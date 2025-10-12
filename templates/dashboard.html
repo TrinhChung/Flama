@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block title %}Bảng điều khiển{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-lg-6 mx-auto">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h2 class="card-title mb-3">Xin chào, {{ current_user.username }}!</h2>
+        <p class="card-text">
+          Bạn đang đăng nhập thành công vào ứng dụng Flask kết nối MySQL.
+          Tại đây bạn có thể bắt đầu phát triển thêm các chức năng phù hợp với dự án Nihongo của mình.
+        </p>
+        <a class="btn btn-outline-danger" href="{{ url_for('logout') }}">Đăng xuất</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

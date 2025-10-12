@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+{% block title %}Trang chủ{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-md-8 col-lg-6 mx-auto text-center">
+    <h1 class="mb-3">Chào mừng đến với ứng dụng Flask + MySQL</h1>
+    <p class="lead">
+      Đây là ví dụ khởi tạo dự án với chức năng đăng nhập, đăng ký cơ bản và kết nối tới MySQL.
+    </p>
+    {% if not current_user.is_authenticated %}
+    <div class="d-flex justify-content-center gap-3">
+      <a class="btn btn-primary" href="{{ url_for('login') }}">Đăng nhập</a>
+      <a class="btn btn-outline-secondary" href="{{ url_for('register') }}">Đăng ký</a>
+    </div>
+    {% else %}
+    <a class="btn btn-success" href="{{ url_for('dashboard') }}">Tới bảng điều khiển</a>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
