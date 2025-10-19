@@ -3,21 +3,23 @@
 {% block title %}Bài {{ lesson }}{% endblock %}
 
 {% block content %}
-<div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 mb-3">
-  <div>
-    <h2 class="mb-0">Bài {{ lesson }}</h2>
-    <small class="text-muted">Hiển thị tối đa {{ page_size }} từ</small>
-  </div>
-  <div class="d-flex flex-wrap gap-2">
-    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('vocabulary.index') }}">
-      ← Quay lại danh sách bài
-    </a>
-    <a
-      class="btn btn-sm btn-outline-primary"
-      href="{{ url_for('vocabulary.download_lesson_csv', lesson=lesson) }}"
-    >
-      Tải CSV
-    </a>
+<div class="lesson-header sticky-top bg-body">
+  <div class="lesson-header-content d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2">
+    <div>
+      <h2 class="mb-0">Bài {{ lesson }}</h2>
+      <small class="text-muted">Hiển thị tối đa {{ page_size }} từ</small>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+      <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('vocabulary.index') }}">
+        ← Quay lại danh sách bài
+      </a>
+      <a
+        class="btn btn-sm btn-outline-primary"
+        href="{{ url_for('vocabulary.download_lesson_csv', lesson=lesson) }}"
+      >
+        Tải CSV
+      </a>
+    </div>
   </div>
 </div>
 
@@ -157,6 +159,20 @@
 </nav>
 
 <style>
+  .lesson-header {
+    width: 100vw;
+    margin-left: calc(50% - 50vw);
+    margin-right: calc(50% - 50vw);
+    padding: 0.75rem 1.5rem 0.75rem 0.5rem;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08);
+    z-index: 1010;
+    margin-bottom: 1rem;
+  }
+  .lesson-header-content {
+    max-width: min(1320px, 100%);
+    margin: 0 auto;
+  }
   .lesson-table-wrapper {
     overflow-x: auto;
     overflow-y: hidden;
@@ -164,6 +180,7 @@
     margin-left: calc(50% - 50vw);
     margin-right: calc(50% - 50vw);
     padding-left: 0.5rem;
+    padding-right: 1.5rem;
   }
   .lesson-table {
     table-layout: fixed;
