@@ -6,7 +6,7 @@ Lightweight Flask + MySQL starter project that focuses on user registration, log
 - Flask application factory pattern with SQLAlchemy models.
 - Environment-based configuration via `.env` and `python-dotenv`.
 - Secure password hashing and session management handled by Flask-Login.
-- Vocabulary management: duyệt danh sách bài chia tự động mỗi 60 từ, nhập liệu hàng loạt qua CSV và chỉnh sửa nhanh nhãn `deck` cho từng mục từ.
+- Vocabulary management: duyệt danh sách bài chia tự động mỗi 60 từ, nhập liệu hàng loạt qua CSV và chỉnh sửa nhanh mọi trường dữ liệu ngay trong bảng.
 - Giao diện bài học hỗ trợ kéo giãn cột và tự lưu kích thước cho từng tài khoản.
 - Bootstrap 5 templates for a quick, responsive UI.
 
@@ -53,9 +53,9 @@ Lightweight Flask + MySQL starter project that focuses on user registration, log
      Deck,Word,hanviet,Reading,Translation_VI,Meaning_JP,Meaning_VI,Usage_JP,Usage_VI,Example_JP,Example_VI,Additional_Note_JP,Additional_Note_VI,image,Diagram,Word_Audio,Example_Audio
      ```
    - Các cột bắt buộc: `Deck`, `Word`.
-8. (Optional) Mở từng bài để hiệu chỉnh nhãn `Deck`:
+8. (Optional) Mở từng bài để hiệu chỉnh dữ liệu inline:
    - Danh sách bài được chia tự động, mỗi bài hiển thị tối đa 60 từ theo thứ tự nhập.
-   - Cột `Deck` có ô nhập cho phép cập nhật nhanh, kèm gợi ý `N1練習::Từ {số thứ tự}`.
+   - Double click vào bất kỳ ô nào để phóng to, chỉnh sửa và nhấn `Enter`/`blur` để lưu (Shift+Enter giữ xuống dòng với các ô đa dòng).
    - Có thể kéo chiều rộng tiêu đề cột; hệ thống sẽ ghi nhớ kích thước cho lần truy cập sau.
 9. Run the application:
    ```powershell

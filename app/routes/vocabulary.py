@@ -48,6 +48,38 @@ COLUMN_KEYS = [
     "example_audio",
 ]
 
+EDITABLE_FIELDS = [
+    "deck",
+    "word",
+    "hanviet",
+    "reading",
+    "translation_vi",
+    "meaning_jp",
+    "meaning_vi",
+    "usage_jp",
+    "usage_vi",
+    "example_jp",
+    "example_vi",
+    "additional_note_jp",
+    "additional_note_vi",
+    "image",
+    "diagram",
+    "word_audio",
+    "example_audio",
+]
+
+MULTILINE_FIELDS = {
+    "translation_vi",
+    "meaning_jp",
+    "meaning_vi",
+    "usage_jp",
+    "usage_vi",
+    "example_jp",
+    "example_vi",
+    "additional_note_jp",
+    "additional_note_vi",
+}
+
 COLUMN_DEFAULT_WIDTHS = {
     "idx": "72px",
     "deck": "220px",
@@ -68,6 +100,9 @@ COLUMN_DEFAULT_WIDTHS = {
     "word_audio": "160px",
     "example_audio": "160px",
 }
+COLUMN_TOTAL_DEFAULT_WIDTH = sum(
+    int(value.replace("px", "").strip()) for value in COLUMN_DEFAULT_WIDTHS.values()
+)
 
 EXPECTED_HEADERS = {
     "deck": "deck",
@@ -174,6 +209,9 @@ def lesson(lesson: int):
         column_widths=column_widths,
         column_keys=COLUMN_KEYS,
         column_default_widths=COLUMN_DEFAULT_WIDTHS,
+        column_total_default_width=COLUMN_TOTAL_DEFAULT_WIDTH,
+        multiline_fields=MULTILINE_FIELDS,
+        editable_fields=EDITABLE_FIELDS,
     )
 
 
@@ -259,20 +297,20 @@ def save_column_width():
     return jsonify({"success": True})
 
 
-@vocabulary_bp.route("/entry/<int:entry_id>/deck", methods=["POST"])
+@vocabulary_bp.route("/entry/<int:entry_id>/field", methods=["POST"])
 @login_required
-def update_deck(entry_id: int):
-    """Update the deck label for a vocabulary entry."""
-    entry = VocabularyEntry.query.get_or_404(entry_id)
-    new_deck = request.form.get("deck", "").strip()
-
-    if not new_deck:
-        flash("Deck không được để trống.", "danger")
+def update_entry_field(entry_id: int):
+    """Update a specific field on a vocabulary entry."""
+    field = request.form.get("field", "").strip()
+    if field not in EDITABLE_FIELDS:
         return redirect(request.form.get("next") or url_for("vocabulary.index"))
 
-    entry.deck = new_deck
+    value = request.form.get("value", "")
+    entry = VocabularyEntry.query.get_or_404(entry_id)
+
+    cleaned = value.strip()
+    setattr(entry, field, cleaned or None)
     db.session.commit()
-    flash("Cập nhật deck thành công.", "success")
 
     next_url = request.form.get("next") or url_for("vocabulary.index")
     return redirect(next_url)

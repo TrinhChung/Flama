@@ -21,32 +21,32 @@
   </div>
 </div>
 
-<div class="full-width-wrapper">
-  <div class="table-responsive">
-    <table
-      class="table table-striped table-bordered table-sm align-middle w-100 lesson-table"
-      id="lesson-table"
-      data-save-url="{{ url_for('vocabulary.save_column_width') }}"
-    >
+<div class="lesson-table-wrapper table-responsive">
+  <table
+    class="table table-striped table-bordered table-sm align-middle lesson-table"
+    id="lesson-table"
+    data-save-url="{{ url_for('vocabulary.save_column_width') }}"
+  >
     <colgroup>
-      <col data-column-key="idx" {% if column_widths.get('idx') %}style="width: {{ column_widths.get('idx') }}"{% endif %}>
-      <col data-column-key="deck" {% if column_widths.get('deck') %}style="width: {{ column_widths.get('deck') }}"{% endif %}>
-      <col data-column-key="word" {% if column_widths.get('word') %}style="width: {{ column_widths.get('word') }}"{% endif %}>
-      <col data-column-key="hanviet" {% if column_widths.get('hanviet') %}style="width: {{ column_widths.get('hanviet') }}"{% endif %}>
-      <col data-column-key="reading" {% if column_widths.get('reading') %}style="width: {{ column_widths.get('reading') }}"{% endif %}>
-      <col data-column-key="translation_vi" {% if column_widths.get('translation_vi') %}style="width: {{ column_widths.get('translation_vi') }}"{% endif %}>
-      <col data-column-key="meaning_jp" {% if column_widths.get('meaning_jp') %}style="width: {{ column_widths.get('meaning_jp') }}"{% endif %}>
-      <col data-column-key="meaning_vi" {% if column_widths.get('meaning_vi') %}style="width: {{ column_widths.get('meaning_vi') }}"{% endif %}>
-      <col data-column-key="usage_jp" {% if column_widths.get('usage_jp') %}style="width: {{ column_widths.get('usage_jp') }}"{% endif %}>
-      <col data-column-key="usage_vi" {% if column_widths.get('usage_vi') %}style="width: {{ column_widths.get('usage_vi') }}"{% endif %}>
-      <col data-column-key="example_jp" {% if column_widths.get('example_jp') %}style="width: {{ column_widths.get('example_jp') }}"{% endif %}>
-      <col data-column-key="example_vi" {% if column_widths.get('example_vi') %}style="width: {{ column_widths.get('example_vi') }}"{% endif %}>
-      <col data-column-key="additional_note_jp" {% if column_widths.get('additional_note_jp') %}style="width: {{ column_widths.get('additional_note_jp') }}"{% endif %}>
-      <col data-column-key="additional_note_vi" {% if column_widths.get('additional_note_vi') %}style="width: {{ column_widths.get('additional_note_vi') }}"{% endif %}>
-      <col data-column-key="image" {% if column_widths.get('image') %}style="width: {{ column_widths.get('image') }}"{% endif %}>
-      <col data-column-key="diagram" {% if column_widths.get('diagram') %}style="width: {{ column_widths.get('diagram') }}"{% endif %}>
-      <col data-column-key="word_audio" {% if column_widths.get('word_audio') %}style="width: {{ column_widths.get('word_audio') }}"{% endif %}>
-      <col data-column-key="example_audio" {% if column_widths.get('example_audio') %}style="width: {{ column_widths.get('example_audio') }}"{% endif %}>
+      {% set widths = column_widths %}
+      <col data-column-key="idx" style="width: {{ widths.get('idx', column_default_widths['idx']) }}">
+      <col data-column-key="deck" style="width: {{ widths.get('deck', column_default_widths['deck']) }}">
+      <col data-column-key="word" style="width: {{ widths.get('word', column_default_widths['word']) }}">
+      <col data-column-key="hanviet" style="width: {{ widths.get('hanviet', column_default_widths['hanviet']) }}">
+      <col data-column-key="reading" style="width: {{ widths.get('reading', column_default_widths['reading']) }}">
+      <col data-column-key="translation_vi" style="width: {{ widths.get('translation_vi', column_default_widths['translation_vi']) }}">
+      <col data-column-key="meaning_jp" style="width: {{ widths.get('meaning_jp', column_default_widths['meaning_jp']) }}">
+      <col data-column-key="meaning_vi" style="width: {{ widths.get('meaning_vi', column_default_widths['meaning_vi']) }}">
+      <col data-column-key="usage_jp" style="width: {{ widths.get('usage_jp', column_default_widths['usage_jp']) }}">
+      <col data-column-key="usage_vi" style="width: {{ widths.get('usage_vi', column_default_widths['usage_vi']) }}">
+      <col data-column-key="example_jp" style="width: {{ widths.get('example_jp', column_default_widths['example_jp']) }}">
+      <col data-column-key="example_vi" style="width: {{ widths.get('example_vi', column_default_widths['example_vi']) }}">
+      <col data-column-key="additional_note_jp" style="width: {{ widths.get('additional_note_jp', column_default_widths['additional_note_jp']) }}">
+      <col data-column-key="additional_note_vi" style="width: {{ widths.get('additional_note_vi', column_default_widths['additional_note_vi']) }}">
+      <col data-column-key="image" style="width: {{ widths.get('image', column_default_widths['image']) }}">
+      <col data-column-key="diagram" style="width: {{ widths.get('diagram', column_default_widths['diagram']) }}">
+      <col data-column-key="word_audio" style="width: {{ widths.get('word_audio', column_default_widths['word_audio']) }}">
+      <col data-column-key="example_audio" style="width: {{ widths.get('example_audio', column_default_widths['example_audio']) }}">
     </colgroup>
     <thead class="table-light">
       <tr>
@@ -70,49 +70,74 @@
         <th scope="col" data-column-key="example_audio">Âm ví dụ<span class="column-resizer"></span></th>
       </tr>
     </thead>
+
+    {% macro editable_cell(entry, field, idx, default_value, multiline=False) %}
+      {% set raw_value = entry|attr(field) %}
+      {% set raw_string = raw_value if raw_value is not none else "" %}
+      {% set display_value = raw_string if raw_string else default_value %}
+      <td class="editable-cell" data-field="{{ field }}">
+        <div
+          class="editable-display"
+          data-value="{{ raw_string|e }}"
+          data-default="{{ default_value|e }}"
+          tabindex="0"
+        >
+          {{ display_value|replace('\n', ' ') if display_value else '\u00A0' }}
+        </div>
+        <form
+          method="post"
+          action="{{ url_for('vocabulary.update_entry_field', entry_id=entry.id) }}"
+          class="editable-form"
+          autocomplete="off"
+        >
+          {% if multiline %}
+          <textarea
+            class="form-control form-control-sm editable-editor editable-textarea"
+            name="value"
+            rows="3"
+            placeholder="{{ default_value }}"
+          >{{ raw_string }}</textarea>
+          {% else %}
+          <input
+            type="text"
+            class="form-control form-control-sm editable-editor"
+            name="value"
+            value="{{ raw_string }}"
+            placeholder="{{ default_value }}"
+          />
+          {% endif %}
+          <input type="hidden" name="field" value="{{ field }}">
+          <input type="hidden" name="next" value="{{ url_for('vocabulary.lesson', lesson=lesson) }}">
+        </form>
+      </td>
+    {% endmacro %}
+
     <tbody>
       {% for entry in entries %}
       {% set idx = start_index + loop.index0 %}
       <tr>
         <td>{{ idx }}</td>
-        <td>
-          <form
-            method="post"
-            action="{{ url_for('vocabulary.update_deck', entry_id=entry.id) }}"
-            class="d-flex flex-column flex-lg-row gap-2"
-          >
-            <input
-              type="text"
-              class="form-control form-control-sm"
-              name="deck"
-              value="{{ entry.deck or ('N1練習::Từ ' ~ idx) }}"
-              placeholder="N1練習::Từ {{ idx }}"
-            />
-            <input type="hidden" name="next" value="{{ url_for('vocabulary.lesson', lesson=lesson) }}">
-            <button class="btn btn-sm btn-outline-success" type="submit">Lưu</button>
-          </form>
-        </td>
-        <td>{{ entry.word }}</td>
-        <td>{{ entry.hanviet }}</td>
-        <td>{{ entry.reading }}</td>
-        <td>{{ entry.translation_vi }}</td>
-        <td>{{ entry.meaning_jp }}</td>
-        <td>{{ entry.meaning_vi }}</td>
-        <td>{{ entry.usage_jp }}</td>
-        <td>{{ entry.usage_vi }}</td>
-        <td>{{ entry.example_jp }}</td>
-        <td>{{ entry.example_vi }}</td>
-        <td>{{ entry.additional_note_jp }}</td>
-        <td>{{ entry.additional_note_vi }}</td>
-        <td>{{ entry.image }}</td>
-        <td>{{ entry.diagram }}</td>
-        <td>{{ entry.word_audio }}</td>
-        <td>{{ entry.example_audio }}</td>
+        {{ editable_cell(entry, "deck", idx, "N1練習::Từ " ~ idx, False) }}
+        {{ editable_cell(entry, "word", idx, "", False) }}
+        {{ editable_cell(entry, "hanviet", idx, "", False) }}
+        {{ editable_cell(entry, "reading", idx, "", False) }}
+        {{ editable_cell(entry, "translation_vi", idx, "", "translation_vi" in multiline_fields) }}
+        {{ editable_cell(entry, "meaning_jp", idx, "", "meaning_jp" in multiline_fields) }}
+        {{ editable_cell(entry, "meaning_vi", idx, "", "meaning_vi" in multiline_fields) }}
+        {{ editable_cell(entry, "usage_jp", idx, "", "usage_jp" in multiline_fields) }}
+        {{ editable_cell(entry, "usage_vi", idx, "", "usage_vi" in multiline_fields) }}
+        {{ editable_cell(entry, "example_jp", idx, "", "example_jp" in multiline_fields) }}
+        {{ editable_cell(entry, "example_vi", idx, "", "example_vi" in multiline_fields) }}
+        {{ editable_cell(entry, "additional_note_jp", idx, "", "additional_note_jp" in multiline_fields) }}
+        {{ editable_cell(entry, "additional_note_vi", idx, "", "additional_note_vi" in multiline_fields) }}
+        {{ editable_cell(entry, "image", idx, "", False) }}
+        {{ editable_cell(entry, "diagram", idx, "", False) }}
+        {{ editable_cell(entry, "word_audio", idx, "", False) }}
+        {{ editable_cell(entry, "example_audio", idx, "", False) }}
       </tr>
       {% endfor %}
     </tbody>
-    </table>
-  </div>
+  </table>
 </div>
 
 <nav aria-label="Lesson navigation" class="mt-4">
@@ -132,18 +157,54 @@
 </nav>
 
 <style>
-  .full-width-wrapper {
+  .lesson-table-wrapper {
+    overflow-x: auto;
+    overflow-y: hidden;
     width: 100vw;
     margin-left: calc(50% - 50vw);
     margin-right: calc(50% - 50vw);
+    padding-left: 0.5rem;
   }
   .lesson-table {
     table-layout: fixed;
+    width: max(100vw, {{ column_total_default_width }}px);
   }
   .lesson-table th,
   .lesson-table td {
     word-break: break-word;
     vertical-align: top;
+  }
+  .editable-cell {
+    position: relative;
+    padding: 0.25rem !important;
+  }
+  .editable-display {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    padding: 0.35rem 0.5rem;
+    border-radius: 0.25rem;
+    border: 1px solid transparent;
+    cursor: pointer;
+  }
+  .editable-display:hover {
+    border-color: rgba(13, 110, 253, 0.3);
+    background-color: rgba(13, 110, 253, 0.05);
+  }
+  .editable-cell.editing .editable-display {
+    display: none;
+  }
+  .editable-form {
+    display: none;
+  }
+  .editable-cell.editing .editable-form {
+    display: block;
+  }
+  .editable-editor {
+    min-width: 200px;
+  }
+  .editable-textarea {
+    resize: vertical;
   }
   #lesson-table th {
     position: relative;
@@ -185,6 +246,14 @@
     const colMap = {};
     table.querySelectorAll("col[data-column-key]").forEach((col) => {
       colMap[col.dataset.columnKey] = col;
+    });
+
+    table.querySelectorAll("th[data-column-key]").forEach((header) => {
+      const key = header.dataset.columnKey;
+      const col = colMap[key];
+      if (col && col.style.width) {
+        header.style.width = col.style.width;
+      }
     });
 
     function applyWidth(columnKey, width) {
@@ -257,6 +326,109 @@
         document.addEventListener("mousemove", onMouseMove);
         document.addEventListener("mouseup", onMouseUp);
       });
+    });
+
+    function adjustHeight(element) {
+      if (element.tagName !== "TEXTAREA") {
+        return;
+      }
+      element.style.height = "auto";
+      element.style.height = Math.max(38, element.scrollHeight) + "px";
+    }
+
+    const editableCells = table.querySelectorAll(".editable-cell");
+    editableCells.forEach((cell) => {
+      const display = cell.querySelector(".editable-display");
+      const form = cell.querySelector(".editable-form");
+      const editor = cell.querySelector(".editable-editor");
+      if (!display || !form || !editor) {
+        return;
+      }
+      const isTextarea = editor.tagName === "TEXTAREA";
+      const defaultValue = display.dataset.default || "";
+
+      function getStoredValue() {
+        return display.dataset.value || "";
+      }
+
+      function openEditor() {
+        if (cell.classList.contains("editing")) {
+          return;
+        }
+        const storedValue = getStoredValue();
+        cell.classList.add("editing");
+        editor.value = storedValue;
+        editor.placeholder = defaultValue;
+        if (isTextarea) {
+          adjustHeight(editor);
+        }
+        requestAnimationFrame(() => {
+          editor.focus();
+          editor.select();
+        });
+      }
+
+      function closeEditor(save) {
+        if (!cell.classList.contains("editing")) {
+          return;
+        }
+        const storedValue = getStoredValue();
+        const newValue = editor.value;
+        if (save && newValue.trim() !== storedValue.trim()) {
+          display.dataset.value = newValue;
+          if (!newValue) {
+            display.textContent = defaultValue || "\u00A0";
+          } else {
+            display.textContent = newValue.replace(/\n/g, " ");
+          }
+          form.submit();
+          cell.classList.remove("editing");
+          return;
+        }
+        cell.classList.remove("editing");
+        editor.value = storedValue;
+        if (isTextarea) {
+          adjustHeight(editor);
+        }
+      }
+
+      display.addEventListener("dblclick", openEditor);
+      display.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          openEditor();
+        }
+      });
+
+      cell.addEventListener("dblclick", (event) => {
+        if (event.target === cell) {
+          openEditor();
+        }
+      });
+
+      editor.addEventListener("blur", () => {
+        closeEditor(true);
+      });
+
+      editor.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" && !(isTextarea && event.shiftKey)) {
+          event.preventDefault();
+          closeEditor(true);
+        } else if (event.key === "Escape") {
+          event.preventDefault();
+          cell.classList.remove("editing");
+          editor.value = getStoredValue();
+          if (isTextarea) {
+            adjustHeight(editor);
+          }
+          display.focus();
+        }
+      });
+
+      if (isTextarea) {
+        adjustHeight(editor);
+        editor.addEventListener("input", () => adjustHeight(editor));
+      }
     });
   })();
 </script>
