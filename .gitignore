@@ -4,6 +4,10 @@ __pycache__/
 
 # Virtual environments
 myenv/
+.venv/
+venv/
+env/
 
 # Environment variables
 .env
+static/tmp/

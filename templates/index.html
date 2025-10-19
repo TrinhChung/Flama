@@ -11,11 +11,11 @@
     </p>
     {% if not current_user.is_authenticated %}
     <div class="d-flex justify-content-center gap-3">
-      <a class="btn btn-primary" href="{{ url_for('login') }}">Đăng nhập</a>
-      <a class="btn btn-outline-secondary" href="{{ url_for('register') }}">Đăng ký</a>
+      <a class="btn btn-primary" href="{{ url_for('auth.login') }}">Đăng nhập</a>
+      <a class="btn btn-outline-secondary" href="{{ url_for('auth.register') }}">Đăng ký</a>
     </div>
     {% else %}
-    <a class="btn btn-success" href="{{ url_for('dashboard') }}">Tới bảng điều khiển</a>
+    <a class="btn btn-success" href="{{ url_for('main.dashboard') }}">Tới bảng điều khiển</a>
     {% endif %}
   </div>
 </div>

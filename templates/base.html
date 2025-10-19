@@ -12,7 +12,7 @@
   <body>
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
       <div class="container">
-        <a class="navbar-brand" href="{{ url_for('index') }}">Nihongo Auth</a>
+        <a class="navbar-brand" href="{{ url_for('main.index') }}">Nihongo Auth</a>
         <div class="collapse navbar-collapse">
           <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
             {% if current_user.is_authenticated %}
@@ -22,17 +22,20 @@
               >
             </li>
             <li class="nav-item">
-              <a class="nav-link" href="{{ url_for('dashboard') }}">Bảng điều khiển</a>
+              <a class="nav-link" href="{{ url_for('main.dashboard') }}">Bảng điều khiển</a>
             </li>
             <li class="nav-item">
-              <a class="nav-link" href="{{ url_for('logout') }}">Đăng xuất</a>
+              <a class="nav-link" href="{{ url_for('vocabulary.index') }}">Từ vựng</a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="{{ url_for('auth.logout') }}">Đăng xuất</a>
             </li>
             {% else %}
             <li class="nav-item">
-              <a class="nav-link" href="{{ url_for('login') }}">Đăng nhập</a>
+              <a class="nav-link" href="{{ url_for('auth.login') }}">Đăng nhập</a>
             </li>
             <li class="nav-item">
-              <a class="nav-link" href="{{ url_for('register') }}">Đăng ký</a>
+              <a class="nav-link" href="{{ url_for('auth.register') }}">Đăng ký</a>
             </li>
             {% endif %}
           </ul>

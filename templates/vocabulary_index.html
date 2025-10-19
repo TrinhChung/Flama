@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block title %}Từ vựng{% endblock %}
+
+{% block content %}
+<div class="row gy-4">
+  <div class="col-12 d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <h2 class="mb-0">Danh sách bài ({{ total_entries }} từ)</h2>
+    <a class="btn btn-sm btn-outline-primary" href="{{ url_for('vocabulary.import_csv') }}">Nhập CSV</a>
+  </div>
+
+{% if lessons %}
+  <div class="col-12">
+    <div class="table-responsive">
+      <table class="table table-bordered table-striped table-sm align-middle">
+        <thead class="table-light">
+          <tr>
+            <th scope="col">Bài</th>
+            <th scope="col">Từ bắt đầu</th>
+            <th scope="col">Từ kết thúc</th>
+            <th scope="col">Số từ</th>
+            <th scope="col" class="text-center">Thao tác</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in lessons %}
+          <tr>
+            <td>Bài {{ item.lesson }}</td>
+            <td>{{ item.start_index }}</td>
+            <td>{{ item.end_index }}</td>
+            <td>{{ item.count }}</td>
+            <td class="text-center">
+              <div class="btn-group btn-group-sm" role="group">
+                <a
+                  class="btn btn-outline-secondary"
+                  href="{{ url_for('vocabulary.lesson', lesson=item.lesson) }}"
+                >
+                  Xem
+                </a>
+                <a
+                  class="btn btn-outline-primary"
+                  href="{{ url_for('vocabulary.download_lesson_csv', lesson=item.lesson) }}"
+                >
+                  CSV
+                </a>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% else %}
+  <div class="col-12">
+    <div class="alert alert-info">
+      Chưa có dữ liệu từ vựng. Hãy sử dụng nút <strong>Nhập CSV</strong> để thêm mới.
+    </div>
+  </div>
+{% endif %}
+</div>
+{% endblock %}

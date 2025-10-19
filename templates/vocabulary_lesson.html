@@ -1,0 +1,263 @@
+{% extends "base.html" %}
+
+{% block title %}Bài {{ lesson }}{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 mb-3">
+  <div>
+    <h2 class="mb-0">Bài {{ lesson }}</h2>
+    <small class="text-muted">Hiển thị tối đa {{ page_size }} từ</small>
+  </div>
+  <div class="d-flex flex-wrap gap-2">
+    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('vocabulary.index') }}">
+      ← Quay lại danh sách bài
+    </a>
+    <a
+      class="btn btn-sm btn-outline-primary"
+      href="{{ url_for('vocabulary.download_lesson_csv', lesson=lesson) }}"
+    >
+      Tải CSV
+    </a>
+  </div>
+</div>
+
+<div class="full-width-wrapper">
+  <div class="table-responsive">
+    <table
+      class="table table-striped table-bordered table-sm align-middle w-100 lesson-table"
+      id="lesson-table"
+      data-save-url="{{ url_for('vocabulary.save_column_width') }}"
+    >
+    <colgroup>
+      <col data-column-key="idx" {% if column_widths.get('idx') %}style="width: {{ column_widths.get('idx') }}"{% endif %}>
+      <col data-column-key="deck" {% if column_widths.get('deck') %}style="width: {{ column_widths.get('deck') }}"{% endif %}>
+      <col data-column-key="word" {% if column_widths.get('word') %}style="width: {{ column_widths.get('word') }}"{% endif %}>
+      <col data-column-key="hanviet" {% if column_widths.get('hanviet') %}style="width: {{ column_widths.get('hanviet') }}"{% endif %}>
+      <col data-column-key="reading" {% if column_widths.get('reading') %}style="width: {{ column_widths.get('reading') }}"{% endif %}>
+      <col data-column-key="translation_vi" {% if column_widths.get('translation_vi') %}style="width: {{ column_widths.get('translation_vi') }}"{% endif %}>
+      <col data-column-key="meaning_jp" {% if column_widths.get('meaning_jp') %}style="width: {{ column_widths.get('meaning_jp') }}"{% endif %}>
+      <col data-column-key="meaning_vi" {% if column_widths.get('meaning_vi') %}style="width: {{ column_widths.get('meaning_vi') }}"{% endif %}>
+      <col data-column-key="usage_jp" {% if column_widths.get('usage_jp') %}style="width: {{ column_widths.get('usage_jp') }}"{% endif %}>
+      <col data-column-key="usage_vi" {% if column_widths.get('usage_vi') %}style="width: {{ column_widths.get('usage_vi') }}"{% endif %}>
+      <col data-column-key="example_jp" {% if column_widths.get('example_jp') %}style="width: {{ column_widths.get('example_jp') }}"{% endif %}>
+      <col data-column-key="example_vi" {% if column_widths.get('example_vi') %}style="width: {{ column_widths.get('example_vi') }}"{% endif %}>
+      <col data-column-key="additional_note_jp" {% if column_widths.get('additional_note_jp') %}style="width: {{ column_widths.get('additional_note_jp') }}"{% endif %}>
+      <col data-column-key="additional_note_vi" {% if column_widths.get('additional_note_vi') %}style="width: {{ column_widths.get('additional_note_vi') }}"{% endif %}>
+      <col data-column-key="image" {% if column_widths.get('image') %}style="width: {{ column_widths.get('image') }}"{% endif %}>
+      <col data-column-key="diagram" {% if column_widths.get('diagram') %}style="width: {{ column_widths.get('diagram') }}"{% endif %}>
+      <col data-column-key="word_audio" {% if column_widths.get('word_audio') %}style="width: {{ column_widths.get('word_audio') }}"{% endif %}>
+      <col data-column-key="example_audio" {% if column_widths.get('example_audio') %}style="width: {{ column_widths.get('example_audio') }}"{% endif %}>
+    </colgroup>
+    <thead class="table-light">
+      <tr>
+        <th scope="col" data-column-key="idx">#<span class="column-resizer"></span></th>
+        <th scope="col" data-column-key="deck">Deck<span class="column-resizer"></span></th>
+        <th scope="col" data-column-key="word">Từ<span class="column-resizer"></span></th>
+        <th scope="col" data-column-key="hanviet">Hán Việt<span class="column-resizer"></span></th>
+        <th scope="col" data-column-key="reading">Cách đọc<span class="column-resizer"></span></th>
+        <th scope="col" data-column-key="translation_vi">Dịch nghĩa (VI)<span class="column-resizer"></span></th>
+        <th scope="col" data-column-key="meaning_jp">Ý nghĩa (JP)<span class="column-resizer"></span></th>
+        <th scope="col" data-column-key="meaning_vi">Ý nghĩa (VI)<span class="column-resizer"></span></th>
+        <th scope="col" data-column-key="usage_jp">Sử dụng (JP)<span class="column-resizer"></span></th>
+        <th scope="col" data-column-key="usage_vi">Sử dụng (VI)<span class="column-resizer"></span></th>
+        <th scope="col" data-column-key="example_jp">Ví dụ (JP)<span class="column-resizer"></span></th>
+        <th scope="col" data-column-key="example_vi">Ví dụ (VI)<span class="column-resizer"></span></th>
+        <th scope="col" data-column-key="additional_note_jp">Ghi chú (JP)<span class="column-resizer"></span></th>
+        <th scope="col" data-column-key="additional_note_vi">Ghi chú (VI)<span class="column-resizer"></span></th>
+        <th scope="col" data-column-key="image">Hình ảnh<span class="column-resizer"></span></th>
+        <th scope="col" data-column-key="diagram">Sơ đồ<span class="column-resizer"></span></th>
+        <th scope="col" data-column-key="word_audio">Âm từ<span class="column-resizer"></span></th>
+        <th scope="col" data-column-key="example_audio">Âm ví dụ<span class="column-resizer"></span></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for entry in entries %}
+      {% set idx = start_index + loop.index0 %}
+      <tr>
+        <td>{{ idx }}</td>
+        <td>
+          <form
+            method="post"
+            action="{{ url_for('vocabulary.update_deck', entry_id=entry.id) }}"
+            class="d-flex flex-column flex-lg-row gap-2"
+          >
+            <input
+              type="text"
+              class="form-control form-control-sm"
+              name="deck"
+              value="{{ entry.deck or ('N1練習::Từ ' ~ idx) }}"
+              placeholder="N1練習::Từ {{ idx }}"
+            />
+            <input type="hidden" name="next" value="{{ url_for('vocabulary.lesson', lesson=lesson) }}">
+            <button class="btn btn-sm btn-outline-success" type="submit">Lưu</button>
+          </form>
+        </td>
+        <td>{{ entry.word }}</td>
+        <td>{{ entry.hanviet }}</td>
+        <td>{{ entry.reading }}</td>
+        <td>{{ entry.translation_vi }}</td>
+        <td>{{ entry.meaning_jp }}</td>
+        <td>{{ entry.meaning_vi }}</td>
+        <td>{{ entry.usage_jp }}</td>
+        <td>{{ entry.usage_vi }}</td>
+        <td>{{ entry.example_jp }}</td>
+        <td>{{ entry.example_vi }}</td>
+        <td>{{ entry.additional_note_jp }}</td>
+        <td>{{ entry.additional_note_vi }}</td>
+        <td>{{ entry.image }}</td>
+        <td>{{ entry.diagram }}</td>
+        <td>{{ entry.word_audio }}</td>
+        <td>{{ entry.example_audio }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    </table>
+  </div>
+</div>
+
+<nav aria-label="Lesson navigation" class="mt-4">
+  <ul class="pagination justify-content-center flex-wrap gap-2">
+    <li class="page-item {% if lesson == 1 %}disabled{% endif %}">
+      <a class="page-link" href="{{ url_for('vocabulary.lesson', lesson=lesson-1) }}">« Trước</a>
+    </li>
+    {% for i in range(1, total_lessons + 1) %}
+    <li class="page-item {% if i == lesson %}active{% endif %}">
+      <a class="page-link" href="{{ url_for('vocabulary.lesson', lesson=i) }}">{{ i }}</a>
+    </li>
+    {% endfor %}
+    <li class="page-item {% if lesson == total_lessons %}disabled{% endif %}">
+      <a class="page-link" href="{{ url_for('vocabulary.lesson', lesson=lesson+1) }}">Sau »</a>
+    </li>
+  </ul>
+</nav>
+
+<style>
+  .full-width-wrapper {
+    width: 100vw;
+    margin-left: calc(50% - 50vw);
+    margin-right: calc(50% - 50vw);
+  }
+  .lesson-table {
+    table-layout: fixed;
+  }
+  .lesson-table th,
+  .lesson-table td {
+    word-break: break-word;
+    vertical-align: top;
+  }
+  #lesson-table th {
+    position: relative;
+    white-space: nowrap;
+  }
+  #lesson-table .column-resizer {
+    position: absolute;
+    top: 0;
+    right: -3px;
+    width: 8px;
+    cursor: col-resize;
+    user-select: none;
+    height: 100%;
+  }
+  #lesson-table .column-resizer::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 2px;
+    height: 100%;
+    background-color: transparent;
+  }
+  #lesson-table .column-resizer:hover::after,
+  #lesson-table th.resizing .column-resizer::after {
+    background-color: rgba(0, 0, 0, 0.2);
+  }
+</style>
+
+<script>
+  (function () {
+    const table = document.getElementById("lesson-table");
+    if (!table) {
+      return;
+    }
+
+    const saveUrl = table.dataset.saveUrl;
+    const colMap = {};
+    table.querySelectorAll("col[data-column-key]").forEach((col) => {
+      colMap[col.dataset.columnKey] = col;
+    });
+
+    function applyWidth(columnKey, width) {
+      if (!colMap[columnKey]) {
+        return;
+      }
+      const widthPx = typeof width === "number" ? `${width}px` : width;
+      colMap[columnKey].style.width = widthPx;
+      const header = table.querySelector(`th[data-column-key="${columnKey}"]`);
+      if (header) {
+        header.style.width = widthPx;
+      }
+    }
+
+    const storedWidths = {{ column_widths|tojson }};
+    Object.entries(storedWidths || {}).forEach(([key, value]) => {
+      applyWidth(key, value);
+    });
+
+    let activeColumnKey = null;
+    let startX = 0;
+    let startWidth = 0;
+
+    function onMouseMove(event) {
+      if (!activeColumnKey) {
+        return;
+      }
+      const delta = event.pageX - startX;
+      const newWidth = Math.max(60, startWidth + delta);
+      applyWidth(activeColumnKey, newWidth);
+    }
+
+    function onMouseUp(event) {
+      if (!activeColumnKey) {
+        return;
+      }
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+      document.body.style.cursor = "";
+      const header = table.querySelector(`th[data-column-key="${activeColumnKey}"]`);
+      if (header) {
+        header.classList.remove("resizing");
+      }
+      const width = colMap[activeColumnKey].style.width || "";
+      const payload = { column: activeColumnKey, width };
+      fetch(saveUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      }).catch(() => {
+        /* ignore network errors */
+      });
+      activeColumnKey = null;
+    }
+
+    table.querySelectorAll("th[data-column-key]").forEach((header) => {
+      const resizer = header.querySelector(".column-resizer");
+      if (!resizer) {
+        return;
+      }
+      resizer.addEventListener("mousedown", (event) => {
+        event.preventDefault();
+        activeColumnKey = header.dataset.columnKey;
+        startX = event.pageX;
+        startWidth = header.offsetWidth;
+        header.classList.add("resizing");
+        document.body.style.cursor = "col-resize";
+        document.addEventListener("mousemove", onMouseMove);
+        document.addEventListener("mouseup", onMouseUp);
+      });
+    });
+  })();
+</script>
+{% endblock %}
