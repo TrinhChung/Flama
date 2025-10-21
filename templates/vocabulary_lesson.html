@@ -1,21 +1,21 @@
 {% extends "base.html" %}
 
-{% block title %}Bài {{ lesson }}{% endblock %}
+{% block title %}Bài {{ initial_lesson }}{% endblock %}
 
 {% block content %}
 <div class="lesson-header sticky-top bg-body">
   <div class="lesson-header-content d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2">
     <div>
-      <h2 class="mb-0">Bài {{ lesson }}</h2>
-      <small class="text-muted">Hiển thị tối đa {{ page_size }} từ</small>
+      <h2 class="mb-0">Bài <span id="lesson-indicator">{{ initial_lesson }}</span></h2>
+      <small class="text-muted">Hiển thị {{ entries|length }} từ • 60 từ mỗi bài</small>
     </div>
     <div class="d-flex flex-wrap gap-2">
       <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('vocabulary.index') }}">
-        ← Quay lại danh sách bài
+        ← Danh sách bài
       </a>
       <a
         class="btn btn-sm btn-outline-primary"
-        href="{{ url_for('vocabulary.download_lesson_csv', lesson=lesson) }}"
+        href="{{ url_for('vocabulary.download_lesson_csv', lesson=initial_lesson) }}"
       >
         Tải CSV
       </a>
@@ -109,7 +109,7 @@
           />
           {% endif %}
           <input type="hidden" name="field" value="{{ field }}">
-          <input type="hidden" name="next" value="{{ url_for('vocabulary.lesson', lesson=lesson) }}">
+          <input type="hidden" name="next" value="{{ url_for('vocabulary.lesson', lesson=initial_lesson) }}">
         </form>
       </td>
     {% endmacro %}
@@ -117,7 +117,8 @@
     <tbody>
       {% for entry in entries %}
       {% set idx = start_index + loop.index0 %}
-      <tr>
+      {% set lesson_number = ((idx - 1) // page_size_constant) + 1 %}
+      <tr data-lesson="{{ lesson_number }}">
         <td>{{ idx }}</td>
         {{ editable_cell(entry, "deck", idx, "N1練習::Từ " ~ idx, False) }}
         {{ editable_cell(entry, "word", idx, "", False) }}
@@ -138,25 +139,55 @@
         {{ editable_cell(entry, "example_audio", idx, "", False) }}
       </tr>
       {% endfor %}
+      {% set next_idx = start_index + entries|length %}
+      {% for extra_idx in range(next_idx, next_idx + placeholder_rows) %}
+      {% set extra_lesson = ((extra_idx - 1) // page_size_constant) + 1 %}
+      <tr class="placeholder-row" data-lesson="{{ extra_lesson }}">
+        <td>{{ extra_idx }}</td>
+        {% for field in editable_fields %}
+        {% set default_val = "N1練習::Từ " ~ extra_idx if field == "deck" else "" %}
+        <td class="placeholder-cell editable-cell" data-field="{{ field }}" data-new-row="true">
+          <div
+            class="editable-display"
+            data-value=""
+            data-default="{{ default_val|e }}"
+            tabindex="0"
+          >
+            {{ default_val or '\u00A0' }}
+          </div>
+          <form
+            method="post"
+            action="#"
+            class="editable-form"
+            autocomplete="off"
+            data-new-row="true"
+          >
+            {% if field in multiline_fields %}
+            <textarea
+              class="form-control form-control-sm editable-editor editable-textarea"
+              name="value"
+              rows="3"
+              placeholder="{{ default_val }}"
+            ></textarea>
+            {% else %}
+            <input
+              type="text"
+              class="form-control form-control-sm editable-editor"
+              name="value"
+              value=""
+              placeholder="{{ default_val }}"
+            />
+            {% endif %}
+            <input type="hidden" name="field" value="{{ field }}">
+            <input type="hidden" name="next" value="{{ url_for('vocabulary.lesson', lesson=initial_lesson) }}">
+          </form>
+        </td>
+        {% endfor %}
+      </tr>
+      {% endfor %}
     </tbody>
   </table>
 </div>
-
-<nav aria-label="Lesson navigation" class="mt-4">
-  <ul class="pagination justify-content-center flex-wrap gap-2">
-    <li class="page-item {% if lesson == 1 %}disabled{% endif %}">
-      <a class="page-link" href="{{ url_for('vocabulary.lesson', lesson=lesson-1) }}">« Trước</a>
-    </li>
-    {% for i in range(1, total_lessons + 1) %}
-    <li class="page-item {% if i == lesson %}active{% endif %}">
-      <a class="page-link" href="{{ url_for('vocabulary.lesson', lesson=i) }}">{{ i }}</a>
-    </li>
-    {% endfor %}
-    <li class="page-item {% if lesson == total_lessons %}disabled{% endif %}">
-      <a class="page-link" href="{{ url_for('vocabulary.lesson', lesson=lesson+1) }}">Sau »</a>
-    </li>
-  </ul>
-</nav>
 
 <style>
   .lesson-header {
@@ -223,6 +254,14 @@
   .editable-textarea {
     resize: vertical;
   }
+  .placeholder-row td {
+    height: 2.5rem;
+    border-top: 1px dashed rgba(15, 23, 42, 0.15);
+    background-color: rgba(13, 110, 253, 0.02);
+  }
+  .placeholder-cell {
+    min-width: 160px;
+  }
   #lesson-table th {
     position: relative;
     white-space: nowrap;
@@ -260,6 +299,8 @@
     }
 
     const saveUrl = table.dataset.saveUrl;
+    const pageSize = {{ page_size_constant }};
+    const headerIndicator = document.getElementById("lesson-indicator");
     const colMap = {};
     table.querySelectorAll("col[data-column-key]").forEach((col) => {
       colMap[col.dataset.columnKey] = col;
@@ -363,6 +404,8 @@
       }
       const isTextarea = editor.tagName === "TEXTAREA";
       const defaultValue = display.dataset.default || "";
+      const isNewRow = cell.dataset.newRow === "true";
+      const formIsNew = form.dataset.newRow === "true";
 
       function getStoredValue() {
         return display.dataset.value || "";
@@ -398,7 +441,9 @@
           } else {
             display.textContent = newValue.replace(/\n/g, " ");
           }
-          form.submit();
+          if (!isNewRow && !formIsNew) {
+            form.submit();
+          }
           cell.classList.remove("editing");
           return;
         }
@@ -446,6 +491,33 @@
         adjustHeight(editor);
         editor.addEventListener("input", () => adjustHeight(editor));
       }
+    });
+
+    const lessonRows = table.querySelectorAll("tbody tr");
+    function updateLessonIndicator() {
+      if (!headerIndicator) {
+        return;
+      }
+      const scrollTop = window.scrollY + document.querySelector(".lesson-header").offsetHeight + 16;
+      let activeLesson = 1;
+      for (const row of lessonRows) {
+        const rect = row.getBoundingClientRect();
+        const rowTop = rect.top + window.scrollY;
+        if (rowTop <= scrollTop) {
+          const rowLesson = parseInt(row.dataset.lesson || "1", 10);
+          if (!Number.isNaN(rowLesson)) {
+            activeLesson = rowLesson;
+          }
+        } else {
+          break;
+        }
+      }
+      headerIndicator.textContent = activeLesson;
+    }
+
+    updateLessonIndicator();
+    document.addEventListener("scroll", () => {
+      window.requestAnimationFrame(updateLessonIndicator);
     });
   })();
 </script>

@@ -171,15 +171,10 @@ def index():
 @vocabulary_bp.route("/lesson/<int:lesson>")
 @login_required
 def lesson(lesson: int):
-    """Display one lesson (chunk of entries) across all vocabulary."""
-    if lesson < 1:
-        abort(404)
+    """Display all vocabulary entries with dynamic lesson indicator."""
 
-    offset = (lesson - 1) * VOCABULARY_PAGE_SIZE
     entries = (
         VocabularyEntry.query.order_by(VocabularyEntry.id)
-        .offset(offset)
-        .limit(VOCABULARY_PAGE_SIZE)
         .all()
     )
 
@@ -187,9 +182,7 @@ def lesson(lesson: int):
         flash("Không tìm thấy bài học hoặc bài không có dữ liệu.", "warning")
         return redirect(url_for("vocabulary.index"))
 
-    total_entries = (
-        db.session.query(func.count(VocabularyEntry.id)).scalar()
-    )
+    total_entries = len(entries)
     total_lessons = math.ceil(total_entries / VOCABULARY_PAGE_SIZE) if total_entries else 0
 
     column_widths: Dict[str, str] = {}
@@ -201,17 +194,19 @@ def lesson(lesson: int):
 
     return render_template(
         "vocabulary_lesson.html",
-        lesson=lesson,
+        initial_lesson=lesson,
         total_lessons=total_lessons,
         entries=entries,
         page_size=VOCABULARY_PAGE_SIZE,
-        start_index=offset + 1,
+        start_index=1,
         column_widths=column_widths,
         column_keys=COLUMN_KEYS,
         column_default_widths=COLUMN_DEFAULT_WIDTHS,
         column_total_default_width=COLUMN_TOTAL_DEFAULT_WIDTH,
         multiline_fields=MULTILINE_FIELDS,
         editable_fields=EDITABLE_FIELDS,
+        page_size_constant=VOCABULARY_PAGE_SIZE,
+        placeholder_rows=10,
     )
 
 

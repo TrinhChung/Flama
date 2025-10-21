@@ -54,8 +54,9 @@ Lightweight Flask + MySQL starter project that focuses on user registration, log
      ```
    - Các cột bắt buộc: `Deck`, `Word`.
 8. (Optional) Mở từng bài để hiệu chỉnh dữ liệu inline:
-   - Danh sách bài được chia tự động, mỗi bài hiển thị tối đa 60 từ theo thứ tự nhập.
+   - Tất cả từ vựng hiển thị trên một bảng; header tự cập nhật bài hiện tại dựa trên vị trí cuộn (mỗi 60 từ là một bài).
    - Double click vào bất kỳ ô nào để phóng to, chỉnh sửa và nhấn `Enter`/`blur` để lưu (Shift+Enter giữ xuống dòng với các ô đa dòng).
+   - Phía cuối bảng có sẵn các hàng trống: double click vào từng ô để soạn thảo trước khi thêm dữ liệu mới.
    - Có thể kéo chiều rộng tiêu đề cột; hệ thống sẽ ghi nhớ kích thước cho lần truy cập sau.
 9. Run the application:
    ```powershell
