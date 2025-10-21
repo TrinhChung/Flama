@@ -13,6 +13,30 @@
         </p>
         <form method="post">
           <div class="mb-3">
+            <label class="form-label" for="lesson_id">Chọn bài học</label>
+            <select class="form-select" id="lesson_id" name="lesson_id" required>
+              {% if levels %}
+              <option value="" disabled {% if not selected_lesson_id %}selected{% endif %}>
+                -- Chọn trình độ / chủ đề / bài học --
+              </option>
+              {% for level in levels %}
+                {% for topic in level.topics %}
+                  {% for lesson in topic.lessons %}
+                  <option
+                    value="{{ lesson.id }}"
+                    {% if selected_lesson_id == lesson.id %}selected{% endif %}
+                  >
+                    {{ level.name }} / {{ topic.name }} / {{ lesson.title }}
+                  </option>
+                  {% endfor %}
+                {% endfor %}
+              {% endfor %}
+              {% else %}
+              <option value="" selected disabled>Chưa có bài học nào. Hãy tạo trước.</option>
+              {% endif %}
+            </select>
+          </div>
+          <div class="mb-3">
             <label class="form-label" for="csv_content">Nội dung CSV</label>
             <textarea
               class="form-control"

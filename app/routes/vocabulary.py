@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import csv
-import math
+import re
 from io import StringIO
-from typing import Dict, List, Tuple
+from typing import Dict, List
 
 from flask import (
     Blueprint,
@@ -20,10 +20,13 @@ from flask import (
 )
 from flask_login import current_user, login_required
 from sqlalchemy import func
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import selectinload
 
 from models import db
-from models.vocabulary_entry import VocabularyEntry
 from models.column_preference import VocabularyColumnPreference
+from models.vocabulary_entry import VocabularyEntry
+from models.vocabulary_structure import VocabularyLevel, VocabularyTopic, VocabularyLesson
 
 VOCABULARY_PAGE_SIZE = 60
 
@@ -104,6 +107,71 @@ COLUMN_TOTAL_DEFAULT_WIDTH = sum(
     int(value.replace("px", "").strip()) for value in COLUMN_DEFAULT_WIDTHS.values()
 )
 
+PLACEHOLDER_ROW_COUNT = 120
+
+EXPORT_FORMATS = {
+    "csv": {
+        "label": "CSV (,)",
+        "delimiter": ",",
+        "extension": "csv",
+        "content_type": "text/csv; charset=utf-8",
+    },
+    "scsv": {
+        "label": "CSV (;)",
+        "delimiter": ";",
+        "extension": "csv",
+        "content_type": "text/csv; charset=utf-8",
+    },
+    "tsv": {
+        "label": "TSV",
+        "delimiter": "\t",
+        "extension": "tsv",
+        "content_type": "text/tab-separated-values; charset=utf-8",
+    },
+}
+DEFAULT_EXPORT_FORMAT = "csv"
+
+_COLUMN_WIDTH_PATTERN = re.compile(r"^\s*(\d+(?:\.\d+)?)\s*(px)?\s*$")
+_MIN_COLUMN_WIDTH = 60
+_MAX_COLUMN_WIDTH = 1600
+
+
+def _normalize_column_width(column_key: str, raw_width: str | None) -> str:
+    """Ensure column widths are valid px values within allowed bounds."""
+    default_value = COLUMN_DEFAULT_WIDTHS.get(column_key, f"{_MIN_COLUMN_WIDTH}px")
+    default_px = int(default_value.replace("px", "").strip())
+    min_px = max(_MIN_COLUMN_WIDTH, default_px // 2 or _MIN_COLUMN_WIDTH)
+
+    if not raw_width:
+        return default_value
+
+    match = _COLUMN_WIDTH_PATTERN.match(raw_width)
+    if not match:
+        return default_value
+
+    numeric_value = float(match.group(1))
+    normalized = max(min_px, min(numeric_value, _MAX_COLUMN_WIDTH))
+
+    if normalized.is_integer():
+        return f"{int(normalized)}px"
+
+    normalized_str = f"{normalized:.2f}".rstrip("0").rstrip(".")
+    return f"{normalized_str}px"
+
+
+def _compute_total_width(column_widths: Dict[str, str]) -> int:
+    """Compute aggregate width in px, falling back to defaults for missing columns."""
+    total = 0
+    for key in COLUMN_KEYS:
+        width_value = column_widths.get(key, COLUMN_DEFAULT_WIDTHS.get(key, f"{_MIN_COLUMN_WIDTH}px"))
+        match = _COLUMN_WIDTH_PATTERN.match(width_value)
+        if match:
+            total += int(float(match.group(1)))
+        else:
+            default_px = int(COLUMN_DEFAULT_WIDTHS.get(key, f"{_MIN_COLUMN_WIDTH}px").replace("px", "").strip())
+            total += default_px
+    return total
+
 EXPECTED_HEADERS = {
     "deck": "deck",
     "word": "word",
@@ -131,107 +199,255 @@ def _normalize_header(value: str) -> str:
     return value.strip().lower().replace(" ", "_") if value else ""
 
 
-def _build_lesson_summary() -> Tuple[List[Dict[str, int]], int]:
-    total_entries = db.session.query(func.count(VocabularyEntry.id)).scalar() or 0
-    total_lessons = (
-        math.ceil(total_entries / VOCABULARY_PAGE_SIZE) if total_entries else 0
+def _get_levels_hierarchy() -> List[VocabularyLevel]:
+    return (
+        VocabularyLevel.query.options(
+            selectinload(VocabularyLevel.topics).selectinload(VocabularyTopic.lessons)
+        )
+        .order_by(VocabularyLevel.position, VocabularyLevel.created_at)
+        .all()
     )
 
-    summary: List[Dict[str, int]] = []
-    for lesson in range(1, total_lessons + 1):
-        start_index = (lesson - 1) * VOCABULARY_PAGE_SIZE + 1
-        end_index = min(lesson * VOCABULARY_PAGE_SIZE, total_entries)
-        count = end_index - start_index + 1
-        summary.append(
-            {
-                "lesson": lesson,
-                "start_index": start_index,
-                "end_index": end_index,
-                "count": count,
-            }
-        )
 
-    return summary, total_entries
+def _next_level_position() -> int:
+    max_pos = db.session.query(func.max(VocabularyLevel.position)).scalar()
+    return (max_pos or 0) + 1
+
+
+def _next_topic_position(level_id: int) -> int:
+    max_pos = (
+        db.session.query(func.max(VocabularyTopic.position))
+        .filter(VocabularyTopic.level_id == level_id)
+        .scalar()
+    )
+    return (max_pos or 0) + 1
+
+
+def _next_lesson_position(topic_id: int) -> int:
+    max_pos = (
+        db.session.query(func.max(VocabularyLesson.position))
+        .filter(VocabularyLesson.topic_id == topic_id)
+        .scalar()
+    )
+    return (max_pos or 0) + 1
 
 
 @vocabulary_bp.route("/")
 @login_required
 def index():
-    """Overview of lessons divided into 60-word chunks."""
-    lesson_summary, total_entries = _build_lesson_summary()
+    """Overview of vocabulary hierarchy (levels → topics → lessons)."""
+    levels = _get_levels_hierarchy()
+    total_entries = db.session.query(func.count(VocabularyEntry.id)).scalar() or 0
     return render_template(
         "vocabulary_index.html",
-        lessons=lesson_summary,
+        levels=levels,
         total_entries=total_entries,
         page_size=VOCABULARY_PAGE_SIZE,
         column_keys=COLUMN_KEYS,
+        export_formats=EXPORT_FORMATS,
+        default_export_format=DEFAULT_EXPORT_FORMAT,
     )
 
 
-@vocabulary_bp.route("/lesson/<int:lesson>")
+@vocabulary_bp.route("/levels/new", methods=["POST"])
 @login_required
-def lesson(lesson: int):
-    """Display all vocabulary entries with dynamic lesson indicator."""
+def create_level():
+    name = (request.form.get("name") or "").strip()
+    description = (request.form.get("description") or "").strip() or None
 
-    entries = (
-        VocabularyEntry.query.order_by(VocabularyEntry.id)
-        .all()
-    )
-
-    if not entries:
-        flash("Không tìm thấy bài học hoặc bài không có dữ liệu.", "warning")
+    if not name:
+        flash("Tên trình độ không được để trống.", "warning")
         return redirect(url_for("vocabulary.index"))
 
-    total_entries = len(entries)
-    total_lessons = math.ceil(total_entries / VOCABULARY_PAGE_SIZE) if total_entries else 0
+    level = VocabularyLevel(
+        name=name,
+        description=description,
+        position=_next_level_position(),
+    )
+    db.session.add(level)
+    db.session.commit()
+    flash("Đã tạo trình độ mới.", "success")
+    return redirect(url_for("vocabulary.index"))
+
+
+@vocabulary_bp.route("/topics/new", methods=["POST"])
+@login_required
+def create_topic():
+    name = (request.form.get("name") or "").strip()
+    description = (request.form.get("description") or "").strip() or None
+    level_id_raw = request.form.get("level_id")
+
+    try:
+        level_id = int(level_id_raw or 0)
+    except ValueError:
+        level_id = 0
+
+    level = VocabularyLevel.query.get(level_id)
+    if not level:
+        flash("Không tìm thấy trình độ để gán chủ đề.", "danger")
+        return redirect(url_for("vocabulary.index"))
+
+    if not name:
+        flash("Tên chủ đề không được để trống.", "warning")
+        return redirect(url_for("vocabulary.index"))
+
+    topic = VocabularyTopic(
+        level=level,
+        name=name,
+        description=description,
+        position=_next_topic_position(level.id),
+    )
+    db.session.add(topic)
+    db.session.commit()
+    flash("Đã tạo chủ đề mới.", "success")
+    return redirect(url_for("vocabulary.index"))
+
+
+@vocabulary_bp.route("/lessons/new", methods=["POST"])
+@login_required
+def create_lesson():
+    title = (request.form.get("title") or "").strip()
+    description = (request.form.get("description") or "").strip() or None
+    topic_id_raw = request.form.get("topic_id")
+    page_size_raw = request.form.get("page_size")
+
+    try:
+        topic_id = int(topic_id_raw or 0)
+    except ValueError:
+        topic_id = 0
+
+    topic = VocabularyTopic.query.options(selectinload(VocabularyTopic.level)).get(topic_id)
+    if not topic:
+        flash("Không tìm thấy chủ đề để gán bài.", "danger")
+        return redirect(url_for("vocabulary.index"))
+
+    if not title:
+        flash("Tên bài không được để trống.", "warning")
+        return redirect(url_for("vocabulary.index"))
+
+    try:
+        page_size = int(page_size_raw) if page_size_raw else VOCABULARY_PAGE_SIZE
+        if page_size <= 0:
+            raise ValueError
+    except ValueError:
+        page_size = VOCABULARY_PAGE_SIZE
+
+    lesson = VocabularyLesson(
+        topic=topic,
+        title=title,
+        description=description,
+        position=_next_lesson_position(topic.id),
+        page_size=page_size,
+    )
+    db.session.add(lesson)
+    db.session.commit()
+    flash("Đã tạo bài học mới.", "success")
+    return redirect(url_for("vocabulary.lesson", lesson_id=lesson.id))
+
+
+@vocabulary_bp.route("/lesson/<int:lesson_id>")
+@login_required
+def lesson(lesson_id: int):
+    """Display the editable grid for a specific lesson."""
+
+    selected_lesson = (
+        VocabularyLesson.query.options(
+            selectinload(VocabularyLesson.topic)
+            .selectinload(VocabularyTopic.level),
+            selectinload(VocabularyLesson.topic)
+            .selectinload(VocabularyTopic.lessons),
+            selectinload(VocabularyLesson.entries),
+        )
+        .get_or_404(lesson_id)
+    )
+
+    topic = selected_lesson.topic
+    level = topic.level
+    topic_lessons = sorted(
+        topic.lessons, key=lambda lesson_obj: (lesson_obj.position, lesson_obj.created_at)
+    )
+    try:
+        lesson_index = topic_lessons.index(selected_lesson) + 1
+    except ValueError:
+        lesson_index = 1
+
+    entries = sorted(selected_lesson.entries, key=lambda entry: entry.id)
+
+    page_size = selected_lesson.page_size or VOCABULARY_PAGE_SIZE
+    placeholder_rows = max(PLACEHOLDER_ROW_COUNT, page_size - len(entries))
+    total_lessons = len(topic_lessons)
 
     column_widths: Dict[str, str] = {}
     if current_user.is_authenticated:
-        prefs = VocabularyColumnPreference.query.filter_by(
-            user_id=current_user.id
-        ).all()
-        column_widths = {pref.column_key: pref.width for pref in prefs}
+        prefs = VocabularyColumnPreference.query.filter_by(user_id=current_user.id).all()
+        column_widths = {}
+        updated = False
+        for pref in prefs:
+            normalized_width = _normalize_column_width(pref.column_key, pref.width)
+            column_widths[pref.column_key] = normalized_width
+            if normalized_width != pref.width:
+                pref.width = normalized_width
+                updated = True
+        if updated:
+            db.session.commit()
+
+    effective_total_width = max(
+        COLUMN_TOTAL_DEFAULT_WIDTH,
+        _compute_total_width(column_widths),
+    )
 
     return render_template(
         "vocabulary_lesson.html",
-        initial_lesson=lesson,
+        initial_lesson=lesson_index,
         total_lessons=total_lessons,
         entries=entries,
-        page_size=VOCABULARY_PAGE_SIZE,
+        page_size=page_size,
         start_index=1,
         column_widths=column_widths,
         column_keys=COLUMN_KEYS,
         column_default_widths=COLUMN_DEFAULT_WIDTHS,
-        column_total_default_width=COLUMN_TOTAL_DEFAULT_WIDTH,
+        column_total_default_width=effective_total_width,
         multiline_fields=MULTILINE_FIELDS,
         editable_fields=EDITABLE_FIELDS,
-        page_size_constant=VOCABULARY_PAGE_SIZE,
-        placeholder_rows=10,
+        page_size_constant=page_size,
+        placeholder_rows=placeholder_rows,
+        export_formats=EXPORT_FORMATS,
+        selected_level=level,
+        selected_topic=topic,
+        selected_lesson=selected_lesson,
+        sibling_lessons=topic_lessons,
     )
 
 
-@vocabulary_bp.route("/lesson/<int:lesson>/download")
+@vocabulary_bp.route("/lesson/<int:lesson_id>/download")
 @login_required
-def download_lesson_csv(lesson: int):
-    """Provide CSV download for a specific lesson."""
-    if lesson < 1:
-        abort(404)
-
-    offset = (lesson - 1) * VOCABULARY_PAGE_SIZE
-    entries = (
-        VocabularyEntry.query.order_by(VocabularyEntry.id)
-        .offset(offset)
-        .limit(VOCABULARY_PAGE_SIZE)
-        .all()
+def download_lesson_csv(lesson_id: int):
+    """Provide vocabulary lesson export in the requested delimiter format."""
+    lesson = (
+        VocabularyLesson.query.options(selectinload(VocabularyLesson.entries))
+        .get_or_404(lesson_id)
     )
+
+    format_key = request.args.get("format", DEFAULT_EXPORT_FORMAT).lower()
+    export_config = EXPORT_FORMATS.get(format_key)
+    if not export_config:
+        abort(400)
+
+    entries = sorted(lesson.entries, key=lambda entry: entry.id)
 
     if not entries:
         flash("Không tìm thấy dữ liệu để tải.", "warning")
-        return redirect(url_for("vocabulary.lesson", lesson=lesson))
+        return redirect(url_for("vocabulary.lesson", lesson_id=lesson.id))
 
     fieldnames = list(EXPECTED_HEADERS.values())
     buffer = StringIO()
-    writer = csv.DictWriter(buffer, fieldnames=fieldnames)
+    writer = csv.DictWriter(
+        buffer,
+        fieldnames=fieldnames,
+        delimiter=export_config["delimiter"],
+        quoting=csv.QUOTE_MINIMAL,
+        lineterminator="\n",
+    )
     writer.writeheader()
     for entry in entries:
         writer.writerow(
@@ -258,9 +474,10 @@ def download_lesson_csv(lesson: int):
 
     csv_data = buffer.getvalue()
     response = make_response(csv_data)
-    filename = f"lesson-{lesson}.csv".replace(" ", "_")
+    safe_title = lesson.title.replace(" ", "_")
+    filename = f"lesson-{safe_title}.{export_config['extension']}"
     response.headers["Content-Disposition"] = f"attachment; filename={filename}"
-    response.headers["Content-Type"] = "text/csv; charset=utf-8"
+    response.headers["Content-Type"] = export_config["content_type"]
     return response
 
 
@@ -272,40 +489,115 @@ def save_column_width():
     column = data.get("column")
     width = data.get("width")
 
-    if column not in COLUMN_KEYS or not width:
+    if column not in COLUMN_KEYS:
         return jsonify({"success": False, "message": "Dữ liệu không hợp lệ."}), 400
 
-    width_str = str(width)
+    width_str = str(width) if width is not None else ""
+    normalized_width = _normalize_column_width(column, width_str)
     pref = VocabularyColumnPreference.query.filter_by(
         user_id=current_user.id, column_key=column
     ).first()
 
     if pref:
-        pref.width = width_str
+        pref.width = normalized_width
     else:
         pref = VocabularyColumnPreference(
-            user_id=current_user.id, column_key=column, width=width_str
+            user_id=current_user.id, column_key=column, width=normalized_width
         )
         db.session.add(pref)
 
     db.session.commit()
-    return jsonify({"success": True})
+    return jsonify({"success": True, "width": normalized_width})
+
+
+@vocabulary_bp.route("/entry", methods=["POST"])
+@login_required
+def create_entry():
+    """Create a new vocabulary entry from pasted or inline data."""
+    if not request.is_json:
+        return jsonify({"success": False, "message": "Dữ liệu không hợp lệ."}), 400
+
+    data = request.get_json(silent=True) or {}
+    raw_values = data.get("values")
+    if not isinstance(raw_values, dict):
+        return jsonify({"success": False, "message": "Thiếu dữ liệu cột."}), 400
+
+    lesson_id_raw = data.get("lesson_id")
+    try:
+        lesson_id = int(lesson_id_raw)
+    except (TypeError, ValueError):
+        lesson_id = 0
+
+    lesson = VocabularyLesson.query.get(lesson_id)
+    if not lesson:
+        return jsonify({"success": False, "message": "Không xác định được bài học."}), 400
+
+    cleaned: Dict[str, str] = {}
+    for field in EDITABLE_FIELDS:
+        raw_val = raw_values.get(field, "")
+        value = "" if raw_val is None else str(raw_val)
+        cleaned[field] = value.replace("\r", "").strip()
+
+    deck = cleaned.get("deck", "")
+    word = cleaned.get("word", "")
+    if not deck or not word:
+        return jsonify({"success": False, "message": "Deck và Từ không được để trống."}), 400
+
+    entry_kwargs = {field: (cleaned_val or None) for field, cleaned_val in cleaned.items()}
+    entry_kwargs["lesson"] = lesson
+    entry = VocabularyEntry(**entry_kwargs)
+    db.session.add(entry)
+    try:
+        db.session.commit()
+    except SQLAlchemyError:
+        db.session.rollback()
+        return jsonify({"success": False, "message": "Không thể lưu dữ liệu mới."}), 500
+
+    response_values = {field: getattr(entry, field) or "" for field in EDITABLE_FIELDS}
+    return jsonify(
+        {
+            "success": True,
+            "entry_id": entry.id,
+            "lesson_id": lesson.id,
+            "values": response_values,
+        }
+    )
 
 
 @vocabulary_bp.route("/entry/<int:entry_id>/field", methods=["POST"])
 @login_required
 def update_entry_field(entry_id: int):
     """Update a specific field on a vocabulary entry."""
-    field = request.form.get("field", "").strip()
+    if request.is_json:
+        data = request.get_json(silent=True) or {}
+        field = str(data.get("field", "")).strip()
+        raw_value = data.get("value", "")
+    else:
+        field = request.form.get("field", "").strip()
+        raw_value = request.form.get("value", "")
     if field not in EDITABLE_FIELDS:
+        if request.is_json:
+            return jsonify({"success": False, "message": "Trường không hợp lệ."}), 400
         return redirect(request.form.get("next") or url_for("vocabulary.index"))
 
-    value = request.form.get("value", "")
     entry = VocabularyEntry.query.get_or_404(entry_id)
 
+    value = "" if raw_value is None else str(raw_value)
     cleaned = value.strip()
+    if request.is_json and field in {"deck", "word"} and not cleaned:
+        return jsonify({"success": False, "message": "Deck và Từ không được để trống."}), 400
     setattr(entry, field, cleaned or None)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except SQLAlchemyError:
+        db.session.rollback()
+        if request.is_json:
+            return jsonify({"success": False, "message": "Không thể cập nhật dữ liệu."}), 500
+        flash("Không thể cập nhật dữ liệu.", "danger")
+        return redirect(request.form.get("next") or url_for("vocabulary.index"))
+
+    if request.is_json:
+        return jsonify({"success": True, "field": field, "value": cleaned})
 
     next_url = request.form.get("next") or url_for("vocabulary.index")
     return redirect(next_url)
@@ -315,18 +607,48 @@ def update_entry_field(entry_id: int):
 @login_required
 def import_csv():
     """Allow users to paste CSV data to populate the vocabulary table."""
+    levels = _get_levels_hierarchy()
     if request.method == "POST":
         csv_content = request.form.get("csv_content", "").strip()
+        lesson_id_raw = request.form.get("lesson_id")
+
+        try:
+            lesson_id = int(lesson_id_raw or 0)
+        except ValueError:
+            lesson_id = 0
+
+        lesson = VocabularyLesson.query.get(lesson_id)
+        if not lesson:
+            flash("Vui lòng chọn bài học hợp lệ để nhập dữ liệu.", "warning")
+            return render_template(
+                "vocabulary_import.html",
+                sample_headers=EXPECTED_HEADERS.keys(),
+                csv_content=csv_content,
+                levels=levels,
+                selected_lesson_id=lesson_id,
+            )
+
         if not csv_content:
             flash("Vui lòng dán nội dung CSV.", "warning")
-            return render_template("vocabulary_import.html")
+            return render_template(
+                "vocabulary_import.html",
+                sample_headers=EXPECTED_HEADERS.keys(),
+                levels=levels,
+                selected_lesson_id=lesson_id,
+            )
 
         buffer = StringIO(csv_content)
         reader = csv.DictReader(buffer)
 
         if not reader.fieldnames:
             flash("CSV phải chứa dòng tiêu đề.", "danger")
-            return render_template("vocabulary_import.html", sample_headers=EXPECTED_HEADERS.keys())
+            return render_template(
+                "vocabulary_import.html",
+                sample_headers=EXPECTED_HEADERS.keys(),
+                csv_content=csv_content,
+                levels=levels,
+                selected_lesson_id=lesson_id,
+            )
 
         normalized_headers = [_normalize_header(h) for h in reader.fieldnames]
         mapping: Dict[str, str] = {}
@@ -345,6 +667,8 @@ def import_csv():
                 "vocabulary_import.html",
                 sample_headers=EXPECTED_HEADERS.keys(),
                 csv_content=csv_content,
+                levels=levels,
+                selected_lesson_id=lesson_id,
             )
 
         inserted = 0
@@ -406,6 +730,7 @@ def import_csv():
                     example_audio=row.get(mapping.get("example_audio", ""), "").strip()
                     if mapping.get("example_audio")
                     else None,
+                    lesson=lesson,
                 )
 
                 db.session.add(entry)
@@ -419,12 +744,15 @@ def import_csv():
                 "vocabulary_import.html",
                 sample_headers=EXPECTED_HEADERS.keys(),
                 csv_content=csv_content,
+                levels=levels,
+                selected_lesson_id=lesson_id,
             )
 
         flash(f"Nhập thành công {inserted} dòng.", "success")
-        return redirect(url_for("vocabulary.index"))
+        return redirect(url_for("vocabulary.lesson", lesson_id=lesson.id))
 
     return render_template(
         "vocabulary_import.html",
         sample_headers=EXPECTED_HEADERS.keys(),
+        levels=levels,
     )

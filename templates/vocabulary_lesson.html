@@ -1,33 +1,91 @@
 {% extends "base.html" %}
 
-{% block title %}Bài {{ initial_lesson }}{% endblock %}
+{% block title %}{{ selected_topic.name }} - {{ selected_lesson.title }}{% endblock %}
 
 {% block content %}
+{% set lesson_id = selected_lesson.id %}
+{% set lesson_title = selected_lesson.title %}
+{% set lesson_number = initial_lesson %}
+{% set lesson_word_count = entries|length %}
 <div class="lesson-header sticky-top bg-body">
   <div class="lesson-header-content d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2">
     <div>
-      <h2 class="mb-0">Bài <span id="lesson-indicator">{{ initial_lesson }}</span></h2>
-      <small class="text-muted">Hiển thị {{ entries|length }} từ • 60 từ mỗi bài</small>
+      <h2 class="mb-0">
+        {{ selected_topic.name }} - Bài <span id="lesson-indicator">{{ lesson_number }}</span>
+        <span class="ms-2 fw-normal">({{ lesson_title }})</span>
+      </h2>
+      <small class="text-muted">
+        Thuộc trình độ {{ selected_level.name }} - {{ lesson_word_count }} / {{ page_size }} từ trong bài
+      </small>
     </div>
     <div class="d-flex flex-wrap gap-2">
       <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('vocabulary.index') }}">
         ← Danh sách bài
       </a>
-      <a
-        class="btn btn-sm btn-outline-primary"
-        href="{{ url_for('vocabulary.download_lesson_csv', lesson=initial_lesson) }}"
-      >
-        Tải CSV
-      </a>
+      {% if sibling_lessons|length > 1 %}
+      <div class="dropdown">
+        <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+          Chuyển bài
+        </button>
+        <ul class="dropdown-menu dropdown-menu-end">
+          {% for option in sibling_lessons %}
+          <li>
+            <a
+              class="dropdown-item{% if option.id == selected_lesson.id %} active{% endif %}"
+              href="{{ url_for('vocabulary.lesson', lesson_id=option.id) }}"
+            >
+              Bài {{ loop.index }} - {{ option.title }}
+            </a>
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+      <div class="btn-group btn-group-sm">
+        <button
+          type="button"
+          class="btn btn-outline-primary dropdown-toggle"
+          data-bs-toggle="dropdown"
+          aria-expanded="false"
+        >
+          Xuất dữ liệu
+        </button>
+        <ul class="dropdown-menu dropdown-menu-end">
+          {% for format_key, format_meta in export_formats.items() %}
+          <li>
+            <a
+              class="dropdown-item lesson-export-option"
+              href="#"
+              data-export-format="{{ format_key }}"
+            >
+              {{ format_meta.label }}
+            </a>
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
     </div>
   </div>
 </div>
 
 <div class="lesson-table-wrapper table-responsive">
+  <div class="lesson-scroll-shortcuts" aria-hidden="true">
+    <button type="button" class="lesson-scroll-button lesson-scroll-up" title="Lên đầu bảng" aria-label="Lên đầu bảng">
+      <span class="lesson-scroll-icon" aria-hidden="true">▲</span>
+    </button>
+    <button type="button" class="lesson-scroll-button lesson-scroll-down" title="Xuống cuối bảng" aria-label="Xuống cuối bảng">
+      <span class="lesson-scroll-icon" aria-hidden="true">▼</span>
+    </button>
+  </div>
   <table
     class="table table-striped table-bordered table-sm align-middle lesson-table"
     id="lesson-table"
     data-save-url="{{ url_for('vocabulary.save_column_width') }}"
+    data-create-url="{{ url_for('vocabulary.create_entry') }}"
+    data-update-url-template="{{ url_for('vocabulary.update_entry_field', entry_id=0) }}"
+    data-export-url-template="{{ url_for('vocabulary.download_lesson_csv', lesson_id=0, format='FORMAT_PLACEHOLDER') }}"
+    data-lesson-id="{{ selected_lesson.id }}"
+    data-initial-lesson="{{ initial_lesson }}"
   >
     <colgroup>
       {% set widths = column_widths %}
@@ -109,7 +167,8 @@
           />
           {% endif %}
           <input type="hidden" name="field" value="{{ field }}">
-          <input type="hidden" name="next" value="{{ url_for('vocabulary.lesson', lesson=initial_lesson) }}">
+          <input type="hidden" name="lesson_id" value="{{ selected_lesson.id }}">
+          <input type="hidden" name="next" value="{{ url_for('vocabulary.lesson', lesson_id=selected_lesson.id) }}">
         </form>
       </td>
     {% endmacro %}
@@ -117,10 +176,9 @@
     <tbody>
       {% for entry in entries %}
       {% set idx = start_index + loop.index0 %}
-      {% set lesson_number = ((idx - 1) // page_size_constant) + 1 %}
-      <tr data-lesson="{{ lesson_number }}">
+      <tr data-lesson="{{ lesson_number }}" data-entry-id="{{ entry.id }}">
         <td>{{ idx }}</td>
-        {{ editable_cell(entry, "deck", idx, "N1練習::Từ " ~ idx, False) }}
+        {{ editable_cell(entry, "deck", idx, lesson_title ~ "::Từ " ~ idx, False) }}
         {{ editable_cell(entry, "word", idx, "", False) }}
         {{ editable_cell(entry, "hanviet", idx, "", False) }}
         {{ editable_cell(entry, "reading", idx, "", False) }}
@@ -141,11 +199,11 @@
       {% endfor %}
       {% set next_idx = start_index + entries|length %}
       {% for extra_idx in range(next_idx, next_idx + placeholder_rows) %}
-      {% set extra_lesson = ((extra_idx - 1) // page_size_constant) + 1 %}
-      <tr class="placeholder-row" data-lesson="{{ extra_lesson }}">
+      {% set extra_lesson = lesson_number %}
+      <tr class="placeholder-row" data-lesson="{{ lesson_number }}" data-placeholder-row="true">
         <td>{{ extra_idx }}</td>
         {% for field in editable_fields %}
-        {% set default_val = "N1練習::Từ " ~ extra_idx if field == "deck" else "" %}
+        {% set default_val = lesson_title ~ "::Từ " ~ extra_idx if field == "deck" else "" %}
         <td class="placeholder-cell editable-cell" data-field="{{ field }}" data-new-row="true">
           <div
             class="editable-display"
@@ -179,7 +237,8 @@
             />
             {% endif %}
             <input type="hidden" name="field" value="{{ field }}">
-            <input type="hidden" name="next" value="{{ url_for('vocabulary.lesson', lesson=initial_lesson) }}">
+            <input type="hidden" name="lesson_id" value="{{ selected_lesson.id }}">
+            <input type="hidden" name="next" value="{{ url_for('vocabulary.lesson', lesson_id=selected_lesson.id) }}">
           </form>
         </td>
         {% endfor %}
@@ -212,6 +271,50 @@
     margin-right: calc(50% - 50vw);
     padding-left: 0.5rem;
     padding-right: 1.5rem;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    position: relative;
+  }
+  .lesson-table-wrapper::-webkit-scrollbar {
+    display: none;
+  }
+  .lesson-scroll-shortcuts {
+    position: fixed;
+    top: 5rem;
+    left: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    z-index: 1040;
+    pointer-events: none;
+  }
+  .lesson-scroll-button {
+    pointer-events: auto;
+    width: 42px;
+    height: 42px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    border: none;
+    background: rgba(13, 110, 253, 0.88);
+    color: #fff;
+    font-size: 1.1rem;
+    line-height: 1;
+    box-shadow: 0 8px 16px rgba(13, 110, 253, 0.25);
+    transition: transform 0.18s ease, background 0.18s ease, box-shadow 0.2s ease;
+  }
+  .lesson-scroll-button:hover {
+    background: rgba(13, 110, 253, 1);
+    transform: translateY(-2px);
+    box-shadow: 0 10px 22px rgba(13, 110, 253, 0.32);
+  }
+  .lesson-scroll-button:active {
+    transform: translateY(0);
+    box-shadow: 0 6px 12px rgba(13, 110, 253, 0.28);
+  }
+  .lesson-scroll-icon {
+    font-weight: 600;
   }
   .lesson-table {
     table-layout: fixed;
@@ -224,32 +327,68 @@
   }
   .editable-cell {
     position: relative;
-    padding: 0.25rem !important;
+    padding: 0.2rem !important;
+    border-radius: 0.3rem;
+    transition: background-color 0.12s ease;
+    outline: 2px solid transparent;
+    outline-offset: -4px;
+  }
+  .editable-cell:hover {
+    background-color: rgba(15, 23, 42, 0.04);
+  }
+  .editable-cell:focus-within {
+    background-color: rgba(13, 110, 253, 0.08);
+    outline-color: rgba(13, 110, 253, 0.85);
+  }
+  .editable-cell.editing {
+    background-color: rgba(13, 110, 253, 0.12);
+    outline-color: rgba(13, 110, 253, 0.95);
   }
   .editable-display {
+    display: block;
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
-    padding: 0.35rem 0.5rem;
-    border-radius: 0.25rem;
+    padding: 0.32rem 0.45rem;
+    border-radius: 0.2rem;
     border: 1px solid transparent;
     cursor: pointer;
+    transition: border-color 0.14s ease, background-color 0.14s ease;
+    box-sizing: border-box;
   }
-  .editable-display:hover {
-    border-color: rgba(13, 110, 253, 0.3);
-    background-color: rgba(13, 110, 253, 0.05);
+  .editable-cell:hover .editable-display {
+    border-color: rgba(13, 110, 253, 0.25);
+  }
+  .editable-cell:focus-within .editable-display {
+    border-color: rgba(13, 110, 253, 0.6);
+  }
+  .editable-display:focus-visible {
+    outline: none;
   }
   .editable-cell.editing .editable-display {
     display: none;
   }
   .editable-form {
+    position: relative;
+    z-index: 1;
     display: none;
+    transform-origin: top left;
+    animation: editableFormIn 0.14s ease forwards;
   }
   .editable-cell.editing .editable-form {
     display: block;
   }
   .editable-editor {
     min-width: 200px;
+    border-radius: 0.2rem;
+    border-color: rgba(13, 110, 253, 0.7);
+    box-shadow: none;
+    transition: border-color 0.12s ease, box-shadow 0.12s ease;
+    box-sizing: border-box;
+  }
+  .editable-editor:focus {
+    border-color: rgba(13, 110, 253, 0.95);
+    box-shadow: 0 0 0 1px rgba(13, 110, 253, 0.35);
   }
   .editable-textarea {
     resize: vertical;
@@ -289,6 +428,26 @@
   #lesson-table th.resizing .column-resizer::after {
     background-color: rgba(0, 0, 0, 0.2);
   }
+  @keyframes editableFormIn {
+    0% {
+      opacity: 0;
+      transform: translateY(4px) scale(0.97);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .editable-cell,
+    .editable-display,
+    .editable-cell.editing .editable-form,
+    .editable-editor {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
 </style>
 
 <script>
@@ -297,8 +456,17 @@
     if (!table) {
       return;
     }
+    const tableWrapper = document.querySelector(".lesson-table-wrapper");
 
     const saveUrl = table.dataset.saveUrl;
+    const createUrl = table.dataset.createUrl || "";
+    const updateUrlTemplateRaw = table.dataset.updateUrlTemplate || "";
+    const updateUrlTemplate = updateUrlTemplateRaw.replace(/\/0\/field$/, "/{id}/field");
+    const exportUrlTemplateRaw = table.dataset.exportUrlTemplate || "";
+    const initialLessonNumber = (() => {
+      const parsed = parseInt(table.dataset.initialLesson || "", 10);
+      return Number.isNaN(parsed) ? 1 : parsed;
+    })();
     const pageSize = {{ page_size_constant }};
     const headerIndicator = document.getElementById("lesson-indicator");
     const colMap = {};
@@ -331,6 +499,442 @@
       applyWidth(key, value);
     });
 
+    function parseDelimited(text, delimiter) {
+      const rows = [];
+      let currentRow = [];
+      let currentValue = "";
+      let inQuotes = false;
+      for (let idx = 0; idx < text.length; idx += 1) {
+        const char = text[idx];
+        if (char === '"') {
+          if (inQuotes && text[idx + 1] === '"') {
+            currentValue += '"';
+            idx += 1;
+          } else {
+            inQuotes = !inQuotes;
+          }
+          continue;
+        }
+        if (char === "\r") {
+          continue;
+        }
+        if (char === "\n") {
+          if (inQuotes) {
+            currentValue += "\n";
+          } else {
+            currentRow.push(currentValue);
+            rows.push(currentRow);
+            currentRow = [];
+            currentValue = "";
+          }
+          continue;
+        }
+        if (char === delimiter && !inQuotes) {
+          currentRow.push(currentValue);
+          currentValue = "";
+          continue;
+        }
+        currentValue += char;
+      }
+      currentRow.push(currentValue);
+      rows.push(currentRow);
+      while (rows.length && rows[rows.length - 1].every((value) => value === "")) {
+        rows.pop();
+      }
+      return rows;
+    }
+
+    function parseClipboardData(rawText) {
+      if (!rawText) {
+        return [];
+      }
+      const normalized = rawText.replace(/\r\n/g, "\n");
+      let delimiter = "\t";
+      if (normalized.includes("\t")) {
+        delimiter = "\t";
+      } else if (normalized.includes(";")) {
+        delimiter = ";";
+      } else if (normalized.includes(",")) {
+        delimiter = ",";
+      } else {
+        delimiter = ";";
+      }
+      return parseDelimited(normalized, delimiter).map((row) =>
+        row.map((value) => {
+          if (typeof value !== "string") {
+            return value;
+          }
+          const noCarriage = value.replace(/\r/g, "");
+          return noCarriage.includes("\\n") ? noCarriage.replace(/\\n/g, "\n") : noCarriage;
+        })
+      );
+    }
+
+    function collectRowValues(row) {
+      if (!row) {
+        return null;
+      }
+      const values = {};
+      row.querySelectorAll("td.editable-cell").forEach((cell) => {
+        const field = cell.dataset.field;
+        if (!field) {
+          return;
+        }
+        const display = cell.querySelector(".editable-display");
+        let value = display ? display.dataset.value || "" : "";
+        if (!value && display) {
+          const defaultValue = display.dataset.default || "";
+          if (defaultValue && defaultValue !== "\u00A0") {
+            value = defaultValue;
+          }
+        }
+        if (value === undefined || value === null) {
+          value = "";
+        }
+        if (typeof value === "string") {
+          value = value.replace(/\r/g, "");
+        }
+        values[field] = value;
+      });
+      return values;
+    }
+
+    function applyRowMetadata(row, entryId, values) {
+      if (!row || !entryId) {
+        return;
+      }
+      const idString = String(entryId);
+      row.dataset.entryId = idString;
+      row.removeAttribute("data-placeholder-row");
+      row.classList.remove("placeholder-row");
+      row.querySelectorAll("td.editable-cell").forEach((cell) => {
+        if (!cell.dataset) {
+          return;
+        }
+        delete cell.dataset.newRow;
+        cell.classList.remove("placeholder-cell");
+        const form = cell.querySelector(".editable-form");
+        if (form) {
+          delete form.dataset.newRow;
+          const updatedAction = resolveUpdateUrl(idString);
+          if (updatedAction) {
+            form.setAttribute("action", updatedAction);
+          }
+        }
+        const field = cell.dataset.field;
+        if (values && field && Object.prototype.hasOwnProperty.call(values, field)) {
+          setCellValue(cell, values[field] ?? "");
+        }
+      });
+    }
+
+    async function ensureRowEntry(row) {
+      if (!row) {
+        return null;
+      }
+      if (row.dataset.entryId) {
+        return row.dataset.entryId;
+      }
+      if (!createUrl) {
+        return null;
+      }
+      const lessonId = parseInt(table.dataset.lessonId || "", 10);
+      if (Number.isNaN(lessonId) || lessonId <= 0) {
+        return null;
+      }
+      const values = collectRowValues(row);
+      if (!values) {
+        return null;
+      }
+      const deck = (values.deck || "").trim();
+      const word = (values.word || "").trim();
+      if (!deck || !word) {
+        return null;
+      }
+      try {
+        const response = await fetch(createUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          credentials: "same-origin",
+          body: JSON.stringify({ values, lesson_id: lessonId }),
+        });
+        if (response.ok) {
+          const data = await response.json();
+          if (data && data.success && data.entry_id) {
+            const responseValues = data.values || values;
+            applyRowMetadata(row, data.entry_id, responseValues);
+            return String(data.entry_id);
+          }
+        }
+      } catch (error) {
+        /* ignore network errors */
+      }
+      return row.dataset.entryId || null;
+    }
+
+    function resolveUpdateUrl(entryId) {
+      if (!entryId) {
+        return "";
+      }
+      const idString = String(entryId);
+      if (updateUrlTemplate && updateUrlTemplate.includes("{id}")) {
+        return updateUrlTemplate.replace("{id}", idString);
+      }
+      if (updateUrlTemplateRaw) {
+        if (updateUrlTemplateRaw.includes("/0/field")) {
+          return updateUrlTemplateRaw.replace("/0/field", `/${idString}/field`);
+        }
+        return updateUrlTemplateRaw.replace(/0(?=\/field$)/, idString);
+      }
+      return "";
+    }
+
+    function resolveExportUrl(lessonId, formatKey) {
+      if (!exportUrlTemplateRaw || !formatKey) {
+        return "";
+      }
+      const encodedFormat = encodeURIComponent(formatKey);
+      let url = exportUrlTemplateRaw.replace("FORMAT_PLACEHOLDER", encodedFormat);
+      url = url.replace(/\/0(\/download)/, `/${lessonId}$1`);
+      return url;
+    }
+
+    async function persistCellValue(cell, rawValue) {
+      if (!cell) {
+        return;
+      }
+      const field = cell.dataset.field;
+      if (!field) {
+        return;
+      }
+      const row = cell.closest("tr");
+      if (!row) {
+        return;
+      }
+      const value =
+        typeof rawValue === "string" ? rawValue : rawValue == null ? "" : String(rawValue);
+      const entryId = await ensureRowEntry(row);
+      if (!entryId) {
+        return;
+      }
+      const actionUrl = resolveUpdateUrl(entryId);
+      if (!actionUrl) {
+        return;
+      }
+      try {
+        const response = await fetch(actionUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          credentials: "same-origin",
+          body: JSON.stringify({ field, value }),
+        });
+        if (response.ok) {
+          const contentType = response.headers.get("Content-Type") || "";
+          if (contentType.includes("application/json")) {
+            const data = await response.json();
+            if (data && typeof data.value === "string") {
+              setCellValue(cell, data.value);
+            }
+          }
+        }
+      } catch (error) {
+        /* ignore network errors */
+      }
+    }
+
+    function setCellValue(cell, rawValue) {
+      const display = cell.querySelector(".editable-display");
+      const editor = cell.querySelector(".editable-editor");
+      if (!display || !editor) {
+        return;
+      }
+      const defaultValue = display.dataset.default || "";
+      const value = typeof rawValue === "string" ? rawValue : rawValue == null ? "" : String(rawValue);
+      display.dataset.value = value;
+      const textContent = value ? value.replace(/\n/g, " ") : defaultValue || "\u00A0";
+      display.textContent = textContent;
+      editor.value = value;
+      if (editor.tagName === "TEXTAREA") {
+        adjustHeight(editor);
+      }
+      cell.classList.remove("editing");
+    }
+
+    async function applyPastedGrid(startDisplay, grid) {
+      if (!grid.length) {
+        return;
+      }
+      const startCell = startDisplay.closest(".editable-cell");
+      const startRow = startCell ? startCell.closest("tr") : null;
+      if (!startCell || !startRow) {
+        return;
+      }
+      const allRows = Array.from(table.querySelectorAll("tbody tr"));
+      const startRowIndex = allRows.indexOf(startRow);
+      if (startRowIndex === -1) {
+        return;
+      }
+      const startRowCells = Array.from(startRow.querySelectorAll(".editable-cell"));
+      const startColIndex = startRowCells.indexOf(startCell);
+      if (startColIndex === -1) {
+        return;
+      }
+
+      const operations = [];
+      let lastCell = startCell;
+      for (let rowOffset = 0; rowOffset < grid.length; rowOffset += 1) {
+        const rowValues = grid[rowOffset];
+        const targetRow = allRows[startRowIndex + rowOffset];
+        if (!targetRow) {
+          break;
+        }
+        const targetCells = Array.from(targetRow.querySelectorAll(".editable-cell"));
+        for (let colOffset = 0; colOffset < rowValues.length; colOffset += 1) {
+          const targetCell = targetCells[startColIndex + colOffset];
+          if (!targetCell) {
+            continue;
+          }
+          const value = rowValues[colOffset] ?? "";
+          const display = targetCell.querySelector(".editable-display");
+          const previousValue = display ? display.dataset.value || "" : "";
+          const normalizedValue = typeof value === "string" ? value.replace(/\r/g, "") : value;
+          if (previousValue === normalizedValue) {
+            continue;
+          }
+          operations.push({ cell: targetCell, value: normalizedValue });
+          lastCell = targetCell;
+        }
+      }
+
+      if (!operations.length) {
+        ensureCellVisible(startCell, { behavior: "auto" });
+        return;
+      }
+
+      operations.forEach(({ cell, value }) => {
+        setCellValue(cell, value);
+      });
+
+      for (const { cell, value } of operations) {
+        await persistCellValue(cell, value);
+      }
+
+      const lastDisplay = lastCell.querySelector(".editable-display");
+      if (lastDisplay) {
+        focusDisplayElement(lastDisplay, { behavior: "auto", align: "center" });
+      }
+    }
+
+    function ensureCellVisible(targetEl, options = {}) {
+      if (!targetEl) {
+        return;
+      }
+      const cell = targetEl.closest(".editable-cell") || targetEl;
+      if (!cell) {
+        return;
+      }
+      if (!tableWrapper) {
+        cell.scrollIntoView({ block: "nearest", inline: "nearest" });
+        return;
+      }
+      const wrapperRect = tableWrapper.getBoundingClientRect();
+      const cellRect = cell.getBoundingClientRect();
+      const padding = options.padding ?? 16;
+      const currentScroll = tableWrapper.scrollLeft;
+      let nextScroll = currentScroll;
+      if (options.align === "center") {
+        const cellCenter = cellRect.left - wrapperRect.left + cellRect.width / 2;
+        nextScroll = cellCenter - wrapperRect.width / 2;
+      } else {
+        const leftOffset = cellRect.left - wrapperRect.left;
+        const rightOffset = cellRect.right - wrapperRect.left;
+        if (leftOffset < padding) {
+          nextScroll += leftOffset - padding;
+        } else if (rightOffset > wrapperRect.width - padding) {
+          nextScroll += rightOffset - (wrapperRect.width - padding);
+        }
+      }
+      const maxScroll = Math.max(0, tableWrapper.scrollWidth - wrapperRect.width);
+      nextScroll = Math.max(0, Math.min(nextScroll, maxScroll));
+      if (Math.abs(nextScroll - currentScroll) > 1) {
+        tableWrapper.scrollTo({
+          left: nextScroll,
+          behavior: options.behavior || "smooth",
+        });
+      }
+    }
+
+    function focusDisplayElement(displayEl, options = {}) {
+      if (!displayEl) {
+        return;
+      }
+      displayEl.focus();
+      ensureCellVisible(displayEl, options);
+    }
+
+    function getRowDisplays(row) {
+      if (!row) {
+        return [];
+      }
+      return Array.from(row.querySelectorAll(".editable-cell .editable-display"));
+    }
+
+    function moveHorizontal(currentDisplay, direction) {
+      const currentCell = currentDisplay.closest(".editable-cell");
+      const row = currentCell ? currentCell.closest("tr") : null;
+      if (!row) {
+        return false;
+      }
+      const displays = getRowDisplays(row);
+      const currentIndex = displays.indexOf(currentDisplay);
+      if (currentIndex === -1) {
+        return false;
+      }
+      const delta = direction === "left" ? -1 : 1;
+      const nextIndex = currentIndex + delta;
+      if (nextIndex >= 0 && nextIndex < displays.length) {
+        focusDisplayElement(displays[nextIndex]);
+        return true;
+      }
+      return false;
+    }
+
+    function moveVertical(currentDisplay, direction) {
+      const currentCell = currentDisplay.closest(".editable-cell");
+      const row = currentCell ? currentCell.closest("tr") : null;
+      if (!row || !currentCell) {
+        return false;
+      }
+      const field = currentCell.dataset.field;
+      if (!field) {
+        return false;
+      }
+      let siblingRow = row;
+      while (true) {
+        siblingRow =
+          direction === "up"
+            ? siblingRow.previousElementSibling
+            : siblingRow.nextElementSibling;
+        if (!siblingRow || !(siblingRow instanceof HTMLElement)) {
+          break;
+        }
+        const targetDisplay = siblingRow.querySelector(
+          `td.editable-cell[data-field="${field}"] .editable-display`
+        );
+        if (targetDisplay) {
+          focusDisplayElement(targetDisplay);
+          return true;
+        }
+      }
+      return false;
+    }
+
     let activeColumnKey = null;
     let startX = 0;
     let startWidth = 0;
@@ -357,15 +961,23 @@
       }
       const width = colMap[activeColumnKey].style.width || "";
       const payload = { column: activeColumnKey, width };
+      const columnKey = activeColumnKey;
       fetch(saveUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify(payload),
-      }).catch(() => {
-        /* ignore network errors */
-      });
+      })
+        .then((response) => (response.ok ? response.json() : null))
+        .then((data) => {
+          if (data && data.width) {
+            applyWidth(columnKey, data.width);
+          }
+        })
+        .catch(() => {
+          /* ignore network errors */
+        });
       activeColumnKey = null;
     }
 
@@ -422,6 +1034,7 @@
         if (isTextarea) {
           adjustHeight(editor);
         }
+        ensureCellVisible(cell, { align: "center", behavior: "auto" });
         requestAnimationFrame(() => {
           editor.focus();
           editor.select();
@@ -441,8 +1054,11 @@
           } else {
             display.textContent = newValue.replace(/\n/g, " ");
           }
-          if (!isNewRow && !formIsNew) {
-            form.submit();
+          const persistPromise = persistCellValue(cell, newValue);
+          if (persistPromise && typeof persistPromise.then === "function") {
+            persistPromise.catch(() => {
+              /* ignore persistence errors */
+            });
           }
           cell.classList.remove("editing");
           return;
@@ -455,11 +1071,47 @@
       }
 
       display.addEventListener("dblclick", openEditor);
+      display.addEventListener("paste", (event) => {
+        const clipboard = event.clipboardData || window.clipboardData;
+        if (!clipboard) {
+          return;
+        }
+        const text = clipboard.getData("text");
+        if (!text) {
+          return;
+        }
+        const grid = parseClipboardData(text);
+        if (!grid.length) {
+          return;
+        }
+        event.preventDefault();
+        applyPastedGrid(display, grid).catch(() => {
+          /* ignore paste errors */
+        });
+      });
       display.addEventListener("keydown", (event) => {
-        if (event.key === "Enter") {
+        const { key } = event;
+        if (key === "Enter" || key === "F2") {
           event.preventDefault();
           openEditor();
+          return;
         }
+        if (key === "ArrowLeft") {
+          event.preventDefault();
+          moveHorizontal(display, "left");
+        } else if (key === "ArrowRight") {
+          event.preventDefault();
+          moveHorizontal(display, "right");
+        } else if (key === "ArrowUp") {
+          event.preventDefault();
+          moveVertical(display, "up");
+        } else if (key === "ArrowDown") {
+          event.preventDefault();
+          moveVertical(display, "down");
+        }
+      });
+      display.addEventListener("focus", () => {
+        ensureCellVisible(display, { behavior: "auto" });
       });
 
       cell.addEventListener("dblclick", (event) => {
@@ -518,6 +1170,71 @@
     updateLessonIndicator();
     document.addEventListener("scroll", () => {
       window.requestAnimationFrame(updateLessonIndicator);
+    });
+    document.querySelectorAll(".lesson-scroll-button").forEach((button) => {
+      const isUp = button.classList.contains("lesson-scroll-up");
+      button.addEventListener("click", () => {
+        if (isUp) {
+          window.scrollTo({ top: 0, behavior: "smooth" });
+          return;
+        }
+        const populatedRows = Array.from(
+          table.querySelectorAll("tbody tr")
+        ).filter((row) => {
+          const cells = row.querySelectorAll("td.editable-cell");
+          for (let i = 0; i < cells.length; i += 1) {
+            const cell = cells[i];
+            if (cell.dataset.field === "deck") {
+              continue;
+            }
+            const display = cell.querySelector(".editable-display");
+            const value = display ? (display.dataset.value || "").trim() : "";
+            if (value) {
+              return true;
+            }
+          }
+          return false;
+        });
+        const lastDataRow = populatedRows.pop();
+        if (!lastDataRow) {
+          return;
+        }
+        const rowTop = lastDataRow.getBoundingClientRect().top + window.scrollY;
+        const offset = document.querySelector(".lesson-header").offsetHeight + 24;
+        window.scrollTo({ top: Math.max(0, rowTop - offset), behavior: "smooth" });
+      });
+    });
+
+    document.querySelectorAll(".lesson-export-option").forEach((option) => {
+      option.addEventListener("click", (event) => {
+        event.preventDefault();
+        const formatKey = option.dataset.exportFormat;
+        if (!formatKey) {
+          return;
+        }
+        let lessonNumber = initialLessonNumber;
+        if (headerIndicator) {
+          const indicatorValue = parseInt(headerIndicator.textContent.trim(), 10);
+          if (!Number.isNaN(indicatorValue)) {
+            lessonNumber = indicatorValue;
+          }
+        }
+        const lessonIdValue = parseInt(table.dataset.lessonId || "", 10);
+        if (Number.isNaN(lessonIdValue) || lessonIdValue <= 0) {
+          return;
+        }
+        const url = resolveExportUrl(lessonIdValue, formatKey);
+        const dropdownMenu = option.closest(".dropdown-menu");
+        if (dropdownMenu) {
+          const toggleButton = dropdownMenu.previousElementSibling;
+          if (toggleButton && typeof bootstrap !== "undefined" && bootstrap.Dropdown) {
+            bootstrap.Dropdown.getOrCreateInstance(toggleButton).hide();
+          }
+        }
+        if (url) {
+          window.location.href = url;
+        }
+      });
     });
   })();
 </script>

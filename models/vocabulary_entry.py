@@ -9,6 +9,7 @@ class VocabularyEntry(db.Model):
     __tablename__ = "vocabulary_entries"
 
     id = db.Column(db.Integer, primary_key=True)
+    lesson_id = db.Column(db.Integer, db.ForeignKey("vocabulary_lessons.id"), index=True, nullable=True)
     deck = db.Column(db.String(255), nullable=False, index=True)
     word = db.Column(db.String(255), nullable=False, index=True)
     hanviet = db.Column(db.String(255))
@@ -30,3 +31,5 @@ class VocabularyEntry(db.Model):
     updated_at = db.Column(
         db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
     )
+
+    lesson = db.relationship("VocabularyLesson", back_populates="entries")

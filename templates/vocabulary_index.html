@@ -5,58 +5,199 @@
 {% block content %}
 <div class="row gy-4">
   <div class="col-12 d-flex justify-content-between align-items-center flex-wrap gap-2">
-    <h2 class="mb-0">Danh sách bài ({{ total_entries }} từ)</h2>
-    <a class="btn btn-sm btn-outline-primary" href="{{ url_for('vocabulary.import_csv') }}">Nhập CSV</a>
+    <div>
+      <h2 class="mb-0">Quản lý bài học</h2>
+      <small class="text-muted">Tổng cộng {{ total_entries }} từ vựng</small>
+    </div>
+    <div class="d-flex gap-2">
+      <a class="btn btn-sm btn-outline-primary" href="{{ url_for('vocabulary.import_csv') }}">Nhập CSV</a>
+    </div>
   </div>
 
-{% if lessons %}
   <div class="col-12">
-    <div class="table-responsive">
-      <table class="table table-bordered table-striped table-sm align-middle">
-        <thead class="table-light">
-          <tr>
-            <th scope="col">Bài</th>
-            <th scope="col">Từ bắt đầu</th>
-            <th scope="col">Từ kết thúc</th>
-            <th scope="col">Số từ</th>
-            <th scope="col" class="text-center">Thao tác</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for item in lessons %}
-          <tr>
-            <td>Bài {{ item.lesson }}</td>
-            <td>{{ item.start_index }}</td>
-            <td>{{ item.end_index }}</td>
-            <td>{{ item.count }}</td>
-            <td class="text-center">
-              <div class="btn-group btn-group-sm" role="group">
-                <a
-                  class="btn btn-outline-secondary"
-                  href="{{ url_for('vocabulary.lesson', lesson=item.lesson) }}"
-                >
-                  Xem
-                </a>
-                <a
-                  class="btn btn-outline-primary"
-                  href="{{ url_for('vocabulary.download_lesson_csv', lesson=item.lesson) }}"
-                >
-                  CSV
-                </a>
+    <div class="card shadow-sm mb-4">
+      <div class="card-body">
+        <h5 class="card-title mb-3">Tạo trình độ mới</h5>
+        <form method="post" action="{{ url_for('vocabulary.create_level') }}" class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label" for="new_level_name">Tên trình độ</label>
+            <input
+              class="form-control"
+              id="new_level_name"
+              name="name"
+              placeholder="Ví dụ: N1, Sơ cấp"
+              required
+            />
+          </div>
+          <div class="col-md-6">
+            <label class="form-label" for="new_level_description">Mô tả</label>
+            <input
+              class="form-control"
+              id="new_level_description"
+              name="description"
+              placeholder="Ghi chú (tuỳ chọn)"
+            />
+          </div>
+          <div class="col-12 text-end">
+            <button class="btn btn-primary" type="submit">Tạo trình độ</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  {% if levels %}
+  <div class="col-12">
+    {% for level in levels %}
+    <div class="card shadow-sm mb-4">
+      <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div>
+          <h5 class="mb-0">{{ level.name }}</h5>
+          {% if level.description %}
+          <small class="text-muted">{{ level.description }}</small>
+          {% endif %}
+        </div>
+        <span class="badge bg-primary-subtle text-primary-emphasis">
+          {{ level.topics|length }} chủ đề
+        </span>
+      </div>
+      <div class="card-body">
+        {% if level.topics %}
+          {% for topic in level.topics %}
+          <div class="border rounded-3 p-3 mb-4">
+            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+              <div>
+                <h6 class="mb-1">{{ topic.name }}</h6>
+                {% if topic.description %}
+                <small class="text-muted">{{ topic.description }}</small>
+                {% endif %}
               </div>
-            </td>
-          </tr>
+              <span class="badge bg-secondary-subtle text-secondary-emphasis">
+                {{ topic.lessons|length }} bài học
+              </span>
+            </div>
+            {% if topic.lessons %}
+            <div class="list-group mb-3">
+              {% for lesson in topic.lessons %}
+              <div class="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <div class="me-auto">
+                  <div class="fw-semibold">{{ lesson.title }}</div>
+                  {% if lesson.description %}
+                  <small class="text-muted">{{ lesson.description }}</small>
+                  {% endif %}
+                  <div class="text-muted small">
+                    Số từ: {{ lesson.entries|length }} • Page size: {{ lesson.page_size }}
+                  </div>
+                </div>
+                <div class="btn-group btn-group-sm" role="group">
+                  <a class="btn btn-outline-secondary" href="{{ url_for('vocabulary.lesson', lesson_id=lesson.id) }}">
+                    Mở
+                  </a>
+                  <button
+                    type="button"
+                    class="btn btn-outline-primary dropdown-toggle"
+                    data-bs-toggle="dropdown"
+                    aria-expanded="false"
+                  >
+                    Xuất
+                  </button>
+                  <ul class="dropdown-menu dropdown-menu-end">
+                    {% for format_key, format_meta in export_formats.items() %}
+                    <li>
+                      <a
+                        class="dropdown-item"
+                        href="{{ url_for('vocabulary.download_lesson_csv', lesson_id=lesson.id, format=format_key) }}"
+                      >
+                        {{ format_meta.label }}
+                      </a>
+                    </li>
+                    {% endfor %}
+                  </ul>
+                </div>
+              </div>
+              {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-muted fst-italic mb-3">Chưa có bài học nào trong chủ đề này.</p>
+            {% endif %}
+            <form method="post" action="{{ url_for('vocabulary.create_lesson') }}" class="row g-2 align-items-end">
+              <input type="hidden" name="topic_id" value="{{ topic.id }}" />
+              <div class="col-md-4">
+                <label class="form-label" for="lesson_title_{{ topic.id }}">Tên bài học</label>
+                <input
+                  class="form-control form-control-sm"
+                  id="lesson_title_{{ topic.id }}"
+                  name="title"
+                  placeholder="Ví dụ: Bài 1"
+                  required
+                />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label" for="lesson_desc_{{ topic.id }}">Mô tả</label>
+                <input
+                  class="form-control form-control-sm"
+                  id="lesson_desc_{{ topic.id }}"
+                  name="description"
+                  placeholder="Ghi chú (tuỳ chọn)"
+                />
+              </div>
+              <div class="col-md-2">
+                <label class="form-label" for="lesson_page_size_{{ topic.id }}">Page size</label>
+                <input
+                  type="number"
+                  min="1"
+                  class="form-control form-control-sm"
+                  id="lesson_page_size_{{ topic.id }}"
+                  name="page_size"
+                  value="{{ page_size }}"
+                  placeholder="{{ page_size }}"
+                />
+              </div>
+              <div class="col-md-2 text-end">
+                <button class="btn btn-sm btn-primary w-100" type="submit">Thêm bài</button>
+              </div>
+            </form>
+          </div>
           {% endfor %}
-        </tbody>
-      </table>
+        {% else %}
+        <p class="text-muted fst-italic mb-3">Chưa có chủ đề nào trong trình độ này.</p>
+        {% endif %}
+        <hr />
+        <form method="post" action="{{ url_for('vocabulary.create_topic') }}" class="row g-2 align-items-end">
+          <input type="hidden" name="level_id" value="{{ level.id }}" />
+          <div class="col-md-5">
+            <label class="form-label" for="topic_name_{{ level.id }}">Tên chủ đề</label>
+            <input
+              class="form-control form-control-sm"
+              id="topic_name_{{ level.id }}"
+              name="name"
+              placeholder="Ví dụ: Chủ đề Ngữ pháp"
+              required
+            />
+          </div>
+          <div class="col-md-5">
+            <label class="form-label" for="topic_desc_{{ level.id }}">Mô tả</label>
+            <input
+              class="form-control form-control-sm"
+              id="topic_desc_{{ level.id }}"
+              name="description"
+              placeholder="Ghi chú (tuỳ chọn)"
+            />
+          </div>
+          <div class="col-md-2 text-end">
+            <button class="btn btn-sm btn-outline-primary w-100" type="submit">Thêm chủ đề</button>
+          </div>
+        </form>
+      </div>
     </div>
+    {% endfor %}
   </div>
-{% else %}
+  {% else %}
   <div class="col-12">
-    <div class="alert alert-info">
-      Chưa có dữ liệu từ vựng. Hãy sử dụng nút <strong>Nhập CSV</strong> để thêm mới.
+    <div class="alert alert-info mb-0">
+      Chưa có trình độ nào. Hãy tạo trình độ mới ở trên để bắt đầu quản lý từ vựng.
     </div>
   </div>
-{% endif %}
+  {% endif %}
 </div>
 {% endblock %}
