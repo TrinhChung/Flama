@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import re
+from datetime import datetime
 from io import StringIO
 from typing import Dict, List
 
@@ -232,10 +233,78 @@ def _next_lesson_position(topic_id: int) -> int:
     return (max_pos or 0) + 1
 
 
+def _sorted_lessons(topic: VocabularyTopic) -> List[VocabularyLesson]:
+    return sorted(
+        topic.lessons,
+        key=lambda lesson: ((lesson.position or 0), lesson.created_at or datetime.min),
+    )
+
+
+def _create_topic_lesson(
+    topic: VocabularyTopic,
+    *,
+    title: str | None = None,
+    description: str | None = None,
+    page_size: int | None = None,
+    commit: bool = True,
+) -> VocabularyLesson:
+    lessons = _sorted_lessons(topic)
+    next_position = (lessons[-1].position if lessons else 0) + 1
+    lesson = VocabularyLesson(
+        topic=topic,
+        title=title or f"Lesson {next_position}",
+        description=description,
+        position=next_position,
+        page_size=page_size or VOCABULARY_PAGE_SIZE,
+    )
+    db.session.add(lesson)
+    if commit:
+        db.session.commit()
+    return lesson
+
+
+def _ensure_first_lesson(topic: VocabularyTopic) -> VocabularyLesson:
+    lessons = _sorted_lessons(topic)
+    if lessons:
+        return lessons[0]
+    return _create_topic_lesson(topic, commit=True)
+
+
+def _lesson_entry_count(lesson: VocabularyLesson) -> int:
+    if "entries" in lesson.__dict__:
+        try:
+            return len(lesson.entries)
+        except TypeError:
+            pass
+    return (
+        db.session.query(func.count(VocabularyEntry.id))
+        .filter(VocabularyEntry.lesson_id == lesson.id)
+        .scalar()
+        or 0
+    )
+
+
+def _select_lesson_for_append(
+    topic: VocabularyTopic, *, default_page_size: int
+) -> tuple[VocabularyLesson, int]:
+    lessons = _sorted_lessons(topic)
+    if not lessons:
+        lesson = _create_topic_lesson(topic, page_size=default_page_size, commit=False)
+        return lesson, 0
+
+    lesson = lessons[-1]
+    entry_count = _lesson_entry_count(lesson)
+    capacity = lesson.page_size or default_page_size
+    if entry_count >= capacity:
+        lesson = _create_topic_lesson(topic, page_size=default_page_size, commit=False)
+        return lesson, 0
+    return lesson, entry_count
+
+
 @vocabulary_bp.route("/")
 @login_required
 def index():
-    """Overview of vocabulary hierarchy (levels → topics → lessons)."""
+    """Overview of vocabulary hierarchy (levels -> topics -> lessons)."""
     levels = _get_levels_hierarchy()
     total_entries = db.session.query(func.count(VocabularyEntry.id)).scalar() or 0
     return render_template(
@@ -252,11 +321,13 @@ def index():
 @vocabulary_bp.route("/levels/new", methods=["POST"])
 @login_required
 def create_level():
+    """Create a new vocabulary level."""
+
     name = (request.form.get("name") or "").strip()
     description = (request.form.get("description") or "").strip() or None
 
     if not name:
-        flash("Tên trình độ không được để trống.", "warning")
+        flash("Level name cannot be empty.", "warning")
         return redirect(url_for("vocabulary.index"))
 
     level = VocabularyLevel(
@@ -266,13 +337,15 @@ def create_level():
     )
     db.session.add(level)
     db.session.commit()
-    flash("Đã tạo trình độ mới.", "success")
+    flash("Level created.", "success")
     return redirect(url_for("vocabulary.index"))
 
 
 @vocabulary_bp.route("/topics/new", methods=["POST"])
 @login_required
 def create_topic():
+    """Create a new topic within a level."""
+
     name = (request.form.get("name") or "").strip()
     description = (request.form.get("description") or "").strip() or None
     level_id_raw = request.form.get("level_id")
@@ -284,11 +357,11 @@ def create_topic():
 
     level = VocabularyLevel.query.get(level_id)
     if not level:
-        flash("Không tìm thấy trình độ để gán chủ đề.", "danger")
+        flash("Level not found.", "danger")
         return redirect(url_for("vocabulary.index"))
 
     if not name:
-        flash("Tên chủ đề không được để trống.", "warning")
+        flash("Topic name cannot be empty.", "warning")
         return redirect(url_for("vocabulary.index"))
 
     topic = VocabularyTopic(
@@ -299,13 +372,15 @@ def create_topic():
     )
     db.session.add(topic)
     db.session.commit()
-    flash("Đã tạo chủ đề mới.", "success")
+    flash("Topic created.", "success")
     return redirect(url_for("vocabulary.index"))
 
 
 @vocabulary_bp.route("/lessons/new", methods=["POST"])
 @login_required
 def create_lesson():
+    """Manually create a new lesson under an existing topic."""
+
     title = (request.form.get("title") or "").strip()
     description = (request.form.get("description") or "").strip() or None
     topic_id_raw = request.form.get("topic_id")
@@ -318,11 +393,11 @@ def create_lesson():
 
     topic = VocabularyTopic.query.options(selectinload(VocabularyTopic.level)).get(topic_id)
     if not topic:
-        flash("Không tìm thấy chủ đề để gán bài.", "danger")
+        flash("Topic not found.", "danger")
         return redirect(url_for("vocabulary.index"))
 
     if not title:
-        flash("Tên bài không được để trống.", "warning")
+        flash("Lesson name cannot be empty.", "warning")
         return redirect(url_for("vocabulary.index"))
 
     try:
@@ -332,16 +407,27 @@ def create_lesson():
     except ValueError:
         page_size = VOCABULARY_PAGE_SIZE
 
-    lesson = VocabularyLesson(
-        topic=topic,
+    lesson = _create_topic_lesson(
+        topic,
         title=title,
         description=description,
-        position=_next_lesson_position(topic.id),
         page_size=page_size,
+        commit=True,
     )
-    db.session.add(lesson)
-    db.session.commit()
-    flash("Đã tạo bài học mới.", "success")
+    flash("Lesson created.", "success")
+    return redirect(url_for("vocabulary.lesson", lesson_id=lesson.id))
+
+
+@vocabulary_bp.route("/topic/<int:topic_id>/open")
+@login_required
+def open_topic(topic_id: int):
+    """Open the topic editor, auto-creating the first lesson if needed."""
+
+    topic = VocabularyTopic.query.options(
+        selectinload(VocabularyTopic.level),
+        selectinload(VocabularyTopic.lessons).selectinload(VocabularyLesson.entries),
+    ).get_or_404(topic_id)
+    lesson = _ensure_first_lesson(topic)
     return redirect(url_for("vocabulary.lesson", lesson_id=lesson.id))
 
 
@@ -363,13 +449,14 @@ def lesson(lesson_id: int):
 
     topic = selected_lesson.topic
     level = topic.level
-    topic_lessons = sorted(
-        topic.lessons, key=lambda lesson_obj: (lesson_obj.position, lesson_obj.created_at)
-    )
+    topic_lessons = _sorted_lessons(topic)
     try:
         lesson_index = topic_lessons.index(selected_lesson) + 1
     except ValueError:
         lesson_index = 1
+
+    if selected_lesson.position:
+        lesson_index = selected_lesson.position
 
     entries = sorted(selected_lesson.entries, key=lambda entry: entry.id)
 
@@ -415,6 +502,7 @@ def lesson(lesson_id: int):
         selected_level=level,
         selected_topic=topic,
         selected_lesson=selected_lesson,
+        lesson_title=selected_lesson.title,
         sibling_lessons=topic_lessons,
     )
 
@@ -436,7 +524,7 @@ def download_lesson_csv(lesson_id: int):
     entries = sorted(lesson.entries, key=lambda entry: entry.id)
 
     if not entries:
-        flash("Không tìm thấy dữ liệu để tải.", "warning")
+        flash("No data available for export.", "warning")
         return redirect(url_for("vocabulary.lesson", lesson_id=lesson.id))
 
     fieldnames = list(EXPECTED_HEADERS.values())
@@ -474,7 +562,7 @@ def download_lesson_csv(lesson_id: int):
 
     csv_data = buffer.getvalue()
     response = make_response(csv_data)
-    safe_title = lesson.title.replace(" ", "_")
+    safe_title = re.sub(r"[^A-Za-z0-9_-]+", "_", lesson.title).strip("_") or f"lesson_{lesson.id}"
     filename = f"lesson-{safe_title}.{export_config['extension']}"
     response.headers["Content-Disposition"] = f"attachment; filename={filename}"
     response.headers["Content-Type"] = export_config["content_type"]
@@ -490,7 +578,7 @@ def save_column_width():
     width = data.get("width")
 
     if column not in COLUMN_KEYS:
-        return jsonify({"success": False, "message": "Dữ liệu không hợp lệ."}), 400
+        return jsonify({"success": False, "message": "D liu khng hp l."}), 400
 
     width_str = str(width) if width is not None else ""
     normalized_width = _normalize_column_width(column, width_str)
@@ -515,12 +603,12 @@ def save_column_width():
 def create_entry():
     """Create a new vocabulary entry from pasted or inline data."""
     if not request.is_json:
-        return jsonify({"success": False, "message": "Dữ liệu không hợp lệ."}), 400
+        return jsonify({"success": False, "message": "D liu khng hp l."}), 400
 
     data = request.get_json(silent=True) or {}
     raw_values = data.get("values")
     if not isinstance(raw_values, dict):
-        return jsonify({"success": False, "message": "Thiếu dữ liệu cột."}), 400
+        return jsonify({"success": False, "message": "Thiu d liu ct."}), 400
 
     lesson_id_raw = data.get("lesson_id")
     try:
@@ -528,9 +616,27 @@ def create_entry():
     except (TypeError, ValueError):
         lesson_id = 0
 
-    lesson = VocabularyLesson.query.get(lesson_id)
+    lesson = VocabularyLesson.query.get(lesson_id) if lesson_id else None
     if not lesson:
-        return jsonify({"success": False, "message": "Không xác định được bài học."}), 400
+        topic_id_raw = data.get("topic_id")
+        try:
+            topic_id = int(topic_id_raw or 0)
+        except (TypeError, ValueError):
+            topic_id = 0
+
+        if topic_id:
+            topic = (
+                VocabularyTopic.query.options(
+                    selectinload(VocabularyTopic.lessons).selectinload(VocabularyLesson.entries)
+                ).get(topic_id)
+            )
+        else:
+            topic = None
+
+        if topic:
+            lesson, _ = _select_lesson_for_append(topic, default_page_size=VOCABULARY_PAGE_SIZE)
+        else:
+            return jsonify({"success": False, "message": "Lesson not found."}), 400
 
     cleaned: Dict[str, str] = {}
     for field in EDITABLE_FIELDS:
@@ -541,7 +647,7 @@ def create_entry():
     deck = cleaned.get("deck", "")
     word = cleaned.get("word", "")
     if not deck or not word:
-        return jsonify({"success": False, "message": "Deck và Từ không được để trống."}), 400
+        return jsonify({"success": False, "message": "Deck and Word cannot be empty."}), 400
 
     entry_kwargs = {field: (cleaned_val or None) for field, cleaned_val in cleaned.items()}
     entry_kwargs["lesson"] = lesson
@@ -551,7 +657,7 @@ def create_entry():
         db.session.commit()
     except SQLAlchemyError:
         db.session.rollback()
-        return jsonify({"success": False, "message": "Không thể lưu dữ liệu mới."}), 500
+        return jsonify({"success": False, "message": "Unable to save new entry."}), 500
 
     response_values = {field: getattr(entry, field) or "" for field in EDITABLE_FIELDS}
     return jsonify(
@@ -577,7 +683,7 @@ def update_entry_field(entry_id: int):
         raw_value = request.form.get("value", "")
     if field not in EDITABLE_FIELDS:
         if request.is_json:
-            return jsonify({"success": False, "message": "Trường không hợp lệ."}), 400
+            return jsonify({"success": False, "message": "Trng khng hp l."}), 400
         return redirect(request.form.get("next") or url_for("vocabulary.index"))
 
     entry = VocabularyEntry.query.get_or_404(entry_id)
@@ -585,15 +691,15 @@ def update_entry_field(entry_id: int):
     value = "" if raw_value is None else str(raw_value)
     cleaned = value.strip()
     if request.is_json and field in {"deck", "word"} and not cleaned:
-        return jsonify({"success": False, "message": "Deck và Từ không được để trống."}), 400
+        return jsonify({"success": False, "message": "Deck and Word cannot be empty."}), 400
     setattr(entry, field, cleaned or None)
     try:
         db.session.commit()
     except SQLAlchemyError:
         db.session.rollback()
         if request.is_json:
-            return jsonify({"success": False, "message": "Không thể cập nhật dữ liệu."}), 500
-        flash("Không thể cập nhật dữ liệu.", "danger")
+            return jsonify({"success": False, "message": "Unable to update entry."}), 500
+        flash("Unable to update entry.", "danger")
         return redirect(request.form.get("next") or url_for("vocabulary.index"))
 
     if request.is_json:
@@ -610,44 +716,49 @@ def import_csv():
     levels = _get_levels_hierarchy()
     if request.method == "POST":
         csv_content = request.form.get("csv_content", "").strip()
-        lesson_id_raw = request.form.get("lesson_id")
+        topic_id_raw = request.form.get("topic_id")
 
         try:
-            lesson_id = int(lesson_id_raw or 0)
+            topic_id = int(topic_id_raw or 0)
         except ValueError:
-            lesson_id = 0
+            topic_id = 0
 
-        lesson = VocabularyLesson.query.get(lesson_id)
-        if not lesson:
-            flash("Vui lòng chọn bài học hợp lệ để nhập dữ liệu.", "warning")
+        topic = (
+            VocabularyTopic.query.options(
+                selectinload(VocabularyTopic.level),
+                selectinload(VocabularyTopic.lessons).selectinload(VocabularyLesson.entries),
+            ).get(topic_id)
+        )
+        if not topic:
+            flash("Please choose a valid topic before importing.", "warning")
             return render_template(
                 "vocabulary_import.html",
                 sample_headers=EXPECTED_HEADERS.keys(),
                 csv_content=csv_content,
                 levels=levels,
-                selected_lesson_id=lesson_id,
+                selected_topic_id=topic_id,
             )
 
         if not csv_content:
-            flash("Vui lòng dán nội dung CSV.", "warning")
+            flash("Paste CSV content before importing.", "warning")
             return render_template(
                 "vocabulary_import.html",
                 sample_headers=EXPECTED_HEADERS.keys(),
                 levels=levels,
-                selected_lesson_id=lesson_id,
+                selected_topic_id=topic_id,
             )
 
         buffer = StringIO(csv_content)
         reader = csv.DictReader(buffer)
 
         if not reader.fieldnames:
-            flash("CSV phải chứa dòng tiêu đề.", "danger")
+            flash("CSV must include a header row.", "danger")
             return render_template(
                 "vocabulary_import.html",
                 sample_headers=EXPECTED_HEADERS.keys(),
                 csv_content=csv_content,
                 levels=levels,
-                selected_lesson_id=lesson_id,
+                selected_topic_id=topic_id,
             )
 
         normalized_headers = [_normalize_header(h) for h in reader.fieldnames]
@@ -660,7 +771,7 @@ def import_csv():
         missing_core = [field for field in ("deck", "word") if field not in mapping]
         if missing_core:
             flash(
-                "Thiếu cột bắt buộc trong CSV: " + ", ".join(missing_core),
+                "Missing required columns in CSV: " + ", ".join(missing_core),
                 "danger",
             )
             return render_template(
@@ -668,9 +779,19 @@ def import_csv():
                 sample_headers=EXPECTED_HEADERS.keys(),
                 csv_content=csv_content,
                 levels=levels,
-                selected_lesson_id=lesson_id,
+                selected_topic_id=topic_id,
             )
 
+        lessons_sorted = _sorted_lessons(topic)
+        if lessons_sorted:
+            current_lesson = lessons_sorted[-1]
+            entries_in_current = _lesson_entry_count(current_lesson)
+        else:
+            current_lesson = _create_topic_lesson(topic, commit=False)
+            entries_in_current = 0
+
+        default_page_size = current_lesson.page_size or VOCABULARY_PAGE_SIZE
+        last_lesson = current_lesson
         inserted = 0
         try:
             for row in reader:
@@ -681,6 +802,12 @@ def import_csv():
                 word = row.get(mapping["word"], "").strip()
                 if not deck or not word:
                     continue
+
+                if entries_in_current >= (current_lesson.page_size or default_page_size):
+                    current_lesson = _create_topic_lesson(topic, commit=False)
+                    entries_in_current = 0
+                    default_page_size = current_lesson.page_size or VOCABULARY_PAGE_SIZE
+                last_lesson = current_lesson
 
                 entry = VocabularyEntry(
                     deck=deck,
@@ -730,26 +857,36 @@ def import_csv():
                     example_audio=row.get(mapping.get("example_audio", ""), "").strip()
                     if mapping.get("example_audio")
                     else None,
-                    lesson=lesson,
+                    lesson=current_lesson,
                 )
 
                 db.session.add(entry)
+                entries_in_current += 1
                 inserted += 1
 
             db.session.commit()
         except Exception as exc:  # pragma: no cover
             db.session.rollback()
-            flash(f"Lỗi khi nhập CSV: {exc}", "danger")
+            flash(f"Failed to import CSV: {exc}", "danger")
             return render_template(
                 "vocabulary_import.html",
                 sample_headers=EXPECTED_HEADERS.keys(),
                 csv_content=csv_content,
                 levels=levels,
-                selected_lesson_id=lesson_id,
+                selected_topic_id=topic_id,
             )
 
-        flash(f"Nhập thành công {inserted} dòng.", "success")
-        return redirect(url_for("vocabulary.lesson", lesson_id=lesson.id))
+        if inserted == 0:
+            flash("No rows were imported.", "warning")
+            return render_template(
+                "vocabulary_import.html",
+                sample_headers=EXPECTED_HEADERS.keys(),
+                levels=levels,
+                selected_topic_id=topic_id,
+            )
+
+        flash(f"Imported {inserted} rows.", "success")
+        return redirect(url_for("vocabulary.lesson", lesson_id=last_lesson.id))
 
     return render_template(
         "vocabulary_import.html",

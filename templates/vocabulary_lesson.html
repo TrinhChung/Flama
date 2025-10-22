@@ -11,21 +11,19 @@
   <div class="lesson-header-content d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2">
     <div>
       <h2 class="mb-0">
-        {{ selected_topic.name }} - Bài <span id="lesson-indicator">{{ lesson_number }}</span>
+        {{ selected_topic.name }} - Lesson <span id="lesson-indicator">{{ lesson_number }}</span>
         <span class="ms-2 fw-normal">({{ lesson_title }})</span>
       </h2>
       <small class="text-muted">
-        Thuộc trình độ {{ selected_level.name }} - {{ lesson_word_count }} / {{ page_size }} từ trong bài
+        Level {{ selected_level.name }} - {{ lesson_word_count }} / {{ page_size }} words in this lesson
       </small>
     </div>
     <div class="d-flex flex-wrap gap-2">
-      <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('vocabulary.index') }}">
-        ← Danh sách bài
-      </a>
+      <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('vocabulary.index') }}">Back to overview</a>
       {% if sibling_lessons|length > 1 %}
       <div class="dropdown">
         <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-          Chuyển bài
+          Switch lesson
         </button>
         <ul class="dropdown-menu dropdown-menu-end">
           {% for option in sibling_lessons %}
@@ -34,7 +32,7 @@
               class="dropdown-item{% if option.id == selected_lesson.id %} active{% endif %}"
               href="{{ url_for('vocabulary.lesson', lesson_id=option.id) }}"
             >
-              Bài {{ loop.index }} - {{ option.title }}
+              Lesson {{ loop.index }} - {{ option.title }}
             </a>
           </li>
           {% endfor %}
@@ -48,7 +46,7 @@
           data-bs-toggle="dropdown"
           aria-expanded="false"
         >
-          Xuất dữ liệu
+          Export
         </button>
         <ul class="dropdown-menu dropdown-menu-end">
           {% for format_key, format_meta in export_formats.items() %}
@@ -70,11 +68,11 @@
 
 <div class="lesson-table-wrapper table-responsive">
   <div class="lesson-scroll-shortcuts" aria-hidden="true">
-    <button type="button" class="lesson-scroll-button lesson-scroll-up" title="Lên đầu bảng" aria-label="Lên đầu bảng">
-      <span class="lesson-scroll-icon" aria-hidden="true">▲</span>
+    <button type="button" class="lesson-scroll-button lesson-scroll-up" title="Scroll to top" aria-label="Scroll to top">
+      <span class="lesson-scroll-icon" aria-hidden="true">&#8593;</span>
     </button>
-    <button type="button" class="lesson-scroll-button lesson-scroll-down" title="Xuống cuối bảng" aria-label="Xuống cuối bảng">
-      <span class="lesson-scroll-icon" aria-hidden="true">▼</span>
+    <button type="button" class="lesson-scroll-button lesson-scroll-down" title="Scroll to last row" aria-label="Scroll to last row">
+      <span class="lesson-scroll-icon" aria-hidden="true">&#8595;</span>
     </button>
   </div>
   <table
@@ -112,22 +110,22 @@
       <tr>
         <th scope="col" data-column-key="idx">#<span class="column-resizer"></span></th>
         <th scope="col" data-column-key="deck">Deck<span class="column-resizer"></span></th>
-        <th scope="col" data-column-key="word">Từ<span class="column-resizer"></span></th>
-        <th scope="col" data-column-key="hanviet">Hán Việt<span class="column-resizer"></span></th>
-        <th scope="col" data-column-key="reading">Cách đọc<span class="column-resizer"></span></th>
-        <th scope="col" data-column-key="translation_vi">Dịch nghĩa (VI)<span class="column-resizer"></span></th>
-        <th scope="col" data-column-key="meaning_jp">Ý nghĩa (JP)<span class="column-resizer"></span></th>
-        <th scope="col" data-column-key="meaning_vi">Ý nghĩa (VI)<span class="column-resizer"></span></th>
-        <th scope="col" data-column-key="usage_jp">Sử dụng (JP)<span class="column-resizer"></span></th>
-        <th scope="col" data-column-key="usage_vi">Sử dụng (VI)<span class="column-resizer"></span></th>
-        <th scope="col" data-column-key="example_jp">Ví dụ (JP)<span class="column-resizer"></span></th>
-        <th scope="col" data-column-key="example_vi">Ví dụ (VI)<span class="column-resizer"></span></th>
-        <th scope="col" data-column-key="additional_note_jp">Ghi chú (JP)<span class="column-resizer"></span></th>
-        <th scope="col" data-column-key="additional_note_vi">Ghi chú (VI)<span class="column-resizer"></span></th>
-        <th scope="col" data-column-key="image">Hình ảnh<span class="column-resizer"></span></th>
-        <th scope="col" data-column-key="diagram">Sơ đồ<span class="column-resizer"></span></th>
-        <th scope="col" data-column-key="word_audio">Âm từ<span class="column-resizer"></span></th>
-        <th scope="col" data-column-key="example_audio">Âm ví dụ<span class="column-resizer"></span></th>
+        <th scope="col" data-column-key="word">Word<span class="column-resizer"></span></th>
+        <th scope="col" data-column-key="hanviet">Han Viet<span class="column-resizer"></span></th>
+        <th scope="col" data-column-key="reading">Reading<span class="column-resizer"></span></th>
+        <th scope="col" data-column-key="translation_vi">Meaning (VI)<span class="column-resizer"></span></th>
+        <th scope="col" data-column-key="meaning_jp">Meaning (JP)<span class="column-resizer"></span></th>
+        <th scope="col" data-column-key="meaning_vi">Meaning (VI)<span class="column-resizer"></span></th>
+        <th scope="col" data-column-key="usage_jp">Usage (JP)<span class="column-resizer"></span></th>
+        <th scope="col" data-column-key="usage_vi">Usage (VI)<span class="column-resizer"></span></th>
+        <th scope="col" data-column-key="example_jp">Example (JP)<span class="column-resizer"></span></th>
+        <th scope="col" data-column-key="example_vi">Example (VI)<span class="column-resizer"></span></th>
+        <th scope="col" data-column-key="additional_note_jp">Notes (JP)<span class="column-resizer"></span></th>
+        <th scope="col" data-column-key="additional_note_vi">Notes (VI)<span class="column-resizer"></span></th>
+        <th scope="col" data-column-key="image">Image<span class="column-resizer"></span></th>
+        <th scope="col" data-column-key="diagram">Diagram<span class="column-resizer"></span></th>
+        <th scope="col" data-column-key="word_audio">Audio (Word)<span class="column-resizer"></span></th>
+        <th scope="col" data-column-key="example_audio">Audio (Example)<span class="column-resizer"></span></th>
       </tr>
     </thead>
 
@@ -178,7 +176,7 @@
       {% set idx = start_index + loop.index0 %}
       <tr data-lesson="{{ lesson_number }}" data-entry-id="{{ entry.id }}">
         <td>{{ idx }}</td>
-        {{ editable_cell(entry, "deck", idx, lesson_title ~ "::Từ " ~ idx, False) }}
+        {{ editable_cell(entry, "deck", idx, lesson_title ~ "::Word " ~ idx, False) }}
         {{ editable_cell(entry, "word", idx, "", False) }}
         {{ editable_cell(entry, "hanviet", idx, "", False) }}
         {{ editable_cell(entry, "reading", idx, "", False) }}
@@ -203,7 +201,7 @@
       <tr class="placeholder-row" data-lesson="{{ lesson_number }}" data-placeholder-row="true">
         <td>{{ extra_idx }}</td>
         {% for field in editable_fields %}
-        {% set default_val = lesson_title ~ "::Từ " ~ extra_idx if field == "deck" else "" %}
+        {% set default_val = lesson_title ~ "::Word " ~ extra_idx if field == "deck" else "" %}
         <td class="placeholder-cell editable-cell" data-field="{{ field }}" data-new-row="true">
           <div
             class="editable-display"
@@ -457,12 +455,14 @@
       return;
     }
     const tableWrapper = document.querySelector(".lesson-table-wrapper");
+    const MAX_PASTE_ROW_CONCURRENCY = 4; // Limit parallel row saves during large paste operations
 
     const saveUrl = table.dataset.saveUrl;
     const createUrl = table.dataset.createUrl || "";
     const updateUrlTemplateRaw = table.dataset.updateUrlTemplate || "";
     const updateUrlTemplate = updateUrlTemplateRaw.replace(/\/0\/field$/, "/{id}/field");
     const exportUrlTemplateRaw = table.dataset.exportUrlTemplate || "";
+    const lessonIdValue = parseInt(table.dataset.lessonId || "", 10);
     const initialLessonNumber = (() => {
       const parsed = parseInt(table.dataset.initialLesson || "", 10);
       return Number.isNaN(parsed) ? 1 : parsed;
@@ -638,8 +638,7 @@
       if (!createUrl) {
         return null;
       }
-      const lessonId = parseInt(table.dataset.lessonId || "", 10);
-      if (Number.isNaN(lessonId) || lessonId <= 0) {
+      if (Number.isNaN(lessonIdValue) || lessonIdValue <= 0) {
         return null;
       }
       const values = collectRowValues(row);
@@ -659,7 +658,7 @@
             Accept: "application/json",
           },
           credentials: "same-origin",
-          body: JSON.stringify({ values, lesson_id: lessonId }),
+          body: JSON.stringify({ values, lesson_id: lessonIdValue }),
         });
         if (response.ok) {
           const data = await response.json();
@@ -766,6 +765,36 @@
       cell.classList.remove("editing");
     }
 
+    async function runWithConcurrency(taskFactories, limit) {
+      if (!Array.isArray(taskFactories) || !taskFactories.length) {
+        return;
+      }
+      const concurrency = Math.max(1, Math.floor(limit) || 1);
+      let nextIndex = 0;
+      const workerCount = Math.min(concurrency, taskFactories.length);
+      const workers = [];
+      for (let workerIdx = 0; workerIdx < workerCount; workerIdx += 1) {
+        workers.push(
+          (async () => {
+            while (nextIndex < taskFactories.length) {
+              const currentIndex = nextIndex;
+              nextIndex += 1;
+              const factory = taskFactories[currentIndex];
+              if (typeof factory !== "function") {
+                continue;
+              }
+              try {
+                await factory();
+              } catch (error) {
+                /* ignore task errors */
+              }
+            }
+          })()
+        );
+      }
+      await Promise.allSettled(workers);
+    }
+
     async function applyPastedGrid(startDisplay, grid) {
       if (!grid.length) {
         return;
@@ -807,7 +836,7 @@
           if (previousValue === normalizedValue) {
             continue;
           }
-          operations.push({ cell: targetCell, value: normalizedValue });
+          operations.push({ cell: targetCell, value: normalizedValue, row: targetRow });
           lastCell = targetCell;
         }
       }
@@ -821,7 +850,34 @@
         setCellValue(cell, value);
       });
 
-      for (const { cell, value } of operations) {
+      const rowGroups = new Map();
+      const standaloneOperations = [];
+      operations.forEach((operation) => {
+        const { row } = operation;
+        if (row) {
+          if (!rowGroups.has(row)) {
+            rowGroups.set(row, []);
+          }
+          rowGroups.get(row).push(operation);
+        } else {
+          standaloneOperations.push(operation);
+        }
+      });
+
+      const rowTasks = Array.from(rowGroups.values()).map(
+        (rowOperations) =>
+          async () => {
+            for (const { cell, value } of rowOperations) {
+              await persistCellValue(cell, value);
+            }
+          }
+      );
+
+      if (rowTasks.length) {
+        await runWithConcurrency(rowTasks, MAX_PASTE_ROW_CONCURRENCY);
+      }
+
+      for (const { cell, value } of standaloneOperations) {
         await persistCellValue(cell, value);
       }
 
@@ -1212,14 +1268,6 @@
         if (!formatKey) {
           return;
         }
-        let lessonNumber = initialLessonNumber;
-        if (headerIndicator) {
-          const indicatorValue = parseInt(headerIndicator.textContent.trim(), 10);
-          if (!Number.isNaN(indicatorValue)) {
-            lessonNumber = indicatorValue;
-          }
-        }
-        const lessonIdValue = parseInt(table.dataset.lessonId || "", 10);
         if (Number.isNaN(lessonIdValue) || lessonIdValue <= 0) {
           return;
         }
