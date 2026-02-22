@@ -1,20 +1,250 @@
-{% extends "base.html" %}
+﻿{% extends "base.html" %}
 
-{% block title %}Bảng điều khiển{% endblock %}
+{% block title %}Home{% endblock %}
 
 {% block content %}
-<div class="row">
-  <div class="col-lg-6 mx-auto">
-    <div class="card shadow-sm">
-      <div class="card-body">
-        <h2 class="card-title mb-3">Xin chào, {{ current_user.username }}!</h2>
-        <p class="card-text">
-          Bạn đang đăng nhập thành công vào ứng dụng Flask kết nối MySQL.
-          Tại đây bạn có thể bắt đầu phát triển thêm các chức năng phù hợp với dự án Nihongo của mình.
-        </p>
-        <a class="btn btn-outline-danger" href="{{ url_for('auth.logout') }}">Đăng xuất</a>
-      </div>
-    </div>
+<div class="anki-home">
+  <div class="anki-top-tabs" role="navigation" aria-label="Home actions">
+    <a class="anki-tab active" href="{{ url_for('main.dashboard') }}">Decks</a>
+    <a class="anki-tab" href="{{ url_for('vocabulary.import_csv') }}">Add</a>
+    <a class="anki-tab" href="{{ url_for('vocabulary.index') }}">Browse</a>
+    <a class="anki-tab" href="{{ url_for('vocabulary.index') }}">Stats</a>
+    <a class="anki-tab sync" href="{{ url_for('main.dashboard') }}">Sync</a>
   </div>
+
+  <section class="anki-board" aria-labelledby="anki-decks-title">
+    <header class="anki-board-head">
+      <h3 id="anki-decks-title">Deck</h3>
+      <div class="anki-col-heads">
+        <span>New</span>
+        <span>Learn</span>
+        <span>Due</span>
+      </div>
+    </header>
+
+    <div class="anki-deck-list">
+      {% if deck_rows %}
+        {% for level in deck_rows %}
+        <div class="anki-row level-row">
+          <a class="anki-name depth-0" href="{{ level.href }}">
+            <span class="prefix">-</span>{{ level.label }}
+          </a>
+          <div class="anki-stats">
+            <span class="new">{{ level.new_count }}</span>
+            <span class="learn">{{ level.learn_count }}</span>
+            <span class="due">{{ level.due_count }}</span>
+          </div>
+        </div>
+
+        {% for topic in level.children %}
+        <div class="anki-row topic-row">
+          <a class="anki-name depth-1" href="{{ topic.href }}">
+            <span class="prefix">+</span>{{ topic.label }}
+          </a>
+          <div class="anki-stats">
+            <span class="new">{{ topic.new_count }}</span>
+            <span class="learn">{{ topic.learn_count }}</span>
+            <span class="due">{{ topic.due_count }}</span>
+          </div>
+        </div>
+
+        {% for lesson in topic.children %}
+        <div class="anki-row lesson-row">
+          <a class="anki-name depth-2" href="{{ lesson.href }}">{{ lesson.label }}</a>
+          <div class="anki-stats">
+            <span class="new">{{ lesson.new_count }}</span>
+            <span class="learn">{{ lesson.learn_count }}</span>
+            <span class="due">{{ lesson.due_count }}</span>
+          </div>
+        </div>
+        {% endfor %}
+        {% endfor %}
+        {% endfor %}
+      {% else %}
+      <div class="anki-empty">No decks yet. Go to Browse to create your first topic/lesson.</div>
+      {% endif %}
+    </div>
+  </section>
+
+  <footer class="anki-home-actions">
+    <a class="btn btn-light btn-sm anki-pill" href="{{ url_for('vocabulary.index') }}">Create Deck</a>
+    <a class="btn btn-light btn-sm anki-pill" href="{{ url_for('vocabulary.import_csv') }}">Import File</a>
+    <a class="btn btn-light btn-sm anki-pill" href="{{ url_for('auth.logout') }}">Logout</a>
+  </footer>
 </div>
+
+<style>
+  .anki-home {
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 0.25rem 0 2rem;
+  }
+  .anki-top-tabs {
+    display: inline-flex;
+    gap: 0;
+    border: 1px solid #cfcfcf;
+    border-radius: 0.9rem;
+    overflow: hidden;
+    background: #f7f7f7;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+    margin: 0 auto 1.5rem;
+    left: 50%;
+    transform: translateX(-50%);
+    position: relative;
+  }
+  .anki-tab {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 92px;
+    height: 42px;
+    padding: 0 0.85rem;
+    text-decoration: none;
+    color: #1f1f1f;
+    font-weight: 600;
+    border-right: 1px solid #d6d6d6;
+    background: linear-gradient(#fafafa, #f0f0f0);
+  }
+  .anki-tab:last-child {
+    border-right: none;
+  }
+  .anki-tab.active {
+    background: #ffffff;
+  }
+  .anki-tab.sync {
+    color: #2176ff;
+  }
+  .anki-board {
+    width: min(100%, 760px);
+    margin: 0 auto;
+    border: 1px solid #d5d5d5;
+    border-radius: 0.9rem;
+    background: #fff;
+    padding: 1rem 1.15rem 0.9rem;
+  }
+  .anki-board-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #e4e4e4;
+    padding-bottom: 0.5rem;
+    margin-bottom: 0.6rem;
+  }
+  .anki-board-head h3 {
+    margin: 0;
+    font-size: 1.8rem;
+    font-weight: 600;
+  }
+  .anki-col-heads {
+    display: grid;
+    grid-template-columns: repeat(3, 72px);
+    gap: 0.25rem;
+    font-size: 1.3rem;
+    font-weight: 600;
+    text-align: right;
+  }
+  .anki-deck-list {
+    display: grid;
+    gap: 0.14rem;
+  }
+  .anki-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-radius: 0.4rem;
+    padding: 0.16rem 0.2rem;
+  }
+  .anki-row:hover {
+    background: #f7faff;
+  }
+  .anki-name {
+    color: #171717;
+    text-decoration: none;
+    font-size: 1.9rem;
+    line-height: 1.2;
+  }
+  .anki-name:hover {
+    color: #0a58ca;
+    text-decoration: underline;
+  }
+  .anki-name .prefix {
+    display: inline-block;
+    width: 1rem;
+    color: #4e4e4e;
+    margin-right: 0.2rem;
+  }
+  .anki-name.depth-1 {
+    padding-left: 1.2rem;
+  }
+  .anki-name.depth-2 {
+    padding-left: 3rem;
+  }
+  .anki-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 72px);
+    gap: 0.25rem;
+    font-size: 1.9rem;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  .anki-stats .new {
+    color: #2d66f4;
+  }
+  .anki-stats .learn {
+    color: #d23a2f;
+  }
+  .anki-stats .due {
+    color: #1f8d35;
+  }
+  .anki-empty {
+    font-size: 1.1rem;
+    color: #6a6a6a;
+    padding: 0.75rem 0.2rem;
+  }
+  .anki-home-actions {
+    width: min(100%, 760px);
+    margin: 1rem auto 0;
+    display: flex;
+    justify-content: center;
+    gap: 0.8rem;
+    flex-wrap: wrap;
+  }
+  .anki-pill {
+    border: 1px solid #c7c7c7;
+    border-radius: 999px;
+    background: linear-gradient(#ffffff, #efefef);
+    color: #222;
+    padding: 0.4rem 1rem;
+  }
+  .anki-pill:hover {
+    border-color: #9db9ff;
+    color: #0a58ca;
+  }
+  @media (max-width: 768px) {
+    .anki-tab {
+      min-width: 74px;
+      font-size: 0.9rem;
+      height: 38px;
+      padding: 0 0.6rem;
+    }
+    .anki-board {
+      padding: 0.8rem 0.75rem;
+    }
+    .anki-board-head h3,
+    .anki-name,
+    .anki-stats {
+      font-size: 1.05rem;
+    }
+    .anki-col-heads,
+    .anki-stats {
+      grid-template-columns: repeat(3, 50px);
+    }
+    .anki-name.depth-1 {
+      padding-left: 0.8rem;
+    }
+    .anki-name.depth-2 {
+      padding-left: 1.8rem;
+    }
+  }
+</style>
 {% endblock %}

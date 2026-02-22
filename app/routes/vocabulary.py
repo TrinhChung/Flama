@@ -418,6 +418,48 @@ def create_lesson():
     return redirect(url_for("vocabulary.lesson", lesson_id=lesson.id))
 
 
+@vocabulary_bp.route("/lessons/<int:lesson_id>/delete", methods=["POST"])
+@login_required
+def delete_lesson(lesson_id: int):
+    """Delete a lesson and all of its vocabulary entries."""
+
+    lesson = VocabularyLesson.query.options(selectinload(VocabularyLesson.topic)).get_or_404(lesson_id)
+    lesson_title = lesson.title
+    next_url = (request.form.get("next") or "").strip()
+    topic = lesson.topic
+    topic_id = topic.id
+    db.session.delete(lesson)
+    db.session.commit()
+
+    flash(f"Deleted lesson: {lesson_title}", "success")
+    if next_url:
+        return redirect(next_url)
+    remaining_lessons = (
+        VocabularyLesson.query.filter_by(topic_id=topic_id)
+        .order_by(VocabularyLesson.position, VocabularyLesson.created_at)
+        .all()
+    )
+    if remaining_lessons:
+        return redirect(url_for("vocabulary.lesson", lesson_id=remaining_lessons[0].id))
+    return redirect(url_for("vocabulary.index"))
+
+
+@vocabulary_bp.route("/topics/<int:topic_id>/delete", methods=["POST"])
+@login_required
+def delete_topic(topic_id: int):
+    """Delete a topic and all nested lessons/entries."""
+
+    topic = VocabularyTopic.query.get_or_404(topic_id)
+    topic_name = topic.name
+    next_url = (request.form.get("next") or "").strip()
+    db.session.delete(topic)
+    db.session.commit()
+    flash(f"Deleted topic: {topic_name}", "success")
+    if next_url:
+        return redirect(next_url)
+    return redirect(url_for("vocabulary.index"))
+
+
 @vocabulary_bp.route("/topic/<int:topic_id>/open")
 @login_required
 def open_topic(topic_id: int):
@@ -429,6 +471,31 @@ def open_topic(topic_id: int):
     ).get_or_404(topic_id)
     lesson = _ensure_first_lesson(topic)
     return redirect(url_for("vocabulary.lesson", lesson_id=lesson.id))
+
+
+@vocabulary_bp.route("/topic/<int:topic_id>")
+@login_required
+def topic(topic_id: int):
+    """Display a topic page with lesson list and management actions."""
+
+    selected_topic = VocabularyTopic.query.options(
+        selectinload(VocabularyTopic.level).selectinload(VocabularyLevel.topics),
+        selectinload(VocabularyTopic.lessons).selectinload(VocabularyLesson.entries),
+    ).get_or_404(topic_id)
+    selected_level = selected_topic.level
+    sibling_topics = sorted(
+        selected_level.topics,
+        key=lambda item: ((item.position or 0), item.created_at or datetime.min),
+    )
+    topic_lessons = _sorted_lessons(selected_topic)
+    return render_template(
+        "vocabulary_topic.html",
+        selected_level=selected_level,
+        selected_topic=selected_topic,
+        sibling_topics=sibling_topics,
+        lessons=topic_lessons,
+        page_size=VOCABULARY_PAGE_SIZE,
+    )
 
 
 @vocabulary_bp.route("/lesson/<int:lesson_id>")

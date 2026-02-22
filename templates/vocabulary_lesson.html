@@ -11,7 +11,10 @@
   <div class="lesson-header-content d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2">
     <div>
       <h2 class="mb-0">
-        {{ selected_topic.name }} - Lesson <span id="lesson-indicator">{{ lesson_number }}</span>
+        <a class="lesson-topic-link" href="{{ url_for('vocabulary.topic', topic_id=selected_topic.id) }}">
+          {{ selected_topic.name }}
+        </a>
+        - Lesson <span id="lesson-indicator">{{ lesson_number }}</span>
         <span class="ms-2 fw-normal">({{ lesson_title }})</span>
       </h2>
       <small class="text-muted">
@@ -20,6 +23,15 @@
     </div>
     <div class="d-flex flex-wrap gap-2">
       <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('vocabulary.index') }}">Back to overview</a>
+      <form
+        method="post"
+        action="{{ url_for('vocabulary.delete_lesson', lesson_id=selected_lesson.id) }}"
+        onsubmit="return confirm('Xóa bài này và toàn bộ từ trong bài?');"
+      >
+        <button class="btn btn-sm btn-outline-danger" type="submit">
+          Delete lesson
+        </button>
+      </form>
       {% if sibling_lessons|length > 1 %}
       <div class="dropdown">
         <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
@@ -262,6 +274,15 @@
   .lesson-header-content {
     max-width: min(1320px, 100%);
     margin: 0 auto;
+  }
+  .lesson-topic-link {
+    color: inherit;
+    text-decoration: none;
+    border-bottom: 1px dashed rgba(13, 110, 253, 0.45);
+  }
+  .lesson-topic-link:hover {
+    color: #0d6efd;
+    border-bottom-color: #0d6efd;
   }
   .lesson-table-wrapper {
     overflow-x: auto;

@@ -69,6 +69,23 @@ Lightweight Flask + MySQL starter project that focuses on user registration, log
 
 The server listens on `http://127.0.0.1:5000`.
 
+## Seed Vocabulary from `static/seed_data`
+- Command:
+  ```powershell
+  flask vocab-seed
+  ```
+- Default behavior:
+  - Tạo/duy trì level tên `Seed Data`.
+  - Mỗi folder con trong `static/seed_data` -> 1 `topic`.
+  - Mỗi file `.tsv`/`.csv` trong folder -> 1 `lesson` (dùng tên file bỏ phần mở rộng).
+  - Các dòng hợp lệ (`deck`, `word`) sẽ được import thành vocabulary entries.
+- Tùy chọn:
+  ```powershell
+  flask vocab-seed --level "JLPT N1 Seed"
+  flask vocab-seed --path "static/seed_data" --replace-lessons
+  ```
+  - `--replace-lessons`: Nếu lesson cùng tên đã tồn tại trong topic, xóa lesson cũ và nạp lại từ file.
+
 ## Project Structure
 ```
 wsgi.py                 # Flask entry point

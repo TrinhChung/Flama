@@ -9,6 +9,7 @@ from flask import Flask
 
 from models import db
 
+from .cli import register_cli_commands
 from .extensions import login_manager, migrate
 from .routes import register_blueprints
 
@@ -48,6 +49,7 @@ def create_app(config: Optional[dict] = None) -> Flask:
         return None
 
     register_blueprints(app)
+    register_cli_commands(app)
 
     with app.app_context():
         db.create_all()
