@@ -6,7 +6,7 @@ import csv
 import re
 from datetime import datetime
 from io import StringIO
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from flask import (
     Blueprint,
@@ -707,6 +707,150 @@ def update_entry_field(entry_id: int):
 
     next_url = request.form.get("next") or url_for("vocabulary.index")
     return redirect(next_url)
+
+
+@vocabulary_bp.route("/entry/<int:entry_id>/fields", methods=["POST"])
+@login_required
+def update_entry_fields(entry_id: int):
+    """Update multiple fields on a vocabulary entry in one request."""
+    if not request.is_json:
+        return jsonify({"success": False, "message": "Du lieu khong hop le."}), 400
+
+    data = request.get_json(silent=True) or {}
+    raw_updates = data.get("values")
+    if not isinstance(raw_updates, dict):
+        return jsonify({"success": False, "message": "Thieu truong cap nhat."}), 400
+
+    entry = VocabularyEntry.query.get_or_404(entry_id)
+
+    cleaned_updates: Dict[str, str] = {}
+    for field, raw_value in raw_updates.items():
+        field_name = str(field).strip()
+        if field_name not in EDITABLE_FIELDS:
+            continue
+        value = "" if raw_value is None else str(raw_value)
+        cleaned_updates[field_name] = value.replace("\r", "").strip()
+
+    if not cleaned_updates:
+        return jsonify({"success": False, "message": "Khong co truong hop le."}), 400
+
+    if "deck" in cleaned_updates and not cleaned_updates["deck"]:
+        return jsonify({"success": False, "message": "Deck cannot be empty."}), 400
+    if "word" in cleaned_updates and not cleaned_updates["word"]:
+        return jsonify({"success": False, "message": "Word cannot be empty."}), 400
+
+    for field, cleaned in cleaned_updates.items():
+        setattr(entry, field, cleaned or None)
+
+    try:
+        db.session.commit()
+    except SQLAlchemyError:
+        db.session.rollback()
+        return jsonify({"success": False, "message": "Unable to update entry."}), 500
+
+    response_values = {field: getattr(entry, field) or "" for field in cleaned_updates}
+    return jsonify({"success": True, "values": response_values})
+
+
+@vocabulary_bp.route("/entries/bulk", methods=["POST"])
+@login_required
+def bulk_update_entries():
+    """Update multiple entries/fields in a single request."""
+    if not request.is_json:
+        return jsonify({"success": False, "message": "Du lieu khong hop le."}), 400
+
+    data = request.get_json(silent=True) or {}
+    updates = data.get("updates")
+    if not isinstance(updates, list) or not updates:
+        return jsonify({"success": False, "message": "Thieu du lieu cap nhat."}), 400
+
+    lesson_id_raw = data.get("lesson_id")
+    try:
+        lesson_id = int(lesson_id_raw or 0)
+    except (TypeError, ValueError):
+        lesson_id = 0
+
+    lesson: Optional[VocabularyLesson] = None
+    if lesson_id:
+        lesson = VocabularyLesson.query.get(lesson_id)
+
+    normalized_updates = []
+    entry_ids = set()
+    for item in updates:
+        if not isinstance(item, dict):
+            return jsonify({"success": False, "message": "Du lieu cap nhat khong hop le."}), 400
+        entry_id_raw = item.get("entry_id")
+        if entry_id_raw in (None, ""):
+            entry_id = None
+        else:
+            try:
+                entry_id = int(entry_id_raw)
+            except (TypeError, ValueError):
+                return jsonify({"success": False, "message": "Ma ban ghi khong hop le."}), 400
+        raw_values = item.get("values")
+        if not isinstance(raw_values, dict):
+            return jsonify({"success": False, "message": "Thieu gia tri cap nhat."}), 400
+        normalized_updates.append((entry_id, raw_values))
+        if entry_id:
+            entry_ids.add(entry_id)
+
+    entry_map = {}
+    if entry_ids:
+        existing_entries = VocabularyEntry.query.filter(VocabularyEntry.id.in_(entry_ids)).all()
+        entry_map = {entry.id: entry for entry in existing_entries}
+
+    results = []
+    try:
+        for entry_id, raw_values in normalized_updates:
+            cleaned = {}
+            for field, raw_value in raw_values.items():
+                field_name = str(field).strip()
+                if field_name not in EDITABLE_FIELDS:
+                    continue
+                value = "" if raw_value is None else str(raw_value)
+                cleaned[field_name] = value.replace("\r", "").strip()
+
+            if entry_id:
+                entry = entry_map.get(entry_id)
+                if not entry:
+                    return jsonify({"success": False, "message": f"Entry {entry_id} not found."}), 404
+                if not cleaned:
+                    results.append({"entry_id": entry.id, "values": {}})
+                    continue
+                if "deck" in cleaned and not cleaned["deck"]:
+                    return jsonify({"success": False, "message": "Deck cannot be empty."}), 400
+                if "word" in cleaned and not cleaned["word"]:
+                    return jsonify({"success": False, "message": "Word cannot be empty."}), 400
+                for field_name, cleaned_value in cleaned.items():
+                    setattr(entry, field_name, cleaned_value or None)
+                result_values = {field_name: getattr(entry, field_name) or "" for field_name in cleaned}
+                results.append({"entry_id": entry.id, "values": result_values})
+            else:
+                if lesson is None:
+                    if not lesson_id:
+                        return jsonify({"success": False, "message": "Lesson id is required for new entries."}), 400
+                    lesson = VocabularyLesson.query.get(lesson_id)
+                    if not lesson:
+                        return jsonify({"success": False, "message": "Lesson not found."}), 404
+                deck = cleaned.get("deck", "")
+                word = cleaned.get("word", "")
+                if not deck or not word:
+                    return jsonify({"success": False, "message": "Deck and Word cannot be empty."}), 400
+                entry_kwargs = {field: (cleaned.get(field) or None) for field in EDITABLE_FIELDS}
+                entry_kwargs["lesson"] = lesson
+                entry = VocabularyEntry(**entry_kwargs)
+                db.session.add(entry)
+                db.session.flush()
+                entry_map[entry.id] = entry
+                result_values = {field: getattr(entry, field) or "" for field in EDITABLE_FIELDS}
+                results.append({"entry_id": entry.id, "values": result_values})
+
+        db.session.commit()
+    except SQLAlchemyError:
+        db.session.rollback()
+        return jsonify({"success": False, "message": "Unable to update entries."}), 500
+
+    return jsonify({"success": True, "results": results})
 
 
 @vocabulary_bp.route("/import", methods=["GET", "POST"])

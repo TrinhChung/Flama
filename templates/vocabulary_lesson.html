@@ -81,6 +81,8 @@
     data-save-url="{{ url_for('vocabulary.save_column_width') }}"
     data-create-url="{{ url_for('vocabulary.create_entry') }}"
     data-update-url-template="{{ url_for('vocabulary.update_entry_field', entry_id=0) }}"
+    data-update-bulk-url-template="{{ url_for('vocabulary.update_entry_fields', entry_id=0) }}"
+    data-grid-update-url="{{ url_for('vocabulary.bulk_update_entries') }}"
     data-export-url-template="{{ url_for('vocabulary.download_lesson_csv', lesson_id=0, format='FORMAT_PLACEHOLDER') }}"
     data-lesson-id="{{ selected_lesson.id }}"
     data-initial-lesson="{{ initial_lesson }}"
@@ -199,7 +201,7 @@
       {% for extra_idx in range(next_idx, next_idx + placeholder_rows) %}
       {% set extra_lesson = lesson_number %}
       <tr class="placeholder-row" data-lesson="{{ lesson_number }}" data-placeholder-row="true">
-        <td>{{ extra_idx }}</td>
+        <td class="lesson-index-cell">{{ extra_idx }}</td>
         {% for field in editable_fields %}
         {% set default_val = lesson_title ~ "::Word " ~ extra_idx if field == "deck" else "" %}
         <td class="placeholder-cell editable-cell" data-field="{{ field }}" data-new-row="true">
@@ -396,6 +398,9 @@
     border-top: 1px dashed rgba(15, 23, 42, 0.15);
     background-color: rgba(13, 110, 253, 0.02);
   }
+  .placeholder-row td[data-field="deck"] {
+    background-color: rgba(13, 110, 253, 0.02);
+  }
   .placeholder-cell {
     min-width: 160px;
   }
@@ -461,6 +466,9 @@
     const createUrl = table.dataset.createUrl || "";
     const updateUrlTemplateRaw = table.dataset.updateUrlTemplate || "";
     const updateUrlTemplate = updateUrlTemplateRaw.replace(/\/0\/field$/, "/{id}/field");
+    const updateBulkUrlTemplateRaw = table.dataset.updateBulkUrlTemplate || "";
+    const updateBulkUrlTemplate = updateBulkUrlTemplateRaw.replace(/\/0\/fields$/, "/{id}/fields");
+    const gridUpdateUrl = table.dataset.gridUpdateUrl || "";
     const exportUrlTemplateRaw = table.dataset.exportUrlTemplate || "";
     const lessonIdValue = parseInt(table.dataset.lessonId || "", 10);
     const initialLessonNumber = (() => {
@@ -470,6 +478,43 @@
     const pageSize = {{ page_size_constant }};
     const headerIndicator = document.getElementById("lesson-indicator");
     const colMap = {};
+
+    function updateStickyOffsets() {
+      const indexHeader = table.querySelector('th[data-column-key="idx"]');
+      if (!indexHeader) {
+        return;
+      }
+      const rect = indexHeader.getBoundingClientRect();
+      if (!rect || !rect.width) {
+        return;
+      }
+      const computedStyle = window.getComputedStyle(indexHeader);
+      const borderRight = parseFloat(computedStyle.borderRightWidth || "0") || 0;
+      const totalWidth = Math.round(rect.width + borderRight);
+      table.style.setProperty("--lesson-index-width", `${totalWidth}px`);
+      table.style.setProperty("--lesson-deck-left", `${totalWidth}px`);
+    }
+
+    if (tableWrapper) {
+      const updateWrapperScrollClass = () => {
+        if (tableWrapper.scrollLeft > 0) {
+          tableWrapper.classList.add("scrolled-left");
+        } else {
+          tableWrapper.classList.remove("scrolled-left");
+        }
+      };
+      updateWrapperScrollClass();
+      updateStickyOffsets();
+      tableWrapper.addEventListener("scroll", () => {
+        window.requestAnimationFrame(updateWrapperScrollClass);
+      });
+      window.addEventListener("resize", () => {
+        window.requestAnimationFrame(() => {
+          updateWrapperScrollClass();
+          updateStickyOffsets();
+        });
+      });
+    }
     table.querySelectorAll("col[data-column-key]").forEach((col) => {
       colMap[col.dataset.columnKey] = col;
     });
@@ -492,12 +537,17 @@
       if (header) {
         header.style.width = widthPx;
       }
+      if (columnKey === "idx") {
+        updateStickyOffsets();
+      }
     }
 
     const storedWidths = {{ column_widths|tojson }};
     Object.entries(storedWidths || {}).forEach(([key, value]) => {
       applyWidth(key, value);
     });
+    updateStickyOffsets();
+    window.requestAnimationFrame(updateStickyOffsets);
 
     function parseDelimited(text, delimiter) {
       const rows = [];
@@ -691,6 +741,23 @@
       return "";
     }
 
+    function resolveBulkUpdateUrl(entryId) {
+      if (!entryId) {
+        return "";
+      }
+      const idString = String(entryId);
+      if (updateBulkUrlTemplate && updateBulkUrlTemplate.includes("{id}")) {
+        return updateBulkUrlTemplate.replace("{id}", idString);
+      }
+      if (updateBulkUrlTemplateRaw) {
+        if (updateBulkUrlTemplateRaw.endsWith("/0/fields")) {
+          return updateBulkUrlTemplateRaw.replace("/0/fields", `/${idString}/fields`);
+        }
+        return updateBulkUrlTemplateRaw.replace(/0(?=\/fields$)/, idString);
+      }
+      return "";
+    }
+
     function resolveExportUrl(lessonId, formatKey) {
       if (!exportUrlTemplateRaw || !formatKey) {
         return "";
@@ -744,6 +811,165 @@
         }
       } catch (error) {
         /* ignore network errors */
+      }
+    }
+
+    async function persistGridBatch(rowPayloads) {
+      if (!gridUpdateUrl || !Array.isArray(rowPayloads) || !rowPayloads.length) {
+        return false;
+      }
+      const payloadUpdates = [];
+      rowPayloads.forEach(({ entryId, values }) => {
+        const sanitizedValues = {};
+        if (values && typeof values === "object") {
+          Object.entries(values).forEach(([field, rawValue]) => {
+            if (!field) {
+              return;
+            }
+            sanitizedValues[field] =
+              typeof rawValue === "string" ? rawValue : rawValue == null ? "" : String(rawValue);
+          });
+        }
+        if (Object.keys(sanitizedValues).length) {
+          payloadUpdates.push({
+            entry_id: entryId ? Number(entryId) : null,
+            values: sanitizedValues,
+          });
+        } else {
+          payloadUpdates.push({
+            entry_id: entryId ? Number(entryId) : null,
+            values: {},
+          });
+        }
+      });
+      if (!payloadUpdates.length) {
+        return false;
+      }
+      const body = {
+        lesson_id: Number.isNaN(lessonIdValue) || lessonIdValue <= 0 ? null : lessonIdValue,
+        updates: payloadUpdates,
+      };
+      let response;
+      try {
+        response = await fetch(gridUpdateUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          credentials: "same-origin",
+          body: JSON.stringify(body),
+        });
+      } catch (error) {
+        return false;
+      }
+      if (!response || !response.ok) {
+        return false;
+      }
+      const contentType = response.headers.get("Content-Type") || "";
+      if (!contentType.includes("application/json")) {
+        return false;
+      }
+      let data;
+      try {
+        data = await response.json();
+      } catch (error) {
+        return false;
+      }
+      if (!data || !data.success || !Array.isArray(data.results) || data.results.length !== rowPayloads.length) {
+        return false;
+      }
+      data.results.forEach((result, index) => {
+        const payload = rowPayloads[index];
+        if (!payload || !payload.row) {
+          return;
+        }
+        const targetRow = payload.row;
+        const entryIdValue =
+          result && (result.entry_id != null ? result.entry_id : result.entryId != null ? result.entryId : null);
+        const entryIdString = entryIdValue != null ? String(entryIdValue) : null;
+        const resultValues =
+          result && result.values && typeof result.values === "object" ? result.values : {};
+        if (entryIdString && targetRow.dataset.entryId !== entryIdString) {
+          const currentValues = collectRowValues(targetRow) || {};
+          const mergedValues = { ...currentValues, ...resultValues };
+          applyRowMetadata(targetRow, entryIdString, mergedValues);
+        } else if (Object.keys(resultValues).length) {
+          Object.entries(resultValues).forEach(([field, rawValue]) => {
+            const cell = targetRow.querySelector(`td.editable-cell[data-field="${field}"]`);
+            if (!cell) {
+              return;
+            }
+            const normalizedValue =
+              typeof rawValue === "string" ? rawValue : rawValue == null ? "" : String(rawValue);
+            setCellValue(cell, normalizedValue);
+          });
+        }
+      });
+      return true;
+    }
+
+    async function persistRowUpdates(row, operations) {
+      if (!row || !Array.isArray(operations) || !operations.length) {
+        return;
+      }
+      const updates = {};
+      operations.forEach(({ cell, value }) => {
+        if (!cell) {
+          return;
+        }
+        const field = cell.dataset.field;
+        if (!field) {
+          return;
+        }
+        updates[field] = value == null ? "" : value;
+      });
+      const updateKeys = Object.keys(updates);
+      if (!updateKeys.length) {
+        return;
+      }
+      const entryId = await ensureRowEntry(row);
+      if (!entryId) {
+        return;
+      }
+      const actionUrl = resolveBulkUpdateUrl(entryId);
+      if (!actionUrl) {
+        for (const { cell, value } of operations) {
+          await persistCellValue(cell, value);
+        }
+        return;
+      }
+      try {
+        const response = await fetch(actionUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          credentials: "same-origin",
+          body: JSON.stringify({ values: updates }),
+        });
+        if (!response.ok) {
+          throw new Error("Bulk update failed");
+        }
+        const contentType = response.headers.get("Content-Type") || "";
+        if (!contentType.includes("application/json")) {
+          return;
+        }
+        const data = await response.json();
+        if (data && data.success && data.values) {
+          Object.entries(data.values).forEach(([field, returnedValue]) => {
+            const targetCell = row.querySelector(`td.editable-cell[data-field="${field}"]`);
+            if (!targetCell) {
+              return;
+            }
+            setCellValue(targetCell, returnedValue ?? "");
+          });
+        }
+      } catch (error) {
+        for (const { cell, value } of operations) {
+          await persistCellValue(cell, value);
+        }
       }
     }
 
@@ -864,16 +1090,66 @@
         }
       });
 
-      const rowTasks = Array.from(rowGroups.values()).map(
-        (rowOperations) =>
-          async () => {
-            for (const { cell, value } of rowOperations) {
-              await persistCellValue(cell, value);
+      const batchCandidates = [];
+      const fallbackRows = [];
+      rowGroups.forEach((rowOperations, row) => {
+        if (!rowOperations || !rowOperations.length) {
+          return;
+        }
+        const entryIdRaw = row.dataset.entryId || "";
+        const parsedEntryId = entryIdRaw ? parseInt(entryIdRaw, 10) : NaN;
+        const entryId = Number.isNaN(parsedEntryId) ? null : parsedEntryId;
+        const values = {};
+        rowOperations.forEach(({ cell, value }) => {
+          if (!cell) {
+            return;
+          }
+          const field = cell.dataset.field;
+          if (!field) {
+            return;
+          }
+          values[field] = typeof value === "string" ? value : value == null ? "" : String(value);
+        });
+        if (!entryId) {
+          if (!values.deck || !values.word) {
+            const rowValues = collectRowValues(row);
+            if (rowValues && rowValues.deck && !values.deck) {
+              values.deck = rowValues.deck;
+            }
+            if (rowValues && rowValues.word && !values.word) {
+              values.word = rowValues.word;
             }
           }
-      );
+          if (!values.deck || !values.word) {
+            fallbackRows.push({ row, operations: rowOperations });
+            return;
+          }
+        }
+        batchCandidates.push({
+          row,
+          entryId,
+          values,
+          operations: rowOperations,
+        });
+      });
 
-      if (rowTasks.length) {
+      let batchHandled = false;
+      if (gridUpdateUrl && batchCandidates.length) {
+        try {
+          batchHandled = await persistGridBatch(batchCandidates);
+        } catch (error) {
+          batchHandled = false;
+        }
+      }
+
+      const rowsNeedingRowUpdate = batchHandled ? fallbackRows : [...fallbackRows, ...batchCandidates];
+      if (rowsNeedingRowUpdate.length) {
+        const rowTasks = rowsNeedingRowUpdate.map(
+          ({ row, operations }) =>
+            async () => {
+              await persistRowUpdates(row, operations);
+            }
+        );
         await runWithConcurrency(rowTasks, MAX_PASTE_ROW_CONCURRENCY);
       }
 
