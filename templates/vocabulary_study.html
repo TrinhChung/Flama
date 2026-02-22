@@ -1,0 +1,432 @@
+{% extends "base.html" %}
+
+{% block title %}Study - {{ selected_topic.name }}{% endblock %}
+
+{% block content %}
+<div class="study-page">
+  <div class="study-top-tabs">
+    <a class="study-tab" href="{{ url_for('main.dashboard') }}">Decks</a>
+    <a class="study-tab" href="{{ url_for('vocabulary.import_csv') }}">Add</a>
+    <a class="study-tab" href="{{ url_for('vocabulary.index') }}">Browse</a>
+    <a class="study-tab" href="{{ url_for('main.dashboard') }}">Stats</a>
+    <a class="study-tab sync" href="{{ url_for('main.dashboard') }}">Sync</a>
+  </div>
+
+  <div class="study-header">
+    <div class="study-path">
+      <a href="{{ url_for('main.dashboard') }}">Home</a>
+      <span>/</span>
+      <a href="{{ url_for('vocabulary.study_topic', topic_id=selected_topic.id) }}">{{ selected_topic.name }}</a>
+      <span>/</span>
+      <span>{{ selected_lesson.title if selected_lesson else 'All lessons' }}</span>
+    </div>
+    <div class="study-counts">
+      <span class="new">{{ due_new }}</span>
+      <span class="learn">{{ due_learn }}</span>
+      <span class="due">{{ due_review }}</span>
+    </div>
+  </div>
+
+  {% if card %}
+  <section class="study-card-shell">
+    <div
+      class="study-card"
+      id="study-card"
+      data-entry-id="{{ card.id }}"
+      data-study-scope="{{ study_scope }}"
+      data-topic-id="{{ selected_topic.id }}"
+    >
+      <div class="card-face card-front is-active" id="card-front">
+        <div style='height:100vh;text-align:center;display:flex;justify-content:center;align-items:center;font-size:70px;font-weight:bold;color:#e53c20'>
+          {{ card.word }}
+        </div>
+      </div>
+
+      <div class="card-face card-back" id="card-back">
+        <div style='
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            text-align: start;
+            padding-left: 20px;
+            font-family: "Arial";
+            font-size: 18px;'
+        >
+            <div style='
+                font-family: "Arial";
+                font-size: 36px;
+                font-weight: bold;
+                display: flex;
+                align-items: center;
+                color: #e53c20;
+                padding-top: 20px;'
+            >
+                {{ card.word }}
+                {% if card.word_audio %}
+                <audio id="custom-audio" src="{{ card.word_audio }}"></audio>
+                <button class="audio-inline-btn" onclick="document.getElementById('custom-audio').play()">🔊</button>
+                {% endif %}
+            </div>
+
+            {% if card.reading %}
+            <div style='
+                display: flex;
+                font-weight: bold;
+                font-family: "Arial";
+                font-size: 20px;
+                flex-direction: column;
+                text-transform: uppercase;'
+            >
+                <div style='font-family: "Arial"; display: flex'>
+                    {{ card.reading }} 「{{ card.hanviet or '' }}」
+                </div>
+                <div style='color: green; display: flex; padding-bottom: 10px' auto-split>
+                    {{ card.translation_vi or '' }}
+                </div>
+            </div>
+            {% endif %}
+
+            {% if card.meaning_jp %}
+            <div style='display: flex; padding-top: 20px; color: #3367d6' auto-split>
+                ◆ {{ card.meaning_jp }}
+            </div>
+            {% endif %}
+
+            {% if card.meaning_vi %}
+            <div style='display: flex; padding-top: 10px' auto-split>
+                {{ card.meaning_vi }}
+            </div>
+            {% endif %}
+
+            {% if card.image %}
+            <div class="kanji-stroke-images">
+              {{ card.image|safe }}
+            </div>
+            {% endif %}
+
+            {% if card.usage_jp %}
+            <div style='display: flex; padding-top: 20px; color: #3367d6; font-weight: bold;'>
+                ◆ Cách sử dụng:
+            </div>
+            <div style='display: flex; flex-direction: column; padding-top: 10px;'>
+                <div style="font-size: 20px;" auto-split>{{ card.usage_jp }}</div>
+                {% if card.usage_vi %}
+                <div style="font-size: 16px; color: gray; margin-left: 10px;" auto-split>{{ card.usage_vi }}</div>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            {% if card.example_jp %}
+            <div style='display: flex; padding-top: 20px; color: #3367d6; font-weight: bold;'>
+                ◆ Câu ví dụ:
+            </div>
+            <div style='display: flex; flex-direction: column; padding-top: 10px;'>
+                <div style="font-size: 20px; display: flex; align-items: center;" auto-split>
+                    {{ card.example_jp }}
+                    {% if card.example_audio %}
+                    <audio id="example-audio" src="{{ card.example_audio }}"></audio>
+                    <button class="audio-inline-btn" onclick="document.getElementById('example-audio').play()">🔊</button>
+                    {% endif %}
+                </div>
+                {% if card.example_vi %}
+                <div style="font-size: 16px; color: gray; margin-left: 10px;" auto-split>{{ card.example_vi }}</div>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            {% if card.additional_note_jp %}
+            <div style='display: flex; padding-top: 20px; font-family: "Arial";color: #3367d6'>
+                ◆ Ghi chú:
+            </div>
+            <div style='display: flex; padding-top: 10px' auto-split>
+                {{ card.additional_note_jp }}
+            </div>
+            {% endif %}
+
+            {% if card.additional_note_vi %}
+            <div style='display: flex; padding-top: 10px;font-family: "Arial"; color: gray; font-size: 16px;' auto-split>
+                {{ card.additional_note_vi }}
+            </div>
+            {% endif %}
+
+            {% if card.diagram %}
+            <div>{{ card.diagram|safe }}</div>
+            {% endif %}
+        </div>
+      </div>
+    </div>
+  </section>
+  {% else %}
+  <section class="study-empty">
+    <h3>No due cards in this lesson.</h3>
+    <p>Hôm nay bạn đã học xong phần này.</p>
+    <div class="d-flex gap-2 justify-content-center flex-wrap">
+      <a class="btn btn-outline-secondary" href="{{ next_study_url }}">Continue</a>
+      <a class="btn btn-primary" href="{{ url_for('main.dashboard') }}">Back home</a>
+      {% if admin_mode and selected_lesson %}
+      <a class="btn btn-outline-primary" href="{{ url_for('vocabulary.lesson', lesson_id=selected_lesson.id) }}">Edit lesson</a>
+      {% endif %}
+    </div>
+  </section>
+  {% endif %}
+
+  {% if card %}
+  <div class="study-bottom-bar">
+    <div class="study-bottom-actions front-actions" id="front-actions">
+      <button class="btn btn-light answer-btn show-answer" id="show-answer-btn">Show Answer</button>
+    </div>
+    <div class="study-bottom-actions back-actions d-none" id="back-actions">
+      <button class="btn btn-light answer-btn again" data-rating="again">Again</button>
+      <button class="btn btn-light answer-btn hard" data-rating="hard">Hard</button>
+      <button class="btn btn-light answer-btn good" data-rating="good">Good</button>
+      <button class="btn btn-light answer-btn easy" data-rating="easy">Easy</button>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<style>
+  .study-page {
+    min-height: calc(100vh - 88px);
+    display: flex;
+    flex-direction: column;
+    background: #ececec;
+    margin: -1rem;
+    padding: 0.8rem 0.8rem 5rem;
+  }
+  .study-top-tabs {
+    margin: 0 auto 0.9rem;
+    display: inline-flex;
+    border: 1px solid #cfcfcf;
+    border-radius: 0.9rem;
+    overflow: hidden;
+    background: #f7f7f7;
+  }
+  .study-tab {
+    min-width: 86px;
+    padding: 0.55rem 0.8rem;
+    text-align: center;
+    text-decoration: none;
+    color: #222;
+    font-weight: 600;
+    border-right: 1px solid #d6d6d6;
+    background: linear-gradient(#fafafa, #f1f1f1);
+  }
+  .study-tab:last-child {
+    border-right: none;
+  }
+  .study-tab.sync {
+    color: #2176ff;
+  }
+  .study-header {
+    width: min(1400px, 100%);
+    margin: 0 auto 0.6rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.95rem;
+    color: #525252;
+  }
+  .study-path {
+    display: flex;
+    gap: 0.45rem;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .study-path a {
+    color: #2c63da;
+    text-decoration: none;
+  }
+  .study-path a:hover {
+    text-decoration: underline;
+  }
+  .study-counts {
+    display: flex;
+    gap: 0.75rem;
+    font-weight: 700;
+  }
+  .study-counts .new {
+    color: #2d66f4;
+  }
+  .study-counts .learn {
+    color: #d23a2f;
+  }
+  .study-counts .due {
+    color: #1f8d35;
+  }
+  .study-card-shell {
+    flex: 1;
+    display: flex;
+    width: min(1400px, 100%);
+    margin: 0 auto;
+    border: 1px solid #d2d2d2;
+    border-radius: 0.75rem;
+    background: #ffffff;
+    overflow: hidden;
+  }
+  .study-card {
+    width: 100%;
+    min-height: 70vh;
+  }
+  .card-face {
+    display: none;
+    padding: 0 0.8rem 1rem;
+  }
+  .card-face.is-active {
+    display: block;
+  }
+  .audio-inline-btn {
+    margin-left: 0.45rem;
+    border-radius: 999px;
+    border: 1px solid #d2d2d2;
+    background: #f7f7f7;
+    min-width: 2rem;
+    height: 2rem;
+  }
+  .study-empty {
+    flex: 1;
+    width: min(840px, 100%);
+    margin: 0.6rem auto 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 0.5rem;
+    text-align: center;
+    background: #fff;
+    border: 1px solid #d7d7d7;
+    border-radius: 0.8rem;
+    padding: 2rem 1rem;
+  }
+  .study-bottom-bar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: #efefef;
+    border-top: 1px solid #d0d0d0;
+    padding: 0.65rem 0.75rem;
+    z-index: 1050;
+  }
+  .study-bottom-actions {
+    display: flex;
+    justify-content: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+  .answer-btn {
+    min-width: 100px;
+    border-radius: 999px;
+    border: 1px solid #c7c7c7;
+    background: linear-gradient(#ffffff, #efefef);
+    font-weight: 600;
+  }
+  .answer-btn.again {
+    color: #b22118;
+  }
+  .answer-btn.hard {
+    color: #825b06;
+  }
+  .answer-btn.good {
+    color: #1a4cc8;
+  }
+  .answer-btn.easy {
+    color: #187131;
+  }
+  @media (max-width: 768px) {
+    .study-page {
+      margin: -1rem -0.5rem;
+      padding-left: 0.5rem;
+      padding-right: 0.5rem;
+    }
+    .study-tab {
+      min-width: 70px;
+      font-size: 0.9rem;
+      padding: 0.5rem 0.55rem;
+    }
+    .card-face {
+      padding: 0 0.4rem 1rem;
+    }
+  }
+</style>
+
+{% if card %}
+<script>
+  (() => {
+    const cardRoot = document.getElementById("study-card");
+    const entryId = Number(cardRoot?.dataset.entryId || 0);
+    const studyScope = (cardRoot?.dataset.studyScope || "lesson").toLowerCase();
+    const topicId = Number(cardRoot?.dataset.topicId || 0);
+    const front = document.getElementById("card-front");
+    const back = document.getElementById("card-back");
+    const showAnswerBtn = document.getElementById("show-answer-btn");
+    const frontActions = document.getElementById("front-actions");
+    const backActions = document.getElementById("back-actions");
+
+    function showBack() {
+      if (!front || !back || !frontActions || !backActions) {
+        return;
+      }
+      front.classList.remove("is-active");
+      back.classList.add("is-active");
+      frontActions.classList.add("d-none");
+      backActions.classList.remove("d-none");
+
+      const wordAudio = document.getElementById("custom-audio");
+      const exampleAudio = document.getElementById("example-audio");
+      if (wordAudio) {
+        wordAudio.play().catch(() => {});
+        wordAudio.onended = () => {
+          setTimeout(() => {
+            if (exampleAudio) {
+              exampleAudio.play().catch(() => {});
+            }
+          }, 500);
+        };
+      }
+    }
+
+    function applyAutoSplit() {
+      document.querySelectorAll("div[auto-split]").forEach((el) => {
+        const text = el.innerHTML.replace(/\$/g, "<br>");
+        el.innerHTML = text;
+      });
+    }
+
+    async function submitRating(rating) {
+      if (!entryId || !rating) {
+        return;
+      }
+      const res = await fetch(`{{ url_for('vocabulary.study_answer', entry_id=0) }}`.replace("/0/", `/${entryId}/`), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          rating,
+          scope: studyScope,
+          topic_id: topicId || null
+        })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        return;
+      }
+      if (data.next_url) {
+        window.location.href = data.next_url;
+      }
+    }
+
+    if (showAnswerBtn) {
+      showAnswerBtn.addEventListener("click", showBack);
+    }
+    document.querySelectorAll("[data-rating]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        submitRating(btn.dataset.rating).catch(() => {});
+      });
+    });
+    applyAutoSplit();
+  })();
+</script>
+{% endif %}
+{% endblock %}

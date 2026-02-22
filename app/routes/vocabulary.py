@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import csv
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from io import StringIO
 from typing import Dict, List, Optional
 
@@ -24,9 +24,11 @@ from sqlalchemy import func
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import selectinload
 
+from app.utils.permissions import is_admin_user
 from models import db
 from models.column_preference import VocabularyColumnPreference
 from models.vocabulary_entry import VocabularyEntry
+from models.vocabulary_progress import VocabularyProgress
 from models.vocabulary_structure import VocabularyLevel, VocabularyTopic, VocabularyLesson
 
 VOCABULARY_PAGE_SIZE = 60
@@ -135,6 +137,9 @@ DEFAULT_EXPORT_FORMAT = "csv"
 _COLUMN_WIDTH_PATTERN = re.compile(r"^\s*(\d+(?:\.\d+)?)\s*(px)?\s*$")
 _MIN_COLUMN_WIDTH = 60
 _MAX_COLUMN_WIDTH = 1600
+LEARN_QUEUE = "learn"
+REVIEW_QUEUE = "review"
+NEW_QUEUE = "new"
 
 
 def _normalize_column_width(column_key: str, raw_width: str | None) -> str:
@@ -194,6 +199,26 @@ EXPECTED_HEADERS = {
 }
 
 vocabulary_bp = Blueprint("vocabulary", __name__, url_prefix="/vocabulary")
+
+
+@vocabulary_bp.before_request
+def restrict_non_admin_routes():
+    """Allow regular users to access only study mode endpoints."""
+    if not current_user.is_authenticated:
+        return None
+    if is_admin_user(current_user):
+        return None
+
+    endpoint = request.endpoint or ""
+    allowed_endpoints = {
+        "vocabulary.lesson",  # route will redirect to study mode
+        "vocabulary.study_topic",
+        "vocabulary.study_lesson",
+        "vocabulary.study_answer",
+    }
+    if endpoint in allowed_endpoints:
+        return None
+    return redirect(url_for("main.dashboard"))
 
 
 def _normalize_header(value: str) -> str:
@@ -299,6 +324,41 @@ def _select_lesson_for_append(
         lesson = _create_topic_lesson(topic, page_size=default_page_size, commit=False)
         return lesson, 0
     return lesson, entry_count
+
+
+def _is_due(progress: VocabularyProgress | None, now: datetime) -> bool:
+    if progress is None:
+        return True
+    if progress.queue == NEW_QUEUE:
+        return True
+    if progress.due_at is None:
+        return True
+    return progress.due_at <= now
+
+
+def _select_next_card(entries: List[VocabularyEntry], progress_map: Dict[int, VocabularyProgress], now: datetime):
+    due_learn = []
+    due_review = []
+    due_new = []
+    for entry in entries:
+        progress = progress_map.get(entry.id)
+        if not _is_due(progress, now):
+            continue
+        queue = progress.queue if progress else NEW_QUEUE
+        if queue == LEARN_QUEUE:
+            due_learn.append(entry)
+        elif queue == REVIEW_QUEUE:
+            due_review.append(entry)
+        else:
+            due_new.append(entry)
+
+    if due_learn:
+        return due_learn[0]
+    if due_review:
+        return due_review[0]
+    if due_new:
+        return due_new[0]
+    return None
 
 
 @vocabulary_bp.route("/")
@@ -498,10 +558,213 @@ def topic(topic_id: int):
     )
 
 
+@vocabulary_bp.route("/study/topic/<int:topic_id>")
+@login_required
+def study_topic(topic_id: int):
+    """Render topic-wide study mode across all lessons in the topic."""
+
+    topic_obj = VocabularyTopic.query.options(
+        selectinload(VocabularyTopic.level),
+        selectinload(VocabularyTopic.lessons).selectinload(VocabularyLesson.entries),
+    ).get_or_404(topic_id)
+    lessons = _sorted_lessons(topic_obj)
+    entries: List[VocabularyEntry] = []
+    for lesson_obj in lessons:
+        lesson_entries = sorted(lesson_obj.entries, key=lambda item: item.id)
+        entries.extend(lesson_entries)
+
+    now = datetime.utcnow()
+    entry_ids = [entry.id for entry in entries]
+    progress_map: Dict[int, VocabularyProgress] = {}
+    if entry_ids:
+        rows = VocabularyProgress.query.filter(
+            VocabularyProgress.user_id == current_user.id,
+            VocabularyProgress.entry_id.in_(entry_ids),
+        ).all()
+        progress_map = {row.entry_id: row for row in rows}
+
+    card = _select_next_card(entries, progress_map, now)
+    due_new = 0
+    due_learn = 0
+    due_review = 0
+    for entry in entries:
+        progress = progress_map.get(entry.id)
+        if not _is_due(progress, now):
+            continue
+        queue = progress.queue if progress else NEW_QUEUE
+        if queue == LEARN_QUEUE:
+            due_learn += 1
+        elif queue == REVIEW_QUEUE:
+            due_review += 1
+        else:
+            due_new += 1
+
+    return render_template(
+        "vocabulary_study.html",
+        selected_level=topic_obj.level,
+        selected_topic=topic_obj,
+        selected_lesson=None,
+        card=card,
+        due_new=due_new,
+        due_learn=due_learn,
+        due_review=due_review,
+        due_total=due_new + due_learn + due_review,
+        admin_mode=is_admin_user(current_user),
+        study_scope="topic",
+        next_study_url=url_for("vocabulary.study_topic", topic_id=topic_obj.id),
+    )
+
+
+@vocabulary_bp.route("/study/lesson/<int:lesson_id>")
+@login_required
+def study_lesson(lesson_id: int):
+    """Render flashcard-style study mode for non-admin users."""
+
+    lesson_obj = VocabularyLesson.query.options(
+        selectinload(VocabularyLesson.topic).selectinload(VocabularyTopic.level),
+        selectinload(VocabularyLesson.entries),
+    ).get_or_404(lesson_id)
+    topic_obj = lesson_obj.topic
+    level_obj = topic_obj.level
+    entries = sorted(lesson_obj.entries, key=lambda item: item.id)
+    now = datetime.utcnow()
+
+    progress_map: Dict[int, VocabularyProgress] = {}
+    entry_ids = [entry.id for entry in entries]
+    if entry_ids:
+        rows = VocabularyProgress.query.filter(
+            VocabularyProgress.user_id == current_user.id,
+            VocabularyProgress.entry_id.in_(entry_ids),
+        ).all()
+        progress_map = {row.entry_id: row for row in rows}
+
+    card = _select_next_card(entries, progress_map, now)
+    due_new = 0
+    due_learn = 0
+    due_review = 0
+    for entry in entries:
+        progress = progress_map.get(entry.id)
+        if not _is_due(progress, now):
+            continue
+        queue = progress.queue if progress else NEW_QUEUE
+        if queue == LEARN_QUEUE:
+            due_learn += 1
+        elif queue == REVIEW_QUEUE:
+            due_review += 1
+        else:
+            due_new += 1
+
+    return render_template(
+        "vocabulary_study.html",
+        selected_level=level_obj,
+        selected_topic=topic_obj,
+        selected_lesson=lesson_obj,
+        card=card,
+        due_new=due_new,
+        due_learn=due_learn,
+        due_review=due_review,
+        due_total=due_new + due_learn + due_review,
+        admin_mode=is_admin_user(current_user),
+        study_scope="lesson",
+        next_study_url=url_for("vocabulary.study_lesson", lesson_id=lesson_obj.id),
+    )
+
+
+@vocabulary_bp.route("/study/entry/<int:entry_id>/answer", methods=["POST"])
+@login_required
+def study_answer(entry_id: int):
+    """Apply a flashcard rating and update spaced-repetition progress."""
+    if not request.is_json:
+        return jsonify({"success": False, "message": "Invalid payload."}), 400
+
+    data = request.get_json(silent=True) or {}
+    rating = str(data.get("rating", "")).strip().lower()
+    scope = str(data.get("scope", "lesson")).strip().lower()
+    topic_id_raw = data.get("topic_id")
+    if rating not in {"again", "hard", "good", "easy"}:
+        return jsonify({"success": False, "message": "Invalid rating."}), 400
+
+    entry = VocabularyEntry.query.options(selectinload(VocabularyEntry.lesson)).get_or_404(entry_id)
+    progress = VocabularyProgress.query.filter_by(
+        user_id=current_user.id, entry_id=entry.id
+    ).first()
+    now = datetime.utcnow()
+
+    if not progress:
+        progress = VocabularyProgress(
+            user_id=current_user.id,
+            entry_id=entry.id,
+            queue=NEW_QUEUE,
+            due_at=None,
+            interval_days=0,
+            ease_factor=2.5,
+            reps=0,
+            lapses=0,
+        )
+        db.session.add(progress)
+
+    progress.reps = (progress.reps or 0) + 1
+    progress.last_reviewed_at = now
+
+    current_interval = max(0, progress.interval_days or 0)
+    current_ease = float(progress.ease_factor or 2.5)
+
+    if rating == "again":
+        progress.queue = LEARN_QUEUE
+        progress.interval_days = 0
+        progress.due_at = now + timedelta(minutes=1)
+        progress.ease_factor = max(1.3, current_ease - 0.2)
+        progress.lapses = (progress.lapses or 0) + 1
+    elif rating == "hard":
+        progress.queue = LEARN_QUEUE if progress.queue in {NEW_QUEUE, LEARN_QUEUE} else REVIEW_QUEUE
+        progress.interval_days = max(1, current_interval or 1)
+        if progress.queue == LEARN_QUEUE:
+            progress.due_at = now + timedelta(minutes=10)
+        else:
+            progress.due_at = now + timedelta(days=progress.interval_days)
+        progress.ease_factor = max(1.3, current_ease - 0.1)
+    elif rating == "good":
+        if progress.queue in {NEW_QUEUE, LEARN_QUEUE}:
+            progress.queue = REVIEW_QUEUE
+            next_interval = max(1, current_interval or 1)
+        else:
+            next_interval = max(1, int(round(max(1, current_interval) * current_ease)))
+        progress.interval_days = next_interval
+        progress.due_at = now + timedelta(days=next_interval)
+        progress.ease_factor = min(3.0, current_ease + 0.03)
+    else:  # easy
+        progress.queue = REVIEW_QUEUE
+        base_interval = max(2, current_interval or 2)
+        next_interval = int(round(base_interval * max(1.5, current_ease)))
+        progress.interval_days = max(2, next_interval)
+        progress.due_at = now + timedelta(days=progress.interval_days)
+        progress.ease_factor = min(3.1, current_ease + 0.1)
+
+    next_url = url_for("vocabulary.study_lesson", lesson_id=entry.lesson_id)
+    if scope == "topic":
+        try:
+            topic_id = int(topic_id_raw or 0)
+        except (TypeError, ValueError):
+            topic_id = 0
+        if topic_id:
+            next_url = url_for("vocabulary.study_topic", topic_id=topic_id)
+
+    db.session.commit()
+    return jsonify(
+        {
+            "success": True,
+            "lesson_id": entry.lesson_id,
+            "next_url": next_url,
+        }
+    )
+
+
 @vocabulary_bp.route("/lesson/<int:lesson_id>")
 @login_required
 def lesson(lesson_id: int):
     """Display the editable grid for a specific lesson."""
+    if not is_admin_user(current_user):
+        return redirect(url_for("vocabulary.study_lesson", lesson_id=lesson_id))
 
     selected_lesson = (
         VocabularyLesson.query.options(

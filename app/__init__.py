@@ -38,6 +38,7 @@ def create_app(config: Optional[dict] = None) -> Flask:
 
     from models.user import User
     from models.vocabulary_entry import VocabularyEntry  # noqa: F401  # register model
+    from models.vocabulary_progress import VocabularyProgress  # noqa: F401  # register model
     from models.column_preference import (
         VocabularyColumnPreference,
     )  # noqa: F401  # register model

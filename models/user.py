@@ -15,9 +15,15 @@ class User(UserMixin, db.Model):
     email = db.Column(db.String(255), unique=True, nullable=False, index=True)
     username = db.Column(db.String(150), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
+    is_admin = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(
         db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+    vocabulary_progress = db.relationship(
+        "VocabularyProgress",
+        back_populates="user",
+        cascade="all, delete-orphan",
     )
 
     def set_password(self, password: str) -> None:

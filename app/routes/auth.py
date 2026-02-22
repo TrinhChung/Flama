@@ -36,6 +36,7 @@ def register():
             return render_template("register.html")
 
         user = User(email=email, username=username)
+        user.is_admin = User.query.count() == 0
         user.set_password(password)
         db.session.add(user)
         db.session.commit()

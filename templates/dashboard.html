@@ -6,9 +6,9 @@
 <div class="anki-home">
   <div class="anki-top-tabs" role="navigation" aria-label="Home actions">
     <a class="anki-tab active" href="{{ url_for('main.dashboard') }}">Decks</a>
-    <a class="anki-tab" href="{{ url_for('vocabulary.import_csv') }}">Add</a>
-    <a class="anki-tab" href="{{ url_for('vocabulary.index') }}">Browse</a>
-    <a class="anki-tab" href="{{ url_for('vocabulary.index') }}">Stats</a>
+    <a class="anki-tab" href="{{ url_for('main.dashboard') }}">Study</a>
+    <a class="anki-tab" href="{{ url_for('main.dashboard') }}">Progress</a>
+    <a class="anki-tab" href="{{ url_for('main.dashboard') }}">Stats</a>
     <a class="anki-tab sync" href="{{ url_for('main.dashboard') }}">Sync</a>
   </div>
 
@@ -25,10 +25,16 @@
     <div class="anki-deck-list">
       {% if deck_rows %}
         {% for level in deck_rows %}
-        <div class="anki-row level-row">
-          <a class="anki-name depth-0" href="{{ level.href }}">
-            <span class="prefix">-</span>{{ level.label }}
-          </a>
+        {% set level_id = "level-" ~ loop.index0 %}
+        <div class="anki-row level-row" data-node-id="{{ level_id }}">
+          <div class="anki-name-wrap depth-0">
+            {% if level.children %}
+            <button class="tree-toggle" type="button" data-node-type="level" data-node-id="{{ level_id }}" data-expanded="true">-</button>
+            {% else %}
+            <span class="tree-spacer"></span>
+            {% endif %}
+            <a class="anki-name" href="{{ level.href }}">{{ level.label }}</a>
+          </div>
           <div class="anki-stats">
             <span class="new">{{ level.new_count }}</span>
             <span class="learn">{{ level.learn_count }}</span>
@@ -37,10 +43,16 @@
         </div>
 
         {% for topic in level.children %}
-        <div class="anki-row topic-row">
-          <a class="anki-name depth-1" href="{{ topic.href }}">
-            <span class="prefix">+</span>{{ topic.label }}
-          </a>
+        {% set topic_id = level_id ~ "-topic-" ~ loop.index0 %}
+        <div class="anki-row topic-row" data-node-id="{{ topic_id }}" data-parent-level="{{ level_id }}">
+          <div class="anki-name-wrap depth-1">
+            {% if topic.children %}
+            <button class="tree-toggle" type="button" data-node-type="topic" data-node-id="{{ topic_id }}" data-expanded="true">-</button>
+            {% else %}
+            <span class="tree-spacer"></span>
+            {% endif %}
+            <a class="anki-name" href="{{ topic.href }}">{{ topic.label }}</a>
+          </div>
           <div class="anki-stats">
             <span class="new">{{ topic.new_count }}</span>
             <span class="learn">{{ topic.learn_count }}</span>
@@ -49,8 +61,11 @@
         </div>
 
         {% for lesson in topic.children %}
-        <div class="anki-row lesson-row">
-          <a class="anki-name depth-2" href="{{ lesson.href }}">{{ lesson.label }}</a>
+        <div class="anki-row lesson-row" data-parent-level="{{ level_id }}" data-parent-topic="{{ topic_id }}">
+          <div class="anki-name-wrap depth-2">
+            <span class="tree-spacer"></span>
+            <a class="anki-name" href="{{ lesson.href }}">{{ lesson.label }}</a>
+          </div>
           <div class="anki-stats">
             <span class="new">{{ lesson.new_count }}</span>
             <span class="learn">{{ lesson.learn_count }}</span>
@@ -67,8 +82,9 @@
   </section>
 
   <footer class="anki-home-actions">
-    <a class="btn btn-light btn-sm anki-pill" href="{{ url_for('vocabulary.index') }}">Create Deck</a>
-    <a class="btn btn-light btn-sm anki-pill" href="{{ url_for('vocabulary.import_csv') }}">Import File</a>
+    {% if admin_mode %}
+    <a class="btn btn-light btn-sm anki-pill" href="{{ url_for('vocabulary.index') }}">Admin Edit</a>
+    {% endif %}
     <a class="btn btn-light btn-sm anki-pill" href="{{ url_for('auth.logout') }}">Logout</a>
   </footer>
 </div>
@@ -157,6 +173,11 @@
   .anki-row:hover {
     background: #f7faff;
   }
+  .anki-name-wrap {
+    display: inline-flex;
+    align-items: center;
+    min-width: 0;
+  }
   .anki-name {
     color: #171717;
     text-decoration: none;
@@ -167,17 +188,35 @@
     color: #0a58ca;
     text-decoration: underline;
   }
-  .anki-name .prefix {
-    display: inline-block;
+  .tree-toggle,
+  .tree-spacer {
     width: 1rem;
-    color: #4e4e4e;
     margin-right: 0.2rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 1rem;
+    font-size: 1.2rem;
+    line-height: 1;
   }
-  .anki-name.depth-1 {
+  .tree-toggle {
+    border: none;
+    background: transparent;
+    color: #4e4e4e;
+    padding: 0;
+    cursor: pointer;
+  }
+  .tree-toggle:hover {
+    color: #0a58ca;
+  }
+  .anki-name-wrap.depth-1 {
     padding-left: 1.2rem;
   }
-  .anki-name.depth-2 {
+  .anki-name-wrap.depth-2 {
     padding-left: 3rem;
+  }
+  .is-collapsed {
+    display: none;
   }
   .anki-stats {
     display: grid;
@@ -239,12 +278,86 @@
     .anki-stats {
       grid-template-columns: repeat(3, 50px);
     }
-    .anki-name.depth-1 {
+    .anki-name-wrap.depth-1 {
       padding-left: 0.8rem;
     }
-    .anki-name.depth-2 {
+    .anki-name-wrap.depth-2 {
       padding-left: 1.8rem;
     }
   }
 </style>
+<script>
+  (() => {
+    const levelRows = Array.from(document.querySelectorAll(".level-row[data-node-id]"));
+
+    function getToggle(nodeType, nodeId) {
+      return document.querySelector(`.tree-toggle[data-node-type="${nodeType}"][data-node-id="${nodeId}"]`);
+    }
+
+    function isExpanded(toggleEl) {
+      return !!toggleEl && toggleEl.dataset.expanded === "true";
+    }
+
+    function setToggleState(toggleEl, expanded) {
+      if (!toggleEl) {
+        return;
+      }
+      toggleEl.dataset.expanded = expanded ? "true" : "false";
+      toggleEl.textContent = expanded ? "-" : "+";
+    }
+
+    function applyTopicVisibility(topicId, levelExpanded) {
+      const topicToggle = getToggle("topic", topicId);
+      const topicExpanded = isExpanded(topicToggle);
+      const lessons = document.querySelectorAll(`.lesson-row[data-parent-topic="${topicId}"]`);
+      lessons.forEach((row) => {
+        row.classList.toggle("is-collapsed", !(levelExpanded && topicExpanded));
+      });
+    }
+
+    function applyLevelVisibility(levelId) {
+      const levelToggle = getToggle("level", levelId);
+      const levelExpanded = isExpanded(levelToggle);
+      const topics = document.querySelectorAll(`.topic-row[data-parent-level="${levelId}"]`);
+      topics.forEach((topicRow) => {
+        topicRow.classList.toggle("is-collapsed", !levelExpanded);
+        const topicId = topicRow.dataset.nodeId;
+        if (topicId) {
+          applyTopicVisibility(topicId, levelExpanded);
+        }
+      });
+    }
+
+    document.querySelectorAll(".tree-toggle").forEach((toggleEl) => {
+      toggleEl.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const expanded = isExpanded(toggleEl);
+        setToggleState(toggleEl, !expanded);
+
+        const nodeType = toggleEl.dataset.nodeType;
+        const nodeId = toggleEl.dataset.nodeId;
+        if (!nodeType || !nodeId) {
+          return;
+        }
+        if (nodeType === "level") {
+          applyLevelVisibility(nodeId);
+          return;
+        }
+        if (nodeType === "topic") {
+          const parentLevel = document.querySelector(`.topic-row[data-node-id="${nodeId}"]`)?.dataset.parentLevel;
+          const levelExpanded = parentLevel ? isExpanded(getToggle("level", parentLevel)) : true;
+          applyTopicVisibility(nodeId, levelExpanded);
+        }
+      });
+    });
+
+    levelRows.forEach((row) => {
+      const levelId = row.dataset.nodeId;
+      if (levelId) {
+        applyLevelVisibility(levelId);
+      }
+    });
+  })();
+</script>
 {% endblock %}

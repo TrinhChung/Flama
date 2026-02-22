@@ -33,3 +33,8 @@ class VocabularyEntry(db.Model):
     )
 
     lesson = db.relationship("VocabularyLesson", back_populates="entries")
+    progress_records = db.relationship(
+        "VocabularyProgress",
+        back_populates="entry",
+        cascade="all, delete-orphan",
+    )
