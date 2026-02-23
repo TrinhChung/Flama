@@ -1,14 +1,16 @@
 /*
  * footer.css
- * Styles for site footer component
+ * Styles for site footer — Flama Design System
  */
 
 .site-footer {
-  background: #1a1a2e;
+  background: var(--flama-text);
+  /* #1F1A17 warm dark, matches navbar */
   color: #c8cdd6;
   margin-top: 3rem;
   padding: 2rem 0 1rem;
   font-size: 0.9rem;
+  border-top: 2px solid var(--flama-orange-700);
 }
 
 .footer-inner {
@@ -35,14 +37,14 @@
 
 .footer-name {
   font-size: 1.2rem;
-  font-weight: 700;
+  font-weight: 800;
   color: #ffffff;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.3px;
 }
 
 .footer-tagline {
   margin: 0;
-  color: #8b95a5;
+  color: rgba(255, 255, 255, 0.45);
   font-size: 0.82rem;
 }
 
@@ -53,25 +55,25 @@
 .footer-feedback {
   margin: 0;
   line-height: 1.6;
-  color: #9aa3b0;
+  color: rgba(255, 255, 255, 0.55);
 }
 
 .footer-feedback a {
-  color: #f97316;
+  color: var(--flama-orange-400);
   text-decoration: none;
   font-weight: 600;
   transition: color 0.15s ease;
 }
 
 .footer-feedback a:hover {
-  color: #fb923c;
+  color: var(--flama-amber-400);
   text-decoration: underline;
 }
 
 .footer-bottom {
   padding-top: 1rem;
   text-align: center;
-  color: #5a6372;
+  color: rgba(255, 255, 255, 0.3);
   font-size: 0.78rem;
   display: flex;
   flex-direction: column;
@@ -86,18 +88,18 @@
 }
 
 .footer-legal-links a {
-  color: #7a8494;
+  color: rgba(255, 255, 255, 0.38);
   text-decoration: none;
   transition: color 0.15s ease;
 }
 
 .footer-legal-links a:hover {
-  color: #c0c9d4;
+  color: var(--flama-orange-300);
   text-decoration: underline;
 }
 
 .footer-dot {
-  color: #3d4553;
+  color: rgba(255, 255, 255, 0.2);
 }
 
 @media (max-width: 576px) {
@@ -121,17 +123,18 @@
 .legal-header {
   margin-bottom: 2rem;
   padding-bottom: 1rem;
-  border-bottom: 2px solid #e5e7eb;
+  border-bottom: 2px solid var(--flama-border);
 }
 
 .legal-header h1 {
   font-size: 1.8rem;
   font-weight: 700;
   margin-bottom: 0.25rem;
+  color: var(--flama-text);
 }
 
 .legal-updated {
-  color: #9ca3af;
+  color: var(--flama-text-2);
   font-size: 0.85rem;
   margin: 0;
 }
@@ -143,15 +146,15 @@
 .legal-section h2 {
   font-size: 1.1rem;
   font-weight: 700;
-  color: #1f2937;
+  color: var(--flama-text);
   margin-bottom: 0.75rem;
   padding-bottom: 0.3rem;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--flama-border);
 }
 
 .legal-section p,
 .legal-section li {
-  color: #374151;
+  color: var(--flama-text-2);
   line-height: 1.7;
   font-size: 0.95rem;
 }
@@ -166,12 +169,12 @@
 }
 
 .legal-warning {
-  background: #fff7ed;
-  border: 1px solid #fed7aa;
-  border-left: 4px solid #f97316;
+  background: var(--flama-orange-50);
+  border: 1px solid var(--flama-orange-200);
+  border-left: 4px solid var(--flama-orange-500);
   border-radius: 6px;
   padding: 0.75rem 1rem;
-  color: #9a3412;
+  color: var(--flama-orange-800);
   font-size: 0.9rem;
   margin-top: 0.75rem;
 }
@@ -179,15 +182,16 @@
 .legal-footer-links {
   margin-top: 3rem;
   padding-top: 1.5rem;
-  border-top: 1px solid #e5e7eb;
+  border-top: 1px solid var(--flama-border);
 }
 
 .legal-footer-links a {
-  color: #f97316;
+  color: var(--flama-orange-600);
   font-weight: 600;
   text-decoration: none;
 }
 
 .legal-footer-links a:hover {
+  color: var(--flama-orange-700);
   text-decoration: underline;
 }

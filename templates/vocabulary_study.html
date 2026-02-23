@@ -2,6 +2,8 @@
 
 {% block title %}Study - {{ selected_topic.name }}{% endblock %}
 
+{% block footer %}{% endblock %}
+
 {% block content %}
 <div class="study-page">
   <div class="study-top-tabs">
@@ -303,9 +305,9 @@
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(242, 245, 249, 0.92);
-    border-top: 1px solid #d4dce6;
-    box-shadow: 0 -8px 24px rgba(15, 23, 42, 0.08);
+    background: rgba(255, 247, 240, 0.94);
+    border-top: 1px solid var(--flama-border);
+    box-shadow: 0 -8px 24px rgba(31, 26, 23, 0.08);
     backdrop-filter: blur(8px);
     padding: 0.7rem 0.75rem;
     z-index: 1050;
@@ -325,16 +327,16 @@
     min-width: 110px;
     padding: 0.56rem 1.2rem;
     border-radius: 14px;
-    border: 1px solid #cad5e4;
-    background: #ffffff;
-    color: #1f2937;
+    border: 1px solid var(--flama-border);
+    background: var(--flama-surface);
+    color: var(--flama-text);
     font-weight: 700;
     line-height: 1.1;
     display: inline-flex;
     flex-direction: column;
     align-items: center;
     gap: 0.2rem;
-    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+    box-shadow: 0 2px 8px rgba(31, 26, 23, 0.08);
     transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease, border-color 0.15s ease;
   }
 
@@ -354,16 +356,16 @@
   .answer-btn.show-answer {
     min-width: 196px;
     padding: 0.74rem 1.9rem;
-    border-color: #f36f3f;
-    background: linear-gradient(180deg, #ff915e, #ff6f3f);
+    border-color: var(--flama-orange-600);
+    background: var(--flama-gradient);
     color: #fff;
-    box-shadow: 0 8px 20px rgba(229, 60, 32, 0.28);
+    box-shadow: 0 8px 20px rgba(239, 51, 3, 0.28);
   }
 
   .answer-btn.show-answer:hover,
   .answer-btn.show-answer:focus-visible {
-    box-shadow: 0 12px 24px rgba(229, 60, 32, 0.35);
-    filter: brightness(1.03);
+    box-shadow: 0 12px 24px rgba(239, 51, 3, 0.38);
+    filter: brightness(1.05);
   }
 
   .answer-ivl {
@@ -373,27 +375,27 @@
   }
 
   .answer-btn.again {
-    color: #b42318;
-    border-color: #f4b7ad;
-    background: linear-gradient(180deg, #fff, #fff5f4);
+    color: var(--flama-danger);
+    border-color: var(--flama-orange-200);
+    background: linear-gradient(180deg, var(--flama-surface), var(--flama-orange-50));
   }
 
   .answer-btn.hard {
-    color: #8a5900;
-    border-color: #f0d49b;
-    background: linear-gradient(180deg, #fff, #fffbf1);
+    color: var(--flama-amber-800);
+    border-color: var(--flama-amber-300);
+    background: linear-gradient(180deg, var(--flama-surface), var(--flama-amber-50));
   }
 
   .answer-btn.good {
-    color: #1d4ed8;
+    color: var(--flama-info);
     border-color: #aec7ff;
-    background: linear-gradient(180deg, #fff, #f4f8ff);
+    background: linear-gradient(180deg, var(--flama-surface), #f4f8ff);
   }
 
   .answer-btn.easy {
-    color: #15803d;
+    color: var(--flama-success);
     border-color: #a8e3bb;
-    background: linear-gradient(180deg, #fff, #f3fff6);
+    background: linear-gradient(180deg, var(--flama-surface), #f3fff6);
   }
 
   /* Compact counters line — same row as Show Answer */
@@ -407,7 +409,7 @@
     align-items: center;
     gap: 0.5rem;
     font-size: 0.78rem;
-    color: #6b7280;
+    color: var(--flama-text-2);
     white-space: nowrap;
   }
 
@@ -416,19 +418,19 @@
   }
 
   .scl-new strong {
-    color: #28a745;
+    color: var(--flama-success);
   }
 
   .scl-learn strong {
-    color: #e6a817;
+    color: var(--flama-amber-600);
   }
 
   .scl-due strong {
-    color: #dc3545;
+    color: var(--flama-danger);
   }
 
   .scl-sep {
-    color: #c0c9d4;
+    color: var(--flama-border);
   }
 
 
@@ -445,7 +447,7 @@
   .card-front-word {
     font-size: clamp(48px, 15vw, 120px);
     font-weight: bold;
-    color: #e53c20;
+    color: var(--flama-orange-500);
     text-align: center;
     line-height: 1.2;
     word-break: break-word;
@@ -471,7 +473,7 @@
   }
 
   .card-hint {
-    color: #999;
+    color: var(--flama-text-2);
     font-style: italic;
   }
 

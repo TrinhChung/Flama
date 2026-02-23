@@ -1,19 +1,28 @@
-/* 
+/*
  * navbar.css
- * Styles for navbar component
+ * Styles for navbar component — Flama Design System
  */
 
 .navbar {
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  background: var(--flama-text) !important;
+  /* #1F1A17 warm dark */
+  box-shadow: 0 2px 8px rgba(31, 26, 23, 0.18);
+  border-bottom: 2px solid var(--flama-orange-700);
 }
 
 .navbar-brand {
-  font-weight: bold;
-  font-size: 1.5rem;
-  letter-spacing: 0.5px;
+  font-weight: 800;
+  font-size: 1.4rem;
+  letter-spacing: 0.3px;
+  color: #fff !important;
   display: flex;
   align-items: center;
-  gap: 0.35rem;
+  gap: 0.4rem;
+  transition: opacity 0.15s ease;
+}
+
+.navbar-brand:hover {
+  opacity: 0.88;
 }
 
 .flama-icon {
@@ -23,28 +32,39 @@
 }
 
 .navbar-nav .nav-link {
-  margin-left: 1rem;
-  transition: color 0.2s ease;
+  margin-left: 0.5rem;
+  color: rgba(255, 255, 255, 0.82) !important;
+  font-weight: 500;
+  transition: color 0.15s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
 }
 
-.navbar-nav .nav-link:hover {
-  color: #ffc107 !important;
+.navbar-nav .nav-link:hover,
+.navbar-nav .nav-link:focus-visible {
+  color: var(--flama-amber-400) !important;
 }
 
 .navbar-nav .nav-link.disabled {
-  color: #adb5bd !important;
+  color: rgba(255, 255, 255, 0.45) !important;
   cursor: default;
 }
 
 .navbar-nav .nav-link.active {
-  color: #ffc107 !important;
-  font-weight: 600;
+  color: var(--flama-orange-400) !important;
+  font-weight: 700;
+}
+
+.navbar-nav .bi {
+  font-size: 0.95rem;
+  opacity: 0.9;
 }
 
 /* Mobile adjustments */
 @media (max-width: 991px) {
   .navbar-collapse {
-    margin-top: 1rem;
+    margin-top: 0.75rem;
   }
 
   .navbar-nav .nav-link {

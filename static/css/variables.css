@@ -1,0 +1,66 @@
+/*
+ * variables.css
+ * Flama Design System — Brand Color Tokens
+ * Extracted from Flama logo (dominant flame + card palette)
+ */
+
+:root {
+    /* ── Flama Orange Scale (Primary) ── */
+    --flama-orange-50: #FFF3EB;
+    --flama-orange-100: #FFE1CE;
+    --flama-orange-200: #FFC39C;
+    --flama-orange-300: #FEA46B;
+    --flama-orange-400: #FE8639;
+    --flama-orange-500: #FE6808;
+    /* brand base */
+    --flama-orange-600: #E05C07;
+    --flama-orange-700: #B74B06;
+    /* primary button bg */
+    --flama-orange-800: #933C05;
+    /* hover */
+    --flama-orange-900: #662A03;
+    /* active */
+
+    /* ── Flama Amber Scale (Secondary / highlight) ── */
+    --flama-amber-50: #FFF7EC;
+    --flama-amber-100: #FFECCF;
+    --flama-amber-200: #FFD99F;
+    --flama-amber-300: #FEC66E;
+    --flama-amber-400: #FEB33E;
+    --flama-amber-500: #FEA00E;
+    /* secondary base */
+    --flama-amber-600: #E08D0C;
+    --flama-amber-700: #B7730A;
+    --flama-amber-800: #935D08;
+    --flama-amber-900: #664006;
+
+    /* ── Warm Neutrals ── */
+    --flama-bg: #FFF7F0;
+    /* app background */
+    --flama-surface: #FFFFFF;
+    /* cards / panels */
+    --flama-surface-2: #FFF1E7;
+    /* soft warm surface */
+    --flama-border: #E9DDD4;
+    /* warm border */
+    --flama-text: #1F1A17;
+    /* primary text */
+    --flama-text-2: #6B625C;
+    /* secondary text */
+
+    /* ── Semantic Colors ── */
+    --flama-success: #16A34A;
+    --flama-info: #2563EB;
+    --flama-warning: var(--flama-amber-600);
+    --flama-danger: #EF3303;
+    /* from logo deep red-orange */
+
+    /* ── Gradient ── */
+    --flama-gradient: linear-gradient(135deg, #EF3303 0%, #FE6808 55%, #FEA00E 100%);
+
+    /* ── Shorthand aliases ── */
+    --primary: var(--flama-orange-700);
+    --primary-hover: var(--flama-orange-800);
+    --primary-light: var(--flama-orange-100);
+    --primary-focus: var(--flama-orange-300);
+}
