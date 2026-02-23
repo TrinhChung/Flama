@@ -13,7 +13,13 @@ class VocabularyProgress(db.Model):
     entry_id = db.Column(
         db.Integer,
         db.ForeignKey("vocabulary_entries.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
+        index=True,
+    )
+    new_card_id = db.Column(
+        db.String(36),
+        db.ForeignKey("cards.id", ondelete="CASCADE"),
+        nullable=True,
         index=True,
     )
     queue = db.Column(db.String(20), nullable=False, default="new", index=True)
@@ -32,7 +38,9 @@ class VocabularyProgress(db.Model):
 
     __table_args__ = (
         db.UniqueConstraint("user_id", "entry_id", name="uq_vocabulary_progress_user_entry"),
+        db.UniqueConstraint("user_id", "new_card_id", name="uq_vocabulary_progress_user_card"),
     )
 
     user = db.relationship("User", back_populates="vocabulary_progress")
     entry = db.relationship("VocabularyEntry", back_populates="progress_records")
+    new_card = db.relationship("Card")

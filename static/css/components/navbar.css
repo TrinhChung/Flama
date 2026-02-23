@@ -11,7 +11,8 @@
 }
 
 .navbar-brand {
-  font-weight: 800;
+  font-family: var(--font-family-base);
+  font-weight: var(--font-weight-extrabold);
   font-size: 1.5rem;
   letter-spacing: -0.3px;
   color: #fff !important;
@@ -26,7 +27,7 @@
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-  font-weight: 900;
+  font-weight: var(--font-weight-extrabold);
   font-size: 1.6rem;
   letter-spacing: -0.5px;
   line-height: 1;
@@ -45,7 +46,9 @@
 .navbar-nav .nav-link {
   margin-left: 0.5rem;
   color: rgba(255, 255, 255, 0.82) !important;
-  font-weight: 500;
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
   transition: color 0.15s ease;
   display: flex;
   align-items: center;
@@ -64,7 +67,7 @@
 
 .navbar-nav .nav-link.active {
   color: var(--flama-orange-400) !important;
-  font-weight: 700;
+  font-weight: var(--font-weight-bold);
 }
 
 .navbar-nav .bi {

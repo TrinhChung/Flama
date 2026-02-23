@@ -106,3 +106,22 @@ myenv/                  # Optional local virtual environment
 - Add email confirmation or password reset flows.
 - Introduce role-based access control for different user types.
 - Expand migration scripts with seed data or additional tables as features grow.
+
+## Flashcard V2 (Anki-like)
+- New NoteType/FieldDef/Template/Note/Card/Media model is available.
+- Management UI:
+  - `/flashcards/note-types`
+  - `/flashcards/note-types/<note_type_id>`
+  - `/flashcards/notes/new`
+  - `/flashcards/study`
+- API root:
+  - `/api/note-types`
+  - `/api/notes`
+  - `/api/study`
+- Migration + rollback runbook:
+  - `docs/FLASHCARD_V2_RUNBOOK.md`
+
+### Assumptions recorded for review
+- Legacy data does not contain user ownership on `vocabulary_entries`; migration maps to one target user.
+- Backward-compatible transition is preserved via `USE_NEW_CARD_MODEL=false` default.
+- Field rename uses job-tracking record but executes synchronously in current version.

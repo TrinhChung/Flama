@@ -29,6 +29,9 @@ def create_app(config: Optional[dict] = None) -> Flask:
     app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "change-me")
     app.config["SQLALCHEMY_DATABASE_URI"] = _build_database_uri()
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+    app.config["USE_NEW_CARD_MODEL"] = os.getenv("USE_NEW_CARD_MODEL", "false").strip().lower() == "true"
+    app.config["FLASHCARD_MEDIA_UPLOAD_ROOT"] = str(BASE_DIR / "static" / "uploads")
+    app.config["FLASHCARD_MEDIA_MAX_BYTES"] = int(os.getenv("FLASHCARD_MEDIA_MAX_BYTES", str(10 * 1024 * 1024)))
     if config:
         app.config.update(config)
 
@@ -43,6 +46,17 @@ def create_app(config: Optional[dict] = None) -> Flask:
     from models.column_preference import (
         VocabularyColumnPreference,
     )  # noqa: F401  # register model
+    from models.flashcard import (  # noqa: F401  # register model
+        AuditLog,
+        Card,
+        FieldDef,
+        FieldRenameJob,
+        LegacyMigrationMap,
+        MediaAsset,
+        Note,
+        NoteType,
+        Template,
+    )
 
     @login_manager.user_loader
     def load_user(user_id: str) -> Optional[User]:

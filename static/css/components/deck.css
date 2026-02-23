@@ -53,7 +53,9 @@
 }
 
 .anki-name {
-  font-weight: 500;
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
   color: var(--flama-text);
 }
 
@@ -68,7 +70,9 @@
   display: inline-block;
   text-align: center;
   min-width: 30px;
-  font-weight: 600;
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
 }
 
 .anki-stats .new {
@@ -110,7 +114,9 @@
   padding: 0.5rem 1rem;
   text-decoration: none;
   color: var(--flama-text-2);
-  font-weight: 500;
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
   border-bottom: 3px solid transparent;
   transition: all 0.2s ease;
   cursor: pointer;
@@ -131,6 +137,9 @@
   padding: 0.5rem 1rem;
   cursor: pointer;
   color: var(--flama-text-2);
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
 }
 
 .anki-tab-button:hover {

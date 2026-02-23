@@ -148,14 +148,19 @@
     padding: 0 0.85rem;
     text-decoration: none;
     color: #1f1f1f;
-    font-weight: 600;
+    font-family: var(--font-family-base);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    line-height: var(--line-height-normal);
     border: none;
     border-right: 1px solid #d6d6d6;
     background: linear-gradient(#fafafa, #f0f0f0);
     cursor: pointer;
   }
   .anki-tab-button {
-    font: inherit;
+    font-family: var(--font-family-base);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
   }
   .anki-tab:last-child {
     border-right: none;
@@ -318,6 +323,25 @@
 
 <script>
   (() => {
+    // Cleanup orphaned modal backdrops on page load
+    const cleanupOrphanedBackdrops = () => {
+      const backdrops = document.querySelectorAll(".modal-backdrop");
+      const activeModals = document.querySelectorAll(".modal.show");
+      
+      if (activeModals.length === 0 && backdrops.length > 0) {
+        backdrops.forEach((backdrop) => {
+          backdrop.remove();
+        });
+        document.body.classList.remove("modal-open");
+        document.body.style.overflow = "";
+      }
+    };
+
+    // Cleanup on page load
+    cleanupOrphanedBackdrops();
+
+    // Also cleanup after a short delay to catch delayed backdrops
+    setTimeout(cleanupOrphanedBackdrops, 500);
     const rows = Array.from(document.querySelectorAll(".deck-row[data-node-id]"));
     const rowMap = new Map();
     const toggleMap = new Map();
@@ -435,7 +459,11 @@
           window.bootstrap &&
           window.bootstrap.Modal
         ) {
-          window.bootstrap.Modal.getOrCreateInstance(createDeckModalEl).show();
+          const modalInstance = window.bootstrap.Modal.getOrCreateInstance(createDeckModalEl);
+          // Reset form when opening
+          resetDeckForm();
+          deckPathInput.value = defaultPath;
+          modalInstance.show();
           return;
         }
 
@@ -454,20 +482,67 @@
 
       confirmCreateDeckBtn.addEventListener("click", () => {
         const deckPath = deckPathInput.value.trim() || "New Deck";
+        
+        // Validate input - prevent empty deck path
+        if (!deckPath || deckPath === "") {
+          alert("Tên deck không được để trống!");
+          deckPathInput.focus();
+          return;
+        }
+
         const leafName = deckPath.split("::").map((item) => item.trim()).filter(Boolean).pop() || "New Deck";
         createDeckParentInput.value = selectedDeckId || "";
         createDeckNameInput.value = leafName;
         createDeckPathInput.value = deckPath;
-        if (
-          createDeckModalEl &&
-          typeof window !== "undefined" &&
-          window.bootstrap &&
-          window.bootstrap.Modal
-        ) {
-          window.bootstrap.Modal.getOrCreateInstance(createDeckModalEl).hide();
+        
+        // Get modal instance
+        const modalInstance = createDeckModalEl && window.bootstrap && window.bootstrap.Modal
+          ? window.bootstrap.Modal.getOrCreateInstance(createDeckModalEl)
+          : null;
+
+        // Hide modal before submit
+        if (modalInstance) {
+          modalInstance.hide();
         }
-        createDeckForm.submit();
+
+        // Submit form
+        try {
+          createDeckForm.submit();
+        } catch (error) {
+          console.error("Error submitting deck form:", error);
+          // Ensure backdrop is removed on error
+          if (modalInstance) {
+            removeModalBackdrop();
+          }
+        }
       });
+
+      // Handle modal hidden event to ensure cleanup
+      if (createDeckModalEl) {
+        createDeckModalEl.addEventListener("hidden.bs.modal", () => {
+          removeModalBackdrop();
+          resetDeckForm();
+        });
+      }
+
+      // Function to remove all modal backdrops
+      function removeModalBackdrop() {
+        const backdrops = document.querySelectorAll(".modal-backdrop");
+        backdrops.forEach((backdrop) => {
+          backdrop.remove();
+        });
+        // Also remove modal-open class from body to restore scrolling
+        document.body.classList.remove("modal-open");
+        document.body.style.overflow = "";
+      }
+
+      // Function to reset form
+      function resetDeckForm() {
+        deckPathInput.value = "New Deck";
+        createDeckParentInput.value = "";
+        createDeckNameInput.value = "";
+        createDeckPathInput.value = "";
+      }
     }
 
     function isVisibleByAncestors(row) {

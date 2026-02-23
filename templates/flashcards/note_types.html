@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+
+{% block title %}Flashcard Note Types{% endblock %}
+
+{% block content %}
+<section class="py-3">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <h2 class="h4 mb-0">NoteType Manager</h2>
+    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('flashcards.note_editor_page') }}">New Note</a>
+  </div>
+
+  <form id="create-note-type-form" class="card card-body mb-3">
+    <label class="form-label fw-semibold">Create NoteType</label>
+    <div class="d-flex gap-2">
+      <input class="form-control" id="note-type-name" placeholder="Japanese Vocabulary" />
+      <button class="btn btn-primary" type="submit">Create</button>
+    </div>
+    <small id="create-note-type-error" class="text-danger mt-2 d-none"></small>
+  </form>
+
+  <div class="card">
+    <div class="table-responsive">
+      <table class="table mb-0 align-middle">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Fields</th>
+            <th>Templates</th>
+            <th class="text-end">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="note-types-body">
+          {% for note_type in note_types %}
+          <tr data-note-type-id="{{ note_type.id }}">
+            <td>{{ note_type.name }}</td>
+            <td>{{ note_type.field_defs|length }}</td>
+            <td>{{ note_type.templates|length }}</td>
+            <td class="text-end">
+              <a class="btn btn-sm btn-outline-primary" href="{{ url_for('flashcards.note_type_detail_page', note_type_id=note_type.id) }}">Edit</a>
+              <button class="btn btn-sm btn-outline-danger ms-1 delete-note-type-btn" data-id="{{ note_type.id }}">Delete</button>
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="4" class="text-center text-muted py-4">No note types yet.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  (() => {
+    const form = document.getElementById("create-note-type-form");
+    const input = document.getElementById("note-type-name");
+    const errorEl = document.getElementById("create-note-type-error");
+
+    function showError(message) {
+      errorEl.textContent = message || "Request failed.";
+      errorEl.classList.remove("d-none");
+    }
+
+    function clearError() {
+      errorEl.textContent = "";
+      errorEl.classList.add("d-none");
+    }
+
+    async function createNoteType(name) {
+      const response = await fetch("/api/note-types", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.message || "Unable to create note type.");
+      }
+      return data;
+    }
+
+    form?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      clearError();
+      const name = (input?.value || "").trim();
+      if (!name) {
+        showError("Name is required.");
+        return;
+      }
+      try {
+        const data = await createNoteType(name);
+        window.location.href = `/flashcards/note-types/${data.id}`;
+      } catch (error) {
+        showError(error.message);
+      }
+    });
+
+    document.querySelectorAll(".delete-note-type-btn").forEach((button) => {
+      button.addEventListener("click", async () => {
+        const id = button.getAttribute("data-id");
+        if (!id || !window.confirm("Delete this note type?")) {
+          return;
+        }
+        const response = await fetch(`/api/note-types/${id}`, { method: "DELETE" });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          alert(data.message || "Cannot delete note type.");
+          return;
+        }
+        const row = button.closest("tr");
+        row?.remove();
+      });
+    });
+  })();
+</script>
+{% endblock %}

@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+
+{% block title %}Flashcard Study{% endblock %}
+
+{% block content %}
+<section class="py-3" id="flashcard-study-root">
+  <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap mb-3">
+    <h2 class="h4 mb-0">Study (Template Renderer)</h2>
+    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('main.dashboard') }}">Back</a>
+  </div>
+
+  <div class="card card-body mb-3">
+    <div class="row g-2 align-items-end">
+      <div class="col-md-4">
+        <label class="form-label">Scope</label>
+        <select id="study-scope" class="form-select">
+          <option value="deck">Deck</option>
+          <option value="note_type">NoteType</option>
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Scope ID</label>
+        <input id="scope-id" class="form-control" placeholder="deck id or note_type id" />
+      </div>
+      <div class="col-md-4 d-grid">
+        <button id="load-next-btn" class="btn btn-primary">Load Next Card</button>
+      </div>
+    </div>
+    <small class="text-muted mt-2">For deck scope: use a deck id. For note_type scope: paste note_type uuid.</small>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <iframe id="study-frame" sandbox="allow-same-origin" class="w-100 border rounded" style="min-height: 320px;"></iframe>
+      <div class="d-flex gap-2 flex-wrap mt-3">
+        <button class="btn btn-outline-secondary" id="show-answer-btn">Show Answer</button>
+        <button class="btn btn-outline-danger rating-btn" data-rating="again">Again</button>
+        <button class="btn btn-outline-warning rating-btn" data-rating="hard">Hard</button>
+        <button class="btn btn-outline-primary rating-btn" data-rating="good">Good</button>
+        <button class="btn btn-outline-success rating-btn" data-rating="easy">Easy</button>
+      </div>
+      <small id="study-status" class="d-block mt-2 text-muted">No card loaded.</small>
+    </div>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  (() => {
+    const scopeEl = document.getElementById("study-scope");
+    const scopeIdEl = document.getElementById("scope-id");
+    const frameEl = document.getElementById("study-frame");
+    const statusEl = document.getElementById("study-status");
+    const loadNextBtn = document.getElementById("load-next-btn");
+    const showAnswerBtn = document.getElementById("show-answer-btn");
+    const ratingButtons = Array.from(document.querySelectorAll(".rating-btn"));
+
+    let currentCard = null;
+    let showingBack = false;
+
+    function setStatus(message) {
+      statusEl.textContent = message;
+    }
+
+    function renderCardFace() {
+      if (!currentCard) {
+        frameEl.srcdoc = "<p style='padding:12px;'>No card loaded.</p>";
+        return;
+      }
+      const html = showingBack ? currentCard.rendered_back_html : currentCard.rendered_front_html;
+      frameEl.srcdoc = `<!doctype html><html><body style="margin:0;padding:8px;">${html || ""}</body></html>`;
+    }
+
+    async function requestJson(url, options = {}) {
+      const response = await fetch(url, options);
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.message || "Request failed.");
+      }
+      return data;
+    }
+
+    async function loadNextCard() {
+      const scope = scopeEl.value;
+      const scopeId = (scopeIdEl.value || "").trim();
+      if (!scopeId) {
+        setStatus("scope_id is required.");
+        return;
+      }
+      setStatus("Loading next card...");
+      try {
+        const data = await requestJson(`/api/study/next?scope=${encodeURIComponent(scope)}&scope_id=${encodeURIComponent(scopeId)}`);
+        if (!data.card_id) {
+          currentCard = null;
+          renderCardFace();
+          setStatus(data.message || "No due cards.");
+          return;
+        }
+        currentCard = data;
+        showingBack = false;
+        renderCardFace();
+        setStatus(`Loaded card ${data.card_id}`);
+      } catch (error) {
+        setStatus(error.message);
+      }
+    }
+
+    async function answerCard(rating) {
+      if (!currentCard?.card_id) {
+        setStatus("No card loaded.");
+        return;
+      }
+      try {
+        const data = await requestJson(`/api/study/${currentCard.card_id}/answer`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ rating }),
+        });
+        setStatus(`Answer saved (${rating}). Loading next card...`);
+        await loadNextCard();
+        if (data?.intervals_preview?.[rating]?.label) {
+          setStatus(`Answer saved (${rating}: ${data.intervals_preview[rating].label}).`);
+        }
+      } catch (error) {
+        setStatus(error.message);
+      }
+    }
+
+    loadNextBtn?.addEventListener("click", loadNextCard);
+    showAnswerBtn?.addEventListener("click", () => {
+      if (!currentCard) {
+        setStatus("No card loaded.");
+        return;
+      }
+      showingBack = true;
+      renderCardFace();
+      setStatus("Showing back side.");
+    });
+    ratingButtons.forEach((button) => {
+      button.addEventListener("click", () => answerCard(button.getAttribute("data-rating")));
+    });
+  })();
+</script>
+{% endblock %}

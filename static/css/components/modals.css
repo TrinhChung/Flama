@@ -16,8 +16,10 @@
 }
 
 .modal-header .modal-title {
-  font-weight: 600;
-  color: #333;
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--flama-text);
 }
 
 .modal-body {

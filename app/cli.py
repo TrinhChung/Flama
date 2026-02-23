@@ -11,9 +11,13 @@ from typing import Dict, Iterable, List
 import click
 from flask import Flask
 
+from app.services.flashcard_legacy import ensure_legacy_note_type
 from models import db
+from models.flashcard import Card, LegacyMigrationMap, Note
+from models.user import User
 from models.vocabulary_deck import VocabularyDeck
 from models.vocabulary_entry import VocabularyEntry
+from models.vocabulary_progress import VocabularyProgress
 
 SEED_REQUIRED_FIELDS = ("deck", "word")
 SEED_OPTIONAL_FIELDS = (
@@ -99,6 +103,114 @@ def register_cli_commands(app: Flask) -> None:
             f"entries+{stats.created_entries}, replaced_files={stats.replaced_files}, "
             f"skipped_files={stats.skipped_files}"
         )
+
+    @app.cli.command("flashcard-migrate-legacy")
+    @click.option("--user-id", type=int, default=None, help="Target owner user id for migrated notes.")
+    @click.option("--sample-size", type=int, default=50, show_default=True, help="Sample size for data verification.")
+    @click.option("--dry-run", is_flag=True, default=False, help="Run migration checks then rollback.")
+    def flashcard_migrate_legacy(user_id: int | None, sample_size: int, dry_run: bool) -> None:
+        """Backfill legacy vocabulary entries into flashcard v2 note/card model."""
+        target_user = User.query.get(user_id) if user_id else User.query.order_by(User.id.asc()).first()
+        if target_user is None:
+            raise click.ClickException("No user found. Create at least one user before migration.")
+
+        note_type, template = ensure_legacy_note_type(db.session, target_user.id)
+        click.echo(f"Using user={target_user.id}, note_type={note_type.id}, template={template.id}")
+
+        legacy_entries = VocabularyEntry.query.order_by(VocabularyEntry.id.asc()).all()
+        existing_maps = {
+            row.entry_id: row
+            for row in LegacyMigrationMap.query.all()
+        }
+        created_notes = 0
+        created_cards = 0
+
+        for entry in legacy_entries:
+            if entry.id in existing_maps:
+                continue
+            note = Note(
+                note_type_id=note_type.id,
+                user_id=target_user.id,
+                deck_id=entry.deck_id,
+                field_values=_legacy_entry_to_field_values(entry),
+                tags=[],
+            )
+            db.session.add(note)
+            db.session.flush()
+
+            card = Card(
+                note_id=note.id,
+                template_id=template.id,
+                queue="new",
+            )
+            db.session.add(card)
+            db.session.flush()
+
+            db.session.add(
+                LegacyMigrationMap(entry_id=entry.id, note_id=note.id, card_id=card.id)
+            )
+            created_notes += 1
+            created_cards += 1
+
+        db.session.flush()
+
+        migration_map = {row.entry_id: row.card_id for row in LegacyMigrationMap.query.all()}
+        progress_rows = VocabularyProgress.query.filter(VocabularyProgress.entry_id.isnot(None)).all()
+        mapped_progress = 0
+        for progress in progress_rows:
+            mapped_card_id = migration_map.get(progress.entry_id)
+            if mapped_card_id and progress.new_card_id != mapped_card_id:
+                progress.new_card_id = mapped_card_id
+                mapped_progress += 1
+
+        db.session.flush()
+
+        total_entries = VocabularyEntry.query.count()
+        total_notes = Note.query.filter_by(note_type_id=note_type.id, user_id=target_user.id).count()
+        total_progress = VocabularyProgress.query.filter(VocabularyProgress.entry_id.isnot(None)).count()
+        mapped_progress_total = (
+            VocabularyProgress.query.filter(
+                VocabularyProgress.entry_id.isnot(None),
+                VocabularyProgress.new_card_id.isnot(None),
+            ).count()
+        )
+
+        sample_rows = (
+            VocabularyEntry.query.order_by(VocabularyEntry.id.asc()).limit(max(0, sample_size)).all()
+        )
+        mismatches = 0
+        for entry in sample_rows:
+            map_row = LegacyMigrationMap.query.filter_by(entry_id=entry.id).first()
+            if map_row is None:
+                mismatches += 1
+                continue
+            note = Note.query.get(map_row.note_id)
+            if note is None:
+                mismatches += 1
+                continue
+            expected = _legacy_entry_to_field_values(entry)
+            for key, value in expected.items():
+                if (note.field_values or {}).get(key, "") != (value or ""):
+                    mismatches += 1
+                    break
+
+        click.echo(
+            "Verification: "
+            f"entries={total_entries}, notes={total_notes}, "
+            f"progress={total_progress}, mapped_progress={mapped_progress_total}, "
+            f"sample_mismatches={mismatches}"
+        )
+        click.echo(
+            "Changes: "
+            f"created_notes={created_notes}, created_cards={created_cards}, mapped_progress_updates={mapped_progress}"
+        )
+
+        if dry_run:
+            db.session.rollback()
+            click.echo("Dry-run complete. Rolled back all changes.")
+        else:
+            db.session.commit()
+            click.echo("Legacy flashcard migration committed.")
 
 
 def _resolve_seed_path(seed_path: str) -> Path:
@@ -332,3 +444,24 @@ def _load_seed_rows(file_path: Path) -> List[Dict[str, str | None]]:
             rows.append(payload)
         return rows
 
+
+def _legacy_entry_to_field_values(entry: VocabularyEntry) -> Dict[str, str]:
+    """Map old VocabularyEntry columns into legacy note field_values JSON."""
+    return {
+        "Word": entry.word or "",
+        "hanviet": entry.hanviet or "",
+        "Reading": entry.reading or "",
+        "Translation_VI": entry.translation_vi or "",
+        "Meaning_JP": entry.meaning_jp or "",
+        "Meaning_VI": entry.meaning_vi or "",
+        "Usage_JP": entry.usage_jp or "",
+        "Usage_VI": entry.usage_vi or "",
+        "Example_JP": entry.example_jp or "",
+        "Example_VI": entry.example_vi or "",
+        "Additional_Note_JP": entry.additional_note_jp or "",
+        "Additional_Note_VI": entry.additional_note_vi or "",
+        "image": entry.image or "",
+        "Diagram": entry.diagram or "",
+        "Word_Audio": entry.word_audio or "",
+        "Example_Audio": entry.example_audio or "",
+    }
