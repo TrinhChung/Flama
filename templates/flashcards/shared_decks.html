@@ -1,0 +1,225 @@
+{% extends "base.html" %}
+
+{% block title %}Shared Decks{% endblock %}
+
+{% block content %}
+<section class="py-3" id="shared-decks-root">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <div>
+      <h2 class="h4 mb-0">Shared Decks</h2>
+      <small class="text-muted">Install shared decks and rate after review usage.</small>
+    </div>
+    <button class="btn btn-outline-primary btn-sm" id="create-deck-item-btn">Publish Deck</button>
+  </div>
+
+  <form id="deck-filter-form" class="card card-body mb-3">
+    <div class="row g-2">
+      <div class="col-md-4">
+        <input class="form-control form-control-sm" name="q" placeholder="Search title or description">
+      </div>
+      <div class="col-md-2">
+        <input class="form-control form-control-sm" name="category" placeholder="Category">
+      </div>
+      <div class="col-md-2">
+        <input class="form-control form-control-sm" name="tags" placeholder="tags,comma,separated">
+      </div>
+      <div class="col-md-2">
+        <select class="form-select form-select-sm" name="pricing_mode">
+          <option value="">All pricing</option>
+          <option value="free">Free</option>
+          <option value="paid">Paid</option>
+        </select>
+      </div>
+      <div class="col-md-2">
+        <select class="form-select form-select-sm" name="sort">
+          <option value="popular">Popular</option>
+          <option value="top_rated">Top rated</option>
+          <option value="newest">Newest</option>
+          <option value="recently_updated">Recently updated</option>
+        </select>
+      </div>
+    </div>
+  </form>
+
+  <div class="row g-3 mb-4">
+    <div class="col-lg-6">
+      <div class="card card-body">
+        <h3 class="h6 mb-2">Recommended for you</h3>
+        <div id="deck-recommended-list" class="small text-muted">Loading...</div>
+      </div>
+    </div>
+    <div class="col-lg-6">
+      <div class="card card-body">
+        <h3 class="h6 mb-2">Trending</h3>
+        <div id="deck-trending-list" class="small text-muted">Loading...</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header py-2">
+      <strong>Deck Marketplace</strong>
+    </div>
+    <div id="deck-items" class="list-group list-group-flush">
+      <div class="list-group-item text-muted">Loading...</div>
+    </div>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  (() => {
+    const root = document.getElementById("shared-decks-root");
+    if (!root) return;
+    const filterForm = document.getElementById("deck-filter-form");
+    const itemsRoot = document.getElementById("deck-items");
+    const recommendedRoot = document.getElementById("deck-recommended-list");
+    const trendingRoot = document.getElementById("deck-trending-list");
+    const createBtn = document.getElementById("create-deck-item-btn");
+
+    async function requestJson(url, options = {}) {
+      const response = await fetch(url, options);
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.message || "Request failed.");
+      return data;
+    }
+
+    function rowActions(item) {
+      const installLabel = item.is_installed ? "Installed" : (item.pricing_mode === "paid" ? "Buy / Install" : "Get / Install");
+      const installDisabled = item.is_installed ? "disabled" : "";
+      return `
+        <div class="d-flex gap-2">
+          <button class="btn btn-sm btn-primary install-btn" data-id="${item.id}" ${installDisabled}>${installLabel}</button>
+          <button class="btn btn-sm btn-outline-secondary rate-btn" data-id="${item.id}">Rate</button>
+        </div>
+      `;
+    }
+
+    function renderItems(items) {
+      if (!items.length) {
+        itemsRoot.innerHTML = `<div class="list-group-item text-muted">No shared decks found.</div>`;
+        return;
+      }
+      itemsRoot.innerHTML = items.map((item) => `
+        <div class="list-group-item">
+          <div class="d-flex justify-content-between align-items-start gap-2">
+            <div>
+              <div class="fw-semibold">${item.title}</div>
+              <div class="small text-muted">By ${item.author?.username || "Unknown"} · ${item.primary_category || "General"} · ${item.price_display}</div>
+              <div class="small mt-1">${item.description || ""}</div>
+              <div class="small text-muted mt-1">Sample ${item.sample_cards_count || 0} · Rating ${Number(item.rating_avg || 0).toFixed(2)} (${item.rating_count || 0}) · Usage ${item.active_usage_count || 0}/${item.install_count || 0}</div>
+            </div>
+            ${rowActions(item)}
+          </div>
+        </div>
+      `).join("");
+    }
+
+    function renderSimpleList(container, items) {
+      if (!items || !items.length) {
+        container.textContent = "No data.";
+        return;
+      }
+      container.innerHTML = items.slice(0, 5).map((item) => {
+        return `<div class="mb-1">${item.title} <span class="text-muted">(${item.price_display})</span></div>`;
+      }).join("");
+    }
+
+    async function loadRecommendations() {
+      const recs = await requestJson("/api/shared/decks/recommendations");
+      renderSimpleList(recommendedRoot, recs.recommended_for_you || []);
+      renderSimpleList(trendingRoot, recs.trending || []);
+    }
+
+    async function loadItems() {
+      const formData = new FormData(filterForm);
+      const params = new URLSearchParams();
+      for (const [key, value] of formData.entries()) {
+        const trimmed = String(value || "").trim();
+        if (!trimmed) continue;
+        params.set(key, trimmed);
+      }
+      const payload = await requestJson(`/api/shared/decks?${params.toString()}`);
+      renderItems(payload.items || []);
+    }
+
+    async function onInstall(id) {
+      await requestJson(`/api/shared/decks/${id}/install`, { method: "POST" });
+      await Promise.all([loadItems(), loadRecommendations()]);
+    }
+
+    async function onRate(id) {
+      const ratingRaw = window.prompt("Rating 1-5");
+      if (ratingRaw === null) return;
+      const rating = Number(ratingRaw);
+      if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+        window.alert("Rating must be 1-5.");
+        return;
+      }
+      const comment = window.prompt("Comment (optional)") || "";
+      await requestJson(`/api/shared/decks/${id}/rate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rating, comment }),
+      });
+      await Promise.all([loadItems(), loadRecommendations()]);
+    }
+
+    async function onCreateDeckItem() {
+      const title = (window.prompt("Deck title") || "").trim();
+      if (!title) return;
+      const sourceDeckIdRaw = (window.prompt("Source deck id (optional)") || "").trim();
+      const category = (window.prompt("Category", "Japanese") || "").trim() || "General";
+      const payload = {
+        title,
+        primary_category: category,
+        description: `Shared deck: ${title}`,
+        preview_text: "Published from Shared Decks page.",
+        tags: [],
+        pricing_mode: "free",
+        publish_status: "published",
+      };
+      if (sourceDeckIdRaw) payload.source_deck_id = Number(sourceDeckIdRaw);
+      await requestJson("/api/shared/decks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      await Promise.all([loadItems(), loadRecommendations()]);
+    }
+
+    filterForm?.addEventListener("input", () => {
+      loadItems().catch((error) => window.alert(error.message));
+    });
+
+    itemsRoot?.addEventListener("click", async (event) => {
+      const installBtn = event.target.closest(".install-btn");
+      if (installBtn) {
+        try {
+          await onInstall(installBtn.getAttribute("data-id"));
+        } catch (error) {
+          window.alert(error.message);
+        }
+        return;
+      }
+      const rateBtn = event.target.closest(".rate-btn");
+      if (rateBtn) {
+        try {
+          await onRate(rateBtn.getAttribute("data-id"));
+        } catch (error) {
+          window.alert(error.message);
+        }
+      }
+    });
+
+    createBtn?.addEventListener("click", () => {
+      onCreateDeckItem().catch((error) => window.alert(error.message));
+    });
+
+    Promise.all([loadItems(), loadRecommendations()]).catch((error) => {
+      itemsRoot.innerHTML = `<div class="list-group-item text-danger">${error.message}</div>`;
+    });
+  })();
+</script>
+{% endblock %}

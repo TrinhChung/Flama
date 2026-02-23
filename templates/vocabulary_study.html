@@ -6,20 +6,35 @@
 
 {% block content %}
 <div class="study-page">
-  <div class="study-top-tabs">
-    <a class="study-tab" href="{{ url_for('main.dashboard') }}">Decks</a>
-    {% if admin_mode %}
-    <a class="study-tab" href="{{ url_for('vocabulary.import_csv') }}">Add</a>
-    <a class="study-tab" href="{{ url_for('vocabulary.index') }}">Browse</a>
-    {% else %}
-    <a class="study-tab" href="{{ url_for('main.dashboard') }}">Add</a>
-    <a class="study-tab" href="{{ url_for('main.dashboard') }}">Browse</a>
-    {% endif %}
-    <a class="study-tab" href="{{ url_for('main.dashboard') }}">Stats</a>
+  <div class="dash-toolbar" role="navigation" aria-label="Study actions">
+    <div class="dash-toolbar__nav">
+      <a class="dash-tab" href="{{ url_for('main.dashboard') }}">
+        <i class="bi bi-collection"></i> Decks
+      </a>
+      <a class="dash-tab dash-tab--active" href="#">
+        <i class="bi bi-play-circle"></i> Study
+      </a>
+      <a class="dash-tab" href="{{ url_for('main.dashboard') }}">
+        <i class="bi bi-bar-chart-line"></i> Stats
+      </a>
+    </div>
+    <div class="dash-toolbar__actions">
+      {% if admin_mode %}
+      <a class="dash-btn dash-btn--ghost" href="{{ url_for('vocabulary.index') }}">
+        <i class="bi bi-search"></i> Browse
+      </a>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="deck-context-bar">
+    <i class="bi bi-collection-fill deck-ctx-icon"></i>
+    <span class="deck-ctx-name">{{ selected_topic.name }}</span>
   </div>
 
   {% if card %}
   <section class="study-card-shell">
+
     <div class="study-card" id="study-card" data-entry-id="{{ card.id }}" data-study-scope="{{ study_scope }}"
       data-scope-id="{{ study_scope_id }}">
       <div class="card-face card-front is-active" id="card-front">
@@ -32,6 +47,7 @@
     </div>
   </section>
   {% else %}
+
   <section class="study-empty">
     <h3>No due cards in this lesson.</h3>
     <p>Hôm nay bạn đã học xong phần này.</p>
@@ -211,38 +227,109 @@
     overflow: hidden;
   }
 
-  .study-top-tabs {
-    margin: 0 auto 0.9rem;
-    padding: 0.28rem;
-    display: inline-flex;
-    border: 1px solid #d4dbe4;
-    border-radius: 999px;
+  /* ── Dashboard Toolbar (shared) ── */
+  .dash-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.5rem;
+    padding: 0.4rem 0.6rem;
+    background: var(--flama-surface);
+    border: 1px solid var(--flama-border);
+    border-radius: 14px;
+    box-shadow: 0 1px 4px rgba(31, 26, 23, 0.06);
+    flex-shrink: 0;
+  }
+
+  /* ── Deck context breadcrumb ── */
+  .deck-context-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.3rem 0.6rem 0.55rem;
+    flex-shrink: 0;
+  }
+
+  .deck-ctx-icon {
+    font-size: 0.75rem;
+    color: var(--flama-orange-400, #fb923c);
+    opacity: 0.8;
+    flex-shrink: 0;
+  }
+
+  .deck-ctx-name {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--flama-text-2);
+    white-space: nowrap;
     overflow: hidden;
-    background: linear-gradient(180deg, #fafbfd, #f3f6fa);
-    box-shadow: 0 4px 16px rgba(15, 23, 42, 0.08);
+    text-overflow: ellipsis;
+    max-width: 480px;
   }
 
-  .study-tab {
-    min-width: 84px;
-    padding: 0.46rem 0.86rem;
-    text-align: center;
+  .dash-toolbar__nav {
+    display: flex;
+    align-items: center;
+    gap: 0.2rem;
+  }
+
+  .dash-toolbar__actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .dash-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.38rem;
+    padding: 0.38rem 0.8rem;
+    border-radius: 9px;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--flama-text-2);
     text-decoration: none;
-    color: #2d3748;
-    font-weight: 700;
-    border-radius: 999px;
+    transition: background 0.16s ease, color 0.16s ease;
+    white-space: nowrap;
+  }
+
+  .dash-tab:hover {
+    background: var(--flama-orange-50);
+    color: var(--flama-orange-600);
+  }
+
+  .dash-tab--active {
+    background: var(--flama-orange-50);
+    color: var(--flama-orange-600);
+    font-weight: var(--font-weight-bold);
+  }
+
+  .dash-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.38rem;
+    padding: 0.38rem 0.9rem;
+    border-radius: 9px;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    border: none;
+    cursor: pointer;
+    text-decoration: none;
+    transition: all 0.16s ease;
+    white-space: nowrap;
+  }
+
+  .dash-btn--ghost {
     background: transparent;
-    transition: background-color 0.16s ease, color 0.16s ease, transform 0.16s ease;
+    color: var(--flama-text-2);
+    border: 1px solid var(--flama-border);
   }
 
-  .study-tab:hover,
-  .study-tab:focus-visible {
-    background: #e7edf6;
-    color: #111827;
-    outline: none;
-  }
-
-  .study-tab:active {
-    transform: translateY(1px);
+  .dash-btn--ghost:hover {
+    background: var(--flama-orange-50);
+    border-color: var(--flama-orange-300);
+    color: var(--flama-orange-600);
   }
 
   .study-card-shell {
@@ -564,9 +651,8 @@
     }
 
     .study-tab {
-      min-width: 70px;
-      font-size: 0.9rem;
-      padding: 0.45rem 0.55rem;
+      display: none;
+      /* replaced by dash-tab */
     }
 
     .study-bottom-bar {

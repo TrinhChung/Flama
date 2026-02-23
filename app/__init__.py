@@ -51,12 +51,17 @@ def create_app(config: Optional[dict] = None) -> Flask:
     from models.flashcard import (  # noqa: F401  # register model
         AuditLog,
         Card,
+        DeckInstall,
+        DeckMarketplaceItem,
+        DeckReview,
         FieldDef,
         FieldRenameJob,
         LegacyMigrationMap,
         MediaAsset,
         Note,
         NoteType,
+        NoteTypeInstall,
+        NoteTypeReview,
         Template,
     )
 

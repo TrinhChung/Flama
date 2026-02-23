@@ -47,14 +47,20 @@ from models import db
 from models.flashcard import (
     AuditLog,
     Card,
+    DeckInstall,
+    DeckMarketplaceItem,
+    DeckReview,
     FieldDef,
     FieldRenameJob,
     MediaAsset,
     Note,
     NoteType,
+    NoteTypeInstall,
+    NoteTypeReview,
     Template,
 )
 from models.vocabulary_deck import VocabularyDeck
+from models.vocabulary_entry import VocabularyEntry
 from models.vocabulary_progress import VocabularyProgress
 
 flashcards_bp = Blueprint("flashcards", __name__)
@@ -80,6 +86,13 @@ CSP_CARD_POLICY = (
     "media-src /media/proxy/; "
     "frame-ancestors 'self'"
 )
+PUBLISH_STATUSES_VISIBLE = {"published", "unlisted"}
+NOTE_TYPE_ACTIVE_NOTE_THRESHOLD = 3
+NOTE_TYPE_ACTIVE_REVIEW_THRESHOLD = 3
+NOTE_TYPE_ACTIVE_DAYS_THRESHOLD = 3
+DECK_ACTIVE_REVIEW_THRESHOLD = 3
+TRENDING_WINDOW_DAYS = 7
+RECENCY_WINDOW_DAYS = 30
 
 
 def _api_error(
@@ -111,6 +124,15 @@ def _get_note_type_or_404(note_type_id: str) -> NoteType | None:
     return NoteType.query.filter_by(id=note_type_id, user_id=current_user.id).first()
 
 
+def _serialize_author(user_obj: Any) -> dict[str, Any]:
+    if not user_obj:
+        return {"id": None, "username": "Unknown"}
+    return {
+        "id": user_obj.id,
+        "username": user_obj.username,
+    }
+
+
 def _serialize_field(field: FieldDef) -> dict[str, Any]:
     return {
         "id": field.id,
@@ -140,6 +162,25 @@ def _serialize_note_type(note_type: NoteType) -> dict[str, Any]:
     return {
         "id": note_type.id,
         "name": note_type.name,
+        "title": note_type.name,
+        "description": note_type.description,
+        "primary_category": note_type.primary_category,
+        "tags": note_type.tags or [],
+        "preview_text": note_type.preview_text,
+        "preview_image_url": note_type.preview_image_url,
+        "pricing_mode": note_type.pricing_mode,
+        "price_cents": int(note_type.price_cents or 0),
+        "version": note_type.version,
+        "changelog": note_type.changelog,
+        "publish_status": note_type.publish_status,
+        "is_official": bool(note_type.is_official),
+        "published_at": note_type.published_at.isoformat() if note_type.published_at else None,
+        "archived_at": note_type.archived_at.isoformat() if note_type.archived_at else None,
+        "install_count": int(note_type.install_count or 0),
+        "active_usage_count": int(note_type.active_usage_count or 0),
+        "rating_avg": float(note_type.rating_avg or 0.0),
+        "rating_count": int(note_type.rating_count or 0),
+        "author": _serialize_author(note_type.owner),
         "created_at": note_type.created_at.isoformat() if note_type.created_at else None,
         "updated_at": note_type.updated_at.isoformat() if note_type.updated_at else None,
         "field_defs": [_serialize_field(field) for field in sorted(note_type.field_defs, key=lambda item: item.position)],
@@ -202,6 +243,68 @@ def _normalize_tags(raw_tags: Any) -> list[str]:
     return []
 
 
+def _normalize_marketplace_tags(raw_tags: Any) -> list[str]:
+    normalized = _normalize_tags(raw_tags)
+    dedup: list[str] = []
+    seen: set[str] = set()
+    for item in normalized:
+        lowered = item.lower()
+        if lowered in seen:
+            continue
+        seen.add(lowered)
+        dedup.append(item)
+    return dedup
+
+
+def _parse_price_cents(raw_price: Any) -> int | None:
+    if raw_price in (None, ""):
+        return None
+    if isinstance(raw_price, int):
+        return raw_price
+    if isinstance(raw_price, float):
+        return int(round(raw_price * 100))
+    text = str(raw_price).strip()
+    if not text:
+        return None
+    if "." in text:
+        try:
+            return int(round(float(text) * 100))
+        except ValueError:
+            return None
+    try:
+        return int(text)
+    except ValueError:
+        return None
+
+
+def _normalize_pricing(payload: dict[str, Any], *, current_mode: str, current_price_cents: int) -> tuple[str, int, str | None]:
+    mode_raw = payload.get("pricing_mode", payload.get("pricing"))
+    mode = current_mode
+    if mode_raw is not None:
+        mode_candidate = str(mode_raw).strip().lower()
+        if mode_candidate not in {"free", "paid"}:
+            return mode, current_price_cents, "pricing_mode must be 'free' or 'paid'."
+        mode = mode_candidate
+
+    price_cents = current_price_cents
+    if "price_cents" in payload:
+        parsed_price = _parse_price_cents(payload.get("price_cents"))
+        if parsed_price is None:
+            return mode, current_price_cents, "price_cents is invalid."
+        price_cents = parsed_price
+    elif "price" in payload:
+        parsed_price = _parse_price_cents(payload.get("price"))
+        if parsed_price is None:
+            return mode, current_price_cents, "price is invalid."
+        price_cents = parsed_price
+
+    if mode == "free":
+        return mode, 0, None
+    if price_cents <= 0:
+        return mode, price_cents, "Paid items must have price > 0."
+    return mode, price_cents, None
+
+
 def _build_preview_sample_values(field_defs: list[FieldDef]) -> dict[str, Any]:
     sample_values: dict[str, Any] = {}
     for field_def in field_defs:
@@ -214,6 +317,726 @@ def _build_preview_sample_values(field_defs: list[FieldDef]) -> dict[str, Any]:
         else:
             sample_values[field_def.name] = field_def.name
     return sample_values
+
+
+def _validate_note_type_publish_requirements(note_type: NoteType) -> str | None:
+    if not (note_type.name or "").strip():
+        return "Title is required for publish."
+    if not (note_type.description or "").strip():
+        return "Description is required for publish."
+    if not (note_type.primary_category or "").strip():
+        return "primary_category is required for publish."
+    preview_text = (note_type.preview_text or "").strip()
+    preview_image = (note_type.preview_image_url or "").strip()
+    if not preview_text and not preview_image:
+        return "Preview text or preview image is required for publish."
+    if not (note_type.version or "").strip():
+        return "Version is required for publish."
+    if note_type.pricing_mode == "paid" and int(note_type.price_cents or 0) <= 0:
+        return "Paid note type must have a positive price."
+    if not note_type.field_defs:
+        return "At least one field is required for publish."
+    if not note_type.templates:
+        return "At least one card template is required for publish."
+    return None
+
+
+def _apply_note_type_marketplace_payload(note_type: NoteType, payload: dict[str, Any]) -> str | None:
+    if "title" in payload or "name" in payload:
+        new_name = (payload.get("title") or payload.get("name") or "").strip()
+        if not new_name:
+            return "Title is required."
+        existing = NoteType.query.filter(
+            NoteType.user_id == note_type.user_id,
+            NoteType.name == new_name,
+            NoteType.id != note_type.id,
+        ).first()
+        if existing:
+            return "Another note type already uses this title."
+        note_type.name = new_name
+
+    if "description" in payload:
+        note_type.description = (payload.get("description") or "").strip() or None
+    if "primary_category" in payload:
+        note_type.primary_category = (payload.get("primary_category") or "").strip() or None
+    if "tags" in payload:
+        note_type.tags = _normalize_marketplace_tags(payload.get("tags"))
+    if "preview_text" in payload:
+        note_type.preview_text = (payload.get("preview_text") or "").strip() or None
+    if "preview_image_url" in payload:
+        note_type.preview_image_url = (payload.get("preview_image_url") or "").strip() or None
+    if "version" in payload:
+        note_type.version = (payload.get("version") or "").strip() or "1.0.0"
+    if "changelog" in payload:
+        note_type.changelog = (payload.get("changelog") or "").strip() or None
+
+    pricing_mode, price_cents, pricing_error = _normalize_pricing(
+        payload,
+        current_mode=str(note_type.pricing_mode or "free"),
+        current_price_cents=int(note_type.price_cents or 0),
+    )
+    if pricing_error:
+        return pricing_error
+    note_type.pricing_mode = pricing_mode
+    note_type.price_cents = price_cents
+
+    if "is_official" in payload:
+        if not is_admin_user(current_user):
+            return "Only admin can set official flag."
+        note_type.is_official = bool(payload.get("is_official"))
+
+    if "publish_status" in payload:
+        candidate_status = str(payload.get("publish_status") or "").strip().lower()
+        if candidate_status not in {"private", "published", "unlisted", "archived"}:
+            return "publish_status is invalid."
+        if candidate_status in PUBLISH_STATUSES_VISIBLE:
+            err = _validate_note_type_publish_requirements(note_type)
+            if err:
+                return err
+            if note_type.publish_status not in PUBLISH_STATUSES_VISIBLE:
+                note_type.published_at = datetime.utcnow()
+            note_type.archived_at = None
+        elif candidate_status == "archived":
+            note_type.archived_at = datetime.utcnow()
+        note_type.publish_status = candidate_status
+
+    return None
+
+
+def _make_unique_note_type_name(user_id: int, base_name: str) -> str:
+    candidate = base_name.strip() or "Installed NoteType"
+    if not NoteType.query.filter_by(user_id=user_id, name=candidate).first():
+        return candidate
+    counter = 2
+    while True:
+        candidate_with_counter = f"{candidate} ({counter})"
+        if not NoteType.query.filter_by(user_id=user_id, name=candidate_with_counter).first():
+            return candidate_with_counter
+        counter += 1
+
+
+def _clone_note_type_for_user(source_note_type: NoteType, user_id: int) -> NoteType:
+    clone = NoteType(
+        user_id=user_id,
+        name=_make_unique_note_type_name(user_id, source_note_type.name),
+        description=source_note_type.description,
+        primary_category=source_note_type.primary_category,
+        tags=list(source_note_type.tags or []),
+        preview_text=source_note_type.preview_text,
+        preview_image_url=source_note_type.preview_image_url,
+        pricing_mode="free",
+        price_cents=0,
+        version=source_note_type.version or "1.0.0",
+        changelog=source_note_type.changelog,
+        publish_status="private",
+        is_official=False,
+        install_count=0,
+        active_usage_count=0,
+        rating_avg=0.0,
+        rating_count=0,
+    )
+    db.session.add(clone)
+    db.session.flush()
+
+    for field_def in sorted(source_note_type.field_defs, key=lambda item: item.position):
+        db.session.add(
+            FieldDef(
+                note_type_id=clone.id,
+                name=field_def.name,
+                field_type=field_def.field_type,
+                position=field_def.position,
+                required=bool(field_def.required),
+            )
+        )
+
+    for template in sorted(source_note_type.templates, key=lambda item: item.position):
+        db.session.add(
+            Template(
+                note_type_id=clone.id,
+                name=template.name,
+                front_html=template.front_html,
+                back_html=template.back_html,
+                shared_css=template.shared_css,
+                position=template.position,
+                is_default=bool(template.is_default),
+            )
+        )
+
+    return clone
+
+
+def _touch_note_type_install_usage(*, user_id: int, installed_note_type_id: str, activity_at: datetime | None = None) -> None:
+    install = NoteTypeInstall.query.filter_by(
+        user_id=user_id,
+        installed_note_type_id=installed_note_type_id,
+    ).first()
+    if not install:
+        return
+    now = activity_at or datetime.utcnow()
+    if install.first_use_at is None:
+        install.first_use_at = now
+    install.last_activity_at = now
+
+
+def _note_type_reps_for_user(*, user_id: int, installed_note_type_id: str) -> int:
+    result = (
+        db.session.query(db.func.coalesce(db.func.sum(VocabularyProgress.reps), 0))
+        .select_from(VocabularyProgress)
+        .join(Card, VocabularyProgress.new_card_id == Card.id)
+        .join(Note, Card.note_id == Note.id)
+        .filter(
+            VocabularyProgress.user_id == user_id,
+            Note.note_type_id == installed_note_type_id,
+        )
+        .scalar()
+    )
+    return int(result or 0)
+
+
+def _is_note_type_install_active(install: NoteTypeInstall, *, now: datetime) -> bool:
+    if not install.installed_note_type_id:
+        return False
+    note_count = Note.query.filter_by(
+        user_id=install.user_id,
+        note_type_id=install.installed_note_type_id,
+    ).count()
+    review_reps = _note_type_reps_for_user(
+        user_id=install.user_id,
+        installed_note_type_id=install.installed_note_type_id,
+    )
+    first_use = install.first_use_at
+    used_days = bool(first_use and now - first_use >= timedelta(days=NOTE_TYPE_ACTIVE_DAYS_THRESHOLD))
+    return (
+        note_count >= NOTE_TYPE_ACTIVE_NOTE_THRESHOLD
+        or review_reps >= NOTE_TYPE_ACTIVE_REVIEW_THRESHOLD
+        or used_days
+    )
+
+
+def _recompute_note_type_market_stats(note_type: NoteType) -> None:
+    now = datetime.utcnow()
+    installs = NoteTypeInstall.query.filter_by(source_note_type_id=note_type.id).all()
+    note_type.install_count = len(installs)
+    note_type.active_usage_count = sum(1 for install in installs if _is_note_type_install_active(install, now=now))
+
+    rating_avg, rating_count = (
+        db.session.query(
+            db.func.coalesce(db.func.avg(NoteTypeReview.rating), 0.0),
+            db.func.count(NoteTypeReview.id),
+        )
+        .filter(NoteTypeReview.note_type_id == note_type.id)
+        .first()
+    )
+    note_type.rating_avg = float(rating_avg or 0.0)
+    note_type.rating_count = int(rating_count or 0)
+
+
+def _can_user_rate_note_type(note_type: NoteType, *, user_id: int) -> bool:
+    if note_type.user_id == user_id:
+        return False
+    install = NoteTypeInstall.query.filter_by(
+        source_note_type_id=note_type.id,
+        user_id=user_id,
+    ).first()
+    if not install:
+        return False
+    return _is_note_type_install_active(install, now=datetime.utcnow())
+
+
+def _serialize_note_type_marketplace_card(note_type: NoteType) -> dict[str, Any]:
+    payload = _serialize_note_type(note_type)
+    payload["price_display"] = "Free" if note_type.pricing_mode == "free" else f"${(note_type.price_cents or 0) / 100:.2f}"
+    return payload
+
+
+def _serialize_deck_marketplace_item(deck_item: DeckMarketplaceItem) -> dict[str, Any]:
+    return {
+        "id": deck_item.id,
+        "title": deck_item.title,
+        "description": deck_item.description,
+        "primary_category": deck_item.primary_category,
+        "tags": deck_item.tags or [],
+        "preview_text": deck_item.preview_text,
+        "sample_cards_count": int(deck_item.sample_cards_count or 0),
+        "source_deck_id": deck_item.source_deck_id,
+        "source_note_type_id": deck_item.source_note_type_id,
+        "pricing_mode": deck_item.pricing_mode,
+        "price_cents": int(deck_item.price_cents or 0),
+        "price_display": "Free" if deck_item.pricing_mode == "free" else f"${(deck_item.price_cents or 0) / 100:.2f}",
+        "version": deck_item.version,
+        "changelog": deck_item.changelog,
+        "publish_status": deck_item.publish_status,
+        "is_official": bool(deck_item.is_official),
+        "install_count": int(deck_item.install_count or 0),
+        "active_usage_count": int(deck_item.active_usage_count or 0),
+        "rating_avg": float(deck_item.rating_avg or 0.0),
+        "rating_count": int(deck_item.rating_count or 0),
+        "author": _serialize_author(deck_item.owner),
+        "published_at": deck_item.published_at.isoformat() if deck_item.published_at else None,
+        "archived_at": deck_item.archived_at.isoformat() if deck_item.archived_at else None,
+        "updated_at": deck_item.updated_at.isoformat() if deck_item.updated_at else None,
+        "created_at": deck_item.created_at.isoformat() if deck_item.created_at else None,
+    }
+
+
+def _validate_deck_publish_requirements(deck_item: DeckMarketplaceItem) -> str | None:
+    if not (deck_item.title or "").strip():
+        return "Title is required for publish."
+    if not (deck_item.description or "").strip():
+        return "Description is required for publish."
+    if not (deck_item.primary_category or "").strip():
+        return "primary_category is required for publish."
+    if not (deck_item.preview_text or "").strip() and int(deck_item.sample_cards_count or 0) <= 0:
+        return "Preview text or sample_cards_count > 0 is required for publish."
+    if not (deck_item.version or "").strip():
+        return "Version is required for publish."
+    if deck_item.pricing_mode == "paid" and int(deck_item.price_cents or 0) <= 0:
+        return "Paid deck must have a positive price."
+    return None
+
+
+def _apply_deck_marketplace_payload(deck_item: DeckMarketplaceItem, payload: dict[str, Any]) -> str | None:
+    if "title" in payload:
+        title = (payload.get("title") or "").strip()
+        if not title:
+            return "title is required."
+        deck_item.title = title
+    if "description" in payload:
+        deck_item.description = (payload.get("description") or "").strip()
+    if "primary_category" in payload:
+        category = (payload.get("primary_category") or "").strip()
+        if not category:
+            return "primary_category is required."
+        deck_item.primary_category = category
+    if "tags" in payload:
+        deck_item.tags = _normalize_marketplace_tags(payload.get("tags"))
+    if "preview_text" in payload:
+        deck_item.preview_text = (payload.get("preview_text") or "").strip() or None
+    if "sample_cards_count" in payload:
+        try:
+            deck_item.sample_cards_count = max(0, int(payload.get("sample_cards_count") or 0))
+        except (TypeError, ValueError):
+            return "sample_cards_count must be an integer."
+    if "source_deck_id" in payload:
+        source_deck_id_raw = payload.get("source_deck_id")
+        if source_deck_id_raw in (None, ""):
+            deck_item.source_deck_id = None
+        else:
+            try:
+                deck_item.source_deck_id = int(source_deck_id_raw)
+            except (TypeError, ValueError):
+                return "source_deck_id must be an integer."
+    if "source_note_type_id" in payload:
+        deck_item.source_note_type_id = (payload.get("source_note_type_id") or "").strip() or None
+    if "version" in payload:
+        deck_item.version = (payload.get("version") or "").strip() or "1.0.0"
+    if "changelog" in payload:
+        deck_item.changelog = (payload.get("changelog") or "").strip() or None
+
+    pricing_mode, price_cents, pricing_error = _normalize_pricing(
+        payload,
+        current_mode=str(deck_item.pricing_mode or "free"),
+        current_price_cents=int(deck_item.price_cents or 0),
+    )
+    if pricing_error:
+        return pricing_error
+    deck_item.pricing_mode = pricing_mode
+    deck_item.price_cents = price_cents
+
+    if "is_official" in payload:
+        if not is_admin_user(current_user):
+            return "Only admin can set official flag."
+        deck_item.is_official = bool(payload.get("is_official"))
+
+    if "publish_status" in payload:
+        candidate_status = str(payload.get("publish_status") or "").strip().lower()
+        if candidate_status not in {"private", "published", "unlisted", "archived"}:
+            return "publish_status is invalid."
+        if candidate_status in PUBLISH_STATUSES_VISIBLE:
+            err = _validate_deck_publish_requirements(deck_item)
+            if err:
+                return err
+            if deck_item.publish_status not in PUBLISH_STATUSES_VISIBLE:
+                deck_item.published_at = datetime.utcnow()
+            deck_item.archived_at = None
+        elif candidate_status == "archived":
+            deck_item.archived_at = datetime.utcnow()
+        deck_item.publish_status = candidate_status
+
+    return None
+
+
+def _next_deck_position(parent_deck_id: int | None) -> int:
+    query = db.session.query(db.func.max(VocabularyDeck.position))
+    if parent_deck_id is None:
+        max_pos = query.filter(VocabularyDeck.parent_id.is_(None)).scalar()
+    else:
+        max_pos = query.filter(VocabularyDeck.parent_id == parent_deck_id).scalar()
+    return int(max_pos or 0) + 1
+
+
+def _clone_deck_subtree(*, source_deck_id: int, parent_id: int | None, root_suffix: str | None) -> VocabularyDeck:
+    source_deck = VocabularyDeck.query.get(source_deck_id)
+    if not source_deck:
+        raise ValueError(f"Deck not found: {source_deck_id}")
+
+    if parent_id is None and root_suffix:
+        cloned_name = f"{source_deck.name} ({root_suffix})"
+    else:
+        cloned_name = source_deck.name
+
+    cloned_deck = VocabularyDeck(
+        parent_id=parent_id,
+        name=cloned_name,
+        description=source_deck.description,
+        position=_next_deck_position(parent_id),
+    )
+    db.session.add(cloned_deck)
+    db.session.flush()
+
+    source_entries = VocabularyEntry.query.filter_by(deck_id=source_deck.id).all()
+    for entry in source_entries:
+        db.session.add(
+            VocabularyEntry(
+                lesson_id=None,
+                deck_id=cloned_deck.id,
+                deck=entry.deck,
+                word=entry.word,
+                hanviet=entry.hanviet,
+                reading=entry.reading,
+                translation_vi=entry.translation_vi,
+                meaning_jp=entry.meaning_jp,
+                meaning_vi=entry.meaning_vi,
+                usage_jp=entry.usage_jp,
+                usage_vi=entry.usage_vi,
+                example_jp=entry.example_jp,
+                example_vi=entry.example_vi,
+                additional_note_jp=entry.additional_note_jp,
+                additional_note_vi=entry.additional_note_vi,
+                image=entry.image,
+                diagram=entry.diagram,
+                word_audio=entry.word_audio,
+                example_audio=entry.example_audio,
+            )
+        )
+
+    child_decks = (
+        VocabularyDeck.query.filter_by(parent_id=source_deck.id)
+        .order_by(VocabularyDeck.position.asc(), VocabularyDeck.id.asc())
+        .all()
+    )
+    for child in child_decks:
+        _clone_deck_subtree(source_deck_id=child.id, parent_id=cloned_deck.id, root_suffix=None)
+
+    return cloned_deck
+
+
+def _touch_deck_install_usage(*, user_id: int, local_deck_id: int, activity_at: datetime | None = None) -> None:
+    install = DeckInstall.query.filter_by(user_id=user_id, local_deck_id=local_deck_id).first()
+    if not install:
+        return
+    now = activity_at or datetime.utcnow()
+    if install.first_use_at is None:
+        install.first_use_at = now
+    install.last_activity_at = now
+
+
+def _deck_reps_for_user(*, user_id: int, local_deck_id: int) -> int:
+    legacy_reps = (
+        db.session.query(db.func.coalesce(db.func.sum(VocabularyProgress.reps), 0))
+        .select_from(VocabularyProgress)
+        .join(VocabularyEntry, VocabularyProgress.entry_id == VocabularyEntry.id)
+        .filter(
+            VocabularyProgress.user_id == user_id,
+            VocabularyEntry.deck_id == local_deck_id,
+        )
+        .scalar()
+    ) or 0
+
+    flashcard_reps = (
+        db.session.query(db.func.coalesce(db.func.sum(VocabularyProgress.reps), 0))
+        .select_from(VocabularyProgress)
+        .join(Card, VocabularyProgress.new_card_id == Card.id)
+        .join(Note, Card.note_id == Note.id)
+        .filter(
+            VocabularyProgress.user_id == user_id,
+            Note.deck_id == local_deck_id,
+        )
+        .scalar()
+    ) or 0
+    return int(legacy_reps or 0) + int(flashcard_reps or 0)
+
+
+def _is_deck_install_active(install: DeckInstall) -> bool:
+    if not install.local_deck_id:
+        return False
+    reps = _deck_reps_for_user(user_id=install.user_id, local_deck_id=install.local_deck_id)
+    return reps >= DECK_ACTIVE_REVIEW_THRESHOLD
+
+
+def _recompute_deck_item_market_stats(deck_item: DeckMarketplaceItem) -> None:
+    installs = DeckInstall.query.filter_by(deck_item_id=deck_item.id).all()
+    deck_item.install_count = len(installs)
+    deck_item.active_usage_count = sum(1 for install in installs if _is_deck_install_active(install))
+
+    rating_avg, rating_count = (
+        db.session.query(
+            db.func.coalesce(db.func.avg(DeckReview.rating), 0.0),
+            db.func.count(DeckReview.id),
+        )
+        .filter(DeckReview.deck_item_id == deck_item.id)
+        .first()
+    )
+    deck_item.rating_avg = float(rating_avg or 0.0)
+    deck_item.rating_count = int(rating_count or 0)
+
+
+def _can_user_rate_deck(deck_item: DeckMarketplaceItem, *, user_id: int) -> bool:
+    if deck_item.owner_user_id == user_id:
+        return False
+    install = DeckInstall.query.filter_by(deck_item_id=deck_item.id, user_id=user_id).first()
+    if not install:
+        return False
+    return _is_deck_install_active(install)
+
+
+def _is_note_type_visible_for_shared(note_type: NoteType) -> bool:
+    return str(note_type.publish_status or "").strip().lower() == "published"
+
+
+def _is_deck_item_visible_for_shared(deck_item: DeckMarketplaceItem) -> bool:
+    return str(deck_item.publish_status or "").strip().lower() == "published"
+
+
+def _item_matches_search(query_text: str, *values: str | None) -> bool:
+    if not query_text:
+        return True
+    lowered = query_text.lower()
+    for value in values:
+        if value and lowered in value.lower():
+            return True
+    return False
+
+
+def _filter_note_type_items(
+    note_types: list[NoteType],
+    *,
+    query_text: str,
+    category: str,
+    tags: set[str],
+    pricing_mode: str,
+    min_price_cents: int | None,
+    max_price_cents: int | None,
+) -> list[NoteType]:
+    filtered: list[NoteType] = []
+    for note_type in note_types:
+        if not _item_matches_search(query_text, note_type.name, note_type.description):
+            continue
+        if category and (note_type.primary_category or "").strip().lower() != category.lower():
+            continue
+        item_tags = {tag.lower() for tag in (note_type.tags or [])}
+        if tags and not tags.intersection(item_tags):
+            continue
+        if pricing_mode in {"free", "paid"} and note_type.pricing_mode != pricing_mode:
+            continue
+        price_value = int(note_type.price_cents or 0)
+        if min_price_cents is not None and price_value < min_price_cents:
+            continue
+        if max_price_cents is not None and price_value > max_price_cents:
+            continue
+        filtered.append(note_type)
+    return filtered
+
+
+def _filter_deck_items(
+    deck_items: list[DeckMarketplaceItem],
+    *,
+    query_text: str,
+    category: str,
+    tags: set[str],
+    pricing_mode: str,
+    min_price_cents: int | None,
+    max_price_cents: int | None,
+) -> list[DeckMarketplaceItem]:
+    filtered: list[DeckMarketplaceItem] = []
+    for deck_item in deck_items:
+        if not _item_matches_search(query_text, deck_item.title, deck_item.description):
+            continue
+        if category and (deck_item.primary_category or "").strip().lower() != category.lower():
+            continue
+        item_tags = {tag.lower() for tag in (deck_item.tags or [])}
+        if tags and not tags.intersection(item_tags):
+            continue
+        if pricing_mode in {"free", "paid"} and deck_item.pricing_mode != pricing_mode:
+            continue
+        price_value = int(deck_item.price_cents or 0)
+        if min_price_cents is not None and price_value < min_price_cents:
+            continue
+        if max_price_cents is not None and price_value > max_price_cents:
+            continue
+        filtered.append(deck_item)
+    return filtered
+
+
+def _sort_note_type_items(items: list[NoteType], sort_key: str) -> list[NoteType]:
+    key = (sort_key or "popular").strip().lower()
+    if key == "top_rated":
+        return sorted(
+            items,
+            key=lambda item: (float(item.rating_avg or 0.0), int(item.rating_count or 0), int(item.active_usage_count or 0)),
+            reverse=True,
+        )
+    if key == "newest":
+        return sorted(items, key=lambda item: (item.created_at or datetime.min), reverse=True)
+    if key == "recently_updated":
+        return sorted(items, key=lambda item: (item.updated_at or datetime.min), reverse=True)
+    return sorted(
+        items,
+        key=lambda item: (int(item.active_usage_count or 0), int(item.install_count or 0), float(item.rating_avg or 0.0)),
+        reverse=True,
+    )
+
+
+def _sort_deck_items(items: list[DeckMarketplaceItem], sort_key: str) -> list[DeckMarketplaceItem]:
+    key = (sort_key or "popular").strip().lower()
+    if key == "top_rated":
+        return sorted(
+            items,
+            key=lambda item: (float(item.rating_avg or 0.0), int(item.rating_count or 0), int(item.active_usage_count or 0)),
+            reverse=True,
+        )
+    if key == "newest":
+        return sorted(items, key=lambda item: (item.created_at or datetime.min), reverse=True)
+    if key == "recently_updated":
+        return sorted(items, key=lambda item: (item.updated_at or datetime.min), reverse=True)
+    return sorted(
+        items,
+        key=lambda item: (int(item.active_usage_count or 0), int(item.install_count or 0), float(item.rating_avg or 0.0)),
+        reverse=True,
+    )
+
+
+def _collect_user_market_interests(user_id: int) -> tuple[set[str], set[str]]:
+    categories: set[str] = set()
+    tags: set[str] = set()
+
+    user_note_types = (
+        db.session.query(NoteType)
+        .join(Note, Note.note_type_id == NoteType.id)
+        .filter(Note.user_id == user_id)
+        .all()
+    )
+    for note_type in user_note_types:
+        if note_type.primary_category:
+            categories.add(note_type.primary_category.strip().lower())
+        for tag in note_type.tags or []:
+            tags.add(str(tag).strip().lower())
+
+    user_notes = Note.query.filter_by(user_id=user_id).all()
+    for note in user_notes:
+        for tag in note.tags or []:
+            tags.add(str(tag).strip().lower())
+
+    deck_installs = DeckInstall.query.filter_by(user_id=user_id).all()
+    if deck_installs:
+        deck_item_ids = [row.deck_item_id for row in deck_installs]
+        deck_items = DeckMarketplaceItem.query.filter(DeckMarketplaceItem.id.in_(deck_item_ids)).all()
+        for deck_item in deck_items:
+            if deck_item.primary_category:
+                categories.add(deck_item.primary_category.strip().lower())
+            for tag in deck_item.tags or []:
+                tags.add(str(tag).strip().lower())
+
+    return categories, tags
+
+
+def _score_market_item(
+    *,
+    item_category: str | None,
+    item_tags: list[str] | None,
+    rating_avg: float,
+    rating_count: int,
+    active_usage_count: int,
+    install_count: int,
+    updated_at: datetime | None,
+    interests_categories: set[str],
+    interests_tags: set[str],
+    is_official: bool,
+    cold_start: bool,
+) -> float:
+    category_match = 1.0 if item_category and item_category.strip().lower() in interests_categories else 0.0
+    normalized_item_tags = {tag.strip().lower() for tag in (item_tags or []) if str(tag).strip()}
+    overlap_count = len(normalized_item_tags.intersection(interests_tags))
+    tag_match = min(1.0, overlap_count / 3) if normalized_item_tags else 0.0
+    rating_score = (float(rating_avg or 0.0) / 5.0) * min(1.0, int(rating_count or 0) / 20)
+    usage_score = min(1.0, int(active_usage_count or 0) / 100) * 0.7 + min(1.0, int(install_count or 0) / 200) * 0.3
+    days_since_update = (
+        (datetime.utcnow() - updated_at).days
+        if updated_at is not None
+        else RECENCY_WINDOW_DAYS
+    )
+    recency_score = max(0.0, 1 - (days_since_update / RECENCY_WINDOW_DAYS))
+
+    score = (
+        category_match * 3.0
+        + tag_match * 2.0
+        + rating_score * 2.0
+        + usage_score * 2.0
+        + recency_score * 1.0
+    )
+    if cold_start and is_official:
+        score += 2.5
+    return score
+
+
+def _top_items_by_category_note_types(items: list[NoteType], *, limit_per_category: int = 5, max_categories: int = 3) -> dict[str, list[dict[str, Any]]]:
+    buckets: dict[str, list[NoteType]] = {}
+    for item in items:
+        category = (item.primary_category or "General").strip()
+        buckets.setdefault(category, []).append(item)
+
+    ranked_categories = sorted(
+        buckets.keys(),
+        key=lambda category: max(
+            (
+                (bucket_item.active_usage_count or 0, bucket_item.rating_avg or 0.0)
+                for bucket_item in buckets[category]
+            ),
+            default=(0, 0.0),
+        ),
+        reverse=True,
+    )[:max_categories]
+
+    result: dict[str, list[dict[str, Any]]] = {}
+    for category in ranked_categories:
+        sorted_bucket = _sort_note_type_items(buckets[category], "popular")[:limit_per_category]
+        result[category] = [_serialize_note_type_marketplace_card(item) for item in sorted_bucket]
+    return result
+
+
+def _top_items_by_category_decks(items: list[DeckMarketplaceItem], *, limit_per_category: int = 5, max_categories: int = 3) -> dict[str, list[dict[str, Any]]]:
+    buckets: dict[str, list[DeckMarketplaceItem]] = {}
+    for item in items:
+        category = (item.primary_category or "General").strip()
+        buckets.setdefault(category, []).append(item)
+
+    ranked_categories = sorted(
+        buckets.keys(),
+        key=lambda category: max(
+            (
+                (bucket_item.active_usage_count or 0, bucket_item.rating_avg or 0.0)
+                for bucket_item in buckets[category]
+            ),
+            default=(0, 0.0),
+        ),
+        reverse=True,
+    )[:max_categories]
+
+    result: dict[str, list[dict[str, Any]]] = {}
+    for category in ranked_categories:
+        sorted_bucket = _sort_deck_items(buckets[category], "popular")[:limit_per_category]
+        result[category] = [_serialize_deck_marketplace_item(item) for item in sorted_bucket]
+    return result
 
 
 def _create_cards_for_note(note: Note) -> None:
@@ -434,6 +1257,18 @@ def note_type_fields_page(note_type_id: str):
     return render_template("flashcards/note_type_fields.html", note_type=note_type)
 
 
+@flashcards_bp.route("/flashcards/shared-note-types")
+@login_required
+def shared_note_types_page():
+    return render_template("flashcards/shared_note_types.html")
+
+
+@flashcards_bp.route("/flashcards/shared-decks")
+@login_required
+def shared_decks_page():
+    return render_template("flashcards/shared_decks.html")
+
+
 @flashcards_bp.route("/flashcards/notes/new")
 @login_required
 def note_editor_page():
@@ -554,7 +1389,7 @@ def list_note_types():
 @login_required
 def create_note_type():
     payload = request.get_json(silent=True) or {}
-    name = (payload.get("name") or "").strip()
+    name = (payload.get("name") or payload.get("title") or "").strip()
     if not name:
         return _api_error("VALIDATION_ERROR", "Note type name is required.", field="name")
 
@@ -601,6 +1436,10 @@ def create_note_type():
         is_default=True,
     )
     db.session.add(template)
+    metadata_error = _apply_note_type_marketplace_payload(note_type, payload)
+    if metadata_error:
+        db.session.rollback()
+        return _api_error("VALIDATION_ERROR", metadata_error)
     _audit("note_type.create", {"note_type_id": note_type.id, "name": note_type.name})
     db.session.commit()
     return jsonify(_serialize_note_type(note_type)), 201
@@ -622,14 +1461,10 @@ def patch_note_type(note_type_id: str):
     if not note_type:
         return _api_error("FIELD_NOT_FOUND", "Note type not found.", status=404)
     payload = request.get_json(silent=True) or {}
-    name = (payload.get("name") or "").strip()
-    if not name:
-        return _api_error("VALIDATION_ERROR", "Name is required.", field="name")
-    existing = NoteType.query.filter(NoteType.user_id == current_user.id, NoteType.name == name, NoteType.id != note_type.id).first()
-    if existing:
-        return _api_error("VALIDATION_ERROR", "Another note type already uses this name.", field="name")
-    note_type.name = name
-    _audit("note_type.rename", {"note_type_id": note_type.id, "name": name})
+    validation_error = _apply_note_type_marketplace_payload(note_type, payload)
+    if validation_error:
+        return _api_error("VALIDATION_ERROR", validation_error)
+    _audit("note_type.update", {"note_type_id": note_type.id})
     db.session.commit()
     return jsonify(_serialize_note_type(note_type))
 
@@ -1039,6 +1874,15 @@ def create_note():
     db.session.add(note)
     db.session.flush()
     _create_cards_for_note(note)
+    _touch_note_type_install_usage(user_id=current_user.id, installed_note_type_id=note.note_type_id)
+    install_rows = NoteTypeInstall.query.filter_by(
+        user_id=current_user.id,
+        installed_note_type_id=note.note_type_id,
+    ).all()
+    for install in install_rows:
+        source_note_type = NoteType.query.get(install.source_note_type_id)
+        if source_note_type:
+            _recompute_note_type_market_stats(source_note_type)
     _audit("note.create", {"note_id": note.id, "note_type_id": note.note_type_id})
     db.session.commit()
     return jsonify({"id": note.id, "field_values": note.field_values, "tags": note.tags}), 201
@@ -1334,6 +2178,23 @@ def study_answer(card_id: str):
     current_state = _card_state_from_progress(progress, now)
     updated_state = applyAnswer(current_state, default_deck_options(), now, rating)  # type: ignore[arg-type]
     _apply_card_state_to_progress(progress, updated_state, now)
+    _touch_note_type_install_usage(user_id=current_user.id, installed_note_type_id=card.note.note_type_id, activity_at=now)
+    note_type_installs = NoteTypeInstall.query.filter_by(
+        user_id=current_user.id,
+        installed_note_type_id=card.note.note_type_id,
+    ).all()
+    for install in note_type_installs:
+        source_note_type = NoteType.query.get(install.source_note_type_id)
+        if source_note_type:
+            _recompute_note_type_market_stats(source_note_type)
+
+    if card.note.deck_id is not None:
+        _touch_deck_install_usage(user_id=current_user.id, local_deck_id=card.note.deck_id, activity_at=now)
+        deck_installs = DeckInstall.query.filter_by(user_id=current_user.id, local_deck_id=card.note.deck_id).all()
+        for deck_install in deck_installs:
+            deck_item = DeckMarketplaceItem.query.get(deck_install.deck_item_id)
+            if deck_item:
+                _recompute_deck_item_market_stats(deck_item)
     _audit("study.answer", {"card_id": card.id, "rating": rating})
     db.session.commit()
     next_url = url_for("flashcards.study_next", scope="deck", scope_id=card.note.deck_id) if card.note.deck_id else None
@@ -1349,3 +2210,635 @@ def seed_legacy_note_type():
     _audit("legacy.seed", {"note_type_id": note_type.id, "template_id": template.id})
     db.session.commit()
     return jsonify({"note_type_id": note_type.id, "template_id": template.id})
+
+
+def _parse_query_price_cents(param_name: str) -> int | None:
+    raw_value = (request.args.get(param_name) or "").strip()
+    if not raw_value:
+        return None
+    parsed = _parse_price_cents(raw_value)
+    if parsed is None:
+        return None
+    return max(0, parsed)
+
+
+@flashcards_bp.route("/api/note-types/<note_type_id>/publish", methods=["POST"])
+@login_required
+def publish_note_type(note_type_id: str):
+    note_type = _get_note_type_or_404(note_type_id)
+    if not note_type:
+        return _api_error("FIELD_NOT_FOUND", "Note type not found.", status=404)
+    payload = request.get_json(silent=True) or {}
+    payload.setdefault("publish_status", "published")
+    validation_error = _apply_note_type_marketplace_payload(note_type, payload)
+    if validation_error:
+        return _api_error("VALIDATION_ERROR", validation_error)
+    _recompute_note_type_market_stats(note_type)
+    _audit("note_type.publish", {"note_type_id": note_type.id, "publish_status": note_type.publish_status})
+    db.session.commit()
+    return jsonify(_serialize_note_type(note_type))
+
+
+@flashcards_bp.route("/api/shared/note-types", methods=["GET"])
+@login_required
+def list_shared_note_types():
+    query_text = (request.args.get("q") or "").strip()
+    category = (request.args.get("category") or "").strip()
+    tags = {item.lower() for item in _normalize_marketplace_tags(request.args.get("tags"))}
+    pricing_mode = (request.args.get("pricing_mode") or request.args.get("pricing") or "").strip().lower()
+    sort_key = (request.args.get("sort") or "popular").strip().lower()
+    min_price_cents = _parse_query_price_cents("min_price")
+    max_price_cents = _parse_query_price_cents("max_price")
+
+    visible_note_types = [
+        item for item in NoteType.query.order_by(NoteType.updated_at.desc()).all()
+        if _is_note_type_visible_for_shared(item)
+    ]
+    filtered = _filter_note_type_items(
+        visible_note_types,
+        query_text=query_text,
+        category=category,
+        tags=tags,
+        pricing_mode=pricing_mode,
+        min_price_cents=min_price_cents,
+        max_price_cents=max_price_cents,
+    )
+    sorted_items = _sort_note_type_items(filtered, sort_key)
+
+    installs = NoteTypeInstall.query.filter_by(user_id=current_user.id).all()
+    install_map = {row.source_note_type_id: row for row in installs}
+    payload_items = []
+    for note_type in sorted_items:
+        row = _serialize_note_type_marketplace_card(note_type)
+        install = install_map.get(note_type.id)
+        row["is_installed"] = install is not None
+        row["installed_note_type_id"] = install.installed_note_type_id if install else None
+        row["is_owner"] = note_type.user_id == current_user.id
+        payload_items.append(row)
+    return jsonify({"items": payload_items})
+
+
+@flashcards_bp.route("/api/shared/note-types/<note_type_id>", methods=["GET"])
+@login_required
+def get_shared_note_type_detail(note_type_id: str):
+    note_type = NoteType.query.get(note_type_id)
+    if not note_type:
+        return _api_error("FIELD_NOT_FOUND", "Note type not found.", status=404)
+
+    status = str(note_type.publish_status or "").strip().lower()
+    is_owner = note_type.user_id == current_user.id
+    if status == "private" and not is_owner:
+        return _api_error("FIELD_NOT_FOUND", "Note type not found.", status=404)
+    if status == "archived" and not is_owner:
+        return _api_error("FIELD_NOT_FOUND", "Note type not found.", status=404)
+    if status == "unlisted" and not is_owner:
+        # Unlisted is only reachable with direct link; this endpoint is that direct link.
+        pass
+
+    install = NoteTypeInstall.query.filter_by(
+        source_note_type_id=note_type.id,
+        user_id=current_user.id,
+    ).first()
+    review = NoteTypeReview.query.filter_by(note_type_id=note_type.id, user_id=current_user.id).first()
+    payload = _serialize_note_type(note_type)
+    payload["is_installed"] = install is not None
+    payload["installed_note_type_id"] = install.installed_note_type_id if install else None
+    payload["can_rate"] = _can_user_rate_note_type(note_type, user_id=current_user.id)
+    payload["my_review"] = (
+        {
+            "rating": review.rating,
+            "comment": review.comment,
+            "updated_at": review.updated_at.isoformat() if review.updated_at else None,
+        }
+        if review
+        else None
+    )
+    return jsonify(payload)
+
+
+@flashcards_bp.route("/api/shared/note-types/<note_type_id>/install", methods=["POST"])
+@login_required
+def install_shared_note_type(note_type_id: str):
+    source_note_type = NoteType.query.get(note_type_id)
+    if not source_note_type:
+        return _api_error("FIELD_NOT_FOUND", "Note type not found.", status=404)
+    status = str(source_note_type.publish_status or "").strip().lower()
+    if status not in PUBLISH_STATUSES_VISIBLE:
+        return _api_error("VALIDATION_ERROR", "This note type is not available for install.", status=409)
+    if source_note_type.user_id == current_user.id:
+        return _api_error("VALIDATION_ERROR", "Owner cannot install own note type.", status=409)
+
+    existing = NoteTypeInstall.query.filter_by(
+        source_note_type_id=source_note_type.id,
+        user_id=current_user.id,
+    ).first()
+    if existing:
+        return jsonify(
+            {
+                "installed_note_type_id": existing.installed_note_type_id,
+                "source_note_type_id": source_note_type.id,
+                "already_installed": True,
+            }
+        )
+
+    installed_copy = _clone_note_type_for_user(source_note_type, current_user.id)
+    now = datetime.utcnow()
+    purchase_price_cents = int(source_note_type.price_cents or 0) if source_note_type.pricing_mode == "paid" else 0
+    install_row = NoteTypeInstall(
+        source_note_type_id=source_note_type.id,
+        installed_note_type_id=installed_copy.id,
+        user_id=current_user.id,
+        purchase_price_cents=purchase_price_cents,
+        installed_at=now,
+        purchased_at=now if source_note_type.pricing_mode == "paid" else None,
+    )
+    db.session.add(install_row)
+    _recompute_note_type_market_stats(source_note_type)
+    _audit(
+        "market.note_type.install",
+        {
+            "source_note_type_id": source_note_type.id,
+            "installed_note_type_id": installed_copy.id,
+            "price_cents": purchase_price_cents,
+        },
+    )
+    db.session.commit()
+    return jsonify(
+        {
+            "installed_note_type_id": installed_copy.id,
+            "source_note_type_id": source_note_type.id,
+            "purchase_price_cents": purchase_price_cents,
+        }
+    ), 201
+
+
+@flashcards_bp.route("/api/shared/note-types/<note_type_id>/rate", methods=["POST"])
+@login_required
+def rate_shared_note_type(note_type_id: str):
+    note_type = NoteType.query.get(note_type_id)
+    if not note_type:
+        return _api_error("FIELD_NOT_FOUND", "Note type not found.", status=404)
+    if not _can_user_rate_note_type(note_type, user_id=current_user.id):
+        return _api_error("VALIDATION_ERROR", "You can only rate after real usage.", status=403)
+
+    payload = request.get_json(silent=True) or {}
+    try:
+        rating = int(payload.get("rating"))
+    except (TypeError, ValueError):
+        return _api_error("VALIDATION_ERROR", "rating must be an integer 1-5.", field="rating")
+    if rating < 1 or rating > 5:
+        return _api_error("VALIDATION_ERROR", "rating must be between 1 and 5.", field="rating")
+    comment = (payload.get("comment") or "").strip() or None
+
+    review = NoteTypeReview.query.filter_by(note_type_id=note_type.id, user_id=current_user.id).first()
+    if review is None:
+        review = NoteTypeReview(note_type_id=note_type.id, user_id=current_user.id, rating=rating, comment=comment)
+        db.session.add(review)
+    else:
+        review.rating = rating
+        review.comment = comment
+
+    _recompute_note_type_market_stats(note_type)
+    _audit("market.note_type.rate", {"note_type_id": note_type.id, "rating": rating})
+    db.session.commit()
+    return jsonify(
+        {
+            "note_type_id": note_type.id,
+            "rating_avg": note_type.rating_avg,
+            "rating_count": note_type.rating_count,
+            "my_rating": rating,
+        }
+    )
+
+
+@flashcards_bp.route("/api/shared/note-types/recommendations", methods=["GET"])
+@login_required
+def shared_note_type_recommendations():
+    visible_items = [item for item in NoteType.query.all() if _is_note_type_visible_for_shared(item)]
+    interests_categories, interests_tags = _collect_user_market_interests(current_user.id)
+    cold_start = not interests_categories and not interests_tags
+
+    scored: list[tuple[float, NoteType]] = []
+    for item in visible_items:
+        if item.user_id == current_user.id:
+            continue
+        score = _score_market_item(
+            item_category=item.primary_category,
+            item_tags=item.tags or [],
+            rating_avg=float(item.rating_avg or 0.0),
+            rating_count=int(item.rating_count or 0),
+            active_usage_count=int(item.active_usage_count or 0),
+            install_count=int(item.install_count or 0),
+            updated_at=item.updated_at,
+            interests_categories=interests_categories,
+            interests_tags=interests_tags,
+            is_official=bool(item.is_official),
+            cold_start=cold_start,
+        )
+        scored.append((score, item))
+
+    recommended = [
+        _serialize_note_type_marketplace_card(item)
+        for _, item in sorted(scored, key=lambda row: row[0], reverse=True)[:12]
+    ]
+
+    trending_cutoff = datetime.utcnow() - timedelta(days=TRENDING_WINDOW_DAYS)
+    trending_counts_raw = (
+        db.session.query(NoteTypeInstall.source_note_type_id, db.func.count(NoteTypeInstall.id))
+        .filter(NoteTypeInstall.installed_at >= trending_cutoff)
+        .group_by(NoteTypeInstall.source_note_type_id)
+        .all()
+    )
+    trending_counts = {row[0]: int(row[1] or 0) for row in trending_counts_raw}
+    trending = sorted(
+        visible_items,
+        key=lambda item: (trending_counts.get(item.id, 0), int(item.active_usage_count or 0), int(item.install_count or 0)),
+        reverse=True,
+    )[:12]
+    new_and_updated = _sort_note_type_items(visible_items, "recently_updated")[:12]
+    return jsonify(
+        {
+            "recommended_for_you": recommended,
+            "top_by_category": _top_items_by_category_note_types(visible_items),
+            "trending": [_serialize_note_type_marketplace_card(item) for item in trending],
+            "new_and_updated": [_serialize_note_type_marketplace_card(item) for item in new_and_updated],
+        }
+    )
+
+
+@flashcards_bp.route("/api/shared/decks", methods=["GET"])
+@login_required
+def list_shared_decks():
+    query_text = (request.args.get("q") or "").strip()
+    category = (request.args.get("category") or "").strip()
+    tags = {item.lower() for item in _normalize_marketplace_tags(request.args.get("tags"))}
+    pricing_mode = (request.args.get("pricing_mode") or request.args.get("pricing") or "").strip().lower()
+    sort_key = (request.args.get("sort") or "popular").strip().lower()
+    min_price_cents = _parse_query_price_cents("min_price")
+    max_price_cents = _parse_query_price_cents("max_price")
+
+    visible_items = [
+        item for item in DeckMarketplaceItem.query.order_by(DeckMarketplaceItem.updated_at.desc()).all()
+        if _is_deck_item_visible_for_shared(item)
+    ]
+    filtered = _filter_deck_items(
+        visible_items,
+        query_text=query_text,
+        category=category,
+        tags=tags,
+        pricing_mode=pricing_mode,
+        min_price_cents=min_price_cents,
+        max_price_cents=max_price_cents,
+    )
+    sorted_items = _sort_deck_items(filtered, sort_key)
+    installs = DeckInstall.query.filter_by(user_id=current_user.id).all()
+    install_map = {row.deck_item_id: row for row in installs}
+    payload_items = []
+    for item in sorted_items:
+        row = _serialize_deck_marketplace_item(item)
+        install = install_map.get(item.id)
+        row["is_installed"] = install is not None
+        row["installed_deck_id"] = install.local_deck_id if install else None
+        row["is_owner"] = item.owner_user_id == current_user.id
+        payload_items.append(row)
+    return jsonify({"items": payload_items})
+
+
+@flashcards_bp.route("/api/shared/decks", methods=["POST"])
+@login_required
+def create_shared_deck_item():
+    payload = request.get_json(silent=True) or {}
+    title = (payload.get("title") or "").strip()
+    if not title:
+        return _api_error("VALIDATION_ERROR", "title is required.", field="title")
+
+    deck_item = DeckMarketplaceItem(
+        owner_user_id=current_user.id,
+        title=title,
+        description=(payload.get("description") or "").strip(),
+        primary_category=(payload.get("primary_category") or "General").strip() or "General",
+        tags=_normalize_marketplace_tags(payload.get("tags")),
+        preview_text=(payload.get("preview_text") or "").strip() or None,
+        sample_cards_count=0,
+        pricing_mode="free",
+        price_cents=0,
+        version="1.0.0",
+        publish_status="private",
+        is_official=False,
+    )
+    db.session.add(deck_item)
+    validation_error = _apply_deck_marketplace_payload(deck_item, payload)
+    if validation_error:
+        db.session.rollback()
+        return _api_error("VALIDATION_ERROR", validation_error)
+    if deck_item.source_deck_id is not None and not VocabularyDeck.query.get(deck_item.source_deck_id):
+        db.session.rollback()
+        return _api_error("FIELD_NOT_FOUND", "source_deck_id not found.", field="source_deck_id", status=404)
+    if deck_item.source_note_type_id and not NoteType.query.get(deck_item.source_note_type_id):
+        db.session.rollback()
+        return _api_error("FIELD_NOT_FOUND", "source_note_type_id not found.", field="source_note_type_id", status=404)
+    _recompute_deck_item_market_stats(deck_item)
+    _audit("market.deck_item.create", {"deck_item_id": deck_item.id})
+    db.session.commit()
+    return jsonify(_serialize_deck_marketplace_item(deck_item)), 201
+
+
+@flashcards_bp.route("/api/shared/decks/<deck_item_id>", methods=["GET"])
+@login_required
+def get_shared_deck_item(deck_item_id: str):
+    deck_item = DeckMarketplaceItem.query.get(deck_item_id)
+    if not deck_item:
+        return _api_error("FIELD_NOT_FOUND", "Deck item not found.", status=404)
+    status = str(deck_item.publish_status or "").strip().lower()
+    is_owner = deck_item.owner_user_id == current_user.id
+    if status == "private" and not is_owner:
+        return _api_error("FIELD_NOT_FOUND", "Deck item not found.", status=404)
+    if status == "archived" and not is_owner:
+        return _api_error("FIELD_NOT_FOUND", "Deck item not found.", status=404)
+
+    install = DeckInstall.query.filter_by(deck_item_id=deck_item.id, user_id=current_user.id).first()
+    review = DeckReview.query.filter_by(deck_item_id=deck_item.id, user_id=current_user.id).first()
+    payload = _serialize_deck_marketplace_item(deck_item)
+    payload["is_installed"] = install is not None
+    payload["installed_deck_id"] = install.local_deck_id if install else None
+    payload["can_rate"] = _can_user_rate_deck(deck_item, user_id=current_user.id)
+    payload["my_review"] = (
+        {
+            "rating": review.rating,
+            "comment": review.comment,
+            "updated_at": review.updated_at.isoformat() if review.updated_at else None,
+        }
+        if review
+        else None
+    )
+    return jsonify(payload)
+
+
+@flashcards_bp.route("/api/shared/decks/<deck_item_id>", methods=["PATCH"])
+@login_required
+def patch_shared_deck_item(deck_item_id: str):
+    deck_item = DeckMarketplaceItem.query.get(deck_item_id)
+    if not deck_item:
+        return _api_error("FIELD_NOT_FOUND", "Deck item not found.", status=404)
+    if deck_item.owner_user_id != current_user.id and not is_admin_user(current_user):
+        return _api_error("VALIDATION_ERROR", "Only owner can edit deck item.", status=403)
+
+    payload = request.get_json(silent=True) or {}
+    validation_error = _apply_deck_marketplace_payload(deck_item, payload)
+    if validation_error:
+        return _api_error("VALIDATION_ERROR", validation_error)
+    if deck_item.source_deck_id is not None and not VocabularyDeck.query.get(deck_item.source_deck_id):
+        return _api_error("FIELD_NOT_FOUND", "source_deck_id not found.", field="source_deck_id", status=404)
+    if deck_item.source_note_type_id and not NoteType.query.get(deck_item.source_note_type_id):
+        return _api_error("FIELD_NOT_FOUND", "source_note_type_id not found.", field="source_note_type_id", status=404)
+    _recompute_deck_item_market_stats(deck_item)
+    _audit("market.deck_item.update", {"deck_item_id": deck_item.id})
+    db.session.commit()
+    return jsonify(_serialize_deck_marketplace_item(deck_item))
+
+
+@flashcards_bp.route("/api/shared/decks/<deck_item_id>/install", methods=["POST"])
+@login_required
+def install_shared_deck_item(deck_item_id: str):
+    deck_item = DeckMarketplaceItem.query.get(deck_item_id)
+    if not deck_item:
+        return _api_error("FIELD_NOT_FOUND", "Deck item not found.", status=404)
+    status = str(deck_item.publish_status or "").strip().lower()
+    if status not in PUBLISH_STATUSES_VISIBLE:
+        return _api_error("VALIDATION_ERROR", "This deck is not available for install.", status=409)
+    if deck_item.owner_user_id == current_user.id:
+        return _api_error("VALIDATION_ERROR", "Owner cannot install own deck item.", status=409)
+
+    existing = DeckInstall.query.filter_by(deck_item_id=deck_item.id, user_id=current_user.id).first()
+    if existing:
+        return jsonify(
+            {
+                "deck_item_id": deck_item.id,
+                "installed_deck_id": existing.local_deck_id,
+                "already_installed": True,
+            }
+        )
+
+    now = datetime.utcnow()
+    local_deck_id = None
+    if deck_item.source_deck_id is not None:
+        source_deck = VocabularyDeck.query.get(deck_item.source_deck_id)
+        if source_deck is None:
+            return _api_error("FIELD_NOT_FOUND", "Source deck not found.", status=404)
+        cloned_root = _clone_deck_subtree(
+            source_deck_id=source_deck.id,
+            parent_id=None,
+            root_suffix=current_user.username,
+        )
+        local_deck_id = cloned_root.id
+
+    purchase_price_cents = int(deck_item.price_cents or 0) if deck_item.pricing_mode == "paid" else 0
+    install = DeckInstall(
+        deck_item_id=deck_item.id,
+        user_id=current_user.id,
+        local_deck_id=local_deck_id,
+        purchase_price_cents=purchase_price_cents,
+        installed_at=now,
+        purchased_at=now if deck_item.pricing_mode == "paid" else None,
+    )
+    db.session.add(install)
+
+    auto_note_type_install = None
+    if deck_item.source_note_type_id:
+        source_note_type = NoteType.query.get(deck_item.source_note_type_id)
+        existing_note_install = NoteTypeInstall.query.filter_by(
+            source_note_type_id=deck_item.source_note_type_id,
+            user_id=current_user.id,
+        ).first()
+        if (
+            source_note_type
+            and existing_note_install is None
+            and source_note_type.pricing_mode == "free"
+            and bool(source_note_type.is_official)
+            and str(source_note_type.publish_status or "").strip().lower() in PUBLISH_STATUSES_VISIBLE
+            and source_note_type.user_id != current_user.id
+        ):
+            installed_copy = _clone_note_type_for_user(source_note_type, current_user.id)
+            auto_note_type_install = NoteTypeInstall(
+                source_note_type_id=source_note_type.id,
+                installed_note_type_id=installed_copy.id,
+                user_id=current_user.id,
+                purchase_price_cents=0,
+                installed_at=now,
+            )
+            db.session.add(auto_note_type_install)
+            _recompute_note_type_market_stats(source_note_type)
+
+    _recompute_deck_item_market_stats(deck_item)
+    _audit(
+        "market.deck_item.install",
+        {
+            "deck_item_id": deck_item.id,
+            "local_deck_id": local_deck_id,
+            "price_cents": purchase_price_cents,
+            "auto_note_type_install": bool(auto_note_type_install),
+        },
+    )
+    db.session.commit()
+    return jsonify(
+        {
+            "deck_item_id": deck_item.id,
+            "installed_deck_id": local_deck_id,
+            "purchase_price_cents": purchase_price_cents,
+            "auto_note_type_installed": bool(auto_note_type_install),
+        }
+    ), 201
+
+
+@flashcards_bp.route("/api/shared/decks/<deck_item_id>/rate", methods=["POST"])
+@login_required
+def rate_shared_deck_item(deck_item_id: str):
+    deck_item = DeckMarketplaceItem.query.get(deck_item_id)
+    if not deck_item:
+        return _api_error("FIELD_NOT_FOUND", "Deck item not found.", status=404)
+    if not _can_user_rate_deck(deck_item, user_id=current_user.id):
+        return _api_error("VALIDATION_ERROR", "You can only rate after real usage.", status=403)
+
+    payload = request.get_json(silent=True) or {}
+    try:
+        rating = int(payload.get("rating"))
+    except (TypeError, ValueError):
+        return _api_error("VALIDATION_ERROR", "rating must be an integer 1-5.", field="rating")
+    if rating < 1 or rating > 5:
+        return _api_error("VALIDATION_ERROR", "rating must be between 1 and 5.", field="rating")
+    comment = (payload.get("comment") or "").strip() or None
+
+    review = DeckReview.query.filter_by(deck_item_id=deck_item.id, user_id=current_user.id).first()
+    if review is None:
+        review = DeckReview(deck_item_id=deck_item.id, user_id=current_user.id, rating=rating, comment=comment)
+        db.session.add(review)
+    else:
+        review.rating = rating
+        review.comment = comment
+
+    _recompute_deck_item_market_stats(deck_item)
+    _audit("market.deck_item.rate", {"deck_item_id": deck_item.id, "rating": rating})
+    db.session.commit()
+    return jsonify(
+        {
+            "deck_item_id": deck_item.id,
+            "rating_avg": deck_item.rating_avg,
+            "rating_count": deck_item.rating_count,
+            "my_rating": rating,
+        }
+    )
+
+
+@flashcards_bp.route("/api/shared/decks/recommendations", methods=["GET"])
+@login_required
+def shared_deck_recommendations():
+    visible_items = [item for item in DeckMarketplaceItem.query.all() if _is_deck_item_visible_for_shared(item)]
+    interests_categories, interests_tags = _collect_user_market_interests(current_user.id)
+    cold_start = not interests_categories and not interests_tags
+
+    scored: list[tuple[float, DeckMarketplaceItem]] = []
+    for item in visible_items:
+        if item.owner_user_id == current_user.id:
+            continue
+        score = _score_market_item(
+            item_category=item.primary_category,
+            item_tags=item.tags or [],
+            rating_avg=float(item.rating_avg or 0.0),
+            rating_count=int(item.rating_count or 0),
+            active_usage_count=int(item.active_usage_count or 0),
+            install_count=int(item.install_count or 0),
+            updated_at=item.updated_at,
+            interests_categories=interests_categories,
+            interests_tags=interests_tags,
+            is_official=bool(item.is_official),
+            cold_start=cold_start,
+        )
+        scored.append((score, item))
+
+    recommended = [
+        _serialize_deck_marketplace_item(item)
+        for _, item in sorted(scored, key=lambda row: row[0], reverse=True)[:12]
+    ]
+
+    trending_cutoff = datetime.utcnow() - timedelta(days=TRENDING_WINDOW_DAYS)
+    trending_counts_raw = (
+        db.session.query(DeckInstall.deck_item_id, db.func.count(DeckInstall.id))
+        .filter(DeckInstall.installed_at >= trending_cutoff)
+        .group_by(DeckInstall.deck_item_id)
+        .all()
+    )
+    trending_counts = {row[0]: int(row[1] or 0) for row in trending_counts_raw}
+    trending = sorted(
+        visible_items,
+        key=lambda item: (trending_counts.get(item.id, 0), int(item.active_usage_count or 0), int(item.install_count or 0)),
+        reverse=True,
+    )[:12]
+    new_and_updated = _sort_deck_items(visible_items, "recently_updated")[:12]
+    return jsonify(
+        {
+            "recommended_for_you": recommended,
+            "top_by_category": _top_items_by_category_decks(visible_items),
+            "trending": [_serialize_deck_marketplace_item(item) for item in trending],
+            "new_and_updated": [_serialize_deck_marketplace_item(item) for item in new_and_updated],
+        }
+    )
+
+
+@flashcards_bp.route("/api/shared/seed-defaults", methods=["POST"])
+@login_required
+def seed_marketplace_defaults():
+    if not is_admin_user(current_user):
+        return _api_error("VALIDATION_ERROR", "Admin only endpoint.", status=403)
+
+    note_type, _template = ensure_legacy_note_type(db.session, current_user.id)
+    note_type.description = note_type.description or "Official default Japanese vocabulary note type."
+    note_type.primary_category = note_type.primary_category or "Japanese"
+    note_type.tags = note_type.tags or ["official", "default", "japanese"]
+    note_type.preview_text = note_type.preview_text or "Word / Reading / Meaning default layout."
+    note_type.pricing_mode = "free"
+    note_type.price_cents = 0
+    note_type.version = note_type.version or "1.0.0"
+    note_type.is_official = True
+    note_type.publish_status = "published"
+    note_type.published_at = note_type.published_at or datetime.utcnow()
+    _recompute_note_type_market_stats(note_type)
+
+    deck_item = DeckMarketplaceItem.query.filter_by(
+        owner_user_id=current_user.id,
+        is_official=True,
+        title="Official Starter Deck",
+    ).first()
+    source_deck = VocabularyDeck.query.order_by(VocabularyDeck.id.asc()).first()
+    if deck_item is None:
+        deck_item = DeckMarketplaceItem(
+            owner_user_id=current_user.id,
+            source_deck_id=source_deck.id if source_deck else None,
+            source_note_type_id=note_type.id,
+            title="Official Starter Deck",
+            description="Official default deck for new users.",
+            primary_category="Japanese",
+            tags=["official", "default", "starter"],
+            preview_text="Starter deck with basic Japanese vocabulary.",
+            sample_cards_count=20,
+            pricing_mode="free",
+            price_cents=0,
+            version="1.0.0",
+            publish_status="published",
+            is_official=True,
+            published_at=datetime.utcnow(),
+        )
+        db.session.add(deck_item)
+    else:
+        if source_deck:
+            deck_item.source_deck_id = source_deck.id
+        deck_item.source_note_type_id = note_type.id
+        deck_item.pricing_mode = "free"
+        deck_item.price_cents = 0
+        deck_item.publish_status = "published"
+        deck_item.is_official = True
+        deck_item.published_at = deck_item.published_at or datetime.utcnow()
+    _recompute_deck_item_market_stats(deck_item)
+
+    _audit("market.seed_defaults", {"note_type_id": note_type.id, "deck_item_id": deck_item.id})
+    db.session.commit()
+    return jsonify({"note_type_id": note_type.id, "deck_item_id": deck_item.id})

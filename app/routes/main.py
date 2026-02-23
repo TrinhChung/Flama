@@ -9,6 +9,7 @@ from flask_login import current_user, login_required
 
 from app.services.anki_scheduler import default_deck_options
 from app.utils.permissions import is_admin_user
+from models.flashcard import DeckInstall
 from models.vocabulary_deck import VocabularyDeck
 from models.vocabulary_entry import VocabularyEntry
 from models.vocabulary_progress import VocabularyProgress
@@ -54,15 +55,35 @@ def cookies():
 @login_required
 def dashboard():
     admin_mode = is_admin_user(current_user)
-    decks = (
-        VocabularyDeck.query.order_by(
-            VocabularyDeck.parent_id.isnot(None),
-            VocabularyDeck.position,
-            VocabularyDeck.created_at,
-            VocabularyDeck.id,
+
+    # Admin sees all decks; regular users only see decks they have installed
+    if admin_mode:
+        decks = (
+            VocabularyDeck.query.order_by(
+                VocabularyDeck.parent_id.isnot(None),
+                VocabularyDeck.position,
+                VocabularyDeck.created_at,
+                VocabularyDeck.id,
+            )
+            .all()
         )
-        .all()
-    )
+    else:
+        # Get only decks installed by this user
+        installs = DeckInstall.query.filter_by(user_id=current_user.id).all()
+        installed_deck_ids = {inst.local_deck_id for inst in installs if inst.local_deck_id}
+        if installed_deck_ids:
+            decks = (
+                VocabularyDeck.query.filter(VocabularyDeck.id.in_(installed_deck_ids))
+                .order_by(
+                    VocabularyDeck.parent_id.isnot(None),
+                    VocabularyDeck.position,
+                    VocabularyDeck.created_at,
+                    VocabularyDeck.id,
+                )
+                .all()
+            )
+        else:
+            decks = []
 
     @dataclass
     class DeckNode:

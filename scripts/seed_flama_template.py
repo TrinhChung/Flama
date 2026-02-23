@@ -235,11 +235,20 @@ def seed_template():
             note_type = NoteType(
                 name="Flama Standard Vocabulary",
                 id="default-flama-vocab-000000000000",  # Hardcoded UUID cho dễ ref
-                user_id=user.id
+                user_id=user.id,
+                description="Official default Japanese vocabulary note type by Flama.",
+                primary_category="Japanese",
+                tags=["official", "default", "japanese", "vocabulary"],
+                preview_text="Word / Reading / Meaning / Example layout.",
+                pricing_mode="free",
+                price_cents=0,
+                version="1.0.0",
+                is_official=True,
+                publish_status="published",
             )
             db.session.add(note_type)
             db.session.commit()
-            print("Đã khởi tạo NoteType: Flama Standard Vocabulary")
+            print("Đã khởi tạo NoteType: Flama Standard Vocabulary (published)")
 
             # Tạo list các trường động (Khớp với columns của VocabularyEntry)
             fields = [
@@ -297,6 +306,17 @@ def seed_template():
             print(f"Đã nạp lại nội dung HTML mới nhất vào Template hiện có: {template_name}")
             
         db.session.commit()
+
+        # Đảm bảo NoteType đã publish nếu chạy lại script
+        if note_type.publish_status != "published":
+            note_type.publish_status = "published"
+            note_type.is_official = True
+            note_type.primary_category = note_type.primary_category or "Japanese"
+            note_type.tags = note_type.tags or ["official", "default", "japanese"]
+            note_type.pricing_mode = note_type.pricing_mode or "free"
+            note_type.price_cents = note_type.price_cents if note_type.price_cents is not None else 0
+            db.session.commit()
+            print("Đã publish NoteType lên marketplace.")
         print("MIGRATION COMPLETED SUCCESSFULY!")
 
 if __name__ == "__main__":

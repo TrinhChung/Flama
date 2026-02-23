@@ -51,16 +51,29 @@
 
 {% block content %}
 <div class="anki-home">
-  <div class="anki-top-tabs" role="navigation" aria-label="Home actions">
-    <a class="anki-tab active" href="{{ url_for('main.dashboard') }}">Decks</a>
-    <a class="anki-tab" href="{{ url_for('main.dashboard') }}">Study</a>
-    {% if admin_mode %}
-    <button type="button" class="anki-tab anki-tab-button" id="create-deck-btn">Create Deck</button>
-    {% else %}
-    <a class="anki-tab" href="{{ url_for('main.dashboard') }}">Progress</a>
-    {% endif %}
-    <a class="anki-tab" href="{{ url_for('main.dashboard') }}">Stats</a>
-    <a class="anki-tab sync" href="{{ url_for('main.dashboard') }}">Sync</a>
+  <div class="dash-toolbar" role="navigation" aria-label="Home actions">
+    <div class="dash-toolbar__nav">
+      <a class="dash-tab dash-tab--active" href="{{ url_for('main.dashboard') }}">
+        <i class="bi bi-collection"></i> Decks
+      </a>
+      <a class="dash-tab" id="study-tab-btn" href="{{ url_for('flashcards.flashcard_study_page') }}"
+        data-base-study-url="/vocabulary/study/deck/">
+        <i class="bi bi-play-circle"></i> Study
+      </a>
+      <a class="dash-tab" href="{{ url_for('main.dashboard') }}">
+        <i class="bi bi-bar-chart-line"></i> Stats
+      </a>
+    </div>
+    <div class="dash-toolbar__actions">
+      {% if admin_mode %}
+      <button type="button" class="dash-btn dash-btn--primary" id="create-deck-btn">
+        <i class="bi bi-plus-lg"></i> Tạo Deck
+      </button>
+      {% endif %}
+      <button type="button" class="dash-btn dash-btn--ghost" title="Đồng bộ dữ liệu">
+        <i class="bi bi-arrow-repeat"></i> Sync
+      </button>
+    </div>
   </div>
   {% if admin_mode %}
   <form id="create-deck-form" method="post" action="{{ url_for('vocabulary.create_deck') }}" class="d-none">
@@ -185,7 +198,22 @@
       {% if deck_rows %}
       {{ render_nodes(deck_rows) }}
       {% else %}
-      <div class="deck-empty">No decks yet. Open Admin Edit to create your first deck tree.</div>
+      <div class="onboarding-panel">
+        <div class="onboarding-icon">📚</div>
+        <h4 class="onboarding-title">Chào mừng bạn đến với Flama!</h4>
+        <p class="onboarding-desc">
+          Tài khoản của bạn chưa có deck nào.<br>
+          Hãy vào <strong>Thư viện</strong> để tìm và cài bộ thẻ phù hợp với bạn.
+        </p>
+        <div class="onboarding-actions">
+          <a href="{{ url_for('flashcards.shared_decks_page') }}" class="dash-btn dash-btn--primary onboarding-btn">
+            <i class="bi bi-box-arrow-in-down"></i> Thư viện Deck
+          </a>
+          <a href="{{ url_for('flashcards.shared_note_types_page') }}" class="dash-btn dash-btn--ghost onboarding-btn">
+            <i class="bi bi-layout-text-window"></i> Thư viện Template
+          </a>
+        </div>
+      </div>
       {% endif %}
     </div>
   </section>
@@ -205,55 +233,96 @@
     padding: 0.25rem 0 2rem;
   }
 
-  .anki-top-tabs {
-    display: inline-flex;
-    gap: 0;
-    border: 1px solid #cfcfcf;
-    border-radius: 0.9rem;
-    overflow: hidden;
-    background: #f7f7f7;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
-    margin: 0 auto 1.5rem;
-    left: 50%;
-    transform: translateX(-50%);
-    position: relative;
+  /* ── Dashboard Toolbar ── */
+  .dash-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+    padding: 0.5rem 0.75rem;
+    background: var(--flama-surface);
+    border: 1px solid var(--flama-border);
+    border-radius: 14px;
+    box-shadow: 0 1px 4px rgba(31, 26, 23, 0.06);
   }
 
-  .anki-tab {
+  .dash-toolbar__nav {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+
+  .dash-toolbar__actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  /* Nav tabs */
+  .dash-tab {
     display: inline-flex;
     align-items: center;
-    justify-content: center;
-    min-width: 92px;
-    height: 42px;
-    padding: 0 0.85rem;
+    gap: 0.4rem;
+    padding: 0.45rem 0.9rem;
+    border-radius: 9px;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--flama-text-2);
     text-decoration: none;
-    color: #1f1f1f;
-    font-family: var(--font-family-base);
+    transition: background 0.18s ease, color 0.18s ease;
+    white-space: nowrap;
+  }
+
+  .dash-tab:hover {
+    background: var(--flama-orange-50);
+    color: var(--flama-orange-600);
+  }
+
+  .dash-tab--active {
+    background: var(--flama-orange-50);
+    color: var(--flama-orange-600);
+    font-weight: var(--font-weight-bold);
+  }
+
+  /* Action buttons */
+  .dash-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.45rem 1rem;
+    border-radius: 9px;
     font-size: var(--font-size-sm);
     font-weight: var(--font-weight-semibold);
-    line-height: var(--line-height-normal);
     border: none;
-    border-right: 1px solid #d6d6d6;
-    background: linear-gradient(#fafafa, #f0f0f0);
     cursor: pointer;
+    text-decoration: none;
+    transition: all 0.18s ease;
+    white-space: nowrap;
   }
 
-  .anki-tab-button {
-    font-family: var(--font-family-base);
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-semibold);
+  .dash-btn--primary {
+    background: var(--flama-gradient);
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(254, 104, 8, 0.25);
   }
 
-  .anki-tab:last-child {
-    border-right: none;
+  .dash-btn--primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 14px rgba(254, 104, 8, 0.35);
+    color: #fff;
   }
 
-  .anki-tab.active {
-    background: #ffffff;
+  .dash-btn--ghost {
+    background: transparent;
+    color: var(--flama-text-2);
+    border: 1px solid var(--flama-border);
   }
 
-  .anki-tab.sync {
-    color: #2176ff;
+  .dash-btn--ghost:hover {
+    background: var(--flama-orange-50);
+    border-color: var(--flama-orange-300);
+    color: var(--flama-orange-600);
   }
 
   /* ── Deck Board & Container ── */
@@ -443,6 +512,52 @@
     border: 1px dashed #d1d5db;
   }
 
+  /* ── Onboarding empty state ── */
+  .onboarding-panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: 2.5rem 1.5rem 2rem;
+    background: linear-gradient(160deg, #fff8f3 0%, #fff 100%);
+    border-radius: 16px;
+    border: 1.5px dashed var(--flama-orange-300, #fdba74);
+    gap: 0.6rem;
+  }
+
+  .onboarding-icon {
+    font-size: 3rem;
+    line-height: 1;
+    margin-bottom: 0.25rem;
+  }
+
+  .onboarding-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--flama-text);
+    margin: 0;
+  }
+
+  .onboarding-desc {
+    font-size: 0.9rem;
+    color: var(--flama-text-2);
+    line-height: 1.6;
+    margin: 0;
+  }
+
+  .onboarding-actions {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-top: 0.6rem;
+  }
+
+  .onboarding-btn {
+    font-size: 0.875rem;
+    padding: 0.55rem 1.25rem;
+  }
+
   /* ── Responsive ── */
   @media (max-width: 1023px) {
     .deck-board {
@@ -456,17 +571,31 @@
 
   /* Mobile (<768px) */
   @media (max-width: 767px) {
-    .anki-top-tabs {
+    .dash-toolbar {
       flex-wrap: wrap;
-      border-radius: 0.5rem;
+      gap: 0.5rem;
+      padding: 0.5rem;
+      border-radius: 10px;
     }
 
-    .anki-tab {
-      min-width: 60px;
-      font-size: 0.85rem;
-      height: 38px;
-      padding: 0 0.5rem;
-      flex: 1;
+    .dash-toolbar__nav {
+      width: 100%;
+      justify-content: flex-start;
+    }
+
+    .dash-toolbar__actions {
+      width: 100%;
+      justify-content: flex-end;
+    }
+
+    .dash-tab {
+      font-size: 0.8rem;
+      padding: 0.35rem 0.65rem;
+    }
+
+    .dash-btn {
+      font-size: 0.8rem;
+      padding: 0.35rem 0.7rem;
     }
 
     .head-right {
@@ -587,17 +716,41 @@
       });
     });
 
+    // ── Study button navigation ──────────────────────────────────────────
+    const studyTabBtn = document.getElementById('study-tab-btn');
+    const baseStudyUrl = studyTabBtn ? studyTabBtn.dataset.baseStudyUrl : '/vocabulary/study/deck/';
+
+    function getFirstVisibleDeckId() {
+      const firstRow = rows.find(r => !r.classList.contains('is-collapsed'));
+      return firstRow ? firstRow.dataset.nodeId : null;
+    }
+
+    function updateStudyBtn(deckId) {
+      if (!studyTabBtn) return;
+      const id = deckId || getFirstVisibleDeckId();
+      if (id) {
+        studyTabBtn.href = baseStudyUrl + id;
+      } else {
+        studyTabBtn.href = studyTabBtn.dataset.baseStudyUrl || '#';
+      }
+    }
+
+    // Init: point Study to the first deck on load
+    updateStudyBtn(null);
+
     function selectRow(row) {
       if (!row) {
         return;
       }
       rows.forEach((item) => item.classList.toggle("is-selected", item === row));
       selectedDeckId = row.dataset.nodeId || null;
+      updateStudyBtn(selectedDeckId);
     }
 
     function clearSelection() {
       rows.forEach((item) => item.classList.remove("is-selected"));
       selectedDeckId = null;
+      updateStudyBtn(null);
     }
 
     function openRow(row) {

@@ -1,0 +1,241 @@
+{% extends "base.html" %}
+
+{% block title %}Shared NoteTypes{% endblock %}
+
+{% block content %}
+<section class="py-3" id="shared-note-types-root">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <div>
+      <h2 class="h4 mb-0">Shared NoteTypes</h2>
+      <small class="text-muted">Install free/paid NoteTypes, then rate after real usage.</small>
+    </div>
+    <div class="d-flex gap-2">
+      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('flashcards.note_type_manager') }}">My NoteTypes</a>
+      <button class="btn btn-outline-primary btn-sm" id="seed-defaults-btn">Seed Official/Default</button>
+    </div>
+  </div>
+
+  <form id="note-type-filter-form" class="card card-body mb-3">
+    <div class="row g-2">
+      <div class="col-md-4">
+        <input class="form-control form-control-sm" name="q" placeholder="Search title or description">
+      </div>
+      <div class="col-md-2">
+        <input class="form-control form-control-sm" name="category" placeholder="Category">
+      </div>
+      <div class="col-md-2">
+        <input class="form-control form-control-sm" name="tags" placeholder="tags,comma,separated">
+      </div>
+      <div class="col-md-2">
+        <select class="form-select form-select-sm" name="pricing_mode">
+          <option value="">All pricing</option>
+          <option value="free">Free</option>
+          <option value="paid">Paid</option>
+        </select>
+      </div>
+      <div class="col-md-2">
+        <select class="form-select form-select-sm" name="sort">
+          <option value="popular">Popular</option>
+          <option value="top_rated">Top rated</option>
+          <option value="newest">Newest</option>
+          <option value="recently_updated">Recently updated</option>
+        </select>
+      </div>
+    </div>
+  </form>
+
+  <div class="row g-3 mb-4">
+    <div class="col-lg-6">
+      <div class="card card-body">
+        <h3 class="h6 mb-2">Recommended for you</h3>
+        <div id="recommended-list" class="small text-muted">Loading...</div>
+      </div>
+    </div>
+    <div class="col-lg-6">
+      <div class="card card-body">
+        <h3 class="h6 mb-2">Trending</h3>
+        <div id="trending-list" class="small text-muted">Loading...</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header py-2">
+      <strong>Marketplace</strong>
+    </div>
+    <div id="note-type-items" class="list-group list-group-flush">
+      <div class="list-group-item text-muted">Loading...</div>
+    </div>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  (() => {
+    const root = document.getElementById("shared-note-types-root");
+    if (!root) return;
+    const filterForm = document.getElementById("note-type-filter-form");
+    const itemsRoot = document.getElementById("note-type-items");
+    const recommendedRoot = document.getElementById("recommended-list");
+    const trendingRoot = document.getElementById("trending-list");
+    const seedDefaultsBtn = document.getElementById("seed-defaults-btn");
+
+    async function requestJson(url, options = {}) {
+      const response = await fetch(url, options);
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.message || "Request failed.");
+      return data;
+    }
+
+    function rowActions(item) {
+      if (item.is_owner) {
+        return `
+          <div class="d-flex gap-2">
+            <button class="btn btn-sm btn-outline-warning edit-btn" data-id="${item.id}"
+              data-title="${item.title || item.name}"
+              data-description="${item.description || ''}">✏️ Chỉnh sửa</button>
+          </div>
+        `;
+      }
+      const installLabel = item.is_installed ? "Installed" : (item.pricing_mode === "paid" ? "Buy / Install" : "Get / Install");
+      const installDisabled = item.is_installed ? "disabled" : "";
+      return `
+        <div class="d-flex gap-2">
+          <button class="btn btn-sm btn-primary install-btn" data-id="${item.id}" ${installDisabled}>${installLabel}</button>
+          <button class="btn btn-sm btn-outline-secondary rate-btn" data-id="${item.id}">Rate</button>
+        </div>
+      `;
+    }
+
+    function renderItems(items) {
+      if (!items.length) {
+        itemsRoot.innerHTML = `<div class="list-group-item text-muted">No shared note types found.</div>`;
+        return;
+      }
+      itemsRoot.innerHTML = items.map((item) => `
+        <div class="list-group-item">
+          <div class="d-flex justify-content-between align-items-start gap-2">
+            <div>
+              <div class="fw-semibold">${item.title || item.name}</div>
+              <div class="small text-muted">By ${item.author?.username || "Unknown"} · ${item.primary_category || "General"} · ${item.price_display}</div>
+              <div class="small mt-1">${item.description || ""}</div>
+              <div class="small text-muted mt-1">Rating ${Number(item.rating_avg || 0).toFixed(2)} (${item.rating_count || 0}) · Usage ${item.active_usage_count || 0}/${item.install_count || 0}</div>
+            </div>
+            ${rowActions(item)}
+          </div>
+        </div>
+      `).join("");
+    }
+
+    function renderSimpleList(container, items, titleKey = "title") {
+      if (!items || !items.length) {
+        container.textContent = "No data.";
+        return;
+      }
+      container.innerHTML = items.slice(0, 5).map((item) => {
+        const title = item[titleKey] || item.name || "Untitled";
+        return `<div class="mb-1">${title} <span class="text-muted">(${item.price_display})</span></div>`;
+      }).join("");
+    }
+
+    async function loadRecommendations() {
+      const recs = await requestJson("/api/shared/note-types/recommendations");
+      renderSimpleList(recommendedRoot, recs.recommended_for_you || [], "title");
+      renderSimpleList(trendingRoot, recs.trending || [], "title");
+    }
+
+    async function loadItems() {
+      const formData = new FormData(filterForm);
+      const params = new URLSearchParams();
+      for (const [key, value] of formData.entries()) {
+        const trimmed = String(value || "").trim();
+        if (!trimmed) continue;
+        params.set(key, trimmed);
+      }
+      const payload = await requestJson(`/api/shared/note-types?${params.toString()}`);
+      renderItems(payload.items || []);
+    }
+
+    async function onInstall(id) {
+      await requestJson(`/api/shared/note-types/${id}/install`, { method: "POST" });
+      await Promise.all([loadItems(), loadRecommendations()]);
+    }
+
+    async function onRate(id) {
+      const ratingRaw = window.prompt("Rating 1-5");
+      if (ratingRaw === null) return;
+      const rating = Number(ratingRaw);
+      if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+        window.alert("Rating must be 1-5.");
+        return;
+      }
+      const comment = window.prompt("Comment (optional)") || "";
+      await requestJson(`/api/shared/note-types/${id}/rate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rating, comment }),
+      });
+      await Promise.all([loadItems(), loadRecommendations()]);
+    }
+
+    filterForm?.addEventListener("input", () => {
+      loadItems().catch((error) => window.alert(error.message));
+    });
+
+    itemsRoot?.addEventListener("click", async (event) => {
+      const installBtn = event.target.closest(".install-btn");
+      if (installBtn) {
+        try {
+          await onInstall(installBtn.getAttribute("data-id"));
+        } catch (error) {
+          window.alert(error.message);
+        }
+        return;
+      }
+      const editBtn = event.target.closest(".edit-btn");
+      if (editBtn) {
+        try {
+          const id = editBtn.getAttribute("data-id");
+          const currentTitle = editBtn.getAttribute("data-title") || "";
+          const currentDesc = editBtn.getAttribute("data-description") || "";
+          const newTitle = window.prompt("Tên template:", currentTitle);
+          if (newTitle === null) return;
+          const newDesc = window.prompt("Mô tả:", currentDesc);
+          if (newDesc === null) return;
+          await requestJson(`/api/note-types/${id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: newTitle.trim(), description: newDesc.trim() }),
+          });
+          await Promise.all([loadItems(), loadRecommendations()]);
+        } catch (error) {
+          window.alert(error.message);
+        }
+        return;
+      }
+      const rateBtn = event.target.closest(".rate-btn");
+      if (rateBtn) {
+        try {
+          await onRate(rateBtn.getAttribute("data-id"));
+        } catch (error) {
+          window.alert(error.message);
+        }
+      }
+    });
+
+    seedDefaultsBtn?.addEventListener("click", async () => {
+      try {
+        await requestJson("/api/shared/seed-defaults", { method: "POST" });
+        await Promise.all([loadItems(), loadRecommendations()]);
+      } catch (error) {
+        window.alert(error.message);
+      }
+    });
+
+    Promise.all([loadItems(), loadRecommendations()]).catch((error) => {
+      itemsRoot.innerHTML = `<div class="list-group-item text-danger">${error.message}</div>`;
+    });
+  })();
+</script>
+{% endblock %}

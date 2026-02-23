@@ -20,9 +20,37 @@ class NoteType(db.Model):
     id = db.Column(db.String(36), primary_key=True, default=_uuid_str)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     name = db.Column(db.String(255), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    primary_category = db.Column(db.String(120), nullable=True, index=True)
+    tags = db.Column(db.JSON, nullable=False, default=list)
+    preview_text = db.Column(db.Text, nullable=True)
+    preview_image_url = db.Column(db.String(512), nullable=True)
+    pricing_mode = db.Column(
+        db.Enum("free", "paid", name="note_type_pricing_mode_enum", native_enum=False),
+        nullable=False,
+        default="free",
+        index=True,
+    )
+    price_cents = db.Column(db.Integer, nullable=False, default=0)
+    version = db.Column(db.String(50), nullable=False, default="1.0.0")
+    changelog = db.Column(db.Text, nullable=True)
+    publish_status = db.Column(
+        db.Enum("private", "published", "unlisted", "archived", name="note_type_publish_status_enum", native_enum=False),
+        nullable=False,
+        default="private",
+        index=True,
+    )
+    is_official = db.Column(db.Boolean, nullable=False, default=False, index=True)
+    published_at = db.Column(db.DateTime, nullable=True)
+    archived_at = db.Column(db.DateTime, nullable=True)
+    install_count = db.Column(db.Integer, nullable=False, default=0)
+    active_usage_count = db.Column(db.Integer, nullable=False, default=0)
+    rating_avg = db.Column(db.Float, nullable=False, default=0.0)
+    rating_count = db.Column(db.Integer, nullable=False, default=0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
+    owner = db.relationship("User", foreign_keys=[user_id])
     field_defs = db.relationship(
         "FieldDef",
         back_populates="note_type",
@@ -39,6 +67,18 @@ class NoteType(db.Model):
         "Note",
         back_populates="note_type",
         cascade="all, delete-orphan",
+    )
+    installs = db.relationship(
+        "NoteTypeInstall",
+        back_populates="source_note_type",
+        cascade="all, delete-orphan",
+        foreign_keys="NoteTypeInstall.source_note_type_id",
+    )
+    reviews = db.relationship(
+        "NoteTypeReview",
+        back_populates="note_type",
+        cascade="all, delete-orphan",
+        foreign_keys="NoteTypeReview.note_type_id",
     )
 
     __table_args__ = (
@@ -179,3 +219,181 @@ class LegacyMigrationMap(db.Model):
     note_id = db.Column(db.String(36), db.ForeignKey("notes.id", ondelete="CASCADE"), nullable=False, index=True)
     card_id = db.Column(db.String(36), db.ForeignKey("cards.id", ondelete="CASCADE"), nullable=False, index=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+
+class NoteTypeInstall(db.Model):
+    __tablename__ = "note_type_installs"
+
+    id = db.Column(db.String(36), primary_key=True, default=_uuid_str)
+    source_note_type_id = db.Column(
+        db.String(36),
+        db.ForeignKey("note_types.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    installed_note_type_id = db.Column(
+        db.String(36),
+        db.ForeignKey("note_types.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    purchase_price_cents = db.Column(db.Integer, nullable=False, default=0)
+    installed_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    purchased_at = db.Column(db.DateTime, nullable=True)
+    first_use_at = db.Column(db.DateTime, nullable=True)
+    last_activity_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    source_note_type = db.relationship(
+        "NoteType",
+        foreign_keys=[source_note_type_id],
+        back_populates="installs",
+    )
+    installed_note_type = db.relationship(
+        "NoteType",
+        foreign_keys=[installed_note_type_id],
+    )
+    user = db.relationship("User", foreign_keys=[user_id])
+
+    __table_args__ = (
+        UniqueConstraint("source_note_type_id", "user_id", name="uq_note_type_installs_source_user"),
+    )
+
+
+class NoteTypeReview(db.Model):
+    __tablename__ = "note_type_reviews"
+
+    id = db.Column(db.String(36), primary_key=True, default=_uuid_str)
+    note_type_id = db.Column(
+        db.String(36),
+        db.ForeignKey("note_types.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    rating = db.Column(db.Integer, nullable=False)
+    comment = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    note_type = db.relationship("NoteType", back_populates="reviews", foreign_keys=[note_type_id])
+    user = db.relationship("User", foreign_keys=[user_id])
+
+    __table_args__ = (
+        UniqueConstraint("note_type_id", "user_id", name="uq_note_type_reviews_item_user"),
+    )
+
+
+class DeckMarketplaceItem(db.Model):
+    __tablename__ = "deck_marketplace_items"
+
+    id = db.Column(db.String(36), primary_key=True, default=_uuid_str)
+    owner_user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    source_deck_id = db.Column(
+        db.Integer,
+        db.ForeignKey("vocabulary_decks.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    source_note_type_id = db.Column(
+        db.String(36),
+        db.ForeignKey("note_types.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    title = db.Column(db.String(255), nullable=False, index=True)
+    description = db.Column(db.Text, nullable=False, default="")
+    primary_category = db.Column(db.String(120), nullable=False, default="General", index=True)
+    tags = db.Column(db.JSON, nullable=False, default=list)
+    preview_text = db.Column(db.Text, nullable=True)
+    sample_cards_count = db.Column(db.Integer, nullable=False, default=0)
+    pricing_mode = db.Column(
+        db.Enum("free", "paid", name="deck_marketplace_pricing_mode_enum", native_enum=False),
+        nullable=False,
+        default="free",
+        index=True,
+    )
+    price_cents = db.Column(db.Integer, nullable=False, default=0)
+    version = db.Column(db.String(50), nullable=False, default="1.0.0")
+    changelog = db.Column(db.Text, nullable=True)
+    publish_status = db.Column(
+        db.Enum("private", "published", "unlisted", "archived", name="deck_marketplace_publish_status_enum", native_enum=False),
+        nullable=False,
+        default="private",
+        index=True,
+    )
+    is_official = db.Column(db.Boolean, nullable=False, default=False, index=True)
+    published_at = db.Column(db.DateTime, nullable=True)
+    archived_at = db.Column(db.DateTime, nullable=True)
+    install_count = db.Column(db.Integer, nullable=False, default=0)
+    active_usage_count = db.Column(db.Integer, nullable=False, default=0)
+    rating_avg = db.Column(db.Float, nullable=False, default=0.0)
+    rating_count = db.Column(db.Integer, nullable=False, default=0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    owner = db.relationship("User", foreign_keys=[owner_user_id])
+    source_deck = db.relationship("VocabularyDeck", foreign_keys=[source_deck_id])
+    source_note_type = db.relationship("NoteType", foreign_keys=[source_note_type_id])
+    installs = db.relationship("DeckInstall", back_populates="deck_item", cascade="all, delete-orphan")
+    reviews = db.relationship("DeckReview", back_populates="deck_item", cascade="all, delete-orphan")
+
+
+class DeckInstall(db.Model):
+    __tablename__ = "deck_installs"
+
+    id = db.Column(db.String(36), primary_key=True, default=_uuid_str)
+    deck_item_id = db.Column(
+        db.String(36),
+        db.ForeignKey("deck_marketplace_items.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    local_deck_id = db.Column(
+        db.Integer,
+        db.ForeignKey("vocabulary_decks.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    purchase_price_cents = db.Column(db.Integer, nullable=False, default=0)
+    installed_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    purchased_at = db.Column(db.DateTime, nullable=True)
+    first_use_at = db.Column(db.DateTime, nullable=True)
+    last_activity_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    deck_item = db.relationship("DeckMarketplaceItem", back_populates="installs")
+    user = db.relationship("User", foreign_keys=[user_id])
+    local_deck = db.relationship("VocabularyDeck", foreign_keys=[local_deck_id])
+
+    __table_args__ = (
+        UniqueConstraint("deck_item_id", "user_id", name="uq_deck_installs_item_user"),
+    )
+
+
+class DeckReview(db.Model):
+    __tablename__ = "deck_reviews"
+
+    id = db.Column(db.String(36), primary_key=True, default=_uuid_str)
+    deck_item_id = db.Column(
+        db.String(36),
+        db.ForeignKey("deck_marketplace_items.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    rating = db.Column(db.Integer, nullable=False)
+    comment = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    deck_item = db.relationship("DeckMarketplaceItem", back_populates="reviews")
+    user = db.relationship("User", foreign_keys=[user_id])
+
+    __table_args__ = (
+        UniqueConstraint("deck_item_id", "user_id", name="uq_deck_reviews_item_user"),
+    )
