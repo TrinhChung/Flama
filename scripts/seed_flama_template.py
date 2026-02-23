@@ -8,107 +8,217 @@ from app import create_app
 from models import db
 from models.flashcard import FieldDef, NoteType, Template
 
-FRONT_HTML = """<div class="card-front-body">
-  <div class="card-front-word">{{ word }}</div>
+FRONT_HTML = """<div style='height:100vh;text-align:center;display:flex;justify-content:center;align-items:center;font-size:70px;font-weight:bold;color:#e53c20'>
+{{word}}
+</div>"""
+
+BACK_HTML = """<div style='
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    text-align: start;
+    padding-left: 20px;
+    font-family: "Arial"; 
+    font-size: 18px;'
+>
+    <!-- Hiển thị từ vựng -->
+    <div style='
+        font-family: "Arial"; 
+        font-size: 36px; 
+        font-weight: bold;
+        display: flex;
+        align-items: center;
+        color: #e53c20;
+        padding-top: 20px;'
+    >
+        {{word}}
+{{#word_audio}}
+  <audio id="custom-audio" src="{{word_audio}}"></audio>
+  <button onclick="document.getElementById('custom-audio').play()">🔊</button>
+{{/word_audio}}
+    </div>
+
+    <!-- Hiển thị cách đọc -->
+    {{#reading}}
+    <div style='
+        display: flex;
+        font-weight: bold;
+        font-family: "Arial"; 
+        font-size: 20px;
+        flex-direction: column;
+        text-transform: uppercase;'
+    >
+        <div style='font-family: "Arial"; display: flex'>
+            {{reading}} 「{{hanviet}}」
+        </div>
+        <div style='color: green; display: flex; padding-bottom: 10px' auto-split>
+            {{translation_vi}}
+        </div>
+    </div>
+    {{/reading}}
+
+    <!-- Hiển thị giải thích -->
+    {{#meaning_jp}}
+    <div style='display: flex; padding-top: 20px; color: #3367d6' auto-split>
+        ◆ {{meaning_jp}}
+    </div>
+    {{/meaning_jp}}
+
+    {{#meaning_vi}}
+    <div style='display: flex; padding-top: 10px' auto-split>
+        {{meaning_vi}}
+    </div>
+    {{/meaning_vi}}
+
+<!-- Ảnh minh hoạ stroke order -->
+{{#image}}
+<div class="kanji-stroke-images">
+  {{image}}
 </div>
-<!-- Footer -->
-<div class="card-front-footer">
-  <small class="card-hint">Click to reveal answer</small>
-</div>"""
+{{/image}}
 
-BACK_HTML = """<div style='display: flex; flex-direction: column; justify-content: flex-start; text-align: start; padding-left: 20px; font-family: "Arial"; font-size: 18px;'>
-  <div style='font-family: "Arial"; font-size: 36px; font-weight: bold; display: flex; align-items: center; color: #e53c20; padding-top: 20px;'>
-    {{ word }}
-    {% if word_audio %}
-    <audio id="custom-audio" src="{{ word_audio }}"></audio>
-    <button onclick="document.getElementById('custom-audio').play()">🔊</button>
-    {% endif %}
-  </div>
-
-  {% if reading %}
-  <div style='display: flex; font-weight: bold; font-family: "Arial"; font-size: 20px; flex-direction: column; text-transform: uppercase;'>
-    <div style='font-family: "Arial"; display: flex'>
-      {{ reading }} 「{{ hanviet or '' }}」
+    <!-- Hiển thị cách sử dụng -->
+    {{#usage_jp}}
+    <div style='display: flex; padding-top: 20px; color: #3367d6; font-weight: bold;'>
+        ◆ Cách sử dụng:
     </div>
-    <div style='color: green; display: flex; padding-bottom: 10px' auto-split>
-      {{ translation_vi or '' }}
+    <div style='display: flex; flex-direction: column; padding-top: 10px;'>
+        <div style="font-size: 20px;" auto-split>{{usage_jp}}</div>
+        {{#usage_vi}}
+        <div style="font-size: 16px; color: gray; margin-left: 10px;" auto-split>{{usage_vi}}</div>
+        {{/usage_vi}}
     </div>
-  </div>
-  {% endif %}
+    {{/usage_jp}}
 
-  {% if meaning_jp %}
-  <div style='display: flex; padding-top: 20px; color: #3367d6' auto-split>
-    ◆ {{ meaning_jp }}
-  </div>
-  {% endif %}
-
-  {% if meaning_vi %}
-  <div style='display: flex; padding-top: 10px' auto-split>
-    {{ meaning_vi }}
-  </div>
-  {% endif %}
-
-  {% if image %}
-  <div class="kanji-stroke-images">
-    {{ image|safe }}
-  </div>
-  {% endif %}
-
-  {% if usage_jp %}
-  <div style='display: flex; padding-top: 20px; color: #3367d6; font-weight: bold;'>
-    ◆ Cách sử dụng:
-  </div>
-  <div style='display: flex; flex-direction: column; padding-top: 10px;'>
-    <div style="font-size: 20px;" auto-split>{{ usage_jp }}</div>
-    {% if usage_vi %}
-    <div style="font-size: 16px; color: gray; margin-left: 10px;" auto-split>{{ usage_vi }}</div>
-    {% endif %}
-  </div>
-  {% endif %}
-
-  {% if example_jp %}
-  <div style='display: flex; padding-top: 20px; color: #3367d6; font-weight: bold;'>
-    ◆ Câu ví dụ:
-  </div>
-  <div style='display: flex; flex-direction: column; padding-top: 10px;'>
-    <div style="font-size: 20px; display: flex; align-items: center;" auto-split>
-      {{ example_jp }}
-      {% if example_audio %}
-      <audio id="example-audio" src="{{ example_audio }}"></audio>
-      <button onclick="document.getElementById('example-audio').play()">🔊</button>
-      {% endif %}
+    <!-- Hiển thị ví dụ -->
+    {{#example_jp}}
+    <div style='display: flex; padding-top: 20px; color: #3367d6; font-weight: bold;'>
+        ◆ Câu ví dụ:
     </div>
-    {% if example_vi %}
-    <div style="font-size: 16px; color: gray; margin-left: 10px;" auto-split>{{ example_vi }}</div>
-    {% endif %}
-  </div>
-  {% endif %}
+    <div style='display: flex; flex-direction: column; padding-top: 10px;'>
+        <div style="font-size: 20px; display: flex; align-items: center;" auto-split>
+            {{example_jp}}
+{{#example_audio}}
+  <audio id="example-audio" src="{{example_audio}}"></audio>
+  <button onclick="document.getElementById('example-audio').play()">🔊</button>
+{{/example_audio}}
+        </div>
+        {{#example_vi}}
+        <div style="font-size: 16px; color: gray; margin-left: 10px;" auto-split>{{example_vi}}</div>
+        {{/example_vi}}
+    </div>
+    {{/example_jp}}
 
-  {% if additional_note_jp %}
-  <div style='display: flex; padding-top: 20px; font-family: "Arial";color: #3367d6'>
-    ◆ Ghi chú:
-  </div>
-  <div style='display: flex; padding-top: 10px' auto-split>
-    {{ additional_note_jp }}
-  </div>
-  {% endif %}
+    <!-- Hiển thị ghi chú -->
+    {{#additional_note_jp}}
+    <div style='display: flex; padding-top: 20px; font-family: "Arial";color: #3367d6'>
+        ◆ Ghi chú:
+    </div>
+    <div style='display: flex; padding-top: 10px' auto-split>
+        {{additional_note_jp}}
+    </div>
+    {{/additional_note_jp}}
 
-  {% if additional_note_vi %}
-  <div style='display: flex; padding-top: 10px;font-family: "Arial"; color: gray; font-size: 16px;' auto-split>
-    {{ additional_note_vi }}
-  </div>
-  {% endif %}
+    {{#additional_note_vi}}
+    <div style='display: flex; padding-top: 10px;font-family: "Arial"; color: gray; font-size: 16px;' auto-split>
+        {{additional_note_vi}}
+    </div>
+    {{/additional_note_vi}}
 
-  {% if diagram %}
-  <div>{{ diagram|safe }}</div>
-  {% endif %}
-</div>"""
+{{#diagram}}
+<div class="kanji-stroke-images">
+  {{diagram}}
+</div>
+{{/diagram}}
+</div>
 
-CSS = """/* Tuỳ chọn CSS nếu cần bổ sung cho thẻ review */
-.kanji-stroke-images img {
-    max-width: 100%;
+<!-- Script phát âm từ vựng và ví dụ -->
+<script>
+  (() => {
+    const wordAudio = document.getElementById("custom-audio");
+    const exampleAudio = document.getElementById("example-audio");
+
+    if (wordAudio) {
+      wordAudio.play().catch(err => {
+        console.error("Không thể phát âm từ vựng:", err);
+      });
+
+      wordAudio.onended = () => {
+        setTimeout(() => {
+          if (exampleAudio) {
+            exampleAudio.play().catch(err => {
+              console.error("Không thể phát câu ví dụ:", err);
+            });
+          }
+        }, 500);
+      };
+    }
+  })();
+
+(function() {
+  const selectorList = [
+    'div[auto-split]'
+  ];
+
+  selectorList.forEach(sel => {
+    document.querySelectorAll(sel).forEach(el => {
+      let text = el.innerHTML;
+
+      text = text
+        .replace(/\$/g, "<br>");
+
+      el.innerHTML = text;
+    });
+  });
+})();
+</script>"""
+
+CSS = """.card {
+    font-family: arial;
+    font-size: 20px;
+    text-align: center;
+    color: black;
+    background-color: white;
 }
-"""
+.kanji-stroke-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-start;
+  align-items: flex-start;
+  margin-top: 15px;
+  line-height: 0;
+}
+
+/* Desktop: ảnh cao 180px, width auto giữ tỉ lệ */
+.kanji-stroke-images > img {
+  height: 180px;
+  width: auto;
+  object-fit: contain;
+  border-radius: 6px;
+  display: block;
+  margin: 0 5px 10px 0; /* khoảng cách ảnh */
+  flex: none;           /* không chiếm % chiều ngang */
+}
+
+/* Điện thoại: 2 ảnh 1 dòng, mỗi ảnh 48% chiều ngang, chiều cao theo % màn hình */
+@media (max-width: 480px) {
+  .kanji-stroke-images > img {
+    flex: 0 0 48%;       /* 2 ảnh 1 dòng */
+    height: 38vw;        /* chiều cao theo % màn hình */
+    width: auto;         /* width tự động */
+    margin: 0;
+  }
+}
+
+/* Điện thoại nhỏ hơn: 1 ảnh 1 dòng */
+@media (max-width: 320px) {
+  .kanji-stroke-images > img {
+    flex: 0 0 100%;      /* 1 ảnh 1 dòng */
+    height: 68vw;        /* chiều cao theo % màn hình */
+    width: auto;
+  }
+}"""
 
 def seed_template():
     app = create_app()

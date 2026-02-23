@@ -109,6 +109,44 @@ class FlashcardRendererTests(unittest.TestCase):
         self.assertIn("diagram-html", html)
         self.assertIn("<script>", html)
 
+    def test_auto_split_attribute_is_preserved(self):
+        template = self._template('<div auto-split>{{Word}}</div>')
+        fields = [self._field("Word")]
+        rendered = render_template_pair(
+            template=template,
+            field_defs=fields,
+            field_values={"Word": "A$B"},
+            media_assets=[],
+            allow_inline_script=True,
+        )
+        self.assertIn("auto-split", rendered["front_html"])
+
+    def test_literal_backslash_n_is_normalized_to_newline(self):
+        template = self._template('<div auto-split>{{Word}}</div>')
+        fields = [self._field("Word")]
+        rendered = render_template_pair(
+            template=template,
+            field_defs=fields,
+            field_values={"Word": "Line1\\nLine2"},
+            media_assets=[],
+        )
+        html = rendered["front_html"]
+        self.assertNotIn("Line1\\nLine2", html)
+        self.assertIn("Line1<br>Line2", html)
+
+    def test_actual_newline_keeps_default_html_whitespace(self):
+        template = self._template("<div>{{Word}}</div>")
+        fields = [self._field("Word")]
+        rendered = render_template_pair(
+            template=template,
+            field_defs=fields,
+            field_values={"Word": "Line1\nLine2"},
+            media_assets=[],
+        )
+        html = rendered["front_html"]
+        self.assertIn("Line1\nLine2", html)
+        self.assertNotIn("<br>", html)
+
     def test_empty_rules(self):
         self.assertTrue(is_field_empty(None))
         self.assertTrue(is_field_empty(""))

@@ -964,8 +964,8 @@ def _render_study_flashcard(card) -> dict:
             preview_note_key=str(card.id),
             allow_inline_script=True,
         )
-        ret["front"] = rendered.get("front", "")
-        ret["back"] = rendered.get("back", "")
+        ret["front"] = rendered.get("front_html", "")
+        ret["back"] = rendered.get("back_html", "")
     except Exception as e:
         ret["front"] = f"<div class='text-danger'>Error rendering front: {e}</div>"
         ret["back"] = f"<div class='text-danger'>Error rendering back: {e}</div>"
@@ -1893,3 +1893,24 @@ def import_csv():
         sample_headers=EXPECTED_HEADERS.keys(),
         levels=levels,
     )
+
+@vocabulary_bp.route("/study/card/<int:entry_id>/edit", methods=["POST"])
+@login_required
+def edit_study_card(entry_id: int):
+    entry = VocabularyEntry.query.get_or_404(entry_id)
+    entry.word = request.form.get("word", "").strip() or entry.word
+    entry.hanviet = request.form.get("hanviet", "").strip()
+    entry.reading = request.form.get("reading", "").strip()
+    entry.translation_vi = request.form.get("translation_vi", "").strip()
+    entry.meaning_jp = request.form.get("meaning_jp", "").strip()
+    entry.meaning_vi = request.form.get("meaning_vi", "").strip()
+    entry.usage_jp = request.form.get("usage_jp", "").strip()
+    entry.usage_vi = request.form.get("usage_vi", "").strip()
+    entry.example_jp = request.form.get("example_jp", "").strip()
+    entry.example_vi = request.form.get("example_vi", "").strip()
+    entry.additional_note_jp = request.form.get("additional_note_jp", "").strip()
+    entry.additional_note_vi = request.form.get("additional_note_vi", "").strip()
+    
+    db.session.commit()
+    flash("Đã cập nhật từ vựng thành công", "success")
+    return redirect(request.referrer or url_for("main.dashboard"))

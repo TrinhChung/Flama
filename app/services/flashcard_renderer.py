@@ -64,6 +64,7 @@ ALLOWED_CSS_PROPERTIES = [
     "font-weight",
     "font-style",
     "text-align",
+    "text-transform",
     "line-height",
     "margin",
     "margin-left",
@@ -76,6 +77,22 @@ ALLOWED_CSS_PROPERTIES = [
     "padding-top",
     "padding-bottom",
     "background-color",
+    "display",
+    "flex-direction",
+    "justify-content",
+    "align-items",
+    "flex-wrap",
+    "flex",
+    "gap",
+    "height",
+    "width",
+    "max-width",
+    "max-height",
+    "min-height",
+    "min-width",
+    "border",
+    "border-radius",
+    "object-fit",
 ]
 
 _css_sanitizer = CSSSanitizer(allowed_css_properties=ALLOWED_CSS_PROPERTIES)
@@ -87,7 +104,9 @@ _PREVIEW_TTL = timedelta(seconds=30)
 PREVIEW_MEDIA_IMAGE_TOKEN = "__fc_preview_image__"
 PREVIEW_MEDIA_AUDIO_TOKEN = "__fc_preview_audio__"
 PREVIEW_MEDIA_DIAGRAM_TOKEN = "__fc_preview_diagram__"
+LINEBREAK_TOKEN = "__FC_LINEBREAK_TOKEN__"
 _INLINE_SCRIPT_RE = re.compile(r"(?is)<script\b([^>]*)>(.*?)</script>")
+_HTML_TAG_SPLIT_RE = re.compile(r"(<[^>]+>)")
 _SAFE_BUTTON_ONCLICK_RE = re.compile(
     r"""^\s*document\.getElementById\(\s*['"][A-Za-z0-9_-]+['"]\s*\)\.play\(\)\s*;?\s*$"""
 )
@@ -103,6 +122,8 @@ def _allowed_attr(tag: str, name: str, value: str) -> bool:
         if lowered == "onclick" and tag == "button":
             return bool(_SAFE_BUTTON_ONCLICK_RE.match((value or "").strip()))
         return False
+    if lowered == "auto-split":
+        return tag in {"div", "p", "span", "li", "td"}
     if lowered in {"class", "id", "style", "alt"}:
         return True
     if lowered == "controls":
@@ -178,6 +199,34 @@ def _resolve_media_url(value: Any, media_by_id: dict[str, Any]) -> str:
     if raw.startswith("/media/proxy/"):
         return raw
     return ""
+
+
+def _normalize_multiline_value(value: Any) -> str:
+    text = "" if value is None else str(value)
+    # Only treat literal '\n' marker as an explicit line break signal.
+    return text.replace("\\n", LINEBREAK_TOKEN)
+
+
+def _replace_linebreak_token_in_html_text_nodes(rendered_html: str) -> str:
+    if LINEBREAK_TOKEN not in rendered_html:
+        return rendered_html
+
+    # Split into tag/text chunks, then only convert tokens in text chunks.
+    chunks = _HTML_TAG_SPLIT_RE.split(rendered_html)
+    for index, chunk in enumerate(chunks):
+        if LINEBREAK_TOKEN not in chunk:
+            continue
+        if index % 2 == 0:
+            chunks[index] = chunk.replace(LINEBREAK_TOKEN, "<br>")
+        else:
+            chunks[index] = chunk.replace(LINEBREAK_TOKEN, "\\n")
+    return "".join(chunks)
+
+
+def _restore_linebreak_token(raw_text: str) -> str:
+    if LINEBREAK_TOKEN not in raw_text:
+        return raw_text
+    return raw_text.replace(LINEBREAK_TOKEN, "\\n")
 
 
 def sanitize_css(css: str | None) -> str:
@@ -287,7 +336,7 @@ def build_render_context(
         name = field_def.name
         value = values.get(name)
         if field_def.field_type == "richtext":
-            context[name] = sanitize_richtext(str(value or ""))
+            context[name] = sanitize_richtext(_normalize_multiline_value(value))
             continue
         if field_def.field_type in {"image", "audio", "diagram"}:
             media_html = _render_media_html(field_def.field_type, value, name, media_by_id)
@@ -298,12 +347,12 @@ def build_render_context(
                 context[name] = media_html
             context[f"{name}_url"] = media_url
             continue
-        context[name] = "" if value is None else str(value)
+        context[name] = _normalize_multiline_value(value)
 
     # Keep unknown keys for legacy compatibility.
     for key, value in values.items():
         if key not in context:
-            context[key] = "" if value is None else str(value)
+            context[key] = _normalize_multiline_value(value)
 
     # Common alias for compatibility with older templates.
     if "hanviet" in context and "han_viet" not in context:
@@ -322,10 +371,17 @@ def render_template_pair(
     allow_inline_script: bool = False,
 ) -> dict[str, str]:
     css = sanitize_css(getattr(template, "shared_css", ""))
+    inline_script_mode = "inline-on" if allow_inline_script else "inline-off"
     preview_key = None
     if preview_note_key:
         preview_hash = hashlib.sha256(
-            (getattr(template, "front_html", "") + getattr(template, "back_html", "") + css + preview_note_key).encode("utf-8")
+            (
+                getattr(template, "front_html", "")
+                + getattr(template, "back_html", "")
+                + css
+                + preview_note_key
+                + inline_script_mode
+            ).encode("utf-8")
         ).hexdigest()
         preview_key = preview_hash
         cached = _preview_cache.get(preview_hash)
@@ -359,11 +415,13 @@ def render_template_pair(
     try:
         front_rendered = chevron.render(front_source, context)
         back_rendered = chevron.render(back_source, context)
-        front_scripts = [chevron.render(script_source, context) for script_source in front_script_sources]
-        back_scripts = [chevron.render(script_source, context) for script_source in back_script_sources]
+        front_scripts = [_restore_linebreak_token(chevron.render(script_source, context)) for script_source in front_script_sources]
+        back_scripts = [_restore_linebreak_token(chevron.render(script_source, context)) for script_source in back_script_sources]
     except Exception as exc:
         raise TemplateCompileError(str(exc)) from exc
 
+    front_rendered = _replace_linebreak_token_in_html_text_nodes(front_rendered)
+    back_rendered = _replace_linebreak_token_in_html_text_nodes(back_rendered)
     safe_front = sanitize_html_fragment(front_rendered)
     safe_back = sanitize_html_fragment(back_rendered)
     if allow_inline_script:

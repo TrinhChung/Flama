@@ -3,6 +3,7 @@
 from flask import Blueprint, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required, login_user, logout_user
 
+from app.services.user_roles import ensure_default_user_roles
 from models import db
 from models.user import User
 
@@ -35,8 +36,17 @@ def register():
             flash("Email hoặc tên đăng nhập đã tồn tại.", "danger")
             return render_template("register.html")
 
+        existing_user_count = User.query.count()
+        roles = ensure_default_user_roles(db.session)
         user = User(email=email, username=username)
-        user.is_admin = User.query.count() == 0
+        if existing_user_count == 0 and roles.get("admin"):
+            user.role_id = roles["admin"].id
+            user.is_admin = True
+        elif roles.get("regular"):
+            user.role_id = roles["regular"].id
+            user.is_admin = bool(roles["regular"].is_admin)
+        else:
+            user.is_admin = existing_user_count == 0
         user.set_password(password)
         db.session.add(user)
         db.session.commit()

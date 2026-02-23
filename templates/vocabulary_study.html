@@ -57,46 +57,148 @@
   {% endif %}
 
   {% if card %}
-  <div class="study-bottom-bar">
-    <div class="study-bottom-actions front-actions" id="front-actions">
-      <div class="study-counters-line">
-        <span class="scl-new">New <strong>{{ due_new }}</strong></span>
-        <span class="scl-sep">·</span>
-        <span class="scl-learn">Learn <strong>{{ due_learn }}</strong></span>
-        <span class="scl-sep">·</span>
-        <span class="scl-due">Due <strong>{{ due_review }}</strong></span>
+  <div class="study-bottom-bar d-flex justify-content-between align-items-center px-3">
+    <!-- Nút Edit góc trái -->
+    <div>
+      <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal"
+        data-bs-target="#editWordModal" title="Edit Entry">
+        <i class="bi bi-pencil"></i> <span class="d-none d-sm-inline">Edit</span>
+      </button>
+    </div>
+
+    <div class="d-flex flex-grow-1 justify-content-center">
+      <div class="study-bottom-actions front-actions" id="front-actions">
+        <div class="study-counters-line">
+          <span class="scl-new">New <strong>{{ due_new }}</strong></span>
+          <span class="scl-sep">·</span>
+          <span class="scl-learn">Learn <strong>{{ due_learn }}</strong></span>
+          <span class="scl-sep">·</span>
+          <span class="scl-due">Due <strong>{{ due_review }}</strong></span>
+        </div>
+        <button class="btn btn-light answer-btn show-answer" id="show-answer-btn">Show Answer</button>
       </div>
-      <button class="btn btn-light answer-btn show-answer" id="show-answer-btn">Show Answer</button>
+      <div class="study-bottom-actions back-actions d-none" id="back-actions">
+        <button class="btn btn-light answer-btn again" data-rating="again">
+          Again
+          {% if next_intervals_preview and next_intervals_preview.get('again') %}
+          <span class="answer-ivl">{{ next_intervals_preview['again']['label'] }}</span>
+          {% endif %}
+        </button>
+        <button class="btn btn-light answer-btn hard" data-rating="hard">
+          Hard
+          {% if next_intervals_preview and next_intervals_preview.get('hard') %}
+          <span class="answer-ivl">{{ next_intervals_preview['hard']['label'] }}</span>
+          {% endif %}
+        </button>
+        <button class="btn btn-light answer-btn good" data-rating="good">
+          Good
+          {% if next_intervals_preview and next_intervals_preview.get('good') %}
+          <span class="answer-ivl">{{ next_intervals_preview['good']['label'] }}</span>
+          {% endif %}
+        </button>
+        <button class="btn btn-light answer-btn easy" data-rating="easy">
+          Easy
+          {% if next_intervals_preview and next_intervals_preview.get('easy') %}
+          <span class="answer-ivl">{{ next_intervals_preview['easy']['label'] }}</span>
+          {% endif %}
+        </button>
+      </div>
     </div>
-    <div class="study-bottom-actions back-actions d-none" id="back-actions">
-      <button class="btn btn-light answer-btn again" data-rating="again">
-        Again
-        {% if next_intervals_preview and next_intervals_preview.get('again') %}
-        <span class="answer-ivl">{{ next_intervals_preview['again']['label'] }}</span>
-        {% endif %}
-      </button>
-      <button class="btn btn-light answer-btn hard" data-rating="hard">
-        Hard
-        {% if next_intervals_preview and next_intervals_preview.get('hard') %}
-        <span class="answer-ivl">{{ next_intervals_preview['hard']['label'] }}</span>
-        {% endif %}
-      </button>
-      <button class="btn btn-light answer-btn good" data-rating="good">
-        Good
-        {% if next_intervals_preview and next_intervals_preview.get('good') %}
-        <span class="answer-ivl">{{ next_intervals_preview['good']['label'] }}</span>
-        {% endif %}
-      </button>
-      <button class="btn btn-light answer-btn easy" data-rating="easy">
-        Easy
-        {% if next_intervals_preview and next_intervals_preview.get('easy') %}
-        <span class="answer-ivl">{{ next_intervals_preview['easy']['label'] }}</span>
-        {% endif %}
-      </button>
-    </div>
+
+    <!-- Khoảng trống tương đương với nút Edit để căn giữa cho button ở giữa -->
+    <div style="width: 70px;"></div>
   </div>
   {% endif %}
 </div>
+
+{% if card %}
+<!-- Edit Word Modal -->
+<div class="modal fade" id="editWordModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <form class="modal-content" method="POST" action="{{ url_for('vocabulary.edit_study_card', entry_id=card.id) }}">
+      <div class="modal-header py-2">
+        <h5 class="modal-title fs-6 fw-bold text-dark">Sửa Từ Vựng</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body overflow-auto" style="max-height: 65vh; background: #fafbfc;">
+        <div class="row g-3">
+          <div class="col-12">
+            <label class="form-label form-label-sm fw-bold">Từ chính (Word)</label>
+            <input type="text" class="form-control form-control-sm" name="word" value="{{ card.word or '' }}" required>
+          </div>
+          <div class="col-12">
+            <label class="form-label form-label-sm fw-bold">Hán Việt</label>
+            <input type="text" class="form-control form-control-sm" name="hanviet" value="{{ card.hanviet or '' }}">
+          </div>
+          <div class="col-12">
+            <label class="form-label form-label-sm fw-bold">Cách đọc (Furigana)</label>
+            <input type="text" class="form-control form-control-sm" name="reading" value="{{ card.reading or '' }}">
+          </div>
+          <div class="col-12">
+            <label class="form-label form-label-sm fw-bold">Dịch nhanh (Translation)</label>
+            <input type="text" class="form-control form-control-sm" name="translation_vi"
+              value="{{ card.translation_vi or '' }}">
+          </div>
+
+          <div class="col-12 mt-4 fw-bold border-bottom pb-1 text-secondary text-uppercase" style="font-size: 0.8rem;">Ý
+            Nghĩa (Meaning)</div>
+          <div class="col-12">
+            <label class="form-label form-label-sm text-muted">Meaning JP</label>
+            <textarea class="form-control form-control-sm" name="meaning_jp"
+              rows="2">{{ card.meaning_jp or '' }}</textarea>
+          </div>
+          <div class="col-12">
+            <label class="form-label form-label-sm text-muted">Meaning VI</label>
+            <textarea class="form-control form-control-sm" name="meaning_vi"
+              rows="2">{{ card.meaning_vi or '' }}</textarea>
+          </div>
+
+          <div class="col-12 mt-4 fw-bold border-bottom pb-1 text-secondary text-uppercase" style="font-size: 0.8rem;">
+            Cách dùng (Usage)</div>
+          <div class="col-12">
+            <label class="form-label form-label-sm text-muted">Usage JP</label>
+            <textarea class="form-control form-control-sm" name="usage_jp" rows="2">{{ card.usage_jp or '' }}</textarea>
+          </div>
+          <div class="col-12">
+            <label class="form-label form-label-sm text-muted">Usage VI</label>
+            <textarea class="form-control form-control-sm" name="usage_vi" rows="2">{{ card.usage_vi or '' }}</textarea>
+          </div>
+
+          <div class="col-12 mt-4 fw-bold border-bottom pb-1 text-secondary text-uppercase" style="font-size: 0.8rem;">
+            Ví dụ (Example)</div>
+          <div class="col-12">
+            <label class="form-label form-label-sm text-muted">Example JP</label>
+            <textarea class="form-control form-control-sm" name="example_jp"
+              rows="2">{{ card.example_jp or '' }}</textarea>
+          </div>
+          <div class="col-12">
+            <label class="form-label form-label-sm text-muted">Example VI</label>
+            <textarea class="form-control form-control-sm" name="example_vi"
+              rows="2">{{ card.example_vi or '' }}</textarea>
+          </div>
+
+          <div class="col-12 mt-4 fw-bold border-bottom pb-1 text-secondary text-uppercase" style="font-size: 0.8rem;">
+            Ghi chú (Notes)</div>
+          <div class="col-12">
+            <label class="form-label form-label-sm text-muted">Note JP</label>
+            <textarea class="form-control form-control-sm" name="additional_note_jp"
+              rows="2">{{ card.additional_note_jp or '' }}</textarea>
+          </div>
+          <div class="col-12">
+            <label class="form-label form-label-sm text-muted">Note VI</label>
+            <textarea class="form-control form-control-sm" name="additional_note_vi"
+              rows="2">{{ card.additional_note_vi or '' }}</textarea>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Đóng (Cancel)</button>
+        <button type="submit" class="btn btn-primary btn-sm">Lưu thay đổi (Save)</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
 
 <style>
   .study-page {
