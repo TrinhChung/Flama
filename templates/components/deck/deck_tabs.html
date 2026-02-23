@@ -11,5 +11,13 @@
   <a class="anki-tab" href="{{ url_for('main.dashboard') }}">Progress</a>
   {% endif %}
   <a class="anki-tab" href="{{ url_for('main.dashboard') }}">Stats</a>
-  <a class="anki-tab sync" href="{{ url_for('vocabulary.browse') }}">Browse</a>
+  <a
+    class="anki-tab sync"
+    href="{{ url_for('vocabulary.browse') }}"
+    data-browse-open="1"
+    data-browse-context="dashboard"
+    data-current-deck-id=""
+  >
+    Browse
+  </a>
 </div>

@@ -1,0 +1,157 @@
+{# Shared Browse modal (Anki-like 3-pane browser) #}
+<div class="modal fade browse-modal" id="browseModal" tabindex="-1" aria-labelledby="browseModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-fullscreen browse-modal__dialog">
+    <div class="modal-content browse-modal__content">
+      <div class="browse-modal__header">
+        <div class="browse-modal__title-wrap">
+          <h5 class="browse-modal__title" id="browseModalLabel">
+            <i class="bi bi-search"></i>
+            Browse
+          </h5>
+          <small class="browse-modal__context" id="browseContextLabel">All decks</small>
+        </div>
+        <div class="browse-modal__header-actions">
+          <button type="button" class="btn btn-sm btn-outline-secondary" id="browseRefreshBtn" title="Reload data">
+            <i class="bi bi-arrow-clockwise"></i>
+            Refresh
+          </button>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+      </div>
+
+      <div class="browse-modal__body">
+        <aside class="browse-pane browse-pane--tree">
+          <div class="browse-pane__toolbar">
+            <div class="input-group input-group-sm">
+              <span class="input-group-text"><i class="bi bi-search"></i></span>
+              <input type="text" class="form-control" id="browseDeckSearch" placeholder="Search deck">
+            </div>
+            <div class="form-check form-switch mt-2">
+              <input class="form-check-input" type="checkbox" role="switch" id="browseIncludeSubdecks" checked>
+              <label class="form-check-label" for="browseIncludeSubdecks">Include sub-decks</label>
+            </div>
+          </div>
+
+          <div class="browse-tree-shortcuts">
+            <button type="button" class="browse-shortcut is-active" data-shortcut="all">
+              <i class="bi bi-collection"></i>
+              All Decks
+            </button>
+            <button type="button" class="browse-shortcut" data-shortcut="current" id="browseCurrentDeckShortcut">
+              <i class="bi bi-bullseye"></i>
+              Current Deck
+            </button>
+          </div>
+
+          <div class="browse-pane__scroll" id="browseDeckTreeWrap">
+            <div class="browse-loading" id="browseTreeLoading">Loading decks...</div>
+            <div class="browse-tree" id="browseDeckTree"></div>
+          </div>
+        </aside>
+
+        <section class="browse-pane browse-pane--table">
+          <div class="browse-pane__toolbar browse-table-toolbar">
+            <div class="browse-toolbar-row">
+              <div class="input-group input-group-sm browse-search-box">
+                <span class="input-group-text"><i class="bi bi-search"></i></span>
+                <input type="text" class="form-control" id="browseKeyword" placeholder="Search word/field...">
+              </div>
+              <select class="form-select form-select-sm browse-status-select" id="browseStatusFilter">
+                <option value="all">All</option>
+                <option value="new">New</option>
+                <option value="learn">Learn</option>
+                <option value="due">Due</option>
+              </select>
+              <input type="text" class="form-control form-control-sm browse-tag-filter" id="browseTagFilter" placeholder="Tag">
+            </div>
+            <div class="browse-toolbar-row">
+              <select class="form-select form-select-sm" id="browseSortBy">
+                <option value="due">Sort: Due</option>
+                <option value="deck">Sort: Deck</option>
+                <option value="word">Sort: Word</option>
+              </select>
+              <button type="button" class="btn btn-sm btn-outline-secondary" id="browseSortDirBtn" data-dir="asc" title="Toggle sort direction">
+                <i class="bi bi-sort-down"></i>
+              </button>
+              <div class="browse-table-meta" id="browseTableMeta">0 cards</div>
+            </div>
+          </div>
+
+          <div class="browse-pane__scroll browse-table-wrap" id="browseTableWrap">
+            <table class="browse-table" id="browseTable">
+              <thead>
+                <tr>
+                  <th>Card Type</th>
+                  <th>Due</th>
+                  <th>Deck</th>
+                  <th>Word</th>
+                  <th>Reading</th>
+                  <th>Meaning</th>
+                  <th>Tags</th>
+                </tr>
+              </thead>
+              <tbody id="browseTableBody">
+                <tr>
+                  <td colspan="7" class="browse-empty-cell">Select a deck to load cards.</td>
+                </tr>
+              </tbody>
+            </table>
+            <div class="browse-loading d-none" id="browseRowsLoading">Loading cards...</div>
+          </div>
+        </section>
+
+        <aside class="browse-pane browse-pane--editor">
+          <div class="browse-pane__toolbar browse-editor-toolbar">
+            <div class="browse-editor-title">Editor</div>
+            <div class="browse-editor-actions">
+              <button type="button" class="btn btn-sm btn-outline-secondary" id="browseRevertBtn" disabled>Revert</button>
+              <button type="button" class="btn btn-sm btn-primary" id="browseSaveBtn" disabled>Save</button>
+            </div>
+          </div>
+
+          <div class="browse-pane__scroll browse-editor-wrap" id="browseEditorWrap">
+            <div class="browse-editor-empty" id="browseEditorEmpty">
+              <i class="bi bi-pencil-square"></i>
+              <p>No card selected</p>
+            </div>
+
+            <form id="browseEditorForm" class="browse-editor-form d-none" novalidate>
+              <div class="browse-editor-meta">
+                <div class="browse-editor-group">
+                  <label for="browseEditorDeck">Deck</label>
+                  <select id="browseEditorDeck" class="form-select form-select-sm"></select>
+                </div>
+                <div class="browse-editor-group">
+                  <label for="browseEditorTags">Tags (comma separated)</label>
+                  <input id="browseEditorTags" type="text" class="form-control form-control-sm">
+                </div>
+              </div>
+              <div id="browseEditorFields"></div>
+              <div class="browse-editor-delete-wrap">
+                <button type="button" class="btn btn-sm btn-outline-danger" id="browseDeleteBtn">Delete Card</button>
+              </div>
+            </form>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="browseUnsavedModal" tabindex="-1" aria-labelledby="browseUnsavedModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="browseUnsavedModalLabel">Unsaved changes</h5>
+      </div>
+      <div class="modal-body">
+        You have unsaved edits. Save before continuing?
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" id="browseUnsavedCancelBtn" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-outline-warning" id="browseUnsavedDiscardBtn">Discard</button>
+        <button type="button" class="btn btn-primary" id="browseUnsavedSaveBtn">Save</button>
+      </div>
+    </div>
+  </div>
+</div>

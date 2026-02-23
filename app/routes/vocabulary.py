@@ -21,7 +21,7 @@ from flask import (
     url_for,
 )
 from flask_login import current_user, login_required
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import selectinload
 
@@ -226,6 +226,15 @@ def restrict_non_admin_routes():
         "vocabulary.study_topic",
         "vocabulary.study_lesson",
         "vocabulary.study_answer",
+        "vocabulary.browse",
+        "vocabulary.browse_api_decks_tree",
+        "vocabulary.browse_api_cards",
+        "vocabulary.browse_api_card_detail",
+        "vocabulary.browse_api_card_update",
+        "vocabulary.browse_api_card_delete",
+        "vocabulary.browse_api_decks",
+        "vocabulary.browse_api_notes",
+        "vocabulary.browse_api_update_note",
     }
     if endpoint in allowed_endpoints:
         return None
@@ -553,109 +562,641 @@ def browse():
     return render_template("vocabulary_browse.html")
 
 
+def _browse_field_value(field_values: dict | None, candidates: list[str]) -> str:
+    if not isinstance(field_values, dict):
+        return ""
+
+    for key in candidates:
+        value = field_values.get(key)
+        if value is None:
+            continue
+        text = str(value).strip()
+        if text:
+            return text
+
+    lowered = {str(key).lower(): value for key, value in field_values.items()}
+    for key in candidates:
+        value = lowered.get(key.lower())
+        if value is None:
+            continue
+        text = str(value).strip()
+        if text:
+            return text
+    return ""
+
+
+def _browse_first_non_empty(field_values: dict | None) -> str:
+    if not isinstance(field_values, dict):
+        return ""
+    for value in field_values.values():
+        if value is None:
+            continue
+        text = str(value).strip()
+        if text:
+            return text
+    return ""
+
+
+def _browse_due_label(*, queue: str | None, due_at: datetime | None) -> str:
+    queue_norm = (queue or NEW_QUEUE).strip().lower()
+    if queue_norm == NEW_QUEUE:
+        return "New"
+    if queue_norm in {LEARNING_QUEUE, RELEARNING_QUEUE, LEARN_QUEUE}:
+        return "Learn"
+    if due_at:
+        return due_at.strftime("%Y-%m-%d %H:%M")
+    return "Due"
+
+
+def _browse_status_code(*, queue: str | None, due_at: datetime | None, now: datetime) -> str:
+    queue_norm = (queue or NEW_QUEUE).strip().lower()
+    if queue_norm == NEW_QUEUE:
+        return NEW_QUEUE
+    if queue_norm in {LEARNING_QUEUE, RELEARNING_QUEUE, LEARN_QUEUE}:
+        return LEARNING_QUEUE
+    if queue_norm == REVIEW_QUEUE and (due_at is None or due_at <= now):
+        return REVIEW_QUEUE
+    return queue_norm
+
+
+def _build_browse_row(card_obj, deck_name_lookup: dict[int, str], now: datetime):
+    note_obj = card_obj.note
+    field_values = note_obj.field_values or {}
+    word = _browse_field_value(field_values, ["Word", "word", "Front", "front", "term"])
+    if not word:
+        word = _browse_first_non_empty(field_values)
+    reading = _browse_field_value(field_values, ["Reading", "reading"])
+    meaning = _browse_field_value(
+        field_values,
+        [
+            "Meaning_VI",
+            "meaning_vi",
+            "Translation_VI",
+            "translation_vi",
+            "Meaning_JP",
+            "meaning_jp",
+        ],
+    )
+
+    note_type_name = note_obj.note_type.name if note_obj.note_type else "Unknown"
+    template_name = card_obj.template.name if card_obj.template else "Card"
+    card_type = f"{note_type_name} / {template_name}" if template_name else note_type_name
+    deck_name = deck_name_lookup.get(note_obj.deck_id or 0, "")
+    status_code = _browse_status_code(queue=card_obj.queue, due_at=card_obj.due_at, now=now)
+
+    return {
+        "card_id": card_obj.id,
+        "note_id": note_obj.id,
+        "note_type_id": note_obj.note_type_id,
+        "card_type": card_type,
+        "note_type": note_type_name,
+        "template": template_name,
+        "queue": (card_obj.queue or NEW_QUEUE).strip().lower(),
+        "status": status_code,
+        "due_at": card_obj.due_at.isoformat() if card_obj.due_at else None,
+        "due_label": _browse_due_label(queue=card_obj.queue, due_at=card_obj.due_at),
+        "deck_id": note_obj.deck_id,
+        "deck_name": deck_name,
+        "word": word,
+        "reading": reading,
+        "meaning": meaning,
+        "tags": note_obj.tags or [],
+        "updated_at": note_obj.updated_at.isoformat() if note_obj.updated_at else None,
+    }
+
+
+def _build_browse_card_detail(card_obj, deck_name_lookup: dict[int, str], now: datetime):
+    note_obj = card_obj.note
+    note_type_obj = note_obj.note_type
+    field_values = note_obj.field_values or {}
+    field_defs = sorted(note_type_obj.field_defs, key=lambda fd: fd.position) if note_type_obj else []
+
+    fields = [
+        {
+            "name": field_def.name,
+            "field_type": field_def.field_type,
+            "required": bool(field_def.required),
+            "position": field_def.position,
+        }
+        for field_def in field_defs
+    ]
+    existing_names = {field_def["name"] for field_def in fields}
+    for key in field_values.keys():
+        key_str = str(key)
+        if key_str in existing_names:
+            continue
+        fields.append(
+            {
+                "name": key_str,
+                "field_type": "text",
+                "required": False,
+                "position": 9999,
+            }
+        )
+    fields.sort(key=lambda item: (int(item["position"]), item["name"].lower()))
+
+    media_assets = [
+        {
+            "id": asset.id,
+            "field_name": asset.field_name,
+            "filename": asset.filename,
+            "mime_type": asset.mime_type,
+            "url": f"/media/proxy/{asset.id}",
+        }
+        for asset in note_obj.media_assets
+    ]
+
+    return {
+        "card": _build_browse_row(card_obj, deck_name_lookup, now),
+        "note": {
+            "id": note_obj.id,
+            "note_type_id": note_obj.note_type_id,
+            "deck_id": note_obj.deck_id,
+            "deck_name": deck_name_lookup.get(note_obj.deck_id or 0, ""),
+            "field_values": field_values,
+            "tags": note_obj.tags or [],
+            "updated_at": note_obj.updated_at.isoformat() if note_obj.updated_at else None,
+        },
+        "fields": fields,
+        "media_assets": media_assets,
+    }
+
+
+def _collect_accessible_browse_decks():
+    from models.flashcard import Note
+
+    all_decks = VocabularyDeck.query.order_by(
+        VocabularyDeck.parent_id.isnot(None),
+        VocabularyDeck.position,
+        VocabularyDeck.created_at,
+        VocabularyDeck.id,
+    ).all()
+    if is_admin_user(current_user):
+        return all_decks
+
+    deck_map = {deck.id: deck for deck in all_decks}
+    deck_rows = (
+        db.session.query(Note.deck_id)
+        .filter(Note.user_id == current_user.id, Note.deck_id.isnot(None))
+        .distinct()
+        .all()
+    )
+    visible_ids = {int(row[0]) for row in deck_rows if row[0]}
+    if not visible_ids:
+        return []
+
+    stack = list(visible_ids)
+    while stack:
+        current_id = stack.pop()
+        deck_obj = deck_map.get(current_id)
+        if not deck_obj or deck_obj.parent_id is None:
+            continue
+        if deck_obj.parent_id in visible_ids:
+            continue
+        visible_ids.add(deck_obj.parent_id)
+        stack.append(deck_obj.parent_id)
+
+    return [deck for deck in all_decks if deck.id in visible_ids]
+
+
+def _deck_children_map(deck_list: list[VocabularyDeck]) -> dict[int | None, list[VocabularyDeck]]:
+    mapping: dict[int | None, list[VocabularyDeck]] = {}
+    for deck_obj in deck_list:
+        mapping.setdefault(deck_obj.parent_id, []).append(deck_obj)
+    for children in mapping.values():
+        children.sort(key=lambda deck_obj: ((deck_obj.position or 0), deck_obj.created_at, deck_obj.id))
+    return mapping
+
+
+def _collect_subtree_ids(root_id: int, children_by_parent: dict[int | None, list[VocabularyDeck]]) -> list[int]:
+    result: list[int] = []
+    stack = [root_id]
+    while stack:
+        current_id = stack.pop()
+        result.append(current_id)
+        for child in children_by_parent.get(current_id, []):
+            stack.append(child.id)
+    return result
+
+
+def _build_browse_deck_tree_payload():
+    from models.flashcard import Card, Note
+
+    now = datetime.utcnow()
+    scoped_decks = _collect_accessible_browse_decks()
+    if not scoped_decks:
+        return []
+
+    scoped_ids = {deck.id for deck in scoped_decks}
+    deck_lookup = {deck.id: deck for deck in scoped_decks}
+    children_by_parent = _deck_children_map(scoped_decks)
+
+    direct_counts = {
+        deck_id: {"total": 0, "new": 0, "learn": 0, "due": 0}
+        for deck_id in scoped_ids
+    }
+
+    base_query = (
+        db.session.query(Note.deck_id, Card.queue, func.count(Card.id))
+        .select_from(Card)
+        .join(Note, Card.note_id == Note.id)
+        .filter(Note.deck_id.in_(scoped_ids))
+    )
+    if not is_admin_user(current_user):
+        base_query = base_query.filter(Note.user_id == current_user.id)
+    queue_rows = base_query.group_by(Note.deck_id, Card.queue).all()
+    for deck_id, queue_value, total in queue_rows:
+        if not deck_id:
+            continue
+        bucket = direct_counts.setdefault(
+            int(deck_id), {"total": 0, "new": 0, "learn": 0, "due": 0}
+        )
+        total_int = int(total or 0)
+        bucket["total"] += total_int
+        queue_norm = (queue_value or NEW_QUEUE).strip().lower()
+        if queue_norm == NEW_QUEUE:
+            bucket["new"] += total_int
+        elif queue_norm in {LEARN_QUEUE, LEARNING_QUEUE, RELEARNING_QUEUE}:
+            bucket["learn"] += total_int
+
+    due_query = (
+        db.session.query(Note.deck_id, func.count(Card.id))
+        .select_from(Card)
+        .join(Note, Card.note_id == Note.id)
+        .filter(
+            Note.deck_id.in_(scoped_ids),
+            Card.queue == REVIEW_QUEUE,
+            or_(Card.due_at.is_(None), Card.due_at <= now),
+        )
+    )
+    if not is_admin_user(current_user):
+        due_query = due_query.filter(Note.user_id == current_user.id)
+    for deck_id, due_total in due_query.group_by(Note.deck_id).all():
+        if not deck_id:
+            continue
+        bucket = direct_counts.setdefault(
+            int(deck_id), {"total": 0, "new": 0, "learn": 0, "due": 0}
+        )
+        bucket["due"] = int(due_total or 0)
+
+    def _build_node(deck_obj: VocabularyDeck):
+        direct = direct_counts.get(
+            deck_obj.id, {"total": 0, "new": 0, "learn": 0, "due": 0}
+        )
+        counts = {
+            "total": int(direct["total"]),
+            "new": int(direct["new"]),
+            "learn": int(direct["learn"]),
+            "due": int(direct["due"]),
+        }
+        children_payload = []
+        for child_obj in children_by_parent.get(deck_obj.id, []):
+            child_payload = _build_node(child_obj)
+            children_payload.append(child_payload)
+            child_counts = child_payload["counts"]
+            counts["total"] += int(child_counts["total"])
+            counts["new"] += int(child_counts["new"])
+            counts["learn"] += int(child_counts["learn"])
+            counts["due"] += int(child_counts["due"])
+        return {
+            "id": deck_obj.id,
+            "name": deck_obj.name,
+            "parent_id": deck_obj.parent_id,
+            "counts": counts,
+            "children": children_payload,
+        }
+
+    roots = [
+        deck_obj
+        for deck_obj in scoped_decks
+        if deck_obj.parent_id is None or deck_obj.parent_id not in deck_lookup
+    ]
+    roots.sort(key=lambda deck_obj: ((deck_obj.position or 0), deck_obj.created_at, deck_obj.id))
+    return [_build_node(root_obj) for root_obj in roots]
+
+
+@vocabulary_bp.route("/api/browse/decks/tree", methods=["GET"])
+@login_required
+def browse_api_decks_tree():
+    """Returns deck tree with aggregate card counts."""
+    return jsonify({"tree": _build_browse_deck_tree_payload()})
+
+
 @vocabulary_bp.route("/api/browse/decks", methods=["GET"])
 @login_required
 def browse_api_decks():
-    """Returns all decks accessible to the current user."""
-    # Temporarily returning all decks for admin, or just user-owned if implemented that way.
-    # In flashcards_v2, decks are just VocabularyDeck records.
-    from models.vocabulary_deck import VocabularyDeck
-    decks = VocabularyDeck.query.order_by(VocabularyDeck.name).all()
-    # Simple flat list for now, can be structured into a tree by the frontend
-    deck_list = [{"id": d.id, "name": d.name, "parent_id": d.parent_id} for d in decks]
-    return jsonify({"decks": deck_list})
+    """Backward-compatible flat deck list endpoint."""
+    tree = _build_browse_deck_tree_payload()
+    flat_items = []
+
+    def _flatten(nodes: list[dict]):
+        for node in nodes:
+            flat_items.append(
+                {
+                    "id": node["id"],
+                    "name": node["name"],
+                    "parent_id": node["parent_id"],
+                    "counts": node.get("counts", {}),
+                }
+            )
+            _flatten(node.get("children", []))
+
+    _flatten(tree)
+    return jsonify({"decks": flat_items, "tree": tree})
+
+
+@vocabulary_bp.route("/api/browse/cards", methods=["GET"])
+@login_required
+def browse_api_cards():
+    """List cards for Browse modal with deck/filter/sort/paging."""
+    from models.flashcard import Card, Note
+
+    deck_id_raw = (request.args.get("deck_id") or "").strip()
+    include_subdecks_raw = (request.args.get("include_subdecks") or "1").strip().lower()
+    include_subdecks = include_subdecks_raw not in {"0", "false", "no"}
+    keyword = (request.args.get("q") or "").strip()
+    status = (request.args.get("status") or "all").strip().lower()
+    tag = (request.args.get("tag") or "").strip()
+    sort_by = (request.args.get("sort_by") or "due").strip().lower()
+    sort_dir = (request.args.get("sort_dir") or "asc").strip().lower()
+
+    try:
+        page = max(1, int(request.args.get("page", "1")))
+        per_page = max(20, min(200, int(request.args.get("per_page", "100"))))
+    except (TypeError, ValueError):
+        return jsonify({"error": "Invalid page/per_page"}), 400
+
+    scoped_decks = _collect_accessible_browse_decks()
+    deck_lookup = {deck.id: deck.name for deck in scoped_decks}
+    children_by_parent = _deck_children_map(scoped_decks)
+    scoped_ids = {deck.id for deck in scoped_decks}
+
+    query = (
+        Card.query.join(Note, Card.note_id == Note.id)
+        .options(
+            selectinload(Card.note).selectinload(Note.note_type),
+            selectinload(Card.template),
+        )
+    )
+    if not is_admin_user(current_user):
+        query = query.filter(Note.user_id == current_user.id)
+
+    if deck_id_raw:
+        try:
+            selected_deck_id = int(deck_id_raw)
+        except (TypeError, ValueError):
+            return jsonify({"error": "Invalid deck_id"}), 400
+        if selected_deck_id not in scoped_ids:
+            return jsonify({"error": "Deck not found"}), 404
+        if include_subdecks:
+            selected_ids = _collect_subtree_ids(selected_deck_id, children_by_parent)
+            query = query.filter(Note.deck_id.in_(selected_ids))
+        else:
+            query = query.filter(Note.deck_id == selected_deck_id)
+    elif scoped_ids:
+        query = query.filter(Note.deck_id.in_(scoped_ids))
+    else:
+        return jsonify(
+            {
+                "items": [],
+                "page": page,
+                "per_page": per_page,
+                "total": 0,
+                "pages": 0,
+                "has_next": False,
+            }
+        )
+
+    if keyword:
+        query = query.filter(func.lower(db.cast(Note.field_values, db.Text)).like(f"%{keyword.lower()}%"))
+    if tag:
+        query = query.filter(func.lower(db.cast(Note.tags, db.Text)).like(f"%{tag.lower()}%"))
+
+    now = datetime.utcnow()
+    if status == NEW_QUEUE:
+        query = query.filter(Card.queue == NEW_QUEUE)
+    elif status == "learn":
+        query = query.filter(Card.queue.in_([LEARN_QUEUE, LEARNING_QUEUE, RELEARNING_QUEUE]))
+    elif status in {"due", REVIEW_QUEUE}:
+        query = query.filter(Card.queue == REVIEW_QUEUE).filter(
+            or_(Card.due_at.is_(None), Card.due_at <= now)
+        )
+
+    if sort_by == "deck":
+        query = query.outerjoin(VocabularyDeck, Note.deck_id == VocabularyDeck.id)
+        if sort_dir == "desc":
+            query = query.order_by(VocabularyDeck.name.desc(), Card.updated_at.desc())
+        else:
+            query = query.order_by(VocabularyDeck.name.asc(), Card.updated_at.desc())
+    elif sort_by == "word":
+        sort_expr = func.lower(db.cast(Note.field_values, db.Text))
+        query = query.order_by(sort_expr.desc() if sort_dir == "desc" else sort_expr.asc(), Card.updated_at.desc())
+    else:
+        if sort_dir == "desc":
+            query = query.order_by(Card.due_at.is_(None), Card.due_at.desc(), Card.updated_at.desc())
+        else:
+            query = query.order_by(Card.due_at.is_(None), Card.due_at.asc(), Card.updated_at.desc())
+
+    pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+    rows = [_build_browse_row(card_obj, deck_lookup, now) for card_obj in pagination.items]
+    return jsonify(
+        {
+            "items": rows,
+            "page": page,
+            "per_page": per_page,
+            "total": pagination.total,
+            "pages": pagination.pages,
+            "has_next": pagination.has_next,
+        }
+    )
+
+
+@vocabulary_bp.route("/api/browse/cards/<card_id>", methods=["GET"])
+@login_required
+def browse_api_card_detail(card_id: str):
+    """Get full card detail for right editor panel."""
+    from models.flashcard import Card, Note, NoteType
+
+    query = (
+        Card.query.join(Note, Card.note_id == Note.id)
+        .filter(Card.id == card_id)
+        .options(
+            selectinload(Card.note).selectinload(Note.note_type).selectinload(NoteType.field_defs),
+            selectinload(Card.note).selectinload(Note.media_assets),
+            selectinload(Card.template),
+        )
+    )
+    if not is_admin_user(current_user):
+        query = query.filter(Note.user_id == current_user.id)
+    card_obj = query.first()
+    if not card_obj:
+        return jsonify({"error": "Card not found"}), 404
+
+    deck_lookup = {deck.id: deck.name for deck in _collect_accessible_browse_decks()}
+    return jsonify(_build_browse_card_detail(card_obj, deck_lookup, datetime.utcnow()))
+
+
+@vocabulary_bp.route("/api/browse/cards/<card_id>", methods=["PATCH"])
+@login_required
+def browse_api_card_update(card_id: str):
+    """Update card note fields/deck/tags from Browse editor."""
+    from models.flashcard import Card, Note, NoteType
+
+    query = Card.query.join(Note, Card.note_id == Note.id).filter(Card.id == card_id)
+    if not is_admin_user(current_user):
+        query = query.filter(Note.user_id == current_user.id)
+    card_obj = query.options(
+        selectinload(Card.note).selectinload(Note.note_type).selectinload(NoteType.field_defs),
+        selectinload(Card.note).selectinload(Note.media_assets),
+        selectinload(Card.template),
+    ).first()
+    if not card_obj:
+        return jsonify({"error": "Card not found"}), 404
+
+    payload = request.get_json(silent=True) or {}
+    note_obj = card_obj.note
+    note_type_obj = note_obj.note_type
+    field_values = dict(note_obj.field_values or {})
+
+    incoming_values = payload.get("field_values")
+    if incoming_values is None and "fields" in payload:
+        incoming_values = payload.get("fields")
+    if incoming_values is not None:
+        if not isinstance(incoming_values, dict):
+            return jsonify({"error": "field_values must be an object"}), 400
+        for key, value in incoming_values.items():
+            key_name = str(key).strip()
+            if not key_name:
+                continue
+            field_values[key_name] = "" if value is None else str(value)
+
+    if note_type_obj:
+        for field_def in note_type_obj.field_defs:
+            if not field_def.required:
+                continue
+            if str(field_values.get(field_def.name, "")).strip():
+                continue
+            return jsonify({"error": f"Field '{field_def.name}' is required"}), 400
+
+    if "deck_id" in payload:
+        raw_deck_id = payload.get("deck_id")
+        if raw_deck_id in (None, ""):
+            note_obj.deck_id = None
+        else:
+            try:
+                selected_deck_id = int(raw_deck_id)
+            except (TypeError, ValueError):
+                return jsonify({"error": "Invalid deck_id"}), 400
+            if not VocabularyDeck.query.get(selected_deck_id):
+                return jsonify({"error": "Deck not found"}), 404
+            if not is_admin_user(current_user):
+                allowed_deck_ids = {deck.id for deck in _collect_accessible_browse_decks()}
+                if selected_deck_id not in allowed_deck_ids:
+                    return jsonify({"error": "Deck is not accessible"}), 403
+            note_obj.deck_id = selected_deck_id
+
+    if "tags" in payload:
+        raw_tags = payload.get("tags")
+        if isinstance(raw_tags, list):
+            note_obj.tags = [str(item).strip() for item in raw_tags if str(item).strip()]
+        elif isinstance(raw_tags, str):
+            note_obj.tags = [item.strip() for item in raw_tags.split(",") if item.strip()]
+        else:
+            note_obj.tags = []
+
+    note_obj.field_values = field_values
+    db.session.commit()
+
+    deck_lookup = {deck.id: deck.name for deck in _collect_accessible_browse_decks()}
+    now = datetime.utcnow()
+    return jsonify(
+        {
+            "success": True,
+            "row": _build_browse_row(card_obj, deck_lookup, now),
+            "detail": _build_browse_card_detail(card_obj, deck_lookup, now),
+        }
+    )
+
+
+@vocabulary_bp.route("/api/browse/cards/<card_id>", methods=["DELETE"])
+@login_required
+def browse_api_card_delete(card_id: str):
+    """Delete one card (and delete its note if last card)."""
+    from models.flashcard import Card, Note
+
+    query = Card.query.join(Note, Card.note_id == Note.id).filter(Card.id == card_id)
+    if not is_admin_user(current_user):
+        query = query.filter(Note.user_id == current_user.id)
+    card_obj = query.first()
+    if not card_obj:
+        return jsonify({"error": "Card not found"}), 404
+
+    note_id = card_obj.note_id
+    db.session.delete(card_obj)
+    db.session.flush()
+
+    remaining = Card.query.filter(Card.note_id == note_id).count()
+    if remaining == 0:
+        note_obj = Note.query.get(note_id)
+        if note_obj:
+            db.session.delete(note_obj)
+    db.session.commit()
+    return jsonify({"success": True})
 
 
 @vocabulary_bp.route("/api/browse/notes", methods=["GET"])
 @login_required
 def browse_api_notes():
-    """Returns notes for a specific deck."""
-    deck_id = request.args.get("deck_id")
-    if not deck_id:
-        return jsonify({"error": "deck_id is required"}), 400
-
-    from models.flashcard import Note, NoteType
-    from models.vocabulary_deck import VocabularyDeck
-
-    deck = VocabularyDeck.query.get(deck_id)
-    if not deck:
-        return jsonify({"error": "Deck not found"}), 404
-
-    # We get all notes in this deck. For regular users, filter by user_id
-    query = Note.query.filter_by(deck_id=deck_id)
-    if not is_admin_user(current_user):
-        query = query.filter_by(user_id=current_user.id)
-    
-    notes_obj = query.order_by(Note.created_at.desc()).limit(500).all()
-
-    # Collect unique columns from NoteTypes
-    note_type_ids = {n.note_type_id for n in notes_obj if n.note_type_id}
-    note_types = NoteType.query.filter(NoteType.id.in_(note_type_ids)).all() if note_type_ids else []
-    note_type_map = {nt.id: nt for nt in note_types}
-
-    columns = set()
-    for nt in note_types:
-        for fd in nt.field_defs:
-            columns.add(fd.get("name", ""))
-    columns.discard("")
-
-    result_notes = []
-    for note in notes_obj:
-        nt = note_type_map.get(note.note_type_id)
-        nt_name = nt.name if nt else "Unknown"
-        result_notes.append({
-            "id": note.id,
-            "sort_field": note.sort_field,
-            "card_type": nt_name,
-            "deck": deck.name,
-            "created_at": note.created_at.strftime("%Y-%m-%d %H:%M:%S") if note.created_at else "",
-            "fields": note.field_values or {}
-        })
-
-    return jsonify({
-        "notes": result_notes,
-        "columns": sorted(list(columns))
-    })
+    """Backward-compatible endpoint for legacy browse page."""
+    result = browse_api_cards()
+    if isinstance(result, tuple):
+        return result
+    payload = result.get_json(silent=True) or {}
+    notes = []
+    for item in payload.get("items", []):
+        notes.append(
+            {
+                "id": item.get("note_id"),
+                "sort_field": item.get("word", ""),
+                "card_type": item.get("card_type", ""),
+                "deck": item.get("deck_name", ""),
+                "created_at": "",
+                "fields": {
+                    "Word": item.get("word", ""),
+                    "Reading": item.get("reading", ""),
+                    "Meaning": item.get("meaning", ""),
+                },
+            }
+        )
+    return jsonify({"notes": notes, "columns": ["Word", "Reading", "Meaning"]})
 
 
 @vocabulary_bp.route("/api/browse/notes/<note_id>", methods=["PATCH"])
 @login_required
 def browse_api_update_note(note_id: str):
-    """Updates a single note's fields from the browser."""
+    """Backward-compatible note update endpoint."""
     from models.flashcard import Note
 
-    note = Note.query.get(note_id)
-    if not note:
+    note_obj = Note.query.get(note_id)
+    if not note_obj:
         return jsonify({"error": "Note not found"}), 404
-        
-    if not is_admin_user(current_user) and note.user_id != current_user.id:
+    if not is_admin_user(current_user) and note_obj.user_id != current_user.id:
         return jsonify({"error": "Unauthorized"}), 403
 
-    data = request.json
-    if not data or "fields" not in data:
+    payload = request.get_json(silent=True) or {}
+    incoming_values = payload.get("fields")
+    if not isinstance(incoming_values, dict):
         return jsonify({"error": "Missing fields payload"}), 400
 
-    updated_fields = data["fields"]
-    current_fields = dict(note.field_values or {})
-    current_fields.update(updated_fields)
-    
-    note.field_values = current_fields
-    
-    # Update sort_field if the first field changed
-    from models.flashcard import NoteType
-    note_type = NoteType.query.get(note.note_type_id)
-    if note_type and note_type.field_defs:
-        first_field_name = note_type.field_defs[0].get("name")
-        if first_field_name in current_fields:
-            note.sort_field = str(current_fields[first_field_name])[:255]
-
+    current_values = dict(note_obj.field_values or {})
+    for key, value in incoming_values.items():
+        key_name = str(key).strip()
+        if not key_name:
+            continue
+        current_values[key_name] = "" if value is None else str(value)
+    note_obj.field_values = current_values
     db.session.commit()
-    
-    return jsonify({"success": True, "note": {
-        "id": note.id,
-        "sort_field": note.sort_field,
-        "fields": note.field_values
-    }})
+    return jsonify({"success": True, "note": {"id": note_obj.id, "fields": note_obj.field_values}})
 
 
 @vocabulary_bp.route("/levels/new", methods=["POST"])

@@ -61,6 +61,8 @@
   {% set toolbar_aria_label = 'Home actions' %}
   {% set toolbar_study_href = url_for('flashcards.flashcard_study_page') %}
   {% set toolbar_study_base_url = '/vocabulary/study/deck/' %}
+  {% set toolbar_browse_context = 'dashboard' %}
+  {% set toolbar_current_deck_id = '' %}
   {% include 'components/deck/dashboard_toolbar.html' with context %}
   {% if admin_mode %}
   <form id="create-deck-form" method="post" action="{{ url_for('vocabulary.create_deck') }}" class="d-none">
@@ -567,6 +569,7 @@
     const rowMap = new Map();
     const toggleMap = new Map();
     let selectedDeckId = null;
+    const browseOpenBtn = document.querySelector('[data-browse-open="1"]');
 
     rows.forEach((row) => {
       rowMap.set(row.dataset.nodeId, row);
@@ -594,12 +597,17 @@
     }
 
     function updateStudyBtn(deckId) {
-      if (!studyTabBtn) return;
       const id = deckId || getFirstVisibleDeckId();
-      if (id) {
-        studyTabBtn.href = baseStudyUrl + id;
-      } else {
-        studyTabBtn.href = studyTabBtn.dataset.baseStudyUrl || '#';
+      if (studyTabBtn) {
+        if (id) {
+          studyTabBtn.href = baseStudyUrl + id;
+        } else {
+          studyTabBtn.href = studyTabBtn.dataset.baseStudyUrl || '#';
+        }
+      }
+
+      if (browseOpenBtn) {
+        browseOpenBtn.dataset.currentDeckId = deckId || "";
       }
     }
 
@@ -703,7 +711,13 @@
     });
 
     document.addEventListener("click", (event) => {
-      if (event.target.closest(".deck-row") || event.target.closest(".anki-top-tabs")) {
+      if (
+        event.target.closest(".deck-row") ||
+        event.target.closest(".anki-top-tabs") ||
+        event.target.closest(".dash-toolbar") ||
+        event.target.closest("#browseModal") ||
+        event.target.closest("#browseUnsavedModal")
+      ) {
         return;
       }
       clearSelection();

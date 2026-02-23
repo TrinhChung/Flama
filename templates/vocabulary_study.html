@@ -10,7 +10,20 @@
   {% set toolbar_active_tab = 'study' %}
   {% set toolbar_aria_label = 'Study actions' %}
   {% set toolbar_study_href = '#' %}
-  {% set toolbar_browse_href = url_for('vocabulary.index') %}
+  {% set toolbar_browse_href = url_for('vocabulary.browse') %}
+  {% set toolbar_browse_context = 'study' %}
+  {% if study_scope == 'deck' %}
+  {% set toolbar_current_deck_id = study_scope_id %}
+  {% else %}
+  {% set toolbar_current_deck_id = '' %}
+  {% endif %}
+  {% if card %}
+  {% set toolbar_current_word = card.word or '' %}
+  {% set toolbar_current_reading = card.reading or '' %}
+  {% else %}
+  {% set toolbar_current_word = '' %}
+  {% set toolbar_current_reading = '' %}
+  {% endif %}
   {% include 'components/deck/dashboard_toolbar.html' with context %}
 
   <div class="deck-context-bar">

@@ -12,41 +12,50 @@
 {% set toolbar_study_href = toolbar_study_href | default(url_for('flashcards.flashcard_study_page')) %}
 {% set toolbar_study_base_url = toolbar_study_base_url | default('/vocabulary/study/deck/') %}
 {% set toolbar_stats_href = toolbar_stats_href | default(url_for('main.dashboard')) %}
-{% set toolbar_browse_href = toolbar_browse_href | default(url_for('vocabulary.index')) %}
+{% set toolbar_browse_href = toolbar_browse_href | default(url_for('vocabulary.browse')) %}
+{% set toolbar_browse_context = toolbar_browse_context | default(toolbar_variant) %}
+{% set toolbar_current_deck_id = toolbar_current_deck_id | default('') %}
+{% set toolbar_current_word = toolbar_current_word | default('') %}
+{% set toolbar_current_reading = toolbar_current_reading | default('') %}
 
 <div class="dash-toolbar" role="navigation" aria-label="{{ toolbar_aria_label }}">
   <div class="dash-toolbar__nav">
-    <a class="dash-tab{% if toolbar_active_tab == 'decks' %} dash-tab--active{% endif %}"
-      href="{{ toolbar_decks_href }}">
+    <a class="dash-tab{% if toolbar_active_tab == 'decks' %} dash-tab--active{% endif %}" href="{{ toolbar_decks_href }}">
       <i class="bi bi-collection"></i> Decks
     </a>
-    <a class="dash-tab{% if toolbar_active_tab == 'study' %} dash-tab--active{% endif %}"
-      href="{{ toolbar_study_href }}" {% if toolbar_variant=='dashboard' %} id="study-tab-btn"
-      data-base-study-url="{{ toolbar_study_base_url }}" {% endif %}>
+    <a
+      class="dash-tab{% if toolbar_active_tab == 'study' %} dash-tab--active{% endif %}"
+      href="{{ toolbar_study_href }}"
+      {% if toolbar_variant == 'dashboard' %}
+      id="study-tab-btn"
+      data-base-study-url="{{ toolbar_study_base_url }}"
+      {% endif %}
+    >
       <i class="bi bi-play-circle"></i> Study
     </a>
-    <a class="dash-tab{% if toolbar_active_tab == 'stats' %} dash-tab--active{% endif %}"
-      href="{{ toolbar_stats_href }}">
+    <a class="dash-tab{% if toolbar_active_tab == 'stats' %} dash-tab--active{% endif %}" href="{{ toolbar_stats_href }}">
       <i class="bi bi-bar-chart-line"></i> Stats
     </a>
   </div>
 
   <div class="dash-toolbar__actions">
-    {% if toolbar_variant == 'dashboard' %}
-    {% if admin_mode %}
+    {% if toolbar_variant == 'dashboard' and admin_mode %}
     <button type="button" class="dash-btn dash-btn--primary" id="create-deck-btn">
-      <i class="bi bi-plus-lg"></i> Tạo Deck
+      <i class="bi bi-plus-lg"></i> Tao Deck
     </button>
     {% endif %}
-    <a href="{{ url_for('vocabulary.browse') }}" class="dash-btn dash-btn--ghost" title="Duyệt dữ liệu thẻ">
-      <i class="bi bi-search"></i> Browse
-    </a>>
-    {% elif toolbar_variant == 'study' %}
-    {% if admin_mode %}
-    <a class="dash-btn dash-btn--ghost" href="{{ toolbar_browse_href }}">
+
+    <a
+      href="{{ toolbar_browse_href }}"
+      class="dash-btn dash-btn--ghost"
+      data-browse-open="1"
+      data-browse-context="{{ toolbar_browse_context }}"
+      data-current-deck-id="{{ toolbar_current_deck_id }}"
+      data-current-word="{{ toolbar_current_word }}"
+      data-current-reading="{{ toolbar_current_reading }}"
+      title="Browse cards"
+    >
       <i class="bi bi-search"></i> Browse
     </a>
-    {% endif %}
-    {% endif %}
   </div>
 </div>
