@@ -1,119 +1,144 @@
 /*
  * footer.css
- * Styles for site footer — Flama Design System
+ * Flama Footer — 4-column professional layout
  */
 
 .site-footer {
   background: var(--flama-text);
-  /* #1F1A17 warm dark, matches navbar */
-  color: #c8cdd6;
-  margin-top: 3rem;
-  padding: 2rem 0 1rem;
-  font-size: 0.9rem;
-  border-top: 2px solid var(--flama-orange-700);
+  /* #1F1A17 warm dark */
+  color: rgba(255, 255, 255, 0.62);
+  margin-top: 4rem;
+  padding: 3.5rem 0 0;
+  font-size: 0.875rem;
+  border-top: 3px solid var(--flama-orange-700);
 }
 
-.footer-inner {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 2rem;
-  flex-wrap: wrap;
-  padding-bottom: 1.5rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+/* ── 4-column grid ── */
+.footer-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1.4fr;
+  gap: 2.5rem 3rem;
+  padding-bottom: 2.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
 }
 
-.footer-brand {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
+/* ── Brand column ── */
+.footer-brand-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  text-decoration: none;
+  margin-bottom: 0.9rem;
 }
 
-.footer-icon {
-  width: 32px;
-  height: 32px;
+.footer-logo {
+  width: 30px;
+  height: 30px;
   object-fit: contain;
 }
 
-.footer-name {
-  font-size: 1.2rem;
-  font-weight: 800;
-  color: #ffffff;
-  letter-spacing: 0.3px;
+.footer-brand-name {
+  font-size: 1.4rem;
+  font-weight: 900;
+  letter-spacing: -0.4px;
+  line-height: 1;
+  background: var(--flama-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
-.footer-tagline {
+.footer-desc {
   margin: 0;
-  color: rgba(255, 255, 255, 0.45);
+  color: rgba(255, 255, 255, 0.48);
+  line-height: 1.7;
   font-size: 0.82rem;
+  max-width: 320px;
 }
 
-.footer-contact {
-  max-width: 380px;
+/* ── Column headings ── */
+.footer-col-title {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  color: rgba(255, 255, 255, 0.35);
+  margin: 0 0 0.85rem;
 }
 
-.footer-feedback {
+.footer-col-title--spaced {
+  margin-top: 1.6rem;
+}
+
+/* ── Nav links ── */
+.footer-links {
+  list-style: none;
+  padding: 0;
   margin: 0;
-  line-height: 1.6;
-  color: rgba(255, 255, 255, 0.55);
-}
-
-.footer-feedback a {
-  color: var(--flama-orange-400);
-  text-decoration: none;
-  font-weight: 600;
-  transition: color 0.15s ease;
-}
-
-.footer-feedback a:hover {
-  color: var(--flama-amber-400);
-  text-decoration: underline;
-}
-
-.footer-bottom {
-  padding-top: 1rem;
-  text-align: center;
-  color: rgba(255, 255, 255, 0.3);
-  font-size: 0.78rem;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 0.4rem;
+  gap: 0.55rem;
 }
 
-.footer-legal-links {
-  display: flex;
-  gap: 0.5rem;
-  align-items: center;
-}
-
-.footer-legal-links a {
-  color: rgba(255, 255, 255, 0.38);
+.footer-links a {
+  color: rgba(255, 255, 255, 0.62);
   text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
   transition: color 0.15s ease;
 }
 
-.footer-legal-links a:hover {
-  color: var(--flama-orange-300);
-  text-decoration: underline;
+.footer-links a:hover {
+  color: var(--flama-orange-400);
 }
 
-.footer-dot {
-  color: rgba(255, 255, 255, 0.2);
+.footer-links .bi {
+  font-size: 0.82rem;
+  opacity: 0.75;
 }
 
-@media (max-width: 576px) {
-  .footer-inner {
-    flex-direction: column;
-    gap: 1.2rem;
-  }
-
-  .footer-contact {
-    max-width: 100%;
-  }
+/* ── "Sắp ra mắt" badge ── */
+.soon-badge {
+  display: inline-block;
+  font-size: 0.6rem;
+  font-weight: 700;
+  padding: 0.1rem 0.38rem;
+  border-radius: 999px;
+  background: rgba(254, 104, 8, 0.15);
+  color: var(--flama-orange-400);
+  letter-spacing: 0.3px;
+  vertical-align: middle;
+  margin-left: 0.15rem;
+  line-height: 1.6;
 }
 
-/* ── Legal pages (Terms / Privacy) ── */
+.footer-link--soon {
+  opacity: 0.72;
+}
+
+.footer-link--soon:hover {
+  opacity: 1;
+}
+
+/* ── Response time note ── */
+.footer-response-time {
+  color: rgba(255, 255, 255, 0.35);
+  font-size: 0.78rem;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+/* ── Bottom bar ── */
+.footer-bottom {
+  padding: 1.1rem 0;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.25);
+  font-size: 0.78rem;
+}
+
+/* ── Legal pages ── */
 .legal-page {
   max-width: 780px;
   margin: 0 auto;
@@ -194,4 +219,35 @@
 .legal-footer-links a:hover {
   color: var(--flama-orange-700);
   text-decoration: underline;
+}
+
+/* ── Responsive ── */
+@media (max-width: 992px) {
+  .footer-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+  }
+
+  .footer-col--brand {
+    grid-column: 1 / -1;
+  }
+
+  .footer-desc {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 576px) {
+  .footer-grid {
+    grid-template-columns: 1fr;
+    gap: 1.6rem;
+  }
+
+  .footer-col--brand {
+    grid-column: auto;
+  }
+
+  .site-footer {
+    padding-top: 2.5rem;
+  }
 }
