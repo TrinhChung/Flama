@@ -203,8 +203,10 @@ def _resolve_media_url(value: Any, media_by_id: dict[str, Any]) -> str:
 
 def _normalize_multiline_value(value: Any) -> str:
     text = "" if value is None else str(value)
-    # Only treat literal '\n' marker as an explicit line break signal.
-    return text.replace("\\n", LINEBREAK_TOKEN)
+    # Normalize Windows/Mac newlines and preserve explicit line breaks from editors.
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+    normalized = normalized.replace("\\n", LINEBREAK_TOKEN)
+    return normalized.replace("\n", LINEBREAK_TOKEN)
 
 
 def _replace_linebreak_token_in_html_text_nodes(rendered_html: str) -> str:

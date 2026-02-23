@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block title %}Quan ly user{% endblock %}
+
+{% block content %}
+<section class="py-3">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <h2 class="h4 mb-0">Quan ly user va quyen</h2>
+    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('main.dashboard') }}">Back</a>
+  </div>
+
+  <div class="card">
+    <div class="table-responsive">
+      <table class="table table-striped align-middle mb-0">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Username</th>
+            <th>Email</th>
+            <th>Role hien tai</th>
+            <th>Cap nhat quyen</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for user in users %}
+          <tr>
+            <td>{{ user.id }}</td>
+            <td>{{ user.username }}</td>
+            <td>{{ user.email }}</td>
+            <td>
+              {% if user.role %}
+              <span class="badge bg-secondary">{{ user.role.name }}</span>
+              {% elif user.is_admin %}
+              <span class="badge bg-danger">Admin (legacy)</span>
+              {% else %}
+              <span class="badge bg-secondary">Chua gan role</span>
+              {% endif %}
+            </td>
+            <td>
+              <form class="d-flex gap-2" method="POST" action="{{ url_for('admin.update_user_role', user_id=user.id) }}">
+                <select name="role_id" class="form-select form-select-sm" style="max-width: 240px;">
+                  {% for role in roles %}
+                  <option value="{{ role.id }}" {% if user.role_id == role.id %}selected{% endif %}>
+                    {{ role.name }}
+                  </option>
+                  {% endfor %}
+                </select>
+                <button class="btn btn-sm btn-primary" type="submit">Luu</button>
+              </form>
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td class="text-center text-muted py-4" colspan="5">Chua co user.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+{% endblock %}

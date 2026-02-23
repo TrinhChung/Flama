@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from sqlalchemy import inspect
+from sqlalchemy.exc import SQLAlchemyError
+
 from models.user import User
 from models.user_role import UserRole
 
@@ -39,8 +42,30 @@ DEFAULT_USER_ROLES: tuple[dict[str, Any], ...] = (
 )
 
 
+def _role_schema_ready(session) -> bool:
+    """Return True only when required tables/columns already exist."""
+    try:
+        bind = session.get_bind()
+        inspector = inspect(bind)
+        if not inspector.has_table("users"):
+            return False
+        if not inspector.has_table("user_roles"):
+            return False
+
+        user_columns = {column["name"] for column in inspector.get_columns("users")}
+        role_columns = {column["name"] for column in inspector.get_columns("user_roles")}
+        required_user_columns = {"id", "is_admin", "role_id"}
+        required_role_columns = {"id", "code", "name", "is_admin", "position"}
+        return required_user_columns.issubset(user_columns) and required_role_columns.issubset(role_columns)
+    except SQLAlchemyError:
+        return False
+
+
 def ensure_default_user_roles(session) -> dict[str, UserRole]:
     """Create/update default roles and backfill users missing role mapping."""
+    if not _role_schema_ready(session):
+        return {}
+
     existing = {role.code: role for role in UserRole.query.all()}
     for row in DEFAULT_USER_ROLES:
         role = existing.get(row["code"])

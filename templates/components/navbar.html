@@ -31,6 +31,11 @@
         </li>
         {% if current_user.is_admin %}
         <li class="nav-item">
+          <a class="nav-link" href="{{ url_for('admin.user_management_page') }}">
+            <i class="bi bi-people"></i> Users
+          </a>
+        </li>
+        <li class="nav-item">
           <a class="nav-link" href="{{ url_for('vocabulary.index') }}">
             <i class="bi bi-pencil-square"></i> Admin Edit
           </a>

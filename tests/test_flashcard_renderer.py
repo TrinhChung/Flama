@@ -134,7 +134,7 @@ class FlashcardRendererTests(unittest.TestCase):
         self.assertNotIn("Line1\\nLine2", html)
         self.assertIn("Line1<br>Line2", html)
 
-    def test_actual_newline_keeps_default_html_whitespace(self):
+    def test_actual_newline_is_rendered_as_line_break(self):
         template = self._template("<div>{{Word}}</div>")
         fields = [self._field("Word")]
         rendered = render_template_pair(
@@ -144,8 +144,20 @@ class FlashcardRendererTests(unittest.TestCase):
             media_assets=[],
         )
         html = rendered["front_html"]
-        self.assertIn("Line1\nLine2", html)
-        self.assertNotIn("<br>", html)
+        self.assertNotIn("Line1\nLine2", html)
+        self.assertIn("Line1<br>Line2", html)
+
+    def test_windows_newline_is_rendered_as_line_break(self):
+        template = self._template("<div>{{Word}}</div>")
+        fields = [self._field("Word")]
+        rendered = render_template_pair(
+            template=template,
+            field_defs=fields,
+            field_values={"Word": "Line1\r\nLine2"},
+            media_assets=[],
+        )
+        html = rendered["front_html"]
+        self.assertIn("Line1<br>Line2", html)
 
     def test_empty_rules(self):
         self.assertTrue(is_field_empty(None))

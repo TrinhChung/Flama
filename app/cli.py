@@ -12,9 +12,11 @@ import click
 from flask import Flask
 
 from app.services.flashcard_legacy import ensure_legacy_note_type
+from app.services.user_roles import ensure_default_user_roles
 from models import db
 from models.flashcard import Card, LegacyMigrationMap, Note
 from models.user import User
+from models.user_role import UserRole
 from models.vocabulary_deck import VocabularyDeck
 from models.vocabulary_entry import VocabularyEntry
 from models.vocabulary_progress import VocabularyProgress
@@ -51,6 +53,15 @@ class SeedStats:
 
 def register_cli_commands(app: Flask) -> None:
     """Register custom Flask CLI commands."""
+
+    @app.cli.command("user-role-seed")
+    def user_role_seed() -> None:
+        """Seed default user roles and backfill users missing role mapping."""
+        ensure_default_user_roles(db.session)
+        db.session.commit()
+        roles = UserRole.query.order_by(UserRole.position.asc(), UserRole.id.asc()).all()
+        codes = ", ".join(role.code for role in roles)
+        click.echo(f"Done. Seeded roles: {codes}")
 
     @app.cli.command("vocab-seed")
     @click.option(

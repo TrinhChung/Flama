@@ -3,11 +3,13 @@
 
 {% with messages = get_flashed_messages(with_categories=true) %}
 {% if messages %}
-<div class="alerts-container">
-  <div class="row">
-    <div class="col-md-8 col-lg-6 mx-auto">
+<div class="alerts-container position-fixed top-0 start-50 translate-middle-x mt-3"
+  style="z-index: 1060; width: 100%; max-width: 600px;">
+  <div class="row px-3">
+    <div class="col-12">
       {% for category, message in messages %}
-      <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+      <div class="alert alert-{{ category }} alert-dismissible fade show shadow-sm" role="alert" {% if category
+        !='danger' %}data-auto-close="true" {% endif %}>
         {{ message }}
         <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
       </div>
@@ -15,5 +17,23 @@
     </div>
   </div>
 </div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const autoCloseAlerts = document.querySelectorAll('.alert[data-auto-close="true"]');
+    autoCloseAlerts.forEach(function (alertEl) {
+      setTimeout(function () {
+        if (typeof bootstrap !== 'undefined' && bootstrap.Alert) {
+          const bsAlert = bootstrap.Alert.getOrCreateInstance(alertEl);
+          bsAlert.close();
+        } else {
+          // Fallback if bootstrap JS is somehow not loaded yet
+          alertEl.classList.remove('show');
+          setTimeout(() => alertEl.remove(), 150);
+        }
+      }, 3500); // Đóng sau 3.5 giây
+    });
+  });
+</script>
 {% endif %}
 {% endwith %}

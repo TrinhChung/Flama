@@ -69,6 +69,34 @@ def create_app(config: Optional[dict] = None) -> Flask:
     register_blueprints(app)
     register_cli_commands(app)
 
+    # Register error handlers
+    @app.errorhandler(404)
+    def page_not_found(error):
+        """Handle 404 errors."""
+        from flask import render_template
+        return render_template('error.html', error_code=404, error_message='Trang không tìm thấy'), 404
+
+    @app.errorhandler(500)
+    def internal_server_error(error):
+        """Handle 500 errors."""
+        from flask import render_template
+        return render_template('error.html', error_code=500, error_message='Lỗi máy chủ'), 500
+
+    @app.errorhandler(403)
+    def forbidden(error):
+        """Handle 403 errors."""
+        from flask import render_template
+        return render_template('error.html', error_code=403, error_message='Truy cập bị từ chối'), 403
+
+    @app.errorhandler(Exception)
+    def handle_exception(error):
+        """Handle unexpected exceptions."""
+        from flask import render_template
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Unhandled exception: {error}", exc_info=True)
+        return render_template('error.html', error_code=500, error_message='Lỗi máy chủ'), 500
+
     with app.app_context():
         db.create_all()
         ensure_default_user_roles(db.session)
