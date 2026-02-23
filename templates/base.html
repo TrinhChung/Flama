@@ -24,12 +24,14 @@
   {# Navbar Component #}
   {% include 'components/navbar.html' %}
 
+  {% block layout %}
   <main class="container">
     {# Alerts Component #}
     {% include 'components/alerts.html' %}
 
     {% block content %}{% endblock %}
   </main>
+  {% endblock %}
 
   {# Footer Component #}
   {% block footer %}{% include 'components/footer.html' %}{% endblock %}

@@ -1,32 +1,703 @@
 {% extends "base.html" %}
 
-{% block title %}Trang chủ{% endblock %}
+{% block title %}Flama — Giữ lửa học tập mỗi ngày{% endblock %}
 
-{% block content %}
-<div class="row">
-  <div class="col-md-8 col-lg-6 mx-auto text-center">
-    <h1 class="mb-3">Chào mừng đến với ứng dụng Flask + MySQL</h1>
-    <p class="lead">
-      Đây là ví dụ khởi tạo dự án với chức năng đăng nhập, đăng ký cơ bản và kết nối tới MySQL.
-    </p>
-    {% if not current_user.is_authenticated %}
-    <div class="d-flex justify-content-center gap-3">
-      {% set button_label = "Đăng nhập" %}
-      {% set button_href = url_for('auth.login') %}
-      {% set button_type = "primary" %}
-      {% include 'components/button.html' with context %}
-      
-      {% set button_label = "Đăng ký" %}
-      {% set button_href = url_for('auth.register') %}
-      {% set button_type = "outline-secondary" %}
-      {% include 'components/button.html' with context %}
-    </div>
-    {% else %}
-    {% set button_label = "Tới bảng điều khiển" %}
-    {% set button_href = url_for('main.dashboard') %}
-    {% set button_type = "primary" %}
-    {% include 'components/button.html' with context %}
-    {% endif %}
-  </div>
+{% block layout %}
+<div class="container mt-3">
+  {% include 'components/alerts.html' %}
 </div>
+
+<main class="landing">
+
+  {# ── Hero Section ── #}
+  <section class="landing__hero">
+    <div class="container landing__hero-container">
+      <div class="landing__hero-content">
+        <h1 class="landing__title">
+          Giữ <span class="text-gradient">lửa</span> học tập<br>cho mọi kiến thức
+        </h1>
+        <p class="landing__subtitle">
+          Flama giúp bạn tự do sáng tạo bộ thẻ theo cách riêng và duy trì ngọn lửa nhiệt huyết học tập mỗi ngày. Ứng
+          dụng Spaced Repetition (Ôn tập ngắt quãng) để ghi nhớ IT, Y khoa, Luật hay bất kỳ chủ đề nào.
+        </p>
+        <div class="landing__cta-group">
+          <a href="{{ url_for('auth.register') }}" class="btn-flama btn-flama--primary">Bắt đầu học miễn phí</a>
+          <a href="{{ url_for('auth.login') }}" class="btn-flama btn-flama--secondary">Đăng nhập</a>
+        </div>
+      </div>
+
+      <div class="landing__hero-visual">
+        <div class="mockup-stack">
+          <!-- Card 3 (Bottom) -->
+          <div class="mockup-card mockup-card--3">
+            <div class="mockup-card__badge" style="background: rgba(155, 89, 182, 0.1); color: #8e44ad;">Tiếng Anh</div>
+            <div class="mockup-card__front">
+              <span class="mockup-word" style="font-size: 1.4rem;">affect vs effect</span>
+            </div>
+            <hr class="mockup-card__divider">
+            <div class="mockup-card__back">
+              <span class="mockup-meaning" style="font-size: 1.1rem; line-height: 1.4;">affect (v) = ảnh hưởng<br>effect
+                (n) = kết quả</span>
+              <div class="mockup-actions">
+                <div class="mockup-btn mockup-btn--hard">Khó</div>
+                <div class="mockup-btn mockup-btn--good">Tốt</div>
+                <div class="mockup-btn mockup-btn--easy">Dễ</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card 2 (Middle) -->
+          <div class="mockup-card mockup-card--2">
+            <div class="mockup-card__badge" style="background: rgba(230, 126, 34, 0.1); color: #d35400;">IT AWS</div>
+            <div class="mockup-card__front">
+              <span class="mockup-word" style="font-size: 1.6rem;">S3 dùng để làm gì?</span>
+            </div>
+            <hr class="mockup-card__divider">
+            <div class="mockup-card__back">
+              <span class="mockup-meaning" style="font-size: 1.1rem; line-height: 1.4;">Object storage, scale lớn,
+                bền.</span>
+              <div class="mockup-actions">
+                <div class="mockup-btn mockup-btn--hard">Khó</div>
+                <div class="mockup-btn mockup-btn--good">Tốt</div>
+                <div class="mockup-btn mockup-btn--easy">Dễ</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card 1 (Top) -->
+          <div class="mockup-card mockup-card--1">
+            <div class="mockup-card__badge" style="background: rgba(52, 152, 219, 0.1); color: #2980b9;">Vật lý cơ bản
+            </div>
+            <div class="mockup-card__front">
+              <span class="mockup-word" style="font-size: 1.8rem;">Định luật II<br>Newton</span>
+            </div>
+            <hr class="mockup-card__divider">
+            <div class="mockup-card__back">
+              <span class="mockup-meaning" style="font-size: 1.6rem; font-weight: 800; color: var(--flama-text);">F =
+                ma</span>
+              <div class="mockup-actions">
+                <div class="mockup-btn mockup-btn--hard">Khó</div>
+                <div class="mockup-btn mockup-btn--good">Tốt</div>
+                <div class="mockup-btn mockup-btn--easy">Dễ</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- Background decoration -->
+        <div class="mockup-blob"></div>
+      </div>
+    </div>
+  </section>
+
+  {# ── How It Works ── #}
+  <section class="landing__steps bg-surface">
+    <div class="container">
+      <h2 class="section-title text-center">Flama hoạt động thế nào?</h2>
+      <div class="steps-grid">
+        <div class="step-card">
+          <div class="step-icon"><i class="bi bi-magic"></i></div>
+          <h3 class="step-title">1. Tạo thẻ trong 30 giây</h3>
+          <p class="step-desc">Thêm công thức, thuật ngữ hay định nghĩa nhanh chóng. Thiết kế tối giản giúp tập trung
+            nội dung.</p>
+        </div>
+        <div class="step-card">
+          <div class="step-icon"><i class="bi bi-calendar-check"></i></div>
+          <h3 class="step-title">2. Học theo lịch thông minh</h3>
+          <p class="step-desc">Flama tự động sắp xếp lịch nhắc lại vào đúng khoảnh khắc bạn chuẩn bị quên.</p>
+        </div>
+        <div class="step-card">
+          <div class="step-icon"><i class="bi bi-graph-up-arrow"></i></div>
+          <h3 class="step-title">3. Giữ vững động lực</h3>
+          <p class="step-desc">Theo dõi chuỗi ngày học liên tục (streak) và số lượng thẻ đã hoàn thành mỗi ngày.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  {# ── Benefits ── #}
+  <section class="landing__benefits">
+    <div class="container">
+      <h2 class="section-title text-center">Tại sao chọn Flama?</h2>
+      <div class="benefits-grid">
+        <div class="benefit-item">
+          <i class="bi bi-lightning-charge text-orange"></i>
+          <div>
+            <h4>Ôn tập ngắt quãng</h4>
+            <p>Nhớ lâu hơn, ít tốn thời gian hơn so với việc học nhồi nhét truyền thống.</p>
+          </div>
+        </div>
+        <div class="benefit-item">
+          <i class="bi bi-bullseye text-orange"></i>
+          <div>
+            <h4>Tập trung phần sắp quên</h4>
+            <p>Hệ thống ưu tiên hiển thị những thẻ bạn hay làm sai (due), bỏ qua những gì đã thuộc.</p>
+          </div>
+        </div>
+        <div class="benefit-item">
+          <i class="bi bi-bar-chart-steps text-orange"></i>
+          <div>
+            <h4>Tiến độ rõ ràng</h4>
+            <p>Duy trì ngọn lửa học tập qua chỉ số streak báo cáo rõ ràng sau mỗi buổi học.</p>
+          </div>
+        </div>
+        <div class="benefit-item">
+          <i class="bi bi-stars text-orange"></i>
+          <div>
+            <h4>Trải nghiệm tối giản</h4>
+            <p>Thao tác nhanh chóng, không màu mè rối mắt. Tối ưu thời gian tập trung.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  {# ── Roadmap ── #}
+  <section class="landing__roadmap bg-surface">
+    <div class="container">
+      <div class="roadmap-box">
+        <h2 class="section-title mb-4">Lộ trình phát triển</h2>
+        <ul class="roadmap-list">
+          <li>
+            <span>Tạo flashcard</span>
+            <span class="badge-soon">Sắp ra mắt</span>
+          </li>
+          <li>
+            <span>Thư viện/Bộ thẻ</span>
+            <span class="badge-soon">Sắp ra mắt</span>
+          </li>
+          <li>
+            <span>Lịch ôn tập</span>
+            <span class="badge-soon">Sắp ra mắt</span>
+          </li>
+          <li>
+            <span>Tiến độ học tập</span>
+            <span class="badge-soon">Sắp ra mắt</span>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  {# ── Trust / Privacy ── #}
+  <section class="landing__trust">
+    <div class="container text-center">
+      <i class="bi bi-shield-check trust-icon"></i>
+      <p class="trust-text">
+        <strong>Dữ liệu của bạn thuộc về bạn.</strong><br>
+        Flama tôn trọng quyền riêng tư. Không chia sẻ dữ liệu với bên thứ ba.<br>
+        Đọc thêm <a href="{{ url_for('main.terms') }}">Điều khoản</a> &bull; <a
+          href="{{ url_for('main.privacy') }}">Chính sách</a>.
+      </p>
+    </div>
+  </section>
+
+</main>
+{% endblock %}
+
+{% block scripts %}
+<style>
+  /* ── Landing Page Styles ── */
+  .landing {
+    font-family: var(--font-family-base);
+    color: var(--flama-text);
+    overflow-x: hidden;
+  }
+
+  .bg-surface {
+    background-color: var(--flama-surface);
+  }
+
+  .text-orange {
+    color: var(--flama-orange-500);
+  }
+
+  .text-gradient {
+    background: var(--flama-gradient);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .section-title {
+    font-size: var(--font-size-2xl);
+    font-weight: var(--font-weight-extrabold);
+    margin-bottom: 3rem;
+    letter-spacing: -0.5px;
+  }
+
+  /* Buttons */
+  .btn-flama {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.75rem 1.5rem;
+    border-radius: 12px;
+    font-size: 1rem;
+    font-weight: var(--font-weight-bold);
+    text-decoration: none;
+    transition: all 0.2s ease;
+  }
+
+  .btn-flama--primary {
+    background: var(--flama-gradient);
+    color: #fff;
+    box-shadow: 0 4px 14px rgba(254, 104, 8, 0.3);
+  }
+
+  .btn-flama--primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(254, 104, 8, 0.4);
+    color: #fff;
+  }
+
+  .btn-flama--secondary {
+    background: transparent;
+    color: var(--flama-text);
+    border: 2px solid var(--flama-border);
+  }
+
+  .btn-flama--secondary:hover {
+    border-color: var(--flama-orange-400);
+    background: rgba(254, 104, 8, 0.05);
+    color: var(--flama-orange-600);
+  }
+
+  /* ── Hero section ── */
+  .landing__hero {
+    padding: 5rem 0 7rem;
+  }
+
+  .landing__hero-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4rem;
+    align-items: center;
+  }
+
+  .landing__title {
+    font-size: 3.5rem;
+    font-weight: 900;
+    line-height: var(--line-height-tight);
+    letter-spacing: -1px;
+    margin-bottom: 1.5rem;
+  }
+
+  .landing__subtitle {
+    font-size: var(--font-size-lg);
+    color: var(--flama-text-2);
+    line-height: var(--line-height-relaxed);
+    margin-bottom: 2.5rem;
+    max-width: 90%;
+  }
+
+  .landing__cta-group {
+    display: flex;
+    gap: 1rem;
+  }
+
+  /* Hero Mockup Visual */
+  .landing__hero-visual {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 400px;
+  }
+
+  .mockup-stack {
+    position: relative;
+    width: 100%;
+    max-width: 340px;
+    height: 380px;
+    perspective: 1000px;
+  }
+
+  .mockup-blob {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 320px;
+    height: 320px;
+    background: var(--flama-gradient);
+    border-radius: 50%;
+    filter: blur(80px);
+    opacity: 0.15;
+    z-index: 0;
+  }
+
+  @keyframes stackCycle {
+
+    /* ── Top (Front, active card) ── */
+    0%,
+    20% {
+      z-index: 3;
+      transform: translateY(20px) scale(1) rotate(-1.5deg);
+      opacity: 1;
+      filter: blur(0);
+      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.13);
+    }
+
+    /* ── Slide out right ── */
+    26% {
+      z-index: 3;
+      transform: translateX(100px) translateY(-10px) rotate(8deg) scale(0.96);
+      opacity: 0.75;
+      filter: blur(0);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+    }
+
+    /* ── Drop behind (z-index snaps) ── */
+    27% {
+      z-index: 1;
+      transform: translateX(80px) translateY(-15px) rotate(5deg) scale(0.92);
+      opacity: 0.55;
+      filter: blur(0.5px);
+    }
+
+    /* ── Bottom (Back of stack) ── */
+    33.33%,
+    52% {
+      z-index: 1;
+      transform: translateY(-22px) scale(0.91) rotate(-2deg) translateX(-10px);
+      opacity: 0.65;
+      filter: blur(0.8px);
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.04);
+    }
+
+    /* ── Middle ── */
+    66.66%,
+    86% {
+      z-index: 2;
+      transform: translateY(0px) scale(0.96) rotate(1.5deg) translateX(8px);
+      opacity: 0.88;
+      filter: blur(0.3px);
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.08);
+    }
+
+    /* ── Rise back to Top ── */
+    100% {
+      z-index: 3;
+      transform: translateY(20px) scale(1) rotate(-1.5deg);
+      opacity: 1;
+      filter: blur(0);
+      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.13);
+    }
+  }
+
+  .mockup-card {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    background: var(--flama-bg);
+    border: 1px solid var(--flama-border);
+    border-radius: 20px;
+    padding: 2rem;
+    transform-origin: 50% 60%;
+    will-change: transform, opacity, filter;
+    animation: stackCycle 8s infinite cubic-bezier(0.4, 0, 0.2, 1);
+    animation-play-state: paused;
+    animation-fill-mode: both;
+  }
+
+  .mockup-card--1 {
+    animation-delay: 0s;
+  }
+
+  .mockup-card--2 {
+    animation-delay: -2.667s;
+  }
+
+  /* 8s / 3 ≈ 2.667s → Middle */
+  .mockup-card--3 {
+    animation-delay: -5.333s;
+  }
+
+  /* 2 × 2.667s → Bottom */
+
+  .mockup-stack.is-visible .mockup-card {
+    animation-play-state: running;
+  }
+
+  .mockup-card__badge {
+    position: absolute;
+    top: -12px;
+    right: 20px;
+    background: #e74c3c;
+    color: white;
+    font-size: 0.75rem;
+    font-weight: bold;
+    padding: 0.2rem 0.8rem;
+    border-radius: 999px;
+    box-shadow: 0 4px 10px rgba(231, 76, 60, 0.3);
+  }
+
+  .mockup-card__front {
+    text-align: center;
+    padding: 1.5rem 0;
+  }
+
+  .mockup-word {
+    font-size: 2.5rem;
+    font-weight: 800;
+    color: var(--flama-text);
+  }
+
+  .mockup-card__divider {
+    border: none;
+    border-top: 2px dashed var(--flama-border);
+    margin: 1.5rem 0;
+  }
+
+  .mockup-card__back {
+    text-align: center;
+  }
+
+  .mockup-meaning {
+    display: block;
+    font-size: 1.25rem;
+    color: var(--flama-text-2);
+    margin-bottom: 2rem;
+  }
+
+  .mockup-actions {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: center;
+  }
+
+  .mockup-btn {
+    flex: 1;
+    padding: 0.5rem 0;
+    border-radius: 8px;
+    font-size: 0.8rem;
+    font-weight: bold;
+    cursor: default;
+  }
+
+  .mockup-btn--hard {
+    background: rgba(231, 76, 60, 0.1);
+    color: #e74c3c;
+  }
+
+  .mockup-btn--good {
+    background: rgba(39, 174, 96, 0.1);
+    color: #27ae60;
+  }
+
+  .mockup-btn--easy {
+    background: rgba(52, 152, 219, 0.1);
+    color: #2980b9;
+  }
+
+  /* ── Steps ── */
+  .landing__steps {
+    padding: 5rem 0;
+  }
+
+  .steps-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 2rem;
+  }
+
+  .step-card {
+    padding: 2rem;
+    background: var(--flama-bg);
+    border: 1px solid var(--flama-border);
+    border-radius: 16px;
+    text-align: center;
+    transition: transform 0.3s ease;
+  }
+
+  .step-card:hover {
+    transform: translateY(-4px);
+  }
+
+  .step-icon {
+    width: 64px;
+    height: 64px;
+    margin: 0 auto 1.5rem;
+    background: rgba(254, 104, 8, 0.1);
+    color: var(--flama-orange-500);
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.75rem;
+  }
+
+  .step-title {
+    font-size: var(--font-size-lg);
+    font-weight: var(--font-weight-bold);
+    margin-bottom: 1rem;
+  }
+
+  .step-desc {
+    color: var(--flama-text-2);
+    font-size: 0.95rem;
+    line-height: var(--line-height-relaxed);
+    margin: 0;
+  }
+
+  /* ── Benefits ── */
+  .landing__benefits {
+    padding: 5rem 0;
+  }
+
+  .benefits-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 3rem 4rem;
+    max-width: 900px;
+    margin: 0 auto;
+  }
+
+  .benefit-item {
+    display: flex;
+    gap: 1.25rem;
+    align-items: flex-start;
+  }
+
+  .benefit-item i {
+    font-size: 1.5rem;
+    margin-top: 0.2rem;
+    background: rgba(254, 104, 8, 0.1);
+    padding: 0.8rem;
+    border-radius: 12px;
+  }
+
+  .benefit-item h4 {
+    font-size: 1.1rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .benefit-item p {
+    color: var(--flama-text-2);
+    font-size: 0.95rem;
+    line-height: var(--line-height-relaxed);
+    margin: 0;
+  }
+
+  /* ── Roadmap ── */
+  .landing__roadmap {
+    padding: 5rem 0;
+  }
+
+  .roadmap-box {
+    max-width: 600px;
+    margin: 0 auto;
+    padding: 3rem;
+    background: var(--flama-bg);
+    border: 1px solid var(--flama-border);
+    border-radius: 24px;
+  }
+
+  .roadmap-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  .roadmap-list li {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 0;
+    border-bottom: 1px solid var(--flama-border);
+    font-weight: var(--font-weight-medium);
+    font-size: 1.05rem;
+  }
+
+  .roadmap-list li:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+  }
+
+  .badge-soon {
+    font-size: 0.75rem;
+    font-weight: var(--font-weight-bold);
+    padding: 0.25rem 0.6rem;
+    border-radius: 999px;
+    background: var(--flama-surface);
+    color: var(--flama-text-2);
+    border: 1px solid var(--flama-border);
+  }
+
+  /* ── Trust ── */
+  .landing__trust {
+    padding: 3rem 0 5rem;
+  }
+
+  .trust-icon {
+    font-size: 2rem;
+    color: #27ae60;
+    margin-bottom: 1rem;
+    display: inline-block;
+  }
+
+  .trust-text {
+    color: var(--flama-text-2);
+    font-size: 0.95rem;
+    line-height: var(--line-height-relaxed);
+  }
+
+  /* ── Responsive ── */
+  @media (max-width: 992px) {
+    .landing__hero-container {
+      grid-template-columns: 1fr;
+      text-align: center;
+      gap: 3rem;
+    }
+
+    .landing__subtitle {
+      margin: 0 auto 2.5rem;
+    }
+
+    .landing__cta-group {
+      justify-content: center;
+    }
+
+    .mockup-card {
+      transform: none;
+    }
+
+    .steps-grid {
+      grid-template-columns: 1fr;
+      gap: 1.5rem;
+    }
+
+    .benefits-grid {
+      grid-template-columns: 1fr;
+      gap: 2rem;
+    }
+  }
+
+  @media (max-width: 576px) {
+    .landing__title {
+      font-size: 2.25rem;
+    }
+
+    .landing__cta-group {
+      flex-direction: column;
+    }
+
+    .roadmap-box {
+      padding: 2rem 1.5rem;
+    }
+  }
+</style>
+<script>
+  (() => {
+    const stack = document.querySelector('.mockup-stack');
+    if (!stack) return;
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        stack.classList.toggle('is-visible', entry.isIntersecting);
+      });
+    }, { threshold: 0.3 });
+    observer.observe(stack);
+  })();
+</script>
 {% endblock %}

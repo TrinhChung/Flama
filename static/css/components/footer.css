@@ -7,12 +7,13 @@
   background: var(--flama-text);
   /* #1F1A17 warm dark */
   color: rgba(255, 255, 255, 0.62);
-  margin-top: 4rem;
   padding: 3.5rem 0 0;
   font-family: var(--font-family-base);
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-normal);
   border-top: 3px solid var(--flama-orange-700);
+  flex-shrink: 0;
+  width: 100%;
 }
 
 /* ── 4-column grid ── */

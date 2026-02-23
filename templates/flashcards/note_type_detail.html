@@ -11,7 +11,12 @@
     </div>
     <div class="d-flex gap-2">
       <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('flashcards.note_type_manager') }}">Back</a>
-      <a class="btn btn-primary btn-sm" href="{{ url_for('flashcards.note_editor_page') }}?note_type_id={{ note_type.id }}">Create Note</a>
+      <a class="btn btn-outline-primary btn-sm"
+        href="{{ url_for('flashcards.notes_list_page', note_type_id=note_type.id) }}">
+        <i class="bi bi-card-list"></i> Xem Notes
+      </a>
+      <a class="btn btn-primary btn-sm"
+        href="{{ url_for('flashcards.note_editor_page') }}?note_type_id={{ note_type.id }}">Create Note</a>
     </div>
   </div>
 
@@ -95,7 +100,8 @@
         <small id="template-error" class="text-danger d-none mt-2"></small>
         <div class="mt-3">
           <label class="form-label small mb-1">Realtime Preview</label>
-          <iframe id="template-preview-frame" class="w-100 border rounded" style="min-height: 260px;" sandbox="allow-same-origin"></iframe>
+          <iframe id="template-preview-frame" class="w-100 border rounded" style="min-height: 260px;"
+            sandbox="allow-same-origin"></iframe>
         </div>
       </div>
     </div>
@@ -179,12 +185,15 @@
       });
 
       placeholderToolbar.innerHTML = "";
+      const OB = '{' + '{';
+      const CB = '}' + '}';
       fields.forEach((field) => {
         const button = document.createElement("button");
         button.type = "button";
         button.className = "btn btn-outline-secondary btn-sm";
-        button.textContent = `{{${field.name}}}`;
-        button.addEventListener("click", () => insertPlaceholder(`{{${field.name}}}`));
+        const placeholder = OB + field.name + CB;
+        button.textContent = placeholder;
+        button.addEventListener("click", () => insertPlaceholder(placeholder));
         placeholderToolbar.appendChild(button);
       });
     }
@@ -352,10 +361,12 @@
     document.getElementById("save-template-btn")?.addEventListener("click", saveTemplate);
     document.getElementById("new-template-btn")?.addEventListener("click", async () => {
       try {
+        const OBi = '{' + '{';
+        const CBi = '}' + '}';
         const created = await requestJson(`/api/note-types/${noteTypeId}/templates`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: `Card ${templates.length + 1}`, front_html: "{{Word}}", back_html: "{{Word}}" }),
+          body: JSON.stringify({ name: `Card ${templates.length + 1}`, front_html: OBi + 'Word' + CBi, back_html: OBi + 'Word' + CBi }),
         });
         templates.push(created);
         selectedTemplateId = created.id;

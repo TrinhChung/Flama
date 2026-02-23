@@ -422,6 +422,98 @@ def flashcard_study_page():
     return render_template("flashcards/study.html", decks=decks)
 
 
+@flashcards_bp.route("/flashcards/notes")
+@login_required
+def notes_list_page():
+    """Note management — list, filter, quick delete."""
+    if not is_admin_user(current_user):
+        return redirect(url_for("main.dashboard"))
+    note_types = (
+        NoteType.query.filter_by(user_id=current_user.id)
+        .order_by(NoteType.name.asc())
+        .all()
+    )
+    decks = VocabularyDeck.query.order_by(VocabularyDeck.name.asc()).all()
+
+    # Filters from query string
+    selected_nt = request.args.get("note_type_id", "")
+    selected_deck = request.args.get("deck_id", "")
+    search_q = request.args.get("q", "").strip()
+    page = max(1, int(request.args.get("page", "1")))
+    per_page = 30
+
+    query = Note.query.filter_by(user_id=current_user.id)
+    if selected_nt:
+        query = query.filter(Note.note_type_id == selected_nt)
+    if selected_deck:
+        try:
+            query = query.filter(Note.deck_id == int(selected_deck))
+        except ValueError:
+            pass
+
+    # JSON search by first field value (simple contains)
+    if search_q:
+        query = query.filter(
+            Note.field_values.cast(db.Text).ilike(f"%{search_q}%")
+        )
+
+    pagination = query.order_by(Note.updated_at.desc()).paginate(
+        page=page, per_page=per_page, error_out=False
+    )
+
+    # Build display rows: extract first text field as "title"
+    rows = []
+    for note in pagination.items:
+        note_type_obj = next(
+            (nt for nt in note_types if nt.id == note.note_type_id), None
+        )
+        first_field = None
+        if note_type_obj:
+            sorted_fields = sorted(note_type_obj.field_defs, key=lambda f: f.position)
+            for fd in sorted_fields:
+                if fd.field_type in {"text", "richtext"}:
+                    first_field = fd.name
+                    break
+        title = (note.field_values or {}).get(first_field or "", "") or f"Note #{note.id}"
+        rows.append(
+            {
+                "note": note,
+                "title": str(title)[:80],
+                "note_type_name": note_type_obj.name if note_type_obj else "—",
+            }
+        )
+
+    return render_template(
+        "flashcards/notes_list.html",
+        rows=rows,
+        pagination=pagination,
+        note_types=note_types,
+        decks=decks,
+        selected_nt=selected_nt,
+        selected_deck=selected_deck,
+        search_q=search_q,
+    )
+
+
+@flashcards_bp.route("/flashcards/notes/<note_id>/edit")
+@login_required
+def note_edit_page(note_id: str):
+    """Edit an existing note."""
+    if not is_admin_user(current_user):
+        return redirect(url_for("main.dashboard"))
+    note = Note.query.filter_by(id=note_id, user_id=current_user.id).first()
+    if not note:
+        return redirect(url_for("flashcards.notes_list_page"))
+    note_type = NoteType.query.get(note.note_type_id)
+    decks = VocabularyDeck.query.order_by(VocabularyDeck.name.asc()).all()
+    return render_template(
+        "flashcards/note_edit.html",
+        note=note,
+        note_type=note_type,
+        decks=decks,
+    )
+
+
 @flashcards_bp.route("/api/note-types", methods=["GET"])
 @login_required
 def list_note_types():

@@ -1,0 +1,580 @@
+{% extends "base.html" %}
+
+{% block title %}Quản lý Flashcards{% endblock %}
+
+{% block content %}
+<div class="fc-mgmt">
+
+    {# ── Header ── #}
+    <div class="fc-mgmt__header">
+        <div class="fc-mgmt__title-row">
+            <div>
+                <h1 class="fc-mgmt__title"><i class="bi bi-card-text"></i> Quản lý Flashcards</h1>
+                <p class="fc-mgmt__subtitle">Duyệt, chỉnh sửa và tạo mới các note trong hệ thống.</p>
+            </div>
+            <div class="fc-mgmt__header-actions">
+                <a class="btn-fc btn-fc--outline" href="{{ url_for('flashcards.note_type_manager') }}">
+                    <i class="bi bi-layers"></i> NoteTypes
+                </a>
+                <a class="btn-fc btn-fc--primary" href="{{ url_for('flashcards.note_editor_page') }}">
+                    <i class="bi bi-plus-lg"></i> Tạo Note
+                </a>
+            </div>
+        </div>
+
+        {# ── Filter/Search bar ── #}
+        <form class="fc-filter-bar" method="GET" action="{{ url_for('flashcards.notes_list_page') }}">
+            <div class="fc-filter-bar__item">
+                <label class="fc-filter-bar__label">NoteType</label>
+                <select name="note_type_id" class="fc-select" onchange="this.form.submit()">
+                    <option value="">Tất cả</option>
+                    {% for nt in note_types %}
+                    <option value="{{ nt.id }}" {% if selected_nt==nt.id %}selected{% endif %}>{{ nt.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="fc-filter-bar__item">
+                <label class="fc-filter-bar__label">Deck</label>
+                <select name="deck_id" class="fc-select" onchange="this.form.submit()">
+                    <option value="">Tất cả</option>
+                    {% for deck in decks %}
+                    <option value="{{ deck.id }}" {% if selected_deck==deck.id|string %}selected{% endif %}>{{ deck.name
+                        }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="fc-filter-bar__item fc-filter-bar__item--grow">
+                <label class="fc-filter-bar__label">Tìm kiếm</label>
+                <div class="fc-search-wrap">
+                    <i class="bi bi-search fc-search-icon"></i>
+                    <input type="text" name="q" class="fc-search-input" placeholder="Nhập từ khóa…"
+                        value="{{ search_q }}">
+                    {% if search_q %}
+                    <a href="{{ url_for('flashcards.notes_list_page', note_type_id=selected_nt, deck_id=selected_deck) }}"
+                        class="fc-search-clear" title="Xóa tìm kiếm">
+                        <i class="bi bi-x-circle"></i>
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="fc-filter-bar__item fc-filter-bar__item--btn">
+                <label class="fc-filter-bar__label">&nbsp;</label>
+                <button type="submit" class="btn-fc btn-fc--outline">Lọc</button>
+            </div>
+        </form>
+    </div>
+
+    {# ── Stats row ── #}
+    <div class="fc-stats-row">
+        <span class="fc-stats-badge">
+            <i class="bi bi-card-list"></i>
+            {{ pagination.total }} note{% if pagination.total != 1 %}s{% endif %}
+        </span>
+        {% if search_q %}
+        <span class="fc-stats-badge fc-stats-badge--search">
+            <i class="bi bi-search"></i> Kết quả tìm: "{{ search_q }}"
+        </span>
+        {% endif %}
+        <span class="fc-stats-badge fc-stats-badge--page">
+            Trang {{ pagination.page }}/{{ pagination.pages }}
+        </span>
+    </div>
+
+    {# ── Table ── #}
+    {% if rows %}
+    <div class="fc-table-wrap">
+        <table class="fc-table">
+            <thead>
+                <tr>
+                    <th>Nội dung</th>
+                    <th>NoteType</th>
+                    <th>Deck</th>
+                    <th>Tags</th>
+                    <th>Cập nhật</th>
+                    <th class="fc-table__actions-col">Thao tác</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in rows %}
+                <tr class="fc-table__row" data-note-id="{{ row.note.id }}">
+                    <td class="fc-table__title">
+                        <span class="fc-note-preview">{{ row.title }}</span>
+                    </td>
+                    <td>
+                        <span class="fc-tag">{{ row.note_type_name }}</span>
+                    </td>
+                    <td class="fc-table__muted">
+                        {% set deck = decks | selectattr('id', 'equalto', row.note.deck_id) | first %}
+                        {% if deck %}{{ deck.name }}{% else %}—{% endif %}
+                    </td>
+                    <td>
+                        {% for tag in (row.note.tags or [])[:3] %}
+                        <span class="fc-chip">{{ tag }}</span>
+                        {% endfor %}
+                        {% if (row.note.tags or [])|length > 3 %}
+                        <span class="fc-chip fc-chip--more">+{{ (row.note.tags|length) - 3 }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="fc-table__muted fc-table__date">
+                        {% if row.note.updated_at %}
+                        {{ row.note.updated_at.strftime('%d/%m/%Y') }}
+                        {% else %}—{% endif %}
+                    </td>
+                    <td class="fc-table__actions">
+                        <a class="btn-icon" href="{{ url_for('flashcards.note_edit_page', note_id=row.note.id) }}"
+                            title="Chỉnh sửa">
+                            <i class="bi bi-pencil"></i>
+                        </a>
+                        <button class="btn-icon btn-icon--danger js-delete-note" data-note-id="{{ row.note.id }}"
+                            title="Xóa">
+                            <i class="bi bi-trash3"></i>
+                        </button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {# ── Pagination ── #}
+    {% if pagination.pages > 1 %}
+    <nav class="fc-pagination">
+        {% if pagination.has_prev %}
+        <a class="fc-page-btn"
+            href="{{ url_for('flashcards.notes_list_page', note_type_id=selected_nt, deck_id=selected_deck, q=search_q, page=pagination.prev_num) }}">
+            <i class="bi bi-chevron-left"></i>
+        </a>
+        {% endif %}
+        {% for p in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+        {% if p %}
+        <a class="fc-page-btn {% if p == pagination.page %}fc-page-btn--active{% endif %}"
+            href="{{ url_for('flashcards.notes_list_page', note_type_id=selected_nt, deck_id=selected_deck, q=search_q, page=p) }}">
+            {{ p }}
+        </a>
+        {% else %}
+        <span class="fc-page-ellipsis">…</span>
+        {% endif %}
+        {% endfor %}
+        {% if pagination.has_next %}
+        <a class="fc-page-btn"
+            href="{{ url_for('flashcards.notes_list_page', note_type_id=selected_nt, deck_id=selected_deck, q=search_q, page=pagination.next_num) }}">
+            <i class="bi bi-chevron-right"></i>
+        </a>
+        {% endif %}
+    </nav>
+    {% endif %}
+
+    {% else %}
+    <div class="fc-empty">
+        <i class="bi bi-inbox fc-empty__icon"></i>
+        <p class="fc-empty__text">Chưa có note nào{% if search_q %} khớp với "{{ search_q }}"{% endif %}.</p>
+        <a class="btn-fc btn-fc--primary" href="{{ url_for('flashcards.note_editor_page') }}">
+            <i class="bi bi-plus-lg"></i> Tạo Note đầu tiên
+        </a>
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<style>
+    /* ── Flashcard Management Page ── */
+    .fc-mgmt {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 1.5rem 0 4rem;
+    }
+
+    .fc-mgmt__header {
+        margin-bottom: 1.5rem;
+    }
+
+    .fc-mgmt__title-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 1rem;
+        margin-bottom: 1.25rem;
+        flex-wrap: wrap;
+    }
+
+    .fc-mgmt__title {
+        font-size: 1.6rem;
+        font-weight: 800;
+        color: var(--flama-text);
+        margin: 0 0 0.25rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .fc-mgmt__title .bi {
+        color: var(--flama-orange-500);
+    }
+
+    .fc-mgmt__subtitle {
+        color: var(--flama-text-2);
+        margin: 0;
+        font-size: 0.9rem;
+    }
+
+    .fc-mgmt__header-actions {
+        display: flex;
+        gap: 0.6rem;
+        flex-shrink: 0;
+    }
+
+    /* Buttons */
+    .btn-fc {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.45rem 1rem;
+        border-radius: 8px;
+        font-size: 0.875rem;
+        font-weight: 600;
+        text-decoration: none;
+        transition: all 0.15s ease;
+        border: none;
+        cursor: pointer;
+    }
+
+    .btn-fc--primary {
+        background: var(--flama-gradient);
+        color: #fff;
+    }
+
+    .btn-fc--primary:hover {
+        opacity: 0.88;
+        color: #fff;
+    }
+
+    .btn-fc--outline {
+        background: transparent;
+        color: var(--flama-text);
+        border: 1.5px solid var(--flama-border);
+    }
+
+    .btn-fc--outline:hover {
+        border-color: var(--flama-orange-400);
+        color: var(--flama-orange-500);
+    }
+
+    /* Filter bar */
+    .fc-filter-bar {
+        display: flex;
+        gap: 0.75rem;
+        align-items: flex-end;
+        flex-wrap: wrap;
+        background: var(--flama-surface);
+        border: 1px solid var(--flama-border);
+        border-radius: 12px;
+        padding: 1rem 1.25rem;
+    }
+
+    .fc-filter-bar__label {
+        display: block;
+        font-size: 0.72rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.6px;
+        color: var(--flama-text-2);
+        margin-bottom: 0.35rem;
+    }
+
+    .fc-filter-bar__item {
+        flex-shrink: 0;
+    }
+
+    .fc-filter-bar__item--grow {
+        flex: 1;
+        min-width: 180px;
+    }
+
+    .fc-filter-bar__item--btn {
+        flex-shrink: 0;
+    }
+
+    .fc-select {
+        height: 38px;
+        border: 1.5px solid var(--flama-border);
+        border-radius: 8px;
+        padding: 0 0.75rem;
+        background: var(--flama-bg);
+        color: var(--flama-text);
+        font-size: 0.875rem;
+        min-width: 140px;
+    }
+
+    .fc-search-wrap {
+        position: relative;
+        display: flex;
+        align-items: center;
+    }
+
+    .fc-search-icon {
+        position: absolute;
+        left: 0.7rem;
+        color: var(--flama-text-2);
+        font-size: 0.85rem;
+        pointer-events: none;
+    }
+
+    .fc-search-input {
+        width: 100%;
+        height: 38px;
+        border: 1.5px solid var(--flama-border);
+        border-radius: 8px;
+        padding: 0 2.2rem 0 2.1rem;
+        background: var(--flama-bg);
+        color: var(--flama-text);
+        font-size: 0.875rem;
+        transition: border-color 0.15s;
+    }
+
+    .fc-search-input:focus {
+        outline: none;
+        border-color: var(--flama-orange-400);
+    }
+
+    .fc-search-clear {
+        position: absolute;
+        right: 0.6rem;
+        color: var(--flama-text-2);
+        font-size: 1rem;
+        text-decoration: none;
+    }
+
+    /* Stats */
+    .fc-stats-row {
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+        flex-wrap: wrap;
+        margin-bottom: 0.85rem;
+    }
+
+    .fc-stats-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+        padding: 0.25rem 0.7rem;
+        border-radius: 999px;
+        font-size: 0.78rem;
+        font-weight: 600;
+        background: var(--flama-surface);
+        color: var(--flama-text-2);
+        border: 1px solid var(--flama-border);
+    }
+
+    .fc-stats-badge--search {
+        background: rgba(254, 104, 8, 0.1);
+        color: var(--flama-orange-500);
+        border-color: rgba(254, 104, 8, 0.2);
+    }
+
+    /* Table */
+    .fc-table-wrap {
+        background: var(--flama-surface);
+        border: 1px solid var(--flama-border);
+        border-radius: 12px;
+        overflow: hidden;
+    }
+
+    .fc-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.875rem;
+    }
+
+    .fc-table thead th {
+        background: rgba(0, 0, 0, 0.04);
+        padding: 0.75rem 1rem;
+        font-size: 0.72rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.6px;
+        color: var(--flama-text-2);
+        border-bottom: 1px solid var(--flama-border);
+        text-align: left;
+    }
+
+    .fc-table__actions-col {
+        width: 90px;
+        text-align: center;
+    }
+
+    .fc-table__row {
+        border-bottom: 1px solid var(--flama-border);
+        transition: background 0.1s;
+    }
+
+    .fc-table__row:last-child {
+        border-bottom: none;
+    }
+
+    .fc-table__row:hover {
+        background: rgba(254, 104, 8, 0.03);
+    }
+
+    .fc-table td {
+        padding: 0.75rem 1rem;
+        vertical-align: middle;
+    }
+
+    .fc-note-preview {
+        font-weight: 600;
+        color: var(--flama-text);
+        font-size: 0.9rem;
+    }
+
+    .fc-table__muted {
+        color: var(--flama-text-2);
+        font-size: 0.82rem;
+    }
+
+    .fc-table__date {
+        white-space: nowrap;
+    }
+
+    .fc-tag {
+        display: inline-block;
+        padding: 0.15rem 0.5rem;
+        border-radius: 6px;
+        font-size: 0.72rem;
+        font-weight: 700;
+        background: rgba(254, 104, 8, 0.1);
+        color: var(--flama-orange-600);
+        border: 1px solid rgba(254, 104, 8, 0.18);
+    }
+
+    .fc-chip {
+        display: inline-block;
+        padding: 0.1rem 0.4rem;
+        border-radius: 999px;
+        font-size: 0.7rem;
+        background: var(--flama-surface);
+        border: 1px solid var(--flama-border);
+        color: var(--flama-text-2);
+        margin-right: 0.2rem;
+    }
+
+    .fc-chip--more {
+        opacity: 0.7;
+    }
+
+    /* Action buttons */
+    .fc-table__actions {
+        text-align: center;
+        white-space: nowrap;
+    }
+
+    .btn-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        border: 1.5px solid var(--flama-border);
+        background: transparent;
+        color: var(--flama-text-2);
+        text-decoration: none;
+        cursor: pointer;
+        transition: all 0.15s;
+        font-size: 0.9rem;
+    }
+
+    .btn-icon:hover {
+        border-color: var(--flama-orange-400);
+        color: var(--flama-orange-500);
+        background: rgba(254, 104, 8, 0.06);
+    }
+
+    .btn-icon--danger:hover {
+        border-color: #e74c3c;
+        color: #e74c3c;
+        background: rgba(231, 76, 60, 0.06);
+    }
+
+    /* Pagination */
+    .fc-pagination {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 0.35rem;
+        margin-top: 1.25rem;
+    }
+
+    .fc-page-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 36px;
+        height: 36px;
+        padding: 0 0.6rem;
+        border-radius: 8px;
+        border: 1.5px solid var(--flama-border);
+        background: var(--flama-surface);
+        color: var(--flama-text-2);
+        text-decoration: none;
+        font-size: 0.85rem;
+        font-weight: 600;
+        transition: all 0.15s;
+    }
+
+    .fc-page-btn:hover {
+        border-color: var(--flama-orange-400);
+        color: var(--flama-orange-500);
+    }
+
+    .fc-page-btn--active {
+        background: var(--flama-gradient);
+        color: #fff;
+        border-color: transparent;
+    }
+
+    .fc-page-ellipsis {
+        color: var(--flama-text-2);
+        padding: 0 0.25rem;
+    }
+
+    /* Empty state */
+    .fc-empty {
+        text-align: center;
+        padding: 4rem 2rem;
+        background: var(--flama-surface);
+        border: 1px dashed var(--flama-border);
+        border-radius: 12px;
+    }
+
+    .fc-empty__icon {
+        font-size: 3.5rem;
+        color: var(--flama-border);
+        display: block;
+        margin-bottom: 0.75rem;
+    }
+
+    .fc-empty__text {
+        color: var(--flama-text-2);
+        margin-bottom: 1.25rem;
+    }
+</style>
+
+<script>
+    document.querySelectorAll('.js-delete-note').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const noteId = btn.dataset.noteId;
+            if (!window.confirm('Xóa note này? Thao tác không thể hoàn tác.')) return;
+            const res = await fetch(`/api/notes/${noteId}`, { method: 'DELETE' });
+            const data = await res.json().catch(() => ({}));
+            if (res.ok) {
+                btn.closest('tr').remove();
+            } else {
+                alert(data.message || 'Không thể xóa note.');
+            }
+        });
+    });
+</script>
+{% endblock %}
