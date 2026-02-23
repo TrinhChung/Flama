@@ -1,18 +1,31 @@
 """Primary navigation routes."""
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date, datetime, time, timedelta
 from typing import Dict, List
 
 from flask import Blueprint, redirect, render_template, url_for
 from flask_login import current_user, login_required
 
+from app.services.anki_scheduler import default_deck_options
 from app.utils.permissions import is_admin_user
 from models.vocabulary_deck import VocabularyDeck
 from models.vocabulary_entry import VocabularyEntry
 from models.vocabulary_progress import VocabularyProgress
 
 main_bp = Blueprint("main", __name__)
+
+
+def _day_index(moment: datetime, boundary_hour: int) -> int:
+    """Convert datetime to day index (ordinal) relative to boundary hour."""
+    shifted = moment - timedelta(hours=boundary_hour)
+    return shifted.date().toordinal()
+
+
+def _day_index_to_datetime(day_index: int, boundary_hour: int) -> datetime:
+    """Convert day index (ordinal) back to datetime at boundary hour."""
+    day_date = date.fromordinal(day_index)
+    return datetime.combine(day_date, time(hour=boundary_hour))
 
 
 @main_bp.route("/")
@@ -64,6 +77,11 @@ def dashboard():
         progress_map = {row.entry_id: row for row in progress_rows}
 
     now = datetime.utcnow()
+    options = default_deck_options()
+    
+    # Calculate today's day index and next day boundary according to dayBoundaryHourLocal
+    today_day_index = _day_index(now, options.dayBoundaryHourLocal)
+    next_day_boundary = _day_index_to_datetime(today_day_index + 1, options.dayBoundaryHourLocal)
 
     def _normalize_queue(value: str | None) -> str:
         normalized = (value or "new").strip().lower()
@@ -85,16 +103,26 @@ def dashboard():
                 continue
 
             due_at = progress.due_at
-            is_due = due_at is None or due_at <= now
+            due_day = progress.due_day
 
+            # Learning/Relearning cards: count if due_at < nextDayBoundary
+            # This ensures all learning cards scheduled for "today" appear in Learn count
             if queue in {"learning", "relearning"}:
-                if is_due:
+                if due_at and due_at < next_day_boundary:
                     learn_count += 1
-                    due_count += 1
                 continue
 
+            # Review cards: count if due_day <= today_day_index
+            # due_day is stored as ordinal int, today is also ordinal int
             if queue == "review":
-                if is_due:
+                # Use stored due_day if available, otherwise calculate from due_at
+                if due_day is not None:
+                    card_due_day = due_day
+                else:
+                    # Backward compatibility: calculate from due_at
+                    card_due_day = _day_index(due_at or now, options.dayBoundaryHourLocal)
+                
+                if card_due_day <= today_day_index:
                     due_count += 1
                 continue
 

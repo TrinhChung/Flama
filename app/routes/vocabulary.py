@@ -363,8 +363,10 @@ def _card_state_from_progress(progress: VocabularyProgress | None, now: datetime
 
     queue = _normalize_progress_queue(progress.queue)
     due_at = progress.due_at or now
-    due_day = None
-    if queue == REVIEW_QUEUE:
+    due_day = progress.due_day
+    
+    # Backward compatibility: if due_day not stored but queue=review, recalculate it
+    if due_day is None and queue == REVIEW_QUEUE:
         shifted = due_at - timedelta(hours=options.dayBoundaryHourLocal)
         due_day = shifted.date().toordinal()
 
@@ -387,6 +389,8 @@ def _apply_card_state_to_progress(
     options = default_deck_options()
     queue = _normalize_progress_queue(card_state.type)
     due_at = card_state.due
+    due_day = card_state.dueDay
+    
     if card_state.dueDay is not None:
         day_date = datetime.fromordinal(int(card_state.dueDay)).date()
         due_at = datetime.combine(day_date, datetime.min.time()) + timedelta(
@@ -395,6 +399,7 @@ def _apply_card_state_to_progress(
     progress.queue = queue
     progress.step_index = int(card_state.stepIndex or 0)
     progress.due_at = due_at
+    progress.due_day = due_day
     progress.interval_days = int(round(float(card_state.intervalDays or 0)))
     progress.ease_factor = float(card_state.ease or options.startingEase)
     progress.reps = int(card_state.reps or 0)

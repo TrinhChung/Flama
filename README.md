@@ -28,17 +28,11 @@ Lightweight Flask + MySQL starter project that focuses on user registration, log
    ```powershell
    pip install -r requirements.txt
    ```
-4. Configure `.env` with your local settings:
-   ```env
-   FLASK_APP=wsgi.py
-   FLASK_ENV=development
-   SECRET_KEY=replace-me-with-a-secret-value
-   DB_HOST=localhost
-   DB_PORT=3306
-   DB_USER=root
-   DB_PASSWORD=your-password
-   DB_NAME=nihongo
+4. Configure environment variables:
+   ```powershell
+   cp .env_example .env
    ```
+   Edit `.env` with your local database credentials and settings.
 5. Ensure the MySQL database defined by `DB_NAME` exists.
 6. (Optional) Initialize migrations:
    ```powershell
