@@ -10,7 +10,11 @@
       <small class="text-muted">Total entries: {{ total_entries }}</small>
     </div>
     <div class="d-flex gap-2">
-      <a class="btn btn-sm btn-outline-primary" href="{{ url_for('vocabulary.import_csv') }}">Import CSV</a>
+      {% set button_label = 'Import CSV' %}
+      {% set button_href = url_for('vocabulary.import_csv') %}
+      {% set button_type = 'outline' %}
+      {% set button_size = 'sm' %}
+      {% include 'components/button.html' with context %}
     </div>
   </div>
 
@@ -39,7 +43,9 @@
             />
           </div>
           <div class="col-12 text-end">
-            <button class="btn btn-primary" type="submit">Add Level</button>
+            {% set button_label = 'Add Level' %}
+            {% set button_type = 'primary' %}
+            {% include 'components/button.html' with context %}
           </div>
         </form>
       </div>

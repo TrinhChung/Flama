@@ -22,15 +22,21 @@
       </small>
     </div>
     <div class="d-flex flex-wrap gap-2">
-      <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('vocabulary.index') }}">Back to overview</a>
+      {% set button_label = 'Back to overview' %}
+      {% set button_href = url_for('vocabulary.index') %}
+      {% set button_type = 'outline-secondary' %}
+      {% set button_size = 'sm' %}
+      {% include 'components/button.html' with context %}
+      
       <form
         method="post"
         action="{{ url_for('vocabulary.delete_lesson', lesson_id=selected_lesson.id) }}"
         onsubmit="return confirm('Xóa bài này và toàn bộ từ trong bài?');"
       >
-        <button class="btn btn-sm btn-outline-danger" type="submit">
-          Delete lesson
-        </button>
+        {% set button_label = 'Delete lesson' %}
+        {% set button_type = 'outline-danger' %}
+        {% set button_size = 'sm' %}
+        {% include 'components/button.html' with context %}
       </form>
       {% if sibling_lessons|length > 1 %}
       <div class="dropdown">

@@ -150,11 +150,21 @@
     <h3>No due cards in this lesson.</h3>
     <p>Hôm nay bạn đã học xong phần này.</p>
     <div class="d-flex gap-2 justify-content-center flex-wrap">
-      <a class="btn btn-outline-secondary" href="{{ next_study_url }}">Continue</a>
-      <a class="btn btn-primary" href="{{ url_for('main.dashboard') }}">Back home</a>
+      {% set button_label = 'Continue' %}
+      {% set button_href = next_study_url %}
+      {% set button_type = 'outline-secondary' %}
+      {% include 'components/button.html' with context %}
+      
+      {% set button_label = 'Back home' %}
+      {% set button_href = url_for('main.dashboard') %}
+      {% set button_type = 'primary' %}
+      {% include 'components/button.html' with context %}
+      
       {% if admin_mode and selected_lesson %}
-      <a class="btn btn-outline-primary" href="{{ url_for('vocabulary.lesson', lesson_id=selected_lesson.id) }}">Edit
-        lesson</a>
+      {% set button_label = 'Edit lesson' %}
+      {% set button_href = url_for('vocabulary.lesson', lesson_id=selected_lesson.id) %}
+      {% set button_type = 'outline' %}
+      {% include 'components/button.html' with context %}
       {% endif %}
     </div>
   </section>

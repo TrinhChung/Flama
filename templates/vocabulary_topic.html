@@ -12,15 +12,27 @@
       </small>
     </div>
     <div class="d-flex gap-2 flex-wrap">
-      <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('vocabulary.index') }}">Back to overview</a>
-      <a class="btn btn-sm btn-outline-primary" href="{{ url_for('vocabulary.open_topic', topic_id=selected_topic.id) }}">Open first lesson</a>
+      {% set button_label = 'Back to overview' %}
+      {% set button_href = url_for('vocabulary.index') %}
+      {% set button_type = 'outline-secondary' %}
+      {% set button_size = 'sm' %}
+      {% include 'components/button.html' with context %}
+      
+      {% set button_label = 'Open first lesson' %}
+      {% set button_href = url_for('vocabulary.open_topic', topic_id=selected_topic.id) %}
+      {% set button_type = 'outline' %}
+      {% include 'components/button.html' with context %}
+      
       <form
         method="post"
         action="{{ url_for('vocabulary.delete_topic', topic_id=selected_topic.id) }}"
         onsubmit="return confirm('Xóa bộ từ này sẽ xóa toàn bộ bài và từ vựng bên trong. Bạn chắc chắn chứ?');"
       >
         <input type="hidden" name="next" value="{{ url_for('vocabulary.index') }}" />
-        <button class="btn btn-sm btn-outline-danger" type="submit">Delete Topic</button>
+        {% set button_label = 'Delete Topic' %}
+        {% set button_type = 'outline-danger' %}
+        {% set button_size = 'sm' %}
+        {% include 'components/button.html' with context %}
       </form>
     </div>
   </div>
@@ -93,7 +105,11 @@
             />
           </div>
           <div class="col-md-2 text-end">
-            <button class="btn btn-sm btn-primary w-100" type="submit">Add Lesson</button>
+            {% set button_label = 'Add Lesson' %}
+            {% set button_type = 'primary' %}
+            {% set button_size = 'sm' %}
+            {% set button_full_width = true %}
+            {% include 'components/button.html' with context %}
           </div>
         </form>
       </div>
@@ -126,7 +142,11 @@
             />
           </div>
           <div class="col-md-2 text-end">
-            <button class="btn btn-sm btn-outline-primary w-100" type="submit">Add Topic</button>
+            {% set button_label = 'Add Topic' %}
+            {% set button_type = 'outline' %}
+            {% set button_size = 'sm' %}
+            {% set button_full_width = true %}
+            {% include 'components/button.html' with context %}
           </div>
         </form>
       </div>

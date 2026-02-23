@@ -79,8 +79,14 @@
           </small>
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-          <button type="button" class="btn btn-primary" id="confirm-create-deck-btn">Create</button>
+          {% set button_label = 'Cancel' %}
+          {% set button_type = 'outline-secondary' %}
+          {% include 'components/button.html' with context %}
+          
+          {% set button_label = 'Create' %}
+          {% set button_id = 'confirm-create-deck-btn' %}
+          {% set button_type = 'primary' %}
+          {% include 'components/button.html' with context %}
         </div>
       </div>
     </div>
