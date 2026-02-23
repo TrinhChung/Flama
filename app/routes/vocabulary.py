@@ -25,6 +25,7 @@ from sqlalchemy import func, or_
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import selectinload
 
+from app.utils.deck_move_token import parse_deck_move_token
 from app.utils.permissions import is_admin_user
 from app.services.anki_scheduler import (
     CardState,
@@ -424,6 +425,35 @@ def _next_deck_position(parent_deck_id: int | None) -> int:
     else:
         max_pos = query.filter(VocabularyDeck.parent_id == parent_deck_id).scalar()
     return (max_pos or 0) + 1
+
+
+def _resolve_next_url(default_endpoint: str = "main.dashboard") -> str:
+    """Return a safe in-app redirect target from `next` form value."""
+    raw_next = (request.form.get("next") or "").strip()
+    if raw_next.startswith("/") and not raw_next.startswith("//"):
+        return raw_next
+    return url_for(default_endpoint)
+
+
+def _deck_name_exists_under_parent(
+    *,
+    parent_id: int | None,
+    name: str,
+    exclude_deck_id: int | None = None,
+) -> bool:
+    """Check if a sibling deck with the same name already exists."""
+    normalized_name = (name or "").strip().lower()
+    if not normalized_name:
+        return False
+
+    query = VocabularyDeck.query.filter(func.lower(VocabularyDeck.name) == normalized_name)
+    if parent_id is None:
+        query = query.filter(VocabularyDeck.parent_id.is_(None))
+    else:
+        query = query.filter(VocabularyDeck.parent_id == parent_id)
+    if exclude_deck_id is not None:
+        query = query.filter(VocabularyDeck.id != exclude_deck_id)
+    return query.first() is not None
 
 
 def _get_or_create_deck(*, parent_id: int | None, name: str, description: str | None, position: int | None):
@@ -1239,7 +1269,7 @@ def create_deck():
     parent_id_raw = (request.form.get("parent_id") or "").strip()
     deck_path_raw = (request.form.get("deck_path") or "").strip()
     deck_name = (request.form.get("name") or "").strip() or "New Deck"
-    next_url = (request.form.get("next") or "").strip() or url_for("main.dashboard")
+    next_url = _resolve_next_url()
 
     tokens = [item.strip() for item in deck_path_raw.split("::") if item.strip()]
     if not tokens:
@@ -1306,47 +1336,93 @@ def rename_deck(deck_id: int):
         
     deck = VocabularyDeck.query.get_or_404(deck_id)
     new_name = (request.form.get("name") or "").strip()
-    next_url = (request.form.get("next") or "").strip() or url_for("main.dashboard")
-    
-    if new_name and new_name != deck.name:
-        deck.name = new_name
+    next_url = _resolve_next_url()
+
+    if not new_name:
+        flash("Deck name cannot be empty.", "warning")
+        return redirect(next_url)
+    if new_name == deck.name:
+        flash("Deck name is unchanged.", "info")
+        return redirect(next_url)
+    if _deck_name_exists_under_parent(parent_id=deck.parent_id, name=new_name, exclude_deck_id=deck.id):
+        flash(f"Deck '{new_name}' already exists at this level.", "danger")
+        return redirect(next_url)
+
+    deck.name = new_name
+    try:
         db.session.commit()
         flash(f"Deck renamed to: {new_name}", "success")
-    
+    except SQLAlchemyError:
+        db.session.rollback()
+        flash("Failed to rename deck. Please try again.", "danger")
     return redirect(next_url)
 
 
+@vocabulary_bp.route("/decks/move", methods=["POST"])
 @vocabulary_bp.route("/decks/<int:deck_id>/move", methods=["POST"])
 @login_required
-def move_deck(deck_id: int):
+def move_deck(deck_id: int | None = None):
     """Move a deck to a new parent deck."""
     if not is_admin_user(current_user):
         return redirect(url_for("main.dashboard"))
-        
-    deck = VocabularyDeck.query.get_or_404(deck_id)
-    parent_id_raw = (request.form.get("parent_id") or "").strip()
-    next_url = (request.form.get("next") or "").strip() or url_for("main.dashboard")
     
+    next_url = _resolve_next_url()
+    if deck_id is None:
+        deck_token = (request.form.get("deck_token") or "").strip()
+        deck_id = parse_deck_move_token(deck_token, user_id=current_user.id)
+        if deck_id is None:
+            flash("Move token is invalid or expired. Please reopen Deck Settings.", "danger")
+            return redirect(next_url)
+
+    deck = VocabularyDeck.query.get_or_404(deck_id)
+    parent_token_raw = (request.form.get("parent_token") or "").strip()
+    parent_id_raw = (request.form.get("parent_id") or "").strip()
+
     new_parent_id = None
-    if parent_id_raw:
+    new_parent = None
+    if parent_token_raw:
+        parsed_parent_id = parse_deck_move_token(parent_token_raw, user_id=current_user.id)
+        if parsed_parent_id is None:
+            flash("Parent move token is invalid or expired.", "danger")
+            return redirect(next_url)
+        new_parent_id = parsed_parent_id
+    elif parent_id_raw:
         try:
             new_parent_id = int(parent_id_raw)
         except ValueError:
             flash("Invalid parent deck.", "danger")
             return redirect(next_url)
-            
+
+    if new_parent_id is not None:
+        new_parent = VocabularyDeck.query.get(new_parent_id)
+        if not new_parent:
+            flash("Parent deck not found.", "danger")
+            return redirect(next_url)
+
         # Prevent moving into itself or its own descendants
-        curr = VocabularyDeck.query.get(new_parent_id)
+        curr = new_parent
         while curr:
             if curr.id == deck.id:
                 flash("Cannot move a deck into itself or its descendants.", "danger")
                 return redirect(next_url)
             curr = curr.parent
 
+    if deck.parent_id == new_parent_id:
+        flash("Deck is already in the selected location.", "info")
+        return redirect(next_url)
+    if _deck_name_exists_under_parent(parent_id=new_parent_id, name=deck.name, exclude_deck_id=deck.id):
+        parent_label = new_parent.name if new_parent else "Root"
+        flash(f"Parent '{parent_label}' already has a deck named '{deck.name}'.", "danger")
+        return redirect(next_url)
+
     deck.parent_id = new_parent_id
     deck.position = _next_deck_position(new_parent_id)
-    db.session.commit()
-    flash(f"Deck '{deck.name}' moved successfully.", "success")
+    try:
+        db.session.commit()
+        flash(f"Deck '{deck.name}' moved successfully.", "success")
+    except SQLAlchemyError:
+        db.session.rollback()
+        flash("Failed to move deck. Please try again.", "danger")
     
     return redirect(next_url)
 
@@ -1360,7 +1436,7 @@ def delete_deck(deck_id: int):
         
     deck = VocabularyDeck.query.get_or_404(deck_id)
     deck_name = deck.name
-    next_url = (request.form.get("next") or "").strip() or url_for("main.dashboard")
+    next_url = _resolve_next_url()
     
     # Recursively get all deck IDs under this deck
     deck_ids_to_delete = []
@@ -1393,7 +1469,7 @@ def reset_deck(deck_id: int):
         return redirect(url_for("main.dashboard"))
         
     deck = VocabularyDeck.query.get_or_404(deck_id)
-    next_url = (request.form.get("next") or "").strip() or url_for("main.dashboard")
+    next_url = _resolve_next_url()
     
     deck_ids = []
     def collect_deck_ids(d):
@@ -1407,9 +1483,12 @@ def reset_deck(deck_id: int):
     entry_ids = [e.id for e in entries]
     
     if entry_ids:
-        deleted_count = VocabularyProgress.query.filter(VocabularyProgress.entry_id.in_(entry_ids)).delete(synchronize_session=False)
+        deleted_count = VocabularyProgress.query.filter(
+            VocabularyProgress.user_id == current_user.id,
+            VocabularyProgress.entry_id.in_(entry_ids),
+        ).delete(synchronize_session=False)
         db.session.commit()
-        flash(f"Reset progress for {deleted_count} cards in '{deck.name}'.", "success")
+        flash(f"Reset progress for {deleted_count} cards in '{deck.name}' (your account).", "success")
     else:
         flash(f"No cards to reset in '{deck.name}'.", "info")
         

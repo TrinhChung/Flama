@@ -1,5 +1,6 @@
 """Primary navigation routes."""
 
+import hashlib
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
 from typing import Dict, List
@@ -8,6 +9,7 @@ from flask import Blueprint, redirect, render_template, url_for
 from flask_login import current_user, login_required
 
 from app.services.anki_scheduler import default_deck_options
+from app.utils.deck_move_token import create_deck_move_token
 from app.utils.permissions import is_admin_user
 from models import db
 from models.flashcard import DeckInstall
@@ -96,6 +98,10 @@ def dashboard():
     class DeckNode:
         deck_id: int
         parent_id: int | None
+        move_alias: str
+        move_token: str
+        parent_move_alias: str | None
+        parent_move_token: str | None
         label: str
         href: str
         depth: int
@@ -178,6 +184,24 @@ def dashboard():
     for children in by_parent.values():
         children.sort(key=lambda item: ((item.position or 0), item.created_at, item.id))
 
+    move_alias_by_deck_id: Dict[int, str] = {}
+    move_token_by_deck_id: Dict[int, str] = {}
+    used_move_aliases: set[str] = set()
+    for deck in decks:
+        move_token = create_deck_move_token(deck.id, current_user.id)
+        digest = hashlib.sha256(move_token.encode("utf-8")).hexdigest().upper()
+        alias_len = 10
+        move_alias = f"MID-{digest[:alias_len]}"
+        while move_alias in used_move_aliases and alias_len < len(digest):
+            alias_len += 2
+            move_alias = f"MID-{digest[:alias_len]}"
+        if move_alias in used_move_aliases:
+            move_alias = f"MID-{digest}"
+
+        used_move_aliases.add(move_alias)
+        move_alias_by_deck_id[deck.id] = move_alias
+        move_token_by_deck_id[deck.id] = move_token
+
     entries_by_deck: Dict[int, List[int]] = {}
     for entry in entries:
         if entry.deck_id is None:
@@ -205,6 +229,10 @@ def dashboard():
                 DeckNode(
                     deck_id=deck.id,
                     parent_id=deck.parent_id,
+                    move_alias=move_alias_by_deck_id.get(deck.id, ""),
+                    move_token=move_token_by_deck_id.get(deck.id, ""),
+                    parent_move_alias=move_alias_by_deck_id.get(deck.parent_id) if deck.parent_id else None,
+                    parent_move_token=move_token_by_deck_id.get(deck.parent_id) if deck.parent_id else None,
                     label=deck.name,
                     href=url_for("vocabulary.study_deck", deck_id=deck.id),
                     depth=depth,

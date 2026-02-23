@@ -5,7 +5,8 @@
 {% macro render_nodes(nodes) %}
 {% for node in nodes %}
 <div class="deck-row" data-node-id="{{ node.deck_id }}" data-node-name="{{ node.label }}"
-  data-parent-id="{{ node.parent_id if node.parent_id is not none else '' }}" data-open-url="{{ node.href }}">
+  data-parent-id="{{ node.parent_id if node.parent_id is not none else '' }}" data-open-url="{{ node.href }}"
+  data-move-alias="{{ node.move_alias }}" data-move-token="{{ node.move_token }}">
   <div class="deck-name-col" style="padding-left: {{ node.depth * 1.5 }}rem;">
     {% if node.children %}
     <button class="tree-toggle" type="button" data-node-id="{{ node.deck_id }}" data-expanded="true"
@@ -22,28 +23,50 @@
     <div class="deck-settings-wrapper dropdown">
       <button class="deck-settings-btn" type="button" data-bs-toggle="dropdown" aria-expanded="false"
         aria-label="Deck Settings" title="Deck Settings">
-        ⚙️
+        <i class="bi bi-gear-fill" aria-hidden="true"></i>
       </button>
-      <ul class="dropdown-menu dropdown-menu-end shadow border-0 py-2" style="min-width: 170px;">
-        <li><button class="dropdown-item deck-action-btn rounded-1 mx-1 px-3" type="button" data-action="rename"
-            data-deck-id="{{ node.deck_id }}" data-deck-name="{{ node.label }}">Rename Deck</button></li>
-        <li><button class="dropdown-item deck-action-btn rounded-1 mx-1 px-3" type="button" data-action="move"
+      <ul class="dropdown-menu dropdown-menu-end deck-settings-menu py-2" role="menu">
+        <li><button class="dropdown-item deck-settings-item deck-action-btn" type="button" data-action="rename"
+            data-deck-id="{{ node.deck_id }}" data-deck-name="{{ node.label }}">
+            <i class="bi bi-pencil-square deck-settings-item-icon" aria-hidden="true"></i>
+            <span>Rename Deck</span>
+          </button></li>
+        <li><button class="dropdown-item deck-settings-item deck-action-btn" type="button" data-action="move"
             data-deck-id="{{ node.deck_id }}" data-deck-name="{{ node.label }}"
-            data-parent-id="{{ node.parent_id if node.parent_id is not none else '' }}">Move Deck</button></li>
+            data-parent-id="{{ node.parent_id if node.parent_id is not none else '' }}"
+            data-move-alias="{{ node.move_alias }}" data-move-token="{{ node.move_token }}"
+            data-parent-move-alias="{{ node.parent_move_alias if node.parent_move_alias else '' }}"
+            data-parent-move-token="{{ node.parent_move_token if node.parent_move_token else '' }}">
+            <i class="bi bi-arrow-left-right deck-settings-item-icon" aria-hidden="true"></i>
+            <span>Move Deck</span>
+          </button></li>
+        <li><button class="dropdown-item deck-settings-item deck-action-btn" type="button" data-action="copy-id"
+            data-deck-id="{{ node.deck_id }}" data-deck-name="{{ node.label }}"
+            data-move-alias="{{ node.move_alias }}" data-move-token="{{ node.move_token }}">
+            <i class="bi bi-copy deck-settings-item-icon" aria-hidden="true"></i>
+            <span>Copy Move ID</span>
+          </button></li>
         <li>
           <hr class="dropdown-divider my-1">
         </li>
-        <li><a class="dropdown-item rounded-1 mx-1 px-3 text-primary fw-bold"
-            href="{{ url_for('flashcards.share_deck_page', deck_id=node.deck_id) }}">Share Deck</a></li>
+        <li><a class="dropdown-item deck-settings-item is-share"
+            href="{{ url_for('flashcards.share_deck_page', deck_id=node.deck_id) }}">
+            <i class="bi bi-share deck-settings-item-icon" aria-hidden="true"></i>
+            <span>Share Deck</span>
+          </a></li>
         <li>
           <hr class="dropdown-divider my-1">
         </li>
-        <li><button class="dropdown-item deck-action-btn rounded-1 mx-1 px-3 text-warning fw-bold" type="button"
-            data-action="reset" data-deck-id="{{ node.deck_id }}" data-deck-name="{{ node.label }}">Reset
-            Progress</button></li>
-        <li><button class="dropdown-item deck-action-btn rounded-1 mx-1 px-3 text-danger fw-bold" type="button"
-            data-action="delete" data-deck-id="{{ node.deck_id }}" data-deck-name="{{ node.label }}">Delete
-            Deck</button></li>
+        <li><button class="dropdown-item deck-settings-item deck-action-btn is-warning" type="button"
+            data-action="reset" data-deck-id="{{ node.deck_id }}" data-deck-name="{{ node.label }}">
+            <i class="bi bi-arrow-counterclockwise deck-settings-item-icon" aria-hidden="true"></i>
+            <span>Reset Progress</span>
+          </button></li>
+        <li><button class="dropdown-item deck-settings-item deck-action-btn is-danger" type="button"
+            data-action="delete" data-deck-id="{{ node.deck_id }}" data-deck-name="{{ node.label }}">
+            <i class="bi bi-trash-fill deck-settings-item-icon" aria-hidden="true"></i>
+            <span>Delete Deck</span>
+          </button></li>
       </ul>
     </div>
   </div>
@@ -74,7 +97,8 @@
 
   {% macro render_deck_options(nodes, prefix='') %}
   {% for node in nodes %}
-  <option value="{{ node.deck_id }}">{{ prefix }}{{ node.label }}</option>
+  <option value="{{ node.move_alias }}" data-move-token="{{ node.move_token }}">{{ prefix }}[{{ node.move_alias }}] {{
+    node.label }}</option>
   {% if node.children %}
   {{ render_deck_options(node.children, prefix + '&nbsp;&nbsp;&nbsp;&nbsp;' | safe) }}
   {% endif %}
@@ -108,20 +132,34 @@
   <div class="modal fade" id="moveDeckModal" tabindex="-1" aria-labelledby="moveDeckModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
       <div class="modal-content">
-        <form id="deck-move-form" action="" method="POST">
+        <form id="deck-move-form" action="{{ url_for('vocabulary.move_deck') }}" method="POST">
           <input type="hidden" name="next" value="{{ request.url }}">
+          <input type="hidden" name="deck_token" id="deck-move-token-input" value="">
+          <input type="hidden" name="parent_token" id="deck-parent-token-input" value="">
           <div class="modal-header border-0 pb-0">
             <h5 class="modal-title fw-bold" id="moveDeckModalLabel">Move Deck</h5>
             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
           </div>
           <div class="modal-body">
+            <div class="small text-muted mb-2">
+              Deck hiện tại:
+              <strong id="move-deck-name-label">-</strong>
+              <span class="ms-1">Move ID:</span>
+              <code id="move-deck-id-label">-</code>
+            </div>
             <label class="form-label text-muted small mb-1">Select new parent deck</label>
-            <select class="form-select" id="deck-move-select" name="parent_id">
+            <select class="form-select" id="deck-move-select">
               <option value="">-- No Parent (Root Level) --</option>
               {% if deck_rows %}
               {{ render_deck_options(deck_rows) }}
               {% endif %}
             </select>
+            <label class="form-label text-muted small mb-1 mt-3" for="deck-move-parent-id-input">Hoặc nhập Parent Move
+              ID</label>
+            <input type="text" class="form-control" id="deck-move-parent-id-input" placeholder="VD: MID-5A9F2C7D1E (trống = Root)"
+              autocomplete="off">
+            <small class="text-muted d-block mt-1">Move ID là mã tạm thời, không phải ID thật trong database.</small>
+            <small class="text-muted d-block">Không thể di chuyển deck cha vào deck con của chính nó.</small>
           </div>
           <div class="modal-footer border-0 pt-0">
             <button type="submit" class="btn btn-primary w-100"
@@ -179,7 +217,7 @@
         <span>New</span>
         <span>Learn</span>
         <span>Due</span>
-        <span class="settings-spacer" aria-hidden="true" style="width: 24px;"></span>
+        <span class="settings-spacer" aria-hidden="true"></span>
       </div>
     </header>
 
@@ -216,6 +254,7 @@
     /* Tailwind Red 600 - subtle red */
     --count-due: var(--flama-orange-600, #ea580c);
     /* Flama Orange */
+    --settings-col-width: 30px;
 
     max-width: 980px;
     margin: 0 auto;
@@ -250,7 +289,7 @@
 
   .head-right {
     display: grid;
-    grid-template-columns: repeat(3, 70px) 24px;
+    grid-template-columns: repeat(3, 70px) var(--settings-col-width);
     gap: 0.5rem;
     text-align: right;
     align-items: center;
@@ -308,25 +347,46 @@
 
   .deck-settings-btn {
     display: none;
-    background: transparent;
-    border: none;
-    padding: 0;
-    margin: 0;
-    cursor: pointer;
-    font-size: 1.15rem;
-    opacity: 0.5;
-    transition: opacity 0.2s, transform 0.2s;
-  }
-
-  .deck-row.is-selected .deck-settings-btn {
-    display: inline-flex;
     align-items: center;
     justify-content: center;
+    width: 1.9rem;
+    height: 1.9rem;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    margin: 0 auto;
+    cursor: pointer;
+    color: var(--flama-text-2);
+    opacity: 0.75;
+    transition: opacity 0.2s ease, color 0.2s ease, background-color 0.2s ease, border-color 0.2s ease,
+      transform 0.2s ease;
+  }
+
+  .deck-settings-btn i {
+    font-size: 0.95rem;
+    line-height: 1;
+  }
+
+  .deck-row:hover .deck-settings-btn,
+  .deck-row.is-selected .deck-settings-btn {
+    display: inline-flex;
   }
 
   .deck-settings-btn:hover {
     opacity: 1;
-    transform: rotate(45deg);
+    color: var(--flama-orange-700);
+    background: var(--flama-orange-50);
+    border-color: var(--flama-orange-300);
+    transform: rotate(15deg);
+  }
+
+  .deck-settings-btn:focus-visible {
+    outline: none;
+    opacity: 1;
+    color: var(--flama-orange-700);
+    background: var(--flama-orange-50);
+    border-color: var(--flama-orange-400);
+    box-shadow: 0 0 0 2px rgba(254, 164, 107, 0.35);
   }
 
   .deck-row:hover .deck-name {
@@ -335,17 +395,21 @@
 
   .deck-stats-col {
     display: grid;
-    grid-template-columns: repeat(3, 70px) 24px;
+    grid-template-columns: repeat(3, 70px) var(--settings-col-width);
     gap: 0.5rem;
     text-align: right;
     align-items: center;
+  }
+
+  .settings-spacer {
+    width: var(--settings-col-width);
   }
 
   .deck-settings-wrapper {
     display: flex;
     justify-content: center;
     align-items: center;
-    width: 24px;
+    width: var(--settings-col-width);
   }
 
   .stat-num {
@@ -365,6 +429,90 @@
   .stat-due {
     color: var(--count-due);
     font-weight: 600;
+  }
+
+  .deck-settings-menu {
+    min-width: 218px;
+    border: 1px solid var(--flama-border);
+    border-radius: 0.75rem;
+    padding: 0.35rem;
+    box-shadow: 0 14px 28px rgba(31, 26, 23, 0.12);
+    background: var(--flama-surface);
+  }
+
+  .deck-settings-menu .dropdown-divider {
+    border-top-color: var(--flama-border);
+    opacity: 1;
+    margin: 0.35rem 0;
+  }
+
+  .deck-settings-item {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.5rem 0.65rem;
+    margin: 0.1rem 0;
+    border-radius: 0.5rem;
+    color: var(--flama-text);
+    font-size: 0.92rem;
+    font-weight: var(--font-weight-medium);
+    text-decoration: none;
+    transition: background-color 0.18s ease, color 0.18s ease;
+  }
+
+  .deck-settings-item:hover,
+  .deck-settings-item:focus-visible {
+    background: var(--flama-orange-50);
+    color: var(--flama-orange-700);
+  }
+
+  .deck-settings-item:active {
+    background: var(--flama-orange-100);
+    color: var(--flama-orange-800);
+  }
+
+  .deck-settings-item-icon {
+    width: 1.05rem;
+    font-size: 0.95rem;
+    text-align: center;
+    color: var(--flama-text-2);
+    transition: color 0.18s ease;
+  }
+
+  .deck-settings-item:hover .deck-settings-item-icon,
+  .deck-settings-item:focus-visible .deck-settings-item-icon {
+    color: currentColor;
+  }
+
+  .deck-settings-item.is-share {
+    color: var(--flama-orange-700);
+    font-weight: var(--font-weight-semibold);
+  }
+
+  .deck-settings-item.is-warning {
+    color: var(--flama-warning);
+  }
+
+  .deck-settings-item.is-warning:hover,
+  .deck-settings-item.is-warning:focus-visible {
+    background: var(--flama-amber-50);
+    color: var(--flama-amber-700);
+  }
+
+  .deck-settings-item.is-danger {
+    color: var(--flama-danger);
+  }
+
+  .deck-settings-item.is-danger:hover,
+  .deck-settings-item.is-danger:focus-visible {
+    background: #fff0ea;
+    color: #cc2b00;
+  }
+
+  .deck-settings-menu .dropdown-item.active,
+  .deck-settings-menu .dropdown-item:active {
+    background: var(--flama-orange-100);
+    color: var(--flama-orange-800);
   }
 
   /* Tree Toggle */
@@ -505,7 +653,7 @@
       /* align stat columns under the deck name skipping chevron */
       padding-left: 2rem;
       display: grid;
-      grid-template-columns: repeat(3, 1fr) 24px;
+      grid-template-columns: repeat(3, 1fr) var(--settings-col-width);
       text-align: left;
       align-items: center;
       gap: 0.5rem;
@@ -639,11 +787,83 @@
     // UI logic for Deck Actions
     const renameModalEl = document.getElementById('renameDeckModal');
     const moveModalEl = document.getElementById('moveDeckModal');
+    const renameFormEl = document.getElementById('deck-rename-form');
+    const renameInputEl = document.getElementById('deck-rename-input');
+    const moveFormEl = document.getElementById('deck-move-form');
+    const moveSelectEl = document.getElementById('deck-move-select');
+    const moveDeckTokenInputEl = document.getElementById('deck-move-token-input');
+    const moveParentTokenInputEl = document.getElementById('deck-parent-token-input');
+    const moveParentIdInputEl = document.getElementById('deck-move-parent-id-input');
+    const moveDeckNameLabelEl = document.getElementById('move-deck-name-label');
+    const moveDeckIdLabelEl = document.getElementById('move-deck-id-label');
+    const resetFormEl = document.getElementById('deck-reset-form');
+    const deleteFormEl = document.getElementById('deck-delete-form');
     let renameModal = null;
     let moveModal = null;
+    const moveAliasToToken = new Map();
+    const moveAliasToDeckId = new Map();
 
     if (renameModalEl && window.bootstrap) renameModal = new bootstrap.Modal(renameModalEl);
     if (moveModalEl && window.bootstrap) moveModal = new bootstrap.Modal(moveModalEl);
+
+    rows.forEach((row) => {
+      const alias = (row.dataset.moveAlias || "").trim();
+      const token = (row.dataset.moveToken || "").trim();
+      const deckId = String(row.dataset.nodeId || "");
+      if (alias && token) {
+        moveAliasToToken.set(alias, token);
+      }
+      if (alias && deckId) {
+        moveAliasToDeckId.set(alias, deckId);
+      }
+    });
+
+    function getDescendantDeckIds(rootDeckId) {
+      const descendants = new Set();
+      if (!rootDeckId) {
+        return descendants;
+      }
+      const queue = [String(rootDeckId)];
+      while (queue.length > 0) {
+        const currentId = queue.shift();
+        rows.forEach((row) => {
+          if ((row.dataset.parentId || "") !== currentId) {
+            return;
+          }
+          const childId = row.dataset.nodeId || "";
+          if (!childId || descendants.has(childId)) {
+            return;
+          }
+          descendants.add(childId);
+          queue.push(childId);
+        });
+      }
+      return descendants;
+    }
+
+    function optionExistsByValue(selectEl, value) {
+      if (!selectEl) {
+        return false;
+      }
+      return Array.from(selectEl.options).some((opt) => String(opt.value || "") === String(value || ""));
+    }
+
+    async function copyText(text) {
+      if (!text) {
+        return;
+      }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const tempInput = document.createElement("input");
+        tempInput.type = "text";
+        tempInput.value = text;
+        document.body.appendChild(tempInput);
+        tempInput.select();
+        document.execCommand("copy");
+        tempInput.remove();
+      }
+    }
 
     document.querySelectorAll('.deck-action-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
@@ -654,39 +874,195 @@
         const deckId = btn.getAttribute('data-deck-id');
         const deckName = btn.getAttribute('data-deck-name');
         const parentId = btn.getAttribute('data-parent-id');
+        const moveAlias = (btn.getAttribute('data-move-alias') || "").trim();
+        const moveToken = (btn.getAttribute('data-move-token') || "").trim();
+        const parentMoveAlias = (btn.getAttribute('data-parent-move-alias') || "").trim();
+        const parentMoveToken = (btn.getAttribute('data-parent-move-token') || "").trim();
+        const normalizedDeckName = (deckName || "").trim() || "Deck";
+        const deckIdText = String(deckId || "");
 
         if (action === 'rename') {
-          document.getElementById('deck-rename-form').action = `/vocabulary/decks/${deckId}/rename`;
-          document.getElementById('deck-rename-input').value = deckName;
-          if (renameModal) renameModal.show();
+          if (!renameFormEl || !renameInputEl || !deckIdText) {
+            window.alert("Bạn không có quyền đổi tên deck này.");
+            return;
+          }
+          renameFormEl.action = `/vocabulary/decks/${deckIdText}/rename`;
+          renameInputEl.value = normalizedDeckName;
+          if (renameModal) {
+            renameModal.show();
+            return;
+          }
+          const promptedName = window.prompt("Nhập tên deck mới", normalizedDeckName);
+          if (promptedName === null) {
+            return;
+          }
+          const nextName = promptedName.trim();
+          if (!nextName) {
+            window.alert("Tên deck không được để trống.");
+            return;
+          }
+          renameInputEl.value = nextName;
+          renameFormEl.submit();
         }
         else if (action === 'move') {
-          document.getElementById('deck-move-form').action = `/vocabulary/decks/${deckId}/move`;
-          const moveSelect = document.getElementById('deck-move-select');
-          if (moveSelect) {
-            Array.from(moveSelect.options).forEach(opt => {
-              opt.disabled = (opt.value === String(deckId));
-            });
-            moveSelect.value = parentId || "";
+          if (
+            !moveFormEl ||
+            !moveSelectEl ||
+            !moveParentIdInputEl ||
+            !moveDeckTokenInputEl ||
+            !moveParentTokenInputEl ||
+            !deckIdText ||
+            !moveToken ||
+            !moveAlias
+          ) {
+            window.alert("Bạn không có quyền di chuyển deck này.");
+            return;
           }
-          if (moveModal) moveModal.show();
+          const descendantDeckIds = getDescendantDeckIds(deckIdText);
+          moveFormEl.dataset.activeDeckId = deckIdText;
+          moveFormEl.dataset.activeMoveAlias = moveAlias;
+          moveFormEl.action = "/vocabulary/decks/move";
+          moveDeckTokenInputEl.value = moveToken;
+          moveParentTokenInputEl.value = parentMoveToken || "";
+          Array.from(moveSelectEl.options).forEach((opt) => {
+            const optionAlias = String(opt.value || "");
+            const optionDeckId = moveAliasToDeckId.get(optionAlias) || "";
+            opt.disabled = optionAlias === moveAlias || descendantDeckIds.has(optionDeckId);
+          });
+          moveSelectEl.value = parentMoveAlias || "";
+          moveParentIdInputEl.value = parentMoveAlias || "";
+          if (moveDeckNameLabelEl) {
+            moveDeckNameLabelEl.textContent = normalizedDeckName;
+          }
+          if (moveDeckIdLabelEl) {
+            moveDeckIdLabelEl.textContent = moveAlias;
+          }
+          if (moveModal) {
+            moveModal.show();
+            return;
+          }
+          const fallbackParentAlias = window.prompt(
+            "Nhập Move ID tạm của deck cha (để trống = Root)",
+            parentMoveAlias || "",
+          );
+          if (fallbackParentAlias === null) {
+            return;
+          }
+          const nextParentAlias = fallbackParentAlias.trim();
+          const nextParentDeckId = moveAliasToDeckId.get(nextParentAlias) || "";
+          if (nextParentAlias && !moveAliasToToken.has(nextParentAlias)) {
+            window.alert("Parent Move ID không hợp lệ.");
+            return;
+          }
+          if (nextParentAlias && (nextParentAlias === moveAlias || descendantDeckIds.has(nextParentDeckId))) {
+            window.alert("Không thể di chuyển deck cha vào deck con.");
+            return;
+          }
+          moveSelectEl.value = nextParentAlias;
+          moveParentTokenInputEl.value = nextParentAlias ? (moveAliasToToken.get(nextParentAlias) || "") : "";
+          moveFormEl.submit();
+        }
+        else if (action === 'copy-id') {
+          if (!moveAlias) {
+            window.alert("Không tìm thấy Move ID.");
+            return;
+          }
+          copyText(moveAlias)
+            .then(() => {
+              window.alert(`Đã copy Move ID: ${moveAlias}`);
+            })
+            .catch(() => {
+              window.prompt("Copy Move ID", moveAlias);
+            });
         }
         else if (action === 'reset') {
-          if (confirm(`WARNING: Are you sure you want to RESET progress for '${deckName}'?`)) {
-            const form = document.getElementById('deck-reset-form');
-            form.action = `/vocabulary/decks/${deckId}/reset`;
-            form.submit();
+          if (!resetFormEl || !deckIdText) {
+            window.alert("Bạn không có quyền reset deck này.");
+            return;
+          }
+          if (confirm(`Reset tiến độ học của '${normalizedDeckName}'? (chỉ áp dụng cho tài khoản của bạn)`)) {
+            resetFormEl.action = `/vocabulary/decks/${deckIdText}/reset`;
+            resetFormEl.submit();
           }
         }
         else if (action === 'delete') {
-          if (confirm(`CRITICAL: Permanently DELETE deck '${deckName}' and its content?`)) {
-            const form = document.getElementById('deck-delete-form');
-            form.action = `/vocabulary/decks/${deckId}/delete`;
-            form.submit();
+          if (!deleteFormEl || !deckIdText) {
+            window.alert("Bạn không có quyền xóa deck này.");
+            return;
+          }
+          if (confirm(`Xóa vĩnh viễn deck '${normalizedDeckName}' và toàn bộ deck con/nội dung?`)) {
+            deleteFormEl.action = `/vocabulary/decks/${deckIdText}/delete`;
+            deleteFormEl.submit();
           }
         }
       });
     });
+
+    if (moveSelectEl && moveParentIdInputEl) {
+      moveSelectEl.addEventListener("change", () => {
+        moveParentIdInputEl.value = moveSelectEl.value || "";
+      });
+
+      moveParentIdInputEl.addEventListener("input", () => {
+        const inputAlias = (moveParentIdInputEl.value || "").trim();
+        if (!inputAlias) {
+          moveSelectEl.value = "";
+          return;
+        }
+        if (optionExistsByValue(moveSelectEl, inputAlias)) {
+          moveSelectEl.value = inputAlias;
+        }
+      });
+    }
+
+    if (moveFormEl && moveSelectEl && moveParentIdInputEl && moveParentTokenInputEl && moveDeckTokenInputEl) {
+      moveFormEl.addEventListener("submit", (event) => {
+        const activeDeckId = String(moveFormEl.dataset.activeDeckId || "");
+        const activeMoveAlias = String(moveFormEl.dataset.activeMoveAlias || "");
+        const typedParentAlias = (moveParentIdInputEl.value || "").trim();
+        const selectedParentAlias = String(moveSelectEl.value || "");
+        const normalizedParentAlias = typedParentAlias || selectedParentAlias;
+
+        if (!moveDeckTokenInputEl.value) {
+          event.preventDefault();
+          window.alert("Move token bị thiếu hoặc đã hết hạn. Vui lòng mở lại menu Deck Settings.");
+          return;
+        }
+
+        if (normalizedParentAlias === activeMoveAlias) {
+          event.preventDefault();
+          window.alert("Không thể di chuyển deck vào chính nó.");
+          return;
+        }
+
+        if (activeDeckId) {
+          const descendantDeckIds = getDescendantDeckIds(activeDeckId);
+          const parentDeckId = moveAliasToDeckId.get(normalizedParentAlias) || "";
+          if (normalizedParentAlias && descendantDeckIds.has(parentDeckId)) {
+            event.preventDefault();
+            window.alert("Không thể di chuyển deck cha vào deck con.");
+            return;
+          }
+        }
+
+        if (normalizedParentAlias && !optionExistsByValue(moveSelectEl, normalizedParentAlias)) {
+          event.preventDefault();
+          window.alert("Parent Move ID không tồn tại trong cây deck hiện tại.");
+          moveParentIdInputEl.focus();
+          return;
+        }
+
+        const parentMoveToken = normalizedParentAlias ? (moveAliasToToken.get(normalizedParentAlias) || "") : "";
+        if (normalizedParentAlias && !parentMoveToken) {
+          event.preventDefault();
+          window.alert("Parent Move ID không hợp lệ hoặc đã hết hạn.");
+          return;
+        }
+
+        moveSelectEl.value = normalizedParentAlias;
+        moveParentTokenInputEl.value = parentMoveToken;
+      });
+    }
 
     rows.forEach((row) => {
       row.addEventListener("click", (event) => {

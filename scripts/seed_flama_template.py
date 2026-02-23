@@ -4,6 +4,9 @@ import sys
 # Thêm thư mục gốc vào đường dẫn để import models và app
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 from app import create_app
 from models import db
 from models.flashcard import FieldDef, NoteType, Template
@@ -250,6 +253,25 @@ def seed_template():
                 print(f"Đã cập nhật quyền admin cho user: {admin_email}")
 
         # Kiểm tra xem NoteType "Flama Standard Vocabulary" đã có chưa
+        fields = [
+            ("word", "text", True),
+            ("hanviet", "text", False),
+            ("reading", "text", False),
+            ("translation_vi", "text", False),
+            ("meaning_jp", "richtext", False),
+            ("meaning_vi", "richtext", False),
+            ("usage_jp", "richtext", False),
+            ("usage_vi", "richtext", False),
+            ("example_jp", "richtext", False),
+            ("example_vi", "richtext", False),
+            ("additional_note_jp", "richtext", False),
+            ("additional_note_vi", "richtext", False),
+            ("image", "image", False),
+            ("diagram", "image", False),
+            ("word_audio", "audio", False),
+            ("example_audio", "audio", False),
+        ]
+
         note_type = NoteType.query.filter_by(name="Flama Standard Vocabulary", user_id=user.id).first()
         if not note_type:
             note_type = NoteType(
@@ -270,38 +292,46 @@ def seed_template():
             db.session.commit()
             print("Đã khởi tạo NoteType: Flama Standard Vocabulary (published)")
 
-            # Tạo list các trường động (Khớp với columns của VocabularyEntry)
-            fields = [
-                ("word", "text", True),
-                ("hanviet", "text", False),
-                ("reading", "text", False),
-                ("translation_vi", "text", False),
-                ("meaning_jp", "richtext", False),
-                ("meaning_vi", "richtext", False),
-                ("usage_jp", "richtext", False),
-                ("usage_vi", "richtext", False),
-                ("example_jp", "richtext", False),
-                ("example_vi", "richtext", False),
-                ("additional_note_jp", "richtext", False),
-                ("additional_note_vi", "richtext", False),
-                ("image", "image", False),
-                ("diagram", "image", False),
-                ("word_audio", "audio", False),
-                ("example_audio", "audio", False)
-            ]
+        existing_fields = {
+            field.name: field
+            for field in FieldDef.query.filter_by(note_type_id=note_type.id).all()
+        }
+        created_fields = 0
+        updated_fields = 0
 
-            for i, (name, f_type, required) in enumerate(fields):
-                field_def = FieldDef(
-                    note_type_id=note_type.id,
-                    name=name,
-                    field_type=f_type,
-                    position=i,
-                    required=required
+        for i, (name, f_type, required) in enumerate(fields):
+            field_def = existing_fields.get(name)
+            if not field_def:
+                db.session.add(
+                    FieldDef(
+                        note_type_id=note_type.id,
+                        name=name,
+                        field_type=f_type,
+                        position=i,
+                        required=required
+                    )
                 )
-                db.session.add(field_def)
-            
-            db.session.commit()
-            print(f"Đã seed {len(fields)} fields cho NoteType.")
+                created_fields += 1
+                continue
+
+            changed = False
+            if field_def.field_type != f_type:
+                field_def.field_type = f_type
+                changed = True
+            if bool(field_def.required) != bool(required):
+                field_def.required = required
+                changed = True
+            if int(field_def.position or 0) != i:
+                field_def.position = i
+                changed = True
+            if changed:
+                updated_fields += 1
+
+        db.session.commit()
+        print(
+            f"Đã đồng bộ field defs. created={created_fields}, "
+            f"updated={updated_fields}, expected_total={len(fields)}"
+        )
 
         # Cập nhật hoặc tạo mới Template
         template_name = "Default Flama Flashcard"

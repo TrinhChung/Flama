@@ -2,6 +2,113 @@
 
 {% block title %}Edit Fields{% endblock %}
 
+{% block styles %}
+<style>
+    .fields-list-wrap {
+        min-height: 320px;
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        background: #ffffff;
+        overflow: hidden;
+    }
+
+    .fields-list {
+        min-height: 260px;
+        max-height: 520px;
+        overflow-y: auto;
+        padding: 0.5rem;
+    }
+
+    .fields-list.is-loading {
+        opacity: 0.6;
+    }
+
+    .field-list-empty {
+        padding: 1rem;
+        text-align: center;
+        color: #6b7280;
+        border-top: 1px solid #f1f5f9;
+        background: #f8fafc;
+    }
+
+    .field-row {
+        cursor: grab;
+        padding: 0.75rem 0.625rem;
+        border-radius: 8px;
+        transition: background-color 0.15s ease, border-color 0.15s ease;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-bottom: 0.35rem;
+        background: #ffffff;
+        border: 1px solid transparent;
+    }
+
+    .field-row:last-child {
+        margin-bottom: 0;
+    }
+
+    .field-row:hover {
+        background: #fff8f5;
+        border-color: #fed7aa;
+    }
+
+    .field-row.is-selected {
+        background: #fff1e6;
+        border-color: #fdba74;
+    }
+
+    .field-row:active {
+        cursor: grabbing;
+    }
+
+    .field-row.dragging {
+        opacity: 0.5;
+        border-color: #fb923c;
+        background: #fff7ed;
+    }
+
+    .field-row.drag-over-top {
+        border-top: 3px solid var(--flama-orange-500, #f97316);
+    }
+
+    .field-row.drag-over-bottom {
+        border-bottom: 3px solid var(--flama-orange-500, #f97316);
+    }
+
+    .field-drag-handle {
+        color: #94a3b8;
+        width: 20px;
+        display: inline-flex;
+        justify-content: center;
+        align-items: center;
+        cursor: grab;
+    }
+
+    .field-name-display {
+        flex-grow: 1;
+        font-weight: 600;
+        color: var(--flama-text);
+        word-break: break-word;
+    }
+
+    .field-type-badge {
+        font-size: 0.75rem;
+        color: #475569;
+        background: #f8fafc;
+        padding: 0.2rem 0.45rem;
+        border-radius: 4px;
+        border: 1px solid #e2e8f0;
+        text-transform: lowercase;
+    }
+
+    .fields-info-text {
+        font-size: 0.85rem;
+        color: #64748b;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <section class="py-3" data-note-type-id="{{ note_type.id }}" id="note-type-fields-root">
     <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
@@ -18,44 +125,96 @@
         </div>
     </div>
 
+    <div id="global-error" class="alert alert-danger d-none py-2" role="alert"></div>
+
     <div class="row g-3">
-        <div class="col-lg-12">
-            <div class="card card-body">
-                <h3 class="h6">Fields</h3>
-                <div class="table-responsive">
-                    <table class="table table-sm align-middle mb-2">
-                        <thead>
-                            <tr>
-                                <th>Name</th>
-                                <th>Type</th>
-                                <th>Req</th>
-                                <th></th>
-                            </tr>
-                        </thead>
-                        <tbody id="field-list-body"></tbody>
-                    </table>
+        <div class="col-lg-5 col-md-6">
+            <div class="card card-body h-100">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h3 class="h6 mb-0">Fields</h3>
+                    <button class="btn btn-sm btn-outline-primary" id="btn-show-add-field">
+                        <i class="bi bi-plus"></i> Add
+                    </button>
                 </div>
-                <form id="add-field-form" class="border-top pt-3">
-                    <div class="row g-2">
-                        <div class="col-12 col-sm-5">
-                            <input class="form-control form-control-sm" id="new-field-name"
-                                placeholder="Field Name (e.g. PitchAccent)" />
-                        </div>
-                        <div class="col-12 col-sm-4">
-                            <select class="form-select form-select-sm" id="new-field-type">
-                                <option value="text">text</option>
-                                <option value="richtext">richtext</option>
-                                <option value="image">image</option>
-                                <option value="audio">audio</option>
-                                <option value="diagram">diagram</option>
-                            </select>
-                        </div>
-                        <div class="col-12 col-sm-3 d-grid">
-                            <button class="btn btn-sm btn-primary" type="submit">Add New Field</button>
-                        </div>
+                <p class="fields-info-text mb-2"><i class="bi bi-info-circle"></i> Drag and drop to reorder fields</p>
+
+                <div class="fields-list-wrap">
+                    <div id="field-list-body" class="fields-list"></div>
+                    <div id="field-list-empty" class="field-list-empty d-none">No fields yet. Click Add to create one.</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-7 col-md-6">
+            <div class="card card-body h-100" id="field-detail-card" style="display: none;">
+                <h3 class="h6 mb-3">Field Properties</h3>
+                <form id="edit-field-form">
+                    <input type="hidden" id="edit-field-id" />
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold text-muted">Field Name</label>
+                        <input type="text" class="form-control form-control-sm" id="edit-field-name" required />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold text-muted">Type</label>
+                        <select class="form-select form-select-sm" id="edit-field-type">
+                            <option value="text">text</option>
+                            <option value="richtext">richtext</option>
+                            <option value="image">image</option>
+                            <option value="audio">audio</option>
+                            <option value="diagram">diagram</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-4 form-check pt-1">
+                        <input type="checkbox" class="form-check-input" id="edit-field-required" />
+                        <label class="form-check-label small text-muted ms-1" for="edit-field-required">Required field</label>
+                    </div>
+
+                    <div class="d-flex justify-content-between pt-3 border-top mt-auto">
+                        <button type="button" class="btn btn-sm btn-outline-danger" id="btn-delete-field">Delete</button>
+                        <button type="submit" class="btn btn-sm btn-primary"
+                            style="background-color: var(--flama-orange-600); border-color: var(--flama-orange-600);">Save Changes</button>
                     </div>
                     <small id="field-error" class="text-danger d-none mt-2"></small>
                 </form>
+            </div>
+
+            <div class="card card-body h-100" id="add-field-card" style="display: none;">
+                <h3 class="h6 mb-3">Add New Field</h3>
+                <form id="add-field-form">
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold text-muted">Field Name</label>
+                        <input type="text" class="form-control form-control-sm" id="new-field-name" placeholder="e.g. PitchAccent" required />
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="form-label small fw-bold text-muted">Type</label>
+                        <select class="form-select form-select-sm" id="new-field-type">
+                            <option value="text">text</option>
+                            <option value="richtext">richtext</option>
+                            <option value="image">image</option>
+                            <option value="audio">audio</option>
+                            <option value="diagram">diagram</option>
+                        </select>
+                    </div>
+
+                    <div class="d-flex justify-content-end pt-3 border-top gap-2 mt-auto">
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="btn-cancel-add">Cancel</button>
+                        <button type="submit" class="btn btn-sm btn-primary"
+                            style="background-color: var(--flama-orange-600); border-color: var(--flama-orange-600);">Add Field</button>
+                    </div>
+                    <small id="add-field-error" class="text-danger d-none mt-2"></small>
+                </form>
+            </div>
+
+            <div class="card card-body h-100 align-items-center justify-content-center text-muted"
+                id="empty-selection-card" style="display: flex;">
+                <div class="text-center">
+                    <i class="bi bi-input-cursor-text mb-2" style="font-size: 2rem; opacity: 0.5;"></i>
+                    <p class="mb-0">Select a field to edit its properties</p>
+                </div>
             </div>
         </div>
     </div>
@@ -67,15 +226,42 @@
     (() => {
         const root = document.getElementById("note-type-fields-root");
         if (!root) return;
+
         const noteTypeId = root.getAttribute("data-note-type-id");
+        if (!noteTypeId) return;
 
         const fieldListBody = document.getElementById("field-list-body");
-        const fieldError = document.getElementById("field-error");
+        const fieldListEmpty = document.getElementById("field-list-empty");
         const addFieldForm = document.getElementById("add-field-form");
+        const editFieldForm = document.getElementById("edit-field-form");
+
+        const fieldDetailCard = document.getElementById("field-detail-card");
+        const addFieldCard = document.getElementById("add-field-card");
+        const emptySelectionCard = document.getElementById("empty-selection-card");
+
+        const btnShowAddField = document.getElementById("btn-show-add-field");
+        const btnCancelAdd = document.getElementById("btn-cancel-add");
+        const btnDeleteField = document.getElementById("btn-delete-field");
+
+        const fieldError = document.getElementById("field-error");
+        const addFieldError = document.getElementById("add-field-error");
+        const globalError = document.getElementById("global-error");
+
         const newFieldName = document.getElementById("new-field-name");
         const newFieldType = document.getElementById("new-field-type");
 
-        let noteType = null;
+        const editFieldId = document.getElementById("edit-field-id");
+        const editFieldName = document.getElementById("edit-field-name");
+        const editFieldType = document.getElementById("edit-field-type");
+        const editFieldRequired = document.getElementById("edit-field-required");
+
+        const state = {
+            fields: [],
+            selectedFieldId: null,
+            draggedFieldId: null,
+            dropPlacement: "before",
+            isLoading: false,
+        };
 
         function showError(el, msg) {
             el.textContent = msg || "Request failed.";
@@ -87,104 +273,308 @@
             el.classList.add("d-none");
         }
 
+        function showGlobalError(message) {
+            if (!globalError) return;
+            globalError.textContent = message || "Request failed.";
+            globalError.classList.remove("d-none");
+        }
+
+        function clearGlobalError() {
+            if (!globalError) return;
+            globalError.textContent = "";
+            globalError.classList.add("d-none");
+        }
+
         async function requestJson(url, options = {}) {
             const response = await fetch(url, options);
-            const data = await response.json().catch(() => ({}));
-            if (!response.ok) throw new Error(data.message || "Request failed.");
+            const raw = await response.text();
+            let data = {};
+            if (raw) {
+                try {
+                    data = JSON.parse(raw);
+                } catch (_) {
+                    data = { message: raw };
+                }
+            }
+            if (!response.ok) {
+                throw new Error(data.message || "Request failed.");
+            }
             return data;
+        }
+
+        function escapeHtml(value) {
+            return String(value ?? "")
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/\"/g, "&quot;")
+                .replace(/'/g, "&#39;");
+        }
+
+        function showCard(cardId) {
+            fieldDetailCard.style.display = cardId === "detail" ? "flex" : "none";
+            if (cardId === "detail") fieldDetailCard.classList.add("flex-column");
+
+            addFieldCard.style.display = cardId === "add" ? "flex" : "none";
+            if (cardId === "add") addFieldCard.classList.add("flex-column");
+
+            emptySelectionCard.style.display = cardId === "empty" ? "flex" : "none";
+        }
+
+        function getSortedFields() {
+            return state.fields.slice().sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+        }
+
+        function getFieldById(fieldId) {
+            return state.fields.find((field) => field.id === fieldId) || null;
+        }
+
+        function setLoading(isLoading) {
+            state.isLoading = isLoading;
+            fieldListBody.classList.toggle("is-loading", isLoading);
+            if (btnShowAddField) btnShowAddField.disabled = isLoading;
+        }
+
+        function clearDragIndicators() {
+            document.querySelectorAll(".field-row").forEach((row) => {
+                row.classList.remove("drag-over-top", "drag-over-bottom", "dragging");
+            });
+        }
+
+        function syncEmptyState() {
+            const hasFields = getSortedFields().length > 0;
+            fieldListEmpty.classList.toggle("d-none", hasFields);
+        }
+
+        function selectField(fieldId) {
+            state.selectedFieldId = fieldId;
+            const field = getFieldById(fieldId);
+
+            document.querySelectorAll(".field-row").forEach((row) => {
+                row.classList.toggle("is-selected", row.getAttribute("data-field-id") === fieldId);
+            });
+
+            if (!field) {
+                showCard("empty");
+                return;
+            }
+
+            editFieldId.value = field.id;
+            editFieldName.value = field.name;
+            editFieldType.value = field.field_type;
+            editFieldRequired.checked = Boolean(field.required);
+            showCard("detail");
         }
 
         function renderFields() {
             fieldListBody.innerHTML = "";
-            const fields = (noteType?.field_defs || []).slice().sort((a, b) => a.position - b.position);
-            fields.forEach((field, index) => {
-                const tr = document.createElement("tr");
-                tr.innerHTML = `
-          <td><input class="form-control form-control-sm field-name-input" value="${field.name}" /></td>
-          <td>
-            <select class="form-select form-select-sm field-type-input">
-              ${["text", "richtext", "image", "audio", "diagram"].map((t) => `<option value="${t}" ${field.field_type === t ? "selected" : ""}>${t}</option>`).join("")}
-            </select>
-          </td>
-          <td class="text-center"><input type="checkbox" class="form-check-input field-required-input" ${field.required ? "checked" : ""} /></td>
-          <td class="text-nowrap">
-            <button class="btn btn-sm btn-outline-success field-save-btn">Save</button>
-            <button class="btn btn-sm btn-outline-danger field-delete-btn ms-1">Del</button>
-            <button class="btn btn-sm btn-outline-secondary field-up-btn ms-1" ${index === 0 ? "disabled" : ""}>↑</button>
-            <button class="btn btn-sm btn-outline-secondary field-down-btn" ${index === fields.length - 1 ? "disabled" : ""}>↓</button>
-          </td>
-        `;
+            const fields = getSortedFields();
 
-                tr.querySelector(".field-save-btn").addEventListener("click", () => updateField(field.id, tr));
-                tr.querySelector(".field-delete-btn").addEventListener("click", () => deleteField(field.id));
-                tr.querySelector(".field-up-btn").addEventListener("click", () => moveField(field.id, -1));
-                tr.querySelector(".field-down-btn").addEventListener("click", () => moveField(field.id, 1));
-                fieldListBody.appendChild(tr);
+            if (!fields.length) {
+                state.selectedFieldId = null;
+                syncEmptyState();
+                showCard("empty");
+                return;
+            }
+
+            if (!state.selectedFieldId || !fields.some((field) => field.id === state.selectedFieldId)) {
+                state.selectedFieldId = fields[0].id;
+            }
+
+            fields.forEach((field) => {
+                const row = document.createElement("div");
+                row.className = "field-row";
+                if (field.id === state.selectedFieldId) {
+                    row.classList.add("is-selected");
+                }
+
+                row.draggable = true;
+                row.setAttribute("data-field-id", field.id);
+                row.innerHTML = `
+                    <div class="field-drag-handle"><i class="bi bi-grip-vertical"></i></div>
+                    <div class="field-name-display">${escapeHtml(field.name)}</div>
+                    <div class="field-type-badge">${escapeHtml(field.field_type)}</div>
+                `;
+
+                row.addEventListener("click", () => {
+                    clearError(fieldError);
+                    selectField(field.id);
+                });
+
+                row.addEventListener("dragstart", (event) => {
+                    state.draggedFieldId = field.id;
+                    row.classList.add("dragging");
+                    if (event.dataTransfer) {
+                        event.dataTransfer.effectAllowed = "move";
+                        event.dataTransfer.setData("text/plain", field.id);
+                    }
+                });
+
+                row.addEventListener("dragend", () => {
+                    state.draggedFieldId = null;
+                    state.dropPlacement = "before";
+                    clearDragIndicators();
+                });
+
+                row.addEventListener("dragover", (event) => {
+                    if (!state.draggedFieldId || state.draggedFieldId === field.id) return;
+                    event.preventDefault();
+
+                    const rect = row.getBoundingClientRect();
+                    const shouldDropAfter = (event.clientY - rect.top) > (rect.height / 2);
+                    state.dropPlacement = shouldDropAfter ? "after" : "before";
+                    row.classList.toggle("drag-over-top", !shouldDropAfter);
+                    row.classList.toggle("drag-over-bottom", shouldDropAfter);
+                });
+
+                row.addEventListener("dragleave", () => {
+                    row.classList.remove("drag-over-top", "drag-over-bottom");
+                });
+
+                row.addEventListener("drop", async (event) => {
+                    event.preventDefault();
+                    if (!state.draggedFieldId || state.draggedFieldId === field.id) return;
+                    const draggedId = state.draggedFieldId;
+                    const placement = state.dropPlacement || "before";
+                    state.draggedFieldId = null;
+                    state.dropPlacement = "before";
+                    clearDragIndicators();
+                    await reorderFieldsByDrag(draggedId, field.id, placement);
+                });
+
+                fieldListBody.appendChild(row);
             });
+
+            syncEmptyState();
+            selectField(state.selectedFieldId);
         }
 
-        async function refreshNoteType() {
-            noteType = await requestJson(`/api/note-types/${noteTypeId}`);
-            renderFields();
+        async function loadFields() {
+            clearGlobalError();
+            setLoading(true);
+            try {
+                const payload = await requestJson(`/api/note-types/${noteTypeId}/fields`);
+                state.fields = Array.isArray(payload.items) ? payload.items : [];
+                renderFields();
+            } catch (error) {
+                state.fields = [];
+                renderFields();
+                showGlobalError(error.message);
+            } finally {
+                setLoading(false);
+            }
         }
 
-        async function updateField(fieldId, row) {
+        editFieldForm?.addEventListener("submit", async (event) => {
+            event.preventDefault();
             clearError(fieldError);
+            clearGlobalError();
+            const fieldId = editFieldId.value;
+            if (!fieldId) return;
+
             const payload = {
-                name: row.querySelector(".field-name-input")?.value?.trim(),
-                field_type: row.querySelector(".field-type-input")?.value,
-                required: row.querySelector(".field-required-input")?.checked,
+                name: editFieldName.value.trim(),
+                field_type: editFieldType.value,
+                required: editFieldRequired.checked,
             };
+
             try {
                 await requestJson(`/api/note-types/${noteTypeId}/fields/${fieldId}`, {
                     method: "PATCH",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify(payload),
                 });
-                await refreshNoteType();
+                state.selectedFieldId = fieldId;
+                await loadFields();
+                selectField(fieldId);
             } catch (error) {
                 showError(fieldError, error.message);
             }
-        }
+        });
 
-        async function deleteField(fieldId) {
+        btnDeleteField?.addEventListener("click", async () => {
+            const fieldId = editFieldId.value;
+            if (!fieldId) return;
             clearError(fieldError);
+            clearGlobalError();
             if (!window.confirm("Delete this field? Existing values will be removed.")) return;
+
             try {
                 await requestJson(`/api/note-types/${noteTypeId}/fields/${fieldId}`, { method: "DELETE" });
-                await refreshNoteType();
+                state.selectedFieldId = null;
+                await loadFields();
             } catch (error) {
                 showError(fieldError, error.message);
             }
-        }
+        });
 
-        async function moveField(fieldId, delta) {
-            const fields = (noteType?.field_defs || []).slice().sort((a, b) => a.position - b.position);
-            const index = fields.findIndex((f) => f.id === fieldId);
-            const nextIndex = index + delta;
-            if (index < 0 || nextIndex < 0 || nextIndex >= fields.length) return;
-            const swapped = fields.slice();
-            const temp = swapped[index];
-            swapped[index] = swapped[nextIndex];
-            swapped[nextIndex] = temp;
-            const payload = swapped.map((field, position) => ({ id: field.id, position }));
+        async function reorderFieldsByDrag(draggedId, targetId, placement) {
+            clearError(fieldError);
+            clearGlobalError();
+
+            if (!draggedId || !targetId || draggedId === targetId) return;
+            const sorted = getSortedFields();
+
+            const movedField = sorted.find((field) => field.id === draggedId);
+            if (!movedField) return;
+
+            const remaining = sorted.filter((field) => field.id !== draggedId);
+            const targetIndex = remaining.findIndex((field) => field.id === targetId);
+            if (targetIndex < 0) return;
+
+            const insertIndex = placement === "after" ? targetIndex + 1 : targetIndex;
+            remaining.splice(insertIndex, 0, movedField);
+
+            const changed = sorted.some((field, index) => field.id !== remaining[index]?.id);
+            if (!changed) return;
+
+            const payload = remaining.map((field, position) => ({ id: field.id, position }));
+            state.fields = remaining.map((field, position) => ({ ...field, position }));
+            renderFields();
+
             try {
                 await requestJson(`/api/note-types/${noteTypeId}/fields/reorder`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify(payload),
                 });
-                await refreshNoteType();
             } catch (error) {
-                showError(fieldError, error.message);
+                showGlobalError(error.message);
+                await loadFields();
             }
         }
 
+        btnShowAddField?.addEventListener("click", () => {
+            clearError(addFieldError);
+            clearGlobalError();
+            newFieldName.value = "";
+            newFieldType.value = "text";
+            showCard("add");
+        });
+
+        btnCancelAdd?.addEventListener("click", () => {
+            clearError(addFieldError);
+            clearGlobalError();
+            if (state.selectedFieldId) {
+                selectField(state.selectedFieldId);
+                return;
+            }
+
+            const fields = getSortedFields();
+            if (fields.length) {
+                selectField(fields[0].id);
+            } else {
+                showCard("empty");
+            }
+        });
+
         addFieldForm?.addEventListener("submit", async (event) => {
             event.preventDefault();
-            clearError(fieldError);
+            clearError(addFieldError);
+            clearGlobalError();
+
             try {
-                await requestJson(`/api/note-types/${noteTypeId}/fields`, {
+                const response = await requestJson(`/api/note-types/${noteTypeId}/fields`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
@@ -193,14 +583,21 @@
                         required: false,
                     }),
                 });
+
                 newFieldName.value = "";
-                await refreshNoteType();
+                state.selectedFieldId = response?.id || null;
+                await loadFields();
+                if (state.selectedFieldId) {
+                    selectField(state.selectedFieldId);
+                } else {
+                    showCard("empty");
+                }
             } catch (error) {
-                showError(fieldError, error.message);
+                showError(addFieldError, error.message);
             }
         });
 
-        refreshNoteType().catch((error) => showError(fieldError, error.message));
+        loadFields();
     })();
 </script>
 {% endblock %}
