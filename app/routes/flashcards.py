@@ -423,6 +423,17 @@ def note_type_detail_page(note_type_id: str):
     return render_template("flashcards/note_type_detail.html", note_type=note_type, notes=notes)
 
 
+@flashcards_bp.route("/flashcards/note-types/<note_type_id>/fields")
+@login_required
+def note_type_fields_page(note_type_id: str):
+    if not is_admin_user(current_user):
+        return redirect(url_for("main.dashboard"))
+    note_type = _get_note_type_or_404(note_type_id)
+    if not note_type:
+        return redirect(url_for("flashcards.note_type_manager"))
+    return render_template("flashcards/note_type_fields.html", note_type=note_type)
+
+
 @flashcards_bp.route("/flashcards/notes/new")
 @login_required
 def note_editor_page():
@@ -946,6 +957,7 @@ def preview_template(note_type_id: str, template_id: str):
             field_values=sample_field_values,
             media_assets=sample_media_assets,
             preview_note_key=preview_note_key,
+            allow_inline_script=True,
         )
     except TemplateCompileError as exc:
         return _api_error("TEMPLATE_COMPILE_ERROR", str(exc), field="front_html")
@@ -1271,6 +1283,7 @@ def study_next():
             field_defs=note.note_type.field_defs,
             field_values=note.field_values or {},
             media_assets=note.media_assets,
+            allow_inline_script=True,
         )
     except TemplateCompileError as exc:
         return _api_error("TEMPLATE_COMPILE_ERROR", str(exc))

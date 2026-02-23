@@ -1,0 +1,206 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Fields{% endblock %}
+
+{% block content %}
+<section class="py-3" data-note-type-id="{{ note_type.id }}" id="note-type-fields-root">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+        <div>
+            <h2 class="h4 mb-0">{{ note_type.name }}</h2>
+            <small class="text-muted">Field management</small>
+        </div>
+        <div class="d-flex gap-2">
+            <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('flashcards.note_type_manager') }}">Back</a>
+            <a class="btn btn-outline-secondary btn-sm"
+                href="{{ url_for('flashcards.note_type_detail_page', note_type_id=note_type.id) }}">
+                <i class="bi bi-code-slash"></i> Edit Templates
+            </a>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-lg-12">
+            <div class="card card-body">
+                <h3 class="h6">Fields</h3>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-2">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Type</th>
+                                <th>Req</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="field-list-body"></tbody>
+                    </table>
+                </div>
+                <form id="add-field-form" class="border-top pt-3">
+                    <div class="row g-2">
+                        <div class="col-12 col-sm-5">
+                            <input class="form-control form-control-sm" id="new-field-name"
+                                placeholder="Field Name (e.g. PitchAccent)" />
+                        </div>
+                        <div class="col-12 col-sm-4">
+                            <select class="form-select form-select-sm" id="new-field-type">
+                                <option value="text">text</option>
+                                <option value="richtext">richtext</option>
+                                <option value="image">image</option>
+                                <option value="audio">audio</option>
+                                <option value="diagram">diagram</option>
+                            </select>
+                        </div>
+                        <div class="col-12 col-sm-3 d-grid">
+                            <button class="btn btn-sm btn-primary" type="submit">Add New Field</button>
+                        </div>
+                    </div>
+                    <small id="field-error" class="text-danger d-none mt-2"></small>
+                </form>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    (() => {
+        const root = document.getElementById("note-type-fields-root");
+        if (!root) return;
+        const noteTypeId = root.getAttribute("data-note-type-id");
+
+        const fieldListBody = document.getElementById("field-list-body");
+        const fieldError = document.getElementById("field-error");
+        const addFieldForm = document.getElementById("add-field-form");
+        const newFieldName = document.getElementById("new-field-name");
+        const newFieldType = document.getElementById("new-field-type");
+
+        let noteType = null;
+
+        function showError(el, msg) {
+            el.textContent = msg || "Request failed.";
+            el.classList.remove("d-none");
+        }
+
+        function clearError(el) {
+            el.textContent = "";
+            el.classList.add("d-none");
+        }
+
+        async function requestJson(url, options = {}) {
+            const response = await fetch(url, options);
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(data.message || "Request failed.");
+            return data;
+        }
+
+        function renderFields() {
+            fieldListBody.innerHTML = "";
+            const fields = (noteType?.field_defs || []).slice().sort((a, b) => a.position - b.position);
+            fields.forEach((field, index) => {
+                const tr = document.createElement("tr");
+                tr.innerHTML = `
+          <td><input class="form-control form-control-sm field-name-input" value="${field.name}" /></td>
+          <td>
+            <select class="form-select form-select-sm field-type-input">
+              ${["text", "richtext", "image", "audio", "diagram"].map((t) => `<option value="${t}" ${field.field_type === t ? "selected" : ""}>${t}</option>`).join("")}
+            </select>
+          </td>
+          <td class="text-center"><input type="checkbox" class="form-check-input field-required-input" ${field.required ? "checked" : ""} /></td>
+          <td class="text-nowrap">
+            <button class="btn btn-sm btn-outline-success field-save-btn">Save</button>
+            <button class="btn btn-sm btn-outline-danger field-delete-btn ms-1">Del</button>
+            <button class="btn btn-sm btn-outline-secondary field-up-btn ms-1" ${index === 0 ? "disabled" : ""}>↑</button>
+            <button class="btn btn-sm btn-outline-secondary field-down-btn" ${index === fields.length - 1 ? "disabled" : ""}>↓</button>
+          </td>
+        `;
+
+                tr.querySelector(".field-save-btn").addEventListener("click", () => updateField(field.id, tr));
+                tr.querySelector(".field-delete-btn").addEventListener("click", () => deleteField(field.id));
+                tr.querySelector(".field-up-btn").addEventListener("click", () => moveField(field.id, -1));
+                tr.querySelector(".field-down-btn").addEventListener("click", () => moveField(field.id, 1));
+                fieldListBody.appendChild(tr);
+            });
+        }
+
+        async function refreshNoteType() {
+            noteType = await requestJson(`/api/note-types/${noteTypeId}`);
+            renderFields();
+        }
+
+        async function updateField(fieldId, row) {
+            clearError(fieldError);
+            const payload = {
+                name: row.querySelector(".field-name-input")?.value?.trim(),
+                field_type: row.querySelector(".field-type-input")?.value,
+                required: row.querySelector(".field-required-input")?.checked,
+            };
+            try {
+                await requestJson(`/api/note-types/${noteTypeId}/fields/${fieldId}`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload),
+                });
+                await refreshNoteType();
+            } catch (error) {
+                showError(fieldError, error.message);
+            }
+        }
+
+        async function deleteField(fieldId) {
+            clearError(fieldError);
+            if (!window.confirm("Delete this field? Existing values will be removed.")) return;
+            try {
+                await requestJson(`/api/note-types/${noteTypeId}/fields/${fieldId}`, { method: "DELETE" });
+                await refreshNoteType();
+            } catch (error) {
+                showError(fieldError, error.message);
+            }
+        }
+
+        async function moveField(fieldId, delta) {
+            const fields = (noteType?.field_defs || []).slice().sort((a, b) => a.position - b.position);
+            const index = fields.findIndex((f) => f.id === fieldId);
+            const nextIndex = index + delta;
+            if (index < 0 || nextIndex < 0 || nextIndex >= fields.length) return;
+            const swapped = fields.slice();
+            const temp = swapped[index];
+            swapped[index] = swapped[nextIndex];
+            swapped[nextIndex] = temp;
+            const payload = swapped.map((field, position) => ({ id: field.id, position }));
+            try {
+                await requestJson(`/api/note-types/${noteTypeId}/fields/reorder`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload),
+                });
+                await refreshNoteType();
+            } catch (error) {
+                showError(fieldError, error.message);
+            }
+        }
+
+        addFieldForm?.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            clearError(fieldError);
+            try {
+                await requestJson(`/api/note-types/${noteTypeId}/fields`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        name: newFieldName.value.trim(),
+                        field_type: newFieldType.value,
+                        required: false,
+                    }),
+                });
+                newFieldName.value = "";
+                await refreshNoteType();
+            } catch (error) {
+                showError(fieldError, error.message);
+            }
+        });
+
+        refreshNoteType().catch((error) => showError(fieldError, error.message));
+    })();
+</script>
+{% endblock %}

@@ -961,7 +961,8 @@ def _render_study_flashcard(card) -> dict:
             field_defs=template.note_type.field_defs if template.note_type else [],
             field_values=field_values,
             media_assets=[],
-            preview_note_key=str(card.id)
+            preview_note_key=str(card.id),
+            allow_inline_script=True,
         )
         ret["front"] = rendered.get("front", "")
         ret["back"] = rendered.get("back", "")

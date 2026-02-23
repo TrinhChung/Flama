@@ -36,8 +36,12 @@
             <td>{{ note_type.field_defs|length }}</td>
             <td>{{ note_type.templates|length }}</td>
             <td class="text-end">
-              <a class="btn btn-sm btn-outline-primary" href="{{ url_for('flashcards.note_type_detail_page', note_type_id=note_type.id) }}">Edit</a>
-              <button class="btn btn-sm btn-outline-danger ms-1 delete-note-type-btn" data-id="{{ note_type.id }}">Delete</button>
+              <a class="btn btn-sm btn-outline-secondary"
+                href="{{ url_for('flashcards.note_type_fields_page', note_type_id=note_type.id) }}">Fields</a>
+              <a class="btn btn-sm btn-outline-primary ms-1"
+                href="{{ url_for('flashcards.note_type_detail_page', note_type_id=note_type.id) }}">Templates</a>
+              <button class="btn btn-sm btn-outline-danger ms-1 delete-note-type-btn"
+                data-id="{{ note_type.id }}">Delete</button>
             </td>
           </tr>
           {% else %}
@@ -92,7 +96,7 @@
       }
       try {
         const data = await createNoteType(name);
-        window.location.href = `/flashcards/note-types/${data.id}`;
+        window.location.href = `/flashcards/note-types/${data.id}/fields`;
       } catch (error) {
         showError(error.message);
       }

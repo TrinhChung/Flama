@@ -49,6 +49,7 @@ ALLOWED_HTML_TAGS = [
     "audio",
     "video",
     "source",
+    "button",
     "ruby",
     "rt",
     "rp",
@@ -86,6 +87,10 @@ _PREVIEW_TTL = timedelta(seconds=30)
 PREVIEW_MEDIA_IMAGE_TOKEN = "__fc_preview_image__"
 PREVIEW_MEDIA_AUDIO_TOKEN = "__fc_preview_audio__"
 PREVIEW_MEDIA_DIAGRAM_TOKEN = "__fc_preview_diagram__"
+_INLINE_SCRIPT_RE = re.compile(r"(?is)<script\b([^>]*)>(.*?)</script>")
+_SAFE_BUTTON_ONCLICK_RE = re.compile(
+    r"""^\s*document\.getElementById\(\s*['"][A-Za-z0-9_-]+['"]\s*\)\.play\(\)\s*;?\s*$"""
+)
 
 
 class TemplateCompileError(ValueError):
@@ -95,6 +100,8 @@ class TemplateCompileError(ValueError):
 def _allowed_attr(tag: str, name: str, value: str) -> bool:
     lowered = name.lower()
     if lowered.startswith("on"):
+        if lowered == "onclick" and tag == "button":
+            return bool(_SAFE_BUTTON_ONCLICK_RE.match((value or "").strip()))
         return False
     if lowered in {"class", "id", "style", "alt"}:
         return True
@@ -110,6 +117,67 @@ def _allowed_attr(tag: str, name: str, value: str) -> bool:
             return True
         return False
     return False
+
+
+def _extract_inline_scripts(source_html: str) -> tuple[str, list[str]]:
+    scripts: list[str] = []
+
+    def _replace(match: re.Match[str]) -> str:
+        attrs = (match.group(1) or "").strip()
+        body = match.group(2) or ""
+        if re.search(r"\bsrc\s*=", attrs, flags=re.IGNORECASE):
+            return ""
+        # Keep only optional type attribute; strip everything else.
+        type_match = re.search(
+            r"""\btype\s*=\s*("[^"]*"|'[^']*'|[^\s"'=<>`]+)""",
+            attrs,
+            flags=re.IGNORECASE,
+        )
+        type_attr = f" type={type_match.group(1)}" if type_match else ""
+        scripts.append(f"<script{type_attr}>{body}</script>")
+        return ""
+
+    cleaned = _INLINE_SCRIPT_RE.sub(_replace, source_html or "")
+    return cleaned, scripts
+
+
+def _upgrade_media_double_brace_tokens(
+    source_html: str,
+    field_defs: list[Any],
+) -> str:
+    upgraded = source_html or ""
+    for field_def in field_defs:
+        if field_def.field_type not in {"image", "diagram"}:
+            continue
+        name = re.escape(field_def.name)
+        # Upgrade {{image}} / {{diagram}} -> triple braces for media html snippets.
+        token_re = re.compile(rf"(?<!{{){{{{\s*{name}\s*}}}}(?!}})")
+        upgraded = token_re.sub(f"{{{{{{{field_def.name}}}}}}}", upgraded)
+    return upgraded
+
+
+def _media_field_used_as_url(field_name: str, template_sources: tuple[str, str] | None) -> bool:
+    if not template_sources:
+        return False
+    pattern = re.compile(
+        r"""(?is)\b(?:src|href)\s*=\s*["']\s*\{\{\s*"""
+        + re.escape(field_name)
+        + r"""\s*\}\}\s*["']""",
+        flags=re.IGNORECASE,
+    )
+    return bool(pattern.search(template_sources[0] or "") or pattern.search(template_sources[1] or ""))
+
+
+def _resolve_media_url(value: Any, media_by_id: dict[str, Any]) -> str:
+    if is_field_empty(value):
+        return ""
+    raw = str(value).strip()
+    asset = media_by_id.get(raw)
+    if asset is not None:
+        return f"/media/proxy/{asset.id}"
+    if raw.startswith("/media/proxy/"):
+        return raw
+    return ""
 
 
 def sanitize_css(css: str | None) -> str:
@@ -193,12 +261,7 @@ def _render_media_html(field_type: str, value: Any, field_name: str, media_by_id
     if field_type in {"image", "diagram"} and raw.startswith("<"):
         return sanitize_html_fragment(raw)
 
-    asset = media_by_id.get(raw)
-    media_url = None
-    if asset is not None:
-        media_url = f"/media/proxy/{asset.id}"
-    elif raw.startswith("/media/proxy/"):
-        media_url = raw
+    media_url = _resolve_media_url(raw, media_by_id)
 
     if not media_url:
         return ""
@@ -213,6 +276,8 @@ def build_render_context(
     field_defs: list[Any],
     field_values: dict[str, Any] | None,
     media_assets: list[Any] | None,
+    *,
+    template_sources: tuple[str, str] | None = None,
 ) -> dict[str, Any]:
     values = field_values or {}
     media_by_id = {str(asset.id): asset for asset in (media_assets or [])}
@@ -225,7 +290,13 @@ def build_render_context(
             context[name] = sanitize_richtext(str(value or ""))
             continue
         if field_def.field_type in {"image", "audio", "diagram"}:
-            context[name] = _render_media_html(field_def.field_type, value, name, media_by_id)
+            media_html = _render_media_html(field_def.field_type, value, name, media_by_id)
+            media_url = _resolve_media_url(value, media_by_id)
+            if field_def.field_type == "audio" and _media_field_used_as_url(name, template_sources):
+                context[name] = media_url
+            else:
+                context[name] = media_html
+            context[f"{name}_url"] = media_url
             continue
         context[name] = "" if value is None else str(value)
 
@@ -233,6 +304,10 @@ def build_render_context(
     for key, value in values.items():
         if key not in context:
             context[key] = "" if value is None else str(value)
+
+    # Common alias for compatibility with older templates.
+    if "hanviet" in context and "han_viet" not in context:
+        context["han_viet"] = context["hanviet"]
 
     return context
 
@@ -244,6 +319,7 @@ def render_template_pair(
     field_values: dict[str, Any] | None,
     media_assets: list[Any] | None = None,
     preview_note_key: str | None = None,
+    allow_inline_script: bool = False,
 ) -> dict[str, str]:
     css = sanitize_css(getattr(template, "shared_css", ""))
     preview_key = None
@@ -256,25 +332,43 @@ def render_template_pair(
         if cached and datetime.utcnow() - cached[0] <= _PREVIEW_TTL:
             return cached[1]
 
-    context = build_render_context(field_defs, field_values, media_assets)
     template_updated = str(getattr(template, "updated_at", ""))
     front_source_raw = getattr(template, "front_html", "")
     back_source_raw = getattr(template, "back_html", "")
-    front_hash = hashlib.sha256(front_source_raw.encode("utf-8")).hexdigest()[:16]
-    back_hash = hashlib.sha256(back_source_raw.encode("utf-8")).hexdigest()[:16]
+    front_source_prepared = _upgrade_media_double_brace_tokens(front_source_raw, field_defs)
+    back_source_prepared = _upgrade_media_double_brace_tokens(back_source_raw, field_defs)
+    front_script_sources: list[str] = []
+    back_script_sources: list[str] = []
+    if allow_inline_script:
+        front_source_prepared, front_script_sources = _extract_inline_scripts(front_source_prepared)
+        back_source_prepared, back_script_sources = _extract_inline_scripts(back_source_prepared)
+
+    context = build_render_context(
+        field_defs,
+        field_values,
+        media_assets,
+        template_sources=(front_source_raw, back_source_raw),
+    )
+    front_hash = hashlib.sha256(front_source_prepared.encode("utf-8")).hexdigest()[:16]
+    back_hash = hashlib.sha256(back_source_prepared.encode("utf-8")).hexdigest()[:16]
     front_key = f"{template.id}:{template_updated}:front:{front_hash}"
     back_key = f"{template.id}:{template_updated}:back:{back_hash}"
-    front_source = _cache_template(front_key, front_source_raw)
-    back_source = _cache_template(back_key, back_source_raw)
+    front_source = _cache_template(front_key, front_source_prepared)
+    back_source = _cache_template(back_key, back_source_prepared)
 
     try:
         front_rendered = chevron.render(front_source, context)
         back_rendered = chevron.render(back_source, context)
+        front_scripts = [chevron.render(script_source, context) for script_source in front_script_sources]
+        back_scripts = [chevron.render(script_source, context) for script_source in back_script_sources]
     except Exception as exc:
         raise TemplateCompileError(str(exc)) from exc
 
     safe_front = sanitize_html_fragment(front_rendered)
     safe_back = sanitize_html_fragment(back_rendered)
+    if allow_inline_script:
+        safe_front = f"{safe_front}{''.join(front_scripts)}"
+        safe_back = f"{safe_back}{''.join(back_scripts)}"
     scoped_front = f"<style>{css}</style>{safe_front}" if css else safe_front
     scoped_back = f"<style>{css}</style>{safe_back}" if css else safe_back
     result = {"front_html": scoped_front, "back_html": scoped_back}

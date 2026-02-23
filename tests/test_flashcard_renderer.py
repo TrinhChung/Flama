@@ -77,6 +77,38 @@ class FlashcardRendererTests(unittest.TestCase):
         self.assertIn("fc-preview-media-box", rendered["front_html"])
         self.assertIn("[Image: image]", rendered["front_html"])
 
+    def test_inline_script_and_audio_src_template_supported_when_enabled(self):
+        template = self._template(
+            """{{#word_audio}}<audio id="custom-audio" src="{{word_audio}}"></audio>{{/word_audio}}
+            {{#hanviet}}<div>{{han_viet}}</div>{{/hanviet}}
+            {{image}}{{diagram}}
+            <script>window.__fc_test = true;</script>"""
+        )
+        fields = [
+            self._field("word_audio", "audio"),
+            self._field("hanviet", "text"),
+            self._field("image", "image"),
+            self._field("diagram", "diagram"),
+        ]
+        rendered = render_template_pair(
+            template=template,
+            field_defs=fields,
+            field_values={
+                "word_audio": "/media/proxy/audio-1",
+                "hanviet": "HANVIET",
+                "image": "/media/proxy/image-1",
+                "diagram": "<div>diagram-html</div>",
+            },
+            media_assets=[],
+            allow_inline_script=True,
+        )
+        html = rendered["front_html"]
+        self.assertIn('src="/media/proxy/audio-1"', html)
+        self.assertIn("HANVIET", html)
+        self.assertIn("<img", html)
+        self.assertIn("diagram-html", html)
+        self.assertIn("<script>", html)
+
     def test_empty_rules(self):
         self.assertTrue(is_field_empty(None))
         self.assertTrue(is_field_empty(""))
