@@ -33,6 +33,11 @@ from app.services.anki_scheduler import (
     computeAnswerPreview,
     default_deck_options,
 )
+from app.services.stats_overview import (
+    normalize_review_mode,
+    record_review_event,
+    update_user_timezone,
+)
 from models import db
 from models.column_preference import VocabularyColumnPreference
 from models.vocabulary_deck import VocabularyDeck
@@ -1973,6 +1978,7 @@ def study_answer(entry_id: int):
 
     options = default_deck_options()
     current_state = _card_state_from_progress(progress, now)
+    review_mode = normalize_review_mode(current_state.type)
     updated_state = applyAnswer(current_state, options, now, rating)  # type: ignore[arg-type]
     _apply_card_state_to_progress(progress, updated_state, now)
 
@@ -1998,6 +2004,19 @@ def study_answer(entry_id: int):
     # Fallback to dashboard if no valid URL could be built
     if not next_url:
         next_url = url_for("main.dashboard")
+
+    update_user_timezone(current_user, data.get("timezone"))
+    record_review_event(
+        user_id=current_user.id,
+        card_id=f"entry:{entry.id}",
+        entry_id=entry.id,
+        deck_id=entry.deck_id,
+        note_type_id=None,
+        reviewed_at=now,
+        duration_ms=data.get("duration_ms"),
+        rating=rating,
+        mode=review_mode,
+    )
 
     db.session.commit()
     return jsonify(

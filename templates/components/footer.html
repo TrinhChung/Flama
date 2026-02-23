@@ -42,8 +42,6 @@
                 <ul class="footer-links">
                     {% if current_user.is_authenticated and current_user.is_admin %}
                     <li><a href="{{ url_for('flashcards.note_type_manager') }}">Quản lý loại thẻ</a></li>
-                    <li><a href="{{ url_for('flashcards.notes_list_page') }}">Quản lý ghi chú thẻ</a></li>
-                    <li><a href="{{ url_for('flashcards.note_editor_page') }}">Tạo ghi chú mới</a></li>
                     <li><a href="{{ url_for('admin.user_management_page') }}">Người dùng &amp; phân quyền</a></li>
                     {% elif current_user.is_authenticated %}
                     <li><a href="{{ url_for('main.dashboard') }}">Trang học tập</a></li>

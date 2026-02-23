@@ -1,0 +1,499 @@
+"""Statistics aggregation and review-event capture helpers."""
+
+from __future__ import annotations
+
+from datetime import date, datetime, time, timedelta, timezone
+from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+from models import db
+from models.flashcard import ReviewEvent
+
+UTC = timezone.utc
+DEFAULT_TIMEZONE = "UTC"
+VALID_REVIEW_MODES = {"new", "learn", "review"}
+
+
+def normalize_timezone_name(raw_timezone: Any) -> str | None:
+    if raw_timezone is None:
+        return None
+    candidate = str(raw_timezone).strip()
+    if not candidate or len(candidate) > 64:
+        return None
+    if candidate.upper() in {"UTC", "ETC/UTC", "GMT"}:
+        return DEFAULT_TIMEZONE
+    try:
+        ZoneInfo(candidate)
+    except ZoneInfoNotFoundError:
+        return None
+    return candidate
+
+
+def get_effective_timezone_name(raw_timezone: Any) -> str:
+    normalized = normalize_timezone_name(raw_timezone)
+    return normalized or DEFAULT_TIMEZONE
+
+
+def update_user_timezone(user_obj: Any, raw_timezone: Any) -> bool:
+    if user_obj is None:
+        return False
+    normalized = normalize_timezone_name(raw_timezone)
+    if not normalized:
+        return False
+    if getattr(user_obj, "timezone", None) == normalized:
+        return False
+    user_obj.timezone = normalized
+    return True
+
+
+def normalize_review_mode(raw_mode: Any) -> str:
+    mode = str(raw_mode or "").strip().lower()
+    if mode in {"learning", "relearning", "learn"}:
+        return "learn"
+    if mode == "review":
+        return "review"
+    if mode == "new":
+        return "new"
+    return "review"
+
+
+def _normalize_duration_ms(raw_duration_ms: Any) -> int | None:
+    if raw_duration_ms is None:
+        return None
+    try:
+        value = int(raw_duration_ms)
+    except (TypeError, ValueError):
+        return None
+    if value < 0:
+        return None
+    return value
+
+
+def _ensure_naive_utc(moment: datetime) -> datetime:
+    if moment.tzinfo is None:
+        return moment
+    return moment.astimezone(UTC).replace(tzinfo=None)
+
+
+def _utc_to_local_day(moment: datetime, timezone_obj) -> date:
+    utc_moment = moment
+    if utc_moment.tzinfo is None:
+        utc_moment = utc_moment.replace(tzinfo=UTC)
+    else:
+        utc_moment = utc_moment.astimezone(UTC)
+    return utc_moment.astimezone(timezone_obj).date()
+
+
+def _local_start_to_utc_naive(day_value: date, timezone_obj) -> datetime:
+    local_start = datetime.combine(day_value, time.min, tzinfo=timezone_obj)
+    return local_start.astimezone(UTC).replace(tzinfo=None)
+
+
+def _next_day(day_value: date) -> date:
+    return day_value + timedelta(days=1)
+
+
+def _iter_days(start_day: date, end_day: date):
+    cursor = start_day
+    while cursor <= end_day:
+        yield cursor
+        cursor = _next_day(cursor)
+
+
+def _round2(value: float) -> float:
+    return round(float(value) + 1e-12, 2)
+
+
+def _safe_int(value: Any) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _parse_sql_day(raw_day: Any) -> date | None:
+    if isinstance(raw_day, date):
+        return raw_day
+    if isinstance(raw_day, datetime):
+        return raw_day.date()
+    if raw_day is None:
+        return None
+    text = str(raw_day).strip()
+    if not text:
+        return None
+    try:
+        return date.fromisoformat(text[:10])
+    except ValueError:
+        return None
+
+
+def _build_timezone_obj(timezone_name: str):
+    if str(timezone_name).upper() == "UTC":
+        return UTC
+    try:
+        return ZoneInfo(timezone_name)
+    except ZoneInfoNotFoundError:
+        return UTC
+
+
+def _query_daily_aggregates_mysql(
+    *,
+    user_id: int,
+    timezone_name: str,
+    start_utc: datetime,
+    end_utc: datetime,
+) -> dict[date, dict[str, int]]:
+    mysql_timezone = "+00:00" if str(timezone_name).upper() == "UTC" else timezone_name
+    local_day_expr = db.func.date(
+        db.func.convert_tz(ReviewEvent.reviewed_at, "+00:00", mysql_timezone)
+    )
+    duration_expr = db.func.coalesce(
+        db.func.sum(
+            db.case(
+                (
+                    db.and_(
+                        ReviewEvent.duration_ms.isnot(None),
+                        ReviewEvent.duration_ms > 0,
+                    ),
+                    ReviewEvent.duration_ms,
+                ),
+                else_=0,
+            )
+        ),
+        0,
+    )
+
+    rows = (
+        db.session.query(
+            local_day_expr.label("local_day"),
+            db.func.count(ReviewEvent.id).label("cards"),
+            duration_expr.label("duration_ms"),
+        )
+        .filter(
+            ReviewEvent.user_id == user_id,
+            ReviewEvent.reviewed_at >= start_utc,
+            ReviewEvent.reviewed_at < end_utc,
+        )
+        .group_by(local_day_expr)
+        .all()
+    )
+
+    by_day: dict[date, dict[str, int]] = {}
+    for local_day, cards, duration_ms in rows:
+        parsed_day = _parse_sql_day(local_day)
+        if not parsed_day:
+            continue
+        by_day[parsed_day] = {
+            "cards": _safe_int(cards),
+            "duration_ms": max(0, _safe_int(duration_ms)),
+        }
+    return by_day
+
+
+def _query_daily_aggregates_python(
+    *,
+    user_id: int,
+    timezone_obj,
+    start_utc: datetime,
+    end_utc: datetime,
+) -> dict[date, dict[str, int]]:
+    rows = (
+        db.session.query(ReviewEvent.reviewed_at, ReviewEvent.duration_ms)
+        .filter(
+            ReviewEvent.user_id == user_id,
+            ReviewEvent.reviewed_at >= start_utc,
+            ReviewEvent.reviewed_at < end_utc,
+        )
+        .all()
+    )
+    by_day: dict[date, dict[str, int]] = {}
+    for reviewed_at, duration_ms in rows:
+        if reviewed_at is None:
+            continue
+        local_day = _utc_to_local_day(reviewed_at, timezone_obj)
+        bucket = by_day.setdefault(local_day, {"cards": 0, "duration_ms": 0})
+        bucket["cards"] += 1
+        duration = _safe_int(duration_ms)
+        if duration > 0:
+            bucket["duration_ms"] += duration
+    return by_day
+
+
+def _query_daily_aggregates(
+    *,
+    user_id: int,
+    timezone_name: str,
+    timezone_obj,
+    start_utc: datetime,
+    end_utc: datetime,
+) -> dict[date, dict[str, int]]:
+    dialect = db.session.get_bind().dialect.name if db.session.get_bind() is not None else ""
+    if dialect == "mysql":
+        return _query_daily_aggregates_mysql(
+            user_id=user_id,
+            timezone_name=timezone_name,
+            start_utc=start_utc,
+            end_utc=end_utc,
+        )
+    return _query_daily_aggregates_python(
+        user_id=user_id,
+        timezone_obj=timezone_obj,
+        start_utc=start_utc,
+        end_utc=end_utc,
+    )
+
+
+def _query_active_days_mysql(
+    *,
+    user_id: int,
+    timezone_name: str,
+    end_utc: datetime,
+) -> set[date]:
+    mysql_timezone = "+00:00" if str(timezone_name).upper() == "UTC" else timezone_name
+    local_day_expr = db.func.date(
+        db.func.convert_tz(ReviewEvent.reviewed_at, "+00:00", mysql_timezone)
+    )
+    rows = (
+        db.session.query(local_day_expr.label("local_day"))
+        .filter(
+            ReviewEvent.user_id == user_id,
+            ReviewEvent.reviewed_at < end_utc,
+        )
+        .group_by(local_day_expr)
+        .all()
+    )
+    result: set[date] = set()
+    for (local_day,) in rows:
+        parsed_day = _parse_sql_day(local_day)
+        if parsed_day:
+            result.add(parsed_day)
+    return result
+
+
+def _query_active_days_python(
+    *,
+    user_id: int,
+    timezone_obj,
+    end_utc: datetime,
+) -> set[date]:
+    rows = (
+        db.session.query(ReviewEvent.reviewed_at)
+        .filter(
+            ReviewEvent.user_id == user_id,
+            ReviewEvent.reviewed_at < end_utc,
+        )
+        .all()
+    )
+    result: set[date] = set()
+    for (reviewed_at,) in rows:
+        if reviewed_at is None:
+            continue
+        result.add(_utc_to_local_day(reviewed_at, timezone_obj))
+    return result
+
+
+def _query_active_days(
+    *,
+    user_id: int,
+    timezone_name: str,
+    timezone_obj,
+    end_utc: datetime,
+) -> set[date]:
+    dialect = db.session.get_bind().dialect.name if db.session.get_bind() is not None else ""
+    if dialect == "mysql":
+        return _query_active_days_mysql(
+            user_id=user_id,
+            timezone_name=timezone_name,
+            end_utc=end_utc,
+        )
+    return _query_active_days_python(
+        user_id=user_id,
+        timezone_obj=timezone_obj,
+        end_utc=end_utc,
+    )
+
+
+def _longest_streak_in_range(
+    *,
+    day_map: dict[date, dict[str, int]],
+    start_day: date,
+    end_day: date,
+) -> int:
+    best = 0
+    current = 0
+    for day_value in _iter_days(start_day, end_day):
+        cards = _safe_int((day_map.get(day_value) or {}).get("cards"))
+        if cards > 0:
+            current += 1
+            if current > best:
+                best = current
+        else:
+            current = 0
+    return best
+
+
+def _current_streak_from_active_days(*, active_days: set[date], today_local: date) -> int:
+    if today_local in active_days:
+        cursor = today_local
+    else:
+        cursor = today_local - timedelta(days=1)
+        if cursor not in active_days:
+            return 0
+
+    streak = 0
+    while cursor in active_days:
+        streak += 1
+        cursor = cursor - timedelta(days=1)
+    return streak
+
+
+def record_review_event(
+    *,
+    user_id: int,
+    card_id: str,
+    rating: str,
+    mode: str,
+    reviewed_at: datetime | None = None,
+    duration_ms: Any = None,
+    entry_id: int | None = None,
+    deck_id: int | None = None,
+    note_type_id: str | None = None,
+) -> ReviewEvent:
+    review_time = _ensure_naive_utc(reviewed_at or datetime.utcnow())
+    normalized_mode = normalize_review_mode(mode)
+    normalized_rating = str(rating or "").strip().lower() or "again"
+    event = ReviewEvent(
+        user_id=user_id,
+        card_id=str(card_id),
+        entry_id=entry_id,
+        deck_id=deck_id,
+        note_type_id=note_type_id,
+        reviewed_at=review_time,
+        duration_ms=_normalize_duration_ms(duration_ms),
+        rating=normalized_rating,
+        mode=normalized_mode if normalized_mode in VALID_REVIEW_MODES else "review",
+    )
+    db.session.add(event)
+    return event
+
+
+def build_stats_overview(
+    *,
+    user_id: int,
+    year: int | None,
+    timezone_name: str | None,
+    now_utc: datetime | None = None,
+) -> dict[str, Any]:
+    effective_timezone_name = get_effective_timezone_name(timezone_name)
+    timezone_obj = _build_timezone_obj(effective_timezone_name)
+    now_utc_naive = _ensure_naive_utc(now_utc or datetime.utcnow())
+    now_local = now_utc_naive.replace(tzinfo=UTC).astimezone(timezone_obj)
+    today_local = now_local.date()
+
+    selected_year = year if year is not None else today_local.year
+    year_start = date(selected_year, 1, 1)
+    year_end = date(selected_year, 12, 31)
+
+    year_start_utc = _local_start_to_utc_naive(year_start, timezone_obj)
+    year_end_utc = _local_start_to_utc_naive(date(selected_year + 1, 1, 1), timezone_obj)
+
+    day_map = _query_daily_aggregates(
+        user_id=user_id,
+        timezone_name=effective_timezone_name,
+        timezone_obj=timezone_obj,
+        start_utc=year_start_utc,
+        end_utc=year_end_utc,
+    )
+
+    today_start_utc = _local_start_to_utc_naive(today_local, timezone_obj)
+    tomorrow_start_utc = _local_start_to_utc_naive(today_local + timedelta(days=1), timezone_obj)
+    today_map = _query_daily_aggregates(
+        user_id=user_id,
+        timezone_name=effective_timezone_name,
+        timezone_obj=timezone_obj,
+        start_utc=today_start_utc,
+        end_utc=tomorrow_start_utc,
+    )
+    today_data = today_map.get(today_local, {"cards": 0, "duration_ms": 0})
+    today_cards = _safe_int(today_data.get("cards"))
+    today_duration_ms = max(0, _safe_int(today_data.get("duration_ms")))
+    today_minutes = _round2(today_duration_ms / 60000.0)
+    today_sec_per_card = _round2((today_duration_ms / 1000.0) / today_cards) if today_cards > 0 else 0.0
+
+    if selected_year < today_local.year:
+        counted_start = year_start
+        counted_end = year_end
+    elif selected_year == today_local.year:
+        counted_start = year_start
+        counted_end = today_local
+    else:
+        counted_start = None
+        counted_end = None
+
+    if counted_start and counted_end and counted_end >= counted_start:
+        counted_days = (counted_end - counted_start).days + 1
+        counted_total_cards = 0
+        counted_active_days = 0
+        for day_value in _iter_days(counted_start, counted_end):
+            cards = _safe_int((day_map.get(day_value) or {}).get("cards"))
+            counted_total_cards += cards
+            if cards > 0:
+                counted_active_days += 1
+        daily_average_cards = counted_total_cards / counted_days if counted_days > 0 else 0.0
+        days_learned_percent = (counted_active_days / counted_days * 100.0) if counted_days > 0 else 0.0
+        longest_streak_days = _longest_streak_in_range(
+            day_map=day_map,
+            start_day=counted_start,
+            end_day=counted_end,
+        )
+    else:
+        counted_days = 0
+        daily_average_cards = 0.0
+        days_learned_percent = 0.0
+        longest_streak_days = 0
+
+    all_active_days = _query_active_days(
+        user_id=user_id,
+        timezone_name=effective_timezone_name,
+        timezone_obj=timezone_obj,
+        end_utc=tomorrow_start_utc,
+    )
+    current_streak_days = _current_streak_from_active_days(
+        active_days=all_active_days,
+        today_local=today_local,
+    )
+
+    heatmap: list[dict[str, Any]] = []
+    for day_value in _iter_days(year_start, year_end):
+        day_bucket = day_map.get(day_value) or {"cards": 0, "duration_ms": 0}
+        cards = _safe_int(day_bucket.get("cards"))
+        duration_ms = max(0, _safe_int(day_bucket.get("duration_ms")))
+        minutes = _round2(duration_ms / 60000.0)
+        sec_per_card = _round2((duration_ms / 1000.0) / cards) if cards > 0 else 0.0
+        heatmap.append(
+            {
+                "date": day_value.isoformat(),
+                "cards": cards,
+                "minutes": minutes,
+                "sec_per_card": sec_per_card,
+                "is_future": day_value > today_local,
+            }
+        )
+
+    return {
+        "year": selected_year,
+        "timezone": effective_timezone_name,
+        "today": {
+            "cards": today_cards,
+            "minutes": today_minutes,
+            "sec_per_card": today_sec_per_card,
+        },
+        "heatmap": heatmap,
+        "metrics": {
+            "daily_average_cards": _safe_int(round(daily_average_cards)),
+            "days_learned_percent": _safe_int(round(days_learned_percent)),
+            "longest_streak_days": _safe_int(longest_streak_days),
+            "current_streak_days": _safe_int(current_streak_days),
+            "days_counted": counted_days,
+        },
+    }

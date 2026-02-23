@@ -16,9 +16,6 @@
                 <a class="btn-fc btn-fc--outline" href="{{ url_for('flashcards.note_type_manager') }}">
                     <i class="bi bi-layers"></i> NoteTypes
                 </a>
-                <a class="btn-fc btn-fc--primary" href="{{ url_for('flashcards.note_editor_page') }}">
-                    <i class="bi bi-plus-lg"></i> Tạo Note
-                </a>
             </div>
         </div>
 
@@ -168,9 +165,6 @@
     <div class="fc-empty">
         <i class="bi bi-inbox fc-empty__icon"></i>
         <p class="fc-empty__text">Chưa có note nào{% if search_q %} khớp với "{{ search_q }}"{% endif %}.</p>
-        <a class="btn-fc btn-fc--primary" href="{{ url_for('flashcards.note_editor_page') }}">
-            <i class="bi bi-plus-lg"></i> Tạo Note đầu tiên
-        </a>
     </div>
     {% endif %}
 
