@@ -6,6 +6,7 @@ import csv
 import re
 from datetime import datetime, timedelta
 from io import StringIO
+from types import SimpleNamespace
 from typing import Dict, List, Optional
 
 from flask import (
@@ -25,8 +26,15 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import selectinload
 
 from app.utils.permissions import is_admin_user
+from app.services.anki_scheduler import (
+    CardState,
+    applyAnswer,
+    computeAnswerPreview,
+    default_deck_options,
+)
 from models import db
 from models.column_preference import VocabularyColumnPreference
+from models.vocabulary_deck import VocabularyDeck
 from models.vocabulary_entry import VocabularyEntry
 from models.vocabulary_progress import VocabularyProgress
 from models.vocabulary_structure import VocabularyLevel, VocabularyTopic, VocabularyLesson
@@ -140,6 +148,8 @@ _MAX_COLUMN_WIDTH = 1600
 LEARN_QUEUE = "learn"
 REVIEW_QUEUE = "review"
 NEW_QUEUE = "new"
+LEARNING_QUEUE = "learning"
+RELEARNING_QUEUE = "relearning"
 
 
 def _normalize_column_width(column_key: str, raw_width: str | None) -> str:
@@ -212,6 +222,7 @@ def restrict_non_admin_routes():
     endpoint = request.endpoint or ""
     allowed_endpoints = {
         "vocabulary.lesson",  # route will redirect to study mode
+        "vocabulary.study_deck",
         "vocabulary.study_topic",
         "vocabulary.study_lesson",
         "vocabulary.study_answer",
@@ -326,10 +337,157 @@ def _select_lesson_for_append(
     return lesson, entry_count
 
 
+def _normalize_progress_queue(value: str | None) -> str:
+    normalized = (value or NEW_QUEUE).strip().lower()
+    if normalized == LEARN_QUEUE:
+        return LEARNING_QUEUE
+    if normalized in {NEW_QUEUE, LEARNING_QUEUE, REVIEW_QUEUE, RELEARNING_QUEUE}:
+        return normalized
+    return NEW_QUEUE
+
+
+def _card_state_from_progress(progress: VocabularyProgress | None, now: datetime) -> CardState:
+    options = default_deck_options()
+    if not progress:
+        return CardState(
+            type=NEW_QUEUE,
+            stepIndex=0,
+            due=now,
+            dueDay=None,
+            intervalDays=0,
+            ease=options.startingEase,
+            reps=0,
+            lapses=0,
+            lastReviewAt=None,
+        )
+
+    queue = _normalize_progress_queue(progress.queue)
+    due_at = progress.due_at or now
+    due_day = None
+    if queue == REVIEW_QUEUE:
+        shifted = due_at - timedelta(hours=options.dayBoundaryHourLocal)
+        due_day = shifted.date().toordinal()
+
+    return CardState(
+        type=queue,  # type: ignore[arg-type]
+        stepIndex=int(progress.step_index or 0),
+        due=due_at,
+        dueDay=due_day,
+        intervalDays=float(progress.interval_days or 0),
+        ease=float(progress.ease_factor or options.startingEase),
+        reps=int(progress.reps or 0),
+        lapses=int(progress.lapses or 0),
+        lastReviewAt=progress.last_reviewed_at,
+    )
+
+
+def _apply_card_state_to_progress(
+    progress: VocabularyProgress, card_state: CardState, now: datetime
+) -> VocabularyProgress:
+    options = default_deck_options()
+    queue = _normalize_progress_queue(card_state.type)
+    due_at = card_state.due
+    if card_state.dueDay is not None:
+        day_date = datetime.fromordinal(int(card_state.dueDay)).date()
+        due_at = datetime.combine(day_date, datetime.min.time()) + timedelta(
+            hours=options.dayBoundaryHourLocal
+        )
+    progress.queue = queue
+    progress.step_index = int(card_state.stepIndex or 0)
+    progress.due_at = due_at
+    progress.interval_days = int(round(float(card_state.intervalDays or 0)))
+    progress.ease_factor = float(card_state.ease or options.startingEase)
+    progress.reps = int(card_state.reps or 0)
+    progress.lapses = int(card_state.lapses or 0)
+    progress.last_reviewed_at = card_state.lastReviewAt or now
+    return progress
+
+
+def _next_deck_position(parent_deck_id: int | None) -> int:
+    query = db.session.query(func.max(VocabularyDeck.position))
+    if parent_deck_id is None:
+        max_pos = query.filter(VocabularyDeck.parent_id.is_(None)).scalar()
+    else:
+        max_pos = query.filter(VocabularyDeck.parent_id == parent_deck_id).scalar()
+    return (max_pos or 0) + 1
+
+
+def _get_or_create_deck(*, parent_id: int | None, name: str, description: str | None, position: int | None):
+    query = VocabularyDeck.query.filter(
+        VocabularyDeck.parent_id == parent_id,
+        VocabularyDeck.name == name,
+    )
+    deck_node = query.order_by(VocabularyDeck.id.asc()).first()
+    if deck_node:
+        return deck_node
+
+    deck_node = VocabularyDeck(
+        parent_id=parent_id,
+        name=name,
+        description=description,
+        position=position or 0,
+    )
+    db.session.add(deck_node)
+    db.session.flush()
+    return deck_node
+
+
+def _ensure_deck_path_for_lesson(lesson: VocabularyLesson | None):
+    if not lesson:
+        return None
+    topic_obj = lesson.topic
+    if not topic_obj:
+        return None
+    level_obj = topic_obj.level
+    if not level_obj:
+        return None
+
+    level_deck = _get_or_create_deck(
+        parent_id=None,
+        name=level_obj.name,
+        description=level_obj.description,
+        position=level_obj.position,
+    )
+    topic_deck = _get_or_create_deck(
+        parent_id=level_deck.id,
+        name=topic_obj.name,
+        description=topic_obj.description,
+        position=topic_obj.position,
+    )
+    lesson_deck = _get_or_create_deck(
+        parent_id=topic_deck.id,
+        name=lesson.title,
+        description=lesson.description,
+        position=lesson.position,
+    )
+    return lesson_deck
+
+
+def _ensure_deck_for_topic(topic_obj: VocabularyTopic | None):
+    if not topic_obj:
+        return None
+    level_obj = topic_obj.level
+    if not level_obj:
+        return None
+    level_deck = _get_or_create_deck(
+        parent_id=None,
+        name=level_obj.name,
+        description=level_obj.description,
+        position=level_obj.position,
+    )
+    return _get_or_create_deck(
+        parent_id=level_deck.id,
+        name=topic_obj.name,
+        description=topic_obj.description,
+        position=topic_obj.position,
+    )
+
+
 def _is_due(progress: VocabularyProgress | None, now: datetime) -> bool:
     if progress is None:
         return True
-    if progress.queue == NEW_QUEUE:
+    queue = _normalize_progress_queue(progress.queue)
+    if queue == NEW_QUEUE:
         return True
     if progress.due_at is None:
         return True
@@ -338,20 +496,25 @@ def _is_due(progress: VocabularyProgress | None, now: datetime) -> bool:
 
 def _select_next_card(entries: List[VocabularyEntry], progress_map: Dict[int, VocabularyProgress], now: datetime):
     due_learn = []
+    due_relearn = []
     due_review = []
     due_new = []
     for entry in entries:
         progress = progress_map.get(entry.id)
         if not _is_due(progress, now):
             continue
-        queue = progress.queue if progress else NEW_QUEUE
-        if queue == LEARN_QUEUE:
+        queue = _normalize_progress_queue(progress.queue) if progress else NEW_QUEUE
+        if queue == LEARNING_QUEUE:
             due_learn.append(entry)
+        elif queue == RELEARNING_QUEUE:
+            due_relearn.append(entry)
         elif queue == REVIEW_QUEUE:
             due_review.append(entry)
         else:
             due_new.append(entry)
 
+    if due_relearn:
+        return due_relearn[0]
     if due_learn:
         return due_learn[0]
     if due_review:
@@ -395,7 +558,82 @@ def create_level():
         description=description,
         position=_next_level_position(),
     )
+
+
+@vocabulary_bp.route("/decks/create", methods=["POST"])
+@login_required
+def create_deck():
+    """Create deck(s) from path, auto-creating missing parents."""
+    if not is_admin_user(current_user):
+        return redirect(url_for("main.dashboard"))
+
+    parent_id_raw = (request.form.get("parent_id") or "").strip()
+    deck_path_raw = (request.form.get("deck_path") or "").strip()
+    deck_name = (request.form.get("name") or "").strip() or "New Deck"
+    next_url = (request.form.get("next") or "").strip() or url_for("main.dashboard")
+
+    tokens = [item.strip() for item in deck_path_raw.split("::") if item.strip()]
+    if not tokens:
+        if parent_id_raw:
+            try:
+                parent_id = int(parent_id_raw)
+            except ValueError:
+                flash("Invalid parent deck.", "danger")
+                return redirect(next_url)
+            parent_deck = VocabularyDeck.query.get(parent_id)
+            if not parent_deck:
+                flash("Parent deck not found.", "danger")
+                return redirect(next_url)
+            tokens = [parent_deck.name, deck_name]
+        else:
+            tokens = [deck_name]
+
+    parent_id = None
+    created_count = 0
+    created_names: List[str] = []
+    final_deck = None
+    for token in tokens:
+        existing = (
+            VocabularyDeck.query.filter(
+                VocabularyDeck.parent_id == parent_id,
+                VocabularyDeck.name == token,
+            )
+            .order_by(VocabularyDeck.id.asc())
+            .first()
+        )
+        if existing:
+            final_deck = existing
+            parent_id = existing.id
+            continue
+
+        node = VocabularyDeck(
+            parent_id=parent_id,
+            name=token,
+            position=_next_deck_position(parent_id),
+        )
+        db.session.add(node)
+        db.session.flush()
+        created_count += 1
+        created_names.append(token)
+        final_deck = node
+        parent_id = node.id
+
+    db.session.commit()
+    if created_count == 0 and final_deck:
+        flash(f"Deck already exists: {'::'.join(tokens)}", "info")
+    elif created_count == 1 and final_deck:
+        flash(f"Created deck: {final_deck.name}", "success")
+    else:
+        flash(f"Created {created_count} decks: {'::'.join(created_names)}", "success")
+    return redirect(next_url)
     db.session.add(level)
+    db.session.commit()
+    _get_or_create_deck(
+        parent_id=None,
+        name=level.name,
+        description=level.description,
+        position=level.position,
+    )
     db.session.commit()
     flash("Level created.", "success")
     return redirect(url_for("vocabulary.index"))
@@ -431,6 +669,8 @@ def create_topic():
         position=_next_topic_position(level.id),
     )
     db.session.add(topic)
+    db.session.commit()
+    _ensure_deck_for_topic(topic)
     db.session.commit()
     flash("Topic created.", "success")
     return redirect(url_for("vocabulary.index"))
@@ -474,6 +714,8 @@ def create_lesson():
         page_size=page_size,
         commit=True,
     )
+    _ensure_deck_path_for_lesson(lesson)
+    db.session.commit()
     flash("Lesson created.", "success")
     return redirect(url_for("vocabulary.lesson", lesson_id=lesson.id))
 
@@ -591,13 +833,18 @@ def study_topic(topic_id: int):
         progress = progress_map.get(entry.id)
         if not _is_due(progress, now):
             continue
-        queue = progress.queue if progress else NEW_QUEUE
-        if queue == LEARN_QUEUE:
+        queue = _normalize_progress_queue(progress.queue) if progress else NEW_QUEUE
+        if queue in {LEARNING_QUEUE, RELEARNING_QUEUE}:
             due_learn += 1
         elif queue == REVIEW_QUEUE:
             due_review += 1
         else:
             due_new += 1
+
+    next_intervals_preview = None
+    if card:
+        card_state = _card_state_from_progress(progress_map.get(card.id), now)
+        next_intervals_preview = computeAnswerPreview(card_state, default_deck_options(), now)
 
     return render_template(
         "vocabulary_study.html",
@@ -611,7 +858,95 @@ def study_topic(topic_id: int):
         due_total=due_new + due_learn + due_review,
         admin_mode=is_admin_user(current_user),
         study_scope="topic",
+        study_scope_id=topic_obj.id,
+        study_root_name=topic_obj.name,
+        study_root_url=url_for("vocabulary.study_topic", topic_id=topic_obj.id),
         next_study_url=url_for("vocabulary.study_topic", topic_id=topic_obj.id),
+        next_intervals_preview=next_intervals_preview,
+    )
+
+
+@vocabulary_bp.route("/study/deck/<int:deck_id>")
+@login_required
+def study_deck(deck_id: int):
+    """Study cards across an arbitrary deck subtree (parent/child model)."""
+    all_decks = VocabularyDeck.query.order_by(
+        VocabularyDeck.parent_id.isnot(None),
+        VocabularyDeck.position,
+        VocabularyDeck.created_at,
+        VocabularyDeck.id,
+    ).all()
+    deck_map = {deck.id: deck for deck in all_decks}
+    root_deck = deck_map.get(deck_id)
+    if not root_deck:
+        abort(404)
+
+    children_by_parent: Dict[int | None, List[VocabularyDeck]] = {}
+    for deck in all_decks:
+        children_by_parent.setdefault(deck.parent_id, []).append(deck)
+
+    subtree_ids: List[int] = []
+
+    def _collect(deck_node_id: int):
+        subtree_ids.append(deck_node_id)
+        for child in children_by_parent.get(deck_node_id, []):
+            _collect(child.id)
+
+    _collect(root_deck.id)
+
+    entries = (
+        VocabularyEntry.query.filter(VocabularyEntry.deck_id.in_(subtree_ids))
+        .order_by(VocabularyEntry.id)
+        .all()
+    )
+    now = datetime.utcnow()
+    entry_ids = [entry.id for entry in entries]
+    progress_map: Dict[int, VocabularyProgress] = {}
+    if entry_ids:
+        rows = VocabularyProgress.query.filter(
+            VocabularyProgress.user_id == current_user.id,
+            VocabularyProgress.entry_id.in_(entry_ids),
+        ).all()
+        progress_map = {row.entry_id: row for row in rows}
+
+    card = _select_next_card(entries, progress_map, now)
+    due_new = 0
+    due_learn = 0
+    due_review = 0
+    for entry in entries:
+        progress = progress_map.get(entry.id)
+        if not _is_due(progress, now):
+            continue
+        queue = _normalize_progress_queue(progress.queue) if progress else NEW_QUEUE
+        if queue in {LEARNING_QUEUE, RELEARNING_QUEUE}:
+            due_learn += 1
+        elif queue == REVIEW_QUEUE:
+            due_review += 1
+        else:
+            due_new += 1
+
+    next_intervals_preview = None
+    if card:
+        card_state = _card_state_from_progress(progress_map.get(card.id), now)
+        next_intervals_preview = computeAnswerPreview(card_state, default_deck_options(), now)
+
+    return render_template(
+        "vocabulary_study.html",
+        selected_level=None,
+        selected_topic=SimpleNamespace(id=root_deck.id, name=root_deck.name),
+        selected_lesson=None,
+        card=card,
+        due_new=due_new,
+        due_learn=due_learn,
+        due_review=due_review,
+        due_total=due_new + due_learn + due_review,
+        admin_mode=is_admin_user(current_user),
+        study_scope="deck",
+        study_scope_id=root_deck.id,
+        study_root_name=root_deck.name,
+        study_root_url=url_for("vocabulary.study_deck", deck_id=root_deck.id),
+        next_study_url=url_for("vocabulary.study_deck", deck_id=root_deck.id),
+        next_intervals_preview=next_intervals_preview,
     )
 
 
@@ -646,13 +981,18 @@ def study_lesson(lesson_id: int):
         progress = progress_map.get(entry.id)
         if not _is_due(progress, now):
             continue
-        queue = progress.queue if progress else NEW_QUEUE
-        if queue == LEARN_QUEUE:
+        queue = _normalize_progress_queue(progress.queue) if progress else NEW_QUEUE
+        if queue in {LEARNING_QUEUE, RELEARNING_QUEUE}:
             due_learn += 1
         elif queue == REVIEW_QUEUE:
             due_review += 1
         else:
             due_new += 1
+
+    next_intervals_preview = None
+    if card:
+        card_state = _card_state_from_progress(progress_map.get(card.id), now)
+        next_intervals_preview = computeAnswerPreview(card_state, default_deck_options(), now)
 
     return render_template(
         "vocabulary_study.html",
@@ -666,7 +1006,11 @@ def study_lesson(lesson_id: int):
         due_total=due_new + due_learn + due_review,
         admin_mode=is_admin_user(current_user),
         study_scope="lesson",
+        study_scope_id=lesson_obj.id,
+        study_root_name=topic_obj.name,
+        study_root_url=url_for("vocabulary.study_topic", topic_id=topic_obj.id),
         next_study_url=url_for("vocabulary.study_lesson", lesson_id=lesson_obj.id),
+        next_intervals_preview=next_intervals_preview,
     )
 
 
@@ -680,7 +1024,7 @@ def study_answer(entry_id: int):
     data = request.get_json(silent=True) or {}
     rating = str(data.get("rating", "")).strip().lower()
     scope = str(data.get("scope", "lesson")).strip().lower()
-    topic_id_raw = data.get("topic_id")
+    scope_id_raw = data.get("scope_id")
     if rating not in {"again", "hard", "good", "easy"}:
         return jsonify({"success": False, "message": "Invalid rating."}), 400
 
@@ -695,59 +1039,42 @@ def study_answer(entry_id: int):
             user_id=current_user.id,
             entry_id=entry.id,
             queue=NEW_QUEUE,
+            step_index=0,
             due_at=None,
             interval_days=0,
-            ease_factor=2.5,
+            ease_factor=default_deck_options().startingEase,
             reps=0,
             lapses=0,
         )
         db.session.add(progress)
 
-    progress.reps = (progress.reps or 0) + 1
-    progress.last_reviewed_at = now
+    options = default_deck_options()
+    current_state = _card_state_from_progress(progress, now)
+    updated_state = applyAnswer(current_state, options, now, rating)  # type: ignore[arg-type]
+    _apply_card_state_to_progress(progress, updated_state, now)
 
-    current_interval = max(0, progress.interval_days or 0)
-    current_ease = float(progress.ease_factor or 2.5)
-
-    if rating == "again":
-        progress.queue = LEARN_QUEUE
-        progress.interval_days = 0
-        progress.due_at = now + timedelta(minutes=1)
-        progress.ease_factor = max(1.3, current_ease - 0.2)
-        progress.lapses = (progress.lapses or 0) + 1
-    elif rating == "hard":
-        progress.queue = LEARN_QUEUE if progress.queue in {NEW_QUEUE, LEARN_QUEUE} else REVIEW_QUEUE
-        progress.interval_days = max(1, current_interval or 1)
-        if progress.queue == LEARN_QUEUE:
-            progress.due_at = now + timedelta(minutes=10)
-        else:
-            progress.due_at = now + timedelta(days=progress.interval_days)
-        progress.ease_factor = max(1.3, current_ease - 0.1)
-    elif rating == "good":
-        if progress.queue in {NEW_QUEUE, LEARN_QUEUE}:
-            progress.queue = REVIEW_QUEUE
-            next_interval = max(1, current_interval or 1)
-        else:
-            next_interval = max(1, int(round(max(1, current_interval) * current_ease)))
-        progress.interval_days = next_interval
-        progress.due_at = now + timedelta(days=next_interval)
-        progress.ease_factor = min(3.0, current_ease + 0.03)
-    else:  # easy
-        progress.queue = REVIEW_QUEUE
-        base_interval = max(2, current_interval or 2)
-        next_interval = int(round(base_interval * max(1.5, current_ease)))
-        progress.interval_days = max(2, next_interval)
-        progress.due_at = now + timedelta(days=progress.interval_days)
-        progress.ease_factor = min(3.1, current_ease + 0.1)
-
-    next_url = url_for("vocabulary.study_lesson", lesson_id=entry.lesson_id)
+    next_url = None
+    if entry.lesson_id:
+        next_url = url_for("vocabulary.study_lesson", lesson_id=entry.lesson_id)
+    
     if scope == "topic":
         try:
-            topic_id = int(topic_id_raw or 0)
+            topic_id = int(scope_id_raw or 0)
         except (TypeError, ValueError):
             topic_id = 0
         if topic_id:
             next_url = url_for("vocabulary.study_topic", topic_id=topic_id)
+    elif scope == "deck":
+        try:
+            deck_id = int(scope_id_raw or 0)
+        except (TypeError, ValueError):
+            deck_id = 0
+        if deck_id:
+            next_url = url_for("vocabulary.study_deck", deck_id=deck_id)
+
+    # Fallback to dashboard if no valid URL could be built
+    if not next_url:
+        next_url = url_for("main.dashboard")
 
     db.session.commit()
     return jsonify(
@@ -981,6 +1308,9 @@ def create_entry():
 
     entry_kwargs = {field: (cleaned_val or None) for field, cleaned_val in cleaned.items()}
     entry_kwargs["lesson"] = lesson
+    lesson_deck = _ensure_deck_path_for_lesson(lesson)
+    if lesson_deck:
+        entry_kwargs["deck_id"] = lesson_deck.id
     entry = VocabularyEntry(**entry_kwargs)
     db.session.add(entry)
     try:
@@ -1168,6 +1498,9 @@ def bulk_update_entries():
                     return jsonify({"success": False, "message": "Deck and Word cannot be empty."}), 400
                 entry_kwargs = {field: (cleaned.get(field) or None) for field in EDITABLE_FIELDS}
                 entry_kwargs["lesson"] = lesson
+                lesson_deck = _ensure_deck_path_for_lesson(lesson)
+                if lesson_deck:
+                    entry_kwargs["deck_id"] = lesson_deck.id
                 entry = VocabularyEntry(**entry_kwargs)
                 db.session.add(entry)
                 db.session.flush()
@@ -1282,6 +1615,7 @@ def import_csv():
                     entries_in_current = 0
                     default_page_size = current_lesson.page_size or VOCABULARY_PAGE_SIZE
                 last_lesson = current_lesson
+                current_lesson_deck = _ensure_deck_path_for_lesson(current_lesson)
 
                 entry = VocabularyEntry(
                     deck=deck,
@@ -1332,6 +1666,7 @@ def import_csv():
                     if mapping.get("example_audio")
                     else None,
                     lesson=current_lesson,
+                    deck_id=current_lesson_deck.id if current_lesson_deck else None,
                 )
 
                 db.session.add(entry)

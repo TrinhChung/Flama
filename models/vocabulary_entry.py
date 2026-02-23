@@ -10,6 +10,7 @@ class VocabularyEntry(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     lesson_id = db.Column(db.Integer, db.ForeignKey("vocabulary_lessons.id"), index=True, nullable=True)
+    deck_id = db.Column(db.Integer, db.ForeignKey("vocabulary_decks.id", ondelete="SET NULL"), index=True, nullable=True)
     deck = db.Column(db.String(255), nullable=False, index=True)
     word = db.Column(db.String(255), nullable=False, index=True)
     hanviet = db.Column(db.String(255))
@@ -33,6 +34,7 @@ class VocabularyEntry(db.Model):
     )
 
     lesson = db.relationship("VocabularyLesson", back_populates="entries")
+    deck_rel = db.relationship("VocabularyDeck", back_populates="entries")
     progress_records = db.relationship(
         "VocabularyProgress",
         back_populates="entry",

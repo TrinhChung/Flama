@@ -23,10 +23,6 @@ class VocabularyDeck(db.Model):
         db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
     )
 
-    __table_args__ = (
-        db.UniqueConstraint("parent_id", "name", name="uq_vocabulary_decks_parent_name"),
-    )
-
     parent = db.relationship(
         "VocabularyDeck",
         remote_side=[id],
@@ -42,4 +38,3 @@ class VocabularyDeck(db.Model):
         "VocabularyEntry",
         back_populates="deck_rel",
     )
-

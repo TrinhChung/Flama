@@ -11,3 +11,6 @@ env/
 # Environment variables
 .env
 static/tmp/
+
+
+/migrations/

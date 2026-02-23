@@ -2,15 +2,90 @@
 
 {% block title %}Home{% endblock %}
 
+{% macro render_nodes(nodes) %}
+  {% for node in nodes %}
+  <div
+    class="anki-row deck-row"
+    data-node-id="{{ node.deck_id }}"
+    data-node-name="{{ node.label }}"
+    data-parent-id="{{ node.parent_id if node.parent_id is not none else '' }}"
+    data-open-url="{{ node.href }}"
+  >
+    <div class="anki-name-wrap" style="padding-left: {{ node.depth * 1.35 }}rem;">
+      {% if node.children %}
+      <button
+        class="tree-toggle"
+        type="button"
+        data-node-id="{{ node.deck_id }}"
+        data-expanded="true"
+        aria-label="Toggle child decks"
+      >-</button>
+      {% else %}
+      <span class="tree-spacer"></span>
+      {% endif %}
+      <span class="anki-name">{{ node.label }}</span>
+    </div>
+    <div class="anki-stats">
+      <span class="new">{{ node.new_count }}</span>
+      <span class="learn">{{ node.learn_count }}</span>
+      <span class="due">{{ node.due_count }}</span>
+    </div>
+  </div>
+  {% if node.children %}
+    {{ render_nodes(node.children) }}
+  {% endif %}
+  {% endfor %}
+{% endmacro %}
+
 {% block content %}
 <div class="anki-home">
   <div class="anki-top-tabs" role="navigation" aria-label="Home actions">
     <a class="anki-tab active" href="{{ url_for('main.dashboard') }}">Decks</a>
     <a class="anki-tab" href="{{ url_for('main.dashboard') }}">Study</a>
+    {% if admin_mode %}
+    <button type="button" class="anki-tab anki-tab-button" id="create-deck-btn">Create Deck</button>
+    {% else %}
     <a class="anki-tab" href="{{ url_for('main.dashboard') }}">Progress</a>
+    {% endif %}
     <a class="anki-tab" href="{{ url_for('main.dashboard') }}">Stats</a>
     <a class="anki-tab sync" href="{{ url_for('main.dashboard') }}">Sync</a>
   </div>
+  {% if admin_mode %}
+  <form id="create-deck-form" method="post" action="{{ url_for('vocabulary.create_deck') }}" class="d-none">
+    <input type="hidden" name="parent_id" id="create-deck-parent-id" value="" />
+    <input type="hidden" name="name" id="create-deck-name" value="" />
+    <input type="hidden" name="deck_path" id="create-deck-path" value="" />
+    <input type="hidden" name="next" value="{{ url_for('main.dashboard') }}" />
+  </form>
+
+  <div class="modal fade" id="createDeckModal" tabindex="-1" aria-labelledby="createDeckModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="createDeckModalLabel">Create Deck</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <label for="deck-path-input" class="form-label">New deck name</label>
+          <input
+            id="deck-path-input"
+            type="text"
+            class="form-control"
+            value="New Deck"
+            placeholder="ChungBechN1::語彙徹底N1::Bài 004"
+          />
+          <small class="text-muted d-block mt-2">
+            Dùng <code>::</code> để phân cấp. Hệ thống sẽ tự tạo deck cha nếu chưa có.
+          </small>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-primary" id="confirm-create-deck-btn">Create</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
 
   <section class="anki-board" aria-labelledby="anki-decks-title">
     <header class="anki-board-head">
@@ -24,59 +99,9 @@
 
     <div class="anki-deck-list">
       {% if deck_rows %}
-        {% for level in deck_rows %}
-        {% set level_id = "level-" ~ loop.index0 %}
-        <div class="anki-row level-row" data-node-id="{{ level_id }}">
-          <div class="anki-name-wrap depth-0">
-            {% if level.children %}
-            <button class="tree-toggle" type="button" data-node-type="level" data-node-id="{{ level_id }}" data-expanded="true">-</button>
-            {% else %}
-            <span class="tree-spacer"></span>
-            {% endif %}
-            <a class="anki-name" href="{{ level.href }}">{{ level.label }}</a>
-          </div>
-          <div class="anki-stats">
-            <span class="new">{{ level.new_count }}</span>
-            <span class="learn">{{ level.learn_count }}</span>
-            <span class="due">{{ level.due_count }}</span>
-          </div>
-        </div>
-
-        {% for topic in level.children %}
-        {% set topic_id = level_id ~ "-topic-" ~ loop.index0 %}
-        <div class="anki-row topic-row" data-node-id="{{ topic_id }}" data-parent-level="{{ level_id }}">
-          <div class="anki-name-wrap depth-1">
-            {% if topic.children %}
-            <button class="tree-toggle" type="button" data-node-type="topic" data-node-id="{{ topic_id }}" data-expanded="true">-</button>
-            {% else %}
-            <span class="tree-spacer"></span>
-            {% endif %}
-            <a class="anki-name" href="{{ topic.href }}">{{ topic.label }}</a>
-          </div>
-          <div class="anki-stats">
-            <span class="new">{{ topic.new_count }}</span>
-            <span class="learn">{{ topic.learn_count }}</span>
-            <span class="due">{{ topic.due_count }}</span>
-          </div>
-        </div>
-
-        {% for lesson in topic.children %}
-        <div class="anki-row lesson-row" data-parent-level="{{ level_id }}" data-parent-topic="{{ topic_id }}">
-          <div class="anki-name-wrap depth-2">
-            <span class="tree-spacer"></span>
-            <a class="anki-name" href="{{ lesson.href }}">{{ lesson.label }}</a>
-          </div>
-          <div class="anki-stats">
-            <span class="new">{{ lesson.new_count }}</span>
-            <span class="learn">{{ lesson.learn_count }}</span>
-            <span class="due">{{ lesson.due_count }}</span>
-          </div>
-        </div>
-        {% endfor %}
-        {% endfor %}
-        {% endfor %}
+        {{ render_nodes(deck_rows) }}
       {% else %}
-      <div class="anki-empty">No decks yet. Go to Browse to create your first topic/lesson.</div>
+      <div class="anki-empty">No decks yet. Open Admin Edit to create your first deck tree.</div>
       {% endif %}
     </div>
   </section>
@@ -118,8 +143,13 @@
     text-decoration: none;
     color: #1f1f1f;
     font-weight: 600;
+    border: none;
     border-right: 1px solid #d6d6d6;
     background: linear-gradient(#fafafa, #f0f0f0);
+    cursor: pointer;
+  }
+  .anki-tab-button {
+    font: inherit;
   }
   .anki-tab:last-child {
     border-right: none;
@@ -173,6 +203,10 @@
   .anki-row:hover {
     background: #f7faff;
   }
+  .anki-row.is-selected {
+    background: #eaf2ff;
+    outline: 1px solid #9db9ff;
+  }
   .anki-name-wrap {
     display: inline-flex;
     align-items: center;
@@ -181,8 +215,9 @@
   .anki-name {
     color: #171717;
     text-decoration: none;
-    font-size: 1.9rem;
+    font-size: 1.3rem;
     line-height: 1.2;
+    cursor: default;
   }
   .anki-name:hover {
     color: #0a58ca;
@@ -191,12 +226,12 @@
   .tree-toggle,
   .tree-spacer {
     width: 1rem;
-    margin-right: 0.2rem;
+    margin-right: 0.28rem;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     flex: 0 0 1rem;
-    font-size: 1.2rem;
+    font-size: 1.15rem;
     line-height: 1;
   }
   .tree-toggle {
@@ -209,20 +244,11 @@
   .tree-toggle:hover {
     color: #0a58ca;
   }
-  .anki-name-wrap.depth-1 {
-    padding-left: 1.2rem;
-  }
-  .anki-name-wrap.depth-2 {
-    padding-left: 3rem;
-  }
-  .is-collapsed {
-    display: none;
-  }
   .anki-stats {
     display: grid;
     grid-template-columns: repeat(3, 72px);
     gap: 0.25rem;
-    font-size: 1.9rem;
+    font-size: 1.3rem;
     text-align: right;
     font-variant-numeric: tabular-nums;
   }
@@ -234,6 +260,9 @@
   }
   .anki-stats .due {
     color: #1f8d35;
+  }
+  .is-collapsed {
+    display: none;
   }
   .anki-empty {
     font-size: 1.1rem;
@@ -278,86 +307,188 @@
     .anki-stats {
       grid-template-columns: repeat(3, 50px);
     }
-    .anki-name-wrap.depth-1 {
-      padding-left: 0.8rem;
-    }
-    .anki-name-wrap.depth-2 {
-      padding-left: 1.8rem;
-    }
   }
 </style>
+
 <script>
   (() => {
-    const levelRows = Array.from(document.querySelectorAll(".level-row[data-node-id]"));
+    const rows = Array.from(document.querySelectorAll(".deck-row[data-node-id]"));
+    const rowMap = new Map();
+    const toggleMap = new Map();
+    let selectedDeckId = null;
 
-    function getToggle(nodeType, nodeId) {
-      return document.querySelector(`.tree-toggle[data-node-type="${nodeType}"][data-node-id="${nodeId}"]`);
-    }
+    rows.forEach((row) => {
+      rowMap.set(row.dataset.nodeId, row);
+    });
 
-    function isExpanded(toggleEl) {
-      return !!toggleEl && toggleEl.dataset.expanded === "true";
-    }
-
-    function setToggleState(toggleEl, expanded) {
-      if (!toggleEl) {
-        return;
-      }
-      toggleEl.dataset.expanded = expanded ? "true" : "false";
-      toggleEl.textContent = expanded ? "-" : "+";
-    }
-
-    function applyTopicVisibility(topicId, levelExpanded) {
-      const topicToggle = getToggle("topic", topicId);
-      const topicExpanded = isExpanded(topicToggle);
-      const lessons = document.querySelectorAll(`.lesson-row[data-parent-topic="${topicId}"]`);
-      lessons.forEach((row) => {
-        row.classList.toggle("is-collapsed", !(levelExpanded && topicExpanded));
-      });
-    }
-
-    function applyLevelVisibility(levelId) {
-      const levelToggle = getToggle("level", levelId);
-      const levelExpanded = isExpanded(levelToggle);
-      const topics = document.querySelectorAll(`.topic-row[data-parent-level="${levelId}"]`);
-      topics.forEach((topicRow) => {
-        topicRow.classList.toggle("is-collapsed", !levelExpanded);
-        const topicId = topicRow.dataset.nodeId;
-        if (topicId) {
-          applyTopicVisibility(topicId, levelExpanded);
-        }
-      });
-    }
-
-    document.querySelectorAll(".tree-toggle").forEach((toggleEl) => {
-      toggleEl.addEventListener("click", (event) => {
+    document.querySelectorAll(".tree-toggle[data-node-id]").forEach((toggle) => {
+      toggleMap.set(toggle.dataset.nodeId, toggle);
+      toggle.addEventListener("click", (event) => {
         event.preventDefault();
         event.stopPropagation();
-        const expanded = isExpanded(toggleEl);
-        setToggleState(toggleEl, !expanded);
-
-        const nodeType = toggleEl.dataset.nodeType;
-        const nodeId = toggleEl.dataset.nodeId;
-        if (!nodeType || !nodeId) {
-          return;
-        }
-        if (nodeType === "level") {
-          applyLevelVisibility(nodeId);
-          return;
-        }
-        if (nodeType === "topic") {
-          const parentLevel = document.querySelector(`.topic-row[data-node-id="${nodeId}"]`)?.dataset.parentLevel;
-          const levelExpanded = parentLevel ? isExpanded(getToggle("level", parentLevel)) : true;
-          applyTopicVisibility(nodeId, levelExpanded);
-        }
+        const expanded = toggle.dataset.expanded === "true";
+        toggle.dataset.expanded = expanded ? "false" : "true";
+        toggle.textContent = expanded ? "+" : "-";
+        refreshVisibility();
       });
     });
 
-    levelRows.forEach((row) => {
-      const levelId = row.dataset.nodeId;
-      if (levelId) {
-        applyLevelVisibility(levelId);
+    function selectRow(row) {
+      if (!row) {
+        return;
       }
+      rows.forEach((item) => item.classList.toggle("is-selected", item === row));
+      selectedDeckId = row.dataset.nodeId || null;
+    }
+
+    function clearSelection() {
+      rows.forEach((item) => item.classList.remove("is-selected"));
+      selectedDeckId = null;
+    }
+
+    function openRow(row) {
+      const url = row?.dataset?.openUrl;
+      if (url) {
+        window.location.href = url;
+      }
+    }
+
+    rows.forEach((row) => {
+      row.addEventListener("click", (event) => {
+        if (event.target.closest(".tree-toggle")) {
+          return;
+        }
+        if (row.classList.contains("is-selected")) {
+          openRow(row);
+          return;
+        }
+        selectRow(row);
+      });
+      row.addEventListener("dblclick", (event) => {
+        if (event.target.closest(".tree-toggle")) {
+          return;
+        }
+        openRow(row);
+      });
     });
+
+    document.addEventListener("click", (event) => {
+      if (event.target.closest(".deck-row") || event.target.closest(".anki-top-tabs")) {
+        return;
+      }
+      clearSelection();
+    });
+
+    const createDeckBtn = document.getElementById("create-deck-btn");
+    const createDeckForm = document.getElementById("create-deck-form");
+    const createDeckParentInput = document.getElementById("create-deck-parent-id");
+    const createDeckNameInput = document.getElementById("create-deck-name");
+    const createDeckPathInput = document.getElementById("create-deck-path");
+    const deckPathInput = document.getElementById("deck-path-input");
+    const confirmCreateDeckBtn = document.getElementById("confirm-create-deck-btn");
+    const createDeckModalEl = document.getElementById("createDeckModal");
+
+    function buildDeckPathFromSelected() {
+      if (!selectedDeckId) {
+        return "New Deck";
+      }
+      const parts = [];
+      let currentId = selectedDeckId;
+      while (currentId) {
+        const row = rowMap.get(currentId);
+        if (!row) {
+          break;
+        }
+        const part = (row.dataset.nodeName || "").trim();
+        if (part) {
+          parts.push(part);
+        }
+        currentId = row.dataset.parentId || "";
+      }
+      parts.reverse();
+      parts.push("New Deck");
+      return parts.join("::");
+    }
+
+    if (
+      createDeckBtn &&
+      createDeckForm &&
+      createDeckParentInput &&
+      createDeckNameInput &&
+      createDeckPathInput &&
+      deckPathInput &&
+      confirmCreateDeckBtn
+    ) {
+      createDeckBtn.addEventListener("click", () => {
+        const defaultPath = buildDeckPathFromSelected();
+        deckPathInput.value = defaultPath;
+
+        if (
+          createDeckModalEl &&
+          typeof window !== "undefined" &&
+          window.bootstrap &&
+          window.bootstrap.Modal
+        ) {
+          window.bootstrap.Modal.getOrCreateInstance(createDeckModalEl).show();
+          return;
+        }
+
+        // Fallback when Bootstrap modal JS is unavailable.
+        const fallbackPath = window.prompt("New deck name", defaultPath);
+        if (fallbackPath === null) {
+          return;
+        }
+        const deckPath = fallbackPath.trim() || "New Deck";
+        const leafName = deckPath.split("::").map((item) => item.trim()).filter(Boolean).pop() || "New Deck";
+        createDeckParentInput.value = selectedDeckId || "";
+        createDeckNameInput.value = leafName;
+        createDeckPathInput.value = deckPath;
+        createDeckForm.submit();
+      });
+
+      confirmCreateDeckBtn.addEventListener("click", () => {
+        const deckPath = deckPathInput.value.trim() || "New Deck";
+        const leafName = deckPath.split("::").map((item) => item.trim()).filter(Boolean).pop() || "New Deck";
+        createDeckParentInput.value = selectedDeckId || "";
+        createDeckNameInput.value = leafName;
+        createDeckPathInput.value = deckPath;
+        if (
+          createDeckModalEl &&
+          typeof window !== "undefined" &&
+          window.bootstrap &&
+          window.bootstrap.Modal
+        ) {
+          window.bootstrap.Modal.getOrCreateInstance(createDeckModalEl).hide();
+        }
+        createDeckForm.submit();
+      });
+    }
+
+    function isVisibleByAncestors(row) {
+      let parentId = row.dataset.parentId;
+      while (parentId) {
+        const parentToggle = toggleMap.get(parentId);
+        if (parentToggle && parentToggle.dataset.expanded !== "true") {
+          return false;
+        }
+        const parentRow = rowMap.get(parentId);
+        parentId = parentRow ? parentRow.dataset.parentId : "";
+      }
+      return true;
+    }
+
+    function refreshVisibility() {
+      rows.forEach((row) => {
+        const isRoot = !row.dataset.parentId;
+        if (isRoot) {
+          row.classList.remove("is-collapsed");
+          return;
+        }
+        row.classList.toggle("is-collapsed", !isVisibleByAncestors(row));
+      });
+    }
+
+    refreshVisibility();
   })();
 </script>
 {% endblock %}

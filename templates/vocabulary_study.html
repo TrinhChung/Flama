@@ -6,25 +6,14 @@
 <div class="study-page">
   <div class="study-top-tabs">
     <a class="study-tab" href="{{ url_for('main.dashboard') }}">Decks</a>
+    {% if admin_mode %}
     <a class="study-tab" href="{{ url_for('vocabulary.import_csv') }}">Add</a>
     <a class="study-tab" href="{{ url_for('vocabulary.index') }}">Browse</a>
+    {% else %}
+    <a class="study-tab" href="{{ url_for('main.dashboard') }}">Add</a>
+    <a class="study-tab" href="{{ url_for('main.dashboard') }}">Browse</a>
+    {% endif %}
     <a class="study-tab" href="{{ url_for('main.dashboard') }}">Stats</a>
-    <a class="study-tab sync" href="{{ url_for('main.dashboard') }}">Sync</a>
-  </div>
-
-  <div class="study-header">
-    <div class="study-path">
-      <a href="{{ url_for('main.dashboard') }}">Home</a>
-      <span>/</span>
-      <a href="{{ url_for('vocabulary.study_topic', topic_id=selected_topic.id) }}">{{ selected_topic.name }}</a>
-      <span>/</span>
-      <span>{{ selected_lesson.title if selected_lesson else 'All lessons' }}</span>
-    </div>
-    <div class="study-counts">
-      <span class="new">{{ due_new }}</span>
-      <span class="learn">{{ due_learn }}</span>
-      <span class="due">{{ due_review }}</span>
-    </div>
   </div>
 
   {% if card %}
@@ -34,7 +23,7 @@
       id="study-card"
       data-entry-id="{{ card.id }}"
       data-study-scope="{{ study_scope }}"
-      data-topic-id="{{ selected_topic.id }}"
+      data-scope-id="{{ study_scope_id }}"
     >
       <div class="card-face card-front is-active" id="card-front">
         <div style='height:100vh;text-align:center;display:flex;justify-content:center;align-items:center;font-size:70px;font-weight:bold;color:#e53c20'>
@@ -176,10 +165,30 @@
       <button class="btn btn-light answer-btn show-answer" id="show-answer-btn">Show Answer</button>
     </div>
     <div class="study-bottom-actions back-actions d-none" id="back-actions">
-      <button class="btn btn-light answer-btn again" data-rating="again">Again</button>
-      <button class="btn btn-light answer-btn hard" data-rating="hard">Hard</button>
-      <button class="btn btn-light answer-btn good" data-rating="good">Good</button>
-      <button class="btn btn-light answer-btn easy" data-rating="easy">Easy</button>
+      <button class="btn btn-light answer-btn again" data-rating="again">
+        Again
+        {% if next_intervals_preview and next_intervals_preview.get('again') %}
+        <span class="answer-ivl">{{ next_intervals_preview['again']['label'] }}</span>
+        {% endif %}
+      </button>
+      <button class="btn btn-light answer-btn hard" data-rating="hard">
+        Hard
+        {% if next_intervals_preview and next_intervals_preview.get('hard') %}
+        <span class="answer-ivl">{{ next_intervals_preview['hard']['label'] }}</span>
+        {% endif %}
+      </button>
+      <button class="btn btn-light answer-btn good" data-rating="good">
+        Good
+        {% if next_intervals_preview and next_intervals_preview.get('good') %}
+        <span class="answer-ivl">{{ next_intervals_preview['good']['label'] }}</span>
+        {% endif %}
+      </button>
+      <button class="btn btn-light answer-btn easy" data-rating="easy">
+        Easy
+        {% if next_intervals_preview and next_intervals_preview.get('easy') %}
+        <span class="answer-ivl">{{ next_intervals_preview['easy']['label'] }}</span>
+        {% endif %}
+      </button>
     </div>
   </div>
   {% endif %}
@@ -214,45 +223,6 @@
   }
   .study-tab:last-child {
     border-right: none;
-  }
-  .study-tab.sync {
-    color: #2176ff;
-  }
-  .study-header {
-    width: min(1400px, 100%);
-    margin: 0 auto 0.6rem;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: 0.95rem;
-    color: #525252;
-  }
-  .study-path {
-    display: flex;
-    gap: 0.45rem;
-    align-items: center;
-    flex-wrap: wrap;
-  }
-  .study-path a {
-    color: #2c63da;
-    text-decoration: none;
-  }
-  .study-path a:hover {
-    text-decoration: underline;
-  }
-  .study-counts {
-    display: flex;
-    gap: 0.75rem;
-    font-weight: 700;
-  }
-  .study-counts .new {
-    color: #2d66f4;
-  }
-  .study-counts .learn {
-    color: #d23a2f;
-  }
-  .study-counts .due {
-    color: #1f8d35;
   }
   .study-card-shell {
     flex: 1;
@@ -320,6 +290,15 @@
     border: 1px solid #c7c7c7;
     background: linear-gradient(#ffffff, #efefef);
     font-weight: 600;
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.1rem;
+  }
+  .answer-ivl {
+    font-size: 0.82rem;
+    color: #555;
+    font-weight: 500;
   }
   .answer-btn.again {
     color: #b22118;
@@ -356,7 +335,7 @@
     const cardRoot = document.getElementById("study-card");
     const entryId = Number(cardRoot?.dataset.entryId || 0);
     const studyScope = (cardRoot?.dataset.studyScope || "lesson").toLowerCase();
-    const topicId = Number(cardRoot?.dataset.topicId || 0);
+    const scopeId = Number(cardRoot?.dataset.scopeId || 0);
     const front = document.getElementById("card-front");
     const back = document.getElementById("card-back");
     const showAnswerBtn = document.getElementById("show-answer-btn");
@@ -405,7 +384,7 @@
         body: JSON.stringify({
           rating,
           scope: studyScope,
-          topic_id: topicId || null
+          scope_id: scopeId || null
         })
       });
       const data = await res.json().catch(() => ({}));
