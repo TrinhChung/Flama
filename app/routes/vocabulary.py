@@ -546,6 +546,118 @@ def index():
     )
 
 
+@vocabulary_bp.route("/browse")
+@login_required
+def browse():
+    """Anki-like browser interface."""
+    return render_template("vocabulary_browse.html")
+
+
+@vocabulary_bp.route("/api/browse/decks", methods=["GET"])
+@login_required
+def browse_api_decks():
+    """Returns all decks accessible to the current user."""
+    # Temporarily returning all decks for admin, or just user-owned if implemented that way.
+    # In flashcards_v2, decks are just VocabularyDeck records.
+    from models.vocabulary_deck import VocabularyDeck
+    decks = VocabularyDeck.query.order_by(VocabularyDeck.name).all()
+    # Simple flat list for now, can be structured into a tree by the frontend
+    deck_list = [{"id": d.id, "name": d.name, "parent_id": d.parent_id} for d in decks]
+    return jsonify({"decks": deck_list})
+
+
+@vocabulary_bp.route("/api/browse/notes", methods=["GET"])
+@login_required
+def browse_api_notes():
+    """Returns notes for a specific deck."""
+    deck_id = request.args.get("deck_id")
+    if not deck_id:
+        return jsonify({"error": "deck_id is required"}), 400
+
+    from models.flashcard import Note, NoteType
+    from models.vocabulary_deck import VocabularyDeck
+
+    deck = VocabularyDeck.query.get(deck_id)
+    if not deck:
+        return jsonify({"error": "Deck not found"}), 404
+
+    # We get all notes in this deck. For regular users, filter by user_id
+    query = Note.query.filter_by(deck_id=deck_id)
+    if not is_admin_user(current_user):
+        query = query.filter_by(user_id=current_user.id)
+    
+    notes_obj = query.order_by(Note.created_at.desc()).limit(500).all()
+
+    # Collect unique columns from NoteTypes
+    note_type_ids = {n.note_type_id for n in notes_obj if n.note_type_id}
+    note_types = NoteType.query.filter(NoteType.id.in_(note_type_ids)).all() if note_type_ids else []
+    note_type_map = {nt.id: nt for nt in note_types}
+
+    columns = set()
+    for nt in note_types:
+        for fd in nt.field_defs:
+            columns.add(fd.get("name", ""))
+    columns.discard("")
+
+    result_notes = []
+    for note in notes_obj:
+        nt = note_type_map.get(note.note_type_id)
+        nt_name = nt.name if nt else "Unknown"
+        result_notes.append({
+            "id": note.id,
+            "sort_field": note.sort_field,
+            "card_type": nt_name,
+            "deck": deck.name,
+            "created_at": note.created_at.strftime("%Y-%m-%d %H:%M:%S") if note.created_at else "",
+            "fields": note.field_values or {}
+        })
+
+    return jsonify({
+        "notes": result_notes,
+        "columns": sorted(list(columns))
+    })
+
+
+@vocabulary_bp.route("/api/browse/notes/<note_id>", methods=["PATCH"])
+@login_required
+def browse_api_update_note(note_id: str):
+    """Updates a single note's fields from the browser."""
+    from models.flashcard import Note
+
+    note = Note.query.get(note_id)
+    if not note:
+        return jsonify({"error": "Note not found"}), 404
+        
+    if not is_admin_user(current_user) and note.user_id != current_user.id:
+        return jsonify({"error": "Unauthorized"}), 403
+
+    data = request.json
+    if not data or "fields" not in data:
+        return jsonify({"error": "Missing fields payload"}), 400
+
+    updated_fields = data["fields"]
+    current_fields = dict(note.field_values or {})
+    current_fields.update(updated_fields)
+    
+    note.field_values = current_fields
+    
+    # Update sort_field if the first field changed
+    from models.flashcard import NoteType
+    note_type = NoteType.query.get(note.note_type_id)
+    if note_type and note_type.field_defs:
+        first_field_name = note_type.field_defs[0].get("name")
+        if first_field_name in current_fields:
+            note.sort_field = str(current_fields[first_field_name])[:255]
+
+    db.session.commit()
+    
+    return jsonify({"success": True, "note": {
+        "id": note.id,
+        "sort_field": note.sort_field,
+        "fields": note.field_values
+    }})
+
+
 @vocabulary_bp.route("/levels/new", methods=["POST"])
 @login_required
 def create_level():

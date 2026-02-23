@@ -47,6 +47,8 @@ class SeedStats:
     created_decks: int = 0
     seeded_files: int = 0
     created_entries: int = 0
+    created_notes: int = 0
+    created_cards: int = 0
     replaced_files: int = 0
     skipped_files: int = 0
 
@@ -77,7 +79,13 @@ def register_cli_commands(app: Flask) -> None:
         default=False,
         help="Replace entries in existing file-decks instead of skipping them.",
     )
-    def vocab_seed(seed_path: str, replace_lessons: bool) -> None:
+    @click.option(
+        "--owner-user-id",
+        type=int,
+        default=None,
+        help="Owner user id for seeded decks/notes. Defaults to first available user.",
+    )
+    def vocab_seed(seed_path: str, replace_lessons: bool, owner_user_id: int | None) -> None:
         """Seed deck tree from static folder structure.
 
         Rules:
@@ -98,11 +106,22 @@ def register_cli_commands(app: Flask) -> None:
             click.echo(f"No subfolders found in {root}. Nothing to seed.")
             return
 
+        target_user = User.query.get(owner_user_id) if owner_user_id else User.query.order_by(User.id.asc()).first()
+        if target_user is None:
+            raise click.ClickException("No user found. Create at least one user before running vocab-seed.")
+
+        note_type, template = ensure_legacy_note_type(db.session, target_user.id)
         click.echo(f"Seeding from: {root}")
+        click.echo(
+            f"Using owner_user_id={target_user.id}, note_type={note_type.id}, template={template.id}"
+        )
         for start_dir in start_dirs:
             _seed_dir_to_deck(
                 directory=start_dir,
                 parent_deck_id=None,
+                owner_user_id=target_user.id,
+                note_type_id=note_type.id,
+                template_id=template.id,
                 replace_existing=replace_lessons,
                 stats=stats,
             )
@@ -111,7 +130,8 @@ def register_cli_commands(app: Flask) -> None:
         click.echo(
             "Done. "
             f"decks+{stats.created_decks}, files_seeded={stats.seeded_files}, "
-            f"entries+{stats.created_entries}, replaced_files={stats.replaced_files}, "
+            f"entries+{stats.created_entries}, notes+{stats.created_notes}, cards+{stats.created_cards}, "
+            f"replaced_files={stats.replaced_files}, "
             f"skipped_files={stats.skipped_files}"
         )
 
@@ -272,6 +292,7 @@ def _next_deck_position(parent_deck_id: int | None) -> int:
 def _get_or_create_deck(
     *,
     parent_deck_id: int | None,
+    owner_user_id: int,
     name: str,
     description: str | None,
     stats: SeedStats,
@@ -285,10 +306,13 @@ def _get_or_create_deck(
         .first()
     )
     if deck:
+        if deck.owner_user_id is None:
+            deck.owner_user_id = owner_user_id
         return deck, False
 
     deck = VocabularyDeck(
         parent_id=parent_deck_id,
+        owner_user_id=owner_user_id,
         name=name,
         description=description,
         position=_next_deck_position(parent_deck_id),
@@ -303,6 +327,9 @@ def _seed_dir_to_deck(
     *,
     directory: Path,
     parent_deck_id: int | None,
+    owner_user_id: int,
+    note_type_id: str,
+    template_id: str,
     replace_existing: bool,
     stats: SeedStats,
 ) -> None:
@@ -312,6 +339,7 @@ def _seed_dir_to_deck(
 
     deck_node, created = _get_or_create_deck(
         parent_deck_id=parent_deck_id,
+        owner_user_id=owner_user_id,
         name=deck_name,
         description=None,
         stats=stats,
@@ -334,6 +362,9 @@ def _seed_dir_to_deck(
         _seed_file_to_leaf_deck(
             file_path=seed_file,
             parent_deck_id=deck_node.id,
+            owner_user_id=owner_user_id,
+            note_type_id=note_type_id,
+            template_id=template_id,
             replace_existing=replace_existing,
             stats=stats,
         )
@@ -344,6 +375,9 @@ def _seed_dir_to_deck(
         _seed_dir_to_deck(
             directory=child_dir,
             parent_deck_id=deck_node.id,
+            owner_user_id=owner_user_id,
+            note_type_id=note_type_id,
+            template_id=template_id,
             replace_existing=replace_existing,
             stats=stats,
         )
@@ -353,12 +387,16 @@ def _seed_file_to_leaf_deck(
     *,
     file_path: Path,
     parent_deck_id: int,
+    owner_user_id: int,
+    note_type_id: str,
+    template_id: str,
     replace_existing: bool,
     stats: SeedStats,
 ) -> None:
     leaf_name = file_path.stem.strip() or file_path.name
     leaf_deck, created = _get_or_create_deck(
         parent_deck_id=parent_deck_id,
+        owner_user_id=owner_user_id,
         name=leaf_name,
         description=f"Seeded from {file_path.name}",
         stats=stats,
@@ -375,6 +413,26 @@ def _seed_file_to_leaf_deck(
         click.echo(f"  Skip file (already seeded): {file_path.name}")
         return
     if existing_count and replace_existing:
+        existing_entry_ids = [
+            row[0]
+            for row in db.session.query(VocabularyEntry.id)
+            .filter(VocabularyEntry.deck_id == leaf_deck.id)
+            .all()
+        ]
+        if existing_entry_ids:
+            LegacyMigrationMap.query.filter(
+                LegacyMigrationMap.entry_id.in_(existing_entry_ids)
+            ).delete(synchronize_session=False)
+        existing_notes = (
+            Note.query.filter(
+                Note.deck_id == leaf_deck.id,
+                Note.user_id == owner_user_id,
+                Note.note_type_id == note_type_id,
+            )
+            .all()
+        )
+        for note in existing_notes:
+            db.session.delete(note)
         VocabularyEntry.query.filter(VocabularyEntry.deck_id == leaf_deck.id).delete()
         stats.replaced_files += 1
         click.echo(f"  Replace file deck: {file_path.name}")
@@ -411,7 +469,47 @@ def _seed_file_to_leaf_deck(
         entries.append(entry)
 
     db.session.add_all(entries)
+
+    notes: list[Note] = []
+    for entry in entries:
+        notes.append(
+            Note(
+                note_type_id=note_type_id,
+                user_id=owner_user_id,
+                deck_id=leaf_deck.id,
+                field_values=_legacy_entry_to_field_values(entry),
+                tags=[],
+            )
+        )
+    db.session.add_all(notes)
+    db.session.flush()
+
+    cards: list[Card] = []
+    for note in notes:
+        cards.append(
+            Card(
+                note_id=note.id,
+                template_id=template_id,
+                queue="new",
+            )
+        )
+    db.session.add_all(cards)
+    db.session.flush()
+
+    migration_maps: list[LegacyMigrationMap] = []
+    for entry, note, card in zip(entries, notes, cards):
+        migration_maps.append(
+            LegacyMigrationMap(
+                entry_id=entry.id,
+                note_id=note.id,
+                card_id=card.id,
+            )
+        )
+    db.session.add_all(migration_maps)
+
     stats.created_entries += len(entries)
+    stats.created_notes += len(notes)
+    stats.created_cards += len(cards)
     stats.seeded_files += 1
     deck_state = "Created" if created else "Updated"
     click.echo(f"  {deck_state} leaf deck: {leaf_name} ({len(entries)} rows)")

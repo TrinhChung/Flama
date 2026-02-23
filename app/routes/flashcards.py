@@ -12,6 +12,7 @@ from typing import Any
 from flask import (
     Blueprint,
     current_app,
+    flash,
     jsonify,
     redirect,
     render_template,
@@ -319,6 +320,62 @@ def _build_preview_sample_values(field_defs: list[FieldDef]) -> dict[str, Any]:
     return sample_values
 
 
+def _build_preview_values_from_vocabulary_entry(
+    entry: VocabularyEntry,
+    field_defs: list[FieldDef],
+) -> dict[str, Any]:
+    # Keep compatibility with both legacy (Word/Reading/...) and flama (word/reading/...) field names.
+    raw_values = {
+        "Word": entry.word or "",
+        "word": entry.word or "",
+        "hanviet": entry.hanviet or "",
+        "Reading": entry.reading or "",
+        "reading": entry.reading or "",
+        "Translation_VI": entry.translation_vi or "",
+        "translation_vi": entry.translation_vi or "",
+        "Meaning_JP": entry.meaning_jp or "",
+        "meaning_jp": entry.meaning_jp or "",
+        "Meaning_VI": entry.meaning_vi or "",
+        "meaning_vi": entry.meaning_vi or "",
+        "Usage_JP": entry.usage_jp or "",
+        "usage_jp": entry.usage_jp or "",
+        "Usage_VI": entry.usage_vi or "",
+        "usage_vi": entry.usage_vi or "",
+        "Example_JP": entry.example_jp or "",
+        "example_jp": entry.example_jp or "",
+        "Example_VI": entry.example_vi or "",
+        "example_vi": entry.example_vi or "",
+        "Additional_Note_JP": entry.additional_note_jp or "",
+        "additional_note_jp": entry.additional_note_jp or "",
+        "Additional_Note_VI": entry.additional_note_vi or "",
+        "additional_note_vi": entry.additional_note_vi or "",
+        "image": entry.image or "",
+        "Diagram": entry.diagram or "",
+        "diagram": entry.diagram or "",
+        "Word_Audio": entry.word_audio or "",
+        "word_audio": entry.word_audio or "",
+        "Example_Audio": entry.example_audio or "",
+        "example_audio": entry.example_audio or "",
+    }
+
+    preview_values: dict[str, Any] = {}
+    for field_def in field_defs:
+        raw_value = raw_values.get(field_def.name, "")
+        if field_def.field_type == "image":
+            preview_values[field_def.name] = PREVIEW_MEDIA_IMAGE_TOKEN if raw_value else ""
+        elif field_def.field_type == "audio":
+            preview_values[field_def.name] = PREVIEW_MEDIA_AUDIO_TOKEN if raw_value else ""
+        elif field_def.field_type == "diagram":
+            preview_values[field_def.name] = PREVIEW_MEDIA_DIAGRAM_TOKEN if raw_value else ""
+        else:
+            preview_values[field_def.name] = raw_value
+
+    for key, value in raw_values.items():
+        if key not in preview_values:
+            preview_values[key] = value
+    return preview_values
+
+
 def _validate_note_type_publish_requirements(note_type: NoteType) -> str | None:
     if not (note_type.name or "").strip():
         return "Title is required for publish."
@@ -592,6 +649,14 @@ def _validate_deck_publish_requirements(deck_item: DeckMarketplaceItem) -> str |
         return "Version is required for publish."
     if deck_item.pricing_mode == "paid" and int(deck_item.price_cents or 0) <= 0:
         return "Paid deck must have a positive price."
+    source_note_type_id = (deck_item.source_note_type_id or "").strip()
+    if not source_note_type_id:
+        return "source_note_type_id is required for publish."
+    source_note_type = NoteType.query.get(source_note_type_id)
+    if not source_note_type:
+        return "source_note_type_id not found for publish."
+    if not source_note_type.templates:
+        return "source_note_type_id must reference a note type that has at least one template."
     return None
 
 
@@ -664,6 +729,95 @@ def _apply_deck_marketplace_payload(deck_item: DeckMarketplaceItem, payload: dic
         deck_item.publish_status = candidate_status
 
     return None
+
+
+def _resolve_single_note_type_for_deck(
+    *,
+    deck_id: int,
+    owner_user_id: int | None = None,
+) -> tuple[str | None, str | None]:
+    query = db.session.query(Note.note_type_id).filter(Note.deck_id == deck_id)
+    if owner_user_id is not None:
+        query = query.filter(Note.user_id == owner_user_id)
+
+    note_type_ids = sorted({row[0] for row in query.all() if row[0]})
+    if not note_type_ids:
+        has_entries = (
+            db.session.query(VocabularyEntry.id)
+            .filter(VocabularyEntry.deck_id == deck_id)
+            .first()
+            is not None
+        )
+        if has_entries and owner_user_id is not None:
+            fallback_note_type, _fallback_template = ensure_legacy_note_type(db.session, owner_user_id)
+            return fallback_note_type.id, None
+        return None, "Deck has no notes, cannot infer source_note_type_id."
+    if len(note_type_ids) > 1:
+        return None, "All notes in one deck must use the same template (note type)."
+
+    resolved_note_type_id = note_type_ids[0]
+    resolved_note_type = NoteType.query.get(resolved_note_type_id)
+    if not resolved_note_type:
+        return None, "Deck source note type not found."
+    if not resolved_note_type.templates:
+        return None, "Deck source note type has no templates."
+    return resolved_note_type.id, None
+
+
+def _bind_deck_item_source_note_type(
+    deck_item: DeckMarketplaceItem,
+    *,
+    require_source_note_type: bool,
+) -> str | None:
+    if deck_item.source_deck_id is not None:
+        inferred_note_type_id, infer_error = _resolve_single_note_type_for_deck(
+            deck_id=deck_item.source_deck_id,
+            owner_user_id=deck_item.owner_user_id,
+        )
+        if infer_error and require_source_note_type and not (deck_item.source_note_type_id or "").strip():
+            return infer_error
+        if inferred_note_type_id:
+            if deck_item.source_note_type_id and deck_item.source_note_type_id != inferred_note_type_id:
+                return "source_note_type_id does not match notes inside source_deck_id."
+            deck_item.source_note_type_id = inferred_note_type_id
+
+    source_note_type_id = (deck_item.source_note_type_id or "").strip()
+    if not source_note_type_id:
+        if require_source_note_type:
+            return "source_note_type_id is required."
+        return None
+
+    source_note_type = NoteType.query.get(source_note_type_id)
+    if not source_note_type:
+        return "source_note_type_id not found."
+    if not source_note_type.templates:
+        return "source_note_type_id must reference a note type with at least one template."
+    return None
+
+
+def _validate_note_type_consistency_for_deck(
+    *,
+    deck_id: int | None,
+    note_type_id: str,
+    user_id: int,
+    exclude_note_id: str | None = None,
+) -> str | None:
+    if deck_id is None:
+        return None
+
+    query = db.session.query(Note.note_type_id).filter(
+        Note.deck_id == deck_id,
+        Note.user_id == user_id,
+    )
+    if exclude_note_id:
+        query = query.filter(Note.id != exclude_note_id)
+
+    existing_note_type_ids = {row[0] for row in query.distinct().all() if row[0]}
+    if not existing_note_type_ids:
+        return None
+    if existing_note_type_ids == {note_type_id}:
+        return None
+    return "All notes in one deck must use the same template (note type)."
 
 
 def _next_deck_position(parent_deck_id: int | None) -> int:
@@ -1333,14 +1487,21 @@ def share_deck_page(deck_id: int):
         if not title:
             flash("Tên hiển thị không được để trống.", "danger")
             return render_template("flashcards/shared_deck_publish.html", deck=deck, existing_item=existing_item)
-            
+
+        resolved_note_type_id, resolve_error = _resolve_single_note_type_for_deck(
+            deck_id=deck.id,
+            owner_user_id=current_user.id,
+        )
+        if resolve_error:
+            flash(resolve_error, "danger")
+            return render_template("flashcards/shared_deck_publish.html", deck=deck, existing_item=existing_item)            
         if not existing_item:
             existing_item = DeckMarketplaceItem(
                 source_deck_id=deck.id,
                 owner_user_id=current_user.id,
                 is_official=is_admin_user(current_user),
                 install_count=0,
-                rating_sum=0,
+                rating_avg=0.0,
                 rating_count=0,
             )
             db.session.add(existing_item)
@@ -1352,6 +1513,7 @@ def share_deck_page(deck_id: int):
         existing_item.tags = tags
         existing_item.pricing_mode = pricing_mode
         existing_item.price_cents = price_cents
+        existing_item.source_note_type_id = resolved_note_type_id
         existing_item.publish_status = "published"
         
         db.session.commit()
@@ -1956,6 +2118,14 @@ def create_note():
         except (TypeError, ValueError):
             return _api_error("VALIDATION_ERROR", "deck_id must be an integer.", field="deck_id")
 
+    deck_consistency_error = _validate_note_type_consistency_for_deck(
+        deck_id=parsed_deck_id,
+        note_type_id=note_type.id,
+        user_id=current_user.id,
+    )
+    if deck_consistency_error:
+        return _api_error("VALIDATION_ERROR", deck_consistency_error, field="deck_id")
+
     note = Note(
         note_type_id=note_type.id,
         user_id=current_user.id,
@@ -2039,6 +2209,15 @@ def patch_note(note_id: str):
                 note.deck_id = int(deck_id)
             except (TypeError, ValueError):
                 return _api_error("VALIDATION_ERROR", "deck_id must be an integer.", field="deck_id")
+
+    deck_consistency_error = _validate_note_type_consistency_for_deck(
+        deck_id=note.deck_id,
+        note_type_id=note.note_type_id,
+        user_id=current_user.id,
+        exclude_note_id=note.id,
+    )
+    if deck_consistency_error:
+        return _api_error("VALIDATION_ERROR", deck_consistency_error, field="deck_id")
     _audit("note.update", {"note_id": note.id})
     db.session.commit()
     return jsonify({"id": note.id, "field_values": note.field_values, "tags": note.tags})
@@ -2673,9 +2852,10 @@ def create_shared_deck_item():
     if deck_item.source_deck_id is not None and not VocabularyDeck.query.get(deck_item.source_deck_id):
         db.session.rollback()
         return _api_error("FIELD_NOT_FOUND", "source_deck_id not found.", field="source_deck_id", status=404)
-    if deck_item.source_note_type_id and not NoteType.query.get(deck_item.source_note_type_id):
+    bind_error = _bind_deck_item_source_note_type(deck_item, require_source_note_type=True)
+    if bind_error:
         db.session.rollback()
-        return _api_error("FIELD_NOT_FOUND", "source_note_type_id not found.", field="source_note_type_id", status=404)
+        return _api_error("VALIDATION_ERROR", bind_error, field="source_note_type_id")
     _recompute_deck_item_market_stats(deck_item)
     _audit("market.deck_item.create", {"deck_item_id": deck_item.id})
     db.session.commit()
@@ -2688,6 +2868,11 @@ def get_shared_deck_item(deck_item_id: str):
     deck_item = _get_shared_deck_item_for_view(deck_item_id)
     if not deck_item:
         return _api_error("FIELD_NOT_FOUND", "Deck item not found.", status=404)
+
+    original_note_type_id = deck_item.source_note_type_id
+    _bind_deck_item_source_note_type(deck_item, require_source_note_type=False)
+    if deck_item.source_note_type_id != original_note_type_id:
+        db.session.commit()
 
     install = DeckInstall.query.filter_by(deck_item_id=deck_item.id, user_id=current_user.id).first()
     review = DeckReview.query.filter_by(deck_item_id=deck_item.id, user_id=current_user.id).first()
@@ -2705,7 +2890,105 @@ def get_shared_deck_item(deck_item_id: str):
         if review
         else None
     )
+
+    source_note_type_payload = None
+    source_note_type_id = (deck_item.source_note_type_id or "").strip()
+    if source_note_type_id:
+        source_note_type = NoteType.query.get(source_note_type_id)
+        if source_note_type:
+            ordered_templates = sorted(
+                source_note_type.templates,
+                key=lambda item: (int(item.position or 0), str(item.name or "").lower()),
+            )
+            source_note_type_payload = {
+                "id": source_note_type.id,
+                "name": source_note_type.name,
+                "title": source_note_type.name,
+                "publish_status": source_note_type.publish_status,
+                "templates": [
+                    {
+                        "id": template.id,
+                        "name": template.name,
+                        "position": int(template.position or 0),
+                        "is_default": bool(template.is_default),
+                    }
+                    for template in ordered_templates
+                ],
+            }
+    payload["source_note_type"] = source_note_type_payload
+
     return jsonify(payload)
+
+
+@flashcards_bp.route("/api/shared/decks/<deck_item_id>/templates/<template_id>/preview", methods=["POST"])
+@login_required
+def preview_shared_deck_template(deck_item_id: str, template_id: str):
+    deck_item = _get_shared_deck_item_for_view(deck_item_id)
+    if not deck_item:
+        return _api_error("FIELD_NOT_FOUND", "Deck item not found.", status=404)
+
+    original_note_type_id = deck_item.source_note_type_id
+    bind_error = _bind_deck_item_source_note_type(deck_item, require_source_note_type=True)
+    if bind_error:
+        return _api_error("VALIDATION_ERROR", bind_error, status=409)
+    if deck_item.source_note_type_id != original_note_type_id:
+        db.session.commit()
+
+    source_note_type_id = (deck_item.source_note_type_id or "").strip()
+    if not source_note_type_id:
+        return _api_error("VALIDATION_ERROR", "Deck item has no source note type.", status=409)
+
+    note_type = NoteType.query.get(source_note_type_id)
+    if not note_type:
+        return _api_error("FIELD_NOT_FOUND", "Note type not found.", status=404)
+
+    template = Template.query.filter_by(id=template_id, note_type_id=note_type.id).first()
+    if not template:
+        return _api_error("FIELD_NOT_FOUND", "Template not found.", status=404)
+
+    preview_note = None
+    preview_entry = None
+    if deck_item.source_deck_id is not None:
+        query = Note.query.filter_by(
+            deck_id=deck_item.source_deck_id,
+            note_type_id=note_type.id,
+        )
+        if deck_item.owner_user_id is not None:
+            query = query.filter(Note.user_id == deck_item.owner_user_id)
+        preview_note = query.order_by(Note.created_at.asc(), Note.id.asc()).first()
+        if preview_note is None:
+            preview_entry = (
+                VocabularyEntry.query.filter_by(deck_id=deck_item.source_deck_id)
+                .order_by(VocabularyEntry.created_at.asc(), VocabularyEntry.id.asc())
+                .first()
+            )
+
+    if preview_note:
+        preview_field_values = preview_note.field_values or {}
+        preview_media_assets = preview_note.media_assets
+        preview_note_key = f"shared-deck-preview:{deck_item.id}:{preview_note.id}"
+    elif preview_entry:
+        preview_field_values = _build_preview_values_from_vocabulary_entry(preview_entry, note_type.field_defs)
+        preview_media_assets = []
+        preview_note_key = f"shared-deck-preview:{deck_item.id}:entry:{preview_entry.id}"
+    else:
+        preview_field_values = _build_preview_sample_values(note_type.field_defs)
+        preview_media_assets = []
+        preview_note_key = f"shared-deck-preview:{deck_item.id}:sample"
+
+    try:
+        rendered = render_template_pair(
+            template=template,
+            field_defs=note_type.field_defs,
+            field_values=preview_field_values,
+            media_assets=preview_media_assets,
+            preview_note_key=preview_note_key,
+            allow_inline_script=True,
+        )
+    except TemplateCompileError as exc:
+        return _api_error("TEMPLATE_COMPILE_ERROR", str(exc), field="front_html")
+
+    return jsonify(rendered)
 
 
 @flashcards_bp.route("/api/shared/decks/<deck_item_id>", methods=["PATCH"])
@@ -2723,8 +3006,9 @@ def patch_shared_deck_item(deck_item_id: str):
         return _api_error("VALIDATION_ERROR", validation_error)
     if deck_item.source_deck_id is not None and not VocabularyDeck.query.get(deck_item.source_deck_id):
         return _api_error("FIELD_NOT_FOUND", "source_deck_id not found.", field="source_deck_id", status=404)
-    if deck_item.source_note_type_id and not NoteType.query.get(deck_item.source_note_type_id):
-        return _api_error("FIELD_NOT_FOUND", "source_note_type_id not found.", field="source_note_type_id", status=404)
+    bind_error = _bind_deck_item_source_note_type(deck_item, require_source_note_type=True)
+    if bind_error:
+        return _api_error("VALIDATION_ERROR", bind_error, field="source_note_type_id")
     _recompute_deck_item_market_stats(deck_item)
     _audit("market.deck_item.update", {"deck_item_id": deck_item.id})
     db.session.commit()
@@ -2737,6 +3021,14 @@ def install_shared_deck_item(deck_item_id: str):
     deck_item = DeckMarketplaceItem.query.get(deck_item_id)
     if not deck_item:
         return _api_error("FIELD_NOT_FOUND", "Deck item not found.", status=404)
+
+    original_note_type_id = deck_item.source_note_type_id
+    bind_error = _bind_deck_item_source_note_type(deck_item, require_source_note_type=True)
+    if bind_error:
+        return _api_error("VALIDATION_ERROR", bind_error, status=409)
+    if deck_item.source_note_type_id != original_note_type_id:
+        db.session.commit()
+
     status = str(deck_item.publish_status or "").strip().lower()
     if status not in PUBLISH_STATUSES_VISIBLE:
         return _api_error("VALIDATION_ERROR", "This deck is not available for install.", status=409)

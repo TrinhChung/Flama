@@ -326,7 +326,7 @@
         return;
       }
       setLoadingPreview();
-      previewPayload = await requestJson(`/api/shared/note-types/${deckDetail.source_note_type_id}/templates/${selectedTemplateId}/preview`, {
+      previewPayload = await requestJson(`/api/shared/decks/${deckItemId}/templates/${selectedTemplateId}/preview`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
       });
@@ -350,6 +350,15 @@
 
       sourceNoteTypeLink.classList.remove("disabled");
       sourceNoteTypeLink.setAttribute("href", buildNoteTypeDetailUrl(deckDetail.source_note_type_id));
+
+      const sourceFromDeckDetail = deckDetail.source_note_type || null;
+      if (sourceFromDeckDetail && Array.isArray(sourceFromDeckDetail.templates) && sourceFromDeckDetail.templates.length) {
+        sourceNoteTypeDetail = sourceFromDeckDetail;
+        renderTemplateSelect(sourceNoteTypeDetail.templates || []);
+        templateNoteEl.textContent = "Preview láº¥y tá»« note type nguá»“n: " + (sourceNoteTypeDetail.title || sourceNoteTypeDetail.name || "");
+        await loadTemplatePreview();
+        return;
+      }
 
       try {
         sourceNoteTypeDetail = await requestJson(`/api/shared/note-types/${deckDetail.source_note_type_id}`);

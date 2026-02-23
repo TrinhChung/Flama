@@ -1,0 +1,546 @@
+{% extends "base.html" %}
+
+{% block title %}Browse Vocabulary{% endblock %}
+
+{% block styles %}
+<style>
+    html,
+    body {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        /* Prevent body scrolling */
+    }
+
+    .browser-container {
+        display: flex;
+        height: calc(100vh - 56px);
+        /* Adjust for navbar height, adjust if needed */
+        width: 100%;
+        background-color: var(--flama-gray-100);
+    }
+
+    /* --- LEFT PANE: DECKS --- */
+    .browser-sidebar {
+        width: 250px;
+        min-width: 200px;
+        max-width: 400px;
+        background-color: white;
+        border-right: 1px solid var(--flama-gray-300);
+        display: flex;
+        flex-direction: column;
+        resize: horizontal;
+        overflow: auto;
+    }
+
+    .sidebar-header {
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--flama-gray-200);
+        font-weight: 600;
+        font-size: 0.9rem;
+        color: var(--flama-gray-700);
+        background-color: var(--flama-gray-50);
+    }
+
+    .deck-tree {
+        flex-grow: 1;
+        overflow-y: auto;
+        padding: 8px 0;
+    }
+
+    .deck-item {
+        padding: 6px 16px;
+        cursor: pointer;
+        font-size: 0.85rem;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--bs-body-color);
+    }
+
+    .deck-item:hover {
+        background-color: var(--flama-gray-100);
+    }
+
+    .deck-item.active {
+        background-color: #ffe8d6;
+        /* Light Flama orange */
+        color: var(--flama-orange-700);
+        font-weight: 600;
+        border-left: 3px solid var(--flama-orange-500);
+    }
+
+    /* --- CENTER PANE: NOTES TABLE --- */
+    .browser-main {
+        flex-grow: 1;
+        display: flex;
+        flex-direction: column;
+        background-color: white;
+        min-width: 300px;
+    }
+
+    .main-toolbar {
+        padding: 8px 16px;
+        border-bottom: 1px solid var(--flama-gray-300);
+        display: flex;
+        gap: 8px;
+        background-color: var(--flama-gray-50);
+        align-items: center;
+    }
+
+    .search-box {
+        flex-grow: 1;
+        max-width: 400px;
+    }
+
+    .notes-table-container {
+        flex-grow: 1;
+        overflow: auto;
+    }
+
+    .notes-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.85rem;
+    }
+
+    .notes-table th {
+        position: sticky;
+        top: 0;
+        background-color: var(--flama-gray-100);
+        padding: 8px 12px;
+        text-align: left;
+        font-weight: 600;
+        border-bottom: 2px solid var(--flama-gray-300);
+        border-right: 1px solid var(--flama-gray-200);
+        box-shadow: 0 1px 0 var(--flama-gray-300);
+        z-index: 10;
+    }
+
+    .notes-table td {
+        padding: 6px 12px;
+        border-bottom: 1px solid var(--flama-gray-200);
+        border-right: 1px solid var(--flama-gray-200);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 200px;
+    }
+
+    .notes-table tr {
+        cursor: pointer;
+    }
+
+    .notes-table tr:hover {
+        background-color: var(--flama-gray-50);
+    }
+
+    .notes-table tr.selected {
+        background-color: #ffe8d6;
+    }
+
+    /* --- RIGHT PANE: EDITOR --- */
+    .browser-editor {
+        width: 350px;
+        min-width: 250px;
+        max-width: 500px;
+        background-color: var(--flama-gray-50);
+        border-left: 1px solid var(--flama-gray-300);
+        display: flex;
+        flex-direction: column;
+        resize: horizontal;
+        direction: rtl;
+        /* For resize handle on the left */
+    }
+
+    .browser-editor>* {
+        direction: ltr;
+        /* Reset content direction */
+    }
+
+    .editor-header {
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--flama-gray-300);
+        font-weight: 600;
+        font-size: 0.9rem;
+        background-color: white;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .editor-content {
+        flex-grow: 1;
+        overflow-y: auto;
+        padding: 16px;
+    }
+
+    .editor-empty-state {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+        color: var(--flama-gray-500);
+        text-align: center;
+        padding: 20px;
+    }
+
+    .editor-empty-state i {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+        opacity: 0.5;
+    }
+
+    .field-group {
+        margin-bottom: 16px;
+    }
+
+    .field-label {
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: var(--flama-gray-600);
+        margin-bottom: 4px;
+        display: block;
+    }
+
+    .field-input {
+        width: 100%;
+        padding: 8px;
+        border: 1px solid var(--flama-gray-300);
+        border-radius: 4px;
+        font-size: 0.9rem;
+        transition: border-color 0.2s;
+    }
+
+    .field-input:focus {
+        outline: none;
+        border-color: var(--flama-orange-500);
+        box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.2);
+    }
+
+    textarea.field-input {
+        resize: vertical;
+        min-height: 40px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="browser-container">
+    <!-- LEFT: DECKS -->
+    <div class="browser-sidebar" style="direction: ltr;">
+        <div class="sidebar-header">
+            Decks
+        </div>
+        <div class="deck-tree" id="deckTree">
+            Loading...
+        </div>
+    </div>
+
+    <!-- CENTER: NOTES -->
+    <div class="browser-main">
+        <div class="main-toolbar">
+            <div class="input-group search-box input-group-sm">
+                <span class="input-group-text bg-white border-end-0"><i class="bi bi-search"></i></span>
+                <input type="text" class="form-control border-start-0 ps-0" placeholder="Search notes..."
+                    id="searchInput">
+            </div>
+            <!-- placeholder for other actions -->
+        </div>
+        <div class="notes-table-container">
+            <table class="notes-table" id="notesTable">
+                <thead>
+                    <tr id="tableHeader">
+                        <th>Sort Field</th>
+                        <th>Type</th>
+                        <th>Deck</th>
+                        <th>Created</th>
+                        <!-- Dynamic columns go here -->
+                    </tr>
+                </thead>
+                <tbody id="tableBody">
+                    <tr>
+                        <td colspan="4" class="text-center py-4 text-muted">Select a deck to view notes.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- RIGHT: EDITOR -->
+    <div class="browser-editor">
+        <div class="editor-header">
+            <span>Editor</span>
+            <button class="btn btn-sm btn-primary py-0 px-2" id="saveNoteBtn" style="display: none;"
+                disabled>Save</button>
+        </div>
+        <div class="editor-content" id="editorContent">
+            <div class="editor-empty-state">
+                <i class="bi bi-file-earmark-text"></i>
+                <p>No note selected</p>
+                <small>Select a note from the list to view and edit its fields.</small>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // App State
+    const state = {
+        decks: [],
+        selectedDeckId: null,
+        notes: [],
+        selectedNoteId: null,
+        currentNoteData: null,
+        searchQuery: '',
+        columns: []
+    };
+
+    // DOM Elements
+    const els = {
+        deckTree: document.getElementById('deckTree'),
+        tableHeader: document.getElementById('tableHeader'),
+        tableBody: document.getElementById('tableBody'),
+        editorContent: document.getElementById('editorContent'),
+        searchInput: document.getElementById('searchInput'),
+        saveBtn: document.getElementById('saveNoteBtn')
+    };
+
+    // Init
+    document.addEventListener('DOMContentLoaded', () => {
+        fetchDecks();
+
+        els.searchInput.addEventListener('input', (e) => {
+            // Basic local filtering for now
+            state.searchQuery = e.target.value.toLowerCase();
+            renderNotesTable();
+        });
+
+        els.saveBtn.addEventListener('click', saveNote);
+    });
+
+    // API Calls
+    async function fetchDecks() {
+        try {
+            const res = await fetch('/vocabulary/api/browse/decks');
+            if (!res.ok) throw new Error("Failed to fetch decks");
+            const data = await res.json();
+            state.decks = data.decks || [];
+            renderDeckTree();
+        } catch (err) {
+            console.error(err);
+            els.deckTree.innerHTML = `<div class="p-3 text-danger">Error loading decks</div>`;
+        }
+    }
+
+    async function fetchNotes(deckId) {
+        if (!deckId) return;
+        try {
+            els.tableBody.innerHTML = `<tr><td colspan="4" class="text-center py-4">Loading...</td></tr>`;
+
+            const res = await fetch(`/vocabulary/api/browse/notes?deck_id=${deckId}`);
+            if (!res.ok) throw new Error("Failed to fetch notes");
+            const data = await res.json();
+
+            state.notes = data.notes || [];
+            state.columns = data.columns || [];
+            renderNotesTable();
+        } catch (err) {
+            console.error(err);
+            els.tableBody.innerHTML = `<tr><td colspan="4" class="text-center py-4 text-danger">Error loading notes</td></tr>`;
+        }
+    }
+
+    function fetchNoteDetails(noteId) {
+        const note = state.notes.find(n => n.id === noteId);
+        if (!note) return;
+        state.currentNoteData = JSON.parse(JSON.stringify(note)); // clone
+        renderEditor(state.currentNoteData);
+    }
+
+    async function saveNote() {
+        if (!state.currentNoteData) return;
+
+        // Gather updated field values from inputs
+        const updatedFields = {};
+        document.querySelectorAll('.editor-field-input').forEach(input => {
+            const fieldName = input.dataset.field;
+            updatedFields[fieldName] = input.value;
+        });
+
+        els.saveBtn.disabled = true;
+        els.saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>';
+
+        try {
+            const res = await fetch(`/vocabulary/api/browse/notes/${state.currentNoteData.id}`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ fields: updatedFields })
+            });
+
+            if (!res.ok) throw new Error("Failed to save note");
+            const data = await res.json();
+
+            if (data.success) {
+                // Update local state and table
+                const idx = state.notes.findIndex(n => n.id === data.note.id);
+                if (idx !== -1) {
+                    state.notes[idx].fields = data.note.fields;
+                    state.notes[idx].sort_field = data.note.sort_field;
+                }
+                renderNotesTable();
+                els.saveBtn.innerHTML = 'Saved!';
+                setTimeout(() => {
+                    els.saveBtn.innerHTML = 'Save';
+                    els.saveBtn.disabled = true;
+                }, 2000);
+            }
+        } catch (err) {
+            console.error(err);
+            els.saveBtn.innerHTML = 'Error';
+            els.saveBtn.classList.replace('btn-primary', 'btn-danger');
+            setTimeout(() => {
+                els.saveBtn.innerHTML = 'Save';
+                els.saveBtn.classList.replace('btn-danger', 'btn-primary');
+                els.saveBtn.disabled = false;
+            }, 3000);
+        }
+    }
+
+    // Render Functions
+    function renderDeckTree() {
+        if (!state.decks.length) {
+            els.deckTree.innerHTML = `<div class="p-3 text-muted">No decks found</div>`;
+            return;
+        }
+
+        // Using a flat list for now. Needs a proper tree layout for hierarchical decks.
+        const html = state.decks.map(deck => `
+      <div class="deck-item ${state.selectedDeckId === deck.id ? 'active' : ''}" 
+           onclick="selectDeck(${deck.id})">
+        <i class="bi ${state.selectedDeckId === deck.id ? 'bi-folder2-open' : 'bi-folder2'}"></i> 
+        ${deck.name}
+      </div>
+    `).join('');
+
+        els.deckTree.innerHTML = html;
+    }
+
+    function renderNotesTable() {
+        let filteredNotes = state.notes;
+        if (state.searchQuery) {
+            filteredNotes = state.notes.filter(note => {
+                const searchStr = (note.sort_field + " " + Object.values(note.fields || {}).join(" ")).toLowerCase();
+                return searchStr.includes(state.searchQuery);
+            });
+        }
+
+        if (!filteredNotes || !filteredNotes.length) {
+            els.tableBody.innerHTML = `<tr><td colspan="${4 + state.columns.length}" class="text-center py-4 text-muted">No matching notes found.</td></tr>`;
+
+            // Still need to render headers so it doesn't look completely empty
+            const headers = [
+                '<th>Sort Field</th>',
+                '<th>Type</th>',
+                '<th>Deck</th>',
+                '<th>Created</th>'
+            ];
+            state.columns.forEach(col => headers.push(`<th>${col}</th>`));
+            els.tableHeader.innerHTML = headers.join('');
+            return;
+        }
+
+        // Dynamic Headers
+        const headers = [
+            '<th>Sort Field</th>',
+            '<th>Type</th>',
+            '<th>Deck</th>',
+            '<th>Created</th>'
+        ];
+        state.columns.forEach(col => {
+            headers.push(`<th>${col}</th>`);
+        });
+        els.tableHeader.innerHTML = headers.join('');
+
+        // Rows
+        const rows = filteredNotes.map(note => {
+            let tr = `<tr class="${state.selectedNoteId === note.id ? 'selected' : ''}" onclick="selectNote(${note.id})">
+        <td class="fw-medium">${note.sort_field || ''}</td>
+        <td><span class="badge bg-secondary opacity-75 fw-normal">${note.card_type || 'Basic'}</span></td>
+        <td class="text-muted small">${note.deck || ''}</td>
+        <td class="text-muted small">${note.created_at || ''}</td>
+      `;
+            state.columns.forEach(col => {
+                tr += `<td>${(note.fields && note.fields[col]) ? note.fields[col] : ''}</td>`;
+            });
+            tr += `</tr>`;
+            return tr;
+        }).join('');
+
+        els.tableBody.innerHTML = rows;
+    }
+
+    function renderEditor(note) {
+        els.saveBtn.style.display = 'block';
+        els.saveBtn.disabled = true; // wait for changes
+        els.saveBtn.innerHTML = 'Save';
+
+        let html = '';
+
+        if (note.fields) {
+            for (const [key, value] of Object.entries(note.fields)) {
+                html += `
+          <div class="field-group">
+            <label class="field-label">${key}</label>
+            <textarea class="field-input editor-field-input" rows="1" data-field="${key}">${value || ''}</textarea>
+          </div>
+        `;
+            }
+        }
+
+        els.editorContent.innerHTML = html;
+
+        // Auto-resize textareas and enable save button on input
+        document.querySelectorAll('.editor-field-input').forEach(ta => {
+            ta.addEventListener('input', function () {
+                this.style.height = 'auto';
+                this.style.height = (this.scrollHeight) + 'px';
+                els.saveBtn.disabled = false;
+                els.saveBtn.classList.replace('btn-danger', 'btn-primary'); // reset error state if any
+            });
+            // Initial sizing
+            ta.style.height = 'auto';
+            ta.style.height = (ta.scrollHeight) + 'px';
+        });
+    }
+
+    // Event Handlers
+    window.selectDeck = function (deckId) {
+        state.selectedDeckId = deckId;
+        state.selectedNoteId = null; // reset note selection
+        renderDeckTree(); // re-render to update active class
+
+        // Clear editor
+        els.editorContent.innerHTML = `
+      <div class="editor-empty-state">
+        <i class="bi bi-file-earmark-text"></i>
+        <p>No note selected</p>
+      </div>`;
+        els.saveBtn.style.display = 'none';
+
+        fetchNotes(deckId);
+    }
+
+    window.selectNote = function (noteId) {
+        state.selectedNoteId = noteId;
+        renderNotesTable({ notes: state.notes, columns: ["Word", "Reading", "Meaning_VI"] }); // lazy re-render for selection class
+        fetchNoteDetails(noteId);
+    }
+</script>
+{% endblock %}

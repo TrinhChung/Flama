@@ -4,8 +4,10 @@ import unittest
 
 from app import create_app
 from models import db
+from models.flashcard import DeckMarketplaceItem
 from models.user import User
 from models.vocabulary_deck import VocabularyDeck
+from models.vocabulary_entry import VocabularyEntry
 from models.vocabulary_progress import VocabularyProgress
 
 
@@ -127,6 +129,187 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         self.assertIn("Word", preview["front_html"])
         self.assertIn("fc-preview-media-box", preview["front_html"])
         self.assertIn("[Image: Illustration]", preview["front_html"])
+
+    def test_shared_deck_preview_uses_first_note_from_source_deck(self):
+        note_type = self._create_note_type()
+        note_type_id = note_type["id"]
+        template_id = note_type["templates"][0]["id"]
+
+        first_note_resp = self.client.post(
+            "/api/notes",
+            json={
+                "note_type_id": note_type_id,
+                "deck_id": self.deck_id,
+                "field_values": {
+                    "Word": "\u72ac",
+                    "Reading": "\u3044\u306c",
+                    "Meaning": "dog",
+                },
+            },
+        )
+        self.assertEqual(first_note_resp.status_code, 201)
+
+        second_note_resp = self.client.post(
+            "/api/notes",
+            json={
+                "note_type_id": note_type_id,
+                "deck_id": self.deck_id,
+                "field_values": {
+                    "Word": "\u732b",
+                    "Reading": "\u306d\u3053",
+                    "Meaning": "cat",
+                },
+            },
+        )
+        self.assertEqual(second_note_resp.status_code, 201)
+
+        with self.app.app_context():
+            deck_item = DeckMarketplaceItem(
+                owner_user_id=self.user_id,
+                source_deck_id=self.deck_id,
+                source_note_type_id=None,
+                title="Shared Deck A",
+                description="Deck description",
+                primary_category="General",
+                tags=[],
+                preview_text="Preview",
+                pricing_mode="free",
+                price_cents=0,
+                version="1.0.0",
+                publish_status="published",
+            )
+            db.session.add(deck_item)
+            db.session.commit()
+            deck_item_id = deck_item.id
+
+        detail_resp = self.client.get(f"/api/shared/decks/{deck_item_id}")
+        self.assertEqual(detail_resp.status_code, 200)
+        detail_payload = detail_resp.get_json()
+        self.assertEqual(detail_payload["source_note_type_id"], note_type_id)
+        self.assertIsNotNone(detail_payload.get("source_note_type"))
+        self.assertTrue((detail_payload["source_note_type"].get("templates") or []))
+
+        preview_resp = self.client.post(
+            f"/api/shared/decks/{deck_item_id}/templates/{template_id}/preview",
+            json={},
+        )
+        self.assertEqual(preview_resp.status_code, 200)
+        preview = preview_resp.get_json()
+        self.assertIn("\u72ac", preview["front_html"])
+        self.assertIn("\u3044\u306c", preview["back_html"])
+        self.assertNotIn("\u306d\u3053", preview["back_html"])
+
+    def test_shared_deck_preview_uses_first_vocabulary_entry_when_notes_missing(self):
+        with self.app.app_context():
+            db.session.add_all(
+                [
+                    VocabularyEntry(
+                        deck_id=self.deck_id,
+                        lesson_id=None,
+                        deck="Deck A",
+                        word="\u6d77",
+                        reading="\u3046\u307f",
+                        translation_vi="bi\u1ec3n",
+                    ),
+                    VocabularyEntry(
+                        deck_id=self.deck_id,
+                        lesson_id=None,
+                        deck="Deck A",
+                        word="\u5c71",
+                        reading="\u3084\u307e",
+                        translation_vi="n\u00fai",
+                    ),
+                ]
+            )
+            deck_item = DeckMarketplaceItem(
+                owner_user_id=self.user_id,
+                source_deck_id=self.deck_id,
+                source_note_type_id=None,
+                title="Shared Deck Entries Only",
+                description="Deck description",
+                primary_category="General",
+                tags=[],
+                preview_text="Preview",
+                pricing_mode="free",
+                price_cents=0,
+                version="1.0.0",
+                publish_status="published",
+            )
+            db.session.add(deck_item)
+            db.session.commit()
+            deck_item_id = deck_item.id
+
+        detail_resp = self.client.get(f"/api/shared/decks/{deck_item_id}")
+        self.assertEqual(detail_resp.status_code, 200)
+        detail_payload = detail_resp.get_json()
+        source_note_type = detail_payload.get("source_note_type") or {}
+        templates = source_note_type.get("templates") or []
+        self.assertTrue(templates)
+        template_id = templates[0]["id"]
+
+        preview_resp = self.client.post(
+            f"/api/shared/decks/{deck_item_id}/templates/{template_id}/preview",
+            json={},
+        )
+        self.assertEqual(preview_resp.status_code, 200)
+        preview = preview_resp.get_json()
+        combined_html = f"{preview.get('front_html', '')}\n{preview.get('back_html', '')}"
+        self.assertIn("\u6d77", combined_html)
+        self.assertIn("\u3046\u307f", combined_html)
+        self.assertNotIn("\u5c71", combined_html)
+
+    def test_note_create_rejects_mixed_note_types_in_same_deck(self):
+        note_type_a = self._create_note_type()
+        note_type_a_id = note_type_a["id"]
+
+        note_type_b_resp = self.client.post(
+            "/api/note-types",
+            json={
+                "name": "Japanese Vocabulary Alt",
+                "field_defs": [
+                    {"name": "Word", "field_type": "text", "position": 0, "required": True},
+                    {"name": "Reading", "field_type": "text", "position": 1, "required": False},
+                    {"name": "Meaning", "field_type": "richtext", "position": 2, "required": False},
+                ],
+                "template": {
+                    "name": "Card 1",
+                    "front_html": "<div>{{Word}}</div>",
+                    "back_html": "<div>{{Word}} - {{Reading}} {{{Meaning}}}</div>",
+                    "shared_css": "",
+                },
+            },
+        )
+        self.assertEqual(note_type_b_resp.status_code, 201)
+        note_type_b_id = note_type_b_resp.get_json()["id"]
+
+        first_note_resp = self.client.post(
+            "/api/notes",
+            json={
+                "note_type_id": note_type_a_id,
+                "deck_id": self.deck_id,
+                "field_values": {
+                    "Word": "\u72ac",
+                    "Reading": "\u3044\u306c",
+                    "Meaning": "dog",
+                },
+            },
+        )
+        self.assertEqual(first_note_resp.status_code, 201)
+
+        second_note_resp = self.client.post(
+            "/api/notes",
+            json={
+                "note_type_id": note_type_b_id,
+                "deck_id": self.deck_id,
+                "field_values": {
+                    "Word": "\u732b",
+                    "Reading": "\u306d\u3053",
+                    "Meaning": "cat",
+                },
+            },
+        )
+        self.assertEqual(second_note_resp.status_code, 400)
+        self.assertIn("same template", second_note_resp.get_json().get("message", ""))
 
     def test_add_field_without_schema_change(self):
         note_type = self._create_note_type()
