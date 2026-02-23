@@ -1,0 +1,27 @@
+{# Component: Footer #}
+{# Usage: {% include 'components/footer.html' %} #}
+
+<footer class="site-footer">
+    <div class="container">
+        <div class="footer-inner">
+            <div class="footer-brand">
+                <span class="footer-icon">🔥</span>
+                <span class="footer-name">Flama</span>
+                <p class="footer-tagline">Nền tảng flash card học ngoại ngữ</p>
+            </div>
+
+            <div class="footer-contact">
+                <p class="footer-feedback">
+                    Có góp ý hoặc phản hồi về ứng dụng?<br>
+                    Hãy gửi email cho chúng tôi tại
+                    <a href="mailto:chungtrinh2k2@gmail.com">chungtrinh2k2@gmail.com</a>
+                </p>
+            </div>
+        </div>
+
+        <div class="footer-bottom">
+            <span>&copy; <span id="footer-year"></span> Flama. Được phát triển với ❤️ bởi Chung Trịnh.</span>
+            <script>document.getElementById('footer-year').textContent = new Date().getFullYear();</script>
+        </div>
+    </div>
+</footer>
