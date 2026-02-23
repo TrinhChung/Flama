@@ -83,6 +83,9 @@ _preview_cache: dict[str, tuple[datetime, dict[str, str]]] = {}
 _cache_lock = threading.Lock()
 _MAX_TEMPLATE_CACHE = 512
 _PREVIEW_TTL = timedelta(seconds=30)
+PREVIEW_MEDIA_IMAGE_TOKEN = "__fc_preview_image__"
+PREVIEW_MEDIA_AUDIO_TOKEN = "__fc_preview_audio__"
+PREVIEW_MEDIA_DIAGRAM_TOKEN = "__fc_preview_diagram__"
 
 
 class TemplateCompileError(ValueError):
@@ -166,6 +169,25 @@ def _render_media_html(field_type: str, value: Any, field_name: str, media_by_id
     if is_field_empty(value):
         return ""
     raw = str(value).strip()
+
+    if raw == PREVIEW_MEDIA_IMAGE_TOKEN:
+        return (
+            f"<div class=\"fc-preview-media-box\" style=\"background-color:#f3f4f6;padding:12px;text-align:center;\">"
+            f"[Image: {html.escape(field_name)}]"
+            "</div>"
+        )
+    if raw == PREVIEW_MEDIA_AUDIO_TOKEN:
+        return (
+            f"<div class=\"fc-preview-media-box\" style=\"background-color:#f3f4f6;padding:12px;text-align:center;\">"
+            f"[Audio: {html.escape(field_name)}]"
+            "</div>"
+        )
+    if raw == PREVIEW_MEDIA_DIAGRAM_TOKEN:
+        return (
+            f"<div class=\"fc-preview-media-box\" style=\"background-color:#f3f4f6;padding:12px;text-align:center;\">"
+            f"[Diagram: {html.escape(field_name)}]"
+            "</div>"
+        )
 
     # Backward compatibility for legacy HTML snippets in diagram/image fields.
     if field_type in {"image", "diagram"} and raw.startswith("<"):

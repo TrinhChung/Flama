@@ -74,38 +74,57 @@
           <small class="text-muted">Insert placeholder:</small>
           <div id="placeholder-toolbar" class="d-flex flex-wrap gap-1 mt-1"></div>
         </div>
-        <div class="row g-2">
-          <div class="col-12">
-            <label class="form-label small mb-1">Front HTML</label>
-            <textarea id="front-html" class="form-control font-monospace" rows="6"></textarea>
+        <div class="row g-3">
+          <!-- Editor Column -->
+          <div class="col-md-6 d-flex flex-column">
+            <ul class="nav nav-tabs nav-sm mb-2" id="templateTabs" role="tablist">
+              <li class="nav-item" role="presentation">
+                <button class="nav-link active py-1 px-2" id="front-tab" data-bs-toggle="tab"
+                  data-bs-target="#front-pane" type="button" role="tab">Front HTML</button>
+              </li>
+              <li class="nav-item" role="presentation">
+                <button class="nav-link py-1 px-2" id="back-tab" data-bs-toggle="tab" data-bs-target="#back-pane"
+                  type="button" role="tab">Back HTML</button>
+              </li>
+              <li class="nav-item" role="presentation">
+                <button class="nav-link py-1 px-2" id="css-tab" data-bs-toggle="tab" data-bs-target="#css-pane"
+                  type="button" role="tab">Shared CSS</button>
+              </li>
+            </ul>
+            <div class="tab-content d-flex flex-column flex-grow-1" id="templateTabsContent">
+              <div class="tab-pane fade show active" id="front-pane" role="tabpanel" style="height: 100%;">
+                <textarea id="front-html" class="form-control font-monospace h-100"
+                  style="min-height: 380px; resize: none;"></textarea>
+              </div>
+              <div class="tab-pane fade" id="back-pane" role="tabpanel" style="height: 100%;">
+                <textarea id="back-html" class="form-control font-monospace h-100"
+                  style="min-height: 380px; resize: none;"></textarea>
+              </div>
+              <div class="tab-pane fade" id="css-pane" role="tabpanel" style="height: 100%;">
+                <textarea id="shared-css" class="form-control font-monospace h-100"
+                  style="min-height: 380px; resize: none;"></textarea>
+              </div>
+            </div>
+
+            <div class="d-flex gap-2 mt-3">
+              <button class="btn btn-primary btn-sm" id="save-template-btn">Save</button>
+              <small class="text-muted align-self-center">Sample data used.</small>
+            </div>
+            <small id="template-error" class="text-danger d-none mt-2"></small>
           </div>
-          <div class="col-12">
-            <label class="form-label small mb-1">Back HTML</label>
-            <textarea id="back-html" class="form-control font-monospace" rows="8"></textarea>
+
+          <!-- Preview Column -->
+          <div class="col-md-6 d-flex flex-column">
+            <div class="d-flex align-items-center mb-2" style="height: 31px;">
+              <span class="small fw-bold text-secondary text-uppercase" style="letter-spacing: 0.5px;">Live
+                Preview</span>
+            </div>
+            <iframe id="template-preview-frame" class="w-100 border rounded flex-grow-1"
+              style="min-height: 380px; background-color: #f8f9fa;" sandbox="allow-same-origin"></iframe>
           </div>
-          <div class="col-12">
-            <label class="form-label small mb-1">Shared CSS</label>
-            <textarea id="shared-css" class="form-control font-monospace" rows="5"></textarea>
-          </div>
-        </div>
-        <div class="d-flex gap-2 mt-3">
-          <button class="btn btn-primary btn-sm" id="save-template-btn">Save</button>
-          <select id="preview-note-id" class="form-select form-select-sm" style="max-width:260px;">
-            <option value="">Preview with first note</option>
-            {% for note in notes %}
-            <option value="{{ note.id }}">Note {{ loop.index }} - {{ note.id[:8] }}</option>
-            {% endfor %}
-          </select>
-        </div>
-        <small id="template-error" class="text-danger d-none mt-2"></small>
-        <div class="mt-3">
-          <label class="form-label small mb-1">Realtime Preview</label>
-          <iframe id="template-preview-frame" class="w-100 border rounded" style="min-height: 260px;"
-            sandbox="allow-same-origin"></iframe>
         </div>
       </div>
     </div>
-  </div>
 </section>
 {% endblock %}
 
@@ -128,7 +147,8 @@
     const sharedCss = document.getElementById("shared-css");
     const templateError = document.getElementById("template-error");
     const previewFrame = document.getElementById("template-preview-frame");
-    const previewNoteId = document.getElementById("preview-note-id");
+    const templateTabs = document.getElementById("templateTabs");
+    const backTab = document.getElementById("back-tab");
     const placeholderToolbar = document.getElementById("placeholder-toolbar");
 
     let noteType = null;
@@ -155,6 +175,18 @@
 
     function selectedTemplate() {
       return templates.find((item) => item.id === selectedTemplateId);
+    }
+
+    function getActivePreviewSide() {
+      if (backTab?.classList.contains("active")) return "back";
+      return "front";
+    }
+
+    function getActiveEditor() {
+      if (document.activeElement === frontHtml || document.activeElement === backHtml) {
+        return document.activeElement;
+      }
+      return getActivePreviewSide() === "back" ? backHtml : frontHtml;
     }
 
     function renderFields() {
@@ -221,7 +253,7 @@
     }
 
     function insertPlaceholder(text) {
-      const target = document.activeElement === backHtml ? backHtml : frontHtml;
+      const target = getActiveEditor();
       if (!target) return;
       const start = target.selectionStart || 0;
       const end = target.selectionEnd || 0;
@@ -316,16 +348,27 @@
       clearError(templateError);
       if (!selectedTemplateId) return;
       try {
+        const activeSide = getActivePreviewSide();
         const preview = await requestJson(`/api/note-types/${noteTypeId}/templates/${selectedTemplateId}/preview`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ note_id: previewNoteId.value || null }),
+          body: JSON.stringify({
+            front_html: frontHtml.value,
+            back_html: backHtml.value,
+            shared_css: sharedCss.value,
+            use_sample_data: true,
+          }),
         });
+        const previewHtml = activeSide === "back" ? (preview.back_html || "") : (preview.front_html || "");
+        const sideLabel = activeSide === "back" ? "Back" : "Front";
         previewFrame.srcdoc = `
           <!doctype html>
-          <html><body>
-          <div style="padding:8px;border-bottom:1px solid #ddd">${preview.front_html || ""}</div>
-          <div style="padding:8px">${preview.back_html || ""}</div>
+          <html>
+          <head><meta charset="utf-8"></head>
+          <body>
+          <div style="padding:8px;min-height:240px">
+            ${previewHtml || `<div style="background-color:#f8f9fa;padding:12px;text-align:center;">Empty ${sideLabel} template</div>`}
+          </div>
           </body></html>
         `;
       } catch (error) {
@@ -391,7 +434,9 @@
       selectedTemplateId = templateSelect.value;
       loadTemplateIntoEditor();
     });
-    previewNoteId?.addEventListener("change", runPreview);
+    templateTabs?.querySelectorAll('[data-bs-toggle="tab"]')?.forEach((tab) => {
+      tab.addEventListener("shown.bs.tab", runPreview);
+    });
     [frontHtml, backHtml, sharedCss].forEach((el) => el?.addEventListener("input", debouncedPreview));
 
     refreshNoteType().catch((error) => showError(fieldError, error.message));

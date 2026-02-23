@@ -563,6 +563,17 @@ def create_level():
         description=description,
         position=_next_level_position(),
     )
+    db.session.add(level)
+    db.session.commit()
+    _get_or_create_deck(
+        parent_id=None,
+        name=level.name,
+        description=level.description,
+        position=level.position,
+    )
+    db.session.commit()
+    flash("Level created.", "success")
+    return redirect(url_for("vocabulary.index"))
 
 
 @vocabulary_bp.route("/decks/create", methods=["POST"])
@@ -631,17 +642,125 @@ def create_deck():
     else:
         flash(f"Created {created_count} decks: {'::'.join(created_names)}", "success")
     return redirect(next_url)
-    db.session.add(level)
+
+
+@vocabulary_bp.route("/decks/<int:deck_id>/rename", methods=["POST"])
+@login_required
+def rename_deck(deck_id: int):
+    """Rename an existing deck."""
+    if not is_admin_user(current_user):
+        return redirect(url_for("main.dashboard"))
+        
+    deck = VocabularyDeck.query.get_or_404(deck_id)
+    new_name = (request.form.get("name") or "").strip()
+    next_url = (request.form.get("next") or "").strip() or url_for("main.dashboard")
+    
+    if new_name and new_name != deck.name:
+        deck.name = new_name
+        db.session.commit()
+        flash(f"Deck renamed to: {new_name}", "success")
+    
+    return redirect(next_url)
+
+
+@vocabulary_bp.route("/decks/<int:deck_id>/move", methods=["POST"])
+@login_required
+def move_deck(deck_id: int):
+    """Move a deck to a new parent deck."""
+    if not is_admin_user(current_user):
+        return redirect(url_for("main.dashboard"))
+        
+    deck = VocabularyDeck.query.get_or_404(deck_id)
+    parent_id_raw = (request.form.get("parent_id") or "").strip()
+    next_url = (request.form.get("next") or "").strip() or url_for("main.dashboard")
+    
+    new_parent_id = None
+    if parent_id_raw:
+        try:
+            new_parent_id = int(parent_id_raw)
+        except ValueError:
+            flash("Invalid parent deck.", "danger")
+            return redirect(next_url)
+            
+        # Prevent moving into itself or its own descendants
+        curr = VocabularyDeck.query.get(new_parent_id)
+        while curr:
+            if curr.id == deck.id:
+                flash("Cannot move a deck into itself or its descendants.", "danger")
+                return redirect(next_url)
+            curr = curr.parent
+
+    deck.parent_id = new_parent_id
+    deck.position = _next_deck_position(new_parent_id)
     db.session.commit()
-    _get_or_create_deck(
-        parent_id=None,
-        name=level.name,
-        description=level.description,
-        position=level.position,
-    )
+    flash(f"Deck '{deck.name}' moved successfully.", "success")
+    
+    return redirect(next_url)
+
+
+@vocabulary_bp.route("/decks/<int:deck_id>/delete", methods=["POST"])
+@login_required
+def delete_deck(deck_id: int):
+    """Delete a deck and all its children/entries."""
+    if not is_admin_user(current_user):
+        return redirect(url_for("main.dashboard"))
+        
+    deck = VocabularyDeck.query.get_or_404(deck_id)
+    deck_name = deck.name
+    next_url = (request.form.get("next") or "").strip() or url_for("main.dashboard")
+    
+    # Recursively get all deck IDs under this deck
+    deck_ids_to_delete = []
+    def collect_deck_ids(d):
+        deck_ids_to_delete.append(d.id)
+        for child in d.children:
+            collect_deck_ids(child)
+            
+    collect_deck_ids(deck)
+    
+    entries = VocabularyEntry.query.filter(VocabularyEntry.deck_id.in_(deck_ids_to_delete)).all()
+    entry_ids = [e.id for e in entries]
+    
+    if entry_ids:
+        VocabularyProgress.query.filter(VocabularyProgress.entry_id.in_(entry_ids)).delete(synchronize_session=False)
+        VocabularyEntry.query.filter(VocabularyEntry.id.in_(entry_ids)).delete(synchronize_session=False)
+        
+    db.session.delete(deck)
     db.session.commit()
-    flash("Level created.", "success")
-    return redirect(url_for("vocabulary.index"))
+    
+    flash(f"Deleted deck '{deck_name}' and all its contents.", "success")
+    return redirect(next_url)
+
+
+@vocabulary_bp.route("/decks/<int:deck_id>/reset", methods=["POST"])
+@login_required
+def reset_deck(deck_id: int):
+    """Reset all progress for entries within a deck and its children."""
+    if not is_admin_user(current_user):
+        return redirect(url_for("main.dashboard"))
+        
+    deck = VocabularyDeck.query.get_or_404(deck_id)
+    next_url = (request.form.get("next") or "").strip() or url_for("main.dashboard")
+    
+    deck_ids = []
+    def collect_deck_ids(d):
+        deck_ids.append(d.id)
+        for child in d.children:
+            collect_deck_ids(child)
+            
+    collect_deck_ids(deck)
+    
+    entries = VocabularyEntry.query.filter(VocabularyEntry.deck_id.in_(deck_ids)).with_entities(VocabularyEntry.id).all()
+    entry_ids = [e.id for e in entries]
+    
+    if entry_ids:
+        deleted_count = VocabularyProgress.query.filter(VocabularyProgress.entry_id.in_(entry_ids)).delete(synchronize_session=False)
+        db.session.commit()
+        flash(f"Reset progress for {deleted_count} cards in '{deck.name}'.", "success")
+    else:
+        flash(f"No cards to reset in '{deck.name}'.", "info")
+        
+    return redirect(next_url)
 
 
 @vocabulary_bp.route("/topics/new", methods=["POST"])
@@ -805,24 +924,78 @@ def topic(topic_id: int):
     )
 
 
+def _render_study_flashcard(card) -> dict:
+    from models.flashcard import Template
+    from app.services.flashcard_renderer import render_template_pair
+
+    ret = {"front": "", "back": ""}
+    if not card:
+        return ret
+        
+    template = Template.query.filter_by(name="Default Flama Flashcard", is_default=True).first()
+    if not template:
+        return ret
+        
+    field_values = {
+        "word": card.word,
+        "hanviet": card.hanviet,
+        "reading": card.reading,
+        "translation_vi": card.translation_vi,
+        "meaning_jp": card.meaning_jp,
+        "meaning_vi": card.meaning_vi,
+        "usage_jp": card.usage_jp,
+        "usage_vi": card.usage_vi,
+        "example_jp": card.example_jp,
+        "example_vi": card.example_vi,
+        "additional_note_jp": card.additional_note_jp,
+        "additional_note_vi": card.additional_note_vi,
+        "image": card.image,
+        "diagram": card.diagram,
+        "word_audio": card.word_audio,
+        "example_audio": card.example_audio,
+    }
+    
+    try:
+        rendered = render_template_pair(
+            template=template,
+            field_defs=template.note_type.field_defs if template.note_type else [],
+            field_values=field_values,
+            media_assets=[],
+            preview_note_key=str(card.id)
+        )
+        ret["front"] = rendered.get("front", "")
+        ret["back"] = rendered.get("back", "")
+    except Exception as e:
+        ret["front"] = f"<div class='text-danger'>Error rendering front: {e}</div>"
+        ret["back"] = f"<div class='text-danger'>Error rendering back: {e}</div>"
+        
+    return ret
+
+
 @vocabulary_bp.route("/study/topic/<int:topic_id>")
 @login_required
 def study_topic(topic_id: int):
-    """Render topic-wide study mode across all lessons in the topic."""
+    """Render flashcard-style study mode for all items under this topic."""
+    topic_obj = (
+        VocabularyTopic.query.options(selectinload(VocabularyTopic.level))
+        .filter_by(id=topic_id)
+        .first()
+    )
+    if not topic_obj:
+        abort(404)
 
-    topic_obj = VocabularyTopic.query.options(
-        selectinload(VocabularyTopic.level),
-        selectinload(VocabularyTopic.lessons).selectinload(VocabularyLesson.entries),
-    ).get_or_404(topic_id)
-    lessons = _sorted_lessons(topic_obj)
-    entries: List[VocabularyEntry] = []
-    for lesson_obj in lessons:
-        lesson_entries = sorted(lesson_obj.entries, key=lambda item: item.id)
-        entries.extend(lesson_entries)
+    lessons = (
+        VocabularyLesson.query.options(selectinload(VocabularyLesson.entries))
+        .filter_by(topic_id=topic_obj.id)
+        .all()
+    )
+    entries = []
+    for lsn in sorted(lessons, key=lambda item: item.position):
+        entries.extend(sorted(lsn.entries, key=lambda item: item.id))
 
     now = datetime.utcnow()
-    entry_ids = [entry.id for entry in entries]
     progress_map: Dict[int, VocabularyProgress] = {}
+    entry_ids = [entry.id for entry in entries]
     if entry_ids:
         rows = VocabularyProgress.query.filter(
             VocabularyProgress.user_id == current_user.id,
@@ -851,12 +1024,16 @@ def study_topic(topic_id: int):
         card_state = _card_state_from_progress(progress_map.get(card.id), now)
         next_intervals_preview = computeAnswerPreview(card_state, default_deck_options(), now)
 
+    rendered_data = _render_study_flashcard(card)
+
     return render_template(
         "vocabulary_study.html",
         selected_level=topic_obj.level,
         selected_topic=topic_obj,
         selected_lesson=None,
         card=card,
+        rendered_front=rendered_data.get("front"),
+        rendered_back=rendered_data.get("back"),
         due_new=due_new,
         due_learn=due_learn,
         due_review=due_review,
@@ -935,12 +1112,16 @@ def study_deck(deck_id: int):
         card_state = _card_state_from_progress(progress_map.get(card.id), now)
         next_intervals_preview = computeAnswerPreview(card_state, default_deck_options(), now)
 
+    rendered_data = _render_study_flashcard(card)
+
     return render_template(
         "vocabulary_study.html",
         selected_level=None,
         selected_topic=SimpleNamespace(id=root_deck.id, name=root_deck.name),
         selected_lesson=None,
         card=card,
+        rendered_front=rendered_data.get("front"),
+        rendered_back=rendered_data.get("back"),
         due_new=due_new,
         due_learn=due_learn,
         due_review=due_review,
@@ -999,12 +1180,16 @@ def study_lesson(lesson_id: int):
         card_state = _card_state_from_progress(progress_map.get(card.id), now)
         next_intervals_preview = computeAnswerPreview(card_state, default_deck_options(), now)
 
+    rendered_data = _render_study_flashcard(card)
+
     return render_template(
         "vocabulary_study.html",
         selected_level=level_obj,
         selected_topic=topic_obj,
         selected_lesson=lesson_obj,
         card=card,
+        rendered_front=rendered_data.get("front"),
+        rendered_back=rendered_data.get("back"),
         due_new=due_new,
         due_learn=due_learn,
         due_review=due_review,

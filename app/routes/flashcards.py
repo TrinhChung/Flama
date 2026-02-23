@@ -6,6 +6,7 @@ import hashlib
 import logging
 from datetime import datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 from flask import (
@@ -33,6 +34,9 @@ from app.services.flashcard_legacy import (
     ensure_legacy_note_type,
 )
 from app.services.flashcard_renderer import (
+    PREVIEW_MEDIA_AUDIO_TOKEN,
+    PREVIEW_MEDIA_DIAGRAM_TOKEN,
+    PREVIEW_MEDIA_IMAGE_TOKEN,
     TemplateCompileError,
     is_field_empty,
     render_template_pair,
@@ -196,6 +200,20 @@ def _normalize_tags(raw_tags: Any) -> list[str]:
     if isinstance(raw_tags, str):
         return [item.strip() for item in raw_tags.split(",") if item.strip()]
     return []
+
+
+def _build_preview_sample_values(field_defs: list[FieldDef]) -> dict[str, Any]:
+    sample_values: dict[str, Any] = {}
+    for field_def in field_defs:
+        if field_def.field_type == "image":
+            sample_values[field_def.name] = PREVIEW_MEDIA_IMAGE_TOKEN
+        elif field_def.field_type == "audio":
+            sample_values[field_def.name] = PREVIEW_MEDIA_AUDIO_TOKEN
+        elif field_def.field_type == "diagram":
+            sample_values[field_def.name] = PREVIEW_MEDIA_DIAGRAM_TOKEN
+        else:
+            sample_values[field_def.name] = field_def.name
+    return sample_values
 
 
 def _create_cards_for_note(note: Note) -> None:
@@ -873,26 +891,57 @@ def preview_template(note_type_id: str, template_id: str):
 
     payload = request.get_json(silent=True) or {}
     note_id = (payload.get("note_id") or "").strip()
-    note = None
-    if note_id:
-        note = Note.query.filter_by(id=note_id, user_id=current_user.id, note_type_id=note_type.id).first()
-    if note is None:
-        note = (
-            Note.query.filter_by(note_type_id=note_type.id, user_id=current_user.id)
-            .order_by(Note.created_at.asc())
-            .first()
-        )
+    raw_use_sample_data = payload.get("use_sample_data", False)
+    use_sample_data = bool(raw_use_sample_data)
+    if isinstance(raw_use_sample_data, str):
+        use_sample_data = raw_use_sample_data.strip().lower() in {"1", "true", "yes", "on"}
+    
+    # Cho phép ghi đè nội dung HTML/CSS thông qua payload (phục vụ Live Preview chưa lưu)
+    preview_front_html = template.front_html
+    preview_back_html = template.back_html
+    preview_shared_css = template.shared_css
+    if "front_html" in payload:
+        preview_front_html = str(payload.get("front_html") or "")
+    if "back_html" in payload:
+        preview_back_html = str(payload.get("back_html") or "")
+    if "shared_css" in payload:
+        preview_shared_css = str(payload.get("shared_css") or "")
 
-    sample_field_values: dict[str, Any] = {}
-    sample_media_assets: list[MediaAsset] = []
-    preview_note_key = note.id if note else "empty-note"
-    if note:
-        sample_field_values = note.field_values or {}
-        sample_media_assets = note.media_assets
+    preview_template_obj = SimpleNamespace(
+        id=template.id,
+        front_html=preview_front_html,
+        back_html=preview_back_html,
+        shared_css=preview_shared_css,
+        updated_at=template.updated_at,
+    )
+
+    sample_field_values: dict[str, Any]
+    sample_media_assets: list[MediaAsset]
+    preview_note_key: str
+    if use_sample_data:
+        sample_field_values = _build_preview_sample_values(note_type.field_defs)
+        sample_media_assets = []
+        preview_note_key = f"sample:{note_type.id}"
+    else:
+        note = None
+        if note_id:
+            note = Note.query.filter_by(id=note_id, user_id=current_user.id, note_type_id=note_type.id).first()
+        if note is None:
+            note = (
+                Note.query.filter_by(note_type_id=note_type.id, user_id=current_user.id)
+                .order_by(Note.created_at.asc())
+                .first()
+            )
+        sample_field_values = {}
+        sample_media_assets = []
+        preview_note_key = note.id if note else "empty-note"
+        if note:
+            sample_field_values = note.field_values or {}
+            sample_media_assets = note.media_assets
 
     try:
         rendered = render_template_pair(
-            template=template,
+            template=preview_template_obj,
             field_defs=note_type.field_defs,
             field_values=sample_field_values,
             media_assets=sample_media_assets,

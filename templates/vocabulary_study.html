@@ -23,125 +23,11 @@
     <div class="study-card" id="study-card" data-entry-id="{{ card.id }}" data-study-scope="{{ study_scope }}"
       data-scope-id="{{ study_scope_id }}">
       <div class="card-face card-front is-active" id="card-front">
-        <!-- Main word display -->
-        <div class="card-front-body">
-          <div class="card-front-word">{{ card.word }}</div>
-        </div>
-
-        <!-- Footer -->
-        <div class="card-front-footer">
-          <small class="card-hint">Click to reveal answer</small>
-        </div>
+        {{ rendered_front | safe }}
       </div>
 
       <div class="card-face card-back" id="card-back">
-        <div style='
-            display: flex;
-            flex-direction: column;
-            justify-content: flex-start;
-            text-align: start;
-            padding-left: 20px;
-            font-family: "Arial";
-            font-size: 18px;'>
-          <div style='
-                font-family: "Arial";
-                font-size: 36px;
-                font-weight: bold;
-                display: flex;
-                align-items: center;
-                color: #e53c20;
-                padding-top: 20px;'>
-            {{ card.word }}
-            {% if card.word_audio %}
-            <audio id="custom-audio" src="{{ card.word_audio }}"></audio>
-            <button onclick="document.getElementById('custom-audio').play()">🔊</button>
-            {% endif %}
-          </div>
-
-          {% if card.reading %}
-          <div style='
-                display: flex;
-                font-weight: bold;
-                font-family: "Arial";
-                font-size: 20px;
-                flex-direction: column;
-                text-transform: uppercase;'>
-            <div style='font-family: "Arial"; display: flex'>
-              {{ card.reading }} 「{{ card.hanviet or '' }}」
-            </div>
-            <div style='color: green; display: flex; padding-bottom: 10px' auto-split>
-              {{ card.translation_vi or '' }}
-            </div>
-          </div>
-          {% endif %}
-
-          {% if card.meaning_jp %}
-          <div style='display: flex; padding-top: 20px; color: #3367d6' auto-split>
-            ◆ {{ card.meaning_jp }}
-          </div>
-          {% endif %}
-
-          {% if card.meaning_vi %}
-          <div style='display: flex; padding-top: 10px' auto-split>
-            {{ card.meaning_vi }}
-          </div>
-          {% endif %}
-
-          {% if card.image %}
-          <div class="kanji-stroke-images">
-            {{ card.image|safe }}
-          </div>
-          {% endif %}
-
-          {% if card.usage_jp %}
-          <div style='display: flex; padding-top: 20px; color: #3367d6; font-weight: bold;'>
-            ◆ Cách sử dụng:
-          </div>
-          <div style='display: flex; flex-direction: column; padding-top: 10px;'>
-            <div style="font-size: 20px;" auto-split>{{ card.usage_jp }}</div>
-            {% if card.usage_vi %}
-            <div style="font-size: 16px; color: gray; margin-left: 10px;" auto-split>{{ card.usage_vi }}</div>
-            {% endif %}
-          </div>
-          {% endif %}
-
-          {% if card.example_jp %}
-          <div style='display: flex; padding-top: 20px; color: #3367d6; font-weight: bold;'>
-            ◆ Câu ví dụ:
-          </div>
-          <div style='display: flex; flex-direction: column; padding-top: 10px;'>
-            <div style="font-size: 20px; display: flex; align-items: center;" auto-split>
-              {{ card.example_jp }}
-              {% if card.example_audio %}
-              <audio id="example-audio" src="{{ card.example_audio }}"></audio>
-              <button onclick="document.getElementById('example-audio').play()">🔊</button>
-              {% endif %}
-            </div>
-            {% if card.example_vi %}
-            <div style="font-size: 16px; color: gray; margin-left: 10px;" auto-split>{{ card.example_vi }}</div>
-            {% endif %}
-          </div>
-          {% endif %}
-
-          {% if card.additional_note_jp %}
-          <div style='display: flex; padding-top: 20px; font-family: "Arial";color: #3367d6'>
-            ◆ Ghi chú:
-          </div>
-          <div style='display: flex; padding-top: 10px' auto-split>
-            {{ card.additional_note_jp }}
-          </div>
-          {% endif %}
-
-          {% if card.additional_note_vi %}
-          <div style='display: flex; padding-top: 10px;font-family: "Arial"; color: gray; font-size: 16px;' auto-split>
-            {{ card.additional_note_vi }}
-          </div>
-          {% endif %}
-
-          {% if card.diagram %}
-          <div>{{ card.diagram|safe }}</div>
-          {% endif %}
-        </div>
+        {{ rendered_back | safe }}
       </div>
     </div>
   </section>
@@ -154,12 +40,12 @@
       {% set button_href = next_study_url %}
       {% set button_type = 'outline-secondary' %}
       {% include 'components/button.html' with context %}
-      
+
       {% set button_label = 'Back home' %}
       {% set button_href = url_for('main.dashboard') %}
       {% set button_type = 'primary' %}
       {% include 'components/button.html' with context %}
-      
+
       {% if admin_mode and selected_lesson %}
       {% set button_label = 'Edit lesson' %}
       {% set button_href = url_for('vocabulary.lesson', lesson_id=selected_lesson.id) %}

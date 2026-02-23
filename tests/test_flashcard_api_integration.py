@@ -4,7 +4,6 @@ import unittest
 
 from app import create_app
 from models import db
-from models.flashcard import Card, Note, NoteType
 from models.user import User
 from models.vocabulary_deck import VocabularyDeck
 from models.vocabulary_progress import VocabularyProgress
@@ -77,7 +76,11 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             json={
                 "note_type_id": note_type_id,
                 "deck_id": self.deck_id,
-                "field_values": {"Word": "犬", "Reading": "いぬ", "Meaning": "<b>dog</b>"},
+                "field_values": {
+                    "Word": "\u72ac",
+                    "Reading": "\u3044\u306c",
+                    "Meaning": "<b>dog</b>",
+                },
             },
         )
         self.assertEqual(note_resp.status_code, 201)
@@ -89,9 +92,41 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         )
         self.assertEqual(preview_resp.status_code, 200)
         preview = preview_resp.get_json()
-        self.assertIn("犬", preview["front_html"])
-        self.assertIn("いぬ", preview["back_html"])
+        self.assertIn("\u72ac", preview["front_html"])
+        self.assertIn("\u3044\u306c", preview["back_html"])
         self.assertIn("<b>dog</b>", preview["back_html"])
+
+    def test_preview_sample_mode_uses_field_name_dump_and_image_placeholder(self):
+        response = self.client.post(
+            "/api/note-types",
+            json={
+                "name": "Preview Sample",
+                "field_defs": [
+                    {"name": "Word", "field_type": "text", "position": 0, "required": True},
+                    {"name": "Illustration", "field_type": "image", "position": 1, "required": False},
+                ],
+                "template": {
+                    "name": "Card 1",
+                    "front_html": "<div>{{Word}}</div>{{{Illustration}}}",
+                    "back_html": "<div>{{Word}}</div>",
+                    "shared_css": "",
+                },
+            },
+        )
+        self.assertEqual(response.status_code, 201)
+        note_type = response.get_json()
+        note_type_id = note_type["id"]
+        template_id = note_type["templates"][0]["id"]
+
+        preview_resp = self.client.post(
+            f"/api/note-types/{note_type_id}/templates/{template_id}/preview",
+            json={"use_sample_data": True},
+        )
+        self.assertEqual(preview_resp.status_code, 200)
+        preview = preview_resp.get_json()
+        self.assertIn("Word", preview["front_html"])
+        self.assertIn("fc-preview-media-box", preview["front_html"])
+        self.assertIn("[Image: Illustration]", preview["front_html"])
 
     def test_add_field_without_schema_change(self):
         note_type = self._create_note_type()
@@ -109,8 +144,8 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
                 "note_type_id": note_type_id,
                 "deck_id": self.deck_id,
                 "field_values": {
-                    "Word": "橋",
-                    "Reading": "はし",
+                    "Word": "\u6a4b",
+                    "Reading": "\u306f\u3057",
                     "Meaning": "bridge",
                     "PitchAccent": "L-H",
                 },
@@ -131,7 +166,11 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             json={
                 "note_type_id": note_type_id,
                 "deck_id": self.deck_id,
-                "field_values": {"Word": "猫", "Reading": "ねこ", "Meaning": "cat"},
+                "field_values": {
+                    "Word": "\u732b",
+                    "Reading": "\u306d\u3053",
+                    "Meaning": "cat",
+                },
             },
         )
 
@@ -139,7 +178,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         self.assertEqual(next_resp.status_code, 200)
         payload = next_resp.get_json()
         self.assertIsNotNone(payload["card_id"])
-        self.assertIn("猫", payload["rendered_front_html"])
+        self.assertIn("\u732b", payload["rendered_front_html"])
 
         answer_resp = self.client.post(
             f"/api/study/{payload['card_id']}/answer",

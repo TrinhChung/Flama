@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import unittest
 
 from app.services.flashcard_renderer import (
+    PREVIEW_MEDIA_IMAGE_TOKEN,
     build_render_context,
     is_field_empty,
     render_template_pair,
@@ -62,6 +63,19 @@ class FlashcardRendererTests(unittest.TestCase):
         self.assertIn("<img", rendered["front_html"])
         self.assertIn("/media/proxy/audio-1", rendered["front_html"])
         self.assertIn("/media/proxy/image-1", rendered["front_html"])
+
+    def test_preview_media_token_renders_placeholder_box(self):
+        template = self._template("{{Word}} {{{image}}}")
+        fields = [self._field("Word"), self._field("image", "image")]
+        rendered = render_template_pair(
+            template=template,
+            field_defs=fields,
+            field_values={"Word": "Word", "image": PREVIEW_MEDIA_IMAGE_TOKEN},
+            media_assets=[],
+        )
+        self.assertIn("Word", rendered["front_html"])
+        self.assertIn("fc-preview-media-box", rendered["front_html"])
+        self.assertIn("[Image: image]", rendered["front_html"])
 
     def test_empty_rules(self):
         self.assertTrue(is_field_empty(None))

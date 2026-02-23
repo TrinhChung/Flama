@@ -3,38 +3,50 @@
 {% block title %}Home{% endblock %}
 
 {% macro render_nodes(nodes) %}
-  {% for node in nodes %}
-  <div
-    class="anki-row deck-row"
-    data-node-id="{{ node.deck_id }}"
-    data-node-name="{{ node.label }}"
-    data-parent-id="{{ node.parent_id if node.parent_id is not none else '' }}"
-    data-open-url="{{ node.href }}"
-  >
-    <div class="anki-name-wrap" style="padding-left: {{ node.depth * 1.35 }}rem;">
-      {% if node.children %}
-      <button
-        class="tree-toggle"
-        type="button"
-        data-node-id="{{ node.deck_id }}"
-        data-expanded="true"
-        aria-label="Toggle child decks"
-      >-</button>
-      {% else %}
-      <span class="tree-spacer"></span>
-      {% endif %}
-      <span class="anki-name">{{ node.label }}</span>
-    </div>
-    <div class="anki-stats">
-      <span class="new">{{ node.new_count }}</span>
-      <span class="learn">{{ node.learn_count }}</span>
-      <span class="due">{{ node.due_count }}</span>
+{% for node in nodes %}
+<div class="deck-row" data-node-id="{{ node.deck_id }}" data-node-name="{{ node.label }}"
+  data-parent-id="{{ node.parent_id if node.parent_id is not none else '' }}" data-open-url="{{ node.href }}">
+  <div class="deck-name-col" style="padding-left: {{ node.depth * 1.5 }}rem;">
+    {% if node.children %}
+    <button class="tree-toggle" type="button" data-node-id="{{ node.deck_id }}" data-expanded="true"
+      aria-label="Toggle child decks">-</button>
+    {% else %}
+    <span class="tree-spacer"></span>
+    {% endif %}
+    <span class="deck-name">{{ node.label }}</span>
+  </div>
+  <div class="deck-stats-col">
+    <span class="stat-num stat-new">{{ node.new_count }}</span>
+    <span class="stat-num stat-learn">{{ node.learn_count }}</span>
+    <span class="stat-num stat-due">{{ node.due_count }}</span>
+    <div class="deck-settings-wrapper dropdown">
+      <button class="deck-settings-btn" type="button" data-bs-toggle="dropdown" aria-expanded="false"
+        aria-label="Deck Settings" title="Deck Settings">
+        ⚙️
+      </button>
+      <ul class="dropdown-menu dropdown-menu-end shadow border-0 py-2" style="min-width: 170px;">
+        <li><button class="dropdown-item deck-action-btn rounded-1 mx-1 px-3" type="button" data-action="rename"
+            data-deck-id="{{ node.deck_id }}" data-deck-name="{{ node.label }}">Rename Deck</button></li>
+        <li><button class="dropdown-item deck-action-btn rounded-1 mx-1 px-3" type="button" data-action="move"
+            data-deck-id="{{ node.deck_id }}" data-deck-name="{{ node.label }}"
+            data-parent-id="{{ node.parent_id if node.parent_id is not none else '' }}">Move Deck</button></li>
+        <li>
+          <hr class="dropdown-divider my-1">
+        </li>
+        <li><button class="dropdown-item deck-action-btn rounded-1 mx-1 px-3 text-warning fw-bold" type="button"
+            data-action="reset" data-deck-id="{{ node.deck_id }}" data-deck-name="{{ node.label }}">Reset
+            Progress</button></li>
+        <li><button class="dropdown-item deck-action-btn rounded-1 mx-1 px-3 text-danger fw-bold" type="button"
+            data-action="delete" data-deck-id="{{ node.deck_id }}" data-deck-name="{{ node.label }}">Delete
+            Deck</button></li>
+      </ul>
     </div>
   </div>
-  {% if node.children %}
-    {{ render_nodes(node.children) }}
-  {% endif %}
-  {% endfor %}
+</div>
+{% if node.children %}
+{{ render_nodes(node.children) }}
+{% endif %}
+{% endfor %}
 {% endmacro %}
 
 {% block content %}
@@ -58,6 +70,74 @@
     <input type="hidden" name="next" value="{{ url_for('main.dashboard') }}" />
   </form>
 
+  {% macro render_deck_options(nodes, prefix='') %}
+  {% for node in nodes %}
+  <option value="{{ node.deck_id }}">{{ prefix }}{{ node.label }}</option>
+  {% if node.children %}
+  {{ render_deck_options(node.children, prefix + '&nbsp;&nbsp;&nbsp;&nbsp;' | safe) }}
+  {% endif %}
+  {% endfor %}
+  {% endmacro %}
+
+  <!-- Rename Deck Modal -->
+  <div class="modal fade" id="renameDeckModal" tabindex="-1" aria-labelledby="renameDeckModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+      <div class="modal-content">
+        <form id="deck-rename-form" action="" method="POST">
+          <input type="hidden" name="next" value="{{ request.url }}">
+          <div class="modal-header border-0 pb-0">
+            <h5 class="modal-title fw-bold" id="renameDeckModalLabel">Rename Deck</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <input type="text" class="form-control" id="deck-rename-input" name="name" required
+              placeholder="New deck name">
+          </div>
+          <div class="modal-footer border-0 pt-0">
+            <button type="submit" class="btn btn-primary w-100"
+              style="background-color: var(--flama-orange-600); border-color: var(--flama-orange-600);">Save</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Move Deck Modal -->
+  <div class="modal fade" id="moveDeckModal" tabindex="-1" aria-labelledby="moveDeckModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <form id="deck-move-form" action="" method="POST">
+          <input type="hidden" name="next" value="{{ request.url }}">
+          <div class="modal-header border-0 pb-0">
+            <h5 class="modal-title fw-bold" id="moveDeckModalLabel">Move Deck</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <label class="form-label text-muted small mb-1">Select new parent deck</label>
+            <select class="form-select" id="deck-move-select" name="parent_id">
+              <option value="">-- No Parent (Root Level) --</option>
+              {% if deck_rows %}
+              {{ render_deck_options(deck_rows) }}
+              {% endif %}
+            </select>
+          </div>
+          <div class="modal-footer border-0 pt-0">
+            <button type="submit" class="btn btn-primary w-100"
+              style="background-color: var(--flama-orange-600); border-color: var(--flama-orange-600);">Move</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hidden Forms for Reset/Delete -->
+  <form id="deck-reset-form" method="POST" style="display: none;">
+    <input type="hidden" name="next" value="{{ request.url }}">
+  </form>
+  <form id="deck-delete-form" method="POST" style="display: none;">
+    <input type="hidden" name="next" value="{{ request.url }}">
+  </form>
+
   <div class="modal fade" id="createDeckModal" tabindex="-1" aria-labelledby="createDeckModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
       <div class="modal-content">
@@ -67,13 +147,8 @@
         </div>
         <div class="modal-body">
           <label for="deck-path-input" class="form-label">New deck name</label>
-          <input
-            id="deck-path-input"
-            type="text"
-            class="form-control"
-            value="New Deck"
-            placeholder="ChungBechN1::語彙徹底N1::Bài 004"
-          />
+          <input id="deck-path-input" type="text" class="form-control" value="New Deck"
+            placeholder="ChungBechN1::語彙徹底N1::Bài 004" />
           <small class="text-muted d-block mt-2">
             Dùng <code>::</code> để phân cấp. Hệ thống sẽ tự tạo deck cha nếu chưa có.
           </small>
@@ -82,7 +157,7 @@
           {% set button_label = 'Cancel' %}
           {% set button_type = 'outline-secondary' %}
           {% include 'components/button.html' with context %}
-          
+
           {% set button_label = 'Create' %}
           {% set button_id = 'confirm-create-deck-btn' %}
           {% set button_type = 'primary' %}
@@ -93,39 +168,43 @@
   </div>
   {% endif %}
 
-  <section class="anki-board" aria-labelledby="anki-decks-title">
-    <header class="anki-board-head">
-      <h3 id="anki-decks-title">Deck</h3>
-      <div class="anki-col-heads">
+  <section class="deck-board" aria-labelledby="anki-decks-title">
+    <header class="deck-board-head">
+      <div class="head-left">
+        <h3 id="anki-decks-title" class="section-title mb-0" style="font-size: 1.25rem;">Deck</h3>
+      </div>
+      <div class="head-right">
         <span>New</span>
         <span>Learn</span>
         <span>Due</span>
+        <span class="settings-spacer" aria-hidden="true" style="width: 24px;"></span>
       </div>
     </header>
 
-    <div class="anki-deck-list">
+    <div class="deck-list">
       {% if deck_rows %}
-        {{ render_nodes(deck_rows) }}
+      {{ render_nodes(deck_rows) }}
       {% else %}
-      <div class="anki-empty">No decks yet. Open Admin Edit to create your first deck tree.</div>
+      <div class="deck-empty">No decks yet. Open Admin Edit to create your first deck tree.</div>
       {% endif %}
     </div>
   </section>
-
-  <footer class="anki-home-actions">
-    {% if admin_mode %}
-    <a class="btn btn-light btn-sm anki-pill" href="{{ url_for('vocabulary.index') }}">Admin Edit</a>
-    {% endif %}
-    <a class="btn btn-light btn-sm anki-pill" href="{{ url_for('auth.logout') }}">Logout</a>
-  </footer>
 </div>
 
 <style>
   .anki-home {
+    --count-new: #16a34a;
+    /* Tailwind Green 600 - subtle green */
+    --count-learn: #dc2626;
+    /* Tailwind Red 600 - subtle red */
+    --count-due: var(--flama-orange-600, #ea580c);
+    /* Flama Orange */
+
     max-width: 980px;
     margin: 0 auto;
     padding: 0.25rem 0 2rem;
   }
+
   .anki-top-tabs {
     display: inline-flex;
     gap: 0;
@@ -139,6 +218,7 @@
     transform: translateX(-50%);
     position: relative;
   }
+
   .anki-tab {
     display: inline-flex;
     align-items: center;
@@ -157,166 +237,310 @@
     background: linear-gradient(#fafafa, #f0f0f0);
     cursor: pointer;
   }
+
   .anki-tab-button {
     font-family: var(--font-family-base);
     font-size: var(--font-size-sm);
     font-weight: var(--font-weight-semibold);
   }
+
   .anki-tab:last-child {
     border-right: none;
   }
+
   .anki-tab.active {
     background: #ffffff;
   }
+
   .anki-tab.sync {
     color: #2176ff;
   }
-  .anki-board {
-    width: min(100%, 760px);
+
+  /* ── Deck Board & Container ── */
+  .deck-board {
+    width: 100%;
+    max-width: 860px;
     margin: 0 auto;
-    border: 1px solid #d5d5d5;
-    border-radius: 0.9rem;
-    background: #fff;
-    padding: 1rem 1.15rem 0.9rem;
+    background: #ffffff;
+    border: 1px solid var(--flama-border);
+    border-radius: 12px;
+    padding: 1.5rem 2.5rem;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.02);
   }
-  .anki-board-head {
+
+  .deck-board-head {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border-bottom: 1px solid #e4e4e4;
-    padding-bottom: 0.5rem;
-    margin-bottom: 0.6rem;
+    border-bottom: 2px solid #f3f4f6;
+    padding-bottom: 0.75rem;
+    margin-bottom: 0.5rem;
   }
-  .anki-board-head h3 {
+
+  .head-left h3 {
     margin: 0;
-    font-size: 1.8rem;
-    font-weight: 600;
+    color: #4b5563;
   }
-  .anki-col-heads {
+
+  .head-right {
     display: grid;
-    grid-template-columns: repeat(3, 72px);
-    gap: 0.25rem;
-    font-size: 1.3rem;
-    font-weight: 600;
+    grid-template-columns: repeat(3, 70px) 24px;
+    gap: 0.5rem;
     text-align: right;
+    align-items: center;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #9ca3af;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
   }
-  .anki-deck-list {
-    display: grid;
-    gap: 0.14rem;
+
+  .deck-list {
+    display: flex;
+    flex-direction: column;
   }
-  .anki-row {
+
+  /* ── Deck Row (Tabular) ── */
+  .deck-row {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border-radius: 0.4rem;
-    padding: 0.16rem 0.2rem;
+    padding: 0.6rem 0.25rem;
+    border-radius: 6px;
+    border-bottom: 1px solid transparent;
+    transition: all 0.2s;
+    cursor: pointer;
+    text-decoration: none;
   }
-  .anki-row:hover {
-    background: #f7faff;
+
+  .deck-row:hover {
+    background: #fff8f5;
+    /* Light flama orange */
+    box-shadow: inset 0 -1px 0 var(--flama-orange-200);
   }
-  .anki-row.is-selected {
-    background: #eaf2ff;
-    outline: 1px solid #9db9ff;
+
+  .deck-row.is-selected {
+    background: #fff1e6;
+    box-shadow: inset 0 -2px 0 var(--flama-orange-400);
   }
-  .anki-name-wrap {
-    display: inline-flex;
+
+  .deck-name-col {
+    display: flex;
     align-items: center;
     min-width: 0;
+    flex: 1;
+    padding-right: 1rem;
   }
-  .anki-name {
-    color: #171717;
-    text-decoration: none;
-    font-size: 1.3rem;
-    line-height: 1.2;
-    cursor: default;
+
+  .deck-name {
+    font-size: 1.15rem;
+    color: var(--flama-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
-  .anki-name:hover {
-    color: #0a58ca;
-    text-decoration: underline;
+
+  .deck-settings-btn {
+    display: none;
+    background: transparent;
+    border: none;
+    padding: 0;
+    margin: 0;
+    cursor: pointer;
+    font-size: 1.15rem;
+    opacity: 0.5;
+    transition: opacity 0.2s, transform 0.2s;
   }
-  .tree-toggle,
-  .tree-spacer {
-    width: 1rem;
-    margin-right: 0.28rem;
+
+  .deck-row.is-selected .deck-settings-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    flex: 0 0 1rem;
-    font-size: 1.15rem;
-    line-height: 1;
   }
-  .tree-toggle {
-    border: none;
-    background: transparent;
-    color: #4e4e4e;
-    padding: 0;
-    cursor: pointer;
+
+  .deck-settings-btn:hover {
+    opacity: 1;
+    transform: rotate(45deg);
   }
-  .tree-toggle:hover {
-    color: #0a58ca;
+
+  .deck-row:hover .deck-name {
+    color: var(--flama-orange-600);
   }
-  .anki-stats {
+
+  .deck-stats-col {
     display: grid;
-    grid-template-columns: repeat(3, 72px);
-    gap: 0.25rem;
-    font-size: 1.3rem;
+    grid-template-columns: repeat(3, 70px) 24px;
+    gap: 0.5rem;
     text-align: right;
-    font-variant-numeric: tabular-nums;
+    align-items: center;
   }
-  .anki-stats .new {
-    color: #2d66f4;
-  }
-  .anki-stats .learn {
-    color: #d23a2f;
-  }
-  .anki-stats .due {
-    color: #1f8d35;
-  }
-  .is-collapsed {
-    display: none;
-  }
-  .anki-empty {
-    font-size: 1.1rem;
-    color: #6a6a6a;
-    padding: 0.75rem 0.2rem;
-  }
-  .anki-home-actions {
-    width: min(100%, 760px);
-    margin: 1rem auto 0;
+
+  .deck-settings-wrapper {
     display: flex;
     justify-content: center;
-    gap: 0.8rem;
-    flex-wrap: wrap;
+    align-items: center;
+    width: 24px;
   }
-  .anki-pill {
-    border: 1px solid #c7c7c7;
-    border-radius: 999px;
-    background: linear-gradient(#ffffff, #efefef);
-    color: #222;
-    padding: 0.4rem 1rem;
+
+  .stat-num {
+    font-size: 1.15rem;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
   }
-  .anki-pill:hover {
-    border-color: #9db9ff;
-    color: #0a58ca;
+
+  .stat-new {
+    color: var(--count-new);
   }
-  @media (max-width: 768px) {
-    .anki-tab {
-      min-width: 74px;
-      font-size: 0.9rem;
-      height: 38px;
-      padding: 0 0.6rem;
+
+  .stat-learn {
+    color: var(--count-learn);
+  }
+
+  .stat-due {
+    color: var(--count-due);
+    font-weight: 600;
+  }
+
+  /* Tree Toggle */
+  .tree-toggle,
+  .tree-spacer {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
+    margin-right: 0.5rem;
+  }
+
+  .tree-toggle {
+    background: transparent;
+    border: none;
+    color: #6b7280;
+    font-size: 1.25rem;
+    line-height: 1;
+    font-weight: 600;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: all 0.2s;
+  }
+
+  .tree-toggle:hover {
+    background: #f3f4f6;
+    color: var(--flama-orange-600);
+  }
+
+  .is-collapsed {
+    display: none !important;
+  }
+
+  .deck-empty {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: #6b7280;
+    background: #f9fafb;
+    border-radius: 12px;
+    border: 1px dashed #d1d5db;
+  }
+
+  /* ── Responsive ── */
+  @media (max-width: 1023px) {
+    .deck-board {
+      padding: 1.25rem 1.75rem;
     }
-    .anki-board {
-      padding: 0.8rem 0.75rem;
-    }
-    .anki-board-head h3,
-    .anki-name,
-    .anki-stats {
+
+    .deck-name {
       font-size: 1.05rem;
     }
-    .anki-col-heads,
-    .anki-stats {
-      grid-template-columns: repeat(3, 50px);
+  }
+
+  /* Mobile (<768px) */
+  @media (max-width: 767px) {
+    .anki-top-tabs {
+      flex-wrap: wrap;
+      border-radius: 0.5rem;
+    }
+
+    .anki-tab {
+      min-width: 60px;
+      font-size: 0.85rem;
+      height: 38px;
+      padding: 0 0.5rem;
+      flex: 1;
+    }
+
+    .head-right {
+      display: none;
+      /* Hide global column headers on mobile */
+    }
+
+    .deck-board {
+      padding: 1rem 1.25rem;
+    }
+
+    .deck-row {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.5rem;
+      padding: 0.85rem 0.25rem;
+      border-bottom: 1px solid #f3f4f6;
+    }
+
+    .deck-row:hover {
+      box-shadow: none;
+      /* simple hover on mobile */
+      background: #fafafa;
+    }
+
+    .deck-name-col {
+      width: 100%;
+      padding-right: 0;
+    }
+
+    .deck-name {
+      white-space: normal;
+    }
+
+    .deck-stats-col {
+      width: 100%;
+      /* align stat columns under the deck name skipping chevron */
+      padding-left: 2rem;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr) 24px;
+      text-align: left;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    /* Add mini inline headers on mobile via pseudo-elements */
+    .stat-new::before {
+      content: "New";
+      display: block;
+      font-size: 0.75rem;
+      color: #9ca3af;
+      text-transform: uppercase;
+      font-weight: 600;
+      margin-bottom: 0.1rem;
+    }
+
+    .stat-learn::before {
+      content: "Learn";
+      display: block;
+      font-size: 0.75rem;
+      color: #9ca3af;
+      text-transform: uppercase;
+      font-weight: 600;
+      margin-bottom: 0.1rem;
+    }
+
+    .stat-due::before {
+      content: "Due";
+      display: block;
+      font-size: 0.75rem;
+      color: #9ca3af;
+      text-transform: uppercase;
+      font-weight: 600;
+      margin-bottom: 0.1rem;
     }
   }
 </style>
@@ -327,7 +551,7 @@
     const cleanupOrphanedBackdrops = () => {
       const backdrops = document.querySelectorAll(".modal-backdrop");
       const activeModals = document.querySelectorAll(".modal.show");
-      
+
       if (activeModals.length === 0 && backdrops.length > 0) {
         backdrops.forEach((backdrop) => {
           backdrop.remove();
@@ -383,9 +607,64 @@
       }
     }
 
+    // UI logic for Deck Actions
+    const renameModalEl = document.getElementById('renameDeckModal');
+    const moveModalEl = document.getElementById('moveDeckModal');
+    let renameModal = null;
+    let moveModal = null;
+
+    if (renameModalEl && window.bootstrap) renameModal = new bootstrap.Modal(renameModalEl);
+    if (moveModalEl && window.bootstrap) moveModal = new bootstrap.Modal(moveModalEl);
+
+    document.querySelectorAll('.deck-action-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+
+        const action = btn.getAttribute('data-action');
+        const deckId = btn.getAttribute('data-deck-id');
+        const deckName = btn.getAttribute('data-deck-name');
+        const parentId = btn.getAttribute('data-parent-id');
+
+        if (action === 'rename') {
+          document.getElementById('deck-rename-form').action = `/vocabulary/decks/${deckId}/rename`;
+          document.getElementById('deck-rename-input').value = deckName;
+          if (renameModal) renameModal.show();
+        }
+        else if (action === 'move') {
+          document.getElementById('deck-move-form').action = `/vocabulary/decks/${deckId}/move`;
+          const moveSelect = document.getElementById('deck-move-select');
+          if (moveSelect) {
+            Array.from(moveSelect.options).forEach(opt => {
+              opt.disabled = (opt.value === String(deckId));
+            });
+            moveSelect.value = parentId || "";
+          }
+          if (moveModal) moveModal.show();
+        }
+        else if (action === 'reset') {
+          if (confirm(`WARNING: Are you sure you want to RESET progress for '${deckName}'?`)) {
+            const form = document.getElementById('deck-reset-form');
+            form.action = `/vocabulary/decks/${deckId}/reset`;
+            form.submit();
+          }
+        }
+        else if (action === 'delete') {
+          if (confirm(`CRITICAL: Permanently DELETE deck '${deckName}' and its content?`)) {
+            const form = document.getElementById('deck-delete-form');
+            form.action = `/vocabulary/decks/${deckId}/delete`;
+            form.submit();
+          }
+        }
+      });
+    });
+
     rows.forEach((row) => {
       row.addEventListener("click", (event) => {
-        if (event.target.closest(".tree-toggle")) {
+        // Ngăn chặn các script khác chèn ngang event click chuyển trang ngay lần đầu tiên
+        event.stopImmediatePropagation();
+
+        if (event.target.closest(".tree-toggle") || event.target.closest(".deck-settings-wrapper")) {
           return;
         }
         if (row.classList.contains("is-selected")) {
@@ -482,7 +761,7 @@
 
       confirmCreateDeckBtn.addEventListener("click", () => {
         const deckPath = deckPathInput.value.trim() || "New Deck";
-        
+
         // Validate input - prevent empty deck path
         if (!deckPath || deckPath === "") {
           alert("Tên deck không được để trống!");
@@ -494,7 +773,7 @@
         createDeckParentInput.value = selectedDeckId || "";
         createDeckNameInput.value = leafName;
         createDeckPathInput.value = deckPath;
-        
+
         // Get modal instance
         const modalInstance = createDeckModalEl && window.bootstrap && window.bootstrap.Modal
           ? window.bootstrap.Modal.getOrCreateInstance(createDeckModalEl)

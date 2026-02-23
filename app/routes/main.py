@@ -45,6 +45,11 @@ def privacy():
     return render_template("privacy.html")
 
 
+@main_bp.route("/cookies")
+def cookies():
+    return render_template("cookies.html")
+
+
 @main_bp.route("/dashboard")
 @login_required
 def dashboard():
