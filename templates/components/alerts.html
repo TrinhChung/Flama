@@ -3,13 +3,14 @@
 
 {% with messages = get_flashed_messages(with_categories=true) %}
 {% if messages %}
-<div class="alerts-container position-fixed top-0 start-50 translate-middle-x mt-3"
-  style="z-index: 1060; width: 100%; max-width: 600px;">
+<div class="alerts-container position-fixed top-0 end-0 p-3"
+  style="z-index: 1060; width: max-content; max-width: 90vw; margin-top: 56px;">
   <div class="row px-3">
     <div class="col-12">
       {% for category, message in messages %}
-      <div class="alert alert-{{ category }} alert-dismissible fade show shadow-sm" role="alert" {% if category
-        !='danger' %}data-auto-close="true" {% endif %}>
+      <div class="alert alert-{{ category }} alert-dismissible fade show shadow-sm" role="alert"
+        style="white-space: nowrap; padding-right: 3rem !important;" {% if category !='danger' %}data-auto-close="true"
+        {% endif %}>
         {{ message }}
         <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
       </div>

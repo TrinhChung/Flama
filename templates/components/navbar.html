@@ -1,4 +1,4 @@
-{# Component: Navbar #}
+﻿{# Component: Navbar #}
 {# Usage: {% include 'components/navbar.html' with context %} #}
 
 <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
@@ -12,56 +12,94 @@
       <span class="navbar-toggler-icon"></span>
     </button>
     <div class="collapse navbar-collapse" id="navbarNav">
-      <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
-        {% if current_user.is_authenticated %}
-        <li class="nav-item">
-          <span class="nav-link disabled">
-            <i class="bi bi-person-circle"></i> {{ current_user.username }}
-          </span>
-        </li>
+      {% if current_user.is_authenticated %}
+      <ul class="navbar-nav ms-auto mb-2 mb-lg-0 align-items-lg-center">
         <li class="nav-item">
           <a class="nav-link" href="{{ url_for('main.dashboard') }}">
-            <i class="bi bi-house"></i> Home
+            <i class="bi bi-speedometer2"></i> Tổng quan
           </a>
         </li>
-        <li class="nav-item">
-          <a class="nav-link" href="{{ url_for('main.dashboard') }}">
-            <i class="bi bi-journal-bookmark"></i> Study
+
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+            <i class="bi bi-mortarboard"></i> Học tập
           </a>
+          <ul class="dropdown-menu dropdown-menu-end">
+            <li>
+              <a class="dropdown-item" href="{{ url_for('main.dashboard') }}">
+                <i class="bi bi-house-door"></i> Trang học tập
+              </a>
+            </li>
+            <li>
+              <a class="dropdown-item" href="{{ url_for('flashcards.flashcard_study_page') }}">
+                <i class="bi bi-card-text"></i> Học flashcard
+              </a>
+            </li>
+          </ul>
         </li>
+
         {% if current_user.is_admin %}
-        <li class="nav-item">
-          <a class="nav-link" href="{{ url_for('admin.user_management_page') }}">
-            <i class="bi bi-people"></i> Users
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+            <i class="bi bi-folder2-open"></i> Quản lý nội dung
           </a>
+          <ul class="dropdown-menu dropdown-menu-end">
+            <li>
+              <a class="dropdown-item" href="{{ url_for('flashcards.note_type_manager') }}">
+                <i class="bi bi-layers"></i> Quản lý loại thẻ
+              </a>
+            </li>
+            <li>
+              <a class="dropdown-item" href="{{ url_for('flashcards.notes_list_page') }}">
+                <i class="bi bi-card-list"></i> Quản lý ghi chú thẻ
+              </a>
+            </li>
+            <li>
+              <a class="dropdown-item" href="{{ url_for('flashcards.note_editor_page') }}">
+                <i class="bi bi-plus-square"></i> Tạo ghi chú mới
+              </a>
+            </li>
+          </ul>
         </li>
-        <li class="nav-item">
-          <a class="nav-link" href="{{ url_for('vocabulary.index') }}">
-            <i class="bi bi-pencil-square"></i> Admin Edit
+
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+            <i class="bi bi-shield-lock"></i> Quản trị hệ thống
           </a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link" href="{{ url_for('flashcards.note_type_manager') }}">
-            <i class="bi bi-layers"></i> NoteTypes
-          </a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link" href="{{ url_for('flashcards.notes_list_page') }}">
-            <i class="bi bi-card-list"></i> Notes
-          </a>
+          <ul class="dropdown-menu dropdown-menu-end">
+            <li>
+              <a class="dropdown-item" href="{{ url_for('admin.user_management_page') }}">
+                <i class="bi bi-people"></i> Người dùng và phân quyền
+              </a>
+            </li>
+          </ul>
         </li>
         {% endif %}
-        <li class="nav-item">
-          <a class="nav-link" href="{{ url_for('flashcards.flashcard_study_page') }}">
-            <i class="bi bi-card-text"></i> Flashcards
+
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+            <i class="bi bi-person-circle"></i> {{ current_user.username }}
           </a>
+          <ul class="dropdown-menu dropdown-menu-end">
+            <li><span class="dropdown-item-text text-muted small">{{ current_user.email }}</span></li>
+            {% if current_user.is_admin %}
+            <li><span class="dropdown-item-text role-badge admin">Vai trò: Quản trị viên</span></li>
+            {% else %}
+            <li><span class="dropdown-item-text role-badge user">Vai trò: Người dùng</span></li>
+            {% endif %}
+            <li>
+              <hr class="dropdown-divider">
+            </li>
+            <li>
+              <a class="dropdown-item text-danger" href="{{ url_for('auth.logout') }}">
+                <i class="bi bi-box-arrow-right"></i> Đăng xuất
+              </a>
+            </li>
+          </ul>
         </li>
-        <li class="nav-item">
-          <a class="nav-link" href="{{ url_for('auth.logout') }}">
-            <i class="bi bi-box-arrow-right"></i> Đăng xuất
-          </a>
-        </li>
-        {% else %}
+      </ul>
+      {% else %}
+      <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
         <li class="nav-item">
           <a class="nav-link" href="{{ url_for('auth.login') }}">
             <i class="bi bi-box-arrow-in-right"></i> Đăng nhập
@@ -72,8 +110,8 @@
             <i class="bi bi-person-plus"></i> Đăng ký
           </a>
         </li>
-        {% endif %}
       </ul>
+      {% endif %}
     </div>
   </div>
 </nav>

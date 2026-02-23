@@ -1,62 +1,146 @@
 {% extends "base.html" %}
 
-{% block title %}Quan ly user{% endblock %}
+{% block title %}Quản lý người dùng - Flama Admin{% endblock %}
 
 {% block content %}
-<section class="py-3">
-  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-    <h2 class="h4 mb-0">Quan ly user va quyen</h2>
-    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('main.dashboard') }}">Back</a>
-  </div>
+<section class="py-4 study-page-bg" style="min-height: calc(100vh - 72px); background-color: #f8fafc;">
+  <div class="container-fluid px-3 px-lg-4">
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
+      <div class="d-flex align-items-center gap-3">
+        <div
+          class="bg-primary bg-opacity-10 text-primary rounded-4 p-3 d-flex align-items-center justify-content-center"
+          style="width: 48px; height: 48px;">
+          <i class="bi bi-people fs-4"></i>
+        </div>
+        <div>
+          <h2 class="h4 fw-bold mb-1 text-dark">Quản lý Người dùng</h2>
+          <p class="text-muted mb-0 small">Thiết lập quyền quản trị và theo dõi thành viên hệ thống.</p>
+        </div>
+      </div>
+    </div>
 
-  <div class="card">
-    <div class="table-responsive">
-      <table class="table table-striped align-middle mb-0">
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>Username</th>
-            <th>Email</th>
-            <th>Role hien tai</th>
-            <th>Cap nhat quyen</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for user in users %}
-          <tr>
-            <td>{{ user.id }}</td>
-            <td>{{ user.username }}</td>
-            <td>{{ user.email }}</td>
-            <td>
-              {% if user.role %}
-              <span class="badge bg-secondary">{{ user.role.name }}</span>
-              {% elif user.is_admin %}
-              <span class="badge bg-danger">Admin (legacy)</span>
-              {% else %}
-              <span class="badge bg-secondary">Chua gan role</span>
-              {% endif %}
-            </td>
-            <td>
-              <form class="d-flex gap-2" method="POST" action="{{ url_for('admin.update_user_role', user_id=user.id) }}">
-                <select name="role_id" class="form-select form-select-sm" style="max-width: 240px;">
-                  {% for role in roles %}
-                  <option value="{{ role.id }}" {% if user.role_id == role.id %}selected{% endif %}>
-                    {{ role.name }}
-                  </option>
-                  {% endfor %}
-                </select>
-                <button class="btn btn-sm btn-primary" type="submit">Luu</button>
-              </form>
-            </td>
-          </tr>
-          {% else %}
-          <tr>
-            <td class="text-center text-muted py-4" colspan="5">Chua co user.</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+    <div class="card border-0 shadow-sm rounded-4 overflow-hidden mb-4 bg-white">
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0 custom-table">
+          <thead class="bg-light">
+            <tr>
+              <th scope="col" class="py-3 px-4 text-secondary fw-semibold small text-uppercase" style="width: 80px;">ID
+              </th>
+              <th scope="col" class="py-3 px-4 text-secondary fw-semibold small text-uppercase">Tài khoản</th>
+              <th scope="col" class="py-3 px-4 text-secondary fw-semibold small text-uppercase">Email</th>
+              <th scope="col" class="py-3 px-4 text-secondary fw-semibold small text-uppercase" style="width: 180px;">
+                Vai trò</th>
+              <th scope="col" class="py-3 px-4 text-secondary fw-semibold small text-uppercase text-end"
+                style="width: 250px;">Phân quyền</th>
+            </tr>
+          </thead>
+          <tbody class="border-top-0">
+            {% for user in users %}
+            <tr>
+              <td class="py-3 px-4">
+                <span class="text-muted fw-medium text-monospace">#{{ user.id }}</span>
+              </td>
+              <td class="py-3 px-4">
+                <div class="d-flex align-items-center gap-3">
+                  <div class="avatar-circle">
+                    {{ user.username[0]|upper if user.username else '?' }}
+                  </div>
+                  <div>
+                    <div class="fw-bold text-dark">{{ user.username }}</div>
+                  </div>
+                </div>
+              </td>
+              <td class="py-3 px-4">
+                <span class="text-muted">{{ user.email }}</span>
+              </td>
+              <td class="py-3 px-4">
+                {% if user.role %}
+                {% if user.role.name == 'Admin' %}
+                <span
+                  class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 px-2 py-1 rounded-pill">Quản
+                  trị viên (Admin)</span>
+                {% else %}
+                <span
+                  class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 px-2 py-1 rounded-pill">{{
+                  user.role.name }}</span>
+                {% endif %}
+                {% elif user.is_admin %}
+                <span
+                  class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 px-2 py-1 rounded-pill">Admin
+                  (Cũ)</span>
+                {% else %}
+                <span
+                  class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 px-2 py-1 rounded-pill">Chưa
+                  có vai trò</span>
+                {% endif %}
+              </td>
+              <td class="py-3 px-4">
+                <form class="d-flex gap-2 justify-content-end align-items-center" method="POST"
+                  action="{{ url_for('admin.update_user_role', user_id=user.id) }}">
+                  <select name="role_id" class="form-select form-select-sm bg-light border-0 text-dark fw-medium"
+                    style="max-width: 140px; border-radius: 0.5rem; font-size: 0.85rem; padding-top: 0.4rem; padding-bottom: 0.4rem;">
+                    {% for role in roles %}
+                    <option value="{{ role.id }}" {% if user.role_id==role.id %}selected{% endif %}>
+                      {{ role.name }}
+                    </option>
+                    {% endfor %}
+                  </select>
+                  <button class="btn btn-sm btn-primary d-flex align-items-center gap-1 shadow-sm" type="submit"
+                    style="border-radius: 0.5rem; padding: 0.4rem 0.85rem; font-weight: 500;">
+                    <i class="bi bi-floppy"></i> Lưu
+                  </button>
+                </form>
+              </td>
+            </tr>
+            {% else %}
+            <tr>
+              <td class="text-center text-muted py-5" colspan="5">
+                <div class="d-flex flex-column align-items-center justify-content-center opacity-50 my-4">
+                  <i class="bi bi-inbox fs-1 mb-2"></i>
+                  <p class="mb-0 fw-medium">Chưa có dữ liệu người dùng</p>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 </section>
+
+<style>
+  .custom-table th {
+    letter-spacing: 0.5px;
+    background-color: #f1f5f9;
+    border-bottom: 2px solid #e2e8f0;
+  }
+
+  .custom-table tbody tr {
+    transition: all 0.2s ease;
+    border-bottom: 1px solid #f1f5f9;
+  }
+
+  .custom-table tbody tr:hover {
+    background-color: #f8fafc;
+  }
+
+  .custom-table td {
+    vertical-align: middle;
+  }
+
+  .avatar-circle {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--flama-primary), #3b82f6);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 1rem;
+    box-shadow: 0 2px 5px rgba(15, 23, 42, 0.1);
+  }
+</style>
 {% endblock %}

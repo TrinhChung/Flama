@@ -75,6 +75,51 @@
   opacity: 0.9;
 }
 
+.navbar-nav .dropdown-menu {
+  border: 1px solid #e2e8f0;
+  border-radius: 0.65rem;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+  min-width: 230px;
+  margin-top: 0.35rem;
+}
+
+.navbar-nav .dropdown-item,
+.navbar-nav .dropdown-item-text {
+  font-size: 0.92rem;
+}
+
+.navbar-nav .dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding-top: 0.45rem;
+  padding-bottom: 0.45rem;
+}
+
+.navbar-nav .dropdown-item:active {
+  background-color: #f1f5f9;
+  color: #0f172a;
+}
+
+.navbar-nav .role-badge {
+  display: inline-block;
+  margin: 0.2rem 0.9rem 0.4rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.navbar-nav .role-badge.admin {
+  color: #7f1d1d;
+  background-color: #fee2e2;
+}
+
+.navbar-nav .role-badge.user {
+  color: #1e3a8a;
+  background-color: #dbeafe;
+}
+
 /* Mobile adjustments */
 @media (max-width: 991px) {
   .navbar-collapse {
@@ -84,5 +129,11 @@
   .navbar-nav .nav-link {
     margin-left: 0;
     padding: 0.5rem 0;
+  }
+
+  .navbar-nav .dropdown-menu {
+    min-width: 100%;
+    margin-top: 0.2rem;
+    border-radius: 0.5rem;
   }
 }
