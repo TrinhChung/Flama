@@ -1,0 +1,15 @@
+{# Component: Email Input Field #}
+{# Usage: {% include 'components/forms/email_input.html' with context %} #}
+{# Params: field_id, field_name, label, placeholder, required #}
+
+<div class="form-group mb-3">
+  <label for="{{ field_id }}" class="form-label">{{ label }}</label>
+  <input
+    type="email"
+    class="form-control"
+    id="{{ field_id }}"
+    name="{{ field_name }}"
+    placeholder="{{ placeholder or 'you@example.com' }}"
+    required
+  />
+</div>

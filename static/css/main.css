@@ -1,0 +1,130 @@
+/* 
+ * main.css
+ * Global styles and layout
+ */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  background-color: #f8f9fa;
+  color: #333;
+}
+
+main.container {
+  max-width: 1200px;
+  margin: 2rem auto;
+  padding: 0 1rem;
+}
+
+/* Alerts */
+.alerts-container {
+  margin-bottom: 1.5rem;
+}
+
+/* Global utilities */
+.text-center {
+  text-align: center;
+}
+
+.mt-4 {
+  margin-top: 1.5rem;
+}
+
+.mb-4 {
+  margin-bottom: 1.5rem;
+}
+
+.gap-2 {
+  gap: 0.75rem;
+}
+
+/* Anki-specific layout */
+.anki-home {
+  max-width: 980px;
+  margin: 0 auto;
+}
+
+.anki-board {
+  background: white;
+  border-radius: 0.375rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  margin: 1.5rem 0;
+}
+
+.anki-board-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem;
+  background-color: #f8f9fa;
+  border-bottom: 1px solid #e0e0e0;
+  border-radius: 0.375rem 0.375rem 0 0;
+}
+
+.anki-board-head h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  color: #333;
+}
+
+.anki-col-heads {
+  display: flex;
+  gap: 1.5rem;
+  min-width: 150px;
+  justify-content: flex-end;
+  font-weight: 600;
+  color: #666;
+  font-size: 0.9rem;
+}
+
+.anki-home-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1.5rem;
+  padding: 1rem;
+}
+
+/* Responsive grid */
+@media (max-width: 768px) {
+  main.container {
+    margin: 1rem auto;
+  }
+
+  .anki-board-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+
+  .anki-col-heads {
+    min-width: 100%;
+  }
+}
+
+/* Print styles */
+@media print {
+  body {
+    background-color: white;
+  }
+
+  .navbar,
+  .alerts-container,
+  .anki-home-actions {
+    display: none;
+  }
+
+  .anki-board {
+    box-shadow: none;
+    border: 1px solid #ddd;
+  }
+}

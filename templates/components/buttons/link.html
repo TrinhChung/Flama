@@ -1,0 +1,11 @@
+{# Component: Link Button #}
+{# Usage: {% include 'components/buttons/link.html' with context %} #}
+{# Params: label, href, classes, size #}
+
+<a
+  href="{{ href }}"
+  class="btn btn-link {{ classes or '' }} btn-{{ size or 'sm' }}"
+  role="button"
+>
+  {{ label }}
+</a>

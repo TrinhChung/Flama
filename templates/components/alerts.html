@@ -1,0 +1,19 @@
+{# Component: Flash Alerts #}
+{# Usage: {% include 'components/alerts.html' with context %} #}
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+{% if messages %}
+<div class="alerts-container">
+  <div class="row">
+    <div class="col-md-8 col-lg-6 mx-auto">
+      {% for category, message in messages %}
+      <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endwith %}

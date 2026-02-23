@@ -1,0 +1,14 @@
+{# Component: Deck List Container #}
+{# Usage: {% include 'components/deck/deck_list.html' with context %} #}
+{# Params: deck_rows #}
+
+<section class="anki-deck-list" id="deck-list">
+  {% if deck_rows %}
+    {% for node in deck_rows %}
+      {% set node = node %}
+      {% include 'components/deck/deck_row.html' %}
+    {% endfor %}
+  {% else %}
+  <div class="anki-empty">No decks yet. Open Admin Edit to create your first deck tree.</div>
+  {% endif %}
+</section>

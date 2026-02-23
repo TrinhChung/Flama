@@ -7,50 +7,34 @@
   <div class="col-md-6 col-lg-4 mx-auto">
     <h2 class="mb-4 text-center">Đăng ký tài khoản</h2>
     <form method="post" novalidate>
-      <div class="mb-3">
-        <label for="email" class="form-label">Email</label>
-        <input
-          type="email"
-          class="form-control"
-          id="email"
-          name="email"
-          placeholder="you@example.com"
-          required
-        />
-      </div>
-      <div class="mb-3">
-        <label for="username" class="form-label">Tên đăng nhập</label>
-        <input
-          type="text"
-          class="form-control"
-          id="username"
-          name="username"
-          placeholder="Tên của bạn"
-          required
-        />
-      </div>
-      <div class="mb-3">
-        <label for="password" class="form-label">Mật khẩu</label>
-        <input
-          type="password"
-          class="form-control"
-          id="password"
-          name="password"
-          placeholder="••••••••"
-          required
-        />
-      </div>
-      <div class="mb-4">
-        <label for="confirm_password" class="form-label">Xác nhận mật khẩu</label>
-        <input
-          type="password"
-          class="form-control"
-          id="confirm_password"
-          name="confirm_password"
-          placeholder="Nhập lại mật khẩu"
-          required
-        />
-      </div>
+      {% set field_id = 'email' %}
+      {% set field_name = 'email' %}
+      {% set label = 'Email' %}
+      {% set placeholder = 'you@example.com' %}
+      {% set required = true %}
+      {% include 'components/forms/email_input.html' %}
+
+      {% set field_id = 'username' %}
+      {% set field_name = 'username' %}
+      {% set label = 'Tên đăng nhập' %}
+      {% set placeholder = 'Tên của bạn' %}
+      {% set required = true %}
+      {% include 'components/forms/text_input.html' %}
+
+      {% set field_id = 'password' %}
+      {% set field_name = 'password' %}
+      {% set label = 'Mật khẩu' %}
+      {% set placeholder = '••••••••' %}
+      {% set required = true %}
+      {% include 'components/forms/password_input.html' %}
+
+      {% set field_id = 'confirm_password' %}
+      {% set field_name = 'confirm_password' %}
+      {% set label = 'Xác nhận mật khẩu' %}
+      {% set placeholder = 'Nhập lại mật khẩu' %}
+      {% set required = true %}
+      {% include 'components/forms/password_input.html' %}
+
       <div class="d-grid">
         <button type="submit" class="btn btn-primary">Đăng ký</button>
       </div>

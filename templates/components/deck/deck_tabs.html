@@ -1,0 +1,15 @@
+{# Component: Deck Tabs Navigation #}
+{# Usage: {% include 'components/deck/deck_tabs.html' with context %} #}
+{# Params: admin_mode #}
+
+<div class="anki-top-tabs" role="navigation" aria-label="Home actions">
+  <a class="anki-tab active" href="{{ url_for('main.dashboard') }}">Decks</a>
+  <a class="anki-tab" href="{{ url_for('main.dashboard') }}">Study</a>
+  {% if admin_mode %}
+  <button type="button" class="anki-tab anki-tab-button" id="create-deck-btn">Create Deck</button>
+  {% else %}
+  <a class="anki-tab" href="{{ url_for('main.dashboard') }}">Progress</a>
+  {% endif %}
+  <a class="anki-tab" href="{{ url_for('main.dashboard') }}">Stats</a>
+  <a class="anki-tab sync" href="{{ url_for('main.dashboard') }}">Sync</a>
+</div>

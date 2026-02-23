@@ -1,0 +1,38 @@
+{# Component: Single Deck Row (Recursive for hierarchy) #}
+{# Usage: Called by deck_list.html #}
+{# Params: node (DeckNode object) #}
+
+<div
+  class="anki-row deck-row"
+  data-node-id="{{ node.deck_id }}"
+  data-node-name="{{ node.label }}"
+  data-parent-id="{{ node.parent_id if node.parent_id else '' }}"
+  data-open-url="{{ node.href }}"
+>
+  <div class="anki-name-wrap" style="padding-left: {{ node.depth * 1.35 }}rem;">
+    {% if node.children %}
+    <button
+      class="tree-toggle"
+      type="button"
+      data-node-id="{{ node.deck_id }}"
+      data-expanded="true"
+      aria-label="Toggle child decks"
+    >−</button>
+    {% else %}
+    <span class="tree-spacer"></span>
+    {% endif %}
+    <span class="anki-name">{{ node.label }}</span>
+  </div>
+  <div class="anki-stats">
+    <span class="new">{{ node.new_count }}</span>
+    <span class="learn">{{ node.learn_count }}</span>
+    <span class="due">{{ node.due_count }}</span>
+  </div>
+</div>
+
+{% if node.children %}
+  {% for child in node.children %}
+    {% set node = child %}
+    {% include 'components/deck/deck_row.html' %}
+  {% endfor %}
+{% endif %}

@@ -1,0 +1,13 @@
+{# Component: Secondary Button #}
+{# Usage: {% include 'components/buttons/secondary.html' with context %} #}
+{# Params: label, id, classes, onclick, disabled #}
+
+<button
+  type="button"
+  class="btn btn-outline-secondary {{ classes or '' }}"
+  id="{{ id or '' }}"
+  onclick="{{ onclick or '' }}"
+  {{ 'disabled' if disabled else '' }}
+>
+  {{ label }}
+</button>
