@@ -9,6 +9,7 @@ from flask_login import current_user, login_required
 
 from app.services.anki_scheduler import default_deck_options
 from app.utils.permissions import is_admin_user
+from models import db
 from models.flashcard import DeckInstall
 from models.vocabulary_deck import VocabularyDeck
 from models.vocabulary_entry import VocabularyEntry
@@ -56,10 +57,16 @@ def cookies():
 def dashboard():
     admin_mode = is_admin_user(current_user)
 
-    # Admin sees all decks; regular users only see decks they have installed
+    # Admin sees own/source decks only (exclude decks cloned for other users)
     if admin_mode:
         decks = (
-            VocabularyDeck.query.order_by(
+            VocabularyDeck.query.filter(
+                db.or_(
+                    VocabularyDeck.owner_user_id == current_user.id,
+                    VocabularyDeck.owner_user_id.is_(None),
+                )
+            )
+            .order_by(
                 VocabularyDeck.parent_id.isnot(None),
                 VocabularyDeck.position,
                 VocabularyDeck.created_at,

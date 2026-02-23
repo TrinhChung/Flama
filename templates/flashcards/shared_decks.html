@@ -65,6 +65,33 @@
     </div>
   </div>
 </section>
+
+<!-- Edit Deck Modal -->
+<div class="modal fade" id="editDeckModal" tabindex="-1" aria-labelledby="editDeckModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="editDeckModalLabel">✏️ Chỉnh sửa Deck</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Tên deck</label>
+          <input type="text" class="form-control" id="editDeckTitle">
+        </div>
+        <div class="mb-1">
+          <label class="form-label fw-semibold">Mô tả</label>
+          <textarea class="form-control" id="editDeckDesc" rows="3"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Hủy</button>
+        <button type="button" class="btn btn-primary btn-sm" id="editDeckSaveBtn">Lưu</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
@@ -72,6 +99,7 @@
   (() => {
     const root = document.getElementById("shared-decks-root");
     if (!root) return;
+    const detailUrlTemplate = "{{ url_for('flashcards.shared_deck_detail_page', deck_item_id='__DECK_ITEM_ID__') }}";
     const filterForm = document.getElementById("deck-filter-form");
     const itemsRoot = document.getElementById("deck-items");
     const recommendedRoot = document.getElementById("deck-recommended-list");
@@ -85,11 +113,26 @@
       return data;
     }
 
+    function buildDetailUrl(deckItemId) {
+      return detailUrlTemplate.replace("__DECK_ITEM_ID__", encodeURIComponent(deckItemId));
+    }
+
     function rowActions(item) {
+      if (item.is_owner) {
+        return `
+          <div class="d-flex gap-2">
+            <a class="btn btn-sm btn-outline-secondary" href="${buildDetailUrl(item.id)}">Chi tiết</a>
+            <button class="btn btn-sm btn-outline-warning edit-btn" data-id="${item.id}"
+              data-title="${item.title}"
+              data-description="${item.description || ''}">✏️ Chỉnh sửa</button>
+          </div>
+        `;
+      }
       const installLabel = item.is_installed ? "Installed" : (item.pricing_mode === "paid" ? "Buy / Install" : "Get / Install");
       const installDisabled = item.is_installed ? "disabled" : "";
       return `
         <div class="d-flex gap-2">
+          <a class="btn btn-sm btn-outline-secondary" href="${buildDetailUrl(item.id)}">Chi tiết</a>
           <button class="btn btn-sm btn-primary install-btn" data-id="${item.id}" ${installDisabled}>${installLabel}</button>
           <button class="btn btn-sm btn-outline-secondary rate-btn" data-id="${item.id}">Rate</button>
         </div>
@@ -122,7 +165,7 @@
         return;
       }
       container.innerHTML = items.slice(0, 5).map((item) => {
-        return `<div class="mb-1">${item.title} <span class="text-muted">(${item.price_display})</span></div>`;
+        return `<div class="mb-1"><a href="${buildDetailUrl(item.id)}">${item.title}</a> <span class="text-muted">(${item.price_display})</span></div>`;
       }).join("");
     }
 
@@ -201,6 +244,34 @@
         } catch (error) {
           window.alert(error.message);
         }
+        return;
+      }
+      const editBtn = event.target.closest(".edit-btn");
+      if (editBtn) {
+        const id = editBtn.getAttribute("data-id");
+        const currentTitle = editBtn.getAttribute("data-title") || "";
+        const currentDesc = editBtn.getAttribute("data-description") || "";
+        document.getElementById("editDeckTitle").value = currentTitle;
+        document.getElementById("editDeckDesc").value = currentDesc;
+        const modal = new bootstrap.Modal(document.getElementById("editDeckModal"));
+        modal.show();
+        const saveBtn = document.getElementById("editDeckSaveBtn");
+        saveBtn.onclick = async () => {
+          const newTitle = document.getElementById("editDeckTitle").value.trim();
+          const newDesc = document.getElementById("editDeckDesc").value.trim();
+          if (!newTitle) { window.alert("Tên không được để trống."); return; }
+          try {
+            await requestJson(`/api/shared/decks/${id}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ title: newTitle, description: newDesc }),
+            });
+            modal.hide();
+            await Promise.all([loadItems(), loadRecommendations()]);
+          } catch (error) {
+            window.alert(error.message);
+          }
+        };
         return;
       }
       const rateBtn = event.target.closest(".rate-btn");

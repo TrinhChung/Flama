@@ -68,6 +68,33 @@
     </div>
   </div>
 </section>
+
+<!-- Edit Modal -->
+<div class="modal fade" id="editNtModal" tabindex="-1" aria-labelledby="editNtModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="editNtModalLabel">✏️ Chỉnh sửa NoteType</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Tên template</label>
+          <input type="text" class="form-control" id="editNtTitle">
+        </div>
+        <div class="mb-1">
+          <label class="form-label fw-semibold">Mô tả</label>
+          <textarea class="form-control" id="editNtDesc" rows="3"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Hủy</button>
+        <button type="button" class="btn btn-primary btn-sm" id="editNtSaveBtn">Lưu</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
@@ -75,6 +102,7 @@
   (() => {
     const root = document.getElementById("shared-note-types-root");
     if (!root) return;
+    const detailUrlTemplate = "{{ url_for('flashcards.shared_note_type_detail_page', note_type_id='__NOTE_TYPE_ID__') }}";
     const filterForm = document.getElementById("note-type-filter-form");
     const itemsRoot = document.getElementById("note-type-items");
     const recommendedRoot = document.getElementById("recommended-list");
@@ -88,10 +116,15 @@
       return data;
     }
 
+    function buildDetailUrl(noteTypeId) {
+      return detailUrlTemplate.replace("__NOTE_TYPE_ID__", encodeURIComponent(noteTypeId));
+    }
+
     function rowActions(item) {
       if (item.is_owner) {
         return `
           <div class="d-flex gap-2">
+            <a class="btn btn-sm btn-outline-secondary" href="${buildDetailUrl(item.id)}">Chi tiết</a>
             <button class="btn btn-sm btn-outline-warning edit-btn" data-id="${item.id}"
               data-title="${item.title || item.name}"
               data-description="${item.description || ''}">✏️ Chỉnh sửa</button>
@@ -102,6 +135,7 @@
       const installDisabled = item.is_installed ? "disabled" : "";
       return `
         <div class="d-flex gap-2">
+          <a class="btn btn-sm btn-outline-secondary" href="${buildDetailUrl(item.id)}">Chi tiết</a>
           <button class="btn btn-sm btn-primary install-btn" data-id="${item.id}" ${installDisabled}>${installLabel}</button>
           <button class="btn btn-sm btn-outline-secondary rate-btn" data-id="${item.id}">Rate</button>
         </div>
@@ -135,7 +169,7 @@
       }
       container.innerHTML = items.slice(0, 5).map((item) => {
         const title = item[titleKey] || item.name || "Untitled";
-        return `<div class="mb-1">${title} <span class="text-muted">(${item.price_display})</span></div>`;
+        return `<div class="mb-1"><a href="${buildDetailUrl(item.id)}">${title}</a> <span class="text-muted">(${item.price_display})</span></div>`;
       }).join("");
     }
 
@@ -195,23 +229,33 @@
       }
       const editBtn = event.target.closest(".edit-btn");
       if (editBtn) {
-        try {
-          const id = editBtn.getAttribute("data-id");
-          const currentTitle = editBtn.getAttribute("data-title") || "";
-          const currentDesc = editBtn.getAttribute("data-description") || "";
-          const newTitle = window.prompt("Tên template:", currentTitle);
-          if (newTitle === null) return;
-          const newDesc = window.prompt("Mô tả:", currentDesc);
-          if (newDesc === null) return;
-          await requestJson(`/api/note-types/${id}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ name: newTitle.trim(), description: newDesc.trim() }),
-          });
-          await Promise.all([loadItems(), loadRecommendations()]);
-        } catch (error) {
-          window.alert(error.message);
-        }
+        const id = editBtn.getAttribute("data-id");
+        const currentTitle = editBtn.getAttribute("data-title") || "";
+        const currentDesc = editBtn.getAttribute("data-description") || "";
+        // Open modal
+        document.getElementById("editNtTitle").value = currentTitle;
+        document.getElementById("editNtDesc").value = currentDesc;
+        const modal = new bootstrap.Modal(document.getElementById("editNtModal"));
+        modal.show();
+        // Wait for Save
+        const onSave = async () => {
+          const newTitle = document.getElementById("editNtTitle").value.trim();
+          const newDesc = document.getElementById("editNtDesc").value.trim();
+          if (!newTitle) { window.alert("Tên không được để trống."); return; }
+          try {
+            await requestJson(`/api/note-types/${id}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ name: newTitle, description: newDesc }),
+            });
+            modal.hide();
+            await Promise.all([loadItems(), loadRecommendations()]);
+          } catch (error) {
+            window.alert(error.message);
+          }
+        };
+        const saveBtn = document.getElementById("editNtSaveBtn");
+        saveBtn.onclick = onSave;
         return;
       }
       const rateBtn = event.target.closest(".rate-btn");

@@ -675,19 +675,21 @@ def _next_deck_position(parent_deck_id: int | None) -> int:
     return int(max_pos or 0) + 1
 
 
-def _clone_deck_subtree(*, source_deck_id: int, parent_id: int | None, root_suffix: str | None) -> VocabularyDeck:
+def _clone_deck_subtree(
+    *,
+    source_deck_id: int,
+    parent_id: int | None,
+    owner_user_id: int | None = None,
+    root_suffix: str | None = None,
+) -> VocabularyDeck:
     source_deck = VocabularyDeck.query.get(source_deck_id)
     if not source_deck:
         raise ValueError(f"Deck not found: {source_deck_id}")
 
-    if parent_id is None and root_suffix:
-        cloned_name = f"{source_deck.name} ({root_suffix})"
-    else:
-        cloned_name = source_deck.name
-
     cloned_deck = VocabularyDeck(
         parent_id=parent_id,
-        name=cloned_name,
+        owner_user_id=owner_user_id,
+        name=source_deck.name,
         description=source_deck.description,
         position=_next_deck_position(parent_id),
     )
@@ -700,7 +702,6 @@ def _clone_deck_subtree(*, source_deck_id: int, parent_id: int | None, root_suff
             VocabularyEntry(
                 lesson_id=None,
                 deck_id=cloned_deck.id,
-                deck=entry.deck,
                 word=entry.word,
                 hanviet=entry.hanviet,
                 reading=entry.reading,
@@ -726,7 +727,11 @@ def _clone_deck_subtree(*, source_deck_id: int, parent_id: int | None, root_suff
         .all()
     )
     for child in child_decks:
-        _clone_deck_subtree(source_deck_id=child.id, parent_id=cloned_deck.id, root_suffix=None)
+        _clone_deck_subtree(
+            source_deck_id=child.id,
+            parent_id=cloned_deck.id,
+            owner_user_id=owner_user_id,
+        )
 
     return cloned_deck
 
@@ -1263,10 +1268,22 @@ def shared_note_types_page():
     return render_template("flashcards/shared_note_types.html")
 
 
+@flashcards_bp.route("/flashcards/shared-note-types/<note_type_id>")
+@login_required
+def shared_note_type_detail_page(note_type_id: str):
+    return render_template("flashcards/shared_note_type_detail.html", note_type_id=note_type_id)
+
+
 @flashcards_bp.route("/flashcards/shared-decks")
 @login_required
 def shared_decks_page():
     return render_template("flashcards/shared_decks.html")
+
+
+@flashcards_bp.route("/flashcards/shared-decks/<deck_item_id>")
+@login_required
+def shared_deck_detail_page(deck_item_id: str):
+    return render_template("flashcards/shared_deck_detail.html", deck_item_id=deck_item_id)
 
 
 @flashcards_bp.route("/flashcards/notes/new")
@@ -2239,6 +2256,34 @@ def publish_note_type(note_type_id: str):
     return jsonify(_serialize_note_type(note_type))
 
 
+def _get_shared_note_type_for_view(note_type_id: str) -> NoteType | None:
+    note_type = NoteType.query.get(note_type_id)
+    if not note_type:
+        return None
+
+    status = str(note_type.publish_status or "").strip().lower()
+    is_owner = note_type.user_id == current_user.id
+    if status == "private" and not is_owner:
+        return None
+    if status == "archived" and not is_owner:
+        return None
+    return note_type
+
+
+def _get_shared_deck_item_for_view(deck_item_id: str) -> DeckMarketplaceItem | None:
+    deck_item = DeckMarketplaceItem.query.get(deck_item_id)
+    if not deck_item:
+        return None
+
+    status = str(deck_item.publish_status or "").strip().lower()
+    is_owner = deck_item.owner_user_id == current_user.id
+    if status == "private" and not is_owner:
+        return None
+    if status == "archived" and not is_owner:
+        return None
+    return deck_item
+
+
 @flashcards_bp.route("/api/shared/note-types", methods=["GET"])
 @login_required
 def list_shared_note_types():
@@ -2281,28 +2326,19 @@ def list_shared_note_types():
 @flashcards_bp.route("/api/shared/note-types/<note_type_id>", methods=["GET"])
 @login_required
 def get_shared_note_type_detail(note_type_id: str):
-    note_type = NoteType.query.get(note_type_id)
+    note_type = _get_shared_note_type_for_view(note_type_id)
     if not note_type:
         return _api_error("FIELD_NOT_FOUND", "Note type not found.", status=404)
-
-    status = str(note_type.publish_status or "").strip().lower()
-    is_owner = note_type.user_id == current_user.id
-    if status == "private" and not is_owner:
-        return _api_error("FIELD_NOT_FOUND", "Note type not found.", status=404)
-    if status == "archived" and not is_owner:
-        return _api_error("FIELD_NOT_FOUND", "Note type not found.", status=404)
-    if status == "unlisted" and not is_owner:
-        # Unlisted is only reachable with direct link; this endpoint is that direct link.
-        pass
 
     install = NoteTypeInstall.query.filter_by(
         source_note_type_id=note_type.id,
         user_id=current_user.id,
     ).first()
     review = NoteTypeReview.query.filter_by(note_type_id=note_type.id, user_id=current_user.id).first()
-    payload = _serialize_note_type(note_type)
+    payload = _serialize_note_type_marketplace_card(note_type)
     payload["is_installed"] = install is not None
     payload["installed_note_type_id"] = install.installed_note_type_id if install else None
+    payload["is_owner"] = note_type.user_id == current_user.id
     payload["can_rate"] = _can_user_rate_note_type(note_type, user_id=current_user.id)
     payload["my_review"] = (
         {
@@ -2314,6 +2350,34 @@ def get_shared_note_type_detail(note_type_id: str):
         else None
     )
     return jsonify(payload)
+
+
+@flashcards_bp.route("/api/shared/note-types/<note_type_id>/templates/<template_id>/preview", methods=["POST"])
+@login_required
+def preview_shared_note_type_template(note_type_id: str, template_id: str):
+    note_type = _get_shared_note_type_for_view(note_type_id)
+    if not note_type:
+        return _api_error("FIELD_NOT_FOUND", "Note type not found.", status=404)
+
+    template = Template.query.filter_by(id=template_id, note_type_id=note_type.id).first()
+    if not template:
+        return _api_error("FIELD_NOT_FOUND", "Template not found.", status=404)
+
+    sample_field_values = _build_preview_sample_values(note_type.field_defs)
+
+    try:
+        rendered = render_template_pair(
+            template=template,
+            field_defs=note_type.field_defs,
+            field_values=sample_field_values,
+            media_assets=[],
+            preview_note_key=f"shared-preview:{note_type.id}",
+            allow_inline_script=True,
+        )
+    except TemplateCompileError as exc:
+        return _api_error("TEMPLATE_COMPILE_ERROR", str(exc), field="front_html")
+
+    return jsonify(rendered)
 
 
 @flashcards_bp.route("/api/shared/note-types/<note_type_id>/install", methods=["POST"])
@@ -2546,14 +2610,8 @@ def create_shared_deck_item():
 @flashcards_bp.route("/api/shared/decks/<deck_item_id>", methods=["GET"])
 @login_required
 def get_shared_deck_item(deck_item_id: str):
-    deck_item = DeckMarketplaceItem.query.get(deck_item_id)
+    deck_item = _get_shared_deck_item_for_view(deck_item_id)
     if not deck_item:
-        return _api_error("FIELD_NOT_FOUND", "Deck item not found.", status=404)
-    status = str(deck_item.publish_status or "").strip().lower()
-    is_owner = deck_item.owner_user_id == current_user.id
-    if status == "private" and not is_owner:
-        return _api_error("FIELD_NOT_FOUND", "Deck item not found.", status=404)
-    if status == "archived" and not is_owner:
         return _api_error("FIELD_NOT_FOUND", "Deck item not found.", status=404)
 
     install = DeckInstall.query.filter_by(deck_item_id=deck_item.id, user_id=current_user.id).first()
@@ -2561,6 +2619,7 @@ def get_shared_deck_item(deck_item_id: str):
     payload = _serialize_deck_marketplace_item(deck_item)
     payload["is_installed"] = install is not None
     payload["installed_deck_id"] = install.local_deck_id if install else None
+    payload["is_owner"] = deck_item.owner_user_id == current_user.id
     payload["can_rate"] = _can_user_rate_deck(deck_item, user_id=current_user.id)
     payload["my_review"] = (
         {
@@ -2628,7 +2687,7 @@ def install_shared_deck_item(deck_item_id: str):
         cloned_root = _clone_deck_subtree(
             source_deck_id=source_deck.id,
             parent_id=None,
-            root_suffix=current_user.username,
+            owner_user_id=current_user.id,
         )
         local_deck_id = cloned_root.id
 
@@ -2809,6 +2868,9 @@ def seed_marketplace_defaults():
         title="Official Starter Deck",
     ).first()
     source_deck = VocabularyDeck.query.order_by(VocabularyDeck.id.asc()).first()
+    # Stamp ownership on the source deck so it is recognised as admin-owned
+    if source_deck and source_deck.owner_user_id is None:
+        source_deck.owner_user_id = current_user.id
     if deck_item is None:
         deck_item = DeckMarketplaceItem(
             owner_user_id=current_user.id,

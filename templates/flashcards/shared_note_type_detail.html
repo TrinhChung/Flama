@@ -1,0 +1,345 @@
+{% extends "base.html" %}
+
+{% block title %}Chi tiết Template{% endblock %}
+
+{% block content %}
+<section class="py-3" id="shared-note-type-detail-root" data-note-type-id="{{ note_type_id }}">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <div>
+      <h2 class="h4 mb-0" id="nt-title">Đang tải...</h2>
+      <small class="text-muted" id="nt-meta-line"></small>
+    </div>
+    <div class="d-flex gap-2">
+      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('flashcards.shared_note_types_page') }}">Quay lại Shared NoteTypes</a>
+      <button class="btn btn-primary btn-sm" id="install-btn" type="button">Install</button>
+    </div>
+  </div>
+
+  <div class="alert alert-danger d-none" id="detail-error" role="alert"></div>
+
+  <div class="row g-3">
+    <div class="col-lg-5">
+      <div class="card card-body mb-3">
+        <h3 class="h6 mb-2">Thông tin template</h3>
+        <p class="mb-2" id="nt-description"></p>
+        <p class="small text-muted mb-2" id="nt-preview-text"></p>
+        <div class="mb-2" id="nt-tags"></div>
+        <div class="small text-muted" id="nt-stats"></div>
+      </div>
+
+      <div class="card card-body">
+        <h3 class="h6 mb-2">Đánh giá</h3>
+        <div class="small text-muted mb-2" id="my-review"></div>
+        <div class="row g-2 align-items-center">
+          <div class="col-4">
+            <label class="form-label mb-1" for="rating-value">Điểm</label>
+            <select class="form-select form-select-sm" id="rating-value">
+              <option value="5">5</option>
+              <option value="4">4</option>
+              <option value="3">3</option>
+              <option value="2">2</option>
+              <option value="1">1</option>
+            </select>
+          </div>
+          <div class="col-8">
+            <label class="form-label mb-1" for="rating-comment">Nhận xét</label>
+            <textarea class="form-control form-control-sm" id="rating-comment" rows="2" placeholder="Viết nhận xét (tuỳ chọn)"></textarea>
+          </div>
+        </div>
+        <div class="d-flex justify-content-between align-items-center mt-2">
+          <small class="text-muted" id="rating-hint"></small>
+          <button class="btn btn-outline-primary btn-sm" id="rating-submit-btn" type="button">Gửi đánh giá</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-7">
+      <div class="card card-body">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+          <h3 class="h6 mb-0">Preview template</h3>
+          <div class="d-flex gap-2 align-items-center">
+            <select class="form-select form-select-sm" id="template-select" style="min-width: 220px;"></select>
+            <div class="btn-group btn-group-sm" role="group" aria-label="Preview side">
+              <button class="btn btn-outline-secondary active" id="preview-side-front" type="button" data-side="front">Front</button>
+              <button class="btn btn-outline-secondary" id="preview-side-back" type="button" data-side="back">Back</button>
+            </div>
+          </div>
+        </div>
+        <iframe id="template-preview-frame" class="w-100 border rounded" style="min-height: 420px;" sandbox="allow-same-origin allow-scripts"></iframe>
+      </div>
+
+      <div class="card card-body mt-3">
+        <h3 class="h6 mb-2">Danh sách field</h3>
+        <div id="field-list" class="small text-muted"></div>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  (() => {
+    const root = document.getElementById("shared-note-type-detail-root");
+    if (!root) return;
+
+    const noteTypeId = root.getAttribute("data-note-type-id");
+    const titleEl = document.getElementById("nt-title");
+    const metaEl = document.getElementById("nt-meta-line");
+    const descriptionEl = document.getElementById("nt-description");
+    const previewTextEl = document.getElementById("nt-preview-text");
+    const tagsEl = document.getElementById("nt-tags");
+    const statsEl = document.getElementById("nt-stats");
+    const installBtn = document.getElementById("install-btn");
+    const ratingValueEl = document.getElementById("rating-value");
+    const ratingCommentEl = document.getElementById("rating-comment");
+    const ratingSubmitBtn = document.getElementById("rating-submit-btn");
+    const ratingHintEl = document.getElementById("rating-hint");
+    const myReviewEl = document.getElementById("my-review");
+    const templateSelectEl = document.getElementById("template-select");
+    const previewFrame = document.getElementById("template-preview-frame");
+    const frontBtn = document.getElementById("preview-side-front");
+    const backBtn = document.getElementById("preview-side-back");
+    const fieldListEl = document.getElementById("field-list");
+    const errorEl = document.getElementById("detail-error");
+
+    let detail = null;
+    let selectedTemplateId = "";
+    let previewPayload = null;
+    let previewSide = "front";
+
+    function showError(message) {
+      errorEl.textContent = message || "Request failed.";
+      errorEl.classList.remove("d-none");
+    }
+
+    function clearError() {
+      errorEl.textContent = "";
+      errorEl.classList.add("d-none");
+    }
+
+    function formatDate(isoString) {
+      if (!isoString) return "";
+      const date = new Date(isoString);
+      if (Number.isNaN(date.getTime())) return "";
+      return date.toLocaleString();
+    }
+
+    async function requestJson(url, options = {}) {
+      const response = await fetch(url, options);
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.message || "Request failed.");
+      return data;
+    }
+
+    function setLoadingPreview(message) {
+      const safeMessage = message || "Loading preview...";
+      previewFrame.srcdoc = "<!doctype html><html><body><div style='padding:12px;color:#6c757d;'>" + safeMessage + "</div></body></html>";
+    }
+
+    function renderTags(tags) {
+      tagsEl.innerHTML = "";
+      const normalized = Array.isArray(tags) ? tags : [];
+      if (!normalized.length) {
+        tagsEl.textContent = "Không có tags.";
+        return;
+      }
+      normalized.forEach((tag) => {
+        const span = document.createElement("span");
+        span.className = "badge bg-light text-dark border me-1 mb-1";
+        span.textContent = tag;
+        tagsEl.appendChild(span);
+      });
+    }
+
+    function renderFieldList(fields) {
+      const normalized = Array.isArray(fields) ? fields.slice().sort((a, b) => (a.position || 0) - (b.position || 0)) : [];
+      if (!normalized.length) {
+        fieldListEl.textContent = "Không có field.";
+        return;
+      }
+      const chips = normalized.map((field) => {
+        const required = field.required ? " (required)" : "";
+        return field.name + " [" + field.field_type + "]" + required;
+      });
+      fieldListEl.textContent = chips.join(" | ");
+    }
+
+    function renderTemplateSelect(templates) {
+      templateSelectEl.innerHTML = "";
+      const normalized = Array.isArray(templates) ? templates.slice().sort((a, b) => (a.position || 0) - (b.position || 0)) : [];
+      if (!normalized.length) {
+        const option = document.createElement("option");
+        option.value = "";
+        option.textContent = "Không có template";
+        templateSelectEl.appendChild(option);
+        templateSelectEl.disabled = true;
+        selectedTemplateId = "";
+        return;
+      }
+      normalized.forEach((template) => {
+        const option = document.createElement("option");
+        option.value = template.id;
+        option.textContent = template.is_default ? template.name + " (default)" : template.name;
+        templateSelectEl.appendChild(option);
+      });
+      if (!selectedTemplateId || !normalized.some((template) => template.id === selectedTemplateId)) {
+        selectedTemplateId = normalized[0].id;
+      }
+      templateSelectEl.value = selectedTemplateId;
+      templateSelectEl.disabled = false;
+    }
+
+    function renderInstallState() {
+      if (!detail) return;
+      if (detail.is_owner) {
+        installBtn.textContent = "Bạn là tác giả";
+        installBtn.disabled = true;
+        return;
+      }
+      if (detail.is_installed) {
+        installBtn.textContent = "Đã cài đặt";
+        installBtn.disabled = true;
+        return;
+      }
+      installBtn.textContent = detail.pricing_mode === "paid" ? "Mua / Cài đặt" : "Cài đặt";
+      installBtn.disabled = false;
+    }
+
+    function renderRatingState() {
+      if (!detail) return;
+      const review = detail.my_review || null;
+      if (review) {
+        myReviewEl.textContent = "Đánh giá của bạn: " + review.rating + "/5"
+          + (review.comment ? " - " + review.comment : "")
+          + (review.updated_at ? " (" + formatDate(review.updated_at) + ")" : "");
+        ratingValueEl.value = String(review.rating || 5);
+        ratingCommentEl.value = review.comment || "";
+      } else {
+        myReviewEl.textContent = "Bạn chưa đánh giá template này.";
+        ratingValueEl.value = "5";
+        ratingCommentEl.value = "";
+      }
+
+      if (detail.can_rate) {
+        ratingHintEl.textContent = "Bạn có thể đánh giá ngay.";
+        ratingValueEl.disabled = false;
+        ratingCommentEl.disabled = false;
+        ratingSubmitBtn.disabled = false;
+      } else {
+        ratingHintEl.textContent = "Cần cài đặt và dùng thực tế trước khi đánh giá.";
+        ratingValueEl.disabled = true;
+        ratingCommentEl.disabled = true;
+        ratingSubmitBtn.disabled = true;
+      }
+    }
+
+    function renderPreviewFrame() {
+      const html = previewSide === "back"
+        ? (previewPayload?.back_html || "")
+        : (previewPayload?.front_html || "");
+      const fallback = "<div style='padding:12px;color:#6c757d;'>Empty preview.</div>";
+      previewFrame.srcdoc = "<!doctype html><html><head><meta charset='utf-8'></head><body><div style='padding:8px;'>" + (html || fallback) + "</div></body></html>";
+    }
+
+    function applySideButtons() {
+      frontBtn.classList.toggle("active", previewSide === "front");
+      backBtn.classList.toggle("active", previewSide === "back");
+    }
+
+    async function loadPreview() {
+      if (!detail || !selectedTemplateId) {
+        setLoadingPreview("Không có template để preview.");
+        return;
+      }
+      setLoadingPreview();
+      previewPayload = await requestJson(`/api/shared/note-types/${noteTypeId}/templates/${selectedTemplateId}/preview`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      renderPreviewFrame();
+    }
+
+    async function loadDetail() {
+      clearError();
+      const previousTemplateId = selectedTemplateId;
+      detail = await requestJson(`/api/shared/note-types/${noteTypeId}`);
+
+      titleEl.textContent = detail.title || detail.name || "Shared template";
+      metaEl.textContent = "Tác giả: " + (detail.author?.username || "Unknown")
+        + " | Danh mục: " + (detail.primary_category || "General")
+        + " | Giá: " + (detail.price_display || "Free");
+      descriptionEl.textContent = detail.description || "Không có mô tả.";
+      previewTextEl.textContent = detail.preview_text || "Không có preview text.";
+      statsEl.textContent = "Rating: " + Number(detail.rating_avg || 0).toFixed(2)
+        + " (" + (detail.rating_count || 0) + ")"
+        + " | Active usage: " + (detail.active_usage_count || 0) + "/" + (detail.install_count || 0)
+        + " | Cập nhật: " + (formatDate(detail.updated_at) || "N/A");
+
+      renderTags(detail.tags || []);
+      renderFieldList(detail.field_defs || []);
+      selectedTemplateId = previousTemplateId;
+      renderTemplateSelect(detail.templates || []);
+      renderInstallState();
+      renderRatingState();
+
+      if (selectedTemplateId) {
+        await loadPreview();
+      } else {
+        setLoadingPreview("Không có template để preview.");
+      }
+    }
+
+    async function onInstall() {
+      if (!detail || detail.is_owner || detail.is_installed) return;
+      installBtn.disabled = true;
+      try {
+        await requestJson(`/api/shared/note-types/${noteTypeId}/install`, { method: "POST" });
+        await loadDetail();
+      } finally {
+        renderInstallState();
+      }
+    }
+
+    async function onRateSubmit() {
+      if (!detail || !detail.can_rate) return;
+      const rating = Number(ratingValueEl.value || "5");
+      if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+        window.alert("Rating phải từ 1 đến 5.");
+        return;
+      }
+      const comment = (ratingCommentEl.value || "").trim();
+      await requestJson(`/api/shared/note-types/${noteTypeId}/rate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rating, comment }),
+      });
+      await loadDetail();
+    }
+
+    installBtn?.addEventListener("click", () => {
+      onInstall().catch((error) => showError(error.message));
+    });
+
+    ratingSubmitBtn?.addEventListener("click", () => {
+      onRateSubmit().catch((error) => showError(error.message));
+    });
+
+    templateSelectEl?.addEventListener("change", () => {
+      selectedTemplateId = templateSelectEl.value;
+      loadPreview().catch((error) => showError(error.message));
+    });
+
+    [frontBtn, backBtn].forEach((button) => {
+      button?.addEventListener("click", () => {
+        previewSide = button.getAttribute("data-side") || "front";
+        applySideButtons();
+        renderPreviewFrame();
+      });
+    });
+
+    applySideButtons();
+    loadDetail().catch((error) => showError(error.message));
+  })();
+</script>
+{% endblock %}

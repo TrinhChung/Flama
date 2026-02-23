@@ -1,0 +1,361 @@
+{% extends "base.html" %}
+
+{% block title %}Chi tiết Deck{% endblock %}
+
+{% block content %}
+<section class="py-3" id="shared-deck-detail-root" data-deck-item-id="{{ deck_item_id }}">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <div>
+      <h2 class="h4 mb-0" id="deck-title">Đang tải...</h2>
+      <small class="text-muted" id="deck-meta-line"></small>
+    </div>
+    <div class="d-flex gap-2">
+      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('flashcards.shared_decks_page') }}">Quay lại Shared Decks</a>
+      <button class="btn btn-primary btn-sm" id="deck-install-btn" type="button">Install</button>
+    </div>
+  </div>
+
+  <div class="alert alert-danger d-none" id="deck-detail-error" role="alert"></div>
+
+  <div class="row g-3">
+    <div class="col-lg-5">
+      <div class="card card-body mb-3">
+        <h3 class="h6 mb-2">Thông tin deck</h3>
+        <p class="mb-2" id="deck-description"></p>
+        <p class="small text-muted mb-2" id="deck-preview-text"></p>
+        <div class="mb-2" id="deck-tags"></div>
+        <div class="small text-muted" id="deck-stats"></div>
+      </div>
+
+      <div class="card card-body">
+        <h3 class="h6 mb-2">Đánh giá</h3>
+        <div class="small text-muted mb-2" id="deck-my-review"></div>
+        <div class="row g-2 align-items-center">
+          <div class="col-4">
+            <label class="form-label mb-1" for="deck-rating-value">Điểm</label>
+            <select class="form-select form-select-sm" id="deck-rating-value">
+              <option value="5">5</option>
+              <option value="4">4</option>
+              <option value="3">3</option>
+              <option value="2">2</option>
+              <option value="1">1</option>
+            </select>
+          </div>
+          <div class="col-8">
+            <label class="form-label mb-1" for="deck-rating-comment">Nhận xét</label>
+            <textarea class="form-control form-control-sm" id="deck-rating-comment" rows="2" placeholder="Viết nhận xét (tuỳ chọn)"></textarea>
+          </div>
+        </div>
+        <div class="d-flex justify-content-between align-items-center mt-2">
+          <small class="text-muted" id="deck-rating-hint"></small>
+          <button class="btn btn-outline-primary btn-sm" id="deck-rating-submit-btn" type="button">Gửi đánh giá</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-7">
+      <div class="card card-body" id="deck-template-preview-card">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+          <div>
+            <h3 class="h6 mb-0">Preview cards</h3>
+            <small class="text-muted" id="deck-template-note"></small>
+          </div>
+          <div class="d-flex gap-2 align-items-center">
+            <a class="btn btn-outline-secondary btn-sm" id="source-note-type-link" href="#" target="_self">Xem chi tiết template nguồn</a>
+            <select class="form-select form-select-sm" id="deck-template-select" style="min-width: 220px;"></select>
+            <div class="btn-group btn-group-sm" role="group" aria-label="Deck preview side">
+              <button class="btn btn-outline-secondary active" id="deck-preview-side-front" type="button" data-side="front">Front</button>
+              <button class="btn btn-outline-secondary" id="deck-preview-side-back" type="button" data-side="back">Back</button>
+            </div>
+          </div>
+        </div>
+        <iframe id="deck-template-preview-frame" class="w-100 border rounded" style="min-height: 420px;" sandbox="allow-same-origin allow-scripts"></iframe>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  (() => {
+    const root = document.getElementById("shared-deck-detail-root");
+    if (!root) return;
+
+    const deckItemId = root.getAttribute("data-deck-item-id");
+    const noteTypeDetailUrlTemplate = "{{ url_for('flashcards.shared_note_type_detail_page', note_type_id='__NOTE_TYPE_ID__') }}";
+
+    const titleEl = document.getElementById("deck-title");
+    const metaEl = document.getElementById("deck-meta-line");
+    const descriptionEl = document.getElementById("deck-description");
+    const previewTextEl = document.getElementById("deck-preview-text");
+    const tagsEl = document.getElementById("deck-tags");
+    const statsEl = document.getElementById("deck-stats");
+    const installBtn = document.getElementById("deck-install-btn");
+    const myReviewEl = document.getElementById("deck-my-review");
+    const ratingValueEl = document.getElementById("deck-rating-value");
+    const ratingCommentEl = document.getElementById("deck-rating-comment");
+    const ratingHintEl = document.getElementById("deck-rating-hint");
+    const ratingSubmitBtn = document.getElementById("deck-rating-submit-btn");
+    const sourceNoteTypeLink = document.getElementById("source-note-type-link");
+    const templateNoteEl = document.getElementById("deck-template-note");
+    const templateSelectEl = document.getElementById("deck-template-select");
+    const previewFrame = document.getElementById("deck-template-preview-frame");
+    const frontBtn = document.getElementById("deck-preview-side-front");
+    const backBtn = document.getElementById("deck-preview-side-back");
+    const errorEl = document.getElementById("deck-detail-error");
+
+    let deckDetail = null;
+    let sourceNoteTypeDetail = null;
+    let selectedTemplateId = "";
+    let previewPayload = null;
+    let previewSide = "front";
+
+    function showError(message) {
+      errorEl.textContent = message || "Request failed.";
+      errorEl.classList.remove("d-none");
+    }
+
+    function clearError() {
+      errorEl.textContent = "";
+      errorEl.classList.add("d-none");
+    }
+
+    function formatDate(isoString) {
+      if (!isoString) return "";
+      const date = new Date(isoString);
+      if (Number.isNaN(date.getTime())) return "";
+      return date.toLocaleString();
+    }
+
+    function buildNoteTypeDetailUrl(noteTypeId) {
+      return noteTypeDetailUrlTemplate.replace("__NOTE_TYPE_ID__", encodeURIComponent(noteTypeId));
+    }
+
+    async function requestJson(url, options = {}) {
+      const response = await fetch(url, options);
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.message || "Request failed.");
+      return data;
+    }
+
+    function renderTags(tags) {
+      tagsEl.innerHTML = "";
+      const normalized = Array.isArray(tags) ? tags : [];
+      if (!normalized.length) {
+        tagsEl.textContent = "Không có tags.";
+        return;
+      }
+      normalized.forEach((tag) => {
+        const span = document.createElement("span");
+        span.className = "badge bg-light text-dark border me-1 mb-1";
+        span.textContent = tag;
+        tagsEl.appendChild(span);
+      });
+    }
+
+    function setLoadingPreview(message) {
+      const safeMessage = message || "Loading preview...";
+      previewFrame.srcdoc = "<!doctype html><html><body><div style='padding:12px;color:#6c757d;'>" + safeMessage + "</div></body></html>";
+    }
+
+    function renderPreviewFrame() {
+      const html = previewSide === "back"
+        ? (previewPayload?.back_html || "")
+        : (previewPayload?.front_html || "");
+      const fallback = "<div style='padding:12px;color:#6c757d;'>Empty preview.</div>";
+      previewFrame.srcdoc = "<!doctype html><html><head><meta charset='utf-8'></head><body><div style='padding:8px;'>" + (html || fallback) + "</div></body></html>";
+    }
+
+    function applySideButtons() {
+      frontBtn.classList.toggle("active", previewSide === "front");
+      backBtn.classList.toggle("active", previewSide === "back");
+    }
+
+    function renderInstallState() {
+      if (!deckDetail) return;
+      if (deckDetail.is_owner) {
+        installBtn.textContent = "Bạn là tác giả";
+        installBtn.disabled = true;
+        return;
+      }
+      if (deckDetail.is_installed) {
+        installBtn.textContent = "Đã cài đặt";
+        installBtn.disabled = true;
+        return;
+      }
+      installBtn.textContent = deckDetail.pricing_mode === "paid" ? "Mua / Cài đặt" : "Cài đặt";
+      installBtn.disabled = false;
+    }
+
+    function renderRatingState() {
+      if (!deckDetail) return;
+      const review = deckDetail.my_review || null;
+      if (review) {
+        myReviewEl.textContent = "Đánh giá của bạn: " + review.rating + "/5"
+          + (review.comment ? " - " + review.comment : "")
+          + (review.updated_at ? " (" + formatDate(review.updated_at) + ")" : "");
+        ratingValueEl.value = String(review.rating || 5);
+        ratingCommentEl.value = review.comment || "";
+      } else {
+        myReviewEl.textContent = "Bạn chưa đánh giá deck này.";
+        ratingValueEl.value = "5";
+        ratingCommentEl.value = "";
+      }
+
+      if (deckDetail.can_rate) {
+        ratingHintEl.textContent = "Bạn có thể đánh giá ngay.";
+        ratingValueEl.disabled = false;
+        ratingCommentEl.disabled = false;
+        ratingSubmitBtn.disabled = false;
+      } else {
+        ratingHintEl.textContent = "Cần cài đặt và dùng thực tế trước khi đánh giá.";
+        ratingValueEl.disabled = true;
+        ratingCommentEl.disabled = true;
+        ratingSubmitBtn.disabled = true;
+      }
+    }
+
+    function renderTemplateSelect(templates) {
+      templateSelectEl.innerHTML = "";
+      const normalized = Array.isArray(templates) ? templates.slice().sort((a, b) => (a.position || 0) - (b.position || 0)) : [];
+      if (!normalized.length) {
+        const option = document.createElement("option");
+        option.value = "";
+        option.textContent = "Không có template";
+        templateSelectEl.appendChild(option);
+        templateSelectEl.disabled = true;
+        selectedTemplateId = "";
+        return;
+      }
+      normalized.forEach((template) => {
+        const option = document.createElement("option");
+        option.value = template.id;
+        option.textContent = template.is_default ? template.name + " (default)" : template.name;
+        templateSelectEl.appendChild(option);
+      });
+      if (!selectedTemplateId || !normalized.some((template) => template.id === selectedTemplateId)) {
+        selectedTemplateId = normalized[0].id;
+      }
+      templateSelectEl.value = selectedTemplateId;
+      templateSelectEl.disabled = false;
+    }
+
+    async function loadTemplatePreview() {
+      if (!deckDetail || !deckDetail.source_note_type_id || !selectedTemplateId) {
+        setLoadingPreview("Deck này chưa có template preview.");
+        return;
+      }
+      setLoadingPreview();
+      previewPayload = await requestJson(`/api/shared/note-types/${deckDetail.source_note_type_id}/templates/${selectedTemplateId}/preview`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      renderPreviewFrame();
+    }
+
+    async function loadSourceNoteType() {
+      sourceNoteTypeDetail = null;
+      selectedTemplateId = "";
+      previewPayload = null;
+
+      if (!deckDetail || !deckDetail.source_note_type_id) {
+        sourceNoteTypeLink.classList.add("disabled");
+        sourceNoteTypeLink.setAttribute("href", "#");
+        templateNoteEl.textContent = "Deck này không liên kết note type nguồn.";
+        templateSelectEl.innerHTML = "<option value=''>Không có template</option>";
+        templateSelectEl.disabled = true;
+        setLoadingPreview("Deck này không có template preview.");
+        return;
+      }
+
+      sourceNoteTypeLink.classList.remove("disabled");
+      sourceNoteTypeLink.setAttribute("href", buildNoteTypeDetailUrl(deckDetail.source_note_type_id));
+
+      try {
+        sourceNoteTypeDetail = await requestJson(`/api/shared/note-types/${deckDetail.source_note_type_id}`);
+        renderTemplateSelect(sourceNoteTypeDetail.templates || []);
+        templateNoteEl.textContent = "Preview lấy từ note type nguồn: " + (sourceNoteTypeDetail.title || sourceNoteTypeDetail.name || "");
+        await loadTemplatePreview();
+      } catch (error) {
+        templateNoteEl.textContent = "Không thể tải template preview nguồn.";
+        templateSelectEl.innerHTML = "<option value=''>Không có template</option>";
+        templateSelectEl.disabled = true;
+        setLoadingPreview("Không có template preview khả dụng.");
+      }
+    }
+
+    async function loadDeckDetail() {
+      clearError();
+      deckDetail = await requestJson(`/api/shared/decks/${deckItemId}`);
+
+      titleEl.textContent = deckDetail.title || "Shared deck";
+      metaEl.textContent = "Tác giả: " + (deckDetail.author?.username || "Unknown")
+        + " | Danh mục: " + (deckDetail.primary_category || "General")
+        + " | Giá: " + (deckDetail.price_display || "Free");
+      descriptionEl.textContent = deckDetail.description || "Không có mô tả.";
+      previewTextEl.textContent = deckDetail.preview_text || "Không có preview text.";
+      statsEl.textContent = "Sample cards: " + (deckDetail.sample_cards_count || 0)
+        + " | Rating: " + Number(deckDetail.rating_avg || 0).toFixed(2) + " (" + (deckDetail.rating_count || 0) + ")"
+        + " | Active usage: " + (deckDetail.active_usage_count || 0) + "/" + (deckDetail.install_count || 0)
+        + " | Cập nhật: " + (formatDate(deckDetail.updated_at) || "N/A");
+
+      renderTags(deckDetail.tags || []);
+      renderInstallState();
+      renderRatingState();
+      await loadSourceNoteType();
+    }
+
+    async function onInstall() {
+      if (!deckDetail || deckDetail.is_owner || deckDetail.is_installed) return;
+      installBtn.disabled = true;
+      try {
+        await requestJson(`/api/shared/decks/${deckItemId}/install`, { method: "POST" });
+        await loadDeckDetail();
+      } finally {
+        renderInstallState();
+      }
+    }
+
+    async function onRateSubmit() {
+      if (!deckDetail || !deckDetail.can_rate) return;
+      const rating = Number(ratingValueEl.value || "5");
+      if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+        window.alert("Rating phải từ 1 đến 5.");
+        return;
+      }
+      const comment = (ratingCommentEl.value || "").trim();
+      await requestJson(`/api/shared/decks/${deckItemId}/rate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rating, comment }),
+      });
+      await loadDeckDetail();
+    }
+
+    installBtn?.addEventListener("click", () => {
+      onInstall().catch((error) => showError(error.message));
+    });
+
+    ratingSubmitBtn?.addEventListener("click", () => {
+      onRateSubmit().catch((error) => showError(error.message));
+    });
+
+    templateSelectEl?.addEventListener("change", () => {
+      selectedTemplateId = templateSelectEl.value;
+      loadTemplatePreview().catch((error) => showError(error.message));
+    });
+
+    [frontBtn, backBtn].forEach((button) => {
+      button?.addEventListener("click", () => {
+        previewSide = button.getAttribute("data-side") || "front";
+        applySideButtons();
+        renderPreviewFrame();
+      });
+    });
+
+    applySideButtons();
+    loadDeckDetail().catch((error) => showError(error.message));
+  })();
+</script>
+{% endblock %}
