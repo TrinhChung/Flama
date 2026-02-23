@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+
+{% block title %}Share Deck: {{ deck.name }}{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-6">
+            <div class="card shadow-sm border-0 root-card">
+                <div class="card-header bg-white border-bottom-0 pt-4 pb-0">
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <a href="{{ url_for('main.dashboard') }}"
+                            class="btn btn-sm btn-outline-secondary rounded-circle" aria-label="Back">
+                            <i class="bi bi-arrow-left"></i>
+                        </a>
+                        <h2 class="h5 mb-0 fw-bold">Publish to Marketplace</h2>
+                    </div>
+                    <p class="text-muted small mb-0">Deck: <strong class="text-dark">{{ deck.name }}</strong></p>
+                </div>
+
+                <div class="card-body pt-4">
+                    <form method="post" action="{{ url_for('flashcards.share_deck_page', deck_id=deck.id) }}">
+                        {% if existing_item %}
+                        <div class="alert alert-info py-2 small mb-4">
+                            <i class="bi bi-info-circle me-1"></i> Deck này đã được chia sẻ trước đó. Việc cập nhật sẽ
+                            áp dụng ngay lên Marketplace.
+                        </div>
+                        {% endif %}
+
+                        <div class="mb-3">
+                            <label for="title" class="form-label fw-semibold">Tên hiển thị (Title) <span
+                                    class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="title" name="title" required
+                                value="{{ existing_item.title if existing_item else deck.name }}"
+                                placeholder="Ví dụ: N3 Vocabulary Master">
+                        </div>
+
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-6">
+                                <label for="primary_category" class="form-label fw-semibold">Danh mục <span
+                                        class="text-danger">*</span></label>
+                                <select class="form-select" id="primary_category" name="primary_category" required>
+                                    <option value="Japanese" {% if existing_item and
+                                        existing_item.primary_category=='Japanese' %}selected{% endif %}>Tiếng Nhật
+                                    </option>
+                                    <option value="English" {% if existing_item and
+                                        existing_item.primary_category=='English' %}selected{% endif %}>Tiếng Anh
+                                    </option>
+                                    <option value="Korean" {% if existing_item and
+                                        existing_item.primary_category=='Korean' %}selected{% endif %}>Tiếng Hàn
+                                    </option>
+                                    <option value="Chinese" {% if existing_item and
+                                        existing_item.primary_category=='Chinese' %}selected{% endif %}>Tiếng Trung
+                                    </option>
+                                    <option value="Other" {% if existing_item and
+                                        existing_item.primary_category=='Other' %}selected{% endif %}>Khác</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="pricing_mode" class="form-label fw-semibold">Giá</label>
+                                <select class="form-select" id="pricing_mode" name="pricing_mode">
+                                    <option value="free" {% if not existing_item or existing_item.pricing_mode=='free'
+                                        %}selected{% endif %}>Miễn phí (Free)</option>
+                                    <option value="paid" {% if existing_item and existing_item.pricing_mode=='paid'
+                                        %}selected{% endif %}>Có phí (Paid)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="mb-3" id="price_cents_container" style="display: none;">
+                            <label for="price_cents" class="form-label fw-semibold">Giá trị (VNĐ)</label>
+                            <input type="number" class="form-control" id="price_cents" name="price_cents" min="0"
+                                step="1000" value="{{ existing_item.price_cents if existing_item else 0 }}">
+                            <small class="text-muted">Nhập số tiền VNĐ. Bỏ trống hoặc 0 nếu miễn phí.</small>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="tags" class="form-label fw-semibold">Tags (Phân cách bằng dấu phẩy)</label>
+                            <input type="text" class="form-control" id="tags" name="tags"
+                                value="{{ (existing_item.tags | join(', ')) if existing_item and existing_item.tags else '' }}"
+                                placeholder="jlpt, n3, vocabulary, kanji">
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="preview_text" class="form-label fw-semibold">Mô tả ngắn (Preview)</label>
+                            <input type="text" class="form-control" id="preview_text" name="preview_text" required
+                                maxlength="120" value="{{ existing_item.preview_text if existing_item else '' }}"
+                                placeholder="Câu tóm tắt xuất hiện ở thẻ tìm kiếm (tối đa 120 ký tự)">
+                        </div>
+
+                        <div class="mb-4">
+                            <label for="description" class="form-label fw-semibold">Mô tả chi tiết</label>
+                            <textarea class="form-control" id="description" name="description" rows="5" required
+                                placeholder="Giới thiệu chi tiết về nội dung deck, cách học, lợi ích, ...">{{ existing_item.description if existing_item else '' }}</textarea>
+                        </div>
+
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-primary fw-bold"
+                                style="background-color: var(--flama-orange-600); border-color: var(--flama-orange-600);">
+                                {% if existing_item %}Cập nhật thông tin chia sẻ{% else %}Chia sẻ lên Marketplace{%
+                                endif %}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const pricingSelect = document.getElementById('pricing_mode');
+        const priceContainer = document.getElementById('price_cents_container');
+
+        function togglePriceInput() {
+            if (pricingSelect.value === 'paid') {
+                priceContainer.style.display = 'block';
+            } else {
+                priceContainer.style.display = 'none';
+            }
+        }
+
+        pricingSelect.addEventListener('change', togglePriceInput);
+        togglePriceInput(); // Init on load
+    });
+</script>
+{% endblock %}

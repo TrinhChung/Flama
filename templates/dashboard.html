@@ -33,6 +33,11 @@
         <li>
           <hr class="dropdown-divider my-1">
         </li>
+        <li><a class="dropdown-item rounded-1 mx-1 px-3 text-primary fw-bold"
+            href="{{ url_for('flashcards.share_deck_page', deck_id=node.deck_id) }}">Share Deck</a></li>
+        <li>
+          <hr class="dropdown-divider my-1">
+        </li>
         <li><button class="dropdown-item deck-action-btn rounded-1 mx-1 px-3 text-warning fw-bold" type="button"
             data-action="reset" data-deck-id="{{ node.deck_id }}" data-deck-name="{{ node.label }}">Reset
             Progress</button></li>
@@ -51,30 +56,12 @@
 
 {% block content %}
 <div class="anki-home">
-  <div class="dash-toolbar" role="navigation" aria-label="Home actions">
-    <div class="dash-toolbar__nav">
-      <a class="dash-tab dash-tab--active" href="{{ url_for('main.dashboard') }}">
-        <i class="bi bi-collection"></i> Decks
-      </a>
-      <a class="dash-tab" id="study-tab-btn" href="{{ url_for('flashcards.flashcard_study_page') }}"
-        data-base-study-url="/vocabulary/study/deck/">
-        <i class="bi bi-play-circle"></i> Study
-      </a>
-      <a class="dash-tab" href="{{ url_for('main.dashboard') }}">
-        <i class="bi bi-bar-chart-line"></i> Stats
-      </a>
-    </div>
-    <div class="dash-toolbar__actions">
-      {% if admin_mode %}
-      <button type="button" class="dash-btn dash-btn--primary" id="create-deck-btn">
-        <i class="bi bi-plus-lg"></i> Tạo Deck
-      </button>
-      {% endif %}
-      <button type="button" class="dash-btn dash-btn--ghost" title="Đồng bộ dữ liệu">
-        <i class="bi bi-arrow-repeat"></i> Sync
-      </button>
-    </div>
-  </div>
+  {% set toolbar_variant = 'dashboard' %}
+  {% set toolbar_active_tab = 'decks' %}
+  {% set toolbar_aria_label = 'Home actions' %}
+  {% set toolbar_study_href = url_for('flashcards.flashcard_study_page') %}
+  {% set toolbar_study_base_url = '/vocabulary/study/deck/' %}
+  {% include 'components/deck/dashboard_toolbar.html' with context %}
   {% if admin_mode %}
   <form id="create-deck-form" method="post" action="{{ url_for('vocabulary.create_deck') }}" class="d-none">
     <input type="hidden" name="parent_id" id="create-deck-parent-id" value="" />
@@ -231,98 +218,6 @@
     max-width: 980px;
     margin: 0 auto;
     padding: 0.25rem 0 2rem;
-  }
-
-  /* ── Dashboard Toolbar ── */
-  .dash-toolbar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem;
-    margin-bottom: 1.5rem;
-    padding: 0.5rem 0.75rem;
-    background: var(--flama-surface);
-    border: 1px solid var(--flama-border);
-    border-radius: 14px;
-    box-shadow: 0 1px 4px rgba(31, 26, 23, 0.06);
-  }
-
-  .dash-toolbar__nav {
-    display: flex;
-    align-items: center;
-    gap: 0.25rem;
-  }
-
-  .dash-toolbar__actions {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
-
-  /* Nav tabs */
-  .dash-tab {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    padding: 0.45rem 0.9rem;
-    border-radius: 9px;
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-semibold);
-    color: var(--flama-text-2);
-    text-decoration: none;
-    transition: background 0.18s ease, color 0.18s ease;
-    white-space: nowrap;
-  }
-
-  .dash-tab:hover {
-    background: var(--flama-orange-50);
-    color: var(--flama-orange-600);
-  }
-
-  .dash-tab--active {
-    background: var(--flama-orange-50);
-    color: var(--flama-orange-600);
-    font-weight: var(--font-weight-bold);
-  }
-
-  /* Action buttons */
-  .dash-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    padding: 0.45rem 1rem;
-    border-radius: 9px;
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-semibold);
-    border: none;
-    cursor: pointer;
-    text-decoration: none;
-    transition: all 0.18s ease;
-    white-space: nowrap;
-  }
-
-  .dash-btn--primary {
-    background: var(--flama-gradient);
-    color: #fff;
-    box-shadow: 0 2px 8px rgba(254, 104, 8, 0.25);
-  }
-
-  .dash-btn--primary:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 14px rgba(254, 104, 8, 0.35);
-    color: #fff;
-  }
-
-  .dash-btn--ghost {
-    background: transparent;
-    color: var(--flama-text-2);
-    border: 1px solid var(--flama-border);
-  }
-
-  .dash-btn--ghost:hover {
-    background: var(--flama-orange-50);
-    border-color: var(--flama-orange-300);
-    color: var(--flama-orange-600);
   }
 
   /* ── Deck Board & Container ── */
@@ -571,33 +466,6 @@
 
   /* Mobile (<768px) */
   @media (max-width: 767px) {
-    .dash-toolbar {
-      flex-wrap: wrap;
-      gap: 0.5rem;
-      padding: 0.5rem;
-      border-radius: 10px;
-    }
-
-    .dash-toolbar__nav {
-      width: 100%;
-      justify-content: flex-start;
-    }
-
-    .dash-toolbar__actions {
-      width: 100%;
-      justify-content: flex-end;
-    }
-
-    .dash-tab {
-      font-size: 0.8rem;
-      padding: 0.35rem 0.65rem;
-    }
-
-    .dash-btn {
-      font-size: 0.8rem;
-      padding: 0.35rem 0.7rem;
-    }
-
     .head-right {
       display: none;
       /* Hide global column headers on mobile */

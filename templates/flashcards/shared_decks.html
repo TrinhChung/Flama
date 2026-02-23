@@ -121,7 +121,6 @@
       if (item.is_owner) {
         return `
           <div class="d-flex gap-2">
-            <a class="btn btn-sm btn-outline-secondary" href="${buildDetailUrl(item.id)}">Chi tiết</a>
             <button class="btn btn-sm btn-outline-warning edit-btn" data-id="${item.id}"
               data-title="${item.title}"
               data-description="${item.description || ''}">✏️ Chỉnh sửa</button>
@@ -132,7 +131,6 @@
       const installDisabled = item.is_installed ? "disabled" : "";
       return `
         <div class="d-flex gap-2">
-          <a class="btn btn-sm btn-outline-secondary" href="${buildDetailUrl(item.id)}">Chi tiết</a>
           <button class="btn btn-sm btn-primary install-btn" data-id="${item.id}" ${installDisabled}>${installLabel}</button>
           <button class="btn btn-sm btn-outline-secondary rate-btn" data-id="${item.id}">Rate</button>
         </div>
@@ -148,7 +146,7 @@
         <div class="list-group-item">
           <div class="d-flex justify-content-between align-items-start gap-2">
             <div>
-              <div class="fw-semibold">${item.title}</div>
+              <a href="${buildDetailUrl(item.id)}" class="fw-semibold text-reset text-decoration-none" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">${item.title}</a>
               <div class="small text-muted">By ${item.author?.username || "Unknown"} · ${item.primary_category || "General"} · ${item.price_display}</div>
               <div class="small mt-1">${item.description || ""}</div>
               <div class="small text-muted mt-1">Sample ${item.sample_cards_count || 0} · Rating ${Number(item.rating_avg || 0).toFixed(2)} (${item.rating_count || 0}) · Usage ${item.active_usage_count || 0}/${item.install_count || 0}</div>

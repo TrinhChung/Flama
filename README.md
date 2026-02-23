@@ -63,22 +63,31 @@ Lightweight Flask + MySQL starter project that focuses on user registration, log
 
 The server listens on `http://127.0.0.1:5000`.
 
-## Seed Vocabulary from `static/seed_data`
-- Command:
-  ```powershell
-  flask vocab-seed
-  ```
-- Default behavior:
-  - Tạo/duy trì level tên `Seed Data`.
-  - Mỗi folder con trong `static/seed_data` -> 1 `topic`.
-  - Mỗi file `.tsv`/`.csv` trong folder -> 1 `lesson` (dùng tên file bỏ phần mở rộng).
-  - Các dòng hợp lệ (`deck`, `word`) sẽ được import thành vocabulary entries.
-- Tùy chọn:
-  ```powershell
-  flask vocab-seed --level "JLPT N1 Seed"
-  flask vocab-seed --path "static/seed_data" --replace-lessons
-  ```
-  - `--replace-lessons`: Nếu lesson cùng tên đã tồn tại trong topic, xóa lesson cũ và nạp lại từ file.
+## Seed Vocabulary from `static/seed_data` (Runbook chuẩn)
+
+Để tránh seed thiếu dữ liệu, chạy theo đúng thứ tự:
+
+1. Chạy migration trước:
+   ```powershell
+   flask --app wsgi.py db upgrade
+   ```
+2. Chuẩn bị dữ liệu seed:
+   - Chỉ nhận file `.tsv` hoặc `.csv`.
+   - Cột bắt buộc: `deck`, `word` (không phân biệt hoa/thường, khoảng trắng sẽ đổi thành `_`).
+   - Dòng nào thiếu `deck` hoặc `word` sẽ bị bỏ qua.
+3. Seed lần đầu:
+   ```powershell
+   flask --app wsgi.py vocab-seed --path "static/seed_data"
+   ```
+4. Khi đã seed trước đó và muốn nạp lại file cũ (tránh bị thiếu dữ liệu mới), bắt buộc dùng:
+   ```powershell
+   flask --app wsgi.py vocab-seed --path "static/seed_data" --replace-lessons
+   ```
+
+Lưu ý quan trọng:
+- Mỗi folder trong `static/seed_data` tạo một deck node.
+- Mỗi file `.tsv/.csv` tạo một leaf deck (tên deck = tên file bỏ extension).
+- Nếu không có `--replace-lessons`, file đã có dữ liệu sẽ bị `Skip file (already seeded)`.
 
 ## Project Structure
 ```

@@ -29,6 +29,10 @@ def register():
             flash("Mật khẩu xác nhận không trùng khớp.", "danger")
             return render_template("register.html")
 
+        if username.lower() == email:
+            flash("Tên đăng nhập không được trùng với email.", "danger")
+            return render_template("register.html")
+
         existing_user = User.query.filter(
             (User.email == email) | (User.username == username)
         ).first()
@@ -71,6 +75,7 @@ def login():
             return render_template("login.html")
 
         user = User.query.filter_by(email=email).first()
+
         if not user or not user.check_password(password):
             flash("Thông tin đăng nhập không chính xác.", "danger")
             return render_template("login.html")

@@ -1,0 +1,55 @@
+{# Shared toolbar for deck dashboard/study pages #}
+{# Usage:
+  {% set toolbar_variant = 'dashboard' or 'study' %}
+  {% set toolbar_active_tab = 'decks' or 'study' or 'stats' %}
+  {% include 'components/deck/dashboard_toolbar.html' with context %}
+#}
+
+{% set toolbar_variant = toolbar_variant | default('dashboard') %}
+{% set toolbar_active_tab = toolbar_active_tab | default('decks') %}
+{% set toolbar_aria_label = toolbar_aria_label | default('Navigation actions') %}
+{% set toolbar_decks_href = toolbar_decks_href | default(url_for('main.dashboard')) %}
+{% set toolbar_study_href = toolbar_study_href | default(url_for('flashcards.flashcard_study_page')) %}
+{% set toolbar_study_base_url = toolbar_study_base_url | default('/vocabulary/study/deck/') %}
+{% set toolbar_stats_href = toolbar_stats_href | default(url_for('main.dashboard')) %}
+{% set toolbar_browse_href = toolbar_browse_href | default(url_for('vocabulary.index')) %}
+
+<div class="dash-toolbar" role="navigation" aria-label="{{ toolbar_aria_label }}">
+  <div class="dash-toolbar__nav">
+    <a class="dash-tab{% if toolbar_active_tab == 'decks' %} dash-tab--active{% endif %}" href="{{ toolbar_decks_href }}">
+      <i class="bi bi-collection"></i> Decks
+    </a>
+    <a
+      class="dash-tab{% if toolbar_active_tab == 'study' %} dash-tab--active{% endif %}"
+      href="{{ toolbar_study_href }}"
+      {% if toolbar_variant == 'dashboard' %}
+      id="study-tab-btn"
+      data-base-study-url="{{ toolbar_study_base_url }}"
+      {% endif %}
+    >
+      <i class="bi bi-play-circle"></i> Study
+    </a>
+    <a class="dash-tab{% if toolbar_active_tab == 'stats' %} dash-tab--active{% endif %}" href="{{ toolbar_stats_href }}">
+      <i class="bi bi-bar-chart-line"></i> Stats
+    </a>
+  </div>
+
+  <div class="dash-toolbar__actions">
+    {% if toolbar_variant == 'dashboard' %}
+      {% if admin_mode %}
+      <button type="button" class="dash-btn dash-btn--primary" id="create-deck-btn">
+        <i class="bi bi-plus-lg"></i> Tạo Deck
+      </button>
+      {% endif %}
+      <button type="button" class="dash-btn dash-btn--ghost" title="Đồng bộ dữ liệu">
+        <i class="bi bi-arrow-repeat"></i> Sync
+      </button>
+    {% elif toolbar_variant == 'study' %}
+      {% if admin_mode %}
+      <a class="dash-btn dash-btn--ghost" href="{{ toolbar_browse_href }}">
+        <i class="bi bi-search"></i> Browse
+      </a>
+      {% endif %}
+    {% endif %}
+  </div>
+</div>

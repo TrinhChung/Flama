@@ -224,10 +224,30 @@ def seed_template():
     app = create_app()
     with app.app_context():
         from models.user import User
-        user = User.query.first()
+        import os
+        from dotenv import load_dotenv
+
+        load_dotenv()
+        admin_email = os.environ.get("ADMIN_EMAIL", "chungtrinh2k2@gmail.com")
+        admin_user = os.environ.get("ADMIN_USER", "chungtrinh2k2")
+        admin_password = os.environ.get("ADMIN_PASSWORD", "chungtrinh1904")
+
+        user = User.query.filter_by(email=admin_email).first()
         if not user:
-            print("Lỗi: Không tìm thấy User nào trong DB để gán chủ sở hữu cho NoteType.")
-            return
+            user = User(
+                email=admin_email,
+                username=admin_user,
+                is_admin=True,
+            )
+            user.set_password(admin_password)
+            db.session.add(user)
+            db.session.commit()
+            print(f"Đã tạo admin user mới: {admin_email}")
+        else:
+            if not user.is_admin:
+                user.is_admin = True
+                db.session.commit()
+                print(f"Đã cập nhật quyền admin cho user: {admin_email}")
 
         # Kiểm tra xem NoteType "Flama Standard Vocabulary" đã có chưa
         note_type = NoteType.query.filter_by(name="Flama Standard Vocabulary", user_id=user.id).first()

@@ -1286,6 +1286,81 @@ def shared_deck_detail_page(deck_item_id: str):
     return render_template("flashcards/shared_deck_detail.html", deck_item_id=deck_item_id)
 
 
+@flashcards_bp.route("/flashcards/decks/<int:deck_id>/share", methods=["GET", "POST"])
+@login_required
+def share_deck_page(deck_id: int):
+    deck = VocabularyDeck.query.get_or_404(deck_id)
+    
+    # Validation 1: Ownership
+    if not is_admin_user(current_user) and deck.owner_user_id != current_user.id:
+        flash("Bạn không có quyền chia sẻ deck này.", "danger")
+        return redirect(url_for("main.dashboard"))
+
+    # Validation 2: Is downloaded deck (cannot re-share a downloaded deck)
+    if deck.owner_user_id == current_user.id:
+        from models.flashcard import DeckInstall
+        # If user has an install record for this exact local deck, block re-sharing
+        if DeckInstall.query.filter_by(user_id=current_user.id, local_deck_id=deck.id).first():
+            flash("Bạn không thể chia sẻ lại deck đã được cài đặt từ Marketplace.", "danger")
+            return redirect(url_for("main.dashboard"))
+        
+    # Validation 3: Child deck of a shared deck cannot be shared
+    from models.flashcard import DeckMarketplaceItem
+    current_parent = deck.parent_id
+    while current_parent is not None:
+        parent_deck = VocabularyDeck.query.get(current_parent)
+        if not parent_deck:
+            break
+        if DeckMarketplaceItem.query.filter_by(source_deck_id=parent_deck.id).first():
+            flash(f"Deck cha '{parent_deck.name}' đã được chia sẻ. Không thể chia sẻ riêng lẻ deck con.", "warning")
+            return redirect(url_for("main.dashboard"))
+        current_parent = parent_deck.parent_id
+
+    # Existing marketplace item
+    existing_item = DeckMarketplaceItem.query.filter_by(source_deck_id=deck.id).first()
+
+    if request.method == "POST":
+        title = request.form.get("title", "").strip()
+        description = request.form.get("description", "").strip()
+        preview_text = request.form.get("preview_text", "").strip()
+        primary_category = request.form.get("primary_category", "Japanese").strip()
+        tags_raw = request.form.get("tags", "")
+        tags = [t.strip() for t in tags_raw.split(",") if t.strip()]
+        pricing_mode = request.form.get("pricing_mode", "free")
+        # Ensure only published free, logic can be updated for payment later
+        price_cents = int(request.form.get("price_cents", 0)) if pricing_mode == "paid" else 0
+        
+        if not title:
+            flash("Tên hiển thị không được để trống.", "danger")
+            return render_template("flashcards/shared_deck_publish.html", deck=deck, existing_item=existing_item)
+            
+        if not existing_item:
+            existing_item = DeckMarketplaceItem(
+                source_deck_id=deck.id,
+                owner_user_id=current_user.id,
+                is_official=is_admin_user(current_user),
+                install_count=0,
+                rating_sum=0,
+                rating_count=0,
+            )
+            db.session.add(existing_item)
+            
+        existing_item.title = title
+        existing_item.description = description
+        existing_item.preview_text = preview_text
+        existing_item.primary_category = primary_category
+        existing_item.tags = tags
+        existing_item.pricing_mode = pricing_mode
+        existing_item.price_cents = price_cents
+        existing_item.publish_status = "published"
+        
+        db.session.commit()
+        flash("Tuyệt vời! Deck của bạn đã được chia sẻ lên Marketplace.", "success")
+        return redirect(url_for("flashcards.shared_decks_page"))
+
+    return render_template("flashcards/shared_deck_publish.html", deck=deck, existing_item=existing_item)
+
+
 @flashcards_bp.route("/flashcards/notes/new")
 @login_required
 def note_editor_page():
@@ -2849,7 +2924,29 @@ def seed_marketplace_defaults():
     if not is_admin_user(current_user):
         return _api_error("VALIDATION_ERROR", "Admin only endpoint.", status=403)
 
-    note_type, _template = ensure_legacy_note_type(db.session, current_user.id)
+    import os
+    from models.user import User
+    admin_email = os.environ.get("ADMIN_EMAIL", "chungtrinh2k2@gmail.com")
+    admin_user_name = os.environ.get("ADMIN_USER", "chungtrinh2k2")
+    admin_password = os.environ.get("ADMIN_PASSWORD", "chungtrinh1904")
+
+    system_admin = User.query.filter_by(email=admin_email).first()
+    if not system_admin:
+        system_admin = User(
+            email=admin_email,
+            username=admin_user_name,
+            is_admin=True,
+        )
+        system_admin.set_password(admin_password)
+        db.session.add(system_admin)
+        db.session.commit()
+    elif not system_admin.is_admin:
+        system_admin.is_admin = True
+        db.session.commit()
+
+    admin_id = system_admin.id
+
+    note_type, _template = ensure_legacy_note_type(db.session, admin_id)
     note_type.description = note_type.description or "Official default Japanese vocabulary note type."
     note_type.primary_category = note_type.primary_category or "Japanese"
     note_type.tags = note_type.tags or ["official", "default", "japanese"]
@@ -2863,17 +2960,17 @@ def seed_marketplace_defaults():
     _recompute_note_type_market_stats(note_type)
 
     deck_item = DeckMarketplaceItem.query.filter_by(
-        owner_user_id=current_user.id,
+        owner_user_id=admin_id,
         is_official=True,
         title="Official Starter Deck",
     ).first()
     source_deck = VocabularyDeck.query.order_by(VocabularyDeck.id.asc()).first()
     # Stamp ownership on the source deck so it is recognised as admin-owned
     if source_deck and source_deck.owner_user_id is None:
-        source_deck.owner_user_id = current_user.id
+        source_deck.owner_user_id = admin_id
     if deck_item is None:
         deck_item = DeckMarketplaceItem(
-            owner_user_id=current_user.id,
+            owner_user_id=admin_id,
             source_deck_id=source_deck.id if source_deck else None,
             source_note_type_id=note_type.id,
             title="Official Starter Deck",

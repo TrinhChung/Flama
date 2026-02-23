@@ -6,26 +6,12 @@
 
 {% block content %}
 <div class="study-page">
-  <div class="dash-toolbar" role="navigation" aria-label="Study actions">
-    <div class="dash-toolbar__nav">
-      <a class="dash-tab" href="{{ url_for('main.dashboard') }}">
-        <i class="bi bi-collection"></i> Decks
-      </a>
-      <a class="dash-tab dash-tab--active" href="#">
-        <i class="bi bi-play-circle"></i> Study
-      </a>
-      <a class="dash-tab" href="{{ url_for('main.dashboard') }}">
-        <i class="bi bi-bar-chart-line"></i> Stats
-      </a>
-    </div>
-    <div class="dash-toolbar__actions">
-      {% if admin_mode %}
-      <a class="dash-btn dash-btn--ghost" href="{{ url_for('vocabulary.index') }}">
-        <i class="bi bi-search"></i> Browse
-      </a>
-      {% endif %}
-    </div>
-  </div>
+  {% set toolbar_variant = 'study' %}
+  {% set toolbar_active_tab = 'study' %}
+  {% set toolbar_aria_label = 'Study actions' %}
+  {% set toolbar_study_href = '#' %}
+  {% set toolbar_browse_href = url_for('vocabulary.index') %}
+  {% include 'components/deck/dashboard_toolbar.html' with context %}
 
   <div class="deck-context-bar">
     <i class="bi bi-collection-fill deck-ctx-icon"></i>
@@ -228,17 +214,9 @@
   }
 
   /* ── Dashboard Toolbar (shared) ── */
-  .dash-toolbar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem;
+  .study-page .dash-toolbar {
     margin-bottom: 0.5rem;
     padding: 0.4rem 0.6rem;
-    background: var(--flama-surface);
-    border: 1px solid var(--flama-border);
-    border-radius: 14px;
-    box-shadow: 0 1px 4px rgba(31, 26, 23, 0.06);
     flex-shrink: 0;
   }
 
@@ -268,68 +246,20 @@
     max-width: 480px;
   }
 
-  .dash-toolbar__nav {
-    display: flex;
-    align-items: center;
+  .study-page .dash-toolbar__nav {
     gap: 0.2rem;
   }
 
-  .dash-toolbar__actions {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
-
-  .dash-tab {
-    display: inline-flex;
-    align-items: center;
+  .study-page .dash-tab {
     gap: 0.38rem;
     padding: 0.38rem 0.8rem;
-    border-radius: 9px;
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-semibold);
-    color: var(--flama-text-2);
-    text-decoration: none;
     transition: background 0.16s ease, color 0.16s ease;
-    white-space: nowrap;
   }
 
-  .dash-tab:hover {
-    background: var(--flama-orange-50);
-    color: var(--flama-orange-600);
-  }
-
-  .dash-tab--active {
-    background: var(--flama-orange-50);
-    color: var(--flama-orange-600);
-    font-weight: var(--font-weight-bold);
-  }
-
-  .dash-btn {
-    display: inline-flex;
-    align-items: center;
+  .study-page .dash-btn {
     gap: 0.38rem;
     padding: 0.38rem 0.9rem;
-    border-radius: 9px;
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-semibold);
-    border: none;
-    cursor: pointer;
-    text-decoration: none;
     transition: all 0.16s ease;
-    white-space: nowrap;
-  }
-
-  .dash-btn--ghost {
-    background: transparent;
-    color: var(--flama-text-2);
-    border: 1px solid var(--flama-border);
-  }
-
-  .dash-btn--ghost:hover {
-    background: var(--flama-orange-50);
-    border-color: var(--flama-orange-300);
-    color: var(--flama-orange-600);
   }
 
   .study-card-shell {

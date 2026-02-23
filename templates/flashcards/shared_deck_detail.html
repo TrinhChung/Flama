@@ -17,59 +17,100 @@
 
   <div class="alert alert-danger d-none" id="deck-detail-error" role="alert"></div>
 
-  <div class="row g-3">
-    <div class="col-lg-5">
-      <div class="card card-body mb-3">
-        <h3 class="h6 mb-2">Thông tin deck</h3>
-        <p class="mb-2" id="deck-description"></p>
-        <p class="small text-muted mb-2" id="deck-preview-text"></p>
-        <div class="mb-2" id="deck-tags"></div>
-        <div class="small text-muted" id="deck-stats"></div>
-      </div>
+  <style>
+    .shared-rating-stars {
+      display: inline-flex;
+      gap: 0.125rem;
+    }
 
-      <div class="card card-body">
-        <h3 class="h6 mb-2">Đánh giá</h3>
-        <div class="small text-muted mb-2" id="deck-my-review"></div>
-        <div class="row g-2 align-items-center">
-          <div class="col-4">
-            <label class="form-label mb-1" for="deck-rating-value">Điểm</label>
-            <select class="form-select form-select-sm" id="deck-rating-value">
-              <option value="5">5</option>
-              <option value="4">4</option>
-              <option value="3">3</option>
-              <option value="2">2</option>
-              <option value="1">1</option>
-            </select>
-          </div>
-          <div class="col-8">
-            <label class="form-label mb-1" for="deck-rating-comment">Nhận xét</label>
-            <textarea class="form-control form-control-sm" id="deck-rating-comment" rows="2" placeholder="Viết nhận xét (tuỳ chọn)"></textarea>
-          </div>
-        </div>
-        <div class="d-flex justify-content-between align-items-center mt-2">
-          <small class="text-muted" id="deck-rating-hint"></small>
-          <button class="btn btn-outline-primary btn-sm" id="deck-rating-submit-btn" type="button">Gửi đánh giá</button>
-        </div>
-      </div>
+    .shared-rating-star {
+      border: 0;
+      background: transparent;
+      padding: 0;
+      font-size: 1.65rem;
+      line-height: 1;
+      color: #c9ced6;
+      cursor: pointer;
+      transition: color .15s ease, transform .15s ease;
+    }
+
+    .shared-rating-star.is-active {
+      color: #f4b400;
+    }
+
+    .shared-rating-star:hover,
+    .shared-rating-star:focus-visible {
+      color: #f4b400;
+      transform: translateY(-1px);
+      outline: none;
+    }
+
+    .shared-rating-stars.is-disabled .shared-rating-star {
+      cursor: not-allowed;
+      opacity: 0.55;
+      transform: none;
+    }
+  </style>
+
+  <div class="mx-auto" style="max-width: 920px;">
+    <div class="card card-body mb-3">
+      <h3 class="h6 mb-2">Thông tin deck</h3>
+      <p class="mb-2" id="deck-description"></p>
+      <div class="mb-2" id="deck-tags"></div>
+      <p class="small text-muted mb-2" id="deck-preview-text"></p>
+      <div class="small text-muted" id="deck-stats"></div>
     </div>
 
-    <div class="col-lg-7">
-      <div class="card card-body" id="deck-template-preview-card">
-        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
-          <div>
-            <h3 class="h6 mb-0">Preview cards</h3>
-            <small class="text-muted" id="deck-template-note"></small>
-          </div>
-          <div class="d-flex gap-2 align-items-center">
-            <a class="btn btn-outline-secondary btn-sm" id="source-note-type-link" href="#" target="_self">Xem chi tiết template nguồn</a>
-            <select class="form-select form-select-sm" id="deck-template-select" style="min-width: 220px;"></select>
-            <div class="btn-group btn-group-sm" role="group" aria-label="Deck preview side">
-              <button class="btn btn-outline-secondary active" id="deck-preview-side-front" type="button" data-side="front">Front</button>
-              <button class="btn btn-outline-secondary" id="deck-preview-side-back" type="button" data-side="back">Back</button>
-            </div>
+    <div class="card card-body mb-3" id="deck-template-preview-card">
+      <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+        <div>
+          <h3 class="h6 mb-0">Preview cards</h3>
+          <small class="text-muted" id="deck-template-note"></small>
+        </div>
+        <div class="d-flex gap-2 align-items-center">
+          <a class="btn btn-outline-secondary btn-sm" id="source-note-type-link" href="#" target="_self">Xem chi tiết template nguồn</a>
+          <select class="form-select form-select-sm" id="deck-template-select" style="min-width: 220px;"></select>
+          <div class="btn-group btn-group-sm" role="group" aria-label="Deck preview side">
+            <button class="btn btn-outline-secondary active" id="deck-preview-side-front" type="button" data-side="front">Front</button>
+            <button class="btn btn-outline-secondary" id="deck-preview-side-back" type="button" data-side="back">Back</button>
           </div>
         </div>
-        <iframe id="deck-template-preview-frame" class="w-100 border rounded" style="min-height: 420px;" sandbox="allow-same-origin allow-scripts"></iframe>
+      </div>
+      <iframe id="deck-template-preview-frame" class="w-100 border rounded" style="min-height: 420px;" sandbox="allow-same-origin allow-scripts"></iframe>
+    </div>
+
+    <div class="card card-body">
+      <h3 class="h6 mb-2">Đánh giá</h3>
+      <div class="small text-muted mb-2" id="deck-my-review"></div>
+      <div class="row g-2 align-items-center">
+        <div class="col-12">
+          <label class="form-label mb-1" for="deck-rating-value">Điểm</label>
+          <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
+            <div class="shared-rating-stars" id="deck-rating-stars" role="radiogroup" aria-label="Chọn số sao">
+              <button type="button" class="shared-rating-star" role="radio" data-value="1" aria-label="1 sao" aria-checked="false">★</button>
+              <button type="button" class="shared-rating-star" role="radio" data-value="2" aria-label="2 sao" aria-checked="false">★</button>
+              <button type="button" class="shared-rating-star" role="radio" data-value="3" aria-label="3 sao" aria-checked="false">★</button>
+              <button type="button" class="shared-rating-star" role="radio" data-value="4" aria-label="4 sao" aria-checked="false">★</button>
+              <button type="button" class="shared-rating-star" role="radio" data-value="5" aria-label="5 sao" aria-checked="true">★</button>
+            </div>
+            <small class="text-muted fw-semibold" id="deck-rating-value-label">5/5</small>
+          </div>
+          <select class="form-select form-select-sm d-none" id="deck-rating-value" aria-hidden="true" tabindex="-1">
+            <option value="5">5</option>
+            <option value="4">4</option>
+            <option value="3">3</option>
+            <option value="2">2</option>
+            <option value="1">1</option>
+          </select>
+        </div>
+        <div class="col-12">
+          <label class="form-label mb-1" for="deck-rating-comment">Nhận xét</label>
+          <textarea class="form-control form-control-sm" id="deck-rating-comment" rows="2" placeholder="Viết nhận xét (tuỳ chọn)"></textarea>
+        </div>
+      </div>
+      <div class="d-flex justify-content-between align-items-center mt-2">
+        <small class="text-muted" id="deck-rating-hint"></small>
+        <button class="btn btn-outline-primary btn-sm" id="deck-rating-submit-btn" type="button">Gửi đánh giá</button>
       </div>
     </div>
   </div>
@@ -94,6 +135,9 @@
     const installBtn = document.getElementById("deck-install-btn");
     const myReviewEl = document.getElementById("deck-my-review");
     const ratingValueEl = document.getElementById("deck-rating-value");
+    const ratingStarsEl = document.getElementById("deck-rating-stars");
+    const ratingValueLabelEl = document.getElementById("deck-rating-value-label");
+    const ratingStarButtons = Array.from(ratingStarsEl?.querySelectorAll(".shared-rating-star") || []);
     const ratingCommentEl = document.getElementById("deck-rating-comment");
     const ratingHintEl = document.getElementById("deck-rating-hint");
     const ratingSubmitBtn = document.getElementById("deck-rating-submit-btn");
@@ -188,6 +232,45 @@
       installBtn.disabled = false;
     }
 
+    function normalizeRatingValue(value) {
+      const parsed = Number(value);
+      if (!Number.isInteger(parsed)) return 5;
+      return Math.max(1, Math.min(5, parsed));
+    }
+
+    function paintRatingStars(value) {
+      const normalized = normalizeRatingValue(value);
+      ratingStarButtons.forEach((button) => {
+        const starValue = Number(button.getAttribute("data-value") || "0");
+        const isActive = starValue <= normalized;
+        button.classList.toggle("is-active", isActive);
+        button.setAttribute("aria-checked", starValue === normalized ? "true" : "false");
+      });
+      if (ratingValueLabelEl) {
+        ratingValueLabelEl.textContent = normalized + "/5";
+      }
+    }
+
+    function setSelectedRating(value) {
+      const normalized = normalizeRatingValue(value);
+      ratingValueEl.value = String(normalized);
+      paintRatingStars(normalized);
+    }
+
+    function setRatingInputDisabled(disabled) {
+      const isDisabled = Boolean(disabled);
+      ratingValueEl.disabled = isDisabled;
+      ratingCommentEl.disabled = isDisabled;
+      ratingSubmitBtn.disabled = isDisabled;
+      if (ratingStarsEl) {
+        ratingStarsEl.classList.toggle("is-disabled", isDisabled);
+        ratingStarsEl.setAttribute("aria-disabled", isDisabled ? "true" : "false");
+      }
+      ratingStarButtons.forEach((button) => {
+        button.disabled = isDisabled;
+      });
+    }
+
     function renderRatingState() {
       if (!deckDetail) return;
       const review = deckDetail.my_review || null;
@@ -195,24 +278,20 @@
         myReviewEl.textContent = "Đánh giá của bạn: " + review.rating + "/5"
           + (review.comment ? " - " + review.comment : "")
           + (review.updated_at ? " (" + formatDate(review.updated_at) + ")" : "");
-        ratingValueEl.value = String(review.rating || 5);
+        setSelectedRating(review.rating || 5);
         ratingCommentEl.value = review.comment || "";
       } else {
         myReviewEl.textContent = "Bạn chưa đánh giá deck này.";
-        ratingValueEl.value = "5";
+        setSelectedRating(5);
         ratingCommentEl.value = "";
       }
 
       if (deckDetail.can_rate) {
         ratingHintEl.textContent = "Bạn có thể đánh giá ngay.";
-        ratingValueEl.disabled = false;
-        ratingCommentEl.disabled = false;
-        ratingSubmitBtn.disabled = false;
+        setRatingInputDisabled(false);
       } else {
         ratingHintEl.textContent = "Cần cài đặt và dùng thực tế trước khi đánh giá.";
-        ratingValueEl.disabled = true;
-        ratingCommentEl.disabled = true;
-        ratingSubmitBtn.disabled = true;
+        setRatingInputDisabled(true);
       }
     }
 
@@ -341,6 +420,33 @@
       onRateSubmit().catch((error) => showError(error.message));
     });
 
+    ratingStarButtons.forEach((button) => {
+      button.addEventListener("mouseenter", () => {
+        if (button.disabled) return;
+        paintRatingStars(button.getAttribute("data-value") || "5");
+      });
+
+      button.addEventListener("focus", () => {
+        if (button.disabled) return;
+        paintRatingStars(button.getAttribute("data-value") || "5");
+      });
+
+      button.addEventListener("click", () => {
+        if (button.disabled) return;
+        setSelectedRating(button.getAttribute("data-value") || "5");
+      });
+    });
+
+    ratingStarsEl?.addEventListener("mouseleave", () => {
+      paintRatingStars(ratingValueEl.value || "5");
+    });
+
+    ratingStarsEl?.addEventListener("focusout", (event) => {
+      if (!ratingStarsEl.contains(event.relatedTarget)) {
+        paintRatingStars(ratingValueEl.value || "5");
+      }
+    });
+
     templateSelectEl?.addEventListener("change", () => {
       selectedTemplateId = templateSelectEl.value;
       loadTemplatePreview().catch((error) => showError(error.message));
@@ -354,6 +460,8 @@
       });
     });
 
+    setSelectedRating(ratingValueEl.value || "5");
+    setRatingInputDisabled(true);
     applySideButtons();
     loadDeckDetail().catch((error) => showError(error.message));
   })();
