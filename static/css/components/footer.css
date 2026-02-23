@@ -28,8 +28,9 @@
 }
 
 .footer-icon {
-  font-size: 1.5rem;
-  line-height: 1;
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
 }
 
 .footer-name {
@@ -72,6 +73,31 @@
   text-align: center;
   color: #5a6372;
   font-size: 0.78rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.footer-legal-links {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.footer-legal-links a {
+  color: #7a8494;
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.footer-legal-links a:hover {
+  color: #c0c9d4;
+  text-decoration: underline;
+}
+
+.footer-dot {
+  color: #3d4553;
 }
 
 @media (max-width: 576px) {
@@ -83,4 +109,85 @@
   .footer-contact {
     max-width: 100%;
   }
+}
+
+/* ── Legal pages (Terms / Privacy) ── */
+.legal-page {
+  max-width: 780px;
+  margin: 0 auto;
+  padding: 2rem 0 4rem;
+}
+
+.legal-header {
+  margin-bottom: 2rem;
+  padding-bottom: 1rem;
+  border-bottom: 2px solid #e5e7eb;
+}
+
+.legal-header h1 {
+  font-size: 1.8rem;
+  font-weight: 700;
+  margin-bottom: 0.25rem;
+}
+
+.legal-updated {
+  color: #9ca3af;
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.legal-section {
+  margin-bottom: 2rem;
+}
+
+.legal-section h2 {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #1f2937;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.3rem;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.legal-section p,
+.legal-section li {
+  color: #374151;
+  line-height: 1.7;
+  font-size: 0.95rem;
+}
+
+.legal-section ul {
+  padding-left: 1.4rem;
+  margin: 0.5rem 0;
+}
+
+.legal-section li {
+  margin-bottom: 0.25rem;
+}
+
+.legal-warning {
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-left: 4px solid #f97316;
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  color: #9a3412;
+  font-size: 0.9rem;
+  margin-top: 0.75rem;
+}
+
+.legal-footer-links {
+  margin-top: 3rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid #e5e7eb;
+}
+
+.legal-footer-links a {
+  color: #f97316;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.legal-footer-links a:hover {
+  text-decoration: underline;
 }

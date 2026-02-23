@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+
+{% block title %}Chính sách bảo mật – Flama{% endblock %}
+
+{% block content %}
+<div class="legal-page">
+    <div class="legal-header">
+        <h1>Chính sách bảo mật</h1>
+        <p class="legal-updated">Cập nhật lần cuối: 23/02/2026</p>
+    </div>
+
+    <div class="legal-body">
+
+        <section class="legal-section">
+            <h2>1. Thông tin thu thập</h2>
+            <p>Flama có thể thu thập:</p>
+            <ul>
+                <li>Email đăng ký</li>
+                <li>Tên hiển thị</li>
+                <li>Dữ liệu flashcard</li>
+                <li>Lịch sử học tập</li>
+                <li>Địa chỉ IP</li>
+                <li>Thông tin thiết bị và trình duyệt</li>
+            </ul>
+        </section>
+
+        <section class="legal-section">
+            <h2>2. Mục đích sử dụng</h2>
+            <p>Dữ liệu được sử dụng để:</p>
+            <ul>
+                <li>Cung cấp dịch vụ</li>
+                <li>Đồng bộ dữ liệu</li>
+                <li>Cải thiện thuật toán học</li>
+                <li>Phát hiện gian lận hoặc hành vi bất thường</li>
+                <li>Bảo mật hệ thống</li>
+            </ul>
+        </section>
+
+        <section class="legal-section">
+            <h2>3. Bảo mật dữ liệu</h2>
+            <p>Flama áp dụng:</p>
+            <ul>
+                <li>Mã hóa HTTPS</li>
+                <li>Hash mật khẩu (bcrypt/argon2)</li>
+                <li>Phân quyền truy cập server</li>
+                <li>Sao lưu định kỳ</li>
+                <li>Giới hạn truy cập database nội bộ</li>
+            </ul>
+        </section>
+
+        <section class="legal-section">
+            <h2>4. Chia sẻ dữ liệu</h2>
+            <p><strong>Flama không bán dữ liệu người dùng.</strong></p>
+            <p>Dữ liệu chỉ được chia sẻ khi:</p>
+            <ul>
+                <li>Có yêu cầu pháp lý</li>
+                <li>Có sự đồng ý của người dùng</li>
+                <li>Cần thiết để vận hành dịch vụ (ví dụ: hosting provider)</li>
+            </ul>
+        </section>
+
+        <section class="legal-section">
+            <h2>5. Lưu trữ dữ liệu</h2>
+            <p>Dữ liệu được lưu trữ:</p>
+            <ul>
+                <li>Trên server bảo mật</li>
+                <li>Trong thời gian tài khoản còn hoạt động</li>
+            </ul>
+            <p>Người dùng có thể yêu cầu xóa tài khoản.</p>
+        </section>
+
+        <section class="legal-section">
+            <h2>6. Quyền của người dùng</h2>
+            <p>Người dùng có quyền:</p>
+            <ul>
+                <li>Yêu cầu truy cập dữ liệu</li>
+                <li>Yêu cầu chỉnh sửa</li>
+                <li>Yêu cầu xóa tài khoản</li>
+            </ul>
+            <p>
+                Để thực hiện các quyền trên, vui lòng liên hệ:
+                <a href="mailto:chungtrinh2k2@gmail.com">chungtrinh2k2@gmail.com</a>
+            </p>
+        </section>
+
+    </div>
+
+    <div class="legal-footer-links">
+        <a href="{{ url_for('main.terms') }}">Điều khoản sử dụng →</a>
+    </div>
+</div>
+{% endblock %}

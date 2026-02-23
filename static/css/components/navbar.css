@@ -17,8 +17,9 @@
 }
 
 .flama-icon {
-  font-size: 1.3rem;
-  line-height: 1;
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
 }
 
 .navbar-nav .nav-link {

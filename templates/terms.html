@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+
+{% block title %}Điều khoản sử dụng – Flama{% endblock %}
+
+{% block content %}
+<div class="legal-page">
+    <div class="legal-header">
+        <h1>Điều khoản sử dụng</h1>
+        <p class="legal-updated">Cập nhật lần cuối: 23/02/2026</p>
+    </div>
+
+    <div class="legal-body">
+
+        <section class="legal-section">
+            <h2>1. Giới thiệu</h2>
+            <p>
+                <strong>Flama</strong> là nền tảng học tập trực tuyến cung cấp hệ thống flashcard và công cụ quản lý
+                kiến thức.
+                Khi sử dụng Flama, bạn đồng ý tuân thủ các điều khoản dưới đây.
+            </p>
+            <p>Nếu bạn không đồng ý, vui lòng ngừng sử dụng dịch vụ.</p>
+        </section>
+
+        <section class="legal-section">
+            <h2>2. Quyền sở hữu nội dung</h2>
+            <p><strong>2.1.</strong> Tất cả nội dung, bao gồm nhưng không giới hạn:</p>
+            <ul>
+                <li>Hệ thống thuật toán lặp lại (spaced repetition)</li>
+                <li>Giao diện người dùng</li>
+                <li>Cơ sở dữ liệu mẫu</li>
+                <li>Tài liệu hướng dẫn</li>
+                <li>Logo, thương hiệu Flama</li>
+            </ul>
+            <p>đều thuộc quyền sở hữu của Flama.</p>
+
+            <p><strong>2.2.</strong> Người dùng <strong>không</strong> được phép:</p>
+            <ul>
+                <li>Sao chép, tải xuống hàng loạt (bulk download)</li>
+                <li>Trích xuất dữ liệu bằng bot, script, crawler</li>
+                <li>Reverse engineering hệ thống</li>
+                <li>Phân phối lại nội dung cho bên thứ ba</li>
+                <li>Tái sử dụng dữ liệu thương mại hóa khi chưa được phép</li>
+            </ul>
+            <div class="legal-warning">
+                ⚠️ Vi phạm có thể dẫn tới khóa tài khoản và xử lý pháp lý.
+            </div>
+        </section>
+
+        <section class="legal-section">
+            <h2>3. Nội dung do người dùng tạo</h2>
+            <p><strong>3.1.</strong> Người dùng sở hữu nội dung do mình tạo (deck, card, ghi chú).</p>
+            <p><strong>3.2.</strong> Tuy nhiên, khi sử dụng Flama, người dùng cấp cho Flama quyền:</p>
+            <ul>
+                <li>Lưu trữ</li>
+                <li>Xử lý</li>
+                <li>Hiển thị</li>
+                <li>Sao lưu dữ liệu</li>
+            </ul>
+            <p>phục vụ cho việc vận hành hệ thống.</p>
+            <p><strong>3.3.</strong> Người dùng chịu trách nhiệm về nội dung mình đăng tải.</p>
+        </section>
+
+        <section class="legal-section">
+            <h2>4. Bảo mật và chống sao chép</h2>
+            <p>Flama áp dụng các biện pháp kỹ thuật nhằm:</p>
+            <ul>
+                <li>Giới hạn request bất thường</li>
+                <li>Phát hiện hành vi scraping</li>
+                <li>Mã hóa dữ liệu truyền tải (HTTPS/TLS)</li>
+                <li>Giám sát truy cập trái phép</li>
+                <li>Giới hạn API (nếu có)</li>
+            </ul>
+            <p>Flama có quyền:</p>
+            <ul>
+                <li>Tạm khóa tài khoản nếu phát hiện hành vi thu thập dữ liệu bất thường</li>
+                <li>Giới hạn tốc độ truy cập</li>
+                <li>Yêu cầu xác minh bổ sung</li>
+            </ul>
+        </section>
+
+        <section class="legal-section">
+            <h2>5. Tài khoản</h2>
+            <p>Người dùng phải:</p>
+            <ul>
+                <li>Cung cấp thông tin chính xác</li>
+                <li>Không chia sẻ tài khoản cho người khác</li>
+                <li>Chịu trách nhiệm về hoạt động trên tài khoản của mình</li>
+            </ul>
+            <p>Flama có quyền đình chỉ hoặc xóa tài khoản vi phạm.</p>
+        </section>
+
+        <section class="legal-section">
+            <h2>6. Giới hạn trách nhiệm</h2>
+            <p>Flama không chịu trách nhiệm đối với:</p>
+            <ul>
+                <li>Mất dữ liệu do lỗi người dùng</li>
+                <li>Lỗi do thiết bị, mạng, bên thứ ba</li>
+                <li>Nội dung do người dùng tạo</li>
+            </ul>
+        </section>
+
+        <section class="legal-section">
+            <h2>7. Chấm dứt dịch vụ</h2>
+            <p>Flama có quyền:</p>
+            <ul>
+                <li>Thay đổi hoặc ngừng dịch vụ</li>
+                <li>Cập nhật điều khoản bất cứ lúc nào</li>
+            </ul>
+        </section>
+
+    </div>
+
+    <div class="legal-footer-links">
+        <a href="{{ url_for('main.privacy') }}">Chính sách bảo mật →</a>
+    </div>
+</div>
+{% endblock %}
