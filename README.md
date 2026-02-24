@@ -2,6 +2,11 @@
 
 Lightweight Flask + MySQL starter project that focuses on user registration, login, and logout using Flask-Login.
 
+## Documentation
+- Setup and basic commands: `README_SETUP.md`
+- One-command DB reseed script: `scripts/reseed_db.sh`
+- Flashcard V2 migration runbook: `docs/FLASHCARD_V2_RUNBOOK.md`
+
 ## Core Features
 - Flask application factory pattern with SQLAlchemy models.
 - Environment-based configuration via `.env` and `python-dotenv`.
@@ -12,82 +17,8 @@ Lightweight Flask + MySQL starter project that focuses on user registration, log
 
 ## Requirements
 - Python 3.10+
-- MySQL server with an empty schema (default name `nihongo`).
+- MySQL server with an empty schema (default name `flama`).
 - Python dependencies listed in `requirements.txt` (includes `cryptography` for MySQL caching_sha2 auth and `Flask-Migrate` for database migrations).
-
-## Quick Setup
-1. (Optional) Create a virtual environment:
-   ```powershell
-   python -m venv myenv
-   ```
-2. Activate the environment:
-   ```powershell
-   .\myenv\Scripts\Activate.ps1
-   ```
-3. Install dependencies:
-   ```powershell
-   pip install -r requirements.txt
-   ```
-4. Configure environment variables:
-   ```powershell
-   cp .env_example .env
-   ```
-   Edit `.env` with your local database credentials and settings.
-5. Ensure the MySQL database defined by `DB_NAME` exists.
-6. (Optional) Initialize migrations:
-   ```powershell
-   flask db init
-   flask db migrate -m "Initial tables"
-   flask db upgrade
-   ```
-7. (Optional) Nhập dữ liệu từ vựng bằng CSV:
-   - Đăng nhập, truy cập `http://127.0.0.1:5000/vocabulary`.
-   - Bấm **Nhập CSV**, dán nội dung với tiêu đề:
-     ```
-     Deck,Word,hanviet,Reading,Translation_VI,Meaning_JP,Meaning_VI,Usage_JP,Usage_VI,Example_JP,Example_VI,Additional_Note_JP,Additional_Note_VI,image,Diagram,Word_Audio,Example_Audio
-     ```
-   - Các cột bắt buộc: `Deck`, `Word`.
-8. (Optional) Mở từng bài để hiệu chỉnh dữ liệu inline:
-   - Tất cả từ vựng hiển thị trên một bảng; header tự cập nhật bài hiện tại dựa trên vị trí cuộn (mỗi 60 từ là một bài).
-   - Double click vào bất kỳ ô nào để phóng to, chỉnh sửa và nhấn `Enter`/`blur` để lưu (Shift+Enter giữ xuống dòng với các ô đa dòng).
-   - Phía cuối bảng có sẵn các hàng trống: double click vào từng ô để soạn thảo trước khi thêm dữ liệu mới.
-   - Có thể kéo chiều rộng tiêu đề cột; hệ thống sẽ ghi nhớ kích thước cho lần truy cập sau.
-9. Run the application:
-   ```powershell
-   flask run
-   ```
-   or
-   ```powershell
-   python wsgi.py
-   ```
-
-The server listens on `http://127.0.0.1:5000`.
-
-## Seed Vocabulary from `static/seed_data` (Runbook chuẩn)
-
-Để tránh seed thiếu dữ liệu, chạy theo đúng thứ tự:
-
-1. Chạy migration trước:
-   ```powershell
-   flask --app wsgi.py db upgrade
-   ```
-2. Chuẩn bị dữ liệu seed:
-   - Chỉ nhận file `.tsv` hoặc `.csv`.
-   - Cột bắt buộc: `deck`, `word` (không phân biệt hoa/thường, khoảng trắng sẽ đổi thành `_`).
-   - Dòng nào thiếu `deck` hoặc `word` sẽ bị bỏ qua.
-3. Seed lần đầu:
-   ```powershell
-   flask --app wsgi.py vocab-seed --path "static/seed_data"
-   ```
-4. Khi đã seed trước đó và muốn nạp lại file cũ (tránh bị thiếu dữ liệu mới), bắt buộc dùng:
-   ```powershell
-   flask --app wsgi.py vocab-seed --path "static/seed_data" --replace-lessons
-   ```
-
-Lưu ý quan trọng:
-- Mỗi folder trong `static/seed_data` tạo một deck node.
-- Mỗi file `.tsv/.csv` tạo một leaf deck (tên deck = tên file bỏ extension).
-- Nếu không có `--replace-lessons`, file đã có dữ liệu sẽ bị `Skip file (already seeded)`.
 
 ## Project Structure
 ```
@@ -108,13 +39,8 @@ templates/              # Jinja2 templates
 static/                 # Static assets
 requirements.txt        # Python dependencies
 .env                    # Environment configuration (never commit real secrets)
-myenv/                  # Optional local virtual environment
+.venv/                  # Optional local virtual environment
 ```
-
-## Next Ideas
-- Add email confirmation or password reset flows.
-- Introduce role-based access control for different user types.
-- Expand migration scripts with seed data or additional tables as features grow.
 
 ## Flashcard V2 (Anki-like)
 - New NoteType/FieldDef/Template/Note/Card/Media model is available.
@@ -127,8 +53,6 @@ myenv/                  # Optional local virtual environment
   - `/api/note-types`
   - `/api/notes`
   - `/api/study`
-- Migration + rollback runbook:
-  - `docs/FLASHCARD_V2_RUNBOOK.md`
 
 ### Assumptions recorded for review
 - Legacy data does not contain user ownership on `vocabulary_entries`; migration maps to one target user.

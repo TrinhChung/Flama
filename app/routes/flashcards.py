@@ -2472,13 +2472,14 @@ def study_answer(card_id: str):
     return jsonify({"success": True, "next_card_url": next_url, "intervals_preview": computeAnswerPreview(updated_state, default_deck_options(), now)})
 
 
+@flashcards_bp.route("/api/flashcards/seed-default-note-type", methods=["POST"])
 @flashcards_bp.route("/api/flashcards/seed-legacy", methods=["POST"])
 @login_required
 def seed_legacy_note_type():
     if not is_admin_user(current_user):
         return _api_error("VALIDATION_ERROR", "Admin only endpoint.", status=403)
     note_type, template = ensure_legacy_note_type(db.session, current_user.id)
-    _audit("legacy.seed", {"note_type_id": note_type.id, "template_id": template.id})
+    _audit("note_type.seed_default", {"note_type_id": note_type.id, "template_id": template.id})
     db.session.commit()
     return jsonify({"note_type_id": note_type.id, "template_id": template.id})
 
@@ -3219,7 +3220,7 @@ def seed_marketplace_defaults():
     import os
     from models.user import User
     admin_email = os.environ.get("ADMIN_EMAIL", "chungtrinh2k2@gmail.com")
-    admin_user_name = os.environ.get("ADMIN_USER", "chungtrinh2k2")
+    admin_user_name = os.environ.get("ADMIN_USERNAME") or os.environ.get("ADMIN_USER", "chungtrinh2k2")
     admin_password = os.environ.get("ADMIN_PASSWORD", "chungtrinh1904")
 
     system_admin = User.query.filter_by(email=admin_email).first()

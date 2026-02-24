@@ -1,49 +1,49 @@
-"""Legacy note type seed helpers used by migration and API flows."""
+"""Default note type seed helpers used by migration and API flows."""
 
 from __future__ import annotations
 
 from models.flashcard import FieldDef, NoteType, Template
 
-LEGACY_NOTE_TYPE_NAME = "Legacy Japanese"
+LEGACY_NOTE_TYPE_NAME = "Flama Standard Vocabulary"
 
 LEGACY_FIELD_DEFS = [
-    ("Word", "text", True),
+    ("word", "text", True),
     ("hanviet", "text", False),
-    ("Reading", "text", False),
-    ("Translation_VI", "text", False),
-    ("Meaning_JP", "richtext", False),
-    ("Meaning_VI", "richtext", False),
-    ("Usage_JP", "richtext", False),
-    ("Usage_VI", "richtext", False),
-    ("Example_JP", "richtext", False),
-    ("Example_VI", "richtext", False),
-    ("Additional_Note_JP", "richtext", False),
-    ("Additional_Note_VI", "richtext", False),
+    ("reading", "text", False),
+    ("translation_vi", "text", False),
+    ("meaning_jp", "richtext", False),
+    ("meaning_vi", "richtext", False),
+    ("usage_jp", "richtext", False),
+    ("usage_vi", "richtext", False),
+    ("example_jp", "richtext", False),
+    ("example_vi", "richtext", False),
+    ("additional_note_jp", "richtext", False),
+    ("additional_note_vi", "richtext", False),
     ("image", "image", False),
-    ("Diagram", "diagram", False),
-    ("Word_Audio", "audio", False),
-    ("Example_Audio", "audio", False),
+    ("diagram", "image", False),
+    ("word_audio", "audio", False),
+    ("example_audio", "audio", False),
 ]
 
-LEGACY_FRONT_TEMPLATE = """<div class="legacy-front">{{Word}}</div>"""
+LEGACY_FRONT_TEMPLATE = """<div class="legacy-front">{{word}}</div>"""
 
 LEGACY_BACK_TEMPLATE = """
 <div class="legacy-back">
-  <div class="word-line">{{Word}}</div>
-  {{#Reading}}<div class="reading-line">{{Reading}} {{#hanviet}}「{{hanviet}}」{{/hanviet}}</div>{{/Reading}}
-  {{#Translation_VI}}<div class="translation-line">{{Translation_VI}}</div>{{/Translation_VI}}
-  {{#Meaning_JP}}<div class="meaning-jp">{{{Meaning_JP}}}</div>{{/Meaning_JP}}
-  {{#Meaning_VI}}<div class="meaning-vi">{{{Meaning_VI}}}</div>{{/Meaning_VI}}
-  {{#Usage_JP}}<div class="usage-jp">{{{Usage_JP}}}</div>{{/Usage_JP}}
-  {{#Usage_VI}}<div class="usage-vi">{{{Usage_VI}}}</div>{{/Usage_VI}}
-  {{#Example_JP}}<div class="example-jp">{{{Example_JP}}}</div>{{/Example_JP}}
-  {{#Example_VI}}<div class="example-vi">{{{Example_VI}}}</div>{{/Example_VI}}
-  {{#Additional_Note_JP}}<div class="note-jp">{{{Additional_Note_JP}}}</div>{{/Additional_Note_JP}}
-  {{#Additional_Note_VI}}<div class="note-vi">{{{Additional_Note_VI}}}</div>{{/Additional_Note_VI}}
+  <div class="word-line">{{word}}</div>
+  {{#reading}}<div class="reading-line">{{reading}} {{#hanviet}}「{{hanviet}}」{{/hanviet}}</div>{{/reading}}
+  {{#translation_vi}}<div class="translation-line">{{translation_vi}}</div>{{/translation_vi}}
+  {{#meaning_jp}}<div class="meaning-jp">{{{meaning_jp}}}</div>{{/meaning_jp}}
+  {{#meaning_vi}}<div class="meaning-vi">{{{meaning_vi}}}</div>{{/meaning_vi}}
+  {{#usage_jp}}<div class="usage-jp">{{{usage_jp}}}</div>{{/usage_jp}}
+  {{#usage_vi}}<div class="usage-vi">{{{usage_vi}}}</div>{{/usage_vi}}
+  {{#example_jp}}<div class="example-jp">{{{example_jp}}}</div>{{/example_jp}}
+  {{#example_vi}}<div class="example-vi">{{{example_vi}}}</div>{{/example_vi}}
+  {{#additional_note_jp}}<div class="note-jp">{{{additional_note_jp}}}</div>{{/additional_note_jp}}
+  {{#additional_note_vi}}<div class="note-vi">{{{additional_note_vi}}}</div>{{/additional_note_vi}}
   {{#image}}<div class="image">{{{image}}}</div>{{/image}}
-  {{#Diagram}}<div class="diagram">{{{Diagram}}}</div>{{/Diagram}}
-  {{#Word_Audio}}<div class="word-audio">{{{Word_Audio}}}</div>{{/Word_Audio}}
-  {{#Example_Audio}}<div class="example-audio">{{{Example_Audio}}}</div>{{/Example_Audio}}
+  {{#diagram}}<div class="diagram">{{{diagram}}}</div>{{/diagram}}
+  {{#word_audio}}<div class="word-audio">{{{word_audio}}}</div>{{/word_audio}}
+  {{#example_audio}}<div class="example-audio">{{{example_audio}}}</div>{{/example_audio}}
 </div>
 """
 
@@ -66,7 +66,19 @@ def ensure_legacy_note_type(db_session, user_id: int) -> tuple[NoteType, Templat
         .first()
     )
     if note_type is None:
-        note_type = NoteType(user_id=user_id, name=LEGACY_NOTE_TYPE_NAME)
+        note_type = NoteType(
+            user_id=user_id,
+            name=LEGACY_NOTE_TYPE_NAME,
+            description="Official default Japanese vocabulary note type by Flama.",
+            primary_category="Japanese",
+            tags=["official", "default", "japanese", "vocabulary"],
+            preview_text="Word / Reading / Meaning / Example layout.",
+            pricing_mode="free",
+            price_cents=0,
+            version="1.0.0",
+            is_official=True,
+            publish_status="published",
+        )
         db_session.add(note_type)
         db_session.flush()
 
@@ -96,7 +108,7 @@ def ensure_legacy_note_type(db_session, user_id: int) -> tuple[NoteType, Templat
     if template is None:
         template = Template(
             note_type_id=note_type.id,
-            name="Legacy",
+            name="Default Flama Flashcard",
             front_html=LEGACY_FRONT_TEMPLATE.strip(),
             back_html=LEGACY_BACK_TEMPLATE.strip(),
             shared_css=LEGACY_SHARED_CSS.strip(),
