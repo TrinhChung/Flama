@@ -232,7 +232,7 @@ def seed_template():
 
         load_dotenv()
         admin_email = os.environ.get("ADMIN_EMAIL", "chungtrinh2k2@gmail.com")
-        admin_user = os.environ.get("ADMIN_USER", "chungtrinh2k2")
+        admin_user = os.environ.get("ADMIN_USERNAME") or os.environ.get("ADMIN_USER", "chungtrinh2k2")
         admin_password = os.environ.get("ADMIN_PASSWORD", "chungtrinh1904")
 
         user = User.query.filter_by(email=admin_email).first()

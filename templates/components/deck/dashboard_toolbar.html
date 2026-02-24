@@ -11,7 +11,8 @@
 {% set toolbar_decks_href = toolbar_decks_href | default(url_for('main.dashboard')) %}
 {% set toolbar_study_href = toolbar_study_href | default(url_for('flashcards.flashcard_study_page')) %}
 {% set toolbar_study_base_url = toolbar_study_base_url | default('/vocabulary/study/deck/') %}
-{% set toolbar_stats_href = toolbar_stats_href | default(url_for('main.dashboard')) %}
+{% set toolbar_stats_href = toolbar_stats_href | default(url_for('main.statistics_page')) %}
+{% set toolbar_stats_base_url = toolbar_stats_base_url | default(url_for('main.statistics_page')) %}
 {% set toolbar_browse_href = toolbar_browse_href | default(url_for('vocabulary.browse')) %}
 {% set toolbar_browse_context = toolbar_browse_context | default(toolbar_variant) %}
 {% set toolbar_current_deck_id = toolbar_current_deck_id | default('') %}
@@ -33,7 +34,14 @@
     >
       <i class="bi bi-play-circle"></i> Study
     </a>
-    <a class="dash-tab{% if toolbar_active_tab == 'stats' %} dash-tab--active{% endif %}" href="{{ toolbar_stats_href }}">
+    <a
+      class="dash-tab{% if toolbar_active_tab == 'stats' %} dash-tab--active{% endif %}"
+      href="{{ toolbar_stats_href }}"
+      {% if toolbar_variant == 'dashboard' %}
+      id="stats-tab-btn"
+      data-base-stats-url="{{ toolbar_stats_base_url }}"
+      {% endif %}
+    >
       <i class="bi bi-bar-chart-line"></i> Stats
     </a>
   </div>

@@ -58,6 +58,7 @@
 
     let currentCard = null;
     let showingBack = false;
+    let cardShownAtMs = null;
 
     function setStatus(message) {
       statusEl.textContent = message;
@@ -93,12 +94,14 @@
         const data = await requestJson(`/api/study/next?scope=${encodeURIComponent(scope)}&scope_id=${encodeURIComponent(scopeId)}`);
         if (!data.card_id) {
           currentCard = null;
+          cardShownAtMs = null;
           renderCardFace();
           setStatus(data.message || "No due cards.");
           return;
         }
         currentCard = data;
         showingBack = false;
+        cardShownAtMs = performance.now();
         renderCardFace();
         setStatus(`Loaded card ${data.card_id}`);
       } catch (error) {
@@ -112,10 +115,16 @@
         return;
       }
       try {
+        const durationMs = cardShownAtMs == null ? null : Math.max(0, Math.round(performance.now() - cardShownAtMs));
+        const timezone =
+          (typeof Intl !== "undefined" &&
+            Intl.DateTimeFormat &&
+            Intl.DateTimeFormat().resolvedOptions().timeZone) ||
+          "UTC";
         const data = await requestJson(`/api/study/${currentCard.card_id}/answer`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ rating }),
+          body: JSON.stringify({ rating, duration_ms: durationMs, timezone }),
         });
         setStatus(`Answer saved (${rating}). Loading next card...`);
         await loadNextCard();

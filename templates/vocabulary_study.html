@@ -13,6 +13,11 @@
   {% set toolbar_browse_href = url_for('vocabulary.browse') %}
   {% set toolbar_browse_context = 'study' %}
   {% if study_scope == 'deck' %}
+  {% set toolbar_stats_href = url_for('main.statistics_page', deck_id=study_scope_id) %}
+  {% else %}
+  {% set toolbar_stats_href = url_for('main.statistics_page') %}
+  {% endif %}
+  {% if study_scope == 'deck' %}
   {% set toolbar_current_deck_id = study_scope_id %}
   {% else %}
   {% set toolbar_current_deck_id = '' %}
@@ -635,6 +640,7 @@
     const showAnswerBtn = document.getElementById("show-answer-btn");
     const frontActions = document.getElementById("front-actions");
     const backActions = document.getElementById("back-actions");
+    const cardShownAtMs = performance.now();
 
     function showBack() {
       if (!front || !back || !frontActions || !backActions) {
@@ -670,6 +676,12 @@
       if (!entryId || !rating) {
         return;
       }
+      const durationMs = Math.max(0, Math.round(performance.now() - cardShownAtMs));
+      const timezone =
+        (typeof Intl !== "undefined" &&
+          Intl.DateTimeFormat &&
+          Intl.DateTimeFormat().resolvedOptions().timeZone) ||
+        "UTC";
       const res = await fetch(`{{ url_for('vocabulary.study_answer', entry_id=0) }}`.replace("/0/", `/${entryId}/`), {
         method: "POST",
         headers: {
@@ -678,7 +690,9 @@
         body: JSON.stringify({
           rating,
           scope: studyScope,
-          scope_id: scopeId || null
+          scope_id: scopeId || null,
+          duration_ms: durationMs,
+          timezone
         })
       });
       const data = await res.json().catch(() => ({}));

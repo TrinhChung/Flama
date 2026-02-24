@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import random
 from datetime import datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -42,6 +43,11 @@ from app.services.flashcard_renderer import (
     is_field_empty,
     render_template_pair,
     sanitize_richtext,
+)
+from app.services.stats_overview import (
+    normalize_review_mode,
+    record_review_event,
+    update_user_timezone,
 )
 from app.utils.permissions import is_admin_user
 from models import db
@@ -94,6 +100,7 @@ NOTE_TYPE_ACTIVE_DAYS_THRESHOLD = 3
 DECK_ACTIVE_REVIEW_THRESHOLD = 3
 TRENDING_WINDOW_DAYS = 7
 RECENCY_WINDOW_DAYS = 30
+SHARED_DECK_TEST_SAMPLE_LIMIT = 5
 
 
 def _api_error(
@@ -636,6 +643,153 @@ def _serialize_deck_marketplace_item(deck_item: DeckMarketplaceItem) -> dict[str
     }
 
 
+def _collect_deck_subtree_ids(root_deck_id: int | None) -> list[int]:
+    if root_deck_id is None:
+        return []
+
+    seen: set[int] = set()
+    frontier: set[int] = {int(root_deck_id)}
+    while frontier:
+        current_ids = {deck_id for deck_id in frontier if deck_id not in seen}
+        if not current_ids:
+            break
+
+        seen.update(current_ids)
+        child_rows = (
+            db.session.query(VocabularyDeck.id)
+            .filter(VocabularyDeck.parent_id.in_(current_ids))
+            .all()
+        )
+        frontier = {int(row[0]) for row in child_rows if row and row[0] is not None}
+
+    return sorted(seen)
+
+
+def _extract_entry_meaning_for_test(entry: VocabularyEntry) -> str:
+    for raw_value in (
+        entry.translation_vi,
+        entry.meaning_vi,
+        entry.meaning_jp,
+        entry.usage_vi,
+        entry.usage_jp,
+    ):
+        text = (raw_value or "").strip()
+        if text:
+            return text
+    return ""
+
+
+def _serialize_vocabulary_entry_test_sample(entry: VocabularyEntry) -> dict[str, Any]:
+    return {
+        "entry_id": int(entry.id),
+        "note_id": None,
+        "word": (entry.word or "").strip(),
+        "reading": (entry.reading or "").strip(),
+        "meaning": _extract_entry_meaning_for_test(entry),
+    }
+
+
+def _first_non_empty_field_text(field_values: dict[str, Any], keys: list[str]) -> str:
+    for key in keys:
+        if key not in field_values:
+            continue
+        candidate = field_values.get(key)
+        if candidate is None:
+            continue
+        text = str(candidate).strip()
+        if text:
+            return text
+    return ""
+
+
+def _serialize_note_test_sample(note: Note) -> dict[str, Any] | None:
+    field_values = note.field_values if isinstance(note.field_values, dict) else {}
+
+    word = _first_non_empty_field_text(
+        field_values,
+        ["Word", "word", "Term", "term", "Vocabulary", "vocabulary"],
+    )
+    if not word:
+        for raw_value in field_values.values():
+            if raw_value is None:
+                continue
+            text = str(raw_value).strip()
+            if text:
+                word = text
+                break
+    if not word:
+        return None
+
+    reading = _first_non_empty_field_text(
+        field_values,
+        ["Reading", "reading", "Kana", "kana", "Yomigana", "yomigana"],
+    )
+    meaning = _first_non_empty_field_text(
+        field_values,
+        [
+            "Meaning",
+            "meaning",
+            "Meaning_VI",
+            "meaning_vi",
+            "Meaning_JP",
+            "meaning_jp",
+            "Translation_VI",
+            "translation_vi",
+        ],
+    )
+
+    return {
+        "entry_id": None,
+        "note_id": note.id,
+        "word": word,
+        "reading": reading,
+        "meaning": meaning,
+    }
+
+
+def _build_shared_deck_test_samples(
+    deck_item: DeckMarketplaceItem,
+    *,
+    limit: int = SHARED_DECK_TEST_SAMPLE_LIMIT,
+) -> list[dict[str, Any]]:
+    if limit <= 0:
+        return []
+    if deck_item.source_deck_id is None:
+        return []
+
+    deck_ids = _collect_deck_subtree_ids(deck_item.source_deck_id)
+    if not deck_ids:
+        return []
+
+    note_query = Note.query.filter(Note.deck_id.in_(deck_ids))
+    if deck_item.owner_user_id is not None:
+        note_query = note_query.filter(Note.user_id == deck_item.owner_user_id)
+    source_note_type_id = (deck_item.source_note_type_id or "").strip()
+    if source_note_type_id:
+        note_query = note_query.filter(Note.note_type_id == source_note_type_id)
+
+    note_candidates: list[dict[str, Any]] = []
+    for note in note_query.all():
+        sample = _serialize_note_test_sample(note)
+        if sample is not None:
+            note_candidates.append(sample)
+
+    if not note_candidates:
+        entry_candidates = [
+            entry
+            for entry in VocabularyEntry.query.filter(VocabularyEntry.deck_id.in_(deck_ids)).all()
+            if (entry.word or "").strip()
+        ]
+        if not entry_candidates:
+            return []
+        random.shuffle(entry_candidates)
+        selected_entries = entry_candidates[:limit]
+        return [_serialize_vocabulary_entry_test_sample(entry) for entry in selected_entries]
+
+    random.shuffle(note_candidates)
+    return note_candidates[:limit]
+
+
 def _validate_deck_publish_requirements(deck_item: DeckMarketplaceItem) -> str | None:
     if not (deck_item.title or "").strip():
         return "Title is required for publish."
@@ -856,6 +1010,7 @@ def _clone_deck_subtree(
             VocabularyEntry(
                 lesson_id=None,
                 deck_id=cloned_deck.id,
+                deck=entry.deck,
                 word=entry.word,
                 hanviet=entry.hanviet,
                 reading=entry.reading,
@@ -1527,6 +1682,7 @@ def share_deck_page(deck_id: int):
 @login_required
 def note_editor_page():
     if not is_admin_user(current_user):
+        flash("Bạn không có quyền truy cập trang này.", "danger")
         return redirect(url_for("main.dashboard"))
     note_types = NoteType.query.filter_by(user_id=current_user.id).order_by(NoteType.name.asc()).all()
     decks = VocabularyDeck.query.order_by(VocabularyDeck.name.asc()).all()
@@ -1545,6 +1701,7 @@ def flashcard_study_page():
 def notes_list_page():
     """Note management — list, filter, quick delete."""
     if not is_admin_user(current_user):
+        flash("Bạn không có quyền truy cập trang này.", "danger")
         return redirect(url_for("main.dashboard"))
     note_types = (
         NoteType.query.filter_by(user_id=current_user.id)
@@ -1618,6 +1775,7 @@ def notes_list_page():
 def note_edit_page(note_id: str):
     """Edit an existing note."""
     if not is_admin_user(current_user):
+        flash("Bạn không có quyền truy cập trang này.", "danger")
         return redirect(url_for("main.dashboard"))
     note = Note.query.filter_by(id=note_id, user_id=current_user.id).first()
     if not note:
@@ -2447,6 +2605,7 @@ def study_answer(card_id: str):
 
     now = datetime.utcnow()
     current_state = _card_state_from_progress(progress, now)
+    review_mode = normalize_review_mode(current_state.type)
     updated_state = applyAnswer(current_state, default_deck_options(), now, rating)  # type: ignore[arg-type]
     _apply_card_state_to_progress(progress, updated_state, now)
     _touch_note_type_install_usage(user_id=current_user.id, installed_note_type_id=card.note.note_type_id, activity_at=now)
@@ -2466,19 +2625,32 @@ def study_answer(card_id: str):
             deck_item = DeckMarketplaceItem.query.get(deck_install.deck_item_id)
             if deck_item:
                 _recompute_deck_item_market_stats(deck_item)
+    update_user_timezone(current_user, payload.get("timezone"))
+    record_review_event(
+        user_id=current_user.id,
+        card_id=card.id,
+        entry_id=None,
+        deck_id=card.note.deck_id,
+        note_type_id=card.note.note_type_id,
+        reviewed_at=now,
+        duration_ms=payload.get("duration_ms"),
+        rating=rating,
+        mode=review_mode,
+    )
     _audit("study.answer", {"card_id": card.id, "rating": rating})
     db.session.commit()
     next_url = url_for("flashcards.study_next", scope="deck", scope_id=card.note.deck_id) if card.note.deck_id else None
     return jsonify({"success": True, "next_card_url": next_url, "intervals_preview": computeAnswerPreview(updated_state, default_deck_options(), now)})
 
 
+@flashcards_bp.route("/api/flashcards/seed-default-note-type", methods=["POST"])
 @flashcards_bp.route("/api/flashcards/seed-legacy", methods=["POST"])
 @login_required
 def seed_legacy_note_type():
     if not is_admin_user(current_user):
         return _api_error("VALIDATION_ERROR", "Admin only endpoint.", status=403)
     note_type, template = ensure_legacy_note_type(db.session, current_user.id)
-    _audit("legacy.seed", {"note_type_id": note_type.id, "template_id": template.id})
+    _audit("note_type.seed_default", {"note_type_id": note_type.id, "template_id": template.id})
     db.session.commit()
     return jsonify({"note_type_id": note_type.id, "template_id": template.id})
 
@@ -2916,6 +3088,11 @@ def get_shared_deck_item(deck_item_id: str):
                 ],
             }
     payload["source_note_type"] = source_note_type_payload
+    payload["test_samples"] = _build_shared_deck_test_samples(
+        deck_item,
+        limit=SHARED_DECK_TEST_SAMPLE_LIMIT,
+    )
+    payload["test_sample_limit"] = SHARED_DECK_TEST_SAMPLE_LIMIT
 
     return jsonify(payload)
 
@@ -2948,20 +3125,50 @@ def preview_shared_deck_template(deck_item_id: str, template_id: str):
 
     preview_note = None
     preview_entry = None
+    payload = request.get_json(silent=True) or {}
     if deck_item.source_deck_id is not None:
-        query = Note.query.filter_by(
-            deck_id=deck_item.source_deck_id,
-            note_type_id=note_type.id,
-        )
-        if deck_item.owner_user_id is not None:
-            query = query.filter(Note.user_id == deck_item.owner_user_id)
-        preview_note = query.order_by(Note.created_at.asc(), Note.id.asc()).first()
-        if preview_note is None:
-            preview_entry = (
-                VocabularyEntry.query.filter_by(deck_id=deck_item.source_deck_id)
-                .order_by(VocabularyEntry.created_at.asc(), VocabularyEntry.id.asc())
-                .first()
-            )
+        deck_ids = _collect_deck_subtree_ids(deck_item.source_deck_id)
+        if deck_ids:
+            requested_note_id = (payload.get("note_id") or "").strip()
+            if requested_note_id:
+                query = Note.query.filter(
+                    Note.id == requested_note_id,
+                    Note.note_type_id == note_type.id,
+                    Note.deck_id.in_(deck_ids),
+                )
+                if deck_item.owner_user_id is not None:
+                    query = query.filter(Note.user_id == deck_item.owner_user_id)
+                preview_note = query.first()
+
+            requested_entry_id = None
+            entry_id_raw = payload.get("entry_id")
+            if entry_id_raw not in (None, ""):
+                try:
+                    requested_entry_id = int(entry_id_raw)
+                except (TypeError, ValueError):
+                    requested_entry_id = None
+            if preview_note is None and requested_entry_id is not None:
+                preview_entry = (
+                    VocabularyEntry.query.filter(
+                        VocabularyEntry.id == requested_entry_id,
+                        VocabularyEntry.deck_id.in_(deck_ids),
+                    ).first()
+                )
+
+            if preview_note is None and preview_entry is None:
+                query = Note.query.filter(
+                    Note.deck_id.in_(deck_ids),
+                    Note.note_type_id == note_type.id,
+                )
+                if deck_item.owner_user_id is not None:
+                    query = query.filter(Note.user_id == deck_item.owner_user_id)
+                preview_note = query.order_by(Note.created_at.asc(), Note.id.asc()).first()
+                if preview_note is None:
+                    preview_entry = (
+                        VocabularyEntry.query.filter(VocabularyEntry.deck_id.in_(deck_ids))
+                        .order_by(VocabularyEntry.created_at.asc(), VocabularyEntry.id.asc())
+                        .first()
+                    )
 
     if preview_note:
         preview_field_values = preview_note.field_values or {}
@@ -3219,7 +3426,7 @@ def seed_marketplace_defaults():
     import os
     from models.user import User
     admin_email = os.environ.get("ADMIN_EMAIL", "chungtrinh2k2@gmail.com")
-    admin_user_name = os.environ.get("ADMIN_USER", "chungtrinh2k2")
+    admin_user_name = os.environ.get("ADMIN_USERNAME") or os.environ.get("ADMIN_USER", "chungtrinh2k2")
     admin_password = os.environ.get("ADMIN_PASSWORD", "chungtrinh1904")
 
     system_admin = User.query.filter_by(email=admin_email).first()

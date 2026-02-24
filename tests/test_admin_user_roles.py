@@ -30,6 +30,7 @@ class AdminUserRoleTests(unittest.TestCase):
                 email="admin@example.com",
                 is_admin=True,
                 role_id=admin_role.id,
+                is_disabled=False,
             )
             admin.set_password("password")
             normal = User(
@@ -37,6 +38,7 @@ class AdminUserRoleTests(unittest.TestCase):
                 email="normal@example.com",
                 is_admin=False,
                 role_id=regular_role.id,
+                is_disabled=False,
             )
             normal.set_password("password")
             db.session.add_all([admin, normal])
@@ -56,12 +58,15 @@ class AdminUserRoleTests(unittest.TestCase):
             follow_redirects=True,
         )
 
+    def _post_json(self, path: str, payload: dict):
+        return self.client.post(path, json=payload, follow_redirects=False)
+
     def test_default_roles_are_seeded(self):
         with self.app.app_context():
             roles = UserRole.query.order_by(UserRole.position.asc()).all()
             self.assertEqual([role.code for role in roles], ["regular", "creator", "enterprise", "admin"])
 
-    def test_admin_can_assign_user_role(self):
+    def test_admin_can_assign_user_role_batch(self):
         self._login("admin@example.com")
 
         with self.app.app_context():
@@ -69,12 +74,18 @@ class AdminUserRoleTests(unittest.TestCase):
             self.assertIsNotNone(creator_role)
             creator_role_id = creator_role.id
 
-        response = self.client.post(
-            f"/admin/users/{self.normal_id}/role",
-            data={"role_id": str(creator_role_id)},
-            follow_redirects=True,
+        response = self._post_json(
+            "/admin/api/users/roles/batch",
+            {
+                "user_ids": [self.normal_id],
+                "target_role_id": creator_role_id,
+                "mode": "replace",
+            },
         )
         self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(payload["success_count"], 1)
+        self.assertEqual(payload["fail_count"], 0)
 
         with self.app.app_context():
             user = User.query.get(self.normal_id)
@@ -82,7 +93,7 @@ class AdminUserRoleTests(unittest.TestCase):
             self.assertEqual(user.role.code, "creator")
             self.assertFalse(user.is_admin)
 
-    def test_cannot_demote_last_admin(self):
+    def test_cannot_demote_last_admin_batch(self):
         self._login("admin@example.com")
 
         with self.app.app_context():
@@ -90,18 +101,110 @@ class AdminUserRoleTests(unittest.TestCase):
             self.assertIsNotNone(regular_role)
             regular_role_id = regular_role.id
 
-        response = self.client.post(
-            f"/admin/users/{self.admin_id}/role",
-            data={"role_id": str(regular_role_id)},
-            follow_redirects=True,
+        response = self._post_json(
+            "/admin/api/users/roles/batch",
+            {
+                "user_ids": [self.admin_id],
+                "target_role_id": regular_role_id,
+                "mode": "replace",
+            },
         )
         self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(payload["success_count"], 0)
+        self.assertEqual(payload["fail_count"], 1)
 
         with self.app.app_context():
             user = User.query.get(self.admin_id)
             self.assertIsNotNone(user)
             self.assertTrue(user.is_admin)
             self.assertEqual(user.role.code, "admin")
+
+    def test_cannot_self_demote(self):
+        self._login("admin@example.com")
+        with self.app.app_context():
+            regular_role = UserRole.query.filter_by(code="regular").first()
+            self.assertIsNotNone(regular_role)
+            regular_role_id = regular_role.id
+
+        response = self._post_json(
+            "/admin/api/users/roles/batch",
+            {
+                "user_ids": [self.admin_id, self.normal_id],
+                "target_role_id": regular_role_id,
+                "mode": "replace",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(payload["success_count"], 1)
+        self.assertEqual(payload["fail_count"], 1)
+
+        with self.app.app_context():
+            admin_user = User.query.get(self.admin_id)
+            normal_user = User.query.get(self.normal_id)
+            self.assertTrue(admin_user.is_admin)
+            self.assertFalse(normal_user.is_admin)
+
+    def test_cannot_disable_last_admin(self):
+        self._login("admin@example.com")
+        response = self._post_json(
+            "/admin/api/users/status/batch",
+            {
+                "user_ids": [self.admin_id],
+                "action": "disable",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(payload["success_count"], 0)
+        self.assertEqual(payload["fail_count"], 1)
+
+        with self.app.app_context():
+            user = User.query.get(self.admin_id)
+            self.assertFalse(user.is_disabled)
+
+    def test_admin_can_disable_non_admin(self):
+        self._login("admin@example.com")
+        response = self._post_json(
+            "/admin/api/users/status/batch",
+            {
+                "user_ids": [self.normal_id],
+                "action": "disable",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(payload["success_count"], 1)
+        self.assertEqual(payload["fail_count"], 0)
+
+        with self.app.app_context():
+            user = User.query.get(self.normal_id)
+            self.assertTrue(user.is_disabled)
+
+    def test_disabled_user_cannot_login(self):
+        with self.app.app_context():
+            user = User.query.get(self.normal_id)
+            user.is_disabled = True
+            db.session.commit()
+
+        response = self._login("normal@example.com")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Tai khoan da bi vo hieu hoa.", response.data)
+
+    def test_list_users_api_supports_filters(self):
+        self._login("admin@example.com")
+        response = self.client.get(
+            "/admin/api/users?q=normal&status=active&page=1&per_page=10",
+            follow_redirects=False,
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(payload["page"], 1)
+        self.assertEqual(payload["per_page"], 10)
+        self.assertGreaterEqual(payload["total"], 1)
+        self.assertEqual(len(payload["items"]), 1)
+        self.assertEqual(payload["items"][0]["username"], "normal")
 
     def test_non_admin_cannot_open_management_page(self):
         self._login("normal@example.com")

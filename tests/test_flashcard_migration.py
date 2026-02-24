@@ -70,7 +70,7 @@ class FlashcardMigrationCommandTests(unittest.TestCase):
         self.assertEqual(result.exit_code, 0, msg=result.output)
 
         with self.app.app_context():
-            legacy_nt = NoteType.query.filter_by(user_id=self.user_id, name="Legacy Japanese").first()
+            legacy_nt = NoteType.query.filter_by(user_id=self.user_id, name="Flama Standard Vocabulary").first()
             self.assertIsNotNone(legacy_nt)
             note_count = Note.query.filter_by(note_type_id=legacy_nt.id, user_id=self.user_id).count()
             self.assertEqual(note_count, 2)
@@ -85,8 +85,8 @@ class FlashcardMigrationCommandTests(unittest.TestCase):
             self.assertEqual(mapped_progress, 2)
 
             sample_note = Note.query.filter_by(note_type_id=legacy_nt.id).first()
-            self.assertEqual(sample_note.field_values.get("Word"), "犬")
-            self.assertEqual(sample_note.field_values.get("Reading"), "いぬ")
+            self.assertEqual(sample_note.field_values.get("word"), "犬")
+            self.assertEqual(sample_note.field_values.get("reading"), "いぬ")
 
     def test_dry_run_rolls_back(self):
         result = self.runner.invoke(

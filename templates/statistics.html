@@ -1,0 +1,581 @@
+{% extends "base.html" %}
+
+{% block title %}Statistics{% endblock %}
+
+{% block content %}
+<section class="statistics-page" id="statistics-root" data-initial-deck-id="{{ stats_initial_deck_id or '' }}">
+  {% set toolbar_variant = 'study' %}
+  {% set toolbar_active_tab = 'stats' %}
+  {% set toolbar_aria_label = 'Statistics actions' %}
+  {% set toolbar_stats_href = url_for('main.statistics_page') %}
+  {% include 'components/deck/dashboard_toolbar.html' with context %}
+
+  <div class="stats-top-filter">
+    <div class="stats-filter-row">
+      <div class="stats-filter-group" role="radiogroup" aria-label="Scope">
+        <label><input type="radio" name="stats-scope" value="deck" checked> deck</label>
+        <label><input type="radio" name="stats-scope" value="collection"> collection</label>
+      </div>
+      <div class="stats-filter-group stats-deck-picker" id="stats-deck-picker">
+        <input type="text" id="stats-deck-search" list="stats-deck-options" class="form-control" placeholder="Search">
+        <datalist id="stats-deck-options"></datalist>
+      </div>
+    </div>
+    <div class="stats-filter-row">
+      <div class="stats-filter-group" role="radiogroup" aria-label="History range">
+        <label><input type="radio" name="stats-history-range" value="12m" checked> last 12 months</label>
+        <label><input type="radio" name="stats-history-range" value="all"> all history</label>
+      </div>
+    </div>
+  </div>
+
+  <section class="stats-panel">
+    <h2>Today</h2>
+    <hr>
+    <p id="stats-today-message" class="stats-center-text">No cards have been studied today.</p>
+  </section>
+
+  <section class="stats-panel">
+    <h2>Future Due</h2>
+    <hr>
+    <p class="stats-subtitle">The number of reviews due in the future.</p>
+
+    <div class="stats-filter-row stats-future-controls">
+      <label><input type="checkbox" id="stats-backlog" checked> Backlog</label>
+      <label><input type="radio" name="stats-future-range" value="30" checked> 1 month</label>
+      <label><input type="radio" name="stats-future-range" value="90"> 3 months</label>
+      <label><input type="radio" name="stats-future-range" value="365"> 1 year</label>
+      <label><input type="radio" name="stats-future-range" value="all"> all</label>
+    </div>
+
+    <div class="stats-chart-wrap">
+      <canvas id="stats-future-chart" aria-label="Future due chart"></canvas>
+    </div>
+
+    <div class="stats-summary-list">
+      <p id="stats-total-reviews">Total: 0 reviews</p>
+      <p id="stats-average-reviews">Average: 0.0 review/day</p>
+      <p id="stats-due-tomorrow">Due tomorrow: 0 reviews</p>
+      <p id="stats-daily-load">Daily load: 0.0 reviews/day</p>
+    </div>
+  </section>
+</section>
+
+<style>
+  .statistics-page {
+    --statistics-board-max-width: 1240px;
+    --statistics-font-family: var(--font-family-base);
+    max-width: 1320px;
+    margin: 0 auto;
+    padding: 0.35rem 0 2rem;
+    color: var(--flama-text);
+    font-family: var(--statistics-font-family);
+  }
+
+  .statistics-page .dash-toolbar {
+    margin-bottom: 0.9rem;
+  }
+
+  .stats-top-filter {
+    width: 100%;
+    max-width: var(--statistics-board-max-width);
+    margin: 0 auto 1.1rem;
+    background: var(--flama-surface);
+    border: 1px solid var(--flama-border);
+    border-radius: 12px;
+    padding: 1.05rem 1.35rem;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.02);
+  }
+
+  .stats-filter-row {
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+    flex-wrap: wrap;
+  }
+
+  .stats-filter-row+.stats-filter-row {
+    margin-top: 0.4rem;
+  }
+
+  .stats-filter-group {
+    display: flex;
+    align-items: center;
+    gap: 1.1rem;
+    flex-wrap: wrap;
+  }
+
+  .stats-filter-group label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: var(--font-size-base);
+    line-height: var(--line-height-snug);
+    color: var(--flama-text);
+    font-weight: var(--font-weight-normal);
+  }
+
+  .stats-deck-picker {
+    min-width: 280px;
+    flex: 1;
+  }
+
+  #stats-deck-search.form-control {
+    border-color: var(--flama-border);
+    color: var(--flama-text);
+    background: var(--flama-surface);
+    font-family: var(--statistics-font-family);
+    font-size: var(--font-size-base);
+    line-height: 1.2;
+    padding: 0.5rem 0.8rem;
+  }
+
+  #stats-deck-search.form-control:focus {
+    border-color: var(--flama-orange-300);
+    box-shadow: 0 0 0 0.2rem rgba(254, 164, 107, 0.22);
+  }
+
+  .stats-panel {
+    width: 100%;
+    max-width: var(--statistics-board-max-width);
+    margin: 0 auto 1rem;
+    background: var(--flama-surface);
+    border: 1px solid var(--flama-border);
+    border-radius: 12px;
+    padding: 1.55rem 1.75rem 1.4rem;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.02);
+  }
+
+  .stats-panel h2 {
+    margin: 0;
+    font-size: 2.4rem;
+    line-height: 1.2;
+    color: #4b5563;
+    font-weight: var(--font-weight-semibold);
+  }
+
+  .stats-panel hr {
+    margin: 0.8rem 0 1rem;
+    border-color: var(--flama-border);
+    opacity: 1;
+  }
+
+  .stats-center-text {
+    text-align: center;
+    font-size: 1.25rem;
+    margin: 0.3rem 0;
+    color: var(--flama-text);
+    line-height: 1.35;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .stats-subtitle {
+    text-align: center;
+    font-size: 1.1rem;
+    margin: 0.35rem 0 0.9rem;
+    color: var(--flama-text-2);
+  }
+
+  .stats-future-controls {
+    justify-content: center;
+    margin-bottom: 0.55rem;
+    gap: 0.95rem;
+  }
+
+  .stats-future-controls label {
+    font-size: 1rem;
+    color: var(--flama-text);
+    font-weight: var(--font-weight-medium);
+  }
+
+  .stats-future-controls input[type="radio"],
+  .stats-future-controls input[type="checkbox"],
+  .stats-filter-group input[type="radio"] {
+    accent-color: var(--flama-orange-600);
+  }
+
+  .stats-chart-wrap {
+    min-height: 420px;
+    height: clamp(420px, 56vh, 620px);
+    border-radius: 10px;
+    background: #fcfcfc;
+    border: 1px solid #f1e8e1;
+    padding: 0.55rem 0.6rem 0.3rem;
+  }
+
+  .stats-chart-wrap canvas {
+    width: 100% !important;
+    height: 100% !important;
+  }
+
+  .stats-summary-list {
+    text-align: center;
+    font-size: 1.05rem;
+    margin-top: 0.8rem;
+    color: var(--flama-text);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .stats-summary-list p {
+    margin: 0.22rem 0;
+  }
+
+  @media (max-width: 1023px) {
+    .statistics-page {
+      --statistics-board-max-width: 100%;
+      max-width: 100%;
+    }
+
+    .stats-chart-wrap {
+      min-height: 360px;
+      height: 52vh;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .stats-top-filter,
+    .stats-panel {
+      padding: 0.95rem;
+    }
+
+    .stats-panel h2 {
+      font-size: 1.55rem;
+    }
+
+    .stats-center-text,
+    .stats-summary-list {
+      font-size: 0.98rem;
+    }
+
+    .stats-subtitle {
+      font-size: 0.95rem;
+    }
+
+    .stats-future-controls label,
+    .stats-filter-group label {
+      font-size: 0.95rem;
+    }
+
+    .stats-chart-wrap {
+      min-height: 300px;
+      height: 50vh;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script>
+  (() => {
+    const root = document.getElementById("statistics-root");
+    if (!root) {
+      return;
+    }
+
+    const deckData = {{ (stats_decks or []) | tojson }};
+    const deckById = new Map(deckData.map((item) => [String(item.id), item]));
+    const deckSearchInput = document.getElementById("stats-deck-search");
+    const deckOptionsEl = document.getElementById("stats-deck-options");
+    const deckPickerEl = document.getElementById("stats-deck-picker");
+
+    const todayMessageEl = document.getElementById("stats-today-message");
+    const totalReviewsEl = document.getElementById("stats-total-reviews");
+    const averageReviewsEl = document.getElementById("stats-average-reviews");
+    const dueTomorrowEl = document.getElementById("stats-due-tomorrow");
+    const dailyLoadEl = document.getElementById("stats-daily-load");
+    const backlogEl = document.getElementById("stats-backlog");
+    const chartEl = document.getElementById("stats-future-chart");
+
+    let chart = null;
+    let selectedDeckId = String(root.dataset.initialDeckId || "");
+    if (!selectedDeckId && deckData.length > 0) {
+      selectedDeckId = String(deckData[0].id);
+    }
+
+    function intVal(rawValue) {
+      const value = Number(rawValue || 0);
+      return Number.isFinite(value) ? Math.round(value) : 0;
+    }
+
+    function numberVal(rawValue, digits = 1) {
+      const value = Number(rawValue || 0);
+      if (!Number.isFinite(value)) {
+        return (0).toFixed(digits);
+      }
+      return value.toFixed(digits);
+    }
+
+    function selectedScope() {
+      const checked = document.querySelector('input[name="stats-scope"]:checked');
+      return checked ? checked.value : "deck";
+    }
+
+    function selectedHistoryRange() {
+      const checked = document.querySelector('input[name="stats-history-range"]:checked');
+      return checked ? checked.value : "12m";
+    }
+
+    function selectedFutureRange() {
+      const checked = document.querySelector('input[name="stats-future-range"]:checked');
+      return checked ? checked.value : "30";
+    }
+
+    function deckLabel(deckId) {
+      const deck = deckById.get(String(deckId));
+      if (!deck) {
+        return "";
+      }
+      return `${deck.id}: ${deck.name}`;
+    }
+
+    function parseDeckIdFromInput(rawValue) {
+      const text = String(rawValue || "").trim();
+      const match = text.match(/^(\d+)\s*:/);
+      if (!match) {
+        return null;
+      }
+      return match[1];
+    }
+
+    function fillDeckOptions() {
+      if (!deckOptionsEl) {
+        return;
+      }
+      deckOptionsEl.innerHTML = "";
+      deckData.forEach((deck) => {
+        const option = document.createElement("option");
+        option.value = `${deck.id}: ${deck.name}`;
+        deckOptionsEl.appendChild(option);
+      });
+    }
+
+    function syncDeckInput() {
+      if (!deckSearchInput) {
+        return;
+      }
+      deckSearchInput.value = deckLabel(selectedDeckId);
+    }
+
+    function applyScopeUI() {
+      if (!deckPickerEl) {
+        return;
+      }
+      const isDeckScope = selectedScope() === "deck";
+      deckPickerEl.style.display = isDeckScope ? "flex" : "none";
+    }
+
+    function renderChart(series) {
+      if (!chartEl || typeof Chart === "undefined") {
+        return;
+      }
+      const css = getComputedStyle(document.documentElement);
+      const dueBarColor = css.getPropertyValue("--flama-orange-300").trim() || "#FEA46B";
+      const dueBorderColor = css.getPropertyValue("--flama-orange-600").trim() || "#E05C07";
+      const textSecondary = css.getPropertyValue("--flama-text-2").trim() || "#6B625C";
+      const safeSeries = Array.isArray(series) ? series : [];
+      const labels = safeSeries.map((item) => intVal(item.day_offset));
+      const dueValues = safeSeries.map((item) => intVal(item.due_count));
+      const cumulativeValues = safeSeries.map((item) => intVal(item.cumulative));
+
+      if (chart) {
+        chart.destroy();
+      }
+
+      chart = new Chart(chartEl, {
+        type: "bar",
+        data: {
+          labels,
+          datasets: [
+            {
+              type: "bar",
+              label: "Due",
+              data: dueValues,
+              backgroundColor: dueBarColor,
+              borderColor: dueBorderColor,
+              borderWidth: 1,
+            },
+            {
+              type: "line",
+              label: "Cumulative",
+              data: cumulativeValues,
+              yAxisID: "y2",
+              borderColor: "rgba(107, 98, 92, 0.55)",
+              backgroundColor: "rgba(107, 98, 92, 0.12)",
+              pointRadius: 0,
+              borderWidth: 2,
+              tension: 0.25,
+              fill: false,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              display: false,
+            },
+            tooltip: {
+              callbacks: {
+                title(context) {
+                  const idx = context && context.length > 0 ? context[0].dataIndex : -1;
+                  const point = idx >= 0 ? safeSeries[idx] : null;
+                  return point ? point.date : "";
+                },
+                label(context) {
+                  const idx = context ? context.dataIndex : -1;
+                  const point = idx >= 0 ? safeSeries[idx] : null;
+                  if (!point) {
+                    return "";
+                  }
+                  if (context.datasetIndex === 0) {
+                    return `Due: ${intVal(point.due_count)}`;
+                  }
+                  return `Cumulative: ${intVal(point.cumulative)}`;
+                },
+                afterBody(context) {
+                  const idx = context && context.length > 0 ? context[0].dataIndex : -1;
+                  const point = idx >= 0 ? safeSeries[idx] : null;
+                  if (!point || !point.breakdown) {
+                    return [];
+                  }
+                  const b = point.breakdown;
+                  return [`New: ${intVal(b.new)}  Learn: ${intVal(b.learn)}  Review: ${intVal(b.review)}`];
+                },
+              },
+            },
+          },
+          scales: {
+            x: {
+              ticks: {
+                color: textSecondary,
+              },
+              title: {
+                display: true,
+                text: "days from today",
+                color: textSecondary,
+              },
+              grid: {
+                display: false,
+              },
+            },
+            y: {
+              beginAtZero: true,
+              ticks: {
+                color: textSecondary,
+              },
+              title: {
+                display: true,
+                text: "reviews due",
+                color: textSecondary,
+              },
+            },
+            y2: {
+              beginAtZero: true,
+              position: "right",
+              ticks: {
+                color: textSecondary,
+              },
+              grid: {
+                drawOnChartArea: false,
+              },
+              title: {
+                display: true,
+                text: "cumulative",
+                color: textSecondary,
+              },
+            },
+          },
+        },
+      });
+    }
+
+    function renderPayload(payload) {
+      const today = payload?.today || {};
+      const futureDue = payload?.future_due || {};
+      const totals = payload?.totals || {};
+      if (todayMessageEl) {
+        todayMessageEl.textContent = today.message || "No cards have been studied today.";
+      }
+      if (totalReviewsEl) {
+        totalReviewsEl.textContent = `Total: ${intVal(totals.total_reviews)} reviews`;
+      }
+      if (averageReviewsEl) {
+        averageReviewsEl.textContent = `Average: ${numberVal(totals.avg_reviews_per_day, 1)} review/day`;
+      }
+      if (dueTomorrowEl) {
+        dueTomorrowEl.textContent = `Due tomorrow: ${intVal(totals.due_tomorrow)} reviews`;
+      }
+      if (dailyLoadEl) {
+        dailyLoadEl.textContent = `Daily load: ${numberVal(totals.daily_load, 1)} reviews/day`;
+      }
+      renderChart(Array.isArray(futureDue.series) ? futureDue.series : []);
+    }
+
+    async function loadStats() {
+      const scope = selectedScope();
+      const params = new URLSearchParams({
+        scope,
+        history_range: selectedHistoryRange(),
+        future_range: selectedFutureRange(),
+        backlog: backlogEl && backlogEl.checked ? "true" : "false",
+      });
+
+      if (scope === "deck" && selectedDeckId) {
+        params.set("deck_id", selectedDeckId);
+      }
+
+      const response = await fetch(`/api/stats/today-future?${params.toString()}`);
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload) {
+        throw new Error(payload?.message || "Unable to load statistics.");
+      }
+      renderPayload(payload);
+    }
+
+    async function refreshStats() {
+      try {
+        await loadStats();
+      } catch (error) {
+        if (todayMessageEl) {
+          todayMessageEl.textContent = error?.message || "Unable to load statistics.";
+        }
+        renderChart([]);
+      }
+    }
+
+    fillDeckOptions();
+    syncDeckInput();
+    applyScopeUI();
+
+    document.querySelectorAll('input[name="stats-scope"]').forEach((el) => {
+      el.addEventListener("change", () => {
+        applyScopeUI();
+        refreshStats();
+      });
+    });
+
+    document.querySelectorAll('input[name="stats-history-range"]').forEach((el) => {
+      el.addEventListener("change", refreshStats);
+    });
+
+    document.querySelectorAll('input[name="stats-future-range"]').forEach((el) => {
+      el.addEventListener("change", refreshStats);
+    });
+
+    backlogEl?.addEventListener("change", refreshStats);
+
+    deckSearchInput?.addEventListener("change", () => {
+      const parsed = parseDeckIdFromInput(deckSearchInput.value);
+      if (parsed && deckById.has(parsed)) {
+        selectedDeckId = parsed;
+      }
+      syncDeckInput();
+      refreshStats();
+    });
+
+    refreshStats();
+  })();
+</script>
+{% endblock %}

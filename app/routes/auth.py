@@ -80,7 +80,9 @@ def login():
             flash("Thông tin đăng nhập không chính xác.", "danger")
             return render_template("login.html")
 
-        login_user(user)
+        if not login_user(user):
+            flash("Tai khoan da bi vo hieu hoa.", "danger")
+            return render_template("login.html")
         flash("Đăng nhập thành công!", "success")
         next_url = request.args.get("next")
         return redirect(next_url or url_for("main.dashboard"))

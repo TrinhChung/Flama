@@ -20,23 +20,6 @@
           </a>
         </li>
 
-        <li class="nav-item dropdown">
-          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-            <i class="bi bi-mortarboard"></i> Học tập
-          </a>
-          <ul class="dropdown-menu dropdown-menu-end">
-            <li>
-              <a class="dropdown-item" href="{{ url_for('main.dashboard') }}">
-                <i class="bi bi-house-door"></i> Trang học tập
-              </a>
-            </li>
-            <li>
-              <a class="dropdown-item" href="{{ url_for('flashcards.flashcard_study_page') }}">
-                <i class="bi bi-card-text"></i> Học flashcard
-              </a>
-            </li>
-          </ul>
-        </li>
 
         <li class="nav-item dropdown">
           <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
@@ -67,16 +50,7 @@
                 <i class="bi bi-layers"></i> Quản lý loại thẻ
               </a>
             </li>
-            <li>
-              <a class="dropdown-item" href="{{ url_for('flashcards.notes_list_page') }}">
-                <i class="bi bi-card-list"></i> Quản lý ghi chú thẻ
-              </a>
-            </li>
-            <li>
-              <a class="dropdown-item" href="{{ url_for('flashcards.note_editor_page') }}">
-                <i class="bi bi-plus-square"></i> Tạo ghi chú mới
-              </a>
-            </li>
+
           </ul>
         </li>
 

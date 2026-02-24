@@ -17,12 +17,6 @@
           href="{{ url_for('flashcards.note_type_fields_page', note_type_id=note_type.id) }}">
           <i class="bi bi-gear"></i> Edit Fields
         </a>
-        <a class="btn btn-outline-primary btn-sm"
-          href="{{ url_for('flashcards.notes_list_page', note_type_id=note_type.id) }}">
-          <i class="bi bi-card-list"></i> Xem Notes
-        </a>
-        <a class="btn btn-primary btn-sm"
-          href="{{ url_for('flashcards.note_editor_page') }}?note_type_id={{ note_type.id }}">Create Note</a>
       </div>
     </div>
 
