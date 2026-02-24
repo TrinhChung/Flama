@@ -17,6 +17,7 @@ class User(UserMixin, db.Model):
     password_hash = db.Column(db.String(255), nullable=False)
     role_id = db.Column(db.Integer, db.ForeignKey("user_roles.id"), nullable=True, index=True)
     is_admin = db.Column(db.Boolean, nullable=False, default=False)
+    is_disabled = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(
         db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
@@ -27,6 +28,11 @@ class User(UserMixin, db.Model):
         cascade="all, delete-orphan",
     )
     role = db.relationship("UserRole", back_populates="users")
+
+    @property
+    def is_active(self) -> bool:
+        """Flask-Login hook: disabled users cannot authenticate."""
+        return not bool(self.is_disabled)
 
     def set_password(self, password: str) -> None:
         """Hash and store the provided password."""

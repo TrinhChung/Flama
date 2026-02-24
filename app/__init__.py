@@ -12,6 +12,7 @@ from models import db
 from .cli import register_cli_commands
 from .extensions import login_manager, migrate
 from .routes import register_blueprints
+from .services.user_management_schema import ensure_user_management_schema
 from .services.user_roles import ensure_default_user_roles
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -46,6 +47,7 @@ def create_app(config: Optional[dict] = None) -> Flask:
 
     from models.user import User
     from models.user_role import UserRole  # noqa: F401  # register model
+    from models.user_permission_audit_log import UserPermissionAuditLog  # noqa: F401
     from models.vocabulary_deck import VocabularyDeck  # noqa: F401  # register model
     from models.vocabulary_entry import VocabularyEntry  # noqa: F401  # register model
     from models.vocabulary_progress import VocabularyProgress  # noqa: F401  # register model
@@ -108,6 +110,7 @@ def create_app(config: Optional[dict] = None) -> Flask:
 
     with app.app_context():
         db.create_all()
+        ensure_user_management_schema(db.session)
         ensure_default_user_roles(db.session)
         db.session.commit()
 

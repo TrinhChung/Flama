@@ -114,6 +114,111 @@
     </div>
   </section>
 
+  {# ── Product Preview ── #}
+  <section class="landing__preview">
+    <div class="container">
+      <div class="section-heading text-center">
+        <h2 class="section-title">Product Preview</h2>
+        <p class="section-subtitle">Mô phỏng từ các màn hình đã có trong app: tạo thẻ, học và duyệt thẻ.</p>
+      </div>
+      <div class="preview-grid">
+        <article class="preview-card">
+          <div class="preview-frame">
+            <div class="preview-frame__top">
+              <span class="preview-dot"></span>
+              <span class="preview-dot"></span>
+              <span class="preview-dot"></span>
+              <span class="preview-path">/flashcards/notes/new</span>
+            </div>
+            <div class="preview-frame__body preview-frame__body--editor">
+              <div class="preview-line preview-line--lg"></div>
+              <div class="preview-grid-2">
+                <div class="preview-input"></div>
+                <div class="preview-input"></div>
+              </div>
+              <div class="preview-area"></div>
+              <div class="preview-actions">
+                <span class="preview-pill">Save Note</span>
+                <span class="preview-pill preview-pill--ghost">Cancel</span>
+              </div>
+            </div>
+          </div>
+          <p class="preview-caption">Tạo note theo NoteType và gán deck trong một luồng.</p>
+        </article>
+
+        <article class="preview-card">
+          <div class="preview-frame">
+            <div class="preview-frame__top">
+              <span class="preview-dot"></span>
+              <span class="preview-dot"></span>
+              <span class="preview-dot"></span>
+              <span class="preview-path">/vocabulary/study/deck/&lt;id&gt;</span>
+            </div>
+            <div class="preview-frame__body preview-frame__body--study">
+              <div class="preview-chip-row">
+                <span class="preview-chip preview-chip--new">New 16</span>
+                <span class="preview-chip preview-chip--learn">Learn 7</span>
+                <span class="preview-chip preview-chip--due">Due 24</span>
+              </div>
+              <div class="preview-study-card">
+                <strong>What is least privilege?</strong>
+                <span>Design principle for limiting permissions.</span>
+              </div>
+              <div class="preview-ratings">
+                <span>Again</span>
+                <span>Hard</span>
+                <span class="is-active">Good</span>
+                <span>Easy</span>
+              </div>
+            </div>
+          </div>
+          <p class="preview-caption">Học thẻ theo hàng đợi due với 4 mức đánh giá nhớ.</p>
+        </article>
+
+        <article class="preview-card">
+          <div class="preview-frame">
+            <div class="preview-frame__top">
+              <span class="preview-dot"></span>
+              <span class="preview-dot"></span>
+              <span class="preview-dot"></span>
+              <span class="preview-path">/vocabulary/browse</span>
+            </div>
+            <div class="preview-frame__body preview-frame__body--browse">
+              <div class="preview-browse">
+                <div class="preview-browse__sidebar"></div>
+                <div class="preview-browse__table">
+                  <div></div>
+                  <div></div>
+                  <div></div>
+                </div>
+                <div class="preview-browse__editor"></div>
+              </div>
+            </div>
+          </div>
+          <p class="preview-caption">Duyệt deck tree, lọc thẻ và sửa nhanh ngay tại chỗ.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  {# ── Use Cases ── #}
+  <section class="landing__usecases bg-surface">
+    <div class="container">
+      <div class="section-heading text-center">
+        <h2 class="section-title">Chủ đề học phổ biến</h2>
+        <p class="section-subtitle">Bạn có thể áp dụng Flama cho nhiều lĩnh vực kiến thức khác nhau.</p>
+      </div>
+      <div class="usecase-chips">
+        <span class="usecase-chip">IT · AWS/Security</span>
+        <span class="usecase-chip">Lập trình · System Design</span>
+        <span class="usecase-chip">JLPT · Kanji/Từ vựng</span>
+        <span class="usecase-chip">Y khoa · Thuật ngữ lâm sàng</span>
+        <span class="usecase-chip">Luật · Điều khoản cốt lõi</span>
+        <span class="usecase-chip">Ngoại ngữ · Cụm từ thường gặp</span>
+      </div>
+    </div>
+  </section>
+
   {# ── Benefits ── #}
   <section class="landing__benefits">
     <div class="container">
@@ -151,29 +256,114 @@
     </div>
   </section>
 
+  {# ── Mini Demo ── #}
+  <section class="landing__demo bg-surface">
+    <div class="container">
+      <div class="demo-grid">
+        <div class="demo-copy">
+          <h2 class="section-title mb-3">Mini Demo: học trong 3 giây</h2>
+          <p class="demo-desc">Lật thẻ, chọn mức độ nhớ, Flama sẽ đề xuất nhịp ôn tiếp theo theo spaced repetition.</p>
+          <ul class="demo-points">
+            <li>Front/Back rõ ràng, tập trung kiến thức chính.</li>
+            <li>Again/Hard/Good/Easy giúp hệ thống điều chỉnh lịch.</li>
+            <li>Phù hợp cho các buổi ôn ngắn mỗi ngày.</li>
+          </ul>
+        </div>
+        <div class="demo-panel">
+          <div class="mini-demo-card" data-mini-demo-card>
+            <div class="mini-demo-face mini-demo-face--front">
+              <span class="mini-demo-label">Mặt trước</span>
+              <strong>IAM Role khác IAM User ở điểm nào?</strong>
+            </div>
+            <div class="mini-demo-face mini-demo-face--back">
+              <span class="mini-demo-label">Mặt sau</span>
+              <strong>Role tạm thời, User thường là cố định.</strong>
+            </div>
+          </div>
+          <button type="button" class="mini-demo-flip" id="mini-demo-flip">Lật thẻ</button>
+          <div class="mini-demo-ratings">
+            <button type="button" class="mini-rate-btn" data-demo-rating="again" data-demo-label="Nhắc lại sau 1 phút">Again</button>
+            <button type="button" class="mini-rate-btn" data-demo-rating="hard" data-demo-label="Nhắc lại sau 10 phút">Hard</button>
+            <button type="button" class="mini-rate-btn is-active" data-demo-rating="good" data-demo-label="Nhắc lại sau 1 ngày">Good</button>
+            <button type="button" class="mini-rate-btn" data-demo-rating="easy" data-demo-label="Nhắc lại sau 5 ngày">Easy</button>
+          </div>
+          <p class="mini-demo-feedback">Lịch gợi ý: <strong id="mini-demo-feedback-text">Nhắc lại sau 1 ngày</strong></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
   {# ── Roadmap ── #}
   <section class="landing__roadmap bg-surface">
     <div class="container">
-      <div class="roadmap-box">
-        <h2 class="section-title mb-4">Lộ trình phát triển</h2>
-        <ul class="roadmap-list">
-          <li>
-            <span>Tạo flashcard</span>
-            <span class="badge-soon">Sắp ra mắt</span>
-          </li>
-          <li>
-            <span>Thư viện/Bộ thẻ</span>
-            <span class="badge-soon">Sắp ra mắt</span>
-          </li>
-          <li>
-            <span>Lịch ôn tập</span>
-            <span class="badge-soon">Sắp ra mắt</span>
-          </li>
-          <li>
-            <span>Tiến độ học tập</span>
-            <span class="badge-soon">Sắp ra mắt</span>
-          </li>
-        </ul>
+      <div class="section-heading text-center">
+        <h2 class="section-title">Lộ trình phát triển</h2>
+      </div>
+      <div class="roadmap-grid">
+        <article class="roadmap-column roadmap-column--now">
+          <div class="roadmap-head">
+            <span class="roadmap-badge roadmap-badge--now">Now</span>
+            <p>Đang có trong sản phẩm</p>
+          </div>
+          <ul class="roadmap-list">
+            <li><strong>Tạo NoteType + Note Editor</strong><span>Tạo thẻ linh hoạt theo mẫu riêng.</span></li>
+            <li><strong>Study với 4 mức đánh giá</strong><span>Ôn đúng nhịp với bốn mức nhớ.</span></li>
+            <li><strong>Browse deck tree + card editor</strong><span>Lọc, tìm, sửa thẻ ngay trong bảng.</span></li>
+            <li><strong>Dashboard New/Learn/Due</strong><span>Theo dõi tải học mỗi ngày rõ.</span></li>
+            <li><strong>Import/Export CSV bài học</strong><span>Nhập nhanh, xuất dữ liệu theo nhu cầu.</span></li>
+          </ul>
+        </article>
+
+        <article class="roadmap-column">
+          <div class="roadmap-head">
+            <span class="roadmap-badge roadmap-badge--next">Next</span>
+            <p>Sắp triển khai gần</p>
+          </div>
+          <ul class="roadmap-list">
+            <li><strong>Báo cáo học tập theo tuần</strong><span>Nhìn rõ xu hướng học trong tuần.</span></li>
+            <li><strong>Preset bộ thẻ theo mục tiêu</strong><span>Khởi tạo nhanh theo ngành học cụ thể.</span></li>
+            <li><strong>Tinh gọn trải nghiệm marketplace</strong><span>Tìm bộ thẻ phù hợp nhanh hơn.</span></li>
+          </ul>
+        </article>
+
+        <article class="roadmap-column">
+          <div class="roadmap-head">
+            <span class="roadmap-badge roadmap-badge--later">Later</span>
+            <p>Kế hoạch dài hạn</p>
+          </div>
+          <ul class="roadmap-list">
+            <li><strong>Đồng bộ đa thiết bị sâu hơn</strong><span>Học liền mạch trên mọi thiết bị.</span></li>
+            <li><strong>Không gian học nhóm</strong><span>Chia sẻ deck và nhịp học nội bộ.</span></li>
+            <li><strong>Ứng dụng mobile tối ưu ôn nhanh</strong><span>Ôn thẻ tiện hơn khi di chuyển.</span></li>
+          </ul>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  {# ── FAQ ── #}
+  <section class="landing__faq">
+    <div class="container">
+      <div class="section-heading text-center">
+        <h2 class="section-title">FAQ</h2>
+      </div>
+      <div class="faq-list">
+        <details class="faq-item" open>
+          <summary>Flama khác gì so với học theo cách ghi chép thông thường hoặc Anki?</summary>
+          <p>Flama giữ luồng học tối giản bằng tiếng Việt: tạo thẻ, học với Again/Hard/Good/Easy, và theo dõi New/Learn/Due trong cùng trải nghiệm.</p>
+        </details>
+        <details class="faq-item">
+          <summary>Dữ liệu học tập có thuộc về tôi không?</summary>
+          <p>Có. Flama tách rõ dữ liệu người dùng và công khai chính sách quyền riêng tư tại trang Điều khoản/Chính sách ngay trên landing.</p>
+        </details>
+        <details class="faq-item">
+          <summary>Flama có miễn phí không?</summary>
+          <p>Bạn có thể đăng ký và dùng luồng học cốt lõi miễn phí. Marketplace hỗ trợ cả nội dung free và paid tùy người chia sẻ.</p>
+        </details>
+        <details class="faq-item">
+          <summary>Hiện tại có import/export dữ liệu không?</summary>
+          <p>Có. Khu vực Vocabulary hỗ trợ import CSV và export bài học theo nhiều định dạng (CSV/TSV) để bạn chủ động dữ liệu.</p>
+        </details>
       </div>
     </div>
   </section>
@@ -188,6 +378,20 @@
         Đọc thêm <a href="{{ url_for('main.terms') }}">Điều khoản</a> &bull; <a
           href="{{ url_for('main.privacy') }}">Chính sách</a>.
       </p>
+    </div>
+  </section>
+
+  {# ── Final CTA ── #}
+  <section class="landing__final-cta bg-surface">
+    <div class="container">
+      <div class="final-cta-box text-center">
+        <h2 class="section-title mb-3">Sẵn sàng giữ lửa học tập mỗi ngày?</h2>
+        <p class="final-cta-desc">Bắt đầu bằng một bộ thẻ nhỏ và duy trì nhịp ôn đều đặn mỗi ngày.</p>
+        <div class="landing__cta-group landing__cta-group--center">
+          <a href="{{ url_for('auth.register') }}" class="btn-flama btn-flama--primary">Bắt đầu học miễn phí</a>
+          <a href="{{ url_for('auth.login') }}" class="btn-flama btn-flama--secondary">Đăng nhập</a>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -221,8 +425,24 @@
   .section-title {
     font-size: var(--font-size-2xl);
     font-weight: var(--font-weight-extrabold);
-    margin-bottom: 3rem;
+    margin-bottom: 2.25rem;
     letter-spacing: -0.5px;
+  }
+
+  .section-heading {
+    max-width: 760px;
+    margin: 0 auto 2.25rem;
+  }
+
+  .section-heading .section-title {
+    margin-bottom: 0.75rem;
+  }
+
+  .section-subtitle {
+    color: var(--flama-text-2);
+    font-size: var(--font-size-base);
+    line-height: var(--line-height-relaxed);
+    margin: 0;
   }
 
   /* Buttons */
@@ -293,6 +513,10 @@
   .landing__cta-group {
     display: flex;
     gap: 1rem;
+  }
+
+  .landing__cta-group--center {
+    justify-content: center;
   }
 
   /* Hero Mockup Visual */
@@ -493,26 +717,27 @@
 
   /* ── Steps ── */
   .landing__steps {
-    padding: 5rem 0;
+    padding: 4.5rem 0;
   }
 
   .steps-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 2rem;
+    gap: 1.5rem;
   }
 
   .step-card {
-    padding: 2rem;
+    padding: 1.75rem;
     background: var(--flama-bg);
     border: 1px solid var(--flama-border);
     border-radius: 16px;
     text-align: center;
-    transition: transform 0.3s ease;
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
   }
 
   .step-card:hover {
     transform: translateY(-4px);
+    box-shadow: 0 12px 28px rgba(31, 26, 23, 0.08);
   }
 
   .step-icon {
@@ -541,93 +766,545 @@
     margin: 0;
   }
 
+  /* ── Product Preview ── */
+  .landing__preview {
+    padding: 4.5rem 0;
+  }
+
+  .preview-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1.5rem;
+  }
+
+  .preview-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+  }
+
+  .preview-frame {
+    background: var(--flama-surface);
+    border: 1px solid var(--flama-border);
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 12px 28px rgba(31, 26, 23, 0.06);
+  }
+
+  .preview-frame__top {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.6rem 0.85rem;
+    background: rgba(254, 104, 8, 0.08);
+    border-bottom: 1px solid rgba(254, 104, 8, 0.18);
+  }
+
+  .preview-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: rgba(31, 26, 23, 0.3);
+  }
+
+  .preview-path {
+    margin-left: 0.4rem;
+    font-size: 0.78rem;
+    font-family: var(--font-family-mono);
+    color: var(--flama-text-2);
+  }
+
+  .preview-frame__body {
+    padding: 0.9rem;
+    min-height: 160px;
+    background: linear-gradient(180deg, #fff, #fff8f2);
+  }
+
+  .preview-line,
+  .preview-input,
+  .preview-area,
+  .preview-browse__sidebar,
+  .preview-browse__table div,
+  .preview-browse__editor {
+    background: #fff;
+    border: 1px solid var(--flama-border);
+    border-radius: 8px;
+  }
+
+  .preview-line {
+    height: 12px;
+    width: 58%;
+    margin-bottom: 0.8rem;
+  }
+
+  .preview-line--lg {
+    width: 72%;
+  }
+
+  .preview-grid-2 {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.55rem;
+    margin-bottom: 0.55rem;
+  }
+
+  .preview-input {
+    height: 28px;
+  }
+
+  .preview-area {
+    height: 56px;
+    margin-bottom: 0.55rem;
+  }
+
+  .preview-actions {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .preview-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 28px;
+    padding: 0 0.7rem;
+    border-radius: 7px;
+    font-size: 0.78rem;
+    color: #fff;
+    background: var(--flama-orange-600);
+  }
+
+  .preview-pill--ghost {
+    background: #fff;
+    color: var(--flama-text-2);
+    border: 1px solid var(--flama-border);
+  }
+
+  .preview-chip-row {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 0.65rem;
+    flex-wrap: wrap;
+  }
+
+  .preview-chip {
+    font-size: 0.76rem;
+    padding: 0.18rem 0.55rem;
+    border-radius: 999px;
+    border: 1px solid transparent;
+  }
+
+  .preview-chip--new {
+    color: #0f9f4d;
+    background: rgba(15, 159, 77, 0.12);
+    border-color: rgba(15, 159, 77, 0.2);
+  }
+
+  .preview-chip--learn {
+    color: #be123c;
+    background: rgba(190, 18, 60, 0.12);
+    border-color: rgba(190, 18, 60, 0.2);
+  }
+
+  .preview-chip--due {
+    color: var(--flama-orange-700);
+    background: rgba(254, 104, 8, 0.12);
+    border-color: rgba(254, 104, 8, 0.2);
+  }
+
+  .preview-study-card {
+    border: 1px solid var(--flama-border);
+    border-radius: 10px;
+    background: #fff;
+    padding: 0.65rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    margin-bottom: 0.65rem;
+  }
+
+  .preview-study-card strong {
+    font-size: 0.92rem;
+  }
+
+  .preview-study-card span {
+    font-size: 0.8rem;
+    color: var(--flama-text-2);
+  }
+
+  .preview-ratings {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.35rem;
+  }
+
+  .preview-ratings span {
+    border-radius: 7px;
+    text-align: center;
+    border: 1px solid var(--flama-border);
+    font-size: 0.72rem;
+    padding: 0.32rem 0.1rem;
+    background: #fff;
+  }
+
+  .preview-ratings .is-active {
+    background: rgba(254, 104, 8, 0.12);
+    border-color: rgba(254, 104, 8, 0.35);
+    color: var(--flama-orange-700);
+  }
+
+  .preview-browse {
+    display: grid;
+    grid-template-columns: 1.1fr 1.5fr 1fr;
+    gap: 0.45rem;
+    height: 132px;
+  }
+
+  .preview-browse__sidebar,
+  .preview-browse__editor {
+    height: 100%;
+  }
+
+  .preview-browse__table {
+    display: grid;
+    gap: 0.35rem;
+  }
+
+  .preview-browse__table div:nth-child(1) {
+    height: 28px;
+  }
+
+  .preview-browse__table div:nth-child(2),
+  .preview-browse__table div:nth-child(3) {
+    height: 48px;
+  }
+
+  .preview-caption {
+    margin: 0;
+    color: var(--flama-text-2);
+    font-size: 0.9rem;
+    line-height: 1.45;
+  }
+
+  /* ── Use Cases ── */
+  .landing__usecases {
+    padding: 4rem 0;
+  }
+
+  .usecase-chips {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.7rem;
+    max-width: 900px;
+    margin: 0 auto;
+  }
+
+  .usecase-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.45rem 0.85rem;
+    border: 1px solid var(--flama-border);
+    border-radius: 999px;
+    background: #fff;
+    font-size: 0.88rem;
+    color: var(--flama-text-2);
+  }
+
   /* ── Benefits ── */
   .landing__benefits {
-    padding: 5rem 0;
+    padding: 4.5rem 0;
   }
 
   .benefits-grid {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 3rem 4rem;
-    max-width: 900px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 2rem 2.5rem;
+    max-width: 940px;
     margin: 0 auto;
   }
 
   .benefit-item {
     display: flex;
-    gap: 1.25rem;
+    gap: 1rem;
     align-items: flex-start;
   }
 
   .benefit-item i {
-    font-size: 1.5rem;
+    font-size: 1.35rem;
     margin-top: 0.2rem;
     background: rgba(254, 104, 8, 0.1);
-    padding: 0.8rem;
-    border-radius: 12px;
+    padding: 0.75rem;
+    border-radius: 10px;
   }
 
   .benefit-item h4 {
-    font-size: 1.1rem;
-    margin-bottom: 0.5rem;
+    font-size: 1.05rem;
+    margin-bottom: 0.35rem;
   }
 
   .benefit-item p {
     color: var(--flama-text-2);
-    font-size: 0.95rem;
+    font-size: 0.92rem;
     line-height: var(--line-height-relaxed);
     margin: 0;
   }
 
-  /* ── Roadmap ── */
-  .landing__roadmap {
-    padding: 5rem 0;
+  /* ── Mini Demo ── */
+  .landing__demo {
+    padding: 4.5rem 0;
   }
 
-  .roadmap-box {
-    max-width: 600px;
-    margin: 0 auto;
-    padding: 3rem;
-    background: var(--flama-bg);
+  .demo-grid {
+    display: grid;
+    grid-template-columns: 1.05fr 1fr;
+    gap: 2rem;
+    align-items: center;
+  }
+
+  .demo-desc {
+    color: var(--flama-text-2);
+    margin-bottom: 1rem;
+  }
+
+  .demo-points {
+    margin: 0;
+    padding-left: 1.1rem;
+    color: var(--flama-text-2);
+    line-height: 1.75;
+  }
+
+  .demo-panel {
+    padding: 1.2rem;
+    border-radius: 16px;
     border: 1px solid var(--flama-border);
-    border-radius: 24px;
+    background: #fff;
+    box-shadow: 0 14px 30px rgba(31, 26, 23, 0.06);
+  }
+
+  .mini-demo-card {
+    position: relative;
+    height: 180px;
+    transform-style: preserve-3d;
+    transition: transform 0.45s ease;
+  }
+
+  .mini-demo-card.is-flipped {
+    transform: rotateY(180deg);
+  }
+
+  .mini-demo-face {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 0.6rem;
+    padding: 1rem;
+    border-radius: 12px;
+    border: 1px solid var(--flama-border);
+    background: linear-gradient(145deg, #fff, #fff3e9);
+    backface-visibility: hidden;
+  }
+
+  .mini-demo-face strong {
+    font-size: 1.03rem;
+    line-height: 1.45;
+  }
+
+  .mini-demo-face--back {
+    transform: rotateY(180deg);
+  }
+
+  .mini-demo-label {
+    font-size: 0.78rem;
+    color: var(--flama-text-2);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .mini-demo-flip {
+    margin-top: 1rem;
+    width: 100%;
+    border: 1px solid var(--flama-border);
+    background: #fff;
+    border-radius: 10px;
+    padding: 0.55rem 0.8rem;
+    font-weight: var(--font-weight-semibold);
+  }
+
+  .mini-demo-ratings {
+    margin-top: 0.85rem;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.45rem;
+  }
+
+  .mini-rate-btn {
+    border: 1px solid var(--flama-border);
+    border-radius: 9px;
+    background: #fff;
+    padding: 0.45rem 0.3rem;
+    font-size: 0.83rem;
+    font-weight: var(--font-weight-semibold);
+    color: var(--flama-text-2);
+  }
+
+  .mini-rate-btn.is-active {
+    color: var(--flama-orange-700);
+    border-color: rgba(254, 104, 8, 0.4);
+    background: rgba(254, 104, 8, 0.1);
+  }
+
+  .mini-demo-feedback {
+    margin: 0.8rem 0 0;
+    color: var(--flama-text-2);
+    font-size: 0.9rem;
+  }
+
+  .mini-demo-feedback strong {
+    color: var(--flama-text);
+  }
+
+  /* ── Roadmap ── */
+  .landing__roadmap {
+    padding: 4.5rem 0;
+  }
+
+  .roadmap-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1rem;
+  }
+
+  .roadmap-column {
+    border: 1px solid var(--flama-border);
+    background: #fff;
+    border-radius: 16px;
+    padding: 1.1rem;
+  }
+
+  .roadmap-column--now {
+    background: linear-gradient(180deg, #fff, #fff4e8);
+    border-color: rgba(254, 104, 8, 0.35);
+  }
+
+  .roadmap-head {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    margin-bottom: 0.8rem;
+  }
+
+  .roadmap-head p {
+    margin: 0;
+    font-size: 0.88rem;
+    color: var(--flama-text-2);
+  }
+
+  .roadmap-badge {
+    width: fit-content;
+    padding: 0.22rem 0.62rem;
+    border-radius: 999px;
+    font-size: 0.74rem;
+    font-weight: var(--font-weight-bold);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+
+  .roadmap-badge--now {
+    color: #fff;
+    background: var(--flama-orange-600);
+  }
+
+  .roadmap-badge--next {
+    color: var(--flama-orange-700);
+    background: rgba(254, 104, 8, 0.13);
+  }
+
+  .roadmap-badge--later {
+    color: var(--flama-text-2);
+    background: rgba(31, 26, 23, 0.08);
   }
 
   .roadmap-list {
     list-style: none;
-    padding: 0;
     margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.7rem;
   }
 
   .roadmap-list li {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 1rem 0;
-    border-bottom: 1px solid var(--flama-border);
-    font-weight: var(--font-weight-medium);
-    font-size: 1.05rem;
-  }
-
-  .roadmap-list li:last-child {
-    border-bottom: none;
-    padding-bottom: 0;
-  }
-
-  .badge-soon {
-    font-size: 0.75rem;
-    font-weight: var(--font-weight-bold);
-    padding: 0.25rem 0.6rem;
-    border-radius: 999px;
-    background: var(--flama-surface);
-    color: var(--flama-text-2);
     border: 1px solid var(--flama-border);
+    border-radius: 10px;
+    padding: 0.65rem;
+    background: #fff;
+    display: grid;
+    gap: 0.22rem;
+  }
+
+  .roadmap-list li strong {
+    font-size: 0.93rem;
+  }
+
+  .roadmap-list li span {
+    font-size: 0.82rem;
+    color: var(--flama-text-2);
+  }
+
+  /* ── FAQ ── */
+  .landing__faq {
+    padding: 4.5rem 0 3.5rem;
+  }
+
+  .faq-list {
+    max-width: 860px;
+    margin: 0 auto;
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .faq-item {
+    border: 1px solid var(--flama-border);
+    border-radius: 12px;
+    background: #fff;
+    padding: 0.85rem 1rem;
+  }
+
+  .faq-item summary {
+    cursor: pointer;
+    font-weight: var(--font-weight-semibold);
+    color: var(--flama-text);
+  }
+
+  .faq-item p {
+    margin: 0.65rem 0 0;
+    color: var(--flama-text-2);
+    line-height: 1.6;
+    font-size: 0.93rem;
+  }
+
+  /* ── Final CTA ── */
+  .landing__final-cta {
+    padding: 0 0 4.5rem;
+  }
+
+  .final-cta-box {
+    border: 1px solid var(--flama-border);
+    border-radius: 20px;
+    background: linear-gradient(180deg, #fff, #fff3e8);
+    padding: 2rem 1.4rem;
+  }
+
+  .final-cta-desc {
+    color: var(--flama-text-2);
+    margin: 0 0 1.25rem;
   }
 
   /* ── Trust ── */
   .landing__trust {
-    padding: 3rem 0 5rem;
+    padding: 2.6rem 0 3rem;
   }
 
   .trust-icon {
@@ -641,6 +1318,7 @@
     color: var(--flama-text-2);
     font-size: 0.95rem;
     line-height: var(--line-height-relaxed);
+    margin: 0;
   }
 
   /* ── Responsive ── */
@@ -664,13 +1342,24 @@
     }
 
     .steps-grid {
-      grid-template-columns: 1fr;
-      gap: 1.5rem;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .preview-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     .benefits-grid {
       grid-template-columns: 1fr;
       gap: 2rem;
+    }
+
+    .demo-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .roadmap-grid {
+      grid-template-columns: 1fr;
     }
   }
 
@@ -683,21 +1372,59 @@
       flex-direction: column;
     }
 
-    .roadmap-box {
-      padding: 2rem 1.5rem;
+    .steps-grid,
+    .preview-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .preview-frame__body {
+      min-height: 145px;
+      padding: 0.75rem;
+    }
+
+    .usecase-chip {
+      font-size: 0.82rem;
+    }
+
+    .mini-demo-ratings {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .faq-item {
+      padding: 0.8rem 0.85rem;
     }
   }
 </style>
 <script>
   (() => {
     const stack = document.querySelector('.mockup-stack');
-    if (!stack) return;
-    const observer = new IntersectionObserver((entries) => {
-      entries.forEach(entry => {
-        stack.classList.toggle('is-visible', entry.isIntersecting);
+    if (stack && "IntersectionObserver" in window) {
+      const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+          stack.classList.toggle('is-visible', entry.isIntersecting);
+        });
+      }, { threshold: 0.3 });
+      observer.observe(stack);
+    }
+
+    const miniCard = document.querySelector("[data-mini-demo-card]");
+    const flipBtn = document.getElementById("mini-demo-flip");
+    const ratingButtons = document.querySelectorAll("[data-demo-rating]");
+    const feedbackText = document.getElementById("mini-demo-feedback-text");
+
+    flipBtn?.addEventListener("click", () => {
+      miniCard?.classList.toggle("is-flipped");
+    });
+
+    ratingButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        ratingButtons.forEach((item) => item.classList.remove("is-active"));
+        button.classList.add("is-active");
+        if (feedbackText) {
+          feedbackText.textContent = button.getAttribute("data-demo-label") || "";
+        }
       });
-    }, { threshold: 0.3 });
-    observer.observe(stack);
+    });
   })();
 </script>
 {% endblock %}
