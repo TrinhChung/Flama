@@ -10,7 +10,8 @@
       <small class="text-muted" id="deck-meta-line"></small>
     </div>
     <div class="d-flex gap-2">
-      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('flashcards.shared_decks_page') }}">Quay lại Shared Decks</a>
+      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('flashcards.shared_decks_page') }}">Quay lại Shared
+        Decks</a>
       <button class="btn btn-primary btn-sm" id="deck-install-btn" type="button">Install</button>
     </div>
   </div>
@@ -61,6 +62,14 @@
       <div class="small text-muted" id="deck-stats"></div>
     </div>
 
+    <div class="card card-body mb-3">
+      <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+        <h3 class="h6 mb-0">Test nhanh (toi da 5 tu)</h3>
+        <small class="text-muted" id="deck-test-note">Chon tu de nap du lieu vao preview card.</small>
+      </div>
+      <div class="list-group list-group-flush" id="deck-test-samples"></div>
+    </div>
+
     <div class="card card-body mb-3" id="deck-template-preview-card">
       <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
         <div>
@@ -68,15 +77,32 @@
           <small class="text-muted" id="deck-template-note"></small>
         </div>
         <div class="d-flex gap-2 align-items-center">
-          <a class="btn btn-outline-secondary btn-sm" id="source-note-type-link" href="#" target="_self">Xem chi tiết template nguồn</a>
-          <select class="form-select form-select-sm" id="deck-template-select" style="min-width: 220px;"></select>
+          <a class="btn btn-outline-primary btn-sm d-flex align-items-center gap-2" id="source-note-type-link" href="#"
+            target="_self">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor"
+              class="bi bi-file-earmark-code" viewBox="0 0 16 16">
+              <path
+                d="M14 4.5V14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2h5.5zm-3 0A1.5 1.5 0 0 1 9.5 3V1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V4.5z" />
+              <path
+                d="M8.646 6.646a.5.5 0 0 1 .708 0l2 2a.5.5 0 0 1 0 .708l-2 2a.5.5 0 0 1-.708-.708L10.293 9 8.646 7.354a.5.5 0 0 1 0-.708m-1.292 0a.5.5 0 0 0-.708 0l-2 2a.5.5 0 0 0 0 .708l2 2a.5.5 0 0 0 .708-.708L5.707 9l1.647-1.646a.5.5 0 0 0 0-.708" />
+            </svg>
+            <span id="deck-template-name-display">Đang tải...</span>
+          </a>
           <div class="btn-group btn-group-sm" role="group" aria-label="Deck preview side">
-            <button class="btn btn-outline-secondary active" id="deck-preview-side-front" type="button" data-side="front">Front</button>
-            <button class="btn btn-outline-secondary" id="deck-preview-side-back" type="button" data-side="back">Back</button>
+            <button class="btn btn-outline-secondary active" id="deck-preview-side-front" type="button"
+              data-side="front">Front</button>
+            <button class="btn btn-outline-secondary" id="deck-preview-side-back" type="button"
+              data-side="back">Back</button>
           </div>
+          <div class="btn-group btn-group-sm" role="group" aria-label="Deck preview sample nav">
+            <button class="btn btn-outline-secondary" id="deck-preview-sample-prev" type="button">Prev tu</button>
+            <button class="btn btn-outline-secondary" id="deck-preview-sample-next" type="button">Next tu</button>
+          </div>
+          <small class="text-muted" id="deck-preview-sample-label"></small>
         </div>
       </div>
-      <iframe id="deck-template-preview-frame" class="w-100 border rounded" style="min-height: 420px;" sandbox="allow-same-origin allow-scripts"></iframe>
+      <iframe id="deck-template-preview-frame" class="w-100 border rounded" style="min-height: 420px;"
+        sandbox="allow-same-origin allow-scripts"></iframe>
     </div>
 
     <div class="card card-body">
@@ -87,11 +113,16 @@
           <label class="form-label mb-1" for="deck-rating-value">Điểm</label>
           <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
             <div class="shared-rating-stars" id="deck-rating-stars" role="radiogroup" aria-label="Chọn số sao">
-              <button type="button" class="shared-rating-star" role="radio" data-value="1" aria-label="1 sao" aria-checked="false">★</button>
-              <button type="button" class="shared-rating-star" role="radio" data-value="2" aria-label="2 sao" aria-checked="false">★</button>
-              <button type="button" class="shared-rating-star" role="radio" data-value="3" aria-label="3 sao" aria-checked="false">★</button>
-              <button type="button" class="shared-rating-star" role="radio" data-value="4" aria-label="4 sao" aria-checked="false">★</button>
-              <button type="button" class="shared-rating-star" role="radio" data-value="5" aria-label="5 sao" aria-checked="true">★</button>
+              <button type="button" class="shared-rating-star" role="radio" data-value="1" aria-label="1 sao"
+                aria-checked="false">★</button>
+              <button type="button" class="shared-rating-star" role="radio" data-value="2" aria-label="2 sao"
+                aria-checked="false">★</button>
+              <button type="button" class="shared-rating-star" role="radio" data-value="3" aria-label="3 sao"
+                aria-checked="false">★</button>
+              <button type="button" class="shared-rating-star" role="radio" data-value="4" aria-label="4 sao"
+                aria-checked="false">★</button>
+              <button type="button" class="shared-rating-star" role="radio" data-value="5" aria-label="5 sao"
+                aria-checked="true">★</button>
             </div>
             <small class="text-muted fw-semibold" id="deck-rating-value-label">5/5</small>
           </div>
@@ -105,7 +136,8 @@
         </div>
         <div class="col-12">
           <label class="form-label mb-1" for="deck-rating-comment">Nhận xét</label>
-          <textarea class="form-control form-control-sm" id="deck-rating-comment" rows="2" placeholder="Viết nhận xét (tuỳ chọn)"></textarea>
+          <textarea class="form-control form-control-sm" id="deck-rating-comment" rows="2"
+            placeholder="Viết nhận xét (tuỳ chọn)"></textarea>
         </div>
       </div>
       <div class="d-flex justify-content-between align-items-center mt-2">
@@ -132,6 +164,8 @@
     const previewTextEl = document.getElementById("deck-preview-text");
     const tagsEl = document.getElementById("deck-tags");
     const statsEl = document.getElementById("deck-stats");
+    const testSamplesEl = document.getElementById("deck-test-samples");
+    const testNoteEl = document.getElementById("deck-test-note");
     const installBtn = document.getElementById("deck-install-btn");
     const myReviewEl = document.getElementById("deck-my-review");
     const ratingValueEl = document.getElementById("deck-rating-value");
@@ -142,8 +176,11 @@
     const ratingHintEl = document.getElementById("deck-rating-hint");
     const ratingSubmitBtn = document.getElementById("deck-rating-submit-btn");
     const sourceNoteTypeLink = document.getElementById("source-note-type-link");
+    const templateNameDisplayEl = document.getElementById("deck-template-name-display");
     const templateNoteEl = document.getElementById("deck-template-note");
-    const templateSelectEl = document.getElementById("deck-template-select");
+    const samplePrevBtn = document.getElementById("deck-preview-sample-prev");
+    const sampleNextBtn = document.getElementById("deck-preview-sample-next");
+    const sampleLabelEl = document.getElementById("deck-preview-sample-label");
     const previewFrame = document.getElementById("deck-template-preview-frame");
     const frontBtn = document.getElementById("deck-preview-side-front");
     const backBtn = document.getElementById("deck-preview-side-back");
@@ -154,6 +191,8 @@
     let selectedTemplateId = "";
     let previewPayload = null;
     let previewSide = "front";
+    let testSamples = [];
+    let activeSampleIndex = -1;
 
     function showError(message) {
       errorEl.textContent = message || "Request failed.";
@@ -196,6 +235,98 @@
         span.textContent = tag;
         tagsEl.appendChild(span);
       });
+    }
+
+    function getActiveSample() {
+      if (!Array.isArray(testSamples)) return null;
+      if (activeSampleIndex < 0 || activeSampleIndex >= testSamples.length) return null;
+      return testSamples[activeSampleIndex];
+    }
+
+    function renderSampleNavState() {
+      const hasSamples = Array.isArray(testSamples) && testSamples.length > 0;
+      if (samplePrevBtn) samplePrevBtn.disabled = !hasSamples;
+      if (sampleNextBtn) sampleNextBtn.disabled = !hasSamples;
+
+      if (!sampleLabelEl) return;
+      if (!hasSamples) {
+        sampleLabelEl.textContent = "Khong co tu mau.";
+        return;
+      }
+      const sample = getActiveSample();
+      const word = ((sample?.word || "").trim() || ("Tu #" + String(activeSampleIndex + 1)));
+      sampleLabelEl.textContent = "Mau " + String(activeSampleIndex + 1) + "/" + String(testSamples.length) + ": " + word;
+    }
+
+    function renderTestSamples(samples) {
+      if (!testSamplesEl) return;
+      testSamplesEl.innerHTML = "";
+
+      const normalized = Array.isArray(samples) ? samples : [];
+      testSamples = normalized;
+      if (!normalized.length) {
+        activeSampleIndex = -1;
+        const emptyRow = document.createElement("div");
+        emptyRow.className = "list-group-item px-0 text-muted";
+        emptyRow.textContent = "Deck nay chua co tu mau de test.";
+        testSamplesEl.appendChild(emptyRow);
+        if (testNoteEl) {
+          testNoteEl.textContent = "Khong co du lieu de lay 5 tu mau.";
+        }
+        renderSampleNavState();
+        return;
+      }
+
+      if (activeSampleIndex < 0 || activeSampleIndex >= normalized.length) {
+        activeSampleIndex = 0;
+      }
+      if (testNoteEl) {
+        testNoteEl.textContent = "Dang hien thi " + normalized.length + " tu ngau nhien de mo phong preview card.";
+      }
+
+      normalized.forEach((sample, index) => {
+        const row = document.createElement("button");
+        row.type = "button";
+        row.className = "list-group-item list-group-item-action px-0 text-start";
+        if (index === activeSampleIndex) {
+          row.classList.add("active");
+        }
+
+        const textWrap = document.createElement("div");
+        textWrap.className = "d-flex flex-wrap justify-content-between align-items-start gap-2";
+        const wordEl = document.createElement("div");
+        wordEl.className = "fw-semibold";
+        wordEl.textContent = (sample?.word || "").trim() || ("Tu #" + String(index + 1));
+        const metaWrap = document.createElement("div");
+        metaWrap.appendChild(wordEl);
+
+        const reading = (sample?.reading || "").trim();
+        if (reading) {
+          const readingEl = document.createElement("div");
+          readingEl.className = "small text-muted";
+          readingEl.textContent = "Reading: " + reading;
+          metaWrap.appendChild(readingEl);
+        }
+
+        const meaning = (sample?.meaning || "").trim();
+        const meaningEl = document.createElement("div");
+        meaningEl.className = "small";
+        meaningEl.textContent = meaning ? ("Hint: " + meaning) : "Hint: (khong co)";
+
+        textWrap.appendChild(metaWrap);
+        textWrap.appendChild(meaningEl);
+        row.appendChild(textWrap);
+
+        row.addEventListener("click", () => {
+          activeSampleIndex = index;
+          renderTestSamples(testSamples);
+          renderSampleNavState();
+          loadTemplatePreview().catch((error) => showError(error.message));
+        });
+
+        testSamplesEl.appendChild(row);
+      });
+      renderSampleNavState();
     }
 
     function setLoadingPreview(message) {
@@ -295,29 +426,18 @@
       }
     }
 
-    function renderTemplateSelect(templates) {
-      templateSelectEl.innerHTML = "";
+    function renderTemplateName(templates, defaultName) {
       const normalized = Array.isArray(templates) ? templates.slice().sort((a, b) => (a.position || 0) - (b.position || 0)) : [];
       if (!normalized.length) {
-        const option = document.createElement("option");
-        option.value = "";
-        option.textContent = "Không có template";
-        templateSelectEl.appendChild(option);
-        templateSelectEl.disabled = true;
+        if (templateNameDisplayEl) templateNameDisplayEl.textContent = "Không có template";
         selectedTemplateId = "";
         return;
       }
-      normalized.forEach((template) => {
-        const option = document.createElement("option");
-        option.value = template.id;
-        option.textContent = template.is_default ? template.name + " (default)" : template.name;
-        templateSelectEl.appendChild(option);
-      });
-      if (!selectedTemplateId || !normalized.some((template) => template.id === selectedTemplateId)) {
-        selectedTemplateId = normalized[0].id;
+      const defaultTemplate = normalized.find(t => t.is_default) || normalized[0];
+      selectedTemplateId = defaultTemplate.id;
+      if (templateNameDisplayEl) {
+        templateNameDisplayEl.textContent = "Template: " + (defaultName || defaultTemplate.name);
       }
-      templateSelectEl.value = selectedTemplateId;
-      templateSelectEl.disabled = false;
     }
 
     async function loadTemplatePreview() {
@@ -325,10 +445,20 @@
         setLoadingPreview("Deck này chưa có template preview.");
         return;
       }
+      const selectedSample = getActiveSample();
+      const previewRequestPayload = {};
+      if (selectedSample?.note_id) {
+        previewRequestPayload.note_id = selectedSample.note_id;
+      }
+      if (selectedSample?.entry_id) {
+        previewRequestPayload.entry_id = selectedSample.entry_id;
+      }
+
       setLoadingPreview();
       previewPayload = await requestJson(`/api/shared/decks/${deckItemId}/templates/${selectedTemplateId}/preview`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(previewRequestPayload),
       });
       renderPreviewFrame();
     }
@@ -342,8 +472,7 @@
         sourceNoteTypeLink.classList.add("disabled");
         sourceNoteTypeLink.setAttribute("href", "#");
         templateNoteEl.textContent = "Deck này không liên kết note type nguồn.";
-        templateSelectEl.innerHTML = "<option value=''>Không có template</option>";
-        templateSelectEl.disabled = true;
+        if (templateNameDisplayEl) templateNameDisplayEl.textContent = "Không có template";
         setLoadingPreview("Deck này không có template preview.");
         return;
       }
@@ -354,21 +483,22 @@
       const sourceFromDeckDetail = deckDetail.source_note_type || null;
       if (sourceFromDeckDetail && Array.isArray(sourceFromDeckDetail.templates) && sourceFromDeckDetail.templates.length) {
         sourceNoteTypeDetail = sourceFromDeckDetail;
-        renderTemplateSelect(sourceNoteTypeDetail.templates || []);
-        templateNoteEl.textContent = "Preview láº¥y tá»« note type nguá»“n: " + (sourceNoteTypeDetail.title || sourceNoteTypeDetail.name || "");
+        const displayName = sourceNoteTypeDetail.title || sourceNoteTypeDetail.name || "";
+        renderTemplateName(sourceNoteTypeDetail.templates || [], displayName);
+        templateNoteEl.textContent = "Preview lấy từ note type nguồn: " + displayName;
         await loadTemplatePreview();
         return;
       }
 
       try {
         sourceNoteTypeDetail = await requestJson(`/api/shared/note-types/${deckDetail.source_note_type_id}`);
-        renderTemplateSelect(sourceNoteTypeDetail.templates || []);
-        templateNoteEl.textContent = "Preview lấy từ note type nguồn: " + (sourceNoteTypeDetail.title || sourceNoteTypeDetail.name || "");
+        const displayName = sourceNoteTypeDetail.title || sourceNoteTypeDetail.name || "";
+        renderTemplateName(sourceNoteTypeDetail.templates || [], displayName);
+        templateNoteEl.textContent = "Preview lấy từ note type nguồn: " + displayName;
         await loadTemplatePreview();
       } catch (error) {
         templateNoteEl.textContent = "Không thể tải template preview nguồn.";
-        templateSelectEl.innerHTML = "<option value=''>Không có template</option>";
-        templateSelectEl.disabled = true;
+        if (templateNameDisplayEl) templateNameDisplayEl.textContent = "Không có template";
         setLoadingPreview("Không có template preview khả dụng.");
       }
     }
@@ -389,6 +519,8 @@
         + " | Cập nhật: " + (formatDate(deckDetail.updated_at) || "N/A");
 
       renderTags(deckDetail.tags || []);
+      renderTestSamples(deckDetail.test_samples || []);
+      renderSampleNavState();
       renderInstallState();
       renderRatingState();
       await loadSourceNoteType();
@@ -456,10 +588,7 @@
       }
     });
 
-    templateSelectEl?.addEventListener("change", () => {
-      selectedTemplateId = templateSelectEl.value;
-      loadTemplatePreview().catch((error) => showError(error.message));
-    });
+
 
     [frontBtn, backBtn].forEach((button) => {
       button?.addEventListener("click", () => {
@@ -467,6 +596,22 @@
         applySideButtons();
         renderPreviewFrame();
       });
+    });
+
+    samplePrevBtn?.addEventListener("click", () => {
+      if (!Array.isArray(testSamples) || !testSamples.length) return;
+      activeSampleIndex = (activeSampleIndex - 1 + testSamples.length) % testSamples.length;
+      renderTestSamples(testSamples);
+      renderSampleNavState();
+      loadTemplatePreview().catch((error) => showError(error.message));
+    });
+
+    sampleNextBtn?.addEventListener("click", () => {
+      if (!Array.isArray(testSamples) || !testSamples.length) return;
+      activeSampleIndex = (activeSampleIndex + 1) % testSamples.length;
+      renderTestSamples(testSamples);
+      renderSampleNavState();
+      loadTemplatePreview().catch((error) => showError(error.message));
     });
 
     setSelectedRating(ratingValueEl.value || "5");

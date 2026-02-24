@@ -21,6 +21,12 @@ class VocabularyDeck(db.Model):
         nullable=True,
         index=True,
     )
+    note_type_id = db.Column(
+        db.String(36),
+        db.ForeignKey("note_types.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     name = db.Column(db.String(255), nullable=False)
     description = db.Column(db.Text, nullable=True)
     position = db.Column(db.Integer, nullable=False, default=0)
@@ -30,6 +36,7 @@ class VocabularyDeck(db.Model):
     )
 
     owner = db.relationship("User", foreign_keys=[owner_user_id])
+    note_type = db.relationship("NoteType", foreign_keys=[note_type_id])
     parent = db.relationship(
         "VocabularyDeck",
         remote_side=[id],

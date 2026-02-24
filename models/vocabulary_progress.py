@@ -27,6 +27,7 @@ class VocabularyProgress(db.Model):
     due_at = db.Column(db.DateTime, nullable=True, index=True)
     due_day = db.Column(db.Integer, nullable=True, index=True)
     interval_days = db.Column(db.Integer, nullable=False, default=0)
+    is_suspended = db.Column(db.Boolean, nullable=False, default=False, index=True)
     ease_factor = db.Column(db.Float, nullable=False, default=2.5)
     reps = db.Column(db.Integer, nullable=False, default=0)
     lapses = db.Column(db.Integer, nullable=False, default=0)

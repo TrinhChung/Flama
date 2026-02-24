@@ -41,8 +41,8 @@
             <span>Move Deck</span>
           </button></li>
         <li><button class="dropdown-item deck-settings-item deck-action-btn" type="button" data-action="copy-id"
-            data-deck-id="{{ node.deck_id }}" data-deck-name="{{ node.label }}"
-            data-move-alias="{{ node.move_alias }}" data-move-token="{{ node.move_token }}">
+            data-deck-id="{{ node.deck_id }}" data-deck-name="{{ node.label }}" data-move-alias="{{ node.move_alias }}"
+            data-move-token="{{ node.move_token }}">
             <i class="bi bi-copy deck-settings-item-icon" aria-hidden="true"></i>
             <span>Copy Move ID</span>
           </button></li>
@@ -84,6 +84,7 @@
   {% set toolbar_aria_label = 'Home actions' %}
   {% set toolbar_study_href = url_for('flashcards.flashcard_study_page') %}
   {% set toolbar_study_base_url = '/vocabulary/study/deck/' %}
+  {% set toolbar_stats_href = url_for('main.statistics_page') %}
   {% set toolbar_browse_context = 'dashboard' %}
   {% set toolbar_current_deck_id = '' %}
   {% include 'components/deck/dashboard_toolbar.html' with context %}
@@ -156,8 +157,8 @@
             </select>
             <label class="form-label text-muted small mb-1 mt-3" for="deck-move-parent-id-input">Hoặc nhập Parent Move
               ID</label>
-            <input type="text" class="form-control" id="deck-move-parent-id-input" placeholder="VD: MID-5A9F2C7D1E (trống = Root)"
-              autocomplete="off">
+            <input type="text" class="form-control" id="deck-move-parent-id-input"
+              placeholder="VD: MID-5A9F2C7D1E (trống = Root)" autocomplete="off">
             <small class="text-muted d-block mt-1">Move ID là mã tạm thời, không phải ID thật trong database.</small>
             <small class="text-muted d-block">Không thể di chuyển deck cha vào deck con của chính nó.</small>
           </div>
@@ -244,6 +245,49 @@
       {% endif %}
     </div>
   </section>
+
+  <section class="stats-board" id="stats-board" data-initial-year="{{ stats_initial_year }}">
+    <p class="stats-summary" id="stats-summary">
+      Studied 0 cards in 0.00 minutes today (0.00s/card)
+    </p>
+
+    <div class="stats-nav" aria-label="Statistics year navigation">
+      <button type="button" class="stats-year-btn" id="stats-prev-year" aria-label="Previous year">
+        <i class="bi bi-chevron-left" aria-hidden="true"></i>
+      </button>
+      <div class="stats-year-label" id="stats-year-label">{{ stats_initial_year }}</div>
+      <button type="button" class="stats-year-btn" id="stats-next-year" aria-label="Next year">
+        <i class="bi bi-chevron-right" aria-hidden="true"></i>
+      </button>
+    </div>
+
+    <div class="stats-heatmap-scroll">
+      <div class="stats-heatmap" id="stats-heatmap" role="grid" aria-label="Study heatmap"></div>
+    </div>
+
+    <div class="stats-tooltip" id="stats-tooltip">
+      Hover a day to view details.
+    </div>
+
+    <div class="stats-metrics">
+      <div class="stats-metric">
+        Daily average:
+        <strong id="stats-daily-average">0 cards</strong>
+      </div>
+      <div class="stats-metric">
+        Days learned:
+        <strong id="stats-days-learned">0%</strong>
+      </div>
+      <div class="stats-metric">
+        Longest streak:
+        <strong id="stats-longest-streak">0 days</strong>
+      </div>
+      <div class="stats-metric">
+        Current streak:
+        <strong id="stats-current-streak">0 days</strong>
+      </div>
+    </div>
+  </section>
 </div>
 
 <style>
@@ -255,6 +299,8 @@
     --count-due: var(--flama-orange-600, #ea580c);
     /* Flama Orange */
     --settings-col-width: 30px;
+    --dashboard-board-max-width: 920px;
+    --dashboard-font-family: var(--font-family-base);
 
     max-width: 980px;
     margin: 0 auto;
@@ -264,13 +310,14 @@
   /* ── Deck Board & Container ── */
   .deck-board {
     width: 100%;
-    max-width: 860px;
+    max-width: var(--dashboard-board-max-width);
     margin: 0 auto;
     background: #ffffff;
     border: 1px solid var(--flama-border);
     border-radius: 12px;
     padding: 1.5rem 2.5rem;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.02);
+    font-family: var(--dashboard-font-family);
   }
 
   .deck-board-head {
@@ -338,6 +385,7 @@
   }
 
   .deck-name {
+    font-family: var(--dashboard-font-family);
     font-size: 1.15rem;
     color: var(--flama-text);
     white-space: nowrap;
@@ -413,6 +461,7 @@
   }
 
   .stat-num {
+    font-family: var(--dashboard-font-family);
     font-size: 1.15rem;
     font-weight: 500;
     font-variant-numeric: tabular-nums;
@@ -603,6 +652,166 @@
     padding: 0.55rem 1.25rem;
   }
 
+  /* ── Statistics board ── */
+  .stats-board {
+    width: 100%;
+    max-width: var(--dashboard-board-max-width);
+    margin: 1.4rem auto 0;
+    padding: 1.35rem 1.2rem 1.2rem;
+    border: 1px solid var(--flama-border);
+    border-radius: 12px;
+    background: #f7f7f7;
+    font-family: var(--dashboard-font-family);
+  }
+
+  .stats-summary {
+    margin: 0;
+    text-align: center;
+    font-size: 1.25rem;
+    line-height: 1.3;
+    font-weight: var(--font-weight-semibold, 600);
+    color: var(--flama-orange-600, #E05C07);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .stats-nav {
+    margin: 1rem 0 1.05rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.55rem;
+  }
+
+  .stats-year-btn {
+    width: 2.15rem;
+    height: 2.15rem;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    background: #efefef;
+    color: #6b7280;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+
+  .stats-year-btn:hover {
+    border-color: var(--flama-orange-300);
+    color: var(--flama-orange-700);
+    background: #fff4ec;
+  }
+
+  .stats-year-label {
+    min-width: 4.2rem;
+    text-align: center;
+    font-size: 1rem;
+    color: #6b7280;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .stats-heatmap-scroll {
+    overflow-x: hidden;
+    padding: 0 0 0.45rem;
+  }
+
+  .stats-heatmap {
+    width: 100%;
+    margin: 0;
+    display: grid;
+    grid-template-columns: repeat(var(--stats-week-count, 53), minmax(0, 1fr));
+    gap: 3px;
+  }
+
+  .stats-week {
+    display: grid;
+    grid-template-rows: repeat(7, minmax(0, 1fr));
+    gap: 3px;
+    min-width: 0;
+  }
+
+  .stats-day {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1 / 1;
+    border: 0;
+    border-radius: 2px;
+    background: #d9d9d9;
+    padding: 0;
+    cursor: pointer;
+  }
+
+  .stats-day--level-0 {
+    background: var(--flama-border, #E9DDD4);
+  }
+
+  .stats-day--level-1 {
+    background: var(--flama-orange-100, #FFE1CE);
+  }
+
+  .stats-day--level-2 {
+    background: var(--flama-orange-200, #FFC39C);
+  }
+
+  .stats-day--level-3 {
+    background: var(--flama-orange-300, #FEA46B);
+  }
+
+  .stats-day--level-4 {
+    background: var(--flama-orange-400, #FE8639);
+  }
+
+  .stats-day--level-5 {
+    background: var(--flama-orange-600, #E05C07);
+  }
+
+  .stats-day--future {
+    background: #ececec;
+    cursor: default;
+  }
+
+  .stats-day--empty {
+    visibility: hidden;
+    cursor: default;
+  }
+
+  .stats-day:focus-visible {
+    outline: 2px solid var(--flama-orange-400);
+    outline-offset: 1px;
+  }
+
+  .stats-tooltip {
+    min-height: 1.25rem;
+    margin-top: 0.45rem;
+    text-align: center;
+    font-size: 0.86rem;
+    color: #6b7280;
+  }
+
+  .stats-metrics {
+    margin-top: 0.9rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: nowrap;
+    gap: 0.75rem;
+    font-size: 1rem;
+    color: var(--flama-text);
+  }
+
+  .stats-metric {
+    white-space: nowrap;
+    font-size: 0.95rem;
+    line-height: 1.25;
+  }
+
+  .stats-metric strong {
+    color: var(--flama-orange-600, #E05C07);
+    font-weight: var(--font-weight-bold, 700);
+    font-size: 1rem;
+    margin-left: 0.2rem;
+  }
+
   /* ── Responsive ── */
   @media (max-width: 1023px) {
     .deck-board {
@@ -611,6 +820,27 @@
 
     .deck-name {
       font-size: 1.05rem;
+    }
+
+    .stats-board {
+      padding: 1.2rem 1rem 1rem;
+    }
+
+    .stats-summary {
+      font-size: 1.1rem;
+    }
+
+    .stats-metrics {
+      gap: 0.5rem;
+      font-size: 0.9rem;
+    }
+
+    .stats-metric {
+      font-size: 0.86rem;
+    }
+
+    .stats-metric strong {
+      font-size: 0.92rem;
     }
   }
 
@@ -623,6 +853,54 @@
 
     .deck-board {
       padding: 1rem 1.25rem;
+    }
+
+    .stats-board {
+      padding: 1rem 0.8rem;
+    }
+
+    .stats-summary {
+      font-size: 1rem;
+    }
+
+    .stats-heatmap-scroll {
+      overflow-x: auto;
+    }
+
+    .stats-heatmap {
+      width: max-content;
+      margin: 0;
+      display: flex;
+      gap: 3px;
+    }
+
+    .stats-week {
+      grid-template-rows: repeat(7, 12px);
+      gap: 3px;
+    }
+
+    .stats-day {
+      width: 12px;
+      height: 12px;
+      aspect-ratio: auto;
+    }
+
+    .stats-metrics {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 0.45rem;
+      font-size: 1.35rem;
+      justify-items: center;
+      text-align: center;
+    }
+
+    .stats-metric {
+      white-space: normal;
+      font-size: 1rem;
+    }
+
+    .stats-metric strong {
+      font-size: 1.05rem;
     }
 
     .deck-row {
@@ -718,6 +996,17 @@
     const toggleMap = new Map();
     let selectedDeckId = null;
     const browseOpenBtn = document.querySelector('[data-browse-open="1"]');
+    const statsRoot = document.getElementById("stats-board");
+    const statsSummaryEl = document.getElementById("stats-summary");
+    const statsYearLabelEl = document.getElementById("stats-year-label");
+    const statsHeatmapEl = document.getElementById("stats-heatmap");
+    const statsTooltipEl = document.getElementById("stats-tooltip");
+    const statsPrevYearBtn = document.getElementById("stats-prev-year");
+    const statsNextYearBtn = document.getElementById("stats-next-year");
+    const statsDailyAverageEl = document.getElementById("stats-daily-average");
+    const statsDaysLearnedEl = document.getElementById("stats-days-learned");
+    const statsLongestStreakEl = document.getElementById("stats-longest-streak");
+    const statsCurrentStreakEl = document.getElementById("stats-current-streak");
 
     rows.forEach((row) => {
       rowMap.set(row.dataset.nodeId, row);
@@ -738,6 +1027,8 @@
     // ── Study button navigation ──────────────────────────────────────────
     const studyTabBtn = document.getElementById('study-tab-btn');
     const baseStudyUrl = studyTabBtn ? studyTabBtn.dataset.baseStudyUrl : '/vocabulary/study/deck/';
+    const statsTabBtn = document.getElementById('stats-tab-btn');
+    const baseStatsUrl = statsTabBtn ? statsTabBtn.dataset.baseStatsUrl : '/statistics';
 
     function getFirstVisibleDeckId() {
       const firstRow = rows.find(r => !r.classList.contains('is-collapsed'));
@@ -751,6 +1042,13 @@
           studyTabBtn.href = baseStudyUrl + id;
         } else {
           studyTabBtn.href = studyTabBtn.dataset.baseStudyUrl || '#';
+        }
+      }
+      if (statsTabBtn) {
+        if (id) {
+          statsTabBtn.href = `${baseStatsUrl}?scope=deck&deck_id=${encodeURIComponent(id)}`;
+        } else {
+          statsTabBtn.href = baseStatsUrl;
         }
       }
 
@@ -1257,6 +1555,225 @@
         }
         row.classList.toggle("is-collapsed", !isVisibleByAncestors(row));
       });
+    }
+
+    function parseIsoDate(isoDate) {
+      const parts = String(isoDate || "").split("-");
+      if (parts.length !== 3) {
+        return null;
+      }
+      const year = Number(parts[0]);
+      const month = Number(parts[1]);
+      const day = Number(parts[2]);
+      if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
+        return null;
+      }
+      return new Date(Date.UTC(year, month - 1, day));
+    }
+
+    function weekdayIndexMonday(dateObj) {
+      return (dateObj.getUTCDay() + 6) % 7;
+    }
+
+    function buildHeatmapWeeks(days) {
+      const weeks = [];
+      let week = new Array(7).fill(null);
+      days.forEach((item, index) => {
+        const parsedDate = parseIsoDate(item.date);
+        if (!parsedDate) {
+          return;
+        }
+        const weekday = weekdayIndexMonday(parsedDate);
+        week[weekday] = item;
+        const isLast = index === days.length - 1;
+        if (weekday === 6 || isLast) {
+          weeks.push(week);
+          week = new Array(7).fill(null);
+        }
+      });
+      return weeks;
+    }
+
+    function toFixedNumber(rawValue, digits = 2) {
+      const value = Number(rawValue || 0);
+      if (!Number.isFinite(value)) {
+        return (0).toFixed(digits);
+      }
+      return value.toFixed(digits);
+    }
+
+    function toInt(rawValue) {
+      const value = Number(rawValue || 0);
+      if (!Number.isFinite(value)) {
+        return 0;
+      }
+      return Math.round(value);
+    }
+
+    function heatLevel(cards, maxCards) {
+      if (!cards || cards <= 0) {
+        return 0;
+      }
+      if (!maxCards || maxCards <= 0) {
+        return 1;
+      }
+      return Math.min(5, Math.max(1, Math.ceil((cards / maxCards) * 5)));
+    }
+
+    function updateStatsTooltip(item) {
+      if (!statsTooltipEl || !item) {
+        return;
+      }
+      const cards = toInt(item.cards);
+      const minutes = toFixedNumber(item.minutes, 2);
+      const secPerCard = toFixedNumber(item.sec_per_card, 2);
+      statsTooltipEl.textContent = `${item.date} · ${cards} cards · ${minutes} minutes · ${secPerCard}s/card`;
+    }
+
+    function renderStats(payload) {
+      if (!payload || typeof payload !== "object") {
+        return;
+      }
+
+      const today = payload.today || {};
+      const metrics = payload.metrics || {};
+      const heatmap = Array.isArray(payload.heatmap) ? payload.heatmap : [];
+
+      if (statsYearLabelEl) {
+        statsYearLabelEl.textContent = String(payload.year || "");
+      }
+      if (statsSummaryEl) {
+        const cards = toInt(today.cards);
+        const minutes = toFixedNumber(today.minutes, 2);
+        const secPerCard = toFixedNumber(today.sec_per_card, 2);
+        statsSummaryEl.textContent = `Studied ${cards} cards in ${minutes} minutes today (${secPerCard}s/card)`;
+      }
+      if (statsDailyAverageEl) {
+        statsDailyAverageEl.textContent = `${toInt(metrics.daily_average_cards)} cards`;
+      }
+      if (statsDaysLearnedEl) {
+        statsDaysLearnedEl.textContent = `${toInt(metrics.days_learned_percent)}%`;
+      }
+      if (statsLongestStreakEl) {
+        statsLongestStreakEl.textContent = `${toInt(metrics.longest_streak_days)} days`;
+      }
+      if (statsCurrentStreakEl) {
+        statsCurrentStreakEl.textContent = `${toInt(metrics.current_streak_days)} days`;
+      }
+
+      if (!statsHeatmapEl) {
+        return;
+      }
+      statsHeatmapEl.innerHTML = "";
+      statsHeatmapEl.style.setProperty("--stats-week-count", "1");
+      if (heatmap.length === 0) {
+        if (statsTooltipEl) {
+          statsTooltipEl.textContent = "No data yet.";
+        }
+        return;
+      }
+
+      const maxCards = heatmap.reduce((max, item) => {
+        if (item && !item.is_future) {
+          return Math.max(max, toInt(item.cards));
+        }
+        return max;
+      }, 0);
+      const weeks = buildHeatmapWeeks(heatmap);
+      statsHeatmapEl.style.setProperty("--stats-week-count", String(Math.max(1, weeks.length)));
+      weeks.forEach((week) => {
+        const weekEl = document.createElement("div");
+        weekEl.className = "stats-week";
+        week.forEach((item) => {
+          if (!item) {
+            const spacer = document.createElement("span");
+            spacer.className = "stats-day stats-day--empty";
+            spacer.setAttribute("aria-hidden", "true");
+            weekEl.appendChild(spacer);
+            return;
+          }
+
+          const cards = toInt(item.cards);
+          const level = item.is_future ? 0 : heatLevel(cards, maxCards);
+          const cell = document.createElement("button");
+          cell.type = "button";
+          cell.className = `stats-day stats-day--level-${level}${item.is_future ? " stats-day--future" : ""}`;
+          cell.setAttribute("aria-label", `${item.date} ${cards} cards`);
+          cell.title = `${item.date} · ${cards} cards`;
+          const showTooltip = () => updateStatsTooltip(item);
+          cell.addEventListener("mouseenter", showTooltip);
+          cell.addEventListener("focus", showTooltip);
+          cell.addEventListener("click", showTooltip);
+          weekEl.appendChild(cell);
+        });
+        statsHeatmapEl.appendChild(weekEl);
+      });
+
+      if (statsTooltipEl) {
+        const firstDay = heatmap.find((item) => toInt(item.cards) > 0) || heatmap[0];
+        updateStatsTooltip(firstDay);
+      }
+    }
+
+    function setStatsLoading(isLoading) {
+      if (statsPrevYearBtn) {
+        statsPrevYearBtn.disabled = Boolean(isLoading);
+      }
+      if (statsNextYearBtn) {
+        statsNextYearBtn.disabled = Boolean(isLoading);
+      }
+    }
+
+    let statsYear = Number(statsRoot?.dataset.initialYear || 0);
+    if (!Number.isFinite(statsYear) || statsYear <= 0) {
+      statsYear = new Date().getFullYear();
+    }
+    let statsRequestId = 0;
+
+    async function loadStats(year) {
+      if (!statsRoot) {
+        return;
+      }
+      statsYear = toInt(year);
+      const requestId = ++statsRequestId;
+      setStatsLoading(true);
+      if (statsYearLabelEl) {
+        statsYearLabelEl.textContent = String(statsYear);
+      }
+      try {
+        const response = await fetch(`/api/stats/overview?year=${encodeURIComponent(statsYear)}`);
+        const data = await response.json().catch(() => null);
+        if (requestId !== statsRequestId) {
+          return;
+        }
+        if (!response.ok || !data) {
+          const message = data?.message || "Unable to load statistics.";
+          throw new Error(message);
+        }
+        statsYear = toInt(data.year || statsYear);
+        renderStats(data);
+      } catch (error) {
+        if (requestId !== statsRequestId) {
+          return;
+        }
+        if (statsTooltipEl) {
+          statsTooltipEl.textContent = error?.message || "Unable to load statistics.";
+        }
+      } finally {
+        if (requestId === statsRequestId) {
+          setStatsLoading(false);
+        }
+      }
+    }
+
+    statsPrevYearBtn?.addEventListener("click", () => {
+      loadStats(statsYear - 1);
+    });
+    statsNextYearBtn?.addEventListener("click", () => {
+      loadStats(statsYear + 1);
+    });
+    if (statsRoot) {
+      loadStats(statsYear);
     }
 
     refreshVisibility();

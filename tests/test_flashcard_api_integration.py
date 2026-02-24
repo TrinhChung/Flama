@@ -188,6 +188,12 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         self.assertEqual(detail_payload["source_note_type_id"], note_type_id)
         self.assertIsNotNone(detail_payload.get("source_note_type"))
         self.assertTrue((detail_payload["source_note_type"].get("templates") or []))
+        test_samples = detail_payload.get("test_samples") or []
+        self.assertEqual(len(test_samples), 2)
+        self.assertEqual(detail_payload.get("test_sample_limit"), 5)
+        sampled_words = {sample.get("word") for sample in test_samples}
+        self.assertIn("\u72ac", sampled_words)
+        self.assertIn("\u732b", sampled_words)
 
         preview_resp = self.client.post(
             f"/api/shared/decks/{deck_item_id}/templates/{template_id}/preview",
@@ -198,6 +204,18 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         self.assertIn("\u72ac", preview["front_html"])
         self.assertIn("\u3044\u306c", preview["back_html"])
         self.assertNotIn("\u306d\u3053", preview["back_html"])
+
+        selected_cat = next((row for row in test_samples if row.get("word") == "\u732b"), None)
+        self.assertIsNotNone(selected_cat)
+        self.assertIsNotNone(selected_cat.get("note_id"))
+        selected_preview_resp = self.client.post(
+            f"/api/shared/decks/{deck_item_id}/templates/{template_id}/preview",
+            json={"note_id": selected_cat.get("note_id")},
+        )
+        self.assertEqual(selected_preview_resp.status_code, 200)
+        selected_preview = selected_preview_resp.get_json()
+        self.assertIn("\u732b", selected_preview["front_html"])
+        self.assertIn("\u306d\u3053", selected_preview["back_html"])
 
     def test_shared_deck_preview_uses_first_vocabulary_entry_when_notes_missing(self):
         with self.app.app_context():
@@ -257,6 +275,124 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         self.assertIn("\u6d77", combined_html)
         self.assertIn("\u3046\u307f", combined_html)
         self.assertNotIn("\u5c71", combined_html)
+
+        selected_mountain = next((row for row in (detail_payload.get("test_samples") or []) if row.get("word") == "\u5c71"), None)
+        self.assertIsNotNone(selected_mountain)
+        self.assertIsNotNone(selected_mountain.get("entry_id"))
+        selected_preview_resp = self.client.post(
+            f"/api/shared/decks/{deck_item_id}/templates/{template_id}/preview",
+            json={"entry_id": selected_mountain.get("entry_id")},
+        )
+        self.assertEqual(selected_preview_resp.status_code, 200)
+        selected_preview = selected_preview_resp.get_json()
+        selected_combined_html = f"{selected_preview.get('front_html', '')}\n{selected_preview.get('back_html', '')}"
+        self.assertIn("\u5c71", selected_combined_html)
+        self.assertIn("\u3084\u307e", selected_combined_html)
+
+    def test_shared_deck_detail_returns_up_to_five_random_test_words(self):
+        source_rows = [
+            ("\u6d77", "\u3046\u307f", "bi\u1ec3n"),
+            ("\u5c71", "\u3084\u307e", "n\u00fai"),
+            ("\u7a7a", "\u305d\u3089", "tr\u1eddi"),
+            ("\u5ddd", "\u304b\u308f", "s\u00f4ng"),
+            ("\u68ee", "\u3082\u308a", "r\u1eebng"),
+            ("\u96e8", "\u3042\u3081", "m\u01b0a"),
+            ("\u98a8", "\u304b\u305c", "gi\u00f3"),
+        ]
+
+        with self.app.app_context():
+            for word, reading, translation_vi in source_rows:
+                db.session.add(
+                    VocabularyEntry(
+                        deck_id=self.deck_id,
+                        lesson_id=None,
+                        deck="Deck A",
+                        word=word,
+                        reading=reading,
+                        translation_vi=translation_vi,
+                    )
+                )
+
+            deck_item = DeckMarketplaceItem(
+                owner_user_id=self.user_id,
+                source_deck_id=self.deck_id,
+                source_note_type_id=None,
+                title="Shared Deck Random Samples",
+                description="Deck description",
+                primary_category="General",
+                tags=[],
+                preview_text="Preview",
+                pricing_mode="free",
+                price_cents=0,
+                version="1.0.0",
+                publish_status="published",
+            )
+            db.session.add(deck_item)
+            db.session.commit()
+            deck_item_id = deck_item.id
+
+        detail_resp = self.client.get(f"/api/shared/decks/{deck_item_id}")
+        self.assertEqual(detail_resp.status_code, 200)
+        payload = detail_resp.get_json()
+        self.assertEqual(payload.get("test_sample_limit"), 5)
+
+        samples = payload.get("test_samples") or []
+        self.assertEqual(len(samples), 5)
+
+        source_words = {row[0] for row in source_rows}
+        for sample in samples:
+            self.assertIn(sample.get("word"), source_words)
+            self.assertIsNotNone(sample.get("entry_id"))
+
+    def test_shared_deck_detail_returns_all_test_words_when_less_than_five(self):
+        source_rows = [
+            ("\u706b", "\u3072", "l\u1eeda"),
+            ("\u6c34", "\u307f\u305a", "n\u01b0\u1edbc"),
+            ("\u571f", "\u3064\u3061", "\u0111\u1ea5t"),
+        ]
+
+        with self.app.app_context():
+            for word, reading, translation_vi in source_rows:
+                db.session.add(
+                    VocabularyEntry(
+                        deck_id=self.deck_id,
+                        lesson_id=None,
+                        deck="Deck A",
+                        word=word,
+                        reading=reading,
+                        translation_vi=translation_vi,
+                    )
+                )
+
+            deck_item = DeckMarketplaceItem(
+                owner_user_id=self.user_id,
+                source_deck_id=self.deck_id,
+                source_note_type_id=None,
+                title="Shared Deck Small Samples",
+                description="Deck description",
+                primary_category="General",
+                tags=[],
+                preview_text="Preview",
+                pricing_mode="free",
+                price_cents=0,
+                version="1.0.0",
+                publish_status="published",
+            )
+            db.session.add(deck_item)
+            db.session.commit()
+            deck_item_id = deck_item.id
+
+        detail_resp = self.client.get(f"/api/shared/decks/{deck_item_id}")
+        self.assertEqual(detail_resp.status_code, 200)
+        payload = detail_resp.get_json()
+
+        samples = payload.get("test_samples") or []
+        self.assertEqual(len(samples), 3)
+        self.assertEqual(payload.get("test_sample_limit"), 5)
+
+        source_words = {row[0] for row in source_rows}
+        for sample in samples:
+            self.assertIn(sample.get("word"), source_words)
 
     def test_note_create_rejects_mixed_note_types_in_same_deck(self):
         note_type_a = self._create_note_type()
