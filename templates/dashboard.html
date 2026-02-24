@@ -175,9 +175,6 @@
   <form id="deck-reset-form" method="POST" style="display: none;">
     <input type="hidden" name="next" value="{{ request.url }}">
   </form>
-  <form id="deck-delete-form" method="POST" style="display: none;">
-    <input type="hidden" name="next" value="{{ request.url }}">
-  </form>
 
   <div class="modal fade" id="createDeckModal" tabindex="-1" aria-labelledby="createDeckModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
@@ -208,6 +205,9 @@
     </div>
   </div>
   {% endif %}
+  <form id="deck-delete-form" method="POST" style="display: none;">
+    <input type="hidden" name="next" value="{{ request.url }}">
+  </form>
 
   <section class="deck-board" aria-labelledby="anki-decks-title">
     <header class="deck-board-head">

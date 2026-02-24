@@ -5,6 +5,7 @@ import unittest
 from app import create_app
 from app.utils.deck_move_token import create_deck_move_token
 from models import db
+from models.flashcard import DeckInstall, DeckMarketplaceItem
 from models.user import User
 from models.user_role import UserRole
 from models.vocabulary_deck import VocabularyDeck
@@ -57,6 +58,13 @@ class DeckSettingsRoutesTests(unittest.TestCase):
         return self.client.post(
             "/login",
             data={"email": "admin@example.com", "password": "password"},
+            follow_redirects=True,
+        )
+
+    def _login_other(self):
+        return self.client.post(
+            "/login",
+            data={"email": "other@example.com", "password": "password"},
             follow_redirects=True,
         )
 
@@ -211,6 +219,147 @@ class DeckSettingsRoutesTests(unittest.TestCase):
             ).count()
             self.assertEqual(admin_progress_count, 0)
             self.assertEqual(other_progress_count, 1)
+
+    def test_clone_owner_can_delete_cloned_deck_and_install_row(self):
+        with self.app.app_context():
+            cloned_root = VocabularyDeck(
+                name="Installed Root",
+                parent_id=None,
+                owner_user_id=self.other_user_id,
+                position=1,
+            )
+            db.session.add(cloned_root)
+            db.session.flush()
+
+            cloned_child = VocabularyDeck(
+                name="Installed Child",
+                parent_id=cloned_root.id,
+                owner_user_id=self.other_user_id,
+                position=1,
+            )
+            db.session.add(cloned_child)
+            db.session.flush()
+
+            db.session.add(VocabularyEntry(deck_id=cloned_child.id, deck=cloned_child.name, word="test"))
+
+            shared_item = DeckMarketplaceItem(
+                owner_user_id=self.admin_id,
+                title="Shared Deck",
+                description="Shared deck description",
+                primary_category="General",
+                tags=[],
+                pricing_mode="free",
+                price_cents=0,
+                version="1.0.0",
+                publish_status="published",
+            )
+            db.session.add(shared_item)
+            db.session.flush()
+
+            install_row = DeckInstall(
+                deck_item_id=shared_item.id,
+                user_id=self.other_user_id,
+                local_deck_id=cloned_root.id,
+            )
+            db.session.add(install_row)
+            db.session.commit()
+            cloned_root_id = cloned_root.id
+            cloned_child_id = cloned_child.id
+            install_row_id = install_row.id
+
+        self._login_other()
+        response = self.client.post(
+            f"/vocabulary/decks/{cloned_root_id}/delete",
+            data={"next": "/dashboard"},
+            follow_redirects=True,
+        )
+        self.assertEqual(response.status_code, 200)
+
+        with self.app.app_context():
+            self.assertIsNone(VocabularyDeck.query.get(cloned_root_id))
+            self.assertIsNone(VocabularyDeck.query.get(cloned_child_id))
+            self.assertIsNone(DeckInstall.query.get(install_row_id))
+
+    def test_non_admin_cannot_delete_owned_deck_without_clone_install(self):
+        with self.app.app_context():
+            owned_deck = VocabularyDeck(
+                name="Owned Deck",
+                parent_id=None,
+                owner_user_id=self.other_user_id,
+                position=1,
+            )
+            db.session.add(owned_deck)
+            db.session.commit()
+            owned_deck_id = owned_deck.id
+
+        self._login_other()
+        response = self.client.post(
+            f"/vocabulary/decks/{owned_deck_id}/delete",
+            data={"next": "/dashboard"},
+            follow_redirects=True,
+        )
+        self.assertEqual(response.status_code, 200)
+
+        with self.app.app_context():
+            self.assertIsNotNone(VocabularyDeck.query.get(owned_deck_id))
+
+    def test_clone_owner_can_delete_subdeck_with_install_on_ancestor(self):
+        with self.app.app_context():
+            cloned_root = VocabularyDeck(
+                name="Installed Root",
+                parent_id=None,
+                owner_user_id=self.other_user_id,
+                position=1,
+            )
+            db.session.add(cloned_root)
+            db.session.flush()
+
+            cloned_child = VocabularyDeck(
+                name="Installed Child",
+                parent_id=cloned_root.id,
+                owner_user_id=self.other_user_id,
+                position=1,
+            )
+            db.session.add(cloned_child)
+            db.session.flush()
+
+            shared_item = DeckMarketplaceItem(
+                owner_user_id=self.admin_id,
+                title="Shared Deck Child Delete",
+                description="Shared deck description",
+                primary_category="General",
+                tags=[],
+                pricing_mode="free",
+                price_cents=0,
+                version="1.0.0",
+                publish_status="published",
+            )
+            db.session.add(shared_item)
+            db.session.flush()
+
+            install_row = DeckInstall(
+                deck_item_id=shared_item.id,
+                user_id=self.other_user_id,
+                local_deck_id=cloned_root.id,
+            )
+            db.session.add(install_row)
+            db.session.commit()
+            cloned_root_id = cloned_root.id
+            cloned_child_id = cloned_child.id
+            install_row_id = install_row.id
+
+        self._login_other()
+        response = self.client.post(
+            f"/vocabulary/decks/{cloned_child_id}/delete",
+            data={"next": "/dashboard"},
+            follow_redirects=True,
+        )
+        self.assertEqual(response.status_code, 200)
+
+        with self.app.app_context():
+            self.assertIsNotNone(VocabularyDeck.query.get(cloned_root_id))
+            self.assertIsNone(VocabularyDeck.query.get(cloned_child_id))
+            self.assertIsNotNone(DeckInstall.query.get(install_row_id))
 
 
 if __name__ == "__main__":

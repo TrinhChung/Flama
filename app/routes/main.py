@@ -81,10 +81,24 @@ def dashboard():
     else:
         # Get only decks installed by this user
         installs = DeckInstall.query.filter_by(user_id=current_user.id).all()
-        installed_deck_ids = {inst.local_deck_id for inst in installs if inst.local_deck_id}
-        if installed_deck_ids:
+        installed_root_ids = {inst.local_deck_id for inst in installs if inst.local_deck_id}
+        if installed_root_ids:
+            visible_ids: set[int] = set()
+            frontier: set[int] = {int(deck_id) for deck_id in installed_root_ids}
+            while frontier:
+                current_ids = {deck_id for deck_id in frontier if deck_id not in visible_ids}
+                if not current_ids:
+                    break
+                visible_ids.update(current_ids)
+                child_rows = (
+                    db.session.query(VocabularyDeck.id)
+                    .filter(VocabularyDeck.parent_id.in_(current_ids))
+                    .all()
+                )
+                frontier = {int(row[0]) for row in child_rows if row and row[0] is not None}
+
             decks = (
-                VocabularyDeck.query.filter(VocabularyDeck.id.in_(installed_deck_ids))
+                VocabularyDeck.query.filter(VocabularyDeck.id.in_(visible_ids))
                 .order_by(
                     VocabularyDeck.parent_id.isnot(None),
                     VocabularyDeck.position,
