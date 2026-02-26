@@ -989,6 +989,7 @@ def _clone_deck_subtree(
     parent_id: int | None,
     owner_user_id: int | None = None,
     root_suffix: str | None = None,
+    source_owner_user_id: int | None = None,
 ) -> VocabularyDeck:
     source_deck = VocabularyDeck.query.get(source_deck_id)
     if not source_deck:
@@ -997,6 +998,7 @@ def _clone_deck_subtree(
     cloned_deck = VocabularyDeck(
         parent_id=parent_id,
         owner_user_id=owner_user_id,
+        note_type_id=source_deck.note_type_id,
         name=source_deck.name,
         description=source_deck.description,
         position=_next_deck_position(parent_id),
@@ -1030,6 +1032,43 @@ def _clone_deck_subtree(
             )
         )
 
+    source_notes_query = Note.query.filter(Note.deck_id == source_deck.id)
+    if source_owner_user_id is not None:
+        source_notes_query = source_notes_query.filter(Note.user_id == source_owner_user_id)
+    source_notes = source_notes_query.order_by(Note.created_at.asc(), Note.id.asc()).all()
+    for source_note in source_notes:
+        cloned_field_values = dict(source_note.field_values or {})
+        cloned_note = Note(
+            note_type_id=source_note.note_type_id,
+            user_id=owner_user_id or source_note.user_id,
+            deck_id=cloned_deck.id,
+            field_values=cloned_field_values,
+            tags=list(source_note.tags or []),
+        )
+        db.session.add(cloned_note)
+        db.session.flush()
+
+        for source_asset in source_note.media_assets:
+            cloned_asset = MediaAsset(
+                note_id=cloned_note.id,
+                field_name=source_asset.field_name,
+                filename=source_asset.filename,
+                mime_type=source_asset.mime_type,
+                storage_path=source_asset.storage_path,
+                sha256=source_asset.sha256,
+                size_bytes=int(source_asset.size_bytes or 0),
+            )
+            db.session.add(cloned_asset)
+            db.session.flush()
+            current_field_value = cloned_field_values.get(source_asset.field_name)
+            if current_field_value == source_asset.id:
+                cloned_field_values[source_asset.field_name] = cloned_asset.id
+            elif isinstance(current_field_value, str) and current_field_value.strip() == source_asset.id:
+                cloned_field_values[source_asset.field_name] = cloned_asset.id
+
+        cloned_note.field_values = cloned_field_values
+        _create_cards_for_note(cloned_note)
+
     child_decks = (
         VocabularyDeck.query.filter_by(parent_id=source_deck.id)
         .order_by(VocabularyDeck.position.asc(), VocabularyDeck.id.asc())
@@ -1040,29 +1079,72 @@ def _clone_deck_subtree(
             source_deck_id=child.id,
             parent_id=cloned_deck.id,
             owner_user_id=owner_user_id,
+            source_owner_user_id=source_owner_user_id,
         )
 
     return cloned_deck
 
 
+def _collect_deck_ancestor_ids(deck_id: int | None) -> list[int]:
+    if deck_id is None:
+        return []
+
+    ancestors: list[int] = []
+    current_deck_id = int(deck_id)
+    seen: set[int] = set()
+
+    while current_deck_id not in seen:
+        seen.add(current_deck_id)
+        ancestors.append(current_deck_id)
+        parent_row = (
+            db.session.query(VocabularyDeck.parent_id)
+            .filter(VocabularyDeck.id == current_deck_id)
+            .first()
+        )
+        if not parent_row or parent_row[0] is None:
+            break
+        current_deck_id = int(parent_row[0])
+
+    return ancestors
+
+
+def _deck_installs_covering_deck(*, user_id: int, deck_id: int) -> list[DeckInstall]:
+    ancestor_ids = _collect_deck_ancestor_ids(deck_id)
+    if not ancestor_ids:
+        return []
+    return (
+        DeckInstall.query.filter(
+            DeckInstall.user_id == user_id,
+            DeckInstall.local_deck_id.in_(ancestor_ids),
+        )
+        .order_by(DeckInstall.installed_at.asc(), DeckInstall.id.asc())
+        .all()
+    )
+
+
 def _touch_deck_install_usage(*, user_id: int, local_deck_id: int, activity_at: datetime | None = None) -> None:
-    install = DeckInstall.query.filter_by(user_id=user_id, local_deck_id=local_deck_id).first()
-    if not install:
+    installs = _deck_installs_covering_deck(user_id=user_id, deck_id=local_deck_id)
+    if not installs:
         return
     now = activity_at or datetime.utcnow()
-    if install.first_use_at is None:
-        install.first_use_at = now
-    install.last_activity_at = now
+    for install in installs:
+        if install.first_use_at is None:
+            install.first_use_at = now
+        install.last_activity_at = now
 
 
 def _deck_reps_for_user(*, user_id: int, local_deck_id: int) -> int:
+    subtree_deck_ids = _collect_deck_subtree_ids(local_deck_id)
+    if not subtree_deck_ids:
+        return 0
+
     legacy_reps = (
         db.session.query(db.func.coalesce(db.func.sum(VocabularyProgress.reps), 0))
         .select_from(VocabularyProgress)
         .join(VocabularyEntry, VocabularyProgress.entry_id == VocabularyEntry.id)
         .filter(
             VocabularyProgress.user_id == user_id,
-            VocabularyEntry.deck_id == local_deck_id,
+            VocabularyEntry.deck_id.in_(subtree_deck_ids),
         )
         .scalar()
     ) or 0
@@ -1074,7 +1156,7 @@ def _deck_reps_for_user(*, user_id: int, local_deck_id: int) -> int:
         .join(Note, Card.note_id == Note.id)
         .filter(
             VocabularyProgress.user_id == user_id,
-            Note.deck_id == local_deck_id,
+            Note.deck_id.in_(subtree_deck_ids),
         )
         .scalar()
     ) or 0
@@ -2521,7 +2603,10 @@ def study_next():
             scope_id = int(scope_id_raw)
         except ValueError:
             return _api_error("VALIDATION_ERROR", "scope_id must be an integer for deck scope.", field="scope_id")
-        query = query.filter(Note.deck_id == scope_id)
+        scope_deck_ids = _collect_deck_subtree_ids(scope_id)
+        if not scope_deck_ids:
+            return jsonify({"card_id": None, "message": "No cards found for selected scope."})
+        query = query.filter(Note.deck_id.in_(scope_deck_ids))
     elif scope == "note_type":
         if not scope_id_raw:
             return _api_error("VALIDATION_ERROR", "scope_id is required for note_type scope.", field="scope_id")
@@ -2620,7 +2705,7 @@ def study_answer(card_id: str):
 
     if card.note.deck_id is not None:
         _touch_deck_install_usage(user_id=current_user.id, local_deck_id=card.note.deck_id, activity_at=now)
-        deck_installs = DeckInstall.query.filter_by(user_id=current_user.id, local_deck_id=card.note.deck_id).all()
+        deck_installs = _deck_installs_covering_deck(user_id=current_user.id, deck_id=card.note.deck_id)
         for deck_install in deck_installs:
             deck_item = DeckMarketplaceItem.query.get(deck_install.deck_item_id)
             if deck_item:
@@ -3262,6 +3347,7 @@ def install_shared_deck_item(deck_item_id: str):
             source_deck_id=source_deck.id,
             parent_id=None,
             owner_user_id=current_user.id,
+            source_owner_user_id=deck_item.owner_user_id,
         )
         local_deck_id = cloned_root.id
 

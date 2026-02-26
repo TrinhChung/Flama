@@ -175,9 +175,6 @@
   <form id="deck-reset-form" method="POST" style="display: none;">
     <input type="hidden" name="next" value="{{ request.url }}">
   </form>
-  <form id="deck-delete-form" method="POST" style="display: none;">
-    <input type="hidden" name="next" value="{{ request.url }}">
-  </form>
 
   <div class="modal fade" id="createDeckModal" tabindex="-1" aria-labelledby="createDeckModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
@@ -208,6 +205,9 @@
     </div>
   </div>
   {% endif %}
+  <form id="deck-delete-form" method="POST" style="display: none;">
+    <input type="hidden" name="next" value="{{ request.url }}">
+  </form>
 
   <section class="deck-board" aria-labelledby="anki-decks-title">
     <header class="deck-board-head">
@@ -246,48 +246,7 @@
     </div>
   </section>
 
-  <section class="stats-board" id="stats-board" data-initial-year="{{ stats_initial_year }}">
-    <p class="stats-summary" id="stats-summary">
-      Studied 0 cards in 0.00 minutes today (0.00s/card)
-    </p>
-
-    <div class="stats-nav" aria-label="Statistics year navigation">
-      <button type="button" class="stats-year-btn" id="stats-prev-year" aria-label="Previous year">
-        <i class="bi bi-chevron-left" aria-hidden="true"></i>
-      </button>
-      <div class="stats-year-label" id="stats-year-label">{{ stats_initial_year }}</div>
-      <button type="button" class="stats-year-btn" id="stats-next-year" aria-label="Next year">
-        <i class="bi bi-chevron-right" aria-hidden="true"></i>
-      </button>
-    </div>
-
-    <div class="stats-heatmap-scroll">
-      <div class="stats-heatmap" id="stats-heatmap" role="grid" aria-label="Study heatmap"></div>
-    </div>
-
-    <div class="stats-tooltip" id="stats-tooltip">
-      Hover a day to view details.
-    </div>
-
-    <div class="stats-metrics">
-      <div class="stats-metric">
-        Daily average:
-        <strong id="stats-daily-average">0 cards</strong>
-      </div>
-      <div class="stats-metric">
-        Days learned:
-        <strong id="stats-days-learned">0%</strong>
-      </div>
-      <div class="stats-metric">
-        Longest streak:
-        <strong id="stats-longest-streak">0 days</strong>
-      </div>
-      <div class="stats-metric">
-        Current streak:
-        <strong id="stats-current-streak">0 days</strong>
-      </div>
-    </div>
-  </section>
+  {% include 'components/stats/stats_board.html' with context %}
 </div>
 
 <style>
@@ -766,8 +725,11 @@
   }
 
   .stats-day--future {
-    background: #ececec;
     cursor: default;
+  }
+
+  .stats-day--future.stats-day--level-0 {
+    background: #ececec;
   }
 
   .stats-day--empty {
@@ -1579,7 +1541,7 @@
       const weeks = [];
       let week = new Array(7).fill(null);
       days.forEach((item, index) => {
-        const parsedDate = parseIsoDate(item.date);
+        const parsedDate = parseIsoDate((item && (item.day || item.date)) || "");
         if (!parsedDate) {
           return;
         }
@@ -1624,10 +1586,17 @@
       if (!statsTooltipEl || !item) {
         return;
       }
+      const day = String(item.day || item.date || "");
       const cards = toInt(item.cards);
-      const minutes = toFixedNumber(item.minutes, 2);
-      const secPerCard = toFixedNumber(item.sec_per_card, 2);
-      statsTooltipEl.textContent = `${item.date} · ${cards} cards · ${minutes} minutes · ${secPerCard}s/card`;
+      const source = String(item.source || "reviewed").toLowerCase();
+      if (source === "due") {
+        statsTooltipEl.textContent = `${day} · Due: ${cards}`;
+        return;
+      }
+      const studyTime = toInt(item.study_time);
+      const minutes = studyTime > 0 ? toFixedNumber(studyTime / 60000, 2) : toFixedNumber(item.minutes, 2);
+      const secPerCard = cards > 0 ? toFixedNumber((studyTime / 1000) / cards, 2) : "0.00";
+      statsTooltipEl.textContent = `${day} · Reviewed: ${cards} · ${minutes} minutes · ${secPerCard}s/card`;
     }
 
     function renderStats(payload) {
@@ -1673,12 +1642,7 @@
         return;
       }
 
-      const maxCards = heatmap.reduce((max, item) => {
-        if (item && !item.is_future) {
-          return Math.max(max, toInt(item.cards));
-        }
-        return max;
-      }, 0);
+      const maxCards = heatmap.reduce((max, item) => Math.max(max, toInt(item && item.cards)), 0);
       const weeks = buildHeatmapWeeks(heatmap);
       statsHeatmapEl.style.setProperty("--stats-week-count", String(Math.max(1, weeks.length)));
       weeks.forEach((week) => {
@@ -1694,12 +1658,14 @@
           }
 
           const cards = toInt(item.cards);
-          const level = item.is_future ? 0 : heatLevel(cards, maxCards);
+          const level = heatLevel(cards, maxCards);
+          const day = String(item.day || item.date || "");
+          const sourceLabel = String(item.source || "reviewed").toLowerCase() === "due" ? "Due" : "Reviewed";
           const cell = document.createElement("button");
           cell.type = "button";
           cell.className = `stats-day stats-day--level-${level}${item.is_future ? " stats-day--future" : ""}`;
-          cell.setAttribute("aria-label", `${item.date} ${cards} cards`);
-          cell.title = `${item.date} · ${cards} cards`;
+          cell.setAttribute("aria-label", `${day} ${sourceLabel.toLowerCase()} ${cards} cards`);
+          cell.title = `${day} · ${sourceLabel}: ${cards} cards`;
           const showTooltip = () => updateStatsTooltip(item);
           cell.addEventListener("mouseenter", showTooltip);
           cell.addEventListener("focus", showTooltip);

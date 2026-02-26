@@ -1,0 +1,42 @@
+<section class="stats-board" id="stats-board" data-initial-year="{{ stats_initial_year }}">
+  <p class="stats-summary" id="stats-summary">
+    Studied 0 cards in 0.00 minutes today (0.00s/card)
+  </p>
+
+  <div class="stats-nav" aria-label="Statistics year navigation">
+    <button type="button" class="stats-year-btn" id="stats-prev-year" aria-label="Previous year">
+      <i class="bi bi-chevron-left" aria-hidden="true"></i>
+    </button>
+    <div class="stats-year-label" id="stats-year-label">{{ stats_initial_year }}</div>
+    <button type="button" class="stats-year-btn" id="stats-next-year" aria-label="Next year">
+      <i class="bi bi-chevron-right" aria-hidden="true"></i>
+    </button>
+  </div>
+
+  <div class="stats-heatmap-scroll">
+    <div class="stats-heatmap" id="stats-heatmap" role="grid" aria-label="Study heatmap"></div>
+  </div>
+
+  <div class="stats-tooltip" id="stats-tooltip">
+    Hover a day to view details.
+  </div>
+
+  <div class="stats-metrics">
+    <div class="stats-metric">
+      Daily average:
+      <strong id="stats-daily-average">0 cards</strong>
+    </div>
+    <div class="stats-metric">
+      Days learned:
+      <strong id="stats-days-learned">0%</strong>
+    </div>
+    <div class="stats-metric">
+      Longest streak:
+      <strong id="stats-longest-streak">0 days</strong>
+    </div>
+    <div class="stats-metric">
+      Current streak:
+      <strong id="stats-current-streak">0 days</strong>
+    </div>
+  </div>
+</section>

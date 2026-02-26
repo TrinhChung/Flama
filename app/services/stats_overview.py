@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from models import db
 from models.flashcard import ReviewEvent
+from models.vocabulary_progress import VocabularyProgress
 
 UTC = timezone.utc
 DEFAULT_TIMEZONE = "UTC"
@@ -243,6 +244,93 @@ def _query_daily_aggregates(
     )
 
 
+def _query_future_due_aggregates_mysql(
+    *,
+    user_id: int,
+    timezone_name: str,
+    start_utc: datetime,
+    end_utc: datetime,
+) -> dict[date, int]:
+    mysql_timezone = "+00:00" if str(timezone_name).upper() == "UTC" else timezone_name
+    local_day_expr = db.func.date(
+        db.func.convert_tz(VocabularyProgress.due_at, "+00:00", mysql_timezone)
+    )
+    rows = (
+        db.session.query(
+            local_day_expr.label("local_day"),
+            db.func.count(VocabularyProgress.id).label("due_cards"),
+        )
+        .filter(
+            VocabularyProgress.user_id == user_id,
+            VocabularyProgress.due_at.isnot(None),
+            VocabularyProgress.due_at >= start_utc,
+            VocabularyProgress.due_at < end_utc,
+            db.or_(VocabularyProgress.is_suspended.is_(False), VocabularyProgress.is_suspended.is_(None)),
+        )
+        .group_by(local_day_expr)
+        .all()
+    )
+
+    by_day: dict[date, int] = {}
+    for local_day, due_cards in rows:
+        parsed_day = _parse_sql_day(local_day)
+        if not parsed_day:
+            continue
+        by_day[parsed_day] = _safe_int(due_cards)
+    return by_day
+
+
+def _query_future_due_aggregates_python(
+    *,
+    user_id: int,
+    timezone_obj,
+    start_utc: datetime,
+    end_utc: datetime,
+) -> dict[date, int]:
+    rows = (
+        db.session.query(VocabularyProgress.due_at)
+        .filter(
+            VocabularyProgress.user_id == user_id,
+            VocabularyProgress.due_at.isnot(None),
+            VocabularyProgress.due_at >= start_utc,
+            VocabularyProgress.due_at < end_utc,
+            db.or_(VocabularyProgress.is_suspended.is_(False), VocabularyProgress.is_suspended.is_(None)),
+        )
+        .all()
+    )
+    by_day: dict[date, int] = {}
+    for (due_at,) in rows:
+        if due_at is None:
+            continue
+        local_day = _utc_to_local_day(due_at, timezone_obj)
+        by_day[local_day] = _safe_int(by_day.get(local_day)) + 1
+    return by_day
+
+
+def _query_future_due_aggregates(
+    *,
+    user_id: int,
+    timezone_name: str,
+    timezone_obj,
+    start_utc: datetime,
+    end_utc: datetime,
+) -> dict[date, int]:
+    dialect = db.session.get_bind().dialect.name if db.session.get_bind() is not None else ""
+    if dialect == "mysql":
+        return _query_future_due_aggregates_mysql(
+            user_id=user_id,
+            timezone_name=timezone_name,
+            start_utc=start_utc,
+            end_utc=end_utc,
+        )
+    return _query_future_due_aggregates_python(
+        user_id=user_id,
+        timezone_obj=timezone_obj,
+        start_utc=start_utc,
+        end_utc=end_utc,
+    )
+
+
 def _query_active_days_mysql(
     *,
     user_id: int,
@@ -404,6 +492,18 @@ def build_stats_overview(
         start_utc=year_start_utc,
         end_utc=year_end_utc,
     )
+    due_day_map: dict[date, int] = {}
+    if selected_year == today_local.year:
+        future_start_local = today_local + timedelta(days=1)
+        if future_start_local <= year_end:
+            future_start_utc = _local_start_to_utc_naive(future_start_local, timezone_obj)
+            due_day_map = _query_future_due_aggregates(
+                user_id=user_id,
+                timezone_name=effective_timezone_name,
+                timezone_obj=timezone_obj,
+                start_utc=future_start_utc,
+                end_utc=year_end_utc,
+            )
 
     today_start_utc = _local_start_to_utc_naive(today_local, timezone_obj)
     tomorrow_start_utc = _local_start_to_utc_naive(today_local + timedelta(days=1), timezone_obj)
@@ -465,18 +565,30 @@ def build_stats_overview(
 
     heatmap: list[dict[str, Any]] = []
     for day_value in _iter_days(year_start, year_end):
-        day_bucket = day_map.get(day_value) or {"cards": 0, "duration_ms": 0}
-        cards = _safe_int(day_bucket.get("cards"))
-        duration_ms = max(0, _safe_int(day_bucket.get("duration_ms")))
-        minutes = _round2(duration_ms / 60000.0)
-        sec_per_card = _round2((duration_ms / 1000.0) / cards) if cards > 0 else 0.0
+        is_future = day_value > today_local
+        if selected_year == today_local.year and is_future:
+            cards = _safe_int(due_day_map.get(day_value))
+            duration_ms = 0
+            minutes = 0.0
+            sec_per_card = 0.0
+            source = "due"
+        else:
+            day_bucket = day_map.get(day_value) or {"cards": 0, "duration_ms": 0}
+            cards = _safe_int(day_bucket.get("cards"))
+            duration_ms = max(0, _safe_int(day_bucket.get("duration_ms")))
+            minutes = _round2(duration_ms / 60000.0)
+            sec_per_card = _round2((duration_ms / 1000.0) / cards) if cards > 0 else 0.0
+            source = "reviewed"
         heatmap.append(
             {
+                "day": day_value.isoformat(),
                 "date": day_value.isoformat(),
                 "cards": cards,
+                "study_time": duration_ms,
                 "minutes": minutes,
                 "sec_per_card": sec_per_card,
-                "is_future": day_value > today_local,
+                "is_future": is_future,
+                "source": source,
             }
         )
 

@@ -241,6 +241,7 @@ def restrict_non_admin_routes():
         "vocabulary.browse_api_decks",
         "vocabulary.browse_api_notes",
         "vocabulary.browse_api_update_note",
+        "vocabulary.delete_deck",
     }
     if endpoint in allowed_endpoints:
         return None
@@ -1432,14 +1433,56 @@ def move_deck(deck_id: int | None = None):
     return redirect(next_url)
 
 
+def _collect_deck_ancestor_ids(deck_id: int) -> list[int]:
+    ancestor_ids: list[int] = []
+    current_id = int(deck_id)
+    seen_ids: set[int] = set()
+
+    while current_id not in seen_ids:
+        seen_ids.add(current_id)
+        ancestor_ids.append(current_id)
+        parent_row = (
+            db.session.query(VocabularyDeck.parent_id)
+            .filter(VocabularyDeck.id == current_id)
+            .first()
+        )
+        if not parent_row or parent_row[0] is None:
+            break
+        current_id = int(parent_row[0])
+
+    return ancestor_ids
+
+
+def _can_current_user_delete_cloned_deck(deck_obj: VocabularyDeck) -> bool:
+    if deck_obj.owner_user_id != current_user.id:
+        return False
+
+    from models.flashcard import DeckInstall
+
+    ancestor_ids = _collect_deck_ancestor_ids(deck_obj.id)
+    if not ancestor_ids:
+        return False
+
+    install_row = (
+        db.session.query(DeckInstall.id)
+        .filter(
+            DeckInstall.user_id == current_user.id,
+            DeckInstall.local_deck_id.in_(ancestor_ids),
+        )
+        .first()
+    )
+    return install_row is not None
+
+
 @vocabulary_bp.route("/decks/<int:deck_id>/delete", methods=["POST"])
 @login_required
 def delete_deck(deck_id: int):
     """Delete a deck and all its children/entries."""
-    if not is_admin_user(current_user):
-        return redirect(url_for("main.dashboard"))
-        
     deck = VocabularyDeck.query.get_or_404(deck_id)
+    if not is_admin_user(current_user) and not _can_current_user_delete_cloned_deck(deck):
+        flash("You do not have permission to delete this deck.", "danger")
+        return redirect(url_for("main.dashboard"))
+
     deck_name = deck.name
     next_url = _resolve_next_url()
     
@@ -1451,6 +1494,13 @@ def delete_deck(deck_id: int):
             collect_deck_ids(child)
             
     collect_deck_ids(deck)
+
+    from models.flashcard import DeckInstall
+
+    install_query = DeckInstall.query.filter(DeckInstall.local_deck_id.in_(deck_ids_to_delete))
+    if not is_admin_user(current_user):
+        install_query = install_query.filter(DeckInstall.user_id == current_user.id)
+    install_query.delete(synchronize_session=False)
     
     entries = VocabularyEntry.query.filter(VocabularyEntry.deck_id.in_(deck_ids_to_delete)).all()
     entry_ids = [e.id for e in entries]

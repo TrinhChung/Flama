@@ -4,7 +4,7 @@ import unittest
 
 from app import create_app
 from models import db
-from models.flashcard import DeckMarketplaceItem
+from models.flashcard import Card, DeckInstall, DeckMarketplaceItem, Note
 from models.user import User
 from models.vocabulary_deck import VocabularyDeck
 from models.vocabulary_entry import VocabularyEntry
@@ -67,6 +67,22 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 201)
         return response.get_json()
+
+    def _collect_subtree_ids(self, root_deck_id: int) -> list[int]:
+        seen: set[int] = set()
+        frontier: set[int] = {int(root_deck_id)}
+        while frontier:
+            current = {deck_id for deck_id in frontier if deck_id not in seen}
+            if not current:
+                break
+            seen.update(current)
+            child_rows = (
+                db.session.query(VocabularyDeck.id)
+                .filter(VocabularyDeck.parent_id.in_(current))
+                .all()
+            )
+            frontier = {int(row[0]) for row in child_rows if row and row[0] is not None}
+        return sorted(seen)
 
     def test_crud_preview_flow(self):
         note_type = self._create_note_type()
@@ -288,6 +304,152 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         selected_combined_html = f"{selected_preview.get('front_html', '')}\n{selected_preview.get('back_html', '')}"
         self.assertIn("\u5c71", selected_combined_html)
         self.assertIn("\u3084\u307e", selected_combined_html)
+
+    def test_shared_deck_install_clones_subtree_notes_and_cards(self):
+        note_type = self._create_note_type()
+        note_type_id = note_type["id"]
+
+        with self.app.app_context():
+            child_deck = VocabularyDeck(name="Installed Child", parent_id=self.deck_id)
+            db.session.add(child_deck)
+            db.session.flush()
+            child_deck_id = child_deck.id
+            db.session.commit()
+
+        owner_note_resp = self.client.post(
+            "/api/notes",
+            json={
+                "note_type_id": note_type_id,
+                "deck_id": child_deck_id,
+                "field_values": {
+                    "Word": "\u72ac",
+                    "Reading": "\u3044\u306c",
+                    "Meaning": "dog",
+                },
+            },
+        )
+        self.assertEqual(owner_note_resp.status_code, 201)
+
+        with self.app.app_context():
+            learner = User(username="learner", email="learner@example.com", is_admin=False)
+            learner.set_password("password")
+            db.session.add(learner)
+            db.session.flush()
+            learner_id = learner.id
+
+            deck_item = DeckMarketplaceItem(
+                owner_user_id=self.user_id,
+                source_deck_id=self.deck_id,
+                source_note_type_id=note_type_id,
+                title="Shared Deck Install Clone",
+                description="Deck description",
+                primary_category="General",
+                tags=[],
+                preview_text="Preview",
+                pricing_mode="free",
+                price_cents=0,
+                version="1.0.0",
+                publish_status="published",
+            )
+            db.session.add(deck_item)
+            db.session.commit()
+            deck_item_id = deck_item.id
+
+        learner_client = self.app.test_client()
+        learner_client.post(
+            "/login",
+            data={"email": "learner@example.com", "password": "password"},
+            follow_redirects=True,
+        )
+
+        install_resp = learner_client.post(f"/api/shared/decks/{deck_item_id}/install")
+        self.assertEqual(install_resp.status_code, 201)
+        install_payload = install_resp.get_json()
+        installed_root_id = install_payload.get("installed_deck_id")
+        self.assertIsNotNone(installed_root_id)
+
+        with self.app.app_context():
+            install_row = DeckInstall.query.filter_by(deck_item_id=deck_item_id, user_id=learner_id).first()
+            self.assertIsNotNone(install_row)
+            subtree_ids = self._collect_subtree_ids(int(installed_root_id))
+            cloned_notes = Note.query.filter(
+                Note.user_id == learner_id,
+                Note.deck_id.in_(subtree_ids),
+            ).all()
+            self.assertEqual(len(cloned_notes), 1)
+            cloned_note_ids = [row.id for row in cloned_notes]
+            cloned_cards = Card.query.filter(Card.note_id.in_(cloned_note_ids)).all()
+            self.assertTrue(cloned_cards)
+
+        next_resp = learner_client.get(f"/api/study/next?scope=deck&scope_id={installed_root_id}")
+        self.assertEqual(next_resp.status_code, 200)
+        next_payload = next_resp.get_json()
+        self.assertIsNotNone(next_payload.get("card_id"))
+        self.assertIn("\u72ac", next_payload.get("rendered_front_html", ""))
+
+    def test_dashboard_for_installed_deck_includes_child_deck_rows(self):
+        note_type = self._create_note_type()
+        note_type_id = note_type["id"]
+
+        with self.app.app_context():
+            child_deck = VocabularyDeck(name="Visible Child Deck", parent_id=self.deck_id)
+            db.session.add(child_deck)
+            db.session.flush()
+            child_deck_id = child_deck.id
+            db.session.commit()
+
+        owner_note_resp = self.client.post(
+            "/api/notes",
+            json={
+                "note_type_id": note_type_id,
+                "deck_id": child_deck_id,
+                "field_values": {
+                    "Word": "\u732b",
+                    "Reading": "\u306d\u3053",
+                    "Meaning": "cat",
+                },
+            },
+        )
+        self.assertEqual(owner_note_resp.status_code, 201)
+
+        with self.app.app_context():
+            learner = User(username="viewer", email="viewer@example.com", is_admin=False)
+            learner.set_password("password")
+            db.session.add(learner)
+            db.session.flush()
+
+            deck_item = DeckMarketplaceItem(
+                owner_user_id=self.user_id,
+                source_deck_id=self.deck_id,
+                source_note_type_id=note_type_id,
+                title="Shared Deck Dashboard Child Visibility",
+                description="Deck description",
+                primary_category="General",
+                tags=[],
+                preview_text="Preview",
+                pricing_mode="free",
+                price_cents=0,
+                version="1.0.0",
+                publish_status="published",
+            )
+            db.session.add(deck_item)
+            db.session.commit()
+            deck_item_id = deck_item.id
+
+        viewer_client = self.app.test_client()
+        viewer_client.post(
+            "/login",
+            data={"email": "viewer@example.com", "password": "password"},
+            follow_redirects=True,
+        )
+        install_resp = viewer_client.post(f"/api/shared/decks/{deck_item_id}/install")
+        self.assertEqual(install_resp.status_code, 201)
+
+        dashboard_resp = viewer_client.get("/dashboard")
+        self.assertEqual(dashboard_resp.status_code, 200)
+        dashboard_html = dashboard_resp.get_data(as_text=True)
+        self.assertIn("Deck A", dashboard_html)
+        self.assertIn("Visible Child Deck", dashboard_html)
 
     def test_shared_deck_detail_returns_up_to_five_random_test_words(self):
         source_rows = [
