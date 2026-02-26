@@ -10,6 +10,9 @@ from app.services.stats_overview import build_stats_overview
 from models import db
 from models.flashcard import ReviewEvent
 from models.user import User
+from models.vocabulary_deck import VocabularyDeck
+from models.vocabulary_entry import VocabularyEntry
+from models.vocabulary_progress import VocabularyProgress
 
 
 class StatsOverviewTests(unittest.TestCase):
@@ -23,14 +26,19 @@ class StatsOverviewTests(unittest.TestCase):
         )
         self.client = self.app.test_client()
         self._card_seq = 0
+        self._entry_seq = 0
 
         with self.app.app_context():
             db.create_all()
             user = User(username="stats-user", email="stats@example.com", timezone="UTC")
             user.set_password("password")
             db.session.add(user)
+            db.session.flush()
+            deck = VocabularyDeck(name="Stats Deck", owner_user_id=user.id)
+            db.session.add(deck)
             db.session.commit()
             self.user_id = user.id
+            self.deck_id = deck.id
 
     def tearDown(self):
         with self.app.app_context():
@@ -59,6 +67,43 @@ class StatsOverviewTests(unittest.TestCase):
             data={"email": "stats@example.com", "password": "password"},
             follow_redirects=True,
         )
+
+    def _new_entry(self):
+        self._entry_seq += 1
+        entry = VocabularyEntry(
+            deck_id=self.deck_id,
+            deck="Stats Deck",
+            word=f"overview-word-{self._entry_seq}",
+        )
+        db.session.add(entry)
+        db.session.flush()
+        return entry
+
+    def _add_progress(
+        self,
+        *,
+        due_at: datetime | None,
+        queue: str = "review",
+        is_suspended: bool = False,
+    ):
+        entry = self._new_entry()
+        db.session.add(
+            VocabularyProgress(
+                user_id=self.user_id,
+                entry_id=entry.id,
+                queue=queue,
+                due_at=due_at,
+                interval_days=1,
+                is_suspended=is_suspended,
+            )
+        )
+
+    @staticmethod
+    def _heatmap_day(payload: dict, day_iso: str) -> dict:
+        for point in payload["heatmap"]:
+            if point.get("day") == day_iso:
+                return point
+        raise AssertionError(f"Missing heatmap day: {day_iso}")
 
     def test_streak_calculation(self):
         with self.app.app_context():
@@ -119,6 +164,71 @@ class StatsOverviewTests(unittest.TestCase):
         self.assertIn("today", payload)
         self.assertIn("heatmap", payload)
         self.assertIn("metrics", payload)
+        self.assertIn("day", payload["heatmap"][0])
+        self.assertIn("study_time", payload["heatmap"][0])
+        self.assertIn("source", payload["heatmap"][0])
+
+    def test_current_year_future_uses_due_without_double_count(self):
+        with self.app.app_context():
+            now_utc = datetime(2026, 1, 10, 12, 0, 0)
+            for _ in range(10):
+                self._add_event(when_utc=datetime(2026, 1, 5, 9, 0, 0), duration_ms=1000)
+
+            for hour in range(10):
+                self._add_progress(due_at=datetime(2026, 1, 12, 8 + hour, 0, 0))
+            self._add_progress(due_at=datetime(2026, 1, 12, 23, 0, 0), is_suspended=True)
+
+            # Future reviewed timestamps (clock skew) must not be used for future day cards.
+            self._add_event(when_utc=datetime(2026, 1, 14, 9, 0, 0), duration_ms=1000)
+            db.session.commit()
+
+            payload = build_stats_overview(
+                user_id=self.user_id,
+                year=2026,
+                timezone_name="UTC",
+                now_utc=now_utc,
+            )
+
+            past_day = self._heatmap_day(payload, "2026-01-05")
+            self.assertEqual(past_day["cards"], 10)
+            self.assertEqual(past_day["source"], "reviewed")
+            self.assertFalse(past_day["is_future"])
+
+            future_due_day = self._heatmap_day(payload, "2026-01-12")
+            self.assertEqual(future_due_day["cards"], 10)
+            self.assertEqual(future_due_day["study_time"], 0)
+            self.assertEqual(future_due_day["source"], "due")
+            self.assertTrue(future_due_day["is_future"])
+
+            future_zero_due_day = self._heatmap_day(payload, "2026-01-13")
+            self.assertEqual(future_zero_due_day["cards"], 0)
+            self.assertEqual(future_zero_due_day["source"], "due")
+            self.assertTrue(future_zero_due_day["is_future"])
+
+            future_review_skew_day = self._heatmap_day(payload, "2026-01-14")
+            self.assertEqual(future_review_skew_day["cards"], 0)
+            self.assertEqual(future_review_skew_day["source"], "due")
+            self.assertTrue(future_review_skew_day["is_future"])
+
+    def test_future_due_local_day_boundary(self):
+        with self.app.app_context():
+            # UTC+7 local boundary: 17:30 UTC -> next local day.
+            self._add_progress(due_at=datetime(2026, 1, 10, 17, 30, 0))
+            # Still same local day, not counted as future due card for Jan 11.
+            self._add_progress(due_at=datetime(2026, 1, 10, 16, 30, 0))
+            db.session.commit()
+
+            payload = build_stats_overview(
+                user_id=self.user_id,
+                year=2026,
+                timezone_name="Asia/Ho_Chi_Minh",
+                now_utc=datetime(2026, 1, 10, 12, 0, 0),
+            )
+
+            jan_11 = self._heatmap_day(payload, "2026-01-11")
+            self.assertEqual(jan_11["cards"], 1)
+            self.assertEqual(jan_11["source"], "due")
+            self.assertTrue(jan_11["is_future"])
 
 
 if __name__ == "__main__":
