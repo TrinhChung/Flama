@@ -79,7 +79,7 @@ Next:
   1) Edit .env with your MySQL credentials.
   2) Ensure DB exists (DB_NAME in .env).
   3) Run migration: flask --app wsgi.py db upgrade
-  4) Start app: flask --app wsgi.py run
+  4) Start app: flask --app wsgi.py run --host=0.0.0.0 --port=4789
 EOF
   exit 0
 fi
@@ -89,7 +89,7 @@ if [[ "${MODE}" == "docker" ]]; then
     docker compose up --build -d
     cat <<'EOF'
 Docker services started.
-App: http://127.0.0.1:5000
+App: http://127.0.0.1:4789
 If needed, run migrations inside container:
   docker compose exec web flask --app wsgi.py db upgrade
 EOF

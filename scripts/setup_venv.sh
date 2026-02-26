@@ -62,5 +62,5 @@ Activate venv:
 
 Next commands (DB already running on your Ubuntu machine):
   flask --app wsgi.py db upgrade
-  flask --app wsgi.py run --host=0.0.0.0 --port=5000
+  flask --app wsgi.py run --host=0.0.0.0 --port=4789
 EOF

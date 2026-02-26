@@ -52,7 +52,7 @@ The frontend employs a custom component-based architecture built with Jinja2 mac
 ## 6. Infrastructure & Deployment
 - The environment is orchestrated using `docker-compose.yml`.
 - **Services**:
-  - `web`: The Flask application running via `wsgi.py` on port 5000.
+  - `web`: The Flask application running via `wsgi.py` on port 4789.
   - `db`: MySQL 8.0 database container with persistent volume storage (`flama_db_data`).
 - **Configuration**: Secrets and environment-specific settings are injected via a `.env` file (loaded by `python-dotenv`). Important keys include database connection parameters (`DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_NAME`), `SECRET_KEY`, and feature flags like `USE_NEW_CARD_MODEL`.
 

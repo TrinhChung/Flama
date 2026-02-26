@@ -87,14 +87,14 @@ bash scripts/reseed_db.sh
 
 7. Chạy ứng dụng:
 ```bash
-flask --app wsgi.py run --host=0.0.0.0 --port=5000
+flask --app wsgi.py run --host=0.0.0.0 --port=4789
 ```
 
 ## Basic Commands
 
 - Chạy app:
 ```bash
-flask --app wsgi.py run --host=0.0.0.0 --port=5000
+flask --app wsgi.py run --host=0.0.0.0 --port=4789
 ```
 
 - Chạy migration:
@@ -130,7 +130,7 @@ flask --app wsgi.py vocab-seed --path "static/seed_data" --replace-lessons
 ## CSV Import (UI)
 
 1. Đăng nhập vào hệ thống.
-2. Truy cập `http://127.0.0.1:5000/vocabulary`.
+2. Truy cập `http://127.0.0.1:4789/vocabulary`.
 3. Bấm **Nhập CSV** và dán dữ liệu với header:
 
 ```text
