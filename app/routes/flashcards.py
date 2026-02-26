@@ -35,6 +35,14 @@ from app.services.flashcard_legacy import (
     LEGACY_SHARED_CSS,
     ensure_legacy_note_type,
 )
+from app.services.flashcard_import import (
+    ImportValidationError,
+    create_import_session,
+    load_import_session,
+    resolve_delimiter,
+    run_import,
+    suggest_mapping,
+)
 from app.services.flashcard_renderer import (
     PREVIEW_MEDIA_AUDIO_TOKEN,
     PREVIEW_MEDIA_DIAGRAM_TOKEN,
@@ -974,6 +982,125 @@ def _validate_note_type_consistency_for_deck(
     return "All notes in one deck must use the same template (note type)."
 
 
+def _collect_accessible_decks_for_import() -> list[VocabularyDeck]:
+    if is_admin_user(current_user):
+        return (
+            VocabularyDeck.query.filter(
+                db.or_(
+                    VocabularyDeck.owner_user_id == current_user.id,
+                    VocabularyDeck.owner_user_id.is_(None),
+                )
+            )
+            .order_by(
+                VocabularyDeck.parent_id.isnot(None),
+                VocabularyDeck.position.asc(),
+                VocabularyDeck.created_at.asc(),
+                VocabularyDeck.id.asc(),
+            )
+            .all()
+        )
+
+    installs = DeckInstall.query.filter_by(user_id=current_user.id).all()
+    installed_root_ids = {int(row.local_deck_id) for row in installs if row.local_deck_id}
+    if not installed_root_ids:
+        return []
+
+    visible_ids: set[int] = set()
+    frontier: set[int] = set(installed_root_ids)
+    while frontier:
+        current_ids = {deck_id for deck_id in frontier if deck_id not in visible_ids}
+        if not current_ids:
+            break
+        visible_ids.update(current_ids)
+        child_rows = (
+            db.session.query(VocabularyDeck.id)
+            .filter(VocabularyDeck.parent_id.in_(current_ids))
+            .all()
+        )
+        frontier = {int(row[0]) for row in child_rows if row and row[0] is not None}
+
+    return (
+        VocabularyDeck.query.filter(VocabularyDeck.id.in_(visible_ids))
+        .order_by(
+            VocabularyDeck.parent_id.isnot(None),
+            VocabularyDeck.position.asc(),
+            VocabularyDeck.created_at.asc(),
+            VocabularyDeck.id.asc(),
+        )
+        .all()
+    )
+
+
+def _deck_path_label(deck_obj: VocabularyDeck, deck_map: dict[int, VocabularyDeck]) -> str:
+    parts: list[str] = []
+    current = deck_obj
+    seen: set[int] = set()
+    while current and current.id not in seen:
+        seen.add(current.id)
+        parts.append(current.name)
+        if current.parent_id is None:
+            break
+        current = deck_map.get(int(current.parent_id))
+    return "::".join(reversed(parts)) if parts else deck_obj.name
+
+
+def _serialize_note_type_for_import(note_type: NoteType) -> dict[str, Any]:
+    fields = [
+        {
+            "id": field_def.id,
+            "name": field_def.name,
+            "position": int(field_def.position or 0),
+            "required": bool(field_def.required),
+            "field_type": field_def.field_type,
+        }
+        for field_def in sorted(note_type.field_defs, key=lambda item: item.position)
+    ]
+    return {
+        "id": note_type.id,
+        "name": note_type.name,
+        "fields": fields,
+    }
+
+
+def _default_uniqueness_fields(note_type: NoteType) -> list[str]:
+    fields = sorted(note_type.field_defs, key=lambda item: item.position)
+    if not fields:
+        return []
+
+    priority = ["word", "front", "term", "expression", "vocabulary"]
+    lowered_name_map = {field_def.name.lower(): field_def.name for field_def in fields}
+    for key in priority:
+        if key in lowered_name_map:
+            return [lowered_name_map[key]]
+
+    required = [field_def.name for field_def in fields if field_def.required]
+    if required:
+        return [required[0]]
+
+    return [fields[0].name]
+
+
+def _infer_default_note_type_id_for_deck(deck_id: int | None) -> str | None:
+    if deck_id is None:
+        return None
+
+    deck_obj = VocabularyDeck.query.get(deck_id)
+    if deck_obj and deck_obj.note_type_id:
+        note_type = NoteType.query.filter_by(id=deck_obj.note_type_id, user_id=current_user.id).first()
+        if note_type:
+            return note_type.id
+
+    query = db.session.query(Note.note_type_id).filter(
+        Note.user_id == current_user.id,
+        Note.deck_id == deck_id,
+        Note.note_type_id.isnot(None),
+    )
+    note_type_ids = sorted({row[0] for row in query.all() if row[0]})
+    if len(note_type_ids) == 1:
+        return note_type_ids[0]
+    return None
+
+
 def _next_deck_position(parent_deck_id: int | None) -> int:
     query = db.session.query(db.func.max(VocabularyDeck.position))
     if parent_deck_id is None:
@@ -1769,6 +1896,239 @@ def note_editor_page():
     note_types = NoteType.query.filter_by(user_id=current_user.id).order_by(NoteType.name.asc()).all()
     decks = VocabularyDeck.query.order_by(VocabularyDeck.name.asc()).all()
     return render_template("flashcards/note_editor.html", note_types=note_types, decks=decks)
+
+
+def _parse_bool(value: Any, *, default: bool = False) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+@flashcards_bp.route("/flashcards/import")
+@login_required
+def flashcard_import_page():
+    decks = _collect_accessible_decks_for_import()
+    deck_map = {deck.id: deck for deck in decks}
+    deck_options = [
+        {
+            "id": deck.id,
+            "name": deck.name,
+            "path": _deck_path_label(deck, deck_map),
+            "note_type_id": deck.note_type_id,
+        }
+        for deck in decks
+    ]
+
+    selected_deck_id: int | None = None
+    selected_deck_raw = (request.args.get("deck_id") or "").strip()
+    if selected_deck_raw:
+        try:
+            candidate = int(selected_deck_raw)
+            if candidate in deck_map:
+                selected_deck_id = candidate
+        except (TypeError, ValueError):
+            selected_deck_id = None
+    if selected_deck_id is None and deck_options:
+        selected_deck_id = int(deck_options[0]["id"])
+
+    note_types = (
+        NoteType.query.filter_by(user_id=current_user.id)
+        .order_by(NoteType.name.asc(), NoteType.updated_at.desc())
+        .all()
+    )
+    note_type_options = [_serialize_note_type_for_import(note_type) for note_type in note_types]
+    note_type_map = {item["id"]: item for item in note_type_options}
+
+    selected_note_type_id = (request.args.get("note_type_id") or "").strip() or None
+    if selected_note_type_id and selected_note_type_id not in note_type_map:
+        selected_note_type_id = None
+
+    if selected_note_type_id is None and selected_deck_id is not None:
+        inferred = _infer_default_note_type_id_for_deck(selected_deck_id)
+        if inferred and inferred in note_type_map:
+            selected_note_type_id = inferred
+
+    if selected_note_type_id is None and note_type_options:
+        selected_note_type_id = note_type_options[0]["id"]
+
+    uniqueness_defaults = {
+        note_type.id: _default_uniqueness_fields(note_type)
+        for note_type in note_types
+    }
+
+    return render_template(
+        "flashcards/import.html",
+        deck_options=deck_options,
+        note_type_options=note_type_options,
+        initial_deck_id=selected_deck_id,
+        initial_note_type_id=selected_note_type_id,
+        uniqueness_defaults=uniqueness_defaults,
+    )
+
+
+@flashcards_bp.route("/api/flashcards/import/parse", methods=["POST"])
+@login_required
+def flashcard_import_parse():
+    note_type_id = (request.form.get("note_type_id") or "").strip()
+    note_type = _get_note_type_or_404(note_type_id)
+    if note_type is None:
+        return _api_error("FIELD_NOT_FOUND", "Note type not found.", status=404, field="note_type_id")
+
+    upload = request.files.get("file")
+    if upload is None or not upload.filename:
+        return _api_error("VALIDATION_ERROR", "Import file is required.", field="file")
+
+    delimiter_mode = (request.form.get("delimiter_mode") or "csv").strip().lower()
+    custom_delimiter = request.form.get("custom_delimiter")
+    has_header = _parse_bool(request.form.get("has_header"), default=True)
+
+    try:
+        delimiter = resolve_delimiter(delimiter_mode, custom_delimiter)
+    except ImportValidationError as exc:
+        return _api_error("VALIDATION_ERROR", str(exc), field="delimiter_mode")
+
+    file_bytes = upload.read()
+    try:
+        summary = create_import_session(
+            user_id=current_user.id,
+            filename=upload.filename,
+            file_bytes=file_bytes,
+            delimiter=delimiter,
+            has_header=has_header,
+            field_count=len(note_type.field_defs),
+        )
+    except ImportValidationError as exc:
+        return _api_error("VALIDATION_ERROR", str(exc))
+
+    suggestions = suggest_mapping(
+        field_defs=note_type.field_defs,
+        has_header=has_header,
+        header=summary.get("header") or [],
+        column_count=int(summary.get("column_count") or 0),
+    )
+
+    return jsonify(
+        {
+            "token": summary.get("token"),
+            "delimiter": delimiter,
+            "has_header": has_header,
+            "columns": summary.get("columns") or [],
+            "column_count": int(summary.get("column_count") or 0),
+            "total_rows": int(summary.get("total_rows") or 0),
+            "preview_rows": summary.get("preview_rows") or [],
+            "warnings": summary.get("warnings") or [],
+            "suggested_mapping": suggestions,
+        }
+    )
+
+
+def _resolve_import_execution_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], NoteType, int | None]:
+    token = (payload.get("token") or "").strip()
+    if not token:
+        raise ImportValidationError("Import token is required")
+
+    session_meta = load_import_session(user_id=current_user.id, token=token)
+
+    note_type_id = (payload.get("note_type_id") or "").strip()
+    note_type = _get_note_type_or_404(note_type_id)
+    if note_type is None:
+        raise ImportValidationError("Note type not found")
+
+    target_deck_raw = payload.get("target_deck_id")
+    if target_deck_raw in ("", None):
+        raise ImportValidationError("target_deck_id is required")
+    try:
+        target_deck_id = int(target_deck_raw)
+    except (TypeError, ValueError) as exc:
+        raise ImportValidationError("target_deck_id must be an integer") from exc
+
+    accessible_deck_ids = {deck.id for deck in _collect_accessible_decks_for_import()}
+    if target_deck_id is not None and target_deck_id not in accessible_deck_ids:
+        raise ImportValidationError("Target deck is not accessible")
+
+    deck_consistency_error = _validate_note_type_consistency_for_deck(
+        deck_id=target_deck_id,
+        note_type_id=note_type.id,
+        user_id=current_user.id,
+    )
+    if deck_consistency_error:
+        raise ImportValidationError(deck_consistency_error)
+
+    return session_meta, note_type, target_deck_id
+
+
+@flashcards_bp.route("/api/flashcards/import/estimate", methods=["POST"])
+@login_required
+def flashcard_import_estimate():
+    payload = request.get_json(silent=True) or {}
+    try:
+        session_meta, note_type, target_deck_id = _resolve_import_execution_payload(payload)
+        report = run_import(
+            user_id=current_user.id,
+            session_meta=session_meta,
+            note_type=note_type,
+            target_deck_id=target_deck_id,
+            mode=(payload.get("import_mode") or "upsert"),
+            uniqueness_fields=payload.get("uniqueness_fields") or [],
+            raw_mapping=payload.get("mapping") if isinstance(payload.get("mapping"), dict) else {},
+            dont_overwrite_empty=_parse_bool(payload.get("dont_overwrite_empty"), default=True),
+            confirm_column_mismatch=_parse_bool(payload.get("confirm_column_mismatch"), default=False),
+            apply_changes=False,
+            chunk_size=payload.get("chunk_size"),
+        )
+    except ImportValidationError as exc:
+        return _api_error("VALIDATION_ERROR", str(exc))
+
+    return jsonify(report)
+
+
+@flashcards_bp.route("/api/flashcards/import/execute", methods=["POST"])
+@login_required
+def flashcard_import_execute():
+    payload = request.get_json(silent=True) or {}
+    try:
+        session_meta, note_type, target_deck_id = _resolve_import_execution_payload(payload)
+        report = run_import(
+            user_id=current_user.id,
+            session_meta=session_meta,
+            note_type=note_type,
+            target_deck_id=target_deck_id,
+            mode=(payload.get("import_mode") or "upsert"),
+            uniqueness_fields=payload.get("uniqueness_fields") or [],
+            raw_mapping=payload.get("mapping") if isinstance(payload.get("mapping"), dict) else {},
+            dont_overwrite_empty=_parse_bool(payload.get("dont_overwrite_empty"), default=True),
+            confirm_column_mismatch=_parse_bool(payload.get("confirm_column_mismatch"), default=False),
+            apply_changes=True,
+            chunk_size=payload.get("chunk_size"),
+        )
+    except ImportValidationError as exc:
+        return _api_error("VALIDATION_ERROR", str(exc))
+
+    summary = report.get("summary") or {}
+    if int(summary.get("inserted") or 0) > 0 or int(summary.get("updated") or 0) > 0:
+        _touch_note_type_install_usage(user_id=current_user.id, installed_note_type_id=note_type.id)
+        install_rows = NoteTypeInstall.query.filter_by(
+            user_id=current_user.id,
+            installed_note_type_id=note_type.id,
+        ).all()
+        for install in install_rows:
+            source_note_type = NoteType.query.get(install.source_note_type_id)
+            if source_note_type:
+                _recompute_note_type_market_stats(source_note_type)
+
+    _audit(
+        "note.import",
+        {
+            "note_type_id": note_type.id,
+            "target_deck_id": target_deck_id,
+            "mode": report.get("mode"),
+            "summary": summary,
+        },
+    )
+    db.session.commit()
+    return jsonify(report)
 
 
 @flashcards_bp.route("/flashcards/study")

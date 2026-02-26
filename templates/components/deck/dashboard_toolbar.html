@@ -13,6 +13,14 @@
 {% set toolbar_study_base_url = toolbar_study_base_url | default('/vocabulary/study/deck/') %}
 {% set toolbar_stats_href = toolbar_stats_href | default(url_for('main.statistics_page')) %}
 {% set toolbar_stats_base_url = toolbar_stats_base_url | default(url_for('main.statistics_page')) %}
+{% set toolbar_import_base_url = toolbar_import_base_url | default(url_for('flashcards.flashcard_import_page')) %}
+{% if toolbar_import_href is not defined %}
+  {% if toolbar_current_deck_id %}
+    {% set toolbar_import_href = toolbar_import_base_url ~ '?deck_id=' ~ toolbar_current_deck_id %}
+  {% else %}
+    {% set toolbar_import_href = toolbar_import_base_url %}
+  {% endif %}
+{% endif %}
 {% set toolbar_browse_href = toolbar_browse_href | default(url_for('vocabulary.browse')) %}
 {% set toolbar_browse_context = toolbar_browse_context | default(toolbar_variant) %}
 {% set toolbar_current_deck_id = toolbar_current_deck_id | default('') %}
@@ -43,6 +51,16 @@
       {% endif %}
     >
       <i class="bi bi-bar-chart-line"></i> Stats
+    </a>
+    <a
+      class="dash-tab{% if toolbar_active_tab == 'import' %} dash-tab--active{% endif %}"
+      href="{{ toolbar_import_href }}"
+      {% if toolbar_variant == 'dashboard' %}
+      id="import-tab-btn"
+      data-base-import-url="{{ toolbar_import_base_url }}"
+      {% endif %}
+    >
+      <i class="bi bi-upload"></i> Import
     </a>
   </div>
 

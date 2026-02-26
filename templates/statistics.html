@@ -8,6 +8,7 @@
   {% set toolbar_active_tab = 'stats' %}
   {% set toolbar_aria_label = 'Statistics actions' %}
   {% set toolbar_stats_href = url_for('main.statistics_page') %}
+  {% set toolbar_current_deck_id = stats_initial_deck_id or '' %}
   {% include 'components/deck/dashboard_toolbar.html' with context %}
 
   <div class="stats-top-filter">

@@ -1,5 +1,7 @@
 """Integration tests for flashcard API CRUD, preview, and study."""
 
+import io
+import re
 import unittest
 
 from app import create_app
@@ -451,6 +453,36 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         self.assertIn("Deck A", dashboard_html)
         self.assertIn("Visible Child Deck", dashboard_html)
 
+    def test_dashboard_counts_include_imported_note_cards(self):
+        note_type = self._create_note_type()
+        note_type_id = note_type["id"]
+
+        create_note_resp = self.client.post(
+            "/api/notes",
+            json={
+                "note_type_id": note_type_id,
+                "deck_id": self.deck_id,
+                "field_values": {
+                    "Word": "\u72ac",
+                    "Reading": "\u3044\u306c",
+                    "Meaning": "dog",
+                },
+            },
+        )
+        self.assertEqual(create_note_resp.status_code, 201)
+
+        dashboard_resp = self.client.get("/dashboard")
+        self.assertEqual(dashboard_resp.status_code, 200)
+        dashboard_html = dashboard_resp.get_data(as_text=True)
+
+        pattern = re.compile(
+            r'data-node-name="Deck A".*?<span class="stat-num stat-new">(\d+)</span>\s*<span class="stat-num stat-learn">(\d+)</span>\s*<span class="stat-num stat-due">(\d+)</span>',
+            re.S,
+        )
+        match = pattern.search(dashboard_html)
+        self.assertIsNotNone(match)
+        self.assertGreaterEqual(int(match.group(1)), 1)
+
     def test_shared_deck_detail_returns_up_to_five_random_test_words(self):
         source_rows = [
             ("\u6d77", "\u3046\u307f", "bi\u1ec3n"),
@@ -676,6 +708,207 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             self.assertIsNotNone(progress)
             self.assertIn(progress.queue, {"learning", "review", "relearning", "new"})
             self.assertIsNotNone(progress.reps)
+
+    def test_flashcard_import_parse_and_execute_upsert(self):
+        note_type = self._create_note_type()
+        note_type_id = note_type["id"]
+
+        parse_resp = self.client.post(
+            "/api/flashcards/import/parse",
+            data={
+                "note_type_id": note_type_id,
+                "delimiter_mode": "custom",
+                "custom_delimiter": "|",
+                "has_header": "1",
+                "file": (
+                    io.BytesIO(
+                        "Word|Reading|Meaning\n犬|いぬ|dog\n猫|ねこ|cat\n".encode("utf-8")
+                    ),
+                    "bulk-import.txt",
+                ),
+            },
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(parse_resp.status_code, 200)
+        parse_payload = parse_resp.get_json()
+        self.assertTrue(parse_payload.get("token"))
+        self.assertEqual(parse_payload.get("total_rows"), 2)
+
+        execute_resp = self.client.post(
+            "/api/flashcards/import/execute",
+            json={
+                "token": parse_payload["token"],
+                "note_type_id": note_type_id,
+                "target_deck_id": self.deck_id,
+                "import_mode": "upsert",
+                "uniqueness_fields": ["Word"],
+                "mapping": parse_payload.get("suggested_mapping", {}),
+                "dont_overwrite_empty": True,
+                "confirm_column_mismatch": False,
+            },
+        )
+        self.assertEqual(execute_resp.status_code, 200)
+        result = execute_resp.get_json()
+        summary = result.get("summary") or {}
+        self.assertEqual(int(summary.get("inserted") or 0), 2)
+        self.assertEqual(int(summary.get("updated") or 0), 0)
+        self.assertEqual(int(summary.get("errors") or 0), 0)
+
+        with self.app.app_context():
+            note_count = Note.query.filter_by(user_id=self.user_id, note_type_id=note_type_id).count()
+            card_count = (
+                db.session.query(Card)
+                .join(Note, Card.note_id == Note.id)
+                .filter(Note.user_id == self.user_id, Note.note_type_id == note_type_id)
+                .count()
+            )
+            self.assertEqual(note_count, 2)
+            self.assertGreaterEqual(card_count, 2)
+
+    def test_flashcard_import_update_only_respects_dont_overwrite_empty(self):
+        note_type = self._create_note_type()
+        note_type_id = note_type["id"]
+
+        create_resp = self.client.post(
+            "/api/notes",
+            json={
+                "note_type_id": note_type_id,
+                "deck_id": self.deck_id,
+                "field_values": {
+                    "Word": "犬",
+                    "Reading": "いぬ",
+                    "Meaning": "dog-old",
+                },
+            },
+        )
+        self.assertEqual(create_resp.status_code, 201)
+
+        parse_resp = self.client.post(
+            "/api/flashcards/import/parse",
+            data={
+                "note_type_id": note_type_id,
+                "delimiter_mode": "csv",
+                "has_header": "1",
+                "file": (
+                    io.BytesIO(
+                        "Word,Reading,Meaning\n犬,,dog-new\n".encode("utf-8")
+                    ),
+                    "update.csv",
+                ),
+            },
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(parse_resp.status_code, 200)
+        parse_payload = parse_resp.get_json()
+
+        execute_resp = self.client.post(
+            "/api/flashcards/import/execute",
+            json={
+                "token": parse_payload["token"],
+                "note_type_id": note_type_id,
+                "target_deck_id": self.deck_id,
+                "import_mode": "update_only",
+                "uniqueness_fields": ["Word"],
+                "mapping": parse_payload.get("suggested_mapping", {}),
+                "dont_overwrite_empty": True,
+                "confirm_column_mismatch": False,
+            },
+        )
+        self.assertEqual(execute_resp.status_code, 200)
+        result = execute_resp.get_json()
+        summary = result.get("summary") or {}
+        self.assertEqual(int(summary.get("inserted") or 0), 0)
+        self.assertEqual(int(summary.get("updated") or 0), 1)
+        self.assertEqual(int(summary.get("errors") or 0), 0)
+
+        with self.app.app_context():
+            note = Note.query.filter_by(user_id=self.user_id, note_type_id=note_type_id).first()
+            self.assertIsNotNone(note)
+            values = note.field_values or {}
+            self.assertEqual(values.get("Word"), "犬")
+            self.assertEqual(values.get("Reading"), "いぬ")
+            self.assertEqual(values.get("Meaning"), "dog-new")
+
+    def test_flashcard_import_insert_only_scoped_to_target_deck(self):
+        note_type = self._create_note_type()
+        note_type_id = note_type["id"]
+
+        with self.app.app_context():
+            deck_b = VocabularyDeck(name="Deck B")
+            db.session.add(deck_b)
+            db.session.commit()
+            deck_b_id = deck_b.id
+
+        existing_note_resp = self.client.post(
+            "/api/notes",
+            json={
+                "note_type_id": note_type_id,
+                "deck_id": self.deck_id,
+                "field_values": {
+                    "Word": "犬",
+                    "Reading": "いぬ",
+                    "Meaning": "dog-existing",
+                },
+            },
+        )
+        self.assertEqual(existing_note_resp.status_code, 201)
+
+        parse_resp = self.client.post(
+            "/api/flashcards/import/parse",
+            data={
+                "note_type_id": note_type_id,
+                "delimiter_mode": "csv",
+                "has_header": "1",
+                "file": (
+                    io.BytesIO("Word,Reading,Meaning\n犬,いぬ,dog-import\n".encode("utf-8")),
+                    "insert-only.csv",
+                ),
+            },
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(parse_resp.status_code, 200)
+        parse_payload = parse_resp.get_json()
+
+        execute_resp = self.client.post(
+            "/api/flashcards/import/execute",
+            json={
+                "token": parse_payload["token"],
+                "note_type_id": note_type_id,
+                "target_deck_id": deck_b_id,
+                "import_mode": "insert_only",
+                "uniqueness_fields": ["Word"],
+                "mapping": parse_payload.get("suggested_mapping", {}),
+                "dont_overwrite_empty": True,
+                "confirm_column_mismatch": False,
+            },
+        )
+        self.assertEqual(execute_resp.status_code, 200)
+        result = execute_resp.get_json()
+        summary = result.get("summary") or {}
+        self.assertEqual(int(summary.get("inserted") or 0), 1)
+        self.assertEqual(int(summary.get("skipped") or 0), 0)
+        self.assertEqual(int(summary.get("errors") or 0), 0)
+
+        with self.app.app_context():
+            deck_a_count = Note.query.filter_by(
+                user_id=self.user_id,
+                note_type_id=note_type_id,
+                deck_id=self.deck_id,
+            ).count()
+            deck_b_count = Note.query.filter_by(
+                user_id=self.user_id,
+                note_type_id=note_type_id,
+                deck_id=deck_b_id,
+            ).count()
+            self.assertEqual(deck_a_count, 1)
+            self.assertEqual(deck_b_count, 1)
+
+    def test_flashcard_import_page_renders(self):
+        response = self.client.get("/flashcards/import")
+        self.assertEqual(response.status_code, 200)
+        html = response.get_data(as_text=True)
+        self.assertIn("Step A - Upload & Parse", html)
+        self.assertIn("Step D - Review & Execute", html)
 
 
 if __name__ == "__main__":
