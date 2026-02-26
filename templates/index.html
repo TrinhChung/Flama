@@ -400,6 +400,88 @@
     </div>
   </section>
 
+  {% set angel_sponsors = [
+    {"name": "Trịnh Văn Chung", "tier": "diamond"},
+    {"name": "Thân Đức Trí", "tier": "platinum"},
+    {"name": "Hoàn Xuân Nguyên", "tier": "gold"},
+    {"name": "Đỗ Việt Hưng", "tier": "platinum"},
+    {"name": "Nguyễn Xuân Bách", "tier": "gold"}
+  ] %}
+  {% set angel_sponsor_repeat = 12 %}
+  {% set angel_sponsors_diamond = angel_sponsors | selectattr("tier", "equalto", "diamond") | list %}
+  {% set angel_sponsors_gold = angel_sponsors | selectattr("tier", "equalto", "gold") | list %}
+  {% set angel_sponsors_platinum = angel_sponsors | selectattr("tier", "equalto", "platinum") | list %}
+  {% set angel_sponsor_lane_diamond = angel_sponsors_diamond * angel_sponsor_repeat %}
+  {% set angel_sponsor_lane_gold = angel_sponsors_gold * angel_sponsor_repeat %}
+  {% set angel_sponsor_lane_platinum = angel_sponsors_platinum * angel_sponsor_repeat %}
+  {# ── Angel Sponsors ── #}
+  <section class="landing__angel-sponsors bg-surface">
+    <div class="container">
+      <div class="section-heading text-center">
+        <h2 class="section-title">Nhà tài trợ thiên thần</h2>
+      </div>
+    </div>
+    <div class="sponsor-marquee" aria-label="Danh sách nhà tài trợ thiên thần">
+      <div class="sponsor-lane sponsor-lane--diamond">
+        <span class="sponsor-tier-badge sponsor-tier-badge--diamond"><i class="bi bi-gem"></i> Kim cương</span>
+        <div class="sponsor-line sponsor-line--diamond">
+          <div class="sponsor-viewport">
+            <div class="sponsor-track sponsor-track--diamond">
+              <div class="sponsor-segment">
+                {% for sponsor in angel_sponsor_lane_diamond %}
+                <span class="sponsor-name sponsor-name--diamond">{{ sponsor.name }}</span>
+                {% endfor %}
+              </div>
+              <div class="sponsor-segment" aria-hidden="true">
+                {% for sponsor in angel_sponsor_lane_diamond %}
+                <span class="sponsor-name sponsor-name--diamond">{{ sponsor.name }}</span>
+                {% endfor %}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="sponsor-lane sponsor-lane--gold">
+        <span class="sponsor-tier-badge sponsor-tier-badge--gold"><i class="bi bi-trophy-fill"></i> Vàng</span>
+        <div class="sponsor-line sponsor-line--gold">
+          <div class="sponsor-viewport">
+            <div class="sponsor-track sponsor-track--gold">
+              <div class="sponsor-segment">
+                {% for sponsor in angel_sponsor_lane_gold %}
+                <span class="sponsor-name sponsor-name--gold">{{ sponsor.name }}</span>
+                {% endfor %}
+              </div>
+              <div class="sponsor-segment" aria-hidden="true">
+                {% for sponsor in angel_sponsor_lane_gold %}
+                <span class="sponsor-name sponsor-name--gold">{{ sponsor.name }}</span>
+                {% endfor %}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="sponsor-lane sponsor-lane--platinum">
+        <span class="sponsor-tier-badge sponsor-tier-badge--platinum"><i class="bi bi-award-fill"></i> Bạch kim</span>
+        <div class="sponsor-line sponsor-line--platinum">
+          <div class="sponsor-viewport">
+            <div class="sponsor-track sponsor-track--platinum">
+              <div class="sponsor-segment">
+                {% for sponsor in angel_sponsor_lane_platinum %}
+                <span class="sponsor-name sponsor-name--platinum">{{ sponsor.name }}</span>
+                {% endfor %}
+              </div>
+              <div class="sponsor-segment" aria-hidden="true">
+                {% for sponsor in angel_sponsor_lane_platinum %}
+                <span class="sponsor-name sponsor-name--platinum">{{ sponsor.name }}</span>
+                {% endfor %}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
   {# ── Trust / Privacy ── #}
   <section class="landing__trust">
     <div class="container text-center">
@@ -1317,6 +1399,224 @@
     font-size: 0.93rem;
   }
 
+  /* ── Angel Sponsors ── */
+  .landing__angel-sponsors {
+    padding: 3.5rem 0 3.1rem;
+  }
+
+  .sponsor-marquee {
+    --sponsor-badge-offset: 0.62rem;
+    --sponsor-row-height: 3rem;
+    --sponsor-row-gap: 0.8rem;
+    --sponsor-item-gap: 2.9rem;
+    display: grid;
+    gap: var(--sponsor-row-gap);
+    height: calc((var(--sponsor-row-height) * 3) + (var(--sponsor-row-gap) * 2) + (var(--sponsor-badge-offset) * 3));
+    margin-top: 1.35rem;
+    width: 100%;
+  }
+
+  .sponsor-lane {
+    padding-top: var(--sponsor-badge-offset);
+    position: relative;
+  }
+
+  .sponsor-line {
+    align-items: center;
+    border-bottom: 1px solid var(--flama-border);
+    border-top: 1px solid var(--flama-border);
+    display: flex;
+    height: var(--sponsor-row-height);
+    overflow: hidden;
+    position: relative;
+    width: 100%;
+  }
+
+  .sponsor-viewport {
+    align-items: center;
+    display: flex;
+    flex: 1 1 auto;
+    height: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow: hidden;
+    width: 100%;
+  }
+
+  .sponsor-track {
+    display: flex;
+    gap: 0;
+    white-space: nowrap;
+    width: max-content;
+    will-change: transform;
+  }
+
+  .sponsor-track--diamond {
+    animation: sponsor-flow-diamond 38s linear infinite;
+    animation-delay: -5.8s;
+  }
+
+  .sponsor-track--gold {
+    animation: sponsor-flow-gold 30s linear infinite reverse;
+    animation-delay: -11.1s;
+    opacity: 0.9;
+  }
+
+  .sponsor-track--platinum {
+    animation: sponsor-flow-platinum 24s linear infinite;
+    animation-delay: -7.4s;
+    opacity: 0.84;
+  }
+
+  .sponsor-tier-badge {
+    align-items: center;
+    background: var(--flama-surface);
+    border: 1px solid var(--flama-border);
+    border-radius: 999px;
+    display: inline-flex;
+    box-shadow: 0 2px 8px rgba(34, 25, 18, 0.12);
+    font-size: 0.78rem;
+    font-weight: 700;
+    gap: 0.35rem;
+    left: 50%;
+    letter-spacing: 0.07em;
+    min-width: max-content;
+    pointer-events: none;
+    padding: 0.13rem 0.55rem;
+    position: absolute;
+    text-transform: uppercase;
+    top: var(--sponsor-badge-offset);
+    transform: translate(-50%, -52%);
+    z-index: 5;
+  }
+
+  .sponsor-tier-badge--diamond {
+    color: #4d7ea9;
+  }
+
+  .sponsor-tier-badge--gold {
+    color: #a66723;
+  }
+
+  .sponsor-tier-badge--platinum {
+    color: #6f7783;
+  }
+
+  .sponsor-line:hover .sponsor-track,
+  .sponsor-line:focus-within .sponsor-track {
+    animation-play-state: paused;
+  }
+
+  .sponsor-segment {
+    align-items: center;
+    display: flex;
+    flex-shrink: 0;
+    gap: var(--sponsor-item-gap);
+    padding: 0 var(--sponsor-item-gap);
+  }
+
+  .sponsor-name {
+    font-size: 1.08rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.45), 0 3px 10px rgba(37, 33, 28, 0.22);
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  .sponsor-name--diamond {
+    color: #5a8fbe;
+    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.48), 0 3px 12px rgba(64, 107, 147, 0.25);
+  }
+
+  .sponsor-name--platinum {
+    color: #8d96a3;
+    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5), 0 3px 12px rgba(88, 97, 108, 0.24);
+  }
+
+  .sponsor-name--gold {
+    color: #c97924;
+    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.38), 0 3px 12px rgba(95, 57, 24, 0.26);
+  }
+
+  @keyframes sponsor-flow-diamond {
+    0% {
+      transform: translateX(0);
+    }
+
+    18% {
+      transform: translateX(-16%);
+    }
+
+    44% {
+      transform: translateX(-22%);
+    }
+
+    64% {
+      transform: translateX(-26%);
+    }
+
+    82% {
+      transform: translateX(-34%);
+    }
+
+    100% {
+      transform: translateX(-50%);
+    }
+  }
+
+  @keyframes sponsor-flow-gold {
+    0% {
+      transform: translateX(0);
+    }
+
+    22% {
+      transform: translateX(-16%);
+    }
+
+    42% {
+      transform: translateX(-20%);
+    }
+
+    63% {
+      transform: translateX(-28%);
+    }
+
+    80% {
+      transform: translateX(-33%);
+    }
+
+    100% {
+      transform: translateX(-50%);
+    }
+  }
+
+  @keyframes sponsor-flow-platinum {
+    0% {
+      transform: translateX(0);
+    }
+
+    26% {
+      transform: translateX(-20%);
+    }
+
+    40% {
+      transform: translateX(-24%);
+    }
+
+    58% {
+      transform: translateX(-30%);
+    }
+
+    76% {
+      transform: translateX(-35%);
+    }
+
+    100% {
+      transform: translateX(-50%);
+    }
+  }
+
   /* ── Final CTA ── */
   .landing__final-cta {
     padding: 1.25rem 0 4.5rem;
@@ -1393,6 +1693,17 @@
     .roadmap-grid {
       grid-template-columns: 1fr;
     }
+
+    .sponsor-marquee {
+      --sponsor-badge-offset: 0.58rem;
+      --sponsor-row-height: 2.85rem;
+      --sponsor-item-gap: 2.2rem;
+      margin-top: 1.1rem;
+    }
+
+    .sponsor-name {
+      font-size: 0.98rem;
+    }
   }
 
   @media (max-width: 576px) {
@@ -1424,6 +1735,52 @@
 
     .faq-item {
       padding: 0.8rem 0.85rem;
+    }
+
+    .sponsor-marquee {
+      --sponsor-badge-offset: 0.5rem;
+      --sponsor-row-height: 2.55rem;
+      --sponsor-row-gap: 0.58rem;
+      --sponsor-item-gap: 1.75rem;
+      height: calc((var(--sponsor-row-height) * 3) + (var(--sponsor-row-gap) * 2) + (var(--sponsor-badge-offset) * 3));
+      margin-top: 0.9rem;
+    }
+
+    .sponsor-name {
+      font-size: 0.9rem;
+    }
+
+    .sponsor-tier-badge {
+      font-size: 0.68rem;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .sponsor-marquee {
+      height: auto;
+    }
+
+    .sponsor-line {
+      height: auto;
+      padding: 0.65rem 0;
+    }
+
+    .sponsor-track {
+      animation: none;
+      justify-content: center;
+      width: 100%;
+    }
+
+    .sponsor-segment {
+      flex-wrap: wrap;
+      justify-content: center;
+      padding: 0 0.8rem;
+      row-gap: 0.5rem;
+      width: 100%;
+    }
+
+    .sponsor-segment[aria-hidden="true"] {
+      display: none;
     }
   }
 </style>
