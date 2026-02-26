@@ -81,5 +81,5 @@ jobs:
           docker compose up -d --build
           
           echo "Deployment successful!"
-          echo "Application is running on port 5000"
+          echo "Application is running on port 4789"
           EOF

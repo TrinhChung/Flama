@@ -10,7 +10,7 @@ RUN pip install --no-cache-dir gunicorn
 
 COPY . .
 
-EXPOSE 5000
+EXPOSE 4789
 
 # Chạy ứng dụng bằng gunicorn
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "wsgi:app"]
+CMD ["gunicorn", "--bind", "0.0.0.0:4789", "wsgi:app"]

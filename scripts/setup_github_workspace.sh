@@ -108,5 +108,5 @@ Run app:
   # Optional seed commands:
   # flask --app wsgi.py user-role-seed
   # flask --app wsgi.py vocab-seed --path "static/seed_data" --replace-lessons
-  flask --app wsgi.py run --host=0.0.0.0 --port=5000
+  flask --app wsgi.py run --host=0.0.0.0 --port=4789
 EOF
