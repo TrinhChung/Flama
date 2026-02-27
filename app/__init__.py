@@ -55,7 +55,7 @@ def create_app(config: Optional[dict] = None) -> Flask:
     from models.column_preference import (
         VocabularyColumnPreference,
     )  # noqa: F401  # register model
-    from models.flashcard_entries import (  # noqa: F401  # register model
+    from models.flashcard import (  # noqa: F401  # register model
         AuditLog,
         Card,
         DeckInstall,

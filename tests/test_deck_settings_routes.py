@@ -5,7 +5,7 @@ import unittest
 from app import create_app
 from app.utils.deck_move_token import create_deck_move_token
 from models import db
-from models.flashcard_entries import Card, DeckInstall, DeckMarketplaceItem, Note, NoteType, Template
+from models.flashcard import Card, DeckInstall, DeckMarketplaceItem, Note, NoteType, Template
 from models.user import User
 from models.user_role import UserRole
 from models.vocabulary_deck import VocabularyDeck

@@ -3,7 +3,7 @@ from datetime import datetime
 from sqlalchemy import UniqueConstraint
 
 from models import db
-from models.flashcard_entries.common import uuid_str
+from models.model_uuid import uuid_str
 
 
 class NoteTypeInstall(db.Model):

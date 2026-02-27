@@ -12,7 +12,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from app import create_app  # noqa: E402
 from models import db  # noqa: E402
-from models.flashcard_entries import Card, LegacyMigrationMap, Note, ReviewEvent  # noqa: E402
+from models.flashcard import Card, LegacyMigrationMap, Note, ReviewEvent  # noqa: E402
 from models.vocabulary_deck import VocabularyDeck  # noqa: E402
 from models.vocabulary_entry import VocabularyEntry  # noqa: E402
 from models.vocabulary_progress import VocabularyProgress  # noqa: E402

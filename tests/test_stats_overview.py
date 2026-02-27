@@ -8,7 +8,7 @@ from datetime import datetime
 from app import create_app
 from app.services.stats_overview import build_stats_overview
 from models import db
-from models.flashcard_entries import ReviewEvent
+from models.flashcard import ReviewEvent
 from models.user import User
 from models.vocabulary_deck import VocabularyDeck
 from models.vocabulary_entry import VocabularyEntry

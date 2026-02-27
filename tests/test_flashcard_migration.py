@@ -4,7 +4,7 @@ import unittest
 
 from app import create_app
 from models import db
-from models.flashcard_entries import LegacyMigrationMap, Note, NoteType
+from models.flashcard import LegacyMigrationMap, Note, NoteType
 from models.user import User
 from models.vocabulary_deck import VocabularyDeck
 from models.vocabulary_entry import VocabularyEntry

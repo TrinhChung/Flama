@@ -3,16 +3,16 @@ from datetime import datetime
 from sqlalchemy import UniqueConstraint
 
 from models import db
-from models.flashcard_entries.common import uuid_str
+from models.model_uuid import uuid_str
 
 
-class DeckReview(db.Model):
-    __tablename__ = "deck_reviews"
+class NoteTypeReview(db.Model):
+    __tablename__ = "note_type_reviews"
 
     id = db.Column(db.String(36), primary_key=True, default=uuid_str)
-    deck_item_id = db.Column(
+    note_type_id = db.Column(
         db.String(36),
-        db.ForeignKey("deck_marketplace_items.id", ondelete="CASCADE"),
+        db.ForeignKey("note_types.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
@@ -22,10 +22,10 @@ class DeckReview(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
-    deck_item = db.relationship("DeckMarketplaceItem", back_populates="reviews")
+    note_type = db.relationship("NoteType", back_populates="reviews", foreign_keys=[note_type_id])
     user = db.relationship("User", foreign_keys=[user_id])
 
     __table_args__ = (
-        UniqueConstraint("deck_item_id", "user_id", name="uq_deck_reviews_item_user"),
+        UniqueConstraint("note_type_id", "user_id", name="uq_note_type_reviews_item_user"),
     )
 
