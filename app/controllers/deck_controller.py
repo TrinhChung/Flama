@@ -82,3 +82,26 @@ def collect_subtree_ids(root_deck_id: int | None) -> list[int]:
         frontier = {int(row[0]) for row in child_rows if row and row[0] is not None}
 
     return sorted(seen)
+
+
+def collect_ancestor_ids(deck_id: int | None) -> list[int]:
+    if deck_id is None:
+        return []
+
+    ancestors: list[int] = []
+    current_deck_id = int(deck_id)
+    seen: set[int] = set()
+
+    while current_deck_id not in seen:
+        seen.add(current_deck_id)
+        ancestors.append(current_deck_id)
+        parent_row = (
+            db.session.query(Deck.parent_id)
+            .filter(Deck.id == current_deck_id)
+            .first()
+        )
+        if not parent_row or parent_row[0] is None:
+            break
+        current_deck_id = int(parent_row[0])
+
+    return ancestors

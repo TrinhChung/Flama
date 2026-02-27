@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Study - {{ selected_topic.name }}{% endblock %}
+{% block title %}Study - {{ selected_deck.name }}{% endblock %}
 
 {% block footer %}{% endblock %}
 
@@ -33,7 +33,7 @@
 
   <div class="deck-context-bar">
     <i class="bi bi-collection-fill deck-ctx-icon"></i>
-    <span class="deck-ctx-name">{{ selected_topic.name }}</span>
+    <span class="deck-ctx-name">{{ selected_deck.name }}</span>
   </div>
 
   {% if card %}
@@ -52,8 +52,8 @@
   {% else %}
 
   <section class="study-empty">
-    <h3>No due cards in this lesson.</h3>
-    <p>Hôm nay bạn đã học xong phần này.</p>
+    <h3>No due cards in this deck.</h3>
+    <p>Hôm nay bạn đã học xong deck này.</p>
     <div class="d-flex gap-2 justify-content-center flex-wrap">
       {% set button_label = 'Continue' %}
       {% set button_href = next_study_url %}
@@ -64,13 +64,6 @@
       {% set button_href = url_for('main.dashboard') %}
       {% set button_type = 'primary' %}
       {% include 'components/button.html' with context %}
-
-      {% if admin_mode and selected_lesson %}
-      {% set button_label = 'Edit lesson' %}
-      {% set button_href = url_for('vocabulary.lesson', lesson_id=selected_lesson.id) %}
-      {% set button_type = 'outline' %}
-      {% include 'components/button.html' with context %}
-      {% endif %}
     </div>
   </section>
   {% endif %}
@@ -634,7 +627,7 @@
   (() => {
     const cardRoot = document.getElementById("study-card");
     const cardId = String(cardRoot?.dataset.cardId || "");
-    const studyScope = (cardRoot?.dataset.studyScope || "lesson").toLowerCase();
+    const studyScope = (cardRoot?.dataset.studyScope || "deck").toLowerCase();
     const scopeId = Number(cardRoot?.dataset.scopeId || 0);
     const answerUrl = String(cardRoot?.dataset.answerUrl || "");
     const front = document.getElementById("card-front");

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import logging
-import random
 from datetime import datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -22,10 +21,20 @@ from flask import (
     url_for,
 )
 from flask_login import current_user, login_required
-from sqlalchemy.orm import aliased
 
+from app.controllers import flashcards_import_controller as flashcard_import_ctrl
+from app.controllers import flashcards_marketplace_controller as marketplace_ctrl
+from app.controllers import flashcards_note_controller as flashcard_note_ctrl
+from app.controllers import flashcards_share_controller as share_ctrl
+from app.controllers.deck_controller import (
+    collect_subtree_ids as _collect_deck_subtree_ids,
+)
+from app.controllers.study_controller import (
+    apply_card_state_to_progress as _apply_card_state_to_progress,
+    card_state_from_progress as _card_state_from_progress,
+    query_next_due_card_id as _query_next_due_card_id,
+)
 from app.services.anki_scheduler import (
-    CardState,
     applyAnswer,
     computeAnswerPreview,
     default_deck_options,
@@ -39,7 +48,6 @@ from app.services.flashcard_legacy import (
 from app.services.flashcard_import import (
     ImportValidationError,
     create_import_session,
-    load_import_session,
     resolve_delimiter,
     run_import,
     suggest_mapping,
@@ -51,7 +59,6 @@ from app.services.flashcard_renderer import (
     TemplateCompileError,
     is_field_empty,
     render_template_pair,
-    sanitize_richtext,
 )
 from app.services.stats_overview import (
     normalize_review_mode,
@@ -141,184 +148,56 @@ def _get_note_type_or_404(note_type_id: str) -> NoteType | None:
 
 
 def _serialize_author(user_obj: Any) -> dict[str, Any]:
-    if not user_obj:
-        return {"id": None, "username": "Unknown"}
-    return {
-        "id": user_obj.id,
-        "username": user_obj.username,
-    }
+    return marketplace_ctrl.serialize_author(user_obj)
 
 
 def _serialize_field(field: FieldDef) -> dict[str, Any]:
-    return {
-        "id": field.id,
-        "note_type_id": field.note_type_id,
-        "name": field.name,
-        "field_type": field.field_type,
-        "position": field.position,
-        "required": bool(field.required),
-    }
+    return marketplace_ctrl.serialize_field(field)
 
 
 def _serialize_template(template: Template) -> dict[str, Any]:
-    return {
-        "id": template.id,
-        "note_type_id": template.note_type_id,
-        "name": template.name,
-        "front_html": template.front_html,
-        "back_html": template.back_html,
-        "shared_css": template.shared_css,
-        "position": template.position,
-        "is_default": bool(template.is_default),
-        "updated_at": template.updated_at.isoformat() if template.updated_at else None,
-    }
+    return marketplace_ctrl.serialize_template(template)
 
 
 def _serialize_note_type(note_type: NoteType) -> dict[str, Any]:
-    return {
-        "id": note_type.id,
-        "name": note_type.name,
-        "title": note_type.name,
-        "description": note_type.description,
-        "primary_category": note_type.primary_category,
-        "tags": note_type.tags or [],
-        "preview_text": note_type.preview_text,
-        "preview_image_url": note_type.preview_image_url,
-        "pricing_mode": note_type.pricing_mode,
-        "price_cents": int(note_type.price_cents or 0),
-        "version": note_type.version,
-        "changelog": note_type.changelog,
-        "publish_status": note_type.publish_status,
-        "is_official": bool(note_type.is_official),
-        "published_at": note_type.published_at.isoformat() if note_type.published_at else None,
-        "archived_at": note_type.archived_at.isoformat() if note_type.archived_at else None,
-        "install_count": int(note_type.install_count or 0),
-        "active_usage_count": int(note_type.active_usage_count or 0),
-        "rating_avg": float(note_type.rating_avg or 0.0),
-        "rating_count": int(note_type.rating_count or 0),
-        "author": _serialize_author(note_type.owner),
-        "created_at": note_type.created_at.isoformat() if note_type.created_at else None,
-        "updated_at": note_type.updated_at.isoformat() if note_type.updated_at else None,
-        "field_defs": [_serialize_field(field) for field in sorted(note_type.field_defs, key=lambda item: item.position)],
-        "templates": [
-            _serialize_template(template)
-            for template in sorted(note_type.templates, key=lambda item: item.position)
-        ],
-    }
+    return marketplace_ctrl.serialize_note_type(note_type)
 
 
 def _clean_field_value(field_def: FieldDef, raw_value: Any) -> Any:
-    if field_def.field_type == "richtext":
-        return sanitize_richtext("" if raw_value is None else str(raw_value))
-    if field_def.field_type in {"image", "audio", "diagram"}:
-        if raw_value is None:
-            return ""
-        candidate = str(raw_value).strip()
-        if candidate.startswith(MEDIA_ALLOWED_PREFIX):
-            return candidate
-        if MediaAsset.query.get(candidate):
-            return candidate
-        return ""
-    return "" if raw_value is None else str(raw_value).strip()
+    return flashcard_note_ctrl.clean_field_value(
+        field_def,
+        raw_value,
+        media_allowed_prefix=MEDIA_ALLOWED_PREFIX,
+    )
 
 
 def _validate_note_payload(note_type: NoteType, payload: dict[str, Any], *, partial: bool) -> tuple[dict[str, Any], str | None]:
-    field_map = {field.name: field for field in note_type.field_defs}
-    field_values = payload.get("field_values")
-    if field_values is None:
-        field_values = {}
-    if not isinstance(field_values, dict):
-        return {}, "field_values must be an object."
-
-    unknown = [key for key in field_values.keys() if key not in field_map]
-    if unknown:
-        return {}, f"Unknown fields: {', '.join(unknown)}"
-
-    cleaned: dict[str, Any] = {}
-    for name, field_def in field_map.items():
-        if name in field_values:
-            cleaned[name] = _clean_field_value(field_def, field_values.get(name))
-
-    if not partial:
-        for name, field_def in field_map.items():
-            if name not in cleaned:
-                cleaned[name] = ""
-            if field_def.required and is_field_empty(cleaned[name]):
-                return {}, f"Field '{name}' is required."
-    return cleaned, None
+    return flashcard_note_ctrl.validate_note_payload(
+        note_type,
+        payload,
+        partial=partial,
+        media_allowed_prefix=MEDIA_ALLOWED_PREFIX,
+    )
 
 
 def _normalize_tags(raw_tags: Any) -> list[str]:
-    if raw_tags is None:
-        return []
-    if isinstance(raw_tags, list):
-        tags = [str(item).strip() for item in raw_tags if str(item).strip()]
-        return tags
-    if isinstance(raw_tags, str):
-        return [item.strip() for item in raw_tags.split(",") if item.strip()]
-    return []
+    return marketplace_ctrl.normalize_tags(raw_tags)
 
 
 def _normalize_marketplace_tags(raw_tags: Any) -> list[str]:
-    normalized = _normalize_tags(raw_tags)
-    dedup: list[str] = []
-    seen: set[str] = set()
-    for item in normalized:
-        lowered = item.lower()
-        if lowered in seen:
-            continue
-        seen.add(lowered)
-        dedup.append(item)
-    return dedup
+    return marketplace_ctrl.normalize_marketplace_tags(raw_tags)
 
 
 def _parse_price_cents(raw_price: Any) -> int | None:
-    if raw_price in (None, ""):
-        return None
-    if isinstance(raw_price, int):
-        return raw_price
-    if isinstance(raw_price, float):
-        return int(round(raw_price * 100))
-    text = str(raw_price).strip()
-    if not text:
-        return None
-    if "." in text:
-        try:
-            return int(round(float(text) * 100))
-        except ValueError:
-            return None
-    try:
-        return int(text)
-    except ValueError:
-        return None
+    return marketplace_ctrl.parse_price_cents(raw_price)
 
 
 def _normalize_pricing(payload: dict[str, Any], *, current_mode: str, current_price_cents: int) -> tuple[str, int, str | None]:
-    mode_raw = payload.get("pricing_mode", payload.get("pricing"))
-    mode = current_mode
-    if mode_raw is not None:
-        mode_candidate = str(mode_raw).strip().lower()
-        if mode_candidate not in {"free", "paid"}:
-            return mode, current_price_cents, "pricing_mode must be 'free' or 'paid'."
-        mode = mode_candidate
-
-    price_cents = current_price_cents
-    if "price_cents" in payload:
-        parsed_price = _parse_price_cents(payload.get("price_cents"))
-        if parsed_price is None:
-            return mode, current_price_cents, "price_cents is invalid."
-        price_cents = parsed_price
-    elif "price" in payload:
-        parsed_price = _parse_price_cents(payload.get("price"))
-        if parsed_price is None:
-            return mode, current_price_cents, "price is invalid."
-        price_cents = parsed_price
-
-    if mode == "free":
-        return mode, 0, None
-    if price_cents <= 0:
-        return mode, price_cents, "Paid items must have price > 0."
-    return mode, price_cents, None
+    return marketplace_ctrl.normalize_pricing(
+        payload,
+        current_mode=current_mode,
+        current_price_cents=current_price_cents,
+    )
 
 
 def _build_preview_sample_values(field_defs: list[FieldDef]) -> dict[str, Any]:
@@ -336,471 +215,89 @@ def _build_preview_sample_values(field_defs: list[FieldDef]) -> dict[str, Any]:
 
 
 def _validate_note_type_publish_requirements(note_type: NoteType) -> str | None:
-    if not (note_type.name or "").strip():
-        return "Title is required for publish."
-    if not (note_type.description or "").strip():
-        return "Description is required for publish."
-    if not (note_type.primary_category or "").strip():
-        return "primary_category is required for publish."
-    preview_text = (note_type.preview_text or "").strip()
-    preview_image = (note_type.preview_image_url or "").strip()
-    if not preview_text and not preview_image:
-        return "Preview text or preview image is required for publish."
-    if not (note_type.version or "").strip():
-        return "Version is required for publish."
-    if note_type.pricing_mode == "paid" and int(note_type.price_cents or 0) <= 0:
-        return "Paid note type must have a positive price."
-    if not note_type.field_defs:
-        return "At least one field is required for publish."
-    if not note_type.templates:
-        return "At least one card template is required for publish."
-    return None
+    return share_ctrl.validate_note_type_publish_requirements(note_type)
 
 
 def _apply_note_type_marketplace_payload(note_type: NoteType, payload: dict[str, Any]) -> str | None:
-    if "title" in payload or "name" in payload:
-        new_name = (payload.get("title") or payload.get("name") or "").strip()
-        if not new_name:
-            return "Title is required."
-        existing = NoteType.query.filter(
-            NoteType.user_id == note_type.user_id,
-            NoteType.name == new_name,
-            NoteType.id != note_type.id,
-        ).first()
-        if existing:
-            return "Another note type already uses this title."
-        note_type.name = new_name
-
-    if "description" in payload:
-        note_type.description = (payload.get("description") or "").strip() or None
-    if "primary_category" in payload:
-        note_type.primary_category = (payload.get("primary_category") or "").strip() or None
-    if "tags" in payload:
-        note_type.tags = _normalize_marketplace_tags(payload.get("tags"))
-    if "preview_text" in payload:
-        note_type.preview_text = (payload.get("preview_text") or "").strip() or None
-    if "preview_image_url" in payload:
-        note_type.preview_image_url = (payload.get("preview_image_url") or "").strip() or None
-    if "version" in payload:
-        note_type.version = (payload.get("version") or "").strip() or "1.0.0"
-    if "changelog" in payload:
-        note_type.changelog = (payload.get("changelog") or "").strip() or None
-
-    pricing_mode, price_cents, pricing_error = _normalize_pricing(
+    return share_ctrl.apply_note_type_marketplace_payload(
+        note_type,
         payload,
-        current_mode=str(note_type.pricing_mode or "free"),
-        current_price_cents=int(note_type.price_cents or 0),
+        allow_set_official=is_admin_user(current_user),
+        publish_statuses_visible=PUBLISH_STATUSES_VISIBLE,
     )
-    if pricing_error:
-        return pricing_error
-    note_type.pricing_mode = pricing_mode
-    note_type.price_cents = price_cents
-
-    if "is_official" in payload:
-        if not is_admin_user(current_user):
-            return "Only admin can set official flag."
-        note_type.is_official = bool(payload.get("is_official"))
-
-    if "publish_status" in payload:
-        candidate_status = str(payload.get("publish_status") or "").strip().lower()
-        if candidate_status not in {"private", "published", "unlisted", "archived"}:
-            return "publish_status is invalid."
-        if candidate_status in PUBLISH_STATUSES_VISIBLE:
-            err = _validate_note_type_publish_requirements(note_type)
-            if err:
-                return err
-            if note_type.publish_status not in PUBLISH_STATUSES_VISIBLE:
-                note_type.published_at = datetime.utcnow()
-            note_type.archived_at = None
-        elif candidate_status == "archived":
-            note_type.archived_at = datetime.utcnow()
-        note_type.publish_status = candidate_status
-
-    return None
 
 
 def _make_unique_note_type_name(user_id: int, base_name: str) -> str:
-    candidate = base_name.strip() or "Installed NoteType"
-    if not NoteType.query.filter_by(user_id=user_id, name=candidate).first():
-        return candidate
-    counter = 2
-    while True:
-        candidate_with_counter = f"{candidate} ({counter})"
-        if not NoteType.query.filter_by(user_id=user_id, name=candidate_with_counter).first():
-            return candidate_with_counter
-        counter += 1
+    return share_ctrl.make_unique_note_type_name(user_id, base_name)
 
 
 def _clone_note_type_for_user(source_note_type: NoteType, user_id: int) -> NoteType:
-    clone = NoteType(
-        user_id=user_id,
-        name=_make_unique_note_type_name(user_id, source_note_type.name),
-        description=source_note_type.description,
-        primary_category=source_note_type.primary_category,
-        tags=list(source_note_type.tags or []),
-        preview_text=source_note_type.preview_text,
-        preview_image_url=source_note_type.preview_image_url,
-        pricing_mode="free",
-        price_cents=0,
-        version=source_note_type.version or "1.0.0",
-        changelog=source_note_type.changelog,
-        publish_status="private",
-        is_official=False,
-        install_count=0,
-        active_usage_count=0,
-        rating_avg=0.0,
-        rating_count=0,
-    )
-    db.session.add(clone)
-    db.session.flush()
-
-    for field_def in sorted(source_note_type.field_defs, key=lambda item: item.position):
-        db.session.add(
-            FieldDef(
-                note_type_id=clone.id,
-                name=field_def.name,
-                field_type=field_def.field_type,
-                position=field_def.position,
-                required=bool(field_def.required),
-            )
-        )
-
-    for template in sorted(source_note_type.templates, key=lambda item: item.position):
-        db.session.add(
-            Template(
-                note_type_id=clone.id,
-                name=template.name,
-                front_html=template.front_html,
-                back_html=template.back_html,
-                shared_css=template.shared_css,
-                position=template.position,
-                is_default=bool(template.is_default),
-            )
-        )
-
-    return clone
+    return share_ctrl.clone_note_type_for_user(source_note_type, user_id)
 
 
 def _touch_note_type_install_usage(*, user_id: int, installed_note_type_id: str, activity_at: datetime | None = None) -> None:
-    install = NoteTypeInstall.query.filter_by(
+    share_ctrl.touch_note_type_install_usage(
         user_id=user_id,
         installed_note_type_id=installed_note_type_id,
-    ).first()
-    if not install:
-        return
-    now = activity_at or datetime.utcnow()
-    if install.first_use_at is None:
-        install.first_use_at = now
-    install.last_activity_at = now
+        activity_at=activity_at,
+    )
 
 
 def _note_type_reps_for_user(*, user_id: int, installed_note_type_id: str) -> int:
-    result = (
-        db.session.query(db.func.coalesce(db.func.sum(CardProgress.reps), 0))
-        .select_from(CardProgress)
-        .join(Card, CardProgress.card_id == Card.id)
-        .join(Note, Card.note_id == Note.id)
-        .filter(
-            CardProgress.user_id == user_id,
-            Note.note_type_id == installed_note_type_id,
-        )
-        .scalar()
+    return share_ctrl.note_type_reps_for_user(
+        user_id=user_id,
+        installed_note_type_id=installed_note_type_id,
     )
-    return int(result or 0)
 
 
 def _is_note_type_install_active(install: NoteTypeInstall, *, now: datetime) -> bool:
-    if not install.installed_note_type_id:
-        return False
-    note_count = Note.query.filter_by(
-        user_id=install.user_id,
-        note_type_id=install.installed_note_type_id,
-    ).count()
-    review_reps = _note_type_reps_for_user(
-        user_id=install.user_id,
-        installed_note_type_id=install.installed_note_type_id,
-    )
-    first_use = install.first_use_at
-    used_days = bool(first_use and now - first_use >= timedelta(days=NOTE_TYPE_ACTIVE_DAYS_THRESHOLD))
-    return (
-        note_count >= NOTE_TYPE_ACTIVE_NOTE_THRESHOLD
-        or review_reps >= NOTE_TYPE_ACTIVE_REVIEW_THRESHOLD
-        or used_days
+    return share_ctrl.is_note_type_install_active(
+        install,
+        now=now,
+        note_type_active_note_threshold=NOTE_TYPE_ACTIVE_NOTE_THRESHOLD,
+        note_type_active_review_threshold=NOTE_TYPE_ACTIVE_REVIEW_THRESHOLD,
+        note_type_active_days_threshold=NOTE_TYPE_ACTIVE_DAYS_THRESHOLD,
     )
 
 
 def _recompute_note_type_market_stats(note_type: NoteType) -> None:
-    now = datetime.utcnow()
-    installs = NoteTypeInstall.query.filter_by(source_note_type_id=note_type.id).all()
-    note_type.install_count = len(installs)
-    note_type.active_usage_count = sum(1 for install in installs if _is_note_type_install_active(install, now=now))
-
-    rating_avg, rating_count = (
-        db.session.query(
-            db.func.coalesce(db.func.avg(NoteTypeReview.rating), 0.0),
-            db.func.count(NoteTypeReview.id),
-        )
-        .filter(NoteTypeReview.note_type_id == note_type.id)
-        .first()
+    share_ctrl.recompute_note_type_market_stats(
+        note_type,
+        note_type_active_note_threshold=NOTE_TYPE_ACTIVE_NOTE_THRESHOLD,
+        note_type_active_review_threshold=NOTE_TYPE_ACTIVE_REVIEW_THRESHOLD,
+        note_type_active_days_threshold=NOTE_TYPE_ACTIVE_DAYS_THRESHOLD,
     )
-    note_type.rating_avg = float(rating_avg or 0.0)
-    note_type.rating_count = int(rating_count or 0)
 
 
 def _can_user_rate_note_type(note_type: NoteType, *, user_id: int) -> bool:
-    if note_type.user_id == user_id:
-        return False
-    install = NoteTypeInstall.query.filter_by(
-        source_note_type_id=note_type.id,
+    return share_ctrl.can_user_rate_note_type(
+        note_type,
         user_id=user_id,
-    ).first()
-    if not install:
-        return False
-    return _is_note_type_install_active(install, now=datetime.utcnow())
+        note_type_active_note_threshold=NOTE_TYPE_ACTIVE_NOTE_THRESHOLD,
+        note_type_active_review_threshold=NOTE_TYPE_ACTIVE_REVIEW_THRESHOLD,
+        note_type_active_days_threshold=NOTE_TYPE_ACTIVE_DAYS_THRESHOLD,
+    )
 
 
 def _serialize_note_type_marketplace_card(note_type: NoteType) -> dict[str, Any]:
-    payload = _serialize_note_type(note_type)
-    payload["price_display"] = "Free" if note_type.pricing_mode == "free" else f"${(note_type.price_cents or 0) / 100:.2f}"
-    return payload
+    return marketplace_ctrl.serialize_note_type_marketplace_card(note_type)
 
 
 def _serialize_deck_marketplace_item(deck_item: DeckMarketplaceItem) -> dict[str, Any]:
-    return {
-        "id": deck_item.id,
-        "title": deck_item.title,
-        "description": deck_item.description,
-        "primary_category": deck_item.primary_category,
-        "tags": deck_item.tags or [],
-        "preview_text": deck_item.preview_text,
-        "sample_cards_count": int(deck_item.sample_cards_count or 0),
-        "source_deck_id": deck_item.source_deck_id,
-        "source_note_type_id": deck_item.source_note_type_id,
-        "pricing_mode": deck_item.pricing_mode,
-        "price_cents": int(deck_item.price_cents or 0),
-        "price_display": "Free" if deck_item.pricing_mode == "free" else f"${(deck_item.price_cents or 0) / 100:.2f}",
-        "version": deck_item.version,
-        "changelog": deck_item.changelog,
-        "publish_status": deck_item.publish_status,
-        "is_official": bool(deck_item.is_official),
-        "install_count": int(deck_item.install_count or 0),
-        "active_usage_count": int(deck_item.active_usage_count or 0),
-        "rating_avg": float(deck_item.rating_avg or 0.0),
-        "rating_count": int(deck_item.rating_count or 0),
-        "author": _serialize_author(deck_item.owner),
-        "published_at": deck_item.published_at.isoformat() if deck_item.published_at else None,
-        "archived_at": deck_item.archived_at.isoformat() if deck_item.archived_at else None,
-        "updated_at": deck_item.updated_at.isoformat() if deck_item.updated_at else None,
-        "created_at": deck_item.created_at.isoformat() if deck_item.created_at else None,
-    }
-
-
-def _collect_deck_subtree_ids(root_deck_id: int | None) -> list[int]:
-    if root_deck_id is None:
-        return []
-
-    seen: set[int] = set()
-    frontier: set[int] = {int(root_deck_id)}
-    while frontier:
-        current_ids = {deck_id for deck_id in frontier if deck_id not in seen}
-        if not current_ids:
-            break
-
-        seen.update(current_ids)
-        child_rows = (
-            db.session.query(Deck.id)
-            .filter(Deck.parent_id.in_(current_ids))
-            .all()
-        )
-        frontier = {int(row[0]) for row in child_rows if row and row[0] is not None}
-
-    return sorted(seen)
-
-
-def _first_non_empty_field_text(field_values: dict[str, Any], keys: list[str]) -> str:
-    for key in keys:
-        if key not in field_values:
-            continue
-        candidate = field_values.get(key)
-        if candidate is None:
-            continue
-        text = str(candidate).strip()
-        if text:
-            return text
-    return ""
-
-
-def _serialize_note_test_sample(note: Note) -> dict[str, Any] | None:
-    field_values = note.field_values if isinstance(note.field_values, dict) else {}
-
-    word = _first_non_empty_field_text(
-        field_values,
-        ["Word", "word", "Term", "term", "Vocabulary", "vocabulary"],
-    )
-    if not word:
-        for raw_value in field_values.values():
-            if raw_value is None:
-                continue
-            text = str(raw_value).strip()
-            if text:
-                word = text
-                break
-    if not word:
-        return None
-
-    reading = _first_non_empty_field_text(
-        field_values,
-        ["Reading", "reading", "Kana", "kana", "Yomigana", "yomigana"],
-    )
-    meaning = _first_non_empty_field_text(
-        field_values,
-        [
-            "Meaning",
-            "meaning",
-            "Meaning_VI",
-            "meaning_vi",
-            "Meaning_JP",
-            "meaning_jp",
-            "Translation_VI",
-            "translation_vi",
-        ],
-    )
-
-    return {
-        "note_id": note.id,
-        "word": word,
-        "reading": reading,
-        "meaning": meaning,
-    }
-
-
-def _build_shared_deck_test_samples(
-    deck_item: DeckMarketplaceItem,
-    *,
-    limit: int = SHARED_DECK_TEST_SAMPLE_LIMIT,
-) -> list[dict[str, Any]]:
-    if limit <= 0:
-        return []
-    if deck_item.source_deck_id is None:
-        return []
-
-    deck_ids = _collect_deck_subtree_ids(deck_item.source_deck_id)
-    if not deck_ids:
-        return []
-
-    note_query = Note.query.filter(Note.deck_id.in_(deck_ids))
-    if deck_item.owner_user_id is not None:
-        note_query = note_query.filter(Note.user_id == deck_item.owner_user_id)
-    source_note_type_id = (deck_item.source_note_type_id or "").strip()
-    if source_note_type_id:
-        note_query = note_query.filter(Note.note_type_id == source_note_type_id)
-
-    note_candidates: list[dict[str, Any]] = []
-    for note in note_query.all():
-        sample = _serialize_note_test_sample(note)
-        if sample is not None:
-            note_candidates.append(sample)
-
-    if not note_candidates:
-        return []
-
-    random.shuffle(note_candidates)
-    return note_candidates[:limit]
+    return marketplace_ctrl.serialize_deck_marketplace_item(deck_item)
 
 
 def _validate_deck_publish_requirements(deck_item: DeckMarketplaceItem) -> str | None:
-    if not (deck_item.title or "").strip():
-        return "Title is required for publish."
-    if not (deck_item.description or "").strip():
-        return "Description is required for publish."
-    if not (deck_item.primary_category or "").strip():
-        return "primary_category is required for publish."
-    if not (deck_item.preview_text or "").strip() and int(deck_item.sample_cards_count or 0) <= 0:
-        return "Preview text or sample_cards_count > 0 is required for publish."
-    if not (deck_item.version or "").strip():
-        return "Version is required for publish."
-    if deck_item.pricing_mode == "paid" and int(deck_item.price_cents or 0) <= 0:
-        return "Paid deck must have a positive price."
-    source_note_type_id = (deck_item.source_note_type_id or "").strip()
-    if not source_note_type_id:
-        return "source_note_type_id is required for publish."
-    source_note_type = NoteType.query.get(source_note_type_id)
-    if not source_note_type:
-        return "source_note_type_id not found for publish."
-    if not source_note_type.templates:
-        return "source_note_type_id must reference a note type that has at least one template."
-    return None
+    return share_ctrl.validate_deck_publish_requirements(deck_item)
 
 
 def _apply_deck_marketplace_payload(deck_item: DeckMarketplaceItem, payload: dict[str, Any]) -> str | None:
-    if "title" in payload:
-        title = (payload.get("title") or "").strip()
-        if not title:
-            return "title is required."
-        deck_item.title = title
-    if "description" in payload:
-        deck_item.description = (payload.get("description") or "").strip()
-    if "primary_category" in payload:
-        category = (payload.get("primary_category") or "").strip()
-        if not category:
-            return "primary_category is required."
-        deck_item.primary_category = category
-    if "tags" in payload:
-        deck_item.tags = _normalize_marketplace_tags(payload.get("tags"))
-    if "preview_text" in payload:
-        deck_item.preview_text = (payload.get("preview_text") or "").strip() or None
-    if "sample_cards_count" in payload:
-        try:
-            deck_item.sample_cards_count = max(0, int(payload.get("sample_cards_count") or 0))
-        except (TypeError, ValueError):
-            return "sample_cards_count must be an integer."
-    if "source_deck_id" in payload:
-        source_deck_id_raw = payload.get("source_deck_id")
-        if source_deck_id_raw in (None, ""):
-            deck_item.source_deck_id = None
-        else:
-            try:
-                deck_item.source_deck_id = int(source_deck_id_raw)
-            except (TypeError, ValueError):
-                return "source_deck_id must be an integer."
-    if "source_note_type_id" in payload:
-        deck_item.source_note_type_id = (payload.get("source_note_type_id") or "").strip() or None
-    if "version" in payload:
-        deck_item.version = (payload.get("version") or "").strip() or "1.0.0"
-    if "changelog" in payload:
-        deck_item.changelog = (payload.get("changelog") or "").strip() or None
-
-    pricing_mode, price_cents, pricing_error = _normalize_pricing(
+    return share_ctrl.apply_deck_marketplace_payload(
+        deck_item,
         payload,
-        current_mode=str(deck_item.pricing_mode or "free"),
-        current_price_cents=int(deck_item.price_cents or 0),
+        allow_set_official=is_admin_user(current_user),
+        publish_statuses_visible=PUBLISH_STATUSES_VISIBLE,
     )
-    if pricing_error:
-        return pricing_error
-    deck_item.pricing_mode = pricing_mode
-    deck_item.price_cents = price_cents
-
-    if "is_official" in payload:
-        if not is_admin_user(current_user):
-            return "Only admin can set official flag."
-        deck_item.is_official = bool(payload.get("is_official"))
-
-    if "publish_status" in payload:
-        candidate_status = str(payload.get("publish_status") or "").strip().lower()
-        if candidate_status not in {"private", "published", "unlisted", "archived"}:
-            return "publish_status is invalid."
-        if candidate_status in PUBLISH_STATUSES_VISIBLE:
-            err = _validate_deck_publish_requirements(deck_item)
-            if err:
-                return err
-            if deck_item.publish_status not in PUBLISH_STATUSES_VISIBLE:
-                deck_item.published_at = datetime.utcnow()
-            deck_item.archived_at = None
-        elif candidate_status == "archived":
-            deck_item.archived_at = datetime.utcnow()
-        deck_item.publish_status = candidate_status
-
-    return None
 
 
 def _resolve_single_note_type_for_deck(
@@ -808,23 +305,10 @@ def _resolve_single_note_type_for_deck(
     deck_id: int,
     owner_user_id: int | None = None,
 ) -> tuple[str | None, str | None]:
-    query = db.session.query(Note.note_type_id).filter(Note.deck_id == deck_id)
-    if owner_user_id is not None:
-        query = query.filter(Note.user_id == owner_user_id)
-
-    note_type_ids = sorted({row[0] for row in query.all() if row[0]})
-    if not note_type_ids:
-        return None, "Deck has no notes, cannot infer source_note_type_id."
-    if len(note_type_ids) > 1:
-        return None, "All notes in one deck must use the same template (note type)."
-
-    resolved_note_type_id = note_type_ids[0]
-    resolved_note_type = NoteType.query.get(resolved_note_type_id)
-    if not resolved_note_type:
-        return None, "Deck source note type not found."
-    if not resolved_note_type.templates:
-        return None, "Deck source note type has no templates."
-    return resolved_note_type.id, None
+    return share_ctrl.resolve_single_note_type_for_deck(
+        deck_id=deck_id,
+        owner_user_id=owner_user_id,
+    )
 
 
 def _bind_deck_item_source_note_type(
@@ -832,30 +316,10 @@ def _bind_deck_item_source_note_type(
     *,
     require_source_note_type: bool,
 ) -> str | None:
-    if deck_item.source_deck_id is not None:
-        inferred_note_type_id, infer_error = _resolve_single_note_type_for_deck(
-            deck_id=deck_item.source_deck_id,
-            owner_user_id=deck_item.owner_user_id,
-        )
-        if infer_error and require_source_note_type and not (deck_item.source_note_type_id or "").strip():
-            return infer_error
-        if inferred_note_type_id:
-            if deck_item.source_note_type_id and deck_item.source_note_type_id != inferred_note_type_id:
-                return "source_note_type_id does not match notes inside source_deck_id."
-            deck_item.source_note_type_id = inferred_note_type_id
-
-    source_note_type_id = (deck_item.source_note_type_id or "").strip()
-    if not source_note_type_id:
-        if require_source_note_type:
-            return "source_note_type_id is required."
-        return None
-
-    source_note_type = NoteType.query.get(source_note_type_id)
-    if not source_note_type:
-        return "source_note_type_id not found."
-    if not source_note_type.templates:
-        return "source_note_type_id must reference a note type with at least one template."
-    return None
+    return share_ctrl.bind_deck_item_source_note_type(
+        deck_item,
+        require_source_note_type=require_source_note_type,
+    )
 
 
 def _validate_note_type_consistency_for_deck(
@@ -865,344 +329,88 @@ def _validate_note_type_consistency_for_deck(
     user_id: int,
     exclude_note_id: str | None = None,
 ) -> str | None:
-    if deck_id is None:
-        return None
-
-    query = db.session.query(Note.note_type_id).filter(
-        Note.deck_id == deck_id,
-        Note.user_id == user_id,
+    return share_ctrl.validate_note_type_consistency_for_deck(
+        deck_id=deck_id,
+        note_type_id=note_type_id,
+        user_id=user_id,
+        exclude_note_id=exclude_note_id,
     )
-    if exclude_note_id:
-        query = query.filter(Note.id != exclude_note_id)
-
-    existing_note_type_ids = {row[0] for row in query.distinct().all() if row[0]}
-    if not existing_note_type_ids:
-        return None
-    if existing_note_type_ids == {note_type_id}:
-        return None
-    return "All notes in one deck must use the same template (note type)."
 
 
 def _collect_accessible_decks_for_import() -> list[Deck]:
-    if is_admin_user(current_user):
-        return (
-            Deck.query.filter(
-                db.or_(
-                    Deck.owner_user_id == current_user.id,
-                    Deck.owner_user_id.is_(None),
-                )
-            )
-            .order_by(
-                Deck.parent_id.isnot(None),
-                Deck.position.asc(),
-                Deck.created_at.asc(),
-                Deck.id.asc(),
-            )
-            .all()
-        )
-
-    installs = DeckInstall.query.filter_by(user_id=current_user.id).all()
-    installed_root_ids = {int(row.local_deck_id) for row in installs if row.local_deck_id}
-    if not installed_root_ids:
-        return []
-
-    visible_ids: set[int] = set()
-    frontier: set[int] = set(installed_root_ids)
-    while frontier:
-        current_ids = {deck_id for deck_id in frontier if deck_id not in visible_ids}
-        if not current_ids:
-            break
-        visible_ids.update(current_ids)
-        child_rows = (
-            db.session.query(Deck.id)
-            .filter(Deck.parent_id.in_(current_ids))
-            .all()
-        )
-        frontier = {int(row[0]) for row in child_rows if row and row[0] is not None}
-
-    return (
-        Deck.query.filter(Deck.id.in_(visible_ids))
-        .order_by(
-            Deck.parent_id.isnot(None),
-            Deck.position.asc(),
-            Deck.created_at.asc(),
-            Deck.id.asc(),
-        )
-        .all()
+    return flashcard_import_ctrl.collect_accessible_decks_for_import(
+        user_id=current_user.id,
+        admin_mode=is_admin_user(current_user),
     )
 
 
 def _deck_path_label(deck_obj: Deck, deck_map: dict[int, Deck]) -> str:
-    parts: list[str] = []
-    current = deck_obj
-    seen: set[int] = set()
-    while current and current.id not in seen:
-        seen.add(current.id)
-        parts.append(current.name)
-        if current.parent_id is None:
-            break
-        current = deck_map.get(int(current.parent_id))
-    return "::".join(reversed(parts)) if parts else deck_obj.name
+    return flashcard_import_ctrl.deck_path_label(deck_obj, deck_map)
 
 
 def _serialize_note_type_for_import(note_type: NoteType) -> dict[str, Any]:
-    fields = [
-        {
-            "id": field_def.id,
-            "name": field_def.name,
-            "position": int(field_def.position or 0),
-            "required": bool(field_def.required),
-            "field_type": field_def.field_type,
-        }
-        for field_def in sorted(note_type.field_defs, key=lambda item: item.position)
-    ]
-    return {
-        "id": note_type.id,
-        "name": note_type.name,
-        "fields": fields,
-    }
+    return flashcard_import_ctrl.serialize_note_type_for_import(note_type)
 
 
 def _default_uniqueness_fields(note_type: NoteType) -> list[str]:
-    fields = sorted(note_type.field_defs, key=lambda item: item.position)
-    if not fields:
-        return []
-
-    priority = ["word", "front", "term", "expression", "vocabulary"]
-    lowered_name_map = {field_def.name.lower(): field_def.name for field_def in fields}
-    for key in priority:
-        if key in lowered_name_map:
-            return [lowered_name_map[key]]
-
-    required = [field_def.name for field_def in fields if field_def.required]
-    if required:
-        return [required[0]]
-
-    return [fields[0].name]
+    return flashcard_import_ctrl.default_uniqueness_fields(note_type)
 
 
 def _infer_default_note_type_id_for_deck(deck_id: int | None) -> str | None:
-    if deck_id is None:
-        return None
-
-    deck_obj = Deck.query.get(deck_id)
-    if deck_obj and deck_obj.note_type_id:
-        note_type = NoteType.query.filter_by(id=deck_obj.note_type_id, user_id=current_user.id).first()
-        if note_type:
-            return note_type.id
-
-    query = db.session.query(Note.note_type_id).filter(
-        Note.user_id == current_user.id,
-        Note.deck_id == deck_id,
-        Note.note_type_id.isnot(None),
+    return flashcard_import_ctrl.infer_default_note_type_id_for_deck(
+        deck_id=deck_id,
+        user_id=current_user.id,
     )
-    note_type_ids = sorted({row[0] for row in query.all() if row[0]})
-    if len(note_type_ids) == 1:
-        return note_type_ids[0]
-    return None
-
-
-def _next_deck_position(parent_deck_id: int | None) -> int:
-    query = db.session.query(db.func.max(Deck.position))
-    if parent_deck_id is None:
-        max_pos = query.filter(Deck.parent_id.is_(None)).scalar()
-    else:
-        max_pos = query.filter(Deck.parent_id == parent_deck_id).scalar()
-    return int(max_pos or 0) + 1
-
-
-def _clone_deck_subtree(
-    *,
-    source_deck_id: int,
-    parent_id: int | None,
-    owner_user_id: int | None = None,
-    root_suffix: str | None = None,
-    source_owner_user_id: int | None = None,
-) -> Deck:
-    source_deck = Deck.query.get(source_deck_id)
-    if not source_deck:
-        raise ValueError(f"Deck not found: {source_deck_id}")
-
-    cloned_deck = Deck(
-        parent_id=parent_id,
-        owner_user_id=owner_user_id,
-        note_type_id=source_deck.note_type_id,
-        name=source_deck.name,
-        description=source_deck.description,
-        position=_next_deck_position(parent_id),
-    )
-    db.session.add(cloned_deck)
-    db.session.flush()
-
-    source_notes_query = Note.query.filter(Note.deck_id == source_deck.id)
-    if source_owner_user_id is not None:
-        source_notes_query = source_notes_query.filter(Note.user_id == source_owner_user_id)
-    source_notes = source_notes_query.order_by(Note.created_at.asc(), Note.id.asc()).all()
-    for source_note in source_notes:
-        cloned_field_values = dict(source_note.field_values or {})
-        cloned_note = Note(
-            note_type_id=source_note.note_type_id,
-            user_id=owner_user_id or source_note.user_id,
-            deck_id=cloned_deck.id,
-            field_values=cloned_field_values,
-            tags=list(source_note.tags or []),
-        )
-        db.session.add(cloned_note)
-        db.session.flush()
-
-        for source_asset in source_note.media_assets:
-            cloned_asset = MediaAsset(
-                note_id=cloned_note.id,
-                field_name=source_asset.field_name,
-                filename=source_asset.filename,
-                mime_type=source_asset.mime_type,
-                storage_path=source_asset.storage_path,
-                sha256=source_asset.sha256,
-                size_bytes=int(source_asset.size_bytes or 0),
-            )
-            db.session.add(cloned_asset)
-            db.session.flush()
-            current_field_value = cloned_field_values.get(source_asset.field_name)
-            if current_field_value == source_asset.id:
-                cloned_field_values[source_asset.field_name] = cloned_asset.id
-            elif isinstance(current_field_value, str) and current_field_value.strip() == source_asset.id:
-                cloned_field_values[source_asset.field_name] = cloned_asset.id
-
-        cloned_note.field_values = cloned_field_values
-        _create_cards_for_note(cloned_note)
-
-    child_decks = (
-        Deck.query.filter_by(parent_id=source_deck.id)
-        .order_by(Deck.position.asc(), Deck.id.asc())
-        .all()
-    )
-    for child in child_decks:
-        _clone_deck_subtree(
-            source_deck_id=child.id,
-            parent_id=cloned_deck.id,
-            owner_user_id=owner_user_id,
-            source_owner_user_id=source_owner_user_id,
-        )
-
-    return cloned_deck
-
-
-def _collect_deck_ancestor_ids(deck_id: int | None) -> list[int]:
-    if deck_id is None:
-        return []
-
-    ancestors: list[int] = []
-    current_deck_id = int(deck_id)
-    seen: set[int] = set()
-
-    while current_deck_id not in seen:
-        seen.add(current_deck_id)
-        ancestors.append(current_deck_id)
-        parent_row = (
-            db.session.query(Deck.parent_id)
-            .filter(Deck.id == current_deck_id)
-            .first()
-        )
-        if not parent_row or parent_row[0] is None:
-            break
-        current_deck_id = int(parent_row[0])
-
-    return ancestors
 
 
 def _deck_installs_covering_deck(*, user_id: int, deck_id: int) -> list[DeckInstall]:
-    ancestor_ids = _collect_deck_ancestor_ids(deck_id)
-    if not ancestor_ids:
-        return []
-    return (
-        DeckInstall.query.filter(
-            DeckInstall.user_id == user_id,
-            DeckInstall.local_deck_id.in_(ancestor_ids),
-        )
-        .order_by(DeckInstall.installed_at.asc(), DeckInstall.id.asc())
-        .all()
-    )
+    return share_ctrl.deck_installs_covering_deck(user_id=user_id, deck_id=deck_id)
 
 
 def _touch_deck_install_usage(*, user_id: int, local_deck_id: int, activity_at: datetime | None = None) -> None:
-    installs = _deck_installs_covering_deck(user_id=user_id, deck_id=local_deck_id)
-    if not installs:
-        return
-    now = activity_at or datetime.utcnow()
-    for install in installs:
-        if install.first_use_at is None:
-            install.first_use_at = now
-        install.last_activity_at = now
+    share_ctrl.touch_deck_install_usage(
+        user_id=user_id,
+        local_deck_id=local_deck_id,
+        activity_at=activity_at,
+    )
 
 
 def _deck_reps_for_user(*, user_id: int, local_deck_id: int) -> int:
-    subtree_deck_ids = _collect_deck_subtree_ids(local_deck_id)
-    if not subtree_deck_ids:
-        return 0
-
-    flashcard_reps = (
-        db.session.query(db.func.coalesce(db.func.sum(CardProgress.reps), 0))
-        .select_from(CardProgress)
-        .join(Card, CardProgress.card_id == Card.id)
-        .join(Note, Card.note_id == Note.id)
-        .filter(
-            CardProgress.user_id == user_id,
-            Note.deck_id.in_(subtree_deck_ids),
-        )
-        .scalar()
-    ) or 0
-    return int(flashcard_reps or 0)
+    return share_ctrl.deck_reps_for_user(user_id=user_id, local_deck_id=local_deck_id)
 
 
 def _is_deck_install_active(install: DeckInstall) -> bool:
-    if not install.local_deck_id:
-        return False
-    reps = _deck_reps_for_user(user_id=install.user_id, local_deck_id=install.local_deck_id)
-    return reps >= DECK_ACTIVE_REVIEW_THRESHOLD
+    return share_ctrl.is_deck_install_active(
+        install,
+        deck_active_review_threshold=DECK_ACTIVE_REVIEW_THRESHOLD,
+    )
 
 
 def _recompute_deck_item_market_stats(deck_item: DeckMarketplaceItem) -> None:
-    installs = DeckInstall.query.filter_by(deck_item_id=deck_item.id).all()
-    deck_item.install_count = len(installs)
-    deck_item.active_usage_count = sum(1 for install in installs if _is_deck_install_active(install))
-
-    rating_avg, rating_count = (
-        db.session.query(
-            db.func.coalesce(db.func.avg(DeckReview.rating), 0.0),
-            db.func.count(DeckReview.id),
-        )
-        .filter(DeckReview.deck_item_id == deck_item.id)
-        .first()
+    share_ctrl.recompute_deck_item_market_stats(
+        deck_item,
+        deck_active_review_threshold=DECK_ACTIVE_REVIEW_THRESHOLD,
     )
-    deck_item.rating_avg = float(rating_avg or 0.0)
-    deck_item.rating_count = int(rating_count or 0)
 
 
 def _can_user_rate_deck(deck_item: DeckMarketplaceItem, *, user_id: int) -> bool:
-    if deck_item.owner_user_id == user_id:
-        return False
-    install = DeckInstall.query.filter_by(deck_item_id=deck_item.id, user_id=user_id).first()
-    if not install:
-        return False
-    return _is_deck_install_active(install)
+    return share_ctrl.can_user_rate_deck(
+        deck_item,
+        user_id=user_id,
+        deck_active_review_threshold=DECK_ACTIVE_REVIEW_THRESHOLD,
+    )
 
 
 def _is_note_type_visible_for_shared(note_type: NoteType) -> bool:
-    return str(note_type.publish_status or "").strip().lower() == "published"
+    return share_ctrl.is_note_type_visible_for_shared(note_type)
 
 
 def _is_deck_item_visible_for_shared(deck_item: DeckMarketplaceItem) -> bool:
-    return str(deck_item.publish_status or "").strip().lower() == "published"
+    return share_ctrl.is_deck_item_visible_for_shared(deck_item)
 
 
 def _item_matches_search(query_text: str, *values: str | None) -> bool:
-    if not query_text:
-        return True
-    lowered = query_text.lower()
-    for value in values:
-        if value and lowered in value.lower():
-            return True
-    return False
+    return marketplace_ctrl.item_matches_search(query_text, *values)
 
 
 def _filter_note_type_items(
@@ -1215,24 +423,15 @@ def _filter_note_type_items(
     min_price_cents: int | None,
     max_price_cents: int | None,
 ) -> list[NoteType]:
-    filtered: list[NoteType] = []
-    for note_type in note_types:
-        if not _item_matches_search(query_text, note_type.name, note_type.description):
-            continue
-        if category and (note_type.primary_category or "").strip().lower() != category.lower():
-            continue
-        item_tags = {tag.lower() for tag in (note_type.tags or [])}
-        if tags and not tags.intersection(item_tags):
-            continue
-        if pricing_mode in {"free", "paid"} and note_type.pricing_mode != pricing_mode:
-            continue
-        price_value = int(note_type.price_cents or 0)
-        if min_price_cents is not None and price_value < min_price_cents:
-            continue
-        if max_price_cents is not None and price_value > max_price_cents:
-            continue
-        filtered.append(note_type)
-    return filtered
+    return marketplace_ctrl.filter_note_type_items(
+        note_types,
+        query_text=query_text,
+        category=category,
+        tags=tags,
+        pricing_mode=pricing_mode,
+        min_price_cents=min_price_cents,
+        max_price_cents=max_price_cents,
+    )
 
 
 def _filter_deck_items(
@@ -1245,96 +444,27 @@ def _filter_deck_items(
     min_price_cents: int | None,
     max_price_cents: int | None,
 ) -> list[DeckMarketplaceItem]:
-    filtered: list[DeckMarketplaceItem] = []
-    for deck_item in deck_items:
-        if not _item_matches_search(query_text, deck_item.title, deck_item.description):
-            continue
-        if category and (deck_item.primary_category or "").strip().lower() != category.lower():
-            continue
-        item_tags = {tag.lower() for tag in (deck_item.tags or [])}
-        if tags and not tags.intersection(item_tags):
-            continue
-        if pricing_mode in {"free", "paid"} and deck_item.pricing_mode != pricing_mode:
-            continue
-        price_value = int(deck_item.price_cents or 0)
-        if min_price_cents is not None and price_value < min_price_cents:
-            continue
-        if max_price_cents is not None and price_value > max_price_cents:
-            continue
-        filtered.append(deck_item)
-    return filtered
+    return marketplace_ctrl.filter_deck_items(
+        deck_items,
+        query_text=query_text,
+        category=category,
+        tags=tags,
+        pricing_mode=pricing_mode,
+        min_price_cents=min_price_cents,
+        max_price_cents=max_price_cents,
+    )
 
 
 def _sort_note_type_items(items: list[NoteType], sort_key: str) -> list[NoteType]:
-    key = (sort_key or "popular").strip().lower()
-    if key == "top_rated":
-        return sorted(
-            items,
-            key=lambda item: (float(item.rating_avg or 0.0), int(item.rating_count or 0), int(item.active_usage_count or 0)),
-            reverse=True,
-        )
-    if key == "newest":
-        return sorted(items, key=lambda item: (item.created_at or datetime.min), reverse=True)
-    if key == "recently_updated":
-        return sorted(items, key=lambda item: (item.updated_at or datetime.min), reverse=True)
-    return sorted(
-        items,
-        key=lambda item: (int(item.active_usage_count or 0), int(item.install_count or 0), float(item.rating_avg or 0.0)),
-        reverse=True,
-    )
+    return marketplace_ctrl.sort_note_type_items(items, sort_key)
 
 
 def _sort_deck_items(items: list[DeckMarketplaceItem], sort_key: str) -> list[DeckMarketplaceItem]:
-    key = (sort_key or "popular").strip().lower()
-    if key == "top_rated":
-        return sorted(
-            items,
-            key=lambda item: (float(item.rating_avg or 0.0), int(item.rating_count or 0), int(item.active_usage_count or 0)),
-            reverse=True,
-        )
-    if key == "newest":
-        return sorted(items, key=lambda item: (item.created_at or datetime.min), reverse=True)
-    if key == "recently_updated":
-        return sorted(items, key=lambda item: (item.updated_at or datetime.min), reverse=True)
-    return sorted(
-        items,
-        key=lambda item: (int(item.active_usage_count or 0), int(item.install_count or 0), float(item.rating_avg or 0.0)),
-        reverse=True,
-    )
+    return marketplace_ctrl.sort_deck_items(items, sort_key)
 
 
 def _collect_user_market_interests(user_id: int) -> tuple[set[str], set[str]]:
-    categories: set[str] = set()
-    tags: set[str] = set()
-
-    user_note_types = (
-        db.session.query(NoteType)
-        .join(Note, Note.note_type_id == NoteType.id)
-        .filter(Note.user_id == user_id)
-        .all()
-    )
-    for note_type in user_note_types:
-        if note_type.primary_category:
-            categories.add(note_type.primary_category.strip().lower())
-        for tag in note_type.tags or []:
-            tags.add(str(tag).strip().lower())
-
-    user_notes = Note.query.filter_by(user_id=user_id).all()
-    for note in user_notes:
-        for tag in note.tags or []:
-            tags.add(str(tag).strip().lower())
-
-    deck_installs = DeckInstall.query.filter_by(user_id=user_id).all()
-    if deck_installs:
-        deck_item_ids = [row.deck_item_id for row in deck_installs]
-        deck_items = DeckMarketplaceItem.query.filter(DeckMarketplaceItem.id.in_(deck_item_ids)).all()
-        for deck_item in deck_items:
-            if deck_item.primary_category:
-                categories.add(deck_item.primary_category.strip().lower())
-            for tag in deck_item.tags or []:
-                tags.add(str(tag).strip().lower())
-
-    return categories, tags
+    return marketplace_ctrl.collect_user_market_interests(user_id)
 
 
 def _score_market_item(
@@ -1351,92 +481,40 @@ def _score_market_item(
     is_official: bool,
     cold_start: bool,
 ) -> float:
-    category_match = 1.0 if item_category and item_category.strip().lower() in interests_categories else 0.0
-    normalized_item_tags = {tag.strip().lower() for tag in (item_tags or []) if str(tag).strip()}
-    overlap_count = len(normalized_item_tags.intersection(interests_tags))
-    tag_match = min(1.0, overlap_count / 3) if normalized_item_tags else 0.0
-    rating_score = (float(rating_avg or 0.0) / 5.0) * min(1.0, int(rating_count or 0) / 20)
-    usage_score = min(1.0, int(active_usage_count or 0) / 100) * 0.7 + min(1.0, int(install_count or 0) / 200) * 0.3
-    days_since_update = (
-        (datetime.utcnow() - updated_at).days
-        if updated_at is not None
-        else RECENCY_WINDOW_DAYS
+    return marketplace_ctrl.score_market_item(
+        item_category=item_category,
+        item_tags=item_tags,
+        rating_avg=rating_avg,
+        rating_count=rating_count,
+        active_usage_count=active_usage_count,
+        install_count=install_count,
+        updated_at=updated_at,
+        interests_categories=interests_categories,
+        interests_tags=interests_tags,
+        is_official=is_official,
+        cold_start=cold_start,
+        recency_window_days=RECENCY_WINDOW_DAYS,
     )
-    recency_score = max(0.0, 1 - (days_since_update / RECENCY_WINDOW_DAYS))
-
-    score = (
-        category_match * 3.0
-        + tag_match * 2.0
-        + rating_score * 2.0
-        + usage_score * 2.0
-        + recency_score * 1.0
-    )
-    if cold_start and is_official:
-        score += 2.5
-    return score
 
 
 def _top_items_by_category_note_types(items: list[NoteType], *, limit_per_category: int = 5, max_categories: int = 3) -> dict[str, list[dict[str, Any]]]:
-    buckets: dict[str, list[NoteType]] = {}
-    for item in items:
-        category = (item.primary_category or "General").strip()
-        buckets.setdefault(category, []).append(item)
-
-    ranked_categories = sorted(
-        buckets.keys(),
-        key=lambda category: max(
-            (
-                (bucket_item.active_usage_count or 0, bucket_item.rating_avg or 0.0)
-                for bucket_item in buckets[category]
-            ),
-            default=(0, 0.0),
-        ),
-        reverse=True,
-    )[:max_categories]
-
-    result: dict[str, list[dict[str, Any]]] = {}
-    for category in ranked_categories:
-        sorted_bucket = _sort_note_type_items(buckets[category], "popular")[:limit_per_category]
-        result[category] = [_serialize_note_type_marketplace_card(item) for item in sorted_bucket]
-    return result
+    return marketplace_ctrl.top_items_by_category_note_types(
+        items,
+        limit_per_category=limit_per_category,
+        max_categories=max_categories,
+    )
 
 
 def _top_items_by_category_decks(items: list[DeckMarketplaceItem], *, limit_per_category: int = 5, max_categories: int = 3) -> dict[str, list[dict[str, Any]]]:
-    buckets: dict[str, list[DeckMarketplaceItem]] = {}
-    for item in items:
-        category = (item.primary_category or "General").strip()
-        buckets.setdefault(category, []).append(item)
-
-    ranked_categories = sorted(
-        buckets.keys(),
-        key=lambda category: max(
-            (
-                (bucket_item.active_usage_count or 0, bucket_item.rating_avg or 0.0)
-                for bucket_item in buckets[category]
-            ),
-            default=(0, 0.0),
-        ),
-        reverse=True,
-    )[:max_categories]
-
-    result: dict[str, list[dict[str, Any]]] = {}
-    for category in ranked_categories:
-        sorted_bucket = _sort_deck_items(buckets[category], "popular")[:limit_per_category]
-        result[category] = [_serialize_deck_marketplace_item(item) for item in sorted_bucket]
-    return result
+    return marketplace_ctrl.top_items_by_category_decks(
+        items,
+        limit_per_category=limit_per_category,
+        max_categories=max_categories,
+    )
 
 
 def _create_cards_for_note(note: Note) -> None:
-    templates = Template.query.filter_by(note_type_id=note.note_type_id).order_by(Template.position.asc()).all()
-    existing_template_ids = {card.template_id for card in note.cards}
-    for template in templates:
-        if template.id in existing_template_ids:
-            continue
-        card = Card(
-            note_id=note.id,
-            template_id=template.id,
-        )
-        db.session.add(card)
+    flashcard_note_ctrl.create_cards_for_note(note)
 
 
 def _reorder_fields(note_type_id: str, reorder_payload: list[dict[str, Any]]) -> tuple[bool, str | None]:
@@ -1490,143 +568,6 @@ def _run_field_rename_job(note_type: NoteType, field_def: FieldDef, old_name: st
         job.error_message = str(exc)
         logger.exception("Field rename job failed: %s", job.id)
     return job
-
-
-def _normalize_progress_queue(value: str | None) -> str:
-    normalized = (value or "new").strip().lower()
-    if normalized == "learn":
-        return "learning"
-    if normalized in {"new", "learning", "review", "relearning"}:
-        return normalized
-    return "new"
-
-
-def _card_state_from_progress(progress: CardProgress | None, now: datetime) -> CardState:
-    options = default_deck_options()
-    if not progress:
-        return CardState(
-            type="new",
-            stepIndex=0,
-            due=now,
-            dueDay=None,
-            intervalDays=0,
-            ease=options.startingEase,
-            reps=0,
-            lapses=0,
-            lastReviewAt=None,
-        )
-
-    queue = _normalize_progress_queue(progress.queue)
-    due_at = progress.due_at or now
-    due_day = progress.due_day
-    if due_day is None and queue == "review":
-        shifted = due_at - timedelta(hours=options.dayBoundaryHourLocal)
-        due_day = shifted.date().toordinal()
-
-    return CardState(
-        type=queue,  # type: ignore[arg-type]
-        stepIndex=int(progress.step_index or 0),
-        due=due_at,
-        dueDay=due_day,
-        intervalDays=float(progress.interval_days or 0),
-        ease=float(progress.ease_factor or options.startingEase),
-        reps=int(progress.reps or 0),
-        lapses=int(progress.lapses or 0),
-        lastReviewAt=progress.last_reviewed_at,
-    )
-
-
-def _apply_card_state_to_progress(progress: CardProgress, card_state: CardState, now: datetime) -> CardProgress:
-    options = default_deck_options()
-    queue = _normalize_progress_queue(card_state.type)
-    due_at = card_state.due
-    due_day = card_state.dueDay
-    if due_day is not None:
-        day_date = datetime.fromordinal(int(due_day)).date()
-        due_at = datetime.combine(day_date, datetime.min.time()) + timedelta(
-            hours=options.dayBoundaryHourLocal
-        )
-
-    progress.queue = queue
-    progress.step_index = int(card_state.stepIndex or 0)
-    progress.due_at = due_at
-    progress.due_day = due_day
-    progress.interval_days = int(round(float(card_state.intervalDays or 0)))
-    progress.ease_factor = float(card_state.ease or options.startingEase)
-    progress.reps = int(card_state.reps or 0)
-    progress.lapses = int(card_state.lapses or 0)
-    progress.last_reviewed_at = card_state.lastReviewAt or now
-    return progress
-
-
-def _is_due(progress: CardProgress | None, now: datetime) -> bool:
-    if progress is None:
-        return True
-    queue = _normalize_progress_queue(progress.queue)
-    if queue == "new":
-        return True
-    if progress.due_at is None:
-        return True
-    return progress.due_at <= now
-
-
-def _pick_due_card(cards: list[Card], progress_map: dict[str, CardProgress], now: datetime) -> Card | None:
-    due_relearn: list[Card] = []
-    due_learn: list[Card] = []
-    due_review: list[Card] = []
-    due_new: list[Card] = []
-    for card in cards:
-        progress = progress_map.get(card.id)
-        if not _is_due(progress, now):
-            continue
-        queue = _normalize_progress_queue(progress.queue) if progress else "new"
-        if queue == "relearning":
-            due_relearn.append(card)
-        elif queue == "learning":
-            due_learn.append(card)
-        elif queue == "review":
-            due_review.append(card)
-        else:
-            due_new.append(card)
-    for group in (due_relearn, due_learn, due_review, due_new):
-        if group:
-            return group[0]
-    return None
-
-
-def _query_next_due_card_id(query, *, now: datetime) -> str | None:
-    progress_alias = aliased(CardProgress)
-    progress_join = db.and_(
-        progress_alias.card_id == Card.id,
-        progress_alias.user_id == current_user.id,
-    )
-    normalized_queue = db.func.lower(db.func.coalesce(progress_alias.queue, "new"))
-    normalized_queue = db.case(
-        (normalized_queue == "learn", "learning"),
-        else_=normalized_queue,
-    )
-    is_due_expr = db.or_(
-        progress_alias.id.is_(None),
-        normalized_queue == "new",
-        progress_alias.due_at.is_(None),
-        progress_alias.due_at <= now,
-    )
-    queue_priority = db.case(
-        (normalized_queue == "relearning", 0),
-        (normalized_queue == "learning", 1),
-        (normalized_queue == "review", 2),
-        else_=3,
-    )
-    row = (
-        query.outerjoin(progress_alias, progress_join)
-        .filter(is_due_expr)
-        .order_by(queue_priority.asc(), Card.created_at.asc(), Card.id.asc())
-        .with_entities(Card.id)
-        .first()
-    )
-    if not row:
-        return None
-    return str(row[0])
 
 
 @flashcards_bp.after_request
@@ -1923,38 +864,11 @@ def flashcard_import_parse():
 
 
 def _resolve_import_execution_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], NoteType, int | None]:
-    token = (payload.get("token") or "").strip()
-    if not token:
-        raise ImportValidationError("Import token is required")
-
-    session_meta = load_import_session(user_id=current_user.id, token=token)
-
-    note_type_id = (payload.get("note_type_id") or "").strip()
-    note_type = _get_note_type_or_404(note_type_id)
-    if note_type is None:
-        raise ImportValidationError("Note type not found")
-
-    target_deck_raw = payload.get("target_deck_id")
-    if target_deck_raw in ("", None):
-        raise ImportValidationError("target_deck_id is required")
-    try:
-        target_deck_id = int(target_deck_raw)
-    except (TypeError, ValueError) as exc:
-        raise ImportValidationError("target_deck_id must be an integer") from exc
-
-    accessible_deck_ids = {deck.id for deck in _collect_accessible_decks_for_import()}
-    if target_deck_id is not None and target_deck_id not in accessible_deck_ids:
-        raise ImportValidationError("Target deck is not accessible")
-
-    deck_consistency_error = _validate_note_type_consistency_for_deck(
-        deck_id=target_deck_id,
-        note_type_id=note_type.id,
+    return flashcard_import_ctrl.resolve_import_execution_payload(
+        payload=payload,
         user_id=current_user.id,
+        admin_mode=is_admin_user(current_user),
     )
-    if deck_consistency_error:
-        raise ImportValidationError(deck_consistency_error)
-
-    return session_meta, note_type, target_deck_id
 
 
 @flashcards_bp.route("/api/flashcards/import/estimate", methods=["POST"])
@@ -2876,7 +1790,11 @@ def study_next():
         return jsonify({"card_id": None, "message": "No cards found for selected scope."})
 
     now = datetime.utcnow()
-    selected_card_id = _query_next_due_card_id(query, now=now)
+    selected_card_id = _query_next_due_card_id(
+        query,
+        user_id=current_user.id,
+        now=now,
+    )
     if not selected_card_id:
         return jsonify({"card_id": None, "message": "No due cards."})
 
@@ -2996,13 +1914,7 @@ def seed_default_note_type():
 
 
 def _parse_query_price_cents(param_name: str) -> int | None:
-    raw_value = (request.args.get(param_name) or "").strip()
-    if not raw_value:
-        return None
-    parsed = _parse_price_cents(raw_value)
-    if parsed is None:
-        return None
-    return max(0, parsed)
+    return marketplace_ctrl.parse_query_price_cents(request.args.get(param_name))
 
 
 @flashcards_bp.route("/api/note-types/<note_type_id>/publish", methods=["POST"])
@@ -3381,58 +2293,19 @@ def get_shared_deck_item(deck_item_id: str):
     if not deck_item:
         return _api_error("FIELD_NOT_FOUND", "Deck item not found.", status=404)
 
-    original_note_type_id = deck_item.source_note_type_id
-    _bind_deck_item_source_note_type(deck_item, require_source_note_type=False)
-    if deck_item.source_note_type_id != original_note_type_id:
+    _, changed = share_ctrl.sync_deck_item_source_note_type(
+        deck_item,
+        require_source_note_type=False,
+    )
+    if changed:
         db.session.commit()
 
-    install = DeckInstall.query.filter_by(deck_item_id=deck_item.id, user_id=current_user.id).first()
-    review = DeckReview.query.filter_by(deck_item_id=deck_item.id, user_id=current_user.id).first()
-    payload = _serialize_deck_marketplace_item(deck_item)
-    payload["is_installed"] = install is not None
-    payload["installed_deck_id"] = install.local_deck_id if install else None
-    payload["is_owner"] = deck_item.owner_user_id == current_user.id
-    payload["can_rate"] = _can_user_rate_deck(deck_item, user_id=current_user.id)
-    payload["my_review"] = (
-        {
-            "rating": review.rating,
-            "comment": review.comment,
-            "updated_at": review.updated_at.isoformat() if review.updated_at else None,
-        }
-        if review
-        else None
-    )
-
-    source_note_type_payload = None
-    source_note_type_id = (deck_item.source_note_type_id or "").strip()
-    if source_note_type_id:
-        source_note_type = NoteType.query.get(source_note_type_id)
-        if source_note_type:
-            ordered_templates = sorted(
-                source_note_type.templates,
-                key=lambda item: (int(item.position or 0), str(item.name or "").lower()),
-            )
-            source_note_type_payload = {
-                "id": source_note_type.id,
-                "name": source_note_type.name,
-                "title": source_note_type.name,
-                "publish_status": source_note_type.publish_status,
-                "templates": [
-                    {
-                        "id": template.id,
-                        "name": template.name,
-                        "position": int(template.position or 0),
-                        "is_default": bool(template.is_default),
-                    }
-                    for template in ordered_templates
-                ],
-            }
-    payload["source_note_type"] = source_note_type_payload
-    payload["test_samples"] = _build_shared_deck_test_samples(
+    payload = share_ctrl.build_shared_deck_item_payload(
         deck_item,
-        limit=SHARED_DECK_TEST_SAMPLE_LIMIT,
+        user_id=current_user.id,
+        sample_limit=SHARED_DECK_TEST_SAMPLE_LIMIT,
+        deck_active_review_threshold=DECK_ACTIVE_REVIEW_THRESHOLD,
     )
-    payload["test_sample_limit"] = SHARED_DECK_TEST_SAMPLE_LIMIT
 
     return jsonify(payload)
 
@@ -3444,11 +2317,13 @@ def preview_shared_deck_template(deck_item_id: str, template_id: str):
     if not deck_item:
         return _api_error("FIELD_NOT_FOUND", "Deck item not found.", status=404)
 
-    original_note_type_id = deck_item.source_note_type_id
-    bind_error = _bind_deck_item_source_note_type(deck_item, require_source_note_type=True)
+    bind_error, changed = share_ctrl.sync_deck_item_source_note_type(
+        deck_item,
+        require_source_note_type=True,
+    )
     if bind_error:
         return _api_error("VALIDATION_ERROR", bind_error, status=409)
-    if deck_item.source_note_type_id != original_note_type_id:
+    if changed:
         db.session.commit()
 
     source_note_type_id = (deck_item.source_note_type_id or "").strip()
@@ -3463,30 +2338,13 @@ def preview_shared_deck_template(deck_item_id: str, template_id: str):
     if not template:
         return _api_error("FIELD_NOT_FOUND", "Template not found.", status=404)
 
-    preview_note = None
     payload = request.get_json(silent=True) or {}
-    if deck_item.source_deck_id is not None:
-        deck_ids = _collect_deck_subtree_ids(deck_item.source_deck_id)
-        if deck_ids:
-            requested_note_id = (payload.get("note_id") or "").strip()
-            if requested_note_id:
-                query = Note.query.filter(
-                    Note.id == requested_note_id,
-                    Note.note_type_id == note_type.id,
-                    Note.deck_id.in_(deck_ids),
-                )
-                if deck_item.owner_user_id is not None:
-                    query = query.filter(Note.user_id == deck_item.owner_user_id)
-                preview_note = query.first()
-
-            if preview_note is None:
-                query = Note.query.filter(
-                    Note.deck_id.in_(deck_ids),
-                    Note.note_type_id == note_type.id,
-                )
-                if deck_item.owner_user_id is not None:
-                    query = query.filter(Note.user_id == deck_item.owner_user_id)
-                preview_note = query.order_by(Note.created_at.asc(), Note.id.asc()).first()
+    requested_note_id = (payload.get("note_id") or "").strip() or None
+    preview_note = share_ctrl.select_preview_note_for_shared_deck(
+        deck_item,
+        note_type_id=note_type.id,
+        requested_note_id=requested_note_id,
+    )
 
     if preview_note:
         preview_field_values = preview_note.field_values or {}
@@ -3543,99 +2401,35 @@ def install_shared_deck_item(deck_item_id: str):
     if not deck_item:
         return _api_error("FIELD_NOT_FOUND", "Deck item not found.", status=404)
 
-    original_note_type_id = deck_item.source_note_type_id
-    bind_error = _bind_deck_item_source_note_type(deck_item, require_source_note_type=True)
+    bind_error, changed = share_ctrl.sync_deck_item_source_note_type(
+        deck_item,
+        require_source_note_type=True,
+    )
     if bind_error:
         return _api_error("VALIDATION_ERROR", bind_error, status=409)
-    if deck_item.source_note_type_id != original_note_type_id:
+    if changed:
         db.session.commit()
 
-    status = str(deck_item.publish_status or "").strip().lower()
-    if status not in PUBLISH_STATUSES_VISIBLE:
-        return _api_error("VALIDATION_ERROR", "This deck is not available for install.", status=409)
-    if deck_item.owner_user_id == current_user.id:
-        return _api_error("VALIDATION_ERROR", "Owner cannot install own deck item.", status=409)
-
-    existing = DeckInstall.query.filter_by(deck_item_id=deck_item.id, user_id=current_user.id).first()
-    if existing:
-        return jsonify(
-            {
-                "deck_item_id": deck_item.id,
-                "installed_deck_id": existing.local_deck_id,
-                "already_installed": True,
-            }
-        )
-
-    now = datetime.utcnow()
-    local_deck_id = None
-    if deck_item.source_deck_id is not None:
-        source_deck = Deck.query.get(deck_item.source_deck_id)
-        if source_deck is None:
-            return _api_error("FIELD_NOT_FOUND", "Source deck not found.", status=404)
-        cloned_root = _clone_deck_subtree(
-            source_deck_id=source_deck.id,
-            parent_id=None,
-            owner_user_id=current_user.id,
-            source_owner_user_id=deck_item.owner_user_id,
-        )
-        local_deck_id = cloned_root.id
-
-    purchase_price_cents = int(deck_item.price_cents or 0) if deck_item.pricing_mode == "paid" else 0
-    install = DeckInstall(
-        deck_item_id=deck_item.id,
-        user_id=current_user.id,
-        local_deck_id=local_deck_id,
-        purchase_price_cents=purchase_price_cents,
-        installed_at=now,
-        purchased_at=now if deck_item.pricing_mode == "paid" else None,
-    )
-    db.session.add(install)
-
-    auto_note_type_install = None
-    if deck_item.source_note_type_id:
-        source_note_type = NoteType.query.get(deck_item.source_note_type_id)
-        existing_note_install = NoteTypeInstall.query.filter_by(
-            source_note_type_id=deck_item.source_note_type_id,
+    try:
+        install_result = share_ctrl.install_shared_deck_item_for_user(
+            deck_item,
             user_id=current_user.id,
-        ).first()
-        if (
-            source_note_type
-            and existing_note_install is None
-            and source_note_type.pricing_mode == "free"
-            and bool(source_note_type.is_official)
-            and str(source_note_type.publish_status or "").strip().lower() in PUBLISH_STATUSES_VISIBLE
-            and source_note_type.user_id != current_user.id
-        ):
-            installed_copy = _clone_note_type_for_user(source_note_type, current_user.id)
-            auto_note_type_install = NoteTypeInstall(
-                source_note_type_id=source_note_type.id,
-                installed_note_type_id=installed_copy.id,
-                user_id=current_user.id,
-                purchase_price_cents=0,
-                installed_at=now,
-            )
-            db.session.add(auto_note_type_install)
-            _recompute_note_type_market_stats(source_note_type)
+            publish_statuses_visible=PUBLISH_STATUSES_VISIBLE,
+        )
+    except share_ctrl.ShareControllerError as exc:
+        return _api_error(
+            exc.error,
+            exc.message,
+            status=exc.status,
+            field=exc.field,
+        )
 
-    _recompute_deck_item_market_stats(deck_item)
-    _audit(
-        "market.deck_item.install",
-        {
-            "deck_item_id": deck_item.id,
-            "local_deck_id": local_deck_id,
-            "price_cents": purchase_price_cents,
-            "auto_note_type_install": bool(auto_note_type_install),
-        },
-    )
+    if not install_result.get("created"):
+        return jsonify(install_result.get("response") or {})
+
+    _audit("market.deck_item.install", install_result.get("audit") or {})
     db.session.commit()
-    return jsonify(
-        {
-            "deck_item_id": deck_item.id,
-            "installed_deck_id": local_deck_id,
-            "purchase_price_cents": purchase_price_cents,
-            "auto_note_type_installed": bool(auto_note_type_install),
-        }
-    ), 201
+    return jsonify(install_result.get("response") or {}), 201
 
 
 @flashcards_bp.route("/api/shared/decks/<deck_item_id>/rate", methods=["POST"])

@@ -450,9 +450,6 @@
       if (selectedSample?.note_id) {
         previewRequestPayload.note_id = selectedSample.note_id;
       }
-      if (selectedSample?.entry_id) {
-        previewRequestPayload.entry_id = selectedSample.entry_id;
-      }
 
       setLoadingPreview();
       previewPayload = await requestJson(`/api/shared/decks/${deckItemId}/templates/${selectedTemplateId}/preview`, {
