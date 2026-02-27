@@ -2,36 +2,34 @@
 
 import hashlib
 from dataclasses import dataclass, field
-from datetime import date, datetime, time, timedelta
+from datetime import datetime
 from typing import Dict, List
 
 from flask import Blueprint, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
-from app.services.anki_scheduler import default_deck_options
+from app.services.anki_scheduler import (
+    _day_index as scheduler_day_index,
+    _day_index_to_datetime as scheduler_day_index_to_datetime,
+)
 from app.services.stats_overview import build_stats_overview
 from app.services.stats_today_future import build_today_future_stats, list_stats_decks
 from app.utils.deck_move_token import create_deck_move_token
 from app.utils.permissions import is_admin_user
 from models import db
-from models.flashcard import DeckInstall
-from models.vocabulary_deck import VocabularyDeck
-from models.vocabulary_entry import VocabularyEntry
-from models.vocabulary_progress import VocabularyProgress
+from models.flashcard import Card, DeckInstall, Note
+from models.deck import Deck
+from models.card_progress import CardProgress
 
 main_bp = Blueprint("main", __name__)
 
 
 def _day_index(moment: datetime, boundary_hour: int) -> int:
-    """Convert datetime to day index (ordinal) relative to boundary hour."""
-    shifted = moment - timedelta(hours=boundary_hour)
-    return shifted.date().toordinal()
+    return scheduler_day_index(moment, boundary_hour)
 
 
 def _day_index_to_datetime(day_index: int, boundary_hour: int) -> datetime:
-    """Convert day index (ordinal) back to datetime at boundary hour."""
-    day_date = date.fromordinal(day_index)
-    return datetime.combine(day_date, time(hour=boundary_hour))
+    return scheduler_day_index_to_datetime(day_index, boundary_hour)
 
 
 @main_bp.route("/")
@@ -64,17 +62,17 @@ def dashboard():
     # Admin sees own/source decks only (exclude decks cloned for other users)
     if admin_mode:
         decks = (
-            VocabularyDeck.query.filter(
+            Deck.query.filter(
                 db.or_(
-                    VocabularyDeck.owner_user_id == current_user.id,
-                    VocabularyDeck.owner_user_id.is_(None),
+                    Deck.owner_user_id == current_user.id,
+                    Deck.owner_user_id.is_(None),
                 )
             )
             .order_by(
-                VocabularyDeck.parent_id.isnot(None),
-                VocabularyDeck.position,
-                VocabularyDeck.created_at,
-                VocabularyDeck.id,
+                Deck.parent_id.isnot(None),
+                Deck.position,
+                Deck.created_at,
+                Deck.id,
             )
             .all()
         )
@@ -91,19 +89,19 @@ def dashboard():
                     break
                 visible_ids.update(current_ids)
                 child_rows = (
-                    db.session.query(VocabularyDeck.id)
-                    .filter(VocabularyDeck.parent_id.in_(current_ids))
+                    db.session.query(Deck.id)
+                    .filter(Deck.parent_id.in_(current_ids))
                     .all()
                 )
                 frontier = {int(row[0]) for row in child_rows if row and row[0] is not None}
 
             decks = (
-                VocabularyDeck.query.filter(VocabularyDeck.id.in_(visible_ids))
+                Deck.query.filter(Deck.id.in_(visible_ids))
                 .order_by(
-                    VocabularyDeck.parent_id.isnot(None),
-                    VocabularyDeck.position,
-                    VocabularyDeck.created_at,
-                    VocabularyDeck.id,
+                    Deck.parent_id.isnot(None),
+                    Deck.position,
+                    Deck.created_at,
+                    Deck.id,
                 )
                 .all()
             )
@@ -126,74 +124,55 @@ def dashboard():
         due_count: int
         children: List["DeckNode"] = field(default_factory=list)
 
-    entries = (
-        VocabularyEntry.query.filter(VocabularyEntry.deck_id.isnot(None))
-        .order_by(VocabularyEntry.id)
-        .all()
-    )
-    entry_ids = [entry.id for entry in entries if entry.id]
-
-    progress_map = {}
-    if entry_ids:
-        progress_rows = VocabularyProgress.query.filter(
-            VocabularyProgress.user_id == current_user.id,
-            VocabularyProgress.entry_id.in_(entry_ids),
-        ).all()
-        progress_map = {row.entry_id: row for row in progress_rows}
-
     now = datetime.utcnow()
-    options = default_deck_options()
+
+    visible_deck_ids = [deck.id for deck in decks if deck.id is not None]
+    card_counts_by_deck: Dict[int, Dict[str, int]] = {
+        int(deck_id): {"total": 0, "new": 0, "learn": 0, "due": 0}
+        for deck_id in visible_deck_ids
+    }
+    if visible_deck_ids:
+        progress_join = db.and_(
+            CardProgress.card_id == Card.id,
+            CardProgress.user_id == current_user.id,
+        )
+        state_rows = (
+            db.session.query(
+                Note.deck_id,
+                CardProgress.queue,
+                CardProgress.due_at,
+            )
+            .select_from(Card)
+            .join(Note, Card.note_id == Note.id)
+            .outerjoin(CardProgress, progress_join)
+            .filter(
+                Note.user_id == current_user.id,
+                Note.deck_id.in_(visible_deck_ids),
+            )
+            .all()
+        )
+        for deck_id, progress_queue, progress_due_at in state_rows:
+            if not deck_id:
+                continue
+            bucket = card_counts_by_deck.setdefault(
+                int(deck_id), {"total": 0, "new": 0, "learn": 0, "due": 0}
+            )
+            bucket["total"] += 1
+
+            queue_value = progress_queue
+            due_at_value = progress_due_at
+            queue_norm = (queue_value or "new").strip().lower()
+            if queue_norm == "learn":
+                queue_norm = "learning"
+
+            if queue_norm == "new":
+                bucket["new"] += 1
+            elif queue_norm in {"learning", "relearning"}:
+                bucket["learn"] += 1
+            elif queue_norm == "review" and (due_at_value is None or due_at_value <= now):
+                bucket["due"] += 1
     
-    # Calculate today's day index and next day boundary according to dayBoundaryHourLocal
-    today_day_index = _day_index(now, options.dayBoundaryHourLocal)
-    next_day_boundary = _day_index_to_datetime(today_day_index + 1, options.dayBoundaryHourLocal)
-
-    def _normalize_queue(value: str | None) -> str:
-        normalized = (value or "new").strip().lower()
-        if normalized == "learn":
-            return "learning"
-        if normalized in {"new", "learning", "review", "relearning"}:
-            return normalized
-        return "new"
-
-    def _stats_from_entry_ids(node_entry_ids: List[int]) -> tuple[int, int, int]:
-        new_count = 0
-        learn_count = 0
-        due_count = 0
-        for entry_id in node_entry_ids:
-            progress = progress_map.get(entry_id)
-            queue = _normalize_queue(progress.queue if progress else "new")
-            if progress is None or queue == "new":
-                new_count += 1
-                continue
-
-            due_at = progress.due_at
-            due_day = progress.due_day
-
-            # Learning/Relearning cards: count if due_at < nextDayBoundary
-            # This ensures all learning cards scheduled for "today" appear in Learn count
-            if queue in {"learning", "relearning"}:
-                if due_at and due_at < next_day_boundary:
-                    learn_count += 1
-                continue
-
-            # Review cards: count if due_day <= today_day_index
-            # due_day is stored as ordinal int, today is also ordinal int
-            if queue == "review":
-                # Use stored due_day if available, otherwise calculate from due_at
-                if due_day is not None:
-                    card_due_day = due_day
-                else:
-                    # Backward compatibility: calculate from due_at
-                    card_due_day = _day_index(due_at or now, options.dayBoundaryHourLocal)
-                
-                if card_due_day <= today_day_index:
-                    due_count += 1
-                continue
-
-        return new_count, learn_count, due_count
-
-    by_parent: Dict[int | None, List[VocabularyDeck]] = {}
+    by_parent: Dict[int | None, List[Deck]] = {}
     for deck in decks:
         by_parent.setdefault(deck.parent_id, []).append(deck)
 
@@ -218,29 +197,39 @@ def dashboard():
         move_alias_by_deck_id[deck.id] = move_alias
         move_token_by_deck_id[deck.id] = move_token
 
-    entries_by_deck: Dict[int, List[int]] = {}
-    for entry in entries:
-        if entry.deck_id is None:
-            continue
-        entries_by_deck.setdefault(entry.deck_id, []).append(entry.id)
+    subtree_card_counts_cache: Dict[int, Dict[str, int]] = {}
 
-    subtree_entry_ids_cache: Dict[int, List[int]] = {}
-
-    def _collect_subtree_entry_ids(deck_id: int) -> List[int]:
-        cached = subtree_entry_ids_cache.get(deck_id)
+    def _collect_subtree_card_counts(deck_id: int) -> Dict[str, int]:
+        cached = subtree_card_counts_cache.get(deck_id)
         if cached is not None:
             return cached
-        collected = list(entries_by_deck.get(deck_id, []))
+
+        base = card_counts_by_deck.get(
+            deck_id, {"total": 0, "new": 0, "learn": 0, "due": 0}
+        )
+        collected = {
+            "total": int(base["total"]),
+            "new": int(base["new"]),
+            "learn": int(base["learn"]),
+            "due": int(base["due"]),
+        }
         for child in by_parent.get(deck_id, []):
-            collected.extend(_collect_subtree_entry_ids(child.id))
-        subtree_entry_ids_cache[deck_id] = collected
+            child_counts = _collect_subtree_card_counts(child.id)
+            collected["total"] += int(child_counts["total"])
+            collected["new"] += int(child_counts["new"])
+            collected["learn"] += int(child_counts["learn"])
+            collected["due"] += int(child_counts["due"])
+
+        subtree_card_counts_cache[deck_id] = collected
         return collected
 
     def _build_nodes(parent_id: int | None, depth: int) -> List[DeckNode]:
         nodes: List[DeckNode] = []
         for deck in by_parent.get(parent_id, []):
-            subtree_ids = _collect_subtree_entry_ids(deck.id)
-            deck_new, deck_learn, deck_due = _stats_from_entry_ids(subtree_ids)
+            card_counts = _collect_subtree_card_counts(deck.id)
+            deck_new = int(card_counts["new"])
+            deck_learn = int(card_counts["learn"])
+            deck_due = int(card_counts["due"])
             nodes.append(
                 DeckNode(
                     deck_id=deck.id,

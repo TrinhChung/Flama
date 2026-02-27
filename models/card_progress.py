@@ -1,22 +1,16 @@
-"""Per-user spaced-repetition progress for vocabulary entries."""
+"""Per-user spaced-repetition progress for flashcard cards."""
 
 from datetime import datetime
 
 from models import db
 
 
-class VocabularyProgress(db.Model):
-    __tablename__ = "vocabulary_progress"
+class CardProgress(db.Model):
+    __tablename__ = "card_progress"
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    entry_id = db.Column(
-        db.Integer,
-        db.ForeignKey("vocabulary_entries.id", ondelete="CASCADE"),
-        nullable=True,
-        index=True,
-    )
-    new_card_id = db.Column(
+    card_id = db.Column(
         db.String(36),
         db.ForeignKey("cards.id", ondelete="CASCADE"),
         nullable=True,
@@ -38,10 +32,8 @@ class VocabularyProgress(db.Model):
     )
 
     __table_args__ = (
-        db.UniqueConstraint("user_id", "entry_id", name="uq_vocabulary_progress_user_entry"),
-        db.UniqueConstraint("user_id", "new_card_id", name="uq_vocabulary_progress_user_card"),
+        db.UniqueConstraint("user_id", "card_id", name="uq_card_progress_user_card"),
     )
 
-    user = db.relationship("User", back_populates="vocabulary_progress")
-    entry = db.relationship("VocabularyEntry", back_populates="progress_records")
-    new_card = db.relationship("Card")
+    user = db.relationship("User", back_populates="card_progress")
+    card = db.relationship("Card", back_populates="progress_rows")

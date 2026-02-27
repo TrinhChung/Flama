@@ -1,0 +1,937 @@
+{% extends "base.html" %}
+
+{% block title %}Import Flashcards{% endblock %}
+
+{% block content %}
+<section class="import-page">
+  {% set toolbar_variant = 'study' %}
+  {% set toolbar_active_tab = 'import' %}
+  {% set toolbar_aria_label = 'Import actions' %}
+  {% if initial_deck_id %}
+  {% set toolbar_current_deck_id = initial_deck_id %}
+  {% else %}
+  {% set toolbar_current_deck_id = '' %}
+  {% endif %}
+  {% set toolbar_import_href = url_for('flashcards.flashcard_import_page', deck_id=initial_deck_id) if initial_deck_id else url_for('flashcards.flashcard_import_page') %}
+  {% include 'components/deck/dashboard_toolbar.html' with context %}
+
+  <div class="import-shell card">
+    <div class="card-body">
+      <div class="import-head">
+        <h2 class="h5 mb-1">Import Notes/Cards</h2>
+        <p class="text-muted mb-0">CSV, TSV, hoặc delimiter tùy chỉnh. Flow: Parse -> Mapping -> Estimate -> Execute.</p>
+      </div>
+
+      <div class="row g-3 mt-2">
+        <div class="col-md-6">
+          <label class="form-label" for="targetDeckSelect">Target deck</label>
+          <select id="targetDeckSelect" class="form-select"></select>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label" for="noteTypeSelect">Note type</label>
+          <select id="noteTypeSelect" class="form-select"></select>
+        </div>
+      </div>
+
+      <hr class="my-4">
+
+      <section class="wizard-step">
+        <h3 class="h6">Step A - Upload & Parse</h3>
+        <div class="row g-3 align-items-end">
+          <div class="col-lg-4">
+            <label class="form-label" for="importFileInput">File (csv/tsv/txt)</label>
+            <input id="importFileInput" class="form-control" type="file" accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values,text/plain">
+          </div>
+          <div class="col-lg-3">
+            <label class="form-label" for="delimiterModeSelect">Delimiter</label>
+            <select id="delimiterModeSelect" class="form-select">
+              <option value="csv">CSV (,)</option>
+              <option value="tsv">TSV (tab)</option>
+              <option value="custom">Custom</option>
+            </select>
+          </div>
+          <div class="col-lg-2">
+            <label class="form-label" for="customDelimiterInput">Custom char</label>
+            <input id="customDelimiterInput" class="form-control" maxlength="1" placeholder="|" disabled>
+          </div>
+          <div class="col-lg-2">
+            <div class="form-check mt-4">
+              <input class="form-check-input" type="checkbox" id="hasHeaderInput" checked>
+              <label class="form-check-label" for="hasHeaderInput">Has header row</label>
+            </div>
+          </div>
+          <div class="col-lg-1 d-grid">
+            <button id="parseBtn" class="btn btn-primary">Parse</button>
+          </div>
+        </div>
+
+        <div id="parseWarningBox" class="alert mt-3 d-none" role="alert"></div>
+
+        <div id="parseMeta" class="small text-muted mt-2"></div>
+
+        <div class="table-responsive mt-3" id="previewWrap" hidden>
+          <table id="previewTable" class="table table-sm table-bordered align-middle import-preview-table">
+            <thead>
+              <tr id="previewHeaderRow"></tr>
+            </thead>
+            <tbody id="previewBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <hr class="my-4">
+
+      <section class="wizard-step">
+        <h3 class="h6">Step B - Mapping Column -> Field</h3>
+        <p class="small text-muted mb-2">Mỗi field chọn một nguồn: cột, Ignore, hoặc Constant value.</p>
+        <div id="mappingWarnings" class="small text-warning mb-2"></div>
+        <div class="table-responsive" id="mappingWrap" hidden>
+          <table class="table table-sm align-middle">
+            <thead>
+              <tr>
+                <th style="width: 28%;">Field</th>
+                <th style="width: 42%;">Source</th>
+                <th style="width: 30%;">Constant value</th>
+              </tr>
+            </thead>
+            <tbody id="mappingBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <hr class="my-4">
+
+      <section class="wizard-step">
+        <h3 class="h6">Step C - Import Mode</h3>
+        <div class="row g-3">
+          <div class="col-lg-6">
+            <label class="form-label d-block">Mode</label>
+            <div class="form-check"><input class="form-check-input" type="radio" name="importMode" id="modeInsert" value="insert_only"><label class="form-check-label" for="modeInsert">Insert only</label></div>
+            <div class="form-check"><input class="form-check-input" type="radio" name="importMode" id="modeUpdate" value="update_only"><label class="form-check-label" for="modeUpdate">Update only</label></div>
+            <div class="form-check"><input class="form-check-input" type="radio" name="importMode" id="modeUpsert" value="upsert" checked><label class="form-check-label" for="modeUpsert">Insert + Update (Upsert)</label></div>
+            <div class="form-check mt-2"><input class="form-check-input" type="checkbox" id="dontOverwriteEmptyInput" checked><label class="form-check-label" for="dontOverwriteEmptyInput">Don't overwrite empty (safe)</label></div>
+            <p class="small text-muted mt-2 mb-0">
+              Insert only: chỉ thêm mới, nếu đã tồn tại thì bỏ qua. Update only: chỉ cập nhật bản ghi đã tồn tại. Upsert: nếu đã tồn tại thì cập nhật, chưa có thì thêm mới.
+            </p>
+          </div>
+          <div class="col-lg-6">
+            <label class="form-label d-block">Uniqueness key (chọn 1 hoặc nhiều field để đối chiếu)</label>
+            <p class="small text-muted mb-2">
+              Hệ thống sẽ dựa vào các field bạn chọn để kiểm tra dữ liệu cũ: trùng khóa thì xem là đã tồn tại, không trùng khóa thì xem là bản ghi mới.
+            </p>
+            <div id="uniquenessFieldsWrap" class="import-uniq-wrap"></div>
+          </div>
+        </div>
+
+        <div class="form-check mt-2 d-none" id="columnMismatchConfirmWrap">
+          <input class="form-check-input" type="checkbox" id="columnMismatchConfirmInput">
+          <label class="form-check-label text-danger" for="columnMismatchConfirmInput">Tôi xác nhận tiếp tục dù số cột không khớp note type</label>
+        </div>
+      </section>
+
+      <hr class="my-4">
+
+      <section class="wizard-step">
+        <h3 class="h6">Step D - Review & Execute</h3>
+        <div class="d-flex flex-wrap gap-2">
+          <button id="estimateBtn" class="btn btn-outline-secondary">Estimate</button>
+          <button id="executeBtn" class="btn btn-success" disabled>Execute Import</button>
+        </div>
+
+        <div id="progressWrap" class="mt-3 d-none">
+          <div class="progress" role="progressbar" aria-label="Import progress">
+            <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated" style="width: 100%;">Running...</div>
+          </div>
+        </div>
+
+        <div id="summaryBox" class="mt-3 d-none">
+          <div class="alert alert-light border">
+            <div class="row g-2" id="summaryGrid"></div>
+          </div>
+        </div>
+
+        <div id="issuesWrap" class="mt-3 d-none">
+          <h4 class="h6">Row issues (first 300 rows)</h4>
+          <div class="table-responsive">
+            <table class="table table-sm table-bordered">
+              <thead>
+                <tr>
+                  <th style="width: 80px;">Row</th>
+                  <th style="width: 100px;">Kind</th>
+                  <th style="width: 180px;">Reason</th>
+                  <th>Message</th>
+                </tr>
+              </thead>
+              <tbody id="issuesBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+</section>
+
+<script id="importPageConfig" type="application/json">
+  {{ {
+    'deck_options': deck_options,
+    'note_type_options': note_type_options,
+    'initial_deck_id': initial_deck_id,
+    'initial_note_type_id': initial_note_type_id,
+    'uniqueness_defaults': uniqueness_defaults,
+  } | tojson }}
+</script>
+
+<style>
+  .import-page {
+    max-width: 1160px;
+    margin: 0 auto;
+    padding: 0.35rem 0 2rem;
+  }
+
+  .import-shell {
+    border: 1px solid var(--flama-border);
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.02);
+  }
+
+  .import-head {
+    border-bottom: 1px solid var(--flama-border);
+    padding-bottom: 0.75rem;
+  }
+
+  .wizard-step + .wizard-step {
+    margin-top: 0.5rem;
+  }
+
+  #previewWrap {
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .import-preview-table {
+    min-width: 100%;
+    width: max-content;
+    table-layout: fixed;
+  }
+
+  .import-preview-table th,
+  .import-preview-table td {
+    min-width: 170px;
+    max-width: 220px;
+  }
+
+  .import-preview-table th {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .import-preview-table td {
+    white-space: normal;
+    word-break: break-word;
+    vertical-align: top;
+  }
+
+  .import-preview-table .preview-cell-text {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.3;
+    max-height: calc(1.3em * 3);
+  }
+
+  .import-uniq-wrap {
+    border: 1px solid var(--flama-border);
+    border-radius: 8px;
+    padding: 0.65rem 0.75rem;
+    max-height: 180px;
+    overflow: auto;
+    background: #fff;
+  }
+
+  @media (max-width: 768px) {
+    .import-page {
+      padding-left: 0.2rem;
+      padding-right: 0.2rem;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  (() => {
+    const configEl = document.getElementById("importPageConfig");
+    if (!configEl) return;
+
+    const config = JSON.parse(configEl.textContent || "{}");
+      const state = {
+        token: null,
+        columns: [],
+        previewRows: [],
+        hasHeader: true,
+        warnings: [],
+        mapping: {},
+        lastSummary: null,
+        parsed: false,
+        running: false,
+    };
+
+    const els = {
+      targetDeckSelect: document.getElementById("targetDeckSelect"),
+      noteTypeSelect: document.getElementById("noteTypeSelect"),
+      importFileInput: document.getElementById("importFileInput"),
+      delimiterModeSelect: document.getElementById("delimiterModeSelect"),
+      customDelimiterInput: document.getElementById("customDelimiterInput"),
+      hasHeaderInput: document.getElementById("hasHeaderInput"),
+      parseBtn: document.getElementById("parseBtn"),
+      parseWarningBox: document.getElementById("parseWarningBox"),
+      parseMeta: document.getElementById("parseMeta"),
+      previewWrap: document.getElementById("previewWrap"),
+      previewTable: document.getElementById("previewTable"),
+      previewHeaderRow: document.getElementById("previewHeaderRow"),
+      previewBody: document.getElementById("previewBody"),
+      mappingWrap: document.getElementById("mappingWrap"),
+      mappingBody: document.getElementById("mappingBody"),
+      mappingWarnings: document.getElementById("mappingWarnings"),
+      uniquenessFieldsWrap: document.getElementById("uniquenessFieldsWrap"),
+      columnMismatchConfirmWrap: document.getElementById("columnMismatchConfirmWrap"),
+      columnMismatchConfirmInput: document.getElementById("columnMismatchConfirmInput"),
+      estimateBtn: document.getElementById("estimateBtn"),
+      executeBtn: document.getElementById("executeBtn"),
+      progressWrap: document.getElementById("progressWrap"),
+      progressBar: document.getElementById("progressBar"),
+      summaryBox: document.getElementById("summaryBox"),
+      summaryGrid: document.getElementById("summaryGrid"),
+      issuesWrap: document.getElementById("issuesWrap"),
+      issuesBody: document.getElementById("issuesBody"),
+      dontOverwriteEmptyInput: document.getElementById("dontOverwriteEmptyInput"),
+    };
+
+    function escapeHtml(value) {
+      const text = value == null ? "" : String(value);
+      return text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/\"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function getNoteTypeOptions() {
+      return Array.isArray(config.note_type_options) ? config.note_type_options : [];
+    }
+
+    function getDeckOptions() {
+      return Array.isArray(config.deck_options) ? config.deck_options : [];
+    }
+
+    function getSelectedNoteType() {
+      const noteTypeId = String(els.noteTypeSelect.value || "");
+      return getNoteTypeOptions().find((item) => String(item.id) === noteTypeId) || null;
+    }
+
+    function getFields() {
+      const noteType = getSelectedNoteType();
+      return Array.isArray(noteType?.fields) ? noteType.fields : [];
+    }
+
+    function getSelectedImportMode() {
+      const checked = document.querySelector('input[name="importMode"]:checked');
+      return checked ? checked.value : "upsert";
+    }
+
+    function setAlert(message, kind = "warning") {
+      if (!message) {
+        els.parseWarningBox.className = "alert mt-3 d-none";
+        els.parseWarningBox.textContent = "";
+        return;
+      }
+      els.parseWarningBox.className = `alert alert-${kind} mt-3`;
+      els.parseWarningBox.textContent = message;
+    }
+
+    function resetParseState({ keepWarning = false } = {}) {
+      state.token = null;
+      state.columns = [];
+      state.previewRows = [];
+      state.hasHeader = true;
+      state.warnings = [];
+      state.mapping = {};
+      state.lastSummary = null;
+      state.parsed = false;
+      els.previewWrap.hidden = true;
+      els.mappingWrap.hidden = true;
+      els.summaryBox.classList.add("d-none");
+      els.issuesWrap.classList.add("d-none");
+      els.executeBtn.disabled = true;
+      els.columnMismatchConfirmWrap.classList.add("d-none");
+      els.columnMismatchConfirmInput.checked = false;
+      if (!keepWarning) {
+        setAlert("");
+      }
+      renderMappingWarnings([]);
+      renderUniquenessFields();
+    }
+
+    function populateDeckOptions() {
+      const initial = String(config.initial_deck_id ?? "");
+      const options = getDeckOptions().map((item) => {
+        const selected = String(item.id) === initial ? " selected" : "";
+        const label = item.path || item.name || `Deck ${item.id}`;
+        return `<option value="${escapeHtml(item.id)}"${selected}>${escapeHtml(label)}</option>`;
+      });
+      els.targetDeckSelect.innerHTML = options.length ? options.join("") : '<option value="">(No deck)</option>';
+    }
+
+    function populateNoteTypeOptions() {
+      const initial = String(config.initial_note_type_id ?? "");
+      const options = getNoteTypeOptions().map((item) => {
+        const selected = String(item.id) === initial ? " selected" : "";
+        return `<option value="${escapeHtml(item.id)}"${selected}>${escapeHtml(item.name || "(Unnamed note type)")}</option>`;
+      });
+      els.noteTypeSelect.innerHTML = options.length ? options.join("") : '<option value="">(No note type)</option>';
+    }
+
+    function applySuggestedMapping(suggestedMapping) {
+      const fields = getFields();
+      const next = {};
+      fields.forEach((field) => {
+        const fallback = { source_type: "ignore", column_index: null, constant_value: "" };
+        const incoming = suggestedMapping && suggestedMapping[field.name] ? suggestedMapping[field.name] : fallback;
+        next[field.name] = {
+          source_type: incoming.source_type || "ignore",
+          column_index: typeof incoming.column_index === "number" ? incoming.column_index : null,
+          constant_value: incoming.constant_value || "",
+        };
+      });
+      state.mapping = next;
+      renderMappingTable();
+    }
+
+    function truncatePreviewValue(value, maxWords = 8, maxChars = 70) {
+      const normalized = String(value == null ? "" : value).replace(/\s+/g, " ").trim();
+      if (!normalized) {
+        return "";
+      }
+
+      const words = normalized.split(" ");
+      let shortened = normalized;
+      let wasTrimmed = false;
+
+      if (words.length > maxWords) {
+        shortened = words.slice(0, maxWords).join(" ");
+        wasTrimmed = true;
+      }
+
+      if (shortened.length > maxChars) {
+        shortened = shortened.slice(0, maxChars).trimEnd();
+        wasTrimmed = true;
+      }
+
+      return wasTrimmed ? `${shortened}...` : shortened;
+    }
+
+    function getSampleRowForMapping() {
+      if (!Array.isArray(state.previewRows) || !state.previewRows.length) {
+        return null;
+      }
+      // "Row #2" in the original file:
+      // - has header => first data row (index 0 in previewRows)
+      // - no header => second data row (index 1 in previewRows)
+      const preferredIndex = state.hasHeader ? 0 : 1;
+      return state.previewRows[preferredIndex] || state.previewRows[0] || null;
+    }
+
+    function renderPreviewTable() {
+      if (!state.parsed || !state.columns.length) {
+        els.previewWrap.hidden = true;
+        return;
+      }
+      els.previewWrap.hidden = false;
+
+      if (els.previewTable) {
+        const minWidthPx = Math.max(760, state.columns.length * 180);
+        els.previewTable.style.minWidth = `${minWidthPx}px`;
+      }
+
+      els.previewHeaderRow.innerHTML = state.columns
+        .map((col) => `<th>Col ${col.index + 1}: ${escapeHtml(col.display || "")}</th>`)
+        .join("");
+
+      if (!state.previewRows.length) {
+        els.previewBody.innerHTML = `<tr><td colspan="${Math.max(state.columns.length, 1)}" class="text-muted text-center">No data rows found.</td></tr>`;
+        return;
+      }
+
+      els.previewBody.innerHTML = state.previewRows
+        .map((row) => {
+          const cells = [];
+          for (let idx = 0; idx < state.columns.length; idx += 1) {
+            const fullValue = String(row[idx] || "");
+            const shortValue = truncatePreviewValue(fullValue);
+            cells.push(
+              `<td title="${escapeHtml(fullValue)}"><div class="preview-cell-text">${escapeHtml(shortValue)}</div></td>`
+            );
+          }
+          return `<tr>${cells.join("")}</tr>`;
+        })
+        .join("");
+    }
+
+    function renderWarnings() {
+      if (!state.warnings.length) {
+        setAlert("");
+        els.columnMismatchConfirmWrap.classList.add("d-none");
+        els.columnMismatchConfirmInput.checked = false;
+        return;
+      }
+      const first = state.warnings[0];
+      const kind = first.severity === "danger" ? "danger" : "warning";
+      setAlert(first.message || "Column mismatch detected.", kind);
+      els.columnMismatchConfirmWrap.classList.remove("d-none");
+    }
+
+    function mappingSelectValue(mappingValue) {
+      if (!mappingValue) return "ignore";
+      if (mappingValue.source_type === "constant") return "constant";
+      if (mappingValue.source_type === "column" && typeof mappingValue.column_index === "number") {
+        return `col:${mappingValue.column_index}`;
+      }
+      return "ignore";
+    }
+
+    function renderMappingTable() {
+      const fields = getFields();
+      if (!state.parsed || !fields.length) {
+        els.mappingWrap.hidden = true;
+        return;
+      }
+      els.mappingWrap.hidden = false;
+      const sampleRow = getSampleRowForMapping();
+
+      els.mappingBody.innerHTML = fields
+        .map((field) => {
+          const mappingValue = state.mapping[field.name] || { source_type: "ignore", column_index: null, constant_value: "" };
+          const selectValue = mappingSelectValue(mappingValue);
+          const columnOptions = state.columns
+            .map((col) => {
+              const optionValue = `col:${col.index}`;
+              const isSelected = selectValue === optionValue ? " selected" : "";
+              return `<option value="${optionValue}"${isSelected}>Column ${col.index + 1} - ${escapeHtml(col.display || "")}</option>`;
+            })
+            .join("");
+          const requiredBadge = field.required ? '<span class="text-danger">*</span>' : "";
+          const constantDisabled = mappingValue.source_type === "constant" ? "" : " disabled";
+          const hasColumnMap = mappingValue.source_type === "column" && typeof mappingValue.column_index === "number";
+          const sampleRaw = hasColumnMap && sampleRow ? String(sampleRow[mappingValue.column_index] || "") : "";
+          const sampleDisplay = truncatePreviewValue(sampleRaw, 10, 90);
+          let valueCellHtml = `<input type="text" class="form-control form-control-sm" data-map-constant="${escapeHtml(field.name)}" value="${escapeHtml(mappingValue.constant_value || "")}"${constantDisabled}>`;
+
+          if (hasColumnMap) {
+            valueCellHtml = `
+              <input type="text" class="form-control form-control-sm" value="${escapeHtml(sampleDisplay)}" readonly>
+            `;
+          }
+
+          return `
+            <tr>
+              <td>
+                <div>${escapeHtml(field.name)} ${requiredBadge}</div>
+                <div class="small text-muted">${escapeHtml(field.field_type || "text")}</div>
+              </td>
+              <td>
+                <select class="form-select form-select-sm" data-map-select="${escapeHtml(field.name)}">
+                  <option value="ignore"${selectValue === "ignore" ? " selected" : ""}>Ignore</option>
+                  <option value="constant"${selectValue === "constant" ? " selected" : ""}>Constant value</option>
+                  ${columnOptions}
+                </select>
+              </td>
+              <td>
+                ${valueCellHtml}
+              </td>
+            </tr>
+          `;
+        })
+        .join("");
+    }
+
+    function renderUniquenessFields() {
+      const fields = getFields();
+      if (!fields.length) {
+        els.uniquenessFieldsWrap.innerHTML = '<div class="text-muted small">No fields</div>';
+        return;
+      }
+
+      const noteTypeId = String(els.noteTypeSelect.value || "");
+      const defaults = (config.uniqueness_defaults && Array.isArray(config.uniqueness_defaults[noteTypeId]))
+        ? config.uniqueness_defaults[noteTypeId]
+        : [];
+
+      const defaultSet = new Set(defaults.map((x) => String(x)));
+      els.uniquenessFieldsWrap.innerHTML = fields
+        .map((field, index) => {
+          const checked = defaultSet.size ? defaultSet.has(field.name) : index === 0;
+          return `
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" data-uniq-field="${escapeHtml(field.name)}" id="uniq-${escapeHtml(field.name)}"${checked ? " checked" : ""}>
+              <label class="form-check-label" for="uniq-${escapeHtml(field.name)}">${escapeHtml(field.name)}</label>
+            </div>
+          `;
+        })
+        .join("");
+    }
+
+    function readUniquenessFields() {
+      return Array.from(document.querySelectorAll("[data-uniq-field]:checked")).map((el) => el.getAttribute("data-uniq-field") || "").filter(Boolean);
+    }
+
+    function readMappingFromDom() {
+      const fields = getFields();
+      fields.forEach((field) => {
+        const selectEl = document.querySelector(`[data-map-select="${CSS.escape(field.name)}"]`);
+        const constantEl = document.querySelector(`[data-map-constant="${CSS.escape(field.name)}"]`);
+        if (!selectEl) return;
+
+        const raw = selectEl.value || "ignore";
+        if (raw === "ignore") {
+          state.mapping[field.name] = { source_type: "ignore", column_index: null, constant_value: "" };
+        } else if (raw === "constant") {
+          state.mapping[field.name] = {
+            source_type: "constant",
+            column_index: null,
+            constant_value: constantEl ? String(constantEl.value || "") : "",
+          };
+        } else if (raw.startsWith("col:")) {
+          const idx = Number(raw.replace("col:", ""));
+          state.mapping[field.name] = {
+            source_type: "column",
+            column_index: Number.isFinite(idx) ? idx : null,
+            constant_value: "",
+          };
+        }
+      });
+    }
+
+    function renderMappingWarnings(messages) {
+      if (!messages || !messages.length) {
+        els.mappingWarnings.innerHTML = "";
+        return;
+      }
+      els.mappingWarnings.innerHTML = messages.map((x) => `<div>${escapeHtml(x)}</div>`).join("");
+    }
+
+    function validateBeforeSubmit() {
+      if (!state.parsed || !state.token) {
+        return { ok: false, errors: ["Hãy parse file trước khi estimate/execute."] };
+      }
+
+      readMappingFromDom();
+
+      const fields = getFields();
+      const uniq = readUniquenessFields();
+      const errors = [];
+      const warnings = [];
+
+      if (!uniq.length) {
+        errors.push("Phải chọn ít nhất 1 uniqueness key field.");
+      }
+
+      const usedColumns = new Map();
+      fields.forEach((field) => {
+        const mapVal = state.mapping[field.name] || { source_type: "ignore" };
+        if (field.required && mapVal.source_type === "ignore") {
+          errors.push(`Required field '${field.name}' chưa được mapping.`);
+        }
+        if (uniq.includes(field.name) && mapVal.source_type === "ignore") {
+          errors.push(`Uniqueness field '${field.name}' chưa được mapping.`);
+        }
+        if (mapVal.source_type === "column" && typeof mapVal.column_index === "number") {
+          const list = usedColumns.get(mapVal.column_index) || [];
+          list.push(field.name);
+          usedColumns.set(mapVal.column_index, list);
+        }
+      });
+
+      Array.from(usedColumns.entries()).forEach(([columnIdx, names]) => {
+        if (names.length > 1) {
+          warnings.push(`Column ${columnIdx + 1} đang map cho nhiều field: ${names.join(", ")}`);
+        }
+      });
+
+      if (state.warnings.length && !els.columnMismatchConfirmInput.checked) {
+        errors.push("Bạn cần xác nhận column mismatch trước khi chạy import.");
+      }
+
+      return {
+        ok: errors.length === 0,
+        errors,
+        warnings,
+      };
+    }
+
+    function renderSummary(report, title) {
+      const summary = report && report.summary ? report.summary : null;
+      if (!summary) {
+        els.summaryBox.classList.add("d-none");
+        return;
+      }
+
+      els.summaryBox.classList.remove("d-none");
+      const items = [
+        ["Total rows", summary.total_rows],
+        ["Valid rows", summary.valid_rows],
+        ["Inserted", summary.inserted],
+        ["Updated", summary.updated],
+        ["Skipped", summary.skipped],
+        ["Unchanged", summary.unchanged],
+        ["Errors", summary.errors],
+      ];
+
+      const heading = title ? `<div class="col-12 fw-semibold mb-1">${escapeHtml(title)}</div>` : "";
+      const rowsHtml = items
+        .map(([label, value]) => `<div class="col-sm-6 col-lg-3"><strong>${escapeHtml(label)}</strong>: ${escapeHtml(value)}</div>`)
+        .join("");
+
+      els.summaryGrid.innerHTML = heading + rowsHtml;
+    }
+
+    function renderIssues(report) {
+      const issues = Array.isArray(report?.issues) ? report.issues : [];
+      if (!issues.length) {
+        els.issuesWrap.classList.add("d-none");
+        return;
+      }
+      els.issuesWrap.classList.remove("d-none");
+      els.issuesBody.innerHTML = issues
+        .map((row) => {
+          const kind = row.kind || "-";
+          const reason = row.reason || "-";
+          return `<tr><td>${escapeHtml(row.row)}</td><td>${escapeHtml(kind)}</td><td>${escapeHtml(reason)}</td><td>${escapeHtml(row.message || "")}</td></tr>`;
+        })
+        .join("");
+    }
+
+    function buildRequestPayload() {
+      const payload = {
+        token: state.token,
+        note_type_id: String(els.noteTypeSelect.value || ""),
+        target_deck_id: els.targetDeckSelect.value ? Number(els.targetDeckSelect.value) : null,
+        import_mode: getSelectedImportMode(),
+        uniqueness_fields: readUniquenessFields(),
+        mapping: state.mapping,
+        dont_overwrite_empty: Boolean(els.dontOverwriteEmptyInput.checked),
+        confirm_column_mismatch: Boolean(els.columnMismatchConfirmInput.checked),
+      };
+      return payload;
+    }
+
+    async function parseFile() {
+      const file = els.importFileInput.files && els.importFileInput.files[0];
+      if (!file) {
+        setAlert("Hãy chọn file trước khi parse.", "warning");
+        return;
+      }
+
+      const noteTypeId = String(els.noteTypeSelect.value || "").trim();
+      if (!noteTypeId) {
+        setAlert("Hãy chọn note type.", "warning");
+        return;
+      }
+
+      const mode = String(els.delimiterModeSelect.value || "csv");
+      const customDelimiter = String(els.customDelimiterInput.value || "");
+      if (mode === "custom" && customDelimiter.length !== 1) {
+        setAlert("Custom delimiter phải là đúng 1 ký tự.", "danger");
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("note_type_id", noteTypeId);
+      formData.append("delimiter_mode", mode);
+      formData.append("custom_delimiter", customDelimiter);
+      formData.append("has_header", els.hasHeaderInput.checked ? "1" : "0");
+
+      els.parseBtn.disabled = true;
+      els.parseBtn.innerHTML = '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span>';
+      resetParseState({ keepWarning: true });
+
+      try {
+        const response = await fetch("/api/flashcards/import/parse", {
+          method: "POST",
+          body: formData,
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(payload.message || payload.error || "Parse failed");
+        }
+
+        state.token = payload.token || null;
+        state.columns = Array.isArray(payload.columns) ? payload.columns : [];
+        state.previewRows = Array.isArray(payload.preview_rows) ? payload.preview_rows : [];
+        state.hasHeader = Boolean(payload.has_header);
+        state.warnings = Array.isArray(payload.warnings) ? payload.warnings : [];
+        state.parsed = true;
+
+        applySuggestedMapping(payload.suggested_mapping || {});
+        renderPreviewTable();
+        renderWarnings();
+        renderUniquenessFields();
+
+        const columnCount = Number(payload.column_count || 0);
+        const totalRows = Number(payload.total_rows || 0);
+        els.parseMeta.textContent = `Rows: ${totalRows} | Columns: ${columnCount}`;
+
+      } catch (error) {
+        setAlert(error.message || "Parse failed.", "danger");
+      } finally {
+        els.parseBtn.disabled = false;
+        els.parseBtn.textContent = "Parse";
+      }
+    }
+
+    async function estimateImport() {
+      const validation = validateBeforeSubmit();
+      renderMappingWarnings(validation.warnings);
+      if (!validation.ok) {
+        setAlert(validation.errors[0], "danger");
+        return;
+      }
+
+      const payload = buildRequestPayload();
+      els.estimateBtn.disabled = true;
+      els.estimateBtn.innerHTML = '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span>';
+      setAlert("");
+
+      try {
+        const response = await fetch("/api/flashcards/import/estimate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(data.message || data.error || "Estimate failed");
+        }
+
+        state.lastSummary = data;
+        renderSummary(data, "Estimated summary");
+        renderIssues(data);
+        els.executeBtn.disabled = false;
+      } catch (error) {
+        setAlert(error.message || "Estimate failed", "danger");
+      } finally {
+        els.estimateBtn.disabled = false;
+        els.estimateBtn.textContent = "Estimate";
+      }
+    }
+
+    async function executeImport() {
+      const validation = validateBeforeSubmit();
+      renderMappingWarnings(validation.warnings);
+      if (!validation.ok) {
+        setAlert(validation.errors[0], "danger");
+        return;
+      }
+
+      const payload = buildRequestPayload();
+      state.running = true;
+      els.executeBtn.disabled = true;
+      els.estimateBtn.disabled = true;
+      els.progressWrap.classList.remove("d-none");
+      els.progressBar.classList.add("progress-bar-animated");
+      els.progressBar.textContent = "Running...";
+      setAlert("");
+
+      try {
+        const response = await fetch("/api/flashcards/import/execute", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(data.message || data.error || "Execute failed");
+        }
+
+        renderSummary(data, "Execution report");
+        renderIssues(data);
+        els.progressBar.classList.remove("progress-bar-animated");
+        els.progressBar.textContent = "Done";
+      } catch (error) {
+        setAlert(error.message || "Execute failed", "danger");
+      } finally {
+        state.running = false;
+        els.executeBtn.disabled = false;
+        els.estimateBtn.disabled = false;
+      }
+    }
+
+    function handleDelimiterModeChange() {
+      const mode = String(els.delimiterModeSelect.value || "csv");
+      const custom = mode === "custom";
+      els.customDelimiterInput.disabled = !custom;
+      if (!custom) {
+        els.customDelimiterInput.value = "";
+      }
+    }
+
+    function bindEvents() {
+      els.delimiterModeSelect.addEventListener("change", handleDelimiterModeChange);
+      els.parseBtn.addEventListener("click", parseFile);
+      els.estimateBtn.addEventListener("click", estimateImport);
+      els.executeBtn.addEventListener("click", executeImport);
+
+      els.noteTypeSelect.addEventListener("change", () => {
+        resetParseState();
+      });
+
+      els.mappingBody.addEventListener("change", (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) return;
+        const fieldName = target.getAttribute("data-map-select") || target.getAttribute("data-map-constant");
+        if (!fieldName) return;
+
+        if (target.hasAttribute("data-map-select")) {
+          const rawValue = target.value || "ignore";
+          if (rawValue === "ignore") {
+            state.mapping[fieldName] = { source_type: "ignore", column_index: null, constant_value: "" };
+          } else if (rawValue === "constant") {
+            const current = state.mapping[fieldName] || { constant_value: "" };
+            state.mapping[fieldName] = {
+              source_type: "constant",
+              column_index: null,
+              constant_value: current.constant_value || "",
+            };
+          } else if (rawValue.startsWith("col:")) {
+            const idx = Number(rawValue.replace("col:", ""));
+            state.mapping[fieldName] = {
+              source_type: "column",
+              column_index: Number.isFinite(idx) ? idx : null,
+              constant_value: "",
+            };
+          }
+          renderMappingTable();
+        } else if (target.hasAttribute("data-map-constant")) {
+          const current = state.mapping[fieldName] || { source_type: "constant", column_index: null, constant_value: "" };
+          current.constant_value = target.value || "";
+          state.mapping[fieldName] = current;
+        }
+      });
+    }
+
+    function init() {
+      populateDeckOptions();
+      populateNoteTypeOptions();
+      renderUniquenessFields();
+      handleDelimiterModeChange();
+      bindEvents();
+    }
+
+    init();
+  })();
+</script>
+{% endblock %}

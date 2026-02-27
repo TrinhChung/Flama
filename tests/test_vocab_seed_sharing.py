@@ -9,7 +9,7 @@ from app import create_app
 from models import db
 from models.flashcard import DeckMarketplaceItem
 from models.user import User
-from models.vocabulary_deck import VocabularyDeck
+from models.deck import Deck
 
 
 class VocabSeedSharingTests(unittest.TestCase):
@@ -67,7 +67,7 @@ class VocabSeedSharingTests(unittest.TestCase):
             shared_items = DeckMarketplaceItem.query.all()
             self.assertEqual(len(shared_items), 1)
             item = shared_items[0]
-            top_deck = VocabularyDeck.query.filter_by(name="Unit 1", parent_id=None).first()
+            top_deck = Deck.query.filter_by(name="Unit 1", parent_id=None).first()
             self.assertIsNotNone(top_deck)
             self.assertEqual(item.owner_user_id, self.user_id)
             self.assertEqual(item.publish_status, "published")

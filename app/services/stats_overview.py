@@ -6,9 +6,13 @@ from datetime import date, datetime, time, timedelta, timezone
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from models import db
+from app.controllers.review_event_controller import (
+    create_review_event_record,
+    query_active_review_days,
+    query_daily_review_aggregates,
+)
+from app.controllers.card_progress_controller import query_future_due_day_counts
 from models.flashcard import ReviewEvent
-from models.vocabulary_progress import VocabularyProgress
 
 UTC = timezone.utc
 DEFAULT_TIMEZONE = "UTC"
@@ -76,15 +80,6 @@ def _ensure_naive_utc(moment: datetime) -> datetime:
     return moment.astimezone(UTC).replace(tzinfo=None)
 
 
-def _utc_to_local_day(moment: datetime, timezone_obj) -> date:
-    utc_moment = moment
-    if utc_moment.tzinfo is None:
-        utc_moment = utc_moment.replace(tzinfo=UTC)
-    else:
-        utc_moment = utc_moment.astimezone(UTC)
-    return utc_moment.astimezone(timezone_obj).date()
-
-
 def _local_start_to_utc_naive(day_value: date, timezone_obj) -> datetime:
     local_start = datetime.combine(day_value, time.min, tzinfo=timezone_obj)
     return local_start.astimezone(UTC).replace(tzinfo=None)
@@ -112,22 +107,6 @@ def _safe_int(value: Any) -> int:
         return 0
 
 
-def _parse_sql_day(raw_day: Any) -> date | None:
-    if isinstance(raw_day, date):
-        return raw_day
-    if isinstance(raw_day, datetime):
-        return raw_day.date()
-    if raw_day is None:
-        return None
-    text = str(raw_day).strip()
-    if not text:
-        return None
-    try:
-        return date.fromisoformat(text[:10])
-    except ValueError:
-        return None
-
-
 def _build_timezone_obj(timezone_name: str):
     if str(timezone_name).upper() == "UTC":
         return UTC
@@ -135,270 +114,6 @@ def _build_timezone_obj(timezone_name: str):
         return ZoneInfo(timezone_name)
     except ZoneInfoNotFoundError:
         return UTC
-
-
-def _query_daily_aggregates_mysql(
-    *,
-    user_id: int,
-    timezone_name: str,
-    start_utc: datetime,
-    end_utc: datetime,
-) -> dict[date, dict[str, int]]:
-    mysql_timezone = "+00:00" if str(timezone_name).upper() == "UTC" else timezone_name
-    local_day_expr = db.func.date(
-        db.func.convert_tz(ReviewEvent.reviewed_at, "+00:00", mysql_timezone)
-    )
-    duration_expr = db.func.coalesce(
-        db.func.sum(
-            db.case(
-                (
-                    db.and_(
-                        ReviewEvent.duration_ms.isnot(None),
-                        ReviewEvent.duration_ms > 0,
-                    ),
-                    ReviewEvent.duration_ms,
-                ),
-                else_=0,
-            )
-        ),
-        0,
-    )
-
-    rows = (
-        db.session.query(
-            local_day_expr.label("local_day"),
-            db.func.count(ReviewEvent.id).label("cards"),
-            duration_expr.label("duration_ms"),
-        )
-        .filter(
-            ReviewEvent.user_id == user_id,
-            ReviewEvent.reviewed_at >= start_utc,
-            ReviewEvent.reviewed_at < end_utc,
-        )
-        .group_by(local_day_expr)
-        .all()
-    )
-
-    by_day: dict[date, dict[str, int]] = {}
-    for local_day, cards, duration_ms in rows:
-        parsed_day = _parse_sql_day(local_day)
-        if not parsed_day:
-            continue
-        by_day[parsed_day] = {
-            "cards": _safe_int(cards),
-            "duration_ms": max(0, _safe_int(duration_ms)),
-        }
-    return by_day
-
-
-def _query_daily_aggregates_python(
-    *,
-    user_id: int,
-    timezone_obj,
-    start_utc: datetime,
-    end_utc: datetime,
-) -> dict[date, dict[str, int]]:
-    rows = (
-        db.session.query(ReviewEvent.reviewed_at, ReviewEvent.duration_ms)
-        .filter(
-            ReviewEvent.user_id == user_id,
-            ReviewEvent.reviewed_at >= start_utc,
-            ReviewEvent.reviewed_at < end_utc,
-        )
-        .all()
-    )
-    by_day: dict[date, dict[str, int]] = {}
-    for reviewed_at, duration_ms in rows:
-        if reviewed_at is None:
-            continue
-        local_day = _utc_to_local_day(reviewed_at, timezone_obj)
-        bucket = by_day.setdefault(local_day, {"cards": 0, "duration_ms": 0})
-        bucket["cards"] += 1
-        duration = _safe_int(duration_ms)
-        if duration > 0:
-            bucket["duration_ms"] += duration
-    return by_day
-
-
-def _query_daily_aggregates(
-    *,
-    user_id: int,
-    timezone_name: str,
-    timezone_obj,
-    start_utc: datetime,
-    end_utc: datetime,
-) -> dict[date, dict[str, int]]:
-    dialect = db.session.get_bind().dialect.name if db.session.get_bind() is not None else ""
-    if dialect == "mysql":
-        return _query_daily_aggregates_mysql(
-            user_id=user_id,
-            timezone_name=timezone_name,
-            start_utc=start_utc,
-            end_utc=end_utc,
-        )
-    return _query_daily_aggregates_python(
-        user_id=user_id,
-        timezone_obj=timezone_obj,
-        start_utc=start_utc,
-        end_utc=end_utc,
-    )
-
-
-def _query_future_due_aggregates_mysql(
-    *,
-    user_id: int,
-    timezone_name: str,
-    start_utc: datetime,
-    end_utc: datetime,
-) -> dict[date, int]:
-    mysql_timezone = "+00:00" if str(timezone_name).upper() == "UTC" else timezone_name
-    local_day_expr = db.func.date(
-        db.func.convert_tz(VocabularyProgress.due_at, "+00:00", mysql_timezone)
-    )
-    rows = (
-        db.session.query(
-            local_day_expr.label("local_day"),
-            db.func.count(VocabularyProgress.id).label("due_cards"),
-        )
-        .filter(
-            VocabularyProgress.user_id == user_id,
-            VocabularyProgress.due_at.isnot(None),
-            VocabularyProgress.due_at >= start_utc,
-            VocabularyProgress.due_at < end_utc,
-            db.or_(VocabularyProgress.is_suspended.is_(False), VocabularyProgress.is_suspended.is_(None)),
-        )
-        .group_by(local_day_expr)
-        .all()
-    )
-
-    by_day: dict[date, int] = {}
-    for local_day, due_cards in rows:
-        parsed_day = _parse_sql_day(local_day)
-        if not parsed_day:
-            continue
-        by_day[parsed_day] = _safe_int(due_cards)
-    return by_day
-
-
-def _query_future_due_aggregates_python(
-    *,
-    user_id: int,
-    timezone_obj,
-    start_utc: datetime,
-    end_utc: datetime,
-) -> dict[date, int]:
-    rows = (
-        db.session.query(VocabularyProgress.due_at)
-        .filter(
-            VocabularyProgress.user_id == user_id,
-            VocabularyProgress.due_at.isnot(None),
-            VocabularyProgress.due_at >= start_utc,
-            VocabularyProgress.due_at < end_utc,
-            db.or_(VocabularyProgress.is_suspended.is_(False), VocabularyProgress.is_suspended.is_(None)),
-        )
-        .all()
-    )
-    by_day: dict[date, int] = {}
-    for (due_at,) in rows:
-        if due_at is None:
-            continue
-        local_day = _utc_to_local_day(due_at, timezone_obj)
-        by_day[local_day] = _safe_int(by_day.get(local_day)) + 1
-    return by_day
-
-
-def _query_future_due_aggregates(
-    *,
-    user_id: int,
-    timezone_name: str,
-    timezone_obj,
-    start_utc: datetime,
-    end_utc: datetime,
-) -> dict[date, int]:
-    dialect = db.session.get_bind().dialect.name if db.session.get_bind() is not None else ""
-    if dialect == "mysql":
-        return _query_future_due_aggregates_mysql(
-            user_id=user_id,
-            timezone_name=timezone_name,
-            start_utc=start_utc,
-            end_utc=end_utc,
-        )
-    return _query_future_due_aggregates_python(
-        user_id=user_id,
-        timezone_obj=timezone_obj,
-        start_utc=start_utc,
-        end_utc=end_utc,
-    )
-
-
-def _query_active_days_mysql(
-    *,
-    user_id: int,
-    timezone_name: str,
-    end_utc: datetime,
-) -> set[date]:
-    mysql_timezone = "+00:00" if str(timezone_name).upper() == "UTC" else timezone_name
-    local_day_expr = db.func.date(
-        db.func.convert_tz(ReviewEvent.reviewed_at, "+00:00", mysql_timezone)
-    )
-    rows = (
-        db.session.query(local_day_expr.label("local_day"))
-        .filter(
-            ReviewEvent.user_id == user_id,
-            ReviewEvent.reviewed_at < end_utc,
-        )
-        .group_by(local_day_expr)
-        .all()
-    )
-    result: set[date] = set()
-    for (local_day,) in rows:
-        parsed_day = _parse_sql_day(local_day)
-        if parsed_day:
-            result.add(parsed_day)
-    return result
-
-
-def _query_active_days_python(
-    *,
-    user_id: int,
-    timezone_obj,
-    end_utc: datetime,
-) -> set[date]:
-    rows = (
-        db.session.query(ReviewEvent.reviewed_at)
-        .filter(
-            ReviewEvent.user_id == user_id,
-            ReviewEvent.reviewed_at < end_utc,
-        )
-        .all()
-    )
-    result: set[date] = set()
-    for (reviewed_at,) in rows:
-        if reviewed_at is None:
-            continue
-        result.add(_utc_to_local_day(reviewed_at, timezone_obj))
-    return result
-
-
-def _query_active_days(
-    *,
-    user_id: int,
-    timezone_name: str,
-    timezone_obj,
-    end_utc: datetime,
-) -> set[date]:
-    dialect = db.session.get_bind().dialect.name if db.session.get_bind() is not None else ""
-    if dialect == "mysql":
-        return _query_active_days_mysql(
-            user_id=user_id,
-            timezone_name=timezone_name,
-            end_utc=end_utc,
-        )
-    return _query_active_days_python(
-        user_id=user_id,
-        timezone_obj=timezone_obj,
-        end_utc=end_utc,
-    )
 
 
 def _longest_streak_in_range(
@@ -443,17 +158,16 @@ def record_review_event(
     mode: str,
     reviewed_at: datetime | None = None,
     duration_ms: Any = None,
-    entry_id: int | None = None,
     deck_id: int | None = None,
     note_type_id: str | None = None,
 ) -> ReviewEvent:
     review_time = _ensure_naive_utc(reviewed_at or datetime.utcnow())
     normalized_mode = normalize_review_mode(mode)
     normalized_rating = str(rating or "").strip().lower() or "again"
-    event = ReviewEvent(
+
+    return create_review_event_record(
         user_id=user_id,
         card_id=str(card_id),
-        entry_id=entry_id,
         deck_id=deck_id,
         note_type_id=note_type_id,
         reviewed_at=review_time,
@@ -461,8 +175,6 @@ def record_review_event(
         rating=normalized_rating,
         mode=normalized_mode if normalized_mode in VALID_REVIEW_MODES else "review",
     )
-    db.session.add(event)
-    return event
 
 
 def build_stats_overview(
@@ -485,19 +197,20 @@ def build_stats_overview(
     year_start_utc = _local_start_to_utc_naive(year_start, timezone_obj)
     year_end_utc = _local_start_to_utc_naive(date(selected_year + 1, 1, 1), timezone_obj)
 
-    day_map = _query_daily_aggregates(
+    day_map = query_daily_review_aggregates(
         user_id=user_id,
         timezone_name=effective_timezone_name,
         timezone_obj=timezone_obj,
         start_utc=year_start_utc,
         end_utc=year_end_utc,
     )
+
     due_day_map: dict[date, int] = {}
     if selected_year == today_local.year:
         future_start_local = today_local + timedelta(days=1)
         if future_start_local <= year_end:
             future_start_utc = _local_start_to_utc_naive(future_start_local, timezone_obj)
-            due_day_map = _query_future_due_aggregates(
+            due_day_map = query_future_due_day_counts(
                 user_id=user_id,
                 timezone_name=effective_timezone_name,
                 timezone_obj=timezone_obj,
@@ -507,7 +220,7 @@ def build_stats_overview(
 
     today_start_utc = _local_start_to_utc_naive(today_local, timezone_obj)
     tomorrow_start_utc = _local_start_to_utc_naive(today_local + timedelta(days=1), timezone_obj)
-    today_map = _query_daily_aggregates(
+    today_map = query_daily_review_aggregates(
         user_id=user_id,
         timezone_name=effective_timezone_name,
         timezone_obj=timezone_obj,
@@ -552,7 +265,7 @@ def build_stats_overview(
         days_learned_percent = 0.0
         longest_streak_days = 0
 
-    all_active_days = _query_active_days(
+    all_active_days = query_active_review_days(
         user_id=user_id,
         timezone_name=effective_timezone_name,
         timezone_obj=timezone_obj,

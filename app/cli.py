@@ -15,12 +15,11 @@ from flask import Flask
 from app.services.flashcard_legacy import ensure_legacy_note_type
 from app.services.user_roles import ensure_default_user_roles
 from models import db
-from models.flashcard import Card, DeckMarketplaceItem, LegacyMigrationMap, Note
+from models.flashcard import Card, DeckMarketplaceItem, Note
 from models.user import User
 from models.user_role import UserRole
-from models.vocabulary_deck import VocabularyDeck
-from models.vocabulary_entry import VocabularyEntry
-from models.vocabulary_progress import VocabularyProgress
+from models.deck import Deck
+from models.card_progress import CardProgress
 
 SEED_REQUIRED_FIELDS = ("deck", "word")
 SEED_OPTIONAL_FIELDS = (
@@ -47,7 +46,6 @@ SEED_SUPPORTED_SUFFIXES = {".tsv", ".csv"}
 class SeedStats:
     created_decks: int = 0
     seeded_files: int = 0
-    created_entries: int = 0
     created_notes: int = 0
     created_cards: int = 0
     replaced_files: int = 0
@@ -66,6 +64,37 @@ def register_cli_commands(app: Flask) -> None:
         roles = UserRole.query.order_by(UserRole.position.asc(), UserRole.id.asc()).all()
         codes = ", ".join(role.code for role in roles)
         click.echo(f"Done. Seeded roles: {codes}")
+
+    @app.cli.command("dev-purge-data")
+    @click.option("--yes", is_flag=True, default=False, help="Confirm destructive purge.")
+    def dev_purge_data(yes: bool) -> None:
+        """Delete all application rows while keeping schema/migrations."""
+        if not yes:
+            raise click.ClickException("Refusing to purge data without --yes")
+
+        bind = db.session.get_bind()
+        dialect = bind.dialect.name if bind is not None else ""
+        is_mysql = str(dialect).lower().startswith("mysql")
+
+        try:
+            if is_mysql:
+                db.session.execute(db.text("SET FOREIGN_KEY_CHECKS=0"))
+
+            for table in reversed(db.metadata.sorted_tables):
+                # Alembic migration tracking (if present in metadata) must be preserved.
+                if table.name == "alembic_version":
+                    continue
+                db.session.execute(table.delete())
+
+            db.session.commit()
+            click.echo("Done. Purged all application data rows.")
+        except Exception as exc:  # pragma: no cover - defensive rollback path
+            db.session.rollback()
+            raise click.ClickException(f"Failed to purge data: {exc}") from exc
+        finally:
+            if is_mysql:
+                db.session.execute(db.text("SET FOREIGN_KEY_CHECKS=1"))
+                db.session.commit()
 
     @app.cli.command("vocab-seed")
     @click.option(
@@ -154,120 +183,11 @@ def register_cli_commands(app: Flask) -> None:
         click.echo(
             "Done. "
             f"decks+{stats.created_decks}, files_seeded={stats.seeded_files}, "
-            f"entries+{stats.created_entries}, notes+{stats.created_notes}, cards+{stats.created_cards}, "
+            f"notes+{stats.created_notes}, cards+{stats.created_cards}, "
             f"replaced_files={stats.replaced_files}, "
             f"skipped_files={stats.skipped_files}, "
             f"shared_decks={stats.shared_decks}"
         )
-
-    @app.cli.command("flashcard-migrate-legacy")
-    @click.option("--user-id", type=int, default=None, help="Target owner user id for migrated notes.")
-    @click.option("--sample-size", type=int, default=50, show_default=True, help="Sample size for data verification.")
-    @click.option("--dry-run", is_flag=True, default=False, help="Run migration checks then rollback.")
-    def flashcard_migrate_legacy(user_id: int | None, sample_size: int, dry_run: bool) -> None:
-        """Backfill legacy vocabulary entries into flashcard v2 note/card model."""
-        target_user = User.query.get(user_id) if user_id else User.query.order_by(User.id.asc()).first()
-        if target_user is None:
-            raise click.ClickException("No user found. Create at least one user before migration.")
-
-        note_type, template = ensure_legacy_note_type(db.session, target_user.id)
-        click.echo(f"Using user={target_user.id}, note_type={note_type.id}, template={template.id}")
-
-        legacy_entries = VocabularyEntry.query.order_by(VocabularyEntry.id.asc()).all()
-        existing_maps = {
-            row.entry_id: row
-            for row in LegacyMigrationMap.query.all()
-        }
-        created_notes = 0
-        created_cards = 0
-
-        for entry in legacy_entries:
-            if entry.id in existing_maps:
-                continue
-            note = Note(
-                note_type_id=note_type.id,
-                user_id=target_user.id,
-                deck_id=entry.deck_id,
-                field_values=_legacy_entry_to_field_values(entry),
-                tags=[],
-            )
-            db.session.add(note)
-            db.session.flush()
-
-            card = Card(
-                note_id=note.id,
-                template_id=template.id,
-                queue="new",
-            )
-            db.session.add(card)
-            db.session.flush()
-
-            db.session.add(
-                LegacyMigrationMap(entry_id=entry.id, note_id=note.id, card_id=card.id)
-            )
-            created_notes += 1
-            created_cards += 1
-
-        db.session.flush()
-
-        migration_map = {row.entry_id: row.card_id for row in LegacyMigrationMap.query.all()}
-        progress_rows = VocabularyProgress.query.filter(VocabularyProgress.entry_id.isnot(None)).all()
-        mapped_progress = 0
-        for progress in progress_rows:
-            mapped_card_id = migration_map.get(progress.entry_id)
-            if mapped_card_id and progress.new_card_id != mapped_card_id:
-                progress.new_card_id = mapped_card_id
-                mapped_progress += 1
-
-        db.session.flush()
-
-        total_entries = VocabularyEntry.query.count()
-        total_notes = Note.query.filter_by(note_type_id=note_type.id, user_id=target_user.id).count()
-        total_progress = VocabularyProgress.query.filter(VocabularyProgress.entry_id.isnot(None)).count()
-        mapped_progress_total = (
-            VocabularyProgress.query.filter(
-                VocabularyProgress.entry_id.isnot(None),
-                VocabularyProgress.new_card_id.isnot(None),
-            ).count()
-        )
-
-        sample_rows = (
-            VocabularyEntry.query.order_by(VocabularyEntry.id.asc()).limit(max(0, sample_size)).all()
-        )
-        mismatches = 0
-        for entry in sample_rows:
-            map_row = LegacyMigrationMap.query.filter_by(entry_id=entry.id).first()
-            if map_row is None:
-                mismatches += 1
-                continue
-            note = Note.query.get(map_row.note_id)
-            if note is None:
-                mismatches += 1
-                continue
-            expected = _legacy_entry_to_field_values(entry)
-            for key, value in expected.items():
-                if (note.field_values or {}).get(key, "") != (value or ""):
-                    mismatches += 1
-                    break
-
-        click.echo(
-            "Verification: "
-            f"entries={total_entries}, notes={total_notes}, "
-            f"progress={total_progress}, mapped_progress={mapped_progress_total}, "
-            f"sample_mismatches={mismatches}"
-        )
-        click.echo(
-            "Changes: "
-            f"created_notes={created_notes}, created_cards={created_cards}, mapped_progress_updates={mapped_progress}"
-        )
-
-        if dry_run:
-            db.session.rollback()
-            click.echo("Dry-run complete. Rolled back all changes.")
-        else:
-            db.session.commit()
-            click.echo("Legacy flashcard migration committed.")
-
 
 def _resolve_seed_path(seed_path: str) -> Path:
     candidate = Path(seed_path)
@@ -306,11 +226,11 @@ def _natural_sort_key(path_obj: Path) -> List[tuple[int, object]]:
 
 
 def _next_deck_position(parent_deck_id: int | None) -> int:
-    query = db.session.query(db.func.max(VocabularyDeck.position))
+    query = db.session.query(db.func.max(Deck.position))
     if parent_deck_id is None:
-        max_pos = query.filter(VocabularyDeck.parent_id.is_(None)).scalar()
+        max_pos = query.filter(Deck.parent_id.is_(None)).scalar()
     else:
-        max_pos = query.filter(VocabularyDeck.parent_id == parent_deck_id).scalar()
+        max_pos = query.filter(Deck.parent_id == parent_deck_id).scalar()
     return (max_pos or 0) + 1
 
 
@@ -321,13 +241,13 @@ def _get_or_create_deck(
     name: str,
     description: str | None,
     stats: SeedStats,
-) -> tuple[VocabularyDeck, bool]:
+) -> tuple[Deck, bool]:
     deck = (
-        VocabularyDeck.query.filter(
-            VocabularyDeck.parent_id == parent_deck_id,
-            VocabularyDeck.name == name,
+        Deck.query.filter(
+            Deck.parent_id == parent_deck_id,
+            Deck.name == name,
         )
-        .order_by(VocabularyDeck.id.asc())
+        .order_by(Deck.id.asc())
         .first()
     )
     if deck:
@@ -335,7 +255,7 @@ def _get_or_create_deck(
             deck.owner_user_id = owner_user_id
         return deck, False
 
-    deck = VocabularyDeck(
+    deck = Deck(
         parent_id=parent_deck_id,
         owner_user_id=owner_user_id,
         name=name,
@@ -357,7 +277,7 @@ def _seed_dir_to_deck(
     template_id: str,
     replace_existing: bool,
     stats: SeedStats,
-) -> VocabularyDeck:
+) -> Deck:
     deck_name = directory.name.strip()
     if not deck_name:
         return
@@ -429,8 +349,12 @@ def _seed_file_to_leaf_deck(
     )
 
     existing_count = (
-        db.session.query(db.func.count(VocabularyEntry.id))
-        .filter(VocabularyEntry.deck_id == leaf_deck.id)
+        db.session.query(db.func.count(Note.id))
+        .filter(
+            Note.deck_id == leaf_deck.id,
+            Note.user_id == owner_user_id,
+            Note.note_type_id == note_type_id,
+        )
         .scalar()
         or 0
     )
@@ -439,16 +363,6 @@ def _seed_file_to_leaf_deck(
         click.echo(f"  Skip file (already seeded): {file_path.name}")
         return
     if existing_count and replace_existing:
-        existing_entry_ids = [
-            row[0]
-            for row in db.session.query(VocabularyEntry.id)
-            .filter(VocabularyEntry.deck_id == leaf_deck.id)
-            .all()
-        ]
-        if existing_entry_ids:
-            LegacyMigrationMap.query.filter(
-                LegacyMigrationMap.entry_id.in_(existing_entry_ids)
-            ).delete(synchronize_session=False)
         existing_notes = (
             Note.query.filter(
                 Note.deck_id == leaf_deck.id,
@@ -457,9 +371,23 @@ def _seed_file_to_leaf_deck(
             )
             .all()
         )
-        for note in existing_notes:
-            db.session.delete(note)
-        VocabularyEntry.query.filter(VocabularyEntry.deck_id == leaf_deck.id).delete()
+        existing_note_ids = [note.id for note in existing_notes]
+        existing_card_ids: list[str] = []
+        if existing_note_ids:
+            existing_card_ids = [
+                row[0]
+                for row in db.session.query(Card.id)
+                .filter(Card.note_id.in_(existing_note_ids))
+                .all()
+                if row and row[0]
+            ]
+        if existing_card_ids:
+            CardProgress.query.filter(
+                CardProgress.card_id.in_(existing_card_ids)
+            ).delete(synchronize_session=False)
+        if existing_note_ids:
+            Card.query.filter(Card.note_id.in_(existing_note_ids)).delete(synchronize_session=False)
+            Note.query.filter(Note.id.in_(existing_note_ids)).delete(synchronize_session=False)
         stats.replaced_files += 1
         click.echo(f"  Replace file deck: {file_path.name}")
 
@@ -469,41 +397,14 @@ def _seed_file_to_leaf_deck(
         click.echo(f"  Skip empty file: {file_path.name}")
         return
 
-    entries = []
-    for row in rows:
-        entry = VocabularyEntry(
-            deck_id=leaf_deck.id,
-            lesson_id=None,
-            deck=row.get("deck") or "",
-            word=row.get("word") or "",
-            hanviet=row.get("hanviet"),
-            reading=row.get("reading"),
-            translation_vi=row.get("translation_vi"),
-            meaning_jp=row.get("meaning_jp"),
-            meaning_vi=row.get("meaning_vi"),
-            usage_jp=row.get("usage_jp"),
-            usage_vi=row.get("usage_vi"),
-            example_jp=row.get("example_jp"),
-            example_vi=row.get("example_vi"),
-            additional_note_jp=row.get("additional_note_jp"),
-            additional_note_vi=row.get("additional_note_vi"),
-            image=row.get("image"),
-            diagram=row.get("diagram"),
-            word_audio=row.get("word_audio"),
-            example_audio=row.get("example_audio"),
-        )
-        entries.append(entry)
-
-    db.session.add_all(entries)
-
     notes: list[Note] = []
-    for entry in entries:
+    for row in rows:
         notes.append(
             Note(
                 note_type_id=note_type_id,
                 user_id=owner_user_id,
                 deck_id=leaf_deck.id,
-                field_values=_legacy_entry_to_field_values(entry),
+                field_values=_seed_row_to_field_values(row),
                 tags=[],
             )
         )
@@ -516,29 +417,16 @@ def _seed_file_to_leaf_deck(
             Card(
                 note_id=note.id,
                 template_id=template_id,
-                queue="new",
             )
         )
     db.session.add_all(cards)
     db.session.flush()
 
-    migration_maps: list[LegacyMigrationMap] = []
-    for entry, note, card in zip(entries, notes, cards):
-        migration_maps.append(
-            LegacyMigrationMap(
-                entry_id=entry.id,
-                note_id=note.id,
-                card_id=card.id,
-            )
-        )
-    db.session.add_all(migration_maps)
-
-    stats.created_entries += len(entries)
     stats.created_notes += len(notes)
     stats.created_cards += len(cards)
     stats.seeded_files += 1
     deck_state = "Created" if created else "Updated"
-    click.echo(f"  {deck_state} leaf deck: {leaf_name} ({len(entries)} rows)")
+    click.echo(f"  {deck_state} leaf deck: {leaf_name} ({len(rows)} rows)")
 
 
 def _count_entries_in_deck_subtree(deck_id: int) -> int:
@@ -547,15 +435,15 @@ def _count_entries_in_deck_subtree(deck_id: int) -> int:
     while stack:
         current = stack.pop()
         total += (
-            db.session.query(db.func.count(VocabularyEntry.id))
-            .filter(VocabularyEntry.deck_id == current)
+            db.session.query(db.func.count(Note.id))
+            .filter(Note.deck_id == current)
             .scalar()
             or 0
         )
         child_ids = [
             row[0]
-            for row in db.session.query(VocabularyDeck.id)
-            .filter(VocabularyDeck.parent_id == current)
+            for row in db.session.query(Deck.id)
+            .filter(Deck.parent_id == current)
             .all()
         ]
         stack.extend(child_ids)
@@ -564,7 +452,7 @@ def _count_entries_in_deck_subtree(deck_id: int) -> int:
 
 def _upsert_seeded_deck_marketplace_item(
     *,
-    deck: VocabularyDeck,
+    deck: Deck,
     owner_user_id: int,
     note_type_id: str,
     sample_cards_count: int,
@@ -655,23 +543,23 @@ def _load_seed_rows(file_path: Path) -> List[Dict[str, str | None]]:
         return rows
 
 
-def _legacy_entry_to_field_values(entry: VocabularyEntry) -> Dict[str, str]:
-    """Map VocabularyEntry columns into default Flama note field_values JSON."""
+def _seed_row_to_field_values(row: Dict[str, str | None]) -> Dict[str, str]:
+    """Map seed CSV row columns into default Flama note field_values JSON."""
     return {
-        "word": entry.word or "",
-        "hanviet": entry.hanviet or "",
-        "reading": entry.reading or "",
-        "translation_vi": entry.translation_vi or "",
-        "meaning_jp": entry.meaning_jp or "",
-        "meaning_vi": entry.meaning_vi or "",
-        "usage_jp": entry.usage_jp or "",
-        "usage_vi": entry.usage_vi or "",
-        "example_jp": entry.example_jp or "",
-        "example_vi": entry.example_vi or "",
-        "additional_note_jp": entry.additional_note_jp or "",
-        "additional_note_vi": entry.additional_note_vi or "",
-        "image": entry.image or "",
-        "diagram": entry.diagram or "",
-        "word_audio": entry.word_audio or "",
-        "example_audio": entry.example_audio or "",
+        "word": row.get("word") or "",
+        "hanviet": row.get("hanviet") or "",
+        "reading": row.get("reading") or "",
+        "translation_vi": row.get("translation_vi") or "",
+        "meaning_jp": row.get("meaning_jp") or "",
+        "meaning_vi": row.get("meaning_vi") or "",
+        "usage_jp": row.get("usage_jp") or "",
+        "usage_vi": row.get("usage_vi") or "",
+        "example_jp": row.get("example_jp") or "",
+        "example_vi": row.get("example_vi") or "",
+        "additional_note_jp": row.get("additional_note_jp") or "",
+        "additional_note_vi": row.get("additional_note_vi") or "",
+        "image": row.get("image") or "",
+        "diagram": row.get("diagram") or "",
+        "word_audio": row.get("word_audio") or "",
+        "example_audio": row.get("example_audio") or "",
     }

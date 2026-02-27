@@ -36,6 +36,7 @@ Script này sẽ chạy tuần tự:
 
 ```bash
 flask --app wsgi.py db upgrade
+flask --app wsgi.py dev-purge-data --yes
 python scripts/seed_flama_template.py
 flask --app wsgi.py user-role-seed
 flask --app wsgi.py vocab-seed --path "static/seed_data" --replace-lessons
@@ -100,6 +101,11 @@ flask --app wsgi.py run --host=0.0.0.0 --port=4789
 - Chạy migration:
 ```bash
 flask --app wsgi.py db upgrade
+```
+
+- Purge toàn bộ dữ liệu ứng dụng (giữ schema):
+```bash
+flask --app wsgi.py dev-purge-data --yes
 ```
 
 - Reseed full DB (khuyên dùng khi xóa/tạo lại DB):

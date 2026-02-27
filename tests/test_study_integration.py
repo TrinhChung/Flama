@@ -6,10 +6,7 @@ from datetime import datetime, timedelta
 from app import create_app
 from models import db
 from models.user import User
-from models.vocabulary_deck import VocabularyDeck
-from models.vocabulary_entry import VocabularyEntry
-from models.vocabulary_progress import VocabularyProgress
-from models.vocabulary_structure import VocabularyLevel, VocabularyTopic, VocabularyLesson
+from models.card_progress import CardProgress
 
 
 class StudyCounterIntegrationTest(unittest.TestCase):
@@ -29,45 +26,8 @@ class StudyCounterIntegrationTest(unittest.TestCase):
             db.session.add(user)
             db.session.flush()
             self.user_id = user.id
-            
-            # Create deck and entries
-            level = VocabularyLevel(name="Test Level")
-            db.session.add(level)
-            db.session.flush()
-            
-            topic = VocabularyTopic(level_id=level.id, name="Test Topic")
-            db.session.add(topic)
-            db.session.flush()
-            
-            lesson = VocabularyLesson(
-                topic_id=topic.id,
-                title="Lesson 1"
-            )
-            db.session.add(lesson)
-            db.session.flush()
-            self.lesson_id = lesson.id
-            
-            deck = VocabularyDeck(name="Test Deck")
-            db.session.add(deck)
-            db.session.flush()
-            self.deck_id = deck.id
-            
-            # Create 5 vocabulary entries
-            self.entry_ids = []
-            for i in range(5):
-                entry = VocabularyEntry(
-                    lesson_id=lesson.id,
-                    deck_id=deck.id,
-                    deck="Test Deck",
-                    word=f"word{i}",
-                    reading=f"reading{i}",
-                    translation_vi=f"translation{i}"
-                )
-                db.session.add(entry)
-                db.session.flush()
-                self.entry_ids.append(entry.id)
-            
             db.session.commit()
+            self.card_ids = [f"card-{i}" for i in range(5)]
 
     def tearDown(self):
         """Clean up."""
@@ -78,30 +38,25 @@ class StudyCounterIntegrationTest(unittest.TestCase):
     def test_new_cards_show_in_counter(self):
         """New entries should show in New counter before any study."""
         with self.app.app_context():
-            deck = VocabularyDeck.query.filter_by(id=self.deck_id).first()
-            entries = VocabularyEntry.query.filter_by(deck_id=deck.id).all()
-            
-            # All entries should have no progress record yet
-            for entry in entries:
-                progress = VocabularyProgress.query.filter_by(
+            # All cards should have no progress record yet
+            for card_id in self.card_ids:
+                progress = CardProgress.query.filter_by(
                     user_id=self.user_id,
-                    entry_id=entry.id
+                    card_id=card_id
                 ).first()
                 self.assertIsNone(progress)
             
             # They should be counted as "new"
-            new_count = len(entries)
+            new_count = len(self.card_ids)
             self.assertEqual(new_count, 5)
 
     def test_learning_card_after_good_answer(self):
         """After answering 'good' to learning step, card should be learning."""
         with self.app.app_context():
-            entry = VocabularyEntry.query.filter_by(id=self.entry_ids[0]).first()
-            
             # Create initial progress as "new"
-            progress = VocabularyProgress(
+            progress = CardProgress(
                 user_id=self.user_id,
-                entry_id=entry.id,
+                card_id=self.card_ids[0],
                 queue="new"
             )
             db.session.add(progress)
@@ -121,9 +76,9 @@ class StudyCounterIntegrationTest(unittest.TestCase):
             db.session.commit()
             
             # Reload and check
-            progress = VocabularyProgress.query.filter_by(
+            progress = CardProgress.query.filter_by(
                 user_id=self.user_id,
-                entry_id=entry.id
+                card_id=self.card_ids[0]
             ).first()
             
             # Should be learning now
@@ -137,13 +92,11 @@ class StudyCounterIntegrationTest(unittest.TestCase):
         with self.app.app_context():
             from app.services.anki_scheduler import default_deck_options, applyAnswer
             from app.routes.vocabulary import _card_state_from_progress, _apply_card_state_to_progress
-            
-            entry = VocabularyEntry.query.filter_by(id=self.entry_ids[1]).first()
-            
+
             # Create progress as learning
-            progress = VocabularyProgress(
+            progress = CardProgress(
                 user_id=self.user_id,
-                entry_id=entry.id,
+                card_id=self.card_ids[1],
                 queue="learning",
                 step_index=1,  # At last learning step
                 due_at=datetime.utcnow() + timedelta(minutes=10)
@@ -162,9 +115,9 @@ class StudyCounterIntegrationTest(unittest.TestCase):
             db.session.commit()
             
             # Reload and check
-            progress = VocabularyProgress.query.filter_by(
+            progress = CardProgress.query.filter_by(
                 user_id=self.user_id,
-                entry_id=entry.id
+                card_id=self.card_ids[1]
             ).first()
             
             # Should be review now

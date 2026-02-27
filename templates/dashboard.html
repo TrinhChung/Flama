@@ -991,6 +991,8 @@
     const baseStudyUrl = studyTabBtn ? studyTabBtn.dataset.baseStudyUrl : '/vocabulary/study/deck/';
     const statsTabBtn = document.getElementById('stats-tab-btn');
     const baseStatsUrl = statsTabBtn ? statsTabBtn.dataset.baseStatsUrl : '/statistics';
+    const importTabBtn = document.getElementById('import-tab-btn');
+    const baseImportUrl = importTabBtn ? importTabBtn.dataset.baseImportUrl : '/flashcards/import';
 
     function getFirstVisibleDeckId() {
       const firstRow = rows.find(r => !r.classList.contains('is-collapsed'));
@@ -1011,6 +1013,14 @@
           statsTabBtn.href = `${baseStatsUrl}?scope=deck&deck_id=${encodeURIComponent(id)}`;
         } else {
           statsTabBtn.href = baseStatsUrl;
+        }
+      }
+
+      if (importTabBtn) {
+        if (id) {
+          importTabBtn.href = `${baseImportUrl}?deck_id=${encodeURIComponent(id)}`;
+        } else {
+          importTabBtn.href = baseImportUrl;
         }
       }
 

@@ -10,9 +10,8 @@ from app.services.stats_overview import build_stats_overview
 from models import db
 from models.flashcard import ReviewEvent
 from models.user import User
-from models.vocabulary_deck import VocabularyDeck
-from models.vocabulary_entry import VocabularyEntry
-from models.vocabulary_progress import VocabularyProgress
+from models.deck import Deck
+from models.card_progress import CardProgress
 
 
 class StatsOverviewTests(unittest.TestCase):
@@ -26,7 +25,6 @@ class StatsOverviewTests(unittest.TestCase):
         )
         self.client = self.app.test_client()
         self._card_seq = 0
-        self._entry_seq = 0
 
         with self.app.app_context():
             db.create_all()
@@ -34,7 +32,7 @@ class StatsOverviewTests(unittest.TestCase):
             user.set_password("password")
             db.session.add(user)
             db.session.flush()
-            deck = VocabularyDeck(name="Stats Deck", owner_user_id=user.id)
+            deck = Deck(name="Stats Deck", owner_user_id=user.id)
             db.session.add(deck)
             db.session.commit()
             self.user_id = user.id
@@ -51,7 +49,6 @@ class StatsOverviewTests(unittest.TestCase):
             ReviewEvent(
                 user_id=self.user_id,
                 card_id=f"card-{self._card_seq}",
-                entry_id=None,
                 deck_id=None,
                 note_type_id=None,
                 reviewed_at=when_utc,
@@ -68,17 +65,6 @@ class StatsOverviewTests(unittest.TestCase):
             follow_redirects=True,
         )
 
-    def _new_entry(self):
-        self._entry_seq += 1
-        entry = VocabularyEntry(
-            deck_id=self.deck_id,
-            deck="Stats Deck",
-            word=f"overview-word-{self._entry_seq}",
-        )
-        db.session.add(entry)
-        db.session.flush()
-        return entry
-
     def _add_progress(
         self,
         *,
@@ -86,11 +72,9 @@ class StatsOverviewTests(unittest.TestCase):
         queue: str = "review",
         is_suspended: bool = False,
     ):
-        entry = self._new_entry()
         db.session.add(
-            VocabularyProgress(
+            CardProgress(
                 user_id=self.user_id,
-                entry_id=entry.id,
                 queue=queue,
                 due_at=due_at,
                 interval_days=1,
