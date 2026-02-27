@@ -18,8 +18,8 @@ from models import db
 from models.flashcard import Card, DeckMarketplaceItem, Note
 from models.user import User
 from models.user_role import UserRole
-from models.vocabulary_deck import VocabularyDeck
-from models.vocabulary_progress import VocabularyProgress
+from models.deck import Deck
+from models.card_progress import CardProgress
 
 SEED_REQUIRED_FIELDS = ("deck", "word")
 SEED_OPTIONAL_FIELDS = (
@@ -226,11 +226,11 @@ def _natural_sort_key(path_obj: Path) -> List[tuple[int, object]]:
 
 
 def _next_deck_position(parent_deck_id: int | None) -> int:
-    query = db.session.query(db.func.max(VocabularyDeck.position))
+    query = db.session.query(db.func.max(Deck.position))
     if parent_deck_id is None:
-        max_pos = query.filter(VocabularyDeck.parent_id.is_(None)).scalar()
+        max_pos = query.filter(Deck.parent_id.is_(None)).scalar()
     else:
-        max_pos = query.filter(VocabularyDeck.parent_id == parent_deck_id).scalar()
+        max_pos = query.filter(Deck.parent_id == parent_deck_id).scalar()
     return (max_pos or 0) + 1
 
 
@@ -241,13 +241,13 @@ def _get_or_create_deck(
     name: str,
     description: str | None,
     stats: SeedStats,
-) -> tuple[VocabularyDeck, bool]:
+) -> tuple[Deck, bool]:
     deck = (
-        VocabularyDeck.query.filter(
-            VocabularyDeck.parent_id == parent_deck_id,
-            VocabularyDeck.name == name,
+        Deck.query.filter(
+            Deck.parent_id == parent_deck_id,
+            Deck.name == name,
         )
-        .order_by(VocabularyDeck.id.asc())
+        .order_by(Deck.id.asc())
         .first()
     )
     if deck:
@@ -255,7 +255,7 @@ def _get_or_create_deck(
             deck.owner_user_id = owner_user_id
         return deck, False
 
-    deck = VocabularyDeck(
+    deck = Deck(
         parent_id=parent_deck_id,
         owner_user_id=owner_user_id,
         name=name,
@@ -277,7 +277,7 @@ def _seed_dir_to_deck(
     template_id: str,
     replace_existing: bool,
     stats: SeedStats,
-) -> VocabularyDeck:
+) -> Deck:
     deck_name = directory.name.strip()
     if not deck_name:
         return
@@ -382,8 +382,8 @@ def _seed_file_to_leaf_deck(
                 if row and row[0]
             ]
         if existing_card_ids:
-            VocabularyProgress.query.filter(
-                VocabularyProgress.new_card_id.in_(existing_card_ids)
+            CardProgress.query.filter(
+                CardProgress.card_id.in_(existing_card_ids)
             ).delete(synchronize_session=False)
         if existing_note_ids:
             Card.query.filter(Card.note_id.in_(existing_note_ids)).delete(synchronize_session=False)
@@ -417,7 +417,6 @@ def _seed_file_to_leaf_deck(
             Card(
                 note_id=note.id,
                 template_id=template_id,
-                queue="new",
             )
         )
     db.session.add_all(cards)
@@ -443,8 +442,8 @@ def _count_entries_in_deck_subtree(deck_id: int) -> int:
         )
         child_ids = [
             row[0]
-            for row in db.session.query(VocabularyDeck.id)
-            .filter(VocabularyDeck.parent_id == current)
+            for row in db.session.query(Deck.id)
+            .filter(Deck.parent_id == current)
             .all()
         ]
         stack.extend(child_ids)
@@ -453,7 +452,7 @@ def _count_entries_in_deck_subtree(deck_id: int) -> int:
 
 def _upsert_seeded_deck_marketplace_item(
     *,
-    deck: VocabularyDeck,
+    deck: Deck,
     owner_user_id: int,
     note_type_id: str,
     sample_cards_count: int,

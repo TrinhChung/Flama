@@ -8,11 +8,18 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from flask_login import current_user
 
+from app.controllers.review_event_controller import query_today_review_summary
+from app.controllers.deck_controller import (
+    collect_subtree_ids,
+    query_accessible_stats_decks,
+)
+from app.controllers.card_progress_controller import (
+    aggregate_future_due_offsets_mysql,
+    query_due_queue_rows_python,
+    query_interval_days_rows,
+)
 from app.utils.permissions import is_admin_user
 from models import db
-from models.flashcard import Card, Note, ReviewEvent
-from models.vocabulary_deck import VocabularyDeck
-from models.vocabulary_progress import VocabularyProgress
 
 UTC = timezone.utc
 DEFAULT_TIMEZONE = "UTC"
@@ -94,91 +101,19 @@ def _normalize_future_range(future_range: Any) -> str:
     return "30"
 
 
-def _query_accessible_stats_decks(user_id: int) -> list[VocabularyDeck]:
-    query = VocabularyDeck.query
-    if is_admin_user(current_user):
-        query = query.filter(
-            db.or_(
-                VocabularyDeck.owner_user_id == user_id,
-                VocabularyDeck.owner_user_id.is_(None),
-            )
-        )
-    else:
-        query = query.filter(VocabularyDeck.owner_user_id == user_id)
-
-    decks = (
-        query.order_by(
-            VocabularyDeck.parent_id.isnot(None),
-            VocabularyDeck.position,
-            VocabularyDeck.created_at,
-            VocabularyDeck.id,
-        )
-        .all()
-    )
-    if decks:
-        return decks
-
-    # Backward-compat fallback for decks created before owner_user_id was populated.
-    all_decks = (
-        VocabularyDeck.query.order_by(
-            VocabularyDeck.parent_id.isnot(None),
-            VocabularyDeck.position,
-            VocabularyDeck.created_at,
-            VocabularyDeck.id,
-        )
-        .all()
-    )
-    note_deck_rows = (
-        db.session.query(Note.deck_id)
-        .select_from(VocabularyProgress)
-        .join(Card, VocabularyProgress.new_card_id == Card.id)
-        .join(Note, Card.note_id == Note.id)
-        .filter(
-            VocabularyProgress.user_id == user_id,
-            Note.deck_id.isnot(None),
-        )
-        .distinct()
-        .all()
-    )
-    visible_ids = {
-        int(row[0])
-        for row in note_deck_rows
-        if row and row[0] is not None
-    }
-    return [deck for deck in all_decks if deck.id in visible_ids]
-
-
 def list_stats_decks(user_id: int) -> list[dict[str, Any]]:
+    decks = query_accessible_stats_decks(
+        user_id=user_id,
+        admin_mode=is_admin_user(current_user),
+    )
     return [
         {
             "id": int(deck.id),
             "name": deck.name,
             "parent_id": int(deck.parent_id) if deck.parent_id is not None else None,
         }
-        for deck in _query_accessible_stats_decks(user_id)
+        for deck in decks
     ]
-
-
-def _collect_subtree_ids(root_deck_id: int | None) -> list[int]:
-    if root_deck_id is None:
-        return []
-
-    seen: set[int] = set()
-    frontier: set[int] = {int(root_deck_id)}
-    while frontier:
-        current_ids = {deck_id for deck_id in frontier if deck_id not in seen}
-        if not current_ids:
-            break
-
-        seen.update(current_ids)
-        child_rows = (
-            db.session.query(VocabularyDeck.id)
-            .filter(VocabularyDeck.parent_id.in_(current_ids))
-            .all()
-        )
-        frontier = {int(row[0]) for row in child_rows if row and row[0] is not None}
-
-    return sorted(seen)
 
 
 def _resolve_scope_deck_ids(*, scope: str, deck_id: int | None) -> list[int] | None:
@@ -186,7 +121,7 @@ def _resolve_scope_deck_ids(*, scope: str, deck_id: int | None) -> list[int] | N
         return None
     if deck_id is None:
         return []
-    return _collect_subtree_ids(deck_id)
+    return collect_subtree_ids(deck_id)
 
 
 def _future_window_end_offset(future_range: str) -> int | None:
@@ -197,72 +132,6 @@ def _future_window_end_offset(future_range: str) -> int | None:
     if future_range == "365":
         return 364
     return None
-
-
-def _base_progress_rows_query(*, user_id: int):
-    return (
-        db.session.query(
-            VocabularyProgress.due_at,
-            VocabularyProgress.queue,
-            VocabularyProgress.interval_days,
-            VocabularyProgress.is_suspended,
-            Note.deck_id.label("note_deck_id"),
-        )
-        .select_from(VocabularyProgress)
-        .outerjoin(Card, VocabularyProgress.new_card_id == Card.id)
-        .outerjoin(Note, Card.note_id == Note.id)
-        .filter(VocabularyProgress.user_id == user_id)
-    )
-
-
-def _apply_scope_filter(query, scope_deck_ids: list[int] | None):
-    if scope_deck_ids is None:
-        return query
-    if not scope_deck_ids:
-        return query.filter(db.text("1=0"))
-    return query.filter(Note.deck_id.in_(scope_deck_ids))
-
-
-def _query_today_summary(
-    *,
-    user_id: int,
-    scope_deck_ids: list[int] | None,
-    today_start_utc: datetime,
-    tomorrow_start_utc: datetime,
-) -> tuple[int, int]:
-    duration_expr = db.func.coalesce(
-        db.func.sum(
-            db.case(
-                (
-                    db.and_(
-                        ReviewEvent.duration_ms.isnot(None),
-                        ReviewEvent.duration_ms > 0,
-                    ),
-                    ReviewEvent.duration_ms,
-                ),
-                else_=0,
-            )
-        ),
-        0,
-    )
-    query = (
-        db.session.query(
-            db.func.count(ReviewEvent.id),
-            duration_expr,
-        )
-        .filter(
-            ReviewEvent.user_id == user_id,
-            ReviewEvent.reviewed_at >= today_start_utc,
-            ReviewEvent.reviewed_at < tomorrow_start_utc,
-        )
-    )
-    if scope_deck_ids is not None:
-        if not scope_deck_ids:
-            return 0, 0
-        query = query.filter(ReviewEvent.deck_id.in_(scope_deck_ids))
-
-    cards, duration_ms = query.one()
-    return _safe_int(cards), max(0, _safe_int(duration_ms))
 
 
 def _aggregate_future_due_python(
@@ -278,6 +147,7 @@ def _aggregate_future_due_python(
     for due_at, queue_value in rows:
         if due_at is None:
             continue
+
         due_utc = due_at if due_at.tzinfo else due_at.replace(tzinfo=UTC)
         due_local_day = due_utc.astimezone(timezone_obj).date()
         day_offset = (due_local_day - today_local).days
@@ -305,81 +175,6 @@ def _aggregate_future_due_python(
             bucket[queue_norm] += 1
 
     min_offset = min((offset for offset in by_offset if offset < 0), default=0)
-    return by_offset, min_offset
-
-
-def _aggregate_future_due_mysql(
-    *,
-    user_id: int,
-    scope_deck_ids: list[int] | None,
-    timezone_name: str,
-    backlog: bool,
-    end_offset: int | None,
-    today_local: date,
-) -> tuple[dict[int, dict[str, int]], int]:
-    mysql_timezone = "+00:00" if str(timezone_name).upper() == "UTC" else timezone_name
-    local_day_expr = db.func.date(
-        db.func.convert_tz(VocabularyProgress.due_at, "+00:00", mysql_timezone)
-    )
-
-    query = (
-        db.session.query(
-            local_day_expr.label("local_day"),
-            VocabularyProgress.queue.label("queue"),
-            db.func.count(VocabularyProgress.id).label("cnt"),
-        )
-        .select_from(VocabularyProgress)
-        .outerjoin(Card, VocabularyProgress.new_card_id == Card.id)
-        .outerjoin(Note, Card.note_id == Note.id)
-        .filter(
-            VocabularyProgress.user_id == user_id,
-            VocabularyProgress.due_at.isnot(None),
-            db.or_(VocabularyProgress.is_suspended.is_(False), VocabularyProgress.is_suspended.is_(None)),
-        )
-    )
-
-    query = _apply_scope_filter(query, scope_deck_ids)
-
-    if end_offset is not None:
-        end_local = today_local + timedelta(days=end_offset + 1)
-        query = query.filter(local_day_expr < end_local.isoformat())
-    if not backlog:
-        query = query.filter(local_day_expr >= today_local.isoformat())
-
-    rows = query.group_by(local_day_expr, VocabularyProgress.queue).all()
-    by_offset: dict[int, dict[str, int]] = {}
-    min_offset = 0
-    for local_day, queue_value, count_value in rows:
-        if local_day is None:
-            continue
-        local_day_text = str(local_day)
-        try:
-            local_day_date = date.fromisoformat(local_day_text[:10])
-        except ValueError:
-            continue
-        day_offset = int((local_day_date - today_local).days)
-        if day_offset < min_offset:
-            min_offset = day_offset
-
-        queue_norm = str(queue_value or "").strip().lower()
-        if queue_norm == "learn":
-            queue_norm = "learning"
-
-        bucket = by_offset.setdefault(
-            day_offset,
-            {
-                "due_count": 0,
-                "new": 0,
-                "learning": 0,
-                "review": 0,
-                "relearning": 0,
-            },
-        )
-        count_int = _safe_int(count_value)
-        bucket["due_count"] += count_int
-        if queue_norm in {"new", "learning", "review", "relearning"}:
-            bucket[queue_norm] += count_int
-
     return by_offset, min_offset
 
 
@@ -438,12 +233,10 @@ def _build_future_series(
 
 
 def _compute_daily_load(*, user_id: int, scope_deck_ids: list[int] | None) -> float:
-    query = _base_progress_rows_query(user_id=user_id)
-    query = _apply_scope_filter(query, scope_deck_ids)
-    query = query.filter(
-        db.or_(VocabularyProgress.is_suspended.is_(False), VocabularyProgress.is_suspended.is_(None))
+    rows = query_interval_days_rows(
+        user_id=user_id,
+        scope_deck_ids=scope_deck_ids,
     )
-    rows = query.with_entities(VocabularyProgress.interval_days).all()
 
     total = 0.0
     for (interval_days,) in rows:
@@ -486,7 +279,7 @@ def build_today_future_stats(
 
     scope_deck_ids = _resolve_scope_deck_ids(scope=effective_scope, deck_id=parsed_deck_id)
 
-    today_cards, today_duration_ms = _query_today_summary(
+    today_cards, today_duration_ms = query_today_review_summary(
         user_id=user_id,
         scope_deck_ids=scope_deck_ids,
         today_start_utc=today_start_utc,
@@ -499,7 +292,7 @@ def build_today_future_stats(
 
     dialect = db.session.get_bind().dialect.name if db.session.get_bind() is not None else ""
     if dialect == "mysql":
-        due_by_offset, min_negative_offset = _aggregate_future_due_mysql(
+        due_by_offset, min_negative_offset = aggregate_future_due_offsets_mysql(
             user_id=user_id,
             scope_deck_ids=scope_deck_ids,
             timezone_name=timezone_effective,
@@ -508,20 +301,17 @@ def build_today_future_stats(
             today_local=today_local,
         )
     else:
-        base_query = _base_progress_rows_query(user_id=user_id)
-        base_query = _apply_scope_filter(base_query, scope_deck_ids)
-        base_query = base_query.filter(
-            VocabularyProgress.due_at.isnot(None),
-            db.or_(VocabularyProgress.is_suspended.is_(False), VocabularyProgress.is_suspended.is_(None)),
-        )
-
+        end_utc_exclusive = None
         if end_offset is not None:
             end_utc_exclusive = _local_start_to_utc_naive(today_local + timedelta(days=end_offset + 1), timezone_obj)
-            base_query = base_query.filter(VocabularyProgress.due_at < end_utc_exclusive)
-        if not effective_backlog:
-            base_query = base_query.filter(VocabularyProgress.due_at >= today_start_utc)
 
-        rows = base_query.with_entities(VocabularyProgress.due_at, VocabularyProgress.queue).all()
+        rows = query_due_queue_rows_python(
+            user_id=user_id,
+            scope_deck_ids=scope_deck_ids,
+            today_start_utc=today_start_utc,
+            end_utc_exclusive=end_utc_exclusive,
+            include_backlog=effective_backlog,
+        )
         due_by_offset, min_negative_offset = _aggregate_future_due_python(
             rows=rows,
             timezone_obj=timezone_obj,

@@ -19,7 +19,7 @@ class DeckInstall(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     local_deck_id = db.Column(
         db.Integer,
-        db.ForeignKey("vocabulary_decks.id", ondelete="SET NULL"),
+        db.ForeignKey("decks.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )
@@ -33,9 +33,8 @@ class DeckInstall(db.Model):
 
     deck_item = db.relationship("DeckMarketplaceItem", back_populates="installs")
     user = db.relationship("User", foreign_keys=[user_id])
-    local_deck = db.relationship("VocabularyDeck", foreign_keys=[local_deck_id])
+    local_deck = db.relationship("Deck", foreign_keys=[local_deck_id])
 
     __table_args__ = (
         UniqueConstraint("deck_item_id", "user_id", name="uq_deck_installs_item_user"),
     )
-

@@ -10,9 +10,8 @@ from app.services.stats_today_future import build_today_future_stats
 from models import db
 from models.flashcard import ReviewEvent
 from models.user import User
-from models.vocabulary_deck import VocabularyDeck
-from models.vocabulary_entry import VocabularyEntry
-from models.vocabulary_progress import VocabularyProgress
+from models.deck import Deck
+from models.card_progress import CardProgress
 
 
 class StatsTodayFutureTests(unittest.TestCase):
@@ -25,7 +24,6 @@ class StatsTodayFutureTests(unittest.TestCase):
             }
         )
         self.client = self.app.test_client()
-        self._entry_seq = 0
 
         with self.app.app_context():
             db.create_all()
@@ -35,7 +33,7 @@ class StatsTodayFutureTests(unittest.TestCase):
             db.session.flush()
             self.user_id = user.id
 
-            deck = VocabularyDeck(name="Deck A", owner_user_id=user.id)
+            deck = Deck(name="Deck A", owner_user_id=user.id)
             db.session.add(deck)
             db.session.flush()
             self.deck_id = deck.id
@@ -53,17 +51,6 @@ class StatsTodayFutureTests(unittest.TestCase):
             follow_redirects=True,
         )
 
-    def _new_entry(self):
-        self._entry_seq += 1
-        entry = VocabularyEntry(
-            deck_id=self.deck_id,
-            deck="Deck A",
-            word=f"word-{self._entry_seq}",
-        )
-        db.session.add(entry)
-        db.session.flush()
-        return entry
-
     def _add_progress(
         self,
         *,
@@ -72,11 +59,9 @@ class StatsTodayFutureTests(unittest.TestCase):
         queue: str = "review",
         is_suspended: bool = False,
     ):
-        entry = self._new_entry()
         db.session.add(
-            VocabularyProgress(
+            CardProgress(
                 user_id=self.user_id,
-                entry_id=entry.id,
                 queue=queue,
                 due_at=due_at,
                 interval_days=interval_days,
@@ -170,7 +155,6 @@ class StatsTodayFutureTests(unittest.TestCase):
                 ReviewEvent(
                     user_id=self.user_id,
                     card_id="c1",
-                    entry_id=None,
                     deck_id=self.deck_id,
                     note_type_id=None,
                     reviewed_at=datetime(2026, 2, 22, 23, 30, 0),  # previous day 23:30 UTC
@@ -183,7 +167,6 @@ class StatsTodayFutureTests(unittest.TestCase):
                 ReviewEvent(
                     user_id=self.user_id,
                     card_id="c2",
-                    entry_id=None,
                     deck_id=self.deck_id,
                     note_type_id=None,
                     reviewed_at=datetime(2026, 2, 23, 0, 10, 0),  # current day 00:10 UTC

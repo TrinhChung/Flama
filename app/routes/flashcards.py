@@ -22,6 +22,7 @@ from flask import (
     url_for,
 )
 from flask_login import current_user, login_required
+from sqlalchemy.orm import aliased
 
 from app.services.anki_scheduler import (
     CardState,
@@ -74,8 +75,8 @@ from models.flashcard import (
     NoteTypeReview,
     Template,
 )
-from models.vocabulary_deck import VocabularyDeck
-from models.vocabulary_progress import VocabularyProgress
+from models.deck import Deck
+from models.card_progress import CardProgress
 
 flashcards_bp = Blueprint("flashcards", __name__)
 logger = logging.getLogger(__name__)
@@ -495,12 +496,12 @@ def _touch_note_type_install_usage(*, user_id: int, installed_note_type_id: str,
 
 def _note_type_reps_for_user(*, user_id: int, installed_note_type_id: str) -> int:
     result = (
-        db.session.query(db.func.coalesce(db.func.sum(VocabularyProgress.reps), 0))
-        .select_from(VocabularyProgress)
-        .join(Card, VocabularyProgress.new_card_id == Card.id)
+        db.session.query(db.func.coalesce(db.func.sum(CardProgress.reps), 0))
+        .select_from(CardProgress)
+        .join(Card, CardProgress.card_id == Card.id)
         .join(Note, Card.note_id == Note.id)
         .filter(
-            VocabularyProgress.user_id == user_id,
+            CardProgress.user_id == user_id,
             Note.note_type_id == installed_note_type_id,
         )
         .scalar()
@@ -607,8 +608,8 @@ def _collect_deck_subtree_ids(root_deck_id: int | None) -> list[int]:
 
         seen.update(current_ids)
         child_rows = (
-            db.session.query(VocabularyDeck.id)
-            .filter(VocabularyDeck.parent_id.in_(current_ids))
+            db.session.query(Deck.id)
+            .filter(Deck.parent_id.in_(current_ids))
             .all()
         )
         frontier = {int(row[0]) for row in child_rows if row and row[0] is not None}
@@ -882,20 +883,20 @@ def _validate_note_type_consistency_for_deck(
     return "All notes in one deck must use the same template (note type)."
 
 
-def _collect_accessible_decks_for_import() -> list[VocabularyDeck]:
+def _collect_accessible_decks_for_import() -> list[Deck]:
     if is_admin_user(current_user):
         return (
-            VocabularyDeck.query.filter(
+            Deck.query.filter(
                 db.or_(
-                    VocabularyDeck.owner_user_id == current_user.id,
-                    VocabularyDeck.owner_user_id.is_(None),
+                    Deck.owner_user_id == current_user.id,
+                    Deck.owner_user_id.is_(None),
                 )
             )
             .order_by(
-                VocabularyDeck.parent_id.isnot(None),
-                VocabularyDeck.position.asc(),
-                VocabularyDeck.created_at.asc(),
-                VocabularyDeck.id.asc(),
+                Deck.parent_id.isnot(None),
+                Deck.position.asc(),
+                Deck.created_at.asc(),
+                Deck.id.asc(),
             )
             .all()
         )
@@ -913,25 +914,25 @@ def _collect_accessible_decks_for_import() -> list[VocabularyDeck]:
             break
         visible_ids.update(current_ids)
         child_rows = (
-            db.session.query(VocabularyDeck.id)
-            .filter(VocabularyDeck.parent_id.in_(current_ids))
+            db.session.query(Deck.id)
+            .filter(Deck.parent_id.in_(current_ids))
             .all()
         )
         frontier = {int(row[0]) for row in child_rows if row and row[0] is not None}
 
     return (
-        VocabularyDeck.query.filter(VocabularyDeck.id.in_(visible_ids))
+        Deck.query.filter(Deck.id.in_(visible_ids))
         .order_by(
-            VocabularyDeck.parent_id.isnot(None),
-            VocabularyDeck.position.asc(),
-            VocabularyDeck.created_at.asc(),
-            VocabularyDeck.id.asc(),
+            Deck.parent_id.isnot(None),
+            Deck.position.asc(),
+            Deck.created_at.asc(),
+            Deck.id.asc(),
         )
         .all()
     )
 
 
-def _deck_path_label(deck_obj: VocabularyDeck, deck_map: dict[int, VocabularyDeck]) -> str:
+def _deck_path_label(deck_obj: Deck, deck_map: dict[int, Deck]) -> str:
     parts: list[str] = []
     current = deck_obj
     seen: set[int] = set()
@@ -984,7 +985,7 @@ def _infer_default_note_type_id_for_deck(deck_id: int | None) -> str | None:
     if deck_id is None:
         return None
 
-    deck_obj = VocabularyDeck.query.get(deck_id)
+    deck_obj = Deck.query.get(deck_id)
     if deck_obj and deck_obj.note_type_id:
         note_type = NoteType.query.filter_by(id=deck_obj.note_type_id, user_id=current_user.id).first()
         if note_type:
@@ -1002,11 +1003,11 @@ def _infer_default_note_type_id_for_deck(deck_id: int | None) -> str | None:
 
 
 def _next_deck_position(parent_deck_id: int | None) -> int:
-    query = db.session.query(db.func.max(VocabularyDeck.position))
+    query = db.session.query(db.func.max(Deck.position))
     if parent_deck_id is None:
-        max_pos = query.filter(VocabularyDeck.parent_id.is_(None)).scalar()
+        max_pos = query.filter(Deck.parent_id.is_(None)).scalar()
     else:
-        max_pos = query.filter(VocabularyDeck.parent_id == parent_deck_id).scalar()
+        max_pos = query.filter(Deck.parent_id == parent_deck_id).scalar()
     return int(max_pos or 0) + 1
 
 
@@ -1017,12 +1018,12 @@ def _clone_deck_subtree(
     owner_user_id: int | None = None,
     root_suffix: str | None = None,
     source_owner_user_id: int | None = None,
-) -> VocabularyDeck:
-    source_deck = VocabularyDeck.query.get(source_deck_id)
+) -> Deck:
+    source_deck = Deck.query.get(source_deck_id)
     if not source_deck:
         raise ValueError(f"Deck not found: {source_deck_id}")
 
-    cloned_deck = VocabularyDeck(
+    cloned_deck = Deck(
         parent_id=parent_id,
         owner_user_id=owner_user_id,
         note_type_id=source_deck.note_type_id,
@@ -1071,8 +1072,8 @@ def _clone_deck_subtree(
         _create_cards_for_note(cloned_note)
 
     child_decks = (
-        VocabularyDeck.query.filter_by(parent_id=source_deck.id)
-        .order_by(VocabularyDeck.position.asc(), VocabularyDeck.id.asc())
+        Deck.query.filter_by(parent_id=source_deck.id)
+        .order_by(Deck.position.asc(), Deck.id.asc())
         .all()
     )
     for child in child_decks:
@@ -1098,8 +1099,8 @@ def _collect_deck_ancestor_ids(deck_id: int | None) -> list[int]:
         seen.add(current_deck_id)
         ancestors.append(current_deck_id)
         parent_row = (
-            db.session.query(VocabularyDeck.parent_id)
-            .filter(VocabularyDeck.id == current_deck_id)
+            db.session.query(Deck.parent_id)
+            .filter(Deck.id == current_deck_id)
             .first()
         )
         if not parent_row or parent_row[0] is None:
@@ -1140,12 +1141,12 @@ def _deck_reps_for_user(*, user_id: int, local_deck_id: int) -> int:
         return 0
 
     flashcard_reps = (
-        db.session.query(db.func.coalesce(db.func.sum(VocabularyProgress.reps), 0))
-        .select_from(VocabularyProgress)
-        .join(Card, VocabularyProgress.new_card_id == Card.id)
+        db.session.query(db.func.coalesce(db.func.sum(CardProgress.reps), 0))
+        .select_from(CardProgress)
+        .join(Card, CardProgress.card_id == Card.id)
         .join(Note, Card.note_id == Note.id)
         .filter(
-            VocabularyProgress.user_id == user_id,
+            CardProgress.user_id == user_id,
             Note.deck_id.in_(subtree_deck_ids),
         )
         .scalar()
@@ -1434,7 +1435,6 @@ def _create_cards_for_note(note: Note) -> None:
         card = Card(
             note_id=note.id,
             template_id=template.id,
-            queue="new",
         )
         db.session.add(card)
 
@@ -1501,7 +1501,7 @@ def _normalize_progress_queue(value: str | None) -> str:
     return "new"
 
 
-def _card_state_from_progress(progress: VocabularyProgress | None, now: datetime) -> CardState:
+def _card_state_from_progress(progress: CardProgress | None, now: datetime) -> CardState:
     options = default_deck_options()
     if not progress:
         return CardState(
@@ -1536,7 +1536,7 @@ def _card_state_from_progress(progress: VocabularyProgress | None, now: datetime
     )
 
 
-def _apply_card_state_to_progress(progress: VocabularyProgress, card_state: CardState, now: datetime) -> VocabularyProgress:
+def _apply_card_state_to_progress(progress: CardProgress, card_state: CardState, now: datetime) -> CardProgress:
     options = default_deck_options()
     queue = _normalize_progress_queue(card_state.type)
     due_at = card_state.due
@@ -1559,7 +1559,7 @@ def _apply_card_state_to_progress(progress: VocabularyProgress, card_state: Card
     return progress
 
 
-def _is_due(progress: VocabularyProgress | None, now: datetime) -> bool:
+def _is_due(progress: CardProgress | None, now: datetime) -> bool:
     if progress is None:
         return True
     queue = _normalize_progress_queue(progress.queue)
@@ -1570,7 +1570,7 @@ def _is_due(progress: VocabularyProgress | None, now: datetime) -> bool:
     return progress.due_at <= now
 
 
-def _pick_due_card(cards: list[Card], progress_map: dict[str, VocabularyProgress], now: datetime) -> Card | None:
+def _pick_due_card(cards: list[Card], progress_map: dict[str, CardProgress], now: datetime) -> Card | None:
     due_relearn: list[Card] = []
     due_learn: list[Card] = []
     due_review: list[Card] = []
@@ -1592,6 +1592,41 @@ def _pick_due_card(cards: list[Card], progress_map: dict[str, VocabularyProgress
         if group:
             return group[0]
     return None
+
+
+def _query_next_due_card_id(query, *, now: datetime) -> str | None:
+    progress_alias = aliased(CardProgress)
+    progress_join = db.and_(
+        progress_alias.card_id == Card.id,
+        progress_alias.user_id == current_user.id,
+    )
+    normalized_queue = db.func.lower(db.func.coalesce(progress_alias.queue, "new"))
+    normalized_queue = db.case(
+        (normalized_queue == "learn", "learning"),
+        else_=normalized_queue,
+    )
+    is_due_expr = db.or_(
+        progress_alias.id.is_(None),
+        normalized_queue == "new",
+        progress_alias.due_at.is_(None),
+        progress_alias.due_at <= now,
+    )
+    queue_priority = db.case(
+        (normalized_queue == "relearning", 0),
+        (normalized_queue == "learning", 1),
+        (normalized_queue == "review", 2),
+        else_=3,
+    )
+    row = (
+        query.outerjoin(progress_alias, progress_join)
+        .filter(is_due_expr)
+        .order_by(queue_priority.asc(), Card.created_at.asc(), Card.id.asc())
+        .with_entities(Card.id)
+        .first()
+    )
+    if not row:
+        return None
+    return str(row[0])
 
 
 @flashcards_bp.after_request
@@ -1670,7 +1705,7 @@ def shared_deck_detail_page(deck_item_id: str):
 @flashcards_bp.route("/flashcards/decks/<int:deck_id>/share", methods=["GET", "POST"])
 @login_required
 def share_deck_page(deck_id: int):
-    deck = VocabularyDeck.query.get_or_404(deck_id)
+    deck = Deck.query.get_or_404(deck_id)
     
     # Validation 1: Ownership
     if not is_admin_user(current_user) and deck.owner_user_id != current_user.id:
@@ -1689,7 +1724,7 @@ def share_deck_page(deck_id: int):
     from models.flashcard import DeckMarketplaceItem
     current_parent = deck.parent_id
     while current_parent is not None:
-        parent_deck = VocabularyDeck.query.get(current_parent)
+        parent_deck = Deck.query.get(current_parent)
         if not parent_deck:
             break
         if DeckMarketplaceItem.query.filter_by(source_deck_id=parent_deck.id).first():
@@ -1757,7 +1792,7 @@ def note_editor_page():
         flash("Bạn không có quyền truy cập trang này.", "danger")
         return redirect(url_for("main.dashboard"))
     note_types = NoteType.query.filter_by(user_id=current_user.id).order_by(NoteType.name.asc()).all()
-    decks = VocabularyDeck.query.order_by(VocabularyDeck.name.asc()).all()
+    decks = Deck.query.order_by(Deck.name.asc()).all()
     return render_template("flashcards/note_editor.html", note_types=note_types, decks=decks)
 
 
@@ -1997,7 +2032,7 @@ def flashcard_import_execute():
 @flashcards_bp.route("/flashcards/study")
 @login_required
 def flashcard_study_page():
-    decks = VocabularyDeck.query.order_by(VocabularyDeck.name.asc()).all()
+    decks = Deck.query.order_by(Deck.name.asc()).all()
     return render_template("flashcards/study.html", decks=decks)
 
 
@@ -2013,7 +2048,7 @@ def notes_list_page():
         .order_by(NoteType.name.asc())
         .all()
     )
-    decks = VocabularyDeck.query.order_by(VocabularyDeck.name.asc()).all()
+    decks = Deck.query.order_by(Deck.name.asc()).all()
 
     # Filters from query string
     selected_nt = request.args.get("note_type_id", "")
@@ -2086,7 +2121,7 @@ def note_edit_page(note_id: str):
     if not note:
         return redirect(url_for("flashcards.notes_list_page"))
     note_type = NoteType.query.get(note.note_type_id)
-    decks = VocabularyDeck.query.order_by(VocabularyDeck.name.asc()).all()
+    decks = Deck.query.order_by(Deck.name.asc()).all()
     return render_template(
         "flashcards/note_edit.html",
         note=note,
@@ -2364,7 +2399,7 @@ def create_template(note_type_id: str):
     db.session.flush()
     notes = Note.query.filter_by(note_type_id=note_type.id, user_id=current_user.id).all()
     for note in notes:
-        db.session.add(Card(note_id=note.id, template_id=template.id, queue="new"))
+        db.session.add(Card(note_id=note.id, template_id=template.id))
     _audit("template.create", {"note_type_id": note_type.id, "template_id": template.id})
     db.session.commit()
     return jsonify(_serialize_template(template)), 201
@@ -2837,22 +2872,19 @@ def study_next():
     else:
         return _api_error("VALIDATION_ERROR", f"Unsupported scope: {scope}", field="scope")
 
-    cards = query.order_by(Card.created_at.asc(), Card.id.asc()).all()
-    if not cards:
+    if not query.with_entities(Card.id).first():
         return jsonify({"card_id": None, "message": "No cards found for selected scope."})
 
-    card_ids = [card.id for card in cards]
-    progress_rows = VocabularyProgress.query.filter(
-        VocabularyProgress.user_id == current_user.id,
-        VocabularyProgress.new_card_id.in_(card_ids),
-    ).all()
-    progress_map = {row.new_card_id: row for row in progress_rows if row.new_card_id}
     now = datetime.utcnow()
-    selected_card = _pick_due_card(cards, progress_map, now)
-    if not selected_card:
+    selected_card_id = _query_next_due_card_id(query, now=now)
+    if not selected_card_id:
         return jsonify({"card_id": None, "message": "No due cards."})
 
-    progress = progress_map.get(selected_card.id)
+    selected_card = query.filter(Card.id == selected_card_id).first()
+    if not selected_card:
+        return _api_error("FIELD_NOT_FOUND", "Card not found.", status=404)
+
+    progress = CardProgress.query.filter_by(user_id=current_user.id, card_id=selected_card.id).first()
     card_state = _card_state_from_progress(progress, now)
     interval_preview = computeAnswerPreview(card_state, default_deck_options(), now)
 
@@ -2893,12 +2925,11 @@ def study_answer(card_id: str):
     if not card:
         return _api_error("FIELD_NOT_FOUND", "Card not found.", status=404)
 
-    progress = VocabularyProgress.query.filter_by(user_id=current_user.id, new_card_id=card.id).first()
+    progress = CardProgress.query.filter_by(user_id=current_user.id, card_id=card.id).first()
     if progress is None:
-        progress = VocabularyProgress(
+        progress = CardProgress(
             user_id=current_user.id,
-            entry_id=None,
-            new_card_id=card.id,
+            card_id=card.id,
             queue="new",
             step_index=0,
             due_at=None,
@@ -2917,27 +2948,13 @@ def study_answer(card_id: str):
     updated_state = applyAnswer(current_state, default_deck_options(), now, rating)  # type: ignore[arg-type]
     _apply_card_state_to_progress(progress, updated_state, now)
     _touch_note_type_install_usage(user_id=current_user.id, installed_note_type_id=card.note.note_type_id, activity_at=now)
-    note_type_installs = NoteTypeInstall.query.filter_by(
-        user_id=current_user.id,
-        installed_note_type_id=card.note.note_type_id,
-    ).all()
-    for install in note_type_installs:
-        source_note_type = NoteType.query.get(install.source_note_type_id)
-        if source_note_type:
-            _recompute_note_type_market_stats(source_note_type)
 
     if card.note.deck_id is not None:
         _touch_deck_install_usage(user_id=current_user.id, local_deck_id=card.note.deck_id, activity_at=now)
-        deck_installs = _deck_installs_covering_deck(user_id=current_user.id, deck_id=card.note.deck_id)
-        for deck_install in deck_installs:
-            deck_item = DeckMarketplaceItem.query.get(deck_install.deck_item_id)
-            if deck_item:
-                _recompute_deck_item_market_stats(deck_item)
     update_user_timezone(current_user, payload.get("timezone"))
     record_review_event(
         user_id=current_user.id,
         card_id=card.id,
-        entry_id=None,
         deck_id=card.note.deck_id,
         note_type_id=card.note.note_type_id,
         reviewed_at=now,
@@ -2947,8 +2964,24 @@ def study_answer(card_id: str):
     )
     _audit("study.answer", {"card_id": card.id, "rating": rating})
     db.session.commit()
-    next_url = url_for("flashcards.study_next", scope="deck", scope_id=card.note.deck_id) if card.note.deck_id else None
-    return jsonify({"success": True, "next_card_url": next_url, "intervals_preview": computeAnswerPreview(updated_state, default_deck_options(), now)})
+    next_card_url = url_for("flashcards.study_next", scope="deck", scope_id=card.note.deck_id) if card.note.deck_id else None
+    next_url = None
+    scope = (payload.get("scope") or "").strip().lower()
+    if scope == "deck":
+        try:
+            scope_id = int(payload.get("scope_id"))
+        except (TypeError, ValueError):
+            scope_id = None
+        if scope_id is not None:
+            next_url = url_for("vocabulary.study_deck", deck_id=scope_id)
+    return jsonify(
+        {
+            "success": True,
+            "next_url": next_url,
+            "next_card_url": next_card_url,
+            "intervals_preview": computeAnswerPreview(updated_state, default_deck_options(), now),
+        }
+    )
 
 
 @flashcards_bp.route("/api/flashcards/seed-default-note-type", methods=["POST"])
@@ -3328,7 +3361,7 @@ def create_shared_deck_item():
     if validation_error:
         db.session.rollback()
         return _api_error("VALIDATION_ERROR", validation_error)
-    if deck_item.source_deck_id is not None and not VocabularyDeck.query.get(deck_item.source_deck_id):
+    if deck_item.source_deck_id is not None and not Deck.query.get(deck_item.source_deck_id):
         db.session.rollback()
         return _api_error("FIELD_NOT_FOUND", "source_deck_id not found.", field="source_deck_id", status=404)
     bind_error = _bind_deck_item_source_note_type(deck_item, require_source_note_type=True)
@@ -3492,7 +3525,7 @@ def patch_shared_deck_item(deck_item_id: str):
     validation_error = _apply_deck_marketplace_payload(deck_item, payload)
     if validation_error:
         return _api_error("VALIDATION_ERROR", validation_error)
-    if deck_item.source_deck_id is not None and not VocabularyDeck.query.get(deck_item.source_deck_id):
+    if deck_item.source_deck_id is not None and not Deck.query.get(deck_item.source_deck_id):
         return _api_error("FIELD_NOT_FOUND", "source_deck_id not found.", field="source_deck_id", status=404)
     bind_error = _bind_deck_item_source_note_type(deck_item, require_source_note_type=True)
     if bind_error:
@@ -3536,7 +3569,7 @@ def install_shared_deck_item(deck_item_id: str):
     now = datetime.utcnow()
     local_deck_id = None
     if deck_item.source_deck_id is not None:
-        source_deck = VocabularyDeck.query.get(deck_item.source_deck_id)
+        source_deck = Deck.query.get(deck_item.source_deck_id)
         if source_deck is None:
             return _api_error("FIELD_NOT_FOUND", "Source deck not found.", status=404)
         cloned_root = _clone_deck_subtree(
@@ -3745,7 +3778,7 @@ def seed_marketplace_defaults():
         is_official=True,
         title="Official Starter Deck",
     ).first()
-    source_deck = VocabularyDeck.query.order_by(VocabularyDeck.id.asc()).first()
+    source_deck = Deck.query.order_by(Deck.id.asc()).first()
     # Stamp ownership on the source deck so it is recognised as admin-owned
     if source_deck and source_deck.owner_user_id is None:
         source_deck.owner_user_id = admin_id

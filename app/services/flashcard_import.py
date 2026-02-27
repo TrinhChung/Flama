@@ -565,7 +565,7 @@ def run_import(
             cards: list[Card] = []
             for note in notes:
                 for template in templates:
-                    cards.append(Card(note_id=note.id, template_id=template.id, queue="new"))
+                    cards.append(Card(note_id=note.id, template_id=template.id))
             if cards:
                 db.session.add_all(cards)
 

@@ -11,7 +11,7 @@ class DeckMarketplaceItem(db.Model):
     owner_user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     source_deck_id = db.Column(
         db.Integer,
-        db.ForeignKey("vocabulary_decks.id", ondelete="SET NULL"),
+        db.ForeignKey("decks.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )
@@ -53,8 +53,7 @@ class DeckMarketplaceItem(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     owner = db.relationship("User", foreign_keys=[owner_user_id])
-    source_deck = db.relationship("VocabularyDeck", foreign_keys=[source_deck_id])
+    source_deck = db.relationship("Deck", foreign_keys=[source_deck_id])
     source_note_type = db.relationship("NoteType", foreign_keys=[source_note_type_id])
     installs = db.relationship("DeckInstall", back_populates="deck_item", cascade="all, delete-orphan")
     reviews = db.relationship("DeckReview", back_populates="deck_item", cascade="all, delete-orphan")
-

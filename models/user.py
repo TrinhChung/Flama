@@ -23,8 +23,8 @@ class User(UserMixin, db.Model):
     updated_at = db.Column(
         db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
     )
-    vocabulary_progress = db.relationship(
-        "VocabularyProgress",
+    card_progress = db.relationship(
+        "CardProgress",
         back_populates="user",
         cascade="all, delete-orphan",
     )

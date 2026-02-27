@@ -701,8 +701,9 @@
       if (!res.ok || !data.success) {
         return;
       }
-      if (data.next_url) {
-        window.location.href = data.next_url;
+      const nextUrl = String(data.next_url || "");
+      if (nextUrl) {
+        window.location.href = nextUrl;
         return;
       }
       window.location.reload();

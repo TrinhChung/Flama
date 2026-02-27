@@ -2,12 +2,13 @@
 
 from models.audit_log import AuditLog
 from models.card import Card
+from models.card_progress import CardProgress
+from models.deck import Deck
 from models.deck_install import DeckInstall
 from models.deck_marketplace_item import DeckMarketplaceItem
 from models.deck_review import DeckReview
 from models.field_def import FieldDef
 from models.field_rename_job import FieldRenameJob
-from models.legacy_migration_map import LegacyMigrationMap
 from models.media_asset import MediaAsset
 from models.note import Note
 from models.note_type import NoteType
@@ -19,12 +20,13 @@ from models.template import Template
 __all__ = [
     "AuditLog",
     "Card",
+    "CardProgress",
+    "Deck",
     "DeckInstall",
     "DeckMarketplaceItem",
     "DeckReview",
     "FieldDef",
     "FieldRenameJob",
-    "LegacyMigrationMap",
     "MediaAsset",
     "Note",
     "NoteType",

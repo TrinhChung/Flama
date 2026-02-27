@@ -49,9 +49,8 @@ def create_app(config: Optional[dict] = None) -> Flask:
     from models.user import User
     from models.user_role import UserRole  # noqa: F401  # register model
     from models.user_permission_audit_log import UserPermissionAuditLog  # noqa: F401
-    from models.vocabulary_deck import VocabularyDeck  # noqa: F401  # register model
-    from models.vocabulary_entry import VocabularyEntry  # noqa: F401  # register model
-    from models.vocabulary_progress import VocabularyProgress  # noqa: F401  # register model
+    from models.deck import Deck  # noqa: F401  # register model
+    from models.card_progress import CardProgress  # noqa: F401  # register model
     from models.column_preference import (
         VocabularyColumnPreference,
     )  # noqa: F401  # register model
@@ -63,7 +62,6 @@ def create_app(config: Optional[dict] = None) -> Flask:
         DeckReview,
         FieldDef,
         FieldRenameJob,
-        LegacyMigrationMap,
         MediaAsset,
         Note,
         NoteType,
@@ -141,7 +139,7 @@ def _build_database_uri() -> str:
 
 
 def _ensure_backward_compatible_schema() -> None:
-    """Patch legacy schemas that predate newly added columns."""
+    """Patch schema for incremental local upgrades."""
     bind = db.session.get_bind()
     if bind is None:
         return
@@ -161,49 +159,49 @@ def _ensure_backward_compatible_schema() -> None:
             schema_changed = True
 
     inspector = sa.inspect(bind)
-    if inspector.has_table("vocabulary_progress"):
-        progress_columns = {column["name"] for column in inspector.get_columns("vocabulary_progress")}
+    if inspector.has_table("card_progress"):
+        progress_columns = {column["name"] for column in inspector.get_columns("card_progress")}
         if "is_suspended" not in progress_columns:
             db.session.execute(
-                sa.text("ALTER TABLE vocabulary_progress ADD COLUMN is_suspended BOOLEAN NOT NULL DEFAULT 0")
+                sa.text("ALTER TABLE card_progress ADD COLUMN is_suspended BOOLEAN NOT NULL DEFAULT 0")
             )
             db.session.execute(
-                sa.text("UPDATE vocabulary_progress SET is_suspended = 0 WHERE is_suspended IS NULL")
+                sa.text("UPDATE card_progress SET is_suspended = 0 WHERE is_suspended IS NULL")
             )
             schema_changed = True
 
-        progress_indexes = {index["name"] for index in inspector.get_indexes("vocabulary_progress")}
-        if "ix_vocabulary_progress_is_suspended" not in progress_indexes:
+        progress_indexes = {index["name"] for index in inspector.get_indexes("card_progress")}
+        if "ix_card_progress_is_suspended" not in progress_indexes:
             db.session.execute(
-                sa.text("CREATE INDEX ix_vocabulary_progress_is_suspended ON vocabulary_progress (is_suspended)")
+                sa.text("CREATE INDEX ix_card_progress_is_suspended ON card_progress (is_suspended)")
             )
             schema_changed = True
 
     inspector = sa.inspect(bind)
-    if inspector.has_table("vocabulary_decks"):
-        deck_columns = {column["name"] for column in inspector.get_columns("vocabulary_decks")}
+    if inspector.has_table("decks"):
+        deck_columns = {column["name"] for column in inspector.get_columns("decks")}
         if "owner_user_id" not in deck_columns:
             db.session.execute(
-                sa.text("ALTER TABLE vocabulary_decks ADD COLUMN owner_user_id INTEGER NULL")
+                sa.text("ALTER TABLE decks ADD COLUMN owner_user_id INTEGER NULL")
             )
             deck_columns.add("owner_user_id")
             schema_changed = True
         if "note_type_id" not in deck_columns:
             db.session.execute(
-                sa.text("ALTER TABLE vocabulary_decks ADD COLUMN note_type_id VARCHAR(36) NULL")
+                sa.text("ALTER TABLE decks ADD COLUMN note_type_id VARCHAR(36) NULL")
             )
             deck_columns.add("note_type_id")
             schema_changed = True
 
-        deck_indexes = {index["name"] for index in inspector.get_indexes("vocabulary_decks")}
-        if "owner_user_id" in deck_columns and "ix_vocabulary_decks_owner_user_id" not in deck_indexes:
+        deck_indexes = {index["name"] for index in inspector.get_indexes("decks")}
+        if "owner_user_id" in deck_columns and "ix_decks_owner_user_id" not in deck_indexes:
             db.session.execute(
-                sa.text("CREATE INDEX ix_vocabulary_decks_owner_user_id ON vocabulary_decks (owner_user_id)")
+                sa.text("CREATE INDEX ix_decks_owner_user_id ON decks (owner_user_id)")
             )
             schema_changed = True
-        if "note_type_id" in deck_columns and "ix_vocabulary_decks_note_type_id" not in deck_indexes:
+        if "note_type_id" in deck_columns and "ix_decks_note_type_id" not in deck_indexes:
             db.session.execute(
-                sa.text("CREATE INDEX ix_vocabulary_decks_note_type_id ON vocabulary_decks (note_type_id)")
+                sa.text("CREATE INDEX ix_decks_note_type_id ON decks (note_type_id)")
             )
             schema_changed = True
 

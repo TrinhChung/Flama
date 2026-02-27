@@ -8,15 +8,28 @@ from typing import Dict, List
 from flask import Blueprint, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
+from app.services.anki_scheduler import (
+    _day_index as scheduler_day_index,
+    _day_index_to_datetime as scheduler_day_index_to_datetime,
+)
 from app.services.stats_overview import build_stats_overview
 from app.services.stats_today_future import build_today_future_stats, list_stats_decks
 from app.utils.deck_move_token import create_deck_move_token
 from app.utils.permissions import is_admin_user
 from models import db
 from models.flashcard import Card, DeckInstall, Note
-from models.vocabulary_deck import VocabularyDeck
+from models.deck import Deck
+from models.card_progress import CardProgress
 
 main_bp = Blueprint("main", __name__)
+
+
+def _day_index(moment: datetime, boundary_hour: int) -> int:
+    return scheduler_day_index(moment, boundary_hour)
+
+
+def _day_index_to_datetime(day_index: int, boundary_hour: int) -> datetime:
+    return scheduler_day_index_to_datetime(day_index, boundary_hour)
 
 
 @main_bp.route("/")
@@ -49,17 +62,17 @@ def dashboard():
     # Admin sees own/source decks only (exclude decks cloned for other users)
     if admin_mode:
         decks = (
-            VocabularyDeck.query.filter(
+            Deck.query.filter(
                 db.or_(
-                    VocabularyDeck.owner_user_id == current_user.id,
-                    VocabularyDeck.owner_user_id.is_(None),
+                    Deck.owner_user_id == current_user.id,
+                    Deck.owner_user_id.is_(None),
                 )
             )
             .order_by(
-                VocabularyDeck.parent_id.isnot(None),
-                VocabularyDeck.position,
-                VocabularyDeck.created_at,
-                VocabularyDeck.id,
+                Deck.parent_id.isnot(None),
+                Deck.position,
+                Deck.created_at,
+                Deck.id,
             )
             .all()
         )
@@ -76,19 +89,19 @@ def dashboard():
                     break
                 visible_ids.update(current_ids)
                 child_rows = (
-                    db.session.query(VocabularyDeck.id)
-                    .filter(VocabularyDeck.parent_id.in_(current_ids))
+                    db.session.query(Deck.id)
+                    .filter(Deck.parent_id.in_(current_ids))
                     .all()
                 )
                 frontier = {int(row[0]) for row in child_rows if row and row[0] is not None}
 
             decks = (
-                VocabularyDeck.query.filter(VocabularyDeck.id.in_(visible_ids))
+                Deck.query.filter(Deck.id.in_(visible_ids))
                 .order_by(
-                    VocabularyDeck.parent_id.isnot(None),
-                    VocabularyDeck.position,
-                    VocabularyDeck.created_at,
-                    VocabularyDeck.id,
+                    Deck.parent_id.isnot(None),
+                    Deck.position,
+                    Deck.created_at,
+                    Deck.id,
                 )
                 .all()
             )
@@ -119,53 +132,47 @@ def dashboard():
         for deck_id in visible_deck_ids
     }
     if visible_deck_ids:
-        queue_rows = (
-            db.session.query(Note.deck_id, Card.queue, db.func.count(Card.id))
+        progress_join = db.and_(
+            CardProgress.card_id == Card.id,
+            CardProgress.user_id == current_user.id,
+        )
+        state_rows = (
+            db.session.query(
+                Note.deck_id,
+                CardProgress.queue,
+                CardProgress.due_at,
+            )
             .select_from(Card)
             .join(Note, Card.note_id == Note.id)
+            .outerjoin(CardProgress, progress_join)
             .filter(
                 Note.user_id == current_user.id,
                 Note.deck_id.in_(visible_deck_ids),
             )
-            .group_by(Note.deck_id, Card.queue)
             .all()
         )
-        for deck_id, queue_value, total in queue_rows:
+        for deck_id, progress_queue, progress_due_at in state_rows:
             if not deck_id:
                 continue
             bucket = card_counts_by_deck.setdefault(
                 int(deck_id), {"total": 0, "new": 0, "learn": 0, "due": 0}
             )
-            total_int = int(total or 0)
-            bucket["total"] += total_int
-            queue_norm = (queue_value or "new").strip().lower()
-            if queue_norm == "new":
-                bucket["new"] += total_int
-            elif queue_norm in {"learn", "learning", "relearning"}:
-                bucket["learn"] += total_int
+            bucket["total"] += 1
 
-        due_rows = (
-            db.session.query(Note.deck_id, db.func.count(Card.id))
-            .select_from(Card)
-            .join(Note, Card.note_id == Note.id)
-            .filter(
-                Note.user_id == current_user.id,
-                Note.deck_id.in_(visible_deck_ids),
-                Card.queue == "review",
-                db.or_(Card.due_at.is_(None), Card.due_at <= now),
-            )
-            .group_by(Note.deck_id)
-            .all()
-        )
-        for deck_id, due_total in due_rows:
-            if not deck_id:
-                continue
-            bucket = card_counts_by_deck.setdefault(
-                int(deck_id), {"total": 0, "new": 0, "learn": 0, "due": 0}
-            )
-            bucket["due"] = int(due_total or 0)
+            queue_value = progress_queue
+            due_at_value = progress_due_at
+            queue_norm = (queue_value or "new").strip().lower()
+            if queue_norm == "learn":
+                queue_norm = "learning"
+
+            if queue_norm == "new":
+                bucket["new"] += 1
+            elif queue_norm in {"learning", "relearning"}:
+                bucket["learn"] += 1
+            elif queue_norm == "review" and (due_at_value is None or due_at_value <= now):
+                bucket["due"] += 1
     
-    by_parent: Dict[int | None, List[VocabularyDeck]] = {}
+    by_parent: Dict[int | None, List[Deck]] = {}
     for deck in decks:
         by_parent.setdefault(deck.parent_id, []).append(deck)
 

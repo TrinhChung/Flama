@@ -8,8 +8,8 @@ from app import create_app
 from models import db
 from models.flashcard import Card, DeckInstall, DeckMarketplaceItem, Note
 from models.user import User
-from models.vocabulary_deck import VocabularyDeck
-from models.vocabulary_progress import VocabularyProgress
+from models.deck import Deck
+from models.card_progress import CardProgress
 
 
 class FlashcardApiIntegrationTests(unittest.TestCase):
@@ -31,7 +31,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             db.session.flush()
             self.user_id = user.id
 
-            deck = VocabularyDeck(name="Deck A")
+            deck = Deck(name="Deck A")
             db.session.add(deck)
             db.session.flush()
             self.deck_id = deck.id
@@ -78,8 +78,8 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
                 break
             seen.update(current)
             child_rows = (
-                db.session.query(VocabularyDeck.id)
-                .filter(VocabularyDeck.parent_id.in_(current))
+                db.session.query(Deck.id)
+                .filter(Deck.parent_id.in_(current))
                 .all()
             )
             frontier = {int(row[0]) for row in child_rows if row and row[0] is not None}
@@ -272,7 +272,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         note_type_id = note_type["id"]
 
         with self.app.app_context():
-            child_deck = VocabularyDeck(name="Installed Child", parent_id=self.deck_id)
+            child_deck = Deck(name="Installed Child", parent_id=self.deck_id)
             db.session.add(child_deck)
             db.session.flush()
             child_deck_id = child_deck.id
@@ -354,7 +354,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         note_type_id = note_type["id"]
 
         with self.app.app_context():
-            child_deck = VocabularyDeck(name="Visible Child Deck", parent_id=self.deck_id)
+            child_deck = Deck(name="Visible Child Deck", parent_id=self.deck_id)
             db.session.add(child_deck)
             db.session.flush()
             child_deck_id = child_deck.id
@@ -705,9 +705,9 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         self.assertTrue(answer_resp.get_json()["success"])
 
         with self.app.app_context():
-            progress = VocabularyProgress.query.filter_by(
+            progress = CardProgress.query.filter_by(
                 user_id=self.user_id,
-                new_card_id=payload["card_id"],
+                card_id=payload["card_id"],
             ).first()
             self.assertIsNotNone(progress)
             self.assertIn(progress.queue, {"learning", "review", "relearning", "new"})
@@ -838,7 +838,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         note_type_id = note_type["id"]
 
         with self.app.app_context():
-            deck_b = VocabularyDeck(name="Deck B")
+            deck_b = Deck(name="Deck B")
             db.session.add(deck_b)
             db.session.commit()
             deck_b_id = deck_b.id

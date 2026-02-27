@@ -19,7 +19,7 @@ from flask import (
 from flask_login import current_user, login_required
 from sqlalchemy import func, or_
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import aliased, selectinload
 
 from app.utils.deck_move_token import parse_deck_move_token
 from app.utils.permissions import is_admin_user
@@ -30,8 +30,8 @@ from app.services.anki_scheduler import (
 )
 from models import db
 from models.flashcard import Card, Note
-from models.vocabulary_deck import VocabularyDeck
-from models.vocabulary_progress import VocabularyProgress
+from models.deck import Deck
+from models.card_progress import CardProgress
 
 LEARN_QUEUE = "learn"
 REVIEW_QUEUE = "review"
@@ -71,7 +71,10 @@ def restrict_non_admin_routes():
 
 
 def _legacy_structure_removed_response():
-    message = "Legacy Level/Topic/Lesson/Entry workflow has been removed. Please use Deck + NoteType + Note."
+    message = (
+        "Legacy Level/Topic/Lesson/Entry workflow has been removed. "
+        "Use Deck + NoteType + Note + Card schema only."
+    )
     if request.is_json:
         return jsonify({"success": False, "error": "LEGACY_STRUCTURE_REMOVED", "message": message}), 410
     if request.method == "GET":
@@ -90,7 +93,7 @@ def _normalize_progress_queue(value: str | None) -> str:
     return NEW_QUEUE
 
 
-def _card_state_from_progress(progress: VocabularyProgress | None, now: datetime) -> CardState:
+def _card_state_from_progress(progress: CardProgress | None, now: datetime) -> CardState:
     options = default_deck_options()
     if not progress:
         return CardState(
@@ -128,8 +131,8 @@ def _card_state_from_progress(progress: VocabularyProgress | None, now: datetime
 
 
 def _apply_card_state_to_progress(
-    progress: VocabularyProgress, card_state: CardState, now: datetime
-) -> VocabularyProgress:
+    progress: CardProgress, card_state: CardState, now: datetime
+) -> CardProgress:
     options = default_deck_options()
     queue = _normalize_progress_queue(card_state.type)
     due_at = card_state.due
@@ -153,11 +156,11 @@ def _apply_card_state_to_progress(
 
 
 def _next_deck_position(parent_deck_id: int | None) -> int:
-    query = db.session.query(func.max(VocabularyDeck.position))
+    query = db.session.query(func.max(Deck.position))
     if parent_deck_id is None:
-        max_pos = query.filter(VocabularyDeck.parent_id.is_(None)).scalar()
+        max_pos = query.filter(Deck.parent_id.is_(None)).scalar()
     else:
-        max_pos = query.filter(VocabularyDeck.parent_id == parent_deck_id).scalar()
+        max_pos = query.filter(Deck.parent_id == parent_deck_id).scalar()
     return (max_pos or 0) + 1
 
 
@@ -180,17 +183,17 @@ def _deck_name_exists_under_parent(
     if not normalized_name:
         return False
 
-    query = VocabularyDeck.query.filter(func.lower(VocabularyDeck.name) == normalized_name)
+    query = Deck.query.filter(func.lower(Deck.name) == normalized_name)
     if parent_id is None:
-        query = query.filter(VocabularyDeck.parent_id.is_(None))
+        query = query.filter(Deck.parent_id.is_(None))
     else:
-        query = query.filter(VocabularyDeck.parent_id == parent_id)
+        query = query.filter(Deck.parent_id == parent_id)
     if exclude_deck_id is not None:
-        query = query.filter(VocabularyDeck.id != exclude_deck_id)
+        query = query.filter(Deck.id != exclude_deck_id)
     return query.first() is not None
 
 
-def _is_due(progress: VocabularyProgress | None, now: datetime) -> bool:
+def _is_due(progress: CardProgress | None, now: datetime) -> bool:
     if progress is None:
         return True
     queue = _normalize_progress_queue(progress.queue)
@@ -307,7 +310,21 @@ def _browse_status_code(*, queue: str | None, due_at: datetime | None, now: date
     return queue_norm
 
 
-def _build_browse_row(card_obj, deck_name_lookup: dict[int, str], now: datetime):
+def _resolve_browse_queue_due(
+    *,
+    progress_obj: CardProgress | None,
+) -> tuple[str, datetime | None]:
+    if progress_obj is not None:
+        return _normalize_progress_queue(progress_obj.queue), progress_obj.due_at
+    return NEW_QUEUE, None
+
+
+def _build_browse_row(
+    card_obj,
+    deck_name_lookup: dict[int, str],
+    now: datetime,
+    progress_obj: CardProgress | None = None,
+):
     note_obj = card_obj.note
     display_triplet = _note_display_triplet(note_obj)
     word = display_triplet["word"]
@@ -318,7 +335,8 @@ def _build_browse_row(card_obj, deck_name_lookup: dict[int, str], now: datetime)
     template_name = card_obj.template.name if card_obj.template else "Card"
     card_type = f"{note_type_name} / {template_name}" if template_name else note_type_name
     deck_name = deck_name_lookup.get(note_obj.deck_id or 0, "")
-    status_code = _browse_status_code(queue=card_obj.queue, due_at=card_obj.due_at, now=now)
+    queue_value, due_at_value = _resolve_browse_queue_due(progress_obj=progress_obj)
+    status_code = _browse_status_code(queue=queue_value, due_at=due_at_value, now=now)
 
     return {
         "card_id": card_obj.id,
@@ -327,10 +345,10 @@ def _build_browse_row(card_obj, deck_name_lookup: dict[int, str], now: datetime)
         "card_type": card_type,
         "note_type": note_type_name,
         "template": template_name,
-        "queue": (card_obj.queue or NEW_QUEUE).strip().lower(),
+        "queue": queue_value,
         "status": status_code,
-        "due_at": card_obj.due_at.isoformat() if card_obj.due_at else None,
-        "due_label": _browse_due_label(queue=card_obj.queue, due_at=card_obj.due_at),
+        "due_at": due_at_value.isoformat() if due_at_value else None,
+        "due_label": _browse_due_label(queue=queue_value, due_at=due_at_value),
         "deck_id": note_obj.deck_id,
         "deck_name": deck_name,
         "word": word,
@@ -341,7 +359,12 @@ def _build_browse_row(card_obj, deck_name_lookup: dict[int, str], now: datetime)
     }
 
 
-def _build_browse_card_detail(card_obj, deck_name_lookup: dict[int, str], now: datetime):
+def _build_browse_card_detail(
+    card_obj,
+    deck_name_lookup: dict[int, str],
+    now: datetime,
+    progress_obj: CardProgress | None = None,
+):
     note_obj = card_obj.note
     note_type_obj = note_obj.note_type
     field_values = note_obj.field_values or {}
@@ -383,7 +406,7 @@ def _build_browse_card_detail(card_obj, deck_name_lookup: dict[int, str], now: d
     ]
 
     return {
-        "card": _build_browse_row(card_obj, deck_name_lookup, now),
+        "card": _build_browse_row(card_obj, deck_name_lookup, now, progress_obj=progress_obj),
         "note": {
             "id": note_obj.id,
             "note_type_id": note_obj.note_type_id,
@@ -401,11 +424,11 @@ def _build_browse_card_detail(card_obj, deck_name_lookup: dict[int, str], now: d
 def _collect_accessible_browse_decks():
     from models.flashcard import Note
 
-    all_decks = VocabularyDeck.query.order_by(
-        VocabularyDeck.parent_id.isnot(None),
-        VocabularyDeck.position,
-        VocabularyDeck.created_at,
-        VocabularyDeck.id,
+    all_decks = Deck.query.order_by(
+        Deck.parent_id.isnot(None),
+        Deck.position,
+        Deck.created_at,
+        Deck.id,
     ).all()
     if is_admin_user(current_user):
         return all_decks
@@ -435,8 +458,8 @@ def _collect_accessible_browse_decks():
     return [deck for deck in all_decks if deck.id in visible_ids]
 
 
-def _deck_children_map(deck_list: list[VocabularyDeck]) -> dict[int | None, list[VocabularyDeck]]:
-    mapping: dict[int | None, list[VocabularyDeck]] = {}
+def _deck_children_map(deck_list: list[Deck]) -> dict[int | None, list[Deck]]:
+    mapping: dict[int | None, list[Deck]] = {}
     for deck_obj in deck_list:
         mapping.setdefault(deck_obj.parent_id, []).append(deck_obj)
     for children in mapping.values():
@@ -444,7 +467,7 @@ def _deck_children_map(deck_list: list[VocabularyDeck]) -> dict[int | None, list
     return mapping
 
 
-def _collect_subtree_ids(root_id: int, children_by_parent: dict[int | None, list[VocabularyDeck]]) -> list[int]:
+def _collect_subtree_ids(root_id: int, children_by_parent: dict[int | None, list[Deck]]) -> list[int]:
     result: list[int] = []
     stack = [root_id]
     while stack:
@@ -472,50 +495,43 @@ def _build_browse_deck_tree_payload():
         for deck_id in scoped_ids
     }
 
-    base_query = (
-        db.session.query(Note.deck_id, Card.queue, func.count(Card.id))
+    progress_join = db.and_(
+        CardProgress.card_id == Card.id,
+        CardProgress.user_id == current_user.id,
+    )
+    state_query = (
+        db.session.query(
+            Note.deck_id,
+            CardProgress.queue,
+            CardProgress.due_at,
+        )
         .select_from(Card)
         .join(Note, Card.note_id == Note.id)
+        .outerjoin(CardProgress, progress_join)
         .filter(Note.deck_id.in_(scoped_ids))
     )
     if not is_admin_user(current_user):
-        base_query = base_query.filter(Note.user_id == current_user.id)
-    queue_rows = base_query.group_by(Note.deck_id, Card.queue).all()
-    for deck_id, queue_value, total in queue_rows:
+        state_query = state_query.filter(Note.user_id == current_user.id)
+
+    for deck_id, progress_queue, progress_due_at in state_query.all():
         if not deck_id:
             continue
         bucket = direct_counts.setdefault(
             int(deck_id), {"total": 0, "new": 0, "learn": 0, "due": 0}
         )
-        total_int = int(total or 0)
-        bucket["total"] += total_int
-        queue_norm = (queue_value or NEW_QUEUE).strip().lower()
+        bucket["total"] += 1
+
+        queue_value = progress_queue
+        due_at_value = progress_due_at
+        queue_norm = _normalize_progress_queue(queue_value)
         if queue_norm == NEW_QUEUE:
-            bucket["new"] += total_int
-        elif queue_norm in {LEARN_QUEUE, LEARNING_QUEUE, RELEARNING_QUEUE}:
-            bucket["learn"] += total_int
+            bucket["new"] += 1
+        elif queue_norm in {LEARNING_QUEUE, RELEARNING_QUEUE}:
+            bucket["learn"] += 1
+        elif queue_norm == REVIEW_QUEUE and (due_at_value is None or due_at_value <= now):
+            bucket["due"] += 1
 
-    due_query = (
-        db.session.query(Note.deck_id, func.count(Card.id))
-        .select_from(Card)
-        .join(Note, Card.note_id == Note.id)
-        .filter(
-            Note.deck_id.in_(scoped_ids),
-            Card.queue == REVIEW_QUEUE,
-            or_(Card.due_at.is_(None), Card.due_at <= now),
-        )
-    )
-    if not is_admin_user(current_user):
-        due_query = due_query.filter(Note.user_id == current_user.id)
-    for deck_id, due_total in due_query.group_by(Note.deck_id).all():
-        if not deck_id:
-            continue
-        bucket = direct_counts.setdefault(
-            int(deck_id), {"total": 0, "new": 0, "learn": 0, "due": 0}
-        )
-        bucket["due"] = int(due_total or 0)
-
-    def _build_node(deck_obj: VocabularyDeck):
+    def _build_node(deck_obj: Deck):
         direct = direct_counts.get(
             deck_obj.id, {"total": 0, "new": 0, "learn": 0, "due": 0}
         )
@@ -606,9 +622,15 @@ def browse_api_cards():
     deck_lookup = {deck.id: deck.name for deck in scoped_decks}
     children_by_parent = _deck_children_map(scoped_decks)
     scoped_ids = {deck.id for deck in scoped_decks}
+    progress_alias = aliased(CardProgress)
+    progress_join = db.and_(
+        progress_alias.card_id == Card.id,
+        progress_alias.user_id == current_user.id,
+    )
 
     query = (
         Card.query.join(Note, Card.note_id == Note.id)
+        .outerjoin(progress_alias, progress_join)
         .options(
             selectinload(Card.note).selectinload(Note.note_type),
             selectinload(Card.template),
@@ -650,31 +672,36 @@ def browse_api_cards():
 
     now = datetime.utcnow()
     if status == NEW_QUEUE:
-        query = query.filter(Card.queue == NEW_QUEUE)
+        query = query.filter(db.or_(progress_alias.id.is_(None), progress_alias.queue == NEW_QUEUE))
     elif status == "learn":
-        query = query.filter(Card.queue.in_([LEARN_QUEUE, LEARNING_QUEUE, RELEARNING_QUEUE]))
+        query = query.filter(progress_alias.queue.in_([LEARN_QUEUE, LEARNING_QUEUE, RELEARNING_QUEUE]))
     elif status in {"due", REVIEW_QUEUE}:
-        query = query.filter(Card.queue == REVIEW_QUEUE).filter(
-            or_(Card.due_at.is_(None), Card.due_at <= now)
+        query = query.filter(progress_alias.queue == REVIEW_QUEUE).filter(
+            or_(progress_alias.due_at.is_(None), progress_alias.due_at <= now)
         )
 
     if sort_by == "deck":
-        query = query.outerjoin(VocabularyDeck, Note.deck_id == VocabularyDeck.id)
+        query = query.outerjoin(Deck, Note.deck_id == Deck.id)
         if sort_dir == "desc":
-            query = query.order_by(VocabularyDeck.name.desc(), Card.updated_at.desc())
+            query = query.order_by(Deck.name.desc(), Card.updated_at.desc())
         else:
-            query = query.order_by(VocabularyDeck.name.asc(), Card.updated_at.desc())
+            query = query.order_by(Deck.name.asc(), Card.updated_at.desc())
     elif sort_by == "word":
         sort_expr = func.lower(db.cast(Note.field_values, db.Text))
         query = query.order_by(sort_expr.desc() if sort_dir == "desc" else sort_expr.asc(), Card.updated_at.desc())
     else:
+        due_sort_expr = progress_alias.due_at
         if sort_dir == "desc":
-            query = query.order_by(Card.due_at.is_(None), Card.due_at.desc(), Card.updated_at.desc())
+            query = query.order_by(due_sort_expr.is_(None), due_sort_expr.desc(), Card.updated_at.desc())
         else:
-            query = query.order_by(Card.due_at.is_(None), Card.due_at.asc(), Card.updated_at.desc())
+            query = query.order_by(due_sort_expr.is_(None), due_sort_expr.asc(), Card.updated_at.desc())
 
     pagination = query.paginate(page=page, per_page=per_page, error_out=False)
-    rows = [_build_browse_row(card_obj, deck_lookup, now) for card_obj in pagination.items]
+    progress_map = _load_card_progress_map([card_obj.id for card_obj in pagination.items])
+    rows = [
+        _build_browse_row(card_obj, deck_lookup, now, progress_obj=progress_map.get(card_obj.id))
+        for card_obj in pagination.items
+    ]
     return jsonify(
         {
             "items": rows,
@@ -709,7 +736,18 @@ def browse_api_card_detail(card_id: str):
         return jsonify({"error": "Card not found"}), 404
 
     deck_lookup = {deck.id: deck.name for deck in _collect_accessible_browse_decks()}
-    return jsonify(_build_browse_card_detail(card_obj, deck_lookup, datetime.utcnow()))
+    progress = CardProgress.query.filter_by(
+        user_id=current_user.id,
+        card_id=card_obj.id,
+    ).first()
+    return jsonify(
+        _build_browse_card_detail(
+            card_obj,
+            deck_lookup,
+            datetime.utcnow(),
+            progress_obj=progress,
+        )
+    )
 
 
 @vocabulary_bp.route("/api/browse/cards/<card_id>", methods=["PATCH"])
@@ -763,7 +801,7 @@ def browse_api_card_update(card_id: str):
                 selected_deck_id = int(raw_deck_id)
             except (TypeError, ValueError):
                 return jsonify({"error": "Invalid deck_id"}), 400
-            if not VocabularyDeck.query.get(selected_deck_id):
+            if not Deck.query.get(selected_deck_id):
                 return jsonify({"error": "Deck not found"}), 404
             if not is_admin_user(current_user):
                 allowed_deck_ids = {deck.id for deck in _collect_accessible_browse_decks()}
@@ -784,12 +822,16 @@ def browse_api_card_update(card_id: str):
     db.session.commit()
 
     deck_lookup = {deck.id: deck.name for deck in _collect_accessible_browse_decks()}
+    progress = CardProgress.query.filter_by(
+        user_id=current_user.id,
+        card_id=card_obj.id,
+    ).first()
     now = datetime.utcnow()
     return jsonify(
         {
             "success": True,
-            "row": _build_browse_row(card_obj, deck_lookup, now),
-            "detail": _build_browse_card_detail(card_obj, deck_lookup, now),
+            "row": _build_browse_row(card_obj, deck_lookup, now, progress_obj=progress),
+            "detail": _build_browse_card_detail(card_obj, deck_lookup, now, progress_obj=progress),
         }
     )
 
@@ -901,7 +943,7 @@ def create_deck():
             except ValueError:
                 flash("Invalid parent deck.", "danger")
                 return redirect(next_url)
-            parent_deck = VocabularyDeck.query.get(parent_id)
+            parent_deck = Deck.query.get(parent_id)
             if not parent_deck:
                 flash("Parent deck not found.", "danger")
                 return redirect(next_url)
@@ -915,11 +957,11 @@ def create_deck():
     final_deck = None
     for token in tokens:
         existing = (
-            VocabularyDeck.query.filter(
-                VocabularyDeck.parent_id == parent_id,
-                VocabularyDeck.name == token,
+            Deck.query.filter(
+                Deck.parent_id == parent_id,
+                Deck.name == token,
             )
-            .order_by(VocabularyDeck.id.asc())
+            .order_by(Deck.id.asc())
             .first()
         )
         if existing:
@@ -927,7 +969,7 @@ def create_deck():
             parent_id = existing.id
             continue
 
-        node = VocabularyDeck(
+        node = Deck(
             parent_id=parent_id,
             name=token,
             position=_next_deck_position(parent_id),
@@ -956,7 +998,7 @@ def rename_deck(deck_id: int):
     if not is_admin_user(current_user):
         return redirect(url_for("main.dashboard"))
         
-    deck = VocabularyDeck.query.get_or_404(deck_id)
+    deck = Deck.query.get_or_404(deck_id)
     new_name = (request.form.get("name") or "").strip()
     next_url = _resolve_next_url()
 
@@ -996,7 +1038,7 @@ def move_deck(deck_id: int | None = None):
             flash("Move token is invalid or expired. Please reopen Deck Settings.", "danger")
             return redirect(next_url)
 
-    deck = VocabularyDeck.query.get_or_404(deck_id)
+    deck = Deck.query.get_or_404(deck_id)
     parent_token_raw = (request.form.get("parent_token") or "").strip()
     parent_id_raw = (request.form.get("parent_id") or "").strip()
 
@@ -1016,7 +1058,7 @@ def move_deck(deck_id: int | None = None):
             return redirect(next_url)
 
     if new_parent_id is not None:
-        new_parent = VocabularyDeck.query.get(new_parent_id)
+        new_parent = Deck.query.get(new_parent_id)
         if not new_parent:
             flash("Parent deck not found.", "danger")
             return redirect(next_url)
@@ -1058,8 +1100,8 @@ def _collect_deck_ancestor_ids(deck_id: int) -> list[int]:
         seen_ids.add(current_id)
         ancestor_ids.append(current_id)
         parent_row = (
-            db.session.query(VocabularyDeck.parent_id)
-            .filter(VocabularyDeck.id == current_id)
+            db.session.query(Deck.parent_id)
+            .filter(Deck.id == current_id)
             .first()
         )
         if not parent_row or parent_row[0] is None:
@@ -1069,7 +1111,7 @@ def _collect_deck_ancestor_ids(deck_id: int) -> list[int]:
     return ancestor_ids
 
 
-def _can_current_user_delete_cloned_deck(deck_obj: VocabularyDeck) -> bool:
+def _can_current_user_delete_cloned_deck(deck_obj: Deck) -> bool:
     if deck_obj.owner_user_id != current_user.id:
         return False
 
@@ -1094,7 +1136,7 @@ def _can_current_user_delete_cloned_deck(deck_obj: VocabularyDeck) -> bool:
 @login_required
 def delete_deck(deck_id: int):
     """Delete a deck subtree and all Note/Card data inside it."""
-    deck = VocabularyDeck.query.get_or_404(deck_id)
+    deck = Deck.query.get_or_404(deck_id)
     if not is_admin_user(current_user) and not _can_current_user_delete_cloned_deck(deck):
         flash("You do not have permission to delete this deck.", "danger")
         return redirect(url_for("main.dashboard"))
@@ -1102,11 +1144,11 @@ def delete_deck(deck_id: int):
     deck_name = deck.name
     next_url = _resolve_next_url()
 
-    all_decks = VocabularyDeck.query.order_by(
-        VocabularyDeck.parent_id.isnot(None),
-        VocabularyDeck.position,
-        VocabularyDeck.created_at,
-        VocabularyDeck.id,
+    all_decks = Deck.query.order_by(
+        Deck.parent_id.isnot(None),
+        Deck.position,
+        Deck.created_at,
+        Deck.id,
     ).all()
     children_by_parent = _deck_children_map(all_decks)
     deck_ids_to_delete = _collect_subtree_ids(deck.id, children_by_parent)
@@ -1124,7 +1166,7 @@ def delete_deck(deck_id: int):
         card_rows = db.session.query(Card.id).filter(Card.note_id.in_(note_ids)).all()
         card_ids = [str(row[0]) for row in card_rows if row and row[0]]
         if card_ids:
-            VocabularyProgress.query.filter(VocabularyProgress.new_card_id.in_(card_ids)).delete(
+            CardProgress.query.filter(CardProgress.card_id.in_(card_ids)).delete(
                 synchronize_session=False
             )
             Card.query.filter(Card.id.in_(card_ids)).delete(synchronize_session=False)
@@ -1144,14 +1186,14 @@ def reset_deck(deck_id: int):
     if not is_admin_user(current_user):
         return redirect(url_for("main.dashboard"))
 
-    deck = VocabularyDeck.query.get_or_404(deck_id)
+    deck = Deck.query.get_or_404(deck_id)
     next_url = _resolve_next_url()
 
-    all_decks = VocabularyDeck.query.order_by(
-        VocabularyDeck.parent_id.isnot(None),
-        VocabularyDeck.position,
-        VocabularyDeck.created_at,
-        VocabularyDeck.id,
+    all_decks = Deck.query.order_by(
+        Deck.parent_id.isnot(None),
+        Deck.position,
+        Deck.created_at,
+        Deck.id,
     ).all()
     children_by_parent = _deck_children_map(all_decks)
     deck_ids = _collect_subtree_ids(deck.id, children_by_parent)
@@ -1166,9 +1208,9 @@ def reset_deck(deck_id: int):
 
     if card_ids:
         deleted_count = (
-            VocabularyProgress.query.filter(
-                VocabularyProgress.user_id == current_user.id,
-                VocabularyProgress.new_card_id.in_(card_ids),
+            CardProgress.query.filter(
+                CardProgress.user_id == current_user.id,
+                CardProgress.card_id.in_(card_ids),
             ).delete(synchronize_session=False)
             or 0
         )
@@ -1216,7 +1258,7 @@ def topic(topic_id: int):
     return _legacy_structure_removed_response()
 
 
-def _select_next_note_card(cards: List[Card], progress_map: Dict[str, VocabularyProgress], now: datetime):
+def _select_next_note_card(cards: List[Card], progress_map: Dict[str, CardProgress], now: datetime):
     due_learn: list[Card] = []
     due_relearn: list[Card] = []
     due_review: list[Card] = []
@@ -1325,20 +1367,20 @@ def _query_study_cards_for_deck_ids(deck_ids: list[int]) -> list[Card]:
     )
 
 
-def _load_card_progress_map(card_ids: list[str]) -> dict[str, VocabularyProgress]:
+def _load_card_progress_map(card_ids: list[str]) -> dict[str, CardProgress]:
     if not card_ids:
         return {}
 
-    rows = VocabularyProgress.query.filter(
-        VocabularyProgress.user_id == current_user.id,
-        VocabularyProgress.new_card_id.in_(card_ids),
+    rows = CardProgress.query.filter(
+        CardProgress.user_id == current_user.id,
+        CardProgress.card_id.in_(card_ids),
     ).all()
-    return {row.new_card_id: row for row in rows if row.new_card_id}
+    return {row.card_id: row for row in rows if row.card_id}
 
 
 def _count_due_note_cards(
     cards: list[Card],
-    progress_map: dict[str, VocabularyProgress],
+    progress_map: dict[str, CardProgress],
     *,
     now: datetime,
 ) -> tuple[int, int, int]:
@@ -1347,14 +1389,13 @@ def _count_due_note_cards(
     due_review = 0
     for card_obj in cards:
         progress = progress_map.get(card_obj.id)
-        if not _is_due(progress, now):
-            continue
         queue = _normalize_progress_queue(progress.queue) if progress else NEW_QUEUE
         if queue in {LEARNING_QUEUE, RELEARNING_QUEUE}:
+            # Study UI should reflect active learning workload, not only "due now".
             due_learn += 1
-        elif queue == REVIEW_QUEUE:
+        elif queue == REVIEW_QUEUE and _is_due(progress, now):
             due_review += 1
-        else:
+        elif _is_due(progress, now):
             due_new += 1
     return due_new, due_learn, due_review
 
@@ -1369,18 +1410,18 @@ def study_topic(topic_id: int):
 @login_required
 def study_deck(deck_id: int):
     """Study cards across a deck subtree using Note/Card as the source of truth."""
-    all_decks = VocabularyDeck.query.order_by(
-        VocabularyDeck.parent_id.isnot(None),
-        VocabularyDeck.position,
-        VocabularyDeck.created_at,
-        VocabularyDeck.id,
+    all_decks = Deck.query.order_by(
+        Deck.parent_id.isnot(None),
+        Deck.position,
+        Deck.created_at,
+        Deck.id,
     ).all()
     deck_map = {deck.id: deck for deck in all_decks}
     root_deck = deck_map.get(deck_id)
     if not root_deck:
         abort(404)
 
-    children_by_parent: Dict[int | None, List[VocabularyDeck]] = {}
+    children_by_parent: Dict[int | None, List[Deck]] = {}
     for deck in all_decks:
         children_by_parent.setdefault(deck.parent_id, []).append(deck)
 
@@ -1463,15 +1504,15 @@ def create_entry():
     return _legacy_structure_removed_response()
 
 
-@vocabulary_bp.route("/entry/<int:entry_id>/field", methods=["POST"])
+@vocabulary_bp.route("/entry/<int:legacy_entry_id>/field", methods=["POST"])
 @login_required
-def update_entry_field(entry_id: int):
+def update_entry_field(legacy_entry_id: int):
     return _legacy_structure_removed_response()
 
 
-@vocabulary_bp.route("/entry/<int:entry_id>/fields", methods=["POST"])
+@vocabulary_bp.route("/entry/<int:legacy_entry_id>/fields", methods=["POST"])
 @login_required
-def update_entry_fields(entry_id: int):
+def update_entry_fields(legacy_entry_id: int):
     return _legacy_structure_removed_response()
 
 

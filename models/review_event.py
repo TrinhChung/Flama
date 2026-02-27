@@ -9,12 +9,6 @@ class ReviewEvent(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     card_id = db.Column(db.String(64), nullable=False, index=True)
-    entry_id = db.Column(
-        db.Integer,
-        db.ForeignKey("vocabulary_entries.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
-    )
     deck_id = db.Column(db.Integer, nullable=True, index=True)
     note_type_id = db.Column(db.String(36), nullable=True, index=True)
     reviewed_at = db.Column(db.DateTime, nullable=False, index=True)
