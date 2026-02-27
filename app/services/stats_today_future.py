@@ -12,7 +12,6 @@ from app.utils.permissions import is_admin_user
 from models import db
 from models.flashcard import Card, Note, ReviewEvent
 from models.vocabulary_deck import VocabularyDeck
-from models.vocabulary_entry import VocabularyEntry
 from models.vocabulary_progress import VocabularyProgress
 
 UTC = timezone.utc
@@ -119,7 +118,7 @@ def _query_accessible_stats_decks(user_id: int) -> list[VocabularyDeck]:
     if decks:
         return decks
 
-    # Backward-compat fallback for legacy rows without owner_user_id.
+    # Backward-compat fallback for decks created before owner_user_id was populated.
     all_decks = (
         VocabularyDeck.query.order_by(
             VocabularyDeck.parent_id.isnot(None),
@@ -127,16 +126,6 @@ def _query_accessible_stats_decks(user_id: int) -> list[VocabularyDeck]:
             VocabularyDeck.created_at,
             VocabularyDeck.id,
         )
-        .all()
-    )
-    entry_deck_rows = (
-        db.session.query(VocabularyEntry.deck_id)
-        .join(VocabularyProgress, VocabularyProgress.entry_id == VocabularyEntry.id)
-        .filter(
-            VocabularyProgress.user_id == user_id,
-            VocabularyEntry.deck_id.isnot(None),
-        )
-        .distinct()
         .all()
     )
     note_deck_rows = (
@@ -153,7 +142,7 @@ def _query_accessible_stats_decks(user_id: int) -> list[VocabularyDeck]:
     )
     visible_ids = {
         int(row[0])
-        for row in [*entry_deck_rows, *note_deck_rows]
+        for row in note_deck_rows
         if row and row[0] is not None
     }
     return [deck for deck in all_decks if deck.id in visible_ids]
@@ -217,11 +206,9 @@ def _base_progress_rows_query(*, user_id: int):
             VocabularyProgress.queue,
             VocabularyProgress.interval_days,
             VocabularyProgress.is_suspended,
-            VocabularyEntry.deck_id.label("entry_deck_id"),
             Note.deck_id.label("note_deck_id"),
         )
         .select_from(VocabularyProgress)
-        .outerjoin(VocabularyEntry, VocabularyProgress.entry_id == VocabularyEntry.id)
         .outerjoin(Card, VocabularyProgress.new_card_id == Card.id)
         .outerjoin(Note, Card.note_id == Note.id)
         .filter(VocabularyProgress.user_id == user_id)
@@ -233,12 +220,7 @@ def _apply_scope_filter(query, scope_deck_ids: list[int] | None):
         return query
     if not scope_deck_ids:
         return query.filter(db.text("1=0"))
-    return query.filter(
-        db.or_(
-            VocabularyEntry.deck_id.in_(scope_deck_ids),
-            Note.deck_id.in_(scope_deck_ids),
-        )
-    )
+    return query.filter(Note.deck_id.in_(scope_deck_ids))
 
 
 def _query_today_summary(
@@ -347,7 +329,6 @@ def _aggregate_future_due_mysql(
             db.func.count(VocabularyProgress.id).label("cnt"),
         )
         .select_from(VocabularyProgress)
-        .outerjoin(VocabularyEntry, VocabularyProgress.entry_id == VocabularyEntry.id)
         .outerjoin(Card, VocabularyProgress.new_card_id == Card.id)
         .outerjoin(Note, Card.note_id == Note.id)
         .filter(

@@ -38,9 +38,8 @@
 
   {% if card %}
   <section class="study-card-shell">
-
-    <div class="study-card" id="study-card" data-entry-id="{{ card.id }}" data-study-scope="{{ study_scope }}"
-      data-scope-id="{{ study_scope_id }}">
+    <div class="study-card" id="study-card" data-card-id="{{ card.id }}" data-study-scope="{{ study_scope }}"
+      data-scope-id="{{ study_scope_id }}" data-answer-url="{{ answer_url or '' }}">
       <div class="card-face card-front is-active" id="card-front">
         {{ rendered_front | safe }}
       </div>
@@ -80,10 +79,12 @@
   <div class="study-bottom-bar d-flex justify-content-between align-items-center px-3">
     <!-- Nút Edit góc trái -->
     <div>
+      {% if edit_action_url %}
       <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal"
         data-bs-target="#editWordModal" title="Edit Entry">
         <i class="bi bi-pencil"></i> <span class="d-none d-sm-inline">Edit</span>
       </button>
+      {% endif %}
     </div>
 
     <div class="d-flex flex-grow-1 justify-content-center">
@@ -131,11 +132,11 @@
   {% endif %}
 </div>
 
-{% if card %}
+{% if card and edit_action_url %}
 <!-- Edit Word Modal -->
 <div class="modal fade" id="editWordModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered modal-lg">
-    <form class="modal-content" method="POST" action="{{ url_for('vocabulary.edit_study_card', entry_id=card.id) }}">
+    <form class="modal-content" method="POST" action="{{ edit_action_url }}">
       <div class="modal-header py-2">
         <h5 class="modal-title fs-6 fw-bold text-dark">Sửa Từ Vựng</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -632,9 +633,10 @@
 <script>
   (() => {
     const cardRoot = document.getElementById("study-card");
-    const entryId = Number(cardRoot?.dataset.entryId || 0);
+    const cardId = String(cardRoot?.dataset.cardId || "");
     const studyScope = (cardRoot?.dataset.studyScope || "lesson").toLowerCase();
     const scopeId = Number(cardRoot?.dataset.scopeId || 0);
+    const answerUrl = String(cardRoot?.dataset.answerUrl || "");
     const front = document.getElementById("card-front");
     const back = document.getElementById("card-back");
     const showAnswerBtn = document.getElementById("show-answer-btn");
@@ -673,7 +675,7 @@
     }
 
     async function submitRating(rating) {
-      if (!entryId || !rating) {
+      if (!cardId || !answerUrl || !rating) {
         return;
       }
       const durationMs = Math.max(0, Math.round(performance.now() - cardShownAtMs));
@@ -682,7 +684,7 @@
           Intl.DateTimeFormat &&
           Intl.DateTimeFormat().resolvedOptions().timeZone) ||
         "UTC";
-      const res = await fetch(`{{ url_for('vocabulary.study_answer', entry_id=0) }}`.replace("/0/", `/${entryId}/`), {
+      const res = await fetch(answerUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -701,7 +703,9 @@
       }
       if (data.next_url) {
         window.location.href = data.next_url;
+        return;
       }
+      window.location.reload();
     }
 
     if (showAnswerBtn) {

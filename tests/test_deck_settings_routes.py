@@ -5,11 +5,10 @@ import unittest
 from app import create_app
 from app.utils.deck_move_token import create_deck_move_token
 from models import db
-from models.flashcard import DeckInstall, DeckMarketplaceItem
+from models.flashcard import Card, DeckInstall, DeckMarketplaceItem, Note, NoteType, Template
 from models.user import User
 from models.user_role import UserRole
 from models.vocabulary_deck import VocabularyDeck
-from models.vocabulary_entry import VocabularyEntry
 from models.vocabulary_progress import VocabularyProgress
 
 
@@ -179,26 +178,42 @@ class DeckSettingsRoutesTests(unittest.TestCase):
             db.session.add(deck)
             db.session.flush()
 
-            entry = VocabularyEntry(deck_id=deck.id, deck=deck.name, word="test")
-            db.session.add(entry)
+            note_type = NoteType(user_id=self.admin_id, name="Deck Reset Note Type")
+            template = Template(
+                note_type=note_type,
+                name="Card 1",
+                front_html="{{Word}}",
+                back_html="{{Word}}",
+                shared_css="",
+                position=0,
+                is_default=True,
+            )
+            note = Note(
+                note_type=note_type,
+                user_id=self.admin_id,
+                deck_id=deck.id,
+                field_values={"Word": "test"},
+            )
+            card = Card(note=note, template=template, queue="new")
+            db.session.add_all([note_type, template, note, card])
             db.session.flush()
 
             admin_progress = VocabularyProgress(
                 user_id=self.admin_id,
-                entry_id=entry.id,
+                new_card_id=card.id,
                 queue="learning",
                 step_index=1,
             )
             other_progress = VocabularyProgress(
                 user_id=self.other_user_id,
-                entry_id=entry.id,
+                new_card_id=card.id,
                 queue="learning",
                 step_index=1,
             )
             db.session.add_all([admin_progress, other_progress])
             db.session.commit()
             deck_id = deck.id
-            entry_id = entry.id
+            card_id = card.id
 
         self._login_admin()
         response = self.client.post(
@@ -211,11 +226,11 @@ class DeckSettingsRoutesTests(unittest.TestCase):
         with self.app.app_context():
             admin_progress_count = VocabularyProgress.query.filter_by(
                 user_id=self.admin_id,
-                entry_id=entry_id,
+                new_card_id=card_id,
             ).count()
             other_progress_count = VocabularyProgress.query.filter_by(
                 user_id=self.other_user_id,
-                entry_id=entry_id,
+                new_card_id=card_id,
             ).count()
             self.assertEqual(admin_progress_count, 0)
             self.assertEqual(other_progress_count, 1)
@@ -239,8 +254,6 @@ class DeckSettingsRoutesTests(unittest.TestCase):
             )
             db.session.add(cloned_child)
             db.session.flush()
-
-            db.session.add(VocabularyEntry(deck_id=cloned_child.id, deck=cloned_child.name, word="test"))
 
             shared_item = DeckMarketplaceItem(
                 owner_user_id=self.admin_id,

@@ -75,7 +75,6 @@ from models.flashcard import (
     Template,
 )
 from models.vocabulary_deck import VocabularyDeck
-from models.vocabulary_entry import VocabularyEntry
 from models.vocabulary_progress import VocabularyProgress
 
 flashcards_bp = Blueprint("flashcards", __name__)
@@ -333,62 +332,6 @@ def _build_preview_sample_values(field_defs: list[FieldDef]) -> dict[str, Any]:
         else:
             sample_values[field_def.name] = field_def.name
     return sample_values
-
-
-def _build_preview_values_from_vocabulary_entry(
-    entry: VocabularyEntry,
-    field_defs: list[FieldDef],
-) -> dict[str, Any]:
-    # Keep compatibility with both legacy (Word/Reading/...) and flama (word/reading/...) field names.
-    raw_values = {
-        "Word": entry.word or "",
-        "word": entry.word or "",
-        "hanviet": entry.hanviet or "",
-        "Reading": entry.reading or "",
-        "reading": entry.reading or "",
-        "Translation_VI": entry.translation_vi or "",
-        "translation_vi": entry.translation_vi or "",
-        "Meaning_JP": entry.meaning_jp or "",
-        "meaning_jp": entry.meaning_jp or "",
-        "Meaning_VI": entry.meaning_vi or "",
-        "meaning_vi": entry.meaning_vi or "",
-        "Usage_JP": entry.usage_jp or "",
-        "usage_jp": entry.usage_jp or "",
-        "Usage_VI": entry.usage_vi or "",
-        "usage_vi": entry.usage_vi or "",
-        "Example_JP": entry.example_jp or "",
-        "example_jp": entry.example_jp or "",
-        "Example_VI": entry.example_vi or "",
-        "example_vi": entry.example_vi or "",
-        "Additional_Note_JP": entry.additional_note_jp or "",
-        "additional_note_jp": entry.additional_note_jp or "",
-        "Additional_Note_VI": entry.additional_note_vi or "",
-        "additional_note_vi": entry.additional_note_vi or "",
-        "image": entry.image or "",
-        "Diagram": entry.diagram or "",
-        "diagram": entry.diagram or "",
-        "Word_Audio": entry.word_audio or "",
-        "word_audio": entry.word_audio or "",
-        "Example_Audio": entry.example_audio or "",
-        "example_audio": entry.example_audio or "",
-    }
-
-    preview_values: dict[str, Any] = {}
-    for field_def in field_defs:
-        raw_value = raw_values.get(field_def.name, "")
-        if field_def.field_type == "image":
-            preview_values[field_def.name] = PREVIEW_MEDIA_IMAGE_TOKEN if raw_value else ""
-        elif field_def.field_type == "audio":
-            preview_values[field_def.name] = PREVIEW_MEDIA_AUDIO_TOKEN if raw_value else ""
-        elif field_def.field_type == "diagram":
-            preview_values[field_def.name] = PREVIEW_MEDIA_DIAGRAM_TOKEN if raw_value else ""
-        else:
-            preview_values[field_def.name] = raw_value
-
-    for key, value in raw_values.items():
-        if key not in preview_values:
-            preview_values[key] = value
-    return preview_values
 
 
 def _validate_note_type_publish_requirements(note_type: NoteType) -> str | None:
@@ -673,30 +616,6 @@ def _collect_deck_subtree_ids(root_deck_id: int | None) -> list[int]:
     return sorted(seen)
 
 
-def _extract_entry_meaning_for_test(entry: VocabularyEntry) -> str:
-    for raw_value in (
-        entry.translation_vi,
-        entry.meaning_vi,
-        entry.meaning_jp,
-        entry.usage_vi,
-        entry.usage_jp,
-    ):
-        text = (raw_value or "").strip()
-        if text:
-            return text
-    return ""
-
-
-def _serialize_vocabulary_entry_test_sample(entry: VocabularyEntry) -> dict[str, Any]:
-    return {
-        "entry_id": int(entry.id),
-        "note_id": None,
-        "word": (entry.word or "").strip(),
-        "reading": (entry.reading or "").strip(),
-        "meaning": _extract_entry_meaning_for_test(entry),
-    }
-
-
 def _first_non_empty_field_text(field_values: dict[str, Any], keys: list[str]) -> str:
     for key in keys:
         if key not in field_values:
@@ -747,7 +666,6 @@ def _serialize_note_test_sample(note: Note) -> dict[str, Any] | None:
     )
 
     return {
-        "entry_id": None,
         "note_id": note.id,
         "word": word,
         "reading": reading,
@@ -783,16 +701,7 @@ def _build_shared_deck_test_samples(
             note_candidates.append(sample)
 
     if not note_candidates:
-        entry_candidates = [
-            entry
-            for entry in VocabularyEntry.query.filter(VocabularyEntry.deck_id.in_(deck_ids)).all()
-            if (entry.word or "").strip()
-        ]
-        if not entry_candidates:
-            return []
-        random.shuffle(entry_candidates)
-        selected_entries = entry_candidates[:limit]
-        return [_serialize_vocabulary_entry_test_sample(entry) for entry in selected_entries]
+        return []
 
     random.shuffle(note_candidates)
     return note_candidates[:limit]
@@ -904,15 +813,6 @@ def _resolve_single_note_type_for_deck(
 
     note_type_ids = sorted({row[0] for row in query.all() if row[0]})
     if not note_type_ids:
-        has_entries = (
-            db.session.query(VocabularyEntry.id)
-            .filter(VocabularyEntry.deck_id == deck_id)
-            .first()
-            is not None
-        )
-        if has_entries and owner_user_id is not None:
-            fallback_note_type, _fallback_template = ensure_legacy_note_type(db.session, owner_user_id)
-            return fallback_note_type.id, None
         return None, "Deck has no notes, cannot infer source_note_type_id."
     if len(note_type_ids) > 1:
         return None, "All notes in one deck must use the same template (note type)."
@@ -1133,32 +1033,6 @@ def _clone_deck_subtree(
     db.session.add(cloned_deck)
     db.session.flush()
 
-    source_entries = VocabularyEntry.query.filter_by(deck_id=source_deck.id).all()
-    for entry in source_entries:
-        db.session.add(
-            VocabularyEntry(
-                lesson_id=None,
-                deck_id=cloned_deck.id,
-                deck=entry.deck,
-                word=entry.word,
-                hanviet=entry.hanviet,
-                reading=entry.reading,
-                translation_vi=entry.translation_vi,
-                meaning_jp=entry.meaning_jp,
-                meaning_vi=entry.meaning_vi,
-                usage_jp=entry.usage_jp,
-                usage_vi=entry.usage_vi,
-                example_jp=entry.example_jp,
-                example_vi=entry.example_vi,
-                additional_note_jp=entry.additional_note_jp,
-                additional_note_vi=entry.additional_note_vi,
-                image=entry.image,
-                diagram=entry.diagram,
-                word_audio=entry.word_audio,
-                example_audio=entry.example_audio,
-            )
-        )
-
     source_notes_query = Note.query.filter(Note.deck_id == source_deck.id)
     if source_owner_user_id is not None:
         source_notes_query = source_notes_query.filter(Note.user_id == source_owner_user_id)
@@ -1265,17 +1139,6 @@ def _deck_reps_for_user(*, user_id: int, local_deck_id: int) -> int:
     if not subtree_deck_ids:
         return 0
 
-    legacy_reps = (
-        db.session.query(db.func.coalesce(db.func.sum(VocabularyProgress.reps), 0))
-        .select_from(VocabularyProgress)
-        .join(VocabularyEntry, VocabularyProgress.entry_id == VocabularyEntry.id)
-        .filter(
-            VocabularyProgress.user_id == user_id,
-            VocabularyEntry.deck_id.in_(subtree_deck_ids),
-        )
-        .scalar()
-    ) or 0
-
     flashcard_reps = (
         db.session.query(db.func.coalesce(db.func.sum(VocabularyProgress.reps), 0))
         .select_from(VocabularyProgress)
@@ -1287,7 +1150,7 @@ def _deck_reps_for_user(*, user_id: int, local_deck_id: int) -> int:
         )
         .scalar()
     ) or 0
-    return int(legacy_reps or 0) + int(flashcard_reps or 0)
+    return int(flashcard_reps or 0)
 
 
 def _is_deck_install_active(install: DeckInstall) -> bool:
@@ -3089,9 +2952,8 @@ def study_answer(card_id: str):
 
 
 @flashcards_bp.route("/api/flashcards/seed-default-note-type", methods=["POST"])
-@flashcards_bp.route("/api/flashcards/seed-legacy", methods=["POST"])
 @login_required
-def seed_legacy_note_type():
+def seed_default_note_type():
     if not is_admin_user(current_user):
         return _api_error("VALIDATION_ERROR", "Admin only endpoint.", status=403)
     note_type, template = ensure_legacy_note_type(db.session, current_user.id)
@@ -3569,7 +3431,6 @@ def preview_shared_deck_template(deck_item_id: str, template_id: str):
         return _api_error("FIELD_NOT_FOUND", "Template not found.", status=404)
 
     preview_note = None
-    preview_entry = None
     payload = request.get_json(silent=True) or {}
     if deck_item.source_deck_id is not None:
         deck_ids = _collect_deck_subtree_ids(deck_item.source_deck_id)
@@ -3585,22 +3446,7 @@ def preview_shared_deck_template(deck_item_id: str, template_id: str):
                     query = query.filter(Note.user_id == deck_item.owner_user_id)
                 preview_note = query.first()
 
-            requested_entry_id = None
-            entry_id_raw = payload.get("entry_id")
-            if entry_id_raw not in (None, ""):
-                try:
-                    requested_entry_id = int(entry_id_raw)
-                except (TypeError, ValueError):
-                    requested_entry_id = None
-            if preview_note is None and requested_entry_id is not None:
-                preview_entry = (
-                    VocabularyEntry.query.filter(
-                        VocabularyEntry.id == requested_entry_id,
-                        VocabularyEntry.deck_id.in_(deck_ids),
-                    ).first()
-                )
-
-            if preview_note is None and preview_entry is None:
+            if preview_note is None:
                 query = Note.query.filter(
                     Note.deck_id.in_(deck_ids),
                     Note.note_type_id == note_type.id,
@@ -3608,21 +3454,11 @@ def preview_shared_deck_template(deck_item_id: str, template_id: str):
                 if deck_item.owner_user_id is not None:
                     query = query.filter(Note.user_id == deck_item.owner_user_id)
                 preview_note = query.order_by(Note.created_at.asc(), Note.id.asc()).first()
-                if preview_note is None:
-                    preview_entry = (
-                        VocabularyEntry.query.filter(VocabularyEntry.deck_id.in_(deck_ids))
-                        .order_by(VocabularyEntry.created_at.asc(), VocabularyEntry.id.asc())
-                        .first()
-                    )
 
     if preview_note:
         preview_field_values = preview_note.field_values or {}
         preview_media_assets = preview_note.media_assets
         preview_note_key = f"shared-deck-preview:{deck_item.id}:{preview_note.id}"
-    elif preview_entry:
-        preview_field_values = _build_preview_values_from_vocabulary_entry(preview_entry, note_type.field_defs)
-        preview_media_assets = []
-        preview_note_key = f"shared-deck-preview:{deck_item.id}:entry:{preview_entry.id}"
     else:
         preview_field_values = _build_preview_sample_values(note_type.field_defs)
         preview_media_assets = []

@@ -2,13 +2,12 @@
 
 import hashlib
 from dataclasses import dataclass, field
-from datetime import date, datetime, time, timedelta
+from datetime import datetime
 from typing import Dict, List
 
 from flask import Blueprint, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
-from app.services.anki_scheduler import default_deck_options
 from app.services.stats_overview import build_stats_overview
 from app.services.stats_today_future import build_today_future_stats, list_stats_decks
 from app.utils.deck_move_token import create_deck_move_token
@@ -16,22 +15,8 @@ from app.utils.permissions import is_admin_user
 from models import db
 from models.flashcard import Card, DeckInstall, Note
 from models.vocabulary_deck import VocabularyDeck
-from models.vocabulary_entry import VocabularyEntry
-from models.vocabulary_progress import VocabularyProgress
 
 main_bp = Blueprint("main", __name__)
-
-
-def _day_index(moment: datetime, boundary_hour: int) -> int:
-    """Convert datetime to day index (ordinal) relative to boundary hour."""
-    shifted = moment - timedelta(hours=boundary_hour)
-    return shifted.date().toordinal()
-
-
-def _day_index_to_datetime(day_index: int, boundary_hour: int) -> datetime:
-    """Convert day index (ordinal) back to datetime at boundary hour."""
-    day_date = date.fromordinal(day_index)
-    return datetime.combine(day_date, time(hour=boundary_hour))
 
 
 @main_bp.route("/")
@@ -126,23 +111,7 @@ def dashboard():
         due_count: int
         children: List["DeckNode"] = field(default_factory=list)
 
-    entries = (
-        VocabularyEntry.query.filter(VocabularyEntry.deck_id.isnot(None))
-        .order_by(VocabularyEntry.id)
-        .all()
-    )
-    entry_ids = [entry.id for entry in entries if entry.id]
-
-    progress_map = {}
-    if entry_ids:
-        progress_rows = VocabularyProgress.query.filter(
-            VocabularyProgress.user_id == current_user.id,
-            VocabularyProgress.entry_id.in_(entry_ids),
-        ).all()
-        progress_map = {row.entry_id: row for row in progress_rows}
-
     now = datetime.utcnow()
-    options = default_deck_options()
 
     visible_deck_ids = [deck.id for deck in decks if deck.id is not None]
     card_counts_by_deck: Dict[int, Dict[str, int]] = {
@@ -196,55 +165,6 @@ def dashboard():
             )
             bucket["due"] = int(due_total or 0)
     
-    # Calculate today's day index and next day boundary according to dayBoundaryHourLocal
-    today_day_index = _day_index(now, options.dayBoundaryHourLocal)
-    next_day_boundary = _day_index_to_datetime(today_day_index + 1, options.dayBoundaryHourLocal)
-
-    def _normalize_queue(value: str | None) -> str:
-        normalized = (value or "new").strip().lower()
-        if normalized == "learn":
-            return "learning"
-        if normalized in {"new", "learning", "review", "relearning"}:
-            return normalized
-        return "new"
-
-    def _stats_from_entry_ids(node_entry_ids: List[int]) -> tuple[int, int, int]:
-        new_count = 0
-        learn_count = 0
-        due_count = 0
-        for entry_id in node_entry_ids:
-            progress = progress_map.get(entry_id)
-            queue = _normalize_queue(progress.queue if progress else "new")
-            if progress is None or queue == "new":
-                new_count += 1
-                continue
-
-            due_at = progress.due_at
-            due_day = progress.due_day
-
-            # Learning/Relearning cards: count if due_at < nextDayBoundary
-            # This ensures all learning cards scheduled for "today" appear in Learn count
-            if queue in {"learning", "relearning"}:
-                if due_at and due_at < next_day_boundary:
-                    learn_count += 1
-                continue
-
-            # Review cards: count if due_day <= today_day_index
-            # due_day is stored as ordinal int, today is also ordinal int
-            if queue == "review":
-                # Use stored due_day if available, otherwise calculate from due_at
-                if due_day is not None:
-                    card_due_day = due_day
-                else:
-                    # Backward compatibility: calculate from due_at
-                    card_due_day = _day_index(due_at or now, options.dayBoundaryHourLocal)
-                
-                if card_due_day <= today_day_index:
-                    due_count += 1
-                continue
-
-        return new_count, learn_count, due_count
-
     by_parent: Dict[int | None, List[VocabularyDeck]] = {}
     for deck in decks:
         by_parent.setdefault(deck.parent_id, []).append(deck)
@@ -270,24 +190,7 @@ def dashboard():
         move_alias_by_deck_id[deck.id] = move_alias
         move_token_by_deck_id[deck.id] = move_token
 
-    entries_by_deck: Dict[int, List[int]] = {}
-    for entry in entries:
-        if entry.deck_id is None:
-            continue
-        entries_by_deck.setdefault(entry.deck_id, []).append(entry.id)
-
-    subtree_entry_ids_cache: Dict[int, List[int]] = {}
     subtree_card_counts_cache: Dict[int, Dict[str, int]] = {}
-
-    def _collect_subtree_entry_ids(deck_id: int) -> List[int]:
-        cached = subtree_entry_ids_cache.get(deck_id)
-        if cached is not None:
-            return cached
-        collected = list(entries_by_deck.get(deck_id, []))
-        for child in by_parent.get(deck_id, []):
-            collected.extend(_collect_subtree_entry_ids(child.id))
-        subtree_entry_ids_cache[deck_id] = collected
-        return collected
 
     def _collect_subtree_card_counts(deck_id: int) -> Dict[str, int]:
         cached = subtree_card_counts_cache.get(deck_id)
@@ -316,15 +219,10 @@ def dashboard():
     def _build_nodes(parent_id: int | None, depth: int) -> List[DeckNode]:
         nodes: List[DeckNode] = []
         for deck in by_parent.get(parent_id, []):
-            subtree_ids = _collect_subtree_entry_ids(deck.id)
-            legacy_new, legacy_learn, legacy_due = _stats_from_entry_ids(subtree_ids)
             card_counts = _collect_subtree_card_counts(deck.id)
-            if int(card_counts["total"]) > 0:
-                deck_new = int(card_counts["new"])
-                deck_learn = int(card_counts["learn"])
-                deck_due = int(card_counts["due"])
-            else:
-                deck_new, deck_learn, deck_due = legacy_new, legacy_learn, legacy_due
+            deck_new = int(card_counts["new"])
+            deck_learn = int(card_counts["learn"])
+            deck_due = int(card_counts["due"])
             nodes.append(
                 DeckNode(
                     deck_id=deck.id,
