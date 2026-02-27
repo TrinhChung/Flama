@@ -4,12 +4,11 @@ from models import db
 
 
 class VocabularyEntry(db.Model):
-    """Stored vocabulary rows originating from uploaded decks or manual entry."""
+    """Stored vocabulary rows attached directly to decks."""
 
     __tablename__ = "vocabulary_entries"
 
     id = db.Column(db.Integer, primary_key=True)
-    lesson_id = db.Column(db.Integer, db.ForeignKey("vocabulary_lessons.id"), index=True, nullable=True)
     deck_id = db.Column(db.Integer, db.ForeignKey("vocabulary_decks.id", ondelete="SET NULL"), index=True, nullable=True)
     deck = db.Column(db.String(255), nullable=False, index=True)
     word = db.Column(db.String(255), nullable=False, index=True)
@@ -33,7 +32,6 @@ class VocabularyEntry(db.Model):
         db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
     )
 
-    lesson = db.relationship("VocabularyLesson", back_populates="entries")
     deck_rel = db.relationship("VocabularyDeck", back_populates="entries")
     progress_records = db.relationship(
         "VocabularyProgress",

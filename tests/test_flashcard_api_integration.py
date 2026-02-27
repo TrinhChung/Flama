@@ -6,7 +6,7 @@ import unittest
 
 from app import create_app
 from models import db
-from models.flashcard import Card, DeckInstall, DeckMarketplaceItem, Note
+from models.flashcard_entries import Card, DeckInstall, DeckMarketplaceItem, Note
 from models.user import User
 from models.vocabulary_deck import VocabularyDeck
 from models.vocabulary_progress import VocabularyProgress

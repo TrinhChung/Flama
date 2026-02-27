@@ -14,7 +14,7 @@ from uuid import uuid4
 
 from app.services.flashcard_renderer import is_field_empty
 from models import db
-from models.flashcard import Card, Note, Template
+from models.flashcard_entries import Card, Note, Template
 
 IMPORT_MAX_FILE_BYTES = 50 * 1024 * 1024
 IMPORT_PREVIEW_ROWS = 4

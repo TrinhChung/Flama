@@ -1,0 +1,48 @@
+from datetime import datetime
+
+from sqlalchemy import UniqueConstraint
+
+from models import db
+from models.flashcard_entries.common import uuid_str
+
+
+class NoteTypeInstall(db.Model):
+    __tablename__ = "note_type_installs"
+
+    id = db.Column(db.String(36), primary_key=True, default=uuid_str)
+    source_note_type_id = db.Column(
+        db.String(36),
+        db.ForeignKey("note_types.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    installed_note_type_id = db.Column(
+        db.String(36),
+        db.ForeignKey("note_types.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    purchase_price_cents = db.Column(db.Integer, nullable=False, default=0)
+    installed_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    purchased_at = db.Column(db.DateTime, nullable=True)
+    first_use_at = db.Column(db.DateTime, nullable=True)
+    last_activity_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    source_note_type = db.relationship(
+        "NoteType",
+        foreign_keys=[source_note_type_id],
+        back_populates="installs",
+    )
+    installed_note_type = db.relationship(
+        "NoteType",
+        foreign_keys=[installed_note_type_id],
+    )
+    user = db.relationship("User", foreign_keys=[user_id])
+
+    __table_args__ = (
+        UniqueConstraint("source_note_type_id", "user_id", name="uq_note_type_installs_source_user"),
+    )
+

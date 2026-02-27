@@ -7,7 +7,7 @@ from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from models import db
-from models.flashcard import ReviewEvent
+from models.flashcard_entries import ReviewEvent
 from models.vocabulary_progress import VocabularyProgress
 
 UTC = timezone.utc

@@ -7,7 +7,7 @@ from pathlib import Path
 
 from app import create_app
 from models import db
-from models.flashcard import DeckMarketplaceItem
+from models.flashcard_entries import DeckMarketplaceItem
 from models.user import User
 from models.vocabulary_deck import VocabularyDeck
 

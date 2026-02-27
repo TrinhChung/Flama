@@ -29,7 +29,7 @@ from app.services.anki_scheduler import (
     default_deck_options,
 )
 from models import db
-from models.flashcard import Card, Note
+from models.flashcard_entries import Card, Note
 from models.vocabulary_deck import VocabularyDeck
 from models.vocabulary_progress import VocabularyProgress
 
@@ -399,7 +399,7 @@ def _build_browse_card_detail(card_obj, deck_name_lookup: dict[int, str], now: d
 
 
 def _collect_accessible_browse_decks():
-    from models.flashcard import Note
+    from models.flashcard_entries import Note
 
     all_decks = VocabularyDeck.query.order_by(
         VocabularyDeck.parent_id.isnot(None),
@@ -456,7 +456,7 @@ def _collect_subtree_ids(root_id: int, children_by_parent: dict[int | None, list
 
 
 def _build_browse_deck_tree_payload():
-    from models.flashcard import Card, Note
+    from models.flashcard_entries import Card, Note
 
     now = datetime.utcnow()
     scoped_decks = _collect_accessible_browse_decks()
@@ -585,7 +585,7 @@ def browse_api_decks():
 @login_required
 def browse_api_cards():
     """List cards for Browse modal with deck/filter/sort/paging."""
-    from models.flashcard import Card, Note
+    from models.flashcard_entries import Card, Note
 
     deck_id_raw = (request.args.get("deck_id") or "").strip()
     include_subdecks_raw = (request.args.get("include_subdecks") or "1").strip().lower()
@@ -691,7 +691,7 @@ def browse_api_cards():
 @login_required
 def browse_api_card_detail(card_id: str):
     """Get full card detail for right editor panel."""
-    from models.flashcard import Card, Note, NoteType
+    from models.flashcard_entries import Card, Note, NoteType
 
     query = (
         Card.query.join(Note, Card.note_id == Note.id)
@@ -716,7 +716,7 @@ def browse_api_card_detail(card_id: str):
 @login_required
 def browse_api_card_update(card_id: str):
     """Update card note fields/deck/tags from Browse editor."""
-    from models.flashcard import Card, Note, NoteType
+    from models.flashcard_entries import Card, Note, NoteType
 
     query = Card.query.join(Note, Card.note_id == Note.id).filter(Card.id == card_id)
     if not is_admin_user(current_user):
@@ -798,7 +798,7 @@ def browse_api_card_update(card_id: str):
 @login_required
 def browse_api_card_delete(card_id: str):
     """Delete one card (and delete its note if last card)."""
-    from models.flashcard import Card, Note
+    from models.flashcard_entries import Card, Note
 
     query = Card.query.join(Note, Card.note_id == Note.id).filter(Card.id == card_id)
     if not is_admin_user(current_user):
@@ -851,7 +851,7 @@ def browse_api_notes():
 @login_required
 def browse_api_update_note(note_id: str):
     """Backward-compatible note update endpoint."""
-    from models.flashcard import Note
+    from models.flashcard_entries import Note
 
     note_obj = Note.query.get(note_id)
     if not note_obj:
@@ -1073,7 +1073,7 @@ def _can_current_user_delete_cloned_deck(deck_obj: VocabularyDeck) -> bool:
     if deck_obj.owner_user_id != current_user.id:
         return False
 
-    from models.flashcard import DeckInstall
+    from models.flashcard_entries import DeckInstall
 
     ancestor_ids = _collect_deck_ancestor_ids(deck_obj.id)
     if not ancestor_ids:
@@ -1111,7 +1111,7 @@ def delete_deck(deck_id: int):
     children_by_parent = _deck_children_map(all_decks)
     deck_ids_to_delete = _collect_subtree_ids(deck.id, children_by_parent)
 
-    from models.flashcard import DeckInstall
+    from models.flashcard_entries import DeckInstall
 
     install_query = DeckInstall.query.filter(DeckInstall.local_deck_id.in_(deck_ids_to_delete))
     if not is_admin_user(current_user):

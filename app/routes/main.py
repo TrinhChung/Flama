@@ -13,7 +13,7 @@ from app.services.stats_today_future import build_today_future_stats, list_stats
 from app.utils.deck_move_token import create_deck_move_token
 from app.utils.permissions import is_admin_user
 from models import db
-from models.flashcard import Card, DeckInstall, Note
+from models.flashcard_entries import Card, DeckInstall, Note
 from models.vocabulary_deck import VocabularyDeck
 
 main_bp = Blueprint("main", __name__)

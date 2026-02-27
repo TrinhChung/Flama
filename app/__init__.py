@@ -51,16 +51,11 @@ def create_app(config: Optional[dict] = None) -> Flask:
     from models.user_permission_audit_log import UserPermissionAuditLog  # noqa: F401
     from models.vocabulary_deck import VocabularyDeck  # noqa: F401  # register model
     from models.vocabulary_entry import VocabularyEntry  # noqa: F401  # register model
-    from models.vocabulary_structure import (  # noqa: F401  # register model
-        VocabularyLesson,
-        VocabularyLevel,
-        VocabularyTopic,
-    )
     from models.vocabulary_progress import VocabularyProgress  # noqa: F401  # register model
     from models.column_preference import (
         VocabularyColumnPreference,
     )  # noqa: F401  # register model
-    from models.flashcard import (  # noqa: F401  # register model
+    from models.flashcard_entries import (  # noqa: F401  # register model
         AuditLog,
         Card,
         DeckInstall,

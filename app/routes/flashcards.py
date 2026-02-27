@@ -59,7 +59,7 @@ from app.services.stats_overview import (
 )
 from app.utils.permissions import is_admin_user
 from models import db
-from models.flashcard import (
+from models.flashcard_entries import (
     AuditLog,
     Card,
     DeckInstall,
@@ -1679,14 +1679,14 @@ def share_deck_page(deck_id: int):
 
     # Validation 2: Is downloaded deck (cannot re-share a downloaded deck)
     if deck.owner_user_id == current_user.id:
-        from models.flashcard import DeckInstall
+        from models.flashcard_entries import DeckInstall
         # If user has an install record for this exact local deck, block re-sharing
         if DeckInstall.query.filter_by(user_id=current_user.id, local_deck_id=deck.id).first():
             flash("Bạn không thể chia sẻ lại deck đã được cài đặt từ Marketplace.", "danger")
             return redirect(url_for("main.dashboard"))
         
     # Validation 3: Child deck of a shared deck cannot be shared
-    from models.flashcard import DeckMarketplaceItem
+    from models.flashcard_entries import DeckMarketplaceItem
     current_parent = deck.parent_id
     while current_parent is not None:
         parent_deck = VocabularyDeck.query.get(current_parent)

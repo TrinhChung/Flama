@@ -15,7 +15,7 @@ from flask import Flask
 from app.services.flashcard_legacy import ensure_legacy_note_type
 from app.services.user_roles import ensure_default_user_roles
 from models import db
-from models.flashcard import Card, DeckMarketplaceItem, Note
+from models.flashcard_entries import Card, DeckMarketplaceItem, Note
 from models.user import User
 from models.user_role import UserRole
 from models.vocabulary_deck import VocabularyDeck

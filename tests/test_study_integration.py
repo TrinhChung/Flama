@@ -9,7 +9,6 @@ from models.user import User
 from models.vocabulary_deck import VocabularyDeck
 from models.vocabulary_entry import VocabularyEntry
 from models.vocabulary_progress import VocabularyProgress
-from models.vocabulary_structure import VocabularyLevel, VocabularyTopic, VocabularyLesson
 
 
 class StudyCounterIntegrationTest(unittest.TestCase):
@@ -31,22 +30,6 @@ class StudyCounterIntegrationTest(unittest.TestCase):
             self.user_id = user.id
             
             # Create deck and entries
-            level = VocabularyLevel(name="Test Level")
-            db.session.add(level)
-            db.session.flush()
-            
-            topic = VocabularyTopic(level_id=level.id, name="Test Topic")
-            db.session.add(topic)
-            db.session.flush()
-            
-            lesson = VocabularyLesson(
-                topic_id=topic.id,
-                title="Lesson 1"
-            )
-            db.session.add(lesson)
-            db.session.flush()
-            self.lesson_id = lesson.id
-            
             deck = VocabularyDeck(name="Test Deck")
             db.session.add(deck)
             db.session.flush()
@@ -56,7 +39,6 @@ class StudyCounterIntegrationTest(unittest.TestCase):
             self.entry_ids = []
             for i in range(5):
                 entry = VocabularyEntry(
-                    lesson_id=lesson.id,
                     deck_id=deck.id,
                     deck="Test Deck",
                     word=f"word{i}",

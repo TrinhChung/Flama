@@ -12,11 +12,10 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from app import create_app  # noqa: E402
 from models import db  # noqa: E402
-from models.flashcard import Card, LegacyMigrationMap, Note, ReviewEvent  # noqa: E402
+from models.flashcard_entries import Card, LegacyMigrationMap, Note, ReviewEvent  # noqa: E402
 from models.vocabulary_deck import VocabularyDeck  # noqa: E402
 from models.vocabulary_entry import VocabularyEntry  # noqa: E402
 from models.vocabulary_progress import VocabularyProgress  # noqa: E402
-from models.vocabulary_structure import VocabularyLesson, VocabularyLevel, VocabularyTopic  # noqa: E402
 
 
 def _count(model) -> int:
@@ -33,9 +32,6 @@ def main() -> int:
         print("=== Legacy Schema Audit ===")
         print("")
 
-        _print_metric("vocabulary_levels rows", _count(VocabularyLevel))
-        _print_metric("vocabulary_topics rows", _count(VocabularyTopic))
-        _print_metric("vocabulary_lessons rows", _count(VocabularyLesson))
         _print_metric("vocabulary_entries rows", _count(VocabularyEntry))
         _print_metric("vocabulary_progress rows", _count(VocabularyProgress))
         _print_metric("legacy_migration_maps rows", _count(LegacyMigrationMap))

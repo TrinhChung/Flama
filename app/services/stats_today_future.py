@@ -10,7 +10,7 @@ from flask_login import current_user
 
 from app.utils.permissions import is_admin_user
 from models import db
-from models.flashcard import Card, Note, ReviewEvent
+from models.flashcard_entries import Card, Note, ReviewEvent
 from models.vocabulary_deck import VocabularyDeck
 from models.vocabulary_progress import VocabularyProgress
 

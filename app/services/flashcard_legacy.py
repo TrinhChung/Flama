@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from models.flashcard import FieldDef, NoteType, Template
+from models.flashcard_entries import FieldDef, NoteType, Template
 
 LEGACY_NOTE_TYPE_NAME = "Flama Standard Vocabulary"
 

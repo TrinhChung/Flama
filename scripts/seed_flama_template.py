@@ -9,7 +9,7 @@ if hasattr(sys.stdout, "reconfigure"):
 
 from app import create_app
 from models import db
-from models.flashcard import FieldDef, NoteType, Template
+from models.flashcard_entries import FieldDef, NoteType, Template
 
 FRONT_HTML = """<div style='height:100vh;text-align:center;display:flex;justify-content:center;align-items:center;font-size:70px;font-weight:bold;color:#e53c20'>
 {{word}}
