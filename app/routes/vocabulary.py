@@ -91,8 +91,6 @@ def _legacy_structure_removed_response():
     return redirect(next_url or url_for("vocabulary.browse"))
 
 
-def _next_deck_position(parent_deck_id: int | None) -> int:
-    return vocabulary_ctrl.next_deck_position(parent_deck_id)
 
 
 def _resolve_next_url(default_endpoint: str = "main.dashboard") -> str:
@@ -103,17 +101,6 @@ def _resolve_next_url(default_endpoint: str = "main.dashboard") -> str:
     return url_for(default_endpoint)
 
 
-def _deck_name_exists_under_parent(
-    *,
-    parent_id: int | None,
-    name: str,
-    exclude_deck_id: int | None = None,
-) -> bool:
-    return vocabulary_ctrl.deck_name_exists_under_parent(
-        parent_id=parent_id,
-        name=name,
-        exclude_deck_id=exclude_deck_id,
-    )
 
 
 @vocabulary_bp.route("/")
@@ -130,85 +117,30 @@ def browse():
     return render_template("vocabulary_browse.html")
 
 
-def _browse_first_non_empty(field_values: dict | None) -> str:
-    return vocabulary_ctrl.browse_first_non_empty(field_values)
 
 
-def _note_field_values_as_strings(note_obj: Note | None) -> dict[str, str]:
-    return vocabulary_ctrl.note_field_values_as_strings(note_obj)
 
 
-def _note_ordered_field_names(note_obj: Note | None, *, text_only: bool = False) -> list[str]:
-    return vocabulary_ctrl.note_ordered_field_names(note_obj, text_only=text_only)
 
 
-def _note_display_triplet(note_obj: Note | None) -> dict[str, str]:
-    return vocabulary_ctrl.note_display_triplet(note_obj)
 
 
-def _browse_due_label(*, queue: str | None, due_at: datetime | None) -> str:
-    return vocabulary_ctrl.browse_due_label(queue=queue, due_at=due_at)
 
 
-def _browse_status_code(*, queue: str | None, due_at: datetime | None, now: datetime) -> str:
-    return vocabulary_ctrl.browse_status_code(queue=queue, due_at=due_at, now=now)
 
 
-def _resolve_browse_queue_due(
-    *,
-    progress_obj: CardProgress | None,
-) -> tuple[str, datetime | None]:
-    return vocabulary_ctrl.resolve_browse_queue_due(progress_obj=progress_obj)
 
 
-def _build_browse_row(
-    card_obj,
-    deck_name_lookup: dict[int, str],
-    now: datetime,
-    progress_obj: CardProgress | None = None,
-):
-    return vocabulary_ctrl.build_browse_row(
-        card_obj,
-        deck_name_lookup,
-        now,
-        progress_obj=progress_obj,
-    )
 
 
-def _build_browse_card_detail(
-    card_obj,
-    deck_name_lookup: dict[int, str],
-    now: datetime,
-    progress_obj: CardProgress | None = None,
-):
-    return vocabulary_ctrl.build_browse_card_detail(
-        card_obj,
-        deck_name_lookup,
-        now,
-        progress_obj=progress_obj,
-    )
 
 
-def _collect_accessible_browse_decks():
-    return vocabulary_ctrl.collect_accessible_browse_decks(
-        user_id=current_user.id,
-        admin_mode=is_admin_user(current_user),
-    )
 
 
-def _deck_children_map(deck_list: list[Deck]) -> dict[int | None, list[Deck]]:
-    return vocabulary_ctrl.deck_children_map(deck_list)
 
 
-def _collect_subtree_ids(root_id: int, children_by_parent: dict[int | None, list[Deck]]) -> list[int]:
-    return vocabulary_ctrl.collect_subtree_ids(root_id, children_by_parent)
 
 
-def _build_browse_deck_tree_payload():
-    return vocabulary_ctrl.build_browse_deck_tree_payload(
-        user_id=current_user.id,
-        admin_mode=is_admin_user(current_user),
-    )
 
 
 def _normalize_tags_payload(raw_tags) -> list[str]:
@@ -268,7 +200,7 @@ def _apply_clone_overlay_to_browse_payload(
         field_values=normalized_values,
         note_type=SimpleNamespace(field_defs=ordered_defs),
     )
-    display_triplet = _note_display_triplet(proxy_note)
+    display_triplet = vocabulary_ctrl.note_display_triplet(proxy_note)
 
     card_payload = payload.get("card")
     if isinstance(card_payload, dict):
@@ -325,14 +257,14 @@ def _apply_clone_overlay_to_browse_payload(
 @login_required
 def browse_api_decks_tree():
     """Returns deck tree with aggregate card counts."""
-    return jsonify({"tree": _build_browse_deck_tree_payload()})
+    return jsonify({"tree": vocabulary_ctrl.build_browse_deck_tree_payload()})
 
 
 @vocabulary_bp.route("/api/browse/decks", methods=["GET"])
 @login_required
 def browse_api_decks():
     """Backward-compatible flat deck list endpoint."""
-    tree = _build_browse_deck_tree_payload()
+    tree = vocabulary_ctrl.build_browse_deck_tree_payload()
     flat_items = []
 
     def _flatten(nodes: list[dict]):
@@ -385,9 +317,9 @@ def browse_api_cards():
             }
         )
 
-    scoped_decks = _collect_accessible_browse_decks()
+    scoped_decks = vocabulary_ctrl.collect_accessible_browse_decks()
     deck_lookup = {deck.id: deck.name for deck in scoped_decks}
-    children_by_parent = _deck_children_map(scoped_decks)
+    children_by_parent = vocabulary_ctrl.deck_children_map(scoped_decks)
     scoped_ids = {deck.id for deck in scoped_decks}
     selected_ids: set[int] | None = None
     if deck_id_raw:
@@ -398,7 +330,7 @@ def browse_api_cards():
         if selected_deck_id not in scoped_ids:
             return jsonify({"error": "Deck not found"}), 404
         if include_subdecks:
-            selected_ids = set(_collect_subtree_ids(selected_deck_id, children_by_parent))
+            selected_ids = set(vocabulary_ctrl.collect_subtree_ids(selected_deck_id, children_by_parent))
         else:
             selected_ids = {selected_deck_id}
 
@@ -536,7 +468,7 @@ def browse_api_cards():
     progress_map = _load_card_progress_map([card_obj.id for card_obj in pagination.items])
     rows = []
     for card_obj in pagination.items:
-        row_payload = _build_browse_row(
+        row_payload = vocabulary_ctrl.build_browse_row(
             card_obj,
             deck_lookup,
             now,
@@ -591,7 +523,7 @@ def browse_api_card_detail(card_id: str):
     if not card_obj:
         return jsonify({"error": "Card not found"}), 404
 
-    deck_lookup = {deck.id: deck.name for deck in _collect_accessible_browse_decks()}
+    deck_lookup = {deck.id: deck.name for deck in vocabulary_ctrl.collect_accessible_browse_decks()}
     clone_scope = None
     if not is_admin_user(current_user) and card_obj.note and card_obj.note.user_id != current_user.id:
         clone_scope = share_ctrl.resolve_clone_scope_for_card(
@@ -612,7 +544,7 @@ def browse_api_card_detail(card_id: str):
         user_id=current_user.id,
         card_id=card_obj.id,
     ).first()
-    payload = _build_browse_card_detail(
+    payload = vocabulary_ctrl.build_browse_card_detail(
         card_obj,
         deck_lookup,
         datetime.utcnow(),
@@ -729,7 +661,7 @@ def browse_api_card_update(card_id: str):
                 return jsonify({"error": validation_error}), 400
         db.session.commit()
 
-        deck_lookup = {deck.id: deck.name for deck in _collect_accessible_browse_decks()}
+        deck_lookup = {deck.id: deck.name for deck in vocabulary_ctrl.collect_accessible_browse_decks()}
         for source_deck_id, local_deck_id in (clone_scope.source_to_local_deck_id or {}).items():
             local_name = deck_lookup.get(int(local_deck_id))
             if local_name:
@@ -739,7 +671,7 @@ def browse_api_card_update(card_id: str):
             card_id=card_obj.id,
         ).first()
         now = datetime.utcnow()
-        detail_payload = _build_browse_card_detail(card_obj, deck_lookup, now, progress_obj=progress)
+        detail_payload = vocabulary_ctrl.build_browse_card_detail(card_obj, deck_lookup, now, progress_obj=progress)
         detail_payload = _apply_clone_overlay_to_browse_payload(
             payload=detail_payload,
             card_obj=card_obj,
@@ -766,7 +698,7 @@ def browse_api_card_update(card_id: str):
             if not Deck.query.get(selected_deck_id):
                 return jsonify({"error": "Deck not found"}), 404
             if not is_admin_user(current_user):
-                allowed_deck_ids = {deck.id for deck in _collect_accessible_browse_decks()}
+                allowed_deck_ids = {deck.id for deck in vocabulary_ctrl.collect_accessible_browse_decks()}
                 if selected_deck_id not in allowed_deck_ids:
                     return jsonify({"error": "Deck is not accessible"}), 403
             note_obj.deck_id = selected_deck_id
@@ -777,7 +709,7 @@ def browse_api_card_update(card_id: str):
     note_obj.field_values = field_values
     db.session.commit()
 
-    deck_lookup = {deck.id: deck.name for deck in _collect_accessible_browse_decks()}
+    deck_lookup = {deck.id: deck.name for deck in vocabulary_ctrl.collect_accessible_browse_decks()}
     progress = CardProgress.query.filter_by(
         user_id=current_user.id,
         card_id=card_obj.id,
@@ -786,8 +718,8 @@ def browse_api_card_update(card_id: str):
     return jsonify(
         {
             "success": True,
-            "row": _build_browse_row(card_obj, deck_lookup, now, progress_obj=progress),
-            "detail": _build_browse_card_detail(card_obj, deck_lookup, now, progress_obj=progress),
+            "row": vocabulary_ctrl.build_browse_row(card_obj, deck_lookup, now, progress_obj=progress),
+            "detail": vocabulary_ctrl.build_browse_card_detail(card_obj, deck_lookup, now, progress_obj=progress),
         }
     )
 
@@ -928,7 +860,7 @@ def create_deck():
         node = Deck(
             parent_id=parent_id,
             name=token,
-            position=_next_deck_position(parent_id),
+            position=vocabulary_ctrl.next_deck_position(parent_id),
         )
         db.session.add(node)
         db.session.flush()
@@ -964,7 +896,7 @@ def rename_deck(deck_id: int):
     if new_name == deck.name:
         flash("Deck name is unchanged.", "info")
         return redirect(next_url)
-    if _deck_name_exists_under_parent(parent_id=deck.parent_id, name=new_name, exclude_deck_id=deck.id):
+    if vocabulary_ctrl.deck_name_exists_under_parent(parent_id=deck.parent_id, name=new_name, exclude_deck_id=deck.id):
         flash(f"Deck '{new_name}' already exists at this level.", "danger")
         return redirect(next_url)
 
@@ -1030,13 +962,13 @@ def move_deck(deck_id: int | None = None):
     if deck.parent_id == new_parent_id:
         flash("Deck is already in the selected location.", "info")
         return redirect(next_url)
-    if _deck_name_exists_under_parent(parent_id=new_parent_id, name=deck.name, exclude_deck_id=deck.id):
+    if vocabulary_ctrl.deck_name_exists_under_parent(parent_id=new_parent_id, name=deck.name, exclude_deck_id=deck.id):
         parent_label = new_parent.name if new_parent else "Root"
         flash(f"Parent '{parent_label}' already has a deck named '{deck.name}'.", "danger")
         return redirect(next_url)
 
     deck.parent_id = new_parent_id
-    deck.position = _next_deck_position(new_parent_id)
+    deck.position = vocabulary_ctrl.next_deck_position(new_parent_id)
     try:
         db.session.commit()
         flash(f"Deck '{deck.name}' moved successfully.", "success")

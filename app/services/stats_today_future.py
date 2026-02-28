@@ -8,12 +8,12 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from flask_login import current_user
 
-from app.controllers.review_event_controller import query_today_review_summary
+from app.repositories.stats_query_repository import query_today_review_summary
 from app.controllers.deck_controller import (
     collect_subtree_ids,
     query_accessible_stats_decks,
 )
-from app.controllers.card_progress_controller import (
+from app.repositories.stats_query_repository import (
     aggregate_future_due_offsets_mysql,
     query_due_queue_rows_python,
     query_interval_days_rows,

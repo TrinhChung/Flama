@@ -6,12 +6,12 @@ from datetime import date, datetime, time, timedelta, timezone
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from app.controllers.review_event_controller import (
-    create_review_event_record,
+from app.repositories.stats_query_repository import (
     query_active_review_days,
     query_daily_review_aggregates,
 )
-from app.controllers.card_progress_controller import query_future_due_day_counts
+from app.controllers.review_event_controller import create_review_event_record
+from app.repositories.stats_query_repository import query_future_due_day_counts
 from models.flashcard import ReviewEvent
 
 UTC = timezone.utc
