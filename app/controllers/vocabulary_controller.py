@@ -21,7 +21,7 @@ from app.controllers.study_controller import (
 from models import db
 from models.card_progress import CardProgress
 from models.deck import Deck
-from models.flashcard import Card, DeckInstall, Note
+from models.flashcard import Card, DeckCloneDeckMap, DeckInstall, Note
 
 
 def next_deck_position(parent_deck_id: int | None) -> int:
@@ -275,13 +275,40 @@ def collect_accessible_browse_decks(*, user_id: int, admin_mode: bool) -> list[D
         return all_decks
 
     deck_map = {deck.id: deck for deck in all_decks}
+    visible_ids: set[int] = set()
+
     deck_rows = (
         db.session.query(Note.deck_id)
         .filter(Note.user_id == user_id, Note.deck_id.isnot(None))
         .distinct()
         .all()
     )
-    visible_ids = {int(row[0]) for row in deck_rows if row[0]}
+    visible_ids.update(int(row[0]) for row in deck_rows if row and row[0] is not None)
+
+    install_root_rows = (
+        db.session.query(DeckInstall.local_deck_id)
+        .filter(
+            DeckInstall.user_id == user_id,
+            DeckInstall.local_deck_id.isnot(None),
+        )
+        .distinct()
+        .all()
+    )
+    install_root_ids = {int(row[0]) for row in install_root_rows if row and row[0] is not None}
+    if install_root_ids:
+        frontier: set[int] = set(install_root_ids)
+        while frontier:
+            current = {deck_id for deck_id in frontier if deck_id not in visible_ids}
+            if not current:
+                break
+            visible_ids.update(current)
+            child_rows = (
+                db.session.query(Deck.id)
+                .filter(Deck.parent_id.in_(current))
+                .all()
+            )
+            frontier = {int(row[0]) for row in child_rows if row and row[0] is not None}
+
     if not visible_ids:
         return []
 
@@ -372,6 +399,74 @@ def build_browse_deck_tree_payload(*, user_id: int, admin_mode: bool) -> list[di
             bucket["learn"] += 1
         elif queue_norm == REVIEW_QUEUE and (progress_due_at is None or progress_due_at <= now):
             bucket["due"] += 1
+
+    if not admin_mode:
+        logical_installs = (
+            DeckInstall.query.filter(
+                DeckInstall.user_id == user_id,
+                DeckInstall.clone_mode == "logical_overlay",
+                DeckInstall.local_deck_id.isnot(None),
+            )
+            .order_by(DeckInstall.installed_at.asc(), DeckInstall.id.asc())
+            .all()
+        )
+        for install in logical_installs:
+            if install.id is None:
+                continue
+            map_rows = (
+                DeckCloneDeckMap.query.filter_by(deck_install_id=install.id)
+                .order_by(DeckCloneDeckMap.local_deck_id.asc(), DeckCloneDeckMap.source_deck_id.asc())
+                .all()
+            )
+            source_to_local = {
+                int(row.source_deck_id): int(row.local_deck_id)
+                for row in map_rows
+                if row.source_deck_id is not None
+                and row.local_deck_id is not None
+                and int(row.local_deck_id) in scoped_ids
+            }
+            if not source_to_local:
+                continue
+
+            clone_query = (
+                db.session.query(
+                    Note.deck_id,
+                    CardProgress.queue,
+                    CardProgress.due_at,
+                )
+                .select_from(Card)
+                .join(Note, Card.note_id == Note.id)
+                .outerjoin(CardProgress, progress_join)
+                .filter(Note.deck_id.in_(source_to_local.keys()))
+            )
+            if install.source_owner_user_id is not None:
+                clone_query = clone_query.filter(Note.user_id == install.source_owner_user_id)
+            snapshot_at = install.base_snapshot_at or install.installed_at
+            if snapshot_at is not None:
+                clone_query = clone_query.filter(
+                    Note.created_at <= snapshot_at,
+                    Card.created_at <= snapshot_at,
+                )
+
+            for source_deck_id, progress_queue, progress_due_at in clone_query.all():
+                if source_deck_id is None:
+                    continue
+                local_deck_id = source_to_local.get(int(source_deck_id))
+                if local_deck_id is None:
+                    continue
+                bucket = direct_counts.setdefault(
+                    int(local_deck_id),
+                    {"total": 0, "new": 0, "learn": 0, "due": 0},
+                )
+                bucket["total"] += 1
+
+                queue_norm = _normalize_progress_queue(progress_queue)
+                if queue_norm == NEW_QUEUE:
+                    bucket["new"] += 1
+                elif queue_norm in {LEARNING_QUEUE, RELEARNING_QUEUE}:
+                    bucket["learn"] += 1
+                elif queue_norm == REVIEW_QUEUE and (progress_due_at is None or progress_due_at <= now):
+                    bucket["due"] += 1
 
     def _build_node(deck_obj: Deck) -> dict[str, Any]:
         direct = direct_counts.get(deck_obj.id, {"total": 0, "new": 0, "learn": 0, "due": 0})
@@ -489,7 +584,7 @@ def query_study_cards_for_deck_ids(*, user_id: int, deck_ids: list[int]) -> list
     if not deck_ids:
         return []
 
-    return (
+    direct_cards = (
         Card.query.join(Note, Card.note_id == Note.id)
         .options(
             selectinload(Card.template),
@@ -503,6 +598,42 @@ def query_study_cards_for_deck_ids(*, user_id: int, deck_ids: list[int]) -> list
         .order_by(Card.created_at.asc(), Card.id.asc())
         .all()
     )
+    seen_card_ids = {card_obj.id for card_obj in direct_cards}
+    merged_cards = list(direct_cards)
+
+    from app.controllers import flashcards_share_controller as share_ctrl
+
+    seen_scope_keys: set[tuple[str, int]] = set()
+    for local_deck_id in sorted({int(deck_id) for deck_id in deck_ids if deck_id is not None}):
+        clone_scope = share_ctrl.resolve_clone_scope_for_local_deck(
+            user_id=user_id,
+            local_deck_id=local_deck_id,
+        )
+        if clone_scope is None:
+            continue
+        scope_key = (clone_scope.install.id, int(clone_scope.local_scope_deck_id))
+        if scope_key in seen_scope_keys:
+            continue
+        seen_scope_keys.add(scope_key)
+
+        clone_cards = (
+            share_ctrl.query_clone_scope_cards(clone_scope)
+            .options(
+                selectinload(Card.template),
+                selectinload(Card.note).selectinload(Note.note_type),
+                selectinload(Card.note).selectinload(Note.media_assets),
+            )
+            .order_by(Card.created_at.asc(), Card.id.asc())
+            .all()
+        )
+        for card_obj in clone_cards:
+            if card_obj.id in seen_card_ids:
+                continue
+            seen_card_ids.add(card_obj.id)
+            merged_cards.append(card_obj)
+
+    merged_cards.sort(key=lambda card_obj: (card_obj.created_at or datetime.min, card_obj.id))
+    return merged_cards
 
 
 def count_due_note_cards(

@@ -40,6 +40,7 @@ from app.services.anki_scheduler import (
     computeAnswerPreview,
     default_deck_options,
 )
+from app.services.flashcard_renderer import TemplateCompileError, render_template_pair
 from models import db
 from models.flashcard import Card, Note
 from models.deck import Deck
@@ -210,6 +211,116 @@ def _build_browse_deck_tree_payload():
     )
 
 
+def _normalize_tags_payload(raw_tags) -> list[str]:
+    if isinstance(raw_tags, list):
+        return [str(item).strip() for item in raw_tags if str(item).strip()]
+    if isinstance(raw_tags, str):
+        return [item.strip() for item in raw_tags.split(",") if item.strip()]
+    return []
+
+
+def _apply_clone_overlay_to_browse_payload(
+    *,
+    payload: dict,
+    card_obj: Card,
+    clone_scope,
+    deck_lookup: dict[int, str],
+):
+    from app.controllers import flashcards_share_controller as share_ctrl
+
+    note_obj = card_obj.note
+    if note_obj is None or note_obj.deck_id is None:
+        return payload
+
+    source_note_type_id = (clone_scope.install.source_note_type_id or note_obj.note_type_id or "").strip()
+    if source_note_type_id:
+        schema_view = share_ctrl.build_clone_schema_view(
+            install=clone_scope.install,
+            source_note_type_id=source_note_type_id,
+        )
+        overlay_field_defs = schema_view.field_defs or (note_obj.note_type.field_defs if note_obj.note_type else [])
+        overlay_field_values = share_ctrl.apply_clone_note_field_overrides(
+            install=clone_scope.install,
+            source_note=note_obj,
+            schema_view=schema_view,
+        )
+    else:
+        overlay_field_defs = note_obj.note_type.field_defs if note_obj.note_type else []
+        overlay_field_values = dict(note_obj.field_values or {})
+
+    normalized_values = {
+        str(key).strip(): "" if value is None else str(value)
+        for key, value in dict(overlay_field_values or {}).items()
+        if str(key).strip()
+    }
+    ordered_defs = sorted(
+        overlay_field_defs or [],
+        key=lambda item: (int(getattr(item, "position", 0) or 0), str(getattr(item, "name", "")).lower()),
+    )
+
+    local_deck_id = (
+        (clone_scope.source_to_local_deck_id or {}).get(int(note_obj.deck_id))
+        or clone_scope.install.local_deck_id
+    )
+    local_deck_name = deck_lookup.get(int(local_deck_id or 0), "")
+
+    proxy_note = SimpleNamespace(
+        field_values=normalized_values,
+        note_type=SimpleNamespace(field_defs=ordered_defs),
+    )
+    display_triplet = _note_display_triplet(proxy_note)
+
+    card_payload = payload.get("card")
+    if isinstance(card_payload, dict):
+        card_payload["word"] = display_triplet.get("word", "")
+        card_payload["reading"] = display_triplet.get("reading", "")
+        card_payload["meaning"] = display_triplet.get("meaning", "")
+        if local_deck_id is not None:
+            card_payload["deck_id"] = int(local_deck_id)
+        if local_deck_name:
+            card_payload["deck_name"] = local_deck_name
+
+    note_payload = payload.get("note")
+    if isinstance(note_payload, dict):
+        note_payload["field_values"] = normalized_values
+        if local_deck_id is not None:
+            note_payload["deck_id"] = int(local_deck_id)
+        note_payload["deck_name"] = local_deck_name
+
+    fields_payload = []
+    for field_def in ordered_defs:
+        field_name = str(getattr(field_def, "name", "") or "").strip()
+        if not field_name:
+            continue
+        try:
+            field_position = int(getattr(field_def, "position", 0) or 0)
+        except (TypeError, ValueError):
+            field_position = 0
+        fields_payload.append(
+            {
+                "name": field_name,
+                "field_type": str(getattr(field_def, "field_type", "text") or "text"),
+                "required": bool(getattr(field_def, "required", False)),
+                "position": field_position,
+            }
+        )
+    existing_names = {field_def["name"] for field_def in fields_payload}
+    for key in normalized_values:
+        if key in existing_names:
+            continue
+        fields_payload.append(
+            {
+                "name": key,
+                "field_type": "text",
+                "required": False,
+                "position": 9999,
+            }
+        )
+    fields_payload.sort(key=lambda item: (int(item["position"]), item["name"].lower()))
+    payload["fields"] = fields_payload
+    return payload
+
+
 @vocabulary_bp.route("/api/browse/decks/tree", methods=["GET"])
 @login_required
 def browse_api_decks_tree():
@@ -244,7 +355,8 @@ def browse_api_decks():
 @login_required
 def browse_api_cards():
     """List cards for Browse modal with deck/filter/sort/paging."""
-    from models.flashcard import Card, Note
+    from app.controllers import flashcards_share_controller as share_ctrl
+    from models.flashcard import Card, DeckInstall, Note
 
     deck_id_raw = (request.args.get("deck_id") or "").strip()
     include_subdecks_raw = (request.args.get("include_subdecks") or "1").strip().lower()
@@ -261,10 +373,35 @@ def browse_api_cards():
     except (TypeError, ValueError):
         return jsonify({"error": "Invalid page/per_page"}), 400
 
+    def _empty_result():
+        return jsonify(
+            {
+                "items": [],
+                "page": page,
+                "per_page": per_page,
+                "total": 0,
+                "pages": 0,
+                "has_next": False,
+            }
+        )
+
     scoped_decks = _collect_accessible_browse_decks()
     deck_lookup = {deck.id: deck.name for deck in scoped_decks}
     children_by_parent = _deck_children_map(scoped_decks)
     scoped_ids = {deck.id for deck in scoped_decks}
+    selected_ids: set[int] | None = None
+    if deck_id_raw:
+        try:
+            selected_deck_id = int(deck_id_raw)
+        except (TypeError, ValueError):
+            return jsonify({"error": "Invalid deck_id"}), 400
+        if selected_deck_id not in scoped_ids:
+            return jsonify({"error": "Deck not found"}), 404
+        if include_subdecks:
+            selected_ids = set(_collect_subtree_ids(selected_deck_id, children_by_parent))
+        else:
+            selected_ids = {selected_deck_id}
+
     progress_alias = aliased(CardProgress)
     progress_join = db.and_(
         progress_alias.card_id == Card.id,
@@ -279,34 +416,90 @@ def browse_api_cards():
             selectinload(Card.template),
         )
     )
-    if not is_admin_user(current_user):
-        query = query.filter(Note.user_id == current_user.id)
-
-    if deck_id_raw:
-        try:
-            selected_deck_id = int(deck_id_raw)
-        except (TypeError, ValueError):
-            return jsonify({"error": "Invalid deck_id"}), 400
-        if selected_deck_id not in scoped_ids:
-            return jsonify({"error": "Deck not found"}), 404
-        if include_subdecks:
-            selected_ids = _collect_subtree_ids(selected_deck_id, children_by_parent)
+    if is_admin_user(current_user):
+        if selected_ids:
             query = query.filter(Note.deck_id.in_(selected_ids))
+        elif scoped_ids:
+            query = query.filter(Note.deck_id.in_(scoped_ids))
         else:
-            query = query.filter(Note.deck_id == selected_deck_id)
-    elif scoped_ids:
-        query = query.filter(Note.deck_id.in_(scoped_ids))
+            return _empty_result()
     else:
-        return jsonify(
-            {
-                "items": [],
-                "page": page,
-                "per_page": per_page,
-                "total": 0,
-                "pages": 0,
-                "has_next": False,
-            }
-        )
+        local_scope_ids = set(selected_ids or scoped_ids)
+        clone_scopes = []
+        source_to_local_deck_id: dict[int, int] = {}
+
+        if selected_ids is not None:
+            scope_candidates = sorted(local_scope_ids)
+        else:
+            install_root_rows = (
+                db.session.query(DeckInstall.local_deck_id)
+                .filter(
+                    DeckInstall.user_id == current_user.id,
+                    DeckInstall.clone_mode == "logical_overlay",
+                    DeckInstall.local_deck_id.isnot(None),
+                )
+                .distinct()
+                .all()
+            )
+            scope_candidates = [
+                int(row[0])
+                for row in install_root_rows
+                if row and row[0] is not None
+            ]
+
+        covered_local_ids: set[int] = set()
+        seen_scope_keys: set[tuple[str, int]] = set()
+        for local_scope_deck_id in scope_candidates:
+            if selected_ids is not None and local_scope_deck_id in covered_local_ids:
+                continue
+            clone_scope = share_ctrl.resolve_clone_scope_for_local_deck(
+                user_id=current_user.id,
+                local_deck_id=int(local_scope_deck_id),
+            )
+            if clone_scope is None or not clone_scope.source_deck_ids:
+                continue
+            scope_key = (clone_scope.install.id, int(clone_scope.local_scope_deck_id))
+            if scope_key in seen_scope_keys:
+                continue
+            seen_scope_keys.add(scope_key)
+            clone_scopes.append(clone_scope)
+            covered_local_ids.update(
+                int(deck_id)
+                for deck_id in clone_scope.local_deck_ids
+                if deck_id is not None
+            )
+            for source_deck_id, local_deck_id in (clone_scope.source_to_local_deck_id or {}).items():
+                source_to_local_deck_id.setdefault(int(source_deck_id), int(local_deck_id))
+
+        visibility_filters = []
+        if local_scope_ids:
+            visibility_filters.append(
+                db.and_(
+                    Note.user_id == current_user.id,
+                    Note.deck_id.in_(local_scope_ids),
+                )
+            )
+        for clone_scope in clone_scopes:
+            scope_filters = [Note.deck_id.in_(clone_scope.source_deck_ids)]
+            if clone_scope.source_owner_user_id is not None:
+                scope_filters.append(Note.user_id == clone_scope.source_owner_user_id)
+            if clone_scope.base_snapshot_at is not None:
+                scope_filters.extend(
+                    [
+                        Note.created_at <= clone_scope.base_snapshot_at,
+                        Card.created_at <= clone_scope.base_snapshot_at,
+                    ]
+                )
+            visibility_filters.append(db.and_(*scope_filters))
+
+        if not visibility_filters:
+            return _empty_result()
+        query = query.filter(db.or_(*visibility_filters))
+
+        for source_deck_id, local_deck_id in source_to_local_deck_id.items():
+            local_name = deck_lookup.get(local_deck_id)
+            if local_name:
+                deck_lookup.setdefault(source_deck_id, local_name)
 
     if keyword:
         query = query.filter(func.lower(db.cast(Note.field_values, db.Text)).like(f"%{keyword.lower()}%"))
@@ -341,10 +534,31 @@ def browse_api_cards():
 
     pagination = query.paginate(page=page, per_page=per_page, error_out=False)
     progress_map = _load_card_progress_map([card_obj.id for card_obj in pagination.items])
-    rows = [
-        _build_browse_row(card_obj, deck_lookup, now, progress_obj=progress_map.get(card_obj.id))
-        for card_obj in pagination.items
-    ]
+    rows = []
+    for card_obj in pagination.items:
+        row_payload = _build_browse_row(
+            card_obj,
+            deck_lookup,
+            now,
+            progress_obj=progress_map.get(card_obj.id),
+        )
+        if not is_admin_user(current_user) and card_obj.note and card_obj.note.user_id != current_user.id:
+            clone_scope = share_ctrl.resolve_clone_scope_for_card(
+                user_id=current_user.id,
+                card_obj=card_obj,
+            )
+            if clone_scope is not None and share_ctrl.is_card_visible_in_clone_scope(
+                scope=clone_scope,
+                card_obj=card_obj,
+            ):
+                adjusted_payload = _apply_clone_overlay_to_browse_payload(
+                    payload={"card": row_payload, "note": {}, "fields": []},
+                    card_obj=card_obj,
+                    clone_scope=clone_scope,
+                    deck_lookup=deck_lookup,
+                )
+                row_payload = adjusted_payload.get("card") or row_payload
+        rows.append(row_payload)
     return jsonify(
         {
             "items": rows,
@@ -361,6 +575,7 @@ def browse_api_cards():
 @login_required
 def browse_api_card_detail(card_id: str):
     """Get full card detail for right editor panel."""
+    from app.controllers import flashcards_share_controller as share_ctrl
     from models.flashcard import Card, Note, NoteType
 
     query = (
@@ -372,36 +587,55 @@ def browse_api_card_detail(card_id: str):
             selectinload(Card.template),
         )
     )
-    if not is_admin_user(current_user):
-        query = query.filter(Note.user_id == current_user.id)
     card_obj = query.first()
     if not card_obj:
         return jsonify({"error": "Card not found"}), 404
 
     deck_lookup = {deck.id: deck.name for deck in _collect_accessible_browse_decks()}
+    clone_scope = None
+    if not is_admin_user(current_user) and card_obj.note and card_obj.note.user_id != current_user.id:
+        clone_scope = share_ctrl.resolve_clone_scope_for_card(
+            user_id=current_user.id,
+            card_obj=card_obj,
+        )
+        if clone_scope is None or not share_ctrl.is_card_visible_in_clone_scope(
+            scope=clone_scope,
+            card_obj=card_obj,
+        ):
+            return jsonify({"error": "Card not found"}), 404
+        for source_deck_id, local_deck_id in (clone_scope.source_to_local_deck_id or {}).items():
+            local_name = deck_lookup.get(int(local_deck_id))
+            if local_name:
+                deck_lookup.setdefault(int(source_deck_id), local_name)
+
     progress = CardProgress.query.filter_by(
         user_id=current_user.id,
         card_id=card_obj.id,
     ).first()
-    return jsonify(
-        _build_browse_card_detail(
-            card_obj,
-            deck_lookup,
-            datetime.utcnow(),
-            progress_obj=progress,
-        )
+    payload = _build_browse_card_detail(
+        card_obj,
+        deck_lookup,
+        datetime.utcnow(),
+        progress_obj=progress,
     )
+    if clone_scope is not None:
+        payload = _apply_clone_overlay_to_browse_payload(
+            payload=payload,
+            card_obj=card_obj,
+            clone_scope=clone_scope,
+            deck_lookup=deck_lookup,
+        )
+    return jsonify(payload)
 
 
 @vocabulary_bp.route("/api/browse/cards/<card_id>", methods=["PATCH"])
 @login_required
 def browse_api_card_update(card_id: str):
     """Update card note fields/deck/tags from Browse editor."""
+    from app.controllers import flashcards_share_controller as share_ctrl
     from models.flashcard import Card, Note, NoteType
 
     query = Card.query.join(Note, Card.note_id == Note.id).filter(Card.id == card_id)
-    if not is_admin_user(current_user):
-        query = query.filter(Note.user_id == current_user.id)
     card_obj = query.options(
         selectinload(Card.note).selectinload(Note.note_type).selectinload(NoteType.field_defs),
         selectinload(Card.note).selectinload(Note.media_assets),
@@ -410,8 +644,20 @@ def browse_api_card_update(card_id: str):
     if not card_obj:
         return jsonify({"error": "Card not found"}), 404
 
-    payload = request.get_json(silent=True) or {}
     note_obj = card_obj.note
+    clone_scope = None
+    if not is_admin_user(current_user) and note_obj and note_obj.user_id != current_user.id:
+        clone_scope = share_ctrl.resolve_clone_scope_for_card(
+            user_id=current_user.id,
+            card_obj=card_obj,
+        )
+        if clone_scope is None or not share_ctrl.is_card_visible_in_clone_scope(
+            scope=clone_scope,
+            card_obj=card_obj,
+        ):
+            return jsonify({"error": "Card not found"}), 404
+
+    payload = request.get_json(silent=True) or {}
     note_type_obj = note_obj.note_type
     field_values = dict(note_obj.field_values or {})
 
@@ -435,6 +681,79 @@ def browse_api_card_update(card_id: str):
                 continue
             return jsonify({"error": f"Field '{field_def.name}' is required"}), 400
 
+    if clone_scope is not None and not is_admin_user(current_user):
+        mapped_local_deck_id = (
+            (clone_scope.source_to_local_deck_id or {}).get(int(note_obj.deck_id or 0))
+            or clone_scope.install.local_deck_id
+        )
+        if "deck_id" in payload:
+            raw_deck_id = payload.get("deck_id")
+            if raw_deck_id in (None, ""):
+                selected_deck_id = None
+            else:
+                try:
+                    selected_deck_id = int(raw_deck_id)
+                except (TypeError, ValueError):
+                    return jsonify({"error": "Invalid deck_id"}), 400
+            if selected_deck_id != (int(mapped_local_deck_id) if mapped_local_deck_id is not None else None):
+                return jsonify({"error": "Moving cloned cards across decks is not supported."}), 400
+
+        if "tags" in payload:
+            incoming_tags = _normalize_tags_payload(payload.get("tags"))
+            current_tags = _normalize_tags_payload(note_obj.tags or [])
+            if incoming_tags != current_tags:
+                return jsonify({"error": "Editing tags for cloned cards is not supported."}), 400
+
+        note_override_items = []
+        if isinstance(incoming_values, dict):
+            for key, value in incoming_values.items():
+                key_name = str(key).strip()
+                if not key_name:
+                    continue
+                note_override_items.append(
+                    {
+                        "source_note_id": note_obj.id,
+                        "field_name": key_name,
+                        "operation": "set",
+                        "value": "" if value is None else str(value),
+                    }
+                )
+
+        if note_override_items:
+            _, validation_error = share_ctrl.upsert_clone_overlay(
+                deck_install=clone_scope.install,
+                payload={"note_field_overrides": note_override_items},
+            )
+            if validation_error:
+                db.session.rollback()
+                return jsonify({"error": validation_error}), 400
+        db.session.commit()
+
+        deck_lookup = {deck.id: deck.name for deck in _collect_accessible_browse_decks()}
+        for source_deck_id, local_deck_id in (clone_scope.source_to_local_deck_id or {}).items():
+            local_name = deck_lookup.get(int(local_deck_id))
+            if local_name:
+                deck_lookup.setdefault(int(source_deck_id), local_name)
+        progress = CardProgress.query.filter_by(
+            user_id=current_user.id,
+            card_id=card_obj.id,
+        ).first()
+        now = datetime.utcnow()
+        detail_payload = _build_browse_card_detail(card_obj, deck_lookup, now, progress_obj=progress)
+        detail_payload = _apply_clone_overlay_to_browse_payload(
+            payload=detail_payload,
+            card_obj=card_obj,
+            clone_scope=clone_scope,
+            deck_lookup=deck_lookup,
+        )
+        return jsonify(
+            {
+                "success": True,
+                "row": detail_payload.get("card"),
+                "detail": detail_payload,
+            }
+        )
+
     if "deck_id" in payload:
         raw_deck_id = payload.get("deck_id")
         if raw_deck_id in (None, ""):
@@ -453,13 +772,7 @@ def browse_api_card_update(card_id: str):
             note_obj.deck_id = selected_deck_id
 
     if "tags" in payload:
-        raw_tags = payload.get("tags")
-        if isinstance(raw_tags, list):
-            note_obj.tags = [str(item).strip() for item in raw_tags if str(item).strip()]
-        elif isinstance(raw_tags, str):
-            note_obj.tags = [item.strip() for item in raw_tags.split(",") if item.strip()]
-        else:
-            note_obj.tags = []
+        note_obj.tags = _normalize_tags_payload(payload.get("tags"))
 
     note_obj.field_values = field_values
     db.session.commit()
@@ -915,6 +1228,57 @@ def study_deck(deck_id: int):
 
     rendered_data = _render_note_study_flashcard(selected_card)
     card_payload = _build_note_study_card_payload(selected_card)
+    from app.controllers import flashcards_share_controller as share_ctrl
+
+    clone_scope = share_ctrl.resolve_clone_scope_for_local_deck(
+        user_id=current_user.id,
+        local_deck_id=root_deck.id,
+    )
+    if (
+        clone_scope is not None
+        and selected_card is not None
+        and share_ctrl.is_card_visible_in_clone_scope(scope=clone_scope, card_obj=selected_card)
+    ):
+        source_note_type_id = (clone_scope.install.source_note_type_id or selected_card.note.note_type_id or "").strip()
+        if source_note_type_id:
+            schema_view = share_ctrl.build_clone_schema_view(
+                install=clone_scope.install,
+                source_note_type_id=source_note_type_id,
+            )
+            overlay_field_defs = schema_view.field_defs or selected_card.note.note_type.field_defs
+            overlay_field_values = share_ctrl.apply_clone_note_field_overrides(
+                install=clone_scope.install,
+                source_note=selected_card.note,
+                schema_view=schema_view,
+            )
+            try:
+                rendered = render_template_pair(
+                    template=selected_card.template,
+                    field_defs=overlay_field_defs,
+                    field_values=overlay_field_values,
+                    media_assets=selected_card.note.media_assets,
+                    allow_inline_script=True,
+                )
+                rendered_data = {
+                    "front": rendered.get("front_html", ""),
+                    "back": rendered.get("back_html", ""),
+                }
+                if card_payload is not None:
+                    card_payload.field_values = {
+                        str(key): "" if value is None else str(value)
+                        for key, value in overlay_field_values.items()
+                    }
+                    card_payload.field_defs = [
+                        {
+                            "name": field_def.name,
+                            "field_type": field_def.field_type,
+                            "required": bool(field_def.required),
+                            "position": int(field_def.position or 0),
+                        }
+                        for field_def in overlay_field_defs
+                    ]
+            except TemplateCompileError:
+                pass
 
     return render_template(
         "vocabulary_study.html",

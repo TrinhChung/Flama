@@ -14,6 +14,7 @@ from flask import Flask
 
 from app.services.flashcard_legacy import ensure_legacy_note_type
 from app.services.user_roles import ensure_default_user_roles
+from app.controllers import flashcards_share_controller as share_ctrl
 from models import db
 from models.flashcard import Card, DeckMarketplaceItem, Note
 from models.user import User
@@ -55,6 +56,36 @@ class SeedStats:
 
 def register_cli_commands(app: Flask) -> None:
     """Register custom Flask CLI commands."""
+
+    @app.cli.command("clone-cutover-overlay")
+    @click.option(
+        "--no-fail-on-mismatch",
+        is_flag=True,
+        default=False,
+        help="Continue processing installs even when one legacy install cannot be migrated cleanly.",
+    )
+    def clone_cutover_overlay(no_fail_on_mismatch: bool) -> None:
+        """One-shot cutover from legacy clone rows to logical overlay model."""
+        summary = share_ctrl.cutover_clone_model_to_overlay_only(
+            fail_on_mismatch=not no_fail_on_mismatch,
+        )
+        db.session.commit()
+        click.echo(
+            "Cutover done. "
+            f"total={summary.get('total_installs', 0)}, "
+            f"migrated={summary.get('migrated', 0)}, "
+            f"failed={summary.get('failed', 0)}, "
+            f"deck_map_rows={summary.get('deck_map_rows', 0)}, "
+            f"note_pairs={summary.get('note_pairs', 0)}, "
+            f"note_overrides={summary.get('note_overrides', 0)}, "
+            f"progress_rows={summary.get('progress_rows', 0)}"
+        )
+        if summary.get("errors"):
+            click.echo("Errors:")
+            for error in summary.get("errors", []):
+                click.echo(
+                    f"- deck_install_id={error.get('deck_install_id')}: {error.get('message')}"
+                )
 
     @app.cli.command("user-role-seed")
     def user_role_seed() -> None:

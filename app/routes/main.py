@@ -17,7 +17,7 @@ from app.services.stats_today_future import build_today_future_stats, list_stats
 from app.utils.deck_move_token import create_deck_move_token
 from app.utils.permissions import is_admin_user
 from models import db
-from models.flashcard import Card, DeckInstall, Note
+from models.flashcard import Card, DeckCloneDeckMap, DeckInstall, Note
 from models.deck import Deck
 from models.card_progress import CardProgress
 
@@ -171,6 +171,72 @@ def dashboard():
                 bucket["learn"] += 1
             elif queue_norm == "review" and (due_at_value is None or due_at_value <= now):
                 bucket["due"] += 1
+
+        if not admin_mode:
+            logical_installs = [
+                install
+                for install in installs
+                if install.clone_mode == "logical_overlay" and install.id and install.local_deck_id
+            ]
+            for install in logical_installs:
+                map_rows = (
+                    DeckCloneDeckMap.query.filter_by(deck_install_id=install.id)
+                    .order_by(DeckCloneDeckMap.local_deck_id.asc(), DeckCloneDeckMap.source_deck_id.asc())
+                    .all()
+                )
+                source_to_local = {
+                    int(row.source_deck_id): int(row.local_deck_id)
+                    for row in map_rows
+                    if row.source_deck_id is not None
+                    and row.local_deck_id is not None
+                    and int(row.local_deck_id) in card_counts_by_deck
+                }
+                if not source_to_local:
+                    continue
+
+                clone_query = (
+                    db.session.query(
+                        Note.deck_id,
+                        CardProgress.queue,
+                        CardProgress.due_at,
+                    )
+                    .select_from(Card)
+                    .join(Note, Card.note_id == Note.id)
+                    .outerjoin(CardProgress, progress_join)
+                    .filter(Note.deck_id.in_(source_to_local.keys()))
+                )
+                if install.source_owner_user_id is not None:
+                    clone_query = clone_query.filter(Note.user_id == install.source_owner_user_id)
+                snapshot_at = install.base_snapshot_at or install.installed_at
+                if snapshot_at is not None:
+                    clone_query = clone_query.filter(
+                        Note.created_at <= snapshot_at,
+                        Card.created_at <= snapshot_at,
+                    )
+
+                for source_deck_id, progress_queue, progress_due_at in clone_query.all():
+                    if source_deck_id is None:
+                        continue
+                    local_deck_id = source_to_local.get(int(source_deck_id))
+                    if local_deck_id is None:
+                        continue
+                    bucket = card_counts_by_deck.setdefault(
+                        int(local_deck_id), {"total": 0, "new": 0, "learn": 0, "due": 0}
+                    )
+                    bucket["total"] += 1
+
+                    queue_value = progress_queue
+                    due_at_value = progress_due_at
+                    queue_norm = (queue_value or "new").strip().lower()
+                    if queue_norm == "learn":
+                        queue_norm = "learning"
+
+                    if queue_norm == "new":
+                        bucket["new"] += 1
+                    elif queue_norm in {"learning", "relearning"}:
+                        bucket["learn"] += 1
+                    elif queue_norm == "review" and (due_at_value is None or due_at_value <= now):
+                        bucket["due"] += 1
     
     by_parent: Dict[int | None, List[Deck]] = {}
     for deck in decks:
