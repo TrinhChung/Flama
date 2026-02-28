@@ -36,7 +36,6 @@ def create_app(config: Optional[dict] = None) -> Flask:
         "pool_pre_ping": True,
         "pool_recycle": 1800,
     }
-    app.config["USE_NEW_CARD_MODEL"] = os.getenv("USE_NEW_CARD_MODEL", "false").strip().lower() == "true"
     app.config["FLASHCARD_MEDIA_UPLOAD_ROOT"] = str(BASE_DIR / "static" / "uploads")
     app.config["FLASHCARD_MEDIA_MAX_BYTES"] = int(os.getenv("FLASHCARD_MEDIA_MAX_BYTES", str(10 * 1024 * 1024)))
     if config:
@@ -57,6 +56,11 @@ def create_app(config: Optional[dict] = None) -> Flask:
     from models.flashcard import (  # noqa: F401  # register model
         AuditLog,
         Card,
+        DeckCloneAddedFieldDef,
+        DeckCloneDeckMap,
+        DeckCloneFieldDefOverride,
+        DeckCloneFieldOrderOverride,
+        DeckCloneNoteFieldOverride,
         DeckInstall,
         DeckMarketplaceItem,
         DeckReview,
@@ -80,6 +84,12 @@ def create_app(config: Optional[dict] = None) -> Flask:
     register_blueprints(app)
     register_cli_commands(app)
 
+    def _rollback_failed_session() -> None:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+
     # Register error handlers
     @app.errorhandler(404)
     def page_not_found(error):
@@ -91,6 +101,7 @@ def create_app(config: Optional[dict] = None) -> Flask:
     def internal_server_error(error):
         """Handle 500 errors."""
         from flask import render_template
+        _rollback_failed_session()
         return render_template('error.html', error_code=500, error_message='Lỗi máy chủ'), 500
 
     @app.errorhandler(403)
@@ -104,6 +115,7 @@ def create_app(config: Optional[dict] = None) -> Flask:
         """Handle unexpected exceptions."""
         from flask import render_template
         import logging
+        _rollback_failed_session()
         logger = logging.getLogger(__name__)
         logger.error(f"Unhandled exception: {error}", exc_info=True)
         return render_template('error.html', error_code=500, error_message='Lỗi máy chủ'), 500
@@ -113,6 +125,9 @@ def create_app(config: Optional[dict] = None) -> Flask:
         ensure_user_management_schema(db.session)
         _ensure_backward_compatible_schema()
         ensure_default_user_roles(db.session)
+        from app.controllers import flashcards_share_controller as share_ctrl
+
+        share_ctrl.cutover_clone_model_to_overlay_only(fail_on_mismatch=True)
         db.session.commit()
 
     return app
@@ -202,6 +217,77 @@ def _ensure_backward_compatible_schema() -> None:
         if "note_type_id" in deck_columns and "ix_decks_note_type_id" not in deck_indexes:
             db.session.execute(
                 sa.text("CREATE INDEX ix_decks_note_type_id ON decks (note_type_id)")
+            )
+            schema_changed = True
+
+    inspector = sa.inspect(bind)
+    if inspector.has_table("deck_installs"):
+        install_columns = {column["name"] for column in inspector.get_columns("deck_installs")}
+        if "clone_mode" not in install_columns:
+            db.session.execute(
+                sa.text("ALTER TABLE deck_installs ADD COLUMN clone_mode VARCHAR(32) NULL")
+            )
+            install_columns.add("clone_mode")
+            schema_changed = True
+        if "clone_mode" in install_columns:
+            missing_mode_count = db.session.execute(
+                sa.text("SELECT COUNT(*) FROM deck_installs WHERE clone_mode IS NULL OR clone_mode = ''")
+            ).scalar()
+            if int(missing_mode_count or 0) > 0:
+                db.session.execute(
+                    sa.text("UPDATE deck_installs SET clone_mode = 'legacy_copy' WHERE clone_mode IS NULL OR clone_mode = ''")
+                )
+                schema_changed = True
+
+        if "source_deck_id" not in install_columns:
+            db.session.execute(
+                sa.text("ALTER TABLE deck_installs ADD COLUMN source_deck_id INTEGER NULL")
+            )
+            install_columns.add("source_deck_id")
+            schema_changed = True
+        if "source_note_type_id" not in install_columns:
+            db.session.execute(
+                sa.text("ALTER TABLE deck_installs ADD COLUMN source_note_type_id VARCHAR(36) NULL")
+            )
+            install_columns.add("source_note_type_id")
+            schema_changed = True
+        if "source_owner_user_id" not in install_columns:
+            db.session.execute(
+                sa.text("ALTER TABLE deck_installs ADD COLUMN source_owner_user_id INTEGER NULL")
+            )
+            install_columns.add("source_owner_user_id")
+            schema_changed = True
+        if "base_snapshot_at" not in install_columns:
+            db.session.execute(
+                sa.text("ALTER TABLE deck_installs ADD COLUMN base_snapshot_at DATETIME NULL")
+            )
+            install_columns.add("base_snapshot_at")
+            schema_changed = True
+
+        install_indexes = {index["name"] for index in inspector.get_indexes("deck_installs")}
+        if "clone_mode" in install_columns and "ix_deck_installs_clone_mode" not in install_indexes:
+            db.session.execute(
+                sa.text("CREATE INDEX ix_deck_installs_clone_mode ON deck_installs (clone_mode)")
+            )
+            schema_changed = True
+        if "source_deck_id" in install_columns and "ix_deck_installs_source_deck_id" not in install_indexes:
+            db.session.execute(
+                sa.text("CREATE INDEX ix_deck_installs_source_deck_id ON deck_installs (source_deck_id)")
+            )
+            schema_changed = True
+        if "source_note_type_id" in install_columns and "ix_deck_installs_source_note_type_id" not in install_indexes:
+            db.session.execute(
+                sa.text("CREATE INDEX ix_deck_installs_source_note_type_id ON deck_installs (source_note_type_id)")
+            )
+            schema_changed = True
+        if "source_owner_user_id" in install_columns and "ix_deck_installs_source_owner_user_id" not in install_indexes:
+            db.session.execute(
+                sa.text("CREATE INDEX ix_deck_installs_source_owner_user_id ON deck_installs (source_owner_user_id)")
+            )
+            schema_changed = True
+        if "base_snapshot_at" in install_columns and "ix_deck_installs_base_snapshot_at" not in install_indexes:
+            db.session.execute(
+                sa.text("CREATE INDEX ix_deck_installs_base_snapshot_at ON deck_installs (base_snapshot_at)")
             )
             schema_changed = True
 

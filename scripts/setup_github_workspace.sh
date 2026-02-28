@@ -55,7 +55,6 @@ set_env_value "DB_PORT" "${DB_PORT}" ".env"
 set_env_value "DB_USER" "${DB_USER}" ".env"
 set_env_value "DB_PASSWORD" "${DB_PASSWORD}" ".env"
 set_env_value "DB_NAME" "${DB_NAME}" ".env"
-set_env_value "USE_NEW_CARD_MODEL" "true" ".env"
 
 if ! command -v docker >/dev/null 2>&1; then
   echo "Docker is required."

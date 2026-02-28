@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -21,6 +22,7 @@ from flask import (
     url_for,
 )
 from flask_login import current_user, login_required
+from sqlalchemy.exc import OperationalError
 
 from app.controllers import flashcards_import_controller as flashcard_import_ctrl
 from app.controllers import flashcards_marketplace_controller as marketplace_ctrl
@@ -116,6 +118,7 @@ DECK_ACTIVE_REVIEW_THRESHOLD = 3
 TRENDING_WINDOW_DAYS = 7
 RECENCY_WINDOW_DAYS = 30
 SHARED_DECK_TEST_SAMPLE_LIMIT = 5
+SHARED_DECK_INSTALL_MAX_RETRIES = 3
 
 
 def _api_error(
@@ -132,6 +135,17 @@ def _api_error(
     if line is not None:
         payload["line"] = line
     return jsonify(payload), status
+
+
+def _is_mysql_deadlock(exc: OperationalError) -> bool:
+    original = getattr(exc, "orig", None)
+    args = getattr(original, "args", ()) if original is not None else ()
+    if args:
+        if str(args[0]) == "1213":
+            return True
+        if "deadlock found when trying to get lock" in " ".join(str(item) for item in args).lower():
+            return True
+    return "deadlock found when trying to get lock" in str(exc).lower()
 
 
 def _audit(action: str, payload: dict[str, Any] | None = None) -> None:
@@ -373,6 +387,67 @@ def _touch_deck_install_usage(*, user_id: int, local_deck_id: int, activity_at: 
         local_deck_id=local_deck_id,
         activity_at=activity_at,
     )
+
+
+def _resolve_clone_scope_for_local_deck(*, user_id: int, local_deck_id: int) -> share_ctrl.CloneDeckScope | None:
+    return share_ctrl.resolve_clone_scope_for_local_deck(
+        user_id=user_id,
+        local_deck_id=local_deck_id,
+    )
+
+
+def _query_clone_scope_cards(scope: share_ctrl.CloneDeckScope):
+    return share_ctrl.query_clone_scope_cards(scope)
+
+
+def _is_card_visible_in_clone_scope(*, scope: share_ctrl.CloneDeckScope, card_obj: Card | None) -> bool:
+    return share_ctrl.is_card_visible_in_clone_scope(scope=scope, card_obj=card_obj)
+
+
+def _resolve_clone_scope_for_card(*, user_id: int, card_obj: Card | None) -> share_ctrl.CloneDeckScope | None:
+    return share_ctrl.resolve_clone_scope_for_card(user_id=user_id, card_obj=card_obj)
+
+
+def _resolve_local_clone_deck_id_for_source_deck(*, install_id: str, source_deck_id: int | None) -> int | None:
+    return share_ctrl.resolve_local_clone_deck_id_for_source_deck(
+        install_id=install_id,
+        source_deck_id=source_deck_id,
+    )
+
+
+def _build_clone_schema_view(
+    *,
+    install: DeckInstall,
+    source_note_type_id: str,
+) -> share_ctrl.CloneSchemaView:
+    return share_ctrl.build_clone_schema_view(
+        install=install,
+        source_note_type_id=source_note_type_id,
+    )
+
+
+def _apply_clone_note_field_overrides(
+    *,
+    install: DeckInstall,
+    source_note: Note,
+    schema_view: share_ctrl.CloneSchemaView,
+) -> dict[str, Any]:
+    return share_ctrl.apply_clone_note_field_overrides(
+        install=install,
+        source_note=source_note,
+        schema_view=schema_view,
+    )
+
+
+def _get_user_deck_install_for_item(*, user_id: int, deck_item_id: str) -> DeckInstall | None:
+    return share_ctrl.get_user_deck_install_for_item(
+        user_id=user_id,
+        deck_item_id=deck_item_id,
+    )
+
+
+def _upsert_clone_overlay(*, deck_install: DeckInstall, payload: dict[str, Any]) -> tuple[dict[str, int], str | None]:
+    return share_ctrl.upsert_clone_overlay(deck_install=deck_install, payload=payload)
 
 
 def _deck_reps_for_user(*, user_id: int, local_deck_id: int) -> int:
@@ -1767,7 +1842,8 @@ def study_next():
     scope = (request.args.get("scope") or "deck").strip().lower()
     scope_id_raw = (request.args.get("scope_id") or "").strip()
 
-    query = Card.query.join(Note, Card.note_id == Note.id).filter(Note.user_id == current_user.id)
+    clone_scope: share_ctrl.CloneDeckScope | None = None
+    query = None
     if scope == "deck":
         if not scope_id_raw:
             return _api_error("VALIDATION_ERROR", "scope_id is required for deck scope.", field="scope_id")
@@ -1775,17 +1851,32 @@ def study_next():
             scope_id = int(scope_id_raw)
         except ValueError:
             return _api_error("VALIDATION_ERROR", "scope_id must be an integer for deck scope.", field="scope_id")
-        scope_deck_ids = _collect_deck_subtree_ids(scope_id)
-        if not scope_deck_ids:
-            return jsonify({"card_id": None, "message": "No cards found for selected scope."})
-        query = query.filter(Note.deck_id.in_(scope_deck_ids))
+        clone_scope = _resolve_clone_scope_for_local_deck(
+            user_id=current_user.id,
+            local_deck_id=scope_id,
+        )
+        if clone_scope is not None:
+            query = _query_clone_scope_cards(clone_scope)
+        else:
+            scope_deck_ids = _collect_deck_subtree_ids(scope_id)
+            if not scope_deck_ids:
+                return jsonify({"card_id": None, "message": "No cards found for selected scope."})
+            query = Card.query.join(Note, Card.note_id == Note.id).filter(
+                Note.user_id == current_user.id,
+                Note.deck_id.in_(scope_deck_ids),
+            )
     elif scope == "note_type":
         if not scope_id_raw:
             return _api_error("VALIDATION_ERROR", "scope_id is required for note_type scope.", field="scope_id")
-        query = query.filter(Note.note_type_id == scope_id_raw)
+        query = Card.query.join(Note, Card.note_id == Note.id).filter(
+            Note.user_id == current_user.id,
+            Note.note_type_id == scope_id_raw,
+        )
     else:
         return _api_error("VALIDATION_ERROR", f"Unsupported scope: {scope}", field="scope")
 
+    if query is None:
+        return jsonify({"card_id": None, "message": "No cards found for selected scope."})
     if not query.with_entities(Card.id).first():
         return jsonify({"card_id": None, "message": "No cards found for selected scope."})
 
@@ -1801,6 +1892,8 @@ def study_next():
     selected_card = query.filter(Card.id == selected_card_id).first()
     if not selected_card:
         return _api_error("FIELD_NOT_FOUND", "Card not found.", status=404)
+    if clone_scope is not None and not _is_card_visible_in_clone_scope(scope=clone_scope, card_obj=selected_card):
+        return jsonify({"card_id": None, "message": "No due cards."})
 
     progress = CardProgress.query.filter_by(user_id=current_user.id, card_id=selected_card.id).first()
     card_state = _card_state_from_progress(progress, now)
@@ -1808,11 +1901,27 @@ def study_next():
 
     note = selected_card.note
     template = selected_card.template
+    render_field_defs = note.note_type.field_defs
+    render_field_values = note.field_values or {}
+    if clone_scope is not None:
+        source_note_type_id = (clone_scope.install.source_note_type_id or note.note_type_id or "").strip()
+        if source_note_type_id:
+            schema_view = _build_clone_schema_view(
+                install=clone_scope.install,
+                source_note_type_id=source_note_type_id,
+            )
+            if schema_view.field_defs:
+                render_field_defs = schema_view.field_defs
+            render_field_values = _apply_clone_note_field_overrides(
+                install=clone_scope.install,
+                source_note=note,
+                schema_view=schema_view,
+            )
     try:
         rendered = render_template_pair(
             template=template,
-            field_defs=note.note_type.field_defs,
-            field_values=note.field_values or {},
+            field_defs=render_field_defs,
+            field_values=render_field_values,
             media_assets=note.media_assets,
             allow_inline_script=True,
         )
@@ -1839,9 +1948,24 @@ def study_answer(card_id: str):
     if rating not in {"again", "hard", "good", "easy"}:
         return _api_error("VALIDATION_ERROR", "rating must be one of: again, hard, good, easy.", field="rating")
 
-    card = Card.query.join(Note, Card.note_id == Note.id).filter(Card.id == card_id, Note.user_id == current_user.id).first()
+    scope = (payload.get("scope") or "").strip().lower()
+    requested_scope_id = None
+    if scope == "deck":
+        try:
+            requested_scope_id = int(payload.get("scope_id"))
+        except (TypeError, ValueError):
+            requested_scope_id = None
+
+    card = Card.query.join(Note, Card.note_id == Note.id).filter(Card.id == card_id).first()
     if not card:
         return _api_error("FIELD_NOT_FOUND", "Card not found.", status=404)
+    clone_scope: share_ctrl.CloneDeckScope | None = None
+    if card.note.user_id != current_user.id:
+        clone_scope = _resolve_clone_scope_for_card(user_id=current_user.id, card_obj=card)
+        if clone_scope is None:
+            return _api_error("FIELD_NOT_FOUND", "Card not found.", status=404)
+        if not _is_card_visible_in_clone_scope(scope=clone_scope, card_obj=card):
+            return _api_error("FIELD_NOT_FOUND", "Card not found.", status=404)
 
     progress = CardProgress.query.filter_by(user_id=current_user.id, card_id=card.id).first()
     if progress is None:
@@ -1867,13 +1991,24 @@ def study_answer(card_id: str):
     _apply_card_state_to_progress(progress, updated_state, now)
     _touch_note_type_install_usage(user_id=current_user.id, installed_note_type_id=card.note.note_type_id, activity_at=now)
 
-    if card.note.deck_id is not None:
-        _touch_deck_install_usage(user_id=current_user.id, local_deck_id=card.note.deck_id, activity_at=now)
+    local_deck_id_for_usage = card.note.deck_id
+    if clone_scope is not None:
+        local_deck_id_for_usage = (
+            requested_scope_id
+            if requested_scope_id is not None
+            else _resolve_local_clone_deck_id_for_source_deck(
+                install_id=clone_scope.install.id,
+                source_deck_id=card.note.deck_id,
+            )
+        ) or clone_scope.install.local_deck_id
+
+    if local_deck_id_for_usage is not None:
+        _touch_deck_install_usage(user_id=current_user.id, local_deck_id=local_deck_id_for_usage, activity_at=now)
     update_user_timezone(current_user, payload.get("timezone"))
     record_review_event(
         user_id=current_user.id,
         card_id=card.id,
-        deck_id=card.note.deck_id,
+        deck_id=local_deck_id_for_usage,
         note_type_id=card.note.note_type_id,
         reviewed_at=now,
         duration_ms=payload.get("duration_ms"),
@@ -1882,16 +2017,12 @@ def study_answer(card_id: str):
     )
     _audit("study.answer", {"card_id": card.id, "rating": rating})
     db.session.commit()
-    next_card_url = url_for("flashcards.study_next", scope="deck", scope_id=card.note.deck_id) if card.note.deck_id else None
+    next_scope_id = requested_scope_id if requested_scope_id is not None else local_deck_id_for_usage
+    next_card_url = url_for("flashcards.study_next", scope="deck", scope_id=next_scope_id) if next_scope_id else None
     next_url = None
-    scope = (payload.get("scope") or "").strip().lower()
     if scope == "deck":
-        try:
-            scope_id = int(payload.get("scope_id"))
-        except (TypeError, ValueError):
-            scope_id = None
-        if scope_id is not None:
-            next_url = url_for("vocabulary.study_deck", deck_id=scope_id)
+        if requested_scope_id is not None:
+            next_url = url_for("vocabulary.study_deck", deck_id=requested_scope_id)
     return jsonify(
         {
             "success": True,
@@ -2397,39 +2528,145 @@ def patch_shared_deck_item(deck_item_id: str):
 @flashcards_bp.route("/api/shared/decks/<deck_item_id>/install", methods=["POST"])
 @login_required
 def install_shared_deck_item(deck_item_id: str):
-    deck_item = DeckMarketplaceItem.query.get(deck_item_id)
-    if not deck_item:
-        return _api_error("FIELD_NOT_FOUND", "Deck item not found.", status=404)
+    for attempt in range(1, SHARED_DECK_INSTALL_MAX_RETRIES + 1):
+        deck_item = DeckMarketplaceItem.query.get(deck_item_id)
+        if not deck_item:
+            return _api_error("FIELD_NOT_FOUND", "Deck item not found.", status=404)
 
-    bind_error, changed = share_ctrl.sync_deck_item_source_note_type(
-        deck_item,
-        require_source_note_type=True,
-    )
-    if bind_error:
-        return _api_error("VALIDATION_ERROR", bind_error, status=409)
-    if changed:
-        db.session.commit()
-
-    try:
-        install_result = share_ctrl.install_shared_deck_item_for_user(
+        bind_error, changed = share_ctrl.sync_deck_item_source_note_type(
             deck_item,
-            user_id=current_user.id,
-            publish_statuses_visible=PUBLISH_STATUSES_VISIBLE,
+            require_source_note_type=True,
         )
-    except share_ctrl.ShareControllerError as exc:
-        return _api_error(
-            exc.error,
-            exc.message,
-            status=exc.status,
-            field=exc.field,
-        )
+        if bind_error:
+            return _api_error("VALIDATION_ERROR", bind_error, status=409)
 
-    if not install_result.get("created"):
-        return jsonify(install_result.get("response") or {})
+        if changed:
+            try:
+                db.session.commit()
+            except OperationalError as exc:
+                db.session.rollback()
+                if _is_mysql_deadlock(exc) and attempt < SHARED_DECK_INSTALL_MAX_RETRIES:
+                    logger.warning(
+                        "Deadlock while syncing source note type for shared deck install "
+                        "(deck_item_id=%s, user_id=%s, attempt=%s/%s)",
+                        deck_item_id,
+                        current_user.id,
+                        attempt,
+                        SHARED_DECK_INSTALL_MAX_RETRIES,
+                    )
+                    time.sleep(0.05 * attempt)
+                    continue
+                raise
 
-    _audit("market.deck_item.install", install_result.get("audit") or {})
+        try:
+            install_result = share_ctrl.install_shared_deck_item_for_user(
+                deck_item,
+                user_id=current_user.id,
+                publish_statuses_visible=PUBLISH_STATUSES_VISIBLE,
+            )
+        except share_ctrl.ShareControllerError as exc:
+            db.session.rollback()
+            return _api_error(
+                exc.error,
+                exc.message,
+                status=exc.status,
+                field=exc.field,
+            )
+        except OperationalError as exc:
+            db.session.rollback()
+            if _is_mysql_deadlock(exc) and attempt < SHARED_DECK_INSTALL_MAX_RETRIES:
+                logger.warning(
+                    "Deadlock while installing shared deck "
+                    "(deck_item_id=%s, user_id=%s, attempt=%s/%s)",
+                    deck_item_id,
+                    current_user.id,
+                    attempt,
+                    SHARED_DECK_INSTALL_MAX_RETRIES,
+                )
+                time.sleep(0.05 * attempt)
+                continue
+            if _is_mysql_deadlock(exc):
+                return _api_error(
+                    "DEADLOCK_RETRY_EXCEEDED",
+                    "Database deadlock detected. Please retry the install request.",
+                    status=409,
+                )
+            raise
+
+        if not install_result.get("created"):
+            return jsonify(install_result.get("response") or {})
+
+        _audit("market.deck_item.install", install_result.get("audit") or {})
+        try:
+            db.session.commit()
+        except OperationalError as exc:
+            db.session.rollback()
+            if _is_mysql_deadlock(exc) and attempt < SHARED_DECK_INSTALL_MAX_RETRIES:
+                logger.warning(
+                    "Deadlock while committing shared deck install "
+                    "(deck_item_id=%s, user_id=%s, attempt=%s/%s)",
+                    deck_item_id,
+                    current_user.id,
+                    attempt,
+                    SHARED_DECK_INSTALL_MAX_RETRIES,
+                )
+                time.sleep(0.05 * attempt)
+                continue
+            if _is_mysql_deadlock(exc):
+                return _api_error(
+                    "DEADLOCK_RETRY_EXCEEDED",
+                    "Database deadlock detected. Please retry the install request.",
+                    status=409,
+                )
+            raise
+
+        return jsonify(install_result.get("response") or {}), 201
+
+    return _api_error(
+        "DEADLOCK_RETRY_EXCEEDED",
+        "Database deadlock detected. Please retry the install request.",
+        status=409,
+    )
+
+
+@flashcards_bp.route("/api/shared/decks/<deck_item_id>/clone/overlay", methods=["POST"])
+@login_required
+def upsert_shared_deck_clone_overlay(deck_item_id: str):
+    install = _get_user_deck_install_for_item(
+        user_id=current_user.id,
+        deck_item_id=deck_item_id,
+    )
+    if install is None:
+        return _api_error("FIELD_NOT_FOUND", "Installed clone deck not found.", status=404)
+
+    payload = request.get_json(silent=True) or {}
+    if not isinstance(payload, dict):
+        return _api_error("VALIDATION_ERROR", "Payload must be an object.")
+
+    counters, validation_error = _upsert_clone_overlay(
+        deck_install=install,
+        payload=payload,
+    )
+    if validation_error:
+        return _api_error("VALIDATION_ERROR", validation_error)
+
+    _audit(
+        "market.deck_item.clone_overlay.upsert",
+        {
+            "deck_item_id": deck_item_id,
+            "deck_install_id": install.id,
+            "changes": counters,
+        },
+    )
     db.session.commit()
-    return jsonify(install_result.get("response") or {}), 201
+    return jsonify(
+        {
+            "deck_item_id": deck_item_id,
+            "deck_install_id": install.id,
+            "installed_deck_id": install.local_deck_id,
+            "changes": counters,
+        }
+    )
 
 
 @flashcards_bp.route("/api/shared/decks/<deck_item_id>/rate", methods=["POST"])
@@ -2573,13 +2810,19 @@ def seed_marketplace_defaults():
         title="Official Starter Deck",
     ).first()
     source_deck = Deck.query.order_by(Deck.id.asc()).first()
+    if source_deck is None:
+        return _api_error(
+            "VALIDATION_ERROR",
+            "Cannot seed official shared deck without at least one source deck.",
+            status=409,
+        )
     # Stamp ownership on the source deck so it is recognised as admin-owned
-    if source_deck and source_deck.owner_user_id is None:
+    if source_deck.owner_user_id is None:
         source_deck.owner_user_id = admin_id
     if deck_item is None:
         deck_item = DeckMarketplaceItem(
             owner_user_id=admin_id,
-            source_deck_id=source_deck.id if source_deck else None,
+            source_deck_id=source_deck.id,
             source_note_type_id=note_type.id,
             title="Official Starter Deck",
             description="Official default deck for new users.",
@@ -2596,8 +2839,7 @@ def seed_marketplace_defaults():
         )
         db.session.add(deck_item)
     else:
-        if source_deck:
-            deck_item.source_deck_id = source_deck.id
+        deck_item.source_deck_id = source_deck.id
         deck_item.source_note_type_id = note_type.id
         deck_item.pricing_mode = "free"
         deck_item.price_cents = 0

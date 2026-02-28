@@ -3,13 +3,27 @@
 import io
 import re
 import unittest
+from datetime import datetime
+from unittest.mock import patch
 
 from app import create_app
+from app.controllers import flashcards_share_controller as share_ctrl
 from models import db
-from models.flashcard import Card, DeckInstall, DeckMarketplaceItem, Note
+from models.flashcard import (
+    Card,
+    DeckCloneAddedFieldDef,
+    DeckCloneDeckMap,
+    DeckCloneFieldDefOverride,
+    DeckCloneFieldOrderOverride,
+    DeckCloneNoteFieldOverride,
+    DeckInstall,
+    DeckMarketplaceItem,
+    Note,
+)
 from models.user import User
 from models.deck import Deck
 from models.card_progress import CardProgress
+from sqlalchemy.exc import OperationalError
 
 
 class FlashcardApiIntegrationTests(unittest.TestCase):
@@ -267,7 +281,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         self.assertEqual(preview_resp.status_code, 409)
         self.assertIn("no notes", (preview_resp.get_json() or {}).get("message", "").lower())
 
-    def test_shared_deck_install_clones_subtree_notes_and_cards(self):
+    def test_shared_deck_install_creates_pointer_clone_without_note_copy(self):
         note_type = self._create_note_type()
         note_type_id = note_type["id"]
 
@@ -333,21 +347,729 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         with self.app.app_context():
             install_row = DeckInstall.query.filter_by(deck_item_id=deck_item_id, user_id=learner_id).first()
             self.assertIsNotNone(install_row)
+            self.assertEqual(install_row.clone_mode, "logical_overlay")
+            self.assertIsNotNone(install_row.base_snapshot_at)
             subtree_ids = self._collect_subtree_ids(int(installed_root_id))
-            cloned_notes = Note.query.filter(
+            cloned_notes_count = Note.query.filter(
                 Note.user_id == learner_id,
                 Note.deck_id.in_(subtree_ids),
-            ).all()
-            self.assertEqual(len(cloned_notes), 1)
-            cloned_note_ids = [row.id for row in cloned_notes]
-            cloned_cards = Card.query.filter(Card.note_id.in_(cloned_note_ids)).all()
-            self.assertTrue(cloned_cards)
+            ).count()
+            self.assertEqual(cloned_notes_count, 0)
+
+            cloned_map_rows = DeckCloneDeckMap.query.filter_by(deck_install_id=install_row.id).all()
+            self.assertTrue(cloned_map_rows)
+            self.assertEqual({int(row.local_deck_id) for row in cloned_map_rows}, set(subtree_ids))
+            self.assertEqual(
+                {int(row.source_deck_id) for row in cloned_map_rows},
+                {self.deck_id, child_deck_id},
+            )
 
         next_resp = learner_client.get(f"/api/study/next?scope=deck&scope_id={installed_root_id}")
         self.assertEqual(next_resp.status_code, 200)
         next_payload = next_resp.get_json()
         self.assertIsNotNone(next_payload.get("card_id"))
         self.assertIn("\u72ac", next_payload.get("rendered_front_html", ""))
+
+    def test_shared_deck_install_clone_cards_visible_in_browse_api(self):
+        note_type = self._create_note_type()
+        note_type_id = note_type["id"]
+
+        with self.app.app_context():
+            child_deck = Deck(name="Browse Child", parent_id=self.deck_id)
+            db.session.add(child_deck)
+            db.session.flush()
+            child_deck_id = child_deck.id
+            db.session.commit()
+
+        owner_note_resp = self.client.post(
+            "/api/notes",
+            json={
+                "note_type_id": note_type_id,
+                "deck_id": child_deck_id,
+                "field_values": {
+                    "Word": "\u72ac",
+                    "Reading": "\u3044\u306c",
+                    "Meaning": "dog",
+                },
+            },
+        )
+        self.assertEqual(owner_note_resp.status_code, 201)
+
+        with self.app.app_context():
+            learner = User(username="browse-learner", email="browse-learner@example.com", is_admin=False)
+            learner.set_password("password")
+            db.session.add(learner)
+            db.session.flush()
+            learner_id = learner.id
+
+            deck_item = DeckMarketplaceItem(
+                owner_user_id=self.user_id,
+                source_deck_id=self.deck_id,
+                source_note_type_id=note_type_id,
+                title="Shared Deck Browse Visibility",
+                description="Deck description",
+                primary_category="General",
+                tags=[],
+                preview_text="Preview",
+                pricing_mode="free",
+                price_cents=0,
+                version="1.0.0",
+                publish_status="published",
+            )
+            db.session.add(deck_item)
+            db.session.commit()
+            deck_item_id = deck_item.id
+
+        learner_client = self.app.test_client()
+        learner_client.post(
+            "/login",
+            data={"email": "browse-learner@example.com", "password": "password"},
+            follow_redirects=True,
+        )
+        install_resp = learner_client.post(f"/api/shared/decks/{deck_item_id}/install")
+        self.assertEqual(install_resp.status_code, 201)
+        installed_root_id = int(install_resp.get_json().get("installed_deck_id"))
+        with self.app.app_context():
+            install_row = DeckInstall.query.filter_by(deck_item_id=deck_item_id, user_id=learner_id).first()
+            self.assertIsNotNone(install_row)
+            install_id = install_row.id
+            cloned_child_map = DeckCloneDeckMap.query.filter_by(
+                deck_install_id=install_row.id,
+                source_deck_id=child_deck_id,
+            ).first()
+            self.assertIsNotNone(cloned_child_map)
+            cloned_child_local_id = int(cloned_child_map.local_deck_id)
+
+        tree_resp = learner_client.get("/vocabulary/api/browse/decks/tree")
+        self.assertEqual(tree_resp.status_code, 200)
+        tree_payload = tree_resp.get_json() or {}
+        tree_nodes = tree_payload.get("tree") or []
+        self.assertTrue(tree_nodes)
+
+        visible_deck_ids: set[int] = set()
+
+        def _collect_ids(nodes):
+            for node in nodes:
+                node_id = node.get("id")
+                if node_id is not None:
+                    visible_deck_ids.add(int(node_id))
+                _collect_ids(node.get("children") or [])
+
+        _collect_ids(tree_nodes)
+        self.assertIn(installed_root_id, visible_deck_ids)
+
+        cards_resp = learner_client.get(
+            f"/vocabulary/api/browse/cards?deck_id={installed_root_id}&include_subdecks=1"
+        )
+        self.assertEqual(cards_resp.status_code, 200)
+        cards_payload = cards_resp.get_json() or {}
+        items = cards_payload.get("items") or []
+        self.assertEqual(int(cards_payload.get("total") or 0), 1)
+        self.assertEqual(len(items), 1)
+        row = items[0]
+        self.assertIn("\u72ac", row.get("word", ""))
+        self.assertTrue((row.get("deck_name") or "").strip())
+
+        card_id = row.get("card_id")
+        self.assertIsNotNone(card_id)
+        detail_resp = learner_client.get(f"/vocabulary/api/browse/cards/{card_id}")
+        self.assertEqual(detail_resp.status_code, 200)
+        detail_payload = detail_resp.get_json() or {}
+        self.assertIn("\u72ac", ((detail_payload.get("card") or {}).get("word") or ""))
+        self.assertEqual(
+            int(((detail_payload.get("note") or {}).get("deck_id") or 0)),
+            cloned_child_local_id,
+        )
+        self.assertEqual(
+            int(((detail_payload.get("card") or {}).get("deck_id") or 0)),
+            cloned_child_local_id,
+        )
+
+        save_resp = learner_client.patch(
+            f"/vocabulary/api/browse/cards/{card_id}",
+            json={
+                "deck_id": cloned_child_local_id,
+                "tags": row.get("tags") or [],
+                "field_values": {
+                    "Word": "\u72ac*",
+                    "Reading": "\u3044\u306c",
+                    "Meaning": "dog",
+                },
+            },
+        )
+        self.assertEqual(save_resp.status_code, 200)
+        save_payload = save_resp.get_json() or {}
+        self.assertIn("\u72ac*", ((save_payload.get("row") or {}).get("word") or ""))
+        self.assertEqual(
+            ((save_payload.get("detail") or {}).get("note") or {}).get("field_values", {}).get("Word"),
+            "\u72ac*",
+        )
+
+        reload_detail_resp = learner_client.get(f"/vocabulary/api/browse/cards/{card_id}")
+        self.assertEqual(reload_detail_resp.status_code, 200)
+        reload_detail_payload = reload_detail_resp.get_json() or {}
+        self.assertEqual(
+            ((reload_detail_payload.get("note") or {}).get("field_values") or {}).get("Word"),
+            "\u72ac*",
+        )
+
+        reload_cards_resp = learner_client.get(
+            f"/vocabulary/api/browse/cards?deck_id={installed_root_id}&include_subdecks=1"
+        )
+        self.assertEqual(reload_cards_resp.status_code, 200)
+        reload_items = (reload_cards_resp.get_json() or {}).get("items") or []
+        self.assertEqual(len(reload_items), 1)
+        self.assertIn("\u72ac*", reload_items[0].get("word", ""))
+
+        with self.app.app_context():
+            source_note = Note.query.get(row.get("note_id"))
+            self.assertIsNotNone(source_note)
+            self.assertEqual((source_note.field_values or {}).get("Word"), "\u72ac")
+            override_row = DeckCloneNoteFieldOverride.query.filter_by(
+                deck_install_id=install_id,
+                source_note_id=row.get("note_id"),
+                field_name="Word",
+            ).first()
+            self.assertIsNotNone(override_row)
+            self.assertEqual(override_row.operation, "set")
+            self.assertEqual(override_row.value, "\u72ac*")
+
+    def test_shared_deck_clone_pins_snapshot_against_new_source_notes(self):
+        note_type = self._create_note_type()
+        note_type_id = note_type["id"]
+
+        with self.app.app_context():
+            child_deck = Deck(name="Snapshot Child", parent_id=self.deck_id)
+            db.session.add(child_deck)
+            db.session.flush()
+            child_deck_id = child_deck.id
+            db.session.commit()
+
+        owner_note_resp = self.client.post(
+            "/api/notes",
+            json={
+                "note_type_id": note_type_id,
+                "deck_id": child_deck_id,
+                "field_values": {
+                    "Word": "\u72ac",
+                    "Reading": "\u3044\u306c",
+                    "Meaning": "dog",
+                },
+            },
+        )
+        self.assertEqual(owner_note_resp.status_code, 201)
+
+        with self.app.app_context():
+            learner = User(username="snapshot-learner", email="snapshot-learner@example.com", is_admin=False)
+            learner.set_password("password")
+            db.session.add(learner)
+            db.session.flush()
+
+            deck_item = DeckMarketplaceItem(
+                owner_user_id=self.user_id,
+                source_deck_id=self.deck_id,
+                source_note_type_id=note_type_id,
+                title="Snapshot Pin Deck",
+                description="Deck description",
+                primary_category="General",
+                tags=[],
+                preview_text="Preview",
+                pricing_mode="free",
+                price_cents=0,
+                version="1.0.0",
+                publish_status="published",
+            )
+            db.session.add(deck_item)
+            db.session.commit()
+            deck_item_id = deck_item.id
+
+        learner_client = self.app.test_client()
+        learner_client.post(
+            "/login",
+            data={"email": "snapshot-learner@example.com", "password": "password"},
+            follow_redirects=True,
+        )
+        install_resp = learner_client.post(f"/api/shared/decks/{deck_item_id}/install")
+        self.assertEqual(install_resp.status_code, 201)
+        installed_root_id = int(install_resp.get_json().get("installed_deck_id"))
+
+        # Add a new upstream note after clone install; pinned clone should not see it.
+        new_source_note_resp = self.client.post(
+            "/api/notes",
+            json={
+                "note_type_id": note_type_id,
+                "deck_id": child_deck_id,
+                "field_values": {
+                    "Word": "\u732b",
+                    "Reading": "\u306d\u3053",
+                    "Meaning": "cat",
+                },
+            },
+        )
+        self.assertEqual(new_source_note_resp.status_code, 201)
+
+        first_next_resp = learner_client.get(f"/api/study/next?scope=deck&scope_id={installed_root_id}")
+        self.assertEqual(first_next_resp.status_code, 200)
+        first_next_payload = first_next_resp.get_json()
+        self.assertIsNotNone(first_next_payload.get("card_id"))
+        self.assertIn("\u72ac", first_next_payload.get("rendered_front_html", ""))
+        self.assertNotIn("\u732b", first_next_payload.get("rendered_front_html", ""))
+
+        answer_resp = learner_client.post(
+            f"/api/study/{first_next_payload['card_id']}/answer",
+            json={"rating": "good", "scope": "deck", "scope_id": installed_root_id},
+        )
+        self.assertEqual(answer_resp.status_code, 200)
+
+        second_next_resp = learner_client.get(f"/api/study/next?scope=deck&scope_id={installed_root_id}")
+        self.assertEqual(second_next_resp.status_code, 200)
+        second_next_payload = second_next_resp.get_json()
+        self.assertIsNone(second_next_payload.get("card_id"))
+
+    def test_cutover_migrates_legacy_full_copy_install_to_overlay(self):
+        note_type = self._create_note_type()
+        note_type_id = note_type["id"]
+
+        with self.app.app_context():
+            source_child = Deck(name="Cutover Source Child", parent_id=self.deck_id)
+            db.session.add(source_child)
+            db.session.flush()
+            source_child_id = source_child.id
+            db.session.commit()
+
+        source_note_resp = self.client.post(
+            "/api/notes",
+            json={
+                "note_type_id": note_type_id,
+                "deck_id": source_child_id,
+                "field_values": {
+                    "Word": "\u72ac",
+                    "Reading": "\u3044\u306c",
+                    "Meaning": "dog",
+                },
+            },
+        )
+        self.assertEqual(source_note_resp.status_code, 201)
+        source_note_id = source_note_resp.get_json()["id"]
+
+        with self.app.app_context():
+            source_note = Note.query.get(source_note_id)
+            self.assertIsNotNone(source_note)
+            source_card = Card.query.filter_by(note_id=source_note.id).first()
+            self.assertIsNotNone(source_card)
+
+            learner = User(username="legacy-cutover", email="legacy-cutover@example.com", is_admin=False)
+            learner.set_password("password")
+            db.session.add(learner)
+            db.session.flush()
+            learner_id = learner.id
+
+            deck_item = DeckMarketplaceItem(
+                owner_user_id=self.user_id,
+                source_deck_id=self.deck_id,
+                source_note_type_id=note_type_id,
+                title="Legacy Cutover Deck",
+                description="Deck description",
+                primary_category="General",
+                tags=[],
+                preview_text="Preview",
+                pricing_mode="free",
+                price_cents=0,
+                version="1.0.0",
+                publish_status="published",
+            )
+            db.session.add(deck_item)
+            db.session.flush()
+
+            local_root = Deck(
+                name="Legacy Local Root",
+                parent_id=None,
+                owner_user_id=learner_id,
+            )
+            db.session.add(local_root)
+            db.session.flush()
+            local_child = Deck(
+                name="Legacy Local Child",
+                parent_id=local_root.id,
+                owner_user_id=learner_id,
+            )
+            db.session.add(local_child)
+            db.session.flush()
+
+            install = DeckInstall(
+                deck_item_id=deck_item.id,
+                user_id=learner_id,
+                local_deck_id=local_root.id,
+                clone_mode="legacy_copy",
+                source_deck_id=self.deck_id,
+                source_note_type_id=note_type_id,
+                source_owner_user_id=self.user_id,
+                base_snapshot_at=datetime.utcnow(),
+                installed_at=datetime.utcnow(),
+            )
+            db.session.add(install)
+            db.session.flush()
+
+            db.session.add(
+                DeckCloneDeckMap(
+                    deck_install_id=install.id,
+                    local_deck_id=local_root.id,
+                    source_deck_id=self.deck_id,
+                )
+            )
+            db.session.add(
+                DeckCloneDeckMap(
+                    deck_install_id=install.id,
+                    local_deck_id=local_child.id,
+                    source_deck_id=source_child_id,
+                )
+            )
+
+            legacy_note = Note(
+                note_type_id=note_type_id,
+                user_id=learner_id,
+                deck_id=local_child.id,
+                field_values={
+                    "Word": "\u72ac*",
+                    "Reading": "\u3044\u306c",
+                    "Meaning": "dog",
+                },
+                tags=[],
+            )
+            db.session.add(legacy_note)
+            db.session.flush()
+            legacy_note_id = legacy_note.id
+            legacy_card = Card(
+                note_id=legacy_note.id,
+                template_id=source_card.template_id,
+            )
+            db.session.add(legacy_card)
+            db.session.flush()
+            legacy_card_id = legacy_card.id
+            db.session.add(
+                CardProgress(
+                    user_id=learner_id,
+                    card_id=legacy_card.id,
+                    queue="review",
+                    step_index=0,
+                    due_at=datetime.utcnow(),
+                    due_day=0,
+                    interval_days=8,
+                    ease_factor=2.5,
+                    reps=5,
+                    lapses=1,
+                )
+            )
+            db.session.commit()
+
+            summary = share_ctrl.cutover_clone_model_to_overlay_only(fail_on_mismatch=True)
+            db.session.commit()
+            self.assertEqual(int(summary.get("migrated") or 0), 1)
+            self.assertEqual(int(summary.get("failed") or 0), 0)
+
+            migrated_install = DeckInstall.query.get(install.id)
+            self.assertIsNotNone(migrated_install)
+            self.assertEqual((migrated_install.clone_mode or "").strip().lower(), "logical_overlay")
+
+            self.assertIsNone(Note.query.get(legacy_note_id))
+            override_row = DeckCloneNoteFieldOverride.query.filter_by(
+                deck_install_id=install.id,
+                source_note_id=source_note.id,
+                field_name="Word",
+            ).first()
+            self.assertIsNotNone(override_row)
+            self.assertEqual(override_row.operation, "set")
+            self.assertEqual(override_row.value, "\u72ac*")
+
+            source_progress = CardProgress.query.filter_by(
+                user_id=learner_id,
+                card_id=source_card.id,
+            ).first()
+            self.assertIsNotNone(source_progress)
+            self.assertEqual(int(source_progress.reps or 0), 5)
+
+            legacy_progress = CardProgress.query.filter_by(
+                user_id=learner_id,
+                card_id=legacy_card_id,
+            ).first()
+            self.assertIsNone(legacy_progress)
+
+    def test_shared_deck_clone_overlay_saves_delta_only_and_updates_render(self):
+        note_type = self._create_note_type()
+        note_type_id = note_type["id"]
+        field_ids = {row["name"]: row["id"] for row in note_type.get("field_defs", [])}
+
+        with self.app.app_context():
+            child_deck = Deck(name="Overlay Child", parent_id=self.deck_id)
+            db.session.add(child_deck)
+            db.session.flush()
+            child_deck_id = child_deck.id
+            db.session.commit()
+
+        owner_note_resp = self.client.post(
+            "/api/notes",
+            json={
+                "note_type_id": note_type_id,
+                "deck_id": child_deck_id,
+                "field_values": {
+                    "Word": "\u72ac",
+                    "Reading": "\u3044\u306c",
+                    "Meaning": "dog",
+                },
+            },
+        )
+        self.assertEqual(owner_note_resp.status_code, 201)
+        source_note_id = owner_note_resp.get_json()["id"]
+
+        with self.app.app_context():
+            learner = User(username="overlay-learner", email="overlay-learner@example.com", is_admin=False)
+            learner.set_password("password")
+            db.session.add(learner)
+            db.session.flush()
+            learner_id = learner.id
+
+            deck_item = DeckMarketplaceItem(
+                owner_user_id=self.user_id,
+                source_deck_id=self.deck_id,
+                source_note_type_id=note_type_id,
+                title="Overlay Deck",
+                description="Deck description",
+                primary_category="General",
+                tags=[],
+                preview_text="Preview",
+                pricing_mode="free",
+                price_cents=0,
+                version="1.0.0",
+                publish_status="published",
+            )
+            db.session.add(deck_item)
+            db.session.commit()
+            deck_item_id = deck_item.id
+
+        learner_client = self.app.test_client()
+        learner_client.post(
+            "/login",
+            data={"email": "overlay-learner@example.com", "password": "password"},
+            follow_redirects=True,
+        )
+        install_resp = learner_client.post(f"/api/shared/decks/{deck_item_id}/install")
+        self.assertEqual(install_resp.status_code, 201)
+        installed_root_id = int(install_resp.get_json().get("installed_deck_id"))
+
+        overlay_resp = learner_client.post(
+            f"/api/shared/decks/{deck_item_id}/clone/overlay",
+            json={
+                "updated_defs": [
+                    {
+                        "source_field_def_id": field_ids["Meaning"],
+                        "properties": {"required": True},
+                    }
+                ],
+                "disabled_def_ids": [field_ids["Reading"]],
+                "added_defs": [
+                    {
+                        "name": "Example",
+                        "field_type": "text",
+                        "position": 99,
+                        "required": False,
+                    }
+                ],
+                "ordered_def_ids": [field_ids["Word"], field_ids["Meaning"]],
+                "note_field_overrides": [
+                    {
+                        "source_note_id": source_note_id,
+                        "field_name": "Word",
+                        "operation": "set",
+                        "value": "\u72ac*",
+                    },
+                    {
+                        "source_note_id": source_note_id,
+                        "field_name": "Reading",
+                        "operation": "remove",
+                    },
+                ],
+            },
+        )
+        self.assertEqual(overlay_resp.status_code, 200)
+        overlay_payload = overlay_resp.get_json() or {}
+        changes = overlay_payload.get("changes") or {}
+        self.assertGreaterEqual(int(changes.get("updated_defs") or 0), 1)
+        self.assertGreaterEqual(int(changes.get("disabled_defs") or 0), 1)
+        self.assertGreaterEqual(int(changes.get("added_defs") or 0), 1)
+        self.assertGreaterEqual(int(changes.get("updated_note_fields") or 0), 1)
+
+        with self.app.app_context():
+            install_row = DeckInstall.query.filter_by(deck_item_id=deck_item_id, user_id=learner_id).first()
+            self.assertIsNotNone(install_row)
+            self.assertEqual(
+                DeckCloneFieldDefOverride.query.filter_by(deck_install_id=install_row.id).count(),
+                2,
+            )
+            self.assertEqual(
+                DeckCloneAddedFieldDef.query.filter_by(deck_install_id=install_row.id).count(),
+                1,
+            )
+            self.assertEqual(
+                DeckCloneFieldOrderOverride.query.filter_by(deck_install_id=install_row.id).count(),
+                1,
+            )
+            self.assertEqual(
+                DeckCloneNoteFieldOverride.query.filter_by(deck_install_id=install_row.id).count(),
+                2,
+            )
+            learner_notes_count = Note.query.filter_by(user_id=learner_id).count()
+            self.assertEqual(learner_notes_count, 0)
+
+        next_resp = learner_client.get(f"/api/study/next?scope=deck&scope_id={installed_root_id}")
+        self.assertEqual(next_resp.status_code, 200)
+        next_payload = next_resp.get_json()
+        self.assertIsNotNone(next_payload.get("card_id"))
+        self.assertIn("\u72ac*", next_payload.get("rendered_front_html", ""))
+        self.assertNotIn("\u3044\u306c", next_payload.get("rendered_back_html", ""))
+
+    def test_shared_deck_install_stress_grows_pointer_rows_not_note_rows(self):
+        note_type = self._create_note_type()
+        note_type_id = note_type["id"]
+
+        for index in range(30):
+            owner_note_resp = self.client.post(
+                "/api/notes",
+                json={
+                    "note_type_id": note_type_id,
+                    "deck_id": self.deck_id,
+                    "field_values": {
+                        "Word": f"word-{index}",
+                        "Reading": f"reading-{index}",
+                        "Meaning": f"meaning-{index}",
+                    },
+                },
+            )
+            self.assertEqual(owner_note_resp.status_code, 201)
+
+        with self.app.app_context():
+            deck_item = DeckMarketplaceItem(
+                owner_user_id=self.user_id,
+                source_deck_id=self.deck_id,
+                source_note_type_id=note_type_id,
+                title="Stress Pointer Deck",
+                description="Deck description",
+                primary_category="General",
+                tags=[],
+                preview_text="Preview",
+                pricing_mode="free",
+                price_cents=0,
+                version="1.0.0",
+                publish_status="published",
+            )
+            db.session.add(deck_item)
+            db.session.flush()
+            deck_item_id = deck_item.id
+
+            learner_specs: list[tuple[str, str]] = []
+            for index in range(12):
+                username = f"stress{index}"
+                email = f"stress{index}@example.com"
+                learner = User(username=username, email=email, is_admin=False)
+                learner.set_password("password")
+                db.session.add(learner)
+                learner_specs.append((username, email))
+            db.session.commit()
+            learner_ids = [int(row[0]) for row in db.session.query(User.id).filter(User.email.like("stress%@example.com")).all()]
+
+        for _, email in learner_specs:
+            learner_client = self.app.test_client()
+            learner_client.post(
+                "/login",
+                data={"email": email, "password": "password"},
+                follow_redirects=True,
+            )
+            install_resp = learner_client.post(f"/api/shared/decks/{deck_item_id}/install")
+            self.assertEqual(install_resp.status_code, 201)
+
+        with self.app.app_context():
+            install_count = DeckInstall.query.filter_by(deck_item_id=deck_item_id).count()
+            self.assertEqual(install_count, len(learner_ids))
+
+            source_note_count = Note.query.filter_by(user_id=self.user_id, deck_id=self.deck_id).count()
+            self.assertEqual(source_note_count, 30)
+
+            learner_note_count = Note.query.filter(Note.user_id.in_(learner_ids)).count()
+            self.assertEqual(learner_note_count, 0)
+
+            source_deck_count = len(self._collect_subtree_ids(self.deck_id))
+            pointer_map_count = (
+                DeckCloneDeckMap.query.join(DeckInstall, DeckCloneDeckMap.deck_install_id == DeckInstall.id)
+                .filter(DeckInstall.deck_item_id == deck_item_id)
+                .count()
+            )
+            self.assertEqual(pointer_map_count, install_count * source_deck_count)
+
+    def test_shared_deck_install_retries_when_deadlock_occurs(self):
+        note_type = self._create_note_type()
+        note_type_id = note_type["id"]
+
+        with self.app.app_context():
+            learner = User(username="retry-learner", email="retry-learner@example.com", is_admin=False)
+            learner.set_password("password")
+            db.session.add(learner)
+            db.session.flush()
+
+            deck_item = DeckMarketplaceItem(
+                owner_user_id=self.user_id,
+                source_deck_id=self.deck_id,
+                source_note_type_id=note_type_id,
+                title="Shared Deck Deadlock Retry",
+                description="Deck description",
+                primary_category="General",
+                tags=[],
+                preview_text="Preview",
+                pricing_mode="free",
+                price_cents=0,
+                version="1.0.0",
+                publish_status="published",
+            )
+            db.session.add(deck_item)
+            db.session.commit()
+            deck_item_id = deck_item.id
+
+        learner_client = self.app.test_client()
+        learner_client.post(
+            "/login",
+            data={"email": "retry-learner@example.com", "password": "password"},
+            follow_redirects=True,
+        )
+
+        class _DeadlockError(Exception):
+            def __init__(self):
+                super().__init__(1213, "Deadlock found when trying to get lock; try restarting transaction")
+
+        deadlock_exc = OperationalError(
+            "INSERT INTO notes (...) VALUES (...)",
+            {},
+            _DeadlockError(),
+        )
+        expected_response = {
+            "deck_item_id": deck_item_id,
+            "installed_deck_id": 999,
+            "already_installed": True,
+        }
+
+        with (
+            patch(
+                "app.routes.flashcards.share_ctrl.install_shared_deck_item_for_user",
+                side_effect=[
+                    deadlock_exc,
+                    {"created": False, "response": expected_response},
+                ],
+            ) as install_mock,
+            patch("app.routes.flashcards.time.sleep") as sleep_mock,
+        ):
+            install_resp = learner_client.post(f"/api/shared/decks/{deck_item_id}/install")
+
+        self.assertEqual(install_resp.status_code, 200)
+        self.assertEqual(install_resp.get_json(), expected_response)
+        self.assertEqual(install_mock.call_count, 2)
+        sleep_mock.assert_called_once()
 
     def test_dashboard_for_installed_deck_includes_child_deck_rows(self):
         note_type = self._create_note_type()

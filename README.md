@@ -56,5 +56,5 @@ requirements.txt        # Python dependencies
 
 ### Assumptions recorded for review
 - Legacy data does not contain user ownership on `vocabulary_entries`; migration maps to one target user.
-- Backward-compatible transition is preserved via `USE_NEW_CARD_MODEL=false` default.
+- Shared deck clone uses overlay-only model (`logical overlay` + pinned snapshot).
 - Field rename uses job-tracking record but executes synchronously in current version.
