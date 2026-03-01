@@ -16,6 +16,27 @@ from app.utils.permissions import is_admin_user
 # Import everything from core module so routes can use helpers
 from . import *
 
+from app.repositories.study_repository import (
+    card_state_from_progress as _card_state_from_progress,
+    apply_card_state_to_progress as _apply_card_state_to_progress,
+    query_next_due_card_id as _query_next_due_card_id,
+)
+
+from app.routes.flashcards import (
+    _api_error,
+    _resolve_clone_scope_for_local_deck,
+    _query_clone_scope_cards,
+    _collect_deck_subtree_ids,
+    _is_card_visible_in_clone_scope,
+    _build_clone_schema_view,
+    _apply_clone_note_field_overrides,
+    _resolve_clone_scope_for_card,
+    _touch_note_type_install_usage,
+    _resolve_local_clone_deck_id_for_source_deck,
+    _touch_deck_install_usage,
+    _audit,
+)
+
 
 
 @flashcards_bp.route("/flashcards/study")
@@ -30,7 +51,7 @@ def study_next():
     scope = (request.args.get("scope") or "deck").strip().lower()
     scope_id_raw = (request.args.get("scope_id") or "").strip()
 
-    clone_scope: share_ctrl.CloneDeckScope | None = None
+    clone_scope: flashcards_share.CloneDeckScope | None = None
     query = None
     if scope == "deck":
         if not scope_id_raw:
@@ -146,7 +167,7 @@ def study_answer(card_id: str):
     card = Card.query.join(Note, Card.note_id == Note.id).filter(Card.id == card_id).first()
     if not card:
         return _api_error("FIELD_NOT_FOUND", "Card not found.", status=404)
-    clone_scope: share_ctrl.CloneDeckScope | None = None
+    clone_scope: flashcards_share.CloneDeckScope | None = None
     if card.note.user_id != current_user.id:
         clone_scope = _resolve_clone_scope_for_card(user_id=current_user.id, card_obj=card)
         if clone_scope is None:
@@ -175,8 +196,20 @@ def study_answer(card_id: str):
     current_state = _card_state_from_progress(progress, now)
     review_mode = normalize_review_mode(current_state.type)
     updated_state = applyAnswer(current_state, default_deck_options(), now, rating)  # type: ignore[arg-type]
-    _apply_card_state_to_progress(progress, updated_state, now)
-    _touch_note_type_install_usage(user_id=current_user.id, installed_note_type_id=card.note.note_type_id, activity_at=now)
+    from app.services.study_service import apply_study_answer_and_commit
+    
+    apply_study_answer_and_commit(
+        user=current_user,
+        card=card,
+        progress=progress,
+        updated_state=updated_state,
+        now=now,
+        rating=rating,
+        review_mode=review_mode,
+        payload=payload,
+        clone_scope=clone_scope,
+        requested_scope_id=requested_scope_id
+    )
 
     local_deck_id_for_usage = card.note.deck_id
     if clone_scope is not None:
@@ -189,23 +222,9 @@ def study_answer(card_id: str):
             )
         ) or clone_scope.install.local_deck_id
 
-    if local_deck_id_for_usage is not None:
-        _touch_deck_install_usage(user_id=current_user.id, local_deck_id=local_deck_id_for_usage, activity_at=now)
-    update_user_timezone(current_user, payload.get("timezone"))
-    record_review_event(
-        user_id=current_user.id,
-        card_id=card.id,
-        deck_id=local_deck_id_for_usage,
-        note_type_id=card.note.note_type_id,
-        reviewed_at=now,
-        duration_ms=payload.get("duration_ms"),
-        rating=rating,
-        mode=review_mode,
-    )
-    _audit("study.answer", {"card_id": card.id, "rating": rating})
-    db.session.commit()
     next_scope_id = requested_scope_id if requested_scope_id is not None else local_deck_id_for_usage
     next_card_url = url_for("flashcards.study_next", scope="deck", scope_id=next_scope_id) if next_scope_id else None
+
     next_url = None
     if scope == "deck":
         if requested_scope_id is not None:

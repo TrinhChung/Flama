@@ -12,6 +12,12 @@ from models.user import User
 from models.user_permission_audit_log import UserPermissionAuditLog
 from models.user_role import UserRole
 
+def commit_transaction() -> None:
+    db.session.commit()
+
+def rollback_transaction() -> None:
+    db.session.rollback()
+
 VALID_STATUS_FILTERS = {"all", "active", "disabled"}
 
 def coerce_int(value: Any, default: int, minimum: int = 1, maximum: int | None = None) -> int:
@@ -169,81 +175,87 @@ def batch_assign_roles(*, actor_user_id: int, user_ids: list[int], target_role: 
     fail_count = 0
     results: list[dict[str, Any]] = []
 
-    for user_id in user_ids:
-        user = user_by_id.get(user_id)
-        if user is None:
-            fail_count += 1
-            results.append(
-                {
-                    "user_id": user_id,
-                    "username": f"#{user_id}",
-                    "email": None,
-                    "status": "fail",
-                    "message": "Khong tim thay user.",
-                }
-            )
-            continue
+    try:
+        for user_id in user_ids:
+            user = user_by_id.get(user_id)
+            if user is None:
+                fail_count += 1
+                results.append(
+                    {
+                        "user_id": user_id,
+                        "username": f"#{user_id}",
+                        "email": None,
+                        "status": "fail",
+                        "message": "Khong tim thay user.",
+                    }
+                )
+                continue
 
-        if (
-            user.id == actor_user_id
-            and bool(user.is_admin)
-            and not bool(target_role.is_admin)
-        ):
-            fail_count += 1
+            if (
+                user.id == actor_user_id
+                and bool(user.is_admin)
+                and not bool(target_role.is_admin)
+            ):
+                fail_count += 1
+                results.append(
+                    {
+                        "user_id": user.id,
+                        "username": user.username,
+                        "email": user.email,
+                        "status": "fail",
+                        "message": "Khong the tu ha quyen admin cua chinh minh.",
+                    }
+                )
+                continue
+
+            if user.id in blocked_last_admin_ids:
+                fail_count += 1
+                results.append(
+                    {
+                        "user_id": user.id,
+                        "username": user.username,
+                        "email": user.email,
+                        "status": "fail",
+                        "message": "Khong the ha quyen admin cuoi cung dang hoat dong.",
+                    }
+                )
+                continue
+
+            from_role_id = user.role_id
+            from_is_admin = bool(user.is_admin)
+            from_is_disabled = bool(user.is_disabled)
+
+            user.role_id = target_role.id
+            user.is_admin = bool(target_role.is_admin)
+
+            append_audit_log(
+                actor_user_id=actor_user_id,
+                target_user_id=user.id,
+                action="assign_role",
+                from_role_id=from_role_id,
+                to_role_id=target_role.id,
+                from_is_admin=from_is_admin,
+                to_is_admin=bool(user.is_admin),
+                from_is_disabled=from_is_disabled,
+                to_is_disabled=from_is_disabled,
+                message=f"Assign role -> {target_role.name}",
+            )
+
+            success_count += 1
             results.append(
                 {
                     "user_id": user.id,
                     "username": user.username,
                     "email": user.email,
-                    "status": "fail",
-                    "message": "Khong the tu ha quyen admin cua chinh minh.",
+                    "status": "success",
+                    "message": f"Da cap nhat role -> {target_role.name}.",
                 }
             )
-            continue
 
-        if user.id in blocked_last_admin_ids:
-            fail_count += 1
-            results.append(
-                {
-                    "user_id": user.id,
-                    "username": user.username,
-                    "email": user.email,
-                    "status": "fail",
-                    "message": "Khong the ha quyen admin cuoi cung dang hoat dong.",
-                }
-            )
-            continue
-
-        from_role_id = user.role_id
-        from_is_admin = bool(user.is_admin)
-        from_is_disabled = bool(user.is_disabled)
-
-        user.role_id = target_role.id
-        user.is_admin = bool(target_role.is_admin)
-
-        append_audit_log(
-            actor_user_id=actor_user_id,
-            target_user_id=user.id,
-            action="assign_role",
-            from_role_id=from_role_id,
-            to_role_id=target_role.id,
-            from_is_admin=from_is_admin,
-            to_is_admin=bool(user.is_admin),
-            from_is_disabled=from_is_disabled,
-            to_is_disabled=from_is_disabled,
-            message=f"Assign role -> {target_role.name}",
-        )
-
-        success_count += 1
-        results.append(
-            {
-                "user_id": user.id,
-                "username": user.username,
-                "email": user.email,
-                "status": "success",
-                "message": f"Da cap nhat role -> {target_role.name}.",
-            }
-        )
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        raise e
 
     return success_count, fail_count, results
 
@@ -268,75 +280,81 @@ def batch_update_status(*, actor_user_id: int, user_ids: list[int], action: str)
     fail_count = 0
     results: list[dict[str, Any]] = []
 
-    for user_id in user_ids:
-        user = user_by_id.get(user_id)
-        if user is None:
-            fail_count += 1
-            results.append(
-                {
-                    "user_id": user_id,
-                    "username": f"#{user_id}",
-                    "email": None,
-                    "status": "fail",
-                    "message": "Khong tim thay user.",
-                }
-            )
-            continue
+    try:
+        for user_id in user_ids:
+            user = user_by_id.get(user_id)
+            if user is None:
+                fail_count += 1
+                results.append(
+                    {
+                        "user_id": user_id,
+                        "username": f"#{user_id}",
+                        "email": None,
+                        "status": "fail",
+                        "message": "Khong tim thay user.",
+                    }
+                )
+                continue
 
-        if target_disabled and user.id == actor_user_id:
-            fail_count += 1
+            if target_disabled and user.id == actor_user_id:
+                fail_count += 1
+                results.append(
+                    {
+                        "user_id": user.id,
+                        "username": user.username,
+                        "email": user.email,
+                        "status": "fail",
+                        "message": "Khong the vo hieu hoa chinh tai khoan dang dang nhap.",
+                    }
+                )
+                continue
+
+            if target_disabled and user.id in blocked_last_admin_ids:
+                fail_count += 1
+                results.append(
+                    {
+                        "user_id": user.id,
+                        "username": user.username,
+                        "email": user.email,
+                        "status": "fail",
+                        "message": "Khong the vo hieu hoa admin cuoi cung dang hoat dong.",
+                    }
+                )
+                continue
+
+            from_role_id = user.role_id
+            from_is_admin = bool(user.is_admin)
+            from_is_disabled = bool(user.is_disabled)
+            to_is_disabled = target_disabled
+            user.is_disabled = to_is_disabled
+
+            append_audit_log(
+                actor_user_id=actor_user_id,
+                target_user_id=user.id,
+                action="disable_user" if target_disabled else "activate_user",
+                from_role_id=from_role_id,
+                to_role_id=from_role_id,
+                from_is_admin=from_is_admin,
+                to_is_admin=from_is_admin,
+                from_is_disabled=from_is_disabled,
+                to_is_disabled=to_is_disabled,
+                message="Disable user" if target_disabled else "Activate user",
+            )
+
+            success_count += 1
             results.append(
                 {
                     "user_id": user.id,
                     "username": user.username,
                     "email": user.email,
-                    "status": "fail",
-                    "message": "Khong the vo hieu hoa chinh tai khoan dang dang nhap.",
+                    "status": "success",
+                    "message": "Da vo hieu hoa." if target_disabled else "Da kich hoat.",
                 }
             )
-            continue
 
-        if target_disabled and user.id in blocked_last_admin_ids:
-            fail_count += 1
-            results.append(
-                {
-                    "user_id": user.id,
-                    "username": user.username,
-                    "email": user.email,
-                    "status": "fail",
-                    "message": "Khong the vo hieu hoa admin cuoi cung dang hoat dong.",
-                }
-            )
-            continue
-
-        from_role_id = user.role_id
-        from_is_admin = bool(user.is_admin)
-        from_is_disabled = bool(user.is_disabled)
-        to_is_disabled = target_disabled
-        user.is_disabled = to_is_disabled
-
-        append_audit_log(
-            actor_user_id=actor_user_id,
-            target_user_id=user.id,
-            action="disable_user" if target_disabled else "activate_user",
-            from_role_id=from_role_id,
-            to_role_id=from_role_id,
-            from_is_admin=from_is_admin,
-            to_is_admin=from_is_admin,
-            from_is_disabled=from_is_disabled,
-            to_is_disabled=to_is_disabled,
-            message="Disable user" if target_disabled else "Activate user",
-        )
-
-        success_count += 1
-        results.append(
-            {
-                "user_id": user.id,
-                "username": user.username,
-                "email": user.email,
-                "status": "success",
-                "message": "Da vo hieu hoa." if target_disabled else "Da kich hoat.",
-            }
-        )
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        raise e
 
     return success_count, fail_count, results

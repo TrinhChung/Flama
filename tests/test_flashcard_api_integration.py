@@ -7,7 +7,7 @@ from datetime import datetime
 from unittest.mock import patch
 
 from app import create_app
-from app.controllers import flashcards_share_controller as share_ctrl
+from app.services import flashcards_share as share_ctrl
 from models import db
 from models.flashcard import (
     Card,
@@ -1056,7 +1056,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
 
         with (
             patch(
-                "app.routes.flashcards.share_ctrl.install_shared_deck_item_for_user",
+                "app.routes.flashcards.share.share_ctrl.install_shared_deck_item_for_user",
                 side_effect=[
                     deadlock_exc,
                     {"created": False, "response": expected_response},

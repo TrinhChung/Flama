@@ -179,9 +179,7 @@ def batch_assign_role_api():
 
     try:
         success_count, fail_count, results = admin_service.batch_assign_roles(actor_user_id=current_user.id, user_ids=user_ids, target_role=role)
-        db.session.commit()
     except SQLAlchemyError:
-        db.session.rollback()
         return jsonify({"message": "Khong the cap nhat role. Vui long thu lai.", "results": []}), 500
 
     return jsonify(
@@ -211,9 +209,7 @@ def batch_update_status_api():
 
     try:
         success_count, fail_count, results = admin_service.batch_update_status(actor_user_id=current_user.id, user_ids=user_ids, action=action)
-        db.session.commit()
     except SQLAlchemyError:
-        db.session.rollback()
         return jsonify({"message": "Khong the cap nhat trang thai user. Vui long thu lai.", "results": []}), 500
 
     return jsonify(
@@ -246,9 +242,7 @@ def update_user_role(user_id: int):
 
     try:
         success_count, fail_count, _ = admin_service.batch_assign_roles(actor_user_id=current_user.id, user_ids=[user_id], target_role=role)
-        db.session.commit()
     except SQLAlchemyError:
-        db.session.rollback()
         flash("Khong the cap nhat quyen user.", "danger")
         return redirect(url_for("admin.user_management_page"))
 

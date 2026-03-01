@@ -16,6 +16,13 @@ from app.utils.permissions import is_admin_user
 # Import everything from core module so routes can use helpers
 from . import *
 
+from app.routes.flashcards import (
+    _api_error,
+    _audit,
+    _get_note_type_or_404,
+    _serialize_template,
+)
+
 
 
 @flashcards_bp.route("/api/note-types/<note_type_id>/templates", methods=["GET"])
@@ -41,9 +48,8 @@ def delete_template(note_type_id: str, template_id: str):
     if Template.query.filter_by(note_type_id=note_type.id).count() <= 1:
         return _api_error("VALIDATION_ERROR", "A note type requires at least one template.", status=409)
     Card.query.filter_by(template_id=template.id).delete()
-    db.session.delete(template)
-    _audit("template.delete", {"note_type_id": note_type.id, "template_id": template.id})
-    db.session.commit()
+    from app.services.flashcard_media_service import delete_template_and_commit
+    delete_template_and_commit(template, note_type.id)
     return jsonify({"success": True})
 
 @flashcards_bp.route("/api/notes/<note_id>", methods=["GET"])
@@ -106,10 +112,8 @@ def upload_note_media(note_id: str):
     digest = hashlib.sha256(content).hexdigest()
     existing = MediaAsset.query.filter_by(note_id=note.id, field_name=field_name, sha256=digest).first()
     if existing:
-        values = dict(note.field_values or {})
-        values[field_name] = existing.id
-        note.field_values = values
-        db.session.commit()
+        from app.services.flashcard_media_service import link_existing_media_and_commit
+        link_existing_media_and_commit(note, existing, field_name)
         return jsonify({"asset_id": existing.id, "url": f"/media/proxy/{existing.id}", "field_name": field_name})
 
     upload_root = Path(current_app.config["FLASHCARD_MEDIA_UPLOAD_ROOT"])
@@ -131,13 +135,8 @@ def upload_note_media(note_id: str):
         sha256=digest,
         size_bytes=len(content),
     )
-    db.session.add(asset)
-    db.session.flush()
-    values = dict(note.field_values or {})
-    values[field_name] = asset.id
-    note.field_values = values
-    _audit("media.upload", {"note_id": note.id, "asset_id": asset.id, "field_name": field_name})
-    db.session.commit()
+    from app.services.flashcard_media_service import upload_note_media_and_commit
+    upload_note_media_and_commit(note, asset, field_name)
     return jsonify({"asset_id": asset.id, "url": f"/media/proxy/{asset.id}", "field_name": field_name}), 201
 
 @flashcards_bp.route("/api/media/<asset_id>", methods=["DELETE"])
@@ -157,14 +156,8 @@ def delete_media(asset_id: str):
             full_path.unlink()
         except OSError:
             logger.warning("Failed to delete media file %s", full_path)
-    note = asset.note
-    values = dict(note.field_values or {})
-    if values.get(asset.field_name) == asset.id:
-        values[asset.field_name] = ""
-        note.field_values = values
-    db.session.delete(asset)
-    _audit("media.delete", {"asset_id": asset_id, "note_id": note.id})
-    db.session.commit()
+    from app.services.flashcard_media_service import delete_media_and_commit
+    delete_media_and_commit(asset)
     return jsonify({"success": True})
 
 @flashcards_bp.route("/media/proxy/<asset_id>", methods=["GET"])

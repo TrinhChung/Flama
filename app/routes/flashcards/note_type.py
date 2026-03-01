@@ -16,6 +16,23 @@ from app.utils.permissions import is_admin_user
 # Import everything from core module so routes can use helpers
 from . import *
 
+from app.routes.flashcards import (
+    _api_error,
+    _apply_note_type_marketplace_payload,
+    _audit,
+    _create_cards_for_note,
+    _get_note_type_or_404,
+    _normalize_tags,
+    _recompute_note_type_market_stats,
+    _reorder_fields,
+    _run_field_rename_job,
+    _serialize_field,
+    _serialize_note_type,
+    _touch_note_type_install_usage,
+    _validate_note_payload,
+    _validate_note_type_consistency_for_deck,
+)
+
 
 
 @flashcards_bp.route("/flashcards/note-types")
@@ -177,8 +194,8 @@ def patch_note_type(note_type_id: str):
     validation_error = _apply_note_type_marketplace_payload(note_type, payload)
     if validation_error:
         return _api_error("VALIDATION_ERROR", validation_error)
-    _audit("note_type.update", {"note_type_id": note_type.id})
-    db.session.commit()
+    from app.services.note_type_service import update_note_type_and_commit
+    update_note_type_and_commit(note_type)
     return jsonify(_serialize_note_type(note_type))
 
 @flashcards_bp.route("/api/note-types/<note_type_id>", methods=["DELETE"])
@@ -190,9 +207,8 @@ def delete_note_type(note_type_id: str):
     note_count = Note.query.filter_by(note_type_id=note_type.id).count()
     if note_count > 0:
         return _api_error("NOTE_TYPE_HAS_NOTES", "Cannot delete note type with existing notes.", status=409)
-    db.session.delete(note_type)
-    _audit("note_type.delete", {"note_type_id": note_type_id})
-    db.session.commit()
+    from app.services.note_type_service import delete_note_type_and_commit
+    delete_note_type_and_commit(note_type)
     return jsonify({"success": True})
 
 @flashcards_bp.route("/api/note-types/<note_type_id>/fields", methods=["GET"])
@@ -220,7 +236,8 @@ def create_field(note_type_id: str):
         return _api_error("VALIDATION_ERROR", "Unsupported field_type.", field="field_type")
     if FieldDef.query.filter_by(note_type_id=note_type.id, name=name).first():
         return _api_error("VALIDATION_ERROR", "Field name already exists in this note type.", field="name")
-    max_pos = db.session.query(db.func.max(FieldDef.position)).filter_by(note_type_id=note_type.id).scalar() or -1
+    from app.services.note_type_service import get_max_field_position
+    max_pos = get_max_field_position(note_type.id)
     field = FieldDef(
         note_type_id=note_type.id,
         name=name,
@@ -228,9 +245,8 @@ def create_field(note_type_id: str):
         required=required,
         position=max_pos + 1,
     )
-    db.session.add(field)
-    _audit("field.create", {"note_type_id": note_type.id, "field_id": field.id, "name": field.name})
-    db.session.commit()
+    from app.services.note_type_service import create_field_and_commit
+    create_field_and_commit(field, note_type.id)
     return jsonify(_serialize_field(field)), 201
 
 @flashcards_bp.route("/api/note-types/<note_type_id>/fields/<field_id>", methods=["PATCH"])
@@ -271,11 +287,8 @@ def patch_field(note_type_id: str, field_id: str):
         field.name = new_name
         job_payload = {"job_id": job.id, "status": job.status, "processed_notes": job.processed_notes}
 
-    _audit(
-        "field.update",
-        {"note_type_id": note_type.id, "field_id": field.id, "old_name": old_name, "new_name": field.name},
-    )
-    db.session.commit()
+    from app.services.note_type_service import update_field_and_commit
+    update_field_and_commit(note_type.id, field.id, old_name, field.name)
     response_payload = {"field": _serialize_field(field)}
     if job_payload:
         response_payload["rename_job"] = job_payload
@@ -297,9 +310,8 @@ def delete_field(note_type_id: str, field_id: str):
         values.pop(field.name, None)
         note.field_values = values
 
-    db.session.delete(field)
-    _audit("field.delete", {"note_type_id": note_type.id, "field_id": field_id, "field_name": field.name})
-    db.session.commit()
+    from app.services.note_type_service import delete_field_and_commit
+    delete_field_and_commit(field, note_type.id)
     return jsonify({"success": True})
 
 @flashcards_bp.route("/api/note-types/<note_type_id>/fields/reorder", methods=["POST"])
@@ -314,8 +326,8 @@ def reorder_fields(note_type_id: str):
     ok, err = _reorder_fields(note_type.id, payload)
     if not ok:
         return _api_error("VALIDATION_ERROR", err or "Invalid reorder payload.", field="body")
-    _audit("field.reorder", {"note_type_id": note_type.id})
-    db.session.commit()
+    from app.services.note_type_service import reorder_fields_and_commit
+    reorder_fields_and_commit(note_type.id)
     return jsonify({"success": True})
 
 @flashcards_bp.route("/api/notes", methods=["GET"])
@@ -396,20 +408,8 @@ def create_note():
         field_values=cleaned_values,
         tags=tags,
     )
-    db.session.add(note)
-    db.session.flush()
-    _create_cards_for_note(note)
-    _touch_note_type_install_usage(user_id=current_user.id, installed_note_type_id=note.note_type_id)
-    install_rows = NoteTypeInstall.query.filter_by(
-        user_id=current_user.id,
-        installed_note_type_id=note.note_type_id,
-    ).all()
-    for install in install_rows:
-        source_note_type = NoteType.query.get(install.source_note_type_id)
-        if source_note_type:
-            _recompute_note_type_market_stats(source_note_type)
-    _audit("note.create", {"note_id": note.id, "note_type_id": note.note_type_id})
-    db.session.commit()
+    from app.services.note_type_service import create_note_and_commit
+    create_note_and_commit(note, current_user.id)
     return jsonify({"id": note.id, "field_values": note.field_values, "tags": note.tags}), 201
 
 @flashcards_bp.route("/api/notes/<note_id>", methods=["PATCH"])
@@ -453,8 +453,8 @@ def patch_note(note_id: str):
     )
     if deck_consistency_error:
         return _api_error("VALIDATION_ERROR", deck_consistency_error, field="deck_id")
-    _audit("note.update", {"note_id": note.id})
-    db.session.commit()
+    from app.services.note_type_service import update_note_and_commit
+    update_note_and_commit(note.id)
     return jsonify({"id": note.id, "field_values": note.field_values, "tags": note.tags})
 
 @flashcards_bp.route("/api/notes/<note_id>", methods=["DELETE"])
@@ -463,9 +463,8 @@ def delete_note(note_id: str):
     note = Note.query.filter_by(id=note_id, user_id=current_user.id).first()
     if not note:
         return _api_error("FIELD_NOT_FOUND", "Note not found.", status=404)
-    db.session.delete(note)
-    _audit("note.delete", {"note_id": note_id})
-    db.session.commit()
+    from app.services.note_type_service import delete_note_and_commit
+    delete_note_and_commit(note)
     return jsonify({"success": True})
 
 @flashcards_bp.route("/api/flashcards/seed-default-note-type", methods=["POST"])
@@ -473,8 +472,7 @@ def delete_note(note_id: str):
 def seed_default_note_type():
     if not is_admin_user(current_user):
         return _api_error("VALIDATION_ERROR", "Admin only endpoint.", status=403)
-    note_type, template = ensure_legacy_note_type(db.session, current_user.id)
-    _audit("note_type.seed_default", {"note_type_id": note_type.id, "template_id": template.id})
-    db.session.commit()
+    from app.services.note_type_service import ensure_legacy_note_type_and_commit
+    note_type, template = ensure_legacy_note_type_and_commit(current_user.id)
     return jsonify({"note_type_id": note_type.id, "template_id": template.id})
 

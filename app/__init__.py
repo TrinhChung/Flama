@@ -125,9 +125,9 @@ def create_app(config: Optional[dict] = None) -> Flask:
         ensure_user_management_schema(db.session)
         _ensure_backward_compatible_schema()
         ensure_default_user_roles(db.session)
-        from app.controllers import flashcards_share_controller as share_ctrl
+        from app.services import flashcards_share
 
-        share_ctrl.cutover_clone_model_to_overlay_only(fail_on_mismatch=True)
+        flashcards_share.cutover_clone_model_to_overlay_only(fail_on_mismatch=True)
         db.session.commit()
 
     return app

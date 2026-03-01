@@ -14,7 +14,7 @@ from flask import Flask
 
 from app.services.flashcard_legacy import ensure_legacy_note_type
 from app.services.user_roles import ensure_default_user_roles
-from app.controllers import flashcards_share_controller as share_ctrl
+from app.services import flashcards_share
 from models import db
 from models.flashcard import Card, DeckMarketplaceItem, Note
 from models.user import User
@@ -66,7 +66,7 @@ def register_cli_commands(app: Flask) -> None:
     )
     def clone_cutover_overlay(no_fail_on_mismatch: bool) -> None:
         """One-shot cutover from legacy clone rows to logical overlay model."""
-        summary = share_ctrl.cutover_clone_model_to_overlay_only(
+        summary = flashcards_share.cutover_clone_model_to_overlay_only(
             fail_on_mismatch=not no_fail_on_mismatch,
         )
         db.session.commit()

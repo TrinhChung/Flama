@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.controllers import flashcards_share_controller as share_ctrl
+from app.services import flashcards_share
 from app.services.flashcard_import import ImportValidationError, load_import_session
 from models import db
 from models.deck import Deck
@@ -163,7 +163,7 @@ def resolve_import_execution_payload(
     if target_deck_id not in accessible_deck_ids:
         raise ImportValidationError("Target deck is not accessible")
 
-    deck_consistency_error = share_ctrl.validate_note_type_consistency_for_deck(
+    deck_consistency_error = flashcards_share.validate_note_type_consistency_for_deck(
         deck_id=target_deck_id,
         note_type_id=note_type.id,
         user_id=user_id,

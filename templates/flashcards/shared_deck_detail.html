@@ -3,7 +3,8 @@
 {% block title %}Chi tiết Deck{% endblock %}
 
 {% block content %}
-<section class="py-3" id="shared-deck-detail-root" data-deck-item-id="{{ deck_item_id }}">
+<section class="py-3" id="shared-deck-detail-root" data-deck-item-id="{{ deck_item_id }}"
+  data-note-type-url-template="{{ url_for('flashcards.shared_note_type_detail_page', note_type_id='__NOTE_TYPE_ID__') }}">
   <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
     <div>
       <h2 class="h4 mb-0" id="deck-title">Đang tải...</h2>
@@ -150,5 +151,5 @@
 {% endblock %}
 
 {% block scripts %}
-  <script src="{{ url_for('static', filename='js/pages/shared_deck_detail.js') }}"></script>
+<script type="module" src="{{ url_for('static', filename='js/pages/shared_deck_detail/main.js') }}"></script>
 {% endblock %}

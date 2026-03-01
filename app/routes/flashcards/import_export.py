@@ -16,6 +16,23 @@ from app.utils.permissions import is_admin_user
 # Import everything from core module so routes can use helpers
 from . import *
 
+from app.routes.flashcards import (
+    _api_error,
+    _audit,
+    _collect_accessible_decks_for_import,
+    _deck_path_label,
+    _default_uniqueness_fields,
+    _get_note_type_or_404,
+    _infer_default_note_type_id_for_deck,
+    _parse_bool,
+    _recompute_deck_item_market_stats,
+    _recompute_note_type_market_stats,
+    _resolve_import_execution_payload,
+    _resolve_single_note_type_for_deck,
+    _serialize_note_type_for_import,
+    _touch_note_type_install_usage,
+)
+
 
 
 @flashcards_bp.route("/flashcards/decks/<int:deck_id>/share", methods=["GET", "POST"])
@@ -24,7 +41,7 @@ def share_deck_page(deck_id: int):
     deck = Deck.query.get_or_404(deck_id)
     
     # Validation 1: Ownership
-    from app.services.deck_service import can_user_edit_deck
+    from app.services.deck_access_policy import can_user_edit_deck
     if not can_user_edit_deck(current_user, deck):
         flash("Bạn không có quyền chia sẻ deck này.", "danger")
         return redirect(url_for("main.dashboard"))
@@ -51,6 +68,7 @@ def share_deck_page(deck_id: int):
 
     # Existing marketplace item
     existing_item = DeckMarketplaceItem.query.filter_by(source_deck_id=deck.id).first()
+    existing_item_was_found = existing_item is not None
 
     if request.method == "POST":
         title = request.form.get("title", "").strip()
@@ -83,7 +101,6 @@ def share_deck_page(deck_id: int):
                 rating_avg=0.0,
                 rating_count=0,
             )
-            db.session.add(existing_item)
             
         existing_item.title = title
         existing_item.description = description
@@ -94,8 +111,9 @@ def share_deck_page(deck_id: int):
         existing_item.price_cents = price_cents
         existing_item.source_note_type_id = resolved_note_type_id
         existing_item.publish_status = "published"
-        
-        db.session.commit()
+
+        from app.services.flashcard_import_service import share_deck_and_commit
+        share_deck_and_commit(existing_item, is_new=not existing_item_was_found)
         flash("Tuyệt vời! Deck của bạn đã được chia sẻ lên Marketplace.", "success")
         return redirect(url_for("flashcards.shared_decks_page"))
 
@@ -275,16 +293,8 @@ def flashcard_import_execute():
             if source_note_type:
                 _recompute_note_type_market_stats(source_note_type)
 
-    _audit(
-        "note.import",
-        {
-            "note_type_id": note_type.id,
-            "target_deck_id": target_deck_id,
-            "mode": report.get("mode"),
-            "summary": summary,
-        },
-    )
-    db.session.commit()
+    from app.services.flashcard_import_service import flashcard_import_execute_commit
+    flashcard_import_execute_commit(note_type, target_deck_id, report.get("mode"), summary)
     return jsonify(report)
 
 @flashcards_bp.route("/api/shared/seed-defaults", methods=["POST"])
@@ -299,19 +309,11 @@ def seed_marketplace_defaults():
     admin_user_name = os.environ.get("ADMIN_USERNAME") or os.environ.get("ADMIN_USER", "chungtrinh2k2")
     admin_password = os.environ.get("ADMIN_PASSWORD", "chungtrinh1904")
 
-    system_admin = User.query.filter_by(email=admin_email).first()
-    if not system_admin:
-        system_admin = User(
-            email=admin_email,
-            username=admin_user_name,
-            is_admin=True,
-        )
-        system_admin.set_password(admin_password)
-        db.session.add(system_admin)
-        db.session.commit()
-    elif not system_admin.is_admin:
-        system_admin.is_admin = True
-        db.session.commit()
+    from app.services.flashcard_import_service import admin_user_ensure_created
+    system_admin = admin_user_ensure_created(admin_email, admin_user_name, admin_password)
+    if not system_admin.is_admin:
+        from app.services.flashcard_import_service import admin_user_set_is_admin
+        admin_user_set_is_admin(system_admin)
 
     admin_id = system_admin.id
 
@@ -343,7 +345,9 @@ def seed_marketplace_defaults():
     # Stamp ownership on the source deck so it is recognised as admin-owned
     if source_deck.owner_user_id is None:
         source_deck.owner_user_id = admin_id
+    is_new_deck_item = False
     if deck_item is None:
+        is_new_deck_item = True
         deck_item = DeckMarketplaceItem(
             owner_user_id=admin_id,
             source_deck_id=source_deck.id,
@@ -361,18 +365,7 @@ def seed_marketplace_defaults():
             is_official=True,
             published_at=datetime.utcnow(),
         )
-        db.session.add(deck_item)
-    else:
-        deck_item.source_deck_id = source_deck.id
-        deck_item.source_note_type_id = note_type.id
-        deck_item.pricing_mode = "free"
-        deck_item.price_cents = 0
-        deck_item.publish_status = "published"
-        deck_item.is_official = True
-        deck_item.published_at = deck_item.published_at or datetime.utcnow()
-    _recompute_deck_item_market_stats(deck_item)
-
-    _audit("market.seed_defaults", {"note_type_id": note_type.id, "deck_item_id": deck_item.id})
-    db.session.commit()
+    from app.services.flashcard_import_service import seed_marketplace_defaults_commit
+    seed_marketplace_defaults_commit(admin_id, note_type, deck_item, is_new_deck_item)
     return jsonify({"note_type_id": note_type.id, "deck_item_id": deck_item.id})
 

@@ -40,20 +40,8 @@ def register():
             flash("Email hoặc tên đăng nhập đã tồn tại.", "danger")
             return render_template("register.html")
 
-        existing_user_count = User.query.count()
-        roles = ensure_default_user_roles(db.session)
-        user = User(email=email, username=username)
-        if existing_user_count == 0 and roles.get("admin"):
-            user.role_id = roles["admin"].id
-            user.is_admin = True
-        elif roles.get("regular"):
-            user.role_id = roles["regular"].id
-            user.is_admin = bool(roles["regular"].is_admin)
-        else:
-            user.is_admin = existing_user_count == 0
-        user.set_password(password)
-        db.session.add(user)
-        db.session.commit()
+        from app.services.auth_service import register_user_and_commit
+        register_user_and_commit(email, username, password)
 
         flash("Đăng ký thành công! Vui lòng đăng nhập.", "success")
         return redirect(url_for("auth.login"))
