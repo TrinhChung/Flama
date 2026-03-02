@@ -16,6 +16,25 @@ from app.utils.permissions import is_admin_user
 # Import everything from core module so routes can use helpers
 from . import *
 
+MAX_MARKET_REVIEW_SUBMISSIONS_PER_USER = 2
+
+
+def _count_user_market_review_submissions(
+    *,
+    user_id: int,
+    action: str,
+    payload_item_key: str,
+    payload_item_value: str,
+) -> int:
+    rows = AuditLog.query.filter_by(user_id=user_id, action=action).all()
+    total = 0
+    expected = str(payload_item_value or "").strip()
+    for row in rows:
+        payload = row.payload if isinstance(row.payload, dict) else {}
+        if str(payload.get(payload_item_key) or "").strip() == expected:
+            total += 1
+    return total
+
 
 
 @flashcards_bp.route("/flashcards/shared-note-types")
@@ -317,11 +336,22 @@ def get_shared_note_type_detail(note_type_id: str):
         user_id=current_user.id,
     ).first()
     review = NoteTypeReview.query.filter_by(note_type_id=note_type.id, user_id=current_user.id).first()
+    review_submission_count = _count_user_market_review_submissions(
+        user_id=current_user.id,
+        action="market.note_type.rate",
+        payload_item_key="note_type_id",
+        payload_item_value=note_type.id,
+    )
+    review_submissions_remaining = max(
+        0, MAX_MARKET_REVIEW_SUBMISSIONS_PER_USER - int(review_submission_count or 0)
+    )
     payload = _serialize_note_type_marketplace_card(note_type)
     payload["is_installed"] = install is not None
     payload["installed_note_type_id"] = install.installed_note_type_id if install else None
     payload["is_owner"] = note_type.user_id == current_user.id
-    payload["can_rate"] = _can_user_rate_note_type(note_type, user_id=current_user.id)
+    payload["can_rate"] = _can_user_rate_note_type(note_type, user_id=current_user.id) and review_submissions_remaining > 0
+    payload["review_submission_count"] = review_submission_count
+    payload["review_submissions_remaining"] = review_submissions_remaining
     payload["my_review"] = (
         {
             "rating": review.rating,
@@ -423,6 +453,18 @@ def rate_shared_note_type(note_type_id: str):
         return _api_error("FIELD_NOT_FOUND", "Note type not found.", status=404)
     if not _can_user_rate_note_type(note_type, user_id=current_user.id):
         return _api_error("VALIDATION_ERROR", "You can only rate after real usage.", status=403)
+    review_submission_count = _count_user_market_review_submissions(
+        user_id=current_user.id,
+        action="market.note_type.rate",
+        payload_item_key="note_type_id",
+        payload_item_value=note_type.id,
+    )
+    if review_submission_count >= MAX_MARKET_REVIEW_SUBMISSIONS_PER_USER:
+        return _api_error(
+            "VALIDATION_ERROR",
+            "You can submit at most 2 ratings for this item.",
+            status=403,
+        )
 
     payload = request.get_json(silent=True) or {}
     try:
@@ -602,7 +644,20 @@ def get_shared_deck_item(deck_item_id: str):
         user_id=current_user.id,
         sample_limit=SHARED_DECK_TEST_SAMPLE_LIMIT,
         deck_active_review_threshold=DECK_ACTIVE_REVIEW_THRESHOLD,
+        review_preview_limit=20,
     )
+    review_submission_count = _count_user_market_review_submissions(
+        user_id=current_user.id,
+        action="market.deck_item.rate",
+        payload_item_key="deck_item_id",
+        payload_item_value=deck_item.id,
+    )
+    review_submissions_remaining = max(
+        0, MAX_MARKET_REVIEW_SUBMISSIONS_PER_USER - int(review_submission_count or 0)
+    )
+    payload["review_submission_count"] = review_submission_count
+    payload["review_submissions_remaining"] = review_submissions_remaining
+    payload["can_rate"] = bool(payload.get("can_rate")) and review_submissions_remaining > 0
 
     return jsonify(payload)
 
@@ -838,6 +893,18 @@ def rate_shared_deck_item(deck_item_id: str):
         return _api_error("FIELD_NOT_FOUND", "Deck item not found.", status=404)
     if not _can_user_rate_deck(deck_item, user_id=current_user.id):
         return _api_error("VALIDATION_ERROR", "You can only rate after real usage.", status=403)
+    review_submission_count = _count_user_market_review_submissions(
+        user_id=current_user.id,
+        action="market.deck_item.rate",
+        payload_item_key="deck_item_id",
+        payload_item_value=deck_item.id,
+    )
+    if review_submission_count >= MAX_MARKET_REVIEW_SUBMISSIONS_PER_USER:
+        return _api_error(
+            "VALIDATION_ERROR",
+            "You can submit at most 2 ratings for this item.",
+            status=403,
+        )
 
     payload = request.get_json(silent=True) or {}
     try:
@@ -921,4 +988,3 @@ def shared_deck_recommendations():
             "new_and_updated": [_serialize_deck_marketplace_item(item) for item in new_and_updated],
         }
     )
-

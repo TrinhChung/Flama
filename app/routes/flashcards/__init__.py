@@ -670,5 +670,8 @@ def _get_shared_deck_item_for_view(deck_item_id: str) -> DeckMarketplaceItem | N
     return deck_item
 
 
+# Sub-modules currently rely on `from . import *`, including private helpers.
+__all__ = [name for name in globals() if not name.startswith("__")]
+
 # Register sub-routes
 from . import note_type, share, import_export, study, media

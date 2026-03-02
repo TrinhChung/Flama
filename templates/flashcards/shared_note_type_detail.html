@@ -289,15 +289,20 @@
       });
     }
 
+    function buildStars(ratingValue) {
+      const normalized = normalizeRatingValue(ratingValue);
+      return "★".repeat(normalized) + "☆".repeat(5 - normalized);
+    }
+
     function renderRatingState() {
       if (!detail) return;
       const review = detail.my_review || null;
       if (review) {
-        myReviewEl.textContent = "Đánh giá của bạn: " + review.rating + "/5"
+        myReviewEl.textContent = "Đánh giá của bạn: " + buildStars(review.rating) + " (" + review.rating + "/5)"
           + (review.comment ? " - " + review.comment : "")
           + (review.updated_at ? " (" + formatDate(review.updated_at) + ")" : "");
         setSelectedRating(review.rating || 5);
-        ratingCommentEl.value = review.comment || "";
+        ratingCommentEl.value = "";
       } else {
         myReviewEl.textContent = "Bạn chưa đánh giá template này.";
         setSelectedRating(5);
@@ -305,10 +310,15 @@
       }
 
       if (detail.can_rate) {
-        ratingHintEl.textContent = "Bạn có thể đánh giá ngay.";
+        const remaining = Number(detail.review_submissions_remaining ?? 0);
+        ratingHintEl.textContent = "Bạn có thể đánh giá ngay. Lượt còn lại: " + remaining + "/2.";
         setRatingInputDisabled(false);
       } else {
-        ratingHintEl.textContent = "Cần cài đặt và dùng thực tế trước khi đánh giá.";
+        if (Number(detail.review_submissions_remaining ?? 0) <= 0) {
+          ratingHintEl.textContent = "Bạn đã dùng hết 2 lượt đánh giá cho template này.";
+        } else {
+          ratingHintEl.textContent = "Cần cài đặt và dùng thực tế trước khi đánh giá.";
+        }
         setRatingInputDisabled(true);
       }
     }
@@ -393,6 +403,7 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ rating, comment }),
       });
+      ratingCommentEl.value = "";
       await loadDetail();
     }
 

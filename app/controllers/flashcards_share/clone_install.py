@@ -94,15 +94,21 @@ def clone_deck_subtree(
     parent_id: int | None,
     deck_install_id: str | None = None,
     owner_user_id: int | None = None,
+    note_type_id_overrides: dict[str, str] | None = None,
+    default_note_type_id: str | None = None,
 ) -> Deck:
     source_deck = Deck.query.get(source_deck_id)
     if not source_deck:
         raise ValueError(f"Deck not found: {source_deck_id}")
 
+    resolved_note_type_id = source_deck.note_type_id or default_note_type_id
+    if source_deck.note_type_id and note_type_id_overrides:
+        resolved_note_type_id = note_type_id_overrides.get(source_deck.note_type_id, source_deck.note_type_id)
+
     cloned_deck = Deck(
         parent_id=parent_id,
         owner_user_id=owner_user_id,
-        note_type_id=source_deck.note_type_id,
+        note_type_id=resolved_note_type_id,
         name=source_deck.name,
         description=source_deck.description,
         position=_next_deck_position(parent_id),
@@ -130,9 +136,55 @@ def clone_deck_subtree(
             parent_id=cloned_deck.id,
             deck_install_id=deck_install_id,
             owner_user_id=owner_user_id,
+            note_type_id_overrides=note_type_id_overrides,
+            default_note_type_id=default_note_type_id,
         )
 
     return cloned_deck
+
+def ensure_note_type_install_for_deck_clone(
+    *,
+    source_note_type_id: str | None,
+    user_id: int,
+) -> tuple[str | None, bool]:
+    source_note_type_key = (source_note_type_id or "").strip()
+    if not source_note_type_key:
+        return None, False
+
+    source_note_type = NoteType.query.get(source_note_type_key)
+    if source_note_type is None:
+        return None, False
+
+    existing_install = NoteTypeInstall.query.filter_by(
+        source_note_type_id=source_note_type.id,
+        user_id=user_id,
+    ).first()
+    if existing_install and (existing_install.installed_note_type_id or "").strip():
+        installed_note_type = NoteType.query.filter_by(
+            id=existing_install.installed_note_type_id,
+            user_id=user_id,
+        ).first()
+        if installed_note_type is not None:
+            return installed_note_type.id, False
+
+    installed_copy = clone_note_type_for_user(source_note_type, user_id)
+    now = datetime.utcnow()
+    if existing_install:
+        existing_install.installed_note_type_id = installed_copy.id
+        if existing_install.installed_at is None:
+            existing_install.installed_at = now
+    else:
+        db.session.add(
+            NoteTypeInstall(
+                source_note_type_id=source_note_type.id,
+                installed_note_type_id=installed_copy.id,
+                user_id=user_id,
+                purchase_price_cents=0,
+                installed_at=now,
+                purchased_at=None,
+            )
+        )
+    return installed_copy.id, True
 
 def _install_snapshot_at(install: DeckInstall) -> datetime | None:
     return install.base_snapshot_at or install.installed_at
@@ -818,6 +870,8 @@ def _build_note_override_payload_for_cutover(
     return override_items
 
 def cutover_clone_model_to_overlay_only(*, fail_on_mismatch: bool = True) -> dict[str, Any]:
+    from .rating import migrate_legacy_clone_install_to_overlay
+
     legacy_installs = (
         DeckInstall.query.filter(
             db.or_(
@@ -868,6 +922,8 @@ def install_shared_deck_item_for_user(
     user_id: int,
     publish_statuses_visible: set[str] | None = None,
 ) -> dict[str, Any]:
+    from .rating import recompute_deck_item_market_stats, recompute_note_type_market_stats
+
     visible_statuses = publish_statuses_visible or DEFAULT_VISIBLE_PUBLISH_STATUSES
 
     status = str(deck_item.publish_status or "").strip().lower()
@@ -909,6 +965,15 @@ def install_shared_deck_item_for_user(
             error="FIELD_NOT_FOUND",
         )
 
+    source_note_type_id = (deck_item.source_note_type_id or "").strip() or None
+    installed_note_type_id = None
+    note_type_install_created = False
+    if source_note_type_id:
+        installed_note_type_id, note_type_install_created = ensure_note_type_install_for_deck_clone(
+            source_note_type_id=source_note_type_id,
+            user_id=user_id,
+        )
+
     purchase_price_cents = int(deck_item.price_cents or 0) if deck_item.pricing_mode == "paid" else 0
     install = DeckInstall(
         deck_item_id=deck_item.id,
@@ -916,7 +981,7 @@ def install_shared_deck_item_for_user(
         local_deck_id=None,
         clone_mode="logical_overlay",
         source_deck_id=source_deck.id,
-        source_note_type_id=(deck_item.source_note_type_id or "").strip() or None,
+        source_note_type_id=source_note_type_id,
         source_owner_user_id=deck_item.owner_user_id,
         base_snapshot_at=now,
         purchase_price_cents=purchase_price_cents,
@@ -932,9 +997,20 @@ def install_shared_deck_item_for_user(
         parent_id=None,
         deck_install_id=install.id,
         owner_user_id=user_id,
+        note_type_id_overrides=(
+            {source_note_type_id: installed_note_type_id}
+            if source_note_type_id and installed_note_type_id
+            else None
+        ),
+        default_note_type_id=installed_note_type_id or source_note_type_id,
     )
     local_deck_id = cloned_root.id
     install.local_deck_id = local_deck_id
+
+    if note_type_install_created and source_note_type_id:
+        source_note_type = NoteType.query.get(source_note_type_id)
+        if source_note_type is not None:
+            recompute_note_type_market_stats(source_note_type)
 
     recompute_deck_item_market_stats(deck_item)
     return {
@@ -950,4 +1026,3 @@ def install_shared_deck_item_for_user(
             "price_cents": purchase_price_cents,
         },
     }
-

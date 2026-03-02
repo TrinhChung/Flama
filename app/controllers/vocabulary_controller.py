@@ -277,6 +277,13 @@ def collect_accessible_browse_decks(*, user_id: int, admin_mode: bool) -> list[D
     deck_map = {deck.id: deck for deck in all_decks}
     visible_ids: set[int] = set()
 
+    owned_deck_rows = (
+        db.session.query(Deck.id)
+        .filter(Deck.owner_user_id == user_id)
+        .all()
+    )
+    visible_ids.update(int(row[0]) for row in owned_deck_rows if row and row[0] is not None)
+
     deck_rows = (
         db.session.query(Note.deck_id)
         .filter(Note.user_id == user_id, Note.deck_id.isnot(None))

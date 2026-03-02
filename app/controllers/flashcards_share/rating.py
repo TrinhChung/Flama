@@ -22,6 +22,16 @@ from app.controllers.deck_controller import collect_ancestor_ids, collect_subtre
 
 # We will let them import classes/constants from core
 from .core import *
+from .clone_install import (
+    CloneSchemaView,
+    build_clone_schema_view,
+    deck_installs_covering_deck,
+    resolve_clone_scope_for_local_deck,
+    upsert_clone_overlay,
+    _build_note_override_payload_for_cutover,
+    _build_schema_overlay_payload_for_cutover,
+    _ensure_clone_map_rows_for_cutover,
+)
 
 def touch_note_type_install_usage(
     *,
@@ -487,4 +497,3 @@ def migrate_legacy_clone_install_to_overlay(
         "note_overrides": len(note_override_payload),
         "progress_rows": progress_migrated,
     }
-

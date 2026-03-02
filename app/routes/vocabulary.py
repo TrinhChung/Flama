@@ -62,6 +62,7 @@ def restrict_non_admin_routes():
         "vocabulary.index",
         "vocabulary.study_deck",
         "vocabulary.browse",
+        "vocabulary.create_deck",
         "vocabulary.browse_api_decks_tree",
         "vocabulary.browse_api_cards",
         "vocabulary.browse_api_card_detail",
@@ -71,6 +72,7 @@ def restrict_non_admin_routes():
         "vocabulary.browse_api_notes",
         "vocabulary.browse_api_update_note",
         "vocabulary.delete_deck",
+        "vocabulary.reset_deck",
     }
     if endpoint in allowed_endpoints:
         return None
@@ -257,14 +259,24 @@ def _apply_clone_overlay_to_browse_payload(
 @login_required
 def browse_api_decks_tree():
     """Returns deck tree with aggregate card counts."""
-    return jsonify({"tree": vocabulary_ctrl.build_browse_deck_tree_payload()})
+    return jsonify(
+        {
+            "tree": vocabulary_ctrl.build_browse_deck_tree_payload(
+                user_id=current_user.id,
+                admin_mode=is_admin_user(current_user),
+            )
+        }
+    )
 
 
 @vocabulary_bp.route("/api/browse/decks", methods=["GET"])
 @login_required
 def browse_api_decks():
     """Backward-compatible flat deck list endpoint."""
-    tree = vocabulary_ctrl.build_browse_deck_tree_payload()
+    tree = vocabulary_ctrl.build_browse_deck_tree_payload(
+        user_id=current_user.id,
+        admin_mode=is_admin_user(current_user),
+    )
     flat_items = []
 
     def _flatten(nodes: list[dict]):
@@ -317,7 +329,10 @@ def browse_api_cards():
             }
         )
 
-    scoped_decks = vocabulary_ctrl.collect_accessible_browse_decks()
+    scoped_decks = vocabulary_ctrl.collect_accessible_browse_decks(
+        user_id=current_user.id,
+        admin_mode=is_admin_user(current_user),
+    )
     deck_lookup = {deck.id: deck.name for deck in scoped_decks}
     children_by_parent = vocabulary_ctrl.deck_children_map(scoped_decks)
     scoped_ids = {deck.id for deck in scoped_decks}
@@ -523,7 +538,13 @@ def browse_api_card_detail(card_id: str):
     if not card_obj:
         return jsonify({"error": "Card not found"}), 404
 
-    deck_lookup = {deck.id: deck.name for deck in vocabulary_ctrl.collect_accessible_browse_decks()}
+    deck_lookup = {
+        deck.id: deck.name
+        for deck in vocabulary_ctrl.collect_accessible_browse_decks(
+            user_id=current_user.id,
+            admin_mode=is_admin_user(current_user),
+        )
+    }
     clone_scope = None
     if not is_admin_user(current_user) and card_obj.note and card_obj.note.user_id != current_user.id:
         clone_scope = share_ctrl.resolve_clone_scope_for_card(
@@ -661,7 +682,13 @@ def browse_api_card_update(card_id: str):
                 return jsonify({"error": validation_error}), 400
         db.session.commit()
 
-        deck_lookup = {deck.id: deck.name for deck in vocabulary_ctrl.collect_accessible_browse_decks()}
+        deck_lookup = {
+            deck.id: deck.name
+            for deck in vocabulary_ctrl.collect_accessible_browse_decks(
+                user_id=current_user.id,
+                admin_mode=is_admin_user(current_user),
+            )
+        }
         for source_deck_id, local_deck_id in (clone_scope.source_to_local_deck_id or {}).items():
             local_name = deck_lookup.get(int(local_deck_id))
             if local_name:
@@ -698,7 +725,13 @@ def browse_api_card_update(card_id: str):
             if not Deck.query.get(selected_deck_id):
                 return jsonify({"error": "Deck not found"}), 404
             if not is_admin_user(current_user):
-                allowed_deck_ids = {deck.id for deck in vocabulary_ctrl.collect_accessible_browse_decks()}
+                allowed_deck_ids = {
+                    deck.id
+                    for deck in vocabulary_ctrl.collect_accessible_browse_decks(
+                        user_id=current_user.id,
+                        admin_mode=is_admin_user(current_user),
+                    )
+                }
                 if selected_deck_id not in allowed_deck_ids:
                     return jsonify({"error": "Deck is not accessible"}), 403
             note_obj.deck_id = selected_deck_id
@@ -709,7 +742,13 @@ def browse_api_card_update(card_id: str):
     note_obj.field_values = field_values
     db.session.commit()
 
-    deck_lookup = {deck.id: deck.name for deck in vocabulary_ctrl.collect_accessible_browse_decks()}
+    deck_lookup = {
+        deck.id: deck.name
+        for deck in vocabulary_ctrl.collect_accessible_browse_decks(
+            user_id=current_user.id,
+            admin_mode=is_admin_user(current_user),
+        )
+    }
     progress = CardProgress.query.filter_by(
         user_id=current_user.id,
         card_id=card_obj.id,
@@ -815,43 +854,77 @@ def create_level():
 @login_required
 def create_deck():
     """Create deck(s) from path, auto-creating missing parents."""
-    if not is_admin_user(current_user):
-        return redirect(url_for("main.dashboard"))
-
     parent_id_raw = (request.form.get("parent_id") or "").strip()
     deck_path_raw = (request.form.get("deck_path") or "").strip()
     deck_name = (request.form.get("name") or "").strip() or "New Deck"
     next_url = _resolve_next_url()
+    admin_mode = is_admin_user(current_user)
+    selected_parent_id: int | None = None
+    selected_parent_path_tokens: list[str] = []
+
+    if parent_id_raw:
+        try:
+            selected_parent_id = int(parent_id_raw)
+        except ValueError:
+            flash("Invalid parent deck.", "danger")
+            return redirect(next_url)
+
+        parent_deck = Deck.query.get(selected_parent_id)
+        if not parent_deck:
+            flash("Parent deck not found.", "danger")
+            return redirect(next_url)
+
+        if not admin_mode:
+            accessible_ids = {
+                int(deck.id)
+                for deck in vocabulary_ctrl.collect_accessible_browse_decks(
+                    user_id=current_user.id,
+                    admin_mode=False,
+                )
+                if deck.id is not None
+            }
+            if selected_parent_id not in accessible_ids:
+                flash("Parent deck not found.", "danger")
+                return redirect(next_url)
+
+        cursor = parent_deck
+        seen_ids: set[int] = set()
+        while cursor and cursor.id not in seen_ids:
+            seen_ids.add(cursor.id)
+            name_token = (cursor.name or "").strip()
+            if name_token:
+                selected_parent_path_tokens.append(name_token)
+            if cursor.parent_id is None:
+                break
+            cursor = Deck.query.get(cursor.parent_id)
+        selected_parent_path_tokens.reverse()
 
     tokens = [item.strip() for item in deck_path_raw.split("::") if item.strip()]
     if not tokens:
-        if parent_id_raw:
-            try:
-                parent_id = int(parent_id_raw)
-            except ValueError:
-                flash("Invalid parent deck.", "danger")
-                return redirect(next_url)
-            parent_deck = Deck.query.get(parent_id)
-            if not parent_deck:
-                flash("Parent deck not found.", "danger")
-                return redirect(next_url)
-            tokens = [parent_deck.name, deck_name]
-        else:
-            tokens = [deck_name]
+        tokens = [deck_name]
 
-    parent_id = None
+    # UI sends absolute path by default (e.g. Parent::Child::New Deck);
+    # strip the selected-parent prefix so creation stays under selected parent.
+    if selected_parent_id is not None and selected_parent_path_tokens and len(tokens) >= len(selected_parent_path_tokens):
+        prefix = tokens[: len(selected_parent_path_tokens)]
+        if [item.casefold() for item in prefix] == [item.casefold() for item in selected_parent_path_tokens]:
+            tokens = tokens[len(selected_parent_path_tokens) :]
+            if not tokens:
+                tokens = [deck_name]
+
+    parent_id = selected_parent_id
     created_count = 0
     created_names: List[str] = []
     final_deck = None
     for token in tokens:
-        existing = (
-            Deck.query.filter(
-                Deck.parent_id == parent_id,
-                Deck.name == token,
-            )
-            .order_by(Deck.id.asc())
-            .first()
+        existing_query = Deck.query.filter(
+            Deck.parent_id == parent_id,
+            Deck.name == token,
         )
+        if not admin_mode:
+            existing_query = existing_query.filter(Deck.owner_user_id == current_user.id)
+
+        existing = existing_query.order_by(Deck.id.asc()).first()
         if existing:
             final_deck = existing
             parent_id = existing.id
@@ -859,6 +932,7 @@ def create_deck():
 
         node = Deck(
             parent_id=parent_id,
+            owner_user_id=getattr(current_user, "id", None),
             name=token,
             position=vocabulary_ctrl.next_deck_position(parent_id),
         )
@@ -1030,21 +1104,47 @@ def delete_deck(deck_id: int):
 @login_required
 def reset_deck(deck_id: int):
     """Reset current-user progress for cards within a deck subtree."""
-    if not is_admin_user(current_user):
+    deck = Deck.query.get_or_404(deck_id)
+    if not is_admin_user(current_user) and not _can_current_user_delete_cloned_deck(deck):
         return redirect(url_for("main.dashboard"))
 
-    deck = Deck.query.get_or_404(deck_id)
     next_url = _resolve_next_url()
 
     deck_ids = _collect_deck_subtree_ids(deck.id)
 
-    card_rows = (
-        db.session.query(Card.id)
-        .join(Note, Card.note_id == Note.id)
-        .filter(Note.deck_id.in_(deck_ids))
-        .all()
-    )
-    card_ids = [str(row[0]) for row in card_rows if row and row[0]]
+    card_id_set = {
+        str(row[0])
+        for row in (
+            db.session.query(Card.id)
+            .join(Note, Card.note_id == Note.id)
+            .filter(Note.deck_id.in_(deck_ids))
+            .all()
+        )
+        if row and row[0]
+    }
+
+    # For logical-overlay installs, reset progress on source cards visible in this local scope.
+    from app.controllers import flashcards_share_controller as share_ctrl
+
+    seen_scopes: set[tuple[str, int]] = set()
+    for local_deck_id in sorted({int(deck_id_item) for deck_id_item in deck_ids if deck_id_item is not None}):
+        clone_scope = share_ctrl.resolve_clone_scope_for_local_deck(
+            user_id=current_user.id,
+            local_deck_id=local_deck_id,
+        )
+        if clone_scope is None:
+            continue
+        scope_key = (clone_scope.install.id, int(clone_scope.local_scope_deck_id))
+        if scope_key in seen_scopes:
+            continue
+        seen_scopes.add(scope_key)
+
+        clone_card_rows = share_ctrl.query_clone_scope_cards(clone_scope).with_entities(Card.id).all()
+        for row in clone_card_rows:
+            if row and row[0]:
+                card_id_set.add(str(row[0]))
+
+    card_ids = sorted(card_id_set)
 
     if card_ids:
         deleted_count = (

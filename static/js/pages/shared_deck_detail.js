@@ -22,6 +22,7 @@
     const ratingCommentEl = document.getElementById("deck-rating-comment");
     const ratingHintEl = document.getElementById("deck-rating-hint");
     const ratingSubmitBtn = document.getElementById("deck-rating-submit-btn");
+    const communityReviewsEl = document.getElementById("deck-community-reviews");
     const sourceNoteTypeLink = document.getElementById("source-note-type-link");
     const templateNameDisplayEl = document.getElementById("deck-template-name-display");
     const templateNoteEl = document.getElementById("deck-template-note");
@@ -249,15 +250,20 @@
       });
     }
 
+    function buildStars(ratingValue) {
+      const normalized = normalizeRatingValue(ratingValue);
+      return "★".repeat(normalized) + "☆".repeat(5 - normalized);
+    }
+
     function renderRatingState() {
       if (!deckDetail) return;
       const review = deckDetail.my_review || null;
       if (review) {
-        myReviewEl.textContent = "Đánh giá của bạn: " + review.rating + "/5"
+        myReviewEl.textContent = "Đánh giá của bạn: " + buildStars(review.rating) + " (" + review.rating + "/5)"
           + (review.comment ? " - " + review.comment : "")
           + (review.updated_at ? " (" + formatDate(review.updated_at) + ")" : "");
         setSelectedRating(review.rating || 5);
-        ratingCommentEl.value = review.comment || "";
+        ratingCommentEl.value = "";
       } else {
         myReviewEl.textContent = "Bạn chưa đánh giá deck này.";
         setSelectedRating(5);
@@ -265,12 +271,53 @@
       }
 
       if (deckDetail.can_rate) {
-        ratingHintEl.textContent = "Bạn có thể đánh giá ngay.";
+        const remaining = Number(deckDetail.review_submissions_remaining ?? 0);
+        ratingHintEl.textContent = "Bạn có thể đánh giá ngay. Lượt còn lại: " + remaining + "/2.";
         setRatingInputDisabled(false);
       } else {
-        ratingHintEl.textContent = "Cần cài đặt và dùng thực tế trước khi đánh giá.";
+        if (Number(deckDetail.review_submissions_remaining ?? 0) <= 0) {
+          ratingHintEl.textContent = "Bạn đã dùng hết 2 lượt đánh giá cho deck này.";
+        } else {
+          ratingHintEl.textContent = "Cần cài đặt và dùng thực tế trước khi đánh giá.";
+        }
         setRatingInputDisabled(true);
       }
+    }
+
+    function escapeHtml(text) {
+      return String(text || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/\"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function renderCommunityReviews() {
+      if (!communityReviewsEl) return;
+      const reviews = Array.isArray(deckDetail?.recent_reviews) ? deckDetail.recent_reviews : [];
+      if (!reviews.length) {
+        communityReviewsEl.innerHTML = "<div class='text-muted'>Chưa có đánh giá từ người dùng khác.</div>";
+        return;
+      }
+      communityReviewsEl.innerHTML = reviews.map((row) => {
+        const rating = normalizeRatingValue(row.rating || 0);
+        const stars = buildStars(rating);
+        const comment = (row.comment || "").trim();
+        const safeComment = escapeHtml(comment || "Không có nhận xét.");
+        const safeUser = escapeHtml(row.username || "Unknown");
+        const updated = formatDate(row.updated_at) || "N/A";
+        return (
+          "<div class='border rounded p-2 mb-2'>"
+          + "<div class='d-flex justify-content-between align-items-center mb-1'>"
+          + "<strong>" + safeUser + "</strong>"
+          + "<span class='text-warning fw-semibold'>" + stars + "</span>"
+          + "</div>"
+          + "<div class='mb-1'>" + safeComment + "</div>"
+          + "<div class='text-muted' style='font-size: 12px;'>Cập nhật: " + escapeHtml(updated) + "</div>"
+          + "</div>"
+        );
+      }).join("");
     }
 
     function renderTemplateName(templates, defaultName) {
@@ -367,6 +414,7 @@
       renderSampleNavState();
       renderInstallState();
       renderRatingState();
+      renderCommunityReviews();
       await loadSourceNoteType();
     }
 
@@ -394,6 +442,7 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ rating, comment }),
       });
+      ratingCommentEl.value = "";
       await loadDeckDetail();
     }
 
