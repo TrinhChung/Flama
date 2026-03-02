@@ -859,97 +859,44 @@ def create_deck():
     deck_name = (request.form.get("name") or "").strip() or "New Deck"
     next_url = _resolve_next_url()
     admin_mode = is_admin_user(current_user)
-    selected_parent_id: int | None = None
-    selected_parent_path_tokens: list[str] = []
+    parent_resolution = vocabulary_ctrl.resolve_create_deck_parent(
+        parent_id_raw=parent_id_raw,
+        user_id=current_user.id,
+        admin_mode=admin_mode,
+    )
+    if parent_resolution.error:
+        flash(parent_resolution.error, "danger")
+        return redirect(next_url)
 
-    if parent_id_raw:
-        try:
-            selected_parent_id = int(parent_id_raw)
-        except ValueError:
-            flash("Invalid parent deck.", "danger")
-            return redirect(next_url)
+    path_tokens = vocabulary_ctrl.parse_create_deck_tokens(
+        deck_path_raw=deck_path_raw,
+        fallback_name=deck_name,
+    )
+    path_tokens = vocabulary_ctrl.normalize_create_deck_tokens_for_parent(
+        path_tokens=path_tokens,
+        parent_path_tokens=vocabulary_ctrl.deck_name_path_tokens(parent_resolution.parent_deck),
+        fallback_name=deck_name,
+    )
 
-        parent_deck = Deck.query.get(selected_parent_id)
-        if not parent_deck:
-            flash("Parent deck not found.", "danger")
-            return redirect(next_url)
-
-        if not admin_mode:
-            accessible_ids = {
-                int(deck.id)
-                for deck in vocabulary_ctrl.collect_accessible_browse_decks(
-                    user_id=current_user.id,
-                    admin_mode=False,
-                )
-                if deck.id is not None
-            }
-            if selected_parent_id not in accessible_ids:
-                flash("Parent deck not found.", "danger")
-                return redirect(next_url)
-
-        cursor = parent_deck
-        seen_ids: set[int] = set()
-        while cursor and cursor.id not in seen_ids:
-            seen_ids.add(cursor.id)
-            name_token = (cursor.name or "").strip()
-            if name_token:
-                selected_parent_path_tokens.append(name_token)
-            if cursor.parent_id is None:
-                break
-            cursor = Deck.query.get(cursor.parent_id)
-        selected_parent_path_tokens.reverse()
-
-    tokens = [item.strip() for item in deck_path_raw.split("::") if item.strip()]
-    if not tokens:
-        tokens = [deck_name]
-
-    # UI sends absolute path by default (e.g. Parent::Child::New Deck);
-    # strip the selected-parent prefix so creation stays under selected parent.
-    if selected_parent_id is not None and selected_parent_path_tokens and len(tokens) >= len(selected_parent_path_tokens):
-        prefix = tokens[: len(selected_parent_path_tokens)]
-        if [item.casefold() for item in prefix] == [item.casefold() for item in selected_parent_path_tokens]:
-            tokens = tokens[len(selected_parent_path_tokens) :]
-            if not tokens:
-                tokens = [deck_name]
-
-    parent_id = selected_parent_id
-    created_count = 0
-    created_names: List[str] = []
-    final_deck = None
-    for token in tokens:
-        existing_query = Deck.query.filter(
-            Deck.parent_id == parent_id,
-            Deck.name == token,
-        )
-        if not admin_mode:
-            existing_query = existing_query.filter(Deck.owner_user_id == current_user.id)
-
-        existing = existing_query.order_by(Deck.id.asc()).first()
-        if existing:
-            final_deck = existing
-            parent_id = existing.id
-            continue
-
-        node = Deck(
-            parent_id=parent_id,
+    try:
+        upsert_result = vocabulary_ctrl.upsert_deck_path(
+            parent_id=parent_resolution.parent_id,
+            path_tokens=path_tokens,
             owner_user_id=getattr(current_user, "id", None),
-            name=token,
-            position=vocabulary_ctrl.next_deck_position(parent_id),
+            admin_mode=admin_mode,
         )
-        db.session.add(node)
-        db.session.flush()
-        created_count += 1
-        created_names.append(token)
-        final_deck = node
-        parent_id = node.id
+        db.session.commit()
+    except SQLAlchemyError:
+        db.session.rollback()
+        flash("Could not create deck. Please try again.", "danger")
+        return redirect(next_url)
 
-    db.session.commit()
-    if created_count == 0 and final_deck:
-        flash(f"Deck already exists: {'::'.join(tokens)}", "info")
-    elif created_count == 1 and final_deck:
-        flash(f"Created deck: {final_deck.name}", "success")
+    if upsert_result.created_count == 0 and upsert_result.final_deck:
+        flash(f"Deck already exists: {'::'.join(upsert_result.path_tokens)}", "info")
+    elif upsert_result.created_count == 1 and upsert_result.final_deck:
+        flash(f"Created deck: {upsert_result.final_deck.name}", "success")
     else:
-        flash(f"Created {created_count} decks: {'::'.join(created_names)}", "success")
+        flash(f"Created {upsert_result.created_count} decks: {'::'.join(upsert_result.created_names)}", "success")
     return redirect(next_url)
 
 
