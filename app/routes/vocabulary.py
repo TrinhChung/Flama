@@ -21,10 +21,9 @@ from sqlalchemy import func, or_
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import aliased, selectinload
 
-from app.presenters import vocabulary_presenter as vocabulary_pstr
-from app.repositories import vocabulary_repository as vocabulary_ctrl
-from app.repositories.deck_tree_query import collect_subtree_ids as _collect_deck_subtree_ids
-from app.repositories.study_repository import (
+from app.controllers import vocabulary_controller as vocabulary_ctrl
+from app.controllers.deck_controller import collect_subtree_ids as _collect_deck_subtree_ids
+from app.controllers.study_controller import (
     LEARNING_QUEUE,
     LEARN_QUEUE,
     NEW_QUEUE,
@@ -63,6 +62,7 @@ def restrict_non_admin_routes():
         "vocabulary.index",
         "vocabulary.study_deck",
         "vocabulary.browse",
+        "vocabulary.create_deck",
         "vocabulary.browse_api_decks_tree",
         "vocabulary.browse_api_cards",
         "vocabulary.browse_api_card_detail",
@@ -72,6 +72,7 @@ def restrict_non_admin_routes():
         "vocabulary.browse_api_notes",
         "vocabulary.browse_api_update_note",
         "vocabulary.delete_deck",
+        "vocabulary.reset_deck",
     }
     if endpoint in allowed_endpoints:
         return None
@@ -159,7 +160,7 @@ def _apply_clone_overlay_to_browse_payload(
     clone_scope,
     deck_lookup: dict[int, str],
 ):
-    from app.services import flashcards_share
+    from app.controllers import flashcards_share_controller as share_ctrl
 
     note_obj = card_obj.note
     if note_obj is None or note_obj.deck_id is None:
@@ -167,12 +168,12 @@ def _apply_clone_overlay_to_browse_payload(
 
     source_note_type_id = (clone_scope.install.source_note_type_id or note_obj.note_type_id or "").strip()
     if source_note_type_id:
-        schema_view = flashcards_share.build_clone_schema_view(
+        schema_view = share_ctrl.build_clone_schema_view(
             install=clone_scope.install,
             source_note_type_id=source_note_type_id,
         )
         overlay_field_defs = schema_view.field_defs or (note_obj.note_type.field_defs if note_obj.note_type else [])
-        overlay_field_values = flashcards_share.apply_clone_note_field_overrides(
+        overlay_field_values = share_ctrl.apply_clone_note_field_overrides(
             install=clone_scope.install,
             source_note=note_obj,
             schema_view=schema_view,
@@ -201,7 +202,7 @@ def _apply_clone_overlay_to_browse_payload(
         field_values=normalized_values,
         note_type=SimpleNamespace(field_defs=ordered_defs),
     )
-    display_triplet = vocabulary_pstr.note_display_triplet(proxy_note)
+    display_triplet = vocabulary_ctrl.note_display_triplet(proxy_note)
 
     card_payload = payload.get("card")
     if isinstance(card_payload, dict):
@@ -258,14 +259,24 @@ def _apply_clone_overlay_to_browse_payload(
 @login_required
 def browse_api_decks_tree():
     """Returns deck tree with aggregate card counts."""
-    return jsonify({"tree": vocabulary_ctrl.build_browse_deck_tree_payload(user_id=current_user.id, admin_mode=is_admin_user(current_user))})
+    return jsonify(
+        {
+            "tree": vocabulary_ctrl.build_browse_deck_tree_payload(
+                user_id=current_user.id,
+                admin_mode=is_admin_user(current_user),
+            )
+        }
+    )
 
 
 @vocabulary_bp.route("/api/browse/decks", methods=["GET"])
 @login_required
 def browse_api_decks():
     """Backward-compatible flat deck list endpoint."""
-    tree = vocabulary_ctrl.build_browse_deck_tree_payload(user_id=current_user.id, admin_mode=is_admin_user(current_user))
+    tree = vocabulary_ctrl.build_browse_deck_tree_payload(
+        user_id=current_user.id,
+        admin_mode=is_admin_user(current_user),
+    )
     flat_items = []
 
     def _flatten(nodes: list[dict]):
@@ -288,7 +299,7 @@ def browse_api_decks():
 @login_required
 def browse_api_cards():
     """List cards for Browse modal with deck/filter/sort/paging."""
-    from app.services import flashcards_share
+    from app.controllers import flashcards_share_controller as share_ctrl
     from models.flashcard import Card, DeckInstall, Note
 
     deck_id_raw = (request.args.get("deck_id") or "").strip()
@@ -318,7 +329,10 @@ def browse_api_cards():
             }
         )
 
-    scoped_decks = vocabulary_ctrl.collect_accessible_browse_decks(user_id=current_user.id, admin_mode=is_admin_user(current_user))
+    scoped_decks = vocabulary_ctrl.collect_accessible_browse_decks(
+        user_id=current_user.id,
+        admin_mode=is_admin_user(current_user),
+    )
     deck_lookup = {deck.id: deck.name for deck in scoped_decks}
     children_by_parent = vocabulary_ctrl.deck_children_map(scoped_decks)
     scoped_ids = {deck.id for deck in scoped_decks}
@@ -385,7 +399,7 @@ def browse_api_cards():
         for local_scope_deck_id in scope_candidates:
             if selected_ids is not None and local_scope_deck_id in covered_local_ids:
                 continue
-            clone_scope = flashcards_share.resolve_clone_scope_for_local_deck(
+            clone_scope = share_ctrl.resolve_clone_scope_for_local_deck(
                 user_id=current_user.id,
                 local_deck_id=int(local_scope_deck_id),
             )
@@ -469,18 +483,18 @@ def browse_api_cards():
     progress_map = _load_card_progress_map([card_obj.id for card_obj in pagination.items])
     rows = []
     for card_obj in pagination.items:
-        row_payload = vocabulary_pstr.build_browse_row(
+        row_payload = vocabulary_ctrl.build_browse_row(
             card_obj,
             deck_lookup,
             now,
             progress_obj=progress_map.get(card_obj.id),
         )
         if not is_admin_user(current_user) and card_obj.note and card_obj.note.user_id != current_user.id:
-            clone_scope = flashcards_share.resolve_clone_scope_for_card(
+            clone_scope = share_ctrl.resolve_clone_scope_for_card(
                 user_id=current_user.id,
                 card_obj=card_obj,
             )
-            if clone_scope is not None and flashcards_share.is_card_visible_in_clone_scope(
+            if clone_scope is not None and share_ctrl.is_card_visible_in_clone_scope(
                 scope=clone_scope,
                 card_obj=card_obj,
             ):
@@ -508,7 +522,7 @@ def browse_api_cards():
 @login_required
 def browse_api_card_detail(card_id: str):
     """Get full card detail for right editor panel."""
-    from app.services import flashcards_share
+    from app.controllers import flashcards_share_controller as share_ctrl
     from models.flashcard import Card, Note, NoteType
 
     query = (
@@ -524,14 +538,20 @@ def browse_api_card_detail(card_id: str):
     if not card_obj:
         return jsonify({"error": "Card not found"}), 404
 
-    deck_lookup = {deck.id: deck.name for deck in vocabulary_ctrl.collect_accessible_browse_decks(user_id=current_user.id, admin_mode=is_admin_user(current_user))}
+    deck_lookup = {
+        deck.id: deck.name
+        for deck in vocabulary_ctrl.collect_accessible_browse_decks(
+            user_id=current_user.id,
+            admin_mode=is_admin_user(current_user),
+        )
+    }
     clone_scope = None
     if not is_admin_user(current_user) and card_obj.note and card_obj.note.user_id != current_user.id:
-        clone_scope = flashcards_share.resolve_clone_scope_for_card(
+        clone_scope = share_ctrl.resolve_clone_scope_for_card(
             user_id=current_user.id,
             card_obj=card_obj,
         )
-        if clone_scope is None or not flashcards_share.is_card_visible_in_clone_scope(
+        if clone_scope is None or not share_ctrl.is_card_visible_in_clone_scope(
             scope=clone_scope,
             card_obj=card_obj,
         ):
@@ -545,7 +565,7 @@ def browse_api_card_detail(card_id: str):
         user_id=current_user.id,
         card_id=card_obj.id,
     ).first()
-    payload = vocabulary_pstr.build_browse_card_detail(
+    payload = vocabulary_ctrl.build_browse_card_detail(
         card_obj,
         deck_lookup,
         datetime.utcnow(),
@@ -565,7 +585,7 @@ def browse_api_card_detail(card_id: str):
 @login_required
 def browse_api_card_update(card_id: str):
     """Update card note fields/deck/tags from Browse editor."""
-    from app.services import flashcards_share
+    from app.controllers import flashcards_share_controller as share_ctrl
     from models.flashcard import Card, Note, NoteType
 
     query = Card.query.join(Note, Card.note_id == Note.id).filter(Card.id == card_id)
@@ -580,11 +600,11 @@ def browse_api_card_update(card_id: str):
     note_obj = card_obj.note
     clone_scope = None
     if not is_admin_user(current_user) and note_obj and note_obj.user_id != current_user.id:
-        clone_scope = flashcards_share.resolve_clone_scope_for_card(
+        clone_scope = share_ctrl.resolve_clone_scope_for_card(
             user_id=current_user.id,
             card_obj=card_obj,
         )
-        if clone_scope is None or not flashcards_share.is_card_visible_in_clone_scope(
+        if clone_scope is None or not share_ctrl.is_card_visible_in_clone_scope(
             scope=clone_scope,
             card_obj=card_obj,
         ):
@@ -653,7 +673,7 @@ def browse_api_card_update(card_id: str):
                 )
 
         if note_override_items:
-            _, validation_error = flashcards_share.upsert_clone_overlay(
+            _, validation_error = share_ctrl.upsert_clone_overlay(
                 deck_install=clone_scope.install,
                 payload={"note_field_overrides": note_override_items},
             )
@@ -662,7 +682,13 @@ def browse_api_card_update(card_id: str):
                 return jsonify({"error": validation_error}), 400
         db.session.commit()
 
-        deck_lookup = {deck.id: deck.name for deck in vocabulary_ctrl.collect_accessible_browse_decks(user_id=current_user.id, admin_mode=is_admin_user(current_user))}
+        deck_lookup = {
+            deck.id: deck.name
+            for deck in vocabulary_ctrl.collect_accessible_browse_decks(
+                user_id=current_user.id,
+                admin_mode=is_admin_user(current_user),
+            )
+        }
         for source_deck_id, local_deck_id in (clone_scope.source_to_local_deck_id or {}).items():
             local_name = deck_lookup.get(int(local_deck_id))
             if local_name:
@@ -672,7 +698,7 @@ def browse_api_card_update(card_id: str):
             card_id=card_obj.id,
         ).first()
         now = datetime.utcnow()
-        detail_payload = vocabulary_pstr.build_browse_card_detail(card_obj, deck_lookup, now, progress_obj=progress)
+        detail_payload = vocabulary_ctrl.build_browse_card_detail(card_obj, deck_lookup, now, progress_obj=progress)
         detail_payload = _apply_clone_overlay_to_browse_payload(
             payload=detail_payload,
             card_obj=card_obj,
@@ -687,12 +713,10 @@ def browse_api_card_update(card_id: str):
             }
         )
 
-    update_deck = False
     if "deck_id" in payload:
-        update_deck = True
         raw_deck_id = payload.get("deck_id")
         if raw_deck_id in (None, ""):
-            selected_deck_id = None
+            note_obj.deck_id = None
         else:
             try:
                 selected_deck_id = int(raw_deck_id)
@@ -701,27 +725,30 @@ def browse_api_card_update(card_id: str):
             if not Deck.query.get(selected_deck_id):
                 return jsonify({"error": "Deck not found"}), 404
             if not is_admin_user(current_user):
-                allowed_deck_ids = {deck.id for deck in vocabulary_ctrl.collect_accessible_browse_decks(user_id=current_user.id, admin_mode=is_admin_user(current_user))}
+                allowed_deck_ids = {
+                    deck.id
+                    for deck in vocabulary_ctrl.collect_accessible_browse_decks(
+                        user_id=current_user.id,
+                        admin_mode=is_admin_user(current_user),
+                    )
+                }
                 if selected_deck_id not in allowed_deck_ids:
                     return jsonify({"error": "Deck is not accessible"}), 403
+            note_obj.deck_id = selected_deck_id
 
-    update_tags = False
-    tags_to_update = None
     if "tags" in payload:
-        update_tags = True
-        tags_to_update = _normalize_tags_payload(payload.get("tags"))
+        note_obj.tags = _normalize_tags_payload(payload.get("tags"))
 
-    from app.services.note_management_service import update_note_fields_and_deck
-    update_note_fields_and_deck(
-        note_obj=note_obj,
-        field_values=field_values,
-        new_deck_id=selected_deck_id if update_deck else None,
-        tags=tags_to_update,
-        update_deck=update_deck,
-        update_tags=update_tags
-    )
+    note_obj.field_values = field_values
+    db.session.commit()
 
-    deck_lookup = {deck.id: deck.name for deck in vocabulary_ctrl.collect_accessible_browse_decks(user_id=current_user.id, admin_mode=is_admin_user(current_user))}
+    deck_lookup = {
+        deck.id: deck.name
+        for deck in vocabulary_ctrl.collect_accessible_browse_decks(
+            user_id=current_user.id,
+            admin_mode=is_admin_user(current_user),
+        )
+    }
     progress = CardProgress.query.filter_by(
         user_id=current_user.id,
         card_id=card_obj.id,
@@ -730,8 +757,8 @@ def browse_api_card_update(card_id: str):
     return jsonify(
         {
             "success": True,
-            "row": vocabulary_pstr.build_browse_row(card_obj, deck_lookup, now, progress_obj=progress),
-            "detail": vocabulary_pstr.build_browse_card_detail(card_obj, deck_lookup, now, progress_obj=progress),
+            "row": vocabulary_ctrl.build_browse_row(card_obj, deck_lookup, now, progress_obj=progress),
+            "detail": vocabulary_ctrl.build_browse_card_detail(card_obj, deck_lookup, now, progress_obj=progress),
         }
     )
 
@@ -749,21 +776,16 @@ def browse_api_card_delete(card_id: str):
     if not card_obj:
         return jsonify({"error": "Card not found"}), 404
 
-    note_obj = card_obj.note
-    try:
-        db.session.delete(card_obj)
-        if note_obj is not None:
-            remaining_cards = Card.query.filter(
-                Card.note_id == note_obj.id,
-                Card.id != card_obj.id,
-            ).count()
-            if remaining_cards == 0:
-                db.session.delete(note_obj)
-        db.session.commit()
-    except SQLAlchemyError:
-        db.session.rollback()
-        return jsonify({"error": "Failed to delete card"}), 500
+    note_id = card_obj.note_id
+    db.session.delete(card_obj)
+    db.session.flush()
 
+    remaining = Card.query.filter(Card.note_id == note_id).count()
+    if remaining == 0:
+        note_obj = Note.query.get(note_id)
+        if note_obj:
+            db.session.delete(note_obj)
+    db.session.commit()
     return jsonify({"success": True})
 
 
@@ -817,12 +839,8 @@ def browse_api_update_note(note_id: str):
         if not key_name:
             continue
         current_values[key_name] = "" if value is None else str(value)
-    from app.services.note_management_service import update_note_fields_and_deck
-    update_note_fields_and_deck(
-        note_obj=note_obj,
-        field_values=current_values
-    )
-
+    note_obj.field_values = current_values
+    db.session.commit()
     return jsonify({"success": True, "note": {"id": note_obj.id, "fields": note_obj.field_values}})
 
 
@@ -836,44 +854,49 @@ def create_level():
 @login_required
 def create_deck():
     """Create deck(s) from path, auto-creating missing parents."""
-    if not is_admin_user(current_user):
-        return redirect(url_for("main.dashboard"))
-
     parent_id_raw = (request.form.get("parent_id") or "").strip()
     deck_path_raw = (request.form.get("deck_path") or "").strip()
     deck_name = (request.form.get("name") or "").strip() or "New Deck"
     next_url = _resolve_next_url()
+    admin_mode = is_admin_user(current_user)
+    parent_resolution = vocabulary_ctrl.resolve_create_deck_parent(
+        parent_id_raw=parent_id_raw,
+        user_id=current_user.id,
+        admin_mode=admin_mode,
+    )
+    if parent_resolution.error:
+        flash(parent_resolution.error, "danger")
+        return redirect(next_url)
 
-    tokens = [item.strip() for item in deck_path_raw.split("::") if item.strip()]
-    if not tokens:
-        if parent_id_raw:
-            try:
-                parent_id = int(parent_id_raw)
-            except ValueError:
-                flash("Invalid parent deck.", "danger")
-                return redirect(next_url)
-            parent_deck = Deck.query.get(parent_id)
-            if not parent_deck:
-                flash("Parent deck not found.", "danger")
-                return redirect(next_url)
-            tokens = [parent_deck.name, deck_name]
-        else:
-            tokens = [deck_name]
+    path_tokens = vocabulary_ctrl.parse_create_deck_tokens(
+        deck_path_raw=deck_path_raw,
+        fallback_name=deck_name,
+    )
+    path_tokens = vocabulary_ctrl.normalize_create_deck_tokens_for_parent(
+        path_tokens=path_tokens,
+        parent_path_tokens=vocabulary_ctrl.deck_name_path_tokens(parent_resolution.parent_deck),
+        fallback_name=deck_name,
+    )
 
-    from app.services.deck_management_service import create_decks_path
-    
-    parent_id = None
-    if parent_id_raw and parent_deck:
-        pass # tokens array was modified to include the parent name as root if it exists
+    try:
+        upsert_result = vocabulary_ctrl.upsert_deck_path(
+            parent_id=parent_resolution.parent_id,
+            path_tokens=path_tokens,
+            owner_user_id=getattr(current_user, "id", None),
+            admin_mode=admin_mode,
+        )
+        db.session.commit()
+    except SQLAlchemyError:
+        db.session.rollback()
+        flash("Could not create deck. Please try again.", "danger")
+        return redirect(next_url)
 
-    created_count, final_deck = create_decks_path(tokens=tokens, parent_id=None)
-
-    if created_count == 0 and final_deck:
-        flash(f"Deck already exists: {'::'.join(tokens)}", "info")
-    elif created_count == 1 and final_deck:
-        flash(f"Created deck: {final_deck.name}", "success")
+    if upsert_result.created_count == 0 and upsert_result.final_deck:
+        flash(f"Deck already exists: {'::'.join(upsert_result.path_tokens)}", "info")
+    elif upsert_result.created_count == 1 and upsert_result.final_deck:
+        flash(f"Created deck: {upsert_result.final_deck.name}", "success")
     else:
-        flash(f"Created {created_count} decks: {'::'.join(tokens)}", "success")
+        flash(f"Created {upsert_result.created_count} decks: {'::'.join(upsert_result.created_names)}", "success")
     return redirect(next_url)
 
 
@@ -898,10 +921,9 @@ def rename_deck(deck_id: int):
         flash(f"Deck '{new_name}' already exists at this level.", "danger")
         return redirect(next_url)
 
-    from app.services.deck_management_service import rename_deck as rename_deck_service
-    
+    deck.name = new_name
     try:
-        rename_deck_service(deck_obj=deck, new_name=new_name)
+        db.session.commit()
         flash(f"Deck renamed to: {new_name}", "success")
     except SQLAlchemyError:
         db.session.rollback()
@@ -966,10 +988,10 @@ def move_deck(deck_id: int | None = None):
         flash(f"Parent '{parent_label}' already has a deck named '{deck.name}'.", "danger")
         return redirect(next_url)
 
-    from app.services.deck_management_service import move_deck as move_deck_service
-    
+    deck.parent_id = new_parent_id
+    deck.position = vocabulary_ctrl.next_deck_position(new_parent_id)
     try:
-        move_deck_service(deck_obj=deck, new_parent_id=new_parent_id)
+        db.session.commit()
         flash(f"Deck '{deck.name}' moved successfully.", "success")
     except SQLAlchemyError:
         db.session.rollback()
@@ -997,15 +1019,31 @@ def delete_deck(deck_id: int):
     deck_name = deck.name
     next_url = _resolve_next_url()
 
-    from app.services.deck_management_service import delete_deck_subtree
-    
-    try:
-        delete_deck_subtree(deck_obj=deck, user_id=current_user.id, is_admin=is_admin_user(current_user))
-        flash(f"Deleted deck '{deck_name}' and all its contents.", "success")
-    except SQLAlchemyError:
-        db.session.rollback()
-        flash("Failed to delete deck. Please try again.", "danger")
+    deck_ids_to_delete = _collect_deck_subtree_ids(deck.id)
 
+    from models.flashcard import DeckInstall
+
+    install_query = DeckInstall.query.filter(DeckInstall.local_deck_id.in_(deck_ids_to_delete))
+    if not is_admin_user(current_user):
+        install_query = install_query.filter(DeckInstall.user_id == current_user.id)
+    install_query.delete(synchronize_session=False)
+
+    note_rows = db.session.query(Note.id).filter(Note.deck_id.in_(deck_ids_to_delete)).all()
+    note_ids = [str(row[0]) for row in note_rows if row and row[0]]
+    if note_ids:
+        card_rows = db.session.query(Card.id).filter(Card.note_id.in_(note_ids)).all()
+        card_ids = [str(row[0]) for row in card_rows if row and row[0]]
+        if card_ids:
+            CardProgress.query.filter(CardProgress.card_id.in_(card_ids)).delete(
+                synchronize_session=False
+            )
+            Card.query.filter(Card.id.in_(card_ids)).delete(synchronize_session=False)
+        Note.query.filter(Note.id.in_(note_ids)).delete(synchronize_session=False)
+
+    db.session.delete(deck)
+    db.session.commit()
+
+    flash(f"Deleted deck '{deck_name}' and all its contents.", "success")
     return redirect(next_url)
 
 
@@ -1013,26 +1051,62 @@ def delete_deck(deck_id: int):
 @login_required
 def reset_deck(deck_id: int):
     """Reset current-user progress for cards within a deck subtree."""
-    if not is_admin_user(current_user):
+    deck = Deck.query.get_or_404(deck_id)
+    if not is_admin_user(current_user) and not _can_current_user_delete_cloned_deck(deck):
         return redirect(url_for("main.dashboard"))
 
-    deck = Deck.query.get_or_404(deck_id)
     next_url = _resolve_next_url()
 
-    try:
-        from app.services.deck_management_service import reset_deck_progress
-        deleted_count = reset_deck_progress(deck_obj=deck, user_id=current_user.id)
-    except SQLAlchemyError:
-        db.session.rollback()
-        deleted_count = 0
+    deck_ids = _collect_deck_subtree_ids(deck.id)
 
-    if deleted_count > 0:
+    card_id_set = {
+        str(row[0])
+        for row in (
+            db.session.query(Card.id)
+            .join(Note, Card.note_id == Note.id)
+            .filter(Note.deck_id.in_(deck_ids))
+            .all()
+        )
+        if row and row[0]
+    }
+
+    # For logical-overlay installs, reset progress on source cards visible in this local scope.
+    from app.controllers import flashcards_share_controller as share_ctrl
+
+    seen_scopes: set[tuple[str, int]] = set()
+    for local_deck_id in sorted({int(deck_id_item) for deck_id_item in deck_ids if deck_id_item is not None}):
+        clone_scope = share_ctrl.resolve_clone_scope_for_local_deck(
+            user_id=current_user.id,
+            local_deck_id=local_deck_id,
+        )
+        if clone_scope is None:
+            continue
+        scope_key = (clone_scope.install.id, int(clone_scope.local_scope_deck_id))
+        if scope_key in seen_scopes:
+            continue
+        seen_scopes.add(scope_key)
+
+        clone_card_rows = share_ctrl.query_clone_scope_cards(clone_scope).with_entities(Card.id).all()
+        for row in clone_card_rows:
+            if row and row[0]:
+                card_id_set.add(str(row[0]))
+
+    card_ids = sorted(card_id_set)
+
+    if card_ids:
+        deleted_count = (
+            CardProgress.query.filter(
+                CardProgress.user_id == current_user.id,
+                CardProgress.card_id.in_(card_ids),
+            ).delete(synchronize_session=False)
+            or 0
+        )
+        db.session.commit()
         flash(f"Reset progress for {deleted_count} cards in '{deck.name}' (your account).", "success")
     else:
         flash(f"No cards to reset in '{deck.name}'.", "info")
 
     return redirect(next_url)
-
 
 
 @vocabulary_bp.route("/topics/new", methods=["POST"])
@@ -1076,11 +1150,11 @@ def _select_next_note_card(cards: List[Card], progress_map: Dict[str, CardProgre
 
 
 def _build_note_study_card_payload(card_obj: Card | None) -> SimpleNamespace | None:
-    return vocabulary_pstr.build_note_study_card_payload(card_obj)
+    return vocabulary_ctrl.build_note_study_card_payload(card_obj)
 
 
 def _render_note_study_flashcard(card_obj: Card | None) -> dict:
-    return vocabulary_pstr.render_note_study_flashcard(card_obj)
+    return vocabulary_ctrl.render_note_study_flashcard(card_obj)
 
 
 def _query_study_cards_for_deck_ids(deck_ids: list[int]) -> list[Card]:
@@ -1133,25 +1207,25 @@ def study_deck(deck_id: int):
 
     rendered_data = _render_note_study_flashcard(selected_card)
     card_payload = _build_note_study_card_payload(selected_card)
-    from app.services import flashcards_share
+    from app.controllers import flashcards_share_controller as share_ctrl
 
-    clone_scope = flashcards_share.resolve_clone_scope_for_local_deck(
+    clone_scope = share_ctrl.resolve_clone_scope_for_local_deck(
         user_id=current_user.id,
         local_deck_id=root_deck.id,
     )
     if (
         clone_scope is not None
         and selected_card is not None
-        and flashcards_share.is_card_visible_in_clone_scope(scope=clone_scope, card_obj=selected_card)
+        and share_ctrl.is_card_visible_in_clone_scope(scope=clone_scope, card_obj=selected_card)
     ):
         source_note_type_id = (clone_scope.install.source_note_type_id or selected_card.note.note_type_id or "").strip()
         if source_note_type_id:
-            schema_view = flashcards_share.build_clone_schema_view(
+            schema_view = share_ctrl.build_clone_schema_view(
                 install=clone_scope.install,
                 source_note_type_id=source_note_type_id,
             )
             overlay_field_defs = schema_view.field_defs or selected_card.note.note_type.field_defs
-            overlay_field_values = flashcards_share.apply_clone_note_field_overrides(
+            overlay_field_values = share_ctrl.apply_clone_note_field_overrides(
                 install=clone_scope.install,
                 source_note=selected_card.note,
                 schema_view=schema_view,

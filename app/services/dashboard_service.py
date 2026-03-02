@@ -51,11 +51,21 @@ def build_dashboard_data(current_user) -> Tuple[List[DeckNode], int, int, int, b
             .all()
         )
     else:
+        owned_root_ids = {
+            int(deck_id)
+            for (deck_id,) in (
+                db.session.query(Deck.id)
+                .filter(Deck.owner_user_id == current_user.id)
+                .all()
+            )
+            if deck_id is not None
+        }
         installs = DeckInstall.query.filter_by(user_id=current_user.id).all()
         installed_root_ids = {inst.local_deck_id for inst in installs if inst.local_deck_id}
-        if installed_root_ids:
+        root_ids = {int(deck_id) for deck_id in installed_root_ids if deck_id is not None} | owned_root_ids
+        if root_ids:
             visible_ids: set[int] = set()
-            frontier: set[int] = {int(deck_id) for deck_id in installed_root_ids}
+            frontier: set[int] = set(root_ids)
             while frontier:
                 current_ids = {deck_id for deck_id in frontier if deck_id not in visible_ids}
                 if not current_ids:

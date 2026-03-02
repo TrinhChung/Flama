@@ -38,8 +38,6 @@ from app.routes.flashcards import (
 @flashcards_bp.route("/flashcards/note-types")
 @login_required
 def note_type_manager():
-    if not is_admin_user(current_user):
-        return redirect(url_for("main.dashboard"))
     note_types = (
         NoteType.query.filter_by(user_id=current_user.id)
         .order_by(NoteType.updated_at.desc(), NoteType.created_at.desc())
@@ -50,8 +48,6 @@ def note_type_manager():
 @flashcards_bp.route("/flashcards/note-types/<note_type_id>")
 @login_required
 def note_type_detail_page(note_type_id: str):
-    if not is_admin_user(current_user):
-        return redirect(url_for("main.dashboard"))
     note_type = _get_note_type_or_404(note_type_id)
     if not note_type:
         return redirect(url_for("flashcards.note_type_manager"))
@@ -61,8 +57,6 @@ def note_type_detail_page(note_type_id: str):
 @flashcards_bp.route("/flashcards/note-types/<note_type_id>/fields")
 @login_required
 def note_type_fields_page(note_type_id: str):
-    if not is_admin_user(current_user):
-        return redirect(url_for("main.dashboard"))
     note_type = _get_note_type_or_404(note_type_id)
     if not note_type:
         return redirect(url_for("flashcards.note_type_manager"))
@@ -475,4 +469,3 @@ def seed_default_note_type():
     from app.services.note_type_service import ensure_legacy_note_type_and_commit
     note_type, template = ensure_legacy_note_type_and_commit(current_user.id)
     return jsonify({"note_type_id": note_type.id, "template_id": template.id})
-

@@ -18,7 +18,11 @@ from models.flashcard import (
     DeckCloneNoteFieldOverride,
     DeckInstall,
     DeckMarketplaceItem,
+    DeckReview,
     Note,
+    NoteType,
+    NoteTypeInstall,
+    NoteTypeReview,
 )
 from models.user import User
 from models.deck import Deck
@@ -533,6 +537,78 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             self.assertIsNotNone(override_row)
             self.assertEqual(override_row.operation, "set")
             self.assertEqual(override_row.value, "\u72ac*")
+
+    def test_shared_deck_install_clones_source_note_type_for_installer(self):
+        note_type = self._create_note_type()
+        note_type_id = note_type["id"]
+
+        owner_note_resp = self.client.post(
+            "/api/notes",
+            json={
+                "note_type_id": note_type_id,
+                "deck_id": self.deck_id,
+                "field_values": {
+                    "Word": "\u72ac",
+                    "Reading": "\u3044\u306c",
+                    "Meaning": "dog",
+                },
+            },
+        )
+        self.assertEqual(owner_note_resp.status_code, 201)
+
+        with self.app.app_context():
+            learner = User(username="nt-clone-learner", email="nt-clone-learner@example.com", is_admin=False)
+            learner.set_password("password")
+            db.session.add(learner)
+            db.session.flush()
+            learner_id = learner.id
+
+            deck_item = DeckMarketplaceItem(
+                owner_user_id=self.user_id,
+                source_deck_id=self.deck_id,
+                source_note_type_id=note_type_id,
+                title="Shared Deck Clones Note Type",
+                description="Deck description",
+                primary_category="General",
+                tags=[],
+                preview_text="Preview",
+                pricing_mode="free",
+                price_cents=0,
+                version="1.0.0",
+                publish_status="published",
+            )
+            db.session.add(deck_item)
+            db.session.commit()
+            deck_item_id = deck_item.id
+
+        learner_client = self.app.test_client()
+        learner_client.post(
+            "/login",
+            data={"email": "nt-clone-learner@example.com", "password": "password"},
+            follow_redirects=True,
+        )
+        install_resp = learner_client.post(f"/api/shared/decks/{deck_item_id}/install")
+        self.assertEqual(install_resp.status_code, 201)
+        installed_root_id = int((install_resp.get_json() or {}).get("installed_deck_id"))
+
+        with self.app.app_context():
+            install_row = DeckInstall.query.filter_by(deck_item_id=deck_item_id, user_id=learner_id).first()
+            self.assertIsNotNone(install_row)
+            root_deck = Deck.query.get(installed_root_id)
+            self.assertIsNotNone(root_deck)
+
+            note_type_install = NoteTypeInstall.query.filter_by(
+                source_note_type_id=note_type_id,
+                user_id=learner_id,
+            ).first()
+            self.assertIsNotNone(note_type_install)
+            self.assertIsNotNone(note_type_install.installed_note_type_id)
+            self.assertNotEqual(note_type_install.installed_note_type_id, note_type_id)
+
+            installed_note_type = NoteType.query.get(note_type_install.installed_note_type_id)
+            self.assertIsNotNone(installed_note_type)
+            self.assertEqual(installed_note_type.user_id, learner_id)
+            self.assertEqual(root_deck.note_type_id, installed_note_type.id)
 
     def test_shared_deck_clone_pins_snapshot_against_new_source_notes(self):
         note_type = self._create_note_type()
@@ -1314,6 +1390,82 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             self.assertIn(sample.get("word"), source_words)
             self.assertIsNotNone(sample.get("note_id"))
 
+    def test_shared_deck_detail_includes_other_users_recent_reviews(self):
+        with self.app.app_context():
+            owner = User(username="review-owner", email="review-owner@example.com", is_admin=False)
+            owner.set_password("password")
+            viewer = User(username="review-viewer", email="review-viewer@example.com", is_admin=False)
+            viewer.set_password("password")
+            reviewer_a = User(username="alice", email="alice@example.com", is_admin=False)
+            reviewer_a.set_password("password")
+            reviewer_b = User(username="bob", email="bob@example.com", is_admin=False)
+            reviewer_b.set_password("password")
+            db.session.add_all([owner, viewer, reviewer_a, reviewer_b])
+            db.session.flush()
+
+            deck_item = DeckMarketplaceItem(
+                owner_user_id=owner.id,
+                title="Deck With Public Reviews",
+                description="Deck description",
+                primary_category="General",
+                tags=[],
+                preview_text="Preview",
+                pricing_mode="free",
+                price_cents=0,
+                version="1.0.0",
+                publish_status="published",
+            )
+            db.session.add(deck_item)
+            db.session.flush()
+
+            db.session.add(
+                DeckReview(
+                    deck_item_id=deck_item.id,
+                    user_id=reviewer_a.id,
+                    rating=5,
+                    comment="Great deck!",
+                )
+            )
+            db.session.add(
+                DeckReview(
+                    deck_item_id=deck_item.id,
+                    user_id=reviewer_b.id,
+                    rating=4,
+                    comment="Useful content.",
+                )
+            )
+            # Viewer's own review should stay in my_review, not in recent_reviews list.
+            db.session.add(
+                DeckReview(
+                    deck_item_id=deck_item.id,
+                    user_id=viewer.id,
+                    rating=3,
+                    comment="My own review",
+                )
+            )
+            db.session.commit()
+            deck_item_id = deck_item.id
+
+        viewer_client = self.app.test_client()
+        viewer_client.post(
+            "/login",
+            data={"email": "review-viewer@example.com", "password": "password"},
+            follow_redirects=True,
+        )
+
+        detail_resp = viewer_client.get(f"/api/shared/decks/{deck_item_id}")
+        self.assertEqual(detail_resp.status_code, 200)
+        payload = detail_resp.get_json() or {}
+
+        recent_reviews = payload.get("recent_reviews") or []
+        self.assertEqual(int(payload.get("recent_reviews_count") or 0), 2)
+        self.assertEqual(len(recent_reviews), 2)
+        usernames = {str(item.get("username") or "") for item in recent_reviews}
+        self.assertEqual(usernames, {"alice", "bob"})
+        comments = {str(item.get("comment") or "") for item in recent_reviews}
+        self.assertIn("Great deck!", comments)
+        self.assertIn("Useful content.", comments)
+
     def test_note_create_rejects_mixed_note_types_in_same_deck(self):
         note_type_a = self._create_note_type()
         note_type_a_id = note_type_a["id"]
@@ -1635,6 +1787,135 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         html = response.get_data(as_text=True)
         self.assertIn("Step A - Upload & Parse", html)
         self.assertIn("Step D - Review & Execute", html)
+
+    def test_shared_note_type_rate_is_limited_to_two_submissions_per_user(self):
+        with self.app.app_context():
+            owner = User(username="nt-owner", email="nt-owner@example.com", is_admin=False)
+            owner.set_password("password")
+            learner = User(username="nt-rater", email="nt-rater@example.com", is_admin=False)
+            learner.set_password("password")
+            db.session.add_all([owner, learner])
+            db.session.flush()
+            learner_id = learner.id
+
+            note_type = NoteType(
+                user_id=owner.id,
+                name="Rate Limit NoteType",
+                description="desc",
+                primary_category="General",
+                preview_text="preview",
+                pricing_mode="free",
+                price_cents=0,
+                publish_status="published",
+                version="1.0.0",
+            )
+            db.session.add(note_type)
+            db.session.commit()
+            note_type_id = note_type.id
+
+        learner_client = self.app.test_client()
+        learner_client.post(
+            "/login",
+            data={"email": "nt-rater@example.com", "password": "password"},
+            follow_redirects=True,
+        )
+
+        with patch("app.routes.flashcards.share._can_user_rate_note_type", return_value=True):
+            first_resp = learner_client.post(
+                f"/api/shared/note-types/{note_type_id}/rate",
+                json={"rating": 5, "comment": "first"},
+            )
+            self.assertEqual(first_resp.status_code, 200)
+
+            second_resp = learner_client.post(
+                f"/api/shared/note-types/{note_type_id}/rate",
+                json={"rating": 4, "comment": "second"},
+            )
+            self.assertEqual(second_resp.status_code, 200)
+
+            third_resp = learner_client.post(
+                f"/api/shared/note-types/{note_type_id}/rate",
+                json={"rating": 3, "comment": "third"},
+            )
+            self.assertEqual(third_resp.status_code, 403)
+
+            detail_resp = learner_client.get(f"/api/shared/note-types/{note_type_id}")
+            self.assertEqual(detail_resp.status_code, 200)
+            detail_payload = detail_resp.get_json() or {}
+            self.assertEqual(int(detail_payload.get("review_submission_count") or 0), 2)
+            self.assertEqual(int(detail_payload.get("review_submissions_remaining") or 0), 0)
+            self.assertFalse(bool(detail_payload.get("can_rate")))
+
+        with self.app.app_context():
+            review = NoteTypeReview.query.filter_by(note_type_id=note_type_id, user_id=learner_id).first()
+            self.assertIsNotNone(review)
+            self.assertEqual(review.rating, 4)
+            self.assertEqual(review.comment, "second")
+
+    def test_shared_deck_rate_is_limited_to_two_submissions_per_user(self):
+        with self.app.app_context():
+            owner = User(username="deck-owner", email="deck-owner@example.com", is_admin=False)
+            owner.set_password("password")
+            learner = User(username="deck-rater", email="deck-rater@example.com", is_admin=False)
+            learner.set_password("password")
+            db.session.add_all([owner, learner])
+            db.session.flush()
+            learner_id = learner.id
+
+            deck_item = DeckMarketplaceItem(
+                owner_user_id=owner.id,
+                title="Rate Limit Deck",
+                description="desc",
+                primary_category="General",
+                tags=[],
+                preview_text="preview",
+                pricing_mode="free",
+                price_cents=0,
+                version="1.0.0",
+                publish_status="published",
+            )
+            db.session.add(deck_item)
+            db.session.commit()
+            deck_item_id = deck_item.id
+
+        learner_client = self.app.test_client()
+        learner_client.post(
+            "/login",
+            data={"email": "deck-rater@example.com", "password": "password"},
+            follow_redirects=True,
+        )
+
+        with patch("app.routes.flashcards.share._can_user_rate_deck", return_value=True):
+            first_resp = learner_client.post(
+                f"/api/shared/decks/{deck_item_id}/rate",
+                json={"rating": 5, "comment": "first"},
+            )
+            self.assertEqual(first_resp.status_code, 200)
+
+            second_resp = learner_client.post(
+                f"/api/shared/decks/{deck_item_id}/rate",
+                json={"rating": 4, "comment": "second"},
+            )
+            self.assertEqual(second_resp.status_code, 200)
+
+            third_resp = learner_client.post(
+                f"/api/shared/decks/{deck_item_id}/rate",
+                json={"rating": 3, "comment": "third"},
+            )
+            self.assertEqual(third_resp.status_code, 403)
+
+            detail_resp = learner_client.get(f"/api/shared/decks/{deck_item_id}")
+            self.assertEqual(detail_resp.status_code, 200)
+            detail_payload = detail_resp.get_json() or {}
+            self.assertEqual(int(detail_payload.get("review_submission_count") or 0), 2)
+            self.assertEqual(int(detail_payload.get("review_submissions_remaining") or 0), 0)
+            self.assertFalse(bool(detail_payload.get("can_rate")))
+
+        with self.app.app_context():
+            review = DeckReview.query.filter_by(deck_item_id=deck_item_id, user_id=learner_id).first()
+            self.assertIsNotNone(review)
+            self.assertEqual(review.rating, 4)
+            self.assertEqual(review.comment, "second")
 
 
 if __name__ == "__main__":

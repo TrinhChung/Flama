@@ -135,7 +135,6 @@
       return `
         <div class="d-flex gap-2">
           <button class="btn btn-sm btn-primary install-btn" data-id="${item.id}" ${installDisabled}>${installLabel}</button>
-          <button class="btn btn-sm btn-outline-secondary rate-btn" data-id="${item.id}">Rate</button>
         </div>
       `;
     }
@@ -194,23 +193,6 @@
       await Promise.all([loadItems(), loadRecommendations()]);
     }
 
-    async function onRate(id) {
-      const ratingRaw = window.prompt("Rating 1-5");
-      if (ratingRaw === null) return;
-      const rating = Number(ratingRaw);
-      if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
-        window.alert("Rating must be 1-5.");
-        return;
-      }
-      const comment = window.prompt("Comment (optional)") || "";
-      await requestJson(`/api/shared/note-types/${id}/rate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rating, comment }),
-      });
-      await Promise.all([loadItems(), loadRecommendations()]);
-    }
-
     filterForm?.addEventListener("input", () => {
       loadItems().catch((error) => window.alert(error.message));
     });
@@ -255,14 +237,6 @@
         const saveBtn = document.getElementById("editNtSaveBtn");
         saveBtn.onclick = onSave;
         return;
-      }
-      const rateBtn = event.target.closest(".rate-btn");
-      if (rateBtn) {
-        try {
-          await onRate(rateBtn.getAttribute("data-id"));
-        } catch (error) {
-          window.alert(error.message);
-        }
       }
     });
 
