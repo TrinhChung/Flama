@@ -21,9 +21,9 @@ from sqlalchemy import func, or_
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import aliased, selectinload
 
-from app.controllers import vocabulary_controller as vocabulary_ctrl
-from app.controllers.deck_controller import collect_subtree_ids as _collect_deck_subtree_ids
-from app.controllers.study_controller import (
+from app.repositories import vocabulary_repository as vocabulary_ctrl
+from app.repositories.deck_tree_query import collect_subtree_ids as _collect_deck_subtree_ids
+from app.repositories.study_repository import (
     LEARNING_QUEUE,
     LEARN_QUEUE,
     NEW_QUEUE,
@@ -160,7 +160,7 @@ def _apply_clone_overlay_to_browse_payload(
     clone_scope,
     deck_lookup: dict[int, str],
 ):
-    from app.controllers import flashcards_share_controller as share_ctrl
+    from app.services import flashcards_share as share_ctrl
 
     note_obj = card_obj.note
     if note_obj is None or note_obj.deck_id is None:
@@ -299,7 +299,7 @@ def browse_api_decks():
 @login_required
 def browse_api_cards():
     """List cards for Browse modal with deck/filter/sort/paging."""
-    from app.controllers import flashcards_share_controller as share_ctrl
+    from app.services import flashcards_share as share_ctrl
     from models.flashcard import Card, DeckInstall, Note
 
     deck_id_raw = (request.args.get("deck_id") or "").strip()
@@ -522,7 +522,7 @@ def browse_api_cards():
 @login_required
 def browse_api_card_detail(card_id: str):
     """Get full card detail for right editor panel."""
-    from app.controllers import flashcards_share_controller as share_ctrl
+    from app.services import flashcards_share as share_ctrl
     from models.flashcard import Card, Note, NoteType
 
     query = (
@@ -585,7 +585,7 @@ def browse_api_card_detail(card_id: str):
 @login_required
 def browse_api_card_update(card_id: str):
     """Update card note fields/deck/tags from Browse editor."""
-    from app.controllers import flashcards_share_controller as share_ctrl
+    from app.services import flashcards_share as share_ctrl
     from models.flashcard import Card, Note, NoteType
 
     query = Card.query.join(Note, Card.note_id == Note.id).filter(Card.id == card_id)
@@ -1071,7 +1071,7 @@ def reset_deck(deck_id: int):
     }
 
     # For logical-overlay installs, reset progress on source cards visible in this local scope.
-    from app.controllers import flashcards_share_controller as share_ctrl
+    from app.services import flashcards_share as share_ctrl
 
     seen_scopes: set[tuple[str, int]] = set()
     for local_deck_id in sorted({int(deck_id_item) for deck_id_item in deck_ids if deck_id_item is not None}):
@@ -1207,7 +1207,7 @@ def study_deck(deck_id: int):
 
     rendered_data = _render_note_study_flashcard(selected_card)
     card_payload = _build_note_study_card_payload(selected_card)
-    from app.controllers import flashcards_share_controller as share_ctrl
+    from app.services import flashcards_share as share_ctrl
 
     clone_scope = share_ctrl.resolve_clone_scope_for_local_deck(
         user_id=current_user.id,

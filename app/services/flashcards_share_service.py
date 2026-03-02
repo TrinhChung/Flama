@@ -656,6 +656,7 @@ def build_shared_deck_item_payload(
     user_id: int,
     sample_limit: int,
     deck_active_review_threshold: int = 3,
+    review_preview_limit: int = 20,
 ) -> dict[str, Any]:
     install = flashcards_share_repository.get_deck_install_by_user_and_item(user_id, deck_item.id)
     review = flashcards_share_repository.get_deck_review_by_user_and_item(user_id, deck_item.id)
@@ -677,6 +678,25 @@ def build_shared_deck_item_payload(
         if review
         else None
     )
+    recent_review_rows = (
+        DeckReview.query.filter(
+            DeckReview.deck_item_id == deck_item.id,
+            DeckReview.user_id != user_id,
+        )
+        .order_by(DeckReview.updated_at.desc(), DeckReview.created_at.desc(), DeckReview.id.desc())
+        .limit(max(1, int(review_preview_limit or 20)))
+        .all()
+    )
+    payload["recent_reviews"] = [
+        {
+            "rating": int(row.rating or 0),
+            "comment": row.comment,
+            "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+            "username": (row.user.username if row.user else "Unknown"),
+        }
+        for row in recent_review_rows
+    ]
+    payload["recent_reviews_count"] = len(payload["recent_reviews"])
 
     source_note_type_payload = None
     source_note_type_id = (deck_item.source_note_type_id or "").strip()
