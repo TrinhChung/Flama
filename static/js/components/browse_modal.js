@@ -10,12 +10,14 @@
   }
 
   const unsavedModalEl = document.getElementById("browseUnsavedModal");
-  if (!unsavedModalEl) {
+  const bulkDeleteModalEl = document.getElementById("browseBulkDeleteModal");
+  if (!unsavedModalEl || !bulkDeleteModalEl) {
     return;
   }
 
   const modalInstance = window.bootstrap.Modal.getOrCreateInstance(modalEl);
   const unsavedModalInstance = window.bootstrap.Modal.getOrCreateInstance(unsavedModalEl);
+  const bulkDeleteModalInstance = window.bootstrap.Modal.getOrCreateInstance(bulkDeleteModalEl);
 
   const els = {
     contextLabel: document.getElementById("browseContextLabel"),
@@ -30,7 +32,11 @@
     status: document.getElementById("browseStatusFilter"),
     tag: document.getElementById("browseTagFilter"),
     sortBy: document.getElementById("browseSortBy"),
+    toggleCheckboxModeBtn: document.getElementById("browseToggleCheckboxMode"),
+    bulkDeleteBtn: document.getElementById("browseBulkDeleteBtn"),
     sortDirBtn: document.getElementById("browseSortDirBtn"),
+    selectAllHead: document.getElementById("browseSelectAllHead"),
+    selectAllCheckbox: document.getElementById("browseSelectAllCheckbox"),
     tableWrap: document.getElementById("browseTableWrap"),
     tableBody: document.getElementById("browseTableBody"),
     rowsLoading: document.getElementById("browseRowsLoading"),
@@ -46,6 +52,9 @@
     unsavedCancelBtn: document.getElementById("browseUnsavedCancelBtn"),
     unsavedDiscardBtn: document.getElementById("browseUnsavedDiscardBtn"),
     unsavedSaveBtn: document.getElementById("browseUnsavedSaveBtn"),
+    bulkDeleteMessage: document.getElementById("browseBulkDeleteMessage"),
+    bulkDeleteCancelBtn: document.getElementById("browseBulkDeleteCancelBtn"),
+    bulkDeleteConfirmBtn: document.getElementById("browseBulkDeleteConfirmBtn"),
   };
 
   const state = {
@@ -75,6 +84,8 @@
       by: "due",
       dir: "asc",
     },
+    checkboxMode: false,
+    selectedCardIds: new Set(),
     selectedCardId: null,
     detail: null,
     draft: null,
@@ -341,21 +352,39 @@
     if (!els.tableBody) {
       return;
     }
+    if (els.selectAllHead) {
+      els.selectAllHead.classList.toggle("d-none", !state.checkboxMode);
+    }
     if (!state.rows.length) {
+      if (els.selectAllCheckbox) {
+        els.selectAllCheckbox.checked = false;
+        els.selectAllCheckbox.indeterminate = false;
+      }
       els.tableBody.innerHTML = `
         <tr>
-          <td colspan="7" class="browse-empty-cell">No cards match current deck/filters.</td>
+          <td colspan="${state.checkboxMode ? "8" : "7"}" class="browse-empty-cell">No cards match current deck/filters.</td>
         </tr>
       `;
       return;
     }
 
+    const loadedSelectedCount = state.rows.filter((row) => state.selectedCardIds.has(row.card_id)).length;
+    if (els.selectAllCheckbox) {
+      els.selectAllCheckbox.checked = loadedSelectedCount > 0 && loadedSelectedCount === state.rows.length;
+      els.selectAllCheckbox.indeterminate = loadedSelectedCount > 0 && loadedSelectedCount < state.rows.length;
+    }
+
     const rowsHtml = state.rows
       .map((row) => {
-        const selected = row.card_id === state.selectedCardId;
+        const selected = state.selectedCardIds.has(row.card_id);
         const tags = Array.isArray(row.tags) ? row.tags.join(", ") : "";
         return `
           <tr class="${selected ? "is-selected" : ""}" data-card-id="${escapeHtml(row.card_id)}">
+            ${
+              state.checkboxMode
+                ? `<td class="browse-select-col"><input type="checkbox" class="form-check-input browse-row-checkbox" data-card-id="${escapeHtml(row.card_id)}" ${selected ? "checked" : ""}></td>`
+                : ""
+            }
             <td title="${escapeHtml(row.card_type || "")}">${escapeHtml(row.card_type || "")}</td>
             <td title="${escapeHtml(row.due_label || "")}">${escapeHtml(row.due_label || "")}</td>
             <td title="${escapeHtml(row.deck_name || "")}">${escapeHtml(row.deck_name || "")}</td>
@@ -378,7 +407,37 @@
     const loaded = state.rows.length;
     const total = state.total || 0;
     const suffix = state.hasNext ? " | more..." : "";
-    els.tableMeta.textContent = `${loaded}/${total} cards${suffix}`;
+    const selectedCount = state.selectedCardIds.size;
+    const selectedText = selectedCount ? ` | selected: ${selectedCount}` : "";
+    els.tableMeta.textContent = `${loaded}/${total} cards${selectedText}${suffix}`;
+    if (els.bulkDeleteBtn) {
+      els.bulkDeleteBtn.disabled = selectedCount === 0;
+    }
+  }
+
+  function setCheckboxMode(enabled) {
+    state.checkboxMode = Boolean(enabled);
+    if (els.toggleCheckboxModeBtn) {
+      els.toggleCheckboxModeBtn.classList.toggle("active", state.checkboxMode);
+    }
+    renderTable();
+    renderTableMeta();
+  }
+
+  function selectAllLoadedRows() {
+    for (const row of state.rows) {
+      state.selectedCardIds.add(row.card_id);
+    }
+    renderTable();
+    renderTableMeta();
+  }
+
+  function clearLoadedRowSelection() {
+    for (const row of state.rows) {
+      state.selectedCardIds.delete(row.card_id);
+    }
+    renderTable();
+    renderTableMeta();
   }
 
   function renderEditor() {
@@ -648,18 +707,28 @@
           }
         } else {
           state.selectedCardId = null;
+          state.selectedCardIds.clear();
           state.detail = null;
           state.draft = null;
           state.isDirty = false;
           state.dirtyFields.clear();
           renderEditor();
         }
+        if (state.selectedShortcut === "current" && state.currentDeckId != null) {
+          selectAllLoadedRows();
+        }
+      } else if (state.selectedShortcut === "current" && state.currentDeckId != null) {
+        for (const row of incomingRows) {
+          state.selectedCardIds.add(row.card_id);
+        }
+        renderTable();
+        renderTableMeta();
       }
     } catch (error) {
       if (error.name !== "AbortError") {
         els.tableBody.innerHTML = `
           <tr>
-            <td colspan="7" class="browse-empty-cell text-danger">${escapeHtml(error.message)}</td>
+            <td colspan="${state.checkboxMode ? "8" : "7"}" class="browse-empty-cell text-danger">${escapeHtml(error.message)}</td>
           </tr>
         `;
         renderTableMeta();
@@ -791,6 +860,43 @@
     }
   }
 
+  async function deleteSelectedCards() {
+    const selectedIds = Array.from(state.selectedCardIds);
+    if (!selectedIds.length) {
+      return;
+    }
+    if (els.bulkDeleteConfirmBtn) {
+      els.bulkDeleteConfirmBtn.disabled = true;
+      els.bulkDeleteConfirmBtn.innerHTML = '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span>';
+    }
+    try {
+      for (const cardId of selectedIds) {
+        await requestJson(`/vocabulary/api/browse/cards/${encodeURIComponent(cardId)}`, {
+          method: "DELETE",
+        });
+      }
+      state.selectedCardIds.clear();
+      if (state.selectedCardId && selectedIds.includes(state.selectedCardId)) {
+        state.selectedCardId = null;
+        state.detail = null;
+        state.draft = null;
+        state.isDirty = false;
+        state.dirtyFields.clear();
+      }
+      bulkDeleteModalInstance.hide();
+      await loadCards({ reset: true, keepSelection: false });
+      renderEditor();
+    } catch (error) {
+      window.alert(`Bulk delete failed: ${error.message}`);
+    } finally {
+      if (els.bulkDeleteConfirmBtn) {
+        els.bulkDeleteConfirmBtn.disabled = false;
+        els.bulkDeleteConfirmBtn.innerHTML = "Delete";
+      }
+      renderTableMeta();
+    }
+  }
+
   async function uploadMedia(fieldName, file) {
     if (!state.detail || !state.detail.note || !state.detail.note.id || !file) {
       return;
@@ -869,6 +975,7 @@
     }
     await runWithDirtyGuard(async () => {
       state.selectedCardId = cardId;
+      state.selectedCardIds.add(cardId);
       renderTable();
       await loadCardDetail(cardId);
     });
@@ -929,6 +1036,7 @@
     if (els.sortBy) {
       els.sortBy.value = state.sort.by;
     }
+    setCheckboxMode(false);
     updateContextLabel();
     await loadDeckTree();
     if (state.selectedShortcut === "current" && state.currentDeckId != null) {
@@ -1084,12 +1192,56 @@
       });
     }
 
+    if (els.toggleCheckboxModeBtn) {
+      els.toggleCheckboxModeBtn.addEventListener("click", () => {
+        setCheckboxMode(!state.checkboxMode);
+      });
+    }
+
+    if (els.bulkDeleteBtn) {
+      els.bulkDeleteBtn.addEventListener("click", () => {
+        const selectedCount = state.selectedCardIds.size;
+        if (!selectedCount) {
+          return;
+        }
+        if (els.bulkDeleteMessage) {
+          els.bulkDeleteMessage.textContent = `Delete ${selectedCount} selected card(s) permanently?`;
+        }
+        bulkDeleteModalInstance.show();
+      });
+    }
+
+    if (els.selectAllCheckbox) {
+      els.selectAllCheckbox.addEventListener("change", () => {
+        if (els.selectAllCheckbox.checked) {
+          selectAllLoadedRows();
+          return;
+        }
+        clearLoadedRowSelection();
+      });
+    }
+
     if (els.tableBody) {
       els.tableBody.addEventListener("click", (event) => {
+        const checkbox = event.target.closest(".browse-row-checkbox");
+        if (checkbox?.dataset.cardId) {
+          if (checkbox.checked) {
+            state.selectedCardIds.add(checkbox.dataset.cardId);
+          } else {
+            state.selectedCardIds.delete(checkbox.dataset.cardId);
+          }
+          selectCard(checkbox.dataset.cardId).catch(() => undefined);
+          renderTableMeta();
+          return;
+        }
         const row = event.target.closest("tr[data-card-id]");
         if (!row?.dataset.cardId) {
           return;
         }
+        if (!state.checkboxMode) {
+          state.selectedCardIds.clear();
+        }
+        state.selectedCardIds.add(row.dataset.cardId);
         selectCard(row.dataset.cardId).catch(() => undefined);
       });
     }
@@ -1176,6 +1328,14 @@
       });
     }
 
+    if (els.bulkDeleteConfirmBtn) {
+      els.bulkDeleteConfirmBtn.addEventListener("click", () => {
+        runWithDirtyGuard(async () => {
+          await deleteSelectedCards();
+        }).catch(() => undefined);
+      });
+    }
+
     unsavedModalEl.addEventListener("hidden.bs.modal", () => {
       if (state.unsavedResolver) {
         resolveUnsaved("cancel");
@@ -1190,6 +1350,12 @@
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
         event.preventDefault();
         saveCurrentCard().catch(() => undefined);
+        return;
+      }
+
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "a") {
+        event.preventDefault();
+        selectAllLoadedRows();
         return;
       }
 

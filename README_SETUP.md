@@ -2,9 +2,22 @@
 
 Tài liệu này tập trung vào thiết lập môi trường và các lệnh chạy dự án.
 
+## Commands Hay Dung (Uu Tien)
+
+```bash
+# 1) Reset + reseed DB
+bash scripts/reseed_db.sh
+
+# 2) Setup workspace/codespaces
+bash scripts/setup_github_workspace.sh
+
+# 3) Chay app
+flask --app wsgi.py run --host=0.0.0.0 --port=4789
+```
+
 ## Prerequisites
 - Python 3.10+
-- Docker + Docker Compose (nếu chạy MySQL bằng container)
+- Docker + Docker Compose plugin (nếu chạy MySQL bằng container)
 
 ## Quick Start (GitHub Workspace / Codespaces)
 
@@ -52,7 +65,7 @@ bash scripts/setup_new_device.sh --mode local
 bash scripts/setup_new_device.sh --mode docker
 ```
 
-## Manual Setup (Local)
+## Manual Setup (Local, khi không dùng script)
 
 1. Tạo virtualenv:
 ```bash
@@ -86,52 +99,22 @@ cp .env_example .env
 bash scripts/reseed_db.sh
 ```
 
-7. Chạy ứng dụng:
-```bash
-flask --app wsgi.py run --host=0.0.0.0 --port=4789
-```
+7. Chạy ứng dụng theo lệnh ở mục `Core Commands`.
 
-## Basic Commands
+## Core Commands (không trùng lặp)
 
-- Chạy app:
 ```bash
-flask --app wsgi.py run --host=0.0.0.0 --port=4789
-```
-
-- Chạy migration:
-```bash
+# Chạy migration
 flask --app wsgi.py db upgrade
-```
 
-- Purge toàn bộ dữ liệu ứng dụng (giữ schema):
-```bash
-flask --app wsgi.py dev-purge-data --yes
-```
+# Chạy app
+flask --app wsgi.py run --host=0.0.0.0 --port=4789
 
-- Reseed full DB (khuyên dùng khi xóa/tạo lại DB):
-```bash
+# Reseed full DB (đã bao gồm purge + seed)
 bash scripts/reseed_db.sh
 ```
 
-- Seed template + admin user từ `.env`:
-```bash
-python scripts/seed_flama_template.py
-```
-
-- Seed user roles:
-```bash
-flask --app wsgi.py user-role-seed
-```
-
-- Seed vocabulary lần đầu:
-```bash
-flask --app wsgi.py vocab-seed --path "static/seed_data"
-```
-
-- Seed vocabulary và ghi đè lesson đã có:
-```bash
-flask --app wsgi.py vocab-seed --path "static/seed_data" --replace-lessons
-```
+Các lệnh seed lẻ vẫn còn dùng được, nhưng thường không cần chạy riêng nếu đã dùng `scripts/reseed_db.sh`.
 
 ## CSV Import (UI)
 

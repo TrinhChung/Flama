@@ -411,14 +411,29 @@ def build_browse_card_detail(
 
 
 def collect_accessible_browse_decks(*, user_id: int, admin_mode: bool) -> list[Deck]:
+    if admin_mode:
+        return (
+            Deck.query.filter(
+                db.or_(
+                    Deck.owner_user_id == user_id,
+                    Deck.owner_user_id.is_(None),
+                )
+            )
+            .order_by(
+                Deck.parent_id.isnot(None),
+                Deck.position,
+                Deck.created_at,
+                Deck.id,
+            )
+            .all()
+        )
+
     all_decks = Deck.query.order_by(
         Deck.parent_id.isnot(None),
         Deck.position,
         Deck.created_at,
         Deck.id,
     ).all()
-    if admin_mode:
-        return all_decks
 
     deck_map = {deck.id: deck for deck in all_decks}
     visible_ids: set[int] = set()

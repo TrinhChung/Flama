@@ -70,6 +70,14 @@
                 <option value="deck">Sort: Deck</option>
                 <option value="word">Sort: Word</option>
               </select>
+              <button type="button" class="btn btn-sm btn-outline-secondary browse-toolbar-btn-compact" id="browseToggleCheckboxMode" title="Toggle checkbox selection">
+                <i class="bi bi-check2-square"></i>
+                Select
+              </button>
+              <button type="button" class="btn btn-sm btn-outline-danger browse-toolbar-btn-compact" id="browseBulkDeleteBtn" title="Delete selected cards" disabled>
+                <i class="bi bi-trash"></i>
+                Delete Selected
+              </button>
               <button type="button" class="btn btn-sm btn-outline-secondary" id="browseSortDirBtn" data-dir="asc" title="Toggle sort direction">
                 <i class="bi bi-sort-down"></i>
               </button>
@@ -81,6 +89,9 @@
             <table class="browse-table" id="browseTable">
               <thead>
                 <tr>
+                  <th class="browse-select-col d-none" id="browseSelectAllHead">
+                    <input type="checkbox" class="form-check-input" id="browseSelectAllCheckbox" title="Select all loaded rows">
+                  </th>
                   <th>Card Type</th>
                   <th>Due</th>
                   <th>Deck</th>
@@ -92,7 +103,7 @@
               </thead>
               <tbody id="browseTableBody">
                 <tr>
-                  <td colspan="7" class="browse-empty-cell">Select a deck to load cards.</td>
+                  <td colspan="8" class="browse-empty-cell">Select a deck to load cards.</td>
                 </tr>
               </tbody>
             </table>
@@ -151,6 +162,23 @@
         <button type="button" class="btn btn-outline-secondary" id="browseUnsavedCancelBtn" data-bs-dismiss="modal">Cancel</button>
         <button type="button" class="btn btn-outline-warning" id="browseUnsavedDiscardBtn">Discard</button>
         <button type="button" class="btn btn-primary" id="browseUnsavedSaveBtn">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="browseBulkDeleteModal" tabindex="-1" aria-labelledby="browseBulkDeleteModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="browseBulkDeleteModalLabel">Confirm bulk delete</h5>
+      </div>
+      <div class="modal-body" id="browseBulkDeleteMessage">
+        Delete selected cards permanently?
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" id="browseBulkDeleteCancelBtn" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-danger" id="browseBulkDeleteConfirmBtn">Delete</button>
       </div>
     </div>
   </div>
