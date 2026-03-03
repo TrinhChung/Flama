@@ -11,10 +11,14 @@ from models import db
 from models.flashcard import *
 from models.deck import Deck
 from models.card_progress import CardProgress
+from app.services import flashcards_share
 from app.utils.permissions import is_admin_user
 
 # Import everything from core module so routes can use helpers
 from . import *
+
+# Backward-compatible alias used by tests and legacy patch targets.
+share_ctrl = flashcards_share
 
 MAX_MARKET_REVIEW_SUBMISSIONS_PER_USER = 2
 
@@ -632,14 +636,14 @@ def get_shared_deck_item(deck_item_id: str):
     if not deck_item:
         return _api_error("FIELD_NOT_FOUND", "Deck item not found.", status=404)
 
-    _, changed = share_ctrl.sync_deck_item_source_note_type(
+    _, changed = flashcards_share.sync_deck_item_source_note_type(
         deck_item,
         require_source_note_type=False,
     )
     if changed:
         db.session.commit()
 
-    payload = share_ctrl.build_shared_deck_item_payload(
+    payload = flashcards_share.build_shared_deck_item_payload(
         deck_item,
         user_id=current_user.id,
         sample_limit=SHARED_DECK_TEST_SAMPLE_LIMIT,
@@ -668,7 +672,7 @@ def preview_shared_deck_template(deck_item_id: str, template_id: str):
     if not deck_item:
         return _api_error("FIELD_NOT_FOUND", "Deck item not found.", status=404)
 
-    bind_error, changed = share_ctrl.sync_deck_item_source_note_type(
+    bind_error, changed = flashcards_share.sync_deck_item_source_note_type(
         deck_item,
         require_source_note_type=True,
     )
@@ -691,7 +695,7 @@ def preview_shared_deck_template(deck_item_id: str, template_id: str):
 
     payload = request.get_json(silent=True) or {}
     requested_note_id = (payload.get("note_id") or "").strip() or None
-    preview_note = share_ctrl.select_preview_note_for_shared_deck(
+    preview_note = flashcards_share.select_preview_note_for_shared_deck(
         deck_item,
         note_type_id=note_type.id,
         requested_note_id=requested_note_id,
@@ -751,7 +755,7 @@ def install_shared_deck_item(deck_item_id: str):
         if not deck_item:
             return _api_error("FIELD_NOT_FOUND", "Deck item not found.", status=404)
 
-        bind_error, changed = share_ctrl.sync_deck_item_source_note_type(
+        bind_error, changed = flashcards_share.sync_deck_item_source_note_type(
             deck_item,
             require_source_note_type=True,
         )
@@ -777,12 +781,12 @@ def install_shared_deck_item(deck_item_id: str):
                 raise
 
         try:
-            install_result = share_ctrl.install_shared_deck_item_for_user(
+            install_result = flashcards_share.install_shared_deck_item_for_user(
                 deck_item,
                 user_id=current_user.id,
                 publish_statuses_visible=PUBLISH_STATUSES_VISIBLE,
             )
-        except share_ctrl.ShareControllerError as exc:
+        except flashcards_share.ShareControllerError as exc:
             db.session.rollback()
             return _api_error(
                 exc.error,

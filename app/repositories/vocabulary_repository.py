@@ -9,8 +9,8 @@ from typing import Any
 
 from sqlalchemy.orm import selectinload
 
-from app.controllers.deck_controller import collect_ancestor_ids
-from app.controllers.study_controller import (
+from app.repositories.deck_tree_query import collect_ancestor_ids
+from app.repositories.study_repository import (
     LEARNING_QUEUE,
     LEARN_QUEUE,
     NEW_QUEUE,
@@ -754,7 +754,7 @@ def query_study_cards_for_deck_ids(*, user_id: int, deck_ids: list[int]) -> list
     seen_card_ids = {card_obj.id for card_obj in direct_cards}
     merged_cards = list(direct_cards)
 
-    from app.controllers import flashcards_share_controller as share_ctrl
+    from app.services import flashcards_share as share_ctrl
 
     seen_scope_keys: set[tuple[str, int]] = set()
     for local_deck_id in sorted({int(deck_id) for deck_id in deck_ids if deck_id is not None}):

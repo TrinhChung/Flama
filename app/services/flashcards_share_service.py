@@ -656,6 +656,7 @@ def build_shared_deck_item_payload(
     user_id: int,
     sample_limit: int,
     deck_active_review_threshold: int = 3,
+    review_preview_limit: int = 20,
 ) -> dict[str, Any]:
     install = flashcards_share_repository.get_deck_install_by_user_and_item(user_id, deck_item.id)
     review = flashcards_share_repository.get_deck_review_by_user_and_item(user_id, deck_item.id)
@@ -677,6 +678,25 @@ def build_shared_deck_item_payload(
         if review
         else None
     )
+    recent_review_rows = (
+        DeckReview.query.filter(
+            DeckReview.deck_item_id == deck_item.id,
+            DeckReview.user_id != user_id,
+        )
+        .order_by(DeckReview.updated_at.desc(), DeckReview.created_at.desc(), DeckReview.id.desc())
+        .limit(max(1, int(review_preview_limit or 20)))
+        .all()
+    )
+    payload["recent_reviews"] = [
+        {
+            "rating": int(row.rating or 0),
+            "comment": row.comment,
+            "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+            "username": (row.user.username if row.user else "Unknown"),
+        }
+        for row in recent_review_rows
+    ]
+    payload["recent_reviews_count"] = len(payload["recent_reviews"])
 
     source_note_type_payload = None
     source_note_type_id = (deck_item.source_note_type_id or "").strip()
@@ -1579,21 +1599,70 @@ def clone_note_type_for_user(source_note_type: NoteType, user_id: int) -> NoteTy
 
     return clone
 
+
+def ensure_note_type_install_for_user(
+    *,
+    source_note_type: NoteType,
+    user_id: int,
+    installed_at: datetime | None = None,
+) -> NoteTypeInstall:
+    install_row = NoteTypeInstall.query.filter_by(
+        source_note_type_id=source_note_type.id,
+        user_id=user_id,
+    ).first()
+    if install_row and (install_row.installed_note_type_id or "").strip():
+        installed_copy = NoteType.query.get(install_row.installed_note_type_id)
+        if installed_copy:
+            return install_row
+
+    installed_copy = flashcards_share.clone_note_type_for_user(source_note_type, user_id)
+    now = installed_at or datetime.utcnow()
+    purchase_price_cents = int(source_note_type.price_cents or 0) if source_note_type.pricing_mode == "paid" else 0
+
+    if install_row is None:
+        install_row = NoteTypeInstall(
+            source_note_type_id=source_note_type.id,
+            installed_note_type_id=installed_copy.id,
+            user_id=user_id,
+            purchase_price_cents=purchase_price_cents,
+            installed_at=now,
+            purchased_at=now if source_note_type.pricing_mode == "paid" else None,
+        )
+        db.session.add(install_row)
+    else:
+        install_row.installed_note_type_id = installed_copy.id
+        install_row.purchase_price_cents = purchase_price_cents
+        if install_row.installed_at is None:
+            install_row.installed_at = now
+        install_row.purchased_at = now if source_note_type.pricing_mode == "paid" else None
+
+    flashcards_share.recompute_note_type_market_stats(source_note_type)
+    return install_row
+
+
 def clone_deck_subtree(
     *,
     source_deck_id: int,
     parent_id: int | None,
     deck_install_id: str | None = None,
     owner_user_id: int | None = None,
+    note_type_id_map: dict[str, str] | None = None,
 ) -> Deck:
     source_deck = Deck.query.get(source_deck_id)
     if not source_deck:
         raise ValueError(f"Deck not found: {source_deck_id}")
 
+    source_note_type_id = (source_deck.note_type_id or "").strip()
+    mapped_note_type_id = (
+        note_type_id_map.get(source_note_type_id)
+        if note_type_id_map and source_note_type_id
+        else None
+    )
+
     cloned_deck = Deck(
         parent_id=parent_id,
         owner_user_id=owner_user_id,
-        note_type_id=source_deck.note_type_id,
+        note_type_id=mapped_note_type_id or source_deck.note_type_id,
         name=source_deck.name,
         description=source_deck.description,
         position=_next_deck_position(parent_id),
@@ -1621,6 +1690,7 @@ def clone_deck_subtree(
             parent_id=cloned_deck.id,
             deck_install_id=deck_install_id,
             owner_user_id=owner_user_id,
+            note_type_id_map=note_type_id_map,
         )
 
     return cloned_deck
@@ -2370,6 +2440,25 @@ def install_shared_deck_item_for_user(
             error="FIELD_NOT_FOUND",
         )
 
+    note_type_id_map: dict[str, str] = {}
+    source_note_type_id = (deck_item.source_note_type_id or "").strip()
+    if source_note_type_id:
+        source_note_type = NoteType.query.get(source_note_type_id)
+        if source_note_type is None:
+            raise ShareControllerError(
+                "source_note_type_id not found.",
+                status=409,
+                field="source_note_type_id",
+            )
+        note_type_install = ensure_note_type_install_for_user(
+            source_note_type=source_note_type,
+            user_id=user_id,
+            installed_at=now,
+        )
+        installed_note_type_id = (note_type_install.installed_note_type_id or "").strip()
+        if installed_note_type_id:
+            note_type_id_map[source_note_type_id] = installed_note_type_id
+
     purchase_price_cents = int(deck_item.price_cents or 0) if deck_item.pricing_mode == "paid" else 0
     install = DeckInstall(
         deck_item_id=deck_item.id,
@@ -2393,7 +2482,10 @@ def install_shared_deck_item_for_user(
         parent_id=None,
         deck_install_id=install.id,
         owner_user_id=user_id,
+        note_type_id_map=note_type_id_map,
     )
+    if cloned_root.note_type_id is None and note_type_id_map:
+        cloned_root.note_type_id = next(iter(note_type_id_map.values()))
     local_deck_id = cloned_root.id
     install.local_deck_id = local_deck_id
 
@@ -2411,4 +2503,3 @@ def install_shared_deck_item_for_user(
             "price_cents": purchase_price_cents,
         },
     }
-
