@@ -7,6 +7,7 @@ from typing import Any
 from sqlalchemy import or_
 from sqlalchemy.orm import selectinload
 
+from app.validators import escape_like_pattern
 from models import db
 from models.user import User
 from models.user_permission_audit_log import UserPermissionAuditLog
@@ -89,8 +90,13 @@ def resolve_account_name(user: User) -> str:
 def build_users_query(search_term: str, status_filter: str):
     query = User.query.options(selectinload(User.role))
     if search_term:
-        like_pattern = f"%{search_term}%"
-        query = query.filter(or_(User.username.ilike(like_pattern), User.email.ilike(like_pattern)))
+        like_pattern = f"%{escape_like_pattern(search_term)}%"
+        query = query.filter(
+            or_(
+                User.username.ilike(like_pattern, escape="\\"),
+                User.email.ilike(like_pattern, escape="\\"),
+            )
+        )
 
     if status_filter == "active":
         query = query.filter(User.is_disabled.is_(False))

@@ -74,8 +74,6 @@ from app.services.flashcard_renderer import (
     PREVIEW_MEDIA_DIAGRAM_TOKEN,
     PREVIEW_MEDIA_IMAGE_TOKEN,
     TemplateCompileError,
-    is_field_empty,
-    sanitize_richtext,
     render_template_pair,
 )
 
@@ -86,6 +84,7 @@ from app.services.stats_overview import (
 )
 
 from app.utils.permissions import is_admin_user
+from app.validators import ALLOWED_MEDIA_MIME_TYPES as VALIDATOR_ALLOWED_MEDIA_MIME_TYPES
 
 from models import db
 
@@ -115,19 +114,7 @@ logger = logging.getLogger(__name__)
 
 FIELD_TYPES = {"text", "richtext", "image", "audio", "diagram"}
 
-MEDIA_ALLOWED_PREFIX = "/media/proxy/"
-
-ALLOWED_MEDIA_MIME_TYPES = {
-    "image/jpeg",
-    "image/png",
-    "image/gif",
-    "image/webp",
-    "image/svg+xml",
-    "audio/mpeg",
-    "audio/ogg",
-    "audio/wav",
-    "audio/webm",
-}
+ALLOWED_MEDIA_MIME_TYPES = set(VALIDATOR_ALLOWED_MEDIA_MIME_TYPES)
 
 CSP_CARD_POLICY = (
     "default-src 'none'; "
@@ -202,45 +189,6 @@ def _serialize_template(template: Template) -> dict[str, Any]:
 
 def _serialize_note_type(note_type: NoteType) -> dict[str, Any]:
     return marketplace_query_service.serialize_note_type(note_type)
-
-def _clean_field_value(field_def: FieldDef, raw_value: Any) -> Any:
-    if field_def.field_type == "richtext":
-        return sanitize_richtext("" if raw_value is None else str(raw_value))
-    if field_def.field_type in {"image", "audio", "diagram"}:
-        if raw_value is None:
-            return ""
-        candidate = str(raw_value).strip()
-        if candidate.startswith(MEDIA_ALLOWED_PREFIX):
-            return candidate
-        if MediaAsset.query.get(candidate):
-            return candidate
-        return ""
-    return "" if raw_value is None else str(raw_value).strip()
-
-def _validate_note_payload(note_type: NoteType, payload: dict[str, Any], *, partial: bool) -> tuple[dict[str, Any], str | None]:
-    field_map = {field.name: field for field in note_type.field_defs}
-    field_values = payload.get("field_values")
-    if field_values is None:
-        field_values = {}
-    if not isinstance(field_values, dict):
-        return {}, "field_values must be an object."
-
-    unknown = [key for key in field_values.keys() if key not in field_map]
-    if unknown:
-        return {}, f"Unknown fields: {', '.join(unknown)}"
-
-    cleaned: dict[str, Any] = {}
-    for name, field_def in field_map.items():
-        if name in field_values:
-            cleaned[name] = _clean_field_value(field_def, field_values.get(name))
-
-    if not partial:
-        for name, field_def in field_map.items():
-            if name not in cleaned:
-                cleaned[name] = ""
-            if field_def.required and is_field_empty(cleaned[name]):
-                return {}, f"Field '{name}' is required."
-    return cleaned, None
 
 def _normalize_tags(raw_tags: Any) -> list[str]:
     return marketplace_query_service.normalize_tags(raw_tags)

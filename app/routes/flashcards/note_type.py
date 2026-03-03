@@ -22,15 +22,20 @@ from app.routes.flashcards import (
     _audit,
     _create_cards_for_note,
     _get_note_type_or_404,
-    _normalize_tags,
     _recompute_note_type_market_stats,
     _reorder_fields,
     _run_field_rename_job,
     _serialize_field,
     _serialize_note_type,
     _touch_note_type_install_usage,
-    _validate_note_payload,
     _validate_note_type_consistency_for_deck,
+)
+from app.validators import (
+    escape_like_pattern,
+    RequestValidationError,
+    sanitize_query_text,
+    validate_note_create_request,
+    validate_note_patch_request,
 )
 
 
@@ -89,7 +94,11 @@ def notes_list_page():
     # Filters from query string
     selected_nt = request.args.get("note_type_id", "")
     selected_deck = request.args.get("deck_id", "")
-    search_q = request.args.get("q", "").strip()
+    try:
+        search_q = sanitize_query_text(request.args.get("q"), field_name="q", max_length=120)
+    except RequestValidationError:
+        search_q = ""
+        flash("Invalid search query detected and ignored.", "warning")
     page = max(1, int(request.args.get("page", "1")))
     per_page = 30
 
@@ -104,8 +113,9 @@ def notes_list_page():
 
     # JSON search by first field value (simple contains)
     if search_q:
+        like_pattern = f"%{escape_like_pattern(search_q)}%"
         query = query.filter(
-            Note.field_values.cast(db.Text).ilike(f"%{search_q}%")
+            Note.field_values.cast(db.Text).ilike(like_pattern, escape="\\")
         )
 
     pagination = query.order_by(Note.updated_at.desc()).paginate(
@@ -374,21 +384,13 @@ def create_note():
     if not note_type:
         return _api_error("FIELD_NOT_FOUND", "Note type not found.", status=404)
 
-    cleaned_values, err = _validate_note_payload(note_type, payload, partial=False)
-    if err:
-        return _api_error("VALIDATION_ERROR", err, field="field_values")
-    tags = _normalize_tags(payload.get("tags"))
-    deck_id = payload.get("deck_id")
-    if deck_id in ("", None):
-        parsed_deck_id = None
-    else:
-        try:
-            parsed_deck_id = int(deck_id)
-        except (TypeError, ValueError):
-            return _api_error("VALIDATION_ERROR", "deck_id must be an integer.", field="deck_id")
+    try:
+        validated = validate_note_create_request(note_type=note_type, payload=payload)
+    except RequestValidationError as exc:
+        return _api_error(exc.code, str(exc), status=exc.status, field=exc.field)
 
     deck_consistency_error = _validate_note_type_consistency_for_deck(
-        deck_id=parsed_deck_id,
+        deck_id=validated.deck_id,
         note_type_id=note_type.id,
         user_id=current_user.id,
     )
@@ -398,9 +400,9 @@ def create_note():
     note = Note(
         note_type_id=note_type.id,
         user_id=current_user.id,
-        deck_id=parsed_deck_id,
-        field_values=cleaned_values,
-        tags=tags,
+        deck_id=validated.deck_id,
+        field_values=validated.field_values,
+        tags=validated.tags,
     )
     from app.services.note_type_service import create_note_and_commit
     create_note_and_commit(note, current_user.id)
@@ -417,27 +419,22 @@ def patch_note(note_id: str):
     if note_type is None:
         return _api_error("FIELD_NOT_FOUND", "Note type not found.", status=404)
 
-    cleaned_values, err = _validate_note_payload(note_type, payload, partial=True)
-    if err:
-        return _api_error("VALIDATION_ERROR", err, field="field_values")
-    values = dict(note.field_values or {})
-    values.update(cleaned_values)
-    for field in note_type.field_defs:
-        if field.required and is_field_empty(values.get(field.name)):
-            return _api_error("VALIDATION_ERROR", f"Field '{field.name}' is required.", field=field.name)
-    note.field_values = values
+    note_media_ids = {asset.id for asset in (note.media_assets or []) if asset.id}
+    try:
+        validated = validate_note_patch_request(
+            note_type=note_type,
+            payload=payload,
+            current_values=dict(note.field_values or {}),
+            note_media_ids=note_media_ids,
+        )
+    except RequestValidationError as exc:
+        return _api_error(exc.code, str(exc), status=exc.status, field=exc.field)
 
-    if "tags" in payload:
-        note.tags = _normalize_tags(payload.get("tags"))
-    if "deck_id" in payload:
-        deck_id = payload.get("deck_id")
-        if deck_id in ("", None):
-            note.deck_id = None
-        else:
-            try:
-                note.deck_id = int(deck_id)
-            except (TypeError, ValueError):
-                return _api_error("VALIDATION_ERROR", "deck_id must be an integer.", field="deck_id")
+    note.field_values = validated.field_values
+    if validated.update_tags:
+        note.tags = validated.tags
+    if validated.update_deck:
+        note.deck_id = validated.deck_id
 
     deck_consistency_error = _validate_note_type_consistency_for_deck(
         deck_id=note.deck_id,

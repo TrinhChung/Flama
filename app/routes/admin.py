@@ -12,6 +12,7 @@ from sqlalchemy.orm import selectinload
 
 from app.utils.permissions import is_admin_user
 from app.services import admin_service
+from app.validators import RequestValidationError, sanitize_query_text
 
 from models import db
 from models.user import User
@@ -55,7 +56,11 @@ def user_management_page():
     if guard is not None:
         return guard
 
-    search_term = (request.args.get("q") or "").strip()
+    try:
+        search_term = sanitize_query_text(request.args.get("q"), field_name="q", max_length=120)
+    except RequestValidationError:
+        search_term = ""
+        flash("Invalid search query detected and ignored.", "warning")
     status_filter = admin_service.normalize_status_filter(request.args.get("status"))
     page = admin_service.coerce_int(request.args.get("page"), default=1, minimum=1)
     per_page = admin_service.coerce_int(request.args.get("per_page"), default=DEFAULT_PAGE_SIZE, minimum=1, maximum=MAX_PAGE_SIZE)
@@ -137,7 +142,10 @@ def list_users_api():
     if not is_admin_user(current_user):
         return jsonify({"message": "Unauthorized"}), 403
 
-    search_term = (request.args.get("q") or "").strip()
+    try:
+        search_term = sanitize_query_text(request.args.get("q"), field_name="q", max_length=120)
+    except RequestValidationError as exc:
+        return jsonify({"message": str(exc), "field": exc.field, "error": exc.code}), exc.status
     status_filter = admin_service.normalize_status_filter(request.args.get("status"))
     page = admin_service.coerce_int(request.args.get("page"), default=1, minimum=1)
     per_page = admin_service.coerce_int(request.args.get("per_page"), default=DEFAULT_PAGE_SIZE, minimum=1, maximum=MAX_PAGE_SIZE)

@@ -8,13 +8,9 @@ from app.repositories import study_card_editor_repository as study_edit_repo
 from app.repositories.vocabulary_repository import note_display_triplet, note_field_values_as_strings
 from app.services.flashcard_renderer import (
     TemplateCompileError,
-    is_field_empty,
     render_template_pair,
-    sanitize_richtext,
 )
-
-MEDIA_ALLOWED_PREFIX = "/media/proxy/"
-MEDIA_FIELD_TYPES = {"image", "audio", "diagram"}
+from app.validators import RequestValidationError, validate_study_card_edit_request
 
 
 class StudyCardEditError(ValueError):
@@ -34,23 +30,6 @@ class StudyCardEditError(ValueError):
         self.code = code
 
 
-def _clean_incoming_field_value(*, field_type: str, raw_value: Any, note_media_ids: set[str]) -> str:
-    if field_type == "richtext":
-        return sanitize_richtext("" if raw_value is None else str(raw_value))
-
-    if field_type in MEDIA_FIELD_TYPES:
-        candidate = "" if raw_value is None else str(raw_value).strip()
-        if not candidate:
-            return ""
-        if candidate.startswith(MEDIA_ALLOWED_PREFIX):
-            return candidate
-        if candidate in note_media_ids:
-            return candidate
-        return ""
-
-    return "" if raw_value is None else str(raw_value).strip()
-
-
 def update_study_card_note(
     *,
     user_id: int,
@@ -67,36 +46,21 @@ def update_study_card_note(
     if note_type is None:
         raise StudyCardEditError("Note type not found.", status=404, code="FIELD_NOT_FOUND")
 
-    body = payload or {}
-    raw_field_values = body.get("field_values")
-    if not isinstance(raw_field_values, dict):
-        raise StudyCardEditError("field_values must be an object.", field="field_values")
-
-    field_defs = sorted(note_type.field_defs, key=lambda item: item.position or 0)
-    field_map = {field_def.name: field_def for field_def in field_defs}
-    unknown_fields = [key for key in raw_field_values.keys() if key not in field_map]
-    if unknown_fields:
-        raise StudyCardEditError(
-            f"Unknown fields: {', '.join(str(item) for item in unknown_fields)}",
-            field="field_values",
-        )
-
     note_media_ids = {asset.id for asset in (note.media_assets or []) if asset.id}
-    next_values = dict(note.field_values or {})
-    for field_name, raw_value in raw_field_values.items():
-        field_def = field_map[field_name]
-        next_values[field_name] = _clean_incoming_field_value(
-            field_type=str(field_def.field_type or "text"),
-            raw_value=raw_value,
+    try:
+        next_values = validate_study_card_edit_request(
+            note_type=note_type,
+            payload=payload,
+            current_values=dict(note.field_values or {}),
             note_media_ids=note_media_ids,
         )
-
-    for field_def in field_defs:
-        if field_def.required and is_field_empty(next_values.get(field_def.name)):
-            raise StudyCardEditError(
-                f"Field '{field_def.name}' is required.",
-                field=field_def.name,
-            )
+    except RequestValidationError as exc:
+        raise StudyCardEditError(
+            str(exc),
+            status=exc.status,
+            field=exc.field,
+            code=exc.code,
+        ) from exc
 
     note.field_values = next_values
     study_edit_repo.commit_note_edit()

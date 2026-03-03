@@ -38,6 +38,10 @@ def create_app(config: Optional[dict] = None) -> Flask:
     }
     app.config["FLASHCARD_MEDIA_UPLOAD_ROOT"] = str(BASE_DIR / "static" / "uploads")
     app.config["FLASHCARD_MEDIA_MAX_BYTES"] = int(os.getenv("FLASHCARD_MEDIA_MAX_BYTES", str(10 * 1024 * 1024)))
+    app.config["FLASHCARD_MEDIA_SCAN_ENABLED"] = (
+        os.getenv("FLASHCARD_MEDIA_SCAN_ENABLED", "0").strip().lower() in {"1", "true", "yes", "on"}
+    )
+    app.config["FLASHCARD_MEDIA_SCANNER"] = None
     if config:
         app.config.update(config)
 

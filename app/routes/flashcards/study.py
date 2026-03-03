@@ -36,6 +36,11 @@ from app.routes.flashcards import (
     _touch_deck_install_usage,
     _audit,
 )
+from app.validators import (
+    RequestValidationError,
+    validate_study_answer_request,
+    validate_study_next_query,
+)
 
 
 
@@ -48,18 +53,18 @@ def flashcard_study_page():
 @flashcards_bp.route("/api/study/next", methods=["GET"])
 @login_required
 def study_next():
-    scope = (request.args.get("scope") or "deck").strip().lower()
-    scope_id_raw = (request.args.get("scope_id") or "").strip()
+    try:
+        validated_query = validate_study_next_query(request.args)
+    except RequestValidationError as exc:
+        return _api_error(exc.code, str(exc), status=exc.status, field=exc.field)
+
+    scope = validated_query.scope
+    scope_id_raw = validated_query.scope_id_raw
 
     clone_scope: flashcards_share.CloneDeckScope | None = None
     query = None
     if scope == "deck":
-        if not scope_id_raw:
-            return _api_error("VALIDATION_ERROR", "scope_id is required for deck scope.", field="scope_id")
-        try:
-            scope_id = int(scope_id_raw)
-        except ValueError:
-            return _api_error("VALIDATION_ERROR", "scope_id must be an integer for deck scope.", field="scope_id")
+        scope_id = int(validated_query.scope_id_int)
         clone_scope = _resolve_clone_scope_for_local_deck(
             user_id=current_user.id,
             local_deck_id=scope_id,
@@ -75,14 +80,10 @@ def study_next():
                 Note.deck_id.in_(scope_deck_ids),
             )
     elif scope == "note_type":
-        if not scope_id_raw:
-            return _api_error("VALIDATION_ERROR", "scope_id is required for note_type scope.", field="scope_id")
         query = Card.query.join(Note, Card.note_id == Note.id).filter(
             Note.user_id == current_user.id,
             Note.note_type_id == scope_id_raw,
         )
-    else:
-        return _api_error("VALIDATION_ERROR", f"Unsupported scope: {scope}", field="scope")
 
     if query is None:
         return jsonify({"card_id": None, "message": "No cards found for selected scope."})
@@ -152,17 +153,17 @@ def study_next():
 @login_required
 def study_answer(card_id: str):
     payload = request.get_json(silent=True) or {}
-    rating = (payload.get("rating") or "").strip().lower()
-    if rating not in {"again", "hard", "good", "easy"}:
-        return _api_error("VALIDATION_ERROR", "rating must be one of: again, hard, good, easy.", field="rating")
+    try:
+        validated_answer = validate_study_answer_request(payload)
+    except RequestValidationError as exc:
+        return _api_error(exc.code, str(exc), status=exc.status, field=exc.field)
 
-    scope = (payload.get("scope") or "").strip().lower()
-    requested_scope_id = None
-    if scope == "deck":
-        try:
-            requested_scope_id = int(payload.get("scope_id"))
-        except (TypeError, ValueError):
-            requested_scope_id = None
+    rating = validated_answer.rating
+    scope = validated_answer.scope
+    requested_scope_id = validated_answer.requested_scope_id
+    service_payload = dict(payload)
+    service_payload["timezone"] = validated_answer.timezone
+    service_payload["duration_ms"] = validated_answer.duration_ms
 
     card = Card.query.join(Note, Card.note_id == Note.id).filter(Card.id == card_id).first()
     if not card:
@@ -206,7 +207,7 @@ def study_answer(card_id: str):
         now=now,
         rating=rating,
         review_mode=review_mode,
-        payload=payload,
+        payload=service_payload,
         clone_scope=clone_scope,
         requested_scope_id=requested_scope_id
     )

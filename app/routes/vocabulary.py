@@ -41,6 +41,13 @@ from app.services.anki_scheduler import (
     default_deck_options,
 )
 from app.services.flashcard_renderer import TemplateCompileError, render_template_pair
+from app.validators import (
+    escape_like_pattern,
+    RequestValidationError,
+    validate_browse_card_update_request,
+    validate_legacy_browse_note_update_request,
+    sanitize_query_text,
+)
 from models import db
 from models.flashcard import Card, Note
 from models.deck import Deck
@@ -305,11 +312,22 @@ def browse_api_cards():
     deck_id_raw = (request.args.get("deck_id") or "").strip()
     include_subdecks_raw = (request.args.get("include_subdecks") or "1").strip().lower()
     include_subdecks = include_subdecks_raw not in {"0", "false", "no"}
-    keyword = (request.args.get("q") or "").strip()
+    try:
+        keyword = sanitize_query_text(request.args.get("q"), field_name="q", max_length=120)
+        tag = sanitize_query_text(request.args.get("tag"), field_name="tag", max_length=80)
+    except RequestValidationError as exc:
+        return jsonify({"error": str(exc), "field": exc.field, "code": exc.code}), exc.status
+
     status = (request.args.get("status") or "all").strip().lower()
-    tag = (request.args.get("tag") or "").strip()
     sort_by = (request.args.get("sort_by") or "due").strip().lower()
     sort_dir = (request.args.get("sort_dir") or "asc").strip().lower()
+
+    if status not in {"all", NEW_QUEUE, "learn", "due", REVIEW_QUEUE}:
+        return jsonify({"error": "Invalid status filter.", "field": "status"}), 400
+    if sort_by not in {"due", "deck", "word"}:
+        return jsonify({"error": "Invalid sort_by.", "field": "sort_by"}), 400
+    if sort_dir not in {"asc", "desc"}:
+        return jsonify({"error": "Invalid sort_dir.", "field": "sort_dir"}), 400
 
     try:
         page = max(1, int(request.args.get("page", "1")))
@@ -449,9 +467,15 @@ def browse_api_cards():
                 deck_lookup.setdefault(source_deck_id, local_name)
 
     if keyword:
-        query = query.filter(func.lower(db.cast(Note.field_values, db.Text)).like(f"%{keyword.lower()}%"))
+        keyword_like = f"%{escape_like_pattern(keyword.lower())}%"
+        query = query.filter(
+            func.lower(db.cast(Note.field_values, db.Text)).like(keyword_like, escape="\\")
+        )
     if tag:
-        query = query.filter(func.lower(db.cast(Note.tags, db.Text)).like(f"%{tag.lower()}%"))
+        tag_like = f"%{escape_like_pattern(tag.lower())}%"
+        query = query.filter(
+            func.lower(db.cast(Note.tags, db.Text)).like(tag_like, escape="\\")
+        )
 
     now = datetime.utcnow()
     if status == NEW_QUEUE:
@@ -598,6 +622,10 @@ def browse_api_card_update(card_id: str):
         return jsonify({"error": "Card not found"}), 404
 
     note_obj = card_obj.note
+    note_type_obj = note_obj.note_type if note_obj else None
+    if note_obj is None or note_type_obj is None:
+        return jsonify({"error": "Card note type not found"}), 404
+
     clone_scope = None
     if not is_admin_user(current_user) and note_obj and note_obj.user_id != current_user.id:
         clone_scope = share_ctrl.resolve_clone_scope_for_card(
@@ -611,66 +639,48 @@ def browse_api_card_update(card_id: str):
             return jsonify({"error": "Card not found"}), 404
 
     payload = request.get_json(silent=True) or {}
-    note_type_obj = note_obj.note_type
-    field_values = dict(note_obj.field_values or {})
+    note_media_ids = {asset.id for asset in (note_obj.media_assets or []) if asset.id}
+    try:
+        validated = validate_browse_card_update_request(
+            note_type=note_type_obj,
+            payload=payload,
+            current_values=dict(note_obj.field_values or {}),
+            note_media_ids=note_media_ids,
+        )
+    except RequestValidationError as exc:
+        return (
+            jsonify({"error": str(exc), "field": exc.field, "code": exc.code}),
+            exc.status,
+        )
 
-    incoming_values = payload.get("field_values")
-    if incoming_values is None and "fields" in payload:
-        incoming_values = payload.get("fields")
-    if incoming_values is not None:
-        if not isinstance(incoming_values, dict):
-            return jsonify({"error": "field_values must be an object"}), 400
-        for key, value in incoming_values.items():
-            key_name = str(key).strip()
-            if not key_name:
-                continue
-            field_values[key_name] = "" if value is None else str(value)
-
-    if note_type_obj:
-        for field_def in note_type_obj.field_defs:
-            if not field_def.required:
-                continue
-            if str(field_values.get(field_def.name, "")).strip():
-                continue
-            return jsonify({"error": f"Field '{field_def.name}' is required"}), 400
+    field_values = validated.field_values
 
     if clone_scope is not None and not is_admin_user(current_user):
         mapped_local_deck_id = (
             (clone_scope.source_to_local_deck_id or {}).get(int(note_obj.deck_id or 0))
             or clone_scope.install.local_deck_id
         )
-        if "deck_id" in payload:
-            raw_deck_id = payload.get("deck_id")
-            if raw_deck_id in (None, ""):
-                selected_deck_id = None
-            else:
-                try:
-                    selected_deck_id = int(raw_deck_id)
-                except (TypeError, ValueError):
-                    return jsonify({"error": "Invalid deck_id"}), 400
+        if validated.update_deck:
+            selected_deck_id = validated.deck_id
             if selected_deck_id != (int(mapped_local_deck_id) if mapped_local_deck_id is not None else None):
                 return jsonify({"error": "Moving cloned cards across decks is not supported."}), 400
 
-        if "tags" in payload:
-            incoming_tags = _normalize_tags_payload(payload.get("tags"))
+        if validated.update_tags:
+            incoming_tags = validated.tags or []
             current_tags = _normalize_tags_payload(note_obj.tags or [])
             if incoming_tags != current_tags:
                 return jsonify({"error": "Editing tags for cloned cards is not supported."}), 400
 
         note_override_items = []
-        if isinstance(incoming_values, dict):
-            for key, value in incoming_values.items():
-                key_name = str(key).strip()
-                if not key_name:
-                    continue
-                note_override_items.append(
-                    {
-                        "source_note_id": note_obj.id,
-                        "field_name": key_name,
-                        "operation": "set",
-                        "value": "" if value is None else str(value),
-                    }
-                )
+        for key_name, value in validated.field_updates.items():
+            note_override_items.append(
+                {
+                    "source_note_id": note_obj.id,
+                    "field_name": key_name,
+                    "operation": "set",
+                    "value": value,
+                }
+            )
 
         if note_override_items:
             _, validation_error = share_ctrl.upsert_clone_overlay(
@@ -713,15 +723,11 @@ def browse_api_card_update(card_id: str):
             }
         )
 
-    if "deck_id" in payload:
-        raw_deck_id = payload.get("deck_id")
-        if raw_deck_id in (None, ""):
+    if validated.update_deck:
+        selected_deck_id = validated.deck_id
+        if selected_deck_id is None:
             note_obj.deck_id = None
         else:
-            try:
-                selected_deck_id = int(raw_deck_id)
-            except (TypeError, ValueError):
-                return jsonify({"error": "Invalid deck_id"}), 400
             if not Deck.query.get(selected_deck_id):
                 return jsonify({"error": "Deck not found"}), 404
             if not is_admin_user(current_user):
@@ -736,8 +742,8 @@ def browse_api_card_update(card_id: str):
                     return jsonify({"error": "Deck is not accessible"}), 403
             note_obj.deck_id = selected_deck_id
 
-    if "tags" in payload:
-        note_obj.tags = _normalize_tags_payload(payload.get("tags"))
+    if validated.update_tags:
+        note_obj.tags = validated.tags
 
     note_obj.field_values = field_values
     db.session.commit()
@@ -829,17 +835,25 @@ def browse_api_update_note(note_id: str):
         return jsonify({"error": "Unauthorized"}), 403
 
     payload = request.get_json(silent=True) or {}
-    incoming_values = payload.get("fields")
-    if not isinstance(incoming_values, dict):
-        return jsonify({"error": "Missing fields payload"}), 400
+    note_type_obj = note_obj.note_type
+    if note_type_obj is None:
+        return jsonify({"error": "Note type not found"}), 404
 
-    current_values = dict(note_obj.field_values or {})
-    for key, value in incoming_values.items():
-        key_name = str(key).strip()
-        if not key_name:
-            continue
-        current_values[key_name] = "" if value is None else str(value)
-    note_obj.field_values = current_values
+    note_media_ids = {asset.id for asset in (note_obj.media_assets or []) if asset.id}
+    try:
+        merged_values = validate_legacy_browse_note_update_request(
+            note_type=note_type_obj,
+            payload=payload,
+            current_values=dict(note_obj.field_values or {}),
+            note_media_ids=note_media_ids,
+        )
+    except RequestValidationError as exc:
+        return (
+            jsonify({"error": str(exc), "field": exc.field, "code": exc.code}),
+            exc.status,
+        )
+
+    note_obj.field_values = merged_values
     db.session.commit()
     return jsonify({"success": True, "note": {"id": note_obj.id, "fields": note_obj.field_values}})
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
+from pathlib import Path
 from flask import jsonify, request, redirect, url_for, flash, render_template, send_file, current_app
 from flask_login import current_user, login_required
 from sqlalchemy.exc import OperationalError
@@ -21,6 +22,12 @@ from app.routes.flashcards import (
     _audit,
     _get_note_type_or_404,
     _serialize_template,
+)
+from app.validators import (
+    RequestValidationError,
+    build_safe_download_filename,
+    resolve_safe_storage_path,
+    validate_media_upload_request,
 )
 
 
@@ -93,51 +100,63 @@ def upload_note_media(note_id: str):
     if field_def.field_type not in {"image", "audio", "diagram"}:
         return _api_error("VALIDATION_ERROR", "Field does not accept media.", field="field_name")
 
-    uploaded = request.files.get("file")
-    if uploaded is None or not uploaded.filename:
-        return _api_error("VALIDATION_ERROR", "Missing uploaded file.", field="file")
-
-    content = uploaded.read()
-    if not content:
-        return _api_error("VALIDATION_ERROR", "Uploaded file is empty.", field="file")
-
     max_bytes = int(current_app.config.get("FLASHCARD_MEDIA_MAX_BYTES", 10 * 1024 * 1024))
-    if len(content) > max_bytes:
-        return _api_error("MEDIA_TOO_LARGE", f"File exceeds {max_bytes} bytes.", field="file", status=413)
+    try:
+        validated_upload = validate_media_upload_request(
+            field_name_raw=field_name,
+            field_type=field_def.field_type,
+            uploaded=request.files.get("file"),
+            max_bytes=max_bytes,
+            scanner=current_app.config.get("FLASHCARD_MEDIA_SCANNER"),
+            scan_enabled=bool(current_app.config.get("FLASHCARD_MEDIA_SCAN_ENABLED", False)),
+        )
+    except RequestValidationError as exc:
+        return _api_error(exc.code, str(exc), field=exc.field, status=exc.status)
 
-    mime_type = uploaded.mimetype or "application/octet-stream"
-    if mime_type not in ALLOWED_MEDIA_MIME_TYPES:
-        return _api_error("MEDIA_TYPE_NOT_ALLOWED", f"Unsupported media type: {mime_type}", field="file", status=415)
-
-    digest = hashlib.sha256(content).hexdigest()
-    existing = MediaAsset.query.filter_by(note_id=note.id, field_name=field_name, sha256=digest).first()
+    existing = MediaAsset.query.filter_by(
+        note_id=note.id,
+        field_name=validated_upload.field_name,
+        sha256=validated_upload.sha256,
+    ).first()
     if existing:
         from app.services.flashcard_media_service import link_existing_media_and_commit
-        link_existing_media_and_commit(note, existing, field_name)
-        return jsonify({"asset_id": existing.id, "url": f"/media/proxy/{existing.id}", "field_name": field_name})
+        link_existing_media_and_commit(note, existing, validated_upload.field_name)
+        return jsonify(
+            {
+                "asset_id": existing.id,
+                "url": f"/media/proxy/{existing.id}",
+                "field_name": validated_upload.field_name,
+            }
+        )
 
-    upload_root = Path(current_app.config["FLASHCARD_MEDIA_UPLOAD_ROOT"])
-    safe_name = Path(uploaded.filename).name.replace(" ", "_")
+    upload_root = Path(current_app.config["FLASHCARD_MEDIA_UPLOAD_ROOT"]).resolve()
     relative_dir = Path(str(current_user.id)) / note.id
-    final_dir = upload_root / relative_dir
-    final_dir.mkdir(parents=True, exist_ok=True)
-    filename = f"{digest[:8]}_{safe_name}"
-    relative_path = relative_dir / filename
-    full_path = upload_root / relative_path
-    full_path.write_bytes(content)
+    relative_path = relative_dir / validated_upload.storage_filename
+    try:
+        full_path = resolve_safe_storage_path(upload_root=upload_root, relative_path=relative_path)
+    except RequestValidationError as exc:
+        return _api_error(exc.code, str(exc), field=exc.field, status=exc.status)
+    full_path.parent.mkdir(parents=True, exist_ok=True)
+    full_path.write_bytes(validated_upload.content)
 
     asset = MediaAsset(
         note_id=note.id,
-        field_name=field_name,
-        filename=safe_name,
-        mime_type=mime_type,
+        field_name=validated_upload.field_name,
+        filename=validated_upload.safe_original_filename,
+        mime_type=validated_upload.mime_type,
         storage_path=str(relative_path).replace("\\", "/"),
-        sha256=digest,
-        size_bytes=len(content),
+        sha256=validated_upload.sha256,
+        size_bytes=validated_upload.size_bytes,
     )
     from app.services.flashcard_media_service import upload_note_media_and_commit
-    upload_note_media_and_commit(note, asset, field_name)
-    return jsonify({"asset_id": asset.id, "url": f"/media/proxy/{asset.id}", "field_name": field_name}), 201
+    upload_note_media_and_commit(note, asset, validated_upload.field_name)
+    return jsonify(
+        {
+            "asset_id": asset.id,
+            "url": f"/media/proxy/{asset.id}",
+            "field_name": validated_upload.field_name,
+        }
+    ), 201
 
 @flashcards_bp.route("/api/media/<asset_id>", methods=["DELETE"])
 @login_required
@@ -149,9 +168,15 @@ def delete_media(asset_id: str):
     )
     if not asset:
         return _api_error("FIELD_NOT_FOUND", "Media asset not found.", status=404)
-    upload_root = Path(current_app.config["FLASHCARD_MEDIA_UPLOAD_ROOT"])
-    full_path = (upload_root / asset.storage_path).resolve()
-    if full_path.exists():
+    upload_root = Path(current_app.config["FLASHCARD_MEDIA_UPLOAD_ROOT"]).resolve()
+    try:
+        full_path = resolve_safe_storage_path(
+            upload_root=upload_root,
+            relative_path=Path(asset.storage_path),
+        )
+    except RequestValidationError:
+        full_path = None
+    if full_path is not None and full_path.exists():
         try:
             full_path.unlink()
         except OSError:
@@ -170,9 +195,20 @@ def proxy_media(asset_id: str):
     )
     if not asset:
         return _api_error("FIELD_NOT_FOUND", "Media asset not found.", status=404)
-    upload_root = Path(current_app.config["FLASHCARD_MEDIA_UPLOAD_ROOT"])
-    full_path = (upload_root / asset.storage_path).resolve()
+    upload_root = Path(current_app.config["FLASHCARD_MEDIA_UPLOAD_ROOT"]).resolve()
+    try:
+        full_path = resolve_safe_storage_path(
+            upload_root=upload_root,
+            relative_path=Path(asset.storage_path),
+        )
+    except RequestValidationError:
+        return _api_error("FIELD_NOT_FOUND", "Media file not found on disk.", status=404)
     if not full_path.exists():
         return _api_error("FIELD_NOT_FOUND", "Media file not found on disk.", status=404)
-    return send_file(full_path, mimetype=asset.mime_type, conditional=True, max_age=3600)
-
+    response = send_file(full_path, mimetype=asset.mime_type, conditional=True, max_age=3600)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Content-Security-Policy"] = "default-src 'none'; sandbox"
+    response.headers["Content-Disposition"] = (
+        f"inline; filename=\"{build_safe_download_filename(asset.filename)}\""
+    )
+    return response
