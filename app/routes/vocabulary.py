@@ -1052,7 +1052,11 @@ def delete_deck(deck_id: int):
 def reset_deck(deck_id: int):
     """Reset current-user progress for cards within a deck subtree."""
     deck = Deck.query.get_or_404(deck_id)
-    if not is_admin_user(current_user) and not _can_current_user_delete_cloned_deck(deck):
+    if (
+        not is_admin_user(current_user)
+        and deck.owner_user_id != current_user.id
+        and not _can_current_user_delete_cloned_deck(deck)
+    ):
         return redirect(url_for("main.dashboard"))
 
     next_url = _resolve_next_url()

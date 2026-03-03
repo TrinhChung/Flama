@@ -31,11 +31,17 @@ def collect_accessible_decks_for_import(*, user_id: int, admin_mode: bool) -> li
 
     installs = DeckInstall.query.filter_by(user_id=user_id).all()
     installed_root_ids = {int(row.local_deck_id) for row in installs if row.local_deck_id}
-    if not installed_root_ids:
+    owned_deck_ids = {
+        int(row[0])
+        for row in db.session.query(Deck.id).filter(Deck.owner_user_id == user_id).all()
+        if row and row[0] is not None
+    }
+    initial_visible_ids = installed_root_ids | owned_deck_ids
+    if not initial_visible_ids:
         return []
 
     visible_ids: set[int] = set()
-    frontier: set[int] = set(installed_root_ids)
+    frontier: set[int] = set(initial_visible_ids)
     while frontier:
         current_ids = {deck_id for deck_id in frontier if deck_id not in visible_ids}
         if not current_ids:

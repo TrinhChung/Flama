@@ -236,6 +236,74 @@ class DeckSettingsRoutesTests(unittest.TestCase):
             self.assertEqual(admin_progress_count, 0)
             self.assertEqual(other_progress_count, 1)
 
+    def test_non_admin_owner_can_reset_owned_deck_without_clone_install(self):
+        with self.app.app_context():
+            owned_deck = Deck(
+                name="Owned Reset Deck",
+                parent_id=None,
+                owner_user_id=self.other_user_id,
+                position=1,
+            )
+            db.session.add(owned_deck)
+            db.session.flush()
+
+            note_type = NoteType(user_id=self.other_user_id, name="Owned Reset Note Type")
+            template = Template(
+                note_type=note_type,
+                name="Card 1",
+                front_html="{{Word}}",
+                back_html="{{Word}}",
+                shared_css="",
+                position=0,
+                is_default=True,
+            )
+            note = Note(
+                note_type=note_type,
+                user_id=self.other_user_id,
+                deck_id=owned_deck.id,
+                field_values={"Word": "mine"},
+            )
+            card = Card(note=note, template=template)
+            db.session.add_all([note_type, template, note, card])
+            db.session.flush()
+
+            owner_progress = CardProgress(
+                user_id=self.other_user_id,
+                card_id=card.id,
+                queue="review",
+                reps=3,
+            )
+            admin_progress = CardProgress(
+                user_id=self.admin_id,
+                card_id=card.id,
+                queue="review",
+                reps=4,
+            )
+            db.session.add_all([owner_progress, admin_progress])
+            db.session.commit()
+            owned_deck_id = owned_deck.id
+            card_id = card.id
+
+        self._login_other()
+        response = self.client.post(
+            f"/vocabulary/decks/{owned_deck_id}/reset",
+            data={"next": "/dashboard"},
+            follow_redirects=True,
+        )
+        self.assertEqual(response.status_code, 200)
+
+        with self.app.app_context():
+            owner_progress_count = CardProgress.query.filter_by(
+                user_id=self.other_user_id,
+                card_id=card_id,
+            ).count()
+            admin_progress_count = CardProgress.query.filter_by(
+                user_id=self.admin_id,
+                card_id=card_id,
+            ).count()
+            self.assertEqual(owner_progress_count, 0)
+            self.assertEqual(admin_progress_count, 1)
+
     def test_clone_owner_can_reset_progress_for_overlay_source_cards(self):
         with self.app.app_context():
             source_root = Deck(name="Source Root", parent_id=None, owner_user_id=self.admin_id, position=1)
