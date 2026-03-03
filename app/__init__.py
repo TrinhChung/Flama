@@ -38,6 +38,10 @@ def create_app(config: Optional[dict] = None) -> Flask:
     }
     app.config["FLASHCARD_MEDIA_UPLOAD_ROOT"] = str(BASE_DIR / "static" / "uploads")
     app.config["FLASHCARD_MEDIA_MAX_BYTES"] = int(os.getenv("FLASHCARD_MEDIA_MAX_BYTES", str(10 * 1024 * 1024)))
+    app.config["FLASHCARD_MEDIA_SCAN_ENABLED"] = (
+        os.getenv("FLASHCARD_MEDIA_SCAN_ENABLED", "0").strip().lower() in {"1", "true", "yes", "on"}
+    )
+    app.config["FLASHCARD_MEDIA_SCANNER"] = None
     if config:
         app.config.update(config)
 
@@ -125,9 +129,9 @@ def create_app(config: Optional[dict] = None) -> Flask:
         ensure_user_management_schema(db.session)
         _ensure_backward_compatible_schema()
         ensure_default_user_roles(db.session)
-        from app.controllers import flashcards_share_controller as share_ctrl
+        from app.services import flashcards_share
 
-        share_ctrl.cutover_clone_model_to_overlay_only(fail_on_mismatch=True)
+        flashcards_share.cutover_clone_model_to_overlay_only(fail_on_mismatch=True)
         db.session.commit()
 
     return app

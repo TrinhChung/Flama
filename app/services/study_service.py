@@ -1,0 +1,67 @@
+"""Study service representing the application-level boundary for flashcard studying."""
+
+from __future__ import annotations
+
+from datetime import datetime
+
+from models import db
+from models.flashcard import Card
+from models.card_progress import CardProgress
+from app.repositories.study_repository import (
+    apply_card_state_to_progress as _apply_card_state_to_progress,
+)
+from app.services.stats_overview import record_review_event, update_user_timezone
+from app.routes.flashcards import (
+    _touch_note_type_install_usage,
+    _resolve_local_clone_deck_id_for_source_deck,
+    _touch_deck_install_usage,
+    _audit,
+)
+from app.services.flashcards_share_service import CloneDeckScope
+
+def apply_study_answer_and_commit(
+    *,
+    user,
+    card: Card,
+    progress: CardProgress,
+    updated_state,
+    now: datetime,
+    rating: str,
+    review_mode: str,
+    payload: dict,
+    clone_scope: CloneDeckScope | None,
+    requested_scope_id: int | None
+) -> None:
+    """Applies the new study state to the progress record and commits the transaction."""
+    _apply_card_state_to_progress(progress, updated_state, now)
+    _touch_note_type_install_usage(user_id=user.id, installed_note_type_id=card.note.note_type_id, activity_at=now)
+
+    local_deck_id_for_usage = card.note.deck_id
+    if clone_scope is not None:
+        local_deck_id_for_usage = (
+            requested_scope_id
+            if requested_scope_id is not None
+            else _resolve_local_clone_deck_id_for_source_deck(
+                install_id=clone_scope.install.id,
+                source_deck_id=card.note.deck_id,
+            )
+        ) or clone_scope.install.local_deck_id
+
+    if local_deck_id_for_usage is not None:
+        _touch_deck_install_usage(user_id=user.id, local_deck_id=local_deck_id_for_usage, activity_at=now)
+        
+    update_user_timezone(user, payload.get("timezone"))
+    
+    record_review_event(
+        user_id=user.id,
+        card_id=card.id,
+        deck_id=local_deck_id_for_usage,
+        note_type_id=card.note.note_type_id,
+        reviewed_at=now,
+        duration_ms=payload.get("duration_ms"),
+        rating=rating,
+        mode=review_mode,
+    )
+    _audit("study.answer", {"card_id": card.id, "rating": rating})
+    db.session.commit()
+

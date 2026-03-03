@@ -6,7 +6,7 @@ import random
 from datetime import datetime
 from typing import Any
 
-from app.controllers.deck_controller import collect_subtree_ids
+from app.repositories.deck_tree_query import collect_subtree_ids
 from models import db
 from models.flashcard import DeckInstall, DeckMarketplaceItem, FieldDef, Note, NoteType, Template
 
@@ -569,3 +569,141 @@ def parse_query_price_cents(raw_value: Any) -> int | None:
     if parsed is None:
         return None
     return max(0, parsed)
+
+def get_visible_note_types(user_id: int) -> list[NoteType]:
+    from app.services import flashcards_share as flashcards_share
+    return [
+        item
+        for item in NoteType.query.order_by(NoteType.updated_at.desc()).all()
+        if flashcards_share.is_note_type_visible_for_shared(item, user_id, flashcards_share.PUBLISH_STATUSES_VISIBLE)
+    ]
+
+def get_visible_deck_items(user_id: int) -> list[DeckMarketplaceItem]:
+    from app.services import flashcards_share as flashcards_share
+    return [
+        item
+        for item in DeckMarketplaceItem.query.order_by(DeckMarketplaceItem.updated_at.desc()).all()
+        if flashcards_share.is_deck_item_visible_for_shared(item, user_id, flashcards_share.PUBLISH_STATUSES_VISIBLE)
+    ]
+
+def get_note_type_recommendations(user_id: int, visible_items: list[NoteType]) -> dict[str, Any]:
+    from app.services import flashcards_share as flashcards_share
+    from models.flashcard import NoteTypeInstall
+    from models import db
+    from datetime import timedelta
+    
+    interests_categories, interests_tags = collect_user_market_interests(user_id)
+    cold_start = not interests_categories and not interests_tags
+
+    scored = []
+    for item in visible_items:
+        if item.user_id == user_id:
+            continue
+        score = score_market_item(
+            item_category=item.primary_category,
+            item_tags=item.tags or [],
+            rating_avg=float(item.rating_avg or 0.0),
+            rating_count=int(item.rating_count or 0),
+            active_usage_count=int(item.active_usage_count or 0),
+            install_count=int(item.install_count or 0),
+            updated_at=item.updated_at,
+            interests_categories=interests_categories,
+            interests_tags=interests_tags,
+            is_official=bool(item.is_official),
+            cold_start=cold_start,
+        )
+        scored.append((score, item))
+
+    recommended = [
+        serialize_note_type_marketplace_card(item)
+        for _, item in sorted(scored, key=lambda row: row[0], reverse=True)[:12]
+    ]
+
+    trending_cutoff = datetime.utcnow() - timedelta(days=flashcards_share.TRENDING_WINDOW_DAYS)
+    trending_counts_raw = (
+        db.session.query(NoteTypeInstall.source_note_type_id, db.func.count(NoteTypeInstall.id))
+        .filter(NoteTypeInstall.installed_at >= trending_cutoff)
+        .group_by(NoteTypeInstall.source_note_type_id)
+        .all()
+    )
+    trending_counts = {row[0]: int(row[1] or 0) for row in trending_counts_raw}
+
+    trending = sorted(
+        visible_items,
+        key=lambda item: (
+            trending_counts.get(item.id, 0),
+            int(item.active_usage_count or 0),
+            int(item.install_count or 0),
+        ),
+        reverse=True,
+    )[:12]
+
+    new_and_updated = sort_note_type_items(visible_items, "recently_updated")[:12]
+
+    return {
+        "recommended_for_you": recommended,
+        "top_by_category": top_items_by_category_note_types(visible_items),
+        "trending": [serialize_note_type_marketplace_card(item) for item in trending],
+        "new_and_updated": [serialize_note_type_marketplace_card(item) for item in new_and_updated],
+    }
+
+def get_deck_recommendations(user_id: int, visible_items: list[DeckMarketplaceItem]) -> dict[str, Any]:
+    from app.services import flashcards_share as flashcards_share
+    from models.flashcard import DeckInstall
+    from models import db
+    from datetime import timedelta
+    
+    interests_categories, interests_tags = collect_user_market_interests(user_id)
+    cold_start = not interests_categories and not interests_tags
+
+    scored = []
+    for item in visible_items:
+        if item.owner_user_id == user_id:
+            continue
+        score = score_market_item(
+            item_category=item.primary_category,
+            item_tags=item.tags or [],
+            rating_avg=float(item.rating_avg or 0.0),
+            rating_count=int(item.rating_count or 0),
+            active_usage_count=int(item.active_usage_count or 0),
+            install_count=int(item.install_count or 0),
+            updated_at=item.updated_at,
+            interests_categories=interests_categories,
+            interests_tags=interests_tags,
+            is_official=bool(item.is_official),
+            cold_start=cold_start,
+        )
+        scored.append((score, item))
+
+    recommended = [
+        serialize_deck_marketplace_item(item)
+        for _, item in sorted(scored, key=lambda row: row[0], reverse=True)[:12]
+    ]
+
+    trending_cutoff = datetime.utcnow() - timedelta(days=flashcards_share.TRENDING_WINDOW_DAYS)
+    trending_counts_raw = (
+        db.session.query(DeckInstall.deck_item_id, db.func.count(DeckInstall.id))
+        .filter(DeckInstall.installed_at >= trending_cutoff)
+        .group_by(DeckInstall.deck_item_id)
+        .all()
+    )
+    trending_counts = {row[0]: int(row[1] or 0) for row in trending_counts_raw}
+
+    trending = sorted(
+        visible_items,
+        key=lambda item: (
+            trending_counts.get(item.id, 0),
+            int(item.active_usage_count or 0),
+            int(item.install_count or 0),
+        ),
+        reverse=True,
+    )[:12]
+
+    new_and_updated = sort_deck_items(visible_items, "recently_updated")[:12]
+
+    return {
+        "recommended_for_you": recommended,
+        "top_by_category": top_items_by_category_decks(visible_items),
+        "trending": [serialize_deck_marketplace_item(item) for item in trending],
+        "new_and_updated": [serialize_deck_marketplace_item(item) for item in new_and_updated],
+    }

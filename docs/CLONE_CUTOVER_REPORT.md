@@ -1,5 +1,11 @@
 # Clone Cutover Report (Logical Overlay Only)
 
+> Follow-up implementation plan for clone edit -> request -> review/merge flow:
+> `docs/DECK_CHANGE_REQUEST_SIMPLE_PLAN.md`
+>
+> Mandatory principle: if the root issue is data model/schema, prefer DB change over
+> workaround logic in routes/services.
+
 ## 1) Inventory & Audit
 
 ### a) Clone deck / install deck / get deck

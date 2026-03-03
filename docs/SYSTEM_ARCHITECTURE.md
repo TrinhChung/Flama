@@ -61,3 +61,58 @@ The frontend employs a custom component-based architecture built with Jinja2 mac
 - **Data Initialization (Seeding)**: Custom CLI commands allow seeding vocabulary from CSV/TSV files into isolated deck structures.
 - **Vocabulary Import & Management**: Users can bulk import CSV data and utilize a spreadsheet-like grid for inline editing, which saves custom column width preferences per user.
 - **Spaced Repetition (Flashcard V2)**: Advanced scheduling subsystem that tracks user reviews on individual `Card` records generated from `Note` data and associated `Template` definitions.
+
+## 8. Layer Responsibility Rules (Agent Guardrails)
+These rules are mandatory for all contributors and coding agents to prevent logic from being added to the wrong layer.
+
+### 8.1 Route Layer (`app/routes/*`)
+- **Must do**:
+  - Parse HTTP input (`request.args`, `request.form`, `request.get_json`).
+  - Perform HTTP-level auth checks and simple resource existence checks.
+  - Call validator(s) and service(s).
+  - Map result to HTTP response (`jsonify`, `render_template`, status code).
+- **Must not do**:
+  - Implement business rules/use-case orchestration.
+  - Do deep data sanitization/security filtering directly in route.
+  - Own transaction boundaries (`db.session.commit/rollback`) except explicitly documented emergency fallback.
+  - Become a data-access hub with large ORM query logic.
+
+### 8.2 Validator Layer (`app/validators/*`)
+- **Must do**:
+  - Validate schema, required/optional, type, enum, length, structure.
+  - Normalize input data.
+  - Apply input security checks (XSS, injection probes, file upload guards).
+  - Return clean data object or structured validation error.
+- **Must not do**:
+  - Write to DB or mutate persistent state.
+  - Call `db.session.commit/rollback`.
+  - Depend on Flask route context side effects.
+
+### 8.3 Service Layer (`app/services/*`)
+- **Must do**:
+  - Implement use-case/business orchestration.
+  - Own transaction boundaries.
+  - Coordinate repository/query modules and domain policies.
+- **Must not do**:
+  - Parse raw HTTP payload formats.
+  - Return Flask response objects.
+  - Re-validate raw request format that already belongs to validator layer.
+
+### 8.4 Repository/Query Layer (`app/repositories/*`)
+- **Must do**:
+  - Encapsulate DB read/write/query operations.
+  - Return entities/read-models needed by service layer.
+- **Must not do**:
+  - Implement business workflows/policies.
+  - Parse or sanitize HTTP input.
+  - Depend on `request`, `current_user`, or route modules.
+  - Own transaction commit/rollback (except explicitly documented low-level migration scripts).
+
+### 8.5 Mandatory Check Before Merge (for Agent and Human)
+For every new logic block, confirm all 4 statements:
+1. Input validation and security checks are in validator layer.
+2. Business orchestration is in service layer.
+3. DB access is in repository/query layer.
+4. Route only maps HTTP <-> app flow and does not absorb business logic.
+
+If any statement fails, refactor before merge.

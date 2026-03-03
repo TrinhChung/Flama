@@ -903,8 +903,9 @@
     state.preferredWord = preferredWord;
     state.preferredReading = preferredReading;
     state.preferredSelectionPending = Boolean(preferredWord);
-    if (state.preferredSelectionPending) {
-      state.query.keyword = preferredWord;
+    // Keep broad browse results; only prefer selecting current card/word when present.
+    if (state.preferredSelectionPending && context === "study") {
+      state.query.keyword = "";
       state.query.tag = "";
       state.query.status = "all";
     }
@@ -1216,4 +1217,3 @@
 
   setupEvents();
 })();
-

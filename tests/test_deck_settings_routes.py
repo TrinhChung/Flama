@@ -1,11 +1,12 @@
 """Integration tests for deck settings actions on dashboard dropdown."""
 
+from datetime import datetime, timedelta
 import unittest
 
 from app import create_app
 from app.utils.deck_move_token import create_deck_move_token
 from models import db
-from models.flashcard import Card, DeckInstall, DeckMarketplaceItem, Note, NoteType, Template
+from models.flashcard import Card, DeckCloneDeckMap, DeckInstall, DeckMarketplaceItem, Note, NoteType, Template
 from models.user import User
 from models.user_role import UserRole
 from models.deck import Deck
@@ -234,6 +235,267 @@ class DeckSettingsRoutesTests(unittest.TestCase):
             ).count()
             self.assertEqual(admin_progress_count, 0)
             self.assertEqual(other_progress_count, 1)
+
+    def test_non_admin_owner_can_reset_owned_deck_without_clone_install(self):
+        with self.app.app_context():
+            owned_deck = Deck(
+                name="Owned Reset Deck",
+                parent_id=None,
+                owner_user_id=self.other_user_id,
+                position=1,
+            )
+            db.session.add(owned_deck)
+            db.session.flush()
+
+            note_type = NoteType(user_id=self.other_user_id, name="Owned Reset Note Type")
+            template = Template(
+                note_type=note_type,
+                name="Card 1",
+                front_html="{{Word}}",
+                back_html="{{Word}}",
+                shared_css="",
+                position=0,
+                is_default=True,
+            )
+            note = Note(
+                note_type=note_type,
+                user_id=self.other_user_id,
+                deck_id=owned_deck.id,
+                field_values={"Word": "mine"},
+            )
+            card = Card(note=note, template=template)
+            db.session.add_all([note_type, template, note, card])
+            db.session.flush()
+
+            owner_progress = CardProgress(
+                user_id=self.other_user_id,
+                card_id=card.id,
+                queue="review",
+                reps=3,
+            )
+            admin_progress = CardProgress(
+                user_id=self.admin_id,
+                card_id=card.id,
+                queue="review",
+                reps=4,
+            )
+            db.session.add_all([owner_progress, admin_progress])
+            db.session.commit()
+            owned_deck_id = owned_deck.id
+            card_id = card.id
+
+        self._login_other()
+        response = self.client.post(
+            f"/vocabulary/decks/{owned_deck_id}/reset",
+            data={"next": "/dashboard"},
+            follow_redirects=True,
+        )
+        self.assertEqual(response.status_code, 200)
+
+        with self.app.app_context():
+            owner_progress_count = CardProgress.query.filter_by(
+                user_id=self.other_user_id,
+                card_id=card_id,
+            ).count()
+            admin_progress_count = CardProgress.query.filter_by(
+                user_id=self.admin_id,
+                card_id=card_id,
+            ).count()
+            self.assertEqual(owner_progress_count, 0)
+            self.assertEqual(admin_progress_count, 1)
+
+    def test_clone_owner_can_reset_progress_for_overlay_source_cards(self):
+        with self.app.app_context():
+            source_root = Deck(name="Source Root", parent_id=None, owner_user_id=self.admin_id, position=1)
+            cloned_root = Deck(name="Installed Root", parent_id=None, owner_user_id=self.other_user_id, position=2)
+            db.session.add_all([source_root, cloned_root])
+            db.session.flush()
+
+            note_type = NoteType(user_id=self.admin_id, name="Clone Reset Note Type")
+            template = Template(
+                note_type=note_type,
+                name="Card 1",
+                front_html="{{Word}}",
+                back_html="{{Word}}",
+                shared_css="",
+                position=0,
+                is_default=True,
+            )
+            source_note = Note(
+                note_type=note_type,
+                user_id=self.admin_id,
+                deck_id=source_root.id,
+                field_values={"Word": "overlay"},
+            )
+            source_card = Card(note=source_note, template=template)
+            db.session.add_all([note_type, template, source_note, source_card])
+            db.session.flush()
+
+            shared_item = DeckMarketplaceItem(
+                owner_user_id=self.admin_id,
+                source_deck_id=source_root.id,
+                source_note_type_id=note_type.id,
+                title="Shared Deck",
+                description="Shared deck description",
+                primary_category="General",
+                tags=[],
+                pricing_mode="free",
+                price_cents=0,
+                version="1.0.0",
+                publish_status="published",
+            )
+            db.session.add(shared_item)
+            db.session.flush()
+
+            install_row = DeckInstall(
+                deck_item_id=shared_item.id,
+                user_id=self.other_user_id,
+                local_deck_id=cloned_root.id,
+                clone_mode="logical_overlay",
+                source_deck_id=source_root.id,
+                source_owner_user_id=self.admin_id,
+                base_snapshot_at=datetime.utcnow() + timedelta(minutes=1),
+            )
+            db.session.add(install_row)
+            db.session.flush()
+            db.session.add(
+                DeckCloneDeckMap(
+                    deck_install_id=install_row.id,
+                    local_deck_id=cloned_root.id,
+                    source_deck_id=source_root.id,
+                )
+            )
+
+            owner_progress = CardProgress(
+                user_id=self.other_user_id,
+                card_id=source_card.id,
+                queue="review",
+                reps=5,
+            )
+            admin_progress = CardProgress(
+                user_id=self.admin_id,
+                card_id=source_card.id,
+                queue="review",
+                reps=7,
+            )
+            db.session.add_all([owner_progress, admin_progress])
+            db.session.commit()
+            cloned_root_id = cloned_root.id
+            source_card_id = source_card.id
+
+        self._login_other()
+        response = self.client.post(
+            f"/vocabulary/decks/{cloned_root_id}/reset",
+            data={"next": "/dashboard"},
+            follow_redirects=True,
+        )
+        self.assertEqual(response.status_code, 200)
+
+        with self.app.app_context():
+            owner_progress_count = CardProgress.query.filter_by(
+                user_id=self.other_user_id,
+                card_id=source_card_id,
+            ).count()
+            admin_progress_count = CardProgress.query.filter_by(
+                user_id=self.admin_id,
+                card_id=source_card_id,
+            ).count()
+            self.assertEqual(owner_progress_count, 0)
+            self.assertEqual(admin_progress_count, 1)
+
+    def test_non_admin_dashboard_includes_reset_form(self):
+        self._login_other()
+        response = self.client.get("/dashboard")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'id="deck-reset-form"', response.data)
+        self.assertIn(b'id="create-deck-btn"', response.data)
+        self.assertIn(b'id="createDeckModal"', response.data)
+        self.assertIn(b'/flashcards/note-types', response.data)
+
+    def test_non_admin_can_open_note_type_manager_page(self):
+        self._login_other()
+        response = self.client.get("/flashcards/note-types")
+        self.assertEqual(response.status_code, 200)
+
+    def test_non_admin_can_create_deck(self):
+        self._login_other()
+        response = self.client.post(
+            "/vocabulary/decks/create",
+            data={"name": "My Regular Deck", "next": "/dashboard"},
+            follow_redirects=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"My Regular Deck", response.data)
+
+        with self.app.app_context():
+            deck = Deck.query.filter_by(name="My Regular Deck").first()
+            self.assertIsNotNone(deck)
+            self.assertEqual(deck.owner_user_id, self.other_user_id)
+
+    def test_non_admin_create_deck_under_installed_root_uses_selected_parent(self):
+        with self.app.app_context():
+            source_root = Deck(
+                name="Shared Root",
+                parent_id=None,
+                owner_user_id=self.admin_id,
+                position=1,
+            )
+            local_root = Deck(
+                name="Shared Root",
+                parent_id=None,
+                owner_user_id=self.other_user_id,
+                position=2,
+            )
+            db.session.add_all([source_root, local_root])
+            db.session.flush()
+
+            shared_item = DeckMarketplaceItem(
+                owner_user_id=self.admin_id,
+                title="Shared Root Deck",
+                description="Shared root deck description",
+                primary_category="General",
+                tags=[],
+                pricing_mode="free",
+                price_cents=0,
+                version="1.0.0",
+                publish_status="published",
+            )
+            db.session.add(shared_item)
+            db.session.flush()
+
+            install_row = DeckInstall(
+                deck_item_id=shared_item.id,
+                user_id=self.other_user_id,
+                local_deck_id=local_root.id,
+            )
+            db.session.add(install_row)
+            db.session.commit()
+            source_root_id = source_root.id
+            local_root_id = local_root.id
+
+        self._login_other()
+        response = self.client.post(
+            "/vocabulary/decks/create",
+            data={
+                "parent_id": str(local_root_id),
+                "name": "Installed Child",
+                "deck_path": "Shared Root::Installed Child",
+                "next": "/dashboard",
+            },
+            follow_redirects=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Installed Child", response.data)
+
+        with self.app.app_context():
+            created = (
+                Deck.query.filter_by(name="Installed Child", owner_user_id=self.other_user_id)
+                .order_by(Deck.id.desc())
+                .first()
+            )
+            self.assertIsNotNone(created)
+            self.assertEqual(created.parent_id, local_root_id)
+            self.assertNotEqual(created.parent_id, source_root_id)
 
     def test_clone_owner_can_delete_cloned_deck_and_install_row(self):
         with self.app.app_context():
