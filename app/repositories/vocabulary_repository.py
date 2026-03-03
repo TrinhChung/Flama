@@ -686,6 +686,7 @@ def build_note_study_card_payload(card_obj: Card | None) -> SimpleNamespace | No
 
     payload = {
         "id": card_obj.id,
+        "note_id": note_obj.id,
         "word": display_triplet["word"],
         "reading": display_triplet["reading"],
         "meaning": display_triplet["meaning"],

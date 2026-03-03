@@ -238,3 +238,24 @@ def study_answer(card_id: str):
         }
     )
 
+
+@flashcards_bp.route("/api/study/cards/<card_id>/edit", methods=["PATCH"])
+@login_required
+def study_edit_card(card_id: str):
+    payload = request.get_json(silent=True) or {}
+    from app.services.study_card_editor_service import StudyCardEditError, update_study_card_note
+
+    try:
+        result = update_study_card_note(
+            user_id=current_user.id,
+            card_id=card_id,
+            payload=payload,
+        )
+    except StudyCardEditError as exc:
+        return _api_error(
+            exc.code,
+            str(exc),
+            status=exc.status,
+            field=exc.field,
+        )
+    return jsonify(result)

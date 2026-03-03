@@ -1587,6 +1587,84 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             self.assertIn(progress.queue, {"learning", "review", "relearning", "new"})
             self.assertIsNotNone(progress.reps)
 
+    def test_study_edit_card_updates_note_and_returns_rendered_html(self):
+        note_type = self._create_note_type()
+        note_type_id = note_type["id"]
+        note_resp = self.client.post(
+            "/api/notes",
+            json={
+                "note_type_id": note_type_id,
+                "deck_id": self.deck_id,
+                "field_values": {
+                    "Word": "\u72ac",
+                    "Reading": "\u3044\u306c",
+                    "Meaning": "dog",
+                },
+            },
+        )
+        self.assertEqual(note_resp.status_code, 201)
+        note_id = note_resp.get_json()["id"]
+
+        with self.app.app_context():
+            card = Card.query.filter_by(note_id=note_id).first()
+            self.assertIsNotNone(card)
+            card_id = card.id  # type: ignore[union-attr]
+
+        edit_resp = self.client.patch(
+            f"/api/study/cards/{card_id}/edit",
+            json={
+                "field_values": {
+                    "Word": "\u72ac-edit",
+                    "Reading": "\u3044\u306c-edit",
+                    "Meaning": "<b>dog edited</b>",
+                }
+            },
+        )
+        self.assertEqual(edit_resp.status_code, 200)
+        payload = edit_resp.get_json()
+        self.assertTrue(payload.get("success"))
+        self.assertIn("\u72ac-edit", payload.get("rendered_front_html", ""))
+        self.assertIn("\u3044\u306c-edit", payload.get("rendered_back_html", ""))
+        self.assertIn("<b>dog edited</b>", payload.get("rendered_back_html", ""))
+
+        with self.app.app_context():
+            note = Note.query.get(note_id)
+            self.assertIsNotNone(note)
+            self.assertEqual(note.field_values.get("Word"), "\u72ac-edit")  # type: ignore[union-attr]
+            self.assertEqual(note.field_values.get("Reading"), "\u3044\u306c-edit")  # type: ignore[union-attr]
+
+    def test_study_edit_card_rejects_empty_required_field(self):
+        note_type = self._create_note_type()
+        note_type_id = note_type["id"]
+        note_resp = self.client.post(
+            "/api/notes",
+            json={
+                "note_type_id": note_type_id,
+                "deck_id": self.deck_id,
+                "field_values": {
+                    "Word": "\u72ac",
+                    "Reading": "\u3044\u306c",
+                    "Meaning": "dog",
+                },
+            },
+        )
+        self.assertEqual(note_resp.status_code, 201)
+        note_id = note_resp.get_json()["id"]
+
+        with self.app.app_context():
+            card = Card.query.filter_by(note_id=note_id).first()
+            self.assertIsNotNone(card)
+            card_id = card.id  # type: ignore[union-attr]
+
+        edit_resp = self.client.patch(
+            f"/api/study/cards/{card_id}/edit",
+            json={"field_values": {"Word": ""}},
+        )
+        self.assertEqual(edit_resp.status_code, 400)
+        payload = edit_resp.get_json()
+        self.assertEqual(payload.get("error"), "VALIDATION_ERROR")
+        self.assertEqual(payload.get("field"), "Word")
+
     def test_flashcard_import_parse_and_execute_upsert(self):
         note_type = self._create_note_type()
         note_type_id = note_type["id"]

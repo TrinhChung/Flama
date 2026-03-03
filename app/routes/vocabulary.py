@@ -1213,6 +1213,12 @@ def study_deck(deck_id: int):
     card_payload = _build_note_study_card_payload(selected_card)
     from app.services import flashcards_share as share_ctrl
 
+    can_edit_current_card = bool(
+        selected_card
+        and selected_card.note
+        and selected_card.note.user_id == current_user.id
+    )
+
     clone_scope = share_ctrl.resolve_clone_scope_for_local_deck(
         user_id=current_user.id,
         local_deck_id=root_deck.id,
@@ -1278,7 +1284,12 @@ def study_deck(deck_id: int):
         next_study_url=url_for("vocabulary.study_deck", deck_id=root_deck.id),
         next_intervals_preview=next_intervals_preview,
         answer_url=(url_for("flashcards.study_answer", card_id=selected_card.id) if selected_card else None),
-        edit_action_url=None,
+        can_edit_current_card=can_edit_current_card,
+        edit_card_api_url=(
+            url_for("flashcards.study_edit_card", card_id=selected_card.id)
+            if can_edit_current_card and selected_card
+            else None
+        ),
     )
 
 
