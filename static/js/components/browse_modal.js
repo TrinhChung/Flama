@@ -21,6 +21,27 @@
 
   const els = {
     contextLabel: document.getElementById("browseContextLabel"),
+    audioCreateBtn: document.getElementById("browseAudioCreateBtn"),
+    audioCreateMenu: document.getElementById("browseAudioCreateMenu"),
+    voicevoxOptionBtn: document.getElementById("browseVoicevoxOptionBtn"),
+    voicevoxModal: document.getElementById("browseVoicevoxModal"),
+    voicevoxModalBackdrop: document.getElementById("browseVoicevoxModalBackdrop"),
+    voicevoxModalCloseBtn: document.getElementById("browseVoicevoxModalCloseBtn"),
+    voicevoxApiKey: document.getElementById("browseVoicevoxApiKey"),
+    voicevoxClearApiKey: document.getElementById("browseVoicevoxClearApiKey"),
+    voicevoxKeyMeta: document.getElementById("browseVoicevoxKeyMeta"),
+    voicevoxKeyStatus: document.getElementById("browseVoicevoxKeyStatus"),
+    voicevoxCharacter: document.getElementById("browseVoicevoxCharacter"),
+    voicevoxCharacterMeta: document.getElementById("browseVoicevoxCharacterMeta"),
+    voicevoxPitch: document.getElementById("browseVoicevoxPitch"),
+    voicevoxIntonationScale: document.getElementById("browseVoicevoxIntonationScale"),
+    voicevoxSpeed: document.getElementById("browseVoicevoxSpeed"),
+    voicevoxPitchValue: document.getElementById("browseVoicevoxPitchValue"),
+    voicevoxIntonationScaleValue: document.getElementById("browseVoicevoxIntonationScaleValue"),
+    voicevoxSpeedValue: document.getElementById("browseVoicevoxSpeedValue"),
+    voicevoxReloadCharactersBtn: document.getElementById("browseVoicevoxReloadCharactersBtn"),
+    voicevoxValidateBtn: document.getElementById("browseVoicevoxValidateBtn"),
+    voicevoxOkBtn: document.getElementById("browseVoicevoxOkBtn"),
     refreshBtn: document.getElementById("browseRefreshBtn"),
     deckSearch: document.getElementById("browseDeckSearch"),
     includeSubdecks: document.getElementById("browseIncludeSubdecks"),
@@ -97,6 +118,25 @@
     preferredWord: "",
     preferredReading: "",
     preferredSelectionPending: false,
+    voicevox: {
+      key: "",
+      characterId: "",
+      pitch: 0.5,
+      intonationScale: 0.5,
+      speed: 0.5,
+      characters: [],
+      loadingCharacters: false,
+      characterError: "",
+      clearApiKey: false,
+      hasApiKey: false,
+      maskedApiKey: "",
+      keyStatus: "unknown",
+      lastValidationError: "",
+      loadedProfile: false,
+      loadingProfile: false,
+      saving: false,
+      validating: false,
+    },
   };
 
   function escapeHtml(value) {
@@ -200,6 +240,342 @@
     if (els.contextLabel) {
       els.contextLabel.textContent = `${contextText} | ${selectedDeckName}`;
     }
+  }
+
+  function clamp01(value, fallback = 0.5) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) {
+      return fallback;
+    }
+    return Math.max(0, Math.min(1, n));
+  }
+
+  function updateVoicevoxValueLabels() {
+    if (els.voicevoxPitchValue) {
+      els.voicevoxPitchValue.textContent = state.voicevox.pitch.toFixed(2);
+    }
+    if (els.voicevoxIntonationScaleValue) {
+      els.voicevoxIntonationScaleValue.textContent = state.voicevox.intonationScale.toFixed(2);
+    }
+    if (els.voicevoxSpeedValue) {
+      els.voicevoxSpeedValue.textContent = state.voicevox.speed.toFixed(2);
+    }
+  }
+
+  function updateVoicevoxMetaLabels() {
+    if (els.voicevoxKeyMeta) {
+      let keyMeta = "Chưa có API key.";
+      if (state.voicevox.clearApiKey) {
+        keyMeta = "API key đã lưu sẽ bị xóa khi bấm OK.";
+      } else if ((state.voicevox.key || "").trim()) {
+        keyMeta = "Sẽ thay API key khi bấm OK.";
+      } else if (state.voicevox.hasApiKey) {
+        const masked = state.voicevox.maskedApiKey || "đã được lưu";
+        keyMeta = `Đã lưu: ${masked}`;
+      }
+      els.voicevoxKeyMeta.textContent = keyMeta;
+    }
+
+    if (els.voicevoxKeyStatus) {
+      const statusText = String(state.voicevox.keyStatus || "unknown");
+      const detailText = String(state.voicevox.lastValidationError || "").trim();
+      els.voicevoxKeyStatus.textContent = detailText
+        ? `Trạng thái key: ${statusText} | ${detailText}`
+        : `Trạng thái key: ${statusText}`;
+    }
+
+    if (els.voicevoxCharacterMeta) {
+      if (state.voicevox.loadingCharacters) {
+        els.voicevoxCharacterMeta.textContent = "Đang tải danh sách nhân vật...";
+      } else if (state.voicevox.characterError) {
+        els.voicevoxCharacterMeta.textContent = state.voicevox.characterError;
+      } else if (state.voicevox.characters.length) {
+        els.voicevoxCharacterMeta.textContent = `Đã tải ${state.voicevox.characters.length} nhân vật từ VoiceVox.`;
+      } else {
+        els.voicevoxCharacterMeta.textContent = "Danh sách nhân vật sẽ tải từ VoiceVox.";
+      }
+    }
+  }
+
+  function renderVoicevoxCharacterOptions() {
+    if (!els.voicevoxCharacter) {
+      return;
+    }
+    const selected = String(state.voicevox.characterId || "").trim();
+    const options = ['<option value="">Chọn nhân vật</option>'];
+    const characters = Array.isArray(state.voicevox.characters) ? state.voicevox.characters : [];
+    for (const item of characters) {
+      const id = String(item?.id || "").trim();
+      if (!id) {
+        continue;
+      }
+      const label = String(item?.label || id);
+      options.push(`<option value="${escapeHtml(id)}">${escapeHtml(label)}</option>`);
+    }
+    els.voicevoxCharacter.innerHTML = options.join("");
+
+    if (selected) {
+      els.voicevoxCharacter.value = selected;
+    }
+    if (characters.length > 0 && selected && !els.voicevoxCharacter.value) {
+      state.voicevox.characterId = "";
+    }
+  }
+
+  function syncVoicevoxInputsFromState() {
+    if (els.voicevoxApiKey) {
+      els.voicevoxApiKey.value = state.voicevox.key;
+    }
+    if (els.voicevoxClearApiKey) {
+      els.voicevoxClearApiKey.checked = Boolean(state.voicevox.clearApiKey);
+    }
+    renderVoicevoxCharacterOptions();
+    if (els.voicevoxCharacter) {
+      els.voicevoxCharacter.value = String(state.voicevox.characterId || "");
+    }
+    if (els.voicevoxPitch) {
+      els.voicevoxPitch.value = String(state.voicevox.pitch);
+    }
+    if (els.voicevoxIntonationScale) {
+      els.voicevoxIntonationScale.value = String(state.voicevox.intonationScale);
+    }
+    if (els.voicevoxSpeed) {
+      els.voicevoxSpeed.value = String(state.voicevox.speed);
+    }
+    updateVoicevoxValueLabels();
+    updateVoicevoxMetaLabels();
+  }
+
+  function setVoicevoxActionState() {
+    const loading =
+      state.voicevox.loadingProfile ||
+      state.voicevox.loadingCharacters ||
+      state.voicevox.saving ||
+      state.voicevox.validating;
+    if (els.voicevoxApiKey) {
+      els.voicevoxApiKey.disabled = loading;
+    }
+    if (els.voicevoxClearApiKey) {
+      els.voicevoxClearApiKey.disabled = loading;
+    }
+    if (els.voicevoxCharacter) {
+      els.voicevoxCharacter.disabled = loading;
+    }
+    if (els.voicevoxPitch) {
+      els.voicevoxPitch.disabled = loading;
+    }
+    if (els.voicevoxIntonationScale) {
+      els.voicevoxIntonationScale.disabled = loading;
+    }
+    if (els.voicevoxSpeed) {
+      els.voicevoxSpeed.disabled = loading;
+    }
+    if (els.voicevoxReloadCharactersBtn) {
+      els.voicevoxReloadCharactersBtn.disabled = loading;
+      els.voicevoxReloadCharactersBtn.innerHTML = state.voicevox.loadingCharacters
+        ? '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span>'
+        : "Tải nhân vật";
+    }
+    if (els.voicevoxValidateBtn) {
+      els.voicevoxValidateBtn.disabled = loading;
+      els.voicevoxValidateBtn.innerHTML = state.voicevox.validating
+        ? '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span>'
+        : "Validate key";
+    }
+    if (els.voicevoxOkBtn) {
+      els.voicevoxOkBtn.disabled = loading;
+      els.voicevoxOkBtn.innerHTML = state.voicevox.saving
+        ? '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span>'
+        : "OK";
+    }
+  }
+
+  function applyVoicevoxProfilePayload(payload) {
+    const profile = payload?.profile || {};
+    const settings = profile?.effective_settings || profile?.settings || {};
+
+    state.voicevox.characterId = String(settings?.character_id || "").trim();
+    state.voicevox.pitch = clamp01(settings?.pitch, 0.5);
+    state.voicevox.intonationScale = clamp01(settings?.intonation_scale, 0.5);
+    state.voicevox.speed = clamp01(settings?.speed, 0.5);
+
+    state.voicevox.hasApiKey = Boolean(profile?.has_api_key);
+    state.voicevox.maskedApiKey = String(profile?.masked_api_key || "");
+    state.voicevox.keyStatus = String(profile?.key_status || "unknown");
+    state.voicevox.lastValidationError = String(profile?.last_validation_error || "");
+
+    state.voicevox.key = "";
+    state.voicevox.clearApiKey = false;
+    syncVoicevoxInputsFromState();
+  }
+
+  async function loadVoicevoxCharacters({ useDraftKey = false } = {}) {
+    if (state.voicevox.loadingCharacters) {
+      return;
+    }
+
+    const body = {};
+    if (useDraftKey) {
+      const draftKey = String(state.voicevox.key || "").trim();
+      if (draftKey) {
+        body.api_key = draftKey;
+      }
+    }
+
+    state.voicevox.loadingCharacters = true;
+    state.voicevox.characterError = "";
+    setVoicevoxActionState();
+    updateVoicevoxMetaLabels();
+
+    try {
+      const response = await requestJson("/api/tts/providers/voicevox/voices", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+      state.voicevox.characters = Array.isArray(response?.items) ? response.items : [];
+      renderVoicevoxCharacterOptions();
+    } catch (error) {
+      state.voicevox.characters = [];
+      state.voicevox.characterError = String(error?.message || "Không tải được danh sách nhân vật.");
+      renderVoicevoxCharacterOptions();
+    } finally {
+      state.voicevox.loadingCharacters = false;
+      setVoicevoxActionState();
+      updateVoicevoxMetaLabels();
+    }
+  }
+
+  async function ensureVoicevoxProfileLoaded(force = false) {
+    if (state.voicevox.loadingProfile) {
+      return;
+    }
+    if (state.voicevox.loadedProfile && !force) {
+      return;
+    }
+    state.voicevox.loadingProfile = true;
+    setVoicevoxActionState();
+
+    try {
+      const payload = await requestJson("/api/tts/providers/voicevox/profile");
+      applyVoicevoxProfilePayload(payload);
+      state.voicevox.loadedProfile = true;
+      await loadVoicevoxCharacters({ useDraftKey: false });
+    } catch (error) {
+      state.voicevox.keyStatus = "unknown";
+      state.voicevox.lastValidationError = String(error?.message || "Không thể tải cấu hình VoiceVox.");
+      updateVoicevoxMetaLabels();
+      window.alert(`Không thể tải cấu hình VoiceVox: ${state.voicevox.lastValidationError}`);
+    } finally {
+      state.voicevox.loadingProfile = false;
+      setVoicevoxActionState();
+    }
+  }
+
+  async function saveVoicevoxProfile({ closeOnSuccess = false } = {}) {
+    if (state.voicevox.saving || state.voicevox.loadingProfile) {
+      return false;
+    }
+    state.voicevox.saving = true;
+    setVoicevoxActionState();
+
+    const payload = {
+      clear_api_key: Boolean(state.voicevox.clearApiKey),
+      settings: {
+        character_id: String(state.voicevox.characterId || "").trim(),
+        pitch: state.voicevox.pitch,
+        intonation_scale: state.voicevox.intonationScale,
+        speed: state.voicevox.speed,
+      },
+    };
+    const typedKey = String(state.voicevox.key || "").trim();
+    if (typedKey) {
+      payload.api_key = typedKey;
+      payload.clear_api_key = false;
+    }
+
+    try {
+      const response = await requestJson("/api/tts/providers/voicevox/profile", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+      applyVoicevoxProfilePayload(response);
+      state.voicevox.loadedProfile = true;
+      await loadVoicevoxCharacters({ useDraftKey: false });
+      if (closeOnSuccess) {
+        setVoicevoxModalOpen(false);
+      }
+      return true;
+    } catch (error) {
+      window.alert(`Lưu cấu hình VoiceVox thất bại: ${error.message}`);
+      return false;
+    } finally {
+      state.voicevox.saving = false;
+      setVoicevoxActionState();
+    }
+  }
+
+  async function validateVoicevoxKey() {
+    if (state.voicevox.validating || state.voicevox.loadingProfile) {
+      return;
+    }
+    state.voicevox.validating = true;
+    setVoicevoxActionState();
+
+    const typedKey = String(state.voicevox.key || "").trim();
+    const requestBody = {};
+    if (typedKey) {
+      requestBody.api_key = typedKey;
+    }
+
+    try {
+      const response = await requestJson("/api/tts/providers/voicevox/validate-key", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(requestBody),
+      });
+
+      if (!typedKey && response?.item) {
+        applyVoicevoxProfilePayload(response.item);
+      } else if (response?.validation) {
+        state.voicevox.keyStatus = String(response.validation.status || "unknown");
+        state.voicevox.lastValidationError = String(response.validation.message || "");
+        updateVoicevoxMetaLabels();
+      }
+    } catch (error) {
+      window.alert(`Validate API key thất bại: ${error.message}`);
+    } finally {
+      state.voicevox.validating = false;
+      setVoicevoxActionState();
+    }
+  }
+
+  function setAudioCreateMenuOpen(open) {
+    if (!els.audioCreateMenu) {
+      return;
+    }
+    els.audioCreateMenu.classList.toggle("d-none", !open);
+  }
+
+  function setVoicevoxModalOpen(open) {
+    if (!els.voicevoxModal) {
+      return;
+    }
+    els.voicevoxModal.classList.toggle("d-none", !open);
+    if (open) {
+      ensureVoicevoxProfileLoaded(false).catch(() => undefined);
+      return;
+    }
+    state.voicevox.key = "";
+    state.voicevox.clearApiKey = false;
+    syncVoicevoxInputsFromState();
   }
 
   function setTreeLoading(loading) {
@@ -1066,14 +1442,105 @@
   }
 
   function setupEvents() {
+    syncVoicevoxInputsFromState();
+    setVoicevoxActionState();
+
     document.addEventListener("click", (event) => {
       const trigger = event.target.closest('[data-browse-open="1"]');
       if (!trigger) {
+        if (!event.target.closest(".browse-voicevox")) {
+          setAudioCreateMenuOpen(false);
+        }
+      } else {
+        event.preventDefault();
+        openBrowseFromTrigger(trigger);
+      }
+    });
+
+    if (els.audioCreateBtn) {
+      els.audioCreateBtn.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const willOpen = els.audioCreateMenu?.classList.contains("d-none");
+        setAudioCreateMenuOpen(Boolean(willOpen));
+      });
+    }
+
+    if (els.voicevoxOptionBtn) {
+      els.voicevoxOptionBtn.addEventListener("click", (event) => {
+        event.preventDefault();
+        setAudioCreateMenuOpen(false);
+        setVoicevoxModalOpen(true);
+      });
+    }
+
+    if (els.voicevoxModalBackdrop) {
+      els.voicevoxModalBackdrop.addEventListener("click", () => {
+        setVoicevoxModalOpen(false);
+      });
+    }
+
+    if (els.voicevoxModalCloseBtn) {
+      els.voicevoxModalCloseBtn.addEventListener("click", () => {
+        setVoicevoxModalOpen(false);
+      });
+    }
+
+    if (els.voicevoxApiKey) {
+      els.voicevoxApiKey.addEventListener("input", () => {
+        state.voicevox.key = String(els.voicevoxApiKey.value || "");
+        if (state.voicevox.key.trim()) {
+          state.voicevox.clearApiKey = false;
+        }
+        updateVoicevoxMetaLabels();
+      });
+    }
+    if (els.voicevoxClearApiKey) {
+      els.voicevoxClearApiKey.addEventListener("change", () => {
+        state.voicevox.clearApiKey = Boolean(els.voicevoxClearApiKey.checked);
+        if (state.voicevox.clearApiKey) {
+          state.voicevox.key = "";
+          if (els.voicevoxApiKey) {
+            els.voicevoxApiKey.value = "";
+          }
+        }
+        updateVoicevoxMetaLabels();
+      });
+    }
+    if (els.voicevoxValidateBtn) {
+      els.voicevoxValidateBtn.addEventListener("click", () => {
+        validateVoicevoxKey().catch(() => undefined);
+      });
+    }
+    if (els.voicevoxReloadCharactersBtn) {
+      els.voicevoxReloadCharactersBtn.addEventListener("click", () => {
+        const useDraftKey = Boolean(String(state.voicevox.key || "").trim());
+        loadVoicevoxCharacters({ useDraftKey }).catch(() => undefined);
+      });
+    }
+    if (els.voicevoxOkBtn) {
+      els.voicevoxOkBtn.addEventListener("click", () => {
+        saveVoicevoxProfile({ closeOnSuccess: true }).catch(() => undefined);
+      });
+    }
+    if (els.voicevoxCharacter) {
+      els.voicevoxCharacter.addEventListener("change", () => {
+        state.voicevox.characterId = String(els.voicevoxCharacter.value || "").trim();
+      });
+    }
+
+    const bindVoicevoxRange = (el, fieldName) => {
+      if (!el) {
         return;
       }
-      event.preventDefault();
-      openBrowseFromTrigger(trigger);
-    });
+      el.addEventListener("input", () => {
+        state.voicevox[fieldName] = clamp01(el.value, 0.5);
+        updateVoicevoxValueLabels();
+      });
+    };
+    bindVoicevoxRange(els.voicevoxPitch, "pitch");
+    bindVoicevoxRange(els.voicevoxIntonationScale, "intonationScale");
+    bindVoicevoxRange(els.voicevoxSpeed, "speed");
 
     modalEl.addEventListener("shown.bs.modal", () => {
       handleModalShown().catch(() => undefined);
@@ -1345,6 +1812,10 @@
     document.addEventListener("keydown", (event) => {
       if (!isModalShown()) {
         return;
+      }
+      if (event.key === "Escape") {
+        setAudioCreateMenuOpen(false);
+        setVoicevoxModalOpen(false);
       }
 
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {

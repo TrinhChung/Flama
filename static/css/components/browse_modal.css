@@ -43,6 +43,105 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  position: relative;
+}
+
+.browse-voicevox {
+  position: relative;
+}
+
+.browse-voicevox__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.browse-voicevox__menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  width: 180px;
+  padding: 0.35rem;
+  border: 1px solid var(--flama-border);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+  z-index: 1060;
+}
+
+.browse-voicevox__menu-item {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  padding: 0.35rem 0.45rem;
+  border-radius: 6px;
+  font-size: 0.82rem;
+}
+
+.browse-voicevox__menu-item:hover {
+  background: #f3f3f3;
+}
+
+.browse-voicevox__field {
+  margin-bottom: 0.5rem;
+}
+
+.browse-voicevox__field label {
+  display: block;
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--flama-text-2);
+  margin-bottom: 0.2rem;
+}
+
+.browse-voicevox__field .form-range {
+  margin: 0;
+}
+
+.browse-voicevox-modal {
+  position: absolute;
+  inset: 0;
+  z-index: 1070;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.browse-voicevox-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.28);
+}
+
+.browse-voicevox-modal__dialog {
+  position: relative;
+  width: min(460px, calc(100vw - 2rem));
+  max-height: calc(100vh - 3rem);
+  overflow: auto;
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid var(--flama-border);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.22);
+}
+
+.browse-voicevox-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.65rem 0.8rem;
+  border-bottom: 1px solid var(--flama-border);
+}
+
+.browse-voicevox-modal__title {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.browse-voicevox-modal__body {
+  padding: 0.75rem 0.8rem 0.5rem;
 }
 
 .browse-modal__body {

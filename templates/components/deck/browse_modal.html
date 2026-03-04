@@ -11,6 +11,15 @@
           <small class="browse-modal__context" id="browseContextLabel">All decks</small>
         </div>
         <div class="browse-modal__header-actions">
+          <div class="browse-voicevox">
+            <button type="button" class="btn btn-sm btn-outline-secondary browse-voicevox__toggle" id="browseAudioCreateBtn" title="Tạo âm thanh">
+              <i class="bi bi-mic"></i>
+              Tạo âm thanh
+            </button>
+            <div class="browse-voicevox__menu d-none" id="browseAudioCreateMenu">
+              <button type="button" class="browse-voicevox__menu-item" id="browseVoicevoxOptionBtn">VoiceVox</button>
+            </div>
+          </div>
           <button type="button" class="btn btn-sm btn-outline-secondary" id="browseRefreshBtn" title="Reload data">
             <i class="bi bi-arrow-clockwise"></i>
             Refresh
@@ -144,6 +153,54 @@
             </form>
           </div>
         </aside>
+      </div>
+
+      <div class="browse-voicevox-modal d-none" id="browseVoicevoxModal">
+        <div class="browse-voicevox-modal__backdrop" id="browseVoicevoxModalBackdrop"></div>
+        <div class="browse-voicevox-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="browseVoicevoxModalLabel">
+          <div class="browse-voicevox-modal__header">
+            <h6 class="browse-voicevox-modal__title" id="browseVoicevoxModalLabel">Thiết lập VoiceVox</h6>
+            <button type="button" class="btn-close" id="browseVoicevoxModalCloseBtn" aria-label="Close"></button>
+          </div>
+          <div class="browse-voicevox-modal__body">
+            <div class="browse-voicevox__field">
+              <label for="browseVoicevoxApiKey">ApiKey (user riêng)</label>
+              <input type="text" class="form-control form-control-sm" id="browseVoicevoxApiKey" placeholder="Để trống nếu không đổi key">
+              <div class="small text-muted mt-1" id="browseVoicevoxKeyMeta">Chưa có API key.</div>
+              <div class="form-check mt-2">
+                <input class="form-check-input" type="checkbox" id="browseVoicevoxClearApiKey">
+                <label class="form-check-label" for="browseVoicevoxClearApiKey">Xóa API key đã lưu</label>
+              </div>
+            </div>
+            <div class="browse-voicevox__field">
+              <label for="browseVoicevoxCharacter">Nhân vật</label>
+              <select class="form-select form-select-sm" id="browseVoicevoxCharacter">
+                <option value="">Chọn nhân vật</option>
+              </select>
+              <div class="small text-muted mt-1" id="browseVoicevoxCharacterMeta">Danh sách nhân vật sẽ tải từ VoiceVox.</div>
+            </div>
+            <div class="browse-voicevox__field">
+              <label for="browseVoicevoxPitch">pitch: <span id="browseVoicevoxPitchValue">0.50</span></label>
+              <input type="range" class="form-range" id="browseVoicevoxPitch" min="0" max="1" step="0.01" value="0.5">
+            </div>
+            <div class="browse-voicevox__field">
+              <label for="browseVoicevoxIntonationScale">intonationScale: <span id="browseVoicevoxIntonationScaleValue">0.50</span></label>
+              <input type="range" class="form-range" id="browseVoicevoxIntonationScale" min="0" max="1" step="0.01" value="0.5">
+            </div>
+            <div class="browse-voicevox__field">
+              <label for="browseVoicevoxSpeed">speed: <span id="browseVoicevoxSpeedValue">0.50</span></label>
+              <input type="range" class="form-range" id="browseVoicevoxSpeed" min="0" max="1" step="0.01" value="0.5">
+            </div>
+            <div class="browse-voicevox__field">
+              <div class="small text-muted" id="browseVoicevoxKeyStatus">Trạng thái key: unknown</div>
+            </div>
+          </div>
+          <div class="browse-voicevox-modal__footer d-flex justify-content-end gap-2 p-3 pt-0">
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="browseVoicevoxReloadCharactersBtn">Tải nhân vật</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="browseVoicevoxValidateBtn">Validate key</button>
+            <button type="button" class="btn btn-sm btn-primary" id="browseVoicevoxOkBtn">OK</button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
