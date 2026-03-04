@@ -70,6 +70,10 @@
 }
 
 .browse-voicevox__menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
   width: 100%;
   border: 0;
   background: transparent;
@@ -81,6 +85,21 @@
 
 .browse-voicevox__menu-item:hover {
   background: #f3f3f3;
+}
+
+.browse-voicevox__menu-tag {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid #e7cbaf;
+  background: #fff5eb;
+  color: #9a4b0a;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  line-height: 1;
+  padding: 0.16rem 0.38rem;
+  white-space: nowrap;
 }
 
 .browse-voicevox-modal {
