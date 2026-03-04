@@ -6,12 +6,17 @@ from typing import Any
 
 from flask import Blueprint, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import selectinload
 
 from app.utils.permissions import is_admin_user
+from app.services import admin_service
+from app.services import tts_provider_service
+from app.validators import RequestValidationError, escape_like_pattern, sanitize_query_text
+
 from models import db
+from models.tts_provider_config import TtsProviderConfig
 from models.user import User
 from models.user_permission_audit_log import UserPermissionAuditLog
 from models.user_role import UserRole
@@ -20,152 +25,233 @@ admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 
 DEFAULT_PAGE_SIZE = 10
 MAX_PAGE_SIZE = 50
-VALID_STATUS_FILTERS = {"all", "active", "disabled"}
 
 
-def _coerce_int(value: Any, default: int, minimum: int = 1, maximum: int | None = None) -> int:
-    try:
-        parsed = int(value)
-    except (TypeError, ValueError):
-        return default
-    if parsed < minimum:
-        return default
-    if maximum is not None and parsed > maximum:
-        return maximum
-    return parsed
 
 
-def _normalize_status_filter(value: str | None) -> str:
-    normalized = (value or "all").strip().lower()
-    if normalized not in VALID_STATUS_FILTERS:
-        return "all"
-    return normalized
 
 
-def _parse_user_ids(raw_ids: str | None) -> list[int]:
-    if not raw_ids:
-        return []
-    parsed: list[int] = []
-    seen: set[int] = set()
-    for part in raw_ids.split(","):
-        token = part.strip()
-        if not token.isdigit():
-            continue
-        user_id = int(token)
-        if user_id <= 0 or user_id in seen:
-            continue
-        parsed.append(user_id)
-        seen.add(user_id)
-    return parsed
 
 
-def _parse_user_ids_payload(payload: dict[str, Any]) -> list[int]:
-    user_ids = payload.get("user_ids", [])
-    parsed: list[int] = []
-    seen: set[int] = set()
-
-    if isinstance(user_ids, str):
-        return _parse_user_ids(user_ids)
-
-    if not isinstance(user_ids, list):
-        return []
-
-    for item in user_ids:
-        if isinstance(item, int) and item > 0 and item not in seen:
-            parsed.append(item)
-            seen.add(item)
-            continue
-        if isinstance(item, str) and item.isdigit():
-            user_id = int(item)
-            if user_id > 0 and user_id not in seen:
-                parsed.append(user_id)
-                seen.add(user_id)
-    return parsed
 
 
-def _resolve_account_name(user: User) -> str:
-    if not user.email:
-        return ""
-    account_name = user.email.split("@", 1)[0].strip()
-    if not account_name:
-        return ""
-    if account_name.lower() == (user.username or "").strip().lower():
-        return ""
-    return account_name
 
 
-def _build_users_query(search_term: str, status_filter: str):
-    query = User.query.options(selectinload(User.role))
-    if search_term:
-        like_pattern = f"%{search_term}%"
-        query = query.filter(or_(User.username.ilike(like_pattern), User.email.ilike(like_pattern)))
-
-    if status_filter == "active":
-        query = query.filter(User.is_disabled.is_(False))
-    elif status_filter == "disabled":
-        query = query.filter(User.is_disabled.is_(True))
-
-    return query.order_by(User.created_at.asc(), User.id.asc())
 
 
-def _load_user_summary() -> dict[str, int]:
-    total_users = User.query.count()
-    disabled_users = User.query.filter(User.is_disabled.is_(True)).count()
-    return {
-        "total_users": total_users,
-        "active_users": max(total_users - disabled_users, 0),
-        "disabled_users": disabled_users,
-    }
 
 
-def _serialize_user_row(user: User) -> dict[str, Any]:
-    return {
-        "id": user.id,
-        "username": user.username,
-        "account_name": _resolve_account_name(user),
-        "email": user.email,
-        "status": "disabled" if user.is_disabled else "active",
-        "is_disabled": bool(user.is_disabled),
-        "is_admin": bool(user.is_admin),
-        "role_id": user.role_id,
-        "role_name": user.role.name if user.role else None,
-    }
 
-
-def _append_audit_log(
-    *,
-    actor_user_id: int,
-    target_user_id: int,
-    action: str,
-    from_role_id: int | None,
-    to_role_id: int | None,
-    from_is_admin: bool,
-    to_is_admin: bool,
-    from_is_disabled: bool,
-    to_is_disabled: bool,
-    message: str,
-) -> None:
-    db.session.add(
-        UserPermissionAuditLog(
-            actor_user_id=actor_user_id,
-            target_user_id=target_user_id,
-            action=action,
-            from_role_id=from_role_id,
-            to_role_id=to_role_id,
-            from_is_admin=bool(from_is_admin),
-            to_is_admin=bool(to_is_admin),
-            from_is_disabled=bool(from_is_disabled),
-            to_is_disabled=bool(to_is_disabled),
-            message=message,
-        )
-    )
 
 
 def _ensure_admin_access():
     if is_admin_user(current_user):
         return None
-    flash("Ban khong co quyen truy cap trang quan ly user.", "warning")
+    flash("Ban khong co quyen truy cap trang quan tri.", "warning")
     return redirect(url_for("main.dashboard"))
+
+
+@admin_bp.route("/tts-providers", methods=["GET", "POST"])
+@login_required
+def tts_provider_management_page():
+    def _redirect_with_state():
+        next_path = (request.form.get("next") or "").strip()
+        if next_path.startswith("/admin/tts-providers"):
+            return redirect(next_path)
+        return redirect(url_for("admin.tts_provider_management_page"))
+
+    def _flash_form_errors(errors: list[str]) -> None:
+        for message in errors:
+            flash(message, "danger")
+
+    def _query_duplicate(
+        *,
+        provider_type: str,
+        exclude_id: int | None = None,
+    ) -> TtsProviderConfig | None:
+        query = TtsProviderConfig.query.filter(
+            func.lower(TtsProviderConfig.provider_type) == provider_type.lower(),
+        )
+        if exclude_id is not None:
+            query = query.filter(TtsProviderConfig.id != exclude_id)
+        return query.first()
+
+    def _build_filtered_query(*, search_term: str, active_filter: str, provider_type_filter: str):
+        query = TtsProviderConfig.query
+        if search_term:
+            escaped = escape_like_pattern(search_term)
+            like_pattern = f"%{escaped}%"
+            query = query.filter(
+                or_(
+                    TtsProviderConfig.provider_name.ilike(like_pattern, escape="\\"),
+                    TtsProviderConfig.provider_type.ilike(like_pattern, escape="\\"),
+                )
+            )
+
+        if active_filter == "active":
+            query = query.filter(TtsProviderConfig.is_active.is_(True))
+        elif active_filter == "inactive":
+            query = query.filter(TtsProviderConfig.is_active.is_(False))
+
+        if provider_type_filter:
+            query = query.filter(TtsProviderConfig.provider_type == provider_type_filter)
+
+        return query
+
+    guard = _ensure_admin_access()
+    if guard is not None:
+        return guard
+
+    if request.method == "POST":
+        action = (request.form.get("action") or "").strip().lower()
+        if action == "create":
+            payload, errors = tts_provider_service.parse_provider_form_payload(
+                request.form,
+                for_update=False,
+            )
+            if errors:
+                _flash_form_errors(errors)
+                return _redirect_with_state()
+
+            duplicate = _query_duplicate(
+                provider_type=payload.provider_type,
+            )
+            if duplicate is not None:
+                flash("Đã tồn tại cấu hình dùng chung cho provider_type này.", "warning")
+                return _redirect_with_state()
+
+            row = TtsProviderConfig(
+                provider_name=payload.provider_name,
+                provider_type=payload.provider_type,
+                base_url=payload.base_url,
+                requires_api_key=payload.requires_api_key,
+                is_active=payload.is_active,
+                shared_config_json=tts_provider_service.dumps_json_map(payload.shared_config),
+                provider_config_json=tts_provider_service.dumps_json_map(payload.provider_config),
+                default_settings_json=tts_provider_service.dumps_json_map(payload.default_settings),
+                created_by_admin_id=current_user.id,
+                updated_by_admin_id=current_user.id,
+            )
+
+            try:
+                db.session.add(row)
+                db.session.commit()
+            except SQLAlchemyError:
+                db.session.rollback()
+                flash("Không thể tạo cấu hình provider. Vui lòng thử lại.", "danger")
+                return _redirect_with_state()
+            flash("Đã tạo cấu hình TTS provider.", "success")
+            return _redirect_with_state()
+
+        if action == "update":
+            row_id = admin_service.coerce_int(request.form.get("id"), default=0, minimum=1)
+            row = db.session.get(TtsProviderConfig, row_id)
+            if row is None:
+                flash("Không tìm thấy bản ghi cần cập nhật.", "danger")
+                return _redirect_with_state()
+
+            payload, errors = tts_provider_service.parse_provider_form_payload(
+                request.form,
+                for_update=True,
+            )
+            if errors:
+                _flash_form_errors(errors)
+                return _redirect_with_state()
+
+            duplicate = _query_duplicate(
+                provider_type=payload.provider_type,
+                exclude_id=row.id,
+            )
+            if duplicate is not None:
+                flash("Đã tồn tại một cấu hình dùng chung với provider_type này.", "warning")
+                return _redirect_with_state()
+
+            row.provider_name = payload.provider_name
+            row.provider_type = payload.provider_type
+            row.base_url = payload.base_url
+            row.requires_api_key = payload.requires_api_key
+            row.is_active = payload.is_active
+            row.shared_config_json = tts_provider_service.dumps_json_map(payload.shared_config)
+            row.provider_config_json = tts_provider_service.dumps_json_map(payload.provider_config)
+            row.default_settings_json = tts_provider_service.dumps_json_map(payload.default_settings)
+            row.updated_by_admin_id = current_user.id
+
+            try:
+                db.session.commit()
+            except SQLAlchemyError:
+                db.session.rollback()
+                flash("Không thể cập nhật cấu hình provider. Vui lòng thử lại.", "danger")
+                return _redirect_with_state()
+            flash("Đã cập nhật cấu hình TTS provider.", "success")
+            return _redirect_with_state()
+
+        if action == "delete":
+            row_id = admin_service.coerce_int(request.form.get("id"), default=0, minimum=1)
+            row = db.session.get(TtsProviderConfig, row_id)
+            if row is None:
+                flash("Không tìm thấy bản ghi để xóa.", "danger")
+                return _redirect_with_state()
+            try:
+                db.session.delete(row)
+                db.session.commit()
+            except SQLAlchemyError:
+                db.session.rollback()
+                flash("Không thể xóa cấu hình provider. Vui lòng thử lại.", "danger")
+                return _redirect_with_state()
+            flash("Đã xóa cấu hình TTS provider.", "success")
+            return _redirect_with_state()
+
+        flash("Action không hợp lệ.", "danger")
+        return _redirect_with_state()
+
+    try:
+        search_term = sanitize_query_text(request.args.get("q"), field_name="q", max_length=120)
+    except RequestValidationError:
+        search_term = ""
+        flash("Bộ lọc tìm kiếm không hợp lệ và đã được bỏ qua.", "warning")
+
+    active_filter = tts_provider_service.normalize_active_filter(request.args.get("active"))
+    provider_type_filter = tts_provider_service.normalize_provider_type_filter(request.args.get("provider_type"))
+
+    rows_query = _build_filtered_query(
+        search_term=search_term,
+        active_filter=active_filter,
+        provider_type_filter=provider_type_filter,
+    )
+    rows = rows_query.order_by(TtsProviderConfig.updated_at.desc(), TtsProviderConfig.id.desc()).all()
+    summary = {
+        "total_count": TtsProviderConfig.query.count(),
+        "active_count": TtsProviderConfig.query.filter(TtsProviderConfig.is_active.is_(True)).count(),
+        "requires_key_count": TtsProviderConfig.query.filter(TtsProviderConfig.requires_api_key.is_(True)).count(),
+        "filtered_count": len(rows),
+    }
+    provider_types = (
+        db.session.query(TtsProviderConfig.provider_type)
+        .distinct()
+        .filter(TtsProviderConfig.provider_type.isnot(None), TtsProviderConfig.provider_type != "")
+        .order_by(TtsProviderConfig.provider_type.asc())
+        .all()
+    )
+    provider_type_options = [value for (value,) in provider_types if value]
+    current_page_url = url_for(
+        "admin.tts_provider_management_page",
+        q=search_term or None,
+        active=active_filter if active_filter != "all" else None,
+        provider_type=provider_type_filter or None,
+    )
+
+    return render_template(
+        "admin/tts_provider_config.html",
+        rows=rows,
+        pretty_json=tts_provider_service.pretty_json,
+        loads_json_map=tts_provider_service.loads_json_map,
+        search_term=search_term,
+        active_filter=active_filter,
+        provider_type_filter=provider_type_filter,
+        provider_type_options=provider_type_options,
+        current_page_url=current_page_url,
+        summary=summary,
+    )
 
 
 @admin_bp.route("/users", methods=["GET"])
@@ -175,11 +261,15 @@ def user_management_page():
     if guard is not None:
         return guard
 
-    search_term = (request.args.get("q") or "").strip()
-    status_filter = _normalize_status_filter(request.args.get("status"))
-    page = _coerce_int(request.args.get("page"), default=1, minimum=1)
-    per_page = _coerce_int(request.args.get("per_page"), default=DEFAULT_PAGE_SIZE, minimum=1, maximum=MAX_PAGE_SIZE)
-    selected_ids = _parse_user_ids(request.args.get("selected_ids"))
+    try:
+        search_term = sanitize_query_text(request.args.get("q"), field_name="q", max_length=120)
+    except RequestValidationError:
+        search_term = ""
+        flash("Invalid search query detected and ignored.", "warning")
+    status_filter = admin_service.normalize_status_filter(request.args.get("status"))
+    page = admin_service.coerce_int(request.args.get("page"), default=1, minimum=1)
+    per_page = admin_service.coerce_int(request.args.get("per_page"), default=DEFAULT_PAGE_SIZE, minimum=1, maximum=MAX_PAGE_SIZE)
+    selected_ids = admin_service.parse_user_ids(request.args.get("selected_ids"))
 
     template_context: dict[str, Any] = {
         "search_term": search_term,
@@ -193,11 +283,11 @@ def user_management_page():
         "total_pages": 1,
         "has_error": False,
         "error_message": "",
-        **_load_user_summary(),
+        **admin_service.load_user_summary(),
     }
 
     try:
-        query = _build_users_query(search_term=search_term, status_filter=status_filter)
+        query = admin_service.build_users_query(search_term=search_term, status_filter=status_filter)
         pagination = query.paginate(page=page, per_page=per_page, error_out=False)
         template_context["users"] = pagination.items
         template_context["pagination_total"] = pagination.total
@@ -217,7 +307,7 @@ def permission_assignment_page():
     if guard is not None:
         return guard
 
-    selected_ids = _parse_user_ids(request.args.get("user_ids") or request.args.get("selected_ids"))
+    selected_ids = admin_service.parse_user_ids(request.args.get("user_ids") or request.args.get("selected_ids"))
     if not selected_ids:
         flash("Hay chon it nhat 1 user de chinh quyen.", "warning")
         return redirect(url_for("admin.user_management_page"))
@@ -247,204 +337,8 @@ def permission_assignment_page():
     )
 
 
-def _batch_assign_roles(*, user_ids: list[int], target_role: UserRole) -> tuple[int, int, list[dict[str, Any]]]:
-    if not user_ids:
-        return 0, 0, []
-
-    users = (
-        User.query.options(selectinload(User.role))
-        .filter(User.id.in_(user_ids))
-        .all()
-    )
-    user_by_id = {user.id: user for user in users}
-
-    active_admin_count = User.query.filter(User.is_admin.is_(True), User.is_disabled.is_(False)).count()
-    demoted_admin_ids = {
-        user.id
-        for user in users
-        if user.is_admin and (not user.is_disabled) and (not bool(target_role.is_admin))
-    }
-
-    blocked_last_admin_ids: set[int] = set()
-    if demoted_admin_ids and active_admin_count - len(demoted_admin_ids) < 1:
-        blocked_last_admin_ids = set(demoted_admin_ids)
-
-    success_count = 0
-    fail_count = 0
-    results: list[dict[str, Any]] = []
-
-    for user_id in user_ids:
-        user = user_by_id.get(user_id)
-        if user is None:
-            fail_count += 1
-            results.append(
-                {
-                    "user_id": user_id,
-                    "username": f"#{user_id}",
-                    "email": None,
-                    "status": "fail",
-                    "message": "Khong tim thay user.",
-                }
-            )
-            continue
-
-        if (
-            user.id == current_user.id
-            and bool(user.is_admin)
-            and not bool(target_role.is_admin)
-        ):
-            fail_count += 1
-            results.append(
-                {
-                    "user_id": user.id,
-                    "username": user.username,
-                    "email": user.email,
-                    "status": "fail",
-                    "message": "Khong the tu ha quyen admin cua chinh minh.",
-                }
-            )
-            continue
-
-        if user.id in blocked_last_admin_ids:
-            fail_count += 1
-            results.append(
-                {
-                    "user_id": user.id,
-                    "username": user.username,
-                    "email": user.email,
-                    "status": "fail",
-                    "message": "Khong the ha quyen admin cuoi cung dang hoat dong.",
-                }
-            )
-            continue
-
-        from_role_id = user.role_id
-        from_is_admin = bool(user.is_admin)
-        from_is_disabled = bool(user.is_disabled)
-
-        user.role_id = target_role.id
-        user.is_admin = bool(target_role.is_admin)
-
-        _append_audit_log(
-            actor_user_id=current_user.id,
-            target_user_id=user.id,
-            action="assign_role",
-            from_role_id=from_role_id,
-            to_role_id=target_role.id,
-            from_is_admin=from_is_admin,
-            to_is_admin=bool(user.is_admin),
-            from_is_disabled=from_is_disabled,
-            to_is_disabled=from_is_disabled,
-            message=f"Assign role -> {target_role.name}",
-        )
-
-        success_count += 1
-        results.append(
-            {
-                "user_id": user.id,
-                "username": user.username,
-                "email": user.email,
-                "status": "success",
-                "message": f"Da cap nhat role -> {target_role.name}.",
-            }
-        )
-
-    return success_count, fail_count, results
 
 
-def _batch_update_status(*, user_ids: list[int], action: str) -> tuple[int, int, list[dict[str, Any]]]:
-    if not user_ids:
-        return 0, 0, []
-
-    target_disabled = action == "disable"
-    users = User.query.options(selectinload(User.role)).filter(User.id.in_(user_ids)).all()
-    user_by_id = {user.id: user for user in users}
-
-    blocked_last_admin_ids: set[int] = set()
-    if target_disabled:
-        active_admin_count = User.query.filter(User.is_admin.is_(True), User.is_disabled.is_(False)).count()
-        disabled_admin_ids = {
-            user.id for user in users if user.is_admin and not user.is_disabled
-        }
-        if disabled_admin_ids and active_admin_count - len(disabled_admin_ids) < 1:
-            blocked_last_admin_ids = set(disabled_admin_ids)
-
-    success_count = 0
-    fail_count = 0
-    results: list[dict[str, Any]] = []
-
-    for user_id in user_ids:
-        user = user_by_id.get(user_id)
-        if user is None:
-            fail_count += 1
-            results.append(
-                {
-                    "user_id": user_id,
-                    "username": f"#{user_id}",
-                    "email": None,
-                    "status": "fail",
-                    "message": "Khong tim thay user.",
-                }
-            )
-            continue
-
-        if target_disabled and user.id == current_user.id:
-            fail_count += 1
-            results.append(
-                {
-                    "user_id": user.id,
-                    "username": user.username,
-                    "email": user.email,
-                    "status": "fail",
-                    "message": "Khong the vo hieu hoa chinh tai khoan dang dang nhap.",
-                }
-            )
-            continue
-
-        if target_disabled and user.id in blocked_last_admin_ids:
-            fail_count += 1
-            results.append(
-                {
-                    "user_id": user.id,
-                    "username": user.username,
-                    "email": user.email,
-                    "status": "fail",
-                    "message": "Khong the vo hieu hoa admin cuoi cung dang hoat dong.",
-                }
-            )
-            continue
-
-        from_role_id = user.role_id
-        from_is_admin = bool(user.is_admin)
-        from_is_disabled = bool(user.is_disabled)
-        to_is_disabled = target_disabled
-        user.is_disabled = to_is_disabled
-
-        _append_audit_log(
-            actor_user_id=current_user.id,
-            target_user_id=user.id,
-            action="disable_user" if target_disabled else "activate_user",
-            from_role_id=from_role_id,
-            to_role_id=from_role_id,
-            from_is_admin=from_is_admin,
-            to_is_admin=from_is_admin,
-            from_is_disabled=from_is_disabled,
-            to_is_disabled=to_is_disabled,
-            message="Disable user" if target_disabled else "Activate user",
-        )
-
-        success_count += 1
-        results.append(
-            {
-                "user_id": user.id,
-                "username": user.username,
-                "email": user.email,
-                "status": "success",
-                "message": "Da vo hieu hoa." if target_disabled else "Da kich hoat.",
-            }
-        )
-
-    return success_count, fail_count, results
 
 
 @admin_bp.route("/api/users", methods=["GET"])
@@ -453,17 +347,20 @@ def list_users_api():
     if not is_admin_user(current_user):
         return jsonify({"message": "Unauthorized"}), 403
 
-    search_term = (request.args.get("q") or "").strip()
-    status_filter = _normalize_status_filter(request.args.get("status"))
-    page = _coerce_int(request.args.get("page"), default=1, minimum=1)
-    per_page = _coerce_int(request.args.get("per_page"), default=DEFAULT_PAGE_SIZE, minimum=1, maximum=MAX_PAGE_SIZE)
+    try:
+        search_term = sanitize_query_text(request.args.get("q"), field_name="q", max_length=120)
+    except RequestValidationError as exc:
+        return jsonify({"message": str(exc), "field": exc.field, "error": exc.code}), exc.status
+    status_filter = admin_service.normalize_status_filter(request.args.get("status"))
+    page = admin_service.coerce_int(request.args.get("page"), default=1, minimum=1)
+    per_page = admin_service.coerce_int(request.args.get("per_page"), default=DEFAULT_PAGE_SIZE, minimum=1, maximum=MAX_PAGE_SIZE)
 
-    query = _build_users_query(search_term=search_term, status_filter=status_filter)
+    query = admin_service.build_users_query(search_term=search_term, status_filter=status_filter)
     pagination = query.paginate(page=page, per_page=per_page, error_out=False)
-    summary = _load_user_summary()
+    summary = admin_service.load_user_summary()
     return jsonify(
         {
-            "items": [_serialize_user_row(user) for user in pagination.items],
+            "items": [admin_service.serialize_user_row(user) for user in pagination.items],
             "page": pagination.page,
             "per_page": per_page,
             "total": pagination.total,
@@ -480,8 +377,8 @@ def batch_assign_role_api():
         return jsonify({"message": "Unauthorized"}), 403
 
     payload = request.get_json(silent=True) or {}
-    user_ids = _parse_user_ids_payload(payload)
-    role_id = _coerce_int(payload.get("target_role_id"), default=0, minimum=1)
+    user_ids = admin_service.parse_user_ids_payload(payload)
+    role_id = admin_service.coerce_int(payload.get("target_role_id"), default=0, minimum=1)
     mode = (payload.get("mode") or "replace").strip().lower()
 
     if not user_ids:
@@ -494,10 +391,8 @@ def batch_assign_role_api():
         return jsonify({"message": "Khong tim thay role.", "results": []}), 404
 
     try:
-        success_count, fail_count, results = _batch_assign_roles(user_ids=user_ids, target_role=role)
-        db.session.commit()
+        success_count, fail_count, results = admin_service.batch_assign_roles(actor_user_id=current_user.id, user_ids=user_ids, target_role=role)
     except SQLAlchemyError:
-        db.session.rollback()
         return jsonify({"message": "Khong the cap nhat role. Vui long thu lai.", "results": []}), 500
 
     return jsonify(
@@ -517,7 +412,7 @@ def batch_update_status_api():
         return jsonify({"message": "Unauthorized"}), 403
 
     payload = request.get_json(silent=True) or {}
-    user_ids = _parse_user_ids_payload(payload)
+    user_ids = admin_service.parse_user_ids_payload(payload)
     action = (payload.get("action") or "").strip().lower()
 
     if not user_ids:
@@ -526,10 +421,8 @@ def batch_update_status_api():
         return jsonify({"message": "Action phai la 'activate' hoac 'disable'.", "results": []}), 400
 
     try:
-        success_count, fail_count, results = _batch_update_status(user_ids=user_ids, action=action)
-        db.session.commit()
+        success_count, fail_count, results = admin_service.batch_update_status(actor_user_id=current_user.id, user_ids=user_ids, action=action)
     except SQLAlchemyError:
-        db.session.rollback()
         return jsonify({"message": "Khong the cap nhat trang thai user. Vui long thu lai.", "results": []}), 500
 
     return jsonify(
@@ -561,10 +454,8 @@ def update_user_role(user_id: int):
         return redirect(url_for("admin.user_management_page"))
 
     try:
-        success_count, fail_count, _ = _batch_assign_roles(user_ids=[user_id], target_role=role)
-        db.session.commit()
+        success_count, fail_count, _ = admin_service.batch_assign_roles(actor_user_id=current_user.id, user_ids=[user_id], target_role=role)
     except SQLAlchemyError:
-        db.session.rollback()
         flash("Khong the cap nhat quyen user.", "danger")
         return redirect(url_for("admin.user_management_page"))
 

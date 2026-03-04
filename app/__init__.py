@@ -13,6 +13,7 @@ from models import db
 from .cli import register_cli_commands
 from .extensions import login_manager, migrate
 from .routes import register_blueprints
+from .services.tts_provider_service import ensure_default_tts_providers
 from .services.user_management_schema import ensure_user_management_schema
 from .services.user_roles import ensure_default_user_roles
 
@@ -20,6 +21,21 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 
 load_dotenv()
+
+
+def _resolve_media_upload_root(raw_value: str | None = None) -> Path:
+    """Resolve media root path; default outside repo to avoid bloating git workspace."""
+    raw = str(raw_value or "").strip() or os.getenv("FLASHCARD_MEDIA_UPLOAD_ROOT", "").strip()
+    if raw:
+        candidate = Path(raw).expanduser()
+        if not candidate.is_absolute():
+            candidate = (BASE_DIR / candidate).resolve()
+        else:
+            candidate = candidate.resolve()
+    else:
+        candidate = (BASE_DIR.parent / "flama_media_storage").resolve()
+    candidate.mkdir(parents=True, exist_ok=True)
+    return candidate
 
 
 def create_app(config: Optional[dict] = None) -> Flask:
@@ -36,10 +52,17 @@ def create_app(config: Optional[dict] = None) -> Flask:
         "pool_pre_ping": True,
         "pool_recycle": 1800,
     }
-    app.config["FLASHCARD_MEDIA_UPLOAD_ROOT"] = str(BASE_DIR / "static" / "uploads")
+    app.config["FLASHCARD_MEDIA_UPLOAD_ROOT"] = str(_resolve_media_upload_root())
     app.config["FLASHCARD_MEDIA_MAX_BYTES"] = int(os.getenv("FLASHCARD_MEDIA_MAX_BYTES", str(10 * 1024 * 1024)))
+    app.config["FLASHCARD_MEDIA_SCAN_ENABLED"] = (
+        os.getenv("FLASHCARD_MEDIA_SCAN_ENABLED", "0").strip().lower() in {"1", "true", "yes", "on"}
+    )
+    app.config["FLASHCARD_MEDIA_SCANNER"] = None
     if config:
         app.config.update(config)
+
+    resolved_upload_root = _resolve_media_upload_root(app.config.get("FLASHCARD_MEDIA_UPLOAD_ROOT"))
+    app.config["FLASHCARD_MEDIA_UPLOAD_ROOT"] = str(resolved_upload_root)
 
     db.init_app(app)
     migrate.init_app(app, db)
@@ -49,6 +72,8 @@ def create_app(config: Optional[dict] = None) -> Flask:
     from models.user_role import UserRole  # noqa: F401  # register model
     from models.user_permission_audit_log import UserPermissionAuditLog  # noqa: F401
     from models.deck import Deck  # noqa: F401  # register model
+    from models.tts_provider_config import TtsProviderConfig  # noqa: F401  # register model
+    from models.tts_user_provider_profile import TtsUserProviderProfile  # noqa: F401  # register model
     from models.card_progress import CardProgress  # noqa: F401  # register model
     from models.column_preference import (
         VocabularyColumnPreference,
@@ -125,9 +150,10 @@ def create_app(config: Optional[dict] = None) -> Flask:
         ensure_user_management_schema(db.session)
         _ensure_backward_compatible_schema()
         ensure_default_user_roles(db.session)
-        from app.controllers import flashcards_share_controller as share_ctrl
+        ensure_default_tts_providers(db.session)
+        from app.services import flashcards_share
 
-        share_ctrl.cutover_clone_model_to_overlay_only(fail_on_mismatch=True)
+        flashcards_share.cutover_clone_model_to_overlay_only(fail_on_mismatch=True)
         db.session.commit()
 
     return app
@@ -191,6 +217,44 @@ def _ensure_backward_compatible_schema() -> None:
                 sa.text("CREATE INDEX ix_card_progress_is_suspended ON card_progress (is_suspended)")
             )
             schema_changed = True
+
+    inspector = sa.inspect(bind)
+    if inspector.has_table("tts_provider_config"):
+        tts_columns = {column["name"] for column in inspector.get_columns("tts_provider_config")}
+        if "shared_config_json" not in tts_columns:
+            db.session.execute(
+                sa.text("ALTER TABLE tts_provider_config ADD COLUMN shared_config_json TEXT NULL")
+            )
+            schema_changed = True
+        if "provider_config_json" not in tts_columns:
+            db.session.execute(
+                sa.text("ALTER TABLE tts_provider_config ADD COLUMN provider_config_json TEXT NULL")
+            )
+            schema_changed = True
+        if "default_settings_json" not in tts_columns:
+            db.session.execute(
+                sa.text("ALTER TABLE tts_provider_config ADD COLUMN default_settings_json TEXT NULL")
+            )
+            schema_changed = True
+        if "shared_config_json" in tts_columns or schema_changed:
+            db.session.execute(
+                sa.text(
+                    "UPDATE tts_provider_config SET shared_config_json = '{}' "
+                    "WHERE shared_config_json IS NULL OR shared_config_json = ''"
+                )
+            )
+            db.session.execute(
+                sa.text(
+                    "UPDATE tts_provider_config SET provider_config_json = '{}' "
+                    "WHERE provider_config_json IS NULL OR provider_config_json = ''"
+                )
+            )
+            db.session.execute(
+                sa.text(
+                    "UPDATE tts_provider_config SET default_settings_json = '{}' "
+                    "WHERE default_settings_json IS NULL OR default_settings_json = ''"
+                )
+            )
 
     inspector = sa.inspect(bind)
     if inspector.has_table("decks"):

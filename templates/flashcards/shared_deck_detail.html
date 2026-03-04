@@ -3,15 +3,17 @@
 {% block title %}Chi tiết Deck{% endblock %}
 
 {% block content %}
-<section class="py-3" id="shared-deck-detail-root" data-deck-item-id="{{ deck_item_id }}">
+<section class="py-3" id="shared-deck-detail-root" data-deck-item-id="{{ deck_item_id }}"
+  data-note-type-url-template="{{ url_for('flashcards.shared_note_type_detail_page', note_type_id='__NOTE_TYPE_ID__') }}">
+
+  <!-- ── Page Header ── -->
   <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
     <div>
-      <h2 class="h4 mb-0" id="deck-title">Đang tải...</h2>
-      <small class="text-muted" id="deck-meta-line"></small>
+      <h2 class="h4 mb-0 flama-page-title" id="deck-title">Đang tải...</h2>
+      <small class="flama-meta-line" id="deck-meta-line"></small>
     </div>
     <div class="d-flex gap-2">
-      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('flashcards.shared_decks_page') }}">Quay lại Shared
-        Decks</a>
+      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('flashcards.shared_decks_page') }}">← Quay lại</a>
       <button class="btn btn-primary btn-sm" id="deck-install-btn" type="button">Install</button>
     </div>
   </div>
@@ -19,6 +21,118 @@
   <div class="alert alert-danger d-none" id="deck-detail-error" role="alert"></div>
 
   <style>
+    /* ── Flama Shared Deck Detail ── */
+
+    .flama-page-title {
+      color: var(--flama-text);
+      font-weight: var(--font-weight-bold);
+    }
+
+    .flama-meta-line {
+      font-size: var(--font-size-sm);
+      color: var(--flama-text-2);
+    }
+
+    /* ── Section Cards ── */
+    .flama-section-card {
+      background: var(--flama-surface);
+      border: 1px solid var(--flama-border);
+      border-radius: 0.5rem;
+      padding: 1rem 1.25rem;
+      margin-bottom: 1rem;
+      box-shadow: 0 1px 4px rgba(31, 26, 23, 0.05);
+    }
+
+    .flama-section-title {
+      font-size: var(--font-size-sm);
+      font-weight: var(--font-weight-semibold);
+      color: var(--flama-orange-700);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.75rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid var(--flama-border);
+    }
+
+    /* ── Tags ── */
+    .flama-tag {
+      display: inline-block;
+      padding: 0.2rem 0.6rem;
+      font-size: var(--font-size-xs);
+      font-weight: var(--font-weight-medium);
+      background-color: var(--flama-amber-50);
+      color: var(--flama-amber-800);
+      border: 1px solid var(--flama-amber-200);
+      border-radius: 999px;
+      margin-right: 0.35rem;
+      margin-bottom: 0.35rem;
+    }
+
+    /* ── Vocabulary / Test Sample List ── */
+    .flama-vocab-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      border: 1px solid var(--flama-border);
+      border-radius: 0.5rem;
+      overflow: hidden;
+    }
+
+    .flama-vocab-item {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 0.5rem;
+      padding: 0.6rem 0.9rem;
+      background: var(--flama-surface);
+      border: none;
+      border-bottom: 1px solid var(--flama-border);
+      text-align: left;
+      width: 100%;
+      cursor: pointer;
+      transition: background-color 0.15s ease;
+    }
+
+    .flama-vocab-item:last-child {
+      border-bottom: none;
+    }
+
+    .flama-vocab-item:hover {
+      background-color: var(--flama-orange-50);
+    }
+
+    .flama-vocab-item.is-active {
+      background-color: var(--flama-orange-100);
+      border-left: 3px solid var(--flama-orange-600);
+    }
+
+    .flama-vocab-word {
+      font-size: var(--font-size-sm);
+      font-weight: var(--font-weight-semibold);
+      color: var(--flama-text);
+    }
+
+    .flama-vocab-reading {
+      font-size: var(--font-size-xs);
+      color: var(--flama-text-2);
+      margin-top: 0.1rem;
+    }
+
+    .flama-vocab-hint {
+      font-size: var(--font-size-xs);
+      color: var(--flama-text-2);
+      font-style: italic;
+    }
+
+    .flama-vocab-empty {
+      padding: 0.75rem 1rem;
+      color: var(--flama-text-2);
+      font-size: var(--font-size-sm);
+      font-style: italic;
+    }
+
+    /* ── Rating Stars ── */
     .shared-rating-stars {
       display: inline-flex;
       gap: 0.125rem;
@@ -30,101 +144,126 @@
       padding: 0;
       font-size: 1.65rem;
       line-height: 1;
-      color: #c9ced6;
+      color: var(--flama-border);
       cursor: pointer;
       transition: color .15s ease, transform .15s ease;
     }
 
     .shared-rating-star.is-active {
-      color: #f4b400;
+      color: var(--flama-amber-500);
     }
 
     .shared-rating-star:hover,
     .shared-rating-star:focus-visible {
-      color: #f4b400;
+      color: var(--flama-amber-400);
       transform: translateY(-1px);
       outline: none;
     }
 
     .shared-rating-stars.is-disabled .shared-rating-star {
       cursor: not-allowed;
-      opacity: 0.55;
+      opacity: 0.5;
       transform: none;
+    }
+
+    /* ── Community Review Cards ── */
+    .flama-review-item {
+      border: 1px solid var(--flama-border);
+      border-radius: 0.5rem;
+      padding: 0.75rem 1rem;
+      margin-bottom: 0.6rem;
+      background: var(--flama-surface);
+    }
+
+    .flama-review-stars {
+      color: var(--flama-amber-500);
+      font-weight: var(--font-weight-semibold);
+    }
+
+    .flama-review-meta {
+      font-size: var(--font-size-xs);
+      color: var(--flama-text-2);
+      margin-top: 0.25rem;
+    }
+
+    /* ── Preview btn-group active override ── */
+    .flama-btn-group .btn.active,
+    .flama-btn-group .btn:focus.active {
+      background-color: var(--flama-orange-600);
+      border-color: var(--flama-orange-600);
+      color: #fff;
     }
   </style>
 
   <div class="mx-auto" style="max-width: 920px;">
-    <div class="card card-body mb-3">
-      <h3 class="h6 mb-2">Thông tin deck</h3>
+
+    <!-- ── Thông tin deck ── -->
+    <div class="flama-section-card">
+      <h3 class="flama-section-title">Thông tin deck</h3>
       <p class="mb-2" id="deck-description"></p>
       <div class="mb-2" id="deck-tags"></div>
-      <p class="small text-muted mb-2" id="deck-preview-text"></p>
-      <div class="small text-muted" id="deck-stats"></div>
+      <p class="mb-1" style="font-size:var(--font-size-sm);color:var(--flama-text-2);" id="deck-preview-text"></p>
+      <div style="font-size:var(--font-size-sm);color:var(--flama-text-2);" id="deck-stats"></div>
     </div>
 
-    <div class="card card-body mb-3">
-      <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
-        <h3 class="h6 mb-0">Test nhanh (toi da 5 tu)</h3>
-        <small class="text-muted" id="deck-test-note">Chon tu de nap du lieu vao preview card.</small>
+    <!-- ── Test nhanh ── -->
+    <div class="flama-section-card">
+      <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+        <h3 class="flama-section-title mb-0">Test nhanh <span style="font-weight:var(--font-weight-normal);text-transform:none;letter-spacing:0;">(tối đa 5 từ)</span></h3>
+        <small style="color:var(--flama-text-2);" id="deck-test-note">Chọn từ để nạp dữ liệu vào preview card.</small>
       </div>
-      <div class="list-group list-group-flush" id="deck-test-samples"></div>
+      <div class="flama-vocab-list" id="deck-test-samples"></div>
     </div>
 
-    <div class="card card-body mb-3" id="deck-template-preview-card">
-      <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+    <!-- ── Preview cards ── -->
+    <div class="flama-section-card" id="deck-template-preview-card">
+      <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
         <div>
-          <h3 class="h6 mb-0">Preview cards</h3>
-          <small class="text-muted" id="deck-template-note"></small>
+          <h3 class="flama-section-title mb-0">Preview cards</h3>
+          <small style="color:var(--flama-text-2);" id="deck-template-note"></small>
         </div>
-        <div class="d-flex gap-2 align-items-center">
-          <a class="btn btn-outline-primary btn-sm d-flex align-items-center gap-2" id="source-note-type-link" href="#"
-            target="_self">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor"
+        <div class="d-flex gap-2 align-items-center flex-wrap">
+          <a class="btn btn-outline-primary btn-sm d-flex align-items-center gap-2" id="source-note-type-link" href="#" target="_self">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor"
               class="bi bi-file-earmark-code" viewBox="0 0 16 16">
-              <path
-                d="M14 4.5V14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2h5.5zm-3 0A1.5 1.5 0 0 1 9.5 3V1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V4.5z" />
-              <path
-                d="M8.646 6.646a.5.5 0 0 1 .708 0l2 2a.5.5 0 0 1 0 .708l-2 2a.5.5 0 0 1-.708-.708L10.293 9 8.646 7.354a.5.5 0 0 1 0-.708m-1.292 0a.5.5 0 0 0-.708 0l-2 2a.5.5 0 0 0 0 .708l2 2a.5.5 0 0 0 .708-.708L5.707 9l1.647-1.646a.5.5 0 0 0 0-.708" />
+              <path d="M14 4.5V14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2h5.5zm-3 0A1.5 1.5 0 0 1 9.5 3V1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V4.5z" />
+              <path d="M8.646 6.646a.5.5 0 0 1 .708 0l2 2a.5.5 0 0 1 0 .708l-2 2a.5.5 0 0 1-.708-.708L10.293 9 8.646 7.354a.5.5 0 0 1 0-.708m-1.292 0a.5.5 0 0 0-.708 0l-2 2a.5.5 0 0 0 0 .708l2 2a.5.5 0 0 0 .708-.708L5.707 9l1.647-1.646a.5.5 0 0 0 0-.708" />
             </svg>
             <span id="deck-template-name-display">Đang tải...</span>
           </a>
-          <div class="btn-group btn-group-sm" role="group" aria-label="Deck preview side">
+          <div class="btn-group btn-group-sm flama-btn-group" role="group" aria-label="Deck preview side">
             <button class="btn btn-outline-secondary active" id="deck-preview-side-front" type="button"
               data-side="front">Front</button>
             <button class="btn btn-outline-secondary" id="deck-preview-side-back" type="button"
               data-side="back">Back</button>
           </div>
           <div class="btn-group btn-group-sm" role="group" aria-label="Deck preview sample nav">
-            <button class="btn btn-outline-secondary" id="deck-preview-sample-prev" type="button">Prev tu</button>
-            <button class="btn btn-outline-secondary" id="deck-preview-sample-next" type="button">Next tu</button>
+            <button class="btn btn-outline-secondary" id="deck-preview-sample-prev" type="button">‹ Prev</button>
+            <button class="btn btn-outline-secondary" id="deck-preview-sample-next" type="button">Next ›</button>
           </div>
-          <small class="text-muted" id="deck-preview-sample-label"></small>
+          <small style="color:var(--flama-text-2);" id="deck-preview-sample-label"></small>
         </div>
       </div>
-      <iframe id="deck-template-preview-frame" class="w-100 border rounded" style="min-height: 420px;"
+      <iframe id="deck-template-preview-frame" class="w-100 border rounded" style="min-height: 420px; border-color: var(--flama-border) !important;"
         sandbox="allow-same-origin allow-scripts"></iframe>
     </div>
 
-    <div class="card card-body">
-      <h3 class="h6 mb-2">Đánh giá</h3>
-      <div class="small text-muted mb-2" id="deck-my-review"></div>
+    <!-- ── Đánh giá của bạn ── -->
+    <div class="flama-section-card">
+      <h3 class="flama-section-title">Đánh giá của bạn</h3>
+      <div class="mb-2" style="font-size:var(--font-size-sm);color:var(--flama-text-2);" id="deck-my-review"></div>
       <div class="row g-2 align-items-center">
         <div class="col-12">
-          <label class="form-label mb-1" for="deck-rating-value">Điểm</label>
+          <label class="form-label mb-1" style="font-size:var(--font-size-sm);font-weight:var(--font-weight-medium);" for="deck-rating-value">Điểm</label>
           <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
             <div class="shared-rating-stars" id="deck-rating-stars" role="radiogroup" aria-label="Chọn số sao">
-              <button type="button" class="shared-rating-star" role="radio" data-value="1" aria-label="1 sao"
-                aria-checked="false">★</button>
-              <button type="button" class="shared-rating-star" role="radio" data-value="2" aria-label="2 sao"
-                aria-checked="false">★</button>
-              <button type="button" class="shared-rating-star" role="radio" data-value="3" aria-label="3 sao"
-                aria-checked="false">★</button>
-              <button type="button" class="shared-rating-star" role="radio" data-value="4" aria-label="4 sao"
-                aria-checked="false">★</button>
-              <button type="button" class="shared-rating-star" role="radio" data-value="5" aria-label="5 sao"
-                aria-checked="true">★</button>
+              <button type="button" class="shared-rating-star" role="radio" data-value="1" aria-label="1 sao" aria-checked="false">★</button>
+              <button type="button" class="shared-rating-star" role="radio" data-value="2" aria-label="2 sao" aria-checked="false">★</button>
+              <button type="button" class="shared-rating-star" role="radio" data-value="3" aria-label="3 sao" aria-checked="false">★</button>
+              <button type="button" class="shared-rating-star" role="radio" data-value="4" aria-label="4 sao" aria-checked="false">★</button>
+              <button type="button" class="shared-rating-star" role="radio" data-value="5" aria-label="5 sao" aria-checked="true">★</button>
             </div>
-            <small class="text-muted fw-semibold" id="deck-rating-value-label">5/5</small>
+            <small style="color:var(--flama-text-2);font-weight:var(--font-weight-semibold);" id="deck-rating-value-label">5/5</small>
           </div>
           <select class="form-select form-select-sm d-none" id="deck-rating-value" aria-hidden="true" tabindex="-1">
             <option value="5">5</option>
@@ -135,486 +274,27 @@
           </select>
         </div>
         <div class="col-12">
-          <label class="form-label mb-1" for="deck-rating-comment">Nhận xét</label>
+          <label class="form-label mb-1" style="font-size:var(--font-size-sm);font-weight:var(--font-weight-medium);" for="deck-rating-comment">Nhận xét</label>
           <textarea class="form-control form-control-sm" id="deck-rating-comment" rows="2"
             placeholder="Viết nhận xét (tuỳ chọn)"></textarea>
         </div>
       </div>
       <div class="d-flex justify-content-between align-items-center mt-2">
-        <small class="text-muted" id="deck-rating-hint"></small>
+        <small style="color:var(--flama-text-2);" id="deck-rating-hint"></small>
         <button class="btn btn-outline-primary btn-sm" id="deck-rating-submit-btn" type="button">Gửi đánh giá</button>
       </div>
     </div>
+
+    <!-- ── Đánh giá cộng đồng ── -->
+    <div class="flama-section-card">
+      <h3 class="flama-section-title">Đánh giá cộng đồng</h3>
+      <div id="deck-community-reviews" style="font-size:var(--font-size-sm);color:var(--flama-text-2);">Đang tải đánh giá...</div>
+    </div>
+
   </div>
 </section>
 {% endblock %}
 
 {% block scripts %}
-<script>
-  (() => {
-    const root = document.getElementById("shared-deck-detail-root");
-    if (!root) return;
-
-    const deckItemId = root.getAttribute("data-deck-item-id");
-    const noteTypeDetailUrlTemplate = "{{ url_for('flashcards.shared_note_type_detail_page', note_type_id='__NOTE_TYPE_ID__') }}";
-
-    const titleEl = document.getElementById("deck-title");
-    const metaEl = document.getElementById("deck-meta-line");
-    const descriptionEl = document.getElementById("deck-description");
-    const previewTextEl = document.getElementById("deck-preview-text");
-    const tagsEl = document.getElementById("deck-tags");
-    const statsEl = document.getElementById("deck-stats");
-    const testSamplesEl = document.getElementById("deck-test-samples");
-    const testNoteEl = document.getElementById("deck-test-note");
-    const installBtn = document.getElementById("deck-install-btn");
-    const myReviewEl = document.getElementById("deck-my-review");
-    const ratingValueEl = document.getElementById("deck-rating-value");
-    const ratingStarsEl = document.getElementById("deck-rating-stars");
-    const ratingValueLabelEl = document.getElementById("deck-rating-value-label");
-    const ratingStarButtons = Array.from(ratingStarsEl?.querySelectorAll(".shared-rating-star") || []);
-    const ratingCommentEl = document.getElementById("deck-rating-comment");
-    const ratingHintEl = document.getElementById("deck-rating-hint");
-    const ratingSubmitBtn = document.getElementById("deck-rating-submit-btn");
-    const sourceNoteTypeLink = document.getElementById("source-note-type-link");
-    const templateNameDisplayEl = document.getElementById("deck-template-name-display");
-    const templateNoteEl = document.getElementById("deck-template-note");
-    const samplePrevBtn = document.getElementById("deck-preview-sample-prev");
-    const sampleNextBtn = document.getElementById("deck-preview-sample-next");
-    const sampleLabelEl = document.getElementById("deck-preview-sample-label");
-    const previewFrame = document.getElementById("deck-template-preview-frame");
-    const frontBtn = document.getElementById("deck-preview-side-front");
-    const backBtn = document.getElementById("deck-preview-side-back");
-    const errorEl = document.getElementById("deck-detail-error");
-
-    let deckDetail = null;
-    let sourceNoteTypeDetail = null;
-    let selectedTemplateId = "";
-    let previewPayload = null;
-    let previewSide = "front";
-    let testSamples = [];
-    let activeSampleIndex = -1;
-
-    function showError(message) {
-      errorEl.textContent = message || "Request failed.";
-      errorEl.classList.remove("d-none");
-    }
-
-    function clearError() {
-      errorEl.textContent = "";
-      errorEl.classList.add("d-none");
-    }
-
-    function formatDate(isoString) {
-      if (!isoString) return "";
-      const date = new Date(isoString);
-      if (Number.isNaN(date.getTime())) return "";
-      return date.toLocaleString();
-    }
-
-    function buildNoteTypeDetailUrl(noteTypeId) {
-      return noteTypeDetailUrlTemplate.replace("__NOTE_TYPE_ID__", encodeURIComponent(noteTypeId));
-    }
-
-    async function requestJson(url, options = {}) {
-      const response = await fetch(url, options);
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.message || "Request failed.");
-      return data;
-    }
-
-    function renderTags(tags) {
-      tagsEl.innerHTML = "";
-      const normalized = Array.isArray(tags) ? tags : [];
-      if (!normalized.length) {
-        tagsEl.textContent = "Không có tags.";
-        return;
-      }
-      normalized.forEach((tag) => {
-        const span = document.createElement("span");
-        span.className = "badge bg-light text-dark border me-1 mb-1";
-        span.textContent = tag;
-        tagsEl.appendChild(span);
-      });
-    }
-
-    function getActiveSample() {
-      if (!Array.isArray(testSamples)) return null;
-      if (activeSampleIndex < 0 || activeSampleIndex >= testSamples.length) return null;
-      return testSamples[activeSampleIndex];
-    }
-
-    function renderSampleNavState() {
-      const hasSamples = Array.isArray(testSamples) && testSamples.length > 0;
-      if (samplePrevBtn) samplePrevBtn.disabled = !hasSamples;
-      if (sampleNextBtn) sampleNextBtn.disabled = !hasSamples;
-
-      if (!sampleLabelEl) return;
-      if (!hasSamples) {
-        sampleLabelEl.textContent = "Khong co tu mau.";
-        return;
-      }
-      const sample = getActiveSample();
-      const word = ((sample?.word || "").trim() || ("Tu #" + String(activeSampleIndex + 1)));
-      sampleLabelEl.textContent = "Mau " + String(activeSampleIndex + 1) + "/" + String(testSamples.length) + ": " + word;
-    }
-
-    function renderTestSamples(samples) {
-      if (!testSamplesEl) return;
-      testSamplesEl.innerHTML = "";
-
-      const normalized = Array.isArray(samples) ? samples : [];
-      testSamples = normalized;
-      if (!normalized.length) {
-        activeSampleIndex = -1;
-        const emptyRow = document.createElement("div");
-        emptyRow.className = "list-group-item px-0 text-muted";
-        emptyRow.textContent = "Deck nay chua co tu mau de test.";
-        testSamplesEl.appendChild(emptyRow);
-        if (testNoteEl) {
-          testNoteEl.textContent = "Khong co du lieu de lay 5 tu mau.";
-        }
-        renderSampleNavState();
-        return;
-      }
-
-      if (activeSampleIndex < 0 || activeSampleIndex >= normalized.length) {
-        activeSampleIndex = 0;
-      }
-      if (testNoteEl) {
-        testNoteEl.textContent = "Dang hien thi " + normalized.length + " tu ngau nhien de mo phong preview card.";
-      }
-
-      normalized.forEach((sample, index) => {
-        const row = document.createElement("button");
-        row.type = "button";
-        row.className = "list-group-item list-group-item-action px-0 text-start";
-        if (index === activeSampleIndex) {
-          row.classList.add("active");
-        }
-
-        const textWrap = document.createElement("div");
-        textWrap.className = "d-flex flex-wrap justify-content-between align-items-start gap-2";
-        const wordEl = document.createElement("div");
-        wordEl.className = "fw-semibold";
-        wordEl.textContent = (sample?.word || "").trim() || ("Tu #" + String(index + 1));
-        const metaWrap = document.createElement("div");
-        metaWrap.appendChild(wordEl);
-
-        const reading = (sample?.reading || "").trim();
-        if (reading) {
-          const readingEl = document.createElement("div");
-          readingEl.className = "small text-muted";
-          readingEl.textContent = "Reading: " + reading;
-          metaWrap.appendChild(readingEl);
-        }
-
-        const meaning = (sample?.meaning || "").trim();
-        const meaningEl = document.createElement("div");
-        meaningEl.className = "small";
-        meaningEl.textContent = meaning ? ("Hint: " + meaning) : "Hint: (khong co)";
-
-        textWrap.appendChild(metaWrap);
-        textWrap.appendChild(meaningEl);
-        row.appendChild(textWrap);
-
-        row.addEventListener("click", () => {
-          activeSampleIndex = index;
-          renderTestSamples(testSamples);
-          renderSampleNavState();
-          loadTemplatePreview().catch((error) => showError(error.message));
-        });
-
-        testSamplesEl.appendChild(row);
-      });
-      renderSampleNavState();
-    }
-
-    function setLoadingPreview(message) {
-      const safeMessage = message || "Loading preview...";
-      previewFrame.srcdoc = "<!doctype html><html><body><div style='padding:12px;color:#6c757d;'>" + safeMessage + "</div></body></html>";
-    }
-
-    function renderPreviewFrame() {
-      const html = previewSide === "back"
-        ? (previewPayload?.back_html || "")
-        : (previewPayload?.front_html || "");
-      const fallback = "<div style='padding:12px;color:#6c757d;'>Empty preview.</div>";
-      previewFrame.srcdoc = "<!doctype html><html><head><meta charset='utf-8'></head><body><div style='padding:8px;'>" + (html || fallback) + "</div></body></html>";
-    }
-
-    function applySideButtons() {
-      frontBtn.classList.toggle("active", previewSide === "front");
-      backBtn.classList.toggle("active", previewSide === "back");
-    }
-
-    function renderInstallState() {
-      if (!deckDetail) return;
-      if (deckDetail.is_owner) {
-        installBtn.textContent = "Bạn là tác giả";
-        installBtn.disabled = true;
-        return;
-      }
-      if (deckDetail.is_installed) {
-        installBtn.textContent = "Đã cài đặt";
-        installBtn.disabled = true;
-        return;
-      }
-      installBtn.textContent = deckDetail.pricing_mode === "paid" ? "Mua / Cài đặt" : "Cài đặt";
-      installBtn.disabled = false;
-    }
-
-    function normalizeRatingValue(value) {
-      const parsed = Number(value);
-      if (!Number.isInteger(parsed)) return 5;
-      return Math.max(1, Math.min(5, parsed));
-    }
-
-    function paintRatingStars(value) {
-      const normalized = normalizeRatingValue(value);
-      ratingStarButtons.forEach((button) => {
-        const starValue = Number(button.getAttribute("data-value") || "0");
-        const isActive = starValue <= normalized;
-        button.classList.toggle("is-active", isActive);
-        button.setAttribute("aria-checked", starValue === normalized ? "true" : "false");
-      });
-      if (ratingValueLabelEl) {
-        ratingValueLabelEl.textContent = normalized + "/5";
-      }
-    }
-
-    function setSelectedRating(value) {
-      const normalized = normalizeRatingValue(value);
-      ratingValueEl.value = String(normalized);
-      paintRatingStars(normalized);
-    }
-
-    function setRatingInputDisabled(disabled) {
-      const isDisabled = Boolean(disabled);
-      ratingValueEl.disabled = isDisabled;
-      ratingCommentEl.disabled = isDisabled;
-      ratingSubmitBtn.disabled = isDisabled;
-      if (ratingStarsEl) {
-        ratingStarsEl.classList.toggle("is-disabled", isDisabled);
-        ratingStarsEl.setAttribute("aria-disabled", isDisabled ? "true" : "false");
-      }
-      ratingStarButtons.forEach((button) => {
-        button.disabled = isDisabled;
-      });
-    }
-
-    function renderRatingState() {
-      if (!deckDetail) return;
-      const review = deckDetail.my_review || null;
-      if (review) {
-        myReviewEl.textContent = "Đánh giá của bạn: " + review.rating + "/5"
-          + (review.comment ? " - " + review.comment : "")
-          + (review.updated_at ? " (" + formatDate(review.updated_at) + ")" : "");
-        setSelectedRating(review.rating || 5);
-        ratingCommentEl.value = review.comment || "";
-      } else {
-        myReviewEl.textContent = "Bạn chưa đánh giá deck này.";
-        setSelectedRating(5);
-        ratingCommentEl.value = "";
-      }
-
-      if (deckDetail.can_rate) {
-        ratingHintEl.textContent = "Bạn có thể đánh giá ngay.";
-        setRatingInputDisabled(false);
-      } else {
-        ratingHintEl.textContent = "Cần cài đặt và dùng thực tế trước khi đánh giá.";
-        setRatingInputDisabled(true);
-      }
-    }
-
-    function renderTemplateName(templates, defaultName) {
-      const normalized = Array.isArray(templates) ? templates.slice().sort((a, b) => (a.position || 0) - (b.position || 0)) : [];
-      if (!normalized.length) {
-        if (templateNameDisplayEl) templateNameDisplayEl.textContent = "Không có template";
-        selectedTemplateId = "";
-        return;
-      }
-      const defaultTemplate = normalized.find(t => t.is_default) || normalized[0];
-      selectedTemplateId = defaultTemplate.id;
-      if (templateNameDisplayEl) {
-        templateNameDisplayEl.textContent = "Template: " + (defaultName || defaultTemplate.name);
-      }
-    }
-
-    async function loadTemplatePreview() {
-      if (!deckDetail || !deckDetail.source_note_type_id || !selectedTemplateId) {
-        setLoadingPreview("Deck này chưa có template preview.");
-        return;
-      }
-      const selectedSample = getActiveSample();
-      const previewRequestPayload = {};
-      if (selectedSample?.note_id) {
-        previewRequestPayload.note_id = selectedSample.note_id;
-      }
-
-      setLoadingPreview();
-      previewPayload = await requestJson(`/api/shared/decks/${deckItemId}/templates/${selectedTemplateId}/preview`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(previewRequestPayload),
-      });
-      renderPreviewFrame();
-    }
-
-    async function loadSourceNoteType() {
-      sourceNoteTypeDetail = null;
-      selectedTemplateId = "";
-      previewPayload = null;
-
-      if (!deckDetail || !deckDetail.source_note_type_id) {
-        sourceNoteTypeLink.classList.add("disabled");
-        sourceNoteTypeLink.setAttribute("href", "#");
-        templateNoteEl.textContent = "Deck này không liên kết note type nguồn.";
-        if (templateNameDisplayEl) templateNameDisplayEl.textContent = "Không có template";
-        setLoadingPreview("Deck này không có template preview.");
-        return;
-      }
-
-      sourceNoteTypeLink.classList.remove("disabled");
-      sourceNoteTypeLink.setAttribute("href", buildNoteTypeDetailUrl(deckDetail.source_note_type_id));
-
-      const sourceFromDeckDetail = deckDetail.source_note_type || null;
-      if (sourceFromDeckDetail && Array.isArray(sourceFromDeckDetail.templates) && sourceFromDeckDetail.templates.length) {
-        sourceNoteTypeDetail = sourceFromDeckDetail;
-        const displayName = sourceNoteTypeDetail.title || sourceNoteTypeDetail.name || "";
-        renderTemplateName(sourceNoteTypeDetail.templates || [], displayName);
-        templateNoteEl.textContent = "Preview lấy từ note type nguồn: " + displayName;
-        await loadTemplatePreview();
-        return;
-      }
-
-      try {
-        sourceNoteTypeDetail = await requestJson(`/api/shared/note-types/${deckDetail.source_note_type_id}`);
-        const displayName = sourceNoteTypeDetail.title || sourceNoteTypeDetail.name || "";
-        renderTemplateName(sourceNoteTypeDetail.templates || [], displayName);
-        templateNoteEl.textContent = "Preview lấy từ note type nguồn: " + displayName;
-        await loadTemplatePreview();
-      } catch (error) {
-        templateNoteEl.textContent = "Không thể tải template preview nguồn.";
-        if (templateNameDisplayEl) templateNameDisplayEl.textContent = "Không có template";
-        setLoadingPreview("Không có template preview khả dụng.");
-      }
-    }
-
-    async function loadDeckDetail() {
-      clearError();
-      deckDetail = await requestJson(`/api/shared/decks/${deckItemId}`);
-
-      titleEl.textContent = deckDetail.title || "Shared deck";
-      metaEl.textContent = "Tác giả: " + (deckDetail.author?.username || "Unknown")
-        + " | Danh mục: " + (deckDetail.primary_category || "General")
-        + " | Giá: " + (deckDetail.price_display || "Free");
-      descriptionEl.textContent = deckDetail.description || "Không có mô tả.";
-      previewTextEl.textContent = deckDetail.preview_text || "Không có preview text.";
-      statsEl.textContent = "Sample cards: " + (deckDetail.sample_cards_count || 0)
-        + " | Rating: " + Number(deckDetail.rating_avg || 0).toFixed(2) + " (" + (deckDetail.rating_count || 0) + ")"
-        + " | Active usage: " + (deckDetail.active_usage_count || 0) + "/" + (deckDetail.install_count || 0)
-        + " | Cập nhật: " + (formatDate(deckDetail.updated_at) || "N/A");
-
-      renderTags(deckDetail.tags || []);
-      renderTestSamples(deckDetail.test_samples || []);
-      renderSampleNavState();
-      renderInstallState();
-      renderRatingState();
-      await loadSourceNoteType();
-    }
-
-    async function onInstall() {
-      if (!deckDetail || deckDetail.is_owner || deckDetail.is_installed) return;
-      installBtn.disabled = true;
-      try {
-        await requestJson(`/api/shared/decks/${deckItemId}/install`, { method: "POST" });
-        await loadDeckDetail();
-      } finally {
-        renderInstallState();
-      }
-    }
-
-    async function onRateSubmit() {
-      if (!deckDetail || !deckDetail.can_rate) return;
-      const rating = Number(ratingValueEl.value || "5");
-      if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
-        window.alert("Rating phải từ 1 đến 5.");
-        return;
-      }
-      const comment = (ratingCommentEl.value || "").trim();
-      await requestJson(`/api/shared/decks/${deckItemId}/rate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rating, comment }),
-      });
-      await loadDeckDetail();
-    }
-
-    installBtn?.addEventListener("click", () => {
-      onInstall().catch((error) => showError(error.message));
-    });
-
-    ratingSubmitBtn?.addEventListener("click", () => {
-      onRateSubmit().catch((error) => showError(error.message));
-    });
-
-    ratingStarButtons.forEach((button) => {
-      button.addEventListener("mouseenter", () => {
-        if (button.disabled) return;
-        paintRatingStars(button.getAttribute("data-value") || "5");
-      });
-
-      button.addEventListener("focus", () => {
-        if (button.disabled) return;
-        paintRatingStars(button.getAttribute("data-value") || "5");
-      });
-
-      button.addEventListener("click", () => {
-        if (button.disabled) return;
-        setSelectedRating(button.getAttribute("data-value") || "5");
-      });
-    });
-
-    ratingStarsEl?.addEventListener("mouseleave", () => {
-      paintRatingStars(ratingValueEl.value || "5");
-    });
-
-    ratingStarsEl?.addEventListener("focusout", (event) => {
-      if (!ratingStarsEl.contains(event.relatedTarget)) {
-        paintRatingStars(ratingValueEl.value || "5");
-      }
-    });
-
-
-
-    [frontBtn, backBtn].forEach((button) => {
-      button?.addEventListener("click", () => {
-        previewSide = button.getAttribute("data-side") || "front";
-        applySideButtons();
-        renderPreviewFrame();
-      });
-    });
-
-    samplePrevBtn?.addEventListener("click", () => {
-      if (!Array.isArray(testSamples) || !testSamples.length) return;
-      activeSampleIndex = (activeSampleIndex - 1 + testSamples.length) % testSamples.length;
-      renderTestSamples(testSamples);
-      renderSampleNavState();
-      loadTemplatePreview().catch((error) => showError(error.message));
-    });
-
-    sampleNextBtn?.addEventListener("click", () => {
-      if (!Array.isArray(testSamples) || !testSamples.length) return;
-      activeSampleIndex = (activeSampleIndex + 1) % testSamples.length;
-      renderTestSamples(testSamples);
-      renderSampleNavState();
-      loadTemplatePreview().catch((error) => showError(error.message));
-    });
-
-    setSelectedRating(ratingValueEl.value || "5");
-    setRatingInputDisabled(true);
-    applySideButtons();
-    loadDeckDetail().catch((error) => showError(error.message));
-  })();
-</script>
+<script type="module" src="{{ url_for('static', filename='js/pages/shared_deck_detail/main.js') }}"></script>
 {% endblock %}

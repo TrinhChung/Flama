@@ -1,0 +1,51 @@
+import_export.py:
+  _api_error
+  _audit
+  _collect_accessible_decks_for_import
+  _deck_path_label
+  _default_uniqueness_fields
+  _get_note_type_or_404
+  _infer_default_note_type_id_for_deck
+  _parse_bool
+  _recompute_deck_item_market_stats
+  _recompute_note_type_market_stats
+  _resolve_import_execution_payload
+  _resolve_single_note_type_for_deck
+  _serialize_note_type_for_import
+  _touch_note_type_install_usage
+media.py:
+  _api_error
+  _audit
+  _get_note_type_or_404
+  _serialize_template
+note_type.py:
+  _api_error
+  _apply_note_type_marketplace_payload
+  _audit
+  _create_cards_for_note
+  _get_note_type_or_404
+  _normalize_tags
+  _recompute_note_type_market_stats
+  _reorder_fields
+  _run_field_rename_job
+  _serialize_field
+  _serialize_note_type
+  _touch_note_type_install_usage
+  _validate_note_payload
+  _validate_note_type_consistency_for_deck
+share.py:
+  _api_error
+  _build_preview_sample_values
+  _get_note_type_or_404
+study.py:
+  _api_error
+  _apply_clone_note_field_overrides
+  _audit
+  _build_clone_schema_view
+  _is_card_visible_in_clone_scope
+  _query_clone_scope_cards
+  _resolve_clone_scope_for_card
+  _resolve_clone_scope_for_local_deck
+  _resolve_local_clone_deck_id_for_source_deck
+  _touch_deck_install_usage
+  _touch_note_type_install_usage

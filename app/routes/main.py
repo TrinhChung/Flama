@@ -12,10 +12,12 @@ from app.services.anki_scheduler import (
     _day_index as scheduler_day_index,
     _day_index_to_datetime as scheduler_day_index_to_datetime,
 )
+from app.services import tts_provider_service
 from app.services.stats_overview import build_stats_overview
 from app.services.stats_today_future import build_today_future_stats, list_stats_decks
 from app.utils.deck_move_token import create_deck_move_token
 from app.utils.permissions import is_admin_user
+from sqlalchemy.exc import SQLAlchemyError
 from models import db
 from models.flashcard import Card, DeckCloneDeckMap, DeckInstall, Note
 from models.deck import Deck
@@ -57,273 +59,8 @@ def cookies():
 @main_bp.route("/dashboard")
 @login_required
 def dashboard():
-    admin_mode = is_admin_user(current_user)
-
-    # Admin sees own/source decks only (exclude decks cloned for other users)
-    if admin_mode:
-        decks = (
-            Deck.query.filter(
-                db.or_(
-                    Deck.owner_user_id == current_user.id,
-                    Deck.owner_user_id.is_(None),
-                )
-            )
-            .order_by(
-                Deck.parent_id.isnot(None),
-                Deck.position,
-                Deck.created_at,
-                Deck.id,
-            )
-            .all()
-        )
-    else:
-        # Get only decks installed by this user
-        installs = DeckInstall.query.filter_by(user_id=current_user.id).all()
-        installed_root_ids = {inst.local_deck_id for inst in installs if inst.local_deck_id}
-        if installed_root_ids:
-            visible_ids: set[int] = set()
-            frontier: set[int] = {int(deck_id) for deck_id in installed_root_ids}
-            while frontier:
-                current_ids = {deck_id for deck_id in frontier if deck_id not in visible_ids}
-                if not current_ids:
-                    break
-                visible_ids.update(current_ids)
-                child_rows = (
-                    db.session.query(Deck.id)
-                    .filter(Deck.parent_id.in_(current_ids))
-                    .all()
-                )
-                frontier = {int(row[0]) for row in child_rows if row and row[0] is not None}
-
-            decks = (
-                Deck.query.filter(Deck.id.in_(visible_ids))
-                .order_by(
-                    Deck.parent_id.isnot(None),
-                    Deck.position,
-                    Deck.created_at,
-                    Deck.id,
-                )
-                .all()
-            )
-        else:
-            decks = []
-
-    @dataclass
-    class DeckNode:
-        deck_id: int
-        parent_id: int | None
-        move_alias: str
-        move_token: str
-        parent_move_alias: str | None
-        parent_move_token: str | None
-        label: str
-        href: str
-        depth: int
-        new_count: int
-        learn_count: int
-        due_count: int
-        children: List["DeckNode"] = field(default_factory=list)
-
-    now = datetime.utcnow()
-
-    visible_deck_ids = [deck.id for deck in decks if deck.id is not None]
-    card_counts_by_deck: Dict[int, Dict[str, int]] = {
-        int(deck_id): {"total": 0, "new": 0, "learn": 0, "due": 0}
-        for deck_id in visible_deck_ids
-    }
-    if visible_deck_ids:
-        progress_join = db.and_(
-            CardProgress.card_id == Card.id,
-            CardProgress.user_id == current_user.id,
-        )
-        state_rows = (
-            db.session.query(
-                Note.deck_id,
-                CardProgress.queue,
-                CardProgress.due_at,
-            )
-            .select_from(Card)
-            .join(Note, Card.note_id == Note.id)
-            .outerjoin(CardProgress, progress_join)
-            .filter(
-                Note.user_id == current_user.id,
-                Note.deck_id.in_(visible_deck_ids),
-            )
-            .all()
-        )
-        for deck_id, progress_queue, progress_due_at in state_rows:
-            if not deck_id:
-                continue
-            bucket = card_counts_by_deck.setdefault(
-                int(deck_id), {"total": 0, "new": 0, "learn": 0, "due": 0}
-            )
-            bucket["total"] += 1
-
-            queue_value = progress_queue
-            due_at_value = progress_due_at
-            queue_norm = (queue_value or "new").strip().lower()
-            if queue_norm == "learn":
-                queue_norm = "learning"
-
-            if queue_norm == "new":
-                bucket["new"] += 1
-            elif queue_norm in {"learning", "relearning"}:
-                bucket["learn"] += 1
-            elif queue_norm == "review" and (due_at_value is None or due_at_value <= now):
-                bucket["due"] += 1
-
-        if not admin_mode:
-            logical_installs = [
-                install
-                for install in installs
-                if install.clone_mode == "logical_overlay" and install.id and install.local_deck_id
-            ]
-            for install in logical_installs:
-                map_rows = (
-                    DeckCloneDeckMap.query.filter_by(deck_install_id=install.id)
-                    .order_by(DeckCloneDeckMap.local_deck_id.asc(), DeckCloneDeckMap.source_deck_id.asc())
-                    .all()
-                )
-                source_to_local = {
-                    int(row.source_deck_id): int(row.local_deck_id)
-                    for row in map_rows
-                    if row.source_deck_id is not None
-                    and row.local_deck_id is not None
-                    and int(row.local_deck_id) in card_counts_by_deck
-                }
-                if not source_to_local:
-                    continue
-
-                clone_query = (
-                    db.session.query(
-                        Note.deck_id,
-                        CardProgress.queue,
-                        CardProgress.due_at,
-                    )
-                    .select_from(Card)
-                    .join(Note, Card.note_id == Note.id)
-                    .outerjoin(CardProgress, progress_join)
-                    .filter(Note.deck_id.in_(source_to_local.keys()))
-                )
-                if install.source_owner_user_id is not None:
-                    clone_query = clone_query.filter(Note.user_id == install.source_owner_user_id)
-                snapshot_at = install.base_snapshot_at or install.installed_at
-                if snapshot_at is not None:
-                    clone_query = clone_query.filter(
-                        Note.created_at <= snapshot_at,
-                        Card.created_at <= snapshot_at,
-                    )
-
-                for source_deck_id, progress_queue, progress_due_at in clone_query.all():
-                    if source_deck_id is None:
-                        continue
-                    local_deck_id = source_to_local.get(int(source_deck_id))
-                    if local_deck_id is None:
-                        continue
-                    bucket = card_counts_by_deck.setdefault(
-                        int(local_deck_id), {"total": 0, "new": 0, "learn": 0, "due": 0}
-                    )
-                    bucket["total"] += 1
-
-                    queue_value = progress_queue
-                    due_at_value = progress_due_at
-                    queue_norm = (queue_value or "new").strip().lower()
-                    if queue_norm == "learn":
-                        queue_norm = "learning"
-
-                    if queue_norm == "new":
-                        bucket["new"] += 1
-                    elif queue_norm in {"learning", "relearning"}:
-                        bucket["learn"] += 1
-                    elif queue_norm == "review" and (due_at_value is None or due_at_value <= now):
-                        bucket["due"] += 1
-    
-    by_parent: Dict[int | None, List[Deck]] = {}
-    for deck in decks:
-        by_parent.setdefault(deck.parent_id, []).append(deck)
-
-    for children in by_parent.values():
-        children.sort(key=lambda item: ((item.position or 0), item.created_at, item.id))
-
-    move_alias_by_deck_id: Dict[int, str] = {}
-    move_token_by_deck_id: Dict[int, str] = {}
-    used_move_aliases: set[str] = set()
-    for deck in decks:
-        move_token = create_deck_move_token(deck.id, current_user.id)
-        digest = hashlib.sha256(move_token.encode("utf-8")).hexdigest().upper()
-        alias_len = 10
-        move_alias = f"MID-{digest[:alias_len]}"
-        while move_alias in used_move_aliases and alias_len < len(digest):
-            alias_len += 2
-            move_alias = f"MID-{digest[:alias_len]}"
-        if move_alias in used_move_aliases:
-            move_alias = f"MID-{digest}"
-
-        used_move_aliases.add(move_alias)
-        move_alias_by_deck_id[deck.id] = move_alias
-        move_token_by_deck_id[deck.id] = move_token
-
-    subtree_card_counts_cache: Dict[int, Dict[str, int]] = {}
-
-    def _collect_subtree_card_counts(deck_id: int) -> Dict[str, int]:
-        cached = subtree_card_counts_cache.get(deck_id)
-        if cached is not None:
-            return cached
-
-        base = card_counts_by_deck.get(
-            deck_id, {"total": 0, "new": 0, "learn": 0, "due": 0}
-        )
-        collected = {
-            "total": int(base["total"]),
-            "new": int(base["new"]),
-            "learn": int(base["learn"]),
-            "due": int(base["due"]),
-        }
-        for child in by_parent.get(deck_id, []):
-            child_counts = _collect_subtree_card_counts(child.id)
-            collected["total"] += int(child_counts["total"])
-            collected["new"] += int(child_counts["new"])
-            collected["learn"] += int(child_counts["learn"])
-            collected["due"] += int(child_counts["due"])
-
-        subtree_card_counts_cache[deck_id] = collected
-        return collected
-
-    def _build_nodes(parent_id: int | None, depth: int) -> List[DeckNode]:
-        nodes: List[DeckNode] = []
-        for deck in by_parent.get(parent_id, []):
-            card_counts = _collect_subtree_card_counts(deck.id)
-            deck_new = int(card_counts["new"])
-            deck_learn = int(card_counts["learn"])
-            deck_due = int(card_counts["due"])
-            nodes.append(
-                DeckNode(
-                    deck_id=deck.id,
-                    parent_id=deck.parent_id,
-                    move_alias=move_alias_by_deck_id.get(deck.id, ""),
-                    move_token=move_token_by_deck_id.get(deck.id, ""),
-                    parent_move_alias=move_alias_by_deck_id.get(deck.parent_id) if deck.parent_id else None,
-                    parent_move_token=move_token_by_deck_id.get(deck.parent_id) if deck.parent_id else None,
-                    label=deck.name,
-                    href=url_for("vocabulary.study_deck", deck_id=deck.id),
-                    depth=depth,
-                    new_count=deck_new,
-                    learn_count=deck_learn,
-                    due_count=deck_due,
-                    children=_build_nodes(deck.id, depth + 1),
-                )
-            )
-        return nodes
-
-    rows = _build_nodes(None, 0)
-
-    total_new = 0
-    total_learn = 0
-    total_due = 0
-    for row in rows:
-        total_new += row.new_count
-        total_learn += row.learn_count
-        total_due += row.due_count
+    from app.services.dashboard_service import build_dashboard_data
+    rows, total_new, total_learn, total_due, admin_mode = build_dashboard_data(current_user)
 
     return render_template(
         "dashboard.html",
@@ -415,3 +152,153 @@ def stats_today_future():
         backlog=backlog,
     )
     return jsonify(payload)
+
+
+def _parse_boolean(value: object) -> bool:
+    if isinstance(value, bool):
+        return value
+    return tts_provider_service.is_truthy(value)
+
+
+def _serialize_validation_result(result: tts_provider_service.ApiKeyValidationResult) -> dict:
+    return {
+        "valid": bool(result.valid),
+        "status": tts_provider_service.normalize_key_status(result.status),
+        "message": str(result.message or ""),
+        "checked_at": result.checked_at.isoformat() if result.checked_at else None,
+    }
+
+
+@main_bp.route("/api/tts/providers", methods=["GET"])
+@login_required
+def tts_provider_list():
+    items = tts_provider_service.list_active_provider_profiles_for_user(current_user.id)
+    return jsonify({"items": items})
+
+
+@main_bp.route("/api/tts/providers/<provider_type>/profile", methods=["GET", "PUT"])
+@login_required
+def tts_provider_profile(provider_type: str):
+    provider = tts_provider_service.find_provider_by_type(provider_type, include_inactive=False)
+    if provider is None:
+        return jsonify({"error": "NOT_FOUND", "message": "Provider không tồn tại hoặc đang bị tắt."}), 404
+
+    if request.method == "GET":
+        payload = tts_provider_service.get_provider_profile_payload_for_user(
+            user_id=current_user.id,
+            provider_type=provider.provider_type,
+            include_inactive=False,
+        )
+        if payload is None:
+            return jsonify({"error": "NOT_FOUND", "message": "Provider không tồn tại."}), 404
+        return jsonify(payload)
+
+    body = request.get_json(silent=True) or {}
+    if not isinstance(body, dict):
+        return jsonify({"error": "VALIDATION_ERROR", "message": "Payload phải là object JSON."}), 400
+
+    raw_api_key = tts_provider_service.UNSET
+    if "api_key" in body:
+        raw_api_key = str(body.get("api_key") or "")
+
+    settings_payload = tts_provider_service.UNSET
+    if "settings" in body:
+        settings_payload = body.get("settings")
+
+    clear_api_key = _parse_boolean(body.get("clear_api_key"))
+    validate_key = _parse_boolean(body.get("validate_key"))
+
+    try:
+        profile, validation_result, errors = tts_provider_service.update_user_provider_profile(
+            db.session,
+            user_id=current_user.id,
+            provider=provider,
+            raw_api_key=raw_api_key,
+            clear_api_key=clear_api_key,
+            settings_payload=settings_payload,
+            validate_key=validate_key,
+        )
+        if errors:
+            db.session.rollback()
+            return jsonify({"error": "VALIDATION_ERROR", "message": "; ".join(errors), "errors": errors}), 400
+        db.session.commit()
+    except SQLAlchemyError:
+        db.session.rollback()
+        return jsonify({"error": "DB_ERROR", "message": "Không thể cập nhật cấu hình TTS của user."}), 500
+
+    payload = tts_provider_service.serialize_user_provider_profile(provider=provider, profile=profile)
+    if validation_result is not None:
+        payload["validation"] = _serialize_validation_result(validation_result)
+    return jsonify(payload)
+
+
+@main_bp.route("/api/tts/providers/<provider_type>/validate-key", methods=["POST"])
+@login_required
+def tts_validate_provider_key(provider_type: str):
+    provider = tts_provider_service.find_provider_by_type(provider_type, include_inactive=False)
+    if provider is None:
+        return jsonify({"error": "NOT_FOUND", "message": "Provider không tồn tại hoặc đang bị tắt."}), 404
+
+    body = request.get_json(silent=True) or {}
+    if not isinstance(body, dict):
+        return jsonify({"error": "VALIDATION_ERROR", "message": "Payload phải là object JSON."}), 400
+
+    api_key_override: str | None = None
+    if "api_key" in body:
+        api_key_override = str(body.get("api_key") or "").strip() or None
+
+    try:
+        result, errors = tts_provider_service.validate_user_provider_key(
+            db.session,
+            user_id=current_user.id,
+            provider=provider,
+            api_key_override=api_key_override,
+        )
+        if errors or result is None:
+            db.session.rollback()
+            messages = errors or ["Không thể validate API key."]
+            return jsonify({"error": "VALIDATION_ERROR", "message": "; ".join(messages), "errors": messages}), 400
+        db.session.commit()
+    except SQLAlchemyError:
+        db.session.rollback()
+        return jsonify({"error": "DB_ERROR", "message": "Không thể lưu kết quả validate API key."}), 500
+
+    payload = tts_provider_service.get_provider_profile_payload_for_user(
+        user_id=current_user.id,
+        provider_type=provider.provider_type,
+        include_inactive=False,
+    )
+    return jsonify(
+        {
+            "validation": _serialize_validation_result(result),
+            "item": payload,
+        }
+    )
+
+
+@main_bp.route("/api/tts/providers/<provider_type>/voices", methods=["POST"])
+@login_required
+def tts_provider_voices(provider_type: str):
+    provider = tts_provider_service.find_provider_by_type(provider_type, include_inactive=False)
+    if provider is None:
+        return jsonify({"error": "NOT_FOUND", "message": "Provider không tồn tại hoặc đang bị tắt."}), 404
+
+    body = request.get_json(silent=True) or {}
+    if not isinstance(body, dict):
+        return jsonify({"error": "VALIDATION_ERROR", "message": "Payload phải là object JSON."}), 400
+
+    api_key_override = str(body.get("api_key") or "").strip() or None
+    try:
+        items, errors = tts_provider_service.list_provider_voices_for_user(
+            db.session,
+            user_id=current_user.id,
+            provider=provider,
+            api_key_override=api_key_override,
+        )
+    except SQLAlchemyError:
+        db.session.rollback()
+        return jsonify({"error": "DB_ERROR", "message": "Không thể tải danh sách nhân vật VoiceVox."}), 500
+
+    if errors:
+        return jsonify({"error": "VALIDATION_ERROR", "message": "; ".join(errors), "errors": errors}), 400
+    return jsonify({"items": items})

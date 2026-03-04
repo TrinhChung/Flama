@@ -19,7 +19,7 @@
     <div class="card-body">
       <div class="import-head">
         <h2 class="h5 mb-1">Import Notes/Cards</h2>
-        <p class="text-muted mb-0">CSV, TSV, hoặc delimiter tùy chỉnh. Flow: Parse -> Mapping -> Estimate -> Execute.</p>
+        <p class="text-muted mb-0">CSV, TSV, hoặc delimiter tùy chỉnh. Flow: Auto Parse -> Mapping -> Estimate -> Execute.</p>
       </div>
 
       <div class="row g-3 mt-2">
@@ -36,7 +36,16 @@
       <hr class="my-4">
 
       <section class="wizard-step">
-        <h3 class="h6">Step A - Upload & Parse</h3>
+        <div class="import-step-title">
+          <h3 class="h6 mb-0">Step A - Upload & Parse</h3>
+          <span id="parseStateBadge" class="import-status-badge import-status-badge--idle">Chưa có file</span>
+        </div>
+        <p class="small text-muted mb-2">Sau khi chọn file, hệ thống sẽ tự nhận diện đuôi file và parse tự động. Nút Parse chỉ dùng để parse lại thủ công.</p>
+        <div class="import-help-strip mb-2">
+          <div class="import-help-pill"><i class="bi bi-file-earmark-spreadsheet"></i> Hỗ trợ .csv / .tsv / .txt</div>
+          <div class="import-help-pill"><i class="bi bi-magic"></i> Tự nhận diện delimiter theo file</div>
+          <div class="import-help-pill"><i class="bi bi-arrow-repeat"></i> Có thể parse lại sau khi đổi cấu hình</div>
+        </div>
         <div class="row g-3 align-items-end">
           <div class="col-lg-4">
             <label class="form-label" for="importFileInput">File (csv/tsv/txt)</label>
@@ -61,7 +70,7 @@
             </div>
           </div>
           <div class="col-lg-1 d-grid">
-            <button id="parseBtn" class="btn btn-primary">Parse</button>
+            <button id="parseBtn" class="btn import-btn import-btn--ghost" type="button">Parse lại</button>
           </div>
         </div>
 
@@ -132,10 +141,41 @@
       <hr class="my-4">
 
       <section class="wizard-step">
-        <h3 class="h6">Step D - Review & Execute</h3>
-        <div class="d-flex flex-wrap gap-2">
-          <button id="estimateBtn" class="btn btn-outline-secondary">Estimate</button>
-          <button id="executeBtn" class="btn btn-success" disabled>Execute Import</button>
+        <div class="import-step-title">
+          <h3 class="h6 mb-0">Step D - Review & Execute</h3>
+          <span id="stepDStateBadge" class="import-status-badge import-status-badge--idle">Chờ parse</span>
+        </div>
+        <p class="small text-muted mb-2">Để tránh import nhầm dữ liệu: hãy estimate trước, kiểm tra kết quả, rồi mới execute import.</p>
+
+        <div class="import-step-guide">
+          <div class="import-guide-item">
+            <span class="import-guide-index">1</span>
+            <div>
+              <div class="fw-semibold">Estimate trước khi import</div>
+              <div class="small text-muted">Kiểm tra tổng số dòng hợp lệ/lỗi và các row issues trước khi chạy thật.</div>
+            </div>
+          </div>
+          <div class="import-guide-item">
+            <span class="import-guide-index">2</span>
+            <div>
+              <div class="fw-semibold">Xác nhận summary + issues</div>
+              <div class="small text-muted">Nếu có lỗi, quay lại Step B/C để chỉnh mapping hoặc uniqueness key.</div>
+            </div>
+          </div>
+          <div class="import-guide-item">
+            <span class="import-guide-index">3</span>
+            <div>
+              <div class="fw-semibold">Execute Import</div>
+              <div class="small text-muted">Chỉ bấm khi đã estimate ổn. Hệ thống sẽ hiển thị report cuối cùng.</div>
+            </div>
+          </div>
+        </div>
+
+        <div id="stepDHint" class="import-step-hint import-step-hint--info mt-3">Bắt đầu bằng Step A: upload file để hệ thống parse.</div>
+
+        <div class="d-flex flex-wrap gap-2 mt-3 import-step-actions">
+          <button id="estimateBtn" class="btn import-btn import-btn--secondary" type="button" disabled>1. Estimate</button>
+          <button id="executeBtn" class="btn import-btn import-btn--primary" type="button" disabled>2. Execute Import</button>
         </div>
 
         <div id="progressWrap" class="mt-3 d-none">
@@ -203,6 +243,220 @@
     margin-top: 0.5rem;
   }
 
+  .import-step-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .import-status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    border-radius: 999px;
+    padding: 0.25rem 0.7rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    border: 1px solid transparent;
+    white-space: nowrap;
+  }
+
+  .import-status-badge--idle {
+    background: var(--flama-surface-2);
+    color: var(--flama-text-2);
+    border-color: var(--flama-border);
+  }
+
+  .import-status-badge--info {
+    background: rgba(37, 99, 235, 0.12);
+    color: var(--flama-info);
+    border-color: rgba(37, 99, 235, 0.28);
+  }
+
+  .import-status-badge--success {
+    background: rgba(22, 163, 74, 0.12);
+    color: var(--flama-success);
+    border-color: rgba(22, 163, 74, 0.28);
+  }
+
+  .import-status-badge--warning {
+    background: rgba(224, 141, 12, 0.16);
+    color: var(--flama-warning);
+    border-color: rgba(224, 141, 12, 0.3);
+  }
+
+  .import-status-badge--danger {
+    background: rgba(239, 51, 3, 0.12);
+    color: var(--flama-danger);
+    border-color: rgba(239, 51, 3, 0.3);
+  }
+
+  .import-help-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+  }
+
+  .import-help-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.32rem 0.6rem;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    color: var(--flama-text-2);
+    background: var(--flama-surface-2);
+    border: 1px solid var(--flama-border);
+  }
+
+  #parseMeta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+  }
+
+  .import-step-guide {
+    display: grid;
+    gap: 0.6rem;
+  }
+
+  .import-guide-item {
+    display: flex;
+    gap: 0.7rem;
+    align-items: flex-start;
+    border: 1px solid var(--flama-border);
+    border-radius: 10px;
+    padding: 0.7rem 0.8rem;
+    background: #fff;
+  }
+
+  .import-guide-index {
+    flex: 0 0 auto;
+    width: 1.4rem;
+    height: 1.4rem;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #fff;
+    background: var(--flama-orange-600);
+  }
+
+  .import-step-hint {
+    border-radius: 10px;
+    border: 1px solid var(--flama-border);
+    padding: 0.65rem 0.75rem;
+    font-size: 0.9rem;
+    font-weight: 500;
+  }
+
+  .import-step-hint--info {
+    background: rgba(37, 99, 235, 0.08);
+    color: var(--flama-info);
+    border-color: rgba(37, 99, 235, 0.24);
+  }
+
+  .import-step-hint--success {
+    background: rgba(22, 163, 74, 0.1);
+    color: var(--flama-success);
+    border-color: rgba(22, 163, 74, 0.24);
+  }
+
+  .import-step-hint--warning {
+    background: rgba(224, 141, 12, 0.12);
+    color: var(--flama-warning);
+    border-color: rgba(224, 141, 12, 0.26);
+  }
+
+  .import-step-hint--danger {
+    background: rgba(239, 51, 3, 0.1);
+    color: var(--flama-danger);
+    border-color: rgba(239, 51, 3, 0.28);
+  }
+
+  .import-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    min-height: 2.45rem;
+    padding: 0.5rem 0.95rem;
+    border-radius: 10px;
+    border: 1px solid transparent;
+    font-size: 0.88rem;
+    font-weight: var(--font-weight-semibold);
+    letter-spacing: 0.01em;
+    transition: all 0.18s ease;
+  }
+
+  .import-btn:hover {
+    transform: translateY(-1px);
+  }
+
+  .import-btn:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 0.2rem rgba(254, 104, 8, 0.2);
+  }
+
+  .import-btn:disabled {
+    opacity: 0.56;
+    transform: none;
+    box-shadow: none;
+    cursor: not-allowed;
+  }
+
+  .import-btn--ghost {
+    background: #fff;
+    color: var(--flama-text-2);
+    border-color: var(--flama-border);
+  }
+
+  .import-btn--ghost:hover {
+    background: var(--flama-surface-2);
+    color: var(--flama-orange-700);
+    border-color: var(--flama-orange-300);
+    box-shadow: 0 3px 10px rgba(254, 104, 8, 0.12);
+  }
+
+  .import-btn--secondary {
+    background: var(--flama-orange-50);
+    color: var(--flama-orange-700);
+    border-color: var(--flama-orange-300);
+  }
+
+  .import-btn--secondary:hover {
+    background: var(--flama-orange-100);
+    color: var(--flama-orange-800);
+    border-color: var(--flama-orange-400);
+    box-shadow: 0 4px 12px rgba(224, 92, 7, 0.16);
+  }
+
+  .import-btn--primary {
+    background: var(--flama-gradient);
+    color: #fff;
+    border-color: transparent;
+    box-shadow: 0 4px 12px rgba(254, 104, 8, 0.24);
+  }
+
+  .import-btn--primary:hover {
+    color: #fff;
+    box-shadow: 0 7px 16px rgba(254, 104, 8, 0.34);
+  }
+
+  .import-step-actions .import-btn {
+    min-width: 170px;
+  }
+
+  .import-toast-container {
+    z-index: 1085;
+    width: min(360px, calc(100vw - 1.5rem));
+    margin-top: 56px;
+  }
+
   #previewWrap {
     overflow-x: auto;
     overflow-y: hidden;
@@ -256,6 +510,10 @@
       padding-left: 0.2rem;
       padding-right: 0.2rem;
     }
+
+    .import-step-actions .import-btn {
+      min-width: 100%;
+    }
   }
 </style>
 {% endblock %}
@@ -267,16 +525,27 @@
     if (!configEl) return;
 
     const config = JSON.parse(configEl.textContent || "{}");
-      const state = {
-        token: null,
-        columns: [],
-        previewRows: [],
-        hasHeader: true,
-        warnings: [],
-        mapping: {},
-        lastSummary: null,
-        parsed: false,
-        running: false,
+    const PARSE_BUTTON_LABEL = "Parse lại";
+    const ESTIMATE_BUTTON_LABEL = "1. Estimate";
+    const EXECUTE_BUTTON_LABEL = "2. Execute Import";
+    const SUPPORTED_IMPORT_EXTENSIONS = new Set(["csv", "tsv", "txt"]);
+
+    const state = {
+      token: null,
+      columns: [],
+      previewRows: [],
+      hasHeader: true,
+      warnings: [],
+      mapping: {},
+      lastSummary: null,
+      parsed: false,
+      running: false,
+      estimating: false,
+      isParsing: false,
+      queuedParse: null,
+      parseFailed: false,
+      hasEstimated: false,
+      executionDone: false,
     };
 
     const els = {
@@ -287,6 +556,7 @@
       customDelimiterInput: document.getElementById("customDelimiterInput"),
       hasHeaderInput: document.getElementById("hasHeaderInput"),
       parseBtn: document.getElementById("parseBtn"),
+      parseStateBadge: document.getElementById("parseStateBadge"),
       parseWarningBox: document.getElementById("parseWarningBox"),
       parseMeta: document.getElementById("parseMeta"),
       previewWrap: document.getElementById("previewWrap"),
@@ -301,6 +571,8 @@
       columnMismatchConfirmInput: document.getElementById("columnMismatchConfirmInput"),
       estimateBtn: document.getElementById("estimateBtn"),
       executeBtn: document.getElementById("executeBtn"),
+      stepDStateBadge: document.getElementById("stepDStateBadge"),
+      stepDHint: document.getElementById("stepDHint"),
       progressWrap: document.getElementById("progressWrap"),
       progressBar: document.getElementById("progressBar"),
       summaryBox: document.getElementById("summaryBox"),
@@ -353,20 +625,300 @@
       els.parseWarningBox.textContent = message;
     }
 
+    function ensureToastContainer() {
+      let container = document.getElementById("importToastContainer");
+      if (container) {
+        return container;
+      }
+
+      container = document.createElement("div");
+      container.id = "importToastContainer";
+      container.className = "toast-container position-fixed top-0 end-0 p-3 import-toast-container";
+      document.body.appendChild(container);
+      return container;
+    }
+
+    function showToast(message, { kind = "info", title = "Import" } = {}) {
+      if (!message) return;
+      const container = ensureToastContainer();
+      const toastId = `import-toast-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+      const classByKind = {
+        success: "text-bg-success",
+        danger: "text-bg-danger",
+        warning: "text-bg-warning",
+        info: "text-bg-primary",
+      };
+      const toneClass = classByKind[kind] || classByKind.info;
+      const closeBtnClass = kind === "warning" ? "btn-close" : "btn-close btn-close-white";
+      const autoHide = kind !== "danger";
+      const delay = kind === "success" ? 3200 : 4600;
+
+      const wrapper = document.createElement("div");
+      wrapper.innerHTML = `
+        <div id="${toastId}" class="toast ${toneClass} border-0" role="status" aria-live="polite" aria-atomic="true">
+          <div class="d-flex">
+            <div class="toast-body">
+              <div class="fw-semibold mb-1">${escapeHtml(title)}</div>
+              <div>${escapeHtml(message)}</div>
+            </div>
+            <button type="button" class="${closeBtnClass} me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+          </div>
+        </div>
+      `;
+      const toastEl = wrapper.firstElementChild;
+      if (!toastEl) return;
+      container.appendChild(toastEl);
+
+      if (typeof bootstrap !== "undefined" && bootstrap.Toast) {
+        const toast = bootstrap.Toast.getOrCreateInstance(toastEl, { autohide: autoHide, delay });
+        toast.show();
+        toastEl.addEventListener("hidden.bs.toast", () => toastEl.remove(), { once: true });
+      } else {
+        setTimeout(() => toastEl.remove(), autoHide ? delay : 5200);
+      }
+    }
+
+    function setStatusBadge(el, tone, label) {
+      if (!el) return;
+      el.className = `import-status-badge import-status-badge--${tone}`;
+      el.textContent = label;
+    }
+
+    function setStepDHint(message, tone = "info") {
+      if (!els.stepDHint) return;
+      els.stepDHint.className = `import-step-hint import-step-hint--${tone} mt-3`;
+      els.stepDHint.textContent = message;
+    }
+
+    function syncActionButtons() {
+      if (!els.estimateBtn || !els.executeBtn) return;
+      const estimateDisabled = !state.parsed || state.isParsing || state.estimating || state.running;
+      const executeDisabled = !state.parsed || !state.hasEstimated || state.isParsing || state.estimating || state.running;
+      els.estimateBtn.disabled = estimateDisabled;
+      els.executeBtn.disabled = executeDisabled;
+    }
+
+    function updateParseStatusBadge() {
+      if (state.isParsing) {
+        setStatusBadge(els.parseStateBadge, "info", "Đang parse...");
+        return;
+      }
+      if (state.parsed) {
+        setStatusBadge(els.parseStateBadge, "success", "Parse thành công");
+        return;
+      }
+      if (state.parseFailed) {
+        setStatusBadge(els.parseStateBadge, "danger", "Parse thất bại");
+        return;
+      }
+      if (hasSelectedFile()) {
+        setStatusBadge(els.parseStateBadge, "warning", "Chờ parse");
+        return;
+      }
+      setStatusBadge(els.parseStateBadge, "idle", "Chưa có file");
+    }
+
+    function updateStepDStatus() {
+      if (state.running) {
+        setStatusBadge(els.stepDStateBadge, "info", "Đang execute");
+        setStepDHint("Import đang chạy. Vui lòng đợi hoàn tất để xem báo cáo cuối cùng.", "info");
+        return;
+      }
+
+      if (state.estimating) {
+        setStatusBadge(els.stepDStateBadge, "info", "Đang estimate");
+        setStepDHint("Hệ thống đang tính toán số lượng bản ghi sẽ được thêm/cập nhật/bỏ qua.", "info");
+        return;
+      }
+
+      if (!state.parsed) {
+        setStatusBadge(els.stepDStateBadge, "idle", "Chờ parse");
+        setStepDHint("Bắt đầu bằng Step A: upload file để hệ thống parse.", "info");
+        return;
+      }
+
+      if (!state.hasEstimated) {
+        setStatusBadge(els.stepDStateBadge, "warning", "Cần estimate");
+        setStepDHint("Nhấn 1. Estimate để xem trước kết quả import trước khi chạy thật.", "warning");
+        return;
+      }
+
+      const summaryErrors = Number(state.lastSummary?.summary?.errors || 0);
+      if (summaryErrors > 0) {
+        setStatusBadge(els.stepDStateBadge, "danger", "Có lỗi cần xử lý");
+        setStepDHint("Estimate cho thấy có dòng lỗi. Hãy xem bảng Row issues trước khi execute.", "danger");
+        return;
+      }
+
+      if (state.executionDone) {
+        setStatusBadge(els.stepDStateBadge, "success", "Import hoàn tất");
+        setStepDHint("Import đã hoàn tất. Bạn có thể kiểm tra dữ liệu hoặc import file khác.", "success");
+        return;
+      }
+
+      setStatusBadge(els.stepDStateBadge, "success", "Sẵn sàng execute");
+      setStepDHint("Estimate đã ổn. Nhấn 2. Execute Import để thực thi import.", "success");
+    }
+
+    function refreshImportUiState() {
+      syncActionButtons();
+      updateParseStatusBadge();
+      updateStepDStatus();
+    }
+
+    function getSelectedFile() {
+      return (els.importFileInput.files && els.importFileInput.files[0]) || null;
+    }
+
+    function hasSelectedFile() {
+      return Boolean(getSelectedFile());
+    }
+
+    function getFileExtension(filename) {
+      const name = String(filename || "").trim().toLowerCase();
+      const lastDot = name.lastIndexOf(".");
+      if (lastDot < 0 || lastDot === name.length - 1) {
+        return "";
+      }
+      return name.slice(lastDot + 1);
+    }
+
+    function readCurrentDelimiterSelection() {
+      const mode = String(els.delimiterModeSelect.value || "csv");
+      const customDelimiter = String(els.customDelimiterInput.value || "");
+      return { mode, customDelimiter };
+    }
+
+    function applyDelimiterSelection(mode, customDelimiter = "") {
+      const normalizedMode = mode === "tsv" || mode === "custom" ? mode : "csv";
+      els.delimiterModeSelect.value = normalizedMode;
+      handleDelimiterModeChange();
+      if (normalizedMode === "custom") {
+        els.customDelimiterInput.value = customDelimiter;
+      }
+    }
+
+    function setParseButtonLoading(isLoading) {
+      if (!els.parseBtn) return;
+      els.parseBtn.disabled = Boolean(isLoading);
+      els.parseBtn.innerHTML = isLoading
+        ? '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span>'
+        : PARSE_BUTTON_LABEL;
+    }
+
+    function countDelimiterInLine(line, delimiter) {
+      if (!line || !delimiter) return 0;
+      return line.split(delimiter).length - 1;
+    }
+
+    async function detectTxtDelimiter(file) {
+      try {
+        const sampleText = await file.slice(0, 8192).text();
+        const firstLine = sampleText
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .find((line) => line.length > 0);
+        if (!firstLine) {
+          return null;
+        }
+
+        const candidates = [
+          { mode: "tsv", customDelimiter: "", delimiter: "\t" },
+          { mode: "csv", customDelimiter: "", delimiter: "," },
+          { mode: "custom", customDelimiter: ";", delimiter: ";" },
+          { mode: "custom", customDelimiter: "|", delimiter: "|" },
+        ];
+
+        let best = null;
+        candidates.forEach((candidate, index) => {
+          const score = countDelimiterInLine(firstLine, candidate.delimiter);
+          if (score <= 0) return;
+          if (!best || score > best.score || (score === best.score && index < best.index)) {
+            best = { ...candidate, score, index };
+          }
+        });
+
+        if (!best) return null;
+        return { mode: best.mode, customDelimiter: best.customDelimiter };
+      } catch (_error) {
+        return null;
+      }
+    }
+
+    async function inferDelimiterFromFile(file) {
+      const extension = getFileExtension(file && file.name);
+      if (!SUPPORTED_IMPORT_EXTENSIONS.has(extension)) {
+        return {
+          ok: false,
+          message: "Định dạng file chưa được hỗ trợ. Vui lòng dùng .csv, .tsv hoặc .txt.",
+        };
+      }
+
+      if (extension === "csv") {
+        return { ok: true, mode: "csv", customDelimiter: "" };
+      }
+
+      if (extension === "tsv") {
+        return { ok: true, mode: "tsv", customDelimiter: "" };
+      }
+
+      const detectedTxtDelimiter = await detectTxtDelimiter(file);
+      if (detectedTxtDelimiter) {
+        return { ok: true, mode: detectedTxtDelimiter.mode, customDelimiter: detectedTxtDelimiter.customDelimiter };
+      }
+
+      const current = readCurrentDelimiterSelection();
+      if (current.mode === "custom" && current.customDelimiter.length !== 1) {
+        return {
+          ok: false,
+          message: "File .txt chưa xác định được delimiter. Hãy chọn CSV/TSV hoặc nhập đúng 1 custom delimiter.",
+        };
+      }
+      return {
+        ok: true,
+        mode: current.mode,
+        customDelimiter: current.mode === "custom" ? current.customDelimiter : "",
+      };
+    }
+
+    function queueParseRequest(options = {}) {
+      if (state.running || state.estimating) {
+        setAlert("Không thể parse lại khi estimate/import đang chạy.", "warning");
+        return;
+      }
+
+      const normalizedOptions = {
+        inferFromFile: Boolean(options.inferFromFile),
+      };
+
+      if (state.isParsing) {
+        state.queuedParse = normalizedOptions;
+        return;
+      }
+
+      parseFile(normalizedOptions).catch(() => undefined);
+    }
+
     function resetParseState({ keepWarning = false } = {}) {
       state.token = null;
       state.columns = [];
       state.previewRows = [];
-      state.hasHeader = true;
+      state.hasHeader = Boolean(els.hasHeaderInput.checked);
       state.warnings = [];
       state.mapping = {};
       state.lastSummary = null;
       state.parsed = false;
+      state.parseFailed = false;
+      state.hasEstimated = false;
+      state.executionDone = false;
       els.previewWrap.hidden = true;
       els.mappingWrap.hidden = true;
+      els.parseMeta.textContent = "";
+      els.progressWrap.classList.add("d-none");
+      els.progressBar.classList.add("progress-bar-animated");
+      els.progressBar.textContent = "Running...";
       els.summaryBox.classList.add("d-none");
       els.issuesWrap.classList.add("d-none");
-      els.executeBtn.disabled = true;
       els.columnMismatchConfirmWrap.classList.add("d-none");
       els.columnMismatchConfirmInput.checked = false;
       if (!keepWarning) {
@@ -374,6 +926,7 @@
       }
       renderMappingWarnings([]);
       renderUniquenessFields();
+      refreshImportUiState();
     }
 
     function populateDeckOptions() {
@@ -625,7 +1178,7 @@
 
     function validateBeforeSubmit() {
       if (!state.parsed || !state.token) {
-        return { ok: false, errors: ["Hãy parse file trước khi estimate/execute."] };
+        return { ok: false, errors: ["Hãy upload file để hệ thống parse trước khi estimate/execute."] };
       }
 
       readMappingFromDom();
@@ -728,23 +1281,44 @@
       return payload;
     }
 
-    async function parseFile() {
-      const file = els.importFileInput.files && els.importFileInput.files[0];
+    async function parseFile({ inferFromFile = false } = {}) {
+      const file = getSelectedFile();
       if (!file) {
-        setAlert("Hãy chọn file trước khi parse.", "warning");
+        setAlert("Hãy chọn file để hệ thống tự parse.", "warning");
+        state.parseFailed = false;
+        resetParseState({ keepWarning: true });
         return;
       }
 
       const noteTypeId = String(els.noteTypeSelect.value || "").trim();
       if (!noteTypeId) {
-        setAlert("Hãy chọn note type.", "warning");
+        setAlert("Hãy chọn note type trước khi parse.", "warning");
+        state.parseFailed = false;
+        resetParseState({ keepWarning: true });
         return;
       }
 
-      const mode = String(els.delimiterModeSelect.value || "csv");
-      const customDelimiter = String(els.customDelimiterInput.value || "");
+      let { mode, customDelimiter } = readCurrentDelimiterSelection();
+      if (inferFromFile) {
+        const inferred = await inferDelimiterFromFile(file);
+        if (!inferred.ok) {
+          resetParseState();
+          state.parseFailed = true;
+          refreshImportUiState();
+          setAlert(inferred.message || "Không thể xác định delimiter từ file đã chọn.", "danger");
+          showToast(inferred.message || "Không thể tự parse file đã chọn.", { kind: "danger", title: "Auto Parse thất bại" });
+          return;
+        }
+        mode = inferred.mode;
+        customDelimiter = inferred.customDelimiter || "";
+        applyDelimiterSelection(mode, customDelimiter);
+      }
+
       if (mode === "custom" && customDelimiter.length !== 1) {
         setAlert("Custom delimiter phải là đúng 1 ký tự.", "danger");
+        resetParseState({ keepWarning: true });
+        state.parseFailed = true;
+        refreshImportUiState();
         return;
       }
 
@@ -755,9 +1329,13 @@
       formData.append("custom_delimiter", customDelimiter);
       formData.append("has_header", els.hasHeaderInput.checked ? "1" : "0");
 
-      els.parseBtn.disabled = true;
-      els.parseBtn.innerHTML = '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span>';
+      state.isParsing = true;
+      state.parseFailed = false;
+      state.executionDone = false;
+      setParseButtonLoading(true);
       resetParseState({ keepWarning: true });
+      setAlert("Đang parse file...", "info");
+      refreshImportUiState();
 
       try {
         const response = await fetch("/api/flashcards/import/parse", {
@@ -775,6 +1353,9 @@
         state.hasHeader = Boolean(payload.has_header);
         state.warnings = Array.isArray(payload.warnings) ? payload.warnings : [];
         state.parsed = true;
+        state.parseFailed = false;
+        state.hasEstimated = false;
+        state.executionDone = false;
 
         applySuggestedMapping(payload.suggested_mapping || {});
         renderPreviewTable();
@@ -783,13 +1364,26 @@
 
         const columnCount = Number(payload.column_count || 0);
         const totalRows = Number(payload.total_rows || 0);
-        els.parseMeta.textContent = `Rows: ${totalRows} | Columns: ${columnCount}`;
-
+        const delimiterLabel = mode === "tsv" ? "tab" : (mode === "custom" ? customDelimiter : ",");
+        els.parseMeta.innerHTML = `
+          <span class="import-help-pill"><i class="bi bi-file-earmark-text"></i> ${escapeHtml(file.name)}</span>
+          <span class="import-help-pill"><i class="bi bi-table"></i> Rows: ${escapeHtml(totalRows)}</span>
+          <span class="import-help-pill"><i class="bi bi-columns-gap"></i> Columns: ${escapeHtml(columnCount)}</span>
+          <span class="import-help-pill"><i class="bi bi-filter"></i> Delimiter: ${escapeHtml(delimiterLabel)}</span>
+        `;
       } catch (error) {
+        state.parseFailed = true;
         setAlert(error.message || "Parse failed.", "danger");
+        showToast(error.message || "Không thể parse file.", { kind: "danger", title: "Auto Parse thất bại" });
       } finally {
-        els.parseBtn.disabled = false;
-        els.parseBtn.textContent = "Parse";
+        state.isParsing = false;
+        setParseButtonLoading(false);
+        refreshImportUiState();
+        if (state.queuedParse) {
+          const queued = state.queuedParse;
+          state.queuedParse = null;
+          queueParseRequest(queued);
+        }
       }
     }
 
@@ -798,11 +1392,14 @@
       renderMappingWarnings(validation.warnings);
       if (!validation.ok) {
         setAlert(validation.errors[0], "danger");
+        showToast(validation.errors[0], { kind: "danger", title: "Estimate thất bại" });
         return;
       }
 
       const payload = buildRequestPayload();
-      els.estimateBtn.disabled = true;
+      state.estimating = true;
+      state.executionDone = false;
+      refreshImportUiState();
       els.estimateBtn.innerHTML = '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span>';
       setAlert("");
 
@@ -818,14 +1415,32 @@
         }
 
         state.lastSummary = data;
+        state.hasEstimated = true;
+        state.executionDone = false;
         renderSummary(data, "Estimated summary");
         renderIssues(data);
-        els.executeBtn.disabled = false;
+
+        const summary = data.summary || {};
+        const summaryErrors = Number(summary.errors || 0);
+        if (summaryErrors > 0) {
+          showToast(`Estimate hoàn tất nhưng có ${summaryErrors} lỗi. Hãy kiểm tra Row issues.`, {
+            kind: "warning",
+            title: "Estimate hoàn tất",
+          });
+        } else {
+          showToast("Estimate hoàn tất. Bạn có thể tiếp tục Execute Import.", {
+            kind: "success",
+            title: "Estimate thành công",
+          });
+        }
       } catch (error) {
+        state.hasEstimated = false;
         setAlert(error.message || "Estimate failed", "danger");
+        showToast(error.message || "Không thể estimate import.", { kind: "danger", title: "Estimate thất bại" });
       } finally {
-        els.estimateBtn.disabled = false;
-        els.estimateBtn.textContent = "Estimate";
+        state.estimating = false;
+        els.estimateBtn.textContent = ESTIMATE_BUTTON_LABEL;
+        refreshImportUiState();
       }
     }
 
@@ -834,13 +1449,15 @@
       renderMappingWarnings(validation.warnings);
       if (!validation.ok) {
         setAlert(validation.errors[0], "danger");
+        showToast(validation.errors[0], { kind: "danger", title: "Execute thất bại" });
         return;
       }
 
       const payload = buildRequestPayload();
       state.running = true;
-      els.executeBtn.disabled = true;
-      els.estimateBtn.disabled = true;
+      state.executionDone = false;
+      refreshImportUiState();
+      els.executeBtn.innerHTML = '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span> Running...';
       els.progressWrap.classList.remove("d-none");
       els.progressBar.classList.add("progress-bar-animated");
       els.progressBar.textContent = "Running...";
@@ -857,16 +1474,28 @@
           throw new Error(data.message || data.error || "Execute failed");
         }
 
+        state.executionDone = true;
         renderSummary(data, "Execution report");
         renderIssues(data);
         els.progressBar.classList.remove("progress-bar-animated");
         els.progressBar.textContent = "Done";
+
+        const summary = data.summary || {};
+        const inserted = Number(summary.inserted || 0);
+        const updated = Number(summary.updated || 0);
+        const skipped = Number(summary.skipped || 0);
+        showToast(
+          `Hoàn tất import. Inserted: ${inserted}, Updated: ${updated}, Skipped: ${skipped}.`,
+          { kind: "success", title: "Import thành công" }
+        );
       } catch (error) {
+        state.executionDone = false;
         setAlert(error.message || "Execute failed", "danger");
+        showToast(error.message || "Không thể execute import.", { kind: "danger", title: "Import thất bại" });
       } finally {
         state.running = false;
-        els.executeBtn.disabled = false;
-        els.estimateBtn.disabled = false;
+        els.executeBtn.textContent = EXECUTE_BUTTON_LABEL;
+        refreshImportUiState();
       }
     }
 
@@ -880,13 +1509,48 @@
     }
 
     function bindEvents() {
-      els.delimiterModeSelect.addEventListener("change", handleDelimiterModeChange);
-      els.parseBtn.addEventListener("click", parseFile);
+      els.delimiterModeSelect.addEventListener("change", () => {
+        handleDelimiterModeChange();
+        if (!hasSelectedFile()) return;
+        resetParseState({ keepWarning: true });
+        queueParseRequest({ inferFromFile: false });
+      });
+
+      els.parseBtn.addEventListener("click", (event) => {
+        event.preventDefault();
+        queueParseRequest({ inferFromFile: false });
+      });
+
       els.estimateBtn.addEventListener("click", estimateImport);
       els.executeBtn.addEventListener("click", executeImport);
 
+      els.importFileInput.addEventListener("change", () => {
+        resetParseState();
+        if (!hasSelectedFile()) {
+          setAlert("");
+          return;
+        }
+        queueParseRequest({ inferFromFile: true });
+      });
+
       els.noteTypeSelect.addEventListener("change", () => {
         resetParseState();
+        if (hasSelectedFile()) {
+          queueParseRequest({ inferFromFile: false });
+        }
+      });
+
+      els.hasHeaderInput.addEventListener("change", () => {
+        if (!hasSelectedFile()) return;
+        resetParseState({ keepWarning: true });
+        queueParseRequest({ inferFromFile: false });
+      });
+
+      els.customDelimiterInput.addEventListener("change", () => {
+        if (String(els.delimiterModeSelect.value || "csv") !== "custom") return;
+        if (!hasSelectedFile()) return;
+        resetParseState({ keepWarning: true });
+        queueParseRequest({ inferFromFile: false });
       });
 
       els.mappingBody.addEventListener("change", (event) => {
@@ -928,6 +1592,10 @@
       populateNoteTypeOptions();
       renderUniquenessFields();
       handleDelimiterModeChange();
+      els.estimateBtn.textContent = ESTIMATE_BUTTON_LABEL;
+      els.executeBtn.textContent = EXECUTE_BUTTON_LABEL;
+      setParseButtonLoading(false);
+      refreshImportUiState();
       bindEvents();
     }
 

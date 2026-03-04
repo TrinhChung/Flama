@@ -1,11 +1,12 @@
 {% extends "base.html" %}
 
 {% block title %}Study - {{ selected_deck.name }}{% endblock %}
+{% block navbar %}{% endblock %}
 
 {% block footer %}{% endblock %}
 
 {% block content %}
-<div class="study-page">
+<div class="study-page" id="study-page-root">
   {% set toolbar_variant = 'study' %}
   {% set toolbar_active_tab = 'study' %}
   {% set toolbar_aria_label = 'Study actions' %}
@@ -39,7 +40,8 @@
   {% if card %}
   <section class="study-card-shell">
     <div class="study-card" id="study-card" data-card-id="{{ card.id }}" data-study-scope="{{ study_scope }}"
-      data-scope-id="{{ study_scope_id }}" data-answer-url="{{ answer_url or '' }}">
+      data-scope-id="{{ study_scope_id }}" data-answer-url="{{ answer_url or '' }}" data-note-id="{{ card.note_id or '' }}"
+      data-can-edit="{{ '1' if can_edit_current_card else '0' }}">
       <div class="card-face card-front is-active" id="card-front">
         {{ rendered_front | safe }}
       </div>
@@ -70,11 +72,10 @@
 
   {% if card %}
   <div class="study-bottom-bar d-flex justify-content-between align-items-center px-3">
-    <!-- Nút Edit góc trái -->
-    <div>
-      {% if edit_action_url %}
+    <div class="study-bottom-side study-bottom-side-left">
+      {% if can_edit_current_card %}
       <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal"
-        data-bs-target="#editWordModal" title="Edit Entry">
+        data-bs-target="#studyEditModal" id="study-edit-btn" title="Edit Card">
         <i class="bi bi-pencil"></i> <span class="d-none d-sm-inline">Edit</span>
       </button>
       {% endif %}
@@ -119,105 +120,54 @@
       </div>
     </div>
 
-    <!-- Khoảng trống tương đương với nút Edit để căn giữa cho button ở giữa -->
-    <div style="width: 70px;"></div>
+    <div class="study-bottom-side study-bottom-side-right">
+      <button type="button" class="btn btn-sm btn-outline-secondary study-focus-btn" id="study-fullscreen-btn"
+        title="Bật toàn màn hình">
+        <i class="bi bi-arrows-fullscreen" data-fullscreen-icon></i>
+        <span class="d-none d-sm-inline" data-fullscreen-label>Focus</span>
+      </button>
+    </div>
   </div>
   {% endif %}
 </div>
 
-{% if card and edit_action_url %}
-<!-- Edit Word Modal -->
-<div class="modal fade" id="editWordModal" tabindex="-1" aria-hidden="true">
+{% if card and can_edit_current_card %}
+<script id="studyEditConfig" type="application/json">
+  {{ {
+      "card_id": card.id,
+      "note_id": card.note_id,
+      "field_defs": card.field_defs or [],
+      "field_values": card.field_values or {},
+      "save_card_url": edit_card_api_url
+    } | tojson }}
+</script>
+
+<div class="modal fade" id="studyEditModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered modal-lg">
-    <form class="modal-content" method="POST" action="{{ edit_action_url }}">
+    <div class="modal-content">
       <div class="modal-header py-2">
-        <h5 class="modal-title fs-6 fw-bold text-dark">Sửa Từ Vựng</h5>
+        <h5 class="modal-title fs-6 fw-bold text-dark">Edit Current Card</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
-      <div class="modal-body overflow-auto" style="max-height: 65vh; background: #fafbfc;">
-        <div class="row g-3">
-          <div class="col-12">
-            <label class="form-label form-label-sm fw-bold">Từ chính (Word)</label>
-            <input type="text" class="form-control form-control-sm" name="word" value="{{ card.word or '' }}" required>
-          </div>
-          <div class="col-12">
-            <label class="form-label form-label-sm fw-bold">Hán Việt</label>
-            <input type="text" class="form-control form-control-sm" name="hanviet" value="{{ card.hanviet or '' }}">
-          </div>
-          <div class="col-12">
-            <label class="form-label form-label-sm fw-bold">Cách đọc (Furigana)</label>
-            <input type="text" class="form-control form-control-sm" name="reading" value="{{ card.reading or '' }}">
-          </div>
-          <div class="col-12">
-            <label class="form-label form-label-sm fw-bold">Dịch nhanh (Translation)</label>
-            <input type="text" class="form-control form-control-sm" name="translation_vi"
-              value="{{ card.translation_vi or '' }}">
-          </div>
-
-          <div class="col-12 mt-4 fw-bold border-bottom pb-1 text-secondary text-uppercase" style="font-size: 0.8rem;">Ý
-            Nghĩa (Meaning)</div>
-          <div class="col-12">
-            <label class="form-label form-label-sm text-muted">Meaning JP</label>
-            <textarea class="form-control form-control-sm" name="meaning_jp"
-              rows="2">{{ card.meaning_jp or '' }}</textarea>
-          </div>
-          <div class="col-12">
-            <label class="form-label form-label-sm text-muted">Meaning VI</label>
-            <textarea class="form-control form-control-sm" name="meaning_vi"
-              rows="2">{{ card.meaning_vi or '' }}</textarea>
-          </div>
-
-          <div class="col-12 mt-4 fw-bold border-bottom pb-1 text-secondary text-uppercase" style="font-size: 0.8rem;">
-            Cách dùng (Usage)</div>
-          <div class="col-12">
-            <label class="form-label form-label-sm text-muted">Usage JP</label>
-            <textarea class="form-control form-control-sm" name="usage_jp" rows="2">{{ card.usage_jp or '' }}</textarea>
-          </div>
-          <div class="col-12">
-            <label class="form-label form-label-sm text-muted">Usage VI</label>
-            <textarea class="form-control form-control-sm" name="usage_vi" rows="2">{{ card.usage_vi or '' }}</textarea>
-          </div>
-
-          <div class="col-12 mt-4 fw-bold border-bottom pb-1 text-secondary text-uppercase" style="font-size: 0.8rem;">
-            Ví dụ (Example)</div>
-          <div class="col-12">
-            <label class="form-label form-label-sm text-muted">Example JP</label>
-            <textarea class="form-control form-control-sm" name="example_jp"
-              rows="2">{{ card.example_jp or '' }}</textarea>
-          </div>
-          <div class="col-12">
-            <label class="form-label form-label-sm text-muted">Example VI</label>
-            <textarea class="form-control form-control-sm" name="example_vi"
-              rows="2">{{ card.example_vi or '' }}</textarea>
-          </div>
-
-          <div class="col-12 mt-4 fw-bold border-bottom pb-1 text-secondary text-uppercase" style="font-size: 0.8rem;">
-            Ghi chú (Notes)</div>
-          <div class="col-12">
-            <label class="form-label form-label-sm text-muted">Note JP</label>
-            <textarea class="form-control form-control-sm" name="additional_note_jp"
-              rows="2">{{ card.additional_note_jp or '' }}</textarea>
-          </div>
-          <div class="col-12">
-            <label class="form-label form-label-sm text-muted">Note VI</label>
-            <textarea class="form-control form-control-sm" name="additional_note_vi"
-              rows="2">{{ card.additional_note_vi or '' }}</textarea>
-          </div>
-        </div>
+      <div class="modal-body overflow-auto study-edit-modal-body">
+        <div id="study-edit-error" class="alert alert-danger d-none py-2" role="alert"></div>
+        <form id="study-edit-form">
+          <div id="study-edit-fields" class="row g-3"></div>
+        </form>
       </div>
       <div class="modal-footer py-2">
         <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Đóng (Cancel)</button>
-        <button type="submit" class="btn btn-primary btn-sm">Lưu thay đổi (Save)</button>
+        <button type="button" class="btn btn-primary btn-sm" id="study-edit-save-btn">Lưu thay đổi (Save)</button>
       </div>
-    </form>
+    </div>
   </div>
 </div>
 {% endif %}
 
 <style>
   .study-page {
-    height: calc(100vh - 88px);
-    max-height: calc(100vh - 88px);
+    height: 100vh;
+    max-height: 100vh;
     display: flex;
     flex-direction: column;
     margin: -1rem;
@@ -348,6 +298,63 @@
     margin: 0 auto;
     gap: 0.75rem;
     flex-wrap: wrap;
+  }
+
+  .study-bottom-side {
+    min-width: 86px;
+    display: flex;
+    align-items: center;
+  }
+
+  .study-bottom-side-left {
+    justify-content: flex-start;
+  }
+
+  .study-bottom-side-right {
+    justify-content: flex-end;
+  }
+
+  .study-focus-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    border-color: #f0b07f;
+    color: var(--flama-orange-700);
+    background: linear-gradient(180deg, #fff9f3, #ffeede);
+  }
+
+  .study-focus-btn:hover,
+  .study-focus-btn:focus-visible {
+    border-color: var(--flama-orange-500);
+    color: var(--flama-orange-800);
+    background: linear-gradient(180deg, #fff3e8, #ffe7d0);
+  }
+
+  .study-focus-btn.is-active {
+    border-color: var(--flama-orange-600);
+    color: #fff;
+    background: var(--flama-gradient);
+  }
+
+  .study-page:fullscreen,
+  .study-page:-webkit-full-screen {
+    margin: 0;
+    padding: 0.7rem 0.7rem 5rem;
+    height: 100dvh;
+    max-height: 100dvh;
+    background: radial-gradient(circle at 10% 0%, #fff8ef 0%, #fff3e8 40%, #fff8f3 100%);
+  }
+
+  .study-page:fullscreen .dash-toolbar,
+  .study-page:-webkit-full-screen .dash-toolbar,
+  .study-page:fullscreen .deck-context-bar,
+  .study-page:-webkit-full-screen .deck-context-bar {
+    display: none !important;
+  }
+
+  .study-page:fullscreen .study-card-shell,
+  .study-page:-webkit-full-screen .study-card-shell {
+    width: min(1600px, 100%);
   }
 
   .answer-btn {
@@ -525,10 +532,36 @@
     flex: 1;
   }
 
+  .study-edit-modal-body {
+    max-height: 65vh;
+    background: #fafbfc;
+  }
+
+  .study-edit-field-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.84rem;
+    font-weight: 700;
+    color: var(--flama-text);
+  }
+
+  .study-edit-field-type {
+    font-size: 0.72rem;
+    color: var(--flama-text-2);
+    letter-spacing: 0.01em;
+    text-transform: uppercase;
+  }
+
+  .study-edit-required {
+    color: var(--flama-danger);
+    font-weight: 800;
+  }
+
   @media (max-width: 768px) {
     .study-page {
-      height: calc(100dvh - 56px);
-      max-height: calc(100dvh - 56px);
+      height: 100dvh;
+      max-height: 100dvh;
       padding-bottom: 4.5rem;
     }
 
@@ -605,6 +638,10 @@
       gap: 0.55rem;
     }
 
+    .study-bottom-side {
+      min-width: 52px;
+    }
+
     .answer-btn {
       min-width: 96px;
       padding: 0.48rem 0.8rem;
@@ -626,16 +663,291 @@
 <script>
   (() => {
     const cardRoot = document.getElementById("study-card");
-    const cardId = String(cardRoot?.dataset.cardId || "");
+    let cardId = String(cardRoot?.dataset.cardId || "");
+    const canEditCard = String(cardRoot?.dataset.canEdit || "") === "1";
     const studyScope = (cardRoot?.dataset.studyScope || "deck").toLowerCase();
     const scopeId = Number(cardRoot?.dataset.scopeId || 0);
-    const answerUrl = String(cardRoot?.dataset.answerUrl || "");
+    let answerUrl = String(cardRoot?.dataset.answerUrl || "");
     const front = document.getElementById("card-front");
     const back = document.getElementById("card-back");
     const showAnswerBtn = document.getElementById("show-answer-btn");
     const frontActions = document.getElementById("front-actions");
     const backActions = document.getElementById("back-actions");
-    const cardShownAtMs = performance.now();
+    let cardShownAtMs = performance.now();
+    let submittingAnswer = false;
+    const editConfigEl = document.getElementById("studyEditConfig");
+    const editModalEl = document.getElementById("studyEditModal");
+    const editErrorEl = document.getElementById("study-edit-error");
+    const editLoadingEl = document.getElementById("study-edit-loading");
+    const editFieldsWrapEl = document.getElementById("study-edit-fields");
+    const editSaveBtn = document.getElementById("study-edit-save-btn");
+    const studyPageRoot = document.getElementById("study-page-root");
+    const fullscreenBtn = document.getElementById("study-fullscreen-btn");
+    const fullscreenIconEl = fullscreenBtn?.querySelector("[data-fullscreen-icon]");
+    const fullscreenLabelEl = fullscreenBtn?.querySelector("[data-fullscreen-label]");
+    const deferredScriptSelector = 'script[data-flama-inline-script="1"]';
+
+    let editConfig = null;
+    let editFieldDefs = [];
+    let editFieldValues = {};
+    let editOriginalFieldValues = {};
+    let editLoading = false;
+    let editSaving = false;
+
+    if (canEditCard && editConfigEl) {
+      try {
+        editConfig = JSON.parse(editConfigEl.textContent || "{}");
+        editFieldDefs = Array.isArray(editConfig.field_defs) ? editConfig.field_defs : [];
+        editFieldValues = (editConfig.field_values && typeof editConfig.field_values === "object") ? editConfig.field_values : {};
+        editOriginalFieldValues = { ...editFieldValues };
+      } catch (_error) {
+        editConfig = null;
+        editFieldDefs = [];
+        editFieldValues = {};
+        editOriginalFieldValues = {};
+      }
+    }
+
+    function escapeHtml(value) {
+      return String(value == null ? "" : value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function cssEscape(value) {
+      const raw = String(value == null ? "" : value);
+      if (window.CSS && typeof window.CSS.escape === "function") {
+        return window.CSS.escape(raw);
+      }
+      return raw.replace(/["\\]/g, "\\$&");
+    }
+
+    function setEditError(message) {
+      if (!editErrorEl) return;
+      if (!message) {
+        editErrorEl.classList.add("d-none");
+        editErrorEl.textContent = "";
+        return;
+      }
+      editErrorEl.classList.remove("d-none");
+      editErrorEl.textContent = String(message);
+    }
+
+    function setEditLoading(isLoading) {
+      editLoading = Boolean(isLoading);
+      if (editLoadingEl) {
+        editLoadingEl.classList.toggle("d-none", !editLoading);
+      }
+      if (editSaveBtn) {
+        editSaveBtn.disabled = editLoading || editSaving;
+      }
+    }
+
+    function setEditSaving(isSaving) {
+      editSaving = Boolean(isSaving);
+      if (editSaveBtn) {
+        editSaveBtn.disabled = editLoading || editSaving;
+        editSaveBtn.innerHTML = editSaving
+          ? '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Saving...'
+          : "Lưu thay đổi (Save)";
+      }
+    }
+
+    function renderEditFields(fieldDefs, values) {
+      if (!editFieldsWrapEl) return;
+      if (!Array.isArray(fieldDefs) || !fieldDefs.length) {
+        editFieldsWrapEl.innerHTML = '<div class="col-12 small text-muted">No editable fields found.</div>';
+        return;
+      }
+
+      const sortedDefs = [...fieldDefs].sort((left, right) => Number(left.position || 0) - Number(right.position || 0));
+      editFieldsWrapEl.innerHTML = sortedDefs.map((fieldDef) => {
+        const name = String(fieldDef?.name || "").trim();
+        if (!name) return "";
+        const fieldId = `study-edit-field-${name.replace(/[^A-Za-z0-9_-]+/g, "-")}`;
+        const fieldType = String(fieldDef?.field_type || "text").trim().toLowerCase();
+        const required = Boolean(fieldDef?.required);
+        const value = String(values && values[name] != null ? values[name] : "");
+        const requiredMark = required ? '<span class="study-edit-required">*</span>' : "";
+        const typeBadge = fieldType ? `<div class="study-edit-field-type">${escapeHtml(fieldType)}</div>` : "";
+        const inputControl = fieldType === "richtext"
+          ? `<textarea id="${escapeHtml(fieldId)}" class="form-control form-control-sm" rows="3" data-edit-field="${escapeHtml(name)}" ${required ? "required" : ""}>${escapeHtml(value)}</textarea>`
+          : `<input id="${escapeHtml(fieldId)}" type="text" class="form-control form-control-sm" data-edit-field="${escapeHtml(name)}" value="${escapeHtml(value)}" ${required ? "required" : ""}>`;
+
+        return `
+          <div class="col-12">
+            <label class="form-label study-edit-field-label" for="${escapeHtml(fieldId)}">${escapeHtml(name)} ${requiredMark}</label>
+            ${inputControl}
+            ${typeBadge}
+          </div>
+        `;
+      }).join("");
+    }
+
+    async function loadLatestEditValues() {
+      if (!editConfig || !editConfig.load_note_url) {
+        renderEditFields(editFieldDefs, editFieldValues);
+        return;
+      }
+
+      setEditError("");
+      setEditLoading(true);
+      try {
+        const response = await fetch(String(editConfig.load_note_url), { method: "GET" });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(payload.message || payload.error || "Failed to load note values.");
+        }
+        const latestValues = (payload.field_values && typeof payload.field_values === "object") ? payload.field_values : {};
+        editFieldValues = latestValues;
+        editOriginalFieldValues = { ...latestValues };
+        renderEditFields(editFieldDefs, editFieldValues);
+      } catch (error) {
+        renderEditFields(editFieldDefs, editFieldValues);
+        setEditError(error.message || "Failed to load note values.");
+      } finally {
+        setEditLoading(false);
+      }
+    }
+
+    function collectEditPayload() {
+      if (!Array.isArray(editFieldDefs) || !editFieldDefs.length) {
+        return { ok: false, noChanges: false, error: "No editable fields found.", fieldValues: {} };
+      }
+
+      const fieldValues = {};
+      const missingRequired = [];
+      let changedCount = 0;
+      editFieldDefs.forEach((fieldDef) => {
+        const name = String(fieldDef?.name || "").trim();
+        if (!name) return;
+        const input = document.querySelector(`[data-edit-field="${cssEscape(name)}"]`);
+        if (!(input instanceof HTMLInputElement || input instanceof HTMLTextAreaElement)) {
+          return;
+        }
+        const rawValue = String(input.value || "");
+        const originalValue = editOriginalFieldValues[name] == null ? "" : String(editOriginalFieldValues[name]);
+        if (rawValue === originalValue) {
+          return;
+        }
+        changedCount += 1;
+        fieldValues[name] = rawValue;
+        if (fieldDef.required && rawValue.trim().length === 0) {
+          missingRequired.push(name);
+        }
+      });
+
+      if (missingRequired.length) {
+        return {
+          ok: false,
+          noChanges: false,
+          error: `Required field không được để trống: ${missingRequired.join(", ")}`,
+          fieldValues,
+        };
+      }
+
+      if (changedCount === 0) {
+        return { ok: true, noChanges: true, error: "", fieldValues: {} };
+      }
+
+      return { ok: true, noChanges: false, error: "", fieldValues };
+    }
+
+    async function saveEditedCard() {
+      if (!editConfig || !editConfig.save_card_url) {
+        setEditError("Edit API chưa sẵn sàng.");
+        return;
+      }
+
+      const payloadState = collectEditPayload();
+      if (!payloadState.ok) {
+        setEditError(payloadState.error || "Invalid edit payload.");
+        return;
+      }
+      if (payloadState.noChanges) {
+        setEditError("");
+        if (editModalEl && typeof bootstrap !== "undefined" && bootstrap.Modal) {
+          const instance = bootstrap.Modal.getOrCreateInstance(editModalEl);
+          instance.hide();
+        }
+        return;
+      }
+
+      setEditError("");
+      setEditSaving(true);
+      try {
+        const response = await fetch(String(editConfig.save_card_url), {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ field_values: payloadState.fieldValues }),
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || !payload.success) {
+          throw new Error(payload.message || payload.error || "Failed to save card edits.");
+        }
+
+        editFieldValues = (payload.field_values && typeof payload.field_values === "object")
+          ? payload.field_values
+          : payloadState.fieldValues;
+        editOriginalFieldValues = { ...editFieldValues };
+
+        if (front && typeof payload.rendered_front_html === "string") {
+          front.innerHTML = payload.rendered_front_html;
+        }
+        if (back && typeof payload.rendered_back_html === "string") {
+          back.innerHTML = payload.rendered_back_html;
+        }
+        applyAutoSplit();
+        activateCurrentFaceScripts();
+
+        if (editModalEl && typeof bootstrap !== "undefined" && bootstrap.Modal) {
+          const instance = bootstrap.Modal.getOrCreateInstance(editModalEl);
+          instance.hide();
+        }
+      } catch (error) {
+        setEditError(error.message || "Failed to save card edits.");
+      } finally {
+        setEditSaving(false);
+      }
+    }
+
+    function executeDeferredInlineScripts(faceEl) {
+      if (!(faceEl instanceof HTMLElement)) {
+        return;
+      }
+      const deferredScripts = faceEl.querySelectorAll(deferredScriptSelector);
+      deferredScripts.forEach((scriptNode) => {
+        if (!(scriptNode instanceof HTMLScriptElement)) {
+          return;
+        }
+        if (scriptNode.dataset.flamaInlineExecuted === "1") {
+          return;
+        }
+        scriptNode.dataset.flamaInlineExecuted = "1";
+
+        const executeNode = document.createElement("script");
+        const declaredType = String(scriptNode.dataset.flamaScriptType || "").trim().toLowerCase();
+        if (declaredType === "module") {
+          executeNode.type = "module";
+        }
+        executeNode.textContent = scriptNode.textContent || "";
+        faceEl.appendChild(executeNode);
+        executeNode.remove();
+      });
+    }
+
+    function activateCurrentFaceScripts() {
+      if (front && front.classList.contains("is-active")) {
+        executeDeferredInlineScripts(front);
+        return;
+      }
+      if (back && back.classList.contains("is-active")) {
+        executeDeferredInlineScripts(back);
+      }
+    }
 
     function showBack() {
       if (!front || !back || !frontActions || !backActions) {
@@ -645,18 +957,51 @@
       back.classList.add("is-active");
       frontActions.classList.add("d-none");
       backActions.classList.remove("d-none");
+      activateCurrentFaceScripts();
+    }
 
-      const wordAudio = document.getElementById("custom-audio");
-      const exampleAudio = document.getElementById("example-audio");
-      if (wordAudio) {
-        wordAudio.play().catch(() => { });
-        wordAudio.onended = () => {
-          setTimeout(() => {
-            if (exampleAudio) {
-              exampleAudio.play().catch(() => { });
-            }
-          }, 500);
-        };
+    function getFullscreenElement() {
+      return document.fullscreenElement || document.webkitFullscreenElement || null;
+    }
+
+    function updateFullscreenUi() {
+      if (!fullscreenBtn) {
+        return;
+      }
+      const isActive = Boolean(getFullscreenElement());
+      fullscreenBtn.classList.toggle("is-active", isActive);
+      fullscreenBtn.title = isActive ? "Thoát toàn màn hình (Esc)" : "Bật toàn màn hình";
+      fullscreenBtn.setAttribute("aria-label", isActive ? "Thoát toàn màn hình" : "Bật toàn màn hình");
+      if (fullscreenLabelEl) {
+        fullscreenLabelEl.textContent = isActive ? "Exit" : "Focus";
+      }
+      if (fullscreenIconEl) {
+        fullscreenIconEl.classList.toggle("bi-arrows-fullscreen", !isActive);
+        fullscreenIconEl.classList.toggle("bi-fullscreen-exit", isActive);
+      }
+    }
+
+    async function toggleFullscreen() {
+      if (!studyPageRoot || !fullscreenBtn) {
+        return;
+      }
+      const activeElement = getFullscreenElement();
+      try {
+        if (activeElement) {
+          if (document.exitFullscreen) {
+            await document.exitFullscreen();
+          } else if (document.webkitExitFullscreen) {
+            document.webkitExitFullscreen();
+          }
+        } else if (studyPageRoot.requestFullscreen) {
+          await studyPageRoot.requestFullscreen();
+        } else if (studyPageRoot.webkitRequestFullscreen) {
+          studyPageRoot.webkitRequestFullscreen();
+        }
+      } catch (_error) {
+        // Browser chặn fullscreen nếu chưa có user gesture hoặc không hỗ trợ.
+      } finally {
+        updateFullscreenUi();
       }
     }
 
@@ -667,39 +1012,147 @@
       });
     }
 
-    async function submitRating(rating) {
-      if (!cardId || !answerUrl || !rating) {
-        return;
+    function setAnswerControlsDisabled(disabled) {
+      const isDisabled = Boolean(disabled);
+      if (showAnswerBtn) {
+        showAnswerBtn.disabled = isDisabled;
       }
-      const durationMs = Math.max(0, Math.round(performance.now() - cardShownAtMs));
-      const timezone =
-        (typeof Intl !== "undefined" &&
-          Intl.DateTimeFormat &&
-          Intl.DateTimeFormat().resolvedOptions().timeZone) ||
-        "UTC";
-      const res = await fetch(answerUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          rating,
-          scope: studyScope,
-          scope_id: scopeId || null,
-          duration_ms: durationMs,
-          timezone
-        })
+      document.querySelectorAll("[data-rating]").forEach((btn) => {
+        if (btn instanceof HTMLButtonElement) {
+          btn.disabled = isDisabled;
+        }
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.success) {
+    }
+
+    function normalizeIntervalLabel(intervalInfo) {
+      if (!intervalInfo || typeof intervalInfo !== "object") {
+        return "";
+      }
+      return String(intervalInfo.label || "").trim();
+    }
+
+    function updateIntervalPreview(intervalsPreview) {
+      document.querySelectorAll("[data-rating]").forEach((btn) => {
+        const rating = String(btn.getAttribute("data-rating") || "").trim();
+        if (!rating) {
+          return;
+        }
+        const intervalInfo = intervalsPreview && typeof intervalsPreview === "object"
+          ? intervalsPreview[rating]
+          : null;
+        const label = normalizeIntervalLabel(intervalInfo);
+        let previewEl = btn.querySelector(".answer-ivl");
+        if (!label) {
+          if (previewEl) {
+            previewEl.remove();
+          }
+          return;
+        }
+        if (!previewEl) {
+          previewEl = document.createElement("span");
+          previewEl.className = "answer-ivl";
+          btn.appendChild(previewEl);
+        }
+        previewEl.textContent = label;
+      });
+    }
+
+    function resetToFrontFace() {
+      if (!front || !back || !frontActions || !backActions) {
         return;
       }
-      const nextUrl = String(data.next_url || "");
-      if (nextUrl) {
-        window.location.href = nextUrl;
+      front.classList.add("is-active");
+      back.classList.remove("is-active");
+      frontActions.classList.remove("d-none");
+      backActions.classList.add("d-none");
+    }
+
+    function applyNextCardPayload(payload) {
+      if (!payload || typeof payload !== "object") {
+        return false;
+      }
+      const nextCardId = String(payload.card_id || "").trim();
+      if (!nextCardId) {
+        return false;
+      }
+      if (front && typeof payload.rendered_front_html === "string") {
+        front.innerHTML = payload.rendered_front_html;
+      }
+      if (back && typeof payload.rendered_back_html === "string") {
+        back.innerHTML = payload.rendered_back_html;
+      }
+      cardId = nextCardId;
+      answerUrl = `/api/study/${encodeURIComponent(nextCardId)}/answer`;
+      if (cardRoot) {
+        cardRoot.dataset.cardId = nextCardId;
+        cardRoot.dataset.answerUrl = answerUrl;
+      }
+      cardShownAtMs = performance.now();
+      resetToFrontFace();
+      applyAutoSplit();
+      activateCurrentFaceScripts();
+      updateIntervalPreview(payload.intervals_preview);
+      return true;
+    }
+
+    async function submitRating(rating) {
+      if (submittingAnswer || !cardId || !answerUrl || !rating) {
         return;
       }
-      window.location.reload();
+      submittingAnswer = true;
+      setAnswerControlsDisabled(true);
+      let navigating = false;
+      try {
+        const durationMs = Math.max(0, Math.round(performance.now() - cardShownAtMs));
+        const timezone =
+          (typeof Intl !== "undefined" &&
+            Intl.DateTimeFormat &&
+            Intl.DateTimeFormat().resolvedOptions().timeZone) ||
+          "UTC";
+        const res = await fetch(answerUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            rating,
+            scope: studyScope,
+            scope_id: scopeId || null,
+            duration_ms: durationMs,
+            timezone
+          })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success) {
+          return;
+        }
+        const nextCardUrl = String(data.next_card_url || "");
+        if (nextCardUrl) {
+          try {
+            const nextResp = await fetch(nextCardUrl, { method: "GET" });
+            const nextPayload = await nextResp.json().catch(() => ({}));
+            if (nextResp.ok && applyNextCardPayload(nextPayload)) {
+              return;
+            }
+          } catch (_error) {
+            // Fallback dưới đây.
+          }
+        }
+        const nextUrl = String(data.next_url || "");
+        if (nextUrl) {
+          navigating = true;
+          window.location.href = nextUrl;
+          return;
+        }
+        navigating = true;
+        window.location.reload();
+        return;
+      } finally {
+        if (!navigating) {
+          submittingAnswer = false;
+          setAnswerControlsDisabled(false);
+        }
+      }
     }
 
     if (showAnswerBtn) {
@@ -710,7 +1163,32 @@
         submitRating(btn.dataset.rating).catch(() => { });
       });
     });
+    if (canEditCard && editModalEl) {
+      editModalEl.addEventListener("show.bs.modal", () => {
+        loadLatestEditValues().catch(() => undefined);
+      });
+      editSaveBtn?.addEventListener("click", () => {
+        saveEditedCard().catch(() => undefined);
+      });
+    }
+    if (fullscreenBtn) {
+      const canFullscreen = Boolean(
+        studyPageRoot && (studyPageRoot.requestFullscreen || studyPageRoot.webkitRequestFullscreen)
+      );
+      if (!canFullscreen) {
+        fullscreenBtn.disabled = true;
+        fullscreenBtn.title = "Trình duyệt không hỗ trợ toàn màn hình";
+      } else {
+        fullscreenBtn.addEventListener("click", () => {
+          toggleFullscreen().catch(() => undefined);
+        });
+        document.addEventListener("fullscreenchange", updateFullscreenUi);
+        document.addEventListener("webkitfullscreenchange", updateFullscreenUi);
+      }
+      updateFullscreenUi();
+    }
     applyAutoSplit();
+    activateCurrentFaceScripts();
   })();
 </script>
 {% endif %}

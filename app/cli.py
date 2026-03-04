@@ -14,7 +14,13 @@ from flask import Flask
 
 from app.services.flashcard_legacy import ensure_legacy_note_type
 from app.services.user_roles import ensure_default_user_roles
-from app.controllers import flashcards_share_controller as share_ctrl
+from app.services.tts_provider_service import (
+    VOICEVOX_AUDIO_BASE_URL,
+    VOICEVOX_POINTS_URL,
+    VOICEVOX_SPEAKERS_URL,
+    ensure_default_tts_providers,
+)
+from app.services import flashcards_share
 from models import db
 from models.flashcard import Card, DeckMarketplaceItem, Note
 from models.user import User
@@ -66,7 +72,7 @@ def register_cli_commands(app: Flask) -> None:
     )
     def clone_cutover_overlay(no_fail_on_mismatch: bool) -> None:
         """One-shot cutover from legacy clone rows to logical overlay model."""
-        summary = share_ctrl.cutover_clone_model_to_overlay_only(
+        summary = flashcards_share.cutover_clone_model_to_overlay_only(
             fail_on_mismatch=not no_fail_on_mismatch,
         )
         db.session.commit()
@@ -95,6 +101,19 @@ def register_cli_commands(app: Flask) -> None:
         roles = UserRole.query.order_by(UserRole.position.asc(), UserRole.id.asc()).all()
         codes = ", ".join(role.code for role in roles)
         click.echo(f"Done. Seeded roles: {codes}")
+
+    @app.cli.command("tts-provider-seed")
+    def tts_provider_seed() -> None:
+        """Seed default global TTS providers (currently VoiceVox)."""
+        result = ensure_default_tts_providers(db.session)
+        db.session.commit()
+        click.echo(
+            "Done. "
+            f"created={result.get('created', 0)}, "
+            f"updated={result.get('updated', 0)}. "
+            f"VoiceVox endpoints: audio={VOICEVOX_AUDIO_BASE_URL}, "
+            f"speakers={VOICEVOX_SPEAKERS_URL}, points={VOICEVOX_POINTS_URL}."
+        )
 
     @app.cli.command("dev-purge-data")
     @click.option("--yes", is_flag=True, default=False, help="Confirm destructive purge.")

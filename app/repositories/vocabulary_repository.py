@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
 from types import SimpleNamespace
 from typing import Any
 
 from sqlalchemy.orm import selectinload
 
-from app.controllers.deck_controller import collect_ancestor_ids
-from app.controllers.study_controller import (
+from app.repositories.deck_tree_query import collect_ancestor_ids
+from app.repositories.study_repository import (
     LEARNING_QUEUE,
     LEARN_QUEUE,
     NEW_QUEUE,
@@ -22,6 +23,21 @@ from models import db
 from models.card_progress import CardProgress
 from models.deck import Deck
 from models.flashcard import Card, DeckCloneDeckMap, DeckInstall, Note
+
+
+@dataclass
+class DeckCreateParentResolution:
+    parent_deck: Deck | None
+    parent_id: int | None
+    error: str | None = None
+
+
+@dataclass
+class DeckPathUpsertResult:
+    final_deck: Deck | None
+    created_count: int
+    created_names: list[str]
+    path_tokens: list[str]
 
 
 def next_deck_position(parent_deck_id: int | None) -> int:
@@ -51,6 +67,136 @@ def deck_name_exists_under_parent(
     if exclude_deck_id is not None:
         query = query.filter(Deck.id != exclude_deck_id)
     return query.first() is not None
+
+
+def parse_create_deck_tokens(*, deck_path_raw: str, fallback_name: str) -> list[str]:
+    tokens = [item.strip() for item in (deck_path_raw or "").split("::") if item and item.strip()]
+    if tokens:
+        return tokens
+    name = (fallback_name or "").strip() or "New Deck"
+    return [name]
+
+
+def deck_name_path_tokens(deck_obj: Deck | None) -> list[str]:
+    if deck_obj is None:
+        return []
+
+    tokens: list[str] = []
+    cursor: Deck | None = deck_obj
+    seen_ids: set[int] = set()
+    while cursor and cursor.id not in seen_ids:
+        seen_ids.add(cursor.id)
+        name_token = (cursor.name or "").strip()
+        if name_token:
+            tokens.append(name_token)
+        if cursor.parent_id is None:
+            break
+        cursor = Deck.query.get(cursor.parent_id)
+    tokens.reverse()
+    return tokens
+
+
+def normalize_create_deck_tokens_for_parent(
+    *,
+    path_tokens: list[str],
+    parent_path_tokens: list[str],
+    fallback_name: str,
+) -> list[str]:
+    if not path_tokens:
+        return [(fallback_name or "").strip() or "New Deck"]
+    if not parent_path_tokens or len(path_tokens) < len(parent_path_tokens):
+        return path_tokens
+
+    prefix = path_tokens[: len(parent_path_tokens)]
+    if [item.casefold() for item in prefix] != [item.casefold() for item in parent_path_tokens]:
+        return path_tokens
+
+    trimmed = path_tokens[len(parent_path_tokens) :]
+    if trimmed:
+        return trimmed
+    return [(fallback_name or "").strip() or "New Deck"]
+
+
+def resolve_create_deck_parent(
+    *,
+    parent_id_raw: str,
+    user_id: int,
+    admin_mode: bool,
+) -> DeckCreateParentResolution:
+    raw_value = (parent_id_raw or "").strip()
+    if not raw_value:
+        return DeckCreateParentResolution(parent_deck=None, parent_id=None)
+
+    try:
+        selected_parent_id = int(raw_value)
+    except (TypeError, ValueError):
+        return DeckCreateParentResolution(parent_deck=None, parent_id=None, error="Invalid parent deck.")
+
+    parent_deck = Deck.query.get(selected_parent_id)
+    if not parent_deck:
+        return DeckCreateParentResolution(parent_deck=None, parent_id=None, error="Parent deck not found.")
+
+    if not admin_mode:
+        accessible_ids = {
+            int(deck.id)
+            for deck in collect_accessible_browse_decks(user_id=user_id, admin_mode=False)
+            if deck.id is not None
+        }
+        if selected_parent_id not in accessible_ids:
+            return DeckCreateParentResolution(parent_deck=None, parent_id=None, error="Parent deck not found.")
+
+    return DeckCreateParentResolution(
+        parent_deck=parent_deck,
+        parent_id=selected_parent_id,
+        error=None,
+    )
+
+
+def upsert_deck_path(
+    *,
+    parent_id: int | None,
+    path_tokens: list[str],
+    owner_user_id: int | None,
+    admin_mode: bool,
+) -> DeckPathUpsertResult:
+    current_parent_id = parent_id
+    created_count = 0
+    created_names: list[str] = []
+    final_deck: Deck | None = None
+
+    for token in path_tokens:
+        existing_query = Deck.query.filter(
+            Deck.parent_id == current_parent_id,
+            Deck.name == token,
+        )
+        if not admin_mode:
+            existing_query = existing_query.filter(Deck.owner_user_id == owner_user_id)
+
+        existing = existing_query.order_by(Deck.id.asc()).first()
+        if existing:
+            final_deck = existing
+            current_parent_id = existing.id
+            continue
+
+        node = Deck(
+            parent_id=current_parent_id,
+            owner_user_id=owner_user_id,
+            name=token,
+            position=next_deck_position(current_parent_id),
+        )
+        db.session.add(node)
+        db.session.flush()
+        created_count += 1
+        created_names.append(token)
+        final_deck = node
+        current_parent_id = node.id
+
+    return DeckPathUpsertResult(
+        final_deck=final_deck,
+        created_count=created_count,
+        created_names=created_names,
+        path_tokens=path_tokens,
+    )
 
 
 def browse_first_non_empty(field_values: dict | None) -> str:
@@ -211,7 +357,7 @@ def build_browse_card_detail(
         else []
     )
 
-    fields = [
+    note_type_fields = [
         {
             "name": field_def.name,
             "field_type": field_def.field_type,
@@ -220,7 +366,8 @@ def build_browse_card_detail(
         }
         for field_def in field_defs
     ]
-    existing_names = {field_def["name"] for field_def in fields}
+    fields = list(note_type_fields)
+    existing_names = {field_def["name"] for field_def in note_type_fields}
     for key in field_values.keys():
         key_str = str(key)
         if key_str in existing_names:
@@ -260,22 +407,45 @@ def build_browse_card_detail(
             "updated_at": note_obj.updated_at.isoformat() if note_obj and note_obj.updated_at else None,
         },
         "fields": fields,
+        "note_type_fields": note_type_fields,
         "media_assets": media_assets,
     }
 
 
 def collect_accessible_browse_decks(*, user_id: int, admin_mode: bool) -> list[Deck]:
+    if admin_mode:
+        return (
+            Deck.query.filter(
+                db.or_(
+                    Deck.owner_user_id == user_id,
+                    Deck.owner_user_id.is_(None),
+                )
+            )
+            .order_by(
+                Deck.parent_id.isnot(None),
+                Deck.position,
+                Deck.created_at,
+                Deck.id,
+            )
+            .all()
+        )
+
     all_decks = Deck.query.order_by(
         Deck.parent_id.isnot(None),
         Deck.position,
         Deck.created_at,
         Deck.id,
     ).all()
-    if admin_mode:
-        return all_decks
 
     deck_map = {deck.id: deck for deck in all_decks}
     visible_ids: set[int] = set()
+
+    owned_deck_rows = (
+        db.session.query(Deck.id)
+        .filter(Deck.owner_user_id == user_id)
+        .all()
+    )
+    visible_ids.update(int(row[0]) for row in owned_deck_rows if row and row[0] is not None)
 
     deck_rows = (
         db.session.query(Note.deck_id)
@@ -533,6 +703,7 @@ def build_note_study_card_payload(card_obj: Card | None) -> SimpleNamespace | No
 
     payload = {
         "id": card_obj.id,
+        "note_id": note_obj.id,
         "word": display_triplet["word"],
         "reading": display_triplet["reading"],
         "meaning": display_triplet["meaning"],
@@ -570,6 +741,7 @@ def render_note_study_flashcard(card_obj: Card | None) -> dict[str, str]:
             media_assets=note_obj.media_assets,
             preview_note_key=note_obj.id,
             allow_inline_script=True,
+            defer_inline_script=True,
         )
         ret["front"] = rendered.get("front_html", "")
         ret["back"] = rendered.get("back_html", "")
@@ -601,7 +773,7 @@ def query_study_cards_for_deck_ids(*, user_id: int, deck_ids: list[int]) -> list
     seen_card_ids = {card_obj.id for card_obj in direct_cards}
     merged_cards = list(direct_cards)
 
-    from app.controllers import flashcards_share_controller as share_ctrl
+    from app.services import flashcards_share as share_ctrl
 
     seen_scope_keys: set[tuple[str, int]] = set()
     for local_deck_id in sorted({int(deck_id) for deck_id in deck_ids if deck_id is not None}):

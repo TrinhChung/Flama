@@ -3,17 +3,18 @@
 from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta, timezone
+import re
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from flask_login import current_user
 
-from app.controllers.review_event_controller import query_today_review_summary
-from app.controllers.deck_controller import (
+from app.repositories.stats_query_repository import query_today_review_summary
+from app.repositories.deck_tree_query import (
     collect_subtree_ids,
     query_accessible_stats_decks,
 )
-from app.controllers.card_progress_controller import (
+from app.repositories.stats_query_repository import (
     aggregate_future_due_offsets_mysql,
     query_due_queue_rows_python,
     query_interval_days_rows,
@@ -23,6 +24,45 @@ from models import db
 
 UTC = timezone.utc
 DEFAULT_TIMEZONE = "UTC"
+FALLBACK_FIXED_OFFSETS_MINUTES = {
+    "ASIA/HO_CHI_MINH": 7 * 60,
+    "ASIA/BANGKOK": 7 * 60,
+    "ASIA/JAKARTA": 7 * 60,
+    "ASIA/TOKYO": 9 * 60,
+    "ASIA/SEOUL": 9 * 60,
+    "ASIA/SHANGHAI": 8 * 60,
+    "ASIA/HONG_KONG": 8 * 60,
+    "ASIA/SINGAPORE": 8 * 60,
+    "ASIA/TAIPEI": 8 * 60,
+}
+OFFSET_TZ_PATTERN = re.compile(r"^(?:UTC|GMT)\s*([+-])\s*(\d{1,2})(?::?(\d{2}))?$", re.IGNORECASE)
+
+
+def _resolve_fixed_offset_minutes(candidate: str) -> int | None:
+    key = str(candidate or "").strip()
+    key_upper = key.upper()
+    if key_upper in {"UTC", "ETC/UTC", "GMT"}:
+        return 0
+    if key_upper in FALLBACK_FIXED_OFFSETS_MINUTES:
+        return int(FALLBACK_FIXED_OFFSETS_MINUTES[key_upper])
+    match = OFFSET_TZ_PATTERN.match(key)
+    if not match:
+        return None
+    sign, hours_text, minutes_text = match.groups()
+    hours = int(hours_text)
+    minutes = int(minutes_text or 0)
+    if hours > 14 or minutes >= 60:
+        return None
+    total = hours * 60 + minutes
+    return total if sign == "+" else -total
+
+
+def _is_supported_timezone_name(candidate: str) -> bool:
+    try:
+        ZoneInfo(candidate)
+        return True
+    except ZoneInfoNotFoundError:
+        return _resolve_fixed_offset_minutes(candidate) is not None
 
 
 def _ensure_naive_utc(moment: datetime) -> datetime:
@@ -37,6 +77,9 @@ def _build_timezone_obj(timezone_name: str):
     try:
         return ZoneInfo(timezone_name)
     except ZoneInfoNotFoundError:
+        fallback_minutes = _resolve_fixed_offset_minutes(timezone_name)
+        if fallback_minutes is not None:
+            return timezone(timedelta(minutes=fallback_minutes))
         return UTC
 
 
@@ -46,9 +89,7 @@ def _effective_timezone_name(raw_timezone: Any) -> str:
         return DEFAULT_TIMEZONE
     if candidate.upper() in {"UTC", "ETC/UTC", "GMT"}:
         return DEFAULT_TIMEZONE
-    try:
-        ZoneInfo(candidate)
-    except ZoneInfoNotFoundError:
+    if not _is_supported_timezone_name(candidate):
         return DEFAULT_TIMEZONE
     return candidate
 
