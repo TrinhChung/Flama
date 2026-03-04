@@ -419,7 +419,16 @@ def patch_note(note_id: str):
     if note_type is None:
         return _api_error("FIELD_NOT_FOUND", "Note type not found.", status=404)
 
-    note_media_ids = {asset.id for asset in (note.media_assets or []) if asset.id}
+    note_media_ids = set()
+    for asset in note.media_assets or []:
+        asset_id = str(asset.id or "").strip()
+        if asset_id:
+            note_media_ids.add(asset_id)
+            note_media_ids.add(f"/media/proxy/{asset_id}")
+        filename = str(asset.filename or "").strip()
+        if filename:
+            note_media_ids.add(filename)
+            note_media_ids.add(f"[sound:{filename}]")
     try:
         validated = validate_note_patch_request(
             note_type=note_type,
@@ -430,7 +439,11 @@ def patch_note(note_id: str):
     except RequestValidationError as exc:
         return _api_error(exc.code, str(exc), status=exc.status, field=exc.field)
 
-    note.field_values = validated.field_values
+    if validated.field_updates:
+        next_values = dict(note.field_values or {})
+        for key_name, value in validated.field_updates.items():
+            next_values[key_name] = value
+        note.field_values = next_values
     if validated.update_tags:
         note.tags = validated.tags
     if validated.update_deck:

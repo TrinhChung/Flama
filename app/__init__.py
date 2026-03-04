@@ -23,6 +23,21 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv()
 
 
+def _resolve_media_upload_root(raw_value: str | None = None) -> Path:
+    """Resolve media root path; default outside repo to avoid bloating git workspace."""
+    raw = str(raw_value or "").strip() or os.getenv("FLASHCARD_MEDIA_UPLOAD_ROOT", "").strip()
+    if raw:
+        candidate = Path(raw).expanduser()
+        if not candidate.is_absolute():
+            candidate = (BASE_DIR / candidate).resolve()
+        else:
+            candidate = candidate.resolve()
+    else:
+        candidate = (BASE_DIR.parent / "flama_media_storage").resolve()
+    candidate.mkdir(parents=True, exist_ok=True)
+    return candidate
+
+
 def create_app(config: Optional[dict] = None) -> Flask:
     """Application factory that sets up Flask, database, and authentication."""
     app = Flask(
@@ -37,7 +52,7 @@ def create_app(config: Optional[dict] = None) -> Flask:
         "pool_pre_ping": True,
         "pool_recycle": 1800,
     }
-    app.config["FLASHCARD_MEDIA_UPLOAD_ROOT"] = str(BASE_DIR / "static" / "uploads")
+    app.config["FLASHCARD_MEDIA_UPLOAD_ROOT"] = str(_resolve_media_upload_root())
     app.config["FLASHCARD_MEDIA_MAX_BYTES"] = int(os.getenv("FLASHCARD_MEDIA_MAX_BYTES", str(10 * 1024 * 1024)))
     app.config["FLASHCARD_MEDIA_SCAN_ENABLED"] = (
         os.getenv("FLASHCARD_MEDIA_SCAN_ENABLED", "0").strip().lower() in {"1", "true", "yes", "on"}
@@ -45,6 +60,9 @@ def create_app(config: Optional[dict] = None) -> Flask:
     app.config["FLASHCARD_MEDIA_SCANNER"] = None
     if config:
         app.config.update(config)
+
+    resolved_upload_root = _resolve_media_upload_root(app.config.get("FLASHCARD_MEDIA_UPLOAD_ROOT"))
+    app.config["FLASHCARD_MEDIA_UPLOAD_ROOT"] = str(resolved_upload_root)
 
     db.init_app(app)
     migrate.init_app(app, db)

@@ -24,11 +24,24 @@ MAX_PROVIDER_NAME_LEN = 120
 MAX_PROVIDER_TYPE_LEN = 64
 MAX_BASE_URL_LEN = 500
 MAX_LAST_VALIDATION_ERROR_LEN = 500
+MAX_VOICEVOX_TEXT_LENGTH = 500
+MAX_VOICEVOX_AUDIO_BYTES = 12 * 1024 * 1024
 
 VOICEVOX_PROVIDER_TYPE = "voicevox"
 VOICEVOX_AUDIO_BASE_URL = "https://deprecatedapis.tts.quest/v2/voicevox/audio/"
 VOICEVOX_SPEAKERS_URL = "https://deprecatedapis.tts.quest/v2/voicevox/speakers/"
 VOICEVOX_POINTS_URL = "https://deprecatedapis.tts.quest/v2/api/"
+VOICEVOX_DEFAULT_SETTINGS: dict[str, Any] = {
+    "character_id": "",
+    "volume_scale": 1.0,
+    "pitch_scale": 0.0,
+    "pitch": 0.0,
+    "speed_scale": 1.0,
+    "speed": 1.0,
+    "intonation_scale": 1.0,
+    "initial_silence_scale": 0.1,
+    "final_silence_length": 0.1,
+}
 
 DEFAULT_TTS_PROVIDER_SEEDS: tuple[dict[str, Any], ...] = (
     {
@@ -49,9 +62,14 @@ DEFAULT_TTS_PROVIDER_SEEDS: tuple[dict[str, Any], ...] = (
         },
         "default_settings": {
             "character_id": "",
-            "pitch": 0.5,
-            "intonation_scale": 0.5,
-            "speed": 0.5,
+            "volume_scale": 1.0,
+            "pitch_scale": 0.0,
+            "pitch": 0.0,
+            "speed_scale": 1.0,
+            "speed": 1.0,
+            "intonation_scale": 1.0,
+            "initial_silence_scale": 0.1,
+            "final_silence_length": 0.1,
         },
     },
 )
@@ -220,12 +238,65 @@ def _normalize_optional_base_url(value: Any) -> str | None:
     return normalized[:MAX_BASE_URL_LEN]
 
 
-def _normalize_voicevox_slider(value: Any, *, fallback: float) -> float:
+def _normalize_voicevox_float(
+    value: Any,
+    *,
+    fallback: float,
+    minimum: float,
+    maximum: float,
+) -> float:
     try:
         parsed = float(value)
     except (TypeError, ValueError):
         return fallback
-    return max(0.0, min(1.0, parsed))
+    return max(minimum, min(maximum, parsed))
+
+
+def _detect_audio_mime_and_extension(
+    content: bytes,
+    *,
+    response_content_type: str | None = None,
+) -> tuple[str, str]:
+    if len(content) >= 12 and content[:4] == b"RIFF" and content[8:12] == b"WAVE":
+        return "audio/wav", "wav"
+    if content.startswith(b"OggS"):
+        return "audio/ogg", "ogg"
+    if content.startswith(b"fLaC"):
+        return "audio/flac", "flac"
+    if content.startswith(b"ID3") or (len(content) >= 2 and content[0] == 0xFF and (content[1] & 0xE0) == 0xE0):
+        return "audio/mpeg", "mp3"
+
+    content_type = str(response_content_type or "").split(";", 1)[0].strip().lower()
+    if content_type in {"audio/wav", "audio/x-wav"}:
+        return "audio/wav", "wav"
+    if content_type in {"audio/ogg", "application/ogg"}:
+        return "audio/ogg", "ogg"
+    if content_type in {"audio/mpeg", "audio/mp3"}:
+        return "audio/mpeg", "mp3"
+    return "application/octet-stream", "bin"
+
+
+def _parse_voicevox_error_message(raw_body: bytes | None) -> str:
+    if not raw_body:
+        return ""
+    try:
+        payload = json.loads((raw_body or b"").decode("utf-8", errors="ignore"))
+    except (TypeError, ValueError):
+        return ""
+
+    if isinstance(payload, dict):
+        for key in ("errorMessage", "error", "message", "detail"):
+            value = str(payload.get(key) or "").strip()
+            if value:
+                return value
+    if isinstance(payload, list) and payload:
+        first = payload[0]
+        if isinstance(first, dict):
+            for key in ("errorMessage", "error", "message", "detail"):
+                value = str(first.get(key) or "").strip()
+                if value:
+                    return value
+    return ""
 
 
 @dataclass(slots=True)
@@ -234,6 +305,14 @@ class ApiKeyValidationResult:
     status: str
     checked_at: datetime
     message: str
+
+
+@dataclass(slots=True)
+class SynthesizedAudioResult:
+    content: bytes
+    mime_type: str
+    extension: str
+    content_type_header: str
 
 
 class BaseTtsProviderAdapter:
@@ -297,12 +376,7 @@ class VoicevoxTtsProviderAdapter(BaseTtsProviderAdapter):
         }
 
     def default_user_settings(self) -> dict[str, Any]:
-        return {
-            "character_id": "",
-            "pitch": 0.5,
-            "intonation_scale": 0.5,
-            "speed": 0.5,
-        }
+        return dict(VOICEVOX_DEFAULT_SETTINGS)
 
     def normalize_user_settings(
         self,
@@ -310,13 +384,21 @@ class VoicevoxTtsProviderAdapter(BaseTtsProviderAdapter):
         *,
         default_settings: dict[str, Any],
     ) -> tuple[dict[str, Any], list[str]]:
+        incoming = coerce_mapping(value)
         merged = coerce_mapping(default_settings)
-        merged.update(coerce_mapping(value))
+        merged.update(incoming)
+
+        def _pick_first(*keys: str) -> Any:
+            for key in keys:
+                if key in incoming and incoming.get(key) is not None:
+                    return incoming.get(key)
+            for key in keys:
+                if key in merged and merged.get(key) is not None:
+                    return merged.get(key)
+            return None
 
         character_raw = (
-            merged.get("character_id")
-            or merged.get("speaker_id")
-            or merged.get("style_id")
+            _pick_first("character_id", "speaker_id", "style_id")
         )
         if character_raw is None:
             legacy_speaker = merged.get("speaker")
@@ -325,12 +407,55 @@ class VoicevoxTtsProviderAdapter(BaseTtsProviderAdapter):
             elif isinstance(legacy_speaker, str) and legacy_speaker.strip().isdigit():
                 character_raw = legacy_speaker.strip()
 
+        pitch_raw = _pick_first("pitch_scale", "pitch")
+        intonation_raw = _pick_first("intonation_scale", "intonationScale")
+        speed_raw = _pick_first("speed_scale", "speed")
+        volume_raw = _pick_first("volume_scale", "volumeScale", "volume")
+        initial_silence_raw = _pick_first("initial_silence_scale", "pre_phoneme_length", "prePhonemeLength")
+        final_silence_raw = _pick_first("final_silence_length", "post_phoneme_length", "postPhonemeLength")
+
         normalized = {
             "character_id": str(character_raw or "").strip(),
-            "pitch": _normalize_voicevox_slider(merged.get("pitch"), fallback=0.5),
-            "intonation_scale": _normalize_voicevox_slider(merged.get("intonation_scale"), fallback=0.5),
-            "speed": _normalize_voicevox_slider(merged.get("speed"), fallback=0.5),
+            "volume_scale": _normalize_voicevox_float(
+                volume_raw,
+                fallback=float(VOICEVOX_DEFAULT_SETTINGS["volume_scale"]),
+                minimum=0.0,
+                maximum=2.0,
+            ),
+            "pitch_scale": _normalize_voicevox_float(
+                pitch_raw,
+                fallback=float(VOICEVOX_DEFAULT_SETTINGS["pitch_scale"]),
+                minimum=-0.4,
+                maximum=0.4,
+            ),
+            "speed_scale": _normalize_voicevox_float(
+                speed_raw,
+                fallback=float(VOICEVOX_DEFAULT_SETTINGS["speed_scale"]),
+                minimum=0.1,
+                maximum=4.0,
+            ),
+            "intonation_scale": _normalize_voicevox_float(
+                intonation_raw,
+                fallback=float(VOICEVOX_DEFAULT_SETTINGS["intonation_scale"]),
+                minimum=0.0,
+                maximum=2.0,
+            ),
+            "initial_silence_scale": _normalize_voicevox_float(
+                initial_silence_raw,
+                fallback=float(VOICEVOX_DEFAULT_SETTINGS["initial_silence_scale"]),
+                minimum=0.0,
+                maximum=2.0,
+            ),
+            "final_silence_length": _normalize_voicevox_float(
+                final_silence_raw,
+                fallback=float(VOICEVOX_DEFAULT_SETTINGS["final_silence_length"]),
+                minimum=0.0,
+                maximum=2.0,
+            ),
         }
+        # Legacy aliases kept for compatibility with older clients/tests.
+        normalized["pitch"] = normalized["pitch_scale"]
+        normalized["speed"] = normalized["speed_scale"]
         return normalized, []
 
     def supports_key_validation(self) -> bool:
@@ -507,18 +632,76 @@ class VoicevoxTtsProviderAdapter(BaseTtsProviderAdapter):
                 parsed_body = None
 
         if isinstance(parsed_body, dict):
-            has_error_key = any(key in parsed_body for key in ("error", "errors", "detail", "message"))
-            # Heuristic: if payload explicitly marks success=false then treat as invalid.
-            if parsed_body.get("success") is False or parsed_body.get("ok") is False:
-                has_error_key = True
-            if has_error_key and str(parsed_body.get("error") or "").strip():
-                message = str(parsed_body.get("error"))[:MAX_LAST_VALIDATION_ERROR_LEN]
+            error_message = ""
+            for key in ("errorMessage", "error", "errors", "detail", "message"):
+                candidate = parsed_body.get(key)
+                if isinstance(candidate, list):
+                    candidate = candidate[0] if candidate else ""
+                if isinstance(candidate, dict):
+                    candidate = (
+                        candidate.get("errorMessage")
+                        or candidate.get("error")
+                        or candidate.get("message")
+                        or candidate.get("detail")
+                        or ""
+                    )
+                text = str(candidate or "").strip()
+                if text:
+                    error_message = text
+                    break
+
+            normalized_error = error_message.strip().lower().replace(" ", "")
+            if normalized_error:
+                if normalized_error == "invalidapikey":
+                    return ApiKeyValidationResult(
+                        valid=False,
+                        status="invalid",
+                        checked_at=checked_at,
+                        message="API key VoiceVox không hợp lệ hoặc đã hết hạn.",
+                    )
+                if normalized_error == "notenoughpoints":
+                    return ApiKeyValidationResult(
+                        valid=False,
+                        status="invalid",
+                        checked_at=checked_at,
+                        message="API key VoiceVox không còn đủ points.",
+                    )
+                if normalized_error == "failed":
+                    return ApiKeyValidationResult(
+                        valid=False,
+                        status="unknown",
+                        checked_at=checked_at,
+                        message="VoiceVox trả về lỗi khi kiểm tra API key.",
+                    )
                 return ApiKeyValidationResult(
                     valid=False,
                     status="invalid",
                     checked_at=checked_at,
-                    message=message,
+                    message=error_message[:MAX_LAST_VALIDATION_ERROR_LEN],
                 )
+
+            # Heuristic: if payload explicitly marks success=false then treat as invalid.
+            if parsed_body.get("success") is False or parsed_body.get("ok") is False:
+                return ApiKeyValidationResult(
+                    valid=False,
+                    status="invalid",
+                    checked_at=checked_at,
+                    message="VoiceVox từ chối API key.",
+                )
+
+            points_value = parsed_body.get("points")
+            if points_value is not None:
+                try:
+                    points = float(points_value)
+                except (TypeError, ValueError):
+                    points = None
+                if points is not None and points <= 0:
+                    return ApiKeyValidationResult(
+                        valid=False,
+                        status="invalid",
+                        checked_at=checked_at,
+                        message="API key VoiceVox đã hết points.",
+                    )
 
         return ApiKeyValidationResult(
             valid=True,
@@ -953,6 +1136,210 @@ def list_provider_voices_for_user(
     return voice_items, []
 
 
+def resolve_provider_api_key_for_user(
+    session,
+    *,
+    user_id: int,
+    provider: TtsProviderConfig,
+    api_key_override: str | None = None,
+) -> tuple[str, list[str]]:
+    raw_key = str(api_key_override or "").strip()
+    if raw_key:
+        return raw_key, []
+
+    profile = get_or_create_user_provider_profile(
+        session,
+        user_id=user_id,
+        provider_id=provider.id,
+        create_if_missing=False,
+    )
+    saved_key = decrypt_api_key(profile.encrypted_api_key) if profile is not None else ""
+    if provider.requires_api_key and not saved_key:
+        return "", ["Provider yêu cầu API key. Hãy lưu API key trước khi dùng VoiceVox."]
+    return saved_key, []
+
+
+def resolve_user_settings_for_provider(
+    session,
+    *,
+    user_id: int,
+    provider: TtsProviderConfig,
+    settings_payload: Any = None,
+) -> tuple[dict[str, Any], list[str]]:
+    profile = get_or_create_user_provider_profile(
+        session,
+        user_id=user_id,
+        provider_id=provider.id,
+        create_if_missing=False,
+    )
+    merged_settings = loads_json_map(profile.settings_json if profile is not None else "{}")
+
+    if settings_payload is not None:
+        if not isinstance(settings_payload, dict):
+            return {}, ["settings phải là object JSON."]
+        merged_settings.update(coerce_mapping(settings_payload))
+
+    normalized, errors = normalize_user_settings_for_provider(provider, merged_settings)
+    if errors:
+        return {}, errors
+    return normalized, []
+
+
+def synthesize_voicevox_audio_for_user(
+    session,
+    *,
+    user_id: int,
+    provider: TtsProviderConfig,
+    text: Any,
+    character_id: Any = "",
+    settings_payload: Any = None,
+    api_key_override: str | None = None,
+    use_opus: bool = False,
+) -> tuple[SynthesizedAudioResult | None, list[str], list[str]]:
+    if normalize_provider_type_filter(provider.provider_type) != VOICEVOX_PROVIDER_TYPE:
+        return None, ["Provider không hỗ trợ VoiceVox synthesis."], []
+
+    text_value = str(text or "").strip()
+    if not text_value:
+        return None, ["Text để tạo audio đang trống."], []
+    if len(text_value) > MAX_VOICEVOX_TEXT_LENGTH:
+        return None, [f"Text vượt quá {MAX_VOICEVOX_TEXT_LENGTH} ký tự."], []
+
+    settings, settings_errors = resolve_user_settings_for_provider(
+        session,
+        user_id=user_id,
+        provider=provider,
+        settings_payload=settings_payload,
+    )
+    if settings_errors:
+        return None, settings_errors, []
+
+    character_value = str(character_id or settings.get("character_id") or "0").strip() or "0"
+    settings["character_id"] = character_value
+
+    api_key, key_errors = resolve_provider_api_key_for_user(
+        session,
+        user_id=user_id,
+        provider=provider,
+        api_key_override=api_key_override,
+    )
+    if key_errors:
+        return None, key_errors, []
+
+    shared_config = shared_config_map(provider)
+    provider_config = provider_config_map(provider)
+
+    audio_url = str(
+        shared_config.get("audio_url")
+        or provider.base_url
+        or VOICEVOX_AUDIO_BASE_URL
+    ).strip()
+    if not is_valid_http_url(audio_url):
+        return None, ["URL audio của VoiceVox không hợp lệ."], []
+
+    key_transport = str(provider_config.get("key_transport") or "query").strip().lower()
+    key_param_name = str(provider_config.get("key_param_name") or "key").strip() or "key"
+    timeout_seconds = provider_config.get("timeout_seconds", 12)
+    try:
+        timeout_seconds = float(timeout_seconds)
+    except (TypeError, ValueError):
+        timeout_seconds = 12
+    timeout_seconds = max(2.0, min(25.0, timeout_seconds))
+
+    headers = {"Accept": "audio/*,application/octet-stream;q=0.8"}
+    parsed = urlparse(audio_url)
+    params = dict(parse_qsl(parsed.query, keep_blank_values=True))
+    params["text"] = text_value
+    params["speaker"] = character_value
+    # Match VoiceVox deprecated API documented query params for max compatibility.
+    params["pitch"] = str(settings.get("pitch_scale", 0.0))
+    params["speed"] = str(settings.get("speed_scale", 1.0))
+    params["intonationScale"] = str(settings.get("intonation_scale", 1.0))
+    if use_opus:
+        # Upstream may ignore this; caller gets warning when content is not opus/ogg.
+        params["outputFormat"] = "opus"
+        params["format"] = "opus"
+
+    if api_key:
+        if key_transport == "header":
+            headers[key_param_name] = api_key
+        else:
+            params[key_param_name] = api_key
+
+    request_url = urlunparse(parsed._replace(query=urlencode(params)))
+    request = Request(request_url, method="GET", headers=headers)
+
+    try:
+        with urlopen(request, timeout=timeout_seconds) as response:
+            status_code = int(response.getcode() or 0)
+            content_type_header = str(response.headers.get("Content-Type") or "")
+            body = response.read(MAX_VOICEVOX_AUDIO_BYTES + 1)
+    except HTTPError as exc:
+        code = int(exc.code or 0)
+        error_body = b""
+        try:
+            error_body = exc.read(8192)
+        except Exception:
+            error_body = b""
+        parsed_error = _parse_voicevox_error_message(error_body).lower()
+        if parsed_error == "invalidapikey":
+            return None, ["API key VoiceVox không hợp lệ hoặc đã hết hạn."], []
+        if parsed_error == "notenoughpoints":
+            return None, ["VoiceVox API key không đủ points để tổng hợp audio."], []
+        if parsed_error == "failed":
+            return None, ["VoiceVox tổng hợp âm thanh thất bại."], []
+        if code in {401, 403}:
+            return None, ["API key VoiceVox không hợp lệ hoặc đã hết hạn."], []
+        if parsed_error:
+            return None, [f"VoiceVox audio API lỗi: {parsed_error}"], []
+        return None, [f"VoiceVox audio API trả về HTTP {code}."], []
+    except URLError as exc:
+        return None, [f"Không thể kết nối VoiceVox audio API: {exc.reason}"], []
+
+    if not (200 <= status_code < 300):
+        return None, [f"VoiceVox audio API phản hồi HTTP {status_code}."], []
+    if not body:
+        return None, ["VoiceVox trả về audio rỗng."], []
+    if len(body) > MAX_VOICEVOX_AUDIO_BYTES:
+        return None, ["Audio trả về quá lớn."], []
+
+    if (
+        str(content_type_header).split(";", 1)[0].strip().lower() == "application/json"
+        or body[:1] in {b"{", b"["}
+    ):
+        parsed_error = _parse_voicevox_error_message(body).lower()
+        if parsed_error == "invalidapikey":
+            return None, ["API key VoiceVox không hợp lệ hoặc đã hết hạn."], []
+        if parsed_error == "notenoughpoints":
+            return None, ["VoiceVox API key không đủ points để tổng hợp audio."], []
+        if parsed_error == "failed":
+            return None, ["VoiceVox tổng hợp âm thanh thất bại."], []
+        if parsed_error:
+            return None, [f"VoiceVox audio API lỗi: {parsed_error}"], []
+        return None, ["VoiceVox audio API trả về JSON thay vì audio."], []
+
+    mime_type, extension = _detect_audio_mime_and_extension(
+        body,
+        response_content_type=content_type_header,
+    )
+    if extension == "bin":
+        return None, ["VoiceVox audio API trả dữ liệu không nhận diện được định dạng âm thanh."], []
+    warnings: list[str] = []
+    if use_opus and extension not in {"ogg", "opus"}:
+        warnings.append("VoiceVox API không trả định dạng opus, hệ thống đã lưu theo định dạng thực tế.")
+
+    return (
+        SynthesizedAudioResult(
+            content=body,
+            mime_type=mime_type,
+            extension=extension,
+            content_type_header=content_type_header,
+        ),
+        [],
+        warnings,
+    )
+
+
 def ensure_default_tts_providers(session) -> dict[str, int]:
     """Create default global TTS providers without duplicating existing rows."""
     created = 0
@@ -1004,9 +1391,40 @@ def ensure_default_tts_providers(session) -> dict[str, int]:
             if not loads_json_map(existing.provider_config_json):
                 existing.provider_config_json = dumps_json_map(merged_provider)
                 changed = True
-            if not loads_json_map(existing.default_settings_json):
+            existing_defaults = loads_json_map(existing.default_settings_json)
+            if not existing_defaults:
                 existing.default_settings_json = dumps_json_map(merged_defaults)
                 changed = True
+            elif normalize_provider_type_filter(existing.provider_type) == VOICEVOX_PROVIDER_TYPE:
+                missing_key = any(key not in existing_defaults for key in VOICEVOX_DEFAULT_SETTINGS.keys())
+                legacy_pitch = _normalize_voicevox_float(
+                    existing_defaults.get("pitch"),
+                    fallback=0.0,
+                    minimum=-10.0,
+                    maximum=10.0,
+                )
+                legacy_speed = _normalize_voicevox_float(
+                    existing_defaults.get("speed"),
+                    fallback=0.0,
+                    minimum=-10.0,
+                    maximum=10.0,
+                )
+                legacy_intonation = _normalize_voicevox_float(
+                    existing_defaults.get("intonation_scale"),
+                    fallback=0.0,
+                    minimum=-10.0,
+                    maximum=10.0,
+                )
+                has_legacy_half_defaults = (
+                    "pitch_scale" not in existing_defaults
+                    and "speed_scale" not in existing_defaults
+                    and legacy_pitch == 0.5
+                    and legacy_speed == 0.5
+                    and legacy_intonation == 0.5
+                )
+                if missing_key or has_legacy_half_defaults:
+                    existing.default_settings_json = dumps_json_map(merged_defaults)
+                    changed = True
 
             if changed:
                 updated += 1

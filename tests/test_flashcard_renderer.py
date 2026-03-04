@@ -64,6 +64,27 @@ class FlashcardRendererTests(unittest.TestCase):
         self.assertIn("/media/proxy/audio-1", rendered["front_html"])
         self.assertIn("/media/proxy/image-1", rendered["front_html"])
 
+    def test_media_filename_reference_resolves_attached_asset(self):
+        template = self._template("{{{Word_Audio}}}")
+        fields = [self._field("Word_Audio", "audio")]
+        media_assets = [SimpleNamespace(id="asset-a", filename="voicevox-001.wav")]
+
+        rendered_a = render_template_pair(
+            template=template,
+            field_defs=fields,
+            field_values={"Word_Audio": "voicevox-001.wav"},
+            media_assets=media_assets,
+        )
+        self.assertIn("/media/proxy/asset-a", rendered_a["front_html"])
+
+        rendered_b = render_template_pair(
+            template=template,
+            field_defs=fields,
+            field_values={"Word_Audio": "[sound:voicevox-001.wav]"},
+            media_assets=media_assets,
+        )
+        self.assertIn("/media/proxy/asset-a", rendered_b["front_html"])
+
     def test_preview_media_token_renders_placeholder_box(self):
         template = self._template("{{Word}} {{{image}}}")
         fields = [self._field("Word"), self._field("image", "image")]
@@ -108,6 +129,23 @@ class FlashcardRendererTests(unittest.TestCase):
         self.assertIn("<img", html)
         self.assertIn("diagram-html", html)
         self.assertIn("<script>", html)
+
+    def test_inline_script_can_be_deferred_when_enabled(self):
+        template = self._template("<div>{{Word}}</div><script>window.__defer_test__=1;</script>")
+        fields = [self._field("Word", "text")]
+        rendered = render_template_pair(
+            template=template,
+            field_defs=fields,
+            field_values={"Word": "犬"},
+            media_assets=[],
+            allow_inline_script=True,
+            defer_inline_script=True,
+        )
+        html = rendered["front_html"]
+        self.assertIn("window.__defer_test__=1;", html)
+        self.assertIn('data-flama-inline-script="1"', html)
+        self.assertIn('type="application/x-flama-note-script"', html)
+        self.assertNotIn("<script>window.__defer_test__=1;</script>", html)
 
     def test_auto_split_attribute_is_preserved(self):
         template = self._template('<div auto-split>{{Word}}</div>')

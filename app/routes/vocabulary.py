@@ -2,17 +2,24 @@
 
 from __future__ import annotations
 
+import hashlib
+import io
+import re
 from datetime import datetime
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Dict, List
+from uuid import uuid4
 
 from flask import (
     Blueprint,
     abort,
+    current_app,
     flash,
     jsonify,
     redirect,
     render_template,
+    send_file,
     request,
     url_for,
 )
@@ -20,6 +27,7 @@ from flask_login import current_user, login_required
 from sqlalchemy import func, or_
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import aliased, selectinload
+from werkzeug.utils import secure_filename
 
 from app.repositories import vocabulary_repository as vocabulary_ctrl
 from app.repositories.deck_tree_query import collect_subtree_ids as _collect_deck_subtree_ids
@@ -36,6 +44,7 @@ from app.repositories.study_repository import (
 )
 from app.utils.deck_move_token import parse_deck_move_token
 from app.utils.permissions import is_admin_user
+from app.services import tts_provider_service
 from app.services.anki_scheduler import (
     computeAnswerPreview,
     default_deck_options,
@@ -54,6 +63,8 @@ from models.deck import Deck
 from models.card_progress import CardProgress
 
 vocabulary_bp = Blueprint("vocabulary", __name__, url_prefix="/vocabulary")
+_VOICEVOX_TEMPLATE_TOKEN_RE = re.compile(r"\{\{\s*([a-zA-Z0-9_]+)\s*\}\}")
+_AUDIO_FILE_EXT_RE = re.compile(r"\.(mp3|wav|ogg|opus|flac|m4a|aac|webm)(?:\?.*)?$", re.IGNORECASE)
 
 
 @vocabulary_bp.before_request
@@ -78,6 +89,9 @@ def restrict_non_admin_routes():
         "vocabulary.browse_api_decks",
         "vocabulary.browse_api_notes",
         "vocabulary.browse_api_update_note",
+        "vocabulary.browse_api_voicevox_preview",
+        "vocabulary.browse_api_voicevox_precheck",
+        "vocabulary.browse_api_voicevox_generate",
         "vocabulary.delete_deck",
         "vocabulary.reset_deck",
     }
@@ -160,6 +174,102 @@ def _normalize_tags_payload(raw_tags) -> list[str]:
     return []
 
 
+def _to_bool(value: object) -> bool:
+    if isinstance(value, bool):
+        return value
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on", "y"}
+
+
+def _collect_note_media_refs(note_obj: Note | None) -> set[str]:
+    refs: set[str] = set()
+    if note_obj is None:
+        return refs
+    for asset in note_obj.media_assets or []:
+        asset_id = str(getattr(asset, "id", "") or "").strip()
+        if asset_id:
+            refs.add(asset_id)
+            refs.add(f"/media/proxy/{asset_id}")
+        filename = str(getattr(asset, "filename", "") or "").strip()
+        if filename:
+            refs.add(filename)
+            refs.add(f"[sound:{filename}]")
+    return refs
+
+
+def _strip_richtext_to_plain(raw_value: object) -> str:
+    text = str(raw_value or "")
+    no_tags = re.sub(r"(?is)<[^>]+>", " ", text)
+    normalized = " ".join(no_tags.replace("&nbsp;", " ").split())
+    return normalized.strip()
+
+
+def _slug_filename_component(raw_value: object, *, fallback: str, max_len: int = 80) -> str:
+    raw_text = str(raw_value or "").strip()
+    if not raw_text:
+        return fallback
+    safe = secure_filename(raw_text).strip("._-")
+    if not safe:
+        safe = fallback
+    return safe[:max_len] or fallback
+
+
+def _render_voicevox_filename(
+    *,
+    template: str,
+    extension: str,
+    speaker_label: str,
+    style_label: str,
+    note_id: str,
+    sequence: int,
+) -> str:
+    token_values = {
+        "speaker": _slug_filename_component(speaker_label, fallback="speaker"),
+        "style": _slug_filename_component(style_label, fallback="style"),
+        "uid": uuid4().hex[:12],
+        "note_id": _slug_filename_component(note_id, fallback="note", max_len=36),
+        "index": str(int(sequence)),
+        "date": datetime.utcnow().strftime("%Y%m%d"),
+        "timestamp": datetime.utcnow().strftime("%Y%m%d%H%M%S"),
+    }
+    raw_template = str(template or "").strip() or "VOICEVOX-{{speaker}}_{{style}}_{{uid}}"
+
+    def _replace_token(match: re.Match[str]) -> str:
+        key = str(match.group(1) or "").strip().lower()
+        return token_values.get(key, "")
+
+    rendered = _VOICEVOX_TEMPLATE_TOKEN_RE.sub(_replace_token, raw_template).strip()
+    base_name = secure_filename(rendered).strip("._-")
+    if not base_name:
+        base_name = f"voicevox_{token_values['uid']}"
+    ext = _slug_filename_component(extension, fallback="wav", max_len=10).lstrip(".")
+    return f"{base_name}.{ext}"
+
+
+def _looks_like_audio_token(raw_value: object) -> bool:
+    token = str(raw_value or "").strip()
+    if not token:
+        return False
+    token_lower = token.lower()
+    if token_lower.startswith("[sound:") and token.endswith("]"):
+        return True
+    if "<audio" in token_lower or token_lower.startswith("/media/proxy/"):
+        return True
+    if _AUDIO_FILE_EXT_RE.search(token_lower):
+        return True
+    return False
+
+
+def _is_audio_like_field_value(raw_value: object) -> bool:
+    text = str(raw_value or "").strip()
+    if not text:
+        return False
+
+    chunks = [line.strip() for line in re.split(r"[\r\n]+", text) if line and line.strip()]
+    if not chunks:
+        return False
+    return all(_looks_like_audio_token(chunk) for chunk in chunks)
+
+
 def _apply_clone_overlay_to_browse_payload(
     *,
     payload: dict,
@@ -228,7 +338,7 @@ def _apply_clone_overlay_to_browse_payload(
             note_payload["deck_id"] = int(local_deck_id)
         note_payload["deck_name"] = local_deck_name
 
-    fields_payload = []
+    note_type_fields_payload = []
     for field_def in ordered_defs:
         field_name = str(getattr(field_def, "name", "") or "").strip()
         if not field_name:
@@ -237,7 +347,7 @@ def _apply_clone_overlay_to_browse_payload(
             field_position = int(getattr(field_def, "position", 0) or 0)
         except (TypeError, ValueError):
             field_position = 0
-        fields_payload.append(
+        note_type_fields_payload.append(
             {
                 "name": field_name,
                 "field_type": str(getattr(field_def, "field_type", "text") or "text"),
@@ -245,7 +355,8 @@ def _apply_clone_overlay_to_browse_payload(
                 "position": field_position,
             }
         )
-    existing_names = {field_def["name"] for field_def in fields_payload}
+    fields_payload = list(note_type_fields_payload)
+    existing_names = {field_def["name"] for field_def in note_type_fields_payload}
     for key in normalized_values:
         if key in existing_names:
             continue
@@ -259,6 +370,7 @@ def _apply_clone_overlay_to_browse_payload(
         )
     fields_payload.sort(key=lambda item: (int(item["position"]), item["name"].lower()))
     payload["fields"] = fields_payload
+    payload["note_type_fields"] = note_type_fields_payload
     return payload
 
 
@@ -639,7 +751,7 @@ def browse_api_card_update(card_id: str):
             return jsonify({"error": "Card not found"}), 404
 
     payload = request.get_json(silent=True) or {}
-    note_media_ids = {asset.id for asset in (note_obj.media_assets or []) if asset.id}
+    note_media_ids = _collect_note_media_refs(note_obj)
     try:
         validated = validate_browse_card_update_request(
             note_type=note_type_obj,
@@ -652,8 +764,6 @@ def browse_api_card_update(card_id: str):
             jsonify({"error": str(exc), "field": exc.field, "code": exc.code}),
             exc.status,
         )
-
-    field_values = validated.field_values
 
     if clone_scope is not None and not is_admin_user(current_user):
         mapped_local_deck_id = (
@@ -745,7 +855,11 @@ def browse_api_card_update(card_id: str):
     if validated.update_tags:
         note_obj.tags = validated.tags
 
-    note_obj.field_values = field_values
+    if validated.field_updates:
+        next_values = dict(note_obj.field_values or {})
+        for key_name, value in validated.field_updates.items():
+            next_values[key_name] = value
+        note_obj.field_values = next_values
     db.session.commit()
 
     deck_lookup = {
@@ -765,6 +879,424 @@ def browse_api_card_update(card_id: str):
             "success": True,
             "row": vocabulary_ctrl.build_browse_row(card_obj, deck_lookup, now, progress_obj=progress),
             "detail": vocabulary_ctrl.build_browse_card_detail(card_obj, deck_lookup, now, progress_obj=progress),
+        }
+    )
+
+
+@vocabulary_bp.route("/api/browse/voicevox/preview", methods=["POST"])
+@login_required
+def browse_api_voicevox_preview():
+    provider = tts_provider_service.find_provider_by_type(
+        tts_provider_service.VOICEVOX_PROVIDER_TYPE,
+        include_inactive=False,
+    )
+    if provider is None:
+        return jsonify({"error": "Provider không tồn tại hoặc đang bị tắt."}), 404
+
+    body = request.get_json(silent=True) or {}
+    if not isinstance(body, dict):
+        return jsonify({"error": "Payload phải là JSON object."}), 400
+
+    settings_payload = body.get("settings")
+    if settings_payload is not None and not isinstance(settings_payload, dict):
+        return jsonify({"error": "settings phải là JSON object."}), 400
+
+    character_id = str(body.get("character_id") or "").strip()
+    text = str(body.get("text") or "").strip()
+    api_key_override = str(body.get("api_key") or "").strip() or None
+    use_opus = _to_bool(body.get("use_opus"))
+
+    synth_result, errors, warnings = tts_provider_service.synthesize_voicevox_audio_for_user(
+        db.session,
+        user_id=current_user.id,
+        provider=provider,
+        text=text,
+        character_id=character_id,
+        settings_payload=settings_payload,
+        api_key_override=api_key_override,
+        use_opus=use_opus,
+    )
+    if errors or synth_result is None:
+        return jsonify({"error": "; ".join(errors or ["Không tạo được preview audio."])}), 400
+
+    response = send_file(
+        io.BytesIO(synth_result.content),
+        mimetype=synth_result.mime_type,
+        as_attachment=False,
+        download_name=f"voicevox-preview.{synth_result.extension}",
+        max_age=0,
+    )
+    if warnings:
+        response.headers["X-VoiceVox-Warnings"] = " | ".join(warnings)[:500]
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
+
+
+@vocabulary_bp.route("/api/browse/voicevox/precheck", methods=["POST"])
+@login_required
+def browse_api_voicevox_precheck():
+    from models.flashcard import NoteType
+
+    body = request.get_json(silent=True) or {}
+    if not isinstance(body, dict):
+        return jsonify({"error": "Payload phải là JSON object."}), 400
+
+    raw_card_ids = body.get("card_ids")
+    if not isinstance(raw_card_ids, list):
+        return jsonify({"error": "card_ids phải là mảng."}), 400
+
+    destination_field = str(body.get("destination_field") or "").strip()
+    if not destination_field:
+        return jsonify({"error": "destination_field là bắt buộc."}), 400
+
+    card_ids: list[str] = []
+    seen_card_ids: set[str] = set()
+    for raw_id in raw_card_ids:
+        card_id = str(raw_id or "").strip()
+        if not card_id or card_id in seen_card_ids:
+            continue
+        seen_card_ids.add(card_id)
+        card_ids.append(card_id)
+    if not card_ids:
+        return jsonify({"warning": False, "count": 0, "items": [], "mixed_note_types": False, "note_type_count": 0})
+
+    query = (
+        Card.query.join(Note, Card.note_id == Note.id)
+        .filter(Card.id.in_(card_ids))
+        .options(
+            selectinload(Card.note)
+            .selectinload(Note.note_type)
+            .selectinload(NoteType.field_defs),
+        )
+    )
+    if not is_admin_user(current_user):
+        query = query.filter(Note.user_id == current_user.id)
+
+    cards = query.all()
+    if not cards:
+        return jsonify({"warning": False, "count": 0, "items": [], "mixed_note_types": False, "note_type_count": 0})
+
+    card_order = {card_id: index for index, card_id in enumerate(card_ids)}
+    ordered_cards = sorted(cards, key=lambda item: card_order.get(item.id, 1_000_000))
+
+    seen_note_ids: set[str] = set()
+    note_type_ids: set[str] = set()
+    warning_items: list[dict] = []
+    for card_obj in ordered_cards:
+        note_obj = card_obj.note
+        if note_obj is None or note_obj.id in seen_note_ids:
+            continue
+        seen_note_ids.add(note_obj.id)
+        note_type_ids.add(str(note_obj.note_type_id or "__missing__").strip() or "__missing__")
+
+        field_defs = {
+            str(field_def.name or "").strip(): field_def
+            for field_def in (note_obj.note_type.field_defs if note_obj.note_type else [])
+            if str(field_def.name or "").strip()
+        }
+        destination_def = field_defs.get(destination_field)
+        if destination_def is None:
+            continue
+
+        note_values = dict(note_obj.field_values or {})
+        existing_value = str(note_values.get(destination_field) or "").strip()
+        if not existing_value or _is_audio_like_field_value(existing_value):
+            continue
+
+        warning_items.append(
+            {
+                "note_id": note_obj.id,
+                "field_name": destination_field,
+                "field_type": str(destination_def.field_type or "text"),
+                "sample": existing_value[:120],
+            }
+        )
+
+    return jsonify(
+        {
+            "warning": bool(warning_items),
+            "count": len(warning_items),
+            "items": warning_items[:5],
+            "mixed_note_types": len(note_type_ids) > 1,
+            "note_type_count": len(note_type_ids),
+        }
+    )
+
+
+@vocabulary_bp.route("/api/browse/voicevox/generate", methods=["POST"])
+@login_required
+def browse_api_voicevox_generate():
+    from models.flashcard import MediaAsset, NoteType
+
+    provider = tts_provider_service.find_provider_by_type(
+        tts_provider_service.VOICEVOX_PROVIDER_TYPE,
+        include_inactive=False,
+    )
+    if provider is None:
+        return jsonify({"error": "Provider không tồn tại hoặc đang bị tắt."}), 404
+
+    body = request.get_json(silent=True) or {}
+    if not isinstance(body, dict):
+        return jsonify({"error": "Payload phải là JSON object."}), 400
+
+    raw_card_ids = body.get("card_ids")
+    if not isinstance(raw_card_ids, list):
+        return jsonify({"error": "card_ids phải là mảng."}), 400
+
+    card_ids: list[str] = []
+    seen_card_ids: set[str] = set()
+    for raw_id in raw_card_ids:
+        card_id = str(raw_id or "").strip()
+        if not card_id or card_id in seen_card_ids:
+            continue
+        seen_card_ids.add(card_id)
+        card_ids.append(card_id)
+    if not card_ids:
+        return jsonify({"error": "Không có card nào được chọn để tạo audio."}), 400
+
+    source_field = str(body.get("source_field") or "").strip()
+    destination_field = str(body.get("destination_field") or "").strip()
+    character_id = str(body.get("character_id") or "").strip()
+    if not source_field:
+        return jsonify({"error": "source_field là bắt buộc."}), 400
+    if not destination_field:
+        return jsonify({"error": "destination_field là bắt buộc."}), 400
+    if not character_id:
+        return jsonify({"error": "character_id là bắt buộc."}), 400
+
+    settings_payload = body.get("settings")
+    if settings_payload is not None and not isinstance(settings_payload, dict):
+        return jsonify({"error": "settings phải là JSON object."}), 400
+
+    append_audio = _to_bool(body.get("append_audio"))
+    use_opus = _to_bool(body.get("use_opus"))
+    filename_template = str(body.get("filename_template") or "").strip()
+    speaker_label = str(body.get("speaker_label") or character_id).strip()
+    style_label = str(body.get("style_label") or "").strip()
+    api_key_override = str(body.get("api_key") or "").strip() or None
+
+    query = (
+        Card.query.join(Note, Card.note_id == Note.id)
+        .filter(Card.id.in_(card_ids))
+        .options(
+            selectinload(Card.note)
+            .selectinload(Note.note_type)
+            .selectinload(NoteType.field_defs),
+            selectinload(Card.note).selectinload(Note.media_assets),
+        )
+    )
+    if not is_admin_user(current_user):
+        query = query.filter(Note.user_id == current_user.id)
+
+    cards = query.all()
+    if not cards:
+        return jsonify({"error": "Không tìm thấy card hợp lệ để tạo audio."}), 404
+
+    card_order = {card_id: index for index, card_id in enumerate(card_ids)}
+    ordered_cards = sorted(cards, key=lambda item: card_order.get(item.id, 1_000_000))
+
+    selected_notes: list[Note] = []
+    seen_note_ids: set[str] = set()
+    for card_obj in ordered_cards:
+        note_obj = card_obj.note
+        if note_obj is None or note_obj.id in seen_note_ids:
+            continue
+        seen_note_ids.add(note_obj.id)
+        selected_notes.append(note_obj)
+
+    if not selected_notes:
+        return jsonify({"error": "Không có note hợp lệ để tạo audio."}), 400
+
+    selected_note_type_ids: set[str] = {
+        str(note_obj.note_type_id or "__missing__").strip() or "__missing__"
+        for note_obj in selected_notes
+    }
+    if len(selected_note_type_ids) > 1:
+        return jsonify(
+            {
+                "error": "Các note được chọn không cùng note_type. Vui lòng chỉ chọn các từ cùng note_type.",
+                "code": "mixed_note_types",
+            }
+        ), 400
+
+    upload_root = Path(current_app.config["FLASHCARD_MEDIA_UPLOAD_ROOT"]).resolve()
+    generated_items: list[dict] = []
+    skipped_items: list[dict] = []
+    warning_items: list[str] = []
+    audio_cache: dict[str, tuple[tts_provider_service.SynthesizedAudioResult, list[str]]] = {}
+    audio_field_append_warned = False
+
+    for sequence, note_obj in enumerate(selected_notes, start=1):
+        field_defs = {
+            str(field_def.name or "").strip(): field_def
+            for field_def in (note_obj.note_type.field_defs if note_obj.note_type else [])
+            if str(field_def.name or "").strip()
+        }
+        source_def = field_defs.get(source_field)
+        destination_def = field_defs.get(destination_field)
+        if source_def is None:
+            skipped_items.append(
+                {
+                    "note_id": note_obj.id,
+                    "reason": f"Note không có source field '{source_field}'.",
+                }
+            )
+            continue
+        if destination_def is None:
+            skipped_items.append(
+                {
+                    "note_id": note_obj.id,
+                    "reason": f"Note không có destination field '{destination_field}'.",
+                }
+            )
+            continue
+
+        note_values = dict(note_obj.field_values or {})
+        source_text_raw = str(note_values.get(source_field) or "").strip()
+        source_text = (
+            _strip_richtext_to_plain(source_text_raw)
+            if str(source_def.field_type or "").strip().lower() == "richtext"
+            else source_text_raw
+        ).strip()
+        if not source_text:
+            skipped_items.append(
+                {
+                    "note_id": note_obj.id,
+                    "reason": "Source field trống.",
+                }
+            )
+            continue
+
+        cache_key = "|".join(
+            [
+                source_text,
+                character_id,
+                "opus" if use_opus else "default",
+                str(settings_payload or {}),
+            ]
+        )
+        cached = audio_cache.get(cache_key)
+        if cached is None:
+            synth_result, errors, warnings = tts_provider_service.synthesize_voicevox_audio_for_user(
+                db.session,
+                user_id=current_user.id,
+                provider=provider,
+                text=source_text,
+                character_id=character_id,
+                settings_payload=settings_payload,
+                api_key_override=api_key_override,
+                use_opus=use_opus,
+            )
+            if errors or synth_result is None:
+                skipped_items.append(
+                    {
+                        "note_id": note_obj.id,
+                        "reason": "; ".join(errors or ["VoiceVox synthesis thất bại."]),
+                    }
+                )
+                continue
+            if warnings:
+                warning_items.extend(warnings)
+            audio_cache[cache_key] = (synth_result, warnings)
+        else:
+            synth_result = cached[0]
+            if cached[1]:
+                warning_items.extend(cached[1])
+
+        sha256 = hashlib.sha256(synth_result.content).hexdigest()
+        existing_asset = MediaAsset.query.filter_by(
+            note_id=note_obj.id,
+            field_name=destination_field,
+            sha256=sha256,
+        ).first()
+
+        if existing_asset is None:
+            filename = _render_voicevox_filename(
+                template=filename_template,
+                extension=synth_result.extension or "wav",
+                speaker_label=speaker_label,
+                style_label=style_label,
+                note_id=note_obj.id,
+                sequence=sequence,
+            )
+            relative_dir = Path("voicevox") / str(current_user.id) / str(note_obj.id)
+            relative_path = relative_dir / filename
+            full_path = (upload_root / relative_path).resolve()
+            counter = 2
+            while full_path.exists():
+                stem = Path(filename).stem
+                suffix = Path(filename).suffix
+                filename = f"{stem}_{counter}{suffix}"
+                relative_path = relative_dir / filename
+                full_path = (upload_root / relative_path).resolve()
+                counter += 1
+
+            full_path.parent.mkdir(parents=True, exist_ok=True)
+            full_path.write_bytes(synth_result.content)
+            existing_asset = MediaAsset(
+                note_id=note_obj.id,
+                field_name=destination_field,
+                filename=filename,
+                mime_type=synth_result.mime_type,
+                storage_path=str(relative_path).replace("\\", "/"),
+                sha256=sha256,
+                size_bytes=len(synth_result.content),
+            )
+            db.session.add(existing_asset)
+            db.session.flush()
+        filename = str(existing_asset.filename or "")
+
+        existing_value = str(note_values.get(destination_field) or "").strip()
+        destination_type = str(destination_def.field_type or "").strip().lower()
+        if append_audio and destination_type != "audio" and existing_value:
+            next_value = f"{existing_value}\n{filename}"
+        else:
+            next_value = filename
+            if append_audio and destination_type == "audio" and existing_value and not audio_field_append_warned:
+                warning_items.append(
+                    "Destination field kiểu audio không hỗ trợ append nhiều dòng, hệ thống đã ghi đè bằng file mới."
+                )
+                audio_field_append_warned = True
+        note_values[destination_field] = next_value
+        note_obj.field_values = note_values
+
+        generated_items.append(
+            {
+                "note_id": note_obj.id,
+                "asset_id": existing_asset.id,
+                "filename": filename,
+                "destination_field": destination_field,
+                "value": next_value,
+                "url": f"/media/proxy/{existing_asset.id}",
+            }
+        )
+
+    try:
+        db.session.commit()
+    except SQLAlchemyError:
+        db.session.rollback()
+        return jsonify({"error": "Không thể lưu kết quả generate audio vào database."}), 500
+
+    unique_warnings = []
+    seen_warnings: set[str] = set()
+    for warning in warning_items:
+        normalized = str(warning or "").strip()
+        if not normalized or normalized in seen_warnings:
+            continue
+        seen_warnings.add(normalized)
+        unique_warnings.append(normalized)
+
+    output_root = str((upload_root / "voicevox" / str(current_user.id)).resolve())
+    return jsonify(
+        {
+            "success": True,
+            "generated_count": len(generated_items),
+            "selected_note_count": len(selected_notes),
+            "skipped_count": len(skipped_items),
+            "items": generated_items,
+            "skipped": skipped_items,
+            "warnings": unique_warnings,
+            "output_root": output_root,
         }
     )
 
@@ -839,7 +1371,7 @@ def browse_api_update_note(note_id: str):
     if note_type_obj is None:
         return jsonify({"error": "Note type not found"}), 404
 
-    note_media_ids = {asset.id for asset in (note_obj.media_assets or []) if asset.id}
+    note_media_ids = _collect_note_media_refs(note_obj)
     try:
         merged_values = validate_legacy_browse_note_update_request(
             note_type=note_type_obj,
@@ -1261,6 +1793,7 @@ def study_deck(deck_id: int):
                     field_values=overlay_field_values,
                     media_assets=selected_card.note.media_assets,
                     allow_inline_script=True,
+                    defer_inline_script=True,
                 )
                 rendered_data = {
                     "front": rendered.get("front_html", ""),

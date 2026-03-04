@@ -163,42 +163,118 @@
             <button type="button" class="btn-close" id="browseVoicevoxModalCloseBtn" aria-label="Close"></button>
           </div>
           <div class="browse-voicevox-modal__body">
-            <div class="browse-voicevox__field">
-              <label for="browseVoicevoxApiKey">ApiKey (user riêng)</label>
-              <input type="text" class="form-control form-control-sm" id="browseVoicevoxApiKey" placeholder="Để trống nếu không đổi key">
-              <div class="small text-muted mt-1" id="browseVoicevoxKeyMeta">Chưa có API key.</div>
-              <div class="form-check mt-2">
-                <input class="form-check-input" type="checkbox" id="browseVoicevoxClearApiKey">
-                <label class="form-check-label" for="browseVoicevoxClearApiKey">Xóa API key đã lưu</label>
+            <div class="browse-voicevox-generate">
+              <div class="browse-voicevox-generate__meta">
+                <span>Selected notes: <strong id="browseVoicevoxSelectedNotes">0</strong></span>
+                <span class="text-muted small" id="browseVoicevoxKeyStatus">Trạng thái key: unknown</span>
+              </div>
+
+              <div class="browse-voicevox-generate__row">
+                <label for="browseVoicevoxSourceField">Source field:</label>
+                <select class="form-select form-select-sm" id="browseVoicevoxSourceField"></select>
+                <label for="browseVoicevoxDestinationField">Destination field:</label>
+                <select class="form-select form-select-sm" id="browseVoicevoxDestinationField"></select>
+              </div>
+
+              <div class="browse-voicevox-generate__row browse-voicevox-generate__row--speaker">
+                <label for="browseVoicevoxCharacter">Speaker:</label>
+                <select class="form-select form-select-sm" id="browseVoicevoxCharacter">
+                  <option value="">Chọn nhân vật</option>
+                </select>
+                <label for="browseVoicevoxApiKey">API key:</label>
+                <div class="input-group input-group-sm browse-voicevox-key-input">
+                  <input type="password" class="form-control" id="browseVoicevoxApiKey" autocomplete="off">
+                  <button
+                    type="button"
+                    class="btn browse-voicevox-key-toggle"
+                    id="browseVoicevoxApiKeyToggleBtn"
+                    aria-label="Hiển thị API key"
+                    title="Hiển thị API key"
+                  >
+                    <i class="bi bi-eye" id="browseVoicevoxApiKeyToggleIcon" aria-hidden="true"></i>
+                  </button>
+                </div>
+                <button type="button" class="btn btn-sm browse-voicevox-btn browse-voicevox-btn--preview" id="browseVoicevoxPreviewBtn">
+                  <i class="bi bi-play-fill"></i>
+                  Preview Voice
+                </button>
+              </div>
+
+              <div class="browse-voicevox-generate__checks">
+                <label class="form-check">
+                  <input class="form-check-input" type="checkbox" id="browseVoicevoxAppendAudio">
+                  <span class="form-check-label">Append Audio</span>
+                </label>
+                <label class="form-check">
+                  <input class="form-check-input" type="checkbox" id="browseVoicevoxUseOpus">
+                  <span class="form-check-label">Use opus instead of mp3</span>
+                </label>
+              </div>
+
+              <div class="small text-danger mt-1" id="browseVoicevoxCharacterMeta"></div>
+
+              <audio id="browseVoicevoxPreviewPlayer" class="d-none" preload="none" aria-hidden="true"></audio>
+
+              <div class="browse-voicevox-progress d-none" id="browseVoicevoxProgressWrap">
+                <div class="browse-voicevox-progress__meta">
+                  <strong id="browseVoicevoxProgressText">0/0</strong>
+                  <span id="browseVoicevoxProgressDetail">Thành công 0 | Lỗi 0</span>
+                </div>
+                <div class="progress browse-voicevox-progress__bar-wrap">
+                  <div
+                    class="progress-bar browse-voicevox-progress__bar"
+                    id="browseVoicevoxProgressBar"
+                    role="progressbar"
+                    style="width: 0%;"
+                    aria-valuemin="0"
+                    aria-valuemax="100"
+                    aria-valuenow="0"
+                  ></div>
+                </div>
+              </div>
+
+              <div class="browse-voicevox-failed d-none" id="browseVoicevoxFailedWrap">
+                <div class="browse-voicevox-failed__meta">
+                  <span>Lỗi: <strong id="browseVoicevoxFailedCount">0</strong></span>
+                  <span class="text-muted">Có thể bấm "Tạo lại mục lỗi" sau khi đổi key.</span>
+                </div>
+                <div class="browse-voicevox-failed__list" id="browseVoicevoxFailedList"></div>
+              </div>
+
+              <div class="browse-voicevox-slider">
+                <label for="browseVoicevoxVolumeScale">Volume scale <span id="browseVoicevoxVolumeScaleValue">1.0</span></label>
+                <input type="range" class="form-range" id="browseVoicevoxVolumeScale" min="0" max="2" step="0.01" value="1">
+              </div>
+              <div class="browse-voicevox-slider">
+                <label for="browseVoicevoxPitch">Pitch scale <span id="browseVoicevoxPitchValue">0.0</span></label>
+                <input type="range" class="form-range" id="browseVoicevoxPitch" min="-0.4" max="0.4" step="0.01" value="0">
+              </div>
+              <div class="browse-voicevox-slider">
+                <label for="browseVoicevoxSpeed">Speed scale <span id="browseVoicevoxSpeedValue">1.0</span></label>
+                <input type="range" class="form-range" id="browseVoicevoxSpeed" min="0.1" max="4" step="0.01" value="1">
+              </div>
+              <div class="browse-voicevox-slider">
+                <label for="browseVoicevoxIntonationScale">Intonation scale <span id="browseVoicevoxIntonationScaleValue">1.0</span></label>
+                <input type="range" class="form-range" id="browseVoicevoxIntonationScale" min="0" max="2" step="0.01" value="1">
+              </div>
+              <div class="browse-voicevox-slider">
+                <label for="browseVoicevoxInitialSilenceScale">Initial silence scale <span id="browseVoicevoxInitialSilenceScaleValue">0.1</span></label>
+                <input type="range" class="form-range" id="browseVoicevoxInitialSilenceScale" min="0" max="2" step="0.01" value="0.1">
+              </div>
+              <div class="browse-voicevox-slider">
+                <label for="browseVoicevoxFinalSilenceLength">Final silence length <span id="browseVoicevoxFinalSilenceLengthValue">0.1</span></label>
+                <input type="range" class="form-range" id="browseVoicevoxFinalSilenceLength" min="0" max="2" step="0.01" value="0.1">
               </div>
             </div>
-            <div class="browse-voicevox__field">
-              <label for="browseVoicevoxCharacter">Nhân vật</label>
-              <select class="form-select form-select-sm" id="browseVoicevoxCharacter">
-                <option value="">Chọn nhân vật</option>
-              </select>
-              <div class="small text-muted mt-1" id="browseVoicevoxCharacterMeta">Danh sách nhân vật sẽ tải từ VoiceVox.</div>
-            </div>
-            <div class="browse-voicevox__field">
-              <label for="browseVoicevoxPitch">pitch: <span id="browseVoicevoxPitchValue">0.50</span></label>
-              <input type="range" class="form-range" id="browseVoicevoxPitch" min="0" max="1" step="0.01" value="0.5">
-            </div>
-            <div class="browse-voicevox__field">
-              <label for="browseVoicevoxIntonationScale">intonationScale: <span id="browseVoicevoxIntonationScaleValue">0.50</span></label>
-              <input type="range" class="form-range" id="browseVoicevoxIntonationScale" min="0" max="1" step="0.01" value="0.5">
-            </div>
-            <div class="browse-voicevox__field">
-              <label for="browseVoicevoxSpeed">speed: <span id="browseVoicevoxSpeedValue">0.50</span></label>
-              <input type="range" class="form-range" id="browseVoicevoxSpeed" min="0" max="1" step="0.01" value="0.5">
-            </div>
-            <div class="browse-voicevox__field">
-              <div class="small text-muted" id="browseVoicevoxKeyStatus">Trạng thái key: unknown</div>
-            </div>
           </div>
-          <div class="browse-voicevox-modal__footer d-flex justify-content-end gap-2 p-3 pt-0">
-            <button type="button" class="btn btn-sm btn-outline-secondary" id="browseVoicevoxReloadCharactersBtn">Tải nhân vật</button>
-            <button type="button" class="btn btn-sm btn-outline-secondary" id="browseVoicevoxValidateBtn">Validate key</button>
-            <button type="button" class="btn btn-sm btn-primary" id="browseVoicevoxOkBtn">OK</button>
+          <div class="browse-voicevox-modal__footer">
+            <button type="button" class="btn btn-sm browse-voicevox-btn browse-voicevox-btn--cancel" id="browseVoicevoxCancelBtn">Cancel</button>
+            <div class="browse-voicevox-modal__actions">
+              <button type="button" class="btn btn-sm browse-voicevox-btn browse-voicevox-btn--save" id="browseVoicevoxSaveSettingsBtn">Lưu thiết lập</button>
+              <button type="button" class="btn btn-sm browse-voicevox-btn browse-voicevox-btn--reset" id="browseVoicevoxResetDefaultsBtn">Reset Default</button>
+              <button type="button" class="btn btn-sm browse-voicevox-btn browse-voicevox-btn--retry" id="browseVoicevoxRetryFailedBtn">Tạo lại mục lỗi</button>
+              <button type="button" class="btn btn-sm browse-voicevox-btn browse-voicevox-btn--generate" id="browseVoicevoxGenerateBtn">Generate Audio</button>
+            </div>
           </div>
         </div>
       </div>

@@ -54,6 +54,11 @@ class TtsProviderSeedTests(unittest.TestCase):
             self.assertIn("pitch", default_settings)
             self.assertIn("intonation_scale", default_settings)
             self.assertIn("speed", default_settings)
+            self.assertEqual(default_settings.get("volume_scale"), 1.0)
+            self.assertEqual(default_settings.get("pitch_scale"), 0.0)
+            self.assertEqual(default_settings.get("speed_scale"), 1.0)
+            self.assertEqual(default_settings.get("initial_silence_scale"), 0.1)
+            self.assertEqual(default_settings.get("final_silence_length"), 0.1)
 
     def test_seed_is_idempotent(self):
         with self.app.app_context():

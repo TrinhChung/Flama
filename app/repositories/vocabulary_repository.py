@@ -357,7 +357,7 @@ def build_browse_card_detail(
         else []
     )
 
-    fields = [
+    note_type_fields = [
         {
             "name": field_def.name,
             "field_type": field_def.field_type,
@@ -366,7 +366,8 @@ def build_browse_card_detail(
         }
         for field_def in field_defs
     ]
-    existing_names = {field_def["name"] for field_def in fields}
+    fields = list(note_type_fields)
+    existing_names = {field_def["name"] for field_def in note_type_fields}
     for key in field_values.keys():
         key_str = str(key)
         if key_str in existing_names:
@@ -406,6 +407,7 @@ def build_browse_card_detail(
             "updated_at": note_obj.updated_at.isoformat() if note_obj and note_obj.updated_at else None,
         },
         "fields": fields,
+        "note_type_fields": note_type_fields,
         "media_assets": media_assets,
     }
 
@@ -739,6 +741,7 @@ def render_note_study_flashcard(card_obj: Card | None) -> dict[str, str]:
             media_assets=note_obj.media_assets,
             preview_note_key=note_obj.id,
             allow_inline_script=True,
+            defer_inline_script=True,
         )
         ret["front"] = rendered.get("front_html", "")
         ret["back"] = rendered.get("back_html", "")

@@ -134,6 +134,7 @@ def study_next():
             field_values=render_field_values,
             media_assets=note.media_assets,
             allow_inline_script=True,
+            defer_inline_script=True,
         )
     except TemplateCompileError as exc:
         return _api_error("TEMPLATE_COMPILE_ERROR", str(exc))

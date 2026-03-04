@@ -179,6 +179,52 @@ class FlashcardValidationSecurityTests(unittest.TestCase):
             self.assertIsNotNone(asset)
             self.assertEqual(asset.mime_type, "audio/wav")
 
+    def test_patch_note_accepts_audio_filename_reference(self):
+        note_type = self._create_note_type_with_media()
+        note_id = self._create_note(note_type["id"])
+
+        upload_resp = self.client.post(
+            f"/api/notes/{note_id}/media",
+            data={
+                "field_name": "Sound",
+                "file": (io.BytesIO(_MIN_WAV_BYTES), "voice.wav", "audio/wav"),
+            },
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(upload_resp.status_code, 201)
+
+        patch_resp = self.client.patch(
+            f"/api/notes/{note_id}",
+            json={"field_values": {"Sound": "voice.wav"}},
+        )
+        self.assertEqual(patch_resp.status_code, 200)
+        payload = patch_resp.get_json() or {}
+        values = payload.get("field_values") or {}
+        self.assertEqual(values.get("Sound"), "voice.wav")
+
+    def test_patch_note_accepts_audio_sound_tag_reference(self):
+        note_type = self._create_note_type_with_media()
+        note_id = self._create_note(note_type["id"])
+
+        upload_resp = self.client.post(
+            f"/api/notes/{note_id}/media",
+            data={
+                "field_name": "Sound",
+                "file": (io.BytesIO(_MIN_WAV_BYTES), "voice.wav", "audio/wav"),
+            },
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(upload_resp.status_code, 201)
+
+        patch_resp = self.client.patch(
+            f"/api/notes/{note_id}",
+            json={"field_values": {"Sound": "[sound:voice.wav]"}},
+        )
+        self.assertEqual(patch_resp.status_code, 200)
+        payload = patch_resp.get_json() or {}
+        values = payload.get("field_values") or {}
+        self.assertEqual(values.get("Sound"), "[sound:voice.wav]")
+
     def test_upload_rejects_fake_extension(self):
         note_type = self._create_note_type_with_media()
         note_id = self._create_note(note_type["id"])

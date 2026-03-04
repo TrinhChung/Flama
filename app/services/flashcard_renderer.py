@@ -110,6 +110,11 @@ _HTML_TAG_SPLIT_RE = re.compile(r"(<[^>]+>)")
 _SAFE_BUTTON_ONCLICK_RE = re.compile(
     r"""^\s*document\.getElementById\(\s*['"][A-Za-z0-9_-]+['"]\s*\)\.play\(\)\s*;?\s*$"""
 )
+_SCRIPT_TAG_RE = re.compile(r"(?is)^\s*<script\b([^>]*)>(.*?)</script>\s*$")
+_SCRIPT_TYPE_ATTR_RE = re.compile(
+    r"""\btype\s*=\s*("[^"]*"|'[^']*'|[^\s"'=<>`]+)""",
+    flags=re.IGNORECASE,
+)
 
 
 class TemplateCompileError(ValueError):
@@ -149,11 +154,7 @@ def _extract_inline_scripts(source_html: str) -> tuple[str, list[str]]:
         if re.search(r"\bsrc\s*=", attrs, flags=re.IGNORECASE):
             return ""
         # Keep only optional type attribute; strip everything else.
-        type_match = re.search(
-            r"""\btype\s*=\s*("[^"]*"|'[^']*'|[^\s"'=<>`]+)""",
-            attrs,
-            flags=re.IGNORECASE,
-        )
+        type_match = _SCRIPT_TYPE_ATTR_RE.search(attrs)
         type_attr = f" type={type_match.group(1)}" if type_match else ""
         scripts.append(f"<script{type_attr}>{body}</script>")
         return ""
@@ -189,11 +190,14 @@ def _media_field_used_as_url(field_name: str, template_sources: tuple[str, str] 
     return bool(pattern.search(template_sources[0] or "") or pattern.search(template_sources[1] or ""))
 
 
-def _resolve_media_url(value: Any, media_by_id: dict[str, Any]) -> str:
+def _resolve_media_url(value: Any, media_lookup: dict[str, Any]) -> str:
     if is_field_empty(value):
         return ""
     raw = str(value).strip()
-    asset = media_by_id.get(raw)
+    sound_match = re.match(r"^\[sound:([^\]]+)\]$", raw)
+    if sound_match:
+        raw = sound_match.group(1).strip()
+    asset = media_lookup.get(raw)
     if asset is not None:
         return f"/media/proxy/{asset.id}"
     if raw.startswith("/media/proxy/"):
@@ -223,6 +227,43 @@ def _replace_linebreak_token_in_html_text_nodes(rendered_html: str) -> str:
         else:
             chunks[index] = chunk.replace(LINEBREAK_TOKEN, "\\n")
     return "".join(chunks)
+
+
+def _strip_wrapped_attr_value(raw_value: str) -> str:
+    token = (raw_value or "").strip()
+    if len(token) >= 2 and (
+        (token.startswith('"') and token.endswith('"'))
+        or (token.startswith("'") and token.endswith("'"))
+    ):
+        return token[1:-1]
+    return token
+
+
+def _defer_inline_script_block(script_block: str) -> str:
+    match = _SCRIPT_TAG_RE.match(script_block or "")
+    if not match:
+        return (
+            '<script type="application/x-flama-note-script" '
+            f'data-flama-inline-script="1">{script_block or ""}</script>'
+        )
+
+    attrs = match.group(1) or ""
+    body = match.group(2) or ""
+    type_match = _SCRIPT_TYPE_ATTR_RE.search(attrs)
+    declared_type = (
+        _strip_wrapped_attr_value(type_match.group(1))
+        if type_match is not None
+        else ""
+    )
+    declared_attr = ""
+    if declared_type:
+        escaped_type = html.escape(declared_type, quote=True)
+        declared_attr = f' data-flama-script-type="{escaped_type}"'
+
+    return (
+        '<script type="application/x-flama-note-script" '
+        f'data-flama-inline-script="1"{declared_attr}>{body}</script>'
+    )
 
 
 def _restore_linebreak_token(raw_text: str) -> str:
@@ -284,7 +325,7 @@ def _cache_template(cache_key: str, source: str) -> str:
     return source
 
 
-def _render_media_html(field_type: str, value: Any, field_name: str, media_by_id: dict[str, Any]) -> str:
+def _render_media_html(field_type: str, value: Any, field_name: str, media_lookup: dict[str, Any]) -> str:
     if is_field_empty(value):
         return ""
     raw = str(value).strip()
@@ -312,7 +353,7 @@ def _render_media_html(field_type: str, value: Any, field_name: str, media_by_id
     if field_type in {"image", "diagram"} and raw.startswith("<"):
         return sanitize_html_fragment(raw)
 
-    media_url = _resolve_media_url(raw, media_by_id)
+    media_url = _resolve_media_url(raw, media_lookup)
 
     if not media_url:
         return ""
@@ -331,7 +372,16 @@ def build_render_context(
     template_sources: tuple[str, str] | None = None,
 ) -> dict[str, Any]:
     values = field_values or {}
-    media_by_id = {str(asset.id): asset for asset in (media_assets or [])}
+    media_lookup: dict[str, Any] = {}
+    for asset in media_assets or []:
+        asset_id = str(getattr(asset, "id", "") or "").strip()
+        if asset_id:
+            media_lookup[asset_id] = asset
+            media_lookup[f"/media/proxy/{asset_id}"] = asset
+        filename = str(getattr(asset, "filename", "") or "").strip()
+        if filename:
+            media_lookup.setdefault(filename, asset)
+            media_lookup.setdefault(f"[sound:{filename}]", asset)
     context: dict[str, Any] = {}
 
     for field_def in field_defs:
@@ -341,8 +391,8 @@ def build_render_context(
             context[name] = sanitize_richtext(_normalize_multiline_value(value))
             continue
         if field_def.field_type in {"image", "audio", "diagram"}:
-            media_html = _render_media_html(field_def.field_type, value, name, media_by_id)
-            media_url = _resolve_media_url(value, media_by_id)
+            media_html = _render_media_html(field_def.field_type, value, name, media_lookup)
+            media_url = _resolve_media_url(value, media_lookup)
             if field_def.field_type == "audio" and _media_field_used_as_url(name, template_sources):
                 context[name] = media_url
             else:
@@ -371,9 +421,13 @@ def render_template_pair(
     media_assets: list[Any] | None = None,
     preview_note_key: str | None = None,
     allow_inline_script: bool = False,
+    defer_inline_script: bool = False,
 ) -> dict[str, str]:
     css = sanitize_css(getattr(template, "shared_css", ""))
-    inline_script_mode = "inline-on" if allow_inline_script else "inline-off"
+    if allow_inline_script and defer_inline_script:
+        inline_script_mode = "inline-on-deferred"
+    else:
+        inline_script_mode = "inline-on" if allow_inline_script else "inline-off"
     preview_key = None
     if preview_note_key:
         preview_hash = hashlib.sha256(
@@ -395,11 +449,13 @@ def render_template_pair(
     back_source_raw = getattr(template, "back_html", "")
     front_source_prepared = _upgrade_media_double_brace_tokens(front_source_raw, field_defs)
     back_source_prepared = _upgrade_media_double_brace_tokens(back_source_raw, field_defs)
-    front_script_sources: list[str] = []
-    back_script_sources: list[str] = []
-    if allow_inline_script:
-        front_source_prepared, front_script_sources = _extract_inline_scripts(front_source_prepared)
-        back_source_prepared, back_script_sources = _extract_inline_scripts(back_source_prepared)
+    # Always strip inline <script> blocks before bleach cleaning.
+    # When allow_inline_script=True we re-attach sanitized script blocks after rendering.
+    front_source_prepared, front_script_sources = _extract_inline_scripts(front_source_prepared)
+    back_source_prepared, back_script_sources = _extract_inline_scripts(back_source_prepared)
+    if not allow_inline_script:
+        front_script_sources = []
+        back_script_sources = []
 
     context = build_render_context(
         field_defs,
@@ -427,8 +483,12 @@ def render_template_pair(
     safe_front = sanitize_html_fragment(front_rendered)
     safe_back = sanitize_html_fragment(back_rendered)
     if allow_inline_script:
-        safe_front = f"{safe_front}{''.join(front_scripts)}"
-        safe_back = f"{safe_back}{''.join(back_scripts)}"
+        if defer_inline_script:
+            safe_front = f"{safe_front}{''.join(_defer_inline_script_block(item) for item in front_scripts)}"
+            safe_back = f"{safe_back}{''.join(_defer_inline_script_block(item) for item in back_scripts)}"
+        else:
+            safe_front = f"{safe_front}{''.join(front_scripts)}"
+            safe_back = f"{safe_back}{''.join(back_scripts)}"
     scoped_front = f"<style>{css}</style>{safe_front}" if css else safe_front
     scoped_back = f"<style>{css}</style>{safe_back}" if css else safe_back
     result = {"front_html": scoped_front, "back_html": scoped_back}

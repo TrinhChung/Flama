@@ -93,6 +93,7 @@ cp .env_example .env
 - `DB_USER`
 - `DB_PASSWORD`
 - `DB_NAME`
+- `FLASHCARD_MEDIA_UPLOAD_ROOT` (khuyến nghị để ngoài repo, ví dụ `../flama_media_storage`)
 
 6. Chạy migration + seed:
 ```bash
@@ -113,6 +114,11 @@ flask --app wsgi.py run --host=0.0.0.0 --port=4789
 # Reseed full DB (đã bao gồm purge + seed)
 bash scripts/reseed_db.sh
 ```
+
+## Lưu ý media/audio
+
+- Mặc định media (bao gồm audio VoiceVox) được lưu ngoài repo tại `../flama_media_storage` để tránh làm nặng git workspace.
+- Có thể đổi bằng biến môi trường `FLASHCARD_MEDIA_UPLOAD_ROOT`.
 
 Các lệnh seed lẻ vẫn còn dùng được, nhưng thường không cần chạy riêng nếu đã dùng `scripts/reseed_db.sh`.
 
