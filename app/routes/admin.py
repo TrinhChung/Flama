@@ -6,15 +6,17 @@ from typing import Any
 
 from flask import Blueprint, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import selectinload
 
 from app.utils.permissions import is_admin_user
 from app.services import admin_service
-from app.validators import RequestValidationError, sanitize_query_text
+from app.services import tts_provider_service
+from app.validators import RequestValidationError, escape_like_pattern, sanitize_query_text
 
 from models import db
+from models.tts_provider_config import TtsProviderConfig
 from models.user import User
 from models.user_permission_audit_log import UserPermissionAuditLog
 from models.user_role import UserRole
@@ -45,8 +47,211 @@ MAX_PAGE_SIZE = 50
 def _ensure_admin_access():
     if is_admin_user(current_user):
         return None
-    flash("Ban khong co quyen truy cap trang quan ly user.", "warning")
+    flash("Ban khong co quyen truy cap trang quan tri.", "warning")
     return redirect(url_for("main.dashboard"))
+
+
+@admin_bp.route("/tts-providers", methods=["GET", "POST"])
+@login_required
+def tts_provider_management_page():
+    def _redirect_with_state():
+        next_path = (request.form.get("next") or "").strip()
+        if next_path.startswith("/admin/tts-providers"):
+            return redirect(next_path)
+        return redirect(url_for("admin.tts_provider_management_page"))
+
+    def _flash_form_errors(errors: list[str]) -> None:
+        for message in errors:
+            flash(message, "danger")
+
+    def _query_duplicate(
+        *,
+        provider_type: str,
+        exclude_id: int | None = None,
+    ) -> TtsProviderConfig | None:
+        query = TtsProviderConfig.query.filter(
+            func.lower(TtsProviderConfig.provider_type) == provider_type.lower(),
+        )
+        if exclude_id is not None:
+            query = query.filter(TtsProviderConfig.id != exclude_id)
+        return query.first()
+
+    def _build_filtered_query(*, search_term: str, active_filter: str, provider_type_filter: str):
+        query = TtsProviderConfig.query
+        if search_term:
+            escaped = escape_like_pattern(search_term)
+            like_pattern = f"%{escaped}%"
+            query = query.filter(
+                or_(
+                    TtsProviderConfig.provider_name.ilike(like_pattern, escape="\\"),
+                    TtsProviderConfig.provider_type.ilike(like_pattern, escape="\\"),
+                )
+            )
+
+        if active_filter == "active":
+            query = query.filter(TtsProviderConfig.is_active.is_(True))
+        elif active_filter == "inactive":
+            query = query.filter(TtsProviderConfig.is_active.is_(False))
+
+        if provider_type_filter:
+            query = query.filter(TtsProviderConfig.provider_type == provider_type_filter)
+
+        return query
+
+    guard = _ensure_admin_access()
+    if guard is not None:
+        return guard
+
+    if request.method == "POST":
+        action = (request.form.get("action") or "").strip().lower()
+        if action == "create":
+            payload, errors = tts_provider_service.parse_provider_form_payload(
+                request.form,
+                for_update=False,
+            )
+            if errors:
+                _flash_form_errors(errors)
+                return _redirect_with_state()
+
+            duplicate = _query_duplicate(
+                provider_type=payload.provider_type,
+            )
+            if duplicate is not None:
+                flash("Đã tồn tại cấu hình dùng chung cho provider_type này.", "warning")
+                return _redirect_with_state()
+
+            row = TtsProviderConfig(
+                provider_name=payload.provider_name,
+                provider_type=payload.provider_type,
+                base_url=payload.base_url,
+                requires_api_key=payload.requires_api_key,
+                is_active=payload.is_active,
+                shared_config_json=tts_provider_service.dumps_json_map(payload.shared_config),
+                provider_config_json=tts_provider_service.dumps_json_map(payload.provider_config),
+                default_settings_json=tts_provider_service.dumps_json_map(payload.default_settings),
+                created_by_admin_id=current_user.id,
+                updated_by_admin_id=current_user.id,
+            )
+
+            try:
+                db.session.add(row)
+                db.session.commit()
+            except SQLAlchemyError:
+                db.session.rollback()
+                flash("Không thể tạo cấu hình provider. Vui lòng thử lại.", "danger")
+                return _redirect_with_state()
+            flash("Đã tạo cấu hình TTS provider.", "success")
+            return _redirect_with_state()
+
+        if action == "update":
+            row_id = admin_service.coerce_int(request.form.get("id"), default=0, minimum=1)
+            row = db.session.get(TtsProviderConfig, row_id)
+            if row is None:
+                flash("Không tìm thấy bản ghi cần cập nhật.", "danger")
+                return _redirect_with_state()
+
+            payload, errors = tts_provider_service.parse_provider_form_payload(
+                request.form,
+                for_update=True,
+            )
+            if errors:
+                _flash_form_errors(errors)
+                return _redirect_with_state()
+
+            duplicate = _query_duplicate(
+                provider_type=payload.provider_type,
+                exclude_id=row.id,
+            )
+            if duplicate is not None:
+                flash("Đã tồn tại một cấu hình dùng chung với provider_type này.", "warning")
+                return _redirect_with_state()
+
+            row.provider_name = payload.provider_name
+            row.provider_type = payload.provider_type
+            row.base_url = payload.base_url
+            row.requires_api_key = payload.requires_api_key
+            row.is_active = payload.is_active
+            row.shared_config_json = tts_provider_service.dumps_json_map(payload.shared_config)
+            row.provider_config_json = tts_provider_service.dumps_json_map(payload.provider_config)
+            row.default_settings_json = tts_provider_service.dumps_json_map(payload.default_settings)
+            row.updated_by_admin_id = current_user.id
+
+            try:
+                db.session.commit()
+            except SQLAlchemyError:
+                db.session.rollback()
+                flash("Không thể cập nhật cấu hình provider. Vui lòng thử lại.", "danger")
+                return _redirect_with_state()
+            flash("Đã cập nhật cấu hình TTS provider.", "success")
+            return _redirect_with_state()
+
+        if action == "delete":
+            row_id = admin_service.coerce_int(request.form.get("id"), default=0, minimum=1)
+            row = db.session.get(TtsProviderConfig, row_id)
+            if row is None:
+                flash("Không tìm thấy bản ghi để xóa.", "danger")
+                return _redirect_with_state()
+            try:
+                db.session.delete(row)
+                db.session.commit()
+            except SQLAlchemyError:
+                db.session.rollback()
+                flash("Không thể xóa cấu hình provider. Vui lòng thử lại.", "danger")
+                return _redirect_with_state()
+            flash("Đã xóa cấu hình TTS provider.", "success")
+            return _redirect_with_state()
+
+        flash("Action không hợp lệ.", "danger")
+        return _redirect_with_state()
+
+    try:
+        search_term = sanitize_query_text(request.args.get("q"), field_name="q", max_length=120)
+    except RequestValidationError:
+        search_term = ""
+        flash("Bộ lọc tìm kiếm không hợp lệ và đã được bỏ qua.", "warning")
+
+    active_filter = tts_provider_service.normalize_active_filter(request.args.get("active"))
+    provider_type_filter = tts_provider_service.normalize_provider_type_filter(request.args.get("provider_type"))
+
+    rows_query = _build_filtered_query(
+        search_term=search_term,
+        active_filter=active_filter,
+        provider_type_filter=provider_type_filter,
+    )
+    rows = rows_query.order_by(TtsProviderConfig.updated_at.desc(), TtsProviderConfig.id.desc()).all()
+    summary = {
+        "total_count": TtsProviderConfig.query.count(),
+        "active_count": TtsProviderConfig.query.filter(TtsProviderConfig.is_active.is_(True)).count(),
+        "requires_key_count": TtsProviderConfig.query.filter(TtsProviderConfig.requires_api_key.is_(True)).count(),
+        "filtered_count": len(rows),
+    }
+    provider_types = (
+        db.session.query(TtsProviderConfig.provider_type)
+        .distinct()
+        .filter(TtsProviderConfig.provider_type.isnot(None), TtsProviderConfig.provider_type != "")
+        .order_by(TtsProviderConfig.provider_type.asc())
+        .all()
+    )
+    provider_type_options = [value for (value,) in provider_types if value]
+    current_page_url = url_for(
+        "admin.tts_provider_management_page",
+        q=search_term or None,
+        active=active_filter if active_filter != "all" else None,
+        provider_type=provider_type_filter or None,
+    )
+
+    return render_template(
+        "admin/tts_provider_config.html",
+        rows=rows,
+        pretty_json=tts_provider_service.pretty_json,
+        loads_json_map=tts_provider_service.loads_json_map,
+        search_term=search_term,
+        active_filter=active_filter,
+        provider_type_filter=provider_type_filter,
+        provider_type_options=provider_type_options,
+        current_page_url=current_page_url,
+        summary=summary,
+    )
 
 
 @admin_bp.route("/users", methods=["GET"])

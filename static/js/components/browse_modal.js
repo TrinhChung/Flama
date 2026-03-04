@@ -10,15 +10,61 @@
   }
 
   const unsavedModalEl = document.getElementById("browseUnsavedModal");
-  if (!unsavedModalEl) {
+  const bulkDeleteModalEl = document.getElementById("browseBulkDeleteModal");
+  if (!unsavedModalEl || !bulkDeleteModalEl) {
     return;
   }
 
   const modalInstance = window.bootstrap.Modal.getOrCreateInstance(modalEl);
   const unsavedModalInstance = window.bootstrap.Modal.getOrCreateInstance(unsavedModalEl);
+  const bulkDeleteModalInstance = window.bootstrap.Modal.getOrCreateInstance(bulkDeleteModalEl);
+  const VOICEVOX_BATCH_SIZE = 4;
 
   const els = {
     contextLabel: document.getElementById("browseContextLabel"),
+    audioCreateBtn: document.getElementById("browseAudioCreateBtn"),
+    audioCreateMenu: document.getElementById("browseAudioCreateMenu"),
+    voicevoxOptionBtn: document.getElementById("browseVoicevoxOptionBtn"),
+    voicevoxModal: document.getElementById("browseVoicevoxModal"),
+    voicevoxModalBackdrop: document.getElementById("browseVoicevoxModalBackdrop"),
+    voicevoxModalCloseBtn: document.getElementById("browseVoicevoxModalCloseBtn"),
+    voicevoxCancelBtn: document.getElementById("browseVoicevoxCancelBtn"),
+    voicevoxSaveSettingsBtn: document.getElementById("browseVoicevoxSaveSettingsBtn"),
+    voicevoxResetDefaultsBtn: document.getElementById("browseVoicevoxResetDefaultsBtn"),
+    voicevoxRetryFailedBtn: document.getElementById("browseVoicevoxRetryFailedBtn"),
+    voicevoxGenerateBtn: document.getElementById("browseVoicevoxGenerateBtn"),
+    voicevoxPreviewBtn: document.getElementById("browseVoicevoxPreviewBtn"),
+    voicevoxSelectedNotes: document.getElementById("browseVoicevoxSelectedNotes"),
+    voicevoxSourceField: document.getElementById("browseVoicevoxSourceField"),
+    voicevoxDestinationField: document.getElementById("browseVoicevoxDestinationField"),
+    voicevoxAppendAudio: document.getElementById("browseVoicevoxAppendAudio"),
+    voicevoxUseOpus: document.getElementById("browseVoicevoxUseOpus"),
+    voicevoxApiKey: document.getElementById("browseVoicevoxApiKey"),
+    voicevoxApiKeyToggleBtn: document.getElementById("browseVoicevoxApiKeyToggleBtn"),
+    voicevoxApiKeyToggleIcon: document.getElementById("browseVoicevoxApiKeyToggleIcon"),
+    voicevoxPreviewPlayer: document.getElementById("browseVoicevoxPreviewPlayer"),
+    voicevoxKeyStatus: document.getElementById("browseVoicevoxKeyStatus"),
+    voicevoxCharacter: document.getElementById("browseVoicevoxCharacter"),
+    voicevoxCharacterMeta: document.getElementById("browseVoicevoxCharacterMeta"),
+    voicevoxProgressWrap: document.getElementById("browseVoicevoxProgressWrap"),
+    voicevoxProgressText: document.getElementById("browseVoicevoxProgressText"),
+    voicevoxProgressDetail: document.getElementById("browseVoicevoxProgressDetail"),
+    voicevoxProgressBar: document.getElementById("browseVoicevoxProgressBar"),
+    voicevoxFailedWrap: document.getElementById("browseVoicevoxFailedWrap"),
+    voicevoxFailedCount: document.getElementById("browseVoicevoxFailedCount"),
+    voicevoxFailedList: document.getElementById("browseVoicevoxFailedList"),
+    voicevoxVolumeScale: document.getElementById("browseVoicevoxVolumeScale"),
+    voicevoxVolumeScaleValue: document.getElementById("browseVoicevoxVolumeScaleValue"),
+    voicevoxPitch: document.getElementById("browseVoicevoxPitch"),
+    voicevoxIntonationScale: document.getElementById("browseVoicevoxIntonationScale"),
+    voicevoxSpeed: document.getElementById("browseVoicevoxSpeed"),
+    voicevoxInitialSilenceScale: document.getElementById("browseVoicevoxInitialSilenceScale"),
+    voicevoxFinalSilenceLength: document.getElementById("browseVoicevoxFinalSilenceLength"),
+    voicevoxInitialSilenceScaleValue: document.getElementById("browseVoicevoxInitialSilenceScaleValue"),
+    voicevoxFinalSilenceLengthValue: document.getElementById("browseVoicevoxFinalSilenceLengthValue"),
+    voicevoxPitchValue: document.getElementById("browseVoicevoxPitchValue"),
+    voicevoxIntonationScaleValue: document.getElementById("browseVoicevoxIntonationScaleValue"),
+    voicevoxSpeedValue: document.getElementById("browseVoicevoxSpeedValue"),
     refreshBtn: document.getElementById("browseRefreshBtn"),
     deckSearch: document.getElementById("browseDeckSearch"),
     includeSubdecks: document.getElementById("browseIncludeSubdecks"),
@@ -30,7 +76,11 @@
     status: document.getElementById("browseStatusFilter"),
     tag: document.getElementById("browseTagFilter"),
     sortBy: document.getElementById("browseSortBy"),
+    toggleCheckboxModeBtn: document.getElementById("browseToggleCheckboxMode"),
+    bulkDeleteBtn: document.getElementById("browseBulkDeleteBtn"),
     sortDirBtn: document.getElementById("browseSortDirBtn"),
+    selectAllHead: document.getElementById("browseSelectAllHead"),
+    selectAllCheckbox: document.getElementById("browseSelectAllCheckbox"),
     tableWrap: document.getElementById("browseTableWrap"),
     tableBody: document.getElementById("browseTableBody"),
     rowsLoading: document.getElementById("browseRowsLoading"),
@@ -46,6 +96,9 @@
     unsavedCancelBtn: document.getElementById("browseUnsavedCancelBtn"),
     unsavedDiscardBtn: document.getElementById("browseUnsavedDiscardBtn"),
     unsavedSaveBtn: document.getElementById("browseUnsavedSaveBtn"),
+    bulkDeleteMessage: document.getElementById("browseBulkDeleteMessage"),
+    bulkDeleteCancelBtn: document.getElementById("browseBulkDeleteCancelBtn"),
+    bulkDeleteConfirmBtn: document.getElementById("browseBulkDeleteConfirmBtn"),
   };
 
   const state = {
@@ -75,6 +128,8 @@
       by: "due",
       dir: "asc",
     },
+    checkboxMode: false,
+    selectedCardIds: new Set(),
     selectedCardId: null,
     detail: null,
     draft: null,
@@ -86,6 +141,57 @@
     preferredWord: "",
     preferredReading: "",
     preferredSelectionPending: false,
+    voicevox: {
+      characterId: "",
+      sourceField: "",
+      destinationField: "",
+      volumeScale: 1.0,
+      pitchScale: 0.0,
+      speedScale: 1.0,
+      intonationScale: 1.0,
+      initialSilenceScale: 0.1,
+      finalSilenceLength: 0.1,
+      appendAudio: false,
+      useOpus: false,
+      apiKey: "",
+      apiKeyVisible: false,
+      maskedApiKey: "",
+      sourceFieldOptions: [],
+      destinationFieldOptions: [],
+      outputRoot: "",
+      characters: [],
+      loadingCharacters: false,
+      characterError: "",
+      hasApiKey: false,
+      keyStatus: "unknown",
+      lastValidationError: "",
+      loadedProfile: false,
+      loadingProfile: false,
+      validatingKey: false,
+      savingSettings: false,
+      generating: false,
+      generationMode: "",
+      previewing: false,
+      previewObjectUrl: "",
+      batchSize: VOICEVOX_BATCH_SIZE,
+      progressTotal: 0,
+      progressProcessed: 0,
+      progressGenerated: 0,
+      progressFailed: 0,
+      progressMessage: "",
+      failedNotes: [],
+      defaultSettings: {
+        characterId: "",
+        volumeScale: 1.0,
+        pitchScale: 0.0,
+        speedScale: 1.0,
+        intonationScale: 1.0,
+        initialSilenceScale: 0.1,
+        finalSilenceLength: 0.1,
+      },
+      lastSavedSettingsHash: "",
+      settingsDirty: false,
+    },
   };
 
   function escapeHtml(value) {
@@ -189,6 +295,1263 @@
     if (els.contextLabel) {
       els.contextLabel.textContent = `${contextText} | ${selectedDeckName}`;
     }
+  }
+
+  function clampRange(value, minimum, maximum, fallback) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) {
+      return fallback;
+    }
+    return Math.max(minimum, Math.min(maximum, n));
+  }
+
+  function formatSliderValue(value) {
+    return Number(value).toFixed(1);
+  }
+
+  function clearVoicevoxPreviewObjectUrl() {
+    if (!state.voicevox.previewObjectUrl) {
+      return;
+    }
+    window.URL.revokeObjectURL(state.voicevox.previewObjectUrl);
+    state.voicevox.previewObjectUrl = "";
+  }
+
+  function resetVoicevoxPreviewPlayer() {
+    clearVoicevoxPreviewObjectUrl();
+    if (!els.voicevoxPreviewPlayer) {
+      return;
+    }
+    try {
+      els.voicevoxPreviewPlayer.pause();
+    } catch (error) {
+      // Ignore pause errors from detached/empty media elements.
+    }
+    els.voicevoxPreviewPlayer.removeAttribute("src");
+    try {
+      els.voicevoxPreviewPlayer.load();
+    } catch (error) {
+      // Ignore reload errors from empty media elements.
+    }
+    els.voicevoxPreviewPlayer.classList.add("d-none");
+  }
+
+  function selectedVoicevoxCardIds() {
+    const cardIds = Array.from(state.selectedCardIds);
+    if (!cardIds.length && state.selectedCardId) {
+      cardIds.push(state.selectedCardId);
+    }
+    return cardIds;
+  }
+
+  function chunkArray(values, size) {
+    const batchSize = Math.max(1, Number(size) || 1);
+    const items = Array.isArray(values) ? values : [];
+    const batches = [];
+    for (let index = 0; index < items.length; index += batchSize) {
+      batches.push(items.slice(index, index + batchSize));
+    }
+    return batches;
+  }
+
+  function voicevoxTargetKeyFromIds(noteId, cardId) {
+    const safeNoteId = String(noteId || "").trim();
+    if (safeNoteId) {
+      return `note:${safeNoteId}`;
+    }
+    const safeCardId = String(cardId || "").trim();
+    if (safeCardId) {
+      return `card:${safeCardId}`;
+    }
+    return "";
+  }
+
+  function collectVoicevoxTargetsFromCardIds(cardIds) {
+    const ids = Array.isArray(cardIds) ? cardIds.filter(Boolean) : [];
+    const rowByCardId = new Map(state.rows.map((row) => [String(row.card_id || ""), row]));
+    const targets = [];
+    const seenKeys = new Set();
+
+    for (const rawCardId of ids) {
+      const cardId = String(rawCardId || "").trim();
+      if (!cardId) {
+        continue;
+      }
+      const row = rowByCardId.get(cardId);
+      const noteId = String(row?.note_id || "").trim();
+      const key = voicevoxTargetKeyFromIds(noteId, cardId);
+      if (!key || seenKeys.has(key)) {
+        continue;
+      }
+      seenKeys.add(key);
+      targets.push(
+        {
+          key,
+          cardId,
+          noteId,
+          word: String(row?.word || "").trim(),
+          reading: String(row?.reading || "").trim(),
+        }
+      );
+    }
+    return targets;
+  }
+
+  function dedupeVoicevoxFailedNotes(items) {
+    const rows = Array.isArray(items) ? items : [];
+    const result = [];
+    const keyToIndex = new Map();
+    for (const rawItem of rows) {
+      const item = rawItem && typeof rawItem === "object" ? rawItem : {};
+      const noteId = String(item.noteId || item.note_id || "").trim();
+      const cardId = String(item.cardId || item.card_id || "").trim();
+      const key = String(item.key || voicevoxTargetKeyFromIds(noteId, cardId)).trim();
+      if (!key) {
+        continue;
+      }
+      const next = {
+        key,
+        noteId,
+        cardId,
+        word: String(item.word || "").trim(),
+        reading: String(item.reading || "").trim(),
+        reason: String(item.reason || "Không tạo được audio.").trim() || "Không tạo được audio.",
+      };
+      if (keyToIndex.has(key)) {
+        result[keyToIndex.get(key)] = next;
+      } else {
+        keyToIndex.set(key, result.length);
+        result.push(next);
+      }
+    }
+    return result;
+  }
+
+  function buildVoicevoxFailedNote(target, reason) {
+    const item = target && typeof target === "object" ? target : {};
+    const fallbackReason = String(reason || "").trim() || "Không tạo được audio.";
+    return {
+      key: String(item.key || voicevoxTargetKeyFromIds(item.noteId, item.cardId)),
+      noteId: String(item.noteId || "").trim(),
+      cardId: String(item.cardId || "").trim(),
+      word: String(item.word || "").trim(),
+      reading: String(item.reading || "").trim(),
+      reason: fallbackReason,
+    };
+  }
+
+  function isVoicevoxKeyOrPointError(reason) {
+    const text = String(reason || "").toLowerCase();
+    if (!text) {
+      return false;
+    }
+    return (
+      text.includes("api key") ||
+      text.includes("không hợp lệ") ||
+      text.includes("hết hạn") ||
+      text.includes("không đủ points") ||
+      text.includes("hết points")
+    );
+  }
+
+  function renderVoicevoxProgressAndFailed() {
+    const total = Math.max(0, Number(state.voicevox.progressTotal || 0));
+    const processed = Math.max(0, Math.min(total || Number.MAX_SAFE_INTEGER, Number(state.voicevox.progressProcessed || 0)));
+    const generated = Math.max(0, Number(state.voicevox.progressGenerated || 0));
+    const failed = Math.max(0, Number(state.voicevox.progressFailed || 0));
+    const percent = total > 0 ? Math.max(0, Math.min(100, Math.round((processed / total) * 100))) : 0;
+    const message = String(state.voicevox.progressMessage || "").trim();
+
+    if (els.voicevoxProgressWrap) {
+      const shouldShow = total > 0 || Boolean(message);
+      els.voicevoxProgressWrap.classList.toggle("d-none", !shouldShow);
+    }
+    if (els.voicevoxProgressText) {
+      els.voicevoxProgressText.textContent = `${processed}/${total}`;
+    }
+    if (els.voicevoxProgressDetail) {
+      const detail = `Thành công ${generated} | Lỗi ${failed}`;
+      els.voicevoxProgressDetail.textContent = message ? `${detail} | ${message}` : detail;
+    }
+    if (els.voicevoxProgressBar) {
+      els.voicevoxProgressBar.style.width = `${percent}%`;
+      els.voicevoxProgressBar.setAttribute("aria-valuenow", String(percent));
+    }
+
+    const failedNotes = dedupeVoicevoxFailedNotes(state.voicevox.failedNotes);
+    state.voicevox.failedNotes = failedNotes;
+    const failedCount = failedNotes.length;
+    if (els.voicevoxFailedWrap) {
+      els.voicevoxFailedWrap.classList.toggle("d-none", failedCount === 0);
+    }
+    if (els.voicevoxFailedCount) {
+      els.voicevoxFailedCount.textContent = String(failedCount);
+    }
+    if (els.voicevoxFailedList) {
+      const itemsHtml = failedNotes.slice(0, 8).map((item) => {
+        const head = item.word
+          ? (item.reading ? `${item.word} (${item.reading})` : item.word)
+          : (item.noteId ? `Note ${item.noteId}` : `Card ${item.cardId}`);
+        return `<div class="browse-voicevox-failed__item"><strong>${escapeHtml(head)}</strong>: ${escapeHtml(item.reason)}</div>`;
+      });
+      if (failedCount > 8) {
+        itemsHtml.push(`<div class="browse-voicevox-failed__item">... và ${failedCount - 8} mục lỗi khác</div>`);
+      }
+      els.voicevoxFailedList.innerHTML = itemsHtml.join("");
+    }
+  }
+
+  function updateVoicevoxSelectedNotesLabel() {
+    if (!els.voicevoxSelectedNotes) {
+      return;
+    }
+    const selectedCardIds = selectedVoicevoxCardIds();
+    const noteIds = new Set();
+    const rowMap = new Map(state.rows.map((row) => [row.card_id, row]));
+    for (const cardId of selectedCardIds) {
+      const row = rowMap.get(cardId);
+      const noteId = String(row?.note_id || "");
+      if (noteId) {
+        noteIds.add(noteId);
+      }
+    }
+    if (!noteIds.size && state.detail?.note?.id) {
+      noteIds.add(String(state.detail.note.id));
+    }
+    els.voicevoxSelectedNotes.textContent = String(noteIds.size);
+  }
+
+  function updateVoicevoxValueLabels() {
+    if (els.voicevoxVolumeScaleValue) {
+      els.voicevoxVolumeScaleValue.textContent = formatSliderValue(state.voicevox.volumeScale);
+    }
+    if (els.voicevoxPitchValue) {
+      els.voicevoxPitchValue.textContent = formatSliderValue(state.voicevox.pitchScale);
+    }
+    if (els.voicevoxSpeedValue) {
+      els.voicevoxSpeedValue.textContent = formatSliderValue(state.voicevox.speedScale);
+    }
+    if (els.voicevoxIntonationScaleValue) {
+      els.voicevoxIntonationScaleValue.textContent = formatSliderValue(state.voicevox.intonationScale);
+    }
+    if (els.voicevoxInitialSilenceScaleValue) {
+      els.voicevoxInitialSilenceScaleValue.textContent = formatSliderValue(state.voicevox.initialSilenceScale);
+    }
+    if (els.voicevoxFinalSilenceLengthValue) {
+      els.voicevoxFinalSilenceLengthValue.textContent = formatSliderValue(state.voicevox.finalSilenceLength);
+    }
+  }
+
+  function updateVoicevoxMetaLabels() {
+    updateVoicevoxSelectedNotesLabel();
+
+    if (els.voicevoxKeyStatus) {
+      const statusText = String(state.voicevox.keyStatus || "unknown");
+      const detailText = String(state.voicevox.lastValidationError || "").trim();
+      els.voicevoxKeyStatus.textContent = detailText
+        ? `Trạng thái key: ${statusText} | ${detailText}`
+        : `Trạng thái key: ${statusText}`;
+    }
+
+    if (els.voicevoxCharacterMeta) {
+      if (state.voicevox.characterError) {
+        els.voicevoxCharacterMeta.textContent = state.voicevox.characterError;
+      } else {
+        els.voicevoxCharacterMeta.textContent = "";
+      }
+    }
+    renderVoicevoxProgressAndFailed();
+  }
+
+  function renderVoicevoxCharacterOptions() {
+    if (!els.voicevoxCharacter) {
+      return;
+    }
+    const selected = String(state.voicevox.characterId || "").trim();
+    const options = ['<option value="">Chọn nhân vật</option>'];
+    const characters = Array.isArray(state.voicevox.characters) ? state.voicevox.characters : [];
+    for (const item of characters) {
+      const id = String(item?.id || "").trim();
+      if (!id) {
+        continue;
+      }
+      const label = String(item?.label || id);
+      options.push(`<option value="${escapeHtml(id)}">${escapeHtml(label)}</option>`);
+    }
+    els.voicevoxCharacter.innerHTML = options.join("");
+    if (selected) {
+      els.voicevoxCharacter.value = selected;
+    }
+    if (!selected && characters.length > 0) {
+      const firstId = String(characters[0]?.id || "").trim();
+      if (firstId) {
+        state.voicevox.characterId = firstId;
+        els.voicevoxCharacter.value = firstId;
+      }
+    }
+    if (characters.length > 0 && selected && !els.voicevoxCharacter.value) {
+      state.voicevox.characterId = "";
+    }
+  }
+
+  function renderVoicevoxFieldOptions() {
+    const sourceOptions = Array.isArray(state.voicevox.sourceFieldOptions) ? state.voicevox.sourceFieldOptions : [];
+    const destinationOptions = Array.isArray(state.voicevox.destinationFieldOptions) ? state.voicevox.destinationFieldOptions : [];
+
+    if (els.voicevoxSourceField) {
+      const optionsHtml = sourceOptions.length
+        ? sourceOptions.map((item) => `<option value="${escapeHtml(item.name)}">${escapeHtml(item.label)}</option>`).join("")
+        : '<option value="">(No source field)</option>';
+      els.voicevoxSourceField.innerHTML = optionsHtml;
+      els.voicevoxSourceField.value = String(state.voicevox.sourceField || "");
+      if (sourceOptions.length > 0 && !els.voicevoxSourceField.value) {
+        state.voicevox.sourceField = sourceOptions[0].name;
+        els.voicevoxSourceField.value = state.voicevox.sourceField;
+      }
+    }
+
+    if (els.voicevoxDestinationField) {
+      const optionsHtml = destinationOptions.length
+        ? destinationOptions.map((item) => `<option value="${escapeHtml(item.name)}">${escapeHtml(item.label)}</option>`).join("")
+        : '<option value="">(No destination field)</option>';
+      els.voicevoxDestinationField.innerHTML = optionsHtml;
+      els.voicevoxDestinationField.value = String(state.voicevox.destinationField || "");
+      if (destinationOptions.length > 0 && !els.voicevoxDestinationField.value) {
+        state.voicevox.destinationField = destinationOptions[0].name;
+        els.voicevoxDestinationField.value = state.voicevox.destinationField;
+      }
+    }
+  }
+
+  function syncVoicevoxInputsFromState() {
+    renderVoicevoxCharacterOptions();
+    renderVoicevoxFieldOptions();
+
+    if (els.voicevoxCharacter) {
+      els.voicevoxCharacter.value = String(state.voicevox.characterId || "");
+    }
+    if (els.voicevoxVolumeScale) {
+      els.voicevoxVolumeScale.value = String(state.voicevox.volumeScale);
+    }
+    if (els.voicevoxPitch) {
+      els.voicevoxPitch.value = String(state.voicevox.pitchScale);
+    }
+    if (els.voicevoxSpeed) {
+      els.voicevoxSpeed.value = String(state.voicevox.speedScale);
+    }
+    if (els.voicevoxIntonationScale) {
+      els.voicevoxIntonationScale.value = String(state.voicevox.intonationScale);
+    }
+    if (els.voicevoxInitialSilenceScale) {
+      els.voicevoxInitialSilenceScale.value = String(state.voicevox.initialSilenceScale);
+    }
+    if (els.voicevoxFinalSilenceLength) {
+      els.voicevoxFinalSilenceLength.value = String(state.voicevox.finalSilenceLength);
+    }
+    if (els.voicevoxAppendAudio) {
+      els.voicevoxAppendAudio.checked = Boolean(state.voicevox.appendAudio);
+    }
+    if (els.voicevoxUseOpus) {
+      els.voicevoxUseOpus.checked = Boolean(state.voicevox.useOpus);
+    }
+    if (els.voicevoxApiKey) {
+      els.voicevoxApiKey.value = String(state.voicevox.apiKey || "");
+    }
+    syncVoicevoxApiKeyVisibility();
+    updateVoicevoxValueLabels();
+    updateVoicevoxMetaLabels();
+    renderVoicevoxProgressAndFailed();
+  }
+
+  function syncVoicevoxApiKeyVisibility() {
+    const visible = Boolean(state.voicevox.apiKeyVisible);
+    if (els.voicevoxApiKey) {
+      els.voicevoxApiKey.type = visible ? "text" : "password";
+    }
+    if (els.voicevoxApiKeyToggleIcon) {
+      els.voicevoxApiKeyToggleIcon.classList.toggle("bi-eye", !visible);
+      els.voicevoxApiKeyToggleIcon.classList.toggle("bi-eye-slash", visible);
+    }
+    if (els.voicevoxApiKeyToggleBtn) {
+      const label = visible ? "Ẩn API key" : "Hiển thị API key";
+      els.voicevoxApiKeyToggleBtn.setAttribute("aria-label", label);
+      els.voicevoxApiKeyToggleBtn.setAttribute("title", label);
+    }
+  }
+
+  function voicevoxApiKeyOverrideValue() {
+    const rawValue = String(state.voicevox.apiKey || "").trim();
+    if (!rawValue) {
+      return undefined;
+    }
+    const masked = String(state.voicevox.maskedApiKey || "").trim();
+    if (masked && rawValue === masked) {
+      return undefined;
+    }
+    return rawValue;
+  }
+
+  function buildVoicevoxDefaultSettings(rawSettings) {
+    const settings = rawSettings && typeof rawSettings === "object" ? rawSettings : {};
+    return {
+      characterId: String(settings?.character_id || "").trim(),
+      volumeScale: clampRange(settings?.volume_scale ?? settings?.volumeScale ?? settings?.volume, 0, 2, 1.0),
+      pitchScale: clampRange(settings?.pitch_scale ?? settings?.pitch, -0.4, 0.4, 0.0),
+      speedScale: clampRange(settings?.speed_scale ?? settings?.speed, 0.1, 4.0, 1.0),
+      intonationScale: clampRange(settings?.intonation_scale ?? settings?.intonationScale, 0, 2, 1.0),
+      initialSilenceScale: clampRange(
+        settings?.initial_silence_scale ?? settings?.pre_phoneme_length ?? settings?.prePhonemeLength,
+        0,
+        2,
+        0.1,
+      ),
+      finalSilenceLength: clampRange(
+        settings?.final_silence_length ?? settings?.post_phoneme_length ?? settings?.postPhonemeLength,
+        0,
+        2,
+        0.1,
+      ),
+    };
+  }
+
+  function setVoicevoxActionState() {
+    const loading =
+      state.voicevox.loadingProfile ||
+      state.voicevox.loadingCharacters ||
+      state.voicevox.validatingKey ||
+      state.voicevox.savingSettings ||
+      state.voicevox.generating ||
+      state.voicevox.previewing;
+    const controls = [
+      els.voicevoxCharacter,
+      els.voicevoxSourceField,
+      els.voicevoxDestinationField,
+      els.voicevoxVolumeScale,
+      els.voicevoxPitch,
+      els.voicevoxSpeed,
+      els.voicevoxIntonationScale,
+      els.voicevoxInitialSilenceScale,
+      els.voicevoxFinalSilenceLength,
+      els.voicevoxAppendAudio,
+      els.voicevoxUseOpus,
+      els.voicevoxApiKey,
+      els.voicevoxApiKeyToggleBtn,
+      els.voicevoxCancelBtn,
+      els.voicevoxSaveSettingsBtn,
+      els.voicevoxResetDefaultsBtn,
+    ];
+    for (const control of controls) {
+      if (control) {
+        control.disabled = loading;
+      }
+    }
+    if (els.voicevoxPreviewBtn) {
+      els.voicevoxPreviewBtn.disabled = loading;
+      els.voicevoxPreviewBtn.innerHTML = state.voicevox.previewing || state.voicevox.validatingKey
+        ? '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span>'
+        : '<i class="bi bi-play-fill"></i> Preview Voice';
+    }
+    if (els.voicevoxGenerateBtn) {
+      els.voicevoxGenerateBtn.disabled = loading;
+      const showSpinner = state.voicevox.validatingKey || (state.voicevox.generating && state.voicevox.generationMode !== "retry");
+      els.voicevoxGenerateBtn.innerHTML = showSpinner
+        ? '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span>'
+        : "Generate Audio";
+    }
+    if (els.voicevoxRetryFailedBtn) {
+      const failedCount = Array.isArray(state.voicevox.failedNotes) ? state.voicevox.failedNotes.length : 0;
+      const showSpinner = state.voicevox.generating && state.voicevox.generationMode === "retry";
+      els.voicevoxRetryFailedBtn.disabled = loading || failedCount === 0;
+      els.voicevoxRetryFailedBtn.innerHTML = showSpinner
+        ? '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span>'
+        : "Tạo lại mục lỗi";
+    }
+    if (els.voicevoxSaveSettingsBtn) {
+      els.voicevoxSaveSettingsBtn.disabled = loading;
+      els.voicevoxSaveSettingsBtn.innerHTML = state.voicevox.savingSettings
+        ? '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span>'
+        : "Lưu thiết lập";
+    }
+    renderVoicevoxProgressAndFailed();
+  }
+
+  function hydrateVoicevoxFieldOptionsFromDetail() {
+    const rawNoteTypeFields = Array.isArray(state.detail?.note_type_fields)
+      ? state.detail.note_type_fields
+      : Array.isArray(state.detail?.fields)
+        ? state.detail.fields.filter((field) => Number(field?.position) < 9999)
+        : [];
+    if (!rawNoteTypeFields.length) {
+      return;
+    }
+
+    const sourceCandidates = rawNoteTypeFields
+      .filter((field) => {
+        const kind = String(field?.field_type || "text").toLowerCase();
+        return kind === "text" || kind === "richtext";
+      })
+      .map((field) => ({
+        name: String(field?.name || ""),
+        label: String(field?.name || ""),
+      }))
+      .filter((item) => item.name);
+
+    const destinationCandidates = rawNoteTypeFields
+      .map((field) => ({
+        name: String(field?.name || ""),
+        label: String(field?.name || ""),
+        fieldType: String(field?.field_type || "text").toLowerCase(),
+      }))
+      .filter((item) => item.name);
+
+    if (sourceCandidates.length) {
+      state.voicevox.sourceFieldOptions = sourceCandidates;
+      const hasCurrent = sourceCandidates.some((item) => item.name === state.voicevox.sourceField);
+      if (!hasCurrent) {
+        const preferred = sourceCandidates.find((item) => item.name.toLowerCase() === "word");
+        state.voicevox.sourceField = (preferred || sourceCandidates[0]).name;
+      }
+    }
+
+    if (destinationCandidates.length) {
+      state.voicevox.destinationFieldOptions = destinationCandidates;
+      const hasCurrent = destinationCandidates.some((item) => item.name === state.voicevox.destinationField);
+      if (!hasCurrent) {
+        const preferredAudio = destinationCandidates.find((item) => item.name.toLowerCase() === "word_audio");
+        const firstAudio = destinationCandidates.find((item) => item.fieldType === "audio");
+        state.voicevox.destinationField = (preferredAudio || firstAudio || destinationCandidates[0]).name;
+      }
+    }
+    renderVoicevoxFieldOptions();
+  }
+
+  function applyVoicevoxProfilePayload(payload) {
+    const profile = payload?.profile || {};
+    const defaults = buildVoicevoxDefaultSettings(payload?.provider?.default_settings || {});
+    const settings = profile?.effective_settings || profile?.settings || {};
+    state.voicevox.defaultSettings = defaults;
+
+    state.voicevox.characterId = String(settings?.character_id || defaults.characterId || "").trim();
+    state.voicevox.volumeScale = clampRange(settings?.volume_scale, 0, 2, defaults.volumeScale);
+    state.voicevox.pitchScale = clampRange(settings?.pitch_scale ?? settings?.pitch, -0.4, 0.4, defaults.pitchScale);
+    state.voicevox.speedScale = clampRange(settings?.speed_scale ?? settings?.speed, 0.1, 4.0, defaults.speedScale);
+    state.voicevox.intonationScale = clampRange(settings?.intonation_scale, 0, 2, defaults.intonationScale);
+    state.voicevox.initialSilenceScale = clampRange(
+      settings?.initial_silence_scale,
+      0,
+      2,
+      defaults.initialSilenceScale,
+    );
+    state.voicevox.finalSilenceLength = clampRange(
+      settings?.final_silence_length,
+      0,
+      2,
+      defaults.finalSilenceLength,
+    );
+
+    state.voicevox.hasApiKey = Boolean(profile?.has_api_key);
+    state.voicevox.maskedApiKey = String(profile?.masked_api_key || "").trim();
+    state.voicevox.apiKey = state.voicevox.maskedApiKey;
+    state.voicevox.apiKeyVisible = false;
+    state.voicevox.keyStatus = String(profile?.key_status || "unknown");
+    state.voicevox.lastValidationError = String(profile?.last_validation_error || "");
+    state.voicevox.lastSavedSettingsHash = JSON.stringify(voicevoxProfileSettingsPayload());
+    state.voicevox.settingsDirty = false;
+    syncVoicevoxInputsFromState();
+  }
+
+  async function loadVoicevoxCharacters() {
+    if (state.voicevox.loadingCharacters) {
+      return;
+    }
+    state.voicevox.loadingCharacters = true;
+    state.voicevox.characterError = "";
+    setVoicevoxActionState();
+    updateVoicevoxMetaLabels();
+
+    try {
+      const requestBody = {};
+      const apiKeyOverride = voicevoxApiKeyOverrideValue();
+      if (apiKeyOverride) {
+        requestBody.api_key = apiKeyOverride;
+      }
+      const response = await requestJson("/api/tts/providers/voicevox/voices", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(requestBody),
+      });
+      state.voicevox.characters = Array.isArray(response?.items) ? response.items : [];
+      renderVoicevoxCharacterOptions();
+    } catch (error) {
+      state.voicevox.characters = [];
+      state.voicevox.characterError = String(error?.message || "Không tải được danh sách nhân vật.");
+      renderVoicevoxCharacterOptions();
+    } finally {
+      state.voicevox.loadingCharacters = false;
+      setVoicevoxActionState();
+      updateVoicevoxMetaLabels();
+    }
+  }
+
+  async function ensureVoicevoxProfileLoaded(force = false) {
+    if (state.voicevox.loadingProfile) {
+      return;
+    }
+    if (state.voicevox.loadedProfile && !force) {
+      hydrateVoicevoxFieldOptionsFromDetail();
+      updateVoicevoxSelectedNotesLabel();
+      return;
+    }
+    state.voicevox.loadingProfile = true;
+    setVoicevoxActionState();
+
+    try {
+      const payload = await requestJson("/api/tts/providers/voicevox/profile");
+      applyVoicevoxProfilePayload(payload);
+      state.voicevox.loadedProfile = true;
+      await loadVoicevoxCharacters();
+      hydrateVoicevoxFieldOptionsFromDetail();
+      updateVoicevoxSelectedNotesLabel();
+    } catch (error) {
+      state.voicevox.keyStatus = "unknown";
+      state.voicevox.lastValidationError = String(error?.message || "Không thể tải cấu hình VoiceVox.");
+      updateVoicevoxMetaLabels();
+      window.alert(`Không thể tải cấu hình VoiceVox: ${state.voicevox.lastValidationError}`);
+    } finally {
+      state.voicevox.loadingProfile = false;
+      setVoicevoxActionState();
+    }
+  }
+
+  function voicevoxSettingsPayload() {
+    return {
+      volume_scale: state.voicevox.volumeScale,
+      pitch_scale: state.voicevox.pitchScale,
+      speed_scale: state.voicevox.speedScale,
+      intonation_scale: state.voicevox.intonationScale,
+      initial_silence_scale: state.voicevox.initialSilenceScale,
+      final_silence_length: state.voicevox.finalSilenceLength,
+    };
+  }
+
+  function voicevoxProfileSettingsPayload() {
+    return {
+      character_id: String(state.voicevox.characterId || "").trim(),
+      volume_scale: state.voicevox.volumeScale,
+      pitch_scale: state.voicevox.pitchScale,
+      speed_scale: state.voicevox.speedScale,
+      intonation_scale: state.voicevox.intonationScale,
+      initial_silence_scale: state.voicevox.initialSilenceScale,
+      final_silence_length: state.voicevox.finalSilenceLength,
+    };
+  }
+
+  async function persistVoicevoxSettings({ notify = false } = {}) {
+    if (state.voicevox.loadingProfile || !state.voicevox.loadedProfile) {
+      return false;
+    }
+    if (state.voicevox.savingSettings) {
+      return false;
+    }
+    if (!state.voicevox.settingsDirty) {
+      if (notify) {
+        window.alert("Thiết lập đã được lưu.");
+      }
+      return false;
+    }
+    const settings = voicevoxProfileSettingsPayload();
+    const nextHash = JSON.stringify(settings);
+    if (nextHash === state.voicevox.lastSavedSettingsHash) {
+      state.voicevox.settingsDirty = false;
+      if (notify) {
+        window.alert("Thiết lập đã được lưu.");
+      }
+      return false;
+    }
+    state.voicevox.savingSettings = true;
+    setVoicevoxActionState();
+    try {
+      const payload = await requestJson("/api/tts/providers/voicevox/profile", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ settings }),
+      });
+      state.voicevox.lastSavedSettingsHash = nextHash;
+      state.voicevox.settingsDirty = false;
+      state.voicevox.keyStatus = String(payload?.profile?.key_status || state.voicevox.keyStatus || "unknown");
+      state.voicevox.lastValidationError = String(payload?.profile?.last_validation_error || "");
+      updateVoicevoxMetaLabels();
+      if (notify) {
+        window.alert("Đã lưu thiết lập VoiceVox.");
+      }
+      return true;
+    } catch (error) {
+      if (notify) {
+        window.alert(`Lưu thiết lập thất bại: ${error.message}`);
+      } else {
+        console.warn("VoiceVox settings save failed:", error);
+      }
+      return false;
+    } finally {
+      state.voicevox.savingSettings = false;
+      setVoicevoxActionState();
+    }
+  }
+
+  function resetVoicevoxSettingsToDefault() {
+    const defaults = state.voicevox.defaultSettings || buildVoicevoxDefaultSettings({});
+    state.voicevox.characterId = String(defaults.characterId || "").trim();
+    state.voicevox.volumeScale = defaults.volumeScale;
+    state.voicevox.pitchScale = defaults.pitchScale;
+    state.voicevox.speedScale = defaults.speedScale;
+    state.voicevox.intonationScale = defaults.intonationScale;
+    state.voicevox.initialSilenceScale = defaults.initialSilenceScale;
+    state.voicevox.finalSilenceLength = defaults.finalSilenceLength;
+    state.voicevox.settingsDirty = true;
+    syncVoicevoxInputsFromState();
+    persistVoicevoxSettings({ notify: true }).catch(() => undefined);
+  }
+
+  async function warnIfDestinationContainsNonAudio(cardIds) {
+    const ids = Array.isArray(cardIds) ? cardIds.filter(Boolean) : [];
+    if (!ids.length || !state.voicevox.destinationField) {
+      return true;
+    }
+    try {
+      const payload = await requestJson("/vocabulary/api/browse/voicevox/precheck", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          card_ids: ids,
+          destination_field: state.voicevox.destinationField,
+        }),
+      });
+      if (Boolean(payload?.mixed_note_types)) {
+        window.alert("Không thể generate: các từ đã chọn không cùng note_type. Vui lòng chỉ chọn các từ cùng note_type.");
+        return false;
+      }
+      const warningCount = Number(payload?.count || 0);
+      if (warningCount <= 0) {
+        return true;
+      }
+      const samples = Array.isArray(payload?.items) ? payload.items : [];
+      const sampleText = samples
+        .slice(0, 3)
+        .map((item) => {
+          const noteId = String(item?.note_id || "").trim();
+          const sample = String(item?.sample || "").replace(/\s+/g, " ").trim();
+          return `- Note ${noteId}: ${sample.slice(0, 40)}${sample.length > 40 ? "..." : ""}`;
+        })
+        .join("\n");
+      const detailText = sampleText ? `\n${sampleText}` : "";
+      window.alert(
+        `Cảnh báo: có ${warningCount} note đang có dữ liệu không phải âm thanh trong field '${state.voicevox.destinationField}'.\nHệ thống sẽ tiếp tục generate và ghi đè giá trị cũ.${detailText}`
+      );
+      return true;
+    } catch (error) {
+      // Precheck warning is best-effort; generation should still continue.
+      console.warn("VoiceVox destination precheck failed:", error);
+      return true;
+    }
+  }
+
+  async function validateVoicevoxApiKeyBeforeAction(actionLabel) {
+    if (state.voicevox.validatingKey) {
+      return false;
+    }
+    state.voicevox.validatingKey = true;
+    setVoicevoxActionState();
+    try {
+      const body = {};
+      const apiKeyOverride = voicevoxApiKeyOverrideValue();
+      if (apiKeyOverride) {
+        body.api_key = apiKeyOverride;
+      }
+      const payload = await requestJson("/api/tts/providers/voicevox/validate-key", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+      const validation = payload?.validation || {};
+      const status = String(validation?.status || "unknown").toLowerCase();
+      const valid = Boolean(validation?.valid) && status === "valid";
+      const message = String(validation?.message || "").trim();
+      state.voicevox.keyStatus = status || "unknown";
+      state.voicevox.lastValidationError = valid ? "" : (message || "API key VoiceVox không hợp lệ hoặc đã hết hạn.");
+      updateVoicevoxMetaLabels();
+      if (!valid) {
+        window.alert(`Không thể ${actionLabel}: ${state.voicevox.lastValidationError}`);
+      }
+      return valid;
+    } catch (error) {
+      state.voicevox.keyStatus = "unknown";
+      state.voicevox.lastValidationError = String(error?.message || "Không thể kiểm tra API key VoiceVox.");
+      updateVoicevoxMetaLabels();
+      window.alert(`Không thể ${actionLabel}: ${state.voicevox.lastValidationError}`);
+      return false;
+    } finally {
+      state.voicevox.validatingKey = false;
+      setVoicevoxActionState();
+    }
+  }
+
+  function pickVoicevoxPreviewText() {
+    if (!state.voicevox.sourceField) {
+      return "";
+    }
+    const sourceField = String(state.voicevox.sourceField);
+    const detailValue = String(state.detail?.note?.field_values?.[sourceField] || "").trim();
+    if (detailValue) {
+      return detailValue;
+    }
+
+    const selectedCardIds = selectedVoicevoxCardIds();
+    if (!selectedCardIds.length) {
+      return "";
+    }
+    const selectedCardId = selectedCardIds[0];
+    const selectedRow = state.rows.find((row) => row.card_id === selectedCardId);
+    if (!selectedRow) {
+      return "";
+    }
+    return String(selectedRow.word || "").trim();
+  }
+
+  async function previewVoicevoxAudio() {
+    if (
+      state.voicevox.previewing ||
+      state.voicevox.generating ||
+      state.voicevox.savingSettings ||
+      state.voicevox.loadingProfile ||
+      state.voicevox.validatingKey
+    ) {
+      return;
+    }
+    const characterId = String(state.voicevox.characterId || "").trim();
+    const previewText = pickVoicevoxPreviewText();
+    if (!characterId) {
+      window.alert("Vui lòng chọn Speaker trước khi preview.");
+      return;
+    }
+    if (!previewText) {
+      window.alert("Không có text ở Source field để preview.");
+      return;
+    }
+    const keyValid = await validateVoicevoxApiKeyBeforeAction("preview audio");
+    if (!keyValid) {
+      return;
+    }
+
+    state.voicevox.previewing = true;
+    setVoicevoxActionState();
+    try {
+      const response = await fetch("/vocabulary/api/browse/voicevox/preview", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          text: previewText,
+          character_id: characterId,
+          settings: voicevoxSettingsPayload(),
+          use_opus: Boolean(state.voicevox.useOpus),
+          api_key: voicevoxApiKeyOverrideValue(),
+        }),
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload?.error || "Preview thất bại.");
+      }
+      resetVoicevoxPreviewPlayer();
+      const blob = await response.blob();
+      if (!blob.size) {
+        throw new Error("VoiceVox trả về audio rỗng.");
+      }
+      const blobType = String(blob.type || "").toLowerCase();
+      if (blobType.includes("json") || blobType.includes("text/plain")) {
+        const rawText = await blob.text().catch(() => "");
+        let previewError = rawText.trim();
+        if (previewError) {
+          try {
+            const parsed = JSON.parse(previewError);
+            previewError = String(parsed?.error || parsed?.message || previewError).trim();
+          } catch (parseError) {
+            // Keep raw body text when response is not JSON.
+          }
+        }
+        throw new Error(previewError || "VoiceVox không trả audio hợp lệ cho preview.");
+      }
+      const audioUrl = window.URL.createObjectURL(blob);
+      state.voicevox.previewObjectUrl = audioUrl;
+
+      if (!els.voicevoxPreviewPlayer) {
+        throw new Error("Không tìm thấy audio preview player.");
+      }
+
+      els.voicevoxPreviewPlayer.src = audioUrl;
+      els.voicevoxPreviewPlayer.loop = false;
+      els.voicevoxPreviewPlayer.classList.add("d-none");
+      els.voicevoxPreviewPlayer.addEventListener("ended", () => {
+        resetVoicevoxPreviewPlayer();
+      }, { once: true });
+      try {
+        await els.voicevoxPreviewPlayer.play();
+      } catch (playError) {
+        throw playError;
+      }
+    } catch (error) {
+      window.alert(`Preview VoiceVox thất bại: ${error.message}`);
+    } finally {
+      state.voicevox.previewing = false;
+      setVoicevoxActionState();
+    }
+  }
+
+  function selectedVoiceLabel() {
+    const selectedId = String(state.voicevox.characterId || "");
+    const item = state.voicevox.characters.find((voice) => String(voice?.id || "") === selectedId);
+    if (!item) {
+      return { speaker: selectedId, style: "" };
+    }
+    const label = String(item.label || selectedId);
+    const [speaker, style] = label.split(" - ");
+    return {
+      speaker: String(speaker || selectedId).trim(),
+      style: String(style || "").trim(),
+    };
+  }
+
+  function collectVoicevoxTargetsFromFailedNotes() {
+    const failedNotes = dedupeVoicevoxFailedNotes(state.voicevox.failedNotes);
+    const rowByNoteId = new Map();
+    const rowByCardId = new Map();
+    for (const row of state.rows) {
+      const cardId = String(row.card_id || "").trim();
+      const noteId = String(row.note_id || "").trim();
+      if (cardId) {
+        rowByCardId.set(cardId, row);
+      }
+      if (noteId && !rowByNoteId.has(noteId)) {
+        rowByNoteId.set(noteId, row);
+      }
+    }
+
+    const targets = [];
+    const seenKeys = new Set();
+    for (const failed of failedNotes) {
+      let cardId = String(failed.cardId || "").trim();
+      const noteId = String(failed.noteId || "").trim();
+      if (!cardId && noteId) {
+        cardId = String(rowByNoteId.get(noteId)?.card_id || "").trim();
+      }
+      if (!cardId && String(failed.key || "").startsWith("card:")) {
+        cardId = String(failed.key || "").slice(5).trim();
+      }
+      if (!cardId) {
+        continue;
+      }
+      const row = rowByCardId.get(cardId) || rowByNoteId.get(noteId);
+      const resolvedNoteId = noteId || String(row?.note_id || "").trim();
+      const key = voicevoxTargetKeyFromIds(resolvedNoteId, cardId);
+      if (!key || seenKeys.has(key)) {
+        continue;
+      }
+      seenKeys.add(key);
+      targets.push(
+        {
+          key,
+          cardId,
+          noteId: resolvedNoteId,
+          word: String(failed.word || row?.word || "").trim(),
+          reading: String(failed.reading || row?.reading || "").trim(),
+        }
+      );
+    }
+    return targets;
+  }
+
+  function resetVoicevoxProgressCounters(total, mode) {
+    state.voicevox.progressTotal = Math.max(0, Number(total || 0));
+    state.voicevox.progressProcessed = 0;
+    state.voicevox.progressGenerated = 0;
+    state.voicevox.progressFailed = 0;
+    state.voicevox.progressMessage = mode === "retry" ? "Đang tạo lại mục lỗi..." : "Đang tạo audio...";
+    renderVoicevoxProgressAndFailed();
+  }
+
+  async function runVoicevoxGenerateBatches(targets, mode) {
+    const voiceLabel = selectedVoiceLabel();
+    const safeTargets = Array.isArray(targets) ? targets : [];
+    const batches = chunkArray(safeTargets, state.voicevox.batchSize || VOICEVOX_BATCH_SIZE);
+    const retryKeys = new Set(safeTargets.map((item) => String(item?.key || "")));
+    const failedFromRun = [];
+    let fatalStopReason = "";
+
+    resetVoicevoxProgressCounters(safeTargets.length, mode);
+    if (mode !== "retry") {
+      state.voicevox.failedNotes = [];
+    }
+    renderVoicevoxProgressAndFailed();
+
+    for (let batchIndex = 0; batchIndex < batches.length; batchIndex += 1) {
+      const batchTargets = batches[batchIndex];
+      if (!batchTargets.length) {
+        continue;
+      }
+      const targetByNoteId = new Map();
+      for (const target of batchTargets) {
+        if (target.noteId) {
+          targetByNoteId.set(String(target.noteId), target);
+        }
+      }
+
+      let batchFailed = [];
+      try {
+        const payload = await requestJson("/vocabulary/api/browse/voicevox/generate", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            card_ids: batchTargets.map((item) => item.cardId),
+            source_field: state.voicevox.sourceField,
+            destination_field: state.voicevox.destinationField,
+            character_id: state.voicevox.characterId,
+            settings: voicevoxSettingsPayload(),
+            append_audio: Boolean(state.voicevox.appendAudio),
+            use_opus: Boolean(state.voicevox.useOpus),
+            speaker_label: voiceLabel.speaker,
+            style_label: voiceLabel.style,
+            api_key: voicevoxApiKeyOverrideValue(),
+          }),
+        });
+
+        state.voicevox.outputRoot = String(payload?.output_root || state.voicevox.outputRoot || "");
+        const skipped = Array.isArray(payload?.skipped) ? payload.skipped : [];
+        const usedTargetKeys = new Set();
+        for (const skippedItem of skipped) {
+          const noteId = String(skippedItem?.note_id || "").trim();
+          const target = noteId ? targetByNoteId.get(noteId) : null;
+          if (!target) {
+            continue;
+          }
+          usedTargetKeys.add(target.key);
+          batchFailed.push(buildVoicevoxFailedNote(target, skippedItem?.reason || "Không tạo được audio."));
+        }
+        if (batchFailed.length < skipped.length) {
+          const fallbackTargets = batchTargets.filter((item) => !usedTargetKeys.has(item.key));
+          for (let index = batchFailed.length; index < skipped.length && fallbackTargets.length; index += 1) {
+            const target = fallbackTargets.shift();
+            if (!target) {
+              break;
+            }
+            const skippedItem = skipped[index];
+            batchFailed.push(buildVoicevoxFailedNote(target, skippedItem?.reason || "Không tạo được audio."));
+          }
+        }
+      } catch (error) {
+        const batchReason = String(error?.message || "Generate VoiceVox thất bại.");
+        batchFailed = batchTargets.map((item) => buildVoicevoxFailedNote(item, batchReason));
+      }
+
+      const normalizedBatchFailed = dedupeVoicevoxFailedNotes(batchFailed);
+      failedFromRun.push(...normalizedBatchFailed);
+
+      const batchFailedCount = Math.min(batchTargets.length, normalizedBatchFailed.length);
+      const batchGeneratedCount = Math.max(0, batchTargets.length - batchFailedCount);
+      state.voicevox.progressProcessed += batchTargets.length;
+      state.voicevox.progressGenerated += batchGeneratedCount;
+      state.voicevox.progressFailed += batchFailedCount;
+      state.voicevox.progressMessage = `Batch ${batchIndex + 1}/${batches.length}`;
+      renderVoicevoxProgressAndFailed();
+
+      const keyErrorItem = normalizedBatchFailed.find((item) => isVoicevoxKeyOrPointError(item.reason));
+      if (!keyErrorItem) {
+        continue;
+      }
+
+      fatalStopReason = String(keyErrorItem.reason || "").trim();
+      if (batchIndex < batches.length - 1) {
+        const remainingTargets = batches.slice(batchIndex + 1).flat();
+        const stopReason = fatalStopReason
+          ? `Chưa xử lý do lỗi key/points: ${fatalStopReason}`
+          : "Chưa xử lý do lỗi key/points.";
+        for (const target of remainingTargets) {
+          failedFromRun.push(buildVoicevoxFailedNote(target, stopReason));
+        }
+        state.voicevox.progressProcessed += remainingTargets.length;
+        state.voicevox.progressFailed += remainingTargets.length;
+      }
+      break;
+    }
+
+    if (mode === "retry") {
+      const untouched = dedupeVoicevoxFailedNotes(state.voicevox.failedNotes).filter((item) => !retryKeys.has(item.key));
+      state.voicevox.failedNotes = dedupeVoicevoxFailedNotes(untouched.concat(failedFromRun));
+    } else {
+      state.voicevox.failedNotes = dedupeVoicevoxFailedNotes(failedFromRun);
+    }
+
+    state.voicevox.progressMessage = fatalStopReason ? "Đã dừng sớm vì key/points." : "Hoàn tất.";
+    renderVoicevoxProgressAndFailed();
+
+    const processed = Number(state.voicevox.progressProcessed || 0);
+    const total = Number(state.voicevox.progressTotal || 0);
+    const generated = Number(state.voicevox.progressGenerated || 0);
+    const failed = Number(state.voicevox.progressFailed || 0);
+    let summary = `Đã xử lý ${processed}/${total} từ. Thành công ${generated}, lỗi ${failed}.`;
+    if (failed > 0) {
+      summary += '\nBạn có thể bấm "Tạo lại mục lỗi" sau khi đổi API key.';
+    }
+    if (fatalStopReason) {
+      summary += `\nChi tiết: ${fatalStopReason}`;
+    }
+    window.alert(summary);
+
+    await loadCards({ reset: true, keepSelection: true });
+    if (state.selectedCardId) {
+      await loadCardDetail(state.selectedCardId);
+    }
+    hydrateVoicevoxFieldOptionsFromDetail();
+    updateVoicevoxSelectedNotesLabel();
+  }
+
+  async function generateVoicevoxAudio() {
+    if (
+      state.voicevox.generating ||
+      state.voicevox.loadingProfile ||
+      state.voicevox.previewing ||
+      state.voicevox.savingSettings ||
+      state.voicevox.validatingKey
+    ) {
+      return;
+    }
+    const cardIds = selectedVoicevoxCardIds();
+    if (!cardIds.length) {
+      window.alert("Vui lòng chọn note/card trước khi Generate Audio.");
+      return;
+    }
+    if (!state.voicevox.sourceField || !state.voicevox.destinationField) {
+      window.alert("Vui lòng chọn Source field và Destination field.");
+      return;
+    }
+    if (!state.voicevox.characterId) {
+      window.alert("Vui lòng chọn Speaker.");
+      return;
+    }
+    const targets = collectVoicevoxTargetsFromCardIds(cardIds);
+    if (!targets.length) {
+      window.alert("Không có note hợp lệ để generate audio.");
+      return;
+    }
+    const keyValid = await validateVoicevoxApiKeyBeforeAction("generate audio");
+    if (!keyValid) {
+      return;
+    }
+    const canProceed = await warnIfDestinationContainsNonAudio(targets.map((item) => item.cardId));
+    if (!canProceed) {
+      return;
+    }
+
+    state.voicevox.generating = true;
+    state.voicevox.generationMode = "all";
+    setVoicevoxActionState();
+    try {
+      await runVoicevoxGenerateBatches(targets, "all");
+    } catch (error) {
+      window.alert(`Generate VoiceVox thất bại: ${error.message}`);
+    } finally {
+      state.voicevox.generating = false;
+      state.voicevox.generationMode = "";
+      setVoicevoxActionState();
+    }
+  }
+
+  async function retryFailedVoicevoxAudio() {
+    if (
+      state.voicevox.generating ||
+      state.voicevox.loadingProfile ||
+      state.voicevox.previewing ||
+      state.voicevox.savingSettings ||
+      state.voicevox.validatingKey
+    ) {
+      return;
+    }
+    if (!state.voicevox.sourceField || !state.voicevox.destinationField) {
+      window.alert("Vui lòng chọn Source field và Destination field.");
+      return;
+    }
+    if (!state.voicevox.characterId) {
+      window.alert("Vui lòng chọn Speaker.");
+      return;
+    }
+
+    const targets = collectVoicevoxTargetsFromFailedNotes();
+    if (!targets.length) {
+      window.alert("Không có mục lỗi hợp lệ để tạo lại.");
+      return;
+    }
+
+    const keyValid = await validateVoicevoxApiKeyBeforeAction("tạo lại audio bị lỗi");
+    if (!keyValid) {
+      return;
+    }
+    const canProceed = await warnIfDestinationContainsNonAudio(targets.map((item) => item.cardId));
+    if (!canProceed) {
+      return;
+    }
+
+    state.voicevox.generating = true;
+    state.voicevox.generationMode = "retry";
+    setVoicevoxActionState();
+    try {
+      await runVoicevoxGenerateBatches(targets, "retry");
+    } catch (error) {
+      window.alert(`Tạo lại mục lỗi thất bại: ${error.message}`);
+    } finally {
+      state.voicevox.generating = false;
+      state.voicevox.generationMode = "";
+      setVoicevoxActionState();
+    }
+  }
+
+  function setAudioCreateMenuOpen(open) {
+    if (!els.audioCreateMenu) {
+      return;
+    }
+    els.audioCreateMenu.classList.toggle("d-none", !open);
+  }
+
+  function setVoicevoxModalOpen(open) {
+    if (!els.voicevoxModal) {
+      return;
+    }
+    els.voicevoxModal.classList.toggle("d-none", !open);
+    if (open) {
+      const cardIds = selectedVoicevoxCardIds();
+      if (!state.detail && cardIds.length) {
+        loadCardDetail(cardIds[0]).catch(() => undefined);
+      }
+      hydrateVoicevoxFieldOptionsFromDetail();
+      updateVoicevoxSelectedNotesLabel();
+      renderVoicevoxProgressAndFailed();
+      ensureVoicevoxProfileLoaded(false).catch(() => undefined);
+      return;
+    }
+    persistVoicevoxSettings().catch(() => undefined);
+    resetVoicevoxPreviewPlayer();
+    state.voicevox.apiKeyVisible = false;
+    syncVoicevoxApiKeyVisibility();
+    updateVoicevoxSelectedNotesLabel();
+    renderVoicevoxProgressAndFailed();
   }
 
   function setTreeLoading(loading) {
@@ -341,21 +1704,39 @@
     if (!els.tableBody) {
       return;
     }
+    if (els.selectAllHead) {
+      els.selectAllHead.classList.toggle("d-none", !state.checkboxMode);
+    }
     if (!state.rows.length) {
+      if (els.selectAllCheckbox) {
+        els.selectAllCheckbox.checked = false;
+        els.selectAllCheckbox.indeterminate = false;
+      }
       els.tableBody.innerHTML = `
         <tr>
-          <td colspan="7" class="browse-empty-cell">No cards match current deck/filters.</td>
+          <td colspan="${state.checkboxMode ? "8" : "7"}" class="browse-empty-cell">No cards match current deck/filters.</td>
         </tr>
       `;
       return;
     }
 
+    const loadedSelectedCount = state.rows.filter((row) => state.selectedCardIds.has(row.card_id)).length;
+    if (els.selectAllCheckbox) {
+      els.selectAllCheckbox.checked = loadedSelectedCount > 0 && loadedSelectedCount === state.rows.length;
+      els.selectAllCheckbox.indeterminate = loadedSelectedCount > 0 && loadedSelectedCount < state.rows.length;
+    }
+
     const rowsHtml = state.rows
       .map((row) => {
-        const selected = row.card_id === state.selectedCardId;
+        const selected = state.selectedCardIds.has(row.card_id);
         const tags = Array.isArray(row.tags) ? row.tags.join(", ") : "";
         return `
           <tr class="${selected ? "is-selected" : ""}" data-card-id="${escapeHtml(row.card_id)}">
+            ${
+              state.checkboxMode
+                ? `<td class="browse-select-col"><input type="checkbox" class="form-check-input browse-row-checkbox" data-card-id="${escapeHtml(row.card_id)}" ${selected ? "checked" : ""}></td>`
+                : ""
+            }
             <td title="${escapeHtml(row.card_type || "")}">${escapeHtml(row.card_type || "")}</td>
             <td title="${escapeHtml(row.due_label || "")}">${escapeHtml(row.due_label || "")}</td>
             <td title="${escapeHtml(row.deck_name || "")}">${escapeHtml(row.deck_name || "")}</td>
@@ -378,7 +1759,38 @@
     const loaded = state.rows.length;
     const total = state.total || 0;
     const suffix = state.hasNext ? " | more..." : "";
-    els.tableMeta.textContent = `${loaded}/${total} cards${suffix}`;
+    const selectedCount = state.selectedCardIds.size;
+    const selectedText = selectedCount ? ` | selected: ${selectedCount}` : "";
+    els.tableMeta.textContent = `${loaded}/${total} cards${selectedText}${suffix}`;
+    if (els.bulkDeleteBtn) {
+      els.bulkDeleteBtn.disabled = selectedCount === 0;
+    }
+    updateVoicevoxSelectedNotesLabel();
+  }
+
+  function setCheckboxMode(enabled) {
+    state.checkboxMode = Boolean(enabled);
+    if (els.toggleCheckboxModeBtn) {
+      els.toggleCheckboxModeBtn.classList.toggle("active", state.checkboxMode);
+    }
+    renderTable();
+    renderTableMeta();
+  }
+
+  function selectAllLoadedRows() {
+    for (const row of state.rows) {
+      state.selectedCardIds.add(row.card_id);
+    }
+    renderTable();
+    renderTableMeta();
+  }
+
+  function clearLoadedRowSelection() {
+    for (const row of state.rows) {
+      state.selectedCardIds.delete(row.card_id);
+    }
+    renderTable();
+    renderTableMeta();
   }
 
   function renderEditor() {
@@ -436,7 +1848,8 @@
             const mediaMeta = media
               ? `File: ${escapeHtml(media.filename || media.id || "")}`
               : "No media attached yet.";
-            const previewBtn = media
+            const allowPreviewBtn = type !== "audio";
+            const previewBtn = media && allowPreviewBtn
               ? `<a class="btn btn-sm btn-outline-secondary browse-editor-media-preview" href="${escapeHtml(media.url || "#")}" target="_blank" rel="noopener">Preview</a>`
               : "";
             return `
@@ -648,18 +2061,28 @@
           }
         } else {
           state.selectedCardId = null;
+          state.selectedCardIds.clear();
           state.detail = null;
           state.draft = null;
           state.isDirty = false;
           state.dirtyFields.clear();
           renderEditor();
         }
+        if (state.selectedShortcut === "current" && state.currentDeckId != null) {
+          selectAllLoadedRows();
+        }
+      } else if (state.selectedShortcut === "current" && state.currentDeckId != null) {
+        for (const row of incomingRows) {
+          state.selectedCardIds.add(row.card_id);
+        }
+        renderTable();
+        renderTableMeta();
       }
     } catch (error) {
       if (error.name !== "AbortError") {
         els.tableBody.innerHTML = `
           <tr>
-            <td colspan="7" class="browse-empty-cell text-danger">${escapeHtml(error.message)}</td>
+            <td colspan="${state.checkboxMode ? "8" : "7"}" class="browse-empty-cell text-danger">${escapeHtml(error.message)}</td>
           </tr>
         `;
         renderTableMeta();
@@ -682,6 +2105,8 @@
       state.detail = payload;
       resetDraftFromDetail();
       renderEditor();
+      hydrateVoicevoxFieldOptionsFromDetail();
+      updateVoicevoxSelectedNotesLabel();
     } catch (error) {
       if (error.name !== "AbortError") {
         state.detail = null;
@@ -689,6 +2114,7 @@
         state.isDirty = false;
         state.dirtyFields.clear();
         renderEditor();
+        updateVoicevoxSelectedNotesLabel();
         window.alert(`Cannot load card detail: ${error.message}`);
       }
     } finally {
@@ -721,11 +2147,26 @@
     }
 
     try {
-      const payload = {
-        deck_id: state.draft.deck_id === "" ? null : Number(state.draft.deck_id),
-        tags: Array.isArray(state.draft.tags) ? state.draft.tags : [],
-        field_values: state.draft.field_values || {},
-      };
+      const payload = {};
+      if (state.dirtyFields.has("__deck__")) {
+        payload.deck_id = state.draft.deck_id === "" ? null : Number(state.draft.deck_id);
+      }
+      if (state.dirtyFields.has("__tags__")) {
+        payload.tags = Array.isArray(state.draft.tags) ? state.draft.tags : [];
+      }
+      const changedFieldValues = {};
+      for (const fieldName of state.dirtyFields) {
+        if (!fieldName || String(fieldName).startsWith("__")) {
+          continue;
+        }
+        changedFieldValues[fieldName] = state.draft.field_values?.[fieldName] ?? "";
+      }
+      if (Object.keys(changedFieldValues).length > 0) {
+        payload.field_values = changedFieldValues;
+      }
+      if (Object.keys(payload).length === 0) {
+        return true;
+      }
 
       const response = await requestJson(`/vocabulary/api/browse/cards/${encodeURIComponent(state.selectedCardId)}`, {
         method: "PATCH",
@@ -788,6 +2229,43 @@
       }
     } catch (error) {
       window.alert(`Delete failed: ${error.message}`);
+    }
+  }
+
+  async function deleteSelectedCards() {
+    const selectedIds = Array.from(state.selectedCardIds);
+    if (!selectedIds.length) {
+      return;
+    }
+    if (els.bulkDeleteConfirmBtn) {
+      els.bulkDeleteConfirmBtn.disabled = true;
+      els.bulkDeleteConfirmBtn.innerHTML = '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span>';
+    }
+    try {
+      for (const cardId of selectedIds) {
+        await requestJson(`/vocabulary/api/browse/cards/${encodeURIComponent(cardId)}`, {
+          method: "DELETE",
+        });
+      }
+      state.selectedCardIds.clear();
+      if (state.selectedCardId && selectedIds.includes(state.selectedCardId)) {
+        state.selectedCardId = null;
+        state.detail = null;
+        state.draft = null;
+        state.isDirty = false;
+        state.dirtyFields.clear();
+      }
+      bulkDeleteModalInstance.hide();
+      await loadCards({ reset: true, keepSelection: false });
+      renderEditor();
+    } catch (error) {
+      window.alert(`Bulk delete failed: ${error.message}`);
+    } finally {
+      if (els.bulkDeleteConfirmBtn) {
+        els.bulkDeleteConfirmBtn.disabled = false;
+        els.bulkDeleteConfirmBtn.innerHTML = "Delete";
+      }
+      renderTableMeta();
     }
   }
 
@@ -869,7 +2347,9 @@
     }
     await runWithDirtyGuard(async () => {
       state.selectedCardId = cardId;
+      state.selectedCardIds.add(cardId);
       renderTable();
+      renderTableMeta();
       await loadCardDetail(cardId);
     });
   }
@@ -929,6 +2409,7 @@
     if (els.sortBy) {
       els.sortBy.value = state.sort.by;
     }
+    setCheckboxMode(false);
     updateContextLabel();
     await loadDeckTree();
     if (state.selectedShortcut === "current" && state.currentDeckId != null) {
@@ -945,6 +2426,9 @@
     }
     renderDeckTree();
     await loadCards({ reset: true, keepSelection: false });
+    hydrateVoicevoxFieldOptionsFromDetail();
+    updateVoicevoxSelectedNotesLabel();
+    renderVoicevoxProgressAndFailed();
 
     if (state.preferredSelectionPending && state.rows.length) {
       const preferredRow = findPreferredRowInLoadedRows() || state.rows[0];
@@ -958,14 +2442,146 @@
   }
 
   function setupEvents() {
+    syncVoicevoxInputsFromState();
+    setVoicevoxActionState();
+    const debouncedVoicevoxReload = debounce(() => {
+      loadVoicevoxCharacters().catch(() => undefined);
+    }, 420);
+    const debouncedPersistVoicevoxSettings = debounce(() => {
+      persistVoicevoxSettings().catch(() => undefined);
+    }, 500);
+
     document.addEventListener("click", (event) => {
       const trigger = event.target.closest('[data-browse-open="1"]');
       if (!trigger) {
+        if (!event.target.closest(".browse-voicevox")) {
+          setAudioCreateMenuOpen(false);
+        }
+      } else {
+        event.preventDefault();
+        openBrowseFromTrigger(trigger);
+      }
+    });
+
+    if (els.audioCreateBtn) {
+      els.audioCreateBtn.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const willOpen = els.audioCreateMenu?.classList.contains("d-none");
+        setAudioCreateMenuOpen(Boolean(willOpen));
+      });
+    }
+
+    if (els.voicevoxOptionBtn) {
+      els.voicevoxOptionBtn.addEventListener("click", (event) => {
+        event.preventDefault();
+        setAudioCreateMenuOpen(false);
+        setVoicevoxModalOpen(true);
+      });
+    }
+
+    if (els.voicevoxModalBackdrop) {
+      els.voicevoxModalBackdrop.addEventListener("click", () => {
+        setVoicevoxModalOpen(false);
+      });
+    }
+
+    if (els.voicevoxModalCloseBtn) {
+      els.voicevoxModalCloseBtn.addEventListener("click", () => {
+        setVoicevoxModalOpen(false);
+      });
+    }
+
+    if (els.voicevoxCancelBtn) {
+      els.voicevoxCancelBtn.addEventListener("click", () => {
+        setVoicevoxModalOpen(false);
+      });
+    }
+    if (els.voicevoxGenerateBtn) {
+      els.voicevoxGenerateBtn.addEventListener("click", () => {
+        generateVoicevoxAudio().catch(() => undefined);
+      });
+    }
+    if (els.voicevoxRetryFailedBtn) {
+      els.voicevoxRetryFailedBtn.addEventListener("click", () => {
+        retryFailedVoicevoxAudio().catch(() => undefined);
+      });
+    }
+    if (els.voicevoxPreviewBtn) {
+      els.voicevoxPreviewBtn.addEventListener("click", () => {
+        previewVoicevoxAudio().catch(() => undefined);
+      });
+    }
+    if (els.voicevoxSaveSettingsBtn) {
+      els.voicevoxSaveSettingsBtn.addEventListener("click", () => {
+        persistVoicevoxSettings({ notify: true }).catch(() => undefined);
+      });
+    }
+    if (els.voicevoxResetDefaultsBtn) {
+      els.voicevoxResetDefaultsBtn.addEventListener("click", () => {
+        resetVoicevoxSettingsToDefault();
+      });
+    }
+    if (els.voicevoxCharacter) {
+      els.voicevoxCharacter.addEventListener("change", () => {
+        state.voicevox.characterId = String(els.voicevoxCharacter.value || "").trim();
+        state.voicevox.settingsDirty = true;
+        debouncedPersistVoicevoxSettings();
+      });
+    }
+    if (els.voicevoxSourceField) {
+      els.voicevoxSourceField.addEventListener("change", () => {
+        state.voicevox.sourceField = String(els.voicevoxSourceField.value || "").trim();
+      });
+    }
+    if (els.voicevoxDestinationField) {
+      els.voicevoxDestinationField.addEventListener("change", () => {
+        state.voicevox.destinationField = String(els.voicevoxDestinationField.value || "").trim();
+      });
+    }
+    if (els.voicevoxAppendAudio) {
+      els.voicevoxAppendAudio.addEventListener("change", () => {
+        state.voicevox.appendAudio = Boolean(els.voicevoxAppendAudio.checked);
+      });
+    }
+    if (els.voicevoxUseOpus) {
+      els.voicevoxUseOpus.addEventListener("change", () => {
+        state.voicevox.useOpus = Boolean(els.voicevoxUseOpus.checked);
+      });
+    }
+    if (els.voicevoxApiKey) {
+      els.voicevoxApiKey.addEventListener("input", () => {
+        state.voicevox.apiKey = String(els.voicevoxApiKey.value || "").trim();
+        state.voicevox.keyStatus = "unknown";
+        state.voicevox.lastValidationError = "";
+        updateVoicevoxMetaLabels();
+        debouncedVoicevoxReload();
+      });
+    }
+    if (els.voicevoxApiKeyToggleBtn) {
+      els.voicevoxApiKeyToggleBtn.addEventListener("click", () => {
+        state.voicevox.apiKeyVisible = !state.voicevox.apiKeyVisible;
+        syncVoicevoxApiKeyVisibility();
+      });
+    }
+
+    const bindVoicevoxRange = (el, fieldName, minimum, maximum, fallback) => {
+      if (!el) {
         return;
       }
-      event.preventDefault();
-      openBrowseFromTrigger(trigger);
-    });
+      el.addEventListener("input", () => {
+        state.voicevox[fieldName] = clampRange(el.value, minimum, maximum, fallback);
+        state.voicevox.settingsDirty = true;
+        updateVoicevoxValueLabels();
+        debouncedPersistVoicevoxSettings();
+      });
+    };
+    bindVoicevoxRange(els.voicevoxVolumeScale, "volumeScale", 0, 2, 1.0);
+    bindVoicevoxRange(els.voicevoxPitch, "pitchScale", -0.4, 0.4, 0.0);
+    bindVoicevoxRange(els.voicevoxIntonationScale, "intonationScale", 0, 2, 1.0);
+    bindVoicevoxRange(els.voicevoxSpeed, "speedScale", 0.1, 4.0, 1.0);
+    bindVoicevoxRange(els.voicevoxInitialSilenceScale, "initialSilenceScale", 0, 2, 0.1);
+    bindVoicevoxRange(els.voicevoxFinalSilenceLength, "finalSilenceLength", 0, 2, 0.1);
 
     modalEl.addEventListener("shown.bs.modal", () => {
       handleModalShown().catch(() => undefined);
@@ -1084,12 +2700,56 @@
       });
     }
 
+    if (els.toggleCheckboxModeBtn) {
+      els.toggleCheckboxModeBtn.addEventListener("click", () => {
+        setCheckboxMode(!state.checkboxMode);
+      });
+    }
+
+    if (els.bulkDeleteBtn) {
+      els.bulkDeleteBtn.addEventListener("click", () => {
+        const selectedCount = state.selectedCardIds.size;
+        if (!selectedCount) {
+          return;
+        }
+        if (els.bulkDeleteMessage) {
+          els.bulkDeleteMessage.textContent = `Delete ${selectedCount} selected card(s) permanently?`;
+        }
+        bulkDeleteModalInstance.show();
+      });
+    }
+
+    if (els.selectAllCheckbox) {
+      els.selectAllCheckbox.addEventListener("change", () => {
+        if (els.selectAllCheckbox.checked) {
+          selectAllLoadedRows();
+          return;
+        }
+        clearLoadedRowSelection();
+      });
+    }
+
     if (els.tableBody) {
       els.tableBody.addEventListener("click", (event) => {
+        const checkbox = event.target.closest(".browse-row-checkbox");
+        if (checkbox?.dataset.cardId) {
+          if (checkbox.checked) {
+            state.selectedCardIds.add(checkbox.dataset.cardId);
+          } else {
+            state.selectedCardIds.delete(checkbox.dataset.cardId);
+          }
+          selectCard(checkbox.dataset.cardId).catch(() => undefined);
+          renderTableMeta();
+          return;
+        }
         const row = event.target.closest("tr[data-card-id]");
         if (!row?.dataset.cardId) {
           return;
         }
+        if (!state.checkboxMode) {
+          state.selectedCardIds.clear();
+        }
+        state.selectedCardIds.add(row.dataset.cardId);
         selectCard(row.dataset.cardId).catch(() => undefined);
       });
     }
@@ -1176,6 +2836,14 @@
       });
     }
 
+    if (els.bulkDeleteConfirmBtn) {
+      els.bulkDeleteConfirmBtn.addEventListener("click", () => {
+        runWithDirtyGuard(async () => {
+          await deleteSelectedCards();
+        }).catch(() => undefined);
+      });
+    }
+
     unsavedModalEl.addEventListener("hidden.bs.modal", () => {
       if (state.unsavedResolver) {
         resolveUnsaved("cancel");
@@ -1186,10 +2854,20 @@
       if (!isModalShown()) {
         return;
       }
+      if (event.key === "Escape") {
+        setAudioCreateMenuOpen(false);
+        setVoicevoxModalOpen(false);
+      }
 
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
         event.preventDefault();
         saveCurrentCard().catch(() => undefined);
+        return;
+      }
+
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "a") {
+        event.preventDefault();
+        selectAllLoadedRows();
         return;
       }
 

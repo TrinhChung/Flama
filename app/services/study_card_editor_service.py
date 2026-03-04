@@ -46,9 +46,18 @@ def update_study_card_note(
     if note_type is None:
         raise StudyCardEditError("Note type not found.", status=404, code="FIELD_NOT_FOUND")
 
-    note_media_ids = {asset.id for asset in (note.media_assets or []) if asset.id}
+    note_media_ids: set[str] = set()
+    for asset in note.media_assets or []:
+        asset_id = str(getattr(asset, "id", "") or "").strip()
+        if asset_id:
+            note_media_ids.add(asset_id)
+            note_media_ids.add(f"/media/proxy/{asset_id}")
+        filename = str(getattr(asset, "filename", "") or "").strip()
+        if filename:
+            note_media_ids.add(filename)
+            note_media_ids.add(f"[sound:{filename}]")
     try:
-        next_values = validate_study_card_edit_request(
+        validated = validate_study_card_edit_request(
             note_type=note_type,
             payload=payload,
             current_values=dict(note.field_values or {}),
@@ -62,8 +71,12 @@ def update_study_card_note(
             code=exc.code,
         ) from exc
 
-    note.field_values = next_values
-    study_edit_repo.commit_note_edit()
+    next_values = dict(note.field_values or {})
+    for key_name, value in validated.field_updates.items():
+        next_values[key_name] = value
+    if validated.field_updates:
+        note.field_values = next_values
+        study_edit_repo.commit_note_edit()
 
     rendered_front_html = ""
     rendered_back_html = ""
@@ -75,6 +88,7 @@ def update_study_card_note(
                 field_values=note.field_values or {},
                 media_assets=note.media_assets,
                 allow_inline_script=True,
+                defer_inline_script=True,
             )
             rendered_front_html = rendered.get("front_html", "")
             rendered_back_html = rendered.get("back_html", "")

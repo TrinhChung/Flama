@@ -1,0 +1,524 @@
+{% extends "base.html" %}
+
+{% block title %}Quản lý TTS Provider - Flama Admin{% endblock %}
+
+{% block content %}
+<section class="tts-admin-page py-3 py-lg-4">
+  <div class="container-fluid px-2 px-lg-3">
+    <div class="tts-admin-header mb-3 mb-lg-4">
+      <h1 class="h4 fw-bold mb-1">Quản lý cấu hình TTS Provider</h1>
+      <p class="text-muted mb-0">Provider chỉ lưu cấu hình hệ thống dùng chung. API key và cấu hình sử dụng cụ thể do từng user tự quản lý.</p>
+    </div>
+
+    <div class="row g-3 mb-3">
+      <div class="col-6 col-lg-3">
+        <div class="summary-card h-100">
+          <div class="summary-label">Tổng cấu hình</div>
+          <div class="summary-value">{{ summary.total_count }}</div>
+        </div>
+      </div>
+      <div class="col-6 col-lg-3">
+        <div class="summary-card h-100">
+          <div class="summary-label">Đang hoạt động</div>
+          <div class="summary-value text-success">{{ summary.active_count }}</div>
+        </div>
+      </div>
+      <div class="col-6 col-lg-3">
+        <div class="summary-card h-100">
+          <div class="summary-label">Yêu cầu API key</div>
+          <div class="summary-value">{{ summary.requires_key_count }}</div>
+        </div>
+      </div>
+      <div class="col-6 col-lg-3">
+        <div class="summary-card h-100">
+          <div class="summary-label">Đang hiển thị</div>
+          <div class="summary-value">{{ summary.filtered_count }}</div>
+        </div>
+      </div>
+    </div>
+
+    <form method="get" action="{{ url_for('admin.tts_provider_management_page') }}" class="toolbar-card mb-3">
+      <div class="row g-2 align-items-end">
+        <div class="col-12 col-lg-5">
+          <label class="form-label mb-1">Tìm kiếm</label>
+          <input class="form-control" name="q" value="{{ search_term }}" placeholder="Tên provider hoặc loại provider">
+        </div>
+        <div class="col-6 col-lg-2">
+          <label class="form-label mb-1">Trạng thái</label>
+          <select class="form-select" name="active">
+            <option value="all" {% if active_filter == "all" %}selected{% endif %}>Tất cả</option>
+            <option value="active" {% if active_filter == "active" %}selected{% endif %}>Đang hoạt động</option>
+            <option value="inactive" {% if active_filter == "inactive" %}selected{% endif %}>Tạm tắt</option>
+          </select>
+        </div>
+        <div class="col-12 col-lg-3">
+          <label class="form-label mb-1">Loại provider</label>
+          <select class="form-select" name="provider_type">
+            <option value="">Tất cả loại</option>
+            {% for option in provider_type_options %}
+            <option value="{{ option }}" {% if provider_type_filter == option %}selected{% endif %}>{{ option }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-12 col-lg-2 d-flex gap-2">
+          <button type="submit" class="dash-btn dash-btn--ghost admin-btn w-100">
+            <i class="bi bi-funnel"></i> Lọc
+          </button>
+          <a href="{{ url_for('admin.tts_provider_management_page') }}" class="dash-btn admin-btn admin-btn--light">
+            <i class="bi bi-arrow-counterclockwise"></i>
+          </a>
+        </div>
+      </div>
+      <div class="d-flex justify-content-end mt-2">
+        <button
+          type="button"
+          class="dash-btn dash-btn--primary admin-btn"
+          data-bs-toggle="collapse"
+          data-bs-target="#createProviderCollapse"
+          aria-expanded="false"
+          aria-controls="createProviderCollapse"
+          id="toggleCreateProviderBtn"
+        >
+          <i class="bi bi-plus-circle"></i> Thêm cấu hình mới
+        </button>
+      </div>
+    </form>
+
+    <div class="collapse mb-3" id="createProviderCollapse">
+      <div class="card border-0 shadow-sm rounded-4">
+        <div class="card-body">
+          <h2 class="h6 mb-3">Tạo cấu hình provider mới</h2>
+          <form method="post" class="row g-2" data-provider-form>
+            <input type="hidden" name="action" value="create">
+            <input type="hidden" name="next" value="{{ current_page_url }}">
+
+            <div class="col-12 col-lg-3">
+              <label class="form-label mb-1">Tên provider</label>
+              <input class="form-control" name="provider_name" placeholder="VD: Google Cloud Voice" required data-role="provider-name">
+            </div>
+            <div class="col-12 col-lg-2">
+              <label class="form-label mb-1">Loại provider</label>
+              <input class="form-control" name="provider_type" placeholder="VD: google_tts" required data-role="provider-type">
+            </div>
+            <div class="col-12 col-lg-7">
+              <label class="form-label mb-1">Base URL</label>
+              <input class="form-control" name="base_url" placeholder="https://api.example.com">
+            </div>
+
+            <div class="col-12 col-lg-4">
+              <label class="form-label mb-1">Shared Config (JSON)</label>
+              <textarea class="form-control json-editor" name="shared_config_json" rows="5" placeholder='{"region": "ap-southeast-1"}'>{}</textarea>
+            </div>
+            <div class="col-12 col-lg-4">
+              <label class="form-label mb-1">Provider Config (JSON)</label>
+              <textarea class="form-control json-editor" name="provider_config_json" rows="5" placeholder='{"key_validation_url": "https://..."}'>{}</textarea>
+            </div>
+            <div class="col-12 col-lg-4">
+              <label class="form-label mb-1">Default User Settings (JSON)</label>
+              <textarea class="form-control json-editor" name="default_settings_json" rows="5" placeholder='{"speed": 0.5, "pitch": 0.5}'>{}</textarea>
+            </div>
+
+            <div class="col-6 col-lg-2 d-flex align-items-end">
+              <div class="form-check tts-check">
+                <input class="form-check-input" type="checkbox" name="requires_api_key" id="create_requires_api_key" checked>
+                <label class="form-check-label" for="create_requires_api_key">Yêu cầu API key</label>
+              </div>
+            </div>
+            <div class="col-6 col-lg-2 d-flex align-items-end">
+              <div class="form-check tts-check">
+                <input class="form-check-input" type="checkbox" name="is_active" id="create_is_active" checked>
+                <label class="form-check-label" for="create_is_active">Đang hoạt động</label>
+              </div>
+            </div>
+            <div class="col-12 col-lg-2 d-flex align-items-end">
+              <button class="btn btn-primary w-100" type="submit">Tạo</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div class="card border-0 shadow-sm rounded-4 overflow-hidden">
+      <div class="table-responsive">
+        <table class="table align-middle mb-0 tts-admin-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Provider</th>
+              <th>Kết nối</th>
+              <th>Chính sách</th>
+              <th>Cấu hình JSON</th>
+              <th>Theo dõi</th>
+              <th>Thao tác</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in rows %}
+            {% set shared_cfg = loads_json_map(row.shared_config_json) %}
+            {% set provider_cfg = loads_json_map(row.provider_config_json) %}
+            {% set default_cfg = loads_json_map(row.default_settings_json) %}
+            <tr>
+              <td class="fw-semibold">#{{ row.id }}</td>
+              <td>
+                <div class="fw-semibold">{{ row.provider_name }}</div>
+                <div class="small text-muted">{{ row.provider_type }}</div>
+              </td>
+              <td class="small">
+                {% if row.base_url %}
+                <a href="{{ row.base_url }}" target="_blank" rel="noopener noreferrer">{{ row.base_url }}</a>
+                {% else %}
+                <span class="text-muted">Không có base URL</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if row.is_active %}
+                <span class="badge rounded-pill text-bg-success">active</span>
+                {% else %}
+                <span class="badge rounded-pill text-bg-secondary">inactive</span>
+                {% endif %}
+                {% if row.requires_api_key %}
+                <span class="badge rounded-pill tts-badge tts-badge--warning mt-1">requires user key</span>
+                {% else %}
+                <span class="badge rounded-pill tts-badge tts-badge--muted mt-1">no key required</span>
+                {% endif %}
+              </td>
+              <td>
+                <details class="config-block mb-1">
+                  <summary>shared</summary>
+                  <pre>{{ pretty_json(shared_cfg) }}</pre>
+                </details>
+                <details class="config-block mb-1">
+                  <summary>provider</summary>
+                  <pre>{{ pretty_json(provider_cfg) }}</pre>
+                </details>
+                <details class="config-block">
+                  <summary>default-user</summary>
+                  <pre>{{ pretty_json(default_cfg) }}</pre>
+                </details>
+              </td>
+              <td class="small">
+                <div>Tạo bởi: {{ row.created_by_admin_id or "—" }}</div>
+                <div>Sửa bởi: {{ row.updated_by_admin_id or "—" }}</div>
+                <div class="text-muted">{{ row.updated_at.strftime("%Y-%m-%d %H:%M") if row.updated_at else "—" }}</div>
+              </td>
+              <td>
+                <div class="d-flex flex-wrap gap-1">
+                  <button
+                    type="button"
+                    class="btn btn-sm btn-outline-primary"
+                    data-bs-toggle="modal"
+                    data-bs-target="#editProviderModal{{ row.id }}"
+                  >
+                    <i class="bi bi-pencil-square"></i> Sửa
+                  </button>
+                  <form method="post" onsubmit="return confirm('Xóa cấu hình #{{ row.id }}?');">
+                    <input type="hidden" name="action" value="delete">
+                    <input type="hidden" name="id" value="{{ row.id }}">
+                    <input type="hidden" name="next" value="{{ current_page_url }}">
+                    <button class="btn btn-sm btn-outline-danger" type="submit">
+                      <i class="bi bi-trash3"></i> Xóa
+                    </button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+            {% else %}
+            <tr>
+              <td colspan="7" class="text-center py-5">
+                <div class="empty-wrap">
+                  <i class="bi bi-broadcast-pin fs-2"></i>
+                  <div class="fw-semibold mt-2">Không có cấu hình phù hợp</div>
+                  <div class="text-muted small">Hãy bỏ bộ lọc hoặc tạo cấu hình provider mới.</div>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  {% for row in rows %}
+  {% set shared_cfg = loads_json_map(row.shared_config_json) %}
+  {% set provider_cfg = loads_json_map(row.provider_config_json) %}
+  {% set default_cfg = loads_json_map(row.default_settings_json) %}
+  <div class="modal fade" id="editProviderModal{{ row.id }}" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+      <form method="post" class="modal-content" data-provider-form>
+        <input type="hidden" name="action" value="update">
+        <input type="hidden" name="id" value="{{ row.id }}">
+        <input type="hidden" name="next" value="{{ current_page_url }}">
+
+        <div class="modal-header">
+          <h2 class="h6 mb-0">Chỉnh sửa provider #{{ row.id }}</h2>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="row g-2">
+            <div class="col-12 col-lg-4">
+              <label class="form-label mb-1">Tên provider</label>
+              <input class="form-control" name="provider_name" value="{{ row.provider_name }}" required data-role="provider-name">
+            </div>
+            <div class="col-12 col-lg-3">
+              <label class="form-label mb-1">Loại provider</label>
+              <input class="form-control" name="provider_type" value="{{ row.provider_type }}" required data-role="provider-type">
+            </div>
+            <div class="col-12 col-lg-5">
+              <label class="form-label mb-1">Base URL</label>
+              <input class="form-control" name="base_url" value="{{ row.base_url or '' }}" placeholder="https://api.example.com">
+            </div>
+
+            <div class="col-12 col-lg-4">
+              <label class="form-label mb-1">Shared Config (JSON)</label>
+              <textarea class="form-control json-editor" name="shared_config_json" rows="8">{{ pretty_json(shared_cfg) }}</textarea>
+            </div>
+            <div class="col-12 col-lg-4">
+              <label class="form-label mb-1">Provider Config (JSON)</label>
+              <textarea class="form-control json-editor" name="provider_config_json" rows="8">{{ pretty_json(provider_cfg) }}</textarea>
+            </div>
+            <div class="col-12 col-lg-4">
+              <label class="form-label mb-1">Default User Settings (JSON)</label>
+              <textarea class="form-control json-editor" name="default_settings_json" rows="8">{{ pretty_json(default_cfg) }}</textarea>
+            </div>
+
+            <div class="col-12 d-flex flex-wrap gap-3">
+              <div class="form-check tts-check">
+                <input class="form-check-input" type="checkbox" name="requires_api_key" id="requires_api_key_{{ row.id }}" {% if row.requires_api_key %}checked{% endif %}>
+                <label class="form-check-label" for="requires_api_key_{{ row.id }}">Yêu cầu API key</label>
+              </div>
+              <div class="form-check tts-check">
+                <input class="form-check-input" type="checkbox" name="is_active" id="is_active_{{ row.id }}" {% if row.is_active %}checked{% endif %}>
+                <label class="form-check-label" for="is_active_{{ row.id }}">Đang hoạt động</label>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Đóng</button>
+          <button type="submit" class="btn btn-primary">Lưu thay đổi</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  {% endfor %}
+</section>
+{% endblock %}
+
+{% block styles %}
+<style>
+  .tts-admin-page {
+    min-height: calc(100vh - 78px);
+    font-size: var(--font-size-sm);
+    color: var(--flama-text);
+  }
+
+  .tts-admin-page h1 {
+    font-size: 1.3rem;
+    line-height: 1.25;
+  }
+
+  .tts-admin-page .form-label {
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-semibold);
+    color: var(--flama-text-2);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .tts-admin-page .form-control,
+  .tts-admin-page .form-select {
+    font-size: var(--font-size-sm);
+    border-color: var(--flama-border);
+    min-height: 2.35rem;
+  }
+
+  .tts-admin-page .form-control:focus,
+  .tts-admin-page .form-select:focus {
+    border-color: var(--flama-orange-300);
+    box-shadow: 0 0 0 0.2rem rgba(254, 104, 8, 0.14);
+  }
+
+  .json-editor {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    min-height: 7rem;
+  }
+
+  .summary-card {
+    background: #fff;
+    border: 1px solid var(--flama-border);
+    border-radius: 0.9rem;
+    padding: 0.9rem 1rem;
+  }
+
+  .summary-label {
+    font-size: 0.8rem;
+    color: var(--flama-text-2);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .summary-value {
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: var(--flama-text);
+  }
+
+  .toolbar-card {
+    border: 1px solid var(--flama-border);
+    border-radius: 0.9rem;
+    background: #fff;
+    padding: 0.75rem;
+    box-shadow: 0 1px 4px rgba(31, 26, 23, 0.05);
+  }
+
+  .admin-btn {
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    border-radius: 9px;
+    line-height: 1;
+    min-height: 2.35rem;
+  }
+
+  .admin-btn--light {
+    border: 1px solid var(--flama-border);
+    color: var(--flama-text-2);
+    background: #fff;
+    min-width: 2.35rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .admin-btn--light:hover {
+    background: var(--flama-orange-50);
+    color: var(--flama-orange-700);
+    border-color: var(--flama-orange-200);
+  }
+
+  .tts-admin-table thead th {
+    background: var(--flama-orange-50);
+    color: var(--flama-text-2);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+  }
+
+  .tts-admin-table td,
+  .tts-admin-table th {
+    padding: 0.85rem 0.75rem;
+    vertical-align: top;
+    font-size: var(--font-size-sm);
+  }
+
+  .tts-admin-table td {
+    border-color: #f1e7df;
+  }
+
+  .tts-badge {
+    border: 1px solid transparent;
+    font-weight: 600;
+    font-size: 0.72rem;
+    text-transform: lowercase;
+  }
+
+  .tts-badge--warning {
+    background: #fff6e7;
+    color: #9a5800;
+    border-color: #f1d8aa;
+  }
+
+  .tts-badge--muted {
+    background: #f2f4f7;
+    color: #52606d;
+    border-color: #d9dee3;
+  }
+
+  .tts-check {
+    padding-left: 1.8rem;
+  }
+
+  .config-block summary {
+    cursor: pointer;
+    font-weight: 600;
+    color: var(--flama-text-2);
+    text-transform: lowercase;
+  }
+
+  .config-block pre {
+    margin-top: 0.35rem;
+    margin-bottom: 0;
+    max-width: 26rem;
+    max-height: 11rem;
+    overflow: auto;
+    padding: 0.5rem;
+    background: #f8f9fb;
+    border: 1px solid #e4e7ec;
+    border-radius: 0.45rem;
+    font-size: 0.72rem;
+    line-height: 1.4;
+  }
+
+  .empty-wrap i {
+    color: #b39a84;
+  }
+
+  @media (max-width: 991.98px) {
+    .tts-admin-table td,
+    .tts-admin-table th {
+      padding: 0.7rem 0.6rem;
+    }
+
+    .config-block pre {
+      max-width: 100%;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  (function () {
+    function slugifyProviderType(value) {
+      return (value || "")
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9_-]+/g, "-")
+        .replace(/-{2,}/g, "-")
+        .replace(/^[-_]+|[-_]+$/g, "")
+        .slice(0, 64);
+    }
+
+    const forms = Array.from(document.querySelectorAll("[data-provider-form]"));
+    forms.forEach((form) => {
+      const providerNameInput = form.querySelector("input[data-role='provider-name']");
+      const providerTypeInput = form.querySelector("input[data-role='provider-type']");
+
+      if (providerNameInput && providerTypeInput) {
+        providerNameInput.addEventListener("blur", function () {
+          const currentType = (providerTypeInput.value || "").trim();
+          if (currentType) {
+            return;
+          }
+          providerTypeInput.value = slugifyProviderType(providerNameInput.value);
+        });
+      }
+    });
+
+    const createCollapse = document.getElementById("createProviderCollapse");
+    const toggleCreateButton = document.getElementById("toggleCreateProviderBtn");
+    if (!createCollapse || !toggleCreateButton || typeof bootstrap === "undefined") {
+      return;
+    }
+
+    createCollapse.addEventListener("shown.bs.collapse", function () {
+      toggleCreateButton.innerHTML = '<i class="bi bi-dash-circle"></i> Ẩn form tạo mới';
+    });
+
+    createCollapse.addEventListener("hidden.bs.collapse", function () {
+      toggleCreateButton.innerHTML = '<i class="bi bi-plus-circle"></i> Thêm cấu hình mới';
+    });
+  })();
+</script>
+{% endblock %}

@@ -278,6 +278,7 @@ def render_note_study_flashcard(card_obj: Card | None) -> dict[str, str]:
             media_assets=note_obj.media_assets,
             preview_note_key=note_obj.id,
             allow_inline_script=True,
+            defer_inline_script=True,
         )
         ret["front"] = rendered.get("front_html", "")
         ret["back"] = rendered.get("back_html", "")

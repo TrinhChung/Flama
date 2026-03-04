@@ -1,6 +1,3 @@
-﻿{# Component: Navbar #}
-{# Usage: {% include 'components/navbar.html' with context %} #}
-
 <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
   <div class="container">
     <a class="navbar-brand" href="{{ url_for('main.index') }}">
@@ -62,6 +59,11 @@
             <li>
               <a class="dropdown-item" href="{{ url_for('admin.user_management_page') }}">
                 <i class="bi bi-people"></i> Người dùng và phân quyền
+              </a>
+            </li>
+            <li>
+              <a class="dropdown-item" href="{{ url_for('admin.tts_provider_management_page') }}">
+                <i class="bi bi-soundwave"></i> TTS Provider Config
               </a>
             </li>
           </ul>

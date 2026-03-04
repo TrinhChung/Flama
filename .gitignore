@@ -11,6 +11,8 @@ env/
 # Environment variables
 .env
 static/tmp/
+/static/uploads/
+/flama_media_storage/
 
 
 /migrations/

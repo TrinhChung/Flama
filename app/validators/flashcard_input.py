@@ -30,6 +30,8 @@ _EVENT_HANDLER_RE = re.compile(r"(?i)\bon[a-z0-9_-]+\s*=")
 _JS_URL_RE = re.compile(r"(?i)javascript\s*:")
 _ASSET_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$")
 _PROXY_MEDIA_URL_RE = re.compile(r"^/media/proxy/([A-Za-z0-9][A-Za-z0-9_-]{0,127})$")
+_MEDIA_FILENAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,254}$")
+_SOUND_TAG_RE = re.compile(r"^\[sound:([A-Za-z0-9][A-Za-z0-9_.-]{0,254})\]$")
 _SAFE_TIMEZONE_RE = re.compile(r"^[A-Za-z0-9_+/\-]{1,64}$")
 _CONTROL_CHAR_RE = re.compile(r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]")
 _SQLI_PROBE_RE = re.compile(
@@ -358,26 +360,56 @@ def _clean_media_reference(
     url_match = _PROXY_MEDIA_URL_RE.match(candidate)
     if url_match:
         asset_id = url_match.group(1)
-        if note_media_ids is not None and asset_id not in note_media_ids:
+        if note_media_ids is not None and asset_id not in note_media_ids and candidate not in note_media_ids:
             raise RequestValidationError(
                 f"Field '{field_name}' references media not attached to this note.",
                 field=field_name,
             )
         return f"{MEDIA_ALLOWED_PREFIX}{asset_id}"
 
-    if not _ASSET_ID_RE.match(candidate):
-        raise RequestValidationError(
-            f"Field '{field_name}' contains invalid media reference.",
-            field=field_name,
-        )
+    sound_match = _SOUND_TAG_RE.match(candidate)
+    if sound_match:
+        filename = sound_match.group(1)
+        normalized_sound = f"[sound:{filename}]"
+        if (
+            note_media_ids is not None
+            and filename not in note_media_ids
+            and normalized_sound not in note_media_ids
+        ):
+            raise RequestValidationError(
+                f"Field '{field_name}' references media not attached to this note.",
+                field=field_name,
+            )
+        return normalized_sound
 
-    if note_media_ids is not None and candidate not in note_media_ids:
-        raise RequestValidationError(
-            f"Field '{field_name}' references media not attached to this note.",
-            field=field_name,
-        )
+    if _MEDIA_FILENAME_RE.match(candidate):
+        if (
+            note_media_ids is not None
+            and candidate not in note_media_ids
+            and f"[sound:{candidate}]" not in note_media_ids
+        ):
+            raise RequestValidationError(
+                f"Field '{field_name}' references media not attached to this note.",
+                field=field_name,
+            )
+        return candidate
 
-    return candidate
+    if _ASSET_ID_RE.match(candidate):
+        if (
+            note_media_ids is not None
+            and candidate not in note_media_ids
+            and f"{MEDIA_ALLOWED_PREFIX}{candidate}" not in note_media_ids
+        ):
+            raise RequestValidationError(
+                f"Field '{field_name}' references media not attached to this note.",
+                field=field_name,
+            )
+        return candidate
+
+    raise RequestValidationError(
+        f"Field '{field_name}' contains invalid media reference.",
+        field=field_name,
+    )
 
 
 def _assert_required_fields(note_type: Any, field_values: dict[str, str]) -> None:
@@ -527,20 +559,27 @@ def validate_study_card_edit_request(
     payload: dict[str, Any] | None,
     current_values: dict[str, Any] | None,
     note_media_ids: set[str],
-) -> dict[str, str]:
+) -> NoteMutationInput:
     body = _payload_dict(payload)
     _validate_allowed_keys(body, {"field_values"})
     if "field_values" not in body:
         raise RequestValidationError("field_values is required.", field="field_values")
 
-    merged_values, _ = clean_note_field_values(
+    merged_values, field_updates = clean_note_field_values(
         note_type=note_type,
         raw_field_values=body.get("field_values"),
         partial=True,
         current_values=current_values,
         note_media_ids=note_media_ids,
     )
-    return merged_values
+    return NoteMutationInput(
+        field_values=merged_values,
+        field_updates=field_updates,
+        tags=None,
+        deck_id=None,
+        update_tags=False,
+        update_deck=False,
+    )
 
 
 def validate_browse_card_update_request(

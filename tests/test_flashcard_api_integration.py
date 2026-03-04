@@ -29,6 +29,11 @@ from models.deck import Deck
 from models.card_progress import CardProgress
 from sqlalchemy.exc import OperationalError
 
+_MIN_WAV_BYTES = (
+    b"RIFF$\x00\x00\x00WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00"
+    b"D\xac\x00\x00\x88X\x01\x00\x02\x00\x10\x00data\x00\x00\x00\x00"
+)
+
 
 class FlashcardApiIntegrationTests(unittest.TestCase):
     def setUp(self):
@@ -1587,6 +1592,51 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             self.assertIn(progress.queue, {"learning", "review", "relearning", "new"})
             self.assertIsNotNone(progress.reps)
 
+    def test_study_next_defers_inline_template_script(self):
+        note_type_resp = self.client.post(
+            "/api/note-types",
+            json={
+                "name": "Study Script Guard",
+                "field_defs": [
+                    {"name": "Word", "field_type": "text", "position": 0, "required": True},
+                ],
+                "template": {
+                    "name": "Card 1",
+                    "front_html": "<div>{{Word}}</div>",
+                    "back_html": (
+                        "<div>{{Word}}</div>"
+                        "<script>window.__study_inline_script_test__=true;"
+                        "window.__study_inline_script_side='back';</script>"
+                    ),
+                    "shared_css": "",
+                },
+            },
+        )
+        self.assertEqual(note_type_resp.status_code, 201)
+        note_type_id = note_type_resp.get_json()["id"]
+
+        note_resp = self.client.post(
+            "/api/notes",
+            json={
+                "note_type_id": note_type_id,
+                "deck_id": self.deck_id,
+                "field_values": {
+                    "Word": "\u72d0",
+                },
+            },
+        )
+        self.assertEqual(note_resp.status_code, 201)
+
+        next_resp = self.client.get(f"/api/study/next?scope=deck&scope_id={self.deck_id}")
+        self.assertEqual(next_resp.status_code, 200)
+        payload = next_resp.get_json()
+        self.assertIsNotNone(payload.get("card_id"))
+        rendered_back = payload.get("rendered_back_html", "")
+        self.assertIn("\u72d0", rendered_back)
+        self.assertIn("__study_inline_script_test__", rendered_back)
+        self.assertIn('data-flama-inline-script="1"', rendered_back)
+        self.assertIn('type="application/x-flama-note-script"', rendered_back)
+
     def test_study_edit_card_updates_note_and_returns_rendered_html(self):
         note_type = self._create_note_type()
         note_type_id = note_type["id"]
@@ -1664,6 +1714,161 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         payload = edit_resp.get_json()
         self.assertEqual(payload.get("error"), "VALIDATION_ERROR")
         self.assertEqual(payload.get("field"), "Word")
+
+    def test_study_edit_card_updates_only_changed_fields(self):
+        note_type = self._create_note_type()
+        note_type_id = note_type["id"]
+        note_resp = self.client.post(
+            "/api/notes",
+            json={
+                "note_type_id": note_type_id,
+                "deck_id": self.deck_id,
+                "field_values": {
+                    "Word": "\u72ac",
+                    "Reading": "\u3044\u306c",
+                    "Meaning": "dog",
+                },
+            },
+        )
+        self.assertEqual(note_resp.status_code, 201)
+        note_id = note_resp.get_json()["id"]
+
+        with self.app.app_context():
+            card = Card.query.filter_by(note_id=note_id).first()
+            self.assertIsNotNone(card)
+            card_id = card.id  # type: ignore[union-attr]
+
+        edit_resp = self.client.patch(
+            f"/api/study/cards/{card_id}/edit",
+            json={
+                "field_values": {
+                    "Word": "\u72ac-only-word-updated",
+                }
+            },
+        )
+        self.assertEqual(edit_resp.status_code, 200)
+        payload = edit_resp.get_json() or {}
+        self.assertTrue(payload.get("success"))
+        field_values = payload.get("field_values") or {}
+        self.assertEqual(field_values.get("Word"), "\u72ac-only-word-updated")
+        self.assertEqual(field_values.get("Reading"), "\u3044\u306c")
+        self.assertEqual(field_values.get("Meaning"), "dog")
+
+        with self.app.app_context():
+            note = Note.query.get(note_id)
+            self.assertIsNotNone(note)
+            values = note.field_values or {}  # type: ignore[union-attr]
+            self.assertEqual(values.get("Word"), "\u72ac-only-word-updated")
+            self.assertEqual(values.get("Reading"), "\u3044\u306c")
+            self.assertEqual(values.get("Meaning"), "dog")
+
+    def test_study_edit_card_accepts_audio_filename_reference(self):
+        note_type_resp = self.client.post(
+            "/api/note-types",
+            json={
+                "name": "Study Audio Edit",
+                "field_defs": [
+                    {"name": "Word", "field_type": "text", "position": 0, "required": True},
+                    {"name": "Word_Audio", "field_type": "audio", "position": 1, "required": False},
+                ],
+                "template": {
+                    "name": "Card 1",
+                    "front_html": "<div>{{Word}}</div>",
+                    "back_html": "<div>{{Word}}</div>{{{Word_Audio}}}",
+                    "shared_css": "",
+                },
+            },
+        )
+        self.assertEqual(note_type_resp.status_code, 201)
+        note_type_id = note_type_resp.get_json()["id"]
+
+        note_resp = self.client.post(
+            "/api/notes",
+            json={
+                "note_type_id": note_type_id,
+                "deck_id": self.deck_id,
+                "field_values": {
+                    "Word": "\u72ac",
+                    "Word_Audio": "",
+                },
+            },
+        )
+        self.assertEqual(note_resp.status_code, 201)
+        note_id = note_resp.get_json()["id"]
+
+        upload_resp = self.client.post(
+            f"/api/notes/{note_id}/media",
+            data={
+                "field_name": "Word_Audio",
+                "file": (io.BytesIO(_MIN_WAV_BYTES), "voice.wav", "audio/wav"),
+            },
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(upload_resp.status_code, 201)
+
+        with self.app.app_context():
+            card = Card.query.filter_by(note_id=note_id).first()
+            self.assertIsNotNone(card)
+            card_id = card.id  # type: ignore[union-attr]
+
+        edit_resp = self.client.patch(
+            f"/api/study/cards/{card_id}/edit",
+            json={
+                "field_values": {
+                    "Word_Audio": "voice.wav",
+                }
+            },
+        )
+        self.assertEqual(edit_resp.status_code, 200)
+        payload = edit_resp.get_json() or {}
+        self.assertTrue(payload.get("success"))
+        self.assertEqual((payload.get("field_values") or {}).get("Word_Audio"), "voice.wav")
+
+    def test_browse_card_update_accepts_partial_field_values_payload(self):
+        note_type = self._create_note_type()
+        note_type_id = note_type["id"]
+        note_resp = self.client.post(
+            "/api/notes",
+            json={
+                "note_type_id": note_type_id,
+                "deck_id": self.deck_id,
+                "field_values": {
+                    "Word": "\u72ac",
+                    "Reading": "\u3044\u306c",
+                    "Meaning": "dog",
+                },
+            },
+        )
+        self.assertEqual(note_resp.status_code, 201)
+        note_id = note_resp.get_json()["id"]
+
+        with self.app.app_context():
+            card = Card.query.filter_by(note_id=note_id).first()
+            self.assertIsNotNone(card)
+            card_id = card.id  # type: ignore[union-attr]
+
+        patch_resp = self.client.patch(
+            f"/vocabulary/api/browse/cards/{card_id}",
+            json={
+                "field_values": {
+                    "Word": "\u72ac-browse-updated",
+                }
+            },
+        )
+        self.assertEqual(patch_resp.status_code, 200)
+        payload = patch_resp.get_json() or {}
+        detail_values = ((payload.get("detail") or {}).get("note") or {}).get("field_values") or {}
+        self.assertEqual(detail_values.get("Word"), "\u72ac-browse-updated")
+        self.assertEqual(detail_values.get("Reading"), "\u3044\u306c")
+        self.assertEqual(detail_values.get("Meaning"), "dog")
+
+        with self.app.app_context():
+            note = Note.query.get(note_id)
+            self.assertIsNotNone(note)
+            values = note.field_values or {}  # type: ignore[union-attr]
+            self.assertEqual(values.get("Word"), "\u72ac-browse-updated")
+            self.assertEqual(values.get("Reading"), "\u3044\u306c")
+            self.assertEqual(values.get("Meaning"), "dog")
 
     def test_flashcard_import_parse_and_execute_upsert(self):
         note_type = self._create_note_type()

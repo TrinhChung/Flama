@@ -12,10 +12,12 @@ from app.services.anki_scheduler import (
     _day_index as scheduler_day_index,
     _day_index_to_datetime as scheduler_day_index_to_datetime,
 )
+from app.services import tts_provider_service
 from app.services.stats_overview import build_stats_overview
 from app.services.stats_today_future import build_today_future_stats, list_stats_decks
 from app.utils.deck_move_token import create_deck_move_token
 from app.utils.permissions import is_admin_user
+from sqlalchemy.exc import SQLAlchemyError
 from models import db
 from models.flashcard import Card, DeckCloneDeckMap, DeckInstall, Note
 from models.deck import Deck
@@ -150,3 +152,153 @@ def stats_today_future():
         backlog=backlog,
     )
     return jsonify(payload)
+
+
+def _parse_boolean(value: object) -> bool:
+    if isinstance(value, bool):
+        return value
+    return tts_provider_service.is_truthy(value)
+
+
+def _serialize_validation_result(result: tts_provider_service.ApiKeyValidationResult) -> dict:
+    return {
+        "valid": bool(result.valid),
+        "status": tts_provider_service.normalize_key_status(result.status),
+        "message": str(result.message or ""),
+        "checked_at": result.checked_at.isoformat() if result.checked_at else None,
+    }
+
+
+@main_bp.route("/api/tts/providers", methods=["GET"])
+@login_required
+def tts_provider_list():
+    items = tts_provider_service.list_active_provider_profiles_for_user(current_user.id)
+    return jsonify({"items": items})
+
+
+@main_bp.route("/api/tts/providers/<provider_type>/profile", methods=["GET", "PUT"])
+@login_required
+def tts_provider_profile(provider_type: str):
+    provider = tts_provider_service.find_provider_by_type(provider_type, include_inactive=False)
+    if provider is None:
+        return jsonify({"error": "NOT_FOUND", "message": "Provider không tồn tại hoặc đang bị tắt."}), 404
+
+    if request.method == "GET":
+        payload = tts_provider_service.get_provider_profile_payload_for_user(
+            user_id=current_user.id,
+            provider_type=provider.provider_type,
+            include_inactive=False,
+        )
+        if payload is None:
+            return jsonify({"error": "NOT_FOUND", "message": "Provider không tồn tại."}), 404
+        return jsonify(payload)
+
+    body = request.get_json(silent=True) or {}
+    if not isinstance(body, dict):
+        return jsonify({"error": "VALIDATION_ERROR", "message": "Payload phải là object JSON."}), 400
+
+    raw_api_key = tts_provider_service.UNSET
+    if "api_key" in body:
+        raw_api_key = str(body.get("api_key") or "")
+
+    settings_payload = tts_provider_service.UNSET
+    if "settings" in body:
+        settings_payload = body.get("settings")
+
+    clear_api_key = _parse_boolean(body.get("clear_api_key"))
+    validate_key = _parse_boolean(body.get("validate_key"))
+
+    try:
+        profile, validation_result, errors = tts_provider_service.update_user_provider_profile(
+            db.session,
+            user_id=current_user.id,
+            provider=provider,
+            raw_api_key=raw_api_key,
+            clear_api_key=clear_api_key,
+            settings_payload=settings_payload,
+            validate_key=validate_key,
+        )
+        if errors:
+            db.session.rollback()
+            return jsonify({"error": "VALIDATION_ERROR", "message": "; ".join(errors), "errors": errors}), 400
+        db.session.commit()
+    except SQLAlchemyError:
+        db.session.rollback()
+        return jsonify({"error": "DB_ERROR", "message": "Không thể cập nhật cấu hình TTS của user."}), 500
+
+    payload = tts_provider_service.serialize_user_provider_profile(provider=provider, profile=profile)
+    if validation_result is not None:
+        payload["validation"] = _serialize_validation_result(validation_result)
+    return jsonify(payload)
+
+
+@main_bp.route("/api/tts/providers/<provider_type>/validate-key", methods=["POST"])
+@login_required
+def tts_validate_provider_key(provider_type: str):
+    provider = tts_provider_service.find_provider_by_type(provider_type, include_inactive=False)
+    if provider is None:
+        return jsonify({"error": "NOT_FOUND", "message": "Provider không tồn tại hoặc đang bị tắt."}), 404
+
+    body = request.get_json(silent=True) or {}
+    if not isinstance(body, dict):
+        return jsonify({"error": "VALIDATION_ERROR", "message": "Payload phải là object JSON."}), 400
+
+    api_key_override: str | None = None
+    if "api_key" in body:
+        api_key_override = str(body.get("api_key") or "").strip() or None
+
+    try:
+        result, errors = tts_provider_service.validate_user_provider_key(
+            db.session,
+            user_id=current_user.id,
+            provider=provider,
+            api_key_override=api_key_override,
+        )
+        if errors or result is None:
+            db.session.rollback()
+            messages = errors or ["Không thể validate API key."]
+            return jsonify({"error": "VALIDATION_ERROR", "message": "; ".join(messages), "errors": messages}), 400
+        db.session.commit()
+    except SQLAlchemyError:
+        db.session.rollback()
+        return jsonify({"error": "DB_ERROR", "message": "Không thể lưu kết quả validate API key."}), 500
+
+    payload = tts_provider_service.get_provider_profile_payload_for_user(
+        user_id=current_user.id,
+        provider_type=provider.provider_type,
+        include_inactive=False,
+    )
+    return jsonify(
+        {
+            "validation": _serialize_validation_result(result),
+            "item": payload,
+        }
+    )
+
+
+@main_bp.route("/api/tts/providers/<provider_type>/voices", methods=["POST"])
+@login_required
+def tts_provider_voices(provider_type: str):
+    provider = tts_provider_service.find_provider_by_type(provider_type, include_inactive=False)
+    if provider is None:
+        return jsonify({"error": "NOT_FOUND", "message": "Provider không tồn tại hoặc đang bị tắt."}), 404
+
+    body = request.get_json(silent=True) or {}
+    if not isinstance(body, dict):
+        return jsonify({"error": "VALIDATION_ERROR", "message": "Payload phải là object JSON."}), 400
+
+    api_key_override = str(body.get("api_key") or "").strip() or None
+    try:
+        items, errors = tts_provider_service.list_provider_voices_for_user(
+            db.session,
+            user_id=current_user.id,
+            provider=provider,
+            api_key_override=api_key_override,
+        )
+    except SQLAlchemyError:
+        db.session.rollback()
+        return jsonify({"error": "DB_ERROR", "message": "Không thể tải danh sách nhân vật VoiceVox."}), 500
+
+    if errors:
+        return jsonify({"error": "VALIDATION_ERROR", "message": "; ".join(errors), "errors": errors}), 400
+    return jsonify({"items": items})
