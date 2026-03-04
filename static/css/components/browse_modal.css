@@ -219,6 +219,18 @@
   color: #a94908;
 }
 
+.browse-voicevox-btn--cancel-generate {
+  background: #fff4f4;
+  border-color: #f2b1b1;
+  color: #b73a3a;
+}
+
+.browse-voicevox-btn--cancel-generate:hover {
+  background: #ffe6e6;
+  border-color: #e78585;
+  color: #982828;
+}
+
 .browse-voicevox-btn--generate {
   background: var(--flama-gradient);
   border-color: transparent;

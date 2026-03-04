@@ -19,6 +19,7 @@
   const unsavedModalInstance = window.bootstrap.Modal.getOrCreateInstance(unsavedModalEl);
   const bulkDeleteModalInstance = window.bootstrap.Modal.getOrCreateInstance(bulkDeleteModalEl);
   const VOICEVOX_BATCH_SIZE = 4;
+  const VOICEVOX_GENERATE_CONTROLLER_KEY = "voicevox-generate";
 
   const els = {
     contextLabel: document.getElementById("browseContextLabel"),
@@ -32,6 +33,7 @@
     voicevoxSaveSettingsBtn: document.getElementById("browseVoicevoxSaveSettingsBtn"),
     voicevoxResetDefaultsBtn: document.getElementById("browseVoicevoxResetDefaultsBtn"),
     voicevoxRetryFailedBtn: document.getElementById("browseVoicevoxRetryFailedBtn"),
+    voicevoxCancelGenerateBtn: document.getElementById("browseVoicevoxCancelGenerateBtn"),
     voicevoxGenerateBtn: document.getElementById("browseVoicevoxGenerateBtn"),
     voicevoxPreviewBtn: document.getElementById("browseVoicevoxPreviewBtn"),
     voicevoxSelectedNotes: document.getElementById("browseVoicevoxSelectedNotes"),
@@ -171,6 +173,7 @@
       savingSettings: false,
       generating: false,
       generationMode: "",
+      cancelRequested: false,
       previewing: false,
       previewObjectUrl: "",
       batchSize: VOICEVOX_BATCH_SIZE,
@@ -722,6 +725,7 @@
       state.voicevox.savingSettings ||
       state.voicevox.generating ||
       state.voicevox.previewing;
+    const generating = Boolean(state.voicevox.generating);
     const controls = [
       els.voicevoxCharacter,
       els.voicevoxSourceField,
@@ -765,6 +769,16 @@
       els.voicevoxRetryFailedBtn.innerHTML = showSpinner
         ? '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span>'
         : "Tạo lại mục lỗi";
+    }
+    if (els.voicevoxCancelGenerateBtn) {
+      els.voicevoxCancelGenerateBtn.classList.toggle("d-none", !generating);
+      if (!generating) {
+        els.voicevoxCancelGenerateBtn.disabled = true;
+        els.voicevoxCancelGenerateBtn.textContent = "Hủy tạo voice";
+      } else {
+        els.voicevoxCancelGenerateBtn.disabled = Boolean(state.voicevox.cancelRequested);
+        els.voicevoxCancelGenerateBtn.textContent = state.voicevox.cancelRequested ? "Đang hủy..." : "Hủy tạo voice";
+      }
     }
     if (els.voicevoxSaveSettingsBtn) {
       els.voicevoxSaveSettingsBtn.disabled = loading;
@@ -1287,6 +1301,33 @@
     renderVoicevoxProgressAndFailed();
   }
 
+  function clearVoicevoxGenerateController(controller) {
+    if (controller) {
+      if (state.controllers[VOICEVOX_GENERATE_CONTROLLER_KEY] === controller) {
+        delete state.controllers[VOICEVOX_GENERATE_CONTROLLER_KEY];
+      }
+      return;
+    }
+    if (state.controllers[VOICEVOX_GENERATE_CONTROLLER_KEY]) {
+      delete state.controllers[VOICEVOX_GENERATE_CONTROLLER_KEY];
+    }
+  }
+
+  function cancelVoicevoxGenerate() {
+    if (!state.voicevox.generating || state.voicevox.cancelRequested) {
+      return;
+    }
+    state.voicevox.cancelRequested = true;
+    state.voicevox.progressMessage = "Đang hủy...";
+    renderVoicevoxProgressAndFailed();
+    const controller = state.controllers[VOICEVOX_GENERATE_CONTROLLER_KEY];
+    if (controller) {
+      controller.abort();
+      clearVoicevoxGenerateController(controller);
+    }
+    setVoicevoxActionState();
+  }
+
   async function runVoicevoxGenerateBatches(targets, mode) {
     const voiceLabel = selectedVoiceLabel();
     const safeTargets = Array.isArray(targets) ? targets : [];
@@ -1294,7 +1335,9 @@
     const retryKeys = new Set(safeTargets.map((item) => String(item?.key || "")));
     const failedFromRun = [];
     let fatalStopReason = "";
+    let cancelledByUser = false;
 
+    state.voicevox.cancelRequested = false;
     resetVoicevoxProgressCounters(safeTargets.length, mode);
     if (mode !== "retry") {
       state.voicevox.failedNotes = [];
@@ -1302,6 +1345,10 @@
     renderVoicevoxProgressAndFailed();
 
     for (let batchIndex = 0; batchIndex < batches.length; batchIndex += 1) {
+      if (state.voicevox.cancelRequested) {
+        cancelledByUser = true;
+        break;
+      }
       const batchTargets = batches[batchIndex];
       if (!batchTargets.length) {
         continue;
@@ -1315,24 +1362,36 @@
 
       let batchFailed = [];
       try {
-        const payload = await requestJson("/vocabulary/api/browse/voicevox/generate", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            card_ids: batchTargets.map((item) => item.cardId),
-            source_field: state.voicevox.sourceField,
-            destination_field: state.voicevox.destinationField,
-            character_id: state.voicevox.characterId,
-            settings: voicevoxSettingsPayload(),
-            append_audio: Boolean(state.voicevox.appendAudio),
-            use_opus: Boolean(state.voicevox.useOpus),
-            speaker_label: voiceLabel.speaker,
-            style_label: voiceLabel.style,
-            api_key: voicevoxApiKeyOverrideValue(),
-          }),
-        });
+        const controller = withAbortController(VOICEVOX_GENERATE_CONTROLLER_KEY);
+        let payload;
+        try {
+          payload = await requestJson("/vocabulary/api/browse/voicevox/generate", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            signal: controller.signal,
+            body: JSON.stringify({
+              card_ids: batchTargets.map((item) => item.cardId),
+              source_field: state.voicevox.sourceField,
+              destination_field: state.voicevox.destinationField,
+              character_id: state.voicevox.characterId,
+              settings: voicevoxSettingsPayload(),
+              append_audio: Boolean(state.voicevox.appendAudio),
+              use_opus: Boolean(state.voicevox.useOpus),
+              speaker_label: voiceLabel.speaker,
+              style_label: voiceLabel.style,
+              api_key: voicevoxApiKeyOverrideValue(),
+            }),
+          });
+        } finally {
+          clearVoicevoxGenerateController(controller);
+        }
+
+        if (state.voicevox.cancelRequested) {
+          cancelledByUser = true;
+          break;
+        }
 
         state.voicevox.outputRoot = String(payload?.output_root || state.voicevox.outputRoot || "");
         const skipped = Array.isArray(payload?.skipped) ? payload.skipped : [];
@@ -1358,6 +1417,10 @@
           }
         }
       } catch (error) {
+        if (error?.name === "AbortError" || state.voicevox.cancelRequested) {
+          cancelledByUser = true;
+          break;
+        }
         const batchReason = String(error?.message || "Generate VoiceVox thất bại.");
         batchFailed = batchTargets.map((item) => buildVoicevoxFailedNote(item, batchReason));
       }
@@ -1372,6 +1435,11 @@
       state.voicevox.progressFailed += batchFailedCount;
       state.voicevox.progressMessage = `Batch ${batchIndex + 1}/${batches.length}`;
       renderVoicevoxProgressAndFailed();
+
+      if (state.voicevox.cancelRequested) {
+        cancelledByUser = true;
+        break;
+      }
 
       const keyErrorItem = normalizedBatchFailed.find((item) => isVoicevoxKeyOrPointError(item.reason));
       if (!keyErrorItem) {
@@ -1400,14 +1468,20 @@
       state.voicevox.failedNotes = dedupeVoicevoxFailedNotes(failedFromRun);
     }
 
-    state.voicevox.progressMessage = fatalStopReason ? "Đã dừng sớm vì key/points." : "Hoàn tất.";
+    if (cancelledByUser || state.voicevox.cancelRequested) {
+      state.voicevox.progressMessage = "Đã hủy bởi người dùng.";
+    } else {
+      state.voicevox.progressMessage = fatalStopReason ? "Đã dừng sớm vì key/points." : "Hoàn tất.";
+    }
     renderVoicevoxProgressAndFailed();
 
     const processed = Number(state.voicevox.progressProcessed || 0);
     const total = Number(state.voicevox.progressTotal || 0);
     const generated = Number(state.voicevox.progressGenerated || 0);
     const failed = Number(state.voicevox.progressFailed || 0);
-    let summary = `Đã xử lý ${processed}/${total} từ. Thành công ${generated}, lỗi ${failed}.`;
+    let summary = (cancelledByUser || state.voicevox.cancelRequested)
+      ? `Đã hủy tạo audio. Đã xử lý ${processed}/${total} từ. Thành công ${generated}, lỗi ${failed}.`
+      : `Đã xử lý ${processed}/${total} từ. Thành công ${generated}, lỗi ${failed}.`;
     if (failed > 0) {
       summary += '\nBạn có thể bấm "Tạo lại mục lỗi" sau khi đổi API key.';
     }
@@ -1461,6 +1535,7 @@
       return;
     }
 
+    state.voicevox.cancelRequested = false;
     state.voicevox.generating = true;
     state.voicevox.generationMode = "all";
     setVoicevoxActionState();
@@ -1469,6 +1544,8 @@
     } catch (error) {
       window.alert(`Generate VoiceVox thất bại: ${error.message}`);
     } finally {
+      clearVoicevoxGenerateController();
+      state.voicevox.cancelRequested = false;
       state.voicevox.generating = false;
       state.voicevox.generationMode = "";
       setVoicevoxActionState();
@@ -1509,6 +1586,7 @@
       return;
     }
 
+    state.voicevox.cancelRequested = false;
     state.voicevox.generating = true;
     state.voicevox.generationMode = "retry";
     setVoicevoxActionState();
@@ -1517,6 +1595,8 @@
     } catch (error) {
       window.alert(`Tạo lại mục lỗi thất bại: ${error.message}`);
     } finally {
+      clearVoicevoxGenerateController();
+      state.voicevox.cancelRequested = false;
       state.voicevox.generating = false;
       state.voicevox.generationMode = "";
       setVoicevoxActionState();
@@ -1532,6 +1612,10 @@
 
   function setVoicevoxModalOpen(open) {
     if (!els.voicevoxModal) {
+      return;
+    }
+    if (!open && state.voicevox.generating) {
+      window.alert('Đang tạo audio. Bấm "Hủy tạo voice" để dừng trước khi đóng modal.');
       return;
     }
     els.voicevoxModal.classList.toggle("d-none", !open);
@@ -2495,6 +2579,11 @@
     if (els.voicevoxCancelBtn) {
       els.voicevoxCancelBtn.addEventListener("click", () => {
         setVoicevoxModalOpen(false);
+      });
+    }
+    if (els.voicevoxCancelGenerateBtn) {
+      els.voicevoxCancelGenerateBtn.addEventListener("click", () => {
+        cancelVoicevoxGenerate();
       });
     }
     if (els.voicevoxGenerateBtn) {
