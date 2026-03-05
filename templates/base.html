@@ -40,8 +40,8 @@
   {% endblock %}
 
   {% set endpoint = request.endpoint or '' %}
-  {% set hide_global_pet = endpoint == 'main.support_donation_page' or endpoint in ['flashcards.flashcard_study_page', 'vocabulary.study_deck', 'vocabulary.study_topic', 'vocabulary.study_lesson'] %}
-  {% if not hide_global_pet %}
+  {% set show_global_pet = endpoint in ['main.index', 'main.dashboard'] %}
+  {% if show_global_pet %}
   <a class="site-pet-link" href="{{ url_for('main.support_donation_page') }}" aria-label="Trang ủng hộ">
     <img class="site-pet" src="{{ url_for('static', filename='images/pet.svg') }}" alt="" aria-hidden="true" />
   </a>
