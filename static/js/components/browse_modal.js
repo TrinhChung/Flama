@@ -121,6 +121,7 @@
     loadingTree: false,
     loadingRows: false,
     loadingDetail: false,
+    rowsRequestSeq: 0,
     query: {
       keyword: "",
       status: "all",
@@ -2087,9 +2088,8 @@
   }
 
   async function loadCards({ reset = false, keepSelection = false } = {}) {
-    if (state.loadingRows) {
-      return;
-    }
+    const requestSeq = state.rowsRequestSeq + 1;
+    state.rowsRequestSeq = requestSeq;
     if (reset) {
       state.page = 1;
       state.rows = [];
@@ -2119,6 +2119,9 @@
       const payload = await requestJson(`/vocabulary/api/browse/cards?${params.toString()}`, {
         signal: controller.signal,
       });
+      if (requestSeq !== state.rowsRequestSeq) {
+        return;
+      }
       const incomingRows = Array.isArray(payload.items) ? payload.items : [];
       if (reset) {
         state.rows = incomingRows;
@@ -2163,6 +2166,9 @@
         renderTableMeta();
       }
     } catch (error) {
+      if (requestSeq !== state.rowsRequestSeq) {
+        return;
+      }
       if (error.name !== "AbortError") {
         els.tableBody.innerHTML = `
           <tr>
@@ -2172,7 +2178,9 @@
         renderTableMeta();
       }
     } finally {
-      setRowsLoading(false);
+      if (requestSeq === state.rowsRequestSeq) {
+        setRowsLoading(false);
+      }
     }
   }
 
