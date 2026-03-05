@@ -915,6 +915,12 @@
     try {
       const requestBody = {};
       const apiKeyOverride = voicevoxApiKeyOverrideValue();
+      if (!state.voicevox.hasApiKey && !apiKeyOverride) {
+        state.voicevox.characters = [];
+        state.voicevox.characterError = "Vui lòng nhập API key VoiceVox trước khi tải danh sách nhân vật.";
+        renderVoicevoxCharacterOptions();
+        return;
+      }
       if (apiKeyOverride) {
         requestBody.api_key = apiKeyOverride;
       }
@@ -1049,6 +1055,23 @@
     }
   }
 
+  async function ensureVoicevoxApiKeyPersistedForAction(actionLabel) {
+    const apiKeyOverride = voicevoxApiKeyOverrideValue();
+    if (!state.voicevox.hasApiKey && !apiKeyOverride) {
+      window.alert(`Không thể ${actionLabel}: vui lòng nhập API key VoiceVox và lưu trước.`);
+      return false;
+    }
+    if (!apiKeyOverride) {
+      return true;
+    }
+    const saved = await persistVoicevoxSettings();
+    if (!saved && !state.voicevox.hasApiKey) {
+      window.alert(`Không thể ${actionLabel}: không lưu được API key VoiceVox.`);
+      return false;
+    }
+    return true;
+  }
+
   function resetVoicevoxSettingsToDefault() {
     const defaults = state.voicevox.defaultSettings || buildVoicevoxDefaultSettings({});
     state.voicevox.characterId = String(defaults.characterId || "").trim();
@@ -1114,6 +1137,10 @@
 
   async function validateVoicevoxApiKeyBeforeAction(actionLabel) {
     if (state.voicevox.validatingKey) {
+      return false;
+    }
+    const keyPersisted = await ensureVoicevoxApiKeyPersistedForAction(actionLabel);
+    if (!keyPersisted) {
       return false;
     }
     state.voicevox.validatingKey = true;

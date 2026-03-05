@@ -1089,13 +1089,10 @@ def update_user_provider_profile(
             else:
                 profile.settings_json = dumps_json_map(normalized_settings)
 
-    effective_key = decrypt_api_key(profile.encrypted_api_key)
-    if provider.requires_api_key and not effective_key:
-        errors.append("Provider này yêu cầu API key. Vui lòng lưu API key trước khi sử dụng.")
-
     if errors:
         return profile, None, errors
 
+    effective_key = decrypt_api_key(profile.encrypted_api_key)
     validation_result = None
     if validate_key:
         if not effective_key:

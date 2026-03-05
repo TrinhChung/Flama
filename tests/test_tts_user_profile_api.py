@@ -127,6 +127,52 @@ class TtsUserProfileApiTests(unittest.TestCase):
         self.assertTrue(verify_payload["profile"]["settings"]["append_audio"])
         self.assertTrue(verify_payload["profile"]["settings"]["use_opus"])
 
+    def test_user_can_save_voicevox_settings_without_api_key(self):
+        self._login("user-a@example.com")
+
+        put_response = self.client.put(
+            f"/api/tts/providers/{VOICEVOX_PROVIDER_TYPE}/profile",
+            json={
+                "settings": {
+                    "character_id": "202",
+                    "source_field": "Word",
+                    "destination_field": "Word_Audio",
+                    "append_audio": True,
+                    "use_opus": False,
+                    "speed": 1.25,
+                },
+            },
+        )
+        self.assertEqual(put_response.status_code, 200)
+        payload = put_response.get_json()
+        self.assertFalse(payload["profile"]["has_api_key"])
+        self.assertEqual(payload["profile"]["settings"]["character_id"], "202")
+        self.assertEqual(payload["profile"]["settings"]["source_field"], "Word")
+        self.assertEqual(payload["profile"]["settings"]["destination_field"], "Word_Audio")
+        self.assertTrue(payload["profile"]["settings"]["append_audio"])
+        self.assertFalse(payload["profile"]["settings"]["use_opus"])
+
+        with self.app.app_context():
+            provider = (
+                TtsProviderConfig.query.filter_by(provider_type=VOICEVOX_PROVIDER_TYPE)
+                .order_by(TtsProviderConfig.id.asc())
+                .first()
+            )
+            self.assertIsNotNone(provider)
+            profile = TtsUserProviderProfile.query.filter_by(
+                user_id=self.user_a_id,
+                provider_id=provider.id,
+            ).first()
+            self.assertIsNotNone(profile)
+            self.assertFalse(bool(profile.encrypted_api_key))
+
+            settings = loads_json_map(profile.settings_json)
+            self.assertEqual(settings.get("character_id"), "202")
+            self.assertEqual(settings.get("source_field"), "Word")
+            self.assertEqual(settings.get("destination_field"), "Word_Audio")
+            self.assertTrue(settings.get("append_audio"))
+            self.assertFalse(settings.get("use_opus"))
+
     def test_user_profiles_are_isolated(self):
         self._login("user-a@example.com")
         put_response = self.client.put(
