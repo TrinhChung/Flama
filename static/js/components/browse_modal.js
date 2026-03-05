@@ -309,6 +309,26 @@
     return Math.max(minimum, Math.min(maximum, n));
   }
 
+  function normalizeBooleanFlag(value, fallback = false) {
+    if (typeof value === "boolean") {
+      return value;
+    }
+    if (typeof value === "number") {
+      return value !== 0;
+    }
+    const text = String(value == null ? "" : value).trim().toLowerCase();
+    if (!text) {
+      return fallback;
+    }
+    if (text === "1" || text === "true" || text === "yes" || text === "on") {
+      return true;
+    }
+    if (text === "0" || text === "false" || text === "no" || text === "off") {
+      return false;
+    }
+    return fallback;
+  }
+
   function formatSliderValue(value) {
     return Number(value).toFixed(1);
   }
@@ -699,6 +719,10 @@
     const settings = rawSettings && typeof rawSettings === "object" ? rawSettings : {};
     return {
       characterId: String(settings?.character_id || "").trim(),
+      sourceField: String(settings?.source_field ?? settings?.sourceField ?? "").trim(),
+      destinationField: String(settings?.destination_field ?? settings?.destinationField ?? "").trim(),
+      appendAudio: normalizeBooleanFlag(settings?.append_audio ?? settings?.appendAudio, false),
+      useOpus: normalizeBooleanFlag(settings?.use_opus ?? settings?.useOpus, false),
       volumeScale: clampRange(settings?.volume_scale ?? settings?.volumeScale ?? settings?.volume, 0, 2, 1.0),
       pitchScale: clampRange(settings?.pitch_scale ?? settings?.pitch, -0.4, 0.4, 0.0),
       speedScale: clampRange(settings?.speed_scale ?? settings?.speed, 0.1, 4.0, 1.0),
@@ -847,6 +871,10 @@
     state.voicevox.defaultSettings = defaults;
 
     state.voicevox.characterId = String(settings?.character_id || defaults.characterId || "").trim();
+    state.voicevox.sourceField = String(settings?.source_field || defaults.sourceField || "").trim();
+    state.voicevox.destinationField = String(settings?.destination_field || defaults.destinationField || "").trim();
+    state.voicevox.appendAudio = normalizeBooleanFlag(settings?.append_audio, defaults.appendAudio);
+    state.voicevox.useOpus = normalizeBooleanFlag(settings?.use_opus, defaults.useOpus);
     state.voicevox.volumeScale = clampRange(settings?.volume_scale, 0, 2, defaults.volumeScale);
     state.voicevox.pitchScale = clampRange(settings?.pitch_scale ?? settings?.pitch, -0.4, 0.4, defaults.pitchScale);
     state.voicevox.speedScale = clampRange(settings?.speed_scale ?? settings?.speed, 0.1, 4.0, defaults.speedScale);
@@ -954,6 +982,10 @@
   function voicevoxProfileSettingsPayload() {
     return {
       character_id: String(state.voicevox.characterId || "").trim(),
+      source_field: String(state.voicevox.sourceField || "").trim(),
+      destination_field: String(state.voicevox.destinationField || "").trim(),
+      append_audio: Boolean(state.voicevox.appendAudio),
+      use_opus: Boolean(state.voicevox.useOpus),
       volume_scale: state.voicevox.volumeScale,
       pitch_scale: state.voicevox.pitchScale,
       speed_scale: state.voicevox.speedScale,
@@ -970,15 +1002,12 @@
     if (state.voicevox.savingSettings) {
       return false;
     }
-    if (!state.voicevox.settingsDirty) {
-      if (notify) {
-        window.alert("Thiết lập đã được lưu.");
-      }
-      return false;
-    }
     const settings = voicevoxProfileSettingsPayload();
     const nextHash = JSON.stringify(settings);
-    if (nextHash === state.voicevox.lastSavedSettingsHash) {
+    const apiKeyOverride = voicevoxApiKeyOverrideValue();
+    const hasKeyMutation = Boolean(apiKeyOverride);
+    const hasSettingsMutation = state.voicevox.settingsDirty || nextHash !== state.voicevox.lastSavedSettingsHash;
+    if (!hasSettingsMutation && !hasKeyMutation) {
       state.voicevox.settingsDirty = false;
       if (notify) {
         window.alert("Thiết lập đã được lưu.");
@@ -988,18 +1017,21 @@
     state.voicevox.savingSettings = true;
     setVoicevoxActionState();
     try {
+      const requestBody = {};
+      if (hasSettingsMutation) {
+        requestBody.settings = settings;
+      }
+      if (apiKeyOverride) {
+        requestBody.api_key = apiKeyOverride;
+      }
       const payload = await requestJson("/api/tts/providers/voicevox/profile", {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ settings }),
+        body: JSON.stringify(requestBody),
       });
-      state.voicevox.lastSavedSettingsHash = nextHash;
-      state.voicevox.settingsDirty = false;
-      state.voicevox.keyStatus = String(payload?.profile?.key_status || state.voicevox.keyStatus || "unknown");
-      state.voicevox.lastValidationError = String(payload?.profile?.last_validation_error || "");
-      updateVoicevoxMetaLabels();
+      applyVoicevoxProfilePayload(payload);
       if (notify) {
         window.alert("Đã lưu thiết lập VoiceVox.");
       }
@@ -1020,6 +1052,10 @@
   function resetVoicevoxSettingsToDefault() {
     const defaults = state.voicevox.defaultSettings || buildVoicevoxDefaultSettings({});
     state.voicevox.characterId = String(defaults.characterId || "").trim();
+    state.voicevox.sourceField = String(defaults.sourceField || "").trim();
+    state.voicevox.destinationField = String(defaults.destinationField || "").trim();
+    state.voicevox.appendAudio = Boolean(defaults.appendAudio);
+    state.voicevox.useOpus = Boolean(defaults.useOpus);
     state.voicevox.volumeScale = defaults.volumeScale;
     state.voicevox.pitchScale = defaults.pitchScale;
     state.voicevox.speedScale = defaults.speedScale;
@@ -2629,21 +2665,29 @@
     if (els.voicevoxSourceField) {
       els.voicevoxSourceField.addEventListener("change", () => {
         state.voicevox.sourceField = String(els.voicevoxSourceField.value || "").trim();
+        state.voicevox.settingsDirty = true;
+        debouncedPersistVoicevoxSettings();
       });
     }
     if (els.voicevoxDestinationField) {
       els.voicevoxDestinationField.addEventListener("change", () => {
         state.voicevox.destinationField = String(els.voicevoxDestinationField.value || "").trim();
+        state.voicevox.settingsDirty = true;
+        debouncedPersistVoicevoxSettings();
       });
     }
     if (els.voicevoxAppendAudio) {
       els.voicevoxAppendAudio.addEventListener("change", () => {
         state.voicevox.appendAudio = Boolean(els.voicevoxAppendAudio.checked);
+        state.voicevox.settingsDirty = true;
+        debouncedPersistVoicevoxSettings();
       });
     }
     if (els.voicevoxUseOpus) {
       els.voicevoxUseOpus.addEventListener("change", () => {
         state.voicevox.useOpus = Boolean(els.voicevoxUseOpus.checked);
+        state.voicevox.settingsDirty = true;
+        debouncedPersistVoicevoxSettings();
       });
     }
     if (els.voicevoxApiKey) {
@@ -2653,6 +2697,9 @@
         state.voicevox.lastValidationError = "";
         updateVoicevoxMetaLabels();
         debouncedVoicevoxReload();
+      });
+      els.voicevoxApiKey.addEventListener("change", () => {
+        persistVoicevoxSettings().catch(() => undefined);
       });
     }
     if (els.voicevoxApiKeyToggleBtn) {

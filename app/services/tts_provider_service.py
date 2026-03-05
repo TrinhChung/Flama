@@ -33,6 +33,10 @@ VOICEVOX_SPEAKERS_URL = "https://deprecatedapis.tts.quest/v2/voicevox/speakers/"
 VOICEVOX_POINTS_URL = "https://deprecatedapis.tts.quest/v2/api/"
 VOICEVOX_DEFAULT_SETTINGS: dict[str, Any] = {
     "character_id": "",
+    "source_field": "",
+    "destination_field": "",
+    "append_audio": False,
+    "use_opus": False,
     "volume_scale": 1.0,
     "pitch_scale": 0.0,
     "pitch": 0.0,
@@ -62,6 +66,10 @@ DEFAULT_TTS_PROVIDER_SEEDS: tuple[dict[str, Any], ...] = (
         },
         "default_settings": {
             "character_id": "",
+            "source_field": "",
+            "destination_field": "",
+            "append_audio": False,
+            "use_opus": False,
             "volume_scale": 1.0,
             "pitch_scale": 0.0,
             "pitch": 0.0,
@@ -252,6 +260,23 @@ def _normalize_voicevox_float(
     return max(minimum, min(maximum, parsed))
 
 
+def _normalize_voicevox_bool(
+    value: Any,
+    *,
+    fallback: bool,
+) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    normalized = str(value or "").strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    return fallback
+
+
 def _detect_audio_mime_and_extension(
     content: bytes,
     *,
@@ -413,9 +438,23 @@ class VoicevoxTtsProviderAdapter(BaseTtsProviderAdapter):
         volume_raw = _pick_first("volume_scale", "volumeScale", "volume")
         initial_silence_raw = _pick_first("initial_silence_scale", "pre_phoneme_length", "prePhonemeLength")
         final_silence_raw = _pick_first("final_silence_length", "post_phoneme_length", "postPhonemeLength")
+        source_field_raw = _pick_first("source_field", "sourceField")
+        destination_field_raw = _pick_first("destination_field", "destinationField")
+        append_audio_raw = _pick_first("append_audio", "appendAudio")
+        use_opus_raw = _pick_first("use_opus", "useOpus")
 
         normalized = {
             "character_id": str(character_raw or "").strip(),
+            "source_field": str(source_field_raw or "").strip(),
+            "destination_field": str(destination_field_raw or "").strip(),
+            "append_audio": _normalize_voicevox_bool(
+                append_audio_raw,
+                fallback=bool(VOICEVOX_DEFAULT_SETTINGS["append_audio"]),
+            ),
+            "use_opus": _normalize_voicevox_bool(
+                use_opus_raw,
+                fallback=bool(VOICEVOX_DEFAULT_SETTINGS["use_opus"]),
+            ),
             "volume_scale": _normalize_voicevox_float(
                 volume_raw,
                 fallback=float(VOICEVOX_DEFAULT_SETTINGS["volume_scale"]),
