@@ -251,6 +251,34 @@ class TtsUserProfileApiTests(unittest.TestCase):
         self.assertEqual(payload["items"], mocked_items)
         self.assertEqual(mocked.call_count, 1)
 
+    def test_profile_payload_treats_undecryptable_saved_key_as_missing(self):
+        self._login("user-a@example.com")
+
+        with self.app.app_context():
+            provider = (
+                TtsProviderConfig.query.filter_by(provider_type=VOICEVOX_PROVIDER_TYPE)
+                .order_by(TtsProviderConfig.id.asc())
+                .first()
+            )
+            self.assertIsNotNone(provider)
+
+            profile = TtsUserProviderProfile(
+                user_id=self.user_a_id,
+                provider_id=provider.id,
+                encrypted_api_key="not-a-valid-fernet-token",
+                key_status="valid",
+                settings_json="{}",
+            )
+            db.session.add(profile)
+            db.session.commit()
+
+        response = self.client.get(f"/api/tts/providers/{VOICEVOX_PROVIDER_TYPE}/profile")
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertFalse(payload["profile"]["has_api_key"])
+        self.assertEqual(payload["profile"]["masked_api_key"], "")
+        self.assertEqual(payload["profile"]["key_status"], "unknown")
+
 
 if __name__ == "__main__":
     unittest.main()

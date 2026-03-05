@@ -972,13 +972,18 @@ def serialize_user_provider_profile(
     effective_settings = dict(default_settings)
     effective_settings.update(normalized_settings)
     effective_settings, _ = adapter.normalize_user_settings(effective_settings, default_settings=default_settings)
+    decrypted_api_key = decrypt_api_key(profile.encrypted_api_key) if profile is not None else ""
+    has_api_key = bool(decrypted_api_key)
+    key_status = normalize_key_status(profile.key_status if profile else "unknown")
+    if not has_api_key:
+        key_status = "unknown"
 
     return {
         "provider": provider_payload,
         "profile": {
-            "has_api_key": bool(profile and profile.encrypted_api_key),
-            "masked_api_key": mask_api_key(profile.encrypted_api_key) if profile else "",
-            "key_status": normalize_key_status(profile.key_status if profile else "unknown"),
+            "has_api_key": has_api_key,
+            "masked_api_key": mask_api_key(profile.encrypted_api_key) if has_api_key and profile is not None else "",
+            "key_status": key_status,
             "last_validated_at": profile.last_validated_at.isoformat() if profile and profile.last_validated_at else None,
             "last_validation_error": (profile.last_validation_error or "") if profile else "",
             "settings": normalized_settings,
