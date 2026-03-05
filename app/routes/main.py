@@ -3,20 +3,23 @@
 import hashlib
 from dataclasses import dataclass, field
 from datetime import datetime
+from pathlib import Path
 from typing import Dict, List
 
-from flask import Blueprint, jsonify, redirect, render_template, request, url_for
+from flask import Blueprint, abort, current_app, jsonify, redirect, render_template, request, send_file, url_for
 from flask_login import current_user, login_required
 
 from app.services.anki_scheduler import (
     _day_index as scheduler_day_index,
     _day_index_to_datetime as scheduler_day_index_to_datetime,
 )
+from app.services import support_donation_service
 from app.services import tts_provider_service
 from app.services.stats_overview import build_stats_overview
 from app.services.stats_today_future import build_today_future_stats, list_stats_decks
 from app.utils.deck_move_token import create_deck_move_token
 from app.utils.permissions import is_admin_user
+from app.validators import RequestValidationError
 from sqlalchemy.exc import SQLAlchemyError
 from models import db
 from models.flashcard import Card, DeckCloneDeckMap, DeckInstall, Note
@@ -54,6 +57,46 @@ def privacy():
 @main_bp.route("/cookies")
 def cookies():
     return render_template("cookies.html")
+
+
+@main_bp.route("/support-donation")
+def support_donation_page():
+    row = support_donation_service.get_latest_config()
+    return render_template(
+        "support_donation.html",
+        donation_config=row,
+        default_support_title=support_donation_service.DEFAULT_TITLE,
+        default_support_description=support_donation_service.DEFAULT_DESCRIPTION,
+        default_thank_you_message=support_donation_service.DEFAULT_THANK_YOU,
+    )
+
+
+@main_bp.route("/support-donation/qr")
+def support_donation_qr_image():
+    row = support_donation_service.get_latest_config()
+    if row is None or not row.qr_image_storage_path:
+        abort(404)
+
+    upload_root = Path(current_app.config["FLASHCARD_MEDIA_UPLOAD_ROOT"]).resolve()
+    try:
+        full_path = support_donation_service.resolve_qr_file_path(
+            upload_root=upload_root,
+            storage_path=row.qr_image_storage_path,
+        )
+    except RequestValidationError:
+        abort(404)
+
+    if not full_path.exists() or not full_path.is_file():
+        abort(404)
+
+    response = send_file(
+        full_path,
+        mimetype=row.qr_image_mime_type or "image/png",
+        conditional=True,
+        max_age=300,
+    )
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
 
 
 @main_bp.route("/dashboard")

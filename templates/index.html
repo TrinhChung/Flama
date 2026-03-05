@@ -341,6 +341,53 @@
     </div>
   </section>
 
+  {# ── Product Updates ── #}
+  <section class="landing__updates" id="landing-updates">
+    <div class="container">
+      <div class="section-heading text-center">
+        <h2 class="section-title">Cập nhật mới cho người học</h2>
+        <p class="section-subtitle">Những cải tiến giúp bạn học nhanh hơn và nghe tiếng Nhật tự nhiên hơn trong tháng 03/2026.</p>
+      </div>
+      <div class="updates-grid">
+        <article class="update-card">
+          <div class="update-card__meta">
+            <span class="update-card__tag">Giao diện</span>
+            <time datetime="2026-03-04">04/03/2026</time>
+          </div>
+          <h3>Tối ưu lại giao diện học</h3>
+          <p>Bố cục học thẻ được làm gọn, rõ hơn và dễ theo dõi hơn khi bạn ôn nhiều từ liên tục.</p>
+        </article>
+
+        <article class="update-card">
+          <div class="update-card__meta">
+            <span class="update-card__tag">Tập trung</span>
+            <time datetime="2026-03-04">04/03/2026</time>
+          </div>
+          <h3>Học toàn màn hình không bị ngắt nhịp</h3>
+          <p>Bạn có thể bật full screen để tập trung ôn bài, và trạng thái học được giữ ổn định khi chuyển thẻ.</p>
+        </article>
+
+        <article class="update-card">
+          <div class="update-card__meta">
+            <span class="update-card__tag">Chỉnh sửa</span>
+            <time datetime="2026-03-04">04/03/2026</time>
+          </div>
+          <h3>Chỉnh sửa thẻ an toàn hơn</h3>
+          <p>Hệ thống giảm rủi ro ghi đè nhầm dữ liệu để bạn yên tâm cập nhật nội dung thẻ theo nhu cầu học.</p>
+        </article>
+
+        <article class="update-card">
+          <div class="update-card__meta">
+            <span class="update-card__tag">Âm thanh tiếng Nhật</span>
+            <time datetime="2026-03-04">04/03/2026</time>
+          </div>
+          <h3>Thêm tạo âm thanh tiếng Nhật bằng VoiceVox</h3>
+          <p>Tạo audio trực tiếp từ từ vựng/câu ví dụ và lưu vào trường âm thanh để luyện nghe ngay trên thẻ.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
   {# ── FAQ ── #}
   <section class="landing__faq">
     <div class="container">
@@ -1367,6 +1414,63 @@
     color: var(--flama-text-2);
   }
 
+  /* ── Updates ── */
+  .landing__updates {
+    padding: 4.5rem 0;
+  }
+
+  .updates-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+  }
+
+  .update-card {
+    border: 1px solid var(--flama-border);
+    border-radius: 14px;
+    background: #fff;
+    padding: 1rem 1.05rem;
+    display: grid;
+    gap: 0.55rem;
+    box-shadow: 0 8px 22px rgba(15, 23, 42, 0.05);
+  }
+
+  .update-card__meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    font-size: 0.78rem;
+    color: var(--flama-text-2);
+  }
+
+  .update-card__tag {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: 0.16rem 0.52rem;
+    font-size: 0.68rem;
+    letter-spacing: 0.02em;
+    font-weight: var(--font-weight-bold);
+    text-transform: uppercase;
+    color: var(--flama-orange-700);
+    background: rgba(254, 104, 8, 0.13);
+    border: 1px solid rgba(254, 104, 8, 0.3);
+  }
+
+  .update-card h3 {
+    margin: 0;
+    font-size: 1.02rem;
+    color: var(--flama-text);
+  }
+
+  .update-card p {
+    margin: 0;
+    font-size: 0.9rem;
+    line-height: 1.55;
+    color: var(--flama-text-2);
+  }
+
   /* ── FAQ ── */
   .landing__faq {
     padding: 4.5rem 0 3.5rem;
@@ -1691,6 +1795,10 @@
     }
 
     .roadmap-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .updates-grid {
       grid-template-columns: 1fr;
     }
 

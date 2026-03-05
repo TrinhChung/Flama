@@ -74,6 +74,7 @@ def create_app(config: Optional[dict] = None) -> Flask:
     from models.deck import Deck  # noqa: F401  # register model
     from models.tts_provider_config import TtsProviderConfig  # noqa: F401  # register model
     from models.tts_user_provider_profile import TtsUserProviderProfile  # noqa: F401  # register model
+    from models.support_donation_config import SupportDonationConfig  # noqa: F401  # register model
     from models.card_progress import CardProgress  # noqa: F401  # register model
     from models.column_preference import (
         VocabularyColumnPreference,

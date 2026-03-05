@@ -39,6 +39,14 @@
   </main>
   {% endblock %}
 
+  {% set endpoint = request.endpoint or '' %}
+  {% set show_global_pet = endpoint in ['main.index', 'main.dashboard'] %}
+  {% if show_global_pet %}
+  <a class="site-pet-link" href="{{ url_for('main.support_donation_page') }}" aria-label="Trang ủng hộ">
+    <img class="site-pet" src="{{ url_for('static', filename='images/pet.svg') }}" alt="" aria-hidden="true" />
+  </a>
+  {% endif %}
+
   {% if current_user.is_authenticated %}
   {% include 'components/deck/browse_modal.html' %}
   {% endif %}

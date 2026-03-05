@@ -1,0 +1,275 @@
+{% extends "base.html" %}
+
+{% block title %}Ủng hộ duy trì hệ thống – Flama{% endblock %}
+
+{% block content %}
+<section class="support-page">
+  <div class="support-card">
+    <header class="support-header">
+      <h1>{{ donation_config.title if donation_config and donation_config.title else default_support_title }}</h1>
+      <p class="support-intro">
+        {{ donation_config.description if donation_config and donation_config.description else default_support_description }}
+      </p>
+    </header>
+
+    {% if not donation_config %}
+    <div class="alert alert-warning mb-4" role="alert">
+      Hệ thống chưa có thông tin tài trợ. Vui lòng quay lại sau.
+    </div>
+    {% endif %}
+
+    <div class="support-grid">
+      <article class="support-panel">
+        <h2 class="panel-title"><i class="bi bi-bank"></i> Thông tin chuyển khoản</h2>
+
+        {% if donation_config and donation_config.account_name and donation_config.account_number %}
+        <div class="copy-field">
+          <label for="supportAccountName">Tên tài khoản</label>
+          <div class="copy-input-wrap">
+            <input id="supportAccountName" type="text" value="{{ donation_config.account_name }}" readonly>
+            <button type="button" class="dash-btn dash-btn--ghost copy-btn" data-copy-target="supportAccountName">
+              <i class="bi bi-copy"></i> Sao chép
+            </button>
+          </div>
+        </div>
+
+        <div class="copy-field">
+          <label for="supportAccountNumber">Số tài khoản</label>
+          <div class="copy-input-wrap">
+            <input id="supportAccountNumber" type="text" value="{{ donation_config.account_number }}" readonly>
+            <button type="button" class="dash-btn dash-btn--ghost copy-btn" data-copy-target="supportAccountNumber">
+              <i class="bi bi-copy"></i> Sao chép
+            </button>
+          </div>
+        </div>
+        {% else %}
+        <div class="panel-empty">
+          Chưa có thông tin tên tài khoản và số tài khoản.
+        </div>
+        {% endif %}
+      </article>
+
+      <article class="support-panel">
+        <h2 class="panel-title"><i class="bi bi-qr-code"></i> Mã QR tài trợ</h2>
+        {% if donation_config and donation_config.qr_image_storage_path %}
+        <figure class="qr-figure">
+          <img
+            src="{{ url_for('main.support_donation_qr_image') }}?v={{ (donation_config.updated_at.timestamp() | int) if donation_config.updated_at else 0 }}"
+            alt="Mã QR tài trợ"
+            loading="lazy"
+          >
+          <figcaption>Quét mã để ủng hộ duy trì hệ thống.</figcaption>
+        </figure>
+        {% else %}
+        <div class="panel-empty">
+          Chưa có ảnh QR. Bạn vẫn có thể chuyển khoản thủ công theo thông tin bên trái.
+        </div>
+        {% endif %}
+      </article>
+    </div>
+
+    <section class="thanks-section" aria-label="Lời cảm ơn">
+      <h2><i class="bi bi-heart"></i> Lời cảm ơn</h2>
+      <p>{{ donation_config.thank_you_message if donation_config and donation_config.thank_you_message else default_thank_you_message }}</p>
+    </section>
+  </div>
+</section>
+{% endblock %}
+
+{% block styles %}
+<style>
+  .support-page {
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 0.25rem 0 1rem;
+  }
+
+  .support-card {
+    background: var(--flama-surface);
+    border: 1px solid var(--flama-border);
+    border-radius: 18px;
+    box-shadow: 0 8px 24px rgba(31, 26, 23, 0.08);
+    padding: 1rem;
+  }
+
+  .support-header h1 {
+    font-size: clamp(1.5rem, 2.4vw, 2rem);
+    margin-bottom: 0.65rem;
+  }
+
+  .support-intro {
+    color: var(--flama-text-2);
+    margin-bottom: 1.1rem;
+    line-height: 1.65;
+  }
+
+  .support-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+  }
+
+  .support-panel {
+    border: 1px solid var(--flama-border);
+    border-radius: 14px;
+    background: #fff;
+    padding: 1rem;
+  }
+
+  .panel-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 1.02rem;
+    margin-bottom: 0.85rem;
+  }
+
+  .copy-field + .copy-field {
+    margin-top: 0.8rem;
+  }
+
+  .copy-field label {
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--flama-text-2);
+    margin-bottom: 0.35rem;
+    display: inline-block;
+  }
+
+  .copy-input-wrap {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .copy-input-wrap input {
+    width: 100%;
+    min-height: 2.4rem;
+    border: 1px solid var(--flama-border);
+    border-radius: 10px;
+    padding: 0.4rem 0.65rem;
+    background: var(--flama-surface-2);
+    color: var(--flama-text);
+    font-weight: var(--font-weight-medium);
+  }
+
+  .copy-btn {
+    flex-shrink: 0;
+    min-height: 2.4rem;
+  }
+
+  .qr-figure {
+    margin: 0;
+    text-align: center;
+  }
+
+  .qr-figure img {
+    width: min(100%, 320px);
+    aspect-ratio: 1 / 1;
+    object-fit: contain;
+    border-radius: 12px;
+    border: 1px solid var(--flama-border);
+    background: #fff;
+    padding: 0.45rem;
+  }
+
+  .qr-figure figcaption {
+    margin-top: 0.55rem;
+    color: var(--flama-text-2);
+    font-size: var(--font-size-sm);
+  }
+
+  .panel-empty {
+    border: 1px dashed var(--flama-border);
+    border-radius: 12px;
+    background: var(--flama-orange-50);
+    color: var(--flama-text-2);
+    font-size: var(--font-size-sm);
+    padding: 0.8rem;
+  }
+
+  .thanks-section {
+    margin-top: 1rem;
+    border-radius: 14px;
+    border: 1px solid rgba(224, 92, 7, 0.25);
+    background: linear-gradient(135deg, rgba(255, 243, 235, 0.95), rgba(255, 241, 231, 0.9));
+    padding: 0.95rem 1rem;
+  }
+
+  .thanks-section h2 {
+    font-size: 1rem;
+    margin-bottom: 0.45rem;
+    display: flex;
+    gap: 0.45rem;
+    align-items: center;
+  }
+
+  .thanks-section p {
+    margin: 0;
+    color: var(--flama-text);
+    line-height: 1.7;
+  }
+
+  @media (max-width: 900px) {
+    .support-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 576px) {
+    .support-card {
+      padding: 0.8rem;
+      border-radius: 14px;
+    }
+
+    .copy-input-wrap {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .copy-btn {
+      width: 100%;
+      justify-content: center;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  (function () {
+    function fallbackCopy(text) {
+      const input = document.createElement("input");
+      input.value = text;
+      document.body.appendChild(input);
+      input.select();
+      document.execCommand("copy");
+      document.body.removeChild(input);
+    }
+
+    document.querySelectorAll("[data-copy-target]").forEach((button) => {
+      button.addEventListener("click", async () => {
+        const targetId = button.getAttribute("data-copy-target");
+        const input = document.getElementById(targetId);
+        if (!input) return;
+        const value = String(input.value || "").trim();
+        if (!value) return;
+
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(value);
+          } else {
+            fallbackCopy(value);
+          }
+          button.innerHTML = '<i class="bi bi-check2"></i> Đã sao chép';
+          setTimeout(() => {
+            button.innerHTML = '<i class="bi bi-copy"></i> Sao chép';
+          }, 1200);
+        } catch (error) {
+          fallbackCopy(value);
+        }
+      });
+    });
+  })();
+</script>
+{% endblock %}

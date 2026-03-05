@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
-from flask import Blueprint, flash, jsonify, redirect, render_template, request, url_for
+from flask import Blueprint, current_app, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 from sqlalchemy import func, or_
 from sqlalchemy.exc import SQLAlchemyError
@@ -12,10 +13,12 @@ from sqlalchemy.orm import selectinload
 
 from app.utils.permissions import is_admin_user
 from app.services import admin_service
+from app.services import support_donation_service
 from app.services import tts_provider_service
 from app.validators import RequestValidationError, escape_like_pattern, sanitize_query_text
 
 from models import db
+from models.support_donation_config import SupportDonationConfig
 from models.tts_provider_config import TtsProviderConfig
 from models.user import User
 from models.user_permission_audit_log import UserPermissionAuditLog
@@ -49,6 +52,105 @@ def _ensure_admin_access():
         return None
     flash("Ban khong co quyen truy cap trang quan tri.", "warning")
     return redirect(url_for("main.dashboard"))
+
+
+@admin_bp.route("/support-donation", methods=["GET", "POST"])
+@login_required
+def support_donation_management_page():
+    guard = _ensure_admin_access()
+    if guard is not None:
+        return guard
+
+    row = support_donation_service.get_latest_config()
+
+    if request.method == "POST":
+        payload, errors = support_donation_service.parse_form_payload(request.form)
+
+        qr_max_bytes = min(
+            int(current_app.config.get("FLASHCARD_MEDIA_MAX_BYTES", support_donation_service.DEFAULT_QR_MAX_BYTES)),
+            support_donation_service.DEFAULT_QR_MAX_BYTES,
+        )
+        validated_upload, upload_errors = support_donation_service.validate_qr_upload(
+            request.files.get("qr_image"),
+            max_bytes=qr_max_bytes,
+            scanner=current_app.config.get("FLASHCARD_MEDIA_SCANNER"),
+            scan_enabled=bool(current_app.config.get("FLASHCARD_MEDIA_SCAN_ENABLED", False)),
+        )
+        errors.extend(upload_errors)
+
+        if errors:
+            for message in errors:
+                flash(message, "danger")
+            return redirect(url_for("admin.support_donation_management_page"))
+
+        remove_qr = support_donation_service.is_truthy(request.form.get("remove_qr_image"))
+        if row is None:
+            row = SupportDonationConfig()
+            db.session.add(row)
+
+        row.title = payload.title
+        row.description = payload.description
+        row.account_name = payload.account_name
+        row.account_number = payload.account_number
+        row.thank_you_message = payload.thank_you_message
+        row.updated_by_admin_id = current_user.id
+
+        upload_root = Path(current_app.config["FLASHCARD_MEDIA_UPLOAD_ROOT"]).resolve()
+        old_storage_path = str(row.qr_image_storage_path or "").strip() or None
+        new_storage_path_written: str | None = None
+        obsolete_storage_path: str | None = None
+
+        if validated_upload is not None:
+            try:
+                storage_path, filename, mime_type = support_donation_service.persist_qr_upload(
+                    validated_upload=validated_upload,
+                    upload_root=upload_root,
+                )
+            except RequestValidationError as exc:
+                flash(str(exc), "danger")
+                return redirect(url_for("admin.support_donation_management_page"))
+
+            row.qr_image_storage_path = storage_path
+            row.qr_image_filename = filename
+            row.qr_image_mime_type = mime_type
+            new_storage_path_written = storage_path
+            if old_storage_path and old_storage_path != storage_path:
+                obsolete_storage_path = old_storage_path
+        elif remove_qr:
+            row.qr_image_storage_path = None
+            row.qr_image_filename = None
+            row.qr_image_mime_type = None
+            if old_storage_path:
+                obsolete_storage_path = old_storage_path
+
+        try:
+            db.session.commit()
+        except SQLAlchemyError:
+            db.session.rollback()
+            if new_storage_path_written:
+                support_donation_service.remove_qr_file(
+                    upload_root=upload_root,
+                    storage_path=new_storage_path_written,
+                )
+            flash("Không thể lưu thông tin tài trợ. Vui lòng thử lại.", "danger")
+            return redirect(url_for("admin.support_donation_management_page"))
+
+        if obsolete_storage_path:
+            support_donation_service.remove_qr_file(
+                upload_root=upload_root,
+                storage_path=obsolete_storage_path,
+            )
+
+        flash("Đã cập nhật thông tin tài trợ.", "success")
+        return redirect(url_for("admin.support_donation_management_page"))
+
+    return render_template(
+        "admin/support_donation.html",
+        config=row,
+        default_support_title=support_donation_service.DEFAULT_TITLE,
+        default_support_description=support_donation_service.DEFAULT_DESCRIPTION,
+        default_thank_you_message=support_donation_service.DEFAULT_THANK_YOU,
+    )
 
 
 @admin_bp.route("/tts-providers", methods=["GET", "POST"])
