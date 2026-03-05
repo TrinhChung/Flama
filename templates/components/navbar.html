@@ -75,12 +75,6 @@
         </li>
         {% endif %}
 
-        <li class="nav-item">
-          <a class="nav-link" href="{{ url_for('main.support_donation_page') }}">
-            <i class="bi bi-heart"></i> Ủng hộ
-          </a>
-        </li>
-
         <li class="nav-item dropdown">
           <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
             <i class="bi bi-person-circle"></i> {{ current_user.username }}
@@ -113,11 +107,6 @@
         <li class="nav-item">
           <a class="nav-link" href="{{ url_for('auth.register') }}">
             <i class="bi bi-person-plus"></i> Đăng ký
-          </a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link" href="{{ url_for('main.support_donation_page') }}">
-            <i class="bi bi-heart"></i> Ủng hộ
           </a>
         </li>
       </ul>

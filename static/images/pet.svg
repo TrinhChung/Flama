@@ -1,0 +1,277 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-label="Flame mascot">
+  <defs>
+    <linearGradient id="flameGrad" x1="512" y1="164" x2="512" y2="744" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFB11A"/>
+      <stop offset="48%" stop-color="#FF7800"/>
+      <stop offset="100%" stop-color="#FF4700"/>
+    </linearGradient>
+
+    <radialGradient id="eyeGrad" cx="38%" cy="32%" r="75%">
+      <stop offset="0%" stop-color="#1A1E27"/>
+      <stop offset="75%" stop-color="#0B0E14"/>
+      <stop offset="100%" stop-color="#050608"/>
+    </radialGradient>
+
+    <radialGradient id="shadowGrad" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#000000" stop-opacity="0.48"/>
+      <stop offset="55%" stop-color="#000000" stop-opacity="0.28"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0"/>
+    </radialGradient>
+
+    <filter id="shadowBlur" x="-40%" y="-120%" width="180%" height="300%">
+      <feGaussianBlur stdDeviation="18"/>
+    </filter>
+  </defs>
+
+  <!-- ground shadow: cute jump once -->
+  <g id="ground-shadow">
+    <ellipse cx="513" cy="808" rx="152" ry="38" fill="url(#shadowGrad)" filter="url(#shadowBlur)" opacity="0.78">
+      <animate attributeName="rx"
+        values="152;164;112;152;146;152"
+        keyTimes="0;0.12;0.42;0.72;0.86;1"
+        calcMode="spline"
+        keySplines="0.25 0.8 0.3 1; 0.22 0.9 0.3 1; 0.2 0 0.2 1; 0.2 0.7 0.2 1; 0.2 0.7 0.2 1"
+        dur="1.15s"
+        begin="0s"
+        repeatCount="1"
+        fill="freeze"/>
+      <animate attributeName="ry"
+        values="38;42;26;38;36;38"
+        keyTimes="0;0.12;0.42;0.72;0.86;1"
+        calcMode="spline"
+        keySplines="0.25 0.8 0.3 1; 0.22 0.9 0.3 1; 0.2 0 0.2 1; 0.2 0.7 0.2 1; 0.2 0.7 0.2 1"
+        dur="1.15s"
+        begin="0s"
+        repeatCount="1"
+        fill="freeze"/>
+      <animate attributeName="opacity"
+        values="0.78;0.88;0.36;0.78;0.7;0.78"
+        keyTimes="0;0.12;0.42;0.72;0.86;1"
+        calcMode="spline"
+        keySplines="0.25 0.8 0.3 1; 0.22 0.9 0.3 1; 0.2 0 0.2 1; 0.2 0.7 0.2 1; 0.2 0.7 0.2 1"
+        dur="1.15s"
+        begin="0s"
+        repeatCount="1"
+        fill="freeze"/>
+    </ellipse>
+  </g>
+
+  <!-- flame + face -->
+  <g id="flame-body-motion">
+    <!-- cute jump once -->
+    <animateTransform attributeName="transform" type="translate"
+      values="0 0; 0 10; 0 -44; 0 4; 0 -8; 0 0"
+      keyTimes="0;0.12;0.42;0.72;0.86;1"
+      calcMode="spline"
+      keySplines="0.25 0.8 0.3 1; 0.22 0.9 0.3 1; 0.2 0 0.2 1; 0.2 0.7 0.2 1; 0.2 0.7 0.2 1"
+      dur="1.15s"
+      begin="0s"
+      repeatCount="1"
+      fill="freeze"/>
+
+    <g transform="translate(513 470)">
+      <g id="flame-body-squish">
+        <!-- squash & stretch once -->
+        <animateTransform attributeName="transform" type="scale"
+          values="1 1; 1.04 0.94; 0.96 1.06; 1.02 0.98; 0.99 1.01; 1 1"
+          keyTimes="0;0.12;0.42;0.72;0.86;1"
+          calcMode="spline"
+          keySplines="0.25 0.8 0.3 1; 0.22 0.9 0.3 1; 0.2 0 0.2 1; 0.2 0.7 0.2 1; 0.2 0.7 0.2 1"
+          dur="1.15s"
+          begin="0s"
+          repeatCount="1"
+          fill="freeze"/>
+
+        <g transform="translate(-513 -470)">
+          <!-- flame body -->
+          <path fill="url(#flameGrad)" shape-rendering="geometricPrecision" d="M 513 744
+          C 484 743, 437 740, 405 733
+          C 373 726, 342 711, 322 699
+          C 302 687, 286 672, 274 654
+          C 262 636, 251 613, 245 589
+          C 239 565, 240 538, 246 513
+          C 252 488, 264 464, 279 443
+          C 294 422, 315 401, 340 381
+          C 365 361, 395 342, 425 323
+          C 454 304, 478 288, 490 269
+          C 502 250, 507 231, 509 217
+          C 511 203, 500 171, 505 164
+          C 510 157, 545 189, 561 208
+          C 577 227, 589 249, 595 269
+          C 601 289, 603 315, 602 337
+          C 601 359, 587 388, 585 401
+          C 583 414, 609 381, 619 363
+          C 629 345, 630 331, 631 320
+          C 632 309, 629 295, 633 294
+          C 637 293, 653 312, 662 323
+          C 671 334, 678 346, 683 358
+          C 688 370, 692 384, 692 397
+          C 692 410, 685 426, 686 439
+          C 687 452, 714 478, 726 496
+          C 738 514, 743 538, 745 556
+          C 747 574, 744 591, 741 606
+          C 738 621, 731 637, 723 650
+          C 715 663, 706 675, 694 685
+          C 682 695, 656 709, 630 721
+          C 604 733, 584 737, 567 739
+          C 550 741, 536 744, 513 744 Z"/>
+
+          <!-- face -->
+          <g id="face">
+            <g id="eyes">
+              <!-- LEFT EYE -->
+              <g id="eye-left">
+                <animateTransform attributeName="transform" type="translate" dur="8s" begin="0.35s" repeatCount="indefinite"
+                  keyTimes="0;0.16;0.24;0.30;0.35;1"
+                  values="0 0;0 0;0 -2;0 -2;0 0;0 0"/>
+
+                <ellipse cx="422" cy="537" rx="44" ry="48" fill="url(#eyeGrad)" stroke="#1B1B1B" stroke-width="2">
+                  <animate attributeName="ry" dur="8s" repeatCount="indefinite"
+                    keyTimes="0;0.20;0.22;0.24;0.26;0.28;0.68;0.70;0.72;0.74;0.76;1"
+                    values="48;48;28;7;5;48;48;28;7;5;48;48"/>
+                </ellipse>
+
+                <circle cx="428" cy="517" r="16" fill="#FFFFFF" opacity="1">
+                  <animate attributeName="opacity" dur="8s" repeatCount="indefinite"
+                    keyTimes="0;0.20;0.22;0.24;0.26;0.28;0.68;0.70;0.72;0.74;0.76;1"
+                    values="1;1;0.6;0;0;1;1;0.6;0;0;1;1"/>
+                  <animate attributeName="r" values="16;16.6;16" dur="2.6s" repeatCount="indefinite"/>
+                </circle>
+
+                <ellipse cx="407" cy="521" rx="14" ry="17" fill="#FFFFFF" opacity="0.98">
+                  <animate attributeName="opacity" dur="8s" repeatCount="indefinite"
+                    keyTimes="0;0.20;0.22;0.24;0.26;0.28;0.68;0.70;0.72;0.74;0.76;1"
+                    values="0.98;0.98;0.6;0;0;0.98;0.98;0.6;0;0;0.98;0.98"/>
+                  <animate attributeName="ry" values="17;18.2;16.8;17.4;17" dur="2.6s" repeatCount="indefinite"/>
+                  <animate attributeName="cy" values="521;520;521.5;521;521" dur="2.6s" repeatCount="indefinite"/>
+                </ellipse>
+
+                <ellipse cx="418" cy="515" rx="6" ry="7.5" fill="#FFFFFF" opacity="0.92">
+                  <animate attributeName="opacity" dur="8s" repeatCount="indefinite"
+                    keyTimes="0;0.20;0.22;0.24;0.26;0.28;0.68;0.70;0.72;0.74;0.76;1"
+                    values="0.92;0.92;0.55;0;0;0.92;0.92;0.55;0;0;0.92;0.92"/>
+                  <animate attributeName="rx" values="6;6.8;5.8;6.2;6" dur="2.1s" repeatCount="indefinite"/>
+                  <animate attributeName="ry" values="7.5;8.1;7.1;7.6;7.5" dur="2.1s" repeatCount="indefinite"/>
+                </ellipse>
+
+                <circle cx="437" cy="550" r="5.5" fill="#FFFFFF" opacity="0.16">
+                  <animate attributeName="opacity" dur="8s" repeatCount="indefinite"
+                    keyTimes="0;0.20;0.22;0.24;0.26;0.28;0.68;0.70;0.72;0.74;0.76;1"
+                    values="0.16;0.16;0.10;0;0;0.16;0.16;0.10;0;0;0.16;0.16"/>
+                  <animate attributeName="r" values="4.6;6.2;5;5.7;4.6" dur="1.9s" repeatCount="indefinite"/>
+                </circle>
+
+                <ellipse cx="429" cy="557" rx="11" ry="6.5" fill="#FFFFFF" opacity="0.12">
+                  <animate attributeName="opacity" dur="8s" repeatCount="indefinite"
+                    keyTimes="0;0.20;0.22;0.24;0.26;0.28;0.68;0.70;0.72;0.74;0.76;1"
+                    values="0.12;0.12;0.07;0;0;0.12;0.12;0.07;0;0;0.12;0.12"/>
+                  <animate attributeName="rx" values="10;12.2;10.4;11.2;10" dur="2.3s" repeatCount="indefinite"/>
+                </ellipse>
+              </g>
+
+              <!-- RIGHT EYE -->
+              <g id="eye-right">
+                <animateTransform attributeName="transform" type="translate" dur="8s" begin="0.35s" repeatCount="indefinite"
+                  keyTimes="0;0.16;0.24;0.30;0.35;1"
+                  values="0 0;0 0;0 -2;0 -2;0 0;0 0"/>
+
+                <ellipse cx="598" cy="537" rx="44" ry="48" fill="url(#eyeGrad)" stroke="#1B1B1B" stroke-width="2">
+                  <animate attributeName="ry" dur="8s" repeatCount="indefinite"
+                    keyTimes="0;0.20;0.22;0.24;0.26;0.28;0.68;0.70;0.72;0.74;0.76;1"
+                    values="48;48;28;7;5;48;48;28;7;5;48;48"/>
+                </ellipse>
+
+                <circle cx="604" cy="517" r="16" fill="#FFFFFF" opacity="1">
+                  <animate attributeName="opacity" dur="8s" repeatCount="indefinite"
+                    keyTimes="0;0.20;0.22;0.24;0.26;0.28;0.68;0.70;0.72;0.74;0.76;1"
+                    values="1;1;0.6;0;0;1;1;0.6;0;0;1;1"/>
+                  <animate attributeName="r" values="16;16.6;16" dur="2.8s" repeatCount="indefinite"/>
+                </circle>
+
+                <ellipse cx="583" cy="521" rx="14" ry="17" fill="#FFFFFF" opacity="0.98">
+                  <animate attributeName="opacity" dur="8s" repeatCount="indefinite"
+                    keyTimes="0;0.20;0.22;0.24;0.26;0.28;0.68;0.70;0.72;0.74;0.76;1"
+                    values="0.98;0.98;0.6;0;0;0.98;0.98;0.6;0;0;0.98;0.98"/>
+                  <animate attributeName="ry" values="17;18;16.7;17.6;17" dur="2.8s" repeatCount="indefinite"/>
+                  <animate attributeName="cy" values="521;520.2;521.4;521;521" dur="2.8s" repeatCount="indefinite"/>
+                </ellipse>
+
+                <ellipse cx="594" cy="515" rx="6" ry="7.5" fill="#FFFFFF" opacity="0.92">
+                  <animate attributeName="opacity" dur="8s" repeatCount="indefinite"
+                    keyTimes="0;0.20;0.22;0.24;0.26;0.28;0.68;0.70;0.72;0.74;0.76;1"
+                    values="0.92;0.92;0.55;0;0;0.92;0.92;0.55;0;0;0.92;0.92"/>
+                  <animate attributeName="rx" values="6;6.7;5.9;6.4;6" dur="2.0s" repeatCount="indefinite"/>
+                  <animate attributeName="ry" values="7.5;8;7.2;7.7;7.5" dur="2.0s" repeatCount="indefinite"/>
+                </ellipse>
+
+                <circle cx="613" cy="550" r="5.5" fill="#FFFFFF" opacity="0.16">
+                  <animate attributeName="opacity" dur="8s" repeatCount="indefinite"
+                    keyTimes="0;0.20;0.22;0.24;0.26;0.28;0.68;0.70;0.72;0.74;0.76;1"
+                    values="0.16;0.16;0.10;0;0;0.16;0.16;0.10;0;0;0.16;0.16"/>
+                  <animate attributeName="r" values="4.7;6.1;5.1;5.6;4.7" dur="2.0s" repeatCount="indefinite"/>
+                </circle>
+
+                <ellipse cx="605" cy="557" rx="11" ry="6.5" fill="#FFFFFF" opacity="0.12">
+                  <animate attributeName="opacity" dur="8s" repeatCount="indefinite"
+                    keyTimes="0;0.20;0.22;0.24;0.26;0.28;0.68;0.70;0.72;0.74;0.76;1"
+                    values="0.12;0.12;0.07;0;0;0.12;0.12;0.07;0;0;0.12;0.12"/>
+                  <animate attributeName="rx" values="10;12;10.6;11.3;10" dur="2.4s" repeatCount="indefinite"/>
+                </ellipse>
+              </g>
+            </g>
+
+            <!-- cheeks -->
+            <g id="cheeks">
+              <ellipse cx="372" cy="591" rx="27" ry="16" fill="#FFA03A" opacity="0.35">
+                <animate attributeName="fill" dur="8s" begin="0.35s" repeatCount="indefinite"
+                  keyTimes="0;0.10;0.16;0.24;0.28;0.35;1"
+                  values="#FFA03A;#FFA03A;#FF8A6A;#FF6B7A;#FF6B7A;#FFA03A;#FFA03A"/>
+                <animate attributeName="opacity" dur="8s" begin="0.35s" repeatCount="indefinite"
+                  keyTimes="0;0.10;0.16;0.24;0.28;0.35;1"
+                  values="0.35;0.35;0.55;0.9;0.85;0.35;0.35"/>
+              </ellipse>
+
+              <ellipse cx="650" cy="591" rx="27" ry="16" fill="#FFA03A" opacity="0.35">
+                <animate attributeName="fill" dur="8s" begin="0.40s" repeatCount="indefinite"
+                  keyTimes="0;0.10;0.16;0.24;0.28;0.35;1"
+                  values="#FFA03A;#FFA03A;#FF8A6A;#FF6B7A;#FF6B7A;#FFA03A;#FFA03A"/>
+                <animate attributeName="opacity" dur="8s" begin="0.40s" repeatCount="indefinite"
+                  keyTimes="0;0.10;0.16;0.24;0.28;0.35;1"
+                  values="0.35;0.35;0.55;0.9;0.85;0.35;0.35"/>
+              </ellipse>
+            </g>
+
+            <!-- mouth -->
+            <g id="mouth" transform="translate(0 20)">
+              <path fill="#2B0D0A" d="M 488 600 C 488 584, 499 574, 513 574 C 527 574, 538 584, 538 600 C 538 616, 527 626, 513 626 C 499 626, 488 616, 488 600 Z">
+                <animate attributeName="d" dur="8s" begin="0.35s" repeatCount="indefinite" keyTimes="0;0.10;0.16;0.24;0.28;0.35;1" calcMode="spline"
+                  keySplines="0.42 0 0.58 1; 0.42 0 0.58 1; 0.42 0 0.58 1; 0.42 0 0.58 1; 0.42 0 0.58 1; 0.42 0 0.58 1"
+                  values="
+                    M 488 600 C 488 584, 499 574, 513 574 C 527 574, 538 584, 538 600 C 538 616, 527 626, 513 626 C 499 626, 488 616, 488 600 Z;
+                    M 488 600 C 488 584, 499 574, 513 574 C 527 574, 538 584, 538 600 C 538 616, 527 626, 513 626 C 499 626, 488 616, 488 600 Z;
+                    M 480 600 C 480 586, 495 576, 513 576 C 531 576, 546 586, 546 600 C 546 614, 531 624, 513 624 C 495 624, 480 614, 480 600 Z;
+                    M 462 600 C 470 618, 492 632, 513 632 C 534 632, 556 618, 564 600 C 549 606, 531 609, 513 609 C 495 609, 477 606, 462 600 Z;
+                    M 462 600 C 470 618, 492 632, 513 632 C 534 632, 556 618, 564 600 C 549 606, 531 609, 513 609 C 495 609, 477 606, 462 600 Z;
+                    M 488 600 C 488 584, 499 574, 513 574 C 527 574, 538 584, 538 600 C 538 616, 527 626, 513 626 C 499 626, 488 616, 488 600 Z;
+                    M 488 600 C 488 584, 499 574, 513 574 C 527 574, 538 584, 538 600 C 538 616, 527 626, 513 626 C 499 626, 488 616, 488 600 Z"/>
+              </path>
+
+              <path fill="#FF5A2C" d="M 497 606 C 497 598, 504 592, 513 592 C 522 592, 529 598, 529 606 C 529 614, 522 620, 513 620 C 504 620, 497 614, 497 606 Z">
+                <animate attributeName="d" dur="8s" begin="0.35s" repeatCount="indefinite" keyTimes="0;0.10;0.16;0.24;0.28;0.35;1" calcMode="spline"
+                  keySplines="0.42 0 0.58 1; 0.42 0 0.58 1; 0.42 0 0.58 1; 0.42 0 0.58 1; 0.42 0 0.58 1; 0.42 0 0.58 1"
+                  values="
+                    M 497 606 C 497 598, 504 592, 513 592 C 522 592, 529 598, 529 606 C 529 614, 522 620, 513 620 C 504 620, 497 614, 497 606 Z;
+                    M 497 606 C 497 598, 504 592, 513 592 C 522 592, 529 598, 529 606 C 529 614, 522 620, 513 620 C 504 620, 497 614, 497 606 Z;
+                    M 491 606 C 491 599, 501 594, 513 594 C 525 594, 535 599, 535 606 C 535 613, 525 618, 513 618 C 501 618, 491 613, 491 606 Z;
+                    M 484 611 C 492 621, 503 627, 513 627 C 523 627, 534 621, 542 611 C 533 605, 523 602, 513 602 C 503 602, 493 605, 484 611 Z;
+                    M 484 611 C 492 621, 503 627, 513 627 C 523 627, 534 621, 542 611 C 533 605, 523 602, 513 602 C 503 602, 493 605, 484 611 Z;
+                    M 497 606 C 497 598, 504 592, 513 592 C 522 592, 529 598, 529 606 C 529 614, 522 620, 513 620 C 504 620, 497 614, 497 606 Z;
+                    M 497 606 C 497 598, 504 592, 513 592 C 522 592, 529 598, 529 606 C 529 614, 522 620, 513 620 C 504 620, 497 614, 497 606 Z"/>
+              </path>
+            </g>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+</svg>
