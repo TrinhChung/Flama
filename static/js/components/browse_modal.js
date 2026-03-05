@@ -329,6 +329,30 @@
     return fallback;
   }
 
+  function applyInputAutofillGuard(input, { password = false } = {}) {
+    if (!input) {
+      return;
+    }
+    input.setAttribute("autocomplete", password ? "new-password" : "off");
+    input.setAttribute("autocorrect", "off");
+    input.setAttribute("autocapitalize", "none");
+    input.setAttribute("spellcheck", "false");
+    input.setAttribute("data-form-type", "other");
+    input.setAttribute("data-lpignore", "true");
+    input.setAttribute("data-1p-ignore", "true");
+    if (!input.name) {
+      const base = String(input.id || "field").replace(/[^a-z0-9_]/gi, "_");
+      input.name = `manual_${base}_${Math.random().toString(36).slice(2, 8)}`;
+    }
+    input.readOnly = true;
+    const unlock = () => {
+      input.readOnly = false;
+    };
+    input.addEventListener("focus", unlock, { once: true });
+    input.addEventListener("pointerdown", unlock, { once: true });
+    input.addEventListener("keydown", unlock, { once: true });
+  }
+
   function formatSliderValue(value) {
     return Number(value).toFixed(1);
   }
@@ -2597,6 +2621,10 @@
   }
 
   function setupEvents() {
+    applyInputAutofillGuard(els.deckSearch);
+    applyInputAutofillGuard(els.keyword);
+    applyInputAutofillGuard(els.tag);
+    applyInputAutofillGuard(els.voicevoxApiKey, { password: true });
     syncVoicevoxInputsFromState();
     setVoicevoxActionState();
     const debouncedVoicevoxReload = debounce(() => {
@@ -2719,6 +2747,9 @@
     }
     if (els.voicevoxApiKey) {
       els.voicevoxApiKey.addEventListener("input", () => {
+        if (!isModalShown()) {
+          return;
+        }
         state.voicevox.apiKey = String(els.voicevoxApiKey.value || "").trim();
         state.voicevox.keyStatus = "unknown";
         state.voicevox.lastValidationError = "";
@@ -2726,6 +2757,9 @@
         debouncedVoicevoxReload();
       });
       els.voicevoxApiKey.addEventListener("change", () => {
+        if (!isModalShown()) {
+          return;
+        }
         persistVoicevoxSettings().catch(() => undefined);
       });
     }
@@ -2782,6 +2816,9 @@
 
     if (els.deckSearch) {
       els.deckSearch.addEventListener("input", () => {
+        if (!isModalShown()) {
+          return;
+        }
         state.deckSearch = String(els.deckSearch.value || "");
         renderDeckTree();
       });
@@ -2833,11 +2870,17 @@
     }
 
     const debouncedFilterReload = debounce(() => {
+      if (!isModalShown()) {
+        return;
+      }
       loadCards({ reset: true, keepSelection: true }).catch(() => undefined);
     }, 280);
 
     if (els.keyword) {
       els.keyword.addEventListener("input", () => {
+        if (!isModalShown()) {
+          return;
+        }
         state.query.keyword = String(els.keyword.value || "");
         debouncedFilterReload();
       });
@@ -2845,6 +2888,9 @@
 
     if (els.status) {
       els.status.addEventListener("change", () => {
+        if (!isModalShown()) {
+          return;
+        }
         state.query.status = String(els.status.value || "all");
         loadCards({ reset: true, keepSelection: true }).catch(() => undefined);
       });
@@ -2852,6 +2898,9 @@
 
     if (els.tag) {
       els.tag.addEventListener("input", () => {
+        if (!isModalShown()) {
+          return;
+        }
         state.query.tag = String(els.tag.value || "");
         debouncedFilterReload();
       });
@@ -2859,6 +2908,9 @@
 
     if (els.sortBy) {
       els.sortBy.addEventListener("change", () => {
+        if (!isModalShown()) {
+          return;
+        }
         state.sort.by = String(els.sortBy.value || "due");
         loadCards({ reset: true, keepSelection: true }).catch(() => undefined);
       });

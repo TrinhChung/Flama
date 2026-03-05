@@ -36,7 +36,19 @@
           <div class="browse-pane__toolbar">
             <div class="input-group input-group-sm">
               <span class="input-group-text"><i class="bi bi-search"></i></span>
-              <input type="text" class="form-control" id="browseDeckSearch" placeholder="Search deck">
+              <input
+                type="text"
+                class="form-control"
+                id="browseDeckSearch"
+                placeholder="Search deck"
+                autocomplete="off"
+                autocorrect="off"
+                autocapitalize="none"
+                spellcheck="false"
+                data-form-type="other"
+                data-lpignore="true"
+                data-1p-ignore="true"
+              >
             </div>
             <div class="form-check form-switch mt-2">
               <input class="form-check-input" type="checkbox" role="switch" id="browseIncludeSubdecks" checked>
@@ -66,7 +78,19 @@
             <div class="browse-toolbar-row">
               <div class="input-group input-group-sm browse-search-box">
                 <span class="input-group-text"><i class="bi bi-search"></i></span>
-                <input type="text" class="form-control" id="browseKeyword" placeholder="Search word/field...">
+                <input
+                  type="text"
+                  class="form-control"
+                  id="browseKeyword"
+                  placeholder="Search word/field..."
+                  autocomplete="off"
+                  autocorrect="off"
+                  autocapitalize="none"
+                  spellcheck="false"
+                  data-form-type="other"
+                  data-lpignore="true"
+                  data-1p-ignore="true"
+                >
               </div>
               <select class="form-select form-select-sm browse-status-select" id="browseStatusFilter">
                 <option value="all">All</option>
@@ -74,7 +98,19 @@
                 <option value="learn">Learn</option>
                 <option value="due">Due</option>
               </select>
-              <input type="text" class="form-control form-control-sm browse-tag-filter" id="browseTagFilter" placeholder="Tag">
+              <input
+                type="text"
+                class="form-control form-control-sm browse-tag-filter"
+                id="browseTagFilter"
+                placeholder="Tag"
+                autocomplete="off"
+                autocorrect="off"
+                autocapitalize="none"
+                spellcheck="false"
+                data-form-type="other"
+                data-lpignore="true"
+                data-1p-ignore="true"
+              >
             </div>
             <div class="browse-toolbar-row">
               <select class="form-select form-select-sm" id="browseSortBy">
@@ -186,7 +222,19 @@
                 </select>
                 <label for="browseVoicevoxApiKey">API key:</label>
                 <div class="input-group input-group-sm browse-voicevox-key-input">
-                  <input type="password" class="form-control" id="browseVoicevoxApiKey" autocomplete="off">
+                  <input
+                    type="password"
+                    class="form-control"
+                    id="browseVoicevoxApiKey"
+                    name="voicevox_api_key_manual"
+                    autocomplete="new-password"
+                    autocorrect="off"
+                    autocapitalize="none"
+                    spellcheck="false"
+                    data-form-type="other"
+                    data-lpignore="true"
+                    data-1p-ignore="true"
+                  >
                   <button
                     type="button"
                     class="btn browse-voicevox-key-toggle"
