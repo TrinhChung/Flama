@@ -65,6 +65,11 @@ from models.card_progress import CardProgress
 vocabulary_bp = Blueprint("vocabulary", __name__, url_prefix="/vocabulary")
 _VOICEVOX_TEMPLATE_TOKEN_RE = re.compile(r"\{\{\s*([a-zA-Z0-9_]+)\s*\}\}")
 _AUDIO_FILE_EXT_RE = re.compile(r"\.(mp3|wav|ogg|opus|flac|m4a|aac|webm)(?:\?.*)?$", re.IGNORECASE)
+_MD_IMAGE_RE = re.compile(r"!\[([^\]]*)\]\([^)]+\)")
+_MD_LINK_RE = re.compile(r"\[([^\]]+)\]\([^)]+\)")
+_MD_INLINE_STYLE_RE = re.compile(r"(\*\*|__|\*|_|~~|`)")
+_MD_HEADING_RE = re.compile(r"(?m)^\s{0,3}#{1,6}\s*")
+_MD_LIST_MARKER_RE = re.compile(r"(?m)^\s{0,3}(?:[-+*]|\d+\.)\s+")
 
 
 @vocabulary_bp.before_request
@@ -200,6 +205,17 @@ def _strip_richtext_to_plain(raw_value: object) -> str:
     text = str(raw_value or "")
     no_tags = re.sub(r"(?is)<[^>]+>", " ", text)
     normalized = " ".join(no_tags.replace("&nbsp;", " ").split())
+    return normalized.strip()
+
+
+def _strip_markdown_to_plain(raw_value: object) -> str:
+    text = str(raw_value or "")
+    text = _MD_IMAGE_RE.sub(r" \1 ", text)
+    text = _MD_LINK_RE.sub(r" \1 ", text)
+    text = _MD_HEADING_RE.sub("", text)
+    text = _MD_LIST_MARKER_RE.sub("", text)
+    text = _MD_INLINE_STYLE_RE.sub("", text)
+    normalized = " ".join(text.split())
     return normalized.strip()
 
 
@@ -1153,11 +1169,14 @@ def browse_api_voicevox_generate():
 
         note_values = dict(note_obj.field_values or {})
         source_text_raw = str(note_values.get(source_field) or "").strip()
-        source_text = (
-            _strip_richtext_to_plain(source_text_raw)
-            if str(source_def.field_type or "").strip().lower() == "richtext"
-            else source_text_raw
-        ).strip()
+        source_type = str(source_def.field_type or "").strip().lower()
+        if source_type == "richtext":
+            source_text = _strip_richtext_to_plain(source_text_raw)
+        elif source_type == "markdown":
+            source_text = _strip_markdown_to_plain(source_text_raw)
+        else:
+            source_text = source_text_raw
+        source_text = source_text.strip()
         if not source_text:
             skipped_items.append(
                 {

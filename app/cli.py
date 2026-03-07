@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import json
 import re
 from dataclasses import dataclass
 from datetime import datetime
@@ -12,7 +13,7 @@ from typing import Dict, Iterable, List
 import click
 from flask import Flask
 
-from app.services.flashcard_legacy import ensure_legacy_note_type
+from app.services.flashcard_legacy import ensure_legacy_note_type, ensure_quiz_note_type
 from app.services.user_roles import ensure_default_user_roles
 from app.services.tts_provider_service import (
     VOICEVOX_AUDIO_BASE_URL,
@@ -47,6 +48,18 @@ SEED_OPTIONAL_FIELDS = (
     "example_audio",
 )
 SEED_SUPPORTED_SUFFIXES = {".tsv", ".csv"}
+
+QUIZ_DUMP_DIR = Path("static") / "deck_dumps" / "trac_nghiem_markdown"
+QUIZ_DUMP_MANIFEST = "deck_manifest.json"
+QUIZ_DUMP_DEFAULT_FILE = "trac_nghiem_markdown.tsv"
+QUIZ_DUMP_REQUIRED_COLUMNS = (
+    "question",
+    "answer_1",
+    "answer_2",
+    "answer_3",
+    "answer_4",
+    "correct_answer",
+)
 
 
 @dataclass
@@ -203,9 +216,13 @@ def register_cli_commands(app: Flask) -> None:
             raise click.ClickException("No user found. Create at least one user before running vocab-seed.")
 
         note_type, template = ensure_legacy_note_type(db.session, target_user.id)
+        quiz_note_type, quiz_template = ensure_quiz_note_type(db.session, target_user.id)
         click.echo(f"Seeding from: {root}")
         click.echo(
             f"Using owner_user_id={target_user.id}, note_type={note_type.id}, template={template.id}"
+        )
+        click.echo(
+            f"Also ensured quiz_note_type={quiz_note_type.id}, template={quiz_template.id}"
         )
         for start_dir in start_dirs:
             top_deck = _seed_dir_to_deck(
@@ -228,6 +245,17 @@ def register_cli_commands(app: Flask) -> None:
                 stats.shared_decks += 1
                 action = "Created" if shared_created else "Updated"
                 click.echo(f"{action} shared top-level deck item: {top_deck.name}")
+
+        quiz_deck, quiz_note_count = _seed_quiz_dump_for_user(
+            owner_user_id=target_user.id,
+            note_type_id=quiz_note_type.id,
+            template_id=quiz_template.id,
+            stats=stats,
+        )
+        if quiz_deck is not None:
+            click.echo(
+                f"Seeded quiz dump deck: {quiz_deck.name} ({quiz_note_count} notes)"
+            )
 
         db.session.commit()
         click.echo(
@@ -613,3 +641,149 @@ def _seed_row_to_field_values(row: Dict[str, str | None]) -> Dict[str, str]:
         "word_audio": row.get("word_audio") or "",
         "example_audio": row.get("example_audio") or "",
     }
+
+
+def _resolve_quiz_dump_paths() -> tuple[Path, Path]:
+    root = Path(__file__).resolve().parent.parent / QUIZ_DUMP_DIR
+    return root, root / QUIZ_DUMP_MANIFEST
+
+
+def _normalize_quiz_correct_answer(raw_value: str | None) -> str:
+    candidate = str(raw_value or "").strip()
+    if candidate in {"1", "2", "3", "4"}:
+        return candidate
+    try:
+        parsed = int(candidate)
+    except (TypeError, ValueError):
+        return "1"
+    return str(parsed) if 1 <= parsed <= 4 else "1"
+
+
+def _load_quiz_dump_rows(tsv_path: Path) -> list[dict[str, str]]:
+    with tsv_path.open("r", encoding="utf-8-sig", newline="") as infile:
+        reader = csv.DictReader(infile, delimiter="\t")
+        if not reader.fieldnames:
+            raise click.ClickException(f"Missing header row in quiz dump: {tsv_path}")
+
+        normalized_columns = {_normalize_header(name): name for name in reader.fieldnames if name}
+        missing_columns = [name for name in QUIZ_DUMP_REQUIRED_COLUMNS if name not in normalized_columns]
+        if missing_columns:
+            raise click.ClickException(
+                "Quiz dump is missing required columns: " + ", ".join(missing_columns)
+            )
+
+        rows: list[dict[str, str]] = []
+        for raw in reader:
+            if not raw:
+                continue
+            question = str(raw.get(normalized_columns["question"]) or "").strip()
+            if not question:
+                continue
+            rows.append(
+                {
+                    "question": question,
+                    "answer_1": str(raw.get(normalized_columns["answer_1"]) or "").strip(),
+                    "answer_2": str(raw.get(normalized_columns["answer_2"]) or "").strip(),
+                    "answer_3": str(raw.get(normalized_columns["answer_3"]) or "").strip(),
+                    "answer_4": str(raw.get(normalized_columns["answer_4"]) or "").strip(),
+                    "correct_answer": _normalize_quiz_correct_answer(
+                        str(raw.get(normalized_columns["correct_answer"]) or "").strip()
+                    ),
+                }
+            )
+        return rows
+
+
+def _seed_quiz_dump_for_user(
+    *,
+    owner_user_id: int,
+    note_type_id: str,
+    template_id: str,
+    stats: SeedStats,
+) -> tuple[Deck | None, int]:
+    dump_root, manifest_path = _resolve_quiz_dump_paths()
+    if not manifest_path.exists():
+        click.echo(f"Quiz dump manifest not found: {manifest_path}. Skipping quiz deck seed.")
+        return None, 0
+
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise click.ClickException(f"Invalid quiz dump manifest JSON: {manifest_path}") from exc
+
+    deck_name = str(manifest.get("deck_name") or "Trac Nghiem Co Ban").strip() or "Trac Nghiem Co Ban"
+    dump_filename = str(manifest.get("file") or QUIZ_DUMP_DEFAULT_FILE).strip() or QUIZ_DUMP_DEFAULT_FILE
+    dump_file = dump_root / dump_filename
+    if not dump_file.exists():
+        raise click.ClickException(f"Quiz dump file not found: {dump_file}")
+
+    rows = _load_quiz_dump_rows(dump_file)
+    if not rows:
+        click.echo(f"Quiz dump has no valid rows: {dump_file}. Skipping quiz deck seed.")
+        return None, 0
+
+    deck_description = f"Seeded quiz dump from {dump_file.name}"
+    quiz_deck, _created = _get_or_create_deck(
+        parent_deck_id=None,
+        owner_user_id=owner_user_id,
+        name=deck_name,
+        description=deck_description,
+        stats=stats,
+    )
+    if not quiz_deck.note_type_id:
+        quiz_deck.note_type_id = note_type_id
+
+    existing_notes = (
+        Note.query.filter(
+            Note.deck_id == quiz_deck.id,
+            Note.user_id == owner_user_id,
+            Note.note_type_id == note_type_id,
+        )
+        .all()
+    )
+    existing_note_ids = [note.id for note in existing_notes]
+    if existing_note_ids:
+        existing_card_ids = [
+            row[0]
+            for row in db.session.query(Card.id)
+            .filter(Card.note_id.in_(existing_note_ids))
+            .all()
+            if row and row[0]
+        ]
+        if existing_card_ids:
+            CardProgress.query.filter(
+                CardProgress.card_id.in_(existing_card_ids)
+            ).delete(synchronize_session=False)
+        Card.query.filter(Card.note_id.in_(existing_note_ids)).delete(synchronize_session=False)
+        Note.query.filter(Note.id.in_(existing_note_ids)).delete(synchronize_session=False)
+        stats.replaced_files += 1
+
+    notes: list[Note] = []
+    for row in rows:
+        notes.append(
+            Note(
+                note_type_id=note_type_id,
+                user_id=owner_user_id,
+                deck_id=quiz_deck.id,
+                field_values={
+                    "question": row["question"],
+                    "answer_1": row["answer_1"],
+                    "answer_2": row["answer_2"],
+                    "answer_3": row["answer_3"],
+                    "answer_4": row["answer_4"],
+                    "correct_answer": row["correct_answer"],
+                },
+                tags=["quiz", "seeded"],
+            )
+        )
+    db.session.add_all(notes)
+    db.session.flush()
+
+    cards = [Card(note_id=note.id, template_id=template_id) for note in notes]
+    db.session.add_all(cards)
+    db.session.flush()
+
+    stats.created_notes += len(notes)
+    stats.created_cards += len(cards)
+    stats.seeded_files += 1
+    return quiz_deck, len(notes)

@@ -50,6 +50,61 @@
 {% endblock %}
 
 {% block scripts %}
+<style>
+  #dynamic-fields textarea[data-markdown-editor="1"] {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  }
+
+  .note-editor-markdown-hint {
+    margin-top: 0.3rem;
+    font-size: 0.74rem;
+    color: #6c757d;
+  }
+
+  .note-editor-markdown-preview {
+    margin-top: 0.4rem;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    background: #fff;
+    padding: 0.5rem 0.6rem;
+    max-height: 180px;
+    overflow: auto;
+  }
+
+  .note-editor-markdown-preview-empty {
+    color: #6c757d;
+    font-size: 0.76rem;
+  }
+
+  .note-editor-markdown-preview-text {
+    color: #4a4a4a;
+    font-size: 0.8rem;
+    line-height: 1.45;
+    margin-bottom: 0.35rem;
+    word-break: break-word;
+  }
+
+  .note-editor-markdown-preview-text:last-child {
+    margin-bottom: 0;
+  }
+
+  .note-editor-markdown-preview-figure {
+    margin: 0 0 0.4rem;
+  }
+
+  .note-editor-markdown-preview-figure:last-child {
+    margin-bottom: 0;
+  }
+
+  .note-editor-markdown-preview-figure img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    border-radius: 6px;
+    border: 1px solid #e5e7eb;
+    background: #fff;
+  }
+</style>
 <script>
   (() => {
     const noteTypeSelect = document.getElementById("note-type-select");
@@ -59,6 +114,7 @@
     const form = document.getElementById("note-editor-form");
     const errorEl = document.getElementById("note-editor-error");
     const successEl = document.getElementById("note-editor-success");
+    const MARKDOWN_PROXY_MEDIA_RE = /^\/media\/proxy\/[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 
     let currentFields = [];
 
@@ -86,6 +142,69 @@
       return data;
     }
 
+    function escapeHtml(value) {
+      return String(value == null ? "" : value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function markdownTextToPreviewHtml(rawText) {
+      return escapeHtml(rawText).replace(/\n/g, "<br>");
+    }
+
+    function renderMarkdownPreviewHtml(rawMarkdown) {
+      const source = String(rawMarkdown || "").replace(/\r\n?/g, "\n");
+      if (!source.trim()) {
+        return '<div class="note-editor-markdown-preview-empty">Preview trống.</div>';
+      }
+
+      const imageRe = /!\[([^\]]*)\]\(([^)\s]+)\)/g;
+      const chunks = [];
+      let cursor = 0;
+      let match;
+
+      while ((match = imageRe.exec(source)) !== null) {
+        const before = source.slice(cursor, match.index);
+        if (before) {
+          chunks.push(`<div class="note-editor-markdown-preview-text">${markdownTextToPreviewHtml(before)}</div>`);
+        }
+
+        const alt = String(match[1] || "").trim().slice(0, 160) || "image";
+        const imageUrl = String(match[2] || "").trim();
+        if (MARKDOWN_PROXY_MEDIA_RE.test(imageUrl)) {
+          chunks.push(
+            `<figure class="note-editor-markdown-preview-figure"><img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(alt)}" loading="lazy"></figure>`
+          );
+        } else {
+          chunks.push(`<div class="note-editor-markdown-preview-text">${markdownTextToPreviewHtml(match[0])}</div>`);
+        }
+        cursor = imageRe.lastIndex;
+      }
+
+      const tail = source.slice(cursor);
+      if (tail) {
+        chunks.push(`<div class="note-editor-markdown-preview-text">${markdownTextToPreviewHtml(tail)}</div>`);
+      }
+
+      return chunks.length
+        ? chunks.join("")
+        : '<div class="note-editor-markdown-preview-empty">Preview trống.</div>';
+    }
+
+    function bindMarkdownPreview(textarea, previewEl) {
+      if (!(textarea instanceof HTMLTextAreaElement) || !(previewEl instanceof HTMLElement)) {
+        return;
+      }
+      const sync = () => {
+        previewEl.innerHTML = renderMarkdownPreviewHtml(textarea.value);
+      };
+      textarea.addEventListener("input", sync);
+      sync();
+    }
+
     function renderField(field) {
       const wrapper = document.createElement("div");
       wrapper.className = "mb-3";
@@ -102,11 +221,25 @@
         fileInput.type = "file";
         fileInput.className = "form-control";
         wrapper.appendChild(fileInput);
-      } else if (field.field_type === "richtext") {
+      } else if (field.field_type === "richtext" || field.field_type === "markdown") {
         const textarea = document.createElement("textarea");
         textarea.className = "form-control";
-        textarea.rows = 4;
+        textarea.rows = field.field_type === "markdown" ? 7 : 4;
+        if (field.field_type === "markdown") {
+          textarea.setAttribute("data-markdown-editor", "1");
+        }
         wrapper.appendChild(textarea);
+        if (field.field_type === "markdown") {
+          const hint = document.createElement("div");
+          hint.className = "note-editor-markdown-hint";
+          hint.textContent = "Markdown preview: ảnh /media/proxy sẽ hiển thị ngay bên dưới.";
+          wrapper.appendChild(hint);
+
+          const preview = document.createElement("div");
+          preview.className = "note-editor-markdown-preview";
+          wrapper.appendChild(preview);
+          bindMarkdownPreview(textarea, preview);
+        }
       } else {
         const input = document.createElement("input");
         input.type = "text";
@@ -161,7 +294,8 @@
           else fieldValues[field.name] = "";
         } else {
           const control = wrapper.querySelector("input, textarea");
-          fieldValues[field.name] = (control?.value || "").trim();
+          const rawValue = control?.value || "";
+          fieldValues[field.name] = field.field_type === "markdown" ? rawValue : rawValue.trim();
         }
       }
 

@@ -14,6 +14,14 @@ from typing import Any
 import bleach
 import chevron
 from bleach.css_sanitizer import CSSSanitizer
+try:
+    from markdown_it import MarkdownIt
+except Exception:  # pragma: no cover - optional dependency fallback
+    MarkdownIt = None  # type: ignore[assignment]
+try:
+    import mistune
+except Exception:  # pragma: no cover - optional dependency fallback
+    mistune = None  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +47,9 @@ ALLOWED_HTML_TAGS = [
     "ul",
     "ol",
     "li",
+    "blockquote",
+    "pre",
+    "code",
     "table",
     "thead",
     "tbody",
@@ -96,6 +107,19 @@ ALLOWED_CSS_PROPERTIES = [
 ]
 
 _css_sanitizer = CSSSanitizer(allowed_css_properties=ALLOWED_CSS_PROPERTIES)
+_markdown_parser = None
+if MarkdownIt is not None:
+    _markdown_parser = MarkdownIt(
+        "commonmark",
+        {
+            "html": False,
+            "linkify": False,
+            "typographer": False,
+        },
+    )
+elif mistune is not None:
+    # Fallback renderer when markdown-it-py is missing in runtime env.
+    _markdown_parser = mistune.create_markdown(escape=True)
 _template_cache: OrderedDict[str, str] = OrderedDict()
 _preview_cache: dict[str, tuple[datetime, dict[str, str]]] = {}
 _cache_lock = threading.Lock()
@@ -213,6 +237,12 @@ def _normalize_multiline_value(value: Any) -> str:
     return normalized.replace("\n", LINEBREAK_TOKEN)
 
 
+def _normalize_markdown_value(value: Any) -> str:
+    text = "" if value is None else str(value)
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+    return normalized.replace("\\n", "\n")
+
+
 def _replace_linebreak_token_in_html_text_nodes(rendered_html: str) -> str:
     if LINEBREAK_TOKEN not in rendered_html:
         return rendered_html
@@ -294,6 +324,25 @@ def sanitize_html_fragment(raw_html: str | None) -> str:
 
 def sanitize_richtext(raw_html: str | None) -> str:
     return sanitize_html_fragment(raw_html)
+
+
+def render_markdown_to_safe_html(raw_markdown: str | None) -> str:
+    source = _normalize_markdown_value(raw_markdown)
+    if not source.strip():
+        return ""
+    if _markdown_parser is None:
+        escaped = html.escape(source)
+        return sanitize_html_fragment(escaped.replace("\n", "<br>"))
+    try:
+        if hasattr(_markdown_parser, "render"):
+            rendered = _markdown_parser.render(source)
+        else:
+            rendered = _markdown_parser(source)
+    except Exception:
+        logger.exception("Failed to render markdown; falling back to plain text.")
+        escaped = html.escape(source)
+        return sanitize_html_fragment(escaped.replace("\n", "<br>"))
+    return sanitize_html_fragment(rendered)
 
 
 def is_field_empty(value: Any) -> bool:
@@ -389,6 +438,9 @@ def build_render_context(
         value = values.get(name)
         if field_def.field_type == "richtext":
             context[name] = sanitize_richtext(_normalize_multiline_value(value))
+            continue
+        if field_def.field_type == "markdown":
+            context[name] = render_markdown_to_safe_html(value)
             continue
         if field_def.field_type in {"image", "audio", "diagram"}:
             media_html = _render_media_html(field_def.field_type, value, name, media_lookup)

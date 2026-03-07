@@ -7,7 +7,7 @@ from pathlib import Path
 
 from app import create_app
 from models import db
-from models.flashcard import DeckMarketplaceItem
+from models.flashcard import DeckMarketplaceItem, Note, NoteType
 from models.user import User
 from models.deck import Deck
 
@@ -90,6 +90,34 @@ class VocabSeedSharingTests(unittest.TestCase):
 
         with self.app.app_context():
             self.assertEqual(DeckMarketplaceItem.query.count(), 0)
+
+    def test_vocab_seed_seeds_quiz_dump_deck_for_owner(self):
+        result = self.runner.invoke(
+            args=["vocab-seed", "--path", str(self.seed_dir), "--owner-user-id", str(self.user_id)],
+        )
+        self.assertEqual(result.exit_code, 0, msg=result.output)
+
+        with self.app.app_context():
+            quiz_note_type = NoteType.query.filter_by(
+                user_id=self.user_id,
+                name="Trắc nghiệm",
+            ).first()
+            self.assertIsNotNone(quiz_note_type)
+
+            quiz_deck = Deck.query.filter_by(
+                owner_user_id=self.user_id,
+                parent_id=None,
+                name="Trac Nghiem Co Ban",
+            ).first()
+            self.assertIsNotNone(quiz_deck)
+            self.assertEqual(quiz_deck.note_type_id, quiz_note_type.id)
+
+            quiz_note_count = Note.query.filter_by(
+                user_id=self.user_id,
+                note_type_id=quiz_note_type.id,
+                deck_id=quiz_deck.id,
+            ).count()
+            self.assertGreater(quiz_note_count, 0)
 
 
 if __name__ == "__main__":

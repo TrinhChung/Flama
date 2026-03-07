@@ -236,7 +236,7 @@ def note_ordered_field_names(note_obj: Note | None, *, text_only: bool = False) 
             key=lambda item: ((item.position or 0), item.name.lower()),
         )
         for field_def in sorted_defs:
-            if text_only and field_def.field_type not in {"text", "richtext"}:
+            if text_only and field_def.field_type not in {"text", "richtext", "markdown"}:
                 continue
             field_name = (field_def.name or "").strip()
             if field_name and field_name not in ordered_names:

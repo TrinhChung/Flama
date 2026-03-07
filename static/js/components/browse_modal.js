@@ -20,6 +20,7 @@
   const bulkDeleteModalInstance = window.bootstrap.Modal.getOrCreateInstance(bulkDeleteModalEl);
   const VOICEVOX_BATCH_SIZE = 4;
   const VOICEVOX_GENERATE_CONTROLLER_KEY = "voicevox-generate";
+  const MARKDOWN_PROXY_MEDIA_RE = /^\/media\/proxy\/[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 
   const els = {
     contextLabel: document.getElementById("browseContextLabel"),
@@ -208,6 +209,14 @@
       .replace(/'/g, "&#39;");
   }
 
+  function cssEscape(value) {
+    const raw = String(value == null ? "" : value);
+    if (window.CSS && typeof window.CSS.escape === "function") {
+      return window.CSS.escape(raw);
+    }
+    return raw.replace(/["\\]/g, "\\$&");
+  }
+
   function debounce(fn, delay = 250) {
     let timerId;
     return (...args) => {
@@ -251,6 +260,131 @@
       return text;
     }
     return `${text.slice(0, maxLength - 1)}...`;
+  }
+
+  function isImageFile(file) {
+    return Boolean(file && String(file.type || "").toLowerCase().startsWith("image/"));
+  }
+
+  function normalizeMarkdownAlt(raw) {
+    const normalized = String(raw || "image")
+      .replace(/[\[\]\(\)]/g, "")
+      .trim()
+      .slice(0, 80);
+    return normalized || "image";
+  }
+
+  function markdownTextToPreviewHtml(rawText) {
+    return escapeHtml(rawText).replace(/\n/g, "<br>");
+  }
+
+  function renderMarkdownPreviewHtml(rawMarkdown) {
+    const source = String(rawMarkdown || "").replace(/\r\n?/g, "\n");
+    if (!source.trim()) {
+      return '<div class="browse-editor-markdown-preview-empty">Preview trống.</div>';
+    }
+
+    const imageRe = /!\[([^\]]*)\]\(([^)\s]+)\)/g;
+    const chunks = [];
+    let cursor = 0;
+    let match;
+
+    while ((match = imageRe.exec(source)) !== null) {
+      const before = source.slice(cursor, match.index);
+      if (before) {
+        chunks.push(`<div class="browse-editor-markdown-preview-text">${markdownTextToPreviewHtml(before)}</div>`);
+      }
+
+      const alt = String(match[1] || "").trim().slice(0, 160) || "image";
+      const imageUrl = String(match[2] || "").trim();
+      if (MARKDOWN_PROXY_MEDIA_RE.test(imageUrl)) {
+        chunks.push(
+          `<figure class="browse-editor-markdown-preview-figure"><img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(alt)}" loading="lazy"></figure>`
+        );
+      } else {
+        chunks.push(`<div class="browse-editor-markdown-preview-text">${markdownTextToPreviewHtml(match[0])}</div>`);
+      }
+      cursor = imageRe.lastIndex;
+    }
+
+    const tail = source.slice(cursor);
+    if (tail) {
+      chunks.push(`<div class="browse-editor-markdown-preview-text">${markdownTextToPreviewHtml(tail)}</div>`);
+    }
+
+    return chunks.length
+      ? chunks.join("")
+      : '<div class="browse-editor-markdown-preview-empty">Preview trống.</div>';
+  }
+
+  function syncMarkdownPreviewForTextarea(textarea) {
+    if (!(textarea instanceof HTMLTextAreaElement) || !els.editorFields) {
+      return;
+    }
+    const fieldName = String(textarea.dataset.browseField || "").trim();
+    if (!fieldName) {
+      return;
+    }
+    const previewEl = els.editorFields.querySelector(
+      `[data-markdown-preview-for="${cssEscape(fieldName)}"]`
+    );
+    if (!(previewEl instanceof HTMLElement)) {
+      return;
+    }
+    previewEl.innerHTML = renderMarkdownPreviewHtml(textarea.value);
+  }
+
+  function refreshMarkdownPreviewsInEditor() {
+    if (!els.editorFields) {
+      return;
+    }
+    els.editorFields
+      .querySelectorAll('textarea[data-markdown-inline="1"][data-browse-field]')
+      .forEach((textarea) => {
+        syncMarkdownPreviewForTextarea(textarea);
+      });
+  }
+
+  function insertMarkdownImageSyntax(textarea, imageUrl, filename) {
+    if (!(textarea instanceof HTMLTextAreaElement) || !imageUrl) {
+      return;
+    }
+    const currentValue = String(textarea.value || "");
+    const start = Number(textarea.selectionStart ?? currentValue.length);
+    const end = Number(textarea.selectionEnd ?? start);
+    const before = currentValue.slice(0, start);
+    const after = currentValue.slice(end);
+    const needsLeadingBreak = before.length > 0 && !before.endsWith("\n");
+    const needsTrailingBreak = after.length > 0 && !after.startsWith("\n");
+    const alt = normalizeMarkdownAlt(filename || "image");
+    const snippet = `${needsLeadingBreak ? "\n" : ""}![${alt}](${imageUrl})${needsTrailingBreak ? "\n" : ""}`;
+
+    textarea.value = `${before}${snippet}${after}`;
+    const cursor = before.length + snippet.length;
+    textarea.focus();
+    textarea.setSelectionRange(cursor, cursor);
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+
+  function imageFileFromClipboardData(clipboardData) {
+    if (!clipboardData || !clipboardData.items) {
+      return null;
+    }
+    for (const item of clipboardData.items) {
+      if (item.kind !== "file") {
+        continue;
+      }
+      const file = item.getAsFile();
+      if (isImageFile(file)) {
+        return file;
+      }
+    }
+    return null;
+  }
+
+  function firstImageFile(filesLike) {
+    const files = Array.from(filesLike || []);
+    return files.find((candidate) => isImageFile(candidate)) || null;
   }
 
   function findPreferredRowInLoadedRows() {
@@ -851,7 +985,7 @@
     const sourceCandidates = rawNoteTypeFields
       .filter((field) => {
         const kind = String(field?.field_type || "text").toLowerCase();
-        return kind === "text" || kind === "richtext";
+        return kind === "text" || kind === "richtext" || kind === "markdown";
       })
       .map((field) => ({
         name: String(field?.name || ""),
@@ -2037,16 +2171,27 @@
             `;
           }
 
+          const isMarkdown = type === "markdown";
+          const markdownHint = isMarkdown
+            ? '<div class="browse-editor-markdown-hint">Markdown: dán ảnh bằng Ctrl/Cmd+V hoặc kéo-thả vào ô này.</div>'
+            : "";
+          const markdownPreview = isMarkdown
+            ? `<div class="browse-editor-markdown-preview" data-markdown-preview-for="${escapeHtml(name)}"></div>`
+            : "";
+
           return `
             <div class="browse-editor-field">
               <label>${escapeHtml(name)} ${requiredBadge}</label>
-              <textarea rows="2" ${commonAttrs}>${escapeHtml(value)}</textarea>
+              <textarea rows="${isMarkdown ? "7" : "2"}" ${commonAttrs} data-markdown-inline="${isMarkdown ? "1" : "0"}">${escapeHtml(value)}</textarea>
+              ${markdownHint}
+              ${markdownPreview}
             </div>
           `;
         })
         .join("");
 
       els.editorFields.innerHTML = fieldsHtml;
+      refreshMarkdownPreviewsInEditor();
     }
 
     setSaveButtons();
@@ -2466,6 +2611,36 @@
       await loadCards({ reset: true, keepSelection: true });
     } catch (error) {
       window.alert(`Media upload failed: ${error.message}`);
+    }
+  }
+
+  async function uploadMarkdownInlineMedia(fieldName, file, textarea) {
+    if (!state.detail || !state.detail.note || !state.detail.note.id || !fieldName || !isImageFile(file)) {
+      return;
+    }
+    if (!(textarea instanceof HTMLTextAreaElement)) {
+      return;
+    }
+
+    const noteId = String(state.detail.note.id || "");
+    const formData = new FormData();
+    formData.append("field_name", fieldName);
+    formData.append("file", file);
+
+    textarea.disabled = true;
+    try {
+      const payload = await requestJson(`/api/notes/${encodeURIComponent(noteId)}/markdown-media`, {
+        method: "POST",
+        body: formData,
+      });
+      insertMarkdownImageSyntax(textarea, payload.url, payload.filename || file.name);
+      updateDraftField(fieldName, textarea.value);
+      syncMarkdownPreviewForTextarea(textarea);
+    } catch (error) {
+      window.alert(`Markdown image upload failed: ${error.message}`);
+    } finally {
+      textarea.disabled = false;
+      textarea.classList.remove("is-dragover");
     }
   }
 
@@ -2996,6 +3171,9 @@
         const fieldTarget = event.target.closest("[data-browse-field]");
         if (fieldTarget?.dataset.browseField) {
           updateDraftField(fieldTarget.dataset.browseField, fieldTarget.value);
+          if (fieldTarget instanceof HTMLTextAreaElement && fieldTarget.dataset.markdownInline === "1") {
+            syncMarkdownPreviewForTextarea(fieldTarget);
+          }
           return;
         }
         if (event.target === els.editorTags) {
@@ -3017,6 +3195,59 @@
           uploadMedia(uploadFieldInput.dataset.uploadField, uploadFieldInput.files[0]).catch(() => undefined);
           uploadFieldInput.value = "";
         }
+      });
+
+      els.editorForm.addEventListener("paste", (event) => {
+        const textarea = event.target.closest('textarea[data-markdown-inline="1"][data-browse-field]');
+        if (!(textarea instanceof HTMLTextAreaElement)) {
+          return;
+        }
+        const fieldName = String(textarea.dataset.browseField || "").trim();
+        if (!fieldName) {
+          return;
+        }
+        const imageFile = imageFileFromClipboardData(event.clipboardData);
+        if (!imageFile) {
+          return;
+        }
+        event.preventDefault();
+        uploadMarkdownInlineMedia(fieldName, imageFile, textarea).catch(() => undefined);
+      });
+
+      els.editorForm.addEventListener("dragover", (event) => {
+        const textarea = event.target.closest('textarea[data-markdown-inline="1"][data-browse-field]');
+        if (!(textarea instanceof HTMLTextAreaElement)) {
+          return;
+        }
+        const file = firstImageFile(event.dataTransfer?.files || []);
+        if (!file) {
+          return;
+        }
+        event.preventDefault();
+        textarea.classList.add("is-dragover");
+      });
+
+      els.editorForm.addEventListener("dragleave", (event) => {
+        const textarea = event.target.closest('textarea[data-markdown-inline="1"][data-browse-field]');
+        if (!(textarea instanceof HTMLTextAreaElement)) {
+          return;
+        }
+        textarea.classList.remove("is-dragover");
+      });
+
+      els.editorForm.addEventListener("drop", (event) => {
+        const textarea = event.target.closest('textarea[data-markdown-inline="1"][data-browse-field]');
+        if (!(textarea instanceof HTMLTextAreaElement)) {
+          return;
+        }
+        const fieldName = String(textarea.dataset.browseField || "").trim();
+        const imageFile = firstImageFile(event.dataTransfer?.files || []);
+        textarea.classList.remove("is-dragover");
+        if (!fieldName || !imageFile) {
+          return;
+        }
+        event.preventDefault();
+        uploadMarkdownInlineMedia(fieldName, imageFile, textarea).catch(() => undefined);
       });
     }
 

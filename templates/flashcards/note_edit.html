@@ -72,6 +72,12 @@
                     {% if fd.field_type == 'richtext' %}
                     <textarea class="fc-textarea fc-field" name="{{ fd.name }}" rows="4">{{ fv }}</textarea>
 
+                    {% elif fd.field_type == 'markdown' %}
+                    <textarea class="fc-textarea fc-field fc-markdown-field" name="{{ fd.name }}" rows="8"
+                        data-markdown-field="{{ fd.name }}">{{ fv }}</textarea>
+                    <div class="note-edit__markdown-hint">Markdown: dán ảnh bằng Ctrl/Cmd+V hoặc kéo-thả ảnh vào ô này.</div>
+                    <div class="note-edit__markdown-preview" data-markdown-preview-for="{{ fd.name }}"></div>
+
                     {% elif fd.field_type in ['image', 'audio', 'diagram'] %}
                     <div class="note-edit__media-wrap">
                         {% if fv %}
@@ -313,6 +319,66 @@
         resize: vertical;
     }
 
+    .fc-markdown-field {
+        min-height: 170px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
+
+    .fc-markdown-field.is-dragover {
+        border-color: var(--flama-orange-400);
+        box-shadow: 0 0 0 2px rgba(251, 146, 60, 0.2);
+    }
+
+    .note-edit__markdown-hint {
+        margin-top: 0.35rem;
+        font-size: 0.75rem;
+        color: var(--flama-text-2);
+    }
+
+    .note-edit__markdown-preview {
+        margin-top: 0.45rem;
+        padding: 0.55rem 0.65rem;
+        border-radius: 8px;
+        border: 1px solid var(--flama-border);
+        background: #fff;
+        max-height: 220px;
+        overflow: auto;
+    }
+
+    .note-edit__markdown-preview-empty {
+        font-size: 0.75rem;
+        color: var(--flama-text-2);
+    }
+
+    .note-edit__markdown-preview-text {
+        font-size: 0.8rem;
+        line-height: 1.45;
+        color: var(--flama-text-2);
+        margin-bottom: 0.4rem;
+        word-break: break-word;
+    }
+
+    .note-edit__markdown-preview-text:last-child {
+        margin-bottom: 0;
+    }
+
+    .note-edit__markdown-preview-figure {
+        margin: 0 0 0.45rem;
+    }
+
+    .note-edit__markdown-preview-figure:last-child {
+        margin-bottom: 0;
+    }
+
+    .note-edit__markdown-preview-figure img {
+        display: block;
+        max-width: 100%;
+        height: auto;
+        border-radius: 6px;
+        border: 1px solid var(--flama-border);
+        background: #fff;
+    }
+
     .fc-file-input {
         display: block;
         margin-top: 0.5rem;
@@ -454,6 +520,7 @@
 <script>
     const NOTE_ID = "{{ note.id }}";
     const NOTE_TYPE_ID = "{{ note_type.id }}";
+    const MARKDOWN_PROXY_MEDIA_RE = /^\/media\/proxy\/[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 
     function showStatus(msg, type = 'success') {
         const el = document.getElementById('note-edit-status');
@@ -461,6 +528,130 @@
         el.className = `note-edit__status note-edit__status--${type}`;
         el.classList.remove('d-none');
         setTimeout(() => el.classList.add('d-none'), 4000);
+    }
+
+    function escapeHtml(raw) {
+        return String(raw == null ? "" : raw)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#39;");
+    }
+
+    function markdownTextToPreviewHtml(rawText) {
+        return escapeHtml(rawText).replace(/\n/g, "<br>");
+    }
+
+    function renderMarkdownPreviewHtml(rawMarkdown) {
+        const source = String(rawMarkdown || "").replace(/\r\n?/g, "\n");
+        if (!source.trim()) {
+            return '<div class="note-edit__markdown-preview-empty">Preview trống.</div>';
+        }
+
+        const imageRe = /!\[([^\]]*)\]\(([^)\s]+)\)/g;
+        const chunks = [];
+        let cursor = 0;
+        let match;
+
+        while ((match = imageRe.exec(source)) !== null) {
+            const before = source.slice(cursor, match.index);
+            if (before) {
+                chunks.push(`<div class="note-edit__markdown-preview-text">${markdownTextToPreviewHtml(before)}</div>`);
+            }
+
+            const alt = String(match[1] || "").trim().slice(0, 160) || "image";
+            const imageUrl = String(match[2] || "").trim();
+            if (MARKDOWN_PROXY_MEDIA_RE.test(imageUrl)) {
+                chunks.push(
+                    `<figure class="note-edit__markdown-preview-figure"><img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(alt)}" loading="lazy"></figure>`
+                );
+            } else {
+                chunks.push(`<div class="note-edit__markdown-preview-text">${markdownTextToPreviewHtml(match[0])}</div>`);
+            }
+            cursor = imageRe.lastIndex;
+        }
+
+        const tail = source.slice(cursor);
+        if (tail) {
+            chunks.push(`<div class="note-edit__markdown-preview-text">${markdownTextToPreviewHtml(tail)}</div>`);
+        }
+
+        if (!chunks.length) {
+            return '<div class="note-edit__markdown-preview-empty">Preview trống.</div>';
+        }
+        return chunks.join("");
+    }
+
+    function syncMarkdownPreview(textarea) {
+        if (!(textarea instanceof HTMLTextAreaElement)) return;
+        const row = textarea.closest('.note-edit__field-row');
+        const preview = row ? row.querySelector('.note-edit__markdown-preview') : null;
+        if (!(preview instanceof HTMLElement)) return;
+        preview.innerHTML = renderMarkdownPreviewHtml(textarea.value);
+    }
+
+    function escapeMarkdownAlt(raw) {
+        const normalized = String(raw || "image")
+            .replace(/[\[\]\(\)]/g, "")
+            .trim()
+            .slice(0, 80);
+        return normalized || "image";
+    }
+
+    function insertMarkdownImageSyntax(textarea, imageUrl, filename) {
+        if (!textarea || !imageUrl) return;
+        const currentValue = String(textarea.value || "");
+        const start = Number(textarea.selectionStart ?? currentValue.length);
+        const end = Number(textarea.selectionEnd ?? start);
+        const before = currentValue.slice(0, start);
+        const after = currentValue.slice(end);
+
+        const needsLeadingBreak = before.length > 0 && !before.endsWith("\n");
+        const needsTrailingBreak = after.length > 0 && !after.startsWith("\n");
+        const alt = escapeMarkdownAlt(filename || "image");
+        const snippet = `${needsLeadingBreak ? "\n" : ""}![${alt}](${imageUrl})${needsTrailingBreak ? "\n" : ""}`;
+
+        textarea.value = `${before}${snippet}${after}`;
+        const cursor = before.length + snippet.length;
+        textarea.focus();
+        textarea.setSelectionRange(cursor, cursor);
+        textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+
+    function getImageFileFromClipboard(clipboardData) {
+        if (!clipboardData || !clipboardData.items) return null;
+        for (const item of clipboardData.items) {
+            if (item.kind !== "file") continue;
+            const file = item.getAsFile();
+            if (!file) continue;
+            if (String(file.type || "").toLowerCase().startsWith("image/")) {
+                return file;
+            }
+        }
+        return null;
+    }
+
+    async function uploadMarkdownInlineImage(fieldName, file, textarea) {
+        if (!fieldName || !file) return;
+        if (!String(file.type || "").toLowerCase().startsWith("image/")) {
+            showStatus('Chỉ hỗ trợ ảnh cho markdown inline.', 'error');
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('field_name', fieldName);
+        formData.append('file', file);
+
+        showStatus('Đang tải ảnh markdown…', 'success');
+        const res = await fetch(`/api/notes/${NOTE_ID}/markdown-media`, { method: 'POST', body: formData });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            showStatus(data.message || 'Upload ảnh markdown thất bại.', 'error');
+            return;
+        }
+        insertMarkdownImageSyntax(textarea, data.url, data.filename || file.name);
+        showStatus('Đã chèn ảnh vào markdown.', 'success');
     }
 
     // ── Media remove ──
@@ -493,6 +684,48 @@
             } else {
                 showStatus(data.message || 'Upload thất bại.', 'error');
             }
+        });
+    });
+
+    document.querySelectorAll('.fc-markdown-field').forEach(textarea => {
+        const fieldName = textarea.dataset.markdownField || textarea.name;
+        if (!fieldName) return;
+
+        textarea.addEventListener('input', () => {
+            syncMarkdownPreview(textarea);
+        });
+        syncMarkdownPreview(textarea);
+
+        textarea.addEventListener('paste', (event) => {
+            const file = getImageFileFromClipboard(event.clipboardData);
+            if (!file) return;
+            event.preventDefault();
+            uploadMarkdownInlineImage(fieldName, file, textarea).catch(() => {
+                showStatus('Upload ảnh markdown thất bại.', 'error');
+            });
+        });
+
+        textarea.addEventListener('dragover', (event) => {
+            const files = Array.from(event.dataTransfer?.files || []);
+            const hasImage = files.some((file) => String(file.type || "").toLowerCase().startsWith("image/"));
+            if (!hasImage) return;
+            event.preventDefault();
+            textarea.classList.add('is-dragover');
+        });
+
+        textarea.addEventListener('dragleave', () => {
+            textarea.classList.remove('is-dragover');
+        });
+
+        textarea.addEventListener('drop', (event) => {
+            textarea.classList.remove('is-dragover');
+            const files = Array.from(event.dataTransfer?.files || []);
+            const file = files.find((candidate) => String(candidate.type || "").toLowerCase().startsWith("image/"));
+            if (!file) return;
+            event.preventDefault();
+            uploadMarkdownInlineImage(fieldName, file, textarea).catch(() => {
+                showStatus('Upload ảnh markdown thất bại.', 'error');
+            });
         });
     });
 

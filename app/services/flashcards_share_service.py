@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 # Keep self-references stable while legacy call sites are migrated.
 flashcards_share = sys.modules[__name__]
 
-FIELD_TYPES = {"text", "richtext", "image", "audio", "diagram"}
+FIELD_TYPES = {"text", "richtext", "markdown", "image", "audio", "diagram"}
 PUBLISH_STATUSES_VISIBLE = {"published", "unlisted"}
 DECK_ACTIVE_REVIEW_THRESHOLD = 3
 SHARED_DECK_TEST_SAMPLE_LIMIT = 5
@@ -1827,7 +1827,7 @@ def build_clone_schema_view(
         if resolved_name != source_def.name:
             renamed_field_names[source_def.name] = resolved_name
         resolved_field_type = str(properties.get("field_type") or source_def.field_type or "text").strip().lower()
-        if resolved_field_type not in {"text", "richtext", "image", "audio", "diagram"}:
+        if resolved_field_type not in FIELD_TYPES:
             resolved_field_type = str(source_def.field_type or "text")
         raw_position = properties.get("position")
         try:
@@ -1853,7 +1853,7 @@ def build_clone_schema_view(
         properties = row.properties if isinstance(row.properties, dict) else {}
         resolved_name = str(properties.get("name") or row.name).strip() or row.name
         resolved_field_type = str(properties.get("field_type") or row.field_type or "text").strip().lower()
-        if resolved_field_type not in {"text", "richtext", "image", "audio", "diagram"}:
+        if resolved_field_type not in FIELD_TYPES:
             resolved_field_type = str(row.field_type or "text")
         raw_position = properties.get("position")
         try:
@@ -2066,7 +2066,7 @@ def upsert_clone_overlay(
             if not name:
                 return {}, "added_defs.name is required."
             field_type = str(item.get("field_type") or "text").strip().lower()
-            if field_type not in {"text", "richtext", "image", "audio", "diagram"}:
+            if field_type not in FIELD_TYPES:
                 return {}, "added_defs.field_type is invalid."
             try:
                 position = int(item.get("position") if item.get("position") is not None else 0)

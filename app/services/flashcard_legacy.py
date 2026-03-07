@@ -58,6 +58,69 @@ LEGACY_SHARED_CSS = """
 .legacy-back img { max-width: 100%; height: auto; }
 """
 
+QUIZ_NOTE_TYPE_NAME = "Tr\u1eafc nghi\u1ec7m"
+
+QUIZ_FIELD_DEFS = [
+    ("question", "markdown", True),
+    ("answer_1", "markdown", True),
+    ("answer_2", "markdown", True),
+    ("answer_3", "markdown", True),
+    ("answer_4", "markdown", True),
+    # Store 1|2|3|4 as the correct option index.
+    ("correct_answer", "text", True),
+]
+
+QUIZ_FRONT_TEMPLATE = """
+<div class="quiz-front">
+  <div class="quiz-question">{{{question}}}</div>
+  <ol class="quiz-options">
+    <li>{{{answer_1}}}</li>
+    <li>{{{answer_2}}}</li>
+    <li>{{{answer_3}}}</li>
+    <li>{{{answer_4}}}</li>
+  </ol>
+</div>
+"""
+
+QUIZ_BACK_TEMPLATE = """
+<div class="quiz-back">
+  <div class="quiz-question">{{{question}}}</div>
+  <ol class="quiz-options">
+    <li>1. {{{answer_1}}}</li>
+    <li>2. {{{answer_2}}}</li>
+    <li>3. {{{answer_3}}}</li>
+    <li>4. {{{answer_4}}}</li>
+  </ol>
+  <div class="quiz-correct">Dap an dung: {{correct_answer}}</div>
+</div>
+"""
+
+QUIZ_SHARED_CSS = """
+.quiz-front, .quiz-back {
+  font-family: Arial, sans-serif;
+  font-size: 20px;
+  line-height: 1.5;
+}
+.quiz-question {
+  font-size: 28px;
+  font-weight: 700;
+  color: #e53c20;
+  margin-bottom: 0.85rem;
+}
+.quiz-options {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+.quiz-options li {
+  margin: 0.25rem 0;
+}
+.quiz-correct {
+  margin-top: 1rem;
+  font-weight: 700;
+  color: #198754;
+}
+"""
+
 
 def ensure_legacy_note_type(db_session, user_id: int) -> tuple[NoteType, Template]:
     note_type = (
@@ -123,6 +186,76 @@ def ensure_legacy_note_type(db_session, user_id: int) -> tuple[NoteType, Templat
             template.back_html = LEGACY_BACK_TEMPLATE.strip()
         if not template.shared_css:
             template.shared_css = LEGACY_SHARED_CSS.strip()
+        template.is_default = True
+
+    db_session.flush()
+    return note_type, template
+
+
+def ensure_quiz_note_type(db_session, user_id: int) -> tuple[NoteType, Template]:
+    note_type = (
+        db_session.query(NoteType)
+        .filter(NoteType.user_id == user_id, NoteType.name == QUIZ_NOTE_TYPE_NAME)
+        .first()
+    )
+    if note_type is None:
+        note_type = NoteType(
+            user_id=user_id,
+            name=QUIZ_NOTE_TYPE_NAME,
+            description="Seeded multiple-choice note type.",
+            primary_category="General",
+            tags=["official", "default", "quiz", "multiple-choice"],
+            preview_text="Question (markdown) + 4 answers (markdown) + correct answer index (1-4).",
+            pricing_mode="free",
+            price_cents=0,
+            version="1.0.0",
+            is_official=True,
+            publish_status="published",
+        )
+        db_session.add(note_type)
+        db_session.flush()
+
+    existing_fields = {field.name: field for field in note_type.field_defs}
+    for position, (name, field_type, required) in enumerate(QUIZ_FIELD_DEFS):
+        field = existing_fields.get(name)
+        if field is None:
+            field = FieldDef(
+                note_type_id=note_type.id,
+                name=name,
+                field_type=field_type,
+                required=required,
+                position=position,
+            )
+            db_session.add(field)
+        else:
+            field.field_type = field_type
+            field.required = required
+            field.position = position
+
+    template = (
+        db_session.query(Template)
+        .filter(Template.note_type_id == note_type.id)
+        .order_by(Template.position.asc(), Template.created_at.asc())
+        .first()
+    )
+    if template is None:
+        template = Template(
+            note_type_id=note_type.id,
+            name="Default Quiz Flashcard",
+            front_html=QUIZ_FRONT_TEMPLATE.strip(),
+            back_html=QUIZ_BACK_TEMPLATE.strip(),
+            shared_css=QUIZ_SHARED_CSS.strip(),
+            position=0,
+            is_default=True,
+        )
+        db_session.add(template)
+    else:
+        if not template.front_html:
+            template.front_html = QUIZ_FRONT_TEMPLATE.strip()
+        if not template.back_html:
+            template.back_html = QUIZ_BACK_TEMPLATE.strip()
+        if not template.shared_css:
+            template.shared_css = QUIZ_SHARED_CSS.strip()
         template.is_default = True
 
     db_session.flush()

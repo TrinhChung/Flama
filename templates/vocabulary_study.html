@@ -558,6 +558,59 @@
     font-weight: 800;
   }
 
+  #study-edit-fields textarea[data-edit-type="markdown"] {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  }
+
+  #study-edit-fields textarea[data-edit-type="markdown"].is-dragover {
+    border-color: var(--flama-orange-500, #f97316);
+    box-shadow: 0 0 0 0.2rem rgba(249, 115, 22, 0.15);
+  }
+
+  #study-edit-fields .study-edit-markdown-preview {
+    margin-top: 0.45rem;
+    padding: 0.5rem 0.6rem;
+    border: 1px solid var(--flama-border);
+    border-radius: 8px;
+    background: #fff;
+    max-height: 180px;
+    overflow: auto;
+  }
+
+  #study-edit-fields .study-edit-markdown-preview-empty {
+    color: var(--flama-text-2);
+    font-size: 0.76rem;
+  }
+
+  #study-edit-fields .study-edit-markdown-preview-text {
+    color: var(--flama-text-2);
+    font-size: 0.8rem;
+    line-height: 1.45;
+    margin-bottom: 0.35rem;
+    word-break: break-word;
+  }
+
+  #study-edit-fields .study-edit-markdown-preview-text:last-child {
+    margin-bottom: 0;
+  }
+
+  #study-edit-fields .study-edit-markdown-preview-figure {
+    margin: 0 0 0.4rem;
+  }
+
+  #study-edit-fields .study-edit-markdown-preview-figure:last-child {
+    margin-bottom: 0;
+  }
+
+  #study-edit-fields .study-edit-markdown-preview-figure img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    border: 1px solid var(--flama-border);
+    border-radius: 6px;
+    background: #fff;
+  }
+
   @media (max-width: 768px) {
     .study-page {
       height: 100dvh;
@@ -686,6 +739,7 @@
     const fullscreenIconEl = fullscreenBtn?.querySelector("[data-fullscreen-icon]");
     const fullscreenLabelEl = fullscreenBtn?.querySelector("[data-fullscreen-label]");
     const deferredScriptSelector = 'script[data-flama-inline-script="1"]';
+    const MARKDOWN_PROXY_MEDIA_RE = /^\/media\/proxy\/[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 
     let editConfig = null;
     let editFieldDefs = [];
@@ -723,6 +777,210 @@
         return window.CSS.escape(raw);
       }
       return raw.replace(/["\\]/g, "\\$&");
+    }
+
+    function markdownTextToPreviewHtml(rawText) {
+      return escapeHtml(rawText).replace(/\n/g, "<br>");
+    }
+
+    function renderMarkdownPreviewHtml(rawMarkdown) {
+      const source = String(rawMarkdown || "").replace(/\r\n?/g, "\n");
+      if (!source.trim()) {
+        return '<div class="study-edit-markdown-preview-empty">Preview trống.</div>';
+      }
+
+      const imageRe = /!\[([^\]]*)\]\(([^)\s]+)\)/g;
+      const chunks = [];
+      let cursor = 0;
+      let match;
+
+      while ((match = imageRe.exec(source)) !== null) {
+        const before = source.slice(cursor, match.index);
+        if (before) {
+          chunks.push(`<div class="study-edit-markdown-preview-text">${markdownTextToPreviewHtml(before)}</div>`);
+        }
+
+        const alt = String(match[1] || "").trim().slice(0, 160) || "image";
+        const imageUrl = String(match[2] || "").trim();
+        if (MARKDOWN_PROXY_MEDIA_RE.test(imageUrl)) {
+          chunks.push(
+            `<figure class="study-edit-markdown-preview-figure"><img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(alt)}" loading="lazy"></figure>`
+          );
+        } else {
+          chunks.push(`<div class="study-edit-markdown-preview-text">${markdownTextToPreviewHtml(match[0])}</div>`);
+        }
+        cursor = imageRe.lastIndex;
+      }
+
+      const tail = source.slice(cursor);
+      if (tail) {
+        chunks.push(`<div class="study-edit-markdown-preview-text">${markdownTextToPreviewHtml(tail)}</div>`);
+      }
+
+      return chunks.length
+        ? chunks.join("")
+        : '<div class="study-edit-markdown-preview-empty">Preview trống.</div>';
+    }
+
+    function syncStudyMarkdownPreview(textarea) {
+      if (!(textarea instanceof HTMLTextAreaElement) || !editFieldsWrapEl) {
+        return;
+      }
+      const fieldName = String(textarea.dataset.editField || "").trim();
+      if (!fieldName) {
+        return;
+      }
+      const previewEl = editFieldsWrapEl.querySelector(
+        `[data-edit-markdown-preview="${cssEscape(fieldName)}"]`
+      );
+      if (!(previewEl instanceof HTMLElement)) {
+        return;
+      }
+      previewEl.innerHTML = renderMarkdownPreviewHtml(textarea.value);
+    }
+
+    function isImageFile(file) {
+      return Boolean(file && String(file.type || "").toLowerCase().startsWith("image/"));
+    }
+
+    function normalizeMarkdownAlt(raw) {
+      const normalized = String(raw || "image")
+        .replace(/[\[\]\(\)]/g, "")
+        .trim()
+        .slice(0, 80);
+      return normalized || "image";
+    }
+
+    function insertMarkdownImageSyntax(textarea, imageUrl, filename) {
+      if (!(textarea instanceof HTMLTextAreaElement) || !imageUrl) {
+        return;
+      }
+      const currentValue = String(textarea.value || "");
+      const start = Number(textarea.selectionStart ?? currentValue.length);
+      const end = Number(textarea.selectionEnd ?? start);
+      const before = currentValue.slice(0, start);
+      const after = currentValue.slice(end);
+      const needsLeadingBreak = before.length > 0 && !before.endsWith("\n");
+      const needsTrailingBreak = after.length > 0 && !after.startsWith("\n");
+      const alt = normalizeMarkdownAlt(filename || "image");
+      const snippet = `${needsLeadingBreak ? "\n" : ""}![${alt}](${imageUrl})${needsTrailingBreak ? "\n" : ""}`;
+
+      textarea.value = `${before}${snippet}${after}`;
+      const cursor = before.length + snippet.length;
+      textarea.focus();
+      textarea.setSelectionRange(cursor, cursor);
+      textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+
+    function imageFileFromClipboard(clipboardData) {
+      if (!clipboardData || !clipboardData.items) {
+        return null;
+      }
+      for (const item of clipboardData.items) {
+        if (item.kind !== "file") {
+          continue;
+        }
+        const file = item.getAsFile();
+        if (isImageFile(file)) {
+          return file;
+        }
+      }
+      return null;
+    }
+
+    async function uploadStudyMarkdownInlineImage({ fieldName, file, textarea }) {
+      if (!fieldName || !isImageFile(file)) {
+        setEditError("Chỉ hỗ trợ upload ảnh cho markdown.");
+        return;
+      }
+      const noteId = String(editConfig?.note_id || "").trim();
+      if (!noteId) {
+        setEditError("Không tìm thấy note để upload markdown image.");
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append("field_name", fieldName);
+      formData.append("file", file);
+
+      textarea.disabled = true;
+      try {
+        const response = await fetch(`/api/notes/${encodeURIComponent(noteId)}/markdown-media`, {
+          method: "POST",
+          body: formData,
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(payload.message || payload.error || "Upload markdown image failed.");
+        }
+        insertMarkdownImageSyntax(textarea, payload.url, payload.filename || file.name);
+        setEditError("");
+      } catch (error) {
+        setEditError(error.message || "Upload markdown image failed.");
+      } finally {
+        textarea.disabled = false;
+        textarea.classList.remove("is-dragover");
+      }
+    }
+
+    function bindStudyMarkdownInlineUploadHandlers() {
+      if (!editFieldsWrapEl) {
+        return;
+      }
+      editFieldsWrapEl
+        .querySelectorAll('textarea[data-edit-type="markdown"][data-edit-field]')
+        .forEach((textarea) => {
+          if (!(textarea instanceof HTMLTextAreaElement)) {
+            return;
+          }
+          if (textarea.dataset.markdownInlineBound === "1") {
+            return;
+          }
+          textarea.dataset.markdownInlineBound = "1";
+          const fieldName = String(textarea.dataset.editField || "").trim();
+          if (!fieldName) {
+            return;
+          }
+
+          textarea.addEventListener("input", () => {
+            syncStudyMarkdownPreview(textarea);
+          });
+          syncStudyMarkdownPreview(textarea);
+
+          textarea.addEventListener("paste", (event) => {
+            const file = imageFileFromClipboard(event.clipboardData);
+            if (!file) {
+              return;
+            }
+            event.preventDefault();
+            uploadStudyMarkdownInlineImage({ fieldName, file, textarea }).catch(() => undefined);
+          });
+
+          textarea.addEventListener("dragover", (event) => {
+            const files = Array.from(event.dataTransfer?.files || []);
+            const hasImage = files.some((file) => isImageFile(file));
+            if (!hasImage) {
+              return;
+            }
+            event.preventDefault();
+            textarea.classList.add("is-dragover");
+          });
+
+          textarea.addEventListener("dragleave", () => {
+            textarea.classList.remove("is-dragover");
+          });
+
+          textarea.addEventListener("drop", (event) => {
+            const files = Array.from(event.dataTransfer?.files || []);
+            const file = files.find((candidate) => isImageFile(candidate));
+            textarea.classList.remove("is-dragover");
+            if (!file) {
+              return;
+            }
+            event.preventDefault();
+            uploadStudyMarkdownInlineImage({ fieldName, file, textarea }).catch(() => undefined);
+          });
+        });
     }
 
     function setEditError(message) {
@@ -773,18 +1031,29 @@
         const value = String(values && values[name] != null ? values[name] : "");
         const requiredMark = required ? '<span class="study-edit-required">*</span>' : "";
         const typeBadge = fieldType ? `<div class="study-edit-field-type">${escapeHtml(fieldType)}</div>` : "";
-        const inputControl = fieldType === "richtext"
-          ? `<textarea id="${escapeHtml(fieldId)}" class="form-control form-control-sm" rows="3" data-edit-field="${escapeHtml(name)}" ${required ? "required" : ""}>${escapeHtml(value)}</textarea>`
-          : `<input id="${escapeHtml(fieldId)}" type="text" class="form-control form-control-sm" data-edit-field="${escapeHtml(name)}" value="${escapeHtml(value)}" ${required ? "required" : ""}>`;
+        const isMultiline = fieldType === "richtext" || fieldType === "markdown";
+        const inputControl = isMultiline
+          ? `<textarea id="${escapeHtml(fieldId)}" class="form-control form-control-sm" rows="${fieldType === "markdown" ? "6" : "3"}" data-edit-field="${escapeHtml(name)}" data-edit-type="${escapeHtml(fieldType)}" ${required ? "required" : ""}>${escapeHtml(value)}</textarea>`
+          : `<input id="${escapeHtml(fieldId)}" type="text" class="form-control form-control-sm" data-edit-field="${escapeHtml(name)}" data-edit-type="${escapeHtml(fieldType)}" value="${escapeHtml(value)}" ${required ? "required" : ""}>`;
+        const markdownHint = fieldType === "markdown"
+          ? '<div class="form-text">Markdown: dán ảnh bằng Ctrl/Cmd+V hoặc kéo-thả trực tiếp.</div>'
+          : "";
+        const markdownPreview = fieldType === "markdown"
+          ? `<div class="study-edit-markdown-preview" data-edit-markdown-preview="${escapeHtml(name)}"></div>`
+          : "";
 
         return `
           <div class="col-12">
             <label class="form-label study-edit-field-label" for="${escapeHtml(fieldId)}">${escapeHtml(name)} ${requiredMark}</label>
             ${inputControl}
+            ${markdownHint}
+            ${markdownPreview}
             ${typeBadge}
           </div>
         `;
       }).join("");
+
+      bindStudyMarkdownInlineUploadHandlers();
     }
 
     async function loadLatestEditValues() {
