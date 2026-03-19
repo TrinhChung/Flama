@@ -51,6 +51,10 @@ class TtsProviderSeedTests(unittest.TestCase):
             self.assertIn("speakers_url", shared_config)
             self.assertIn("key_validation_url", provider_config)
             self.assertIn("character_id", default_settings)
+            self.assertIn("source_field", default_settings)
+            self.assertIn("destination_field", default_settings)
+            self.assertIn("append_audio", default_settings)
+            self.assertIn("use_opus", default_settings)
             self.assertIn("pitch", default_settings)
             self.assertIn("intonation_scale", default_settings)
             self.assertIn("speed", default_settings)
@@ -59,6 +63,10 @@ class TtsProviderSeedTests(unittest.TestCase):
             self.assertEqual(default_settings.get("speed_scale"), 1.0)
             self.assertEqual(default_settings.get("initial_silence_scale"), 0.1)
             self.assertEqual(default_settings.get("final_silence_length"), 0.1)
+            self.assertEqual(default_settings.get("source_field"), "")
+            self.assertEqual(default_settings.get("destination_field"), "")
+            self.assertFalse(default_settings.get("append_audio"))
+            self.assertFalse(default_settings.get("use_opus"))
 
     def test_seed_is_idempotent(self):
         with self.app.app_context():

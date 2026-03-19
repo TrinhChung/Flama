@@ -61,7 +61,7 @@
     /* ── Typography System ── */
     --font-family-base: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
     --font-family-mono: 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', monospace;
-    
+
     /* Font Sizes */
     --font-size-xs: 0.75rem;
     --font-size-sm: 0.875rem;
@@ -70,14 +70,14 @@
     --font-size-xl: 1.25rem;
     --font-size-2xl: 1.5rem;
     --font-size-3xl: 1.875rem;
-    
+
     /* Font Weights */
     --font-weight-normal: 400;
     --font-weight-medium: 500;
     --font-weight-semibold: 600;
     --font-weight-bold: 700;
     --font-weight-extrabold: 800;
-    
+
     /* Line Heights */
     --line-height-tight: 1.2;
     --line-height-snug: 1.375;

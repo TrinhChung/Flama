@@ -13,7 +13,16 @@ class FieldDef(db.Model):
     note_type_id = db.Column(db.String(36), db.ForeignKey("note_types.id", ondelete="CASCADE"), nullable=False, index=True)
     name = db.Column(db.String(255), nullable=False)
     field_type = db.Column(
-        db.Enum("text", "richtext", "image", "audio", "diagram", name="field_type_enum", native_enum=False),
+        db.Enum(
+            "text",
+            "richtext",
+            "markdown",
+            "image",
+            "audio",
+            "diagram",
+            name="field_type_enum",
+            native_enum=False,
+        ),
         nullable=False,
         default="text",
     )
@@ -27,4 +36,3 @@ class FieldDef(db.Model):
     __table_args__ = (
         UniqueConstraint("note_type_id", "name", name="uq_field_defs_note_type_name"),
     )
-

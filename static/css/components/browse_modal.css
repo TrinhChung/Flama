@@ -70,6 +70,10 @@
 }
 
 .browse-voicevox__menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
   width: 100%;
   border: 0;
   background: transparent;
@@ -81,6 +85,21 @@
 
 .browse-voicevox__menu-item:hover {
   background: #f3f3f3;
+}
+
+.browse-voicevox__menu-tag {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid #e7cbaf;
+  background: #fff5eb;
+  color: #9a4b0a;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  line-height: 1;
+  padding: 0.16rem 0.38rem;
+  white-space: nowrap;
 }
 
 .browse-voicevox-modal {
@@ -217,6 +236,18 @@
   background: #ffeede;
   border-color: #ea9d62;
   color: #a94908;
+}
+
+.browse-voicevox-btn--cancel-generate {
+  background: #fff4f4;
+  border-color: #f2b1b1;
+  color: #b73a3a;
+}
+
+.browse-voicevox-btn--cancel-generate:hover {
+  background: #ffe6e6;
+  border-color: #e78585;
+  color: #982828;
 }
 
 .browse-voicevox-btn--generate {
@@ -753,11 +784,71 @@
   min-height: 40px;
 }
 
+.browse-editor-field textarea[data-markdown-inline="1"] {
+  min-height: 140px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+.browse-editor-field textarea[data-markdown-inline="1"].is-dragover {
+  border-color: var(--flama-orange-500, #f97316);
+  box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.16);
+}
+
 .browse-editor-field textarea:focus,
 .browse-editor-field input[type="text"]:focus {
   outline: none;
   border-color: var(--flama-orange-400);
   box-shadow: 0 0 0 2px rgba(254, 104, 8, 0.12);
+}
+
+.browse-editor-markdown-hint {
+  margin-top: 0.3rem;
+  font-size: 0.72rem;
+  color: #6f6f6f;
+}
+
+.browse-editor-markdown-preview {
+  margin-top: 0.35rem;
+  padding: 0.5rem 0.55rem;
+  border: 1px solid #dcdcdc;
+  border-radius: 8px;
+  background: #fff;
+  max-height: 170px;
+  overflow: auto;
+}
+
+.browse-editor-markdown-preview-empty {
+  color: #787878;
+  font-size: 0.73rem;
+}
+
+.browse-editor-markdown-preview-text {
+  color: #5b5b5b;
+  font-size: 0.79rem;
+  line-height: 1.45;
+  margin-bottom: 0.35rem;
+  word-break: break-word;
+}
+
+.browse-editor-markdown-preview-text:last-child {
+  margin-bottom: 0;
+}
+
+.browse-editor-markdown-preview-figure {
+  margin: 0 0 0.4rem;
+}
+
+.browse-editor-markdown-preview-figure:last-child {
+  margin-bottom: 0;
+}
+
+.browse-editor-markdown-preview-figure img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+  border: 1px solid #e0e0e0;
+  background: #fff;
 }
 
 .browse-editor-media-meta {

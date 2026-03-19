@@ -74,6 +74,10 @@ class TtsUserProfileApiTests(unittest.TestCase):
                 "api_key": "user-a-secret-key",
                 "settings": {
                     "character_id": "101",
+                    "source_field": "Word",
+                    "destination_field": "Word_Audio",
+                    "append_audio": True,
+                    "use_opus": True,
                     "pitch": 0.35,
                     "intonation_scale": 0.45,
                     "speed": 0.65,
@@ -85,6 +89,10 @@ class TtsUserProfileApiTests(unittest.TestCase):
 
         self.assertTrue(put_payload["profile"]["has_api_key"])
         self.assertEqual(put_payload["profile"]["settings"]["character_id"], "101")
+        self.assertEqual(put_payload["profile"]["settings"]["source_field"], "Word")
+        self.assertEqual(put_payload["profile"]["settings"]["destination_field"], "Word_Audio")
+        self.assertTrue(put_payload["profile"]["settings"]["append_audio"])
+        self.assertTrue(put_payload["profile"]["settings"]["use_opus"])
         self.assertEqual(put_payload["profile"]["settings"]["speed"], 0.65)
 
         with self.app.app_context():
@@ -106,6 +114,64 @@ class TtsUserProfileApiTests(unittest.TestCase):
 
             settings = loads_json_map(profile.settings_json)
             self.assertEqual(settings.get("character_id"), "101")
+            self.assertEqual(settings.get("source_field"), "Word")
+            self.assertEqual(settings.get("destination_field"), "Word_Audio")
+            self.assertTrue(settings.get("append_audio"))
+            self.assertTrue(settings.get("use_opus"))
+
+        verify_response = self.client.get(f"/api/tts/providers/{VOICEVOX_PROVIDER_TYPE}/profile")
+        self.assertEqual(verify_response.status_code, 200)
+        verify_payload = verify_response.get_json()
+        self.assertEqual(verify_payload["profile"]["settings"]["source_field"], "Word")
+        self.assertEqual(verify_payload["profile"]["settings"]["destination_field"], "Word_Audio")
+        self.assertTrue(verify_payload["profile"]["settings"]["append_audio"])
+        self.assertTrue(verify_payload["profile"]["settings"]["use_opus"])
+
+    def test_user_can_save_voicevox_settings_without_api_key(self):
+        self._login("user-a@example.com")
+
+        put_response = self.client.put(
+            f"/api/tts/providers/{VOICEVOX_PROVIDER_TYPE}/profile",
+            json={
+                "settings": {
+                    "character_id": "202",
+                    "source_field": "Word",
+                    "destination_field": "Word_Audio",
+                    "append_audio": True,
+                    "use_opus": False,
+                    "speed": 1.25,
+                },
+            },
+        )
+        self.assertEqual(put_response.status_code, 200)
+        payload = put_response.get_json()
+        self.assertFalse(payload["profile"]["has_api_key"])
+        self.assertEqual(payload["profile"]["settings"]["character_id"], "202")
+        self.assertEqual(payload["profile"]["settings"]["source_field"], "Word")
+        self.assertEqual(payload["profile"]["settings"]["destination_field"], "Word_Audio")
+        self.assertTrue(payload["profile"]["settings"]["append_audio"])
+        self.assertFalse(payload["profile"]["settings"]["use_opus"])
+
+        with self.app.app_context():
+            provider = (
+                TtsProviderConfig.query.filter_by(provider_type=VOICEVOX_PROVIDER_TYPE)
+                .order_by(TtsProviderConfig.id.asc())
+                .first()
+            )
+            self.assertIsNotNone(provider)
+            profile = TtsUserProviderProfile.query.filter_by(
+                user_id=self.user_a_id,
+                provider_id=provider.id,
+            ).first()
+            self.assertIsNotNone(profile)
+            self.assertFalse(bool(profile.encrypted_api_key))
+
+            settings = loads_json_map(profile.settings_json)
+            self.assertEqual(settings.get("character_id"), "202")
+            self.assertEqual(settings.get("source_field"), "Word")
+            self.assertEqual(settings.get("destination_field"), "Word_Audio")
+            self.assertTrue(settings.get("append_audio"))
+            self.assertFalse(settings.get("use_opus"))
 
     def test_user_profiles_are_isolated(self):
         self._login("user-a@example.com")
@@ -184,6 +250,34 @@ class TtsUserProfileApiTests(unittest.TestCase):
         payload = response.get_json()
         self.assertEqual(payload["items"], mocked_items)
         self.assertEqual(mocked.call_count, 1)
+
+    def test_profile_payload_treats_undecryptable_saved_key_as_missing(self):
+        self._login("user-a@example.com")
+
+        with self.app.app_context():
+            provider = (
+                TtsProviderConfig.query.filter_by(provider_type=VOICEVOX_PROVIDER_TYPE)
+                .order_by(TtsProviderConfig.id.asc())
+                .first()
+            )
+            self.assertIsNotNone(provider)
+
+            profile = TtsUserProviderProfile(
+                user_id=self.user_a_id,
+                provider_id=provider.id,
+                encrypted_api_key="not-a-valid-fernet-token",
+                key_status="valid",
+                settings_json="{}",
+            )
+            db.session.add(profile)
+            db.session.commit()
+
+        response = self.client.get(f"/api/tts/providers/{VOICEVOX_PROVIDER_TYPE}/profile")
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertFalse(payload["profile"]["has_api_key"])
+        self.assertEqual(payload["profile"]["masked_api_key"], "")
+        self.assertEqual(payload["profile"]["key_status"], "unknown")
 
 
 if __name__ == "__main__":

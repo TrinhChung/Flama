@@ -1,8 +1,10 @@
 # Setup Guide
 
-Tài liệu này tập trung vào thiết lập môi trường và các lệnh chạy dự án.
+Tai lieu nay tap trung vao thiet lap moi truong va cac lenh chay du an, co bo sung huong dan cho Windows.
 
 ## Commands Hay Dung (Uu Tien)
+
+### macOS / Linux / Git Bash
 
 ```bash
 # 1) Reset + reseed DB
@@ -14,38 +16,97 @@ bash scripts/setup_github_workspace.sh
 # 3) Chay app
 flask --app wsgi.py run --host=0.0.0.0 --port=4789
 ```
+myenv\Scripts\activate
+### Windows PowerShell
+
+```powershell
+# 1) Reset + reseed DB
+powershell -ExecutionPolicy Bypass -File .\scripts\reseed_db.ps1
+
+# 2) Chay app
+flask --app wsgi.py run --host=0.0.0.0 --port=4789
+```
+
+### Windows Command Prompt
+
+```bat
+REM 1) Reset + reseed DB
+scripts\reseed_db.bat
+
+REM 2) Chay app
+flask --app wsgi.py run --host=0.0.0.0 --port=4789
+```
 
 ## Prerequisites
+
 - Python 3.10+
-- Docker + Docker Compose plugin (nếu chạy MySQL bằng container)
+- Docker + Docker Compose plugin (neu chay MySQL bang container)
+- Tren Windows:
+  - Dung PowerShell hoac Command Prompt cho cac lenh native cua Windows
+  - Cai Git Bash hoac WSL neu muon chay cac script `.sh`
 
 ## Quick Start (GitHub Workspace / Codespaces)
 
-Chạy từ thư mục gốc dự án:
+Chay tu thu muc goc du an:
+
+### macOS / Linux / Git Bash
 
 ```bash
 bash scripts/setup_github_workspace.sh
 ```
 
-Script sẽ tự động:
-- Tạo/cập nhật `.env`
-- Chạy MySQL bằng Docker (`docker compose up -d db`)
-- Tạo database theo `DB_NAME` trong `.env` (nếu chưa có)
-- Cài Python dependencies vào `.venv`
+### Windows
 
-Override biến môi trường (khuyến nghị):
+`setup_github_workspace.sh` hien chi co ban shell, vi vay tren Windows can chay bang Git Bash hoac WSL:
+
+```powershell
+bash scripts/setup_github_workspace.sh
+```
+
+Script se tu dong:
+
+- Tao/cap nhat `.env`
+- Chay MySQL bang Docker (`docker compose up -d db`)
+- Tao database theo `DB_NAME` trong `.env` (neu chua co)
+- Cai Python dependencies vao `.venv`
+
+Override bien moi truong:
+
+### macOS / Linux / Git Bash
 
 ```bash
 DB_PASSWORD='strong-db-pass' DB_NAME='flama' bash scripts/setup_github_workspace.sh
 ```
 
-Sau khi setup xong, reseed toàn bộ DB bằng 1 lệnh:
+### Windows PowerShell
+
+```powershell
+$env:DB_PASSWORD = "strong-db-pass"
+$env:DB_NAME = "flama"
+bash scripts/setup_github_workspace.sh
+```
+
+Sau khi setup xong, reseed toan bo DB:
+
+### macOS / Linux / Git Bash
 
 ```bash
 bash scripts/reseed_db.sh
 ```
 
-Script này sẽ chạy tuần tự:
+### Windows PowerShell
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\reseed_db.ps1
+```
+
+### Windows Command Prompt
+
+```bat
+scripts\reseed_db.bat
+```
+
+Lenh reseed tren macOS/Linux se chay:
 
 ```bash
 flask --app wsgi.py db upgrade
@@ -55,7 +116,11 @@ flask --app wsgi.py user-role-seed
 flask --app wsgi.py vocab-seed --path "static/seed_data" --replace-lessons
 ```
 
-## Quick Start (Máy mới, không dùng workspace script)
+Luu y: tren Windows, `scripts/reseed_db.ps1` va `scripts/reseed_db.bat` dang dung luong native va hien tai khong goi `dev-purge-data --yes`.
+
+## Quick Start (May moi, khong dung workspace script)
+
+### macOS / Linux / Git Bash
 
 ```bash
 # Local Python
@@ -65,71 +130,183 @@ bash scripts/setup_new_device.sh --mode local
 bash scripts/setup_new_device.sh --mode docker
 ```
 
-## Manual Setup (Local, khi không dùng script)
+### Windows
 
-1. Tạo virtualenv:
+`setup_new_device.sh` la shell script, nen can chay bang Git Bash hoac WSL:
+
+```powershell
+# Local Python
+bash scripts/setup_new_device.sh --mode local
+
+# Docker app + DB
+bash scripts/setup_new_device.sh --mode docker
+```
+
+## Manual Setup
+
+### macOS / Linux
+
+1. Tao virtualenv:
+
 ```bash
 python -m venv .venv
 ```
 
-2. Kích hoạt virtualenv:
+2. Kich hoat virtualenv:
+
 ```bash
 source .venv/bin/activate
 ```
 
-3. Cài dependencies:
+3. Cai dependencies:
+
 ```bash
 pip install -r requirements.txt
 ```
 
-4. Tạo file môi trường:
+4. Tao file moi truong:
+
 ```bash
 cp .env_example .env
 ```
 
-5. Chỉnh `.env`:
+5. Chinh `.env`:
+
 - `DB_HOST`
 - `DB_PORT`
 - `DB_USER`
 - `DB_PASSWORD`
 - `DB_NAME`
-- `FLASHCARD_MEDIA_UPLOAD_ROOT` (khuyến nghị để ngoài repo, ví dụ `../flama_media_storage`)
+- `FLASHCARD_MEDIA_UPLOAD_ROOT` (khuyen nghi de ngoai repo, vi du `../flama_media_storage`)
 
-6. Chạy migration + seed:
+6. Chay migration + seed:
+
 ```bash
 bash scripts/reseed_db.sh
 ```
 
-7. Chạy ứng dụng theo lệnh ở mục `Core Commands`.
+### Windows PowerShell
 
-## Core Commands (không trùng lặp)
+1. Tao virtualenv:
+
+```powershell
+python -m venv .venv
+```
+
+2. Kich hoat virtualenv:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
+
+Neu bi chan script execution:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\.venv\Scripts\Activate.ps1
+```
+
+3. Cai dependencies:
+
+```powershell
+pip install -r requirements.txt
+```
+
+4. Tao file moi truong:
+
+```powershell
+Copy-Item .env_example .env
+```
+
+5. Chinh `.env`:
+
+- `DB_HOST`
+- `DB_PORT`
+- `DB_USER`
+- `DB_PASSWORD`
+- `DB_NAME`
+- `FLASHCARD_MEDIA_UPLOAD_ROOT` (khuyen nghi de ngoai repo, vi du `../flama_media_storage`)
+
+6. Chay migration + seed:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\reseed_db.ps1
+```
+
+### Windows Command Prompt
+
+1. Tao virtualenv:
+
+```bat
+python -m venv .venv
+```
+
+2. Kich hoat virtualenv:
+
+```bat
+.\.venv\Scripts\activate.bat
+```
+
+3. Cai dependencies:
+
+```bat
+pip install -r requirements.txt
+```
+
+4. Tao file moi truong:
+
+```bat
+copy .env_example .env
+```
+
+5. Chinh `.env`, sau do reseed:
+
+```bat
+scripts\reseed_db.bat
+```
+
+## Core Commands
+
+### Chung
 
 ```bash
-# Chạy migration
+# Chay migration
 flask --app wsgi.py db upgrade
 
-# Chạy app
+# Chay app
 flask --app wsgi.py run --host=0.0.0.0 --port=4789
+```
 
-# Reseed full DB (đã bao gồm purge + seed)
+### Reseed DB
+
+```bash
+# macOS / Linux / Git Bash
 bash scripts/reseed_db.sh
 ```
 
-## Lưu ý media/audio
+```powershell
+# Windows PowerShell
+powershell -ExecutionPolicy Bypass -File .\scripts\reseed_db.ps1
+```
 
-- Mặc định media (bao gồm audio VoiceVox) được lưu ngoài repo tại `../flama_media_storage` để tránh làm nặng git workspace.
-- Có thể đổi bằng biến môi trường `FLASHCARD_MEDIA_UPLOAD_ROOT`.
+```bat
+REM Windows Command Prompt
+scripts\reseed_db.bat
+```
 
-Các lệnh seed lẻ vẫn còn dùng được, nhưng thường không cần chạy riêng nếu đã dùng `scripts/reseed_db.sh`.
+## Luu y media/audio
+
+- Mac dinh media (bao gom audio VoiceVox) duoc luu ngoai repo tai `../flama_media_storage` de tranh lam nang git workspace.
+- Co the doi bang bien moi truong `FLASHCARD_MEDIA_UPLOAD_ROOT`.
 
 ## CSV Import (UI)
 
-1. Đăng nhập vào hệ thống.
-2. Truy cập `http://127.0.0.1:4789/vocabulary`.
-3. Bấm **Nhập CSV** và dán dữ liệu với header:
+1. Dang nhap vao he thong.
+2. Truy cap `http://127.0.0.1:4789/vocabulary`.
+3. Bam **Nhap CSV** va dan du lieu voi header:
 
 ```text
 Deck,Word,hanviet,Reading,Translation_VI,Meaning_JP,Meaning_VI,Usage_JP,Usage_VI,Example_JP,Example_VI,Additional_Note_JP,Additional_Note_VI,image,Diagram,Word_Audio,Example_Audio
 ```
 
-4. Cột bắt buộc: `Deck`, `Word`.
+4. Cot bat buoc: `Deck`, `Word`.

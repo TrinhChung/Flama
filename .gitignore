@@ -11,8 +11,11 @@ env/
 # Environment variables
 .env
 static/tmp/
-/static/uploads/
+/static/uploads/*
+!/static/uploads/.gitignore
 /flama_media_storage/
 
 
 /migrations/
+
+/app/static/

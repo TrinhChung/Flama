@@ -10,6 +10,8 @@ from models import db
 from models.flashcard import Card, DeckCloneDeckMap, DeckInstall, Note
 from models.deck import Deck
 from models.card_progress import CardProgress
+from app.repositories.study_repository import counter_bucket_for_progress_values
+from app.services.stats_overview import get_effective_timezone_name
 from app.utils.deck_move_token import create_deck_move_token
 from app.utils.permissions import is_admin_user
 
@@ -33,6 +35,7 @@ class DeckNode:
 
 def build_dashboard_data(current_user) -> Tuple[List[DeckNode], int, int, int, bool]:
     admin_mode = is_admin_user(current_user)
+    timezone_name = get_effective_timezone_name(getattr(current_user, "timezone", "UTC"))
 
     if admin_mode:
         decks = (
@@ -108,6 +111,7 @@ def build_dashboard_data(current_user) -> Tuple[List[DeckNode], int, int, int, b
                 Note.deck_id,
                 CardProgress.queue,
                 CardProgress.due_at,
+                CardProgress.due_day,
             )
             .select_from(Card)
             .join(Note, Card.note_id == Note.id)
@@ -118,7 +122,7 @@ def build_dashboard_data(current_user) -> Tuple[List[DeckNode], int, int, int, b
             )
             .all()
         )
-        for deck_id, progress_queue, progress_due_at in state_rows:
+        for deck_id, progress_queue, progress_due_at, progress_due_day in state_rows:
             if not deck_id:
                 continue
             bucket = card_counts_by_deck.setdefault(
@@ -126,17 +130,18 @@ def build_dashboard_data(current_user) -> Tuple[List[DeckNode], int, int, int, b
             )
             bucket["total"] += 1
 
-            queue_value = progress_queue
-            due_at_value = progress_due_at
-            queue_norm = (queue_value or "new").strip().lower()
-            if queue_norm == "learn":
-                queue_norm = "learning"
-
-            if queue_norm == "new":
+            count_bucket = counter_bucket_for_progress_values(
+                queue=progress_queue,
+                due_at=progress_due_at,
+                due_day=progress_due_day,
+                now=now,
+                timezone_name=timezone_name,
+            )
+            if count_bucket == "new":
                 bucket["new"] += 1
-            elif queue_norm in {"learning", "relearning"}:
+            elif count_bucket == "learning":
                 bucket["learn"] += 1
-            elif queue_norm == "review" and (due_at_value is None or due_at_value <= now):
+            elif count_bucket == "review":
                 bucket["due"] += 1
 
         if not admin_mode:
@@ -166,6 +171,7 @@ def build_dashboard_data(current_user) -> Tuple[List[DeckNode], int, int, int, b
                         Note.deck_id,
                         CardProgress.queue,
                         CardProgress.due_at,
+                        CardProgress.due_day,
                     )
                     .select_from(Card)
                     .join(Note, Card.note_id == Note.id)
@@ -181,7 +187,7 @@ def build_dashboard_data(current_user) -> Tuple[List[DeckNode], int, int, int, b
                         Card.created_at <= snapshot_at,
                     )
 
-                for source_deck_id, progress_queue, progress_due_at in clone_query.all():
+                for source_deck_id, progress_queue, progress_due_at, progress_due_day in clone_query.all():
                     if source_deck_id is None:
                         continue
                     local_deck_id = source_to_local.get(int(source_deck_id))
@@ -192,17 +198,18 @@ def build_dashboard_data(current_user) -> Tuple[List[DeckNode], int, int, int, b
                     )
                     bucket["total"] += 1
 
-                    queue_value = progress_queue
-                    due_at_value = progress_due_at
-                    queue_norm = (queue_value or "new").strip().lower()
-                    if queue_norm == "learn":
-                        queue_norm = "learning"
-
-                    if queue_norm == "new":
+                    count_bucket = counter_bucket_for_progress_values(
+                        queue=progress_queue,
+                        due_at=progress_due_at,
+                        due_day=progress_due_day,
+                        now=now,
+                        timezone_name=timezone_name,
+                    )
+                    if count_bucket == "new":
                         bucket["new"] += 1
-                    elif queue_norm in {"learning", "relearning"}:
+                    elif count_bucket == "learning":
                         bucket["learn"] += 1
-                    elif queue_norm == "review" and (due_at_value is None or due_at_value <= now):
+                    elif count_bucket == "review":
                         bucket["due"] += 1
     
     by_parent: Dict[int, List[Deck]] = {}

@@ -16,7 +16,7 @@ from app.repositories.study_repository import (
     NEW_QUEUE,
     RELEARNING_QUEUE,
     REVIEW_QUEUE,
-    is_due as _is_due,
+    counter_bucket_for_progress_values,
     normalize_progress_queue as _normalize_progress_queue,
 )
 from models import db
@@ -236,7 +236,7 @@ def note_ordered_field_names(note_obj: Note | None, *, text_only: bool = False) 
             key=lambda item: ((item.position or 0), item.name.lower()),
         )
         for field_def in sorted_defs:
-            if text_only and field_def.field_type not in {"text", "richtext"}:
+            if text_only and field_def.field_type not in {"text", "richtext", "markdown"}:
                 continue
             field_name = (field_def.name or "").strip()
             if field_name and field_name not in ordered_names:
@@ -521,7 +521,12 @@ def collect_subtree_ids(
     return result
 
 
-def build_browse_deck_tree_payload(*, user_id: int, admin_mode: bool) -> list[dict[str, Any]]:
+def build_browse_deck_tree_payload(
+    *,
+    user_id: int,
+    admin_mode: bool,
+    timezone_name: str = "UTC",
+) -> list[dict[str, Any]]:
     now = datetime.utcnow()
     scoped_decks = collect_accessible_browse_decks(user_id=user_id, admin_mode=admin_mode)
     if not scoped_decks:
@@ -545,6 +550,7 @@ def build_browse_deck_tree_payload(*, user_id: int, admin_mode: bool) -> list[di
             Note.deck_id,
             CardProgress.queue,
             CardProgress.due_at,
+            CardProgress.due_day,
         )
         .select_from(Card)
         .join(Note, Card.note_id == Note.id)
@@ -554,7 +560,7 @@ def build_browse_deck_tree_payload(*, user_id: int, admin_mode: bool) -> list[di
     if not admin_mode:
         state_query = state_query.filter(Note.user_id == user_id)
 
-    for deck_id, progress_queue, progress_due_at in state_query.all():
+    for deck_id, progress_queue, progress_due_at, progress_due_day in state_query.all():
         if not deck_id:
             continue
         bucket = direct_counts.setdefault(
@@ -562,12 +568,18 @@ def build_browse_deck_tree_payload(*, user_id: int, admin_mode: bool) -> list[di
         )
         bucket["total"] += 1
 
-        queue_norm = _normalize_progress_queue(progress_queue)
-        if queue_norm == NEW_QUEUE:
+        count_bucket = counter_bucket_for_progress_values(
+            queue=progress_queue,
+            due_at=progress_due_at,
+            due_day=progress_due_day,
+            now=now,
+            timezone_name=timezone_name,
+        )
+        if count_bucket == NEW_QUEUE:
             bucket["new"] += 1
-        elif queue_norm in {LEARNING_QUEUE, RELEARNING_QUEUE}:
+        elif count_bucket == LEARNING_QUEUE:
             bucket["learn"] += 1
-        elif queue_norm == REVIEW_QUEUE and (progress_due_at is None or progress_due_at <= now):
+        elif count_bucket == REVIEW_QUEUE:
             bucket["due"] += 1
 
     if not admin_mode:
@@ -603,6 +615,7 @@ def build_browse_deck_tree_payload(*, user_id: int, admin_mode: bool) -> list[di
                     Note.deck_id,
                     CardProgress.queue,
                     CardProgress.due_at,
+                    CardProgress.due_day,
                 )
                 .select_from(Card)
                 .join(Note, Card.note_id == Note.id)
@@ -618,7 +631,7 @@ def build_browse_deck_tree_payload(*, user_id: int, admin_mode: bool) -> list[di
                     Card.created_at <= snapshot_at,
                 )
 
-            for source_deck_id, progress_queue, progress_due_at in clone_query.all():
+            for source_deck_id, progress_queue, progress_due_at, progress_due_day in clone_query.all():
                 if source_deck_id is None:
                     continue
                 local_deck_id = source_to_local.get(int(source_deck_id))
@@ -630,12 +643,18 @@ def build_browse_deck_tree_payload(*, user_id: int, admin_mode: bool) -> list[di
                 )
                 bucket["total"] += 1
 
-                queue_norm = _normalize_progress_queue(progress_queue)
-                if queue_norm == NEW_QUEUE:
+                count_bucket = counter_bucket_for_progress_values(
+                    queue=progress_queue,
+                    due_at=progress_due_at,
+                    due_day=progress_due_day,
+                    now=now,
+                    timezone_name=timezone_name,
+                )
+                if count_bucket == NEW_QUEUE:
                     bucket["new"] += 1
-                elif queue_norm in {LEARNING_QUEUE, RELEARNING_QUEUE}:
+                elif count_bucket == LEARNING_QUEUE:
                     bucket["learn"] += 1
-                elif queue_norm == REVIEW_QUEUE and (progress_due_at is None or progress_due_at <= now):
+                elif count_bucket == REVIEW_QUEUE:
                     bucket["due"] += 1
 
     def _build_node(deck_obj: Deck) -> dict[str, Any]:
@@ -813,17 +832,24 @@ def count_due_note_cards(
     progress_map: dict[str, CardProgress],
     *,
     now: datetime,
+    timezone_name: str = "UTC",
 ) -> tuple[int, int, int]:
     due_new = 0
     due_learn = 0
     due_review = 0
     for card_obj in cards:
         progress = progress_map.get(card_obj.id)
-        queue = _normalize_progress_queue(progress.queue) if progress else NEW_QUEUE
-        if queue in {LEARNING_QUEUE, RELEARNING_QUEUE}:
+        count_bucket = counter_bucket_for_progress_values(
+            queue=progress.queue if progress else None,
+            due_at=progress.due_at if progress else None,
+            due_day=progress.due_day if progress else None,
+            now=now,
+            timezone_name=timezone_name,
+        )
+        if count_bucket == LEARNING_QUEUE:
             due_learn += 1
-        elif queue == REVIEW_QUEUE and _is_due(progress, now):
+        elif count_bucket == REVIEW_QUEUE:
             due_review += 1
-        elif _is_due(progress, now):
+        elif count_bucket == NEW_QUEUE:
             due_new += 1
     return due_new, due_learn, due_review

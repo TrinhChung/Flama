@@ -1,0 +1,4 @@
+interface:
+  display_name: "Docs Architect"
+  short_description: "Keep Nihongo engineering docs aligned with the codebase."
+  default_prompt: "Use $docs-architect to inspect this repository and update documentation so it matches the real code, startup flow, scripts, Docker setup, and engineering workflows."

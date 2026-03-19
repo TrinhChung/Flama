@@ -167,6 +167,27 @@ main.container {
   padding: 1rem;
 }
 
+.site-pet-link {
+  position: fixed;
+  right: max(1rem, env(safe-area-inset-right));
+  bottom: max(1rem, env(safe-area-inset-bottom));
+  z-index: 1020;
+  line-height: 0;
+  border-radius: 999px;
+}
+
+.site-pet {
+  width: 124px;
+  height: auto;
+  display: block;
+  user-select: none;
+}
+
+.site-pet-link:focus-visible {
+  outline: 2px solid var(--flama-orange-400);
+  outline-offset: 2px;
+}
+
 /* Responsive grid */
 @media (max-width: 768px) {
   main.container {
@@ -181,6 +202,21 @@ main.container {
 
   .anki-col-heads {
     min-width: 100%;
+  }
+
+  .site-pet {
+    width: 96px;
+  }
+}
+
+@media (max-width: 599px) {
+  .site-pet-link {
+    right: max(0.4rem, env(safe-area-inset-right));
+    bottom: max(0.4rem, env(safe-area-inset-bottom));
+  }
+
+  .site-pet {
+    width: 78px;
   }
 }
 

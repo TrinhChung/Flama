@@ -33,6 +33,10 @@ VOICEVOX_SPEAKERS_URL = "https://deprecatedapis.tts.quest/v2/voicevox/speakers/"
 VOICEVOX_POINTS_URL = "https://deprecatedapis.tts.quest/v2/api/"
 VOICEVOX_DEFAULT_SETTINGS: dict[str, Any] = {
     "character_id": "",
+    "source_field": "",
+    "destination_field": "",
+    "append_audio": False,
+    "use_opus": False,
     "volume_scale": 1.0,
     "pitch_scale": 0.0,
     "pitch": 0.0,
@@ -62,6 +66,10 @@ DEFAULT_TTS_PROVIDER_SEEDS: tuple[dict[str, Any], ...] = (
         },
         "default_settings": {
             "character_id": "",
+            "source_field": "",
+            "destination_field": "",
+            "append_audio": False,
+            "use_opus": False,
             "volume_scale": 1.0,
             "pitch_scale": 0.0,
             "pitch": 0.0,
@@ -252,6 +260,23 @@ def _normalize_voicevox_float(
     return max(minimum, min(maximum, parsed))
 
 
+def _normalize_voicevox_bool(
+    value: Any,
+    *,
+    fallback: bool,
+) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    normalized = str(value or "").strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    return fallback
+
+
 def _detect_audio_mime_and_extension(
     content: bytes,
     *,
@@ -413,9 +438,23 @@ class VoicevoxTtsProviderAdapter(BaseTtsProviderAdapter):
         volume_raw = _pick_first("volume_scale", "volumeScale", "volume")
         initial_silence_raw = _pick_first("initial_silence_scale", "pre_phoneme_length", "prePhonemeLength")
         final_silence_raw = _pick_first("final_silence_length", "post_phoneme_length", "postPhonemeLength")
+        source_field_raw = _pick_first("source_field", "sourceField")
+        destination_field_raw = _pick_first("destination_field", "destinationField")
+        append_audio_raw = _pick_first("append_audio", "appendAudio")
+        use_opus_raw = _pick_first("use_opus", "useOpus")
 
         normalized = {
             "character_id": str(character_raw or "").strip(),
+            "source_field": str(source_field_raw or "").strip(),
+            "destination_field": str(destination_field_raw or "").strip(),
+            "append_audio": _normalize_voicevox_bool(
+                append_audio_raw,
+                fallback=bool(VOICEVOX_DEFAULT_SETTINGS["append_audio"]),
+            ),
+            "use_opus": _normalize_voicevox_bool(
+                use_opus_raw,
+                fallback=bool(VOICEVOX_DEFAULT_SETTINGS["use_opus"]),
+            ),
             "volume_scale": _normalize_voicevox_float(
                 volume_raw,
                 fallback=float(VOICEVOX_DEFAULT_SETTINGS["volume_scale"]),
@@ -933,13 +972,18 @@ def serialize_user_provider_profile(
     effective_settings = dict(default_settings)
     effective_settings.update(normalized_settings)
     effective_settings, _ = adapter.normalize_user_settings(effective_settings, default_settings=default_settings)
+    decrypted_api_key = decrypt_api_key(profile.encrypted_api_key) if profile is not None else ""
+    has_api_key = bool(decrypted_api_key)
+    key_status = normalize_key_status(profile.key_status if profile else "unknown")
+    if not has_api_key:
+        key_status = "unknown"
 
     return {
         "provider": provider_payload,
         "profile": {
-            "has_api_key": bool(profile and profile.encrypted_api_key),
-            "masked_api_key": mask_api_key(profile.encrypted_api_key) if profile else "",
-            "key_status": normalize_key_status(profile.key_status if profile else "unknown"),
+            "has_api_key": has_api_key,
+            "masked_api_key": mask_api_key(profile.encrypted_api_key) if has_api_key and profile is not None else "",
+            "key_status": key_status,
             "last_validated_at": profile.last_validated_at.isoformat() if profile and profile.last_validated_at else None,
             "last_validation_error": (profile.last_validation_error or "") if profile else "",
             "settings": normalized_settings,
@@ -1050,13 +1094,10 @@ def update_user_provider_profile(
             else:
                 profile.settings_json = dumps_json_map(normalized_settings)
 
-    effective_key = decrypt_api_key(profile.encrypted_api_key)
-    if provider.requires_api_key and not effective_key:
-        errors.append("Provider này yêu cầu API key. Vui lòng lưu API key trước khi sử dụng.")
-
     if errors:
         return profile, None, errors
 
+    effective_key = decrypt_api_key(profile.encrypted_api_key)
     validation_result = None
     if validate_key:
         if not effective_key:

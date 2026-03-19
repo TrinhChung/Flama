@@ -17,6 +17,7 @@ from app.services.flashcard_renderer import is_field_empty, sanitize_richtext
 MEDIA_ALLOWED_PREFIX = "/media/proxy/"
 MAX_TEXT_FIELD_LENGTH = 5_000
 MAX_RICHTEXT_LENGTH = 20_000
+MAX_MARKDOWN_LENGTH = 20_000
 MAX_TAG_LENGTH = 64
 MAX_TAG_COUNT = 50
 MAX_FILENAME_LENGTH = 255
@@ -305,6 +306,27 @@ def sanitize_rich_text(raw_value: Any, *, field_name: str, max_length: int = MAX
     return sanitize_richtext(raw_text).strip()
 
 
+def sanitize_markdown_text(
+    raw_value: Any,
+    *,
+    field_name: str,
+    max_length: int = MAX_MARKDOWN_LENGTH,
+) -> str:
+    text = "" if raw_value is None else str(raw_value)
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n").strip()
+    if len(normalized) > max_length:
+        raise RequestValidationError(
+            f"Field '{field_name}' exceeds max length {max_length}.",
+            field=field_name,
+        )
+    if _CONTROL_CHAR_RE.search(normalized):
+        raise RequestValidationError(
+            f"Field '{field_name}' contains control characters.",
+            field=field_name,
+        )
+    return normalized
+
+
 def normalize_tags(raw_tags: Any) -> list[str]:
     if raw_tags is None:
         return []
@@ -467,6 +489,8 @@ def clean_note_field_values(
         field_type = str(field_def.field_type or "text").strip().lower()
         if field_type == "richtext":
             cleaned_value = sanitize_rich_text(raw_value, field_name=field_name)
+        elif field_type == "markdown":
+            cleaned_value = sanitize_markdown_text(raw_value, field_name=field_name)
         elif field_type in {"image", "audio", "diagram"}:
             cleaned_value = _clean_media_reference(
                 raw_value,

@@ -24,7 +24,7 @@ load_dotenv()
 
 
 def _resolve_media_upload_root(raw_value: str | None = None) -> Path:
-    """Resolve media root path; default outside repo to avoid bloating git workspace."""
+    """Resolve media root path for local media uploads."""
     raw = str(raw_value or "").strip() or os.getenv("FLASHCARD_MEDIA_UPLOAD_ROOT", "").strip()
     if raw:
         candidate = Path(raw).expanduser()
@@ -33,9 +33,25 @@ def _resolve_media_upload_root(raw_value: str | None = None) -> Path:
         else:
             candidate = candidate.resolve()
     else:
-        candidate = (BASE_DIR.parent / "flama_media_storage").resolve()
+        # Keep the default inside static for local Windows development so uploads
+        # do not depend on an external writable folder configuration.
+        candidate = (BASE_DIR / "static" / "uploads" / "flashcard_media").resolve()
     candidate.mkdir(parents=True, exist_ok=True)
     return candidate
+
+
+def _coerce_bool_env(name: str, *, default: bool) -> bool:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
+    token = str(raw_value).strip().lower()
+    if not token:
+        return default
+    if token in {"1", "true", "yes", "on"}:
+        return True
+    if token in {"0", "false", "no", "off"}:
+        return False
+    return default
 
 
 def create_app(config: Optional[dict] = None) -> Flask:
@@ -74,6 +90,7 @@ def create_app(config: Optional[dict] = None) -> Flask:
     from models.deck import Deck  # noqa: F401  # register model
     from models.tts_provider_config import TtsProviderConfig  # noqa: F401  # register model
     from models.tts_user_provider_profile import TtsUserProviderProfile  # noqa: F401  # register model
+    from models.support_donation_config import SupportDonationConfig  # noqa: F401  # register model
     from models.card_progress import CardProgress  # noqa: F401  # register model
     from models.column_preference import (
         VocabularyColumnPreference,
@@ -153,7 +170,26 @@ def create_app(config: Optional[dict] = None) -> Flask:
         ensure_default_tts_providers(db.session)
         from app.services import flashcards_share
 
-        flashcards_share.cutover_clone_model_to_overlay_only(fail_on_mismatch=True)
+        default_cutover_fail_on_mismatch = os.getenv("FLASK_ENV", "").strip().lower() not in {
+            "development",
+            "dev",
+        }
+        cutover_fail_on_mismatch = _coerce_bool_env(
+            "FLASHCARDS_SHARE_CUTOVER_FAIL_ON_MISMATCH",
+            default=default_cutover_fail_on_mismatch,
+        )
+        cutover_summary = flashcards_share.cutover_clone_model_to_overlay_only(
+            fail_on_mismatch=cutover_fail_on_mismatch,
+        )
+        failed_cutovers = int(cutover_summary.get("failed") or 0)
+        if failed_cutovers > 0:
+            app.logger.warning(
+                "Clone cutover completed with %s failed installs (migrated=%s, total=%s). "
+                "Set FLASHCARDS_SHARE_CUTOVER_FAIL_ON_MISMATCH=1 to enforce strict startup.",
+                failed_cutovers,
+                int(cutover_summary.get("migrated") or 0),
+                int(cutover_summary.get("total_installs") or 0),
+            )
         db.session.commit()
 
     return app
@@ -185,6 +221,7 @@ def _ensure_backward_compatible_schema() -> None:
     if bind is None:
         return
 
+    is_mysql = str(bind.dialect.name).lower().startswith("mysql")
     inspector = sa.inspect(bind)
     schema_changed = False
 
@@ -220,7 +257,8 @@ def _ensure_backward_compatible_schema() -> None:
 
     inspector = sa.inspect(bind)
     if inspector.has_table("tts_provider_config"):
-        tts_columns = {column["name"] for column in inspector.get_columns("tts_provider_config")}
+        tts_columns_meta = {column["name"]: column for column in inspector.get_columns("tts_provider_config")}
+        tts_columns = set(tts_columns_meta.keys())
         if "shared_config_json" not in tts_columns:
             db.session.execute(
                 sa.text("ALTER TABLE tts_provider_config ADD COLUMN shared_config_json TEXT NULL")
@@ -253,6 +291,24 @@ def _ensure_backward_compatible_schema() -> None:
                 sa.text(
                     "UPDATE tts_provider_config SET default_settings_json = '{}' "
                     "WHERE default_settings_json IS NULL OR default_settings_json = ''"
+                )
+            )
+        key_status_column = tts_columns_meta.get("key_status")
+        if key_status_column is not None:
+            key_status_default = str(key_status_column.get("default") or "").strip().strip("'")
+            key_status_nullable = bool(key_status_column.get("nullable", True))
+            if is_mysql and (key_status_default.lower() != "unknown" or key_status_nullable):
+                db.session.execute(
+                    sa.text(
+                        "ALTER TABLE tts_provider_config "
+                        "MODIFY COLUMN key_status VARCHAR(32) NOT NULL DEFAULT 'unknown'"
+                    )
+                )
+                schema_changed = True
+            db.session.execute(
+                sa.text(
+                    "UPDATE tts_provider_config SET key_status = 'unknown' "
+                    "WHERE key_status IS NULL OR key_status = ''"
                 )
             )
 

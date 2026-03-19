@@ -14,6 +14,14 @@ from typing import Any
 import bleach
 import chevron
 from bleach.css_sanitizer import CSSSanitizer
+try:
+    from markdown_it import MarkdownIt
+except Exception:  # pragma: no cover - optional dependency fallback
+    MarkdownIt = None  # type: ignore[assignment]
+try:
+    import mistune
+except Exception:  # pragma: no cover - optional dependency fallback
+    mistune = None  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +47,9 @@ ALLOWED_HTML_TAGS = [
     "ul",
     "ol",
     "li",
+    "blockquote",
+    "pre",
+    "code",
     "table",
     "thead",
     "tbody",
@@ -96,6 +107,19 @@ ALLOWED_CSS_PROPERTIES = [
 ]
 
 _css_sanitizer = CSSSanitizer(allowed_css_properties=ALLOWED_CSS_PROPERTIES)
+_markdown_parser = None
+if MarkdownIt is not None:
+    _markdown_parser = MarkdownIt(
+        "commonmark",
+        {
+            "html": False,
+            "linkify": False,
+            "typographer": False,
+        },
+    )
+elif mistune is not None:
+    # Fallback renderer when markdown-it-py is missing in runtime env.
+    _markdown_parser = mistune.create_markdown(escape=True)
 _template_cache: OrderedDict[str, str] = OrderedDict()
 _preview_cache: dict[str, tuple[datetime, dict[str, str]]] = {}
 _cache_lock = threading.Lock()
@@ -163,16 +187,16 @@ def _extract_inline_scripts(source_html: str) -> tuple[str, list[str]]:
     return cleaned, scripts
 
 
-def _upgrade_media_double_brace_tokens(
+def _upgrade_html_field_double_brace_tokens(
     source_html: str,
     field_defs: list[Any],
 ) -> str:
     upgraded = source_html or ""
     for field_def in field_defs:
-        if field_def.field_type not in {"image", "diagram"}:
+        if field_def.field_type not in {"image", "diagram", "richtext", "markdown"}:
             continue
         name = re.escape(field_def.name)
-        # Upgrade {{image}} / {{diagram}} -> triple braces for media html snippets.
+        # Upgrade HTML-producing fields from {{Field}} to {{{Field}}}.
         token_re = re.compile(rf"(?<!{{){{{{\s*{name}\s*}}}}(?!}})")
         upgraded = token_re.sub(f"{{{{{{{field_def.name}}}}}}}", upgraded)
     return upgraded
@@ -211,6 +235,12 @@ def _normalize_multiline_value(value: Any) -> str:
     normalized = text.replace("\r\n", "\n").replace("\r", "\n")
     normalized = normalized.replace("\\n", LINEBREAK_TOKEN)
     return normalized.replace("\n", LINEBREAK_TOKEN)
+
+
+def _normalize_markdown_value(value: Any) -> str:
+    text = "" if value is None else str(value)
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+    return normalized.replace("\\n", "\n")
 
 
 def _replace_linebreak_token_in_html_text_nodes(rendered_html: str) -> str:
@@ -294,6 +324,142 @@ def sanitize_html_fragment(raw_html: str | None) -> str:
 
 def sanitize_richtext(raw_html: str | None) -> str:
     return sanitize_html_fragment(raw_html)
+
+
+def _fallback_markdown_inline_to_html(text: str) -> str:
+    placeholders: list[str] = []
+    html_text = html.escape(text or "")
+
+    def _store(fragment: str) -> str:
+        token = f"%%FCMD{len(placeholders)}%%"
+        placeholders.append(fragment)
+        return token
+
+    html_text = re.sub(
+        r"`([^`\n]+)`",
+        lambda match: _store(f"<code>{html.escape(match.group(1))}</code>"),
+        html_text,
+    )
+    html_text = re.sub(
+        r"!\[([^\]]*)\]\(([^)\s]+)\)",
+        lambda match: _store(
+            f'<img src="{html.escape(match.group(2), quote=True)}" '
+            f'alt="{html.escape((match.group(1) or "image").strip() or "image", quote=True)}">'
+        ),
+        html_text,
+    )
+    html_text = re.sub(
+        r"\[([^\]]+)\]\(([^)\s]+)\)",
+        lambda match: _store(
+            f'<a href="{html.escape(match.group(2), quote=True)}" target="_blank" rel="noopener noreferrer">'
+            f"{html.escape(match.group(1))}</a>"
+        ),
+        html_text,
+    )
+    html_text = re.sub(r"\*\*([^*\n]+)\*\*", r"<strong>\1</strong>", html_text)
+    html_text = re.sub(r"__([^_\n]+)__", r"<strong>\1</strong>", html_text)
+    html_text = re.sub(r"~~([^~\n]+)~~", r"<s>\1</s>", html_text)
+    html_text = re.sub(r"(^|[^\*])\*([^*\n]+)\*(?!\*)", r"\1<em>\2</em>", html_text)
+    html_text = re.sub(r"(^|[^_])_([^_\n]+)_(?!_)", r"\1<em>\2</em>", html_text)
+
+    for index, fragment in enumerate(placeholders):
+        html_text = html_text.replace(f"%%FCMD{index}%%", fragment)
+    return html_text
+
+
+def _fallback_render_markdown_to_html(source: str) -> str:
+    lines = source.split("\n")
+    blocks: list[str] = []
+    index = 0
+
+    while index < len(lines):
+        line = lines[index]
+        stripped = line.strip()
+        if not stripped:
+            index += 1
+            continue
+
+        if stripped.startswith("```"):
+            code_lines: list[str] = []
+            index += 1
+            while index < len(lines) and not lines[index].strip().startswith("```"):
+                code_lines.append(lines[index])
+                index += 1
+            if index < len(lines):
+                index += 1
+            blocks.append(f"<pre><code>{html.escape(chr(10).join(code_lines))}</code></pre>")
+            continue
+
+        heading_match = re.match(r"^(#{1,3})\s+(.*)$", line)
+        if heading_match:
+            level = len(heading_match.group(1))
+            blocks.append(f"<h{level}>{_fallback_markdown_inline_to_html(heading_match.group(2))}</h{level}>")
+            index += 1
+            continue
+
+        if re.match(r"^>\s?", line):
+            quote_lines: list[str] = []
+            while index < len(lines) and re.match(r"^>\s?", lines[index]):
+                quote_lines.append(re.sub(r"^>\s?", "", lines[index]))
+                index += 1
+            quote_html = "<br>".join(_fallback_markdown_inline_to_html(item) for item in quote_lines)
+            blocks.append(f"<blockquote><p>{quote_html}</p></blockquote>")
+            continue
+
+        if re.match(r"^[-*+]\s+", line):
+            items: list[str] = []
+            while index < len(lines):
+                item_match = re.match(r"^[-*+]\s+(.*)$", lines[index])
+                if not item_match:
+                    break
+                items.append(f"<li>{_fallback_markdown_inline_to_html(item_match.group(1))}</li>")
+                index += 1
+            blocks.append(f"<ul>{''.join(items)}</ul>")
+            continue
+
+        if re.match(r"^\d+\.\s+", line):
+            items = []
+            while index < len(lines):
+                item_match = re.match(r"^\d+\.\s+(.*)$", lines[index])
+                if not item_match:
+                    break
+                items.append(f"<li>{_fallback_markdown_inline_to_html(item_match.group(1))}</li>")
+                index += 1
+            blocks.append(f"<ol>{''.join(items)}</ol>")
+            continue
+
+        paragraph_lines = [line]
+        index += 1
+        while index < len(lines):
+            current = lines[index]
+            if not current.strip():
+                index += 1
+                break
+            if re.match(r"^(#{1,3})\s+", current) or re.match(r"^>\s?", current) or re.match(r"^[-*+]\s+", current) or re.match(r"^\d+\.\s+", current) or current.strip().startswith("```"):
+                break
+            paragraph_lines.append(current)
+            index += 1
+        paragraph_html = "<br>".join(_fallback_markdown_inline_to_html(item) for item in paragraph_lines)
+        blocks.append(f"<p>{paragraph_html}</p>")
+
+    return "".join(blocks)
+
+
+def render_markdown_to_safe_html(raw_markdown: str | None) -> str:
+    source = _normalize_markdown_value(raw_markdown)
+    if not source.strip():
+        return ""
+    if _markdown_parser is None:
+        return sanitize_html_fragment(_fallback_render_markdown_to_html(source))
+    try:
+        if hasattr(_markdown_parser, "render"):
+            rendered = _markdown_parser.render(source)
+        else:
+            rendered = _markdown_parser(source)
+    except Exception:
+        logger.exception("Failed to render markdown; falling back to plain text.")
+        return sanitize_html_fragment(_fallback_render_markdown_to_html(source))
+    return sanitize_html_fragment(rendered)
 
 
 def is_field_empty(value: Any) -> bool:
@@ -390,6 +556,9 @@ def build_render_context(
         if field_def.field_type == "richtext":
             context[name] = sanitize_richtext(_normalize_multiline_value(value))
             continue
+        if field_def.field_type == "markdown":
+            context[name] = render_markdown_to_safe_html(value)
+            continue
         if field_def.field_type in {"image", "audio", "diagram"}:
             media_html = _render_media_html(field_def.field_type, value, name, media_lookup)
             media_url = _resolve_media_url(value, media_lookup)
@@ -447,8 +616,8 @@ def render_template_pair(
     template_updated = str(getattr(template, "updated_at", ""))
     front_source_raw = getattr(template, "front_html", "")
     back_source_raw = getattr(template, "back_html", "")
-    front_source_prepared = _upgrade_media_double_brace_tokens(front_source_raw, field_defs)
-    back_source_prepared = _upgrade_media_double_brace_tokens(back_source_raw, field_defs)
+    front_source_prepared = _upgrade_html_field_double_brace_tokens(front_source_raw, field_defs)
+    back_source_prepared = _upgrade_html_field_double_brace_tokens(back_source_raw, field_defs)
     # Always strip inline <script> blocks before bleach cleaning.
     # When allow_inline_script=True we re-attach sanitized script blocks after rendering.
     front_source_prepared, front_script_sources = _extract_inline_scripts(front_source_prepared)

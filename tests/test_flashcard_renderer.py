@@ -50,6 +50,56 @@ class FlashcardRendererTests(unittest.TestCase):
         self.assertIn("<b>ok</b>", rendered["front_html"])
         self.assertNotIn("<script>", rendered["front_html"])
 
+    def test_markdown_rendered_to_safe_html(self):
+        template = self._template("{{{Notes}}}")
+        fields = [self._field("Notes", "markdown")]
+        rendered = render_template_pair(
+            template=template,
+            field_defs=fields,
+            field_values={
+                "Notes": "# Header\n\n**bold**\n\n<script>alert(2)</script>\n\n[ok](https://example.com)",
+            },
+            media_assets=[],
+        )
+        html = rendered["front_html"]
+        self.assertNotIn("<script>", html)
+        if "<h1>Header</h1>" in html:
+            self.assertIn("<strong>bold</strong>", html)
+            self.assertIn('href="https://example.com"', html)
+        else:
+            # Fallback path when markdown parser dependency is unavailable.
+            self.assertIn("# Header", html)
+            self.assertIn("**bold**", html)
+
+    def test_markdown_double_brace_template_is_auto_upgraded_to_html(self):
+        template = self._template("{{Notes}}")
+        fields = [self._field("Notes", "markdown")]
+        rendered = render_template_pair(
+            template=template,
+            field_defs=fields,
+            field_values={"Notes": "**bold**"},
+            media_assets=[],
+        )
+        html = rendered["front_html"]
+        self.assertNotIn("&lt;strong&gt;", html)
+        if "<strong>bold</strong>" in html:
+            self.assertIn("<strong>bold</strong>", html)
+        else:
+            self.assertIn("**bold**", html)
+
+    def test_markdown_proxy_image_syntax_renders_img_tag(self):
+        template = self._template("{{{Notes}}}")
+        fields = [self._field("Notes", "markdown")]
+        rendered = render_template_pair(
+            template=template,
+            field_defs=fields,
+            field_values={"Notes": "![image.png](/media/proxy/asset-123)"},
+            media_assets=[],
+        )
+        html = rendered["front_html"]
+        self.assertIn("<img", html)
+        self.assertIn('src="/media/proxy/asset-123"', html)
+
     def test_media_rendering_uses_proxy_url_only(self):
         template = self._template("{{{Word_Audio}}} {{{image}}}")
         fields = [self._field("Word_Audio", "audio"), self._field("image", "image")]

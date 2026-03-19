@@ -19,26 +19,21 @@ from app.routes.flashcards import (
 )
 from app.services.flashcards_share_service import CloneDeckScope
 
-def apply_study_answer_and_commit(
-    *,
-    user,
-    card: Card,
-    progress: CardProgress,
-    updated_state,
-    now: datetime,
-    rating: str,
-    review_mode: str,
-    payload: dict,
-    clone_scope: CloneDeckScope | None,
-    requested_scope_id: int | None
-) -> None:
-    """Applies the new study state to the progress record and commits the transaction."""
-    _apply_card_state_to_progress(progress, updated_state, now)
-    _touch_note_type_install_usage(user_id=user.id, installed_note_type_id=card.note.note_type_id, activity_at=now)
 
-    local_deck_id_for_usage = card.note.deck_id
+class ConcurrentReviewError(Exception):
+    """Raised when a card was already reviewed by another concurrent request."""
+    pass
+
+
+def _resolve_local_deck_id(
+    card: Card,
+    clone_scope: CloneDeckScope | None,
+    requested_scope_id: int | None,
+) -> int | None:
+    """Resolve the local deck id for usage tracking (single source of truth)."""
+    local_deck_id = card.note.deck_id
     if clone_scope is not None:
-        local_deck_id_for_usage = (
+        local_deck_id = (
             requested_scope_id
             if requested_scope_id is not None
             else _resolve_local_clone_deck_id_for_source_deck(
@@ -46,12 +41,49 @@ def apply_study_answer_and_commit(
                 source_deck_id=card.note.deck_id,
             )
         ) or clone_scope.install.local_deck_id
+    return local_deck_id
+
+
+def apply_study_answer_and_commit(
+    *,
+    user,
+    card: Card,
+    progress: CardProgress,
+    expected_last_reviewed_at: datetime | None,
+    updated_state,
+    now: datetime,
+    rating: str,
+    review_mode: str,
+    payload: dict,
+    clone_scope: CloneDeckScope | None,
+    requested_scope_id: int | None,
+    timezone_name: str,
+) -> int | None:
+    """Applies the new study state to the progress record and commits the transaction.
+
+    Returns the resolved local_deck_id_for_usage.
+    Raises ConcurrentReviewError if the card was already reviewed concurrently.
+    """
+    # Optimistic lock: verify progress was not modified by a concurrent request.
+    fresh = CardProgress.query.filter_by(
+        user_id=user.id, card_id=card.id,
+    ).first()
+    if fresh is not None and fresh.last_reviewed_at != expected_last_reviewed_at:
+        db.session.rollback()
+        raise ConcurrentReviewError(
+            "This card was already reviewed in another session. Loading next card."
+        )
+
+    _apply_card_state_to_progress(progress, updated_state, now, timezone_name=timezone_name)
+    _touch_note_type_install_usage(user_id=user.id, installed_note_type_id=card.note.note_type_id, activity_at=now)
+
+    local_deck_id_for_usage = _resolve_local_deck_id(card, clone_scope, requested_scope_id)
 
     if local_deck_id_for_usage is not None:
         _touch_deck_install_usage(user_id=user.id, local_deck_id=local_deck_id_for_usage, activity_at=now)
-        
+
     update_user_timezone(user, payload.get("timezone"))
-    
+
     record_review_event(
         user_id=user.id,
         card_id=card.id,
@@ -64,4 +96,4 @@ def apply_study_answer_and_commit(
     )
     _audit("study.answer", {"card_id": card.id, "rating": rating})
     db.session.commit()
-
+    return local_deck_id_for_usage

@@ -158,6 +158,84 @@ def upload_note_media(note_id: str):
         }
     ), 201
 
+
+@flashcards_bp.route("/api/notes/<note_id>/markdown-media", methods=["POST"])
+@login_required
+def upload_note_markdown_media(note_id: str):
+    note = Note.query.filter_by(id=note_id, user_id=current_user.id).first()
+    if not note:
+        return _api_error("FIELD_NOT_FOUND", "Note not found.", status=404)
+
+    field_name = (request.form.get("field_name") or "").strip()
+    if not field_name:
+        return _api_error("VALIDATION_ERROR", "field_name is required.", field="field_name")
+
+    field_def = FieldDef.query.filter_by(note_type_id=note.note_type_id, name=field_name).first()
+    if not field_def:
+        return _api_error("FIELD_NOT_FOUND", "Field not found in note type.", field="field_name", status=404)
+    if field_def.field_type != "markdown":
+        return _api_error("VALIDATION_ERROR", "Field is not markdown.", field="field_name")
+
+    max_bytes = int(current_app.config.get("FLASHCARD_MEDIA_MAX_BYTES", 10 * 1024 * 1024))
+    try:
+        validated_upload = validate_media_upload_request(
+            field_name_raw=field_name,
+            # Inline markdown uploads are image-only.
+            field_type="image",
+            uploaded=request.files.get("file"),
+            max_bytes=max_bytes,
+            scanner=current_app.config.get("FLASHCARD_MEDIA_SCANNER"),
+            scan_enabled=bool(current_app.config.get("FLASHCARD_MEDIA_SCAN_ENABLED", False)),
+        )
+    except RequestValidationError as exc:
+        return _api_error(exc.code, str(exc), field=exc.field, status=exc.status)
+
+    existing = MediaAsset.query.filter_by(
+        note_id=note.id,
+        field_name=validated_upload.field_name,
+        sha256=validated_upload.sha256,
+    ).first()
+    if existing:
+        return jsonify(
+            {
+                "asset_id": existing.id,
+                "url": f"/media/proxy/{existing.id}",
+                "field_name": validated_upload.field_name,
+                "filename": existing.filename,
+            }
+        )
+
+    upload_root = Path(current_app.config["FLASHCARD_MEDIA_UPLOAD_ROOT"]).resolve()
+    relative_dir = Path(str(current_user.id)) / note.id
+    relative_path = relative_dir / validated_upload.storage_filename
+    try:
+        full_path = resolve_safe_storage_path(upload_root=upload_root, relative_path=relative_path)
+    except RequestValidationError as exc:
+        return _api_error(exc.code, str(exc), field=exc.field, status=exc.status)
+    full_path.parent.mkdir(parents=True, exist_ok=True)
+    full_path.write_bytes(validated_upload.content)
+
+    asset = MediaAsset(
+        note_id=note.id,
+        field_name=validated_upload.field_name,
+        filename=validated_upload.safe_original_filename,
+        mime_type=validated_upload.mime_type,
+        storage_path=str(relative_path).replace("\\", "/"),
+        sha256=validated_upload.sha256,
+        size_bytes=validated_upload.size_bytes,
+    )
+    from app.services.flashcard_media_service import upload_note_inline_media_and_commit
+
+    upload_note_inline_media_and_commit(note, asset, validated_upload.field_name)
+    return jsonify(
+        {
+            "asset_id": asset.id,
+            "url": f"/media/proxy/{asset.id}",
+            "field_name": validated_upload.field_name,
+            "filename": asset.filename,
+        }
+    ), 201
+
 @flashcards_bp.route("/api/media/<asset_id>", methods=["DELETE"])
 @login_required
 def delete_media(asset_id: str):

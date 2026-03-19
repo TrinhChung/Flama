@@ -1592,6 +1592,85 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             self.assertIn(progress.queue, {"learning", "review", "relearning", "new"})
             self.assertIsNotNone(progress.reps)
 
+    def test_study_next_reports_waiting_when_only_learning_cards_remain(self):
+        note_type = self._create_note_type()
+        note_type_id = note_type["id"]
+        self.client.post(
+            "/api/notes",
+            json={
+                "note_type_id": note_type_id,
+                "deck_id": self.deck_id,
+                "field_values": {
+                    "Word": "犬",
+                    "Reading": "いぬ",
+                    "Meaning": "dog",
+                },
+            },
+        )
+
+        next_resp = self.client.get(f"/api/study/next?scope=deck&scope_id={self.deck_id}")
+        self.assertEqual(next_resp.status_code, 200)
+        payload = next_resp.get_json()
+        self.assertIsNotNone(payload.get("card_id"))
+
+        answer_resp = self.client.post(
+            f"/api/study/{payload['card_id']}/answer",
+            json={"rating": "good", "scope": "deck", "scope_id": self.deck_id},
+        )
+        self.assertEqual(answer_resp.status_code, 200)
+
+        waiting_resp = self.client.get(f"/api/study/next?scope=deck&scope_id={self.deck_id}")
+        self.assertEqual(waiting_resp.status_code, 200)
+        waiting_payload = waiting_resp.get_json()
+
+        self.assertIsNone(waiting_payload.get("card_id"))
+        self.assertEqual(waiting_payload.get("session_state"), "waiting")
+        self.assertEqual(int(waiting_payload.get("pending_learning_count") or 0), 1)
+        self.assertTrue(str(waiting_payload.get("message") or "").startswith("No cards are due right now"))
+        self.assertTrue(str(waiting_payload.get("next_due_at") or "").endswith("Z"))
+
+    def test_vocabulary_study_deck_shows_waiting_state_for_pending_learning(self):
+        note_type = self._create_note_type()
+        note_type_id = note_type["id"]
+        for word, reading, meaning in (
+            ("犬", "いぬ", "dog"),
+            ("猫", "ねこ", "cat"),
+            ("鳥", "とり", "bird"),
+        ):
+            resp = self.client.post(
+                "/api/notes",
+                json={
+                    "note_type_id": note_type_id,
+                    "deck_id": self.deck_id,
+                    "field_values": {
+                        "Word": word,
+                        "Reading": reading,
+                        "Meaning": meaning,
+                    },
+                },
+            )
+            self.assertEqual(resp.status_code, 201)
+
+        for _ in range(3):
+            next_resp = self.client.get(f"/api/study/next?scope=deck&scope_id={self.deck_id}")
+            self.assertEqual(next_resp.status_code, 200)
+            payload = next_resp.get_json()
+            self.assertIsNotNone(payload.get("card_id"))
+            answer_resp = self.client.post(
+                f"/api/study/{payload['card_id']}/answer",
+                json={"rating": "good", "scope": "deck", "scope_id": self.deck_id},
+            )
+            self.assertEqual(answer_resp.status_code, 200)
+
+        study_resp = self.client.get(f"/vocabulary/study/deck/{self.deck_id}")
+        self.assertEqual(study_resp.status_code, 200)
+        html = study_resp.get_data(as_text=True)
+
+        self.assertIn("No cards due right now.", html)
+        self.assertIn("learning cards", html)
+        self.assertIn('id="study-waiting-next-due"', html)
+        self.assertNotIn("Hôm nay bạn đã học xong deck này.", html)
+
     def test_study_next_defers_inline_template_script(self):
         note_type_resp = self.client.post(
             "/api/note-types",

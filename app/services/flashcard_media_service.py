@@ -26,6 +26,16 @@ def link_existing_media_and_commit(note: Note, existing_asset: MediaAsset, field
     note.field_values = values
     db.session.commit()
 
+
+def upload_note_inline_media_and_commit(note: Note, asset: MediaAsset, field_name: str) -> None:
+    db.session.add(asset)
+    db.session.flush()
+    _audit(
+        "media.upload.inline",
+        {"note_id": note.id, "asset_id": asset.id, "field_name": field_name},
+    )
+    db.session.commit()
+
 def delete_media_and_commit(asset: MediaAsset) -> None:
     note = asset.note
     values = dict(note.field_values or {})

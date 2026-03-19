@@ -142,6 +142,69 @@
   font-size: 0.78rem;
 }
 
+/* ── Product updates strip ── */
+.footer-updates {
+  padding: 1.1rem 0 1.25rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.footer-updates__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  margin-bottom: 0.75rem;
+}
+
+.footer-updates__head .footer-col-title {
+  margin: 0;
+}
+
+.footer-updates__link {
+  color: var(--flama-orange-300);
+  text-decoration: none;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.footer-updates__link:hover {
+  color: var(--flama-orange-200);
+}
+
+.footer-update-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem 1.25rem;
+}
+
+.footer-update-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.45rem;
+}
+
+.footer-update-tag {
+  flex-shrink: 0;
+  font-size: 0.66rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-radius: 999px;
+  color: var(--flama-orange-200);
+  background: rgba(254, 104, 8, 0.14);
+  border: 1px solid rgba(254, 104, 8, 0.3);
+  padding: 0.06rem 0.45rem;
+}
+
+.footer-update-text {
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.54);
+}
+
 /* ── Legal pages ── */
 .legal-page {
   max-width: 780px;
@@ -239,6 +302,10 @@
   .footer-desc {
     max-width: 100%;
   }
+
+  .footer-update-list {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 576px) {
@@ -253,5 +320,10 @@
 
   .site-footer {
     padding-top: 2.5rem;
+  }
+
+  .footer-updates__head {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }

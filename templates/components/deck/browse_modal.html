@@ -17,7 +17,10 @@
               Tạo âm thanh
             </button>
             <div class="browse-voicevox__menu d-none" id="browseAudioCreateMenu">
-              <button type="button" class="browse-voicevox__menu-item" id="browseVoicevoxOptionBtn">VoiceVox</button>
+              <button type="button" class="browse-voicevox__menu-item" id="browseVoicevoxOptionBtn">
+                <span>VOICEVOX</span>
+                <span class="browse-voicevox__menu-tag">日本語</span>
+              </button>
             </div>
           </div>
           <button type="button" class="btn btn-sm btn-outline-secondary" id="browseRefreshBtn" title="Reload data">
@@ -33,7 +36,19 @@
           <div class="browse-pane__toolbar">
             <div class="input-group input-group-sm">
               <span class="input-group-text"><i class="bi bi-search"></i></span>
-              <input type="text" class="form-control" id="browseDeckSearch" placeholder="Search deck">
+              <input
+                type="text"
+                class="form-control"
+                id="browseDeckSearch"
+                placeholder="Search deck"
+                autocomplete="off"
+                autocorrect="off"
+                autocapitalize="none"
+                spellcheck="false"
+                data-form-type="other"
+                data-lpignore="true"
+                data-1p-ignore="true"
+              >
             </div>
             <div class="form-check form-switch mt-2">
               <input class="form-check-input" type="checkbox" role="switch" id="browseIncludeSubdecks" checked>
@@ -63,7 +78,19 @@
             <div class="browse-toolbar-row">
               <div class="input-group input-group-sm browse-search-box">
                 <span class="input-group-text"><i class="bi bi-search"></i></span>
-                <input type="text" class="form-control" id="browseKeyword" placeholder="Search word/field...">
+                <input
+                  type="text"
+                  class="form-control"
+                  id="browseKeyword"
+                  placeholder="Search word/field..."
+                  autocomplete="off"
+                  autocorrect="off"
+                  autocapitalize="none"
+                  spellcheck="false"
+                  data-form-type="other"
+                  data-lpignore="true"
+                  data-1p-ignore="true"
+                >
               </div>
               <select class="form-select form-select-sm browse-status-select" id="browseStatusFilter">
                 <option value="all">All</option>
@@ -71,7 +98,19 @@
                 <option value="learn">Learn</option>
                 <option value="due">Due</option>
               </select>
-              <input type="text" class="form-control form-control-sm browse-tag-filter" id="browseTagFilter" placeholder="Tag">
+              <input
+                type="text"
+                class="form-control form-control-sm browse-tag-filter"
+                id="browseTagFilter"
+                placeholder="Tag"
+                autocomplete="off"
+                autocorrect="off"
+                autocapitalize="none"
+                spellcheck="false"
+                data-form-type="other"
+                data-lpignore="true"
+                data-1p-ignore="true"
+              >
             </div>
             <div class="browse-toolbar-row">
               <select class="form-select form-select-sm" id="browseSortBy">
@@ -146,6 +185,7 @@
                   <input id="browseEditorTags" type="text" class="form-control form-control-sm">
                 </div>
               </div>
+              <div id="browseEditorMarkdownToolbar" class="mb-3 d-none"></div>
               <div id="browseEditorFields"></div>
               <div class="browse-editor-delete-wrap">
                 <button type="button" class="btn btn-sm btn-outline-danger" id="browseDeleteBtn">Delete Card</button>
@@ -183,7 +223,19 @@
                 </select>
                 <label for="browseVoicevoxApiKey">API key:</label>
                 <div class="input-group input-group-sm browse-voicevox-key-input">
-                  <input type="password" class="form-control" id="browseVoicevoxApiKey" autocomplete="off">
+                  <input
+                    type="password"
+                    class="form-control"
+                    id="browseVoicevoxApiKey"
+                    name="voicevox_api_key_manual"
+                    autocomplete="new-password"
+                    autocorrect="off"
+                    autocapitalize="none"
+                    spellcheck="false"
+                    data-form-type="other"
+                    data-lpignore="true"
+                    data-1p-ignore="true"
+                  >
                   <button
                     type="button"
                     class="btn browse-voicevox-key-toggle"
@@ -199,6 +251,11 @@
                   Preview Voice
                 </button>
               </div>
+              <p class="small text-muted mb-1">
+                Truy cập
+                <a href="https://su-shiki.com/api/" target="_blank" rel="noopener noreferrer">su-shiki.com/api/</a>
+                để lấy API key.
+              </p>
 
               <div class="browse-voicevox-generate__checks">
                 <label class="form-check">
@@ -273,6 +330,7 @@
               <button type="button" class="btn btn-sm browse-voicevox-btn browse-voicevox-btn--save" id="browseVoicevoxSaveSettingsBtn">Lưu thiết lập</button>
               <button type="button" class="btn btn-sm browse-voicevox-btn browse-voicevox-btn--reset" id="browseVoicevoxResetDefaultsBtn">Reset Default</button>
               <button type="button" class="btn btn-sm browse-voicevox-btn browse-voicevox-btn--retry" id="browseVoicevoxRetryFailedBtn">Tạo lại mục lỗi</button>
+              <button type="button" class="btn btn-sm browse-voicevox-btn browse-voicevox-btn--cancel-generate d-none" id="browseVoicevoxCancelGenerateBtn">Hủy tạo voice</button>
               <button type="button" class="btn btn-sm browse-voicevox-btn browse-voicevox-btn--generate" id="browseVoicevoxGenerateBtn">Generate Audio</button>
             </div>
           </div>

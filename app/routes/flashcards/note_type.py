@@ -132,7 +132,7 @@ def notes_list_page():
         if note_type_obj:
             sorted_fields = sorted(note_type_obj.field_defs, key=lambda f: f.position)
             for fd in sorted_fields:
-                if fd.field_type in {"text", "richtext"}:
+                if fd.field_type in {"text", "richtext", "markdown"}:
                     first_field = fd.name
                     break
         title = (note.field_values or {}).get(first_field or "", "") or f"Note #{note.id}"

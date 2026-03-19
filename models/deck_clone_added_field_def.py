@@ -16,7 +16,16 @@ class DeckCloneAddedFieldDef(db.Model):
     )
     name = db.Column(db.String(255), nullable=False)
     field_type = db.Column(
-        db.Enum("text", "richtext", "image", "audio", "diagram", name="deck_clone_field_type_enum", native_enum=False),
+        db.Enum(
+            "text",
+            "richtext",
+            "markdown",
+            "image",
+            "audio",
+            "diagram",
+            name="deck_clone_field_type_enum",
+            native_enum=False,
+        ),
         nullable=False,
         default="text",
     )

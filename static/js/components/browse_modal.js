@@ -19,6 +19,8 @@
   const unsavedModalInstance = window.bootstrap.Modal.getOrCreateInstance(unsavedModalEl);
   const bulkDeleteModalInstance = window.bootstrap.Modal.getOrCreateInstance(bulkDeleteModalEl);
   const VOICEVOX_BATCH_SIZE = 4;
+  const VOICEVOX_GENERATE_CONTROLLER_KEY = "voicevox-generate";
+  const MARKDOWN_PROXY_MEDIA_RE = /^\/media\/proxy\/[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 
   const els = {
     contextLabel: document.getElementById("browseContextLabel"),
@@ -32,6 +34,7 @@
     voicevoxSaveSettingsBtn: document.getElementById("browseVoicevoxSaveSettingsBtn"),
     voicevoxResetDefaultsBtn: document.getElementById("browseVoicevoxResetDefaultsBtn"),
     voicevoxRetryFailedBtn: document.getElementById("browseVoicevoxRetryFailedBtn"),
+    voicevoxCancelGenerateBtn: document.getElementById("browseVoicevoxCancelGenerateBtn"),
     voicevoxGenerateBtn: document.getElementById("browseVoicevoxGenerateBtn"),
     voicevoxPreviewBtn: document.getElementById("browseVoicevoxPreviewBtn"),
     voicevoxSelectedNotes: document.getElementById("browseVoicevoxSelectedNotes"),
@@ -89,6 +92,7 @@
     editorForm: document.getElementById("browseEditorForm"),
     editorDeck: document.getElementById("browseEditorDeck"),
     editorTags: document.getElementById("browseEditorTags"),
+    editorMarkdownToolbar: document.getElementById("browseEditorMarkdownToolbar"),
     editorFields: document.getElementById("browseEditorFields"),
     saveBtn: document.getElementById("browseSaveBtn"),
     revertBtn: document.getElementById("browseRevertBtn"),
@@ -119,6 +123,7 @@
     loadingTree: false,
     loadingRows: false,
     loadingDetail: false,
+    rowsRequestSeq: 0,
     query: {
       keyword: "",
       status: "all",
@@ -171,6 +176,7 @@
       savingSettings: false,
       generating: false,
       generationMode: "",
+      cancelRequested: false,
       previewing: false,
       previewObjectUrl: "",
       batchSize: VOICEVOX_BATCH_SIZE,
@@ -194,6 +200,9 @@
     },
   };
 
+  let browseMarkdownManager = null;
+  let browseMarkdownEditors = new Map();
+
   function escapeHtml(value) {
     const text = value == null ? "" : String(value);
     return text
@@ -202,6 +211,14 @@
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;")
       .replace(/'/g, "&#39;");
+  }
+
+  function cssEscape(value) {
+    const raw = String(value == null ? "" : value);
+    if (window.CSS && typeof window.CSS.escape === "function") {
+      return window.CSS.escape(raw);
+    }
+    return raw.replace(/["\\]/g, "\\$&");
   }
 
   function debounce(fn, delay = 250) {
@@ -247,6 +264,195 @@
       return text;
     }
     return `${text.slice(0, maxLength - 1)}...`;
+  }
+
+  function isImageFile(file) {
+    return Boolean(file && String(file.type || "").toLowerCase().startsWith("image/"));
+  }
+
+  function normalizeMarkdownAlt(raw) {
+    const normalized = String(raw || "image")
+      .replace(/[\[\]\(\)]/g, "")
+      .trim()
+      .slice(0, 80);
+    return normalized || "image";
+  }
+
+  function markdownTextToPreviewHtml(rawText) {
+    return escapeHtml(rawText).replace(/\n/g, "<br>");
+  }
+
+  function renderMarkdownPreviewHtml(rawMarkdown) {
+    const source = String(rawMarkdown || "").replace(/\r\n?/g, "\n");
+    if (!source.trim()) {
+      return '<div class="browse-editor-markdown-preview-empty">Preview trống.</div>';
+    }
+
+    const imageRe = /!\[([^\]]*)\]\(([^)\s]+)\)/g;
+    const chunks = [];
+    let cursor = 0;
+    let match;
+
+    while ((match = imageRe.exec(source)) !== null) {
+      const before = source.slice(cursor, match.index);
+      if (before) {
+        chunks.push(`<div class="browse-editor-markdown-preview-text">${markdownTextToPreviewHtml(before)}</div>`);
+      }
+
+      const alt = String(match[1] || "").trim().slice(0, 160) || "image";
+      const imageUrl = String(match[2] || "").trim();
+      if (MARKDOWN_PROXY_MEDIA_RE.test(imageUrl)) {
+        chunks.push(
+          `<figure class="browse-editor-markdown-preview-figure"><img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(alt)}" loading="lazy"></figure>`
+        );
+      } else {
+        chunks.push(`<div class="browse-editor-markdown-preview-text">${markdownTextToPreviewHtml(match[0])}</div>`);
+      }
+      cursor = imageRe.lastIndex;
+    }
+
+    const tail = source.slice(cursor);
+    if (tail) {
+      chunks.push(`<div class="browse-editor-markdown-preview-text">${markdownTextToPreviewHtml(tail)}</div>`);
+    }
+
+    return chunks.length
+      ? chunks.join("")
+      : '<div class="browse-editor-markdown-preview-empty">Preview trống.</div>';
+  }
+
+  function syncMarkdownPreviewForTextarea(textarea) {
+    if (!(textarea instanceof HTMLTextAreaElement) || !els.editorFields) {
+      return;
+    }
+    const fieldName = String(textarea.dataset.browseField || "").trim();
+    if (!fieldName) {
+      return;
+    }
+    const previewEl = els.editorFields.querySelector(
+      `[data-markdown-preview-for="${cssEscape(fieldName)}"]`
+    );
+    if (!(previewEl instanceof HTMLElement)) {
+      return;
+    }
+    previewEl.innerHTML = renderMarkdownPreviewHtml(textarea.value);
+  }
+
+  function refreshMarkdownPreviewsInEditor() {
+    if (!els.editorFields) {
+      return;
+    }
+    els.editorFields
+      .querySelectorAll('textarea[data-markdown-inline="1"][data-browse-field]')
+      .forEach((textarea) => {
+        syncMarkdownPreviewForTextarea(textarea);
+      });
+  }
+
+  function resetBrowseMarkdownEditors() {
+    browseMarkdownEditors.clear();
+    if (browseMarkdownManager) {
+      browseMarkdownManager.destroyAll();
+    }
+    if (!els.editorMarkdownToolbar) {
+      browseMarkdownManager = null;
+      return;
+    }
+    if (window.FlamaMarkdownEditor) {
+      browseMarkdownManager = window.FlamaMarkdownEditor.createManager({
+        toolbarHost: els.editorMarkdownToolbar,
+      });
+      els.editorMarkdownToolbar.classList.remove("d-none");
+      return;
+    }
+    browseMarkdownManager = null;
+    els.editorMarkdownToolbar.classList.add("d-none");
+    els.editorMarkdownToolbar.replaceChildren();
+  }
+
+  function initBrowseMarkdownEditors(fields, values) {
+    resetBrowseMarkdownEditors();
+    const markdownFields = Array.isArray(fields)
+      ? fields.filter((field) => String(field?.field_type || "").trim().toLowerCase() === "markdown")
+      : [];
+    if (!markdownFields.length) {
+      if (els.editorMarkdownToolbar) {
+        els.editorMarkdownToolbar.classList.add("d-none");
+        els.editorMarkdownToolbar.replaceChildren();
+      }
+      browseMarkdownManager = null;
+      return;
+    }
+    if (!browseMarkdownManager || !els.editorFields || !Array.isArray(fields)) {
+      return;
+    }
+    markdownFields.forEach((field) => {
+      const name = String(field?.name || "").trim();
+      if (!name) {
+        return;
+      }
+      const mount = els.editorFields.querySelector(`[data-browse-markdown-mount="${cssEscape(name)}"]`);
+      if (!(mount instanceof HTMLElement)) {
+        return;
+      }
+      const value = values && values[name] != null ? String(values[name]) : "";
+      const editor = browseMarkdownManager.register({
+        mount,
+        fieldName: name,
+        label: name,
+        inputName: "",
+        value,
+        minHeight: "2.75rem",
+        hint: "",
+        uploadImage: (file, currentEditor) => uploadMarkdownInlineMedia(name, file, currentEditor),
+        onChange: (nextValue) => {
+          updateDraftField(name, nextValue);
+        },
+      });
+      browseMarkdownEditors.set(name, editor);
+    });
+  }
+
+  function insertMarkdownImageSyntax(textarea, imageUrl, filename) {
+    if (!(textarea instanceof HTMLTextAreaElement) || !imageUrl) {
+      return;
+    }
+    const currentValue = String(textarea.value || "");
+    const start = Number(textarea.selectionStart ?? currentValue.length);
+    const end = Number(textarea.selectionEnd ?? start);
+    const before = currentValue.slice(0, start);
+    const after = currentValue.slice(end);
+    const needsLeadingBreak = before.length > 0 && !before.endsWith("\n");
+    const needsTrailingBreak = after.length > 0 && !after.startsWith("\n");
+    const alt = normalizeMarkdownAlt(filename || "image");
+    const snippet = `${needsLeadingBreak ? "\n" : ""}![${alt}](${imageUrl})${needsTrailingBreak ? "\n" : ""}`;
+
+    textarea.value = `${before}${snippet}${after}`;
+    const cursor = before.length + snippet.length;
+    textarea.focus();
+    textarea.setSelectionRange(cursor, cursor);
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+
+  function imageFileFromClipboardData(clipboardData) {
+    if (!clipboardData || !clipboardData.items) {
+      return null;
+    }
+    for (const item of clipboardData.items) {
+      if (item.kind !== "file") {
+        continue;
+      }
+      const file = item.getAsFile();
+      if (isImageFile(file)) {
+        return file;
+      }
+    }
+    return null;
+  }
+
+  function firstImageFile(filesLike) {
+    const files = Array.from(filesLike || []);
+    return files.find((candidate) => isImageFile(candidate)) || null;
   }
 
   function findPreferredRowInLoadedRows() {
@@ -303,6 +509,50 @@
       return fallback;
     }
     return Math.max(minimum, Math.min(maximum, n));
+  }
+
+  function normalizeBooleanFlag(value, fallback = false) {
+    if (typeof value === "boolean") {
+      return value;
+    }
+    if (typeof value === "number") {
+      return value !== 0;
+    }
+    const text = String(value == null ? "" : value).trim().toLowerCase();
+    if (!text) {
+      return fallback;
+    }
+    if (text === "1" || text === "true" || text === "yes" || text === "on") {
+      return true;
+    }
+    if (text === "0" || text === "false" || text === "no" || text === "off") {
+      return false;
+    }
+    return fallback;
+  }
+
+  function applyInputAutofillGuard(input, { password = false } = {}) {
+    if (!input) {
+      return;
+    }
+    input.setAttribute("autocomplete", password ? "new-password" : "off");
+    input.setAttribute("autocorrect", "off");
+    input.setAttribute("autocapitalize", "none");
+    input.setAttribute("spellcheck", "false");
+    input.setAttribute("data-form-type", "other");
+    input.setAttribute("data-lpignore", "true");
+    input.setAttribute("data-1p-ignore", "true");
+    if (!input.name) {
+      const base = String(input.id || "field").replace(/[^a-z0-9_]/gi, "_");
+      input.name = `manual_${base}_${Math.random().toString(36).slice(2, 8)}`;
+    }
+    input.readOnly = true;
+    const unlock = () => {
+      input.readOnly = false;
+    };
+    input.addEventListener("focus", unlock, { once: true });
+    input.addEventListener("pointerdown", unlock, { once: true });
+    input.addEventListener("keydown", unlock, { once: true });
   }
 
   function formatSliderValue(value) {
@@ -695,6 +945,10 @@
     const settings = rawSettings && typeof rawSettings === "object" ? rawSettings : {};
     return {
       characterId: String(settings?.character_id || "").trim(),
+      sourceField: String(settings?.source_field ?? settings?.sourceField ?? "").trim(),
+      destinationField: String(settings?.destination_field ?? settings?.destinationField ?? "").trim(),
+      appendAudio: normalizeBooleanFlag(settings?.append_audio ?? settings?.appendAudio, false),
+      useOpus: normalizeBooleanFlag(settings?.use_opus ?? settings?.useOpus, false),
       volumeScale: clampRange(settings?.volume_scale ?? settings?.volumeScale ?? settings?.volume, 0, 2, 1.0),
       pitchScale: clampRange(settings?.pitch_scale ?? settings?.pitch, -0.4, 0.4, 0.0),
       speedScale: clampRange(settings?.speed_scale ?? settings?.speed, 0.1, 4.0, 1.0),
@@ -722,6 +976,7 @@
       state.voicevox.savingSettings ||
       state.voicevox.generating ||
       state.voicevox.previewing;
+    const generating = Boolean(state.voicevox.generating);
     const controls = [
       els.voicevoxCharacter,
       els.voicevoxSourceField,
@@ -766,6 +1021,16 @@
         ? '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span>'
         : "Tạo lại mục lỗi";
     }
+    if (els.voicevoxCancelGenerateBtn) {
+      els.voicevoxCancelGenerateBtn.classList.toggle("d-none", !generating);
+      if (!generating) {
+        els.voicevoxCancelGenerateBtn.disabled = true;
+        els.voicevoxCancelGenerateBtn.textContent = "Hủy tạo voice";
+      } else {
+        els.voicevoxCancelGenerateBtn.disabled = Boolean(state.voicevox.cancelRequested);
+        els.voicevoxCancelGenerateBtn.textContent = state.voicevox.cancelRequested ? "Đang hủy..." : "Hủy tạo voice";
+      }
+    }
     if (els.voicevoxSaveSettingsBtn) {
       els.voicevoxSaveSettingsBtn.disabled = loading;
       els.voicevoxSaveSettingsBtn.innerHTML = state.voicevox.savingSettings
@@ -788,7 +1053,7 @@
     const sourceCandidates = rawNoteTypeFields
       .filter((field) => {
         const kind = String(field?.field_type || "text").toLowerCase();
-        return kind === "text" || kind === "richtext";
+        return kind === "text" || kind === "richtext" || kind === "markdown";
       })
       .map((field) => ({
         name: String(field?.name || ""),
@@ -832,6 +1097,10 @@
     state.voicevox.defaultSettings = defaults;
 
     state.voicevox.characterId = String(settings?.character_id || defaults.characterId || "").trim();
+    state.voicevox.sourceField = String(settings?.source_field || defaults.sourceField || "").trim();
+    state.voicevox.destinationField = String(settings?.destination_field || defaults.destinationField || "").trim();
+    state.voicevox.appendAudio = normalizeBooleanFlag(settings?.append_audio, defaults.appendAudio);
+    state.voicevox.useOpus = normalizeBooleanFlag(settings?.use_opus, defaults.useOpus);
     state.voicevox.volumeScale = clampRange(settings?.volume_scale, 0, 2, defaults.volumeScale);
     state.voicevox.pitchScale = clampRange(settings?.pitch_scale ?? settings?.pitch, -0.4, 0.4, defaults.pitchScale);
     state.voicevox.speedScale = clampRange(settings?.speed_scale ?? settings?.speed, 0.1, 4.0, defaults.speedScale);
@@ -872,6 +1141,12 @@
     try {
       const requestBody = {};
       const apiKeyOverride = voicevoxApiKeyOverrideValue();
+      if (!state.voicevox.hasApiKey && !apiKeyOverride) {
+        state.voicevox.characters = [];
+        state.voicevox.characterError = "Vui lòng nhập API key VoiceVox trước khi tải danh sách nhân vật.";
+        renderVoicevoxCharacterOptions();
+        return;
+      }
       if (apiKeyOverride) {
         requestBody.api_key = apiKeyOverride;
       }
@@ -939,6 +1214,10 @@
   function voicevoxProfileSettingsPayload() {
     return {
       character_id: String(state.voicevox.characterId || "").trim(),
+      source_field: String(state.voicevox.sourceField || "").trim(),
+      destination_field: String(state.voicevox.destinationField || "").trim(),
+      append_audio: Boolean(state.voicevox.appendAudio),
+      use_opus: Boolean(state.voicevox.useOpus),
       volume_scale: state.voicevox.volumeScale,
       pitch_scale: state.voicevox.pitchScale,
       speed_scale: state.voicevox.speedScale,
@@ -955,15 +1234,12 @@
     if (state.voicevox.savingSettings) {
       return false;
     }
-    if (!state.voicevox.settingsDirty) {
-      if (notify) {
-        window.alert("Thiết lập đã được lưu.");
-      }
-      return false;
-    }
     const settings = voicevoxProfileSettingsPayload();
     const nextHash = JSON.stringify(settings);
-    if (nextHash === state.voicevox.lastSavedSettingsHash) {
+    const apiKeyOverride = voicevoxApiKeyOverrideValue();
+    const hasKeyMutation = Boolean(apiKeyOverride);
+    const hasSettingsMutation = state.voicevox.settingsDirty || nextHash !== state.voicevox.lastSavedSettingsHash;
+    if (!hasSettingsMutation && !hasKeyMutation) {
       state.voicevox.settingsDirty = false;
       if (notify) {
         window.alert("Thiết lập đã được lưu.");
@@ -973,18 +1249,21 @@
     state.voicevox.savingSettings = true;
     setVoicevoxActionState();
     try {
+      const requestBody = {};
+      if (hasSettingsMutation) {
+        requestBody.settings = settings;
+      }
+      if (apiKeyOverride) {
+        requestBody.api_key = apiKeyOverride;
+      }
       const payload = await requestJson("/api/tts/providers/voicevox/profile", {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ settings }),
+        body: JSON.stringify(requestBody),
       });
-      state.voicevox.lastSavedSettingsHash = nextHash;
-      state.voicevox.settingsDirty = false;
-      state.voicevox.keyStatus = String(payload?.profile?.key_status || state.voicevox.keyStatus || "unknown");
-      state.voicevox.lastValidationError = String(payload?.profile?.last_validation_error || "");
-      updateVoicevoxMetaLabels();
+      applyVoicevoxProfilePayload(payload);
       if (notify) {
         window.alert("Đã lưu thiết lập VoiceVox.");
       }
@@ -1002,9 +1281,30 @@
     }
   }
 
+  async function ensureVoicevoxApiKeyPersistedForAction(actionLabel) {
+    const apiKeyOverride = voicevoxApiKeyOverrideValue();
+    if (!state.voicevox.hasApiKey && !apiKeyOverride) {
+      window.alert(`Không thể ${actionLabel}: vui lòng nhập API key VoiceVox và lưu trước.`);
+      return false;
+    }
+    if (!apiKeyOverride) {
+      return true;
+    }
+    const saved = await persistVoicevoxSettings();
+    if (!saved && !state.voicevox.hasApiKey) {
+      window.alert(`Không thể ${actionLabel}: không lưu được API key VoiceVox.`);
+      return false;
+    }
+    return true;
+  }
+
   function resetVoicevoxSettingsToDefault() {
     const defaults = state.voicevox.defaultSettings || buildVoicevoxDefaultSettings({});
     state.voicevox.characterId = String(defaults.characterId || "").trim();
+    state.voicevox.sourceField = String(defaults.sourceField || "").trim();
+    state.voicevox.destinationField = String(defaults.destinationField || "").trim();
+    state.voicevox.appendAudio = Boolean(defaults.appendAudio);
+    state.voicevox.useOpus = Boolean(defaults.useOpus);
     state.voicevox.volumeScale = defaults.volumeScale;
     state.voicevox.pitchScale = defaults.pitchScale;
     state.voicevox.speedScale = defaults.speedScale;
@@ -1063,6 +1363,10 @@
 
   async function validateVoicevoxApiKeyBeforeAction(actionLabel) {
     if (state.voicevox.validatingKey) {
+      return false;
+    }
+    const keyPersisted = await ensureVoicevoxApiKeyPersistedForAction(actionLabel);
+    if (!keyPersisted) {
       return false;
     }
     state.voicevox.validatingKey = true;
@@ -1287,6 +1591,33 @@
     renderVoicevoxProgressAndFailed();
   }
 
+  function clearVoicevoxGenerateController(controller) {
+    if (controller) {
+      if (state.controllers[VOICEVOX_GENERATE_CONTROLLER_KEY] === controller) {
+        delete state.controllers[VOICEVOX_GENERATE_CONTROLLER_KEY];
+      }
+      return;
+    }
+    if (state.controllers[VOICEVOX_GENERATE_CONTROLLER_KEY]) {
+      delete state.controllers[VOICEVOX_GENERATE_CONTROLLER_KEY];
+    }
+  }
+
+  function cancelVoicevoxGenerate() {
+    if (!state.voicevox.generating || state.voicevox.cancelRequested) {
+      return;
+    }
+    state.voicevox.cancelRequested = true;
+    state.voicevox.progressMessage = "Đang hủy...";
+    renderVoicevoxProgressAndFailed();
+    const controller = state.controllers[VOICEVOX_GENERATE_CONTROLLER_KEY];
+    if (controller) {
+      controller.abort();
+      clearVoicevoxGenerateController(controller);
+    }
+    setVoicevoxActionState();
+  }
+
   async function runVoicevoxGenerateBatches(targets, mode) {
     const voiceLabel = selectedVoiceLabel();
     const safeTargets = Array.isArray(targets) ? targets : [];
@@ -1294,7 +1625,9 @@
     const retryKeys = new Set(safeTargets.map((item) => String(item?.key || "")));
     const failedFromRun = [];
     let fatalStopReason = "";
+    let cancelledByUser = false;
 
+    state.voicevox.cancelRequested = false;
     resetVoicevoxProgressCounters(safeTargets.length, mode);
     if (mode !== "retry") {
       state.voicevox.failedNotes = [];
@@ -1302,6 +1635,10 @@
     renderVoicevoxProgressAndFailed();
 
     for (let batchIndex = 0; batchIndex < batches.length; batchIndex += 1) {
+      if (state.voicevox.cancelRequested) {
+        cancelledByUser = true;
+        break;
+      }
       const batchTargets = batches[batchIndex];
       if (!batchTargets.length) {
         continue;
@@ -1315,24 +1652,36 @@
 
       let batchFailed = [];
       try {
-        const payload = await requestJson("/vocabulary/api/browse/voicevox/generate", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            card_ids: batchTargets.map((item) => item.cardId),
-            source_field: state.voicevox.sourceField,
-            destination_field: state.voicevox.destinationField,
-            character_id: state.voicevox.characterId,
-            settings: voicevoxSettingsPayload(),
-            append_audio: Boolean(state.voicevox.appendAudio),
-            use_opus: Boolean(state.voicevox.useOpus),
-            speaker_label: voiceLabel.speaker,
-            style_label: voiceLabel.style,
-            api_key: voicevoxApiKeyOverrideValue(),
-          }),
-        });
+        const controller = withAbortController(VOICEVOX_GENERATE_CONTROLLER_KEY);
+        let payload;
+        try {
+          payload = await requestJson("/vocabulary/api/browse/voicevox/generate", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            signal: controller.signal,
+            body: JSON.stringify({
+              card_ids: batchTargets.map((item) => item.cardId),
+              source_field: state.voicevox.sourceField,
+              destination_field: state.voicevox.destinationField,
+              character_id: state.voicevox.characterId,
+              settings: voicevoxSettingsPayload(),
+              append_audio: Boolean(state.voicevox.appendAudio),
+              use_opus: Boolean(state.voicevox.useOpus),
+              speaker_label: voiceLabel.speaker,
+              style_label: voiceLabel.style,
+              api_key: voicevoxApiKeyOverrideValue(),
+            }),
+          });
+        } finally {
+          clearVoicevoxGenerateController(controller);
+        }
+
+        if (state.voicevox.cancelRequested) {
+          cancelledByUser = true;
+          break;
+        }
 
         state.voicevox.outputRoot = String(payload?.output_root || state.voicevox.outputRoot || "");
         const skipped = Array.isArray(payload?.skipped) ? payload.skipped : [];
@@ -1358,6 +1707,10 @@
           }
         }
       } catch (error) {
+        if (error?.name === "AbortError" || state.voicevox.cancelRequested) {
+          cancelledByUser = true;
+          break;
+        }
         const batchReason = String(error?.message || "Generate VoiceVox thất bại.");
         batchFailed = batchTargets.map((item) => buildVoicevoxFailedNote(item, batchReason));
       }
@@ -1372,6 +1725,11 @@
       state.voicevox.progressFailed += batchFailedCount;
       state.voicevox.progressMessage = `Batch ${batchIndex + 1}/${batches.length}`;
       renderVoicevoxProgressAndFailed();
+
+      if (state.voicevox.cancelRequested) {
+        cancelledByUser = true;
+        break;
+      }
 
       const keyErrorItem = normalizedBatchFailed.find((item) => isVoicevoxKeyOrPointError(item.reason));
       if (!keyErrorItem) {
@@ -1400,14 +1758,20 @@
       state.voicevox.failedNotes = dedupeVoicevoxFailedNotes(failedFromRun);
     }
 
-    state.voicevox.progressMessage = fatalStopReason ? "Đã dừng sớm vì key/points." : "Hoàn tất.";
+    if (cancelledByUser || state.voicevox.cancelRequested) {
+      state.voicevox.progressMessage = "Đã hủy bởi người dùng.";
+    } else {
+      state.voicevox.progressMessage = fatalStopReason ? "Đã dừng sớm vì key/points." : "Hoàn tất.";
+    }
     renderVoicevoxProgressAndFailed();
 
     const processed = Number(state.voicevox.progressProcessed || 0);
     const total = Number(state.voicevox.progressTotal || 0);
     const generated = Number(state.voicevox.progressGenerated || 0);
     const failed = Number(state.voicevox.progressFailed || 0);
-    let summary = `Đã xử lý ${processed}/${total} từ. Thành công ${generated}, lỗi ${failed}.`;
+    let summary = (cancelledByUser || state.voicevox.cancelRequested)
+      ? `Đã hủy tạo audio. Đã xử lý ${processed}/${total} từ. Thành công ${generated}, lỗi ${failed}.`
+      : `Đã xử lý ${processed}/${total} từ. Thành công ${generated}, lỗi ${failed}.`;
     if (failed > 0) {
       summary += '\nBạn có thể bấm "Tạo lại mục lỗi" sau khi đổi API key.';
     }
@@ -1461,6 +1825,7 @@
       return;
     }
 
+    state.voicevox.cancelRequested = false;
     state.voicevox.generating = true;
     state.voicevox.generationMode = "all";
     setVoicevoxActionState();
@@ -1469,6 +1834,8 @@
     } catch (error) {
       window.alert(`Generate VoiceVox thất bại: ${error.message}`);
     } finally {
+      clearVoicevoxGenerateController();
+      state.voicevox.cancelRequested = false;
       state.voicevox.generating = false;
       state.voicevox.generationMode = "";
       setVoicevoxActionState();
@@ -1509,6 +1876,7 @@
       return;
     }
 
+    state.voicevox.cancelRequested = false;
     state.voicevox.generating = true;
     state.voicevox.generationMode = "retry";
     setVoicevoxActionState();
@@ -1517,6 +1885,8 @@
     } catch (error) {
       window.alert(`Tạo lại mục lỗi thất bại: ${error.message}`);
     } finally {
+      clearVoicevoxGenerateController();
+      state.voicevox.cancelRequested = false;
       state.voicevox.generating = false;
       state.voicevox.generationMode = "";
       setVoicevoxActionState();
@@ -1532,6 +1902,10 @@
 
   function setVoicevoxModalOpen(open) {
     if (!els.voicevoxModal) {
+      return;
+    }
+    if (!open && state.voicevox.generating) {
+      window.alert('Đang tạo audio. Bấm "Hủy tạo voice" để dừng trước khi đóng modal.');
       return;
     }
     els.voicevoxModal.classList.toggle("d-none", !open);
@@ -1732,11 +2106,10 @@
         const tags = Array.isArray(row.tags) ? row.tags.join(", ") : "";
         return `
           <tr class="${selected ? "is-selected" : ""}" data-card-id="${escapeHtml(row.card_id)}">
-            ${
-              state.checkboxMode
-                ? `<td class="browse-select-col"><input type="checkbox" class="form-check-input browse-row-checkbox" data-card-id="${escapeHtml(row.card_id)}" ${selected ? "checked" : ""}></td>`
-                : ""
-            }
+            ${state.checkboxMode
+            ? `<td class="browse-select-col"><input type="checkbox" class="form-check-input browse-row-checkbox" data-card-id="${escapeHtml(row.card_id)}" ${selected ? "checked" : ""}></td>`
+            : ""
+          }
             <td title="${escapeHtml(row.card_type || "")}">${escapeHtml(row.card_type || "")}</td>
             <td title="${escapeHtml(row.due_label || "")}">${escapeHtml(row.due_label || "")}</td>
             <td title="${escapeHtml(row.deck_name || "")}">${escapeHtml(row.deck_name || "")}</td>
@@ -1865,6 +2238,108 @@
             `;
           }
 
+          const isMarkdown = type === "markdown";
+          const markdownHint = "";
+          const markdownPreview = isMarkdown
+            ? `<div class="browse-editor-markdown-preview" data-markdown-preview-for="${escapeHtml(name)}"></div>`
+            : "";
+
+          return `
+            <div class="browse-editor-field">
+              <label>${escapeHtml(name)} ${requiredBadge}</label>
+              <textarea rows="${isMarkdown ? "7" : "2"}" ${commonAttrs} data-markdown-inline="${isMarkdown ? "1" : "0"}">${escapeHtml(value)}</textarea>
+              ${markdownHint}
+              ${markdownPreview}
+            </div>
+          `;
+        })
+        .join("");
+
+      els.editorFields.innerHTML = fieldsHtml;
+      refreshMarkdownPreviewsInEditor();
+    }
+
+    setSaveButtons();
+  }
+
+  function renderEditor() {
+    const hasDetail = Boolean(state.detail && state.draft);
+    if (els.editorEmpty) {
+      els.editorEmpty.classList.toggle("d-none", hasDetail);
+    }
+    if (els.editorForm) {
+      els.editorForm.classList.toggle("d-none", !hasDetail);
+    }
+    if (!hasDetail) {
+      resetBrowseMarkdownEditors();
+      return;
+    }
+
+    const detail = state.detail;
+    const draft = state.draft;
+
+    if (els.editorDeck) {
+      const options = ['<option value="">(No deck)</option>'];
+      const appendOptions = (nodes, depth) => {
+        nodes.forEach((node) => {
+          const indent = depth > 0 ? `${"&nbsp;".repeat(depth * 3)}&boxvr;&nbsp;` : "";
+          const selected = String(draft.deck_id || "") === String(node.id) ? " selected" : "";
+          options.push(`<option value="${escapeHtml(String(node.id))}"${selected}>${indent}${escapeHtml(node.name)}</option>`);
+          appendOptions(node.children || [], depth + 1);
+        });
+      };
+      appendOptions(state.deckTree, 0);
+      els.editorDeck.innerHTML = options.join("");
+    }
+
+    if (els.editorTags) {
+      els.editorTags.value = Array.isArray(draft.tags) ? draft.tags.join(", ") : "";
+    }
+
+    if (els.editorFields) {
+      const mediaByField = new Map();
+      for (const asset of detail.media_assets || []) {
+        mediaByField.set(asset.field_name, asset);
+      }
+
+      const fieldsHtml = (detail.fields || [])
+        .map((field) => {
+          const name = field.name;
+          const type = field.field_type || "text";
+          const value = draft.field_values[name] == null ? "" : String(draft.field_values[name]);
+          const media = mediaByField.get(name);
+          const requiredBadge = field.required ? '<span class="text-danger">*</span>' : "";
+          const commonAttrs = `data-browse-field="${escapeHtml(name)}" data-browse-type="${escapeHtml(type)}"`;
+          if (type === "image" || type === "audio" || type === "diagram") {
+            const mediaMeta = media
+              ? `File: ${escapeHtml(media.filename || media.id || "")}`
+              : "No media attached yet.";
+            const allowPreviewBtn = type !== "audio";
+            const previewBtn = media && allowPreviewBtn
+              ? `<a class="btn btn-sm btn-outline-secondary browse-editor-media-preview" href="${escapeHtml(media.url || "#")}" target="_blank" rel="noopener">Preview</a>`
+              : "";
+            return `
+              <div class="browse-editor-field">
+                <label>${escapeHtml(name)} ${requiredBadge}</label>
+                <input type="text" ${commonAttrs} class="form-control form-control-sm" value="${escapeHtml(value)}" placeholder="Media asset id or URL">
+                <div class="browse-editor-media-meta">${mediaMeta}</div>
+                <div class="browse-editor-media-actions">
+                  ${previewBtn}
+                  <input type="file" class="form-control form-control-sm" data-upload-field="${escapeHtml(name)}" />
+                </div>
+              </div>
+            `;
+          }
+
+          if (type === "markdown") {
+            return `
+              <div class="browse-editor-field">
+                <label>${escapeHtml(name)} ${requiredBadge}</label>
+                <div data-browse-markdown-mount="${escapeHtml(name)}"></div>
+              </div>
+            `;
+          }
+
           return `
             <div class="browse-editor-field">
               <label>${escapeHtml(name)} ${requiredBadge}</label>
@@ -1875,6 +2350,7 @@
         .join("");
 
       els.editorFields.innerHTML = fieldsHtml;
+      initBrowseMarkdownEditors(detail.fields || [], draft.field_values || {});
     }
 
     setSaveButtons();
@@ -2003,9 +2479,8 @@
   }
 
   async function loadCards({ reset = false, keepSelection = false } = {}) {
-    if (state.loadingRows) {
-      return;
-    }
+    const requestSeq = state.rowsRequestSeq + 1;
+    state.rowsRequestSeq = requestSeq;
     if (reset) {
       state.page = 1;
       state.rows = [];
@@ -2035,6 +2510,9 @@
       const payload = await requestJson(`/vocabulary/api/browse/cards?${params.toString()}`, {
         signal: controller.signal,
       });
+      if (requestSeq !== state.rowsRequestSeq) {
+        return;
+      }
       const incomingRows = Array.isArray(payload.items) ? payload.items : [];
       if (reset) {
         state.rows = incomingRows;
@@ -2079,6 +2557,9 @@
         renderTableMeta();
       }
     } catch (error) {
+      if (requestSeq !== state.rowsRequestSeq) {
+        return;
+      }
       if (error.name !== "AbortError") {
         els.tableBody.innerHTML = `
           <tr>
@@ -2088,7 +2569,9 @@
         renderTableMeta();
       }
     } finally {
-      setRowsLoading(false);
+      if (requestSeq === state.rowsRequestSeq) {
+        setRowsLoading(false);
+      }
     }
   }
 
@@ -2290,6 +2773,58 @@
     }
   }
 
+  async function uploadMarkdownInlineMedia(fieldName, file, textarea) {
+    if (!state.detail || !state.detail.note || !state.detail.note.id || !fieldName || !isImageFile(file)) {
+      return;
+    }
+    if (!(textarea instanceof HTMLTextAreaElement)) {
+      return;
+    }
+
+    const noteId = String(state.detail.note.id || "");
+    const formData = new FormData();
+    formData.append("field_name", fieldName);
+    formData.append("file", file);
+
+    textarea.disabled = true;
+    try {
+      const payload = await requestJson(`/api/notes/${encodeURIComponent(noteId)}/markdown-media`, {
+        method: "POST",
+        body: formData,
+      });
+      insertMarkdownImageSyntax(textarea, payload.url, payload.filename || file.name);
+      updateDraftField(fieldName, textarea.value);
+      syncMarkdownPreviewForTextarea(textarea);
+    } catch (error) {
+      window.alert(`Markdown image upload failed: ${error.message}`);
+    } finally {
+      textarea.disabled = false;
+      textarea.classList.remove("is-dragover");
+    }
+  }
+
+  async function uploadMarkdownInlineMedia(fieldName, file, editor) {
+    if (!state.detail || !state.detail.note || !state.detail.note.id || !fieldName || !isImageFile(file)) {
+      throw new Error("Markdown upload is unavailable.");
+    }
+
+    const noteId = String(state.detail.note.id || "");
+    const formData = new FormData();
+    formData.append("field_name", fieldName);
+    formData.append("file", file);
+
+    const payload = await requestJson(`/api/notes/${encodeURIComponent(noteId)}/markdown-media`, {
+      method: "POST",
+      body: formData,
+    });
+    if (editor && typeof editor.getValue === "function") {
+      window.setTimeout(() => {
+        updateDraftField(fieldName, editor.getValue());
+      }, 0);
+    }
+    return payload;
+  }
+
   function resolveUnsaved(choice) {
     if (!state.unsavedResolver) {
       return;
@@ -2442,6 +2977,10 @@
   }
 
   function setupEvents() {
+    applyInputAutofillGuard(els.deckSearch);
+    applyInputAutofillGuard(els.keyword);
+    applyInputAutofillGuard(els.tag);
+    applyInputAutofillGuard(els.voicevoxApiKey, { password: true });
     syncVoicevoxInputsFromState();
     setVoicevoxActionState();
     const debouncedVoicevoxReload = debounce(() => {
@@ -2497,6 +3036,11 @@
         setVoicevoxModalOpen(false);
       });
     }
+    if (els.voicevoxCancelGenerateBtn) {
+      els.voicevoxCancelGenerateBtn.addEventListener("click", () => {
+        cancelVoicevoxGenerate();
+      });
+    }
     if (els.voicevoxGenerateBtn) {
       els.voicevoxGenerateBtn.addEventListener("click", () => {
         generateVoicevoxAudio().catch(() => undefined);
@@ -2532,30 +3076,47 @@
     if (els.voicevoxSourceField) {
       els.voicevoxSourceField.addEventListener("change", () => {
         state.voicevox.sourceField = String(els.voicevoxSourceField.value || "").trim();
+        state.voicevox.settingsDirty = true;
+        debouncedPersistVoicevoxSettings();
       });
     }
     if (els.voicevoxDestinationField) {
       els.voicevoxDestinationField.addEventListener("change", () => {
         state.voicevox.destinationField = String(els.voicevoxDestinationField.value || "").trim();
+        state.voicevox.settingsDirty = true;
+        debouncedPersistVoicevoxSettings();
       });
     }
     if (els.voicevoxAppendAudio) {
       els.voicevoxAppendAudio.addEventListener("change", () => {
         state.voicevox.appendAudio = Boolean(els.voicevoxAppendAudio.checked);
+        state.voicevox.settingsDirty = true;
+        debouncedPersistVoicevoxSettings();
       });
     }
     if (els.voicevoxUseOpus) {
       els.voicevoxUseOpus.addEventListener("change", () => {
         state.voicevox.useOpus = Boolean(els.voicevoxUseOpus.checked);
+        state.voicevox.settingsDirty = true;
+        debouncedPersistVoicevoxSettings();
       });
     }
     if (els.voicevoxApiKey) {
       els.voicevoxApiKey.addEventListener("input", () => {
+        if (!isModalShown()) {
+          return;
+        }
         state.voicevox.apiKey = String(els.voicevoxApiKey.value || "").trim();
         state.voicevox.keyStatus = "unknown";
         state.voicevox.lastValidationError = "";
         updateVoicevoxMetaLabels();
         debouncedVoicevoxReload();
+      });
+      els.voicevoxApiKey.addEventListener("change", () => {
+        if (!isModalShown()) {
+          return;
+        }
+        persistVoicevoxSettings().catch(() => undefined);
       });
     }
     if (els.voicevoxApiKeyToggleBtn) {
@@ -2599,6 +3160,10 @@
       }).catch(() => undefined);
     });
 
+    modalEl.addEventListener("hidden.bs.modal", () => {
+      resetBrowseMarkdownEditors();
+    });
+
     if (els.refreshBtn) {
       els.refreshBtn.addEventListener("click", async () => {
         await loadDeckTree();
@@ -2611,6 +3176,9 @@
 
     if (els.deckSearch) {
       els.deckSearch.addEventListener("input", () => {
+        if (!isModalShown()) {
+          return;
+        }
         state.deckSearch = String(els.deckSearch.value || "");
         renderDeckTree();
       });
@@ -2662,11 +3230,17 @@
     }
 
     const debouncedFilterReload = debounce(() => {
+      if (!isModalShown()) {
+        return;
+      }
       loadCards({ reset: true, keepSelection: true }).catch(() => undefined);
     }, 280);
 
     if (els.keyword) {
       els.keyword.addEventListener("input", () => {
+        if (!isModalShown()) {
+          return;
+        }
         state.query.keyword = String(els.keyword.value || "");
         debouncedFilterReload();
       });
@@ -2674,6 +3248,9 @@
 
     if (els.status) {
       els.status.addEventListener("change", () => {
+        if (!isModalShown()) {
+          return;
+        }
         state.query.status = String(els.status.value || "all");
         loadCards({ reset: true, keepSelection: true }).catch(() => undefined);
       });
@@ -2681,6 +3258,9 @@
 
     if (els.tag) {
       els.tag.addEventListener("input", () => {
+        if (!isModalShown()) {
+          return;
+        }
         state.query.tag = String(els.tag.value || "");
         debouncedFilterReload();
       });
@@ -2688,6 +3268,9 @@
 
     if (els.sortBy) {
       els.sortBy.addEventListener("change", () => {
+        if (!isModalShown()) {
+          return;
+        }
         state.sort.by = String(els.sortBy.value || "due");
         loadCards({ reset: true, keepSelection: true }).catch(() => undefined);
       });
@@ -2773,6 +3356,9 @@
         const fieldTarget = event.target.closest("[data-browse-field]");
         if (fieldTarget?.dataset.browseField) {
           updateDraftField(fieldTarget.dataset.browseField, fieldTarget.value);
+          if (fieldTarget instanceof HTMLTextAreaElement && fieldTarget.dataset.markdownInline === "1") {
+            syncMarkdownPreviewForTextarea(fieldTarget);
+          }
           return;
         }
         if (event.target === els.editorTags) {
@@ -2794,6 +3380,59 @@
           uploadMedia(uploadFieldInput.dataset.uploadField, uploadFieldInput.files[0]).catch(() => undefined);
           uploadFieldInput.value = "";
         }
+      });
+
+      els.editorForm.addEventListener("paste", (event) => {
+        const textarea = event.target.closest('textarea[data-markdown-inline="1"][data-browse-field]');
+        if (!(textarea instanceof HTMLTextAreaElement)) {
+          return;
+        }
+        const fieldName = String(textarea.dataset.browseField || "").trim();
+        if (!fieldName) {
+          return;
+        }
+        const imageFile = imageFileFromClipboardData(event.clipboardData);
+        if (!imageFile) {
+          return;
+        }
+        event.preventDefault();
+        uploadMarkdownInlineMedia(fieldName, imageFile, textarea).catch(() => undefined);
+      });
+
+      els.editorForm.addEventListener("dragover", (event) => {
+        const textarea = event.target.closest('textarea[data-markdown-inline="1"][data-browse-field]');
+        if (!(textarea instanceof HTMLTextAreaElement)) {
+          return;
+        }
+        const file = firstImageFile(event.dataTransfer?.files || []);
+        if (!file) {
+          return;
+        }
+        event.preventDefault();
+        textarea.classList.add("is-dragover");
+      });
+
+      els.editorForm.addEventListener("dragleave", (event) => {
+        const textarea = event.target.closest('textarea[data-markdown-inline="1"][data-browse-field]');
+        if (!(textarea instanceof HTMLTextAreaElement)) {
+          return;
+        }
+        textarea.classList.remove("is-dragover");
+      });
+
+      els.editorForm.addEventListener("drop", (event) => {
+        const textarea = event.target.closest('textarea[data-markdown-inline="1"][data-browse-field]');
+        if (!(textarea instanceof HTMLTextAreaElement)) {
+          return;
+        }
+        const fieldName = String(textarea.dataset.browseField || "").trim();
+        const imageFile = firstImageFile(event.dataTransfer?.files || []);
+        textarea.classList.remove("is-dragover");
+        if (!fieldName || !imageFile) {
+          return;
+        }
+        event.preventDefault();
+        uploadMarkdownInlineMedia(fieldName, imageFile, textarea).catch(() => undefined);
       });
     }
 

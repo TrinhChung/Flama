@@ -104,6 +104,26 @@ class FlashcardValidationSecurityTests(unittest.TestCase):
         self.assertEqual(response.status_code, 201)
         return response.get_json()["id"]
 
+    def _create_note_type_with_markdown(self):
+        response = self.client.post(
+            "/api/note-types",
+            json={
+                "name": "Security Markdown Note Type",
+                "field_defs": [
+                    {"name": "Word", "field_type": "text", "position": 0, "required": True},
+                    {"name": "Notes", "field_type": "markdown", "position": 1, "required": False},
+                ],
+                "template": {
+                    "name": "Card 1",
+                    "front_html": "<div>{{Word}}</div>",
+                    "back_html": "<div>{{Word}}</div><div>{{{Notes}}}</div>",
+                    "shared_css": "",
+                },
+            },
+        )
+        self.assertEqual(response.status_code, 201)
+        return response.get_json()
+
     def test_text_input_normal_and_richtext_sanitized(self):
         note_type = self._create_note_type_with_media()
         note_id = self._create_note(
@@ -297,6 +317,66 @@ class FlashcardValidationSecurityTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         payload = response.get_json() or {}
         self.assertEqual(payload.get("field"), "q")
+
+    def test_upload_markdown_inline_media_keeps_field_value_unchanged(self):
+        note_type = self._create_note_type_with_markdown()
+        create_note_resp = self.client.post(
+            "/api/notes",
+            json={
+                "note_type_id": note_type["id"],
+                "deck_id": self.deck_id,
+                "field_values": {
+                    "Word": "猫",
+                    "Notes": "Nội dung markdown ban đầu",
+                },
+            },
+        )
+        self.assertEqual(create_note_resp.status_code, 201)
+        note_id = create_note_resp.get_json()["id"]
+
+        upload_resp = self.client.post(
+            f"/api/notes/{note_id}/markdown-media",
+            data={
+                "field_name": "Notes",
+                "file": (io.BytesIO(_MIN_PNG_BYTES), "inline.png", "image/png"),
+            },
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(upload_resp.status_code, 201)
+        upload_payload = upload_resp.get_json() or {}
+        first_asset_id = upload_payload.get("asset_id")
+        self.assertTrue(first_asset_id)
+        self.assertTrue(str(upload_payload.get("url") or "").startswith("/media/proxy/"))
+
+        duplicate_resp = self.client.post(
+            f"/api/notes/{note_id}/markdown-media",
+            data={
+                "field_name": "Notes",
+                "file": (io.BytesIO(_MIN_PNG_BYTES), "inline.png", "image/png"),
+            },
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(duplicate_resp.status_code, 200)
+        duplicate_payload = duplicate_resp.get_json() or {}
+        self.assertEqual(duplicate_payload.get("asset_id"), first_asset_id)
+
+        with self.app.app_context():
+            note = Note.query.get(note_id)
+            self.assertIsNotNone(note)
+            self.assertEqual((note.field_values or {}).get("Notes"), "Nội dung markdown ban đầu")
+            self.assertEqual(MediaAsset.query.filter_by(note_id=note_id, field_name="Notes").count(), 1)
+
+        invalid_target_resp = self.client.post(
+            f"/api/notes/{note_id}/markdown-media",
+            data={
+                "field_name": "Word",
+                "file": (io.BytesIO(_MIN_PNG_BYTES), "inline.png", "image/png"),
+            },
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(invalid_target_resp.status_code, 400)
+        invalid_payload = invalid_target_resp.get_json() or {}
+        self.assertEqual(invalid_payload.get("field"), "field_name")
 
     def test_admin_users_api_rejects_sql_injection_probe_in_query(self):
         response = self.client.get("/admin/api/users?q=1 UNION SELECT")
