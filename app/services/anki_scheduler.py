@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 from typing import Dict, Literal, Optional
 
 Answer = Literal["again", "hard", "good", "easy"]
 CardType = Literal["new", "learning", "review", "relearning"]
+
+
+UTC = timezone.utc
 
 
 @dataclass
@@ -61,16 +64,29 @@ def default_deck_options() -> DeckOptions:
 
 
 def computeAnswerPreview(
-    card: CardState, options: DeckOptions, now: datetime
+    card: CardState, options: DeckOptions, now: datetime, *, timezone_name: str = "UTC"
 ) -> Dict[Answer, Dict[str, float | int | str | None]]:
     previews: Dict[Answer, Dict[str, float | int | str | None]] = {}
     for answer in ("again", "hard", "good", "easy"):
-        simulated = applyAnswer(_clone_card(card), options, now, answer)  # type: ignore[arg-type]
-        previews[answer] = _preview_from_state(simulated, options, now)
+        simulated = applyAnswer(  # type: ignore[arg-type]
+            _clone_card(card),
+            options,
+            now,
+            answer,
+            timezone_name=timezone_name,
+        )
+        previews[answer] = _preview_from_state(simulated, options, now, timezone_name=timezone_name)
     return previews
 
 
-def applyAnswer(card: CardState, options: DeckOptions, now: datetime, answer: Answer) -> CardState:
+def applyAnswer(
+    card: CardState,
+    options: DeckOptions,
+    now: datetime,
+    answer: Answer,
+    *,
+    timezone_name: str = "UTC",
+) -> CardState:
     state = _clone_card(card)
     normalized_type = _normalize_card_type(state.type)
     state.type = normalized_type
@@ -78,10 +94,24 @@ def applyAnswer(card: CardState, options: DeckOptions, now: datetime, answer: An
     state.lastReviewAt = now
 
     if normalized_type in {"new", "learning"}:
-        return _apply_learning(state, options, now, answer, relearning=False)
+        return _apply_learning(
+            state,
+            options,
+            now,
+            answer,
+            relearning=False,
+            timezone_name=timezone_name,
+        )
     if normalized_type == "relearning":
-        return _apply_learning(state, options, now, answer, relearning=True)
-    return _apply_review(state, options, now, answer)
+        return _apply_learning(
+            state,
+            options,
+            now,
+            answer,
+            relearning=True,
+            timezone_name=timezone_name,
+        )
+    return _apply_review(state, options, now, answer, timezone_name=timezone_name)
 
 
 def _apply_learning(
@@ -91,6 +121,7 @@ def _apply_learning(
     answer: Answer,
     *,
     relearning: bool,
+    timezone_name: str,
 ) -> CardState:
     steps = options.relearningSteps if relearning else options.learningSteps
     current_idx = max(0, int(state.stepIndex))
@@ -98,7 +129,14 @@ def _apply_learning(
     if answer == "again":
         state.stepIndex = 0
         delay = steps[0] if steps else timedelta(minutes=1)
-        return _set_learning_due(state, now, delay, options.dayBoundaryHourLocal, relearning)
+        return _set_learning_due(
+            state,
+            now,
+            delay,
+            options.dayBoundaryHourLocal,
+            relearning,
+            timezone_name=timezone_name,
+        )
 
     if answer == "hard":
         if current_idx <= 0:
@@ -113,17 +151,25 @@ def _apply_learning(
             step_pos = min(current_idx, len(steps) - 1) if steps else 0
             delay = steps[step_pos] if steps else timedelta(minutes=10)
             state.stepIndex = current_idx
-        return _set_learning_due(state, now, delay, options.dayBoundaryHourLocal, relearning)
+        return _set_learning_due(
+            state,
+            now,
+            delay,
+            options.dayBoundaryHourLocal,
+            relearning,
+            timezone_name=timezone_name,
+        )
 
     if answer == "easy":
         if relearning:
-            return _graduate_relearning(state, options, now)
+            return _graduate_relearning(state, options, now, timezone_name=timezone_name)
         return _graduate_new_learning(
             state,
             options,
             now,
             max(options.minimumIntervalDays, options.easyIntervalDays),
             reset_ease=True,
+            timezone_name=timezone_name,
         )
 
     # good
@@ -131,10 +177,17 @@ def _apply_learning(
     if steps and next_idx < len(steps):
         state.stepIndex = next_idx
         delay = steps[next_idx]
-        return _set_learning_due(state, now, delay, options.dayBoundaryHourLocal, relearning)
+        return _set_learning_due(
+            state,
+            now,
+            delay,
+            options.dayBoundaryHourLocal,
+            relearning,
+            timezone_name=timezone_name,
+        )
 
     if relearning:
-        return _graduate_relearning(state, options, now)
+        return _graduate_relearning(state, options, now, timezone_name=timezone_name)
 
     return _graduate_new_learning(
         state,
@@ -142,16 +195,28 @@ def _apply_learning(
         now,
         max(options.minimumIntervalDays, options.graduatingIntervalDays),
         reset_ease=True,
+        timezone_name=timezone_name,
     )
 
 
-def _apply_review(state: CardState, options: DeckOptions, now: datetime, answer: Answer) -> CardState:
+def _apply_review(
+    state: CardState,
+    options: DeckOptions,
+    now: datetime,
+    answer: Answer,
+    *,
+    timezone_name: str,
+) -> CardState:
     ivl = max(float(options.minimumIntervalDays), float(state.intervalDays or 0))
     ease = float(state.ease or options.startingEase)
-    current_day = _day_index(now, options.dayBoundaryHourLocal)
+    current_day = _day_index(now, options.dayBoundaryHourLocal, timezone_name=timezone_name)
     scheduled_due_day = state.dueDay
     if scheduled_due_day is None:
-        scheduled_due_day = _day_index(state.due or now, options.dayBoundaryHourLocal)
+        scheduled_due_day = _day_index(
+            state.due or now,
+            options.dayBoundaryHourLocal,
+            timezone_name=timezone_name,
+        )
     days_late = max(0, current_day - scheduled_due_day)
 
     if answer == "again":
@@ -168,9 +233,10 @@ def _apply_review(state: CardState, options: DeckOptions, now: datetime, answer:
                 options.relearningSteps[0],
                 options.dayBoundaryHourLocal,
                 relearning=True,
+                timezone_name=timezone_name,
             )
         # no relearning steps: immediately stay review at minimum/lapse interval
-        return _set_review_due(state, now, lapse_interval, options)
+        return _set_review_due(state, now, lapse_interval, options, timezone_name=timezone_name)
 
     if answer == "hard":
         state.ease = max(options.minEase, ease - 0.15)
@@ -185,12 +251,14 @@ def _apply_review(state: CardState, options: DeckOptions, now: datetime, answer:
         raw_next = base * ease * float(options.easyBonus) * float(options.intervalModifier)
 
     raw_next = max(raw_next, ivl + 1.0)
-    return _set_review_due(state, now, raw_next, options)
+    return _set_review_due(state, now, raw_next, options, timezone_name=timezone_name)
 
 
-def _graduate_relearning(state: CardState, options: DeckOptions, now: datetime) -> CardState:
+def _graduate_relearning(
+    state: CardState, options: DeckOptions, now: datetime, *, timezone_name: str
+) -> CardState:
     exit_interval = max(float(options.minimumIntervalDays), float(state.intervalDays or 0))
-    return _set_review_due(state, now, exit_interval, options)
+    return _set_review_due(state, now, exit_interval, options, timezone_name=timezone_name)
 
 
 def _graduate_new_learning(
@@ -200,10 +268,11 @@ def _graduate_new_learning(
     interval_days: int,
     *,
     reset_ease: bool,
+    timezone_name: str,
 ) -> CardState:
     if reset_ease:
         state.ease = float(options.startingEase)
-    return _set_review_due(state, now, float(interval_days), options)
+    return _set_review_due(state, now, float(interval_days), options, timezone_name=timezone_name)
 
 
 def _set_learning_due(
@@ -212,10 +281,12 @@ def _set_learning_due(
     delay: timedelta,
     boundary_hour: int,
     relearning: bool,
+    *,
+    timezone_name: str,
 ) -> CardState:
     target_due = now + delay
-    now_day = _day_index(now, boundary_hour)
-    target_day = _day_index(target_due, boundary_hour)
+    now_day = _day_index(now, boundary_hour, timezone_name=timezone_name)
+    target_day = _day_index(target_due, boundary_hour, timezone_name=timezone_name)
     state.type = "relearning" if relearning else "learning"
     state.intervalDays = float(state.intervalDays or 0)
     if target_day == now_day:
@@ -224,27 +295,40 @@ def _set_learning_due(
         return state
 
     state.dueDay = target_day
-    state.due = _day_index_to_datetime(target_day, boundary_hour)
+    state.due = _day_index_to_datetime(target_day, boundary_hour, timezone_name=timezone_name)
     return state
 
 
 def _set_review_due(
-    state: CardState, now: datetime, interval_days: float, options: DeckOptions
+    state: CardState,
+    now: datetime,
+    interval_days: float,
+    options: DeckOptions,
+    *,
+    timezone_name: str,
 ) -> CardState:
     clamped_days = _clamp_review_interval(interval_days, options)
     rounded_days = _round_review_interval(clamped_days, options)
     state.type = "review"
     state.stepIndex = 0
     state.intervalDays = float(clamped_days)
-    current_day = _day_index(now, options.dayBoundaryHourLocal)
+    current_day = _day_index(now, options.dayBoundaryHourLocal, timezone_name=timezone_name)
     due_day = current_day + max(1, int(rounded_days))
     state.dueDay = due_day
-    state.due = _day_index_to_datetime(due_day, options.dayBoundaryHourLocal)
+    state.due = _day_index_to_datetime(
+        due_day,
+        options.dayBoundaryHourLocal,
+        timezone_name=timezone_name,
+    )
     return state
 
 
 def _preview_from_state(
-    state: CardState, options: DeckOptions, now: datetime
+    state: CardState,
+    options: DeckOptions,
+    now: datetime,
+    *,
+    timezone_name: str,
 ) -> Dict[str, float | int | str | None]:
     if state.type in {"review"}:
         raw_days = float(state.intervalDays)
@@ -258,7 +342,11 @@ def _preview_from_state(
 
     due = state.due
     if state.dueDay is not None:
-        due = _day_index_to_datetime(state.dueDay, options.dayBoundaryHourLocal)
+        due = _day_index_to_datetime(
+            state.dueDay,
+            options.dayBoundaryHourLocal,
+            timezone_name=timezone_name,
+        )
     if due is None:
         return {"seconds": None, "days": None, "intervalDays": None, "label": "n/a"}
 
@@ -299,14 +387,39 @@ def _clamp_review_interval(raw_days: float, options: DeckOptions) -> float:
     return min(float(options.maxIntervalDays), max(float(options.minimumIntervalDays), raw_days))
 
 
-def _day_index(moment: datetime, boundary_hour: int) -> int:
-    shifted = moment - timedelta(hours=boundary_hour)
+def _day_index(moment: datetime, boundary_hour: int, *, timezone_name: str = "UTC") -> int:
+    local_moment = _to_local_naive(moment, timezone_name)
+    shifted = local_moment - timedelta(hours=boundary_hour)
     return shifted.date().toordinal()
 
 
-def _day_index_to_datetime(day_index: int, boundary_hour: int) -> datetime:
+def _day_index_to_datetime(day_index: int, boundary_hour: int, *, timezone_name: str = "UTC") -> datetime:
     day_date = date.fromordinal(day_index)
-    return datetime.combine(day_date, time(hour=boundary_hour))
+    local_due = datetime.combine(day_date, time(hour=boundary_hour))
+    return _local_naive_to_utc(local_due, timezone_name)
+
+
+def _build_timezone(timezone_name: str):
+    from app.services.stats_overview import _build_timezone_obj
+
+    candidate = str(timezone_name or "UTC").strip() or "UTC"
+    return _build_timezone_obj(candidate)
+
+
+def _ensure_utc_naive(moment: datetime) -> datetime:
+    if moment.tzinfo is None:
+        return moment
+    return moment.astimezone(UTC).replace(tzinfo=None)
+
+
+def _to_local_naive(moment: datetime, timezone_name: str) -> datetime:
+    utc_moment = _ensure_utc_naive(moment).replace(tzinfo=UTC)
+    return utc_moment.astimezone(_build_timezone(timezone_name)).replace(tzinfo=None)
+
+
+def _local_naive_to_utc(moment: datetime, timezone_name: str) -> datetime:
+    local_aware = moment.replace(tzinfo=_build_timezone(timezone_name))
+    return local_aware.astimezone(UTC).replace(tzinfo=None)
 
 
 def _normalize_card_type(card_type: str | CardType) -> CardType:

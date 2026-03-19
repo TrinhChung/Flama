@@ -40,8 +40,8 @@
   {% if card %}
   <section class="study-card-shell">
     <div class="study-card" id="study-card" data-card-id="{{ card.id }}" data-study-scope="{{ study_scope }}"
-      data-scope-id="{{ study_scope_id }}" data-answer-url="{{ answer_url or '' }}" data-note-id="{{ card.note_id or '' }}"
-      data-can-edit="{{ '1' if can_edit_current_card else '0' }}">
+      data-scope-id="{{ study_scope_id }}" data-answer-url="{{ answer_url or '' }}"
+      data-note-id="{{ card.note_id or '' }}" data-can-edit="{{ '1' if can_edit_current_card else '0' }}">
       <div class="card-face card-front is-active" id="card-front">
         {{ rendered_front | safe }}
       </div>
@@ -54,8 +54,18 @@
   {% else %}
 
   <section class="study-empty">
+    {% if pending_learning_count %}
+    <h3>No cards due right now.</h3>
+    <p>You still have {{ pending_learning_count }} learning card{% if pending_learning_count != 1 %}s{% endif %} scheduled later in this session.</p>
+    {% if next_learning_due_at_iso %}
+    <p id="study-waiting-next-due" data-next-due-at="{{ next_learning_due_at_iso }}">
+      Next card will be ready soon.
+    </p>
+    {% endif %}
+    {% else %}
     <h3>No due cards in this deck.</h3>
     <p>Hôm nay bạn đã học xong deck này.</p>
+    {% endif %}
     <div class="d-flex gap-2 justify-content-center flex-wrap">
       {% set button_label = 'Continue' %}
       {% set button_href = next_study_url %}
@@ -138,6 +148,7 @@
       "note_id": card.note_id,
       "field_defs": card.field_defs or [],
       "field_values": card.field_values or {},
+      "load_note_url": url_for("flashcards.get_note", note_id=card.note_id),
       "save_card_url": edit_card_api_url
     } | tojson }}
 </script>
@@ -152,6 +163,7 @@
       <div class="modal-body overflow-auto study-edit-modal-body">
         <div id="study-edit-error" class="alert alert-danger d-none py-2" role="alert"></div>
         <form id="study-edit-form">
+          <div id="study-edit-markdown-toolbar" class="mb-3 d-none"></div>
           <div id="study-edit-fields" class="row g-3"></div>
         </form>
       </div>
@@ -712,6 +724,54 @@
   }
 </style>
 
+{% if not card and pending_learning_count and next_learning_due_at_iso %}
+<script>
+  (() => {
+    const nextDueEl = document.getElementById("study-waiting-next-due");
+    const nextDueAt = String(nextDueEl?.dataset.nextDueAt || "");
+    if (!nextDueEl || !nextDueAt) {
+      return;
+    }
+    const nextDueMs = Date.parse(nextDueAt);
+    if (!Number.isFinite(nextDueMs)) {
+      return;
+    }
+
+    const timeFormatter =
+      typeof Intl !== "undefined" && Intl.DateTimeFormat
+        ? new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" })
+        : null;
+
+    function renderWaitingState() {
+      const remainingMs = nextDueMs - Date.now();
+      if (remainingMs <= 0) {
+        nextDueEl.textContent = "Next card is ready now. Reloading...";
+        window.setTimeout(() => window.location.reload(), 600);
+        return false;
+      }
+      const remainingSeconds = Math.ceil(remainingMs / 1000);
+      const minutes = Math.floor(remainingSeconds / 60);
+      const seconds = remainingSeconds % 60;
+      const countdown = minutes > 0
+        ? `${minutes}m ${String(seconds).padStart(2, "0")}s`
+        : `${seconds}s`;
+      const dueLabel = timeFormatter ? timeFormatter.format(new Date(nextDueMs)) : nextDueAt;
+      nextDueEl.textContent = `Next card is due at ${dueLabel} (${countdown}).`;
+      return true;
+    }
+
+    if (!renderWaitingState()) {
+      return;
+    }
+    const intervalId = window.setInterval(() => {
+      if (!renderWaitingState()) {
+        window.clearInterval(intervalId);
+      }
+    }, 1000);
+  })();
+</script>
+{% endif %}
+
 {% if card %}
 <script>
   (() => {
@@ -734,6 +794,8 @@
     const editLoadingEl = document.getElementById("study-edit-loading");
     const editFieldsWrapEl = document.getElementById("study-edit-fields");
     const editSaveBtn = document.getElementById("study-edit-save-btn");
+    const studyEditMarkdownToolbarEl = document.getElementById("study-edit-markdown-toolbar");
+    const studyEditBtn = document.getElementById("study-edit-btn");
     const studyPageRoot = document.getElementById("study-page-root");
     const fullscreenBtn = document.getElementById("study-fullscreen-btn");
     const fullscreenIconEl = fullscreenBtn?.querySelector("[data-fullscreen-icon]");
@@ -747,6 +809,8 @@
     let editOriginalFieldValues = {};
     let editLoading = false;
     let editSaving = false;
+    let studyMarkdownManager = null;
+    let studyMarkdownEditors = new Map();
 
     if (canEditCard && editConfigEl) {
       try {
@@ -760,6 +824,51 @@
         editFieldValues = {};
         editOriginalFieldValues = {};
       }
+    }
+
+    function syncStudyEditAvailability() {
+      if (!cardRoot || !studyEditBtn) {
+        return;
+      }
+      const enabled = Boolean(editConfig && editConfig.save_card_url);
+      cardRoot.dataset.canEdit = enabled ? "1" : "0";
+      studyEditBtn.disabled = !enabled;
+      studyEditBtn.classList.toggle("d-none", !enabled);
+    }
+
+    function updateStudyEditConfigFromPayload(payload) {
+      if (!payload || typeof payload !== "object") {
+        editConfig = null;
+        editFieldDefs = [];
+        editFieldValues = {};
+        editOriginalFieldValues = {};
+        syncStudyEditAvailability();
+        return;
+      }
+
+      const nextCardId = String(payload.card_id || "").trim();
+      const nextNoteId = String(payload.note_id || "").trim();
+      const canEditNextCard = Boolean(payload.can_edit_card);
+      editConfig = {
+        card_id: nextCardId,
+        note_id: nextNoteId,
+        field_defs: Array.isArray(payload.field_defs) ? payload.field_defs : [],
+        field_values: payload.field_values && typeof payload.field_values === "object" ? payload.field_values : {},
+        load_note_url: payload.load_note_url ? String(payload.load_note_url) : (nextNoteId ? `/api/notes/${encodeURIComponent(nextNoteId)}` : ""),
+        save_card_url: canEditNextCard && payload.save_card_url ? String(payload.save_card_url) : "",
+      };
+      editFieldDefs = Array.isArray(editConfig.field_defs) ? editConfig.field_defs : [];
+      editFieldValues = editConfig.field_values && typeof editConfig.field_values === "object" ? { ...editConfig.field_values } : {};
+      editOriginalFieldValues = { ...editFieldValues };
+
+      if (editConfigEl) {
+        editConfigEl.textContent = JSON.stringify(editConfig);
+      }
+      if (cardRoot) {
+        cardRoot.dataset.noteId = nextNoteId;
+        cardRoot.dataset.canEdit = canEditNextCard ? "1" : "0";
+      }
+      syncStudyEditAvailability();
     }
 
     function escapeHtml(value) {
@@ -983,6 +1092,95 @@
         });
     }
 
+    async function uploadStudyMarkdownImage(file, editor) {
+      const fieldName = String(editor?.fieldName || "").trim();
+      if (!fieldName || !isImageFile(file)) {
+        throw new Error("Chi ho tro upload anh cho markdown.");
+      }
+      const noteId = String(editConfig?.note_id || "").trim();
+      if (!noteId) {
+        throw new Error("Khong tim thay note de upload markdown image.");
+      }
+
+      const formData = new FormData();
+      formData.append("field_name", fieldName);
+      formData.append("file", file);
+
+      const response = await fetch(`/api/notes/${encodeURIComponent(noteId)}/markdown-media`, {
+        method: "POST",
+        body: formData,
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload.message || payload.error || "Upload markdown image failed.");
+      }
+      setEditError("");
+      return payload;
+    }
+
+    function resetStudyMarkdownEditors() {
+      studyMarkdownEditors.clear();
+      if (studyMarkdownManager) {
+        studyMarkdownManager.destroyAll();
+      }
+      if (!studyEditMarkdownToolbarEl) {
+        return;
+      }
+      if (window.FlamaMarkdownEditor) {
+        studyMarkdownManager = window.FlamaMarkdownEditor.createManager({
+          toolbarHost: studyEditMarkdownToolbarEl,
+        });
+        studyEditMarkdownToolbarEl.classList.remove("d-none");
+        return;
+      }
+      studyMarkdownManager = null;
+      studyEditMarkdownToolbarEl.classList.add("d-none");
+      studyEditMarkdownToolbarEl.replaceChildren();
+    }
+
+    function initStudyMarkdownEditors(fieldDefs, values) {
+      resetStudyMarkdownEditors();
+      const markdownFields = Array.isArray(fieldDefs)
+        ? fieldDefs.filter((fieldDef) => String(fieldDef?.field_type || "").trim().toLowerCase() === "markdown")
+        : [];
+      if (!markdownFields.length) {
+        if (studyEditMarkdownToolbarEl) {
+          studyEditMarkdownToolbarEl.classList.add("d-none");
+          studyEditMarkdownToolbarEl.replaceChildren();
+        }
+        studyMarkdownManager = null;
+        return;
+      }
+      if (!studyMarkdownManager || !editFieldsWrapEl) {
+        return;
+      }
+      markdownFields.forEach((fieldDef) => {
+        const name = String(fieldDef?.name || "").trim();
+        if (!name) {
+          return;
+        }
+        const mount = editFieldsWrapEl.querySelector(`[data-study-markdown-mount="${cssEscape(name)}"]`);
+        if (!(mount instanceof HTMLElement)) {
+          return;
+        }
+        const value = values && values[name] != null ? String(values[name]) : "";
+        const editor = studyMarkdownManager.register({
+          mount,
+          fieldName: name,
+          label: name,
+          inputName: "",
+          value,
+          minHeight: "2.75rem",
+          hint: "",
+          uploadImage: uploadStudyMarkdownImage,
+          onChange: (nextValue) => {
+            editFieldValues[name] = nextValue;
+          },
+        });
+        studyMarkdownEditors.set(name, editor);
+      });
+    }
+
     function setEditError(message) {
       if (!editErrorEl) return;
       if (!message) {
@@ -1017,6 +1215,7 @@
     function renderEditFields(fieldDefs, values) {
       if (!editFieldsWrapEl) return;
       if (!Array.isArray(fieldDefs) || !fieldDefs.length) {
+        resetStudyMarkdownEditors();
         editFieldsWrapEl.innerHTML = '<div class="col-12 small text-muted">No editable fields found.</div>';
         return;
       }
@@ -1030,30 +1229,26 @@
         const required = Boolean(fieldDef?.required);
         const value = String(values && values[name] != null ? values[name] : "");
         const requiredMark = required ? '<span class="study-edit-required">*</span>' : "";
-        const typeBadge = fieldType ? `<div class="study-edit-field-type">${escapeHtml(fieldType)}</div>` : "";
+        const typeBadge = fieldType && fieldType !== "markdown" ? `<div class="study-edit-field-type">${escapeHtml(fieldType)}</div>` : "";
         const isMultiline = fieldType === "richtext" || fieldType === "markdown";
         const inputControl = isMultiline
-          ? `<textarea id="${escapeHtml(fieldId)}" class="form-control form-control-sm" rows="${fieldType === "markdown" ? "6" : "3"}" data-edit-field="${escapeHtml(name)}" data-edit-type="${escapeHtml(fieldType)}" ${required ? "required" : ""}>${escapeHtml(value)}</textarea>`
+          ? (fieldType === "markdown"
+            ? `<div class="study-edit-markdown-mount" data-study-markdown-mount="${escapeHtml(name)}"></div>`
+            : `<textarea id="${escapeHtml(fieldId)}" class="form-control form-control-sm" rows="3" data-edit-field="${escapeHtml(name)}" data-edit-type="${escapeHtml(fieldType)}" ${required ? "required" : ""}>${escapeHtml(value)}</textarea>`)
           : `<input id="${escapeHtml(fieldId)}" type="text" class="form-control form-control-sm" data-edit-field="${escapeHtml(name)}" data-edit-type="${escapeHtml(fieldType)}" value="${escapeHtml(value)}" ${required ? "required" : ""}>`;
-        const markdownHint = fieldType === "markdown"
-          ? '<div class="form-text">Markdown: dán ảnh bằng Ctrl/Cmd+V hoặc kéo-thả trực tiếp.</div>'
-          : "";
-        const markdownPreview = fieldType === "markdown"
-          ? `<div class="study-edit-markdown-preview" data-edit-markdown-preview="${escapeHtml(name)}"></div>`
-          : "";
+        const markdownHint = "";
 
         return `
           <div class="col-12">
             <label class="form-label study-edit-field-label" for="${escapeHtml(fieldId)}">${escapeHtml(name)} ${requiredMark}</label>
             ${inputControl}
             ${markdownHint}
-            ${markdownPreview}
             ${typeBadge}
           </div>
         `;
       }).join("");
 
-      bindStudyMarkdownInlineUploadHandlers();
+      initStudyMarkdownEditors(sortedDefs, values || {});
     }
 
     async function loadLatestEditValues() {
@@ -1125,6 +1320,61 @@
       return { ok: true, noChanges: false, error: "", fieldValues };
     }
 
+    function collectEditPayload() {
+      if (!Array.isArray(editFieldDefs) || !editFieldDefs.length) {
+        return { ok: false, noChanges: false, error: "No editable fields found.", fieldValues: {} };
+      }
+
+      const fieldValues = {};
+      const missingRequired = [];
+      let changedCount = 0;
+      editFieldDefs.forEach((fieldDef) => {
+        const name = String(fieldDef?.name || "").trim();
+        if (!name) return;
+        const fieldType = String(fieldDef?.field_type || "text").trim().toLowerCase();
+        let rawValue = "";
+
+        if (fieldType === "markdown") {
+          const editor = studyMarkdownEditors.get(name);
+          if (!editor) {
+            return;
+          }
+          rawValue = String(editor.getValue() || "");
+        } else {
+          const input = document.querySelector(`[data-edit-field="${cssEscape(name)}"]`);
+          if (!(input instanceof HTMLInputElement || input instanceof HTMLTextAreaElement)) {
+            return;
+          }
+          rawValue = String(input.value || "");
+        }
+
+        const originalValue = editOriginalFieldValues[name] == null ? "" : String(editOriginalFieldValues[name]);
+        if (rawValue === originalValue) {
+          return;
+        }
+        changedCount += 1;
+        fieldValues[name] = rawValue;
+        if (fieldDef.required && rawValue.trim().length === 0) {
+          missingRequired.push(name);
+        }
+      });
+
+      if (missingRequired.length) {
+        return {
+          ok: false,
+          noChanges: false,
+          error: `Required field khÃ´ng Ä‘Æ°á»£c Ä‘á»ƒ trá»‘ng: ${missingRequired.join(", ")}`,
+          fieldValues,
+        };
+      }
+
+      if (changedCount === 0) {
+        return { ok: true, noChanges: true, error: "", fieldValues: {} };
+      }
+
+      return { ok: true, noChanges: false, error: "", fieldValues };
+    }
+
     async function saveEditedCard() {
       if (!editConfig || !editConfig.save_card_url) {
         setEditError("Edit API chưa sẵn sàng.");
@@ -1162,6 +1412,12 @@
           ? payload.field_values
           : payloadState.fieldValues;
         editOriginalFieldValues = { ...editFieldValues };
+        if (editConfig && typeof editConfig === "object") {
+          editConfig.field_values = { ...editFieldValues };
+        }
+        if (editConfigEl && editConfig && typeof editConfig === "object") {
+          editConfigEl.textContent = JSON.stringify(editConfig);
+        }
 
         if (front && typeof payload.rendered_front_html === "string") {
           front.innerHTML = payload.rendered_front_html;
@@ -1356,6 +1612,7 @@
         cardRoot.dataset.cardId = nextCardId;
         cardRoot.dataset.answerUrl = answerUrl;
       }
+      updateStudyEditConfigFromPayload(payload);
       cardShownAtMs = performance.now();
       resetToFrontFace();
       applyAutoSplit();
@@ -1436,10 +1693,14 @@
       editModalEl.addEventListener("show.bs.modal", () => {
         loadLatestEditValues().catch(() => undefined);
       });
+      editModalEl.addEventListener("hidden.bs.modal", () => {
+        resetStudyMarkdownEditors();
+      });
       editSaveBtn?.addEventListener("click", () => {
         saveEditedCard().catch(() => undefined);
       });
     }
+    syncStudyEditAvailability();
     if (fullscreenBtn) {
       const canFullscreen = Boolean(
         studyPageRoot && (studyPageRoot.requestFullscreen || studyPageRoot.webkitRequestFullscreen)

@@ -407,6 +407,25 @@ def seed_template():
                 db.session.commit()
                 print(f"Đã cập nhật quyền admin cho user: {admin_email}")
 
+        # ── Seed test user (dùng cho dev/QA) ──────────────────────────────────
+        TEST_EMAIL    = "test@flama.dev"
+        TEST_USERNAME = "testuser"
+        TEST_PASSWORD = "test1234"
+
+        test_user = User.query.filter_by(email=TEST_EMAIL).first()
+        if not test_user:
+            test_user = User(
+                email=TEST_EMAIL,
+                username=TEST_USERNAME,
+                is_admin=False,
+            )
+            test_user.set_password(TEST_PASSWORD)
+            db.session.add(test_user)
+            db.session.commit()
+            print(f"Đã tạo test user: {TEST_EMAIL} / {TEST_PASSWORD}")
+        else:
+            print(f"Test user đã tồn tại: {TEST_EMAIL}")
+
         # Kiểm tra xem NoteType "Flama Standard Vocabulary" đã có chưa
         fields = [
             ("word", "text", True),

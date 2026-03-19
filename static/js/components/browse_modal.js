@@ -92,6 +92,7 @@
     editorForm: document.getElementById("browseEditorForm"),
     editorDeck: document.getElementById("browseEditorDeck"),
     editorTags: document.getElementById("browseEditorTags"),
+    editorMarkdownToolbar: document.getElementById("browseEditorMarkdownToolbar"),
     editorFields: document.getElementById("browseEditorFields"),
     saveBtn: document.getElementById("browseSaveBtn"),
     revertBtn: document.getElementById("browseRevertBtn"),
@@ -198,6 +199,9 @@
       settingsDirty: false,
     },
   };
+
+  let browseMarkdownManager = null;
+  let browseMarkdownEditors = new Map();
 
   function escapeHtml(value) {
     const text = value == null ? "" : String(value);
@@ -343,6 +347,70 @@
       .forEach((textarea) => {
         syncMarkdownPreviewForTextarea(textarea);
       });
+  }
+
+  function resetBrowseMarkdownEditors() {
+    browseMarkdownEditors.clear();
+    if (browseMarkdownManager) {
+      browseMarkdownManager.destroyAll();
+    }
+    if (!els.editorMarkdownToolbar) {
+      browseMarkdownManager = null;
+      return;
+    }
+    if (window.FlamaMarkdownEditor) {
+      browseMarkdownManager = window.FlamaMarkdownEditor.createManager({
+        toolbarHost: els.editorMarkdownToolbar,
+      });
+      els.editorMarkdownToolbar.classList.remove("d-none");
+      return;
+    }
+    browseMarkdownManager = null;
+    els.editorMarkdownToolbar.classList.add("d-none");
+    els.editorMarkdownToolbar.replaceChildren();
+  }
+
+  function initBrowseMarkdownEditors(fields, values) {
+    resetBrowseMarkdownEditors();
+    const markdownFields = Array.isArray(fields)
+      ? fields.filter((field) => String(field?.field_type || "").trim().toLowerCase() === "markdown")
+      : [];
+    if (!markdownFields.length) {
+      if (els.editorMarkdownToolbar) {
+        els.editorMarkdownToolbar.classList.add("d-none");
+        els.editorMarkdownToolbar.replaceChildren();
+      }
+      browseMarkdownManager = null;
+      return;
+    }
+    if (!browseMarkdownManager || !els.editorFields || !Array.isArray(fields)) {
+      return;
+    }
+    markdownFields.forEach((field) => {
+      const name = String(field?.name || "").trim();
+      if (!name) {
+        return;
+      }
+      const mount = els.editorFields.querySelector(`[data-browse-markdown-mount="${cssEscape(name)}"]`);
+      if (!(mount instanceof HTMLElement)) {
+        return;
+      }
+      const value = values && values[name] != null ? String(values[name]) : "";
+      const editor = browseMarkdownManager.register({
+        mount,
+        fieldName: name,
+        label: name,
+        inputName: "",
+        value,
+        minHeight: "2.75rem",
+        hint: "",
+        uploadImage: (file, currentEditor) => uploadMarkdownInlineMedia(name, file, currentEditor),
+        onChange: (nextValue) => {
+          updateDraftField(name, nextValue);
+        },
+      });
+      browseMarkdownEditors.set(name, editor);
+    });
   }
 
   function insertMarkdownImageSyntax(textarea, imageUrl, filename) {
@@ -2038,11 +2106,10 @@
         const tags = Array.isArray(row.tags) ? row.tags.join(", ") : "";
         return `
           <tr class="${selected ? "is-selected" : ""}" data-card-id="${escapeHtml(row.card_id)}">
-            ${
-              state.checkboxMode
-                ? `<td class="browse-select-col"><input type="checkbox" class="form-check-input browse-row-checkbox" data-card-id="${escapeHtml(row.card_id)}" ${selected ? "checked" : ""}></td>`
-                : ""
-            }
+            ${state.checkboxMode
+            ? `<td class="browse-select-col"><input type="checkbox" class="form-check-input browse-row-checkbox" data-card-id="${escapeHtml(row.card_id)}" ${selected ? "checked" : ""}></td>`
+            : ""
+          }
             <td title="${escapeHtml(row.card_type || "")}">${escapeHtml(row.card_type || "")}</td>
             <td title="${escapeHtml(row.due_label || "")}">${escapeHtml(row.due_label || "")}</td>
             <td title="${escapeHtml(row.deck_name || "")}">${escapeHtml(row.deck_name || "")}</td>
@@ -2172,9 +2239,7 @@
           }
 
           const isMarkdown = type === "markdown";
-          const markdownHint = isMarkdown
-            ? '<div class="browse-editor-markdown-hint">Markdown: dán ảnh bằng Ctrl/Cmd+V hoặc kéo-thả vào ô này.</div>'
-            : "";
+          const markdownHint = "";
           const markdownPreview = isMarkdown
             ? `<div class="browse-editor-markdown-preview" data-markdown-preview-for="${escapeHtml(name)}"></div>`
             : "";
@@ -2192,6 +2257,100 @@
 
       els.editorFields.innerHTML = fieldsHtml;
       refreshMarkdownPreviewsInEditor();
+    }
+
+    setSaveButtons();
+  }
+
+  function renderEditor() {
+    const hasDetail = Boolean(state.detail && state.draft);
+    if (els.editorEmpty) {
+      els.editorEmpty.classList.toggle("d-none", hasDetail);
+    }
+    if (els.editorForm) {
+      els.editorForm.classList.toggle("d-none", !hasDetail);
+    }
+    if (!hasDetail) {
+      resetBrowseMarkdownEditors();
+      return;
+    }
+
+    const detail = state.detail;
+    const draft = state.draft;
+
+    if (els.editorDeck) {
+      const options = ['<option value="">(No deck)</option>'];
+      const appendOptions = (nodes, depth) => {
+        nodes.forEach((node) => {
+          const indent = depth > 0 ? `${"&nbsp;".repeat(depth * 3)}&boxvr;&nbsp;` : "";
+          const selected = String(draft.deck_id || "") === String(node.id) ? " selected" : "";
+          options.push(`<option value="${escapeHtml(String(node.id))}"${selected}>${indent}${escapeHtml(node.name)}</option>`);
+          appendOptions(node.children || [], depth + 1);
+        });
+      };
+      appendOptions(state.deckTree, 0);
+      els.editorDeck.innerHTML = options.join("");
+    }
+
+    if (els.editorTags) {
+      els.editorTags.value = Array.isArray(draft.tags) ? draft.tags.join(", ") : "";
+    }
+
+    if (els.editorFields) {
+      const mediaByField = new Map();
+      for (const asset of detail.media_assets || []) {
+        mediaByField.set(asset.field_name, asset);
+      }
+
+      const fieldsHtml = (detail.fields || [])
+        .map((field) => {
+          const name = field.name;
+          const type = field.field_type || "text";
+          const value = draft.field_values[name] == null ? "" : String(draft.field_values[name]);
+          const media = mediaByField.get(name);
+          const requiredBadge = field.required ? '<span class="text-danger">*</span>' : "";
+          const commonAttrs = `data-browse-field="${escapeHtml(name)}" data-browse-type="${escapeHtml(type)}"`;
+          if (type === "image" || type === "audio" || type === "diagram") {
+            const mediaMeta = media
+              ? `File: ${escapeHtml(media.filename || media.id || "")}`
+              : "No media attached yet.";
+            const allowPreviewBtn = type !== "audio";
+            const previewBtn = media && allowPreviewBtn
+              ? `<a class="btn btn-sm btn-outline-secondary browse-editor-media-preview" href="${escapeHtml(media.url || "#")}" target="_blank" rel="noopener">Preview</a>`
+              : "";
+            return `
+              <div class="browse-editor-field">
+                <label>${escapeHtml(name)} ${requiredBadge}</label>
+                <input type="text" ${commonAttrs} class="form-control form-control-sm" value="${escapeHtml(value)}" placeholder="Media asset id or URL">
+                <div class="browse-editor-media-meta">${mediaMeta}</div>
+                <div class="browse-editor-media-actions">
+                  ${previewBtn}
+                  <input type="file" class="form-control form-control-sm" data-upload-field="${escapeHtml(name)}" />
+                </div>
+              </div>
+            `;
+          }
+
+          if (type === "markdown") {
+            return `
+              <div class="browse-editor-field">
+                <label>${escapeHtml(name)} ${requiredBadge}</label>
+                <div data-browse-markdown-mount="${escapeHtml(name)}"></div>
+              </div>
+            `;
+          }
+
+          return `
+            <div class="browse-editor-field">
+              <label>${escapeHtml(name)} ${requiredBadge}</label>
+              <textarea rows="2" ${commonAttrs}>${escapeHtml(value)}</textarea>
+            </div>
+          `;
+        })
+        .join("");
+
+      els.editorFields.innerHTML = fieldsHtml;
+      initBrowseMarkdownEditors(detail.fields || [], draft.field_values || {});
     }
 
     setSaveButtons();
@@ -2644,6 +2803,28 @@
     }
   }
 
+  async function uploadMarkdownInlineMedia(fieldName, file, editor) {
+    if (!state.detail || !state.detail.note || !state.detail.note.id || !fieldName || !isImageFile(file)) {
+      throw new Error("Markdown upload is unavailable.");
+    }
+
+    const noteId = String(state.detail.note.id || "");
+    const formData = new FormData();
+    formData.append("field_name", fieldName);
+    formData.append("file", file);
+
+    const payload = await requestJson(`/api/notes/${encodeURIComponent(noteId)}/markdown-media`, {
+      method: "POST",
+      body: formData,
+    });
+    if (editor && typeof editor.getValue === "function") {
+      window.setTimeout(() => {
+        updateDraftField(fieldName, editor.getValue());
+      }, 0);
+    }
+    return payload;
+  }
+
   function resolveUnsaved(choice) {
     if (!state.unsavedResolver) {
       return;
@@ -2977,6 +3158,10 @@
         modalInstance.hide();
         state.bypassHideGuard = false;
       }).catch(() => undefined);
+    });
+
+    modalEl.addEventListener("hidden.bs.modal", () => {
+      resetBrowseMarkdownEditors();
     });
 
     if (els.refreshBtn) {

@@ -24,7 +24,7 @@ load_dotenv()
 
 
 def _resolve_media_upload_root(raw_value: str | None = None) -> Path:
-    """Resolve media root path; default outside repo to avoid bloating git workspace."""
+    """Resolve media root path for local media uploads."""
     raw = str(raw_value or "").strip() or os.getenv("FLASHCARD_MEDIA_UPLOAD_ROOT", "").strip()
     if raw:
         candidate = Path(raw).expanduser()
@@ -33,7 +33,9 @@ def _resolve_media_upload_root(raw_value: str | None = None) -> Path:
         else:
             candidate = candidate.resolve()
     else:
-        candidate = (BASE_DIR.parent / "flama_media_storage").resolve()
+        # Keep the default inside static for local Windows development so uploads
+        # do not depend on an external writable folder configuration.
+        candidate = (BASE_DIR / "static" / "uploads" / "flashcard_media").resolve()
     candidate.mkdir(parents=True, exist_ok=True)
     return candidate
 

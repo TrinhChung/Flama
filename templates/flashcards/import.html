@@ -12,14 +12,16 @@
   {% else %}
   {% set toolbar_current_deck_id = '' %}
   {% endif %}
-  {% set toolbar_import_href = url_for('flashcards.flashcard_import_page', deck_id=initial_deck_id) if initial_deck_id else url_for('flashcards.flashcard_import_page') %}
+  {% set toolbar_import_href = url_for('flashcards.flashcard_import_page', deck_id=initial_deck_id) if initial_deck_id
+  else url_for('flashcards.flashcard_import_page') %}
   {% include 'components/deck/dashboard_toolbar.html' with context %}
 
   <div class="import-shell card">
     <div class="card-body">
       <div class="import-head">
         <h2 class="h5 mb-1">Import Notes/Cards</h2>
-        <p class="text-muted mb-0">CSV, TSV, hoặc delimiter tùy chỉnh. Flow: Auto Parse -> Mapping -> Estimate -> Execute.</p>
+        <p class="text-muted mb-0">CSV, TSV, hoặc delimiter tùy chỉnh. Flow: Auto Parse -> Mapping -> Estimate ->
+          Execute.</p>
       </div>
 
       <div class="row g-3 mt-2">
@@ -28,7 +30,11 @@
           <select id="targetDeckSelect" class="form-select"></select>
         </div>
         <div class="col-md-6">
-          <label class="form-label" for="noteTypeSelect">Note type</label>
+          <div class="d-flex align-items-center justify-content-between mb-1">
+            <label class="form-label mb-0" for="noteTypeSelect">Note type</label>
+            <span id="noteTypeAutoSelectBadge" class="import-auto-badge d-none"><i class="bi bi-magic"></i> Tự động theo
+              deck anh/chị em</span>
+          </div>
           <select id="noteTypeSelect" class="form-select"></select>
         </div>
       </div>
@@ -40,16 +46,11 @@
           <h3 class="h6 mb-0">Step A - Upload & Parse</h3>
           <span id="parseStateBadge" class="import-status-badge import-status-badge--idle">Chưa có file</span>
         </div>
-        <p class="small text-muted mb-2">Sau khi chọn file, hệ thống sẽ tự nhận diện đuôi file và parse tự động. Nút Parse chỉ dùng để parse lại thủ công.</p>
-        <div class="import-help-strip mb-2">
-          <div class="import-help-pill"><i class="bi bi-file-earmark-spreadsheet"></i> Hỗ trợ .csv / .tsv / .txt</div>
-          <div class="import-help-pill"><i class="bi bi-magic"></i> Tự nhận diện delimiter theo file</div>
-          <div class="import-help-pill"><i class="bi bi-arrow-repeat"></i> Có thể parse lại sau khi đổi cấu hình</div>
-        </div>
         <div class="row g-3 align-items-end">
           <div class="col-lg-4">
             <label class="form-label" for="importFileInput">File (csv/tsv/txt)</label>
-            <input id="importFileInput" class="form-control" type="file" accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values,text/plain">
+            <input id="importFileInput" class="form-control" type="file"
+              accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values,text/plain">
           </div>
           <div class="col-lg-3">
             <label class="form-label" for="delimiterModeSelect">Delimiter</label>
@@ -59,17 +60,11 @@
               <option value="custom">Custom</option>
             </select>
           </div>
-          <div class="col-lg-2">
+          <div class="col-lg-3">
             <label class="form-label" for="customDelimiterInput">Custom char</label>
             <input id="customDelimiterInput" class="form-control" maxlength="1" placeholder="|" disabled>
           </div>
-          <div class="col-lg-2">
-            <div class="form-check mt-4">
-              <input class="form-check-input" type="checkbox" id="hasHeaderInput" checked>
-              <label class="form-check-label" for="hasHeaderInput">Has header row</label>
-            </div>
-          </div>
-          <div class="col-lg-1 d-grid">
+          <div class="col-lg-2 d-grid">
             <button id="parseBtn" class="btn import-btn import-btn--ghost" type="button">Parse lại</button>
           </div>
         </div>
@@ -78,13 +73,29 @@
 
         <div id="parseMeta" class="small text-muted mt-2"></div>
 
-        <div class="table-responsive mt-3" id="previewWrap" hidden>
-          <table id="previewTable" class="table table-sm table-bordered align-middle import-preview-table">
-            <thead>
-              <tr id="previewHeaderRow"></tr>
-            </thead>
-            <tbody id="previewBody"></tbody>
-          </table>
+        <div id="previewWrap" class="import-preview-panel mt-3" hidden>
+          <div class="import-preview-toolbar">
+            <div>
+              <div class="import-preview-title">Preview dữ liệu</div>
+              <div id="previewCaption" class="import-preview-caption">Chọn file để xem trước dữ liệu import.</div>
+            </div>
+            <div class="import-preview-actions">
+              <div class="import-toggle-group" role="group" aria-label="Header row mode">
+                <input class="import-toggle-input" type="radio" name="previewHeaderMode" id="previewHeaderOn" value="1" checked>
+                <label class="import-toggle-chip" for="previewHeaderOn">Có header</label>
+                <input class="import-toggle-input" type="radio" name="previewHeaderMode" id="previewHeaderOff" value="0">
+                <label class="import-toggle-chip" for="previewHeaderOff">Không header</label>
+              </div>
+            </div>
+          </div>
+          <div class="table-responsive">
+            <table id="previewTable" class="table table-sm table-bordered align-middle import-preview-table">
+              <thead>
+                <tr id="previewHeaderRow"></tr>
+              </thead>
+              <tbody id="previewBody"></tbody>
+            </table>
+          </div>
         </div>
       </section>
 
@@ -115,18 +126,26 @@
         <div class="row g-3">
           <div class="col-lg-6">
             <label class="form-label d-block">Mode</label>
-            <div class="form-check"><input class="form-check-input" type="radio" name="importMode" id="modeInsert" value="insert_only"><label class="form-check-label" for="modeInsert">Insert only</label></div>
-            <div class="form-check"><input class="form-check-input" type="radio" name="importMode" id="modeUpdate" value="update_only"><label class="form-check-label" for="modeUpdate">Update only</label></div>
-            <div class="form-check"><input class="form-check-input" type="radio" name="importMode" id="modeUpsert" value="upsert" checked><label class="form-check-label" for="modeUpsert">Insert + Update (Upsert)</label></div>
-            <div class="form-check mt-2"><input class="form-check-input" type="checkbox" id="dontOverwriteEmptyInput" checked><label class="form-check-label" for="dontOverwriteEmptyInput">Don't overwrite empty (safe)</label></div>
+            <div class="form-check"><input class="form-check-input" type="radio" name="importMode" id="modeInsert"
+                value="insert_only"><label class="form-check-label" for="modeInsert">Insert only</label></div>
+            <div class="form-check"><input class="form-check-input" type="radio" name="importMode" id="modeUpdate"
+                value="update_only"><label class="form-check-label" for="modeUpdate">Update only</label></div>
+            <div class="form-check"><input class="form-check-input" type="radio" name="importMode" id="modeUpsert"
+                value="upsert" checked><label class="form-check-label" for="modeUpsert">Insert + Update (Upsert)</label>
+            </div>
+            <div class="form-check mt-2"><input class="form-check-input" type="checkbox" id="dontOverwriteEmptyInput"
+                checked><label class="form-check-label" for="dontOverwriteEmptyInput">Don't overwrite empty
+                (safe)</label></div>
             <p class="small text-muted mt-2 mb-0">
-              Insert only: chỉ thêm mới, nếu đã tồn tại thì bỏ qua. Update only: chỉ cập nhật bản ghi đã tồn tại. Upsert: nếu đã tồn tại thì cập nhật, chưa có thì thêm mới.
+              Insert only: chỉ thêm mới, nếu đã tồn tại thì bỏ qua. Update only: chỉ cập nhật bản ghi đã tồn tại.
+              Upsert: nếu đã tồn tại thì cập nhật, chưa có thì thêm mới.
             </p>
           </div>
           <div class="col-lg-6">
             <label class="form-label d-block">Uniqueness key (chọn 1 hoặc nhiều field để đối chiếu)</label>
             <p class="small text-muted mb-2">
-              Hệ thống sẽ dựa vào các field bạn chọn để kiểm tra dữ liệu cũ: trùng khóa thì xem là đã tồn tại, không trùng khóa thì xem là bản ghi mới.
+              Hệ thống sẽ dựa vào các field bạn chọn để kiểm tra dữ liệu cũ: trùng khóa thì xem là đã tồn tại, không
+              trùng khóa thì xem là bản ghi mới.
             </p>
             <div id="uniquenessFieldsWrap" class="import-uniq-wrap"></div>
           </div>
@@ -134,7 +153,8 @@
 
         <div class="form-check mt-2 d-none" id="columnMismatchConfirmWrap">
           <input class="form-check-input" type="checkbox" id="columnMismatchConfirmInput">
-          <label class="form-check-label text-danger" for="columnMismatchConfirmInput">Tôi xác nhận tiếp tục dù số cột không khớp note type</label>
+          <label class="form-check-label text-danger" for="columnMismatchConfirmInput">Tôi xác nhận tiếp tục dù số cột
+            không khớp note type</label>
         </div>
       </section>
 
@@ -145,14 +165,16 @@
           <h3 class="h6 mb-0">Step D - Review & Execute</h3>
           <span id="stepDStateBadge" class="import-status-badge import-status-badge--idle">Chờ parse</span>
         </div>
-        <p class="small text-muted mb-2">Để tránh import nhầm dữ liệu: hãy estimate trước, kiểm tra kết quả, rồi mới execute import.</p>
+        <p class="small text-muted mb-2">Để tránh import nhầm dữ liệu: hãy estimate trước, kiểm tra kết quả, rồi mới
+          execute import.</p>
 
         <div class="import-step-guide">
           <div class="import-guide-item">
             <span class="import-guide-index">1</span>
             <div>
               <div class="fw-semibold">Estimate trước khi import</div>
-              <div class="small text-muted">Kiểm tra tổng số dòng hợp lệ/lỗi và các row issues trước khi chạy thật.</div>
+              <div class="small text-muted">Kiểm tra tổng số dòng hợp lệ/lỗi và các row issues trước khi chạy thật.
+              </div>
             </div>
           </div>
           <div class="import-guide-item">
@@ -171,16 +193,20 @@
           </div>
         </div>
 
-        <div id="stepDHint" class="import-step-hint import-step-hint--info mt-3">Bắt đầu bằng Step A: upload file để hệ thống parse.</div>
+        <div id="stepDHint" class="import-step-hint import-step-hint--info mt-3">Bắt đầu bằng Step A: upload file để hệ
+          thống parse.</div>
 
         <div class="d-flex flex-wrap gap-2 mt-3 import-step-actions">
-          <button id="estimateBtn" class="btn import-btn import-btn--secondary" type="button" disabled>1. Estimate</button>
-          <button id="executeBtn" class="btn import-btn import-btn--primary" type="button" disabled>2. Execute Import</button>
+          <button id="estimateBtn" class="btn import-btn import-btn--secondary" type="button" disabled>1.
+            Estimate</button>
+          <button id="executeBtn" class="btn import-btn import-btn--primary" type="button" disabled>2. Execute
+            Import</button>
         </div>
 
         <div id="progressWrap" class="mt-3 d-none">
           <div class="progress" role="progressbar" aria-label="Import progress">
-            <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated" style="width: 100%;">Running...</div>
+            <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated" style="width: 100%;">
+              Running...</div>
           </div>
         </div>
 
@@ -239,7 +265,7 @@
     padding-bottom: 0.75rem;
   }
 
-  .wizard-step + .wizard-step {
+  .wizard-step+.wizard-step {
     margin-top: 0.5rem;
   }
 
@@ -458,6 +484,80 @@
   }
 
   #previewWrap {
+    overflow: hidden;
+    border: 1px solid var(--flama-border);
+    border-radius: 14px;
+    background: #fff;
+    box-shadow: 0 10px 30px rgba(31, 26, 23, 0.04);
+  }
+
+  .import-preview-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.95rem 1rem 0.85rem;
+    border-bottom: 1px solid var(--flama-border);
+    background: linear-gradient(180deg, rgba(255, 243, 235, 0.72) 0%, rgba(255, 255, 255, 0.98) 100%);
+  }
+
+  .import-preview-title {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--flama-text);
+  }
+
+  .import-preview-caption {
+    margin-top: 0.2rem;
+    font-size: 0.8rem;
+    color: var(--flama-text-2);
+  }
+
+  .import-preview-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .import-toggle-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.25rem;
+    border-radius: 999px;
+    background: var(--flama-bg);
+    border: 1px solid var(--flama-border);
+  }
+
+  .import-toggle-input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .import-toggle-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 98px;
+    min-height: 2rem;
+    padding: 0.35rem 0.8rem;
+    border-radius: 999px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--flama-text-2);
+    cursor: pointer;
+    transition: all 0.18s ease;
+  }
+
+  .import-toggle-input:checked + .import-toggle-chip {
+    color: #fff;
+    background: var(--flama-gradient);
+    box-shadow: 0 5px 14px rgba(254, 104, 8, 0.22);
+  }
+
+  .import-preview-panel .table-responsive {
     overflow-x: auto;
     overflow-y: hidden;
   }
@@ -475,6 +575,10 @@
   }
 
   .import-preview-table th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: #fff7f0;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -489,6 +593,7 @@
   .import-preview-table .preview-cell-text {
     display: -webkit-box;
     -webkit-line-clamp: 3;
+    line-clamp: 3;
     -webkit-box-orient: vertical;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -511,8 +616,44 @@
       padding-right: 0.2rem;
     }
 
+    .import-preview-toolbar {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .import-preview-actions {
+      justify-content: flex-start;
+    }
+
     .import-step-actions .import-btn {
       min-width: 100%;
+    }
+  }
+
+  .import-auto-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.73rem;
+    font-weight: 600;
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+    color: var(--flama-info);
+    background: rgba(37, 99, 235, 0.10);
+    border: 1px solid rgba(37, 99, 235, 0.24);
+    white-space: nowrap;
+    animation: fadeIn 0.2s ease;
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(-2px);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0);
     }
   }
 </style>
@@ -554,15 +695,17 @@
       importFileInput: document.getElementById("importFileInput"),
       delimiterModeSelect: document.getElementById("delimiterModeSelect"),
       customDelimiterInput: document.getElementById("customDelimiterInput"),
-      hasHeaderInput: document.getElementById("hasHeaderInput"),
       parseBtn: document.getElementById("parseBtn"),
       parseStateBadge: document.getElementById("parseStateBadge"),
       parseWarningBox: document.getElementById("parseWarningBox"),
       parseMeta: document.getElementById("parseMeta"),
       previewWrap: document.getElementById("previewWrap"),
+      previewCaption: document.getElementById("previewCaption"),
       previewTable: document.getElementById("previewTable"),
       previewHeaderRow: document.getElementById("previewHeaderRow"),
       previewBody: document.getElementById("previewBody"),
+      previewHeaderOn: document.getElementById("previewHeaderOn"),
+      previewHeaderOff: document.getElementById("previewHeaderOff"),
       mappingWrap: document.getElementById("mappingWrap"),
       mappingBody: document.getElementById("mappingBody"),
       mappingWarnings: document.getElementById("mappingWarnings"),
@@ -600,6 +743,51 @@
       return Array.isArray(config.deck_options) ? config.deck_options : [];
     }
 
+    /**
+     * Infers a note type ID from sibling decks (decks with same parent_id).
+     * Returns a note_type_id string if all siblings agree on one, otherwise null.
+     */
+    function inferNoteTypeFromSiblings(deckIdRaw) {
+      const deckId = String(deckIdRaw || "");
+      if (!deckId) return null;
+
+      const allDecks = getDeckOptions();
+      const selectedDeck = allDecks.find((d) => String(d.id) === deckId);
+      if (!selectedDeck) return null;
+
+      const parentId = selectedDeck.parent_id != null ? String(selectedDeck.parent_id) : null;
+
+      // Siblings = decks with same parent_id, excluding the selected deck itself
+      const siblings = allDecks.filter(
+        (d) => String(d.id) !== deckId && (d.parent_id != null ? String(d.parent_id) : null) === parentId
+      );
+
+      if (!siblings.length) return null;
+
+      // Collect note_type_ids from siblings that actually have one
+      const siblingNoteTypeIds = siblings
+        .map((d) => (d.note_type_id != null ? String(d.note_type_id) : null))
+        .filter(Boolean);
+
+      if (!siblingNoteTypeIds.length) return null;
+
+      // Only auto-select if all siblings agree on the same note type
+      const uniqueIds = new Set(siblingNoteTypeIds);
+      if (uniqueIds.size !== 1) return null;
+
+      const suggested = siblingNoteTypeIds[0];
+
+      // Make sure it's in our note type options list
+      const available = getNoteTypeOptions().find((nt) => String(nt.id) === suggested);
+      return available ? suggested : null;
+    }
+
+    function setNoteTypeAutoSelectBadge(visible) {
+      const badge = document.getElementById("noteTypeAutoSelectBadge");
+      if (!badge) return;
+      badge.classList.toggle("d-none", !visible);
+    }
+
     function getSelectedNoteType() {
       const noteTypeId = String(els.noteTypeSelect.value || "");
       return getNoteTypeOptions().find((item) => String(item.id) === noteTypeId) || null;
@@ -613,6 +801,19 @@
     function getSelectedImportMode() {
       const checked = document.querySelector('input[name="importMode"]:checked');
       return checked ? checked.value : "upsert";
+    }
+
+    function getHasHeaderEnabled() {
+      return Boolean(els.previewHeaderOn && els.previewHeaderOn.checked);
+    }
+
+    function syncHeaderControls() {
+      if (els.previewHeaderOn) {
+        els.previewHeaderOn.checked = Boolean(state.hasHeader);
+      }
+      if (els.previewHeaderOff) {
+        els.previewHeaderOff.checked = !state.hasHeader;
+      }
     }
 
     function setAlert(message, kind = "warning") {
@@ -903,7 +1104,7 @@
       state.token = null;
       state.columns = [];
       state.previewRows = [];
-      state.hasHeader = Boolean(els.hasHeaderInput.checked);
+      state.hasHeader = getHasHeaderEnabled();
       state.warnings = [];
       state.mapping = {};
       state.lastSummary = null;
@@ -1004,10 +1205,18 @@
         return;
       }
       els.previewWrap.hidden = false;
+      syncHeaderControls();
 
       if (els.previewTable) {
         const minWidthPx = Math.max(760, state.columns.length * 180);
         els.previewTable.style.minWidth = `${minWidthPx}px`;
+      }
+
+      if (els.previewCaption) {
+        const rowCount = Array.isArray(state.previewRows) ? state.previewRows.length : 0;
+        els.previewCaption.textContent = state.hasHeader
+          ? `Đang dùng dòng đầu tiên làm header. Preview ${rowCount} dòng dữ liệu đầu tiên.`
+          : `Đang xem dữ liệu thô. Preview ${rowCount} dòng đầu tiên, bao gồm cả dòng đầu nếu có tiêu đề.`;
       }
 
       els.previewHeaderRow.innerHTML = state.columns
@@ -1327,7 +1536,7 @@
       formData.append("note_type_id", noteTypeId);
       formData.append("delimiter_mode", mode);
       formData.append("custom_delimiter", customDelimiter);
-      formData.append("has_header", els.hasHeaderInput.checked ? "1" : "0");
+      formData.append("has_header", getHasHeaderEnabled() ? "1" : "0");
 
       state.isParsing = true;
       state.parseFailed = false;
@@ -1524,6 +1733,21 @@
       els.estimateBtn.addEventListener("click", estimateImport);
       els.executeBtn.addEventListener("click", executeImport);
 
+      els.targetDeckSelect.addEventListener("change", () => {
+        const suggested = inferNoteTypeFromSiblings(els.targetDeckSelect.value);
+        if (suggested && String(els.noteTypeSelect.value) !== suggested) {
+          els.noteTypeSelect.value = suggested;
+          setNoteTypeAutoSelectBadge(true);
+          renderUniquenessFields();
+          if (hasSelectedFile()) {
+            resetParseState();
+            queueParseRequest({ inferFromFile: false });
+          }
+        } else {
+          setNoteTypeAutoSelectBadge(false);
+        }
+      });
+
       els.importFileInput.addEventListener("change", () => {
         resetParseState();
         if (!hasSelectedFile()) {
@@ -1534,16 +1758,11 @@
       });
 
       els.noteTypeSelect.addEventListener("change", () => {
+        setNoteTypeAutoSelectBadge(false);
         resetParseState();
         if (hasSelectedFile()) {
           queueParseRequest({ inferFromFile: false });
         }
-      });
-
-      els.hasHeaderInput.addEventListener("change", () => {
-        if (!hasSelectedFile()) return;
-        resetParseState({ keepWarning: true });
-        queueParseRequest({ inferFromFile: false });
       });
 
       els.customDelimiterInput.addEventListener("change", () => {
@@ -1551,6 +1770,19 @@
         if (!hasSelectedFile()) return;
         resetParseState({ keepWarning: true });
         queueParseRequest({ inferFromFile: false });
+      });
+
+      [els.previewHeaderOn, els.previewHeaderOff].forEach((control) => {
+        if (!control) return;
+        control.addEventListener("change", () => {
+          state.hasHeader = getHasHeaderEnabled();
+          if (!hasSelectedFile()) {
+            syncHeaderControls();
+            return;
+          }
+          resetParseState({ keepWarning: true });
+          queueParseRequest({ inferFromFile: false });
+        });
       });
 
       els.mappingBody.addEventListener("change", (event) => {
@@ -1592,6 +1824,7 @@
       populateNoteTypeOptions();
       renderUniquenessFields();
       handleDelimiterModeChange();
+      syncHeaderControls();
       els.estimateBtn.textContent = ESTIMATE_BUTTON_LABEL;
       els.executeBtn.textContent = EXECUTE_BUTTON_LABEL;
       setParseButtonLoading(false);

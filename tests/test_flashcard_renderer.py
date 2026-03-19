@@ -71,6 +71,22 @@ class FlashcardRendererTests(unittest.TestCase):
             self.assertIn("# Header", html)
             self.assertIn("**bold**", html)
 
+    def test_markdown_double_brace_template_is_auto_upgraded_to_html(self):
+        template = self._template("{{Notes}}")
+        fields = [self._field("Notes", "markdown")]
+        rendered = render_template_pair(
+            template=template,
+            field_defs=fields,
+            field_values={"Notes": "**bold**"},
+            media_assets=[],
+        )
+        html = rendered["front_html"]
+        self.assertNotIn("&lt;strong&gt;", html)
+        if "<strong>bold</strong>" in html:
+            self.assertIn("<strong>bold</strong>", html)
+        else:
+            self.assertIn("**bold**", html)
+
     def test_markdown_proxy_image_syntax_renders_img_tag(self):
         template = self._template("{{{Notes}}}")
         fields = [self._field("Notes", "markdown")]

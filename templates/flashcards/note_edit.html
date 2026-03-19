@@ -56,6 +56,7 @@
                 </div>
 
                 <hr class="note-edit__divider">
+                <div class="note-edit__editor-toolbar" id="note-edit-markdown-toolbar"></div>
 
                 {# Dynamic fields from note_type #}
                 {% set field_defs = note_type.field_defs | sort(attribute='position') %}
@@ -64,7 +65,7 @@
                     <label class="note-edit__label">
                         {{ fd.name }}
                         {% if fd.required %}<span class="note-edit__required">*</span>{% endif %}
-                        <span class="note-edit__type-badge">{{ fd.field_type }}</span>
+                        {% if fd.field_type != 'markdown' %}<span class="note-edit__type-badge">{{ fd.field_type }}</span>{% endif %}
                     </label>
 
                     {% set fv = (note.field_values or {}).get(fd.name, '') %}
@@ -73,10 +74,9 @@
                     <textarea class="fc-textarea fc-field" name="{{ fd.name }}" rows="4">{{ fv }}</textarea>
 
                     {% elif fd.field_type == 'markdown' %}
-                    <textarea class="fc-textarea fc-field fc-markdown-field" name="{{ fd.name }}" rows="8"
-                        data-markdown-field="{{ fd.name }}">{{ fv }}</textarea>
-                    <div class="note-edit__markdown-hint">Markdown: dán ảnh bằng Ctrl/Cmd+V hoặc kéo-thả ảnh vào ô này.</div>
-                    <div class="note-edit__markdown-preview" data-markdown-preview-for="{{ fd.name }}"></div>
+                    <div class="note-edit__markdown-editor" data-markdown-mount="{{ fd.name }}"
+                        data-markdown-name="{{ fd.name }}" data-markdown-label="{{ fd.name }}"
+                        data-markdown-value="{{ fv | e }}"></div>
 
                     {% elif fd.field_type in ['image', 'audio', 'diagram'] %}
                     <div class="note-edit__media-wrap">
@@ -319,64 +319,14 @@
         resize: vertical;
     }
 
-    .fc-markdown-field {
-        min-height: 170px;
-        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    .note-edit__editor-toolbar {
+        position: sticky;
+        top: 0.5rem;
+        z-index: 9;
     }
 
-    .fc-markdown-field.is-dragover {
-        border-color: var(--flama-orange-400);
-        box-shadow: 0 0 0 2px rgba(251, 146, 60, 0.2);
-    }
-
-    .note-edit__markdown-hint {
-        margin-top: 0.35rem;
-        font-size: 0.75rem;
-        color: var(--flama-text-2);
-    }
-
-    .note-edit__markdown-preview {
-        margin-top: 0.45rem;
-        padding: 0.55rem 0.65rem;
-        border-radius: 8px;
-        border: 1px solid var(--flama-border);
-        background: #fff;
-        max-height: 220px;
-        overflow: auto;
-    }
-
-    .note-edit__markdown-preview-empty {
-        font-size: 0.75rem;
-        color: var(--flama-text-2);
-    }
-
-    .note-edit__markdown-preview-text {
-        font-size: 0.8rem;
-        line-height: 1.45;
-        color: var(--flama-text-2);
-        margin-bottom: 0.4rem;
-        word-break: break-word;
-    }
-
-    .note-edit__markdown-preview-text:last-child {
-        margin-bottom: 0;
-    }
-
-    .note-edit__markdown-preview-figure {
-        margin: 0 0 0.45rem;
-    }
-
-    .note-edit__markdown-preview-figure:last-child {
-        margin-bottom: 0;
-    }
-
-    .note-edit__markdown-preview-figure img {
-        display: block;
-        max-width: 100%;
-        height: auto;
-        border-radius: 6px;
-        border: 1px solid var(--flama-border);
-        background: #fff;
+    .note-edit__markdown-editor {
+        margin-top: 0.2rem;
     }
 
     .fc-file-input {
@@ -518,249 +468,139 @@
 </style>
 
 <script>
-    const NOTE_ID = "{{ note.id }}";
-    const NOTE_TYPE_ID = "{{ note_type.id }}";
-    const MARKDOWN_PROXY_MEDIA_RE = /^\/media\/proxy\/[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
+    (() => {
+        const NOTE_ID = "{{ note.id }}";
+        const markdownEditors = new Map();
+        const toolbarHost = document.getElementById('note-edit-markdown-toolbar');
+        const markdownManager = toolbarHost && window.FlamaMarkdownEditor
+            ? window.FlamaMarkdownEditor.createManager({ toolbarHost })
+            : null;
 
-    function showStatus(msg, type = 'success') {
-        const el = document.getElementById('note-edit-status');
-        el.textContent = msg;
-        el.className = `note-edit__status note-edit__status--${type}`;
-        el.classList.remove('d-none');
-        setTimeout(() => el.classList.add('d-none'), 4000);
-    }
-
-    function escapeHtml(raw) {
-        return String(raw == null ? "" : raw)
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;")
-            .replace(/"/g, "&quot;")
-            .replace(/'/g, "&#39;");
-    }
-
-    function markdownTextToPreviewHtml(rawText) {
-        return escapeHtml(rawText).replace(/\n/g, "<br>");
-    }
-
-    function renderMarkdownPreviewHtml(rawMarkdown) {
-        const source = String(rawMarkdown || "").replace(/\r\n?/g, "\n");
-        if (!source.trim()) {
-            return '<div class="note-edit__markdown-preview-empty">Preview trống.</div>';
+        function showStatus(msg, type = 'success') {
+            const el = document.getElementById('note-edit-status');
+            el.textContent = msg;
+            el.className = `note-edit__status note-edit__status--${type}`;
+            el.classList.remove('d-none');
+            window.setTimeout(() => el.classList.add('d-none'), 4000);
         }
 
-        const imageRe = /!\[([^\]]*)\]\(([^)\s]+)\)/g;
-        const chunks = [];
-        let cursor = 0;
-        let match;
-
-        while ((match = imageRe.exec(source)) !== null) {
-            const before = source.slice(cursor, match.index);
-            if (before) {
-                chunks.push(`<div class="note-edit__markdown-preview-text">${markdownTextToPreviewHtml(before)}</div>`);
+        async function requestJson(url, options = {}) {
+            const response = await fetch(url, options);
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(payload.message || 'Request failed.');
             }
-
-            const alt = String(match[1] || "").trim().slice(0, 160) || "image";
-            const imageUrl = String(match[2] || "").trim();
-            if (MARKDOWN_PROXY_MEDIA_RE.test(imageUrl)) {
-                chunks.push(
-                    `<figure class="note-edit__markdown-preview-figure"><img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(alt)}" loading="lazy"></figure>`
-                );
-            } else {
-                chunks.push(`<div class="note-edit__markdown-preview-text">${markdownTextToPreviewHtml(match[0])}</div>`);
-            }
-            cursor = imageRe.lastIndex;
+            return payload;
         }
 
-        const tail = source.slice(cursor);
-        if (tail) {
-            chunks.push(`<div class="note-edit__markdown-preview-text">${markdownTextToPreviewHtml(tail)}</div>`);
-        }
-
-        if (!chunks.length) {
-            return '<div class="note-edit__markdown-preview-empty">Preview trống.</div>';
-        }
-        return chunks.join("");
-    }
-
-    function syncMarkdownPreview(textarea) {
-        if (!(textarea instanceof HTMLTextAreaElement)) return;
-        const row = textarea.closest('.note-edit__field-row');
-        const preview = row ? row.querySelector('.note-edit__markdown-preview') : null;
-        if (!(preview instanceof HTMLElement)) return;
-        preview.innerHTML = renderMarkdownPreviewHtml(textarea.value);
-    }
-
-    function escapeMarkdownAlt(raw) {
-        const normalized = String(raw || "image")
-            .replace(/[\[\]\(\)]/g, "")
-            .trim()
-            .slice(0, 80);
-        return normalized || "image";
-    }
-
-    function insertMarkdownImageSyntax(textarea, imageUrl, filename) {
-        if (!textarea || !imageUrl) return;
-        const currentValue = String(textarea.value || "");
-        const start = Number(textarea.selectionStart ?? currentValue.length);
-        const end = Number(textarea.selectionEnd ?? start);
-        const before = currentValue.slice(0, start);
-        const after = currentValue.slice(end);
-
-        const needsLeadingBreak = before.length > 0 && !before.endsWith("\n");
-        const needsTrailingBreak = after.length > 0 && !after.startsWith("\n");
-        const alt = escapeMarkdownAlt(filename || "image");
-        const snippet = `${needsLeadingBreak ? "\n" : ""}![${alt}](${imageUrl})${needsTrailingBreak ? "\n" : ""}`;
-
-        textarea.value = `${before}${snippet}${after}`;
-        const cursor = before.length + snippet.length;
-        textarea.focus();
-        textarea.setSelectionRange(cursor, cursor);
-        textarea.dispatchEvent(new Event('input', { bubbles: true }));
-    }
-
-    function getImageFileFromClipboard(clipboardData) {
-        if (!clipboardData || !clipboardData.items) return null;
-        for (const item of clipboardData.items) {
-            if (item.kind !== "file") continue;
-            const file = item.getAsFile();
-            if (!file) continue;
-            if (String(file.type || "").toLowerCase().startsWith("image/")) {
-                return file;
-            }
-        }
-        return null;
-    }
-
-    async function uploadMarkdownInlineImage(fieldName, file, textarea) {
-        if (!fieldName || !file) return;
-        if (!String(file.type || "").toLowerCase().startsWith("image/")) {
-            showStatus('Chỉ hỗ trợ ảnh cho markdown inline.', 'error');
-            return;
-        }
-
-        const formData = new FormData();
-        formData.append('field_name', fieldName);
-        formData.append('file', file);
-
-        showStatus('Đang tải ảnh markdown…', 'success');
-        const res = await fetch(`/api/notes/${NOTE_ID}/markdown-media`, { method: 'POST', body: formData });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) {
-            showStatus(data.message || 'Upload ảnh markdown thất bại.', 'error');
-            return;
-        }
-        insertMarkdownImageSyntax(textarea, data.url, data.filename || file.name);
-        showStatus('Đã chèn ảnh vào markdown.', 'success');
-    }
-
-    // ── Media remove ──
-    document.querySelectorAll('.note-edit__media-remove').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const fieldName = btn.dataset.field;
-            const preview = document.getElementById(`preview-${fieldName}`);
-            const hidden = document.querySelector(`.note-edit__media-wrap input[name="${fieldName}"]`);
-            if (preview) preview.remove();
-            if (hidden) hidden.value = '';
-        });
-    });
-
-    // ── Media upload ──
-    document.querySelectorAll('.fc-file-input').forEach(input => {
-        input.addEventListener('change', async () => {
-            const file = input.files[0];
-            if (!file) return;
-            const fieldName = input.dataset.field;
+        async function uploadMarkdownImage(file, editor) {
             const formData = new FormData();
-            formData.append('field_name', fieldName);
+            formData.append('field_name', editor.fieldName);
             formData.append('file', file);
-            showStatus('Đang tải media…', 'success');
-            const res = await fetch(`/api/notes/${NOTE_ID}/media`, { method: 'POST', body: formData });
-            const data = await res.json().catch(() => ({}));
-            if (res.ok) {
+            showStatus('Đang tải ảnh markdown…', 'success');
+            const payload = await requestJson(`/api/notes/${NOTE_ID}/markdown-media`, {
+                method: 'POST',
+                body: formData,
+            });
+            showStatus('Đã chèn ảnh vào markdown.', 'success');
+            return payload;
+        }
+
+        function initMarkdownEditors() {
+            if (!markdownManager) {
+                return;
+            }
+            document.querySelectorAll('[data-markdown-mount]').forEach((mount) => {
+                const fieldName = mount.dataset.markdownName || mount.dataset.markdownMount || '';
+                if (!fieldName) {
+                    return;
+                }
+                const editor = markdownManager.register({
+                    mount,
+                    fieldName,
+                    label: mount.dataset.markdownLabel || fieldName,
+                    inputName: fieldName,
+                    value: mount.dataset.markdownValue || '',
+                    hint: 'Dán ảnh bằng Ctrl/Cmd+V hoặc kéo-thả trực tiếp.',
+                    minHeight: '2.75rem',
+                    hint: '',
+                    uploadImage: uploadMarkdownImage,
+                });
+                markdownEditors.set(fieldName, editor);
+            });
+        }
+
+        document.querySelectorAll('.note-edit__media-remove').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const fieldName = btn.dataset.field;
+                const preview = document.getElementById(`preview-${fieldName}`);
                 const hidden = document.querySelector(`.note-edit__media-wrap input[name="${fieldName}"]`);
-                if (hidden) hidden.value = data.url || data.asset_id;
-                showStatus('Upload thành công!', 'success');
-            } else {
-                showStatus(data.message || 'Upload thất bại.', 'error');
+                if (preview) preview.remove();
+                if (hidden) hidden.value = '';
+            });
+        });
+
+        document.querySelectorAll('.fc-file-input').forEach((input) => {
+            input.addEventListener('change', async () => {
+                const file = input.files[0];
+                if (!file) return;
+                const fieldName = input.dataset.field;
+                const formData = new FormData();
+                formData.append('field_name', fieldName);
+                formData.append('file', file);
+                showStatus('Đang tải media…', 'success');
+                try {
+                    const payload = await requestJson(`/api/notes/${NOTE_ID}/media`, {
+                        method: 'POST',
+                        body: formData,
+                    });
+                    const hidden = document.querySelector(`.note-edit__media-wrap input[name="${fieldName}"]`);
+                    if (hidden) hidden.value = payload.url || payload.asset_id;
+                    showStatus('Upload thành công!', 'success');
+                } catch (error) {
+                    showStatus(error.message || 'Upload thất bại.', 'error');
+                }
+            });
+        });
+
+        document.getElementById('btn-save-note').addEventListener('click', async () => {
+            const fieldValues = {};
+            document.querySelectorAll('.fc-field').forEach((el) => {
+                fieldValues[el.name] = el.value;
+            });
+            markdownEditors.forEach((editor, fieldName) => {
+                fieldValues[fieldName] = editor.getValue();
+            });
+
+            const tags = (document.getElementById('tags-input').value || '')
+                .split(',')
+                .map((tag) => tag.trim())
+                .filter(Boolean);
+            const deckId = document.getElementById('deck-select').value;
+
+            try {
+                await requestJson(`/api/notes/${NOTE_ID}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ field_values: fieldValues, tags, deck_id: deckId || null }),
+                });
+                showStatus('Đã lưu thay đổi!', 'success');
+            } catch (error) {
+                showStatus(error.message || 'Lỗi khi lưu.', 'error');
             }
         });
-    });
 
-    document.querySelectorAll('.fc-markdown-field').forEach(textarea => {
-        const fieldName = textarea.dataset.markdownField || textarea.name;
-        if (!fieldName) return;
-
-        textarea.addEventListener('input', () => {
-            syncMarkdownPreview(textarea);
-        });
-        syncMarkdownPreview(textarea);
-
-        textarea.addEventListener('paste', (event) => {
-            const file = getImageFileFromClipboard(event.clipboardData);
-            if (!file) return;
-            event.preventDefault();
-            uploadMarkdownInlineImage(fieldName, file, textarea).catch(() => {
-                showStatus('Upload ảnh markdown thất bại.', 'error');
-            });
+        document.getElementById('btn-delete-note').addEventListener('click', async () => {
+            if (!window.confirm('Xóa note này và tất cả cards liên quan? Không thể hoàn tác.')) return;
+            try {
+                await requestJson(`/api/notes/${NOTE_ID}`, { method: 'DELETE' });
+                window.location.href = "{{ url_for('flashcards.notes_list_page') }}";
+            } catch (error) {
+                showStatus(error.message || 'Không thể xóa.', 'error');
+            }
         });
 
-        textarea.addEventListener('dragover', (event) => {
-            const files = Array.from(event.dataTransfer?.files || []);
-            const hasImage = files.some((file) => String(file.type || "").toLowerCase().startsWith("image/"));
-            if (!hasImage) return;
-            event.preventDefault();
-            textarea.classList.add('is-dragover');
-        });
-
-        textarea.addEventListener('dragleave', () => {
-            textarea.classList.remove('is-dragover');
-        });
-
-        textarea.addEventListener('drop', (event) => {
-            textarea.classList.remove('is-dragover');
-            const files = Array.from(event.dataTransfer?.files || []);
-            const file = files.find((candidate) => String(candidate.type || "").toLowerCase().startsWith("image/"));
-            if (!file) return;
-            event.preventDefault();
-            uploadMarkdownInlineImage(fieldName, file, textarea).catch(() => {
-                showStatus('Upload ảnh markdown thất bại.', 'error');
-            });
-        });
-    });
-
-    // ── Save ──
-    document.getElementById('btn-save-note').addEventListener('click', async () => {
-        const fieldValues = {};
-        document.querySelectorAll('.fc-field').forEach(el => {
-            fieldValues[el.name] = el.value;
-        });
-        const tags = (document.getElementById('tags-input').value || '').split(',').map(t => t.trim()).filter(Boolean);
-        const deckId = document.getElementById('deck-select').value;
-
-        const res = await fetch(`/api/notes/${NOTE_ID}`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ field_values: fieldValues, tags, deck_id: deckId || null }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (res.ok) {
-            showStatus('Đã lưu thay đổi!', 'success');
-        } else {
-            showStatus(data.message || 'Lỗi khi lưu.', 'error');
-        }
-    });
-
-    // ── Delete ──
-    document.getElementById('btn-delete-note').addEventListener('click', async () => {
-        if (!window.confirm('Xóa note này và tất cả cards liên quan? Không thể hoàn tác.')) return;
-        const res = await fetch(`/api/notes/${NOTE_ID}`, { method: 'DELETE' });
-        if (res.ok) {
-            window.location.href = "{{ url_for('flashcards.notes_list_page') }}";
-        } else {
-            const data = await res.json().catch(() => ({}));
-            showStatus(data.message || 'Không thể xóa.', 'error');
-        }
-    });
+        initMarkdownEditors();
+    })();
 </script>
 {% endblock %}

@@ -130,6 +130,7 @@ def flashcard_import_page():
             "name": deck.name,
             "path": _deck_path_label(deck, deck_map),
             "note_type_id": deck.note_type_id,
+            "parent_id": deck.parent_id,
         }
         for deck in decks
     ]

@@ -37,6 +37,7 @@
       </div>
     </div>
 
+    <div id="note-editor-markdown-toolbar" class="mb-3"></div>
     <div id="dynamic-fields" class="mt-3"></div>
 
     <div class="d-flex gap-2 mt-3">
@@ -51,58 +52,10 @@
 
 {% block scripts %}
 <style>
-  #dynamic-fields textarea[data-markdown-editor="1"] {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-  }
-
-  .note-editor-markdown-hint {
-    margin-top: 0.3rem;
-    font-size: 0.74rem;
-    color: #6c757d;
-  }
-
-  .note-editor-markdown-preview {
-    margin-top: 0.4rem;
-    border: 1px solid #dee2e6;
-    border-radius: 8px;
-    background: #fff;
-    padding: 0.5rem 0.6rem;
-    max-height: 180px;
-    overflow: auto;
-  }
-
-  .note-editor-markdown-preview-empty {
-    color: #6c757d;
-    font-size: 0.76rem;
-  }
-
-  .note-editor-markdown-preview-text {
-    color: #4a4a4a;
-    font-size: 0.8rem;
-    line-height: 1.45;
-    margin-bottom: 0.35rem;
-    word-break: break-word;
-  }
-
-  .note-editor-markdown-preview-text:last-child {
-    margin-bottom: 0;
-  }
-
-  .note-editor-markdown-preview-figure {
-    margin: 0 0 0.4rem;
-  }
-
-  .note-editor-markdown-preview-figure:last-child {
-    margin-bottom: 0;
-  }
-
-  .note-editor-markdown-preview-figure img {
-    display: block;
-    max-width: 100%;
-    height: auto;
-    border-radius: 6px;
-    border: 1px solid #e5e7eb;
-    background: #fff;
+  #note-editor-markdown-toolbar {
+    position: sticky;
+    top: 0.5rem;
+    z-index: 9;
   }
 </style>
 <script>
@@ -111,12 +64,14 @@
     const deckSelect = document.getElementById("deck-select");
     const tagsInput = document.getElementById("tags-input");
     const dynamicFields = document.getElementById("dynamic-fields");
+    const toolbarHost = document.getElementById("note-editor-markdown-toolbar");
     const form = document.getElementById("note-editor-form");
     const errorEl = document.getElementById("note-editor-error");
     const successEl = document.getElementById("note-editor-success");
-    const MARKDOWN_PROXY_MEDIA_RE = /^\/media\/proxy\/[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 
     let currentFields = [];
+    let markdownManager = null;
+    let markdownEditors = [];
 
     function showError(message) {
       errorEl.textContent = message || "Request failed.";
@@ -142,67 +97,15 @@
       return data;
     }
 
-    function escapeHtml(value) {
-      return String(value == null ? "" : value)
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#39;");
-    }
-
-    function markdownTextToPreviewHtml(rawText) {
-      return escapeHtml(rawText).replace(/\n/g, "<br>");
-    }
-
-    function renderMarkdownPreviewHtml(rawMarkdown) {
-      const source = String(rawMarkdown || "").replace(/\r\n?/g, "\n");
-      if (!source.trim()) {
-        return '<div class="note-editor-markdown-preview-empty">Preview trống.</div>';
+    function resetMarkdownEditors() {
+      markdownEditors.forEach((editor) => editor.destroy());
+      markdownEditors = [];
+      if (markdownManager) {
+        markdownManager.destroyAll();
       }
-
-      const imageRe = /!\[([^\]]*)\]\(([^)\s]+)\)/g;
-      const chunks = [];
-      let cursor = 0;
-      let match;
-
-      while ((match = imageRe.exec(source)) !== null) {
-        const before = source.slice(cursor, match.index);
-        if (before) {
-          chunks.push(`<div class="note-editor-markdown-preview-text">${markdownTextToPreviewHtml(before)}</div>`);
-        }
-
-        const alt = String(match[1] || "").trim().slice(0, 160) || "image";
-        const imageUrl = String(match[2] || "").trim();
-        if (MARKDOWN_PROXY_MEDIA_RE.test(imageUrl)) {
-          chunks.push(
-            `<figure class="note-editor-markdown-preview-figure"><img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(alt)}" loading="lazy"></figure>`
-          );
-        } else {
-          chunks.push(`<div class="note-editor-markdown-preview-text">${markdownTextToPreviewHtml(match[0])}</div>`);
-        }
-        cursor = imageRe.lastIndex;
-      }
-
-      const tail = source.slice(cursor);
-      if (tail) {
-        chunks.push(`<div class="note-editor-markdown-preview-text">${markdownTextToPreviewHtml(tail)}</div>`);
-      }
-
-      return chunks.length
-        ? chunks.join("")
-        : '<div class="note-editor-markdown-preview-empty">Preview trống.</div>';
-    }
-
-    function bindMarkdownPreview(textarea, previewEl) {
-      if (!(textarea instanceof HTMLTextAreaElement) || !(previewEl instanceof HTMLElement)) {
-        return;
-      }
-      const sync = () => {
-        previewEl.innerHTML = renderMarkdownPreviewHtml(textarea.value);
-      };
-      textarea.addEventListener("input", sync);
-      sync();
+      markdownManager = toolbarHost && window.FlamaMarkdownEditor
+        ? window.FlamaMarkdownEditor.createManager({ toolbarHost })
+        : null;
     }
 
     function renderField(field) {
@@ -226,19 +129,11 @@
         textarea.className = "form-control";
         textarea.rows = field.field_type === "markdown" ? 7 : 4;
         if (field.field_type === "markdown") {
-          textarea.setAttribute("data-markdown-editor", "1");
-        }
-        wrapper.appendChild(textarea);
-        if (field.field_type === "markdown") {
-          const hint = document.createElement("div");
-          hint.className = "note-editor-markdown-hint";
-          hint.textContent = "Markdown preview: ảnh /media/proxy sẽ hiển thị ngay bên dưới.";
-          wrapper.appendChild(hint);
-
-          const preview = document.createElement("div");
-          preview.className = "note-editor-markdown-preview";
-          wrapper.appendChild(preview);
-          bindMarkdownPreview(textarea, preview);
+          const mount = document.createElement("div");
+          mount.setAttribute("data-note-editor-markdown", field.name);
+          wrapper.appendChild(mount);
+        } else {
+          wrapper.appendChild(textarea);
         }
       } else {
         const input = document.createElement("input");
@@ -257,8 +152,29 @@
       }
       const data = await requestJson(`/api/note-types/${noteTypeId}/fields`);
       currentFields = data.items || [];
+      resetMarkdownEditors();
       dynamicFields.innerHTML = "";
       currentFields.forEach((field) => dynamicFields.appendChild(renderField(field)));
+      if (markdownManager) {
+        currentFields
+          .filter((field) => field.field_type === "markdown")
+          .forEach((field) => {
+            const mount = dynamicFields.querySelector(`[data-note-editor-markdown="${window.FlamaMarkdownEditor.cssEscape(field.name)}"]`);
+            if (!(mount instanceof HTMLElement)) {
+              return;
+            }
+            const editor = markdownManager.register({
+              mount,
+              fieldName: field.name,
+              label: field.name,
+              inputName: field.name,
+              value: "",
+              minHeight: "2.75rem",
+              hint: "",
+            });
+            markdownEditors.push(editor);
+          });
+      }
     }
 
     async function uploadMedia(noteId, fieldName, file) {
@@ -293,9 +209,14 @@
           if (file) mediaUploads.push({ fieldName: field.name, file });
           else fieldValues[field.name] = "";
         } else {
-          const control = wrapper.querySelector("input, textarea");
-          const rawValue = control?.value || "";
-          fieldValues[field.name] = field.field_type === "markdown" ? rawValue : rawValue.trim();
+          if (field.field_type === "markdown") {
+            const editor = markdownEditors.find((candidate) => candidate.fieldName === field.name);
+            fieldValues[field.name] = editor ? editor.getValue() : "";
+          } else {
+            const control = wrapper.querySelector("input, textarea");
+            const rawValue = control?.value || "";
+            fieldValues[field.name] = rawValue.trim();
+          }
         }
       }
 

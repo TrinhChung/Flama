@@ -41,6 +41,7 @@ from app.repositories.study_repository import (
     card_state_from_progress as _card_state_from_progress,
     load_card_progress_map as _load_card_progress_map_for_user,
     select_next_due_card_from_loaded as _select_next_due_card_from_loaded,
+    summarize_pending_learning_from_loaded as _summarize_pending_learning_from_loaded,
 )
 from app.utils.deck_move_token import parse_deck_move_token
 from app.utils.permissions import is_admin_user
@@ -50,6 +51,7 @@ from app.services.anki_scheduler import (
     default_deck_options,
 )
 from app.services.flashcard_renderer import TemplateCompileError, render_template_pair
+from app.services.stats_overview import get_effective_timezone_name
 from app.validators import (
     escape_like_pattern,
     RequestValidationError,
@@ -399,6 +401,7 @@ def browse_api_decks_tree():
             "tree": vocabulary_ctrl.build_browse_deck_tree_payload(
                 user_id=current_user.id,
                 admin_mode=is_admin_user(current_user),
+                timezone_name=get_effective_timezone_name(getattr(current_user, "timezone", "UTC")),
             )
         }
     )
@@ -411,6 +414,7 @@ def browse_api_decks():
     tree = vocabulary_ctrl.build_browse_deck_tree_payload(
         user_id=current_user.id,
         admin_mode=is_admin_user(current_user),
+        timezone_name=get_effective_timezone_name(getattr(current_user, "timezone", "UTC")),
     )
     flat_items = []
 
@@ -1714,8 +1718,19 @@ def topic(topic_id: int):
     return _legacy_structure_removed_response()
 
 
-def _select_next_note_card(cards: List[Card], progress_map: Dict[str, CardProgress], now: datetime):
-    return _select_next_due_card_from_loaded(cards, progress_map, now=now)
+def _select_next_note_card(
+    cards: List[Card],
+    progress_map: Dict[str, CardProgress],
+    now: datetime,
+    *,
+    timezone_name: str,
+):
+    return _select_next_due_card_from_loaded(
+        cards,
+        progress_map,
+        now=now,
+        timezone_name=timezone_name,
+    )
 
 
 def _build_note_study_card_payload(card_obj: Card | None) -> SimpleNamespace | None:
@@ -1742,8 +1757,29 @@ def _count_due_note_cards(
     progress_map: dict[str, CardProgress],
     *,
     now: datetime,
+    timezone_name: str,
 ) -> tuple[int, int, int]:
-    return vocabulary_ctrl.count_due_note_cards(cards, progress_map, now=now)
+    return vocabulary_ctrl.count_due_note_cards(
+        cards,
+        progress_map,
+        now=now,
+        timezone_name=timezone_name,
+    )
+
+
+def _summarize_pending_learning_cards(
+    cards: list[Card],
+    progress_map: dict[str, CardProgress],
+    *,
+    now: datetime,
+    timezone_name: str,
+) -> tuple[int, datetime | None]:
+    return _summarize_pending_learning_from_loaded(
+        cards,
+        progress_map,
+        now=now,
+        timezone_name=timezone_name,
+    )
 
 
 @vocabulary_bp.route("/study/topic/<int:topic_id>")
@@ -1763,16 +1799,42 @@ def study_deck(deck_id: int):
 
     cards = _query_study_cards_for_deck_ids(subtree_ids)
     now = datetime.utcnow()
+    timezone_name = get_effective_timezone_name(getattr(current_user, "timezone", "UTC"))
     card_ids = [card_obj.id for card_obj in cards]
     progress_map = _load_card_progress_map(card_ids)
 
-    selected_card = _select_next_note_card(cards, progress_map, now)
-    due_new, due_learn, due_review = _count_due_note_cards(cards, progress_map, now=now)
+    selected_card = _select_next_note_card(
+        cards,
+        progress_map,
+        now,
+        timezone_name=timezone_name,
+    )
+    due_new, due_learn, due_review = _count_due_note_cards(
+        cards,
+        progress_map,
+        now=now,
+        timezone_name=timezone_name,
+    )
+    pending_learning_count, next_learning_due_at = _summarize_pending_learning_cards(
+        cards,
+        progress_map,
+        now=now,
+        timezone_name=timezone_name,
+    )
 
     next_intervals_preview = None
     if selected_card:
-        card_state = _card_state_from_progress(progress_map.get(selected_card.id), now)
-        next_intervals_preview = computeAnswerPreview(card_state, default_deck_options(), now)
+        card_state = _card_state_from_progress(
+            progress_map.get(selected_card.id),
+            now,
+            timezone_name=timezone_name,
+        )
+        next_intervals_preview = computeAnswerPreview(
+            card_state,
+            default_deck_options(),
+            now,
+            timezone_name=timezone_name,
+        )
 
     rendered_data = _render_note_study_flashcard(selected_card)
     card_payload = _build_note_study_card_payload(selected_card)
@@ -1845,6 +1907,12 @@ def study_deck(deck_id: int):
         due_learn=due_learn,
         due_review=due_review,
         due_total=due_new + due_learn + due_review,
+        pending_learning_count=pending_learning_count,
+        next_learning_due_at_iso=(
+            f"{next_learning_due_at.isoformat(timespec='seconds')}Z"
+            if next_learning_due_at is not None
+            else None
+        ),
         study_scope="deck",
         study_scope_id=root_deck.id,
         next_study_url=url_for("vocabulary.study_deck", deck_id=root_deck.id),

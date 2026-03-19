@@ -66,6 +66,27 @@ class AnkiSchedulerTests(unittest.TestCase):
         # Easy base uses (5 + 20)=25 => *2.5*1.3 = 81.25
         self.assertAlmostEqual(easy.intervalDays, 81.25, delta=0.01)
 
+    def test_learning_cross_day_boundary_uses_user_timezone(self):
+        now_utc = datetime(2026, 2, 22, 18, 55, 0)  # 03:55 Asia/Tokyo local time
+        card = CardState(
+            type="new",
+            stepIndex=0,
+            due=now_utc,
+            ease=self.options.startingEase,
+        )
+
+        updated = applyAnswer(
+            card,
+            self.options,
+            now_utc,
+            "good",
+            timezone_name="Asia/Tokyo",
+        )
+
+        self.assertEqual(updated.type, "learning")
+        self.assertEqual(updated.due, datetime(2026, 2, 22, 19, 0, 0))
+        self.assertEqual(updated.dueDay, datetime(2026, 2, 23, 0, 0, 0).date().toordinal())
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -19,6 +19,7 @@ from . import *
 from app.repositories.study_repository import (
     card_state_from_progress as _card_state_from_progress,
     apply_card_state_to_progress as _apply_card_state_to_progress,
+    query_pending_learning_summary as _query_pending_learning_summary,
     query_next_due_card_id as _query_next_due_card_id,
 )
 
@@ -41,6 +42,8 @@ from app.validators import (
     validate_study_answer_request,
     validate_study_next_query,
 )
+from app.services.stats_overview import get_effective_timezone_name
+from app.presenters.vocabulary_presenter import note_field_values_as_strings
 
 
 
@@ -91,13 +94,35 @@ def study_next():
         return jsonify({"card_id": None, "message": "No cards found for selected scope."})
 
     now = datetime.utcnow()
+    timezone_name = get_effective_timezone_name(getattr(current_user, "timezone", "UTC"))
     selected_card_id = _query_next_due_card_id(
         query,
         user_id=current_user.id,
         now=now,
+        timezone_name=timezone_name,
     )
     if not selected_card_id:
-        return jsonify({"card_id": None, "message": "No due cards."})
+        pending_learning_count, next_due_at = _query_pending_learning_summary(
+            query,
+            user_id=current_user.id,
+            now=now,
+            timezone_name=timezone_name,
+        )
+        if pending_learning_count > 0:
+            return jsonify(
+                {
+                    "card_id": None,
+                    "message": "No cards are due right now.",
+                    "session_state": "waiting",
+                    "pending_learning_count": pending_learning_count,
+                    "next_due_at": (
+                        f"{next_due_at.isoformat(timespec='seconds')}Z"
+                        if next_due_at is not None
+                        else None
+                    ),
+                }
+            )
+        return jsonify({"card_id": None, "message": "No due cards.", "session_state": "complete"})
 
     selected_card = query.filter(Card.id == selected_card_id).first()
     if not selected_card:
@@ -106,8 +131,13 @@ def study_next():
         return jsonify({"card_id": None, "message": "No due cards."})
 
     progress = CardProgress.query.filter_by(user_id=current_user.id, card_id=selected_card.id).first()
-    card_state = _card_state_from_progress(progress, now)
-    interval_preview = computeAnswerPreview(card_state, default_deck_options(), now)
+    card_state = _card_state_from_progress(progress, now, timezone_name=timezone_name)
+    interval_preview = computeAnswerPreview(
+        card_state,
+        default_deck_options(),
+        now,
+        timezone_name=timezone_name,
+    )
 
     note = selected_card.note
     template = selected_card.template
@@ -147,6 +177,27 @@ def study_next():
             "rendered_front_html": rendered["front_html"],
             "rendered_back_html": rendered["back_html"],
             "intervals_preview": interval_preview,
+            "can_edit_card": bool(note and note.user_id == current_user.id),
+            "save_card_url": (
+                url_for("flashcards.study_edit_card", card_id=selected_card.id)
+                if note and note.user_id == current_user.id
+                else None
+            ),
+            "load_note_url": (
+                url_for("flashcards.get_note", note_id=note.id)
+                if note and note.user_id == current_user.id
+                else None
+            ),
+            "field_values": note_field_values_as_strings(note),
+            "field_defs": [
+                {
+                    "name": field_def.name,
+                    "field_type": field_def.field_type,
+                    "required": bool(field_def.required),
+                    "position": int(field_def.position or 0),
+                }
+                for field_def in sorted(note.note_type.field_defs, key=lambda item: item.position)
+            ] if note and note.note_type else [],
         }
     )
 
@@ -194,35 +245,41 @@ def study_answer(card_id: str):
         db.session.add(progress)
         db.session.flush()
 
-    now = datetime.utcnow()
-    current_state = _card_state_from_progress(progress, now)
-    review_mode = normalize_review_mode(current_state.type)
-    updated_state = applyAnswer(current_state, default_deck_options(), now, rating)  # type: ignore[arg-type]
-    from app.services.study_service import apply_study_answer_and_commit
-    
-    apply_study_answer_and_commit(
-        user=current_user,
-        card=card,
-        progress=progress,
-        updated_state=updated_state,
-        now=now,
-        rating=rating,
-        review_mode=review_mode,
-        payload=service_payload,
-        clone_scope=clone_scope,
-        requested_scope_id=requested_scope_id
-    )
+    # Capture for optimistic locking (detect concurrent reviews)
+    expected_last_reviewed_at = progress.last_reviewed_at
 
-    local_deck_id_for_usage = card.note.deck_id
-    if clone_scope is not None:
-        local_deck_id_for_usage = (
-            requested_scope_id
-            if requested_scope_id is not None
-            else _resolve_local_clone_deck_id_for_source_deck(
-                install_id=clone_scope.install.id,
-                source_deck_id=card.note.deck_id,
-            )
-        ) or clone_scope.install.local_deck_id
+    now = datetime.utcnow()
+    timezone_name = get_effective_timezone_name(
+        validated_answer.timezone or getattr(current_user, "timezone", "UTC")
+    )
+    current_state = _card_state_from_progress(progress, now, timezone_name=timezone_name)
+    review_mode = normalize_review_mode(current_state.type)
+    updated_state = applyAnswer(  # type: ignore[arg-type]
+        current_state,
+        default_deck_options(),
+        now,
+        rating,
+        timezone_name=timezone_name,
+    )
+    from app.services.study_service import apply_study_answer_and_commit, ConcurrentReviewError
+
+    try:
+        local_deck_id_for_usage = apply_study_answer_and_commit(
+            user=current_user,
+            card=card,
+            progress=progress,
+            expected_last_reviewed_at=expected_last_reviewed_at,
+            updated_state=updated_state,
+            now=now,
+            rating=rating,
+            review_mode=review_mode,
+            payload=service_payload,
+            clone_scope=clone_scope,
+            requested_scope_id=requested_scope_id,
+            timezone_name=timezone_name,
+        )
+    except ConcurrentReviewError as exc:
+        return _api_error("CONCURRENT_REVIEW", str(exc), status=409)
 
     next_scope_id = requested_scope_id if requested_scope_id is not None else local_deck_id_for_usage
     next_card_url = url_for("flashcards.study_next", scope="deck", scope_id=next_scope_id) if next_scope_id else None
@@ -236,7 +293,12 @@ def study_answer(card_id: str):
             "success": True,
             "next_url": next_url,
             "next_card_url": next_card_url,
-            "intervals_preview": computeAnswerPreview(updated_state, default_deck_options(), now),
+            "intervals_preview": computeAnswerPreview(
+                updated_state,
+                default_deck_options(),
+                now,
+                timezone_name=timezone_name,
+            ),
         }
     )
 
