@@ -2069,6 +2069,77 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             self.assertEqual(values.get("Reading"), "いぬ")
             self.assertEqual(values.get("Meaning"), "dog-new")
 
+    def test_flashcard_import_txt_preamble_uses_separator_directive(self):
+        note_type = self._create_note_type()
+        note_type_id = note_type["id"]
+
+        parse_resp = self.client.post(
+            "/api/flashcards/import/parse",
+            data={
+                "note_type_id": note_type_id,
+                "delimiter_mode": "csv",
+                "has_header": "0",
+                "file": (
+                    io.BytesIO(
+                        (
+                            "#separator:tab\n"
+                            "#html:true\n"
+                            "#tags column:16\n"
+                            "\\u72ac\\t\\u3044\\u306c\\t<b>dog</b>\n"
+                            "\\u732b\\t\\u306d\\u3053\\tcat\n"
+                        ).encode("utf-8").decode("unicode_escape").encode("utf-8")
+                    ),
+                    "anki-export.txt",
+                ),
+            },
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(parse_resp.status_code, 200)
+        parse_payload = parse_resp.get_json() or {}
+        self.assertEqual(parse_payload.get("delimiter"), "\t")
+        self.assertEqual(parse_payload.get("column_count"), 3)
+        self.assertEqual(parse_payload.get("total_rows"), 2)
+        preview_rows = parse_payload.get("preview_rows") or []
+        self.assertEqual(preview_rows[0][0], "犬")
+        self.assertEqual(preview_rows[0][2], "<b>dog</b>")
+
+        execute_resp = self.client.post(
+            "/api/flashcards/import/execute",
+            json={
+                "token": parse_payload["token"],
+                "note_type_id": note_type_id,
+                "target_deck_id": self.deck_id,
+                "import_mode": "upsert",
+                "uniqueness_fields": ["Word"],
+                "mapping": parse_payload.get("suggested_mapping", {}),
+                "dont_overwrite_empty": True,
+                "confirm_column_mismatch": False,
+            },
+        )
+        self.assertEqual(execute_resp.status_code, 200)
+        result = execute_resp.get_json() or {}
+        summary = result.get("summary") or {}
+        self.assertEqual(int(summary.get("inserted") or 0), 2)
+        self.assertEqual(int(summary.get("errors") or 0), 0)
+
+        with self.app.app_context():
+            imported = (
+                Note.query.filter_by(
+                    user_id=self.user_id,
+                    note_type_id=note_type_id,
+                    deck_id=self.deck_id,
+                )
+                .order_by(Note.id.asc())
+                .all()
+            )
+            self.assertEqual(len(imported), 2)
+            values_by_word = {
+                str((note.field_values or {}).get("Word")): (note.field_values or {})
+                for note in imported
+            }
+            self.assertEqual(values_by_word["犬"].get("Meaning"), "<b>dog</b>")
+            self.assertEqual(values_by_word["猫"].get("Meaning"), "cat")
+
     def test_flashcard_import_insert_only_scoped_to_target_deck(self):
         note_type = self._create_note_type()
         note_type_id = note_type["id"]
@@ -2234,6 +2305,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         html = response.get_data(as_text=True)
         self.assertIn("Step A - Upload & Parse", html)
         self.assertIn("Step D - Review & Execute", html)
+        self.assertIn("previewSelectAllInput", html)
 
     def test_shared_note_type_rate_is_limited_to_two_submissions_per_user(self):
         with self.app.app_context():

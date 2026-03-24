@@ -294,6 +294,69 @@ REM Windows Command Prompt
 scripts\reseed_db.bat
 ```
 
+### Seed Vocabulary Data
+
+`vocab-seed` doc duoc du lieu tu `static/seed_data` va tao deck tree theo folder/file:
+
+- Folder -> deck node
+- File `.csv` / `.tsv` / `.txt` -> leaf deck
+- Reseed full DB mac dinh se chay: `flask --app wsgi.py vocab-seed --path "static/seed_data" --replace-lessons`
+
+Neu muon seed rieng mot nhom du lieu, co the chay truc tiep:
+
+```bash
+flask --app wsgi.py vocab-seed --path "static/seed_data/ChungBech" --replace-lessons
+```
+
+```powershell
+flask --app wsgi.py vocab-seed --path "static/seed_data/ChungBech" --replace-lessons
+```
+
+```bat
+flask --app wsgi.py vocab-seed --path "static/seed_data/ChungBech" --replace-lessons
+```
+
+### Legacy TXT Seed (ChungBech)
+
+Flow seed hien tai da ho tro file `.txt` kieu Anki export co preamble nhu:
+
+```text
+#separator:tab
+#html:true
+#tags column:16
+```
+
+File mau hien dat tai `static/seed_data/ChungBech/ChungBechN1__言葉__Bài 01.txt`.
+
+Khi seed file `.txt` legacy nay, he thong tai su dung parser import delimited hien co va map sang note type `Flama Standard Vocabulary` theo thu tu cot:
+
+```text
+1 Deck
+2 Word
+3 Reading
+4 Translation_VI
+5 Meaning_JP
+6 Meaning_VI
+7 Usage_JP
+8 Usage_VI
+9 Example_JP
+10 Example_VI
+11 Additional_Note_JP
+12 Additional_Note_VI
+13 image
+14 Word_Audio
+15 Example_Audio
+16 tags (bo qua trong vocab-seed)
+```
+
+Luu y:
+
+- Bo du lieu ChungBech khong co `hanviet`, nen field `hanviet` duoc seed la `null`.
+- File `.txt` legacy nay khong co `diagram`, nen field `diagram` duoc seed la `null`.
+- Bat ky truong nao khong co du lieu trong file cung duoc seed la `null`.
+- `#tags column` duoc dung de parser doc dung format, nhung cot tags khong duoc ghi vao field values cua note.
+- De them full data sau nay, chi can dat them file/folder cung format vao `static/seed_data/ChungBech/` roi chay lai `vocab-seed --replace-lessons`.
+
 ## Luu y media/audio
 
 - Mac dinh media (bao gom audio VoiceVox) duoc luu ngoai repo tai `../flama_media_storage` de tranh lam nang git workspace.

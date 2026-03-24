@@ -16,11 +16,11 @@ from app.repositories.deck_tree_query import (
 )
 from app.repositories.stats_query_repository import (
     aggregate_future_due_offsets_mysql,
+    can_use_mysql_local_day_sql,
     query_due_queue_rows_python,
     query_interval_days_rows,
 )
 from app.utils.permissions import is_admin_user
-from models import db
 
 UTC = timezone.utc
 DEFAULT_TIMEZONE = "UTC"
@@ -331,12 +331,11 @@ def build_today_future_stats(
 
     end_offset = _future_window_end_offset(effective_future_range)
 
-    dialect = db.session.get_bind().dialect.name if db.session.get_bind() is not None else ""
-    if dialect == "mysql":
+    if can_use_mysql_local_day_sql(timezone_name=timezone_effective):
         due_by_offset, min_negative_offset = aggregate_future_due_offsets_mysql(
             user_id=user_id,
             scope_deck_ids=scope_deck_ids,
-            timezone_name=timezone_effective,
+            mysql_timezone="+00:00",
             backlog=effective_backlog,
             end_offset=end_offset,
             today_local=today_local,

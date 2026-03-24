@@ -225,8 +225,8 @@ def flashcard_import_parse():
     return jsonify(
         {
             "token": summary.get("token"),
-            "delimiter": delimiter,
-            "has_header": has_header,
+            "delimiter": summary.get("delimiter") or delimiter,
+            "has_header": bool(summary.get("has_header")),
             "columns": summary.get("columns") or [],
             "column_count": int(summary.get("column_count") or 0),
             "total_rows": int(summary.get("total_rows") or 0),

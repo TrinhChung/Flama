@@ -11,6 +11,19 @@ from models.card_progress import CardProgress
 
 UTC = timezone.utc
 
+
+def _session_dialect_name() -> str:
+    bind = db.session.get_bind()
+    return bind.dialect.name if bind is not None else ""
+
+
+def can_use_mysql_local_day_sql(*, timezone_name: str) -> bool:
+    """Only UTC is safe in local MySQL setups without timezone tables."""
+    if _session_dialect_name() != "mysql":
+        return False
+    return str(timezone_name or "").strip().upper() in {"UTC", "ETC/UTC", "GMT"}
+
+
 def _safe_int(value: Any) -> int:
     try:
         return int(value or 0)
@@ -43,11 +56,10 @@ def _utc_to_local_day(moment: datetime, timezone_obj) -> date:
 def _query_daily_review_aggregates_mysql(
     *,
     user_id: int,
-    timezone_name: str,
+    mysql_timezone: str,
     start_utc: datetime,
     end_utc: datetime,
 ) -> dict[date, dict[str, int]]:
-    mysql_timezone = "+00:00" if str(timezone_name).upper() == "UTC" else timezone_name
     local_day_expr = db.func.date(
         db.func.convert_tz(ReviewEvent.reviewed_at, "+00:00", mysql_timezone)
     )
@@ -132,11 +144,10 @@ def query_daily_review_aggregates(
     start_utc: datetime,
     end_utc: datetime,
 ) -> dict[date, dict[str, int]]:
-    dialect = db.session.get_bind().dialect.name if db.session.get_bind() is not None else ""
-    if dialect == "mysql":
+    if can_use_mysql_local_day_sql(timezone_name=timezone_name):
         return _query_daily_review_aggregates_mysql(
             user_id=user_id,
-            timezone_name=timezone_name,
+            mysql_timezone="+00:00",
             start_utc=start_utc,
             end_utc=end_utc,
         )
@@ -151,10 +162,9 @@ def query_daily_review_aggregates(
 def _query_active_review_days_mysql(
     *,
     user_id: int,
-    timezone_name: str,
+    mysql_timezone: str,
     end_utc: datetime,
 ) -> set[date]:
-    mysql_timezone = "+00:00" if str(timezone_name).upper() == "UTC" else timezone_name
     local_day_expr = db.func.date(
         db.func.convert_tz(ReviewEvent.reviewed_at, "+00:00", mysql_timezone)
     )
@@ -206,11 +216,10 @@ def query_active_review_days(
     timezone_obj,
     end_utc: datetime,
 ) -> set[date]:
-    dialect = db.session.get_bind().dialect.name if db.session.get_bind() is not None else ""
-    if dialect == "mysql":
+    if can_use_mysql_local_day_sql(timezone_name=timezone_name):
         return _query_active_review_days_mysql(
             user_id=user_id,
-            timezone_name=timezone_name,
+            mysql_timezone="+00:00",
             end_utc=end_utc,
         )
     return _query_active_review_days_python(
@@ -266,11 +275,10 @@ def query_today_review_summary(
 def _query_future_due_day_counts_mysql(
     *,
     user_id: int,
-    timezone_name: str,
+    mysql_timezone: str,
     start_utc: datetime,
     end_utc: datetime,
 ) -> dict[date, int]:
-    mysql_timezone = "+00:00" if str(timezone_name).upper() == "UTC" else timezone_name
     local_day_expr = db.func.date(
         db.func.convert_tz(CardProgress.due_at, "+00:00", mysql_timezone)
     )
@@ -335,11 +343,10 @@ def query_future_due_day_counts(
     start_utc: datetime,
     end_utc: datetime,
 ) -> dict[date, int]:
-    dialect = db.session.get_bind().dialect.name if db.session.get_bind() is not None else ""
-    if dialect == "mysql":
+    if can_use_mysql_local_day_sql(timezone_name=timezone_name):
         return _query_future_due_day_counts_mysql(
             user_id=user_id,
-            timezone_name=timezone_name,
+            mysql_timezone="+00:00",
             start_utc=start_utc,
             end_utc=end_utc,
         )
@@ -379,12 +386,11 @@ def aggregate_future_due_offsets_mysql(
     *,
     user_id: int,
     scope_deck_ids: list[int] | None,
-    timezone_name: str,
+    mysql_timezone: str,
     backlog: bool,
     end_offset: int | None,
     today_local: date,
 ) -> tuple[dict[int, dict[str, int]], int]:
-    mysql_timezone = "+00:00" if str(timezone_name).upper() == "UTC" else timezone_name
     local_day_expr = db.func.date(
         db.func.convert_tz(CardProgress.due_at, "+00:00", mysql_timezone)
     )

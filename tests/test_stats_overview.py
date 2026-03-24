@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import unittest
 from datetime import datetime
+from unittest.mock import patch
 
 from app import create_app
 from app.services.stats_overview import build_stats_overview
@@ -213,6 +214,25 @@ class StatsOverviewTests(unittest.TestCase):
             self.assertEqual(jan_11["cards"], 1)
             self.assertEqual(jan_11["source"], "due")
             self.assertTrue(jan_11["is_future"])
+
+    def test_non_utc_mysql_falls_back_to_python_aggregation(self):
+        with self.app.app_context():
+            self._add_event(when_utc=datetime(2026, 1, 10, 15, 30, 0), duration_ms=2000)
+            db.session.commit()
+
+            with patch("app.repositories.stats_query_repository._session_dialect_name", return_value="mysql"):
+                payload = build_stats_overview(
+                    user_id=self.user_id,
+                    year=2026,
+                    timezone_name="Asia/Tokyo",
+                    now_utc=datetime(2026, 1, 10, 16, 0, 0),
+                )
+
+            jan_11 = self._heatmap_day(payload, "2026-01-11")
+            self.assertEqual(payload["today"]["cards"], 1)
+            self.assertEqual(jan_11["cards"], 1)
+            self.assertEqual(jan_11["source"], "reviewed")
+            self.assertFalse(jan_11["is_future"])
 
 
 if __name__ == "__main__":

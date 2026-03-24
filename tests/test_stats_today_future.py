@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import unittest
 from datetime import datetime
+from unittest.mock import patch
 
 from app import create_app
 from app.services.stats_today_future import build_today_future_stats
@@ -205,6 +206,38 @@ class StatsTodayFutureTests(unittest.TestCase):
         self.assertIn("today", payload)
         self.assertIn("future_due", payload)
         self.assertIn("totals", payload)
+
+    def test_non_utc_mysql_falls_back_to_python_future_due(self):
+        with self.app.app_context():
+            db.session.add(
+                ReviewEvent(
+                    user_id=self.user_id,
+                    card_id="tokyo-card",
+                    deck_id=self.deck_id,
+                    note_type_id=None,
+                    reviewed_at=datetime(2026, 2, 22, 15, 30, 0),
+                    duration_ms=2000,
+                    rating="good",
+                    mode="review",
+                )
+            )
+            self._add_progress(due_at=datetime(2026, 2, 23, 15, 30, 0), interval_days=3)
+            db.session.commit()
+
+            with patch("app.repositories.stats_query_repository._session_dialect_name", return_value="mysql"):
+                payload = build_today_future_stats(
+                    user_id=self.user_id,
+                    timezone_name="Asia/Tokyo",
+                    scope="collection",
+                    deck_id=None,
+                    history_range="12m",
+                    future_range="30",
+                    backlog=False,
+                    now_utc=datetime(2026, 2, 22, 16, 0, 0),
+                )
+
+            self.assertEqual(payload["today"]["cards"], 1)
+            self.assertEqual(payload["totals"]["due_tomorrow"], 1)
 
 
 if __name__ == "__main__":

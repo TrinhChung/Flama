@@ -80,6 +80,10 @@
               <div id="previewCaption" class="import-preview-caption">Chọn file để xem trước dữ liệu import.</div>
             </div>
             <div class="import-preview-actions">
+              <label class="import-preview-select-all" for="previewSelectAllInput">
+                <input id="previewSelectAllInput" class="form-check-input mt-0" type="checkbox">
+                <span>Select all columns</span>
+              </label>
               <div class="import-toggle-group" role="group" aria-label="Header row mode">
                 <input class="import-toggle-input" type="radio" name="previewHeaderMode" id="previewHeaderOn" value="1" checked>
                 <label class="import-toggle-chip" for="previewHeaderOn">Có header</label>
@@ -520,6 +524,20 @@
     flex-wrap: wrap;
   }
 
+  .import-preview-select-all {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.45rem 0.75rem;
+    border-radius: 999px;
+    background: #fff;
+    border: 1px solid var(--flama-border);
+    color: var(--flama-text-2);
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
   .import-toggle-group {
     display: inline-flex;
     align-items: center;
@@ -579,15 +597,52 @@
     top: 0;
     z-index: 1;
     background: #fff7f0;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
   }
 
   .import-preview-table td {
     white-space: normal;
     word-break: break-word;
     vertical-align: top;
+  }
+
+  .import-preview-column-toggle {
+    display: grid;
+    gap: 0.35rem;
+    align-items: flex-start;
+  }
+
+  .import-preview-column-topline {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+  }
+
+  .import-preview-column-title {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--flama-text);
+    line-height: 1.25;
+  }
+
+  .import-preview-column-meta {
+    display: block;
+    font-size: 0.72rem;
+    color: var(--flama-text-2);
+    line-height: 1.2;
+  }
+
+  .import-preview-table th.is-excluded,
+  .import-preview-table td.is-excluded {
+    background: #f7f7f8;
+    color: var(--flama-text-2);
+  }
+
+  .import-preview-table td.is-excluded .preview-cell-text {
+    opacity: 0.58;
   }
 
   .import-preview-table .preview-cell-text {
@@ -670,14 +725,18 @@
     const ESTIMATE_BUTTON_LABEL = "1. Estimate";
     const EXECUTE_BUTTON_LABEL = "2. Execute Import";
     const SUPPORTED_IMPORT_EXTENSIONS = new Set(["csv", "tsv", "txt"]);
+    const DECK_COLUMN_HINTS = new Set(["deck", "deckname", "deckpath", "decks", "sourcedeck", "targetdeck"]);
 
     const state = {
       token: null,
       columns: [],
+      selectedColumnIndexes: [],
+      autoExcludedColumnIndexes: [],
       previewRows: [],
       hasHeader: true,
       warnings: [],
       mapping: {},
+      parseMetaInfo: null,
       lastSummary: null,
       parsed: false,
       running: false,
@@ -701,6 +760,7 @@
       parseMeta: document.getElementById("parseMeta"),
       previewWrap: document.getElementById("previewWrap"),
       previewCaption: document.getElementById("previewCaption"),
+      previewSelectAllInput: document.getElementById("previewSelectAllInput"),
       previewTable: document.getElementById("previewTable"),
       previewHeaderRow: document.getElementById("previewHeaderRow"),
       previewBody: document.getElementById("previewBody"),
@@ -796,6 +856,181 @@
     function getFields() {
       const noteType = getSelectedNoteType();
       return Array.isArray(noteType?.fields) ? noteType.fields : [];
+    }
+
+    function normalizeImportName(value) {
+      return String(value == null ? "" : value).trim().toLowerCase().replace(/[^a-z0-9]+/g, "");
+    }
+
+    function normalizeColumnIndexes(indexes) {
+      const available = new Set(
+        (Array.isArray(state.columns) ? state.columns : [])
+          .map((col) => Number(col.index))
+          .filter((value) => Number.isInteger(value) && value >= 0)
+      );
+      const normalized = (Array.isArray(indexes) ? indexes : [])
+        .map((value) => Number(value))
+        .filter((value, position, list) => (
+          Number.isInteger(value)
+          && value >= 0
+          && available.has(value)
+          && list.indexOf(value) === position
+        ))
+        .sort((left, right) => left - right);
+      return normalized;
+    }
+
+    function getSelectedColumnIndexes() {
+      return normalizeColumnIndexes(state.selectedColumnIndexes);
+    }
+
+    function getSelectedColumns() {
+      const selected = new Set(getSelectedColumnIndexes());
+      const columns = Array.isArray(state.columns) ? state.columns : [];
+      return columns
+        .filter((column) => selected.has(Number(column.index)))
+        .map((column, effectiveIndex) => ({
+          ...column,
+          effectiveIndex,
+        }));
+    }
+
+    function isLikelyDeckColumn(column) {
+      if (!column || !state.hasHeader) {
+        return false;
+      }
+      return DECK_COLUMN_HINTS.has(normalizeImportName(column.name || column.display || ""));
+    }
+
+    function initializeColumnSelection() {
+      const allIndexes = normalizeColumnIndexes(
+        (Array.isArray(state.columns) ? state.columns : []).map((column) => column.index)
+      );
+      state.selectedColumnIndexes = allIndexes.slice();
+      state.autoExcludedColumnIndexes = [];
+
+      const firstColumn = Array.isArray(state.columns) && state.columns.length ? state.columns[0] : null;
+      if (allIndexes.length > 1 && isLikelyDeckColumn(firstColumn)) {
+        const firstIndex = Number(firstColumn.index);
+        state.selectedColumnIndexes = allIndexes.filter((value) => value !== firstIndex);
+        state.autoExcludedColumnIndexes = [firstIndex];
+      }
+      syncPreviewSelectAll();
+    }
+
+    function buildSuggestedMappingForSelection() {
+      const fields = getFields();
+      const selectedColumns = getSelectedColumns();
+      const headerMap = new Map();
+      const suggestions = {};
+
+      if (state.hasHeader) {
+        selectedColumns.forEach((column) => {
+          const normalized = normalizeImportName(column.name || "");
+          if (normalized && !headerMap.has(normalized)) {
+            headerMap.set(normalized, Number(column.index));
+          }
+        });
+      }
+
+      fields.forEach((field, position) => {
+        let mappedIndex = null;
+        if (state.hasHeader) {
+          mappedIndex = headerMap.get(normalizeImportName(field.name)) ?? null;
+        }
+        if (mappedIndex == null && position < selectedColumns.length) {
+          mappedIndex = Number(selectedColumns[position].index);
+        }
+
+        suggestions[field.name] = mappedIndex == null
+          ? { source_type: "ignore", column_index: null, constant_value: "" }
+          : { source_type: "column", column_index: mappedIndex, constant_value: "" };
+      });
+
+      return suggestions;
+    }
+
+    function getColumnMismatchWarning() {
+      if (!state.parsed) {
+        return null;
+      }
+
+      const selectedCount = getSelectedColumns().length;
+      const fieldCount = getFields().length;
+      if (selectedCount < fieldCount) {
+        return {
+          severity: "danger",
+          message: `Dang chon ${selectedCount} column(s), nhung note type co ${fieldCount} field(s).`,
+        };
+      }
+      if (selectedCount > fieldCount) {
+        return {
+          severity: "warning",
+          message: `Dang chon ${selectedCount} column(s), nhung note type co ${fieldCount} field(s).`,
+        };
+      }
+      return null;
+    }
+
+    function syncPreviewSelectAll() {
+      if (!els.previewSelectAllInput) {
+        return;
+      }
+      const totalColumns = Array.isArray(state.columns) ? state.columns.length : 0;
+      const selectedCount = getSelectedColumnIndexes().length;
+      els.previewSelectAllInput.indeterminate = selectedCount > 0 && selectedCount < totalColumns;
+      els.previewSelectAllInput.checked = totalColumns > 0 && selectedCount === totalColumns;
+      els.previewSelectAllInput.disabled = totalColumns === 0;
+    }
+
+    function resetReviewState() {
+      state.lastSummary = null;
+      state.hasEstimated = false;
+      state.executionDone = false;
+      els.progressWrap.classList.add("d-none");
+      els.progressBar.classList.add("progress-bar-animated");
+      els.progressBar.textContent = "Running...";
+      els.summaryBox.classList.add("d-none");
+      els.issuesWrap.classList.add("d-none");
+      refreshImportUiState();
+    }
+
+    function renderParseMeta() {
+      if (!state.parseMetaInfo) {
+        els.parseMeta.textContent = "";
+        return;
+      }
+
+      const selectedColumnCount = getSelectedColumns().length;
+      els.parseMeta.innerHTML = `
+        <span class="import-help-pill"><i class="bi bi-file-earmark-text"></i> ${escapeHtml(state.parseMetaInfo.filename || "")}</span>
+        <span class="import-help-pill"><i class="bi bi-table"></i> Rows: ${escapeHtml(state.parseMetaInfo.totalRows || 0)}</span>
+        <span class="import-help-pill"><i class="bi bi-columns-gap"></i> Columns: ${escapeHtml(selectedColumnCount)}/${escapeHtml(state.parseMetaInfo.columnCount || 0)}</span>
+        <span class="import-help-pill"><i class="bi bi-filter"></i> Delimiter: ${escapeHtml(state.parseMetaInfo.delimiterLabel || "")}</span>
+      `;
+    }
+
+    function applyColumnSelection(indexes, { keepAutoExcluded = false } = {}) {
+      state.selectedColumnIndexes = normalizeColumnIndexes(indexes);
+      if (keepAutoExcluded) {
+        state.autoExcludedColumnIndexes = normalizeColumnIndexes(state.autoExcludedColumnIndexes)
+          .filter((index) => !state.selectedColumnIndexes.includes(index));
+      } else {
+        state.autoExcludedColumnIndexes = [];
+      }
+
+      syncPreviewSelectAll();
+
+      if (!state.parsed) {
+        return;
+      }
+
+      resetReviewState();
+      applySuggestedMapping(buildSuggestedMappingForSelection());
+      renderParseMeta();
+      renderPreviewTable();
+      renderWarnings();
+      renderMappingWarnings([]);
     }
 
     function getSelectedImportMode() {
@@ -999,6 +1234,76 @@
       }
     }
 
+    function delimiterSelectionFromChar(delimiter) {
+      if (delimiter === "\t") {
+        return { mode: "tsv", customDelimiter: "" };
+      }
+      if (delimiter === ",") {
+        return { mode: "csv", customDelimiter: "" };
+      }
+      if (typeof delimiter === "string" && delimiter.length === 1) {
+        return { mode: "custom", customDelimiter: delimiter };
+      }
+      return null;
+    }
+
+    function formatDelimiterLabel(delimiter) {
+      if (delimiter === "\t") return "tab";
+      if (delimiter === ",") return ",";
+      if (typeof delimiter === "string" && delimiter.length === 1) return delimiter;
+      return "";
+    }
+
+    function normalizeDirectiveKey(value) {
+      return String(value == null ? "" : value).trim().toLowerCase().replace(/\s+/g, " ");
+    }
+
+    function resolveSeparatorDirective(value) {
+      const token = String(value == null ? "" : value).trim();
+      if (!token) return null;
+      if (token.length === 1) return token;
+
+      const normalized = token.toLowerCase();
+      const aliases = {
+        "\\t": "\t",
+        bar: "|",
+        colon: ":",
+        comma: ",",
+        pipe: "|",
+        semicolon: ";",
+        space: " ",
+        tab: "\t",
+      };
+      return Object.prototype.hasOwnProperty.call(aliases, normalized) ? aliases[normalized] : null;
+    }
+
+    function parseTxtImportPreamble(sampleText) {
+      const lines = String(sampleText == null ? "" : sampleText).split(/\r?\n/);
+      const directives = {};
+      let firstDataLine = "";
+      let hasDirectives = false;
+
+      for (const line of lines) {
+        const trimmed = String(line || "").trim();
+        if (!trimmed) continue;
+
+        const match = trimmed.match(/^#\s*([^:]+):(.*)$/);
+        if (!match) {
+          firstDataLine = trimmed;
+          break;
+        }
+
+        hasDirectives = true;
+        directives[normalizeDirectiveKey(match[1])] = String(match[2] || "").trim();
+      }
+
+      return {
+        directives,
+        firstDataLine,
+        hasDirectives,
+      };
+    }
+
     function setParseButtonLoading(isLoading) {
       if (!els.parseBtn) return;
       els.parseBtn.disabled = Boolean(isLoading);
@@ -1015,10 +1320,16 @@
     async function detectTxtDelimiter(file) {
       try {
         const sampleText = await file.slice(0, 8192).text();
-        const firstLine = sampleText
-          .split(/\r?\n/)
-          .map((line) => line.trim())
-          .find((line) => line.length > 0);
+        const preamble = parseTxtImportPreamble(sampleText);
+        const directiveDelimiter = resolveSeparatorDirective(preamble.directives.separator);
+        if (directiveDelimiter) {
+          const resolved = delimiterSelectionFromChar(directiveDelimiter);
+          if (resolved) {
+            return { ...resolved, hasHeader: false };
+          }
+        }
+
+        const firstLine = preamble.firstDataLine;
         if (!firstLine) {
           return null;
         }
@@ -1040,7 +1351,11 @@
         });
 
         if (!best) return null;
-        return { mode: best.mode, customDelimiter: best.customDelimiter };
+        return {
+          mode: best.mode,
+          customDelimiter: best.customDelimiter,
+          hasHeader: preamble.hasDirectives ? false : undefined,
+        };
       } catch (_error) {
         return null;
       }
@@ -1065,7 +1380,12 @@
 
       const detectedTxtDelimiter = await detectTxtDelimiter(file);
       if (detectedTxtDelimiter) {
-        return { ok: true, mode: detectedTxtDelimiter.mode, customDelimiter: detectedTxtDelimiter.customDelimiter };
+        return {
+          ok: true,
+          mode: detectedTxtDelimiter.mode,
+          customDelimiter: detectedTxtDelimiter.customDelimiter,
+          hasHeader: detectedTxtDelimiter.hasHeader,
+        };
       }
 
       const current = readCurrentDelimiterSelection();
@@ -1103,10 +1423,13 @@
     function resetParseState({ keepWarning = false } = {}) {
       state.token = null;
       state.columns = [];
+      state.selectedColumnIndexes = [];
+      state.autoExcludedColumnIndexes = [];
       state.previewRows = [];
       state.hasHeader = getHasHeaderEnabled();
       state.warnings = [];
       state.mapping = {};
+      state.parseMetaInfo = null;
       state.lastSummary = null;
       state.parsed = false;
       state.parseFailed = false;
@@ -1122,6 +1445,7 @@
       els.issuesWrap.classList.add("d-none");
       els.columnMismatchConfirmWrap.classList.add("d-none");
       els.columnMismatchConfirmInput.checked = false;
+      syncPreviewSelectAll();
       if (!keepWarning) {
         setAlert("");
       }
@@ -1202,10 +1526,16 @@
     function renderPreviewTable() {
       if (!state.parsed || !state.columns.length) {
         els.previewWrap.hidden = true;
+        syncPreviewSelectAll();
         return;
       }
       els.previewWrap.hidden = false;
       syncHeaderControls();
+      syncPreviewSelectAll();
+
+      const selectedColumns = getSelectedColumns();
+      const selectedSet = new Set(selectedColumns.map((column) => Number(column.index)));
+      const effectiveIndexBySource = new Map(selectedColumns.map((column) => [Number(column.index), column.effectiveIndex]));
 
       if (els.previewTable) {
         const minWidthPx = Math.max(760, state.columns.length * 180);
@@ -1214,13 +1544,41 @@
 
       if (els.previewCaption) {
         const rowCount = Array.isArray(state.previewRows) ? state.previewRows.length : 0;
+        const totalColumns = Array.isArray(state.columns) ? state.columns.length : 0;
+        const selectionSummary = `Dang chon ${selectedColumns.length}/${totalColumns} cot.`;
+        const autoExcludedNote = state.autoExcludedColumnIndexes.length
+          ? " Cot dau tien duoc bo chon tu dong vi header giong deck."
+          : "";
         els.previewCaption.textContent = state.hasHeader
-          ? `Đang dùng dòng đầu tiên làm header. Preview ${rowCount} dòng dữ liệu đầu tiên.`
-          : `Đang xem dữ liệu thô. Preview ${rowCount} dòng đầu tiên, bao gồm cả dòng đầu nếu có tiêu đề.`;
+          ? `Dang dung dong dau tien lam header. Preview ${rowCount} dong du lieu dau tien. ${selectionSummary}${autoExcludedNote}`
+          : `Dang xem du lieu tho. Preview ${rowCount} dong dau tien. ${selectionSummary}${autoExcludedNote}`;
       }
 
       els.previewHeaderRow.innerHTML = state.columns
-        .map((col) => `<th>Col ${col.index + 1}: ${escapeHtml(col.display || "")}</th>`)
+        .map((col) => {
+          const sourceIndex = Number(col.index);
+          const isSelected = selectedSet.has(sourceIndex);
+          const effectiveIndex = effectiveIndexBySource.has(sourceIndex)
+            ? Number(effectiveIndexBySource.get(sourceIndex))
+            : -1;
+          const titleLabel = isSelected
+            ? `Column ${effectiveIndex + 1}: ${escapeHtml(col.display || "")}`
+            : `Ignored: ${escapeHtml(col.display || "")}`;
+          const metaLabel = isSelected
+            ? `Source column ${sourceIndex + 1}`
+            : `Source column ${sourceIndex + 1} ignored`;
+          return `
+            <th class="${isSelected ? "" : "is-excluded"}">
+              <label class="import-preview-column-toggle">
+                <span class="import-preview-column-topline">
+                  <input class="form-check-input mt-0" type="checkbox" data-preview-column-index="${sourceIndex}"${isSelected ? " checked" : ""}>
+                  <span class="import-preview-column-title">${titleLabel}</span>
+                </span>
+                <span class="import-preview-column-meta">${metaLabel}</span>
+              </label>
+            </th>
+          `;
+        })
         .join("");
 
       if (!state.previewRows.length) {
@@ -1232,10 +1590,12 @@
         .map((row) => {
           const cells = [];
           for (let idx = 0; idx < state.columns.length; idx += 1) {
+            const sourceIndex = Number(state.columns[idx]?.index ?? idx);
             const fullValue = String(row[idx] || "");
             const shortValue = truncatePreviewValue(fullValue);
+            const isSelected = selectedSet.has(sourceIndex);
             cells.push(
-              `<td title="${escapeHtml(fullValue)}"><div class="preview-cell-text">${escapeHtml(shortValue)}</div></td>`
+              `<td class="${isSelected ? "" : "is-excluded"}" title="${escapeHtml(fullValue)}"><div class="preview-cell-text">${escapeHtml(shortValue)}</div></td>`
             );
           }
           return `<tr>${cells.join("")}</tr>`;
@@ -1244,15 +1604,15 @@
     }
 
     function renderWarnings() {
-      if (!state.warnings.length) {
+      const mismatch = getColumnMismatchWarning();
+      if (!mismatch) {
         setAlert("");
         els.columnMismatchConfirmWrap.classList.add("d-none");
         els.columnMismatchConfirmInput.checked = false;
         return;
       }
-      const first = state.warnings[0];
-      const kind = first.severity === "danger" ? "danger" : "warning";
-      setAlert(first.message || "Column mismatch detected.", kind);
+      const kind = mismatch.severity === "danger" ? "danger" : "warning";
+      setAlert(mismatch.message || "Column mismatch detected.", kind);
       els.columnMismatchConfirmWrap.classList.remove("d-none");
     }
 
@@ -1273,16 +1633,17 @@
       }
       els.mappingWrap.hidden = false;
       const sampleRow = getSampleRowForMapping();
+      const selectedColumns = getSelectedColumns();
 
       els.mappingBody.innerHTML = fields
         .map((field) => {
           const mappingValue = state.mapping[field.name] || { source_type: "ignore", column_index: null, constant_value: "" };
           const selectValue = mappingSelectValue(mappingValue);
-          const columnOptions = state.columns
+          const columnOptions = selectedColumns
             .map((col) => {
               const optionValue = `col:${col.index}`;
               const isSelected = selectValue === optionValue ? " selected" : "";
-              return `<option value="${optionValue}"${isSelected}>Column ${col.index + 1} - ${escapeHtml(col.display || "")}</option>`;
+              return `<option value="${optionValue}"${isSelected}>Column ${col.effectiveIndex + 1} - ${escapeHtml(col.display || "")}</option>`;
             })
             .join("");
           const requiredBadge = field.required ? '<span class="text-danger">*</span>' : "";
@@ -1393,9 +1754,15 @@
       readMappingFromDom();
 
       const fields = getFields();
+      const selectedColumns = getSelectedColumns();
+      const effectiveIndexBySource = new Map(selectedColumns.map((column) => [Number(column.index), column.effectiveIndex]));
       const uniq = readUniquenessFields();
       const errors = [];
       const warnings = [];
+
+      if (!selectedColumns.length) {
+        errors.push("Phai chon it nhat 1 cot de import.");
+      }
 
       if (!uniq.length) {
         errors.push("Phải chọn ít nhất 1 uniqueness key field.");
@@ -1419,11 +1786,14 @@
 
       Array.from(usedColumns.entries()).forEach(([columnIdx, names]) => {
         if (names.length > 1) {
-          warnings.push(`Column ${columnIdx + 1} đang map cho nhiều field: ${names.join(", ")}`);
+          const effectiveIndex = effectiveIndexBySource.has(columnIdx)
+            ? Number(effectiveIndexBySource.get(columnIdx)) + 1
+            : columnIdx + 1;
+          warnings.push(`Column ${effectiveIndex} đang map cho nhiều field: ${names.join(", ")}`);
         }
       });
 
-      if (state.warnings.length && !els.columnMismatchConfirmInput.checked) {
+      if (getColumnMismatchWarning() && !els.columnMismatchConfirmInput.checked) {
         errors.push("Bạn cần xác nhận column mismatch trước khi chạy import.");
       }
 
@@ -1477,6 +1847,7 @@
     }
 
     function buildRequestPayload() {
+      const effectiveMismatch = getColumnMismatchWarning();
       const payload = {
         token: state.token,
         note_type_id: String(els.noteTypeSelect.value || ""),
@@ -1485,7 +1856,9 @@
         uniqueness_fields: readUniquenessFields(),
         mapping: state.mapping,
         dont_overwrite_empty: Boolean(els.dontOverwriteEmptyInput.checked),
-        confirm_column_mismatch: Boolean(els.columnMismatchConfirmInput.checked),
+        confirm_column_mismatch: effectiveMismatch
+          ? Boolean(els.columnMismatchConfirmInput.checked)
+          : Boolean(state.warnings.length),
       };
       return payload;
     }
@@ -1520,6 +1893,10 @@
         }
         mode = inferred.mode;
         customDelimiter = inferred.customDelimiter || "";
+        if (typeof inferred.hasHeader === "boolean") {
+          state.hasHeader = inferred.hasHeader;
+          syncHeaderControls();
+        }
         applyDelimiterSelection(mode, customDelimiter);
       }
 
@@ -1566,20 +1943,28 @@
         state.hasEstimated = false;
         state.executionDone = false;
 
-        applySuggestedMapping(payload.suggested_mapping || {});
+        const resolvedDelimiter = typeof payload.delimiter === "string" ? payload.delimiter : "";
+        const resolvedSelection = delimiterSelectionFromChar(resolvedDelimiter);
+        if (resolvedSelection) {
+          applyDelimiterSelection(resolvedSelection.mode, resolvedSelection.customDelimiter);
+        }
+
+        initializeColumnSelection();
+        applySuggestedMapping(buildSuggestedMappingForSelection());
         renderPreviewTable();
         renderWarnings();
         renderUniquenessFields();
 
         const columnCount = Number(payload.column_count || 0);
         const totalRows = Number(payload.total_rows || 0);
-        const delimiterLabel = mode === "tsv" ? "tab" : (mode === "custom" ? customDelimiter : ",");
-        els.parseMeta.innerHTML = `
-          <span class="import-help-pill"><i class="bi bi-file-earmark-text"></i> ${escapeHtml(file.name)}</span>
-          <span class="import-help-pill"><i class="bi bi-table"></i> Rows: ${escapeHtml(totalRows)}</span>
-          <span class="import-help-pill"><i class="bi bi-columns-gap"></i> Columns: ${escapeHtml(columnCount)}</span>
-          <span class="import-help-pill"><i class="bi bi-filter"></i> Delimiter: ${escapeHtml(delimiterLabel)}</span>
-        `;
+        const delimiterLabel = formatDelimiterLabel(resolvedDelimiter) || (mode === "tsv" ? "tab" : (mode === "custom" ? customDelimiter : ","));
+        state.parseMetaInfo = {
+          filename: file.name,
+          totalRows,
+          columnCount,
+          delimiterLabel,
+        };
+        renderParseMeta();
       } catch (error) {
         state.parseFailed = true;
         setAlert(error.message || "Parse failed.", "danger");
@@ -1785,6 +2170,46 @@
         });
       });
 
+      if (els.previewSelectAllInput) {
+        els.previewSelectAllInput.addEventListener("change", () => {
+          if (state.isParsing || state.estimating || state.running) {
+            syncPreviewSelectAll();
+            return;
+          }
+          const allIndexes = (Array.isArray(state.columns) ? state.columns : []).map((column) => Number(column.index));
+          const nextIndexes = els.previewSelectAllInput.checked ? allIndexes : [];
+          applyColumnSelection(nextIndexes);
+        });
+      }
+
+      if (els.previewTable) {
+        els.previewTable.addEventListener("change", (event) => {
+          const target = event.target;
+          if (!(target instanceof HTMLElement) || !target.hasAttribute("data-preview-column-index")) {
+            return;
+          }
+          if (state.isParsing || state.estimating || state.running) {
+            renderPreviewTable();
+            return;
+          }
+
+          const rawIndex = Number(target.getAttribute("data-preview-column-index"));
+          if (!Number.isInteger(rawIndex) || rawIndex < 0) {
+            return;
+          }
+
+          const nextIndexes = getSelectedColumnIndexes();
+          const selectedSet = new Set(nextIndexes);
+          const shouldSelect = target instanceof HTMLInputElement ? Boolean(target.checked) : !selectedSet.has(rawIndex);
+          if (shouldSelect) {
+            selectedSet.add(rawIndex);
+          } else {
+            selectedSet.delete(rawIndex);
+          }
+          applyColumnSelection(Array.from(selectedSet));
+        });
+      }
+
       els.mappingBody.addEventListener("change", (event) => {
         const target = event.target;
         if (!(target instanceof HTMLElement)) return;
@@ -1825,6 +2250,7 @@
       renderUniquenessFields();
       handleDelimiterModeChange();
       syncHeaderControls();
+      syncPreviewSelectAll();
       els.estimateBtn.textContent = ESTIMATE_BUTTON_LABEL;
       els.executeBtn.textContent = EXECUTE_BUTTON_LABEL;
       setParseButtonLoading(false);

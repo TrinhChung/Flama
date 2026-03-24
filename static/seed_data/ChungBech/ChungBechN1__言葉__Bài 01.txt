@@ -1,0 +1,134 @@
+#separator:tab
+#html:true
+#tags column:16
+N1語彙Riki::Bài 1	配布	はいふ	Phân phát	不特定多数の人に配ること。	Phân phát cho nhiều người bất kỳ.	チラシ・ビラ・資料・書類を配布する	Phân phát tờ rơi, quảng cáo, tài liệu...	新しくオープンするお店の宣伝をするため、駅前でチラシを配布した。	Chúng tôi đã phát tờ rơi ở trước nhà ga để quảng bá cho cửa hàng mới khai trương.				VOICEVOX_後鬼_人間ver._b949e4f4-0c0d-4c34-a156-bb70b495b6c8.mp3	VOICEVOX_後鬼_人間ver._ae8ae5c4-ad42-474c-86ac-bfd34f65f584.mp3	
+N1語彙Riki::Bài 1	採取	さいしゅ	Lấy, thu thập	研究・調査のために、何かを集めること。	Thu thập gì đó để điều tra hoặc nghiên cứu (dấu vân tay, côn trùng, máu...).			警察では、被疑者から指紋を採取しています。	Cảnh sát đang lấy dấu vân tay của các nghi phạm.				VOICEVOX_後鬼_人間ver._1bf1ddd7-64af-48d4-acb3-be92796a0601.mp3	VOICEVOX_後鬼_人間ver._f3a12707-dfd1-4c80-b87e-1abc54a4fc5c.mp3	
+N1語彙Riki::Bài 1	駆除	くじょ	Tiêu diệt	害を与えるものを追い払うこと。	Loại bỏ những thứ gây hại (virus, sâu bọ...).			コンピューターウイルスは、一度駆除すれば終わりというものではありません。	Virus máy tính sẽ không thể hết hoàn toàn nếu chỉ diệt một lần.	害虫駆除、敵を駆逐など。			VOICEVOX_後鬼_人間ver._89c4f9f6-39cb-4632-a5fe-668494d6aad4.mp3	VOICEVOX_後鬼_人間ver._cc2befe5-cf4e-4672-adef-81c1c0381173.mp3	
+N1語彙Riki::Bài 1	研修	けんしゅう	Đào tạo, huấn luyện	企業で社員に対して行う、計画的なトレーニング。	Chương trình đào tạo bài bản cho nhân viên ở công ty.			新入社員は社内研修で専門知識を学ぶ機会があります。	Nhân viên mới có cơ hội học hỏi kiến thức chuyên môn thông qua kỳ tập huấn nội bộ.	講習→受け身的；ワークショップ→主体的。			VOICEVOX_後鬼_人間ver._c45f42eb-deed-4396-bfc6-2439ebc24a2c.mp3	VOICEVOX_後鬼_人間ver._38965b8e-2f18-4249-a721-78e38f489712.mp3	
+N1語彙Riki::Bài 1	交渉	こうしょう	Đàm phán	異なる意見を持つ相手と折り合いを付けるための話し合い。	Thỏa thuận với bên có ý kiến khác, để cả hai cùng đồng ý.	価格交渉、外交交渉	Đàm phán giá cả, đàm phán ngoại giao...	この価格、交渉如何では、来年はもう仕入れないかもしれない。	Với mức giá này, tùy kết quả đàm phán mà năm sau chúng ta có thể không nhập hàng nữa.	仕事では交渉、日常では駆け引きをする。			VOICEVOX_後鬼_人間ver._daa25efd-c581-4177-8ec0-69f7ade2441c.mp3	VOICEVOX_後鬼_人間ver._59eaa08f-da68-4cb8-8ebd-0ba56a0cd84e.mp3	
+N1語彙Riki::Bài 1	本音	ほんね	Lời nói thật lòng	本当の心から出た言葉（⇔建前）。	"Lời nói xuất phát từ thật tâm (trái nghĩa với &#x27;khách sáo&#x27;)."	本音を言う・吐く・漏らす	Nói/Thổ lộ/Tiết lộ lời thật lòng	「京都の人は建前を使って本音を言わない」と言われる時がある。	Người Kyoto đôi khi bị nói là hay khách sáo, không nói lời thật lòng.				VOICEVOX_後鬼_人間ver._91f52d9a-6944-4bd0-b7e8-d11a037c380b.mp3	VOICEVOX_後鬼_人間ver._ed3024be-269f-4c1f-9a2e-41f233795019.mp3	
+N1語彙Riki::Bài 1	発足	ほっそく	Thành lập	組織や団体などが新しく作られ、活動を始めること。	Việc thành lập một tổ chức, đoàn thể mới và bắt đầu hoạt động.			A市に町おこしのプロジェクト団体が発足する。	Một nhóm dự án phát triển đô thị được thành lập ở thành phố A.	「設立」は法的手続き重視；「発足」は目的ある団体を結成。			VOICEVOX_後鬼_人間ver._ec6479b1-0130-4f02-a87e-897461df8db3.mp3	VOICEVOX_後鬼_人間ver._4e868207-4a36-4165-8d58-eb6d86c95cf8.mp3	
+N1語彙Riki::Bài 1	目先	めさき	Trước mắt	すぐ目の前、すぐ近い将来にあること。	Những việc ở tương lai gần, ngay trước mắt.			彼は目先が利く人なので、リーダーに向いているだろう。	Anh ấy là người có tầm nhìn gần tốt, nên chắc hợp làm leader.	目先の利益にとらわれると長期的発展を逃す。			VOICEVOX_後鬼_人間ver._694ba64f-9317-465b-b9e7-fe20ab0f814a.mp3	VOICEVOX_後鬼_人間ver._55181e76-c920-4f1c-a69f-2c25e7585eeb.mp3	
+N1語彙Riki::Bài 1	赴任	ふにん	Chuyển công tác (xa, dài hạn)	仕事をする場所へ行くこと（遠く離れている、長期的）。	Chuyển đến nơi xa để làm việc trong thời gian dài.	海外赴任、単身赴任	Công tác nước ngoài, đi công tác một mình	東京本社から沖縄支社に赴任した。	Tôi chuyển công tác từ trụ sở chính Tokyo sang chi nhánh Okinawa.	「出向」は本社が雇用主 nhưng làm ở công ty con.			VOICEVOX_後鬼_人間ver._d80561b0-471a-4d2f-8d73-6ee8c86c35de.mp3	VOICEVOX_後鬼_人間ver._35f95114-a831-476d-a646-9e44b7f65154.mp3	
+N1語彙Riki::Bài 1	抜粋	ばっすい	Đoạn trích, trích đoạn	書物や作品から必要な部分を抜き出すこと。	Trích ra phần cần thiết, nổi bật trong sách, tác phẩm.			他人の文章を抜粋することで、内容に説得力が増す。	Bằng cách trích dẫn bài viết của người khác, tính thuyết phục trong nội dung tăng lên.				VOICEVOX_後鬼_人間ver._381e32be-e6f6-442e-a4c0-8a29538bae66.mp3	VOICEVOX_後鬼_人間ver._75e341f5-15c9-4d4f-be7b-494c012d757c.mp3	
+N1語彙Riki::Bài 1	ゆとり	ゆとり	Dư dả, thong thả, thừa thãi	必要以上にあまる。経済的・気持ちなどに余裕があること。	Nhiều hơn mức cần thiết, dư dả về kinh tế, tinh thần...			引退してようやく生活にゆとりができた。	Sau khi nghỉ hưu, cuối cùng tôi cũng được tận hưởng cuộc sống dư dả.	ゆとり世代（厳しい上下関係が薄い時代）。			VOICEVOX_後鬼_人間ver._2609b4fb-3186-45e9-a7f7-86a9120c7818.mp3	VOICEVOX_後鬼_人間ver._8be8e77c-d0af-482c-a56c-f17c1a9dfcf6.mp3	
+N1語彙Riki::Bài 1	触発	しょくはつ	Truyền cảm hứng, xúc tác	刺激や影響を受けて行動すること。	Hành động sau khi bị kích thích, ảnh hưởng.			オリンピックに触発され、スポーツ用品を買う消費者が増える。	Được Olympic truyền cảm hứng, số người mua đồ thể thao tăng lên.				VOICEVOX_後鬼_人間ver._1c6b8e0b-4628-4f4d-a167-ff54382a042d.mp3	VOICEVOX_後鬼_人間ver._07b4e875-ab21-444e-a4fe-8174abded753.mp3	
+N1語彙Riki::Bài 1	見込み	みこみ	Dự kiến, khả năng, triển vọng	将来そうなるだろうという期待。	Kỳ vọng điều gì đó sẽ xảy ra (triển vọng).	卒業見込み、見込み客	Dự kiến tốt nghiệp, khách hàng tiềm năng	この会社では昇進の見込みがない。	Công ty này không có triển vọng thăng tiến.				VOICEVOX_後鬼_人間ver._d4301234-fa0e-4a4d-ad75-b26260b97ae0.mp3	VOICEVOX_後鬼_人間ver._c715910a-b351-404e-9268-d470c45ccf82.mp3	
+N1語彙Riki::Bài 1	当面	とうめん	Trước mắt, hiện thời	現在直面していること（これからしばらく抱える課題）。	Những vấn đề hiện phải đối mặt trong thời gian tới.	差し当たり、当分	Hiện tại (có ấn tượng dài hạn hơn)	当面の課題は、対立する両者の関係を調整すること。	Vấn đề trước mắt là điều chỉnh mối quan hệ giữa hai bên đang xung đột.				VOICEVOX_後鬼_人間ver._ee9e6d11-4cf9-4561-9412-e4a1008c0e49.mp3	VOICEVOX_後鬼_人間ver._7b93c9f6-c545-4602-a38a-823b42cb7251.mp3	
+N1語彙Riki::Bài 1	念願	ねんがん	Điều hằng mong ước	常に心にかけて強く望むこと。	Điều luôn khao khát, mong muốn mạnh mẽ.	念願が叶う、念願を果たす	Điều ước thành hiện thực, thực hiện ước mơ	とうとう念願の海外旅行に行けた。	Cuối cùng tôi đã đi được chuyến du lịch nước ngoài mơ ước.	「志願」は大学・入社に入りたいと願う。			VOICEVOX_後鬼_人間ver._bf444855-f500-49d7-b734-3627764006d3.mp3	VOICEVOX_後鬼_人間ver._910f3159-9eef-46ab-baae-dce5a83b80d6.mp3	
+N1語彙Riki::Bài 1	発散	はっさん	Phát tán, tỏa ra	内部にたまったものが外部へ散らばって出ること。	Những thứ tích tụ bên trong được giải phóng ra ngoài (nhiệt, mùi...).			この動物から悪臭が発散している。	Từ con vật này bốc ra mùi hôi.	熱、匂い、ストレスも同様。			VOICEVOX_後鬼_人間ver._050aba98-e521-4e47-8db8-b26b731d245f.mp3	VOICEVOX_後鬼_人間ver._1240df20-538d-4d9d-b93c-65d4bc191c16.mp3	
+N1語彙Riki::Bài 1	従来	じゅうらい	Từ trước đến nay	以前から今まで。	Từ trước đến giờ (phương pháp, cách làm…).	従来通り、従来の方法	Như thường lệ, phương pháp truyền thống	会議で従来の方法の問題点が指摘された。	Tại cuộc họp, người ta chỉ ra những vấn đề của phương pháp truyền thống.	既存の方法ともいう。			VOICEVOX_後鬼_人間ver._cd8e13da-9ad7-421f-ab9f-8bfd601c124c.mp3	VOICEVOX_後鬼_人間ver._315452c8-3e92-44da-a172-63dd3fc28cbd.mp3	
+N1語彙Riki::Bài 1	腕前	うでまえ	Tay nghề, trình độ	身につけた技術・能力。	Kỹ năng, tay nghề mà bản thân đã đạt được.	腕が上がる、腕を上げる	Tay nghề tiến bộ, nâng cao tay nghề	職人の見事な腕前に、見ていた人々から拍手が沸いた。	Mọi người vỗ tay trước tay nghề điêu luyện của người thợ.				VOICEVOX_後鬼_人間ver._c415c773-0f9f-4567-9667-29ada52950ad.mp3	VOICEVOX_後鬼_人間ver._67b4c51d-cd8c-49eb-adf4-66496ae2148b.mp3	
+N1語彙Riki::Bài 1	人込み	ひとごみ	Đám đông	たくさんの人がいて込み合っていること。	Nơi tập trung rất đông người.	人込みをかき分ける	Lách qua đám đông	人込みの中で買い物するのは嫌なので、平日に行きましょう。	Tôi ghét phải mua sắm trong đám đông, nên hãy đi vào ngày thường.	類：人だかり、街の雑踏。			VOICEVOX_後鬼_人間ver._554c2caa-1427-4d2f-8ba8-69398087a37c.mp3	VOICEVOX_後鬼_人間ver._881b8fa5-01aa-4462-90f8-9cd057d4fdb8.mp3	
+N1語彙Riki::Bài 1	気掛かり	きがかり	Lo lắng	何か悪いことが起こりそうで落ち着かない。	Băn khoăn, lo rằng điều xấu sẽ xảy ra.			娘が一人暮らししていることが一番気掛かりだ。	Việc con gái sống một mình là điều khiến tôi lo lắng nhất.				VOICEVOX_後鬼_人間ver._d83b047e-1c4e-488c-b70a-58ca0dab9816.mp3	VOICEVOX_後鬼_人間ver._0a0633ed-e88d-4e9f-89b6-2ad009a7a8cd.mp3	
+N1語彙Riki::Bài 1	復旧	ふっきゅう	Khôi phục, trùng tu	事故や震災で壊れたものを元の状態に直すこと。	Sửa chữa những thứ bị hỏng (đường xá, điện, gas...) sau sự cố.			震災後、道路が復旧するのに一か月かかった。	Mất một tháng để khôi phục lại con đường sau trận động đất.	「復元」はより完璧に元通りにするニュアンス。			VOICEVOX_後鬼_人間ver._eb5fd756-88e8-44d4-987d-60cc50c7a9f4.mp3	VOICEVOX_後鬼_人間ver._e4d6a5a3-019a-4583-b10f-59b8ce85012c.mp3	
+N1語彙Riki::Bài 1	直面	ちょくめん	Đối mặt	避けられない問題や困難に出会うこと。	Gặp phải khó khăn, vấn đề không thể né tránh.			工事計画は住民の反対に直面している。	Kế hoạch xây dựng đang đối mặt với sự phản đối của dân cư.				VOICEVOX_後鬼_人間ver._8cf15653-cabe-4332-a1d6-405a32b4b9af.mp3	VOICEVOX_後鬼_人間ver._d9a5b06c-461b-4bfa-b8f7-6700b57c972d.mp3	
+N1語彙Riki::Bài 1	軌道	きどう	Quỹ đạo	①物が回る道 ②計画が順調に進む。	①Đường ray/quỹ đạo ②Mọi việc diễn ra theo kế hoạch, vào guồng.	軌道に乗る	Đi vào quỹ đạo/ổn định	開業した店が軌道に乗るまでには1年かかる。	Mất khoảng một năm để cửa hàng mới mở đi vào ổn định.				VOICEVOX_後鬼_人間ver._dc146547-c0d6-466b-b019-87b1c7380168.mp3	VOICEVOX_後鬼_人間ver._05854d18-2c94-4db3-8298-fa053db9d9f5.mp3	
+N1語彙Riki::Bài 1	経緯	けいい	Đầu đuôi sự việc, ngọn ngành câu chuyện	始まりから結果に至るまでの過程。	Quá trình từ đầu đến kết quả cuối cùng.			新聞には事件の詳しい経緯が載っていた。	Trên báo đăng chi tiết đầu đuôi của vụ án.				VOICEVOX_後鬼_人間ver._f9f7a3e6-2b99-4230-835a-51d9c2395361.mp3	VOICEVOX_後鬼_人間ver._db1d90a1-38fd-417f-9ccf-eae7cd987be9.mp3	
+N1語彙Riki::Bài 1	規制	きせい	Quy chế, nội quy (hạn chế)	制限するために設けられたルール。	Quy định/hạn chế được đặt ra để giới hạn việc gì.	規制をかける・規制を敷く	Áp đặt quy chế/hạn chế	市内で車の使用を規制する計画がある。	Hiện có kế hoạch hạn chế việc dùng ô tô trong nội thành.	「制限」は具体的な数字を伴うことが多い。			VOICEVOX_後鬼_人間ver._ac0f672c-6305-46ad-8468-6af849e5e669.mp3	VOICEVOX_後鬼_人間ver._b15e6707-ced2-48fd-bad1-a2bc7f933266.mp3	
+N1語彙Riki::Bài 1	打診	だしん	Thăm dò, hỏi ý kiến	相手の意向を確かめるために話を持ちかける。	Đề xuất/hỏi ý kiến để xác nhận ý định đối phương.			部長に打診して、賛成してもらえるか確認する。	Tôi sẽ hỏi ý kiến trưởng phòng để xem có được tán thành không.				VOICEVOX_後鬼_人間ver._0cda50b9-bd39-4d9c-a7af-a003ce1a9d4a.mp3	VOICEVOX_後鬼_人間ver._9590e854-70fa-4ef7-be4a-f2aaec9cd2f0.mp3	
+N1語彙Riki::Bài 1	検討	けんとう	Xem xét, cân nhắc	よく調べて良いか悪いか考えること。	Nghiên cứu, cân nhắc kỹ xem có tốt không.	ご検討のほどお願い致します	Xin vui lòng xem xét/cân nhắc	当社との契約について、ご検討ください。	Xin hãy cân nhắc về việc ký hợp đồng với công ty chúng tôi.	類：考慮			VOICEVOX_後鬼_人間ver._c5447a0d-6293-4982-a01d-f43f69ebacbe.mp3	VOICEVOX_後鬼_人間ver._b1994d4d-f462-4396-858f-a105affeed6e.mp3	
+N1語彙Riki::Bài 1	要望	ようぼう	Mong muốn, yêu cầu	相手に対し物事の実現を強く望むこと。	Mong muốn yêu cầu đối phương thực hiện điều gì.			お客さんからの要望に応えてサービスを改善する。	Tiến hành cải thiện dịch vụ để đáp ứng yêu cầu của khách hàng.	要求&gt;要望&gt;要請の順に強い。			VOICEVOX_後鬼_人間ver._0e5860bd-41e2-495d-b126-5c13dbb161cd.mp3	VOICEVOX_後鬼_人間ver._789f4f4a-1844-4e12-a0e7-2e1d4d567860.mp3	
+N1語彙Riki::Bài 1	混乱	こんらん	Hỗn loạn	①ぐちゃぐちゃ整理できない ②いろいろ混じり頭がまとまらない。	①Lộn xộn không sắp xếp được ②Tâm trí rối bời.			事故が交通の混乱を招いた。; 頭が混乱して考えがまとまらない。	Vụ tai nạn đã gây ra tình trạng hỗn loạn giao thông.; Tôi rối bời, không thể tập trung suy nghĩ.				VOICEVOX_後鬼_人間ver._ce42d42f-33e5-451f-a66e-d4389e384a90.mp3	VOICEVOX_後鬼_人間ver._6378d514-2f58-410c-98fc-345ba1aac11e.mp3	
+N1語彙Riki::Bài 1	規模	きぼ	Quy mô	事の構造や仕組みの大きさ（計量可能）。	Độ lớn về cấu trúc, nội dung, hệ thống... (có thể đo lường).			会社の規模は10年で4倍になった。	Quy mô công ty đã tăng gấp 4 lần trong 10 năm.	スケールとも言う。			VOICEVOX_後鬼_人間ver._290fa351-eb2c-4c15-b6ee-a605ea9532e4.mp3	VOICEVOX_後鬼_人間ver._e929b266-d8aa-4930-a144-89e8d7355708.mp3	
+N1語彙Riki::Bài 1	完結	かんけつ	Kết thúc, hoàn thành (chuỗi)	続いていた物事がすっかり終わる（小説、ドラマなど）。	Việc kết thúc hoàn toàn một chuỗi (truyện, phim...).			好きな連続ドラマが全25回で完結する。	Bộ phim truyền hình tôi thích kết thúc ở tập 25.	完了は仕事/タスク、完成は作品/建物に使う。	"<li><div><strong>Đồng nghĩa</strong>:</div>
+<ul>
+<li>
+<div>終了（しゅうりょう）: kết thúc (trung tính, không nhấn mạnh trọn vẹn).</div>
+</li>
+<li>
+<div>完了（かんりょう）: hoàn thành (hoàn tất một công việc).</div>
+</li>
+<li>
+<div>終結（しゅうけつ）: chấm dứt, kết thúc (thường dùng cho chiến tranh, vụ kiện).</div>
+</li>
+</ul>
+</li>
+<li>
+<div><strong>Trái nghĩa</strong>:</div>
+<ul>
+<li>
+<div>未完（みかん）: chưa hoàn tất.</div>
+</li>
+<li>
+<div>続く（つづく）: tiếp tục.</div>
+</li>
+</ul>
+</li>
+<li>
+<div><strong>Cách nói khác</strong>:</div>
+<ul>
+<li>
+<div>終わりを迎える: đi đến hồi kết.</div>
+</li>
+<li>
+<div>一段落する（いちだんらくする）: tạm khép lại.</div></li></ul></li>"		VOICEVOX_後鬼_人間ver._abff1e49-5877-41a5-a894-329beaba0a06.mp3	VOICEVOX_後鬼_人間ver._77ef6d88-da6d-412b-b7e5-d071e60f40af.mp3	
+N1語彙Riki::Bài 1	朗報	ろうほう	Tin mừng	明るい内容の知らせ。嬉しい知らせ。	Thông tin tốt lành, tin vui.	悲報：Tin buồn		朗報を聞いて、喜びでいっぱいになった。	Nghe tin mừng khiến tôi tràn đầy hân hoan.				VOICEVOX_後鬼_人間ver._35325656-b7b2-4575-8201-1b07e9ee3ea1.mp3	VOICEVOX_後鬼_人間ver._5b06c8ed-c683-4f1b-aac1-de363dea579d.mp3	
+N1語彙Riki::Bài 1	嫌味	いやみ	Lời đá xéo, mỉa mai	わざと相手の嫌がるようなことを直接言う。	Cố tình nói điều mà người khác ghét (trực tiếp).			妻が傷つく夫の嫌味。	Lời mỉa mai của chồng làm tổn thương vợ.	類：皮肉（遠まわし）。			VOICEVOX_後鬼_人間ver._2d883617-bcc2-45a6-a3b4-9405a239061c.mp3	VOICEVOX_後鬼_人間ver._f87ff34f-a4bd-4c5b-9747-4d1672c98560.mp3	
+N1語彙Riki::Bài 1	結束	けっそく	Đoàn kết	同じ目標を持つ人たちが団結すること。	Những người chung mục tiêu tập hợp đoàn kết.	結束を高める・強める	Nâng cao sự đoàn kết	チームビルディングの目的はチームの結束を高めることです。	Mục đích team building là tăng cường sự đoàn kết trong nhóm.			"<img alt=""団結する3人の棒人間イラスト - No: 24082677／無料イラスト/フリー素材なら「イラストAC」"" src=""5dcfbab62f7f1a9dc4596e02e03c3ee4_w.jpeg"">"	VOICEVOX_後鬼_人間ver._69a10a24-7163-4e18-8dca-0e9ad76d8873.mp3	VOICEVOX_後鬼_人間ver._2a2743ac-8de2-41b8-8bc9-eedaa61aedb0.mp3	
+N1語彙Riki::Bài 1	背景	はいけい	1. Phông nền, bối cảnh; 2. Hậu thuẫn, nền tảng	①絵・写真の背後 ②事件や物事の背後にあるもの。	①Cảnh phía sau bức tranh/ảnh ②Bối cảnh, lý do phía sau sự việc.			その絵の背景はまるで写真のように美しい。; 事件の背景には人種差別があった。	Phông nền của bức tranh đẹp hệt như ảnh chụp.; Phía sau vụ án này có sự phân biệt chủng tộc.				VOICEVOX_後鬼_人間ver._6632fcac-9317-47ca-b42b-e087c6999d45.mp3	VOICEVOX_後鬼_人間ver._456f83bd-a66e-4694-b184-02ff65053fb4.mp3	
+N1語彙Riki::Bài 1	調達	ちょうたつ	Huy động, gom (vốn, nguyên vật liệu...)	必要な金品や資材を取り揃えること。	Tập hợp tiền, vật liệu cần thiết.			新事業を始めるため、約1,000万円の資金調達が必要だ。	Cần huy động khoảng 10 triệu yên để khởi đầu kinh doanh mới.				VOICEVOX_後鬼_人間ver._3fe5d882-3530-4319-8418-f6111a321b3d.mp3	VOICEVOX_後鬼_人間ver._8e2b98b3-c3f3-4e79-89be-0e67437a645a.mp3	
+N1語彙Riki::Bài 1	細心	さいしん	Tỉ mỉ	細かい所までよく気をつけること。	Chú ý cẩn thận đến từng chi tiết nhỏ.	細心の注意を払う	Vô cùng chú ý, cẩn thận	彼は細心の注意を払ったが、それでも間違えた。	Anh ấy đã rất cẩn thận nhưng vẫn phạm sai lầm.	"<li><div>その件については<strong>細心の配慮</strong>が必要だ。<br>
+→ Về vấn đề đó, cần phải có sự quan tâm tỉ mỉ và chu đáo.</div>
+</li>
+<li>
+<div>医者は<strong>細心</strong>の態度で患者を診察した。<br>
+→ Bác sĩ đã khám bệnh cho bệnh nhân với thái độ hết sức cẩn thận.</div></li>"			VOICEVOX_後鬼_人間ver._f3c45a37-b1f8-4ce7-ad35-5e583007fc07.mp3	VOICEVOX_後鬼_人間ver._9ce82148-e3ce-4449-9601-74c0cbe8c990.mp3	
+N1語彙Riki::Bài 1	意地	いじ	Ngoan cố, ương ngạnh, cứng đầu	自分の考えを押し通そうとする。	Cố giữ quan điểm của mình đến cùng (cứng đầu).	意地を張る	Cố chấp, ương ngạnh	こんなに暑いのに意地を張らないで涼しい所で休もうよ。	Trời nóng thế này đừng cứng đầu nữa, hãy vào chỗ mát nghỉ ngơi thôi.	意地悪(性格が悪い)、意地悪を言う…			VOICEVOX_後鬼_人間ver._99d6fe76-5947-4930-901c-1ecf7c511e08.mp3	VOICEVOX_後鬼_人間ver._5d90c5cf-3de4-4f55-ba50-541d9d87d7d6.mp3	
+N1語彙Riki::Bài 1	実情	じつじょう	Tình hình thực tế, sự tình	表面では見えない実際の事情や状況。	Hoàn cảnh, tình hình thực tế (không nhìn thấy ở bề ngoài).			華やかに見えるけど、業界の実情を知ったらやる気なくなるかも。	Trông hào nhoáng vậy, nhưng nếu biết thực trạng ngành này thì có khi bạn chẳng muốn làm.	実情を暴露する…	"<li><div>彼の生活の<strong>実情</strong>を知って驚いた。<br>
+→ Tôi đã ngạc nhiên khi biết thực trạng cuộc sống của anh ấy.</div>
+</li>
+<li>
+<div>報告書には会社の経営の<strong>実情</strong>が記されている。<br>
+→ Trong bản báo cáo có ghi rõ thực trạng kinh doanh của công ty.</div>
+</li>
+<li>
+<div>表面だけではなく、社会の<strong>実情</strong>を理解することが大切だ。<br>
+→ Không chỉ nhìn bề ngoài, việc hiểu rõ thực trạng của xã hội là rất quan trọng.</div></li>"		VOICEVOX_後鬼_人間ver._4189f650-a527-4383-baf1-895979835a59.mp3	VOICEVOX_後鬼_人間ver._e7b79983-fe08-49c2-b94a-d366b7cd8c37.mp3	
+N1語彙Riki::Bài 1	逸材	いつざい	Tài năng xuất chúng	優れた才能を持つ人。	Người có năng lực vượt trội, xuất sắc.			あの新人選手は最高の逸材だ。	Vận động viên trẻ ấy là một tài năng kiệt xuất.				VOICEVOX_後鬼_人間ver._44092f9f-8b9f-4c16-a7fb-529e6981d13c.mp3	VOICEVOX_後鬼_人間ver._35a325bc-caa4-4c33-a3b5-97b206ce7746.mp3	
+N1語彙Riki::Bài 1	不備	ふび	Không chuẩn bị đủ, thiếu sót	必要なものが完全にそろっていないこと。	Chưa có đầy đủ thứ cần thiết (tài liệu, hồ sơ...).	不備がある・ない	Có/không có thiếu sót	この書類は不備だらけで提出できない。	Tài liệu này toàn thiếu sót nên chưa thể nộp được.	対：完備。			VOICEVOX_後鬼_人間ver._3e7e6aed-1d92-46d6-9e22-971e1fa0188e.mp3	VOICEVOX_後鬼_人間ver._59f7bb99-da5b-43b0-b7b1-4ae7ccb32d5b.mp3	
+N1語彙Riki::Bài 1	修復	しゅうふく	Làm lành, hàn gắn (mối quan hệ)	元の良い関係を取り戻すこと。	Khôi phục lại mối quan hệ tốt đẹp ban đầu (hoặc phục chế tranh...).			夫婦関係の修復には時間がかかるが不可能ではない。	Hàn gắn quan hệ vợ chồng cần thời gian nhưng không phải bất khả thi.	"修復：Sửa chữa, phục hồi về nguyên trạng (di sản, đồ vật, dữ liệu…).<br>
+復旧：Khôi phục trạng thái hoạt động bình thường (hệ thống, dịch vụ, đường xá…).<br>
+修理：Sửa chữa hỏng hóc thiết bị, máy móc."	建物や美術品にも使う。インフラには「復旧」。	"<img alt=""心の修復 - メンタルヘルス コンセプトアートのイラスト素材 [36978433] - PIXTA"" src=""36978433.jpg"">"	VOICEVOX_後鬼_人間ver._d246191e-e627-44f3-bcbd-58327e43b379.mp3	VOICEVOX_後鬼_人間ver._b57777d3-a541-4504-8f28-6b3ed07213f6.mp3	
+N1語彙Riki::Bài 1	手がかり	てがかり	Manh mối, gợi ý	ヒント。事件捜査などの手掛かり。	Gợi ý, đầu mối (điều tra vụ án...).	手がかりを見つける、掴む	Tìm kiếm, nắm bắt manh mối	この事件では警察はほとんど手がかりがない。	Trong vụ án này, cảnh sát gần như không có manh mối gì.	類：ヒント、糸口。		"<img alt=""手がかりと足がかりの意味や使い方は？両者の違いを徹底解説！ | トレトレの昨日の？を今日で解決！"" src=""23121801_s.jpg"">"	VOICEVOX_後鬼_人間ver._9962d951-622c-4a36-9e41-b6a8c7ca47c3.mp3	VOICEVOX_後鬼_人間ver._a228859c-1640-4b1a-b6a0-88bdb2ff7c5f.mp3	
+N1語彙Riki::Bài 1	重宝	ちょうほう	Có ích, tiện lợi	大切に扱う。便利なものとして常に使う感じ。	Quý trọng, thường xuyên sử dụng như một vật tiện lợi.			部屋が寒いので、いただいた膝掛けを重宝しています。	Phòng lạnh nên tôi rất quý chiếc chăn mỏng được tặng.	人が重宝される＝大事にされる（仕事などで）。	"<li><div>このハサミはよく切れて、本当に<strong>重宝</strong>している。<br>
+→ Cái kéo này cắt rất tốt, tôi dùng thường xuyên, thật tiện lợi.</div>
+</li>
+<li>
+<div>日本語ができる彼は会社でとても<strong>重宝されている</strong>。<br>
+→ Vì biết tiếng Nhật nên anh ấy được công ty trọng dụng.</div>
+</li>
+<li>
+<div>昔からこの刀は家の<strong>重宝</strong>とされてきた。<br>
+→ Thanh kiếm này từ xưa được coi là bảo vật của gia đình.</div></li>"		VOICEVOX_後鬼_人間ver._db18acc5-69b5-42a2-8963-0b511cc8a4e6.mp3	VOICEVOX_後鬼_人間ver._1e6ea3c3-5e6c-4ef1-b412-ac34745d1314.mp3	
+N1語彙Riki::Bài 1	連携	れんけい	Liên kết, cộng tác	明確な目的のためにお互い連絡し合い協力すること。	Liên hệ, hợp tác để thực hiện mục tiêu rõ ràng.			大学はA会社と連携して、就職活動セミナーを行う。	Trường đại học hợp tác cùng công ty A tổ chức hội thảo tìm việc.				VOICEVOX_後鬼_人間ver._a0ef36c4-b4b9-45ec-9161-30b680f8c69f.mp3	VOICEVOX_後鬼_人間ver._457bf941-2da9-4edc-bcf3-148ae7866082.mp3	
+N1語彙Riki::Bài 1	不服	ふふく	Không hài lòng, không phục	上の人に納得できず反対すること。	Không phục, phản đối ý kiến cấp trên.	不服を唱える	Đưa ra ý kiến phản đối	彼は部長の決定に不服を唱えた。	Anh ấy tỏ ý không phục quyết định của trưởng phòng.	「不満」は満足できない気持ち。「不服」は従わない、反対。			VOICEVOX_後鬼_人間ver._c38ce841-37d4-4453-beca-9dc5f0b21d29.mp3	VOICEVOX_後鬼_人間ver._ede971af-b51a-4c56-8e23-aeeaf2d8448b.mp3	
+N1語彙Riki::Bài 1	会心	かいしん	1. Thỏa mãn, hài lòng<br>2. Tâm đắc	①期待どおりで満足 <br>②とても自信がある作品など。	①Mãn nguyện như mong đợi <br>②Tác phẩm/tình huống tâm đắc, tự hào.			大会の結果を見て彼女は会心の笑みを浮かべた。<br>この小説は彼女の会心の作だ。	Nhìn kết quả cuộc thi, cô ấy nở nụ cười mãn nguyện.<br>Cuốn tiểu thuyết này là tác phẩm tâm đắc của cô ấy.	"<ul><li><ul><li><div>自画自賛する（じがじさんする）: tự khen mình.</div>
+</li>
+<li>
+<div>上出来（じょうでき）: làm rất tốt, thành công.</div>
+</li>
+</ul>
+</li></ul>"		"<img alt=""会心のイラスト素材 [16154873] - PIXTA"" src=""16154873.jpg"">"	VOICEVOX_後鬼_人間ver._fbd0fb45-643f-4a50-a82c-89076b52ec6a.mp3	VOICEVOX_後鬼_人間ver._101ef7b3-f4bd-4adb-9064-39722e9bb385.mp3	
+N1語彙Riki::Bài 1	並行	へいこう	Đồng thời, song song	二つのことが同時に行われるさま。同時進行。	Hai việc tiến hành cùng lúc, hoặc vật chạy song song.			二つの仕事を並行して進める。; 道路は川と並行している。	Tiến hành song song hai công việc.; Con đường chạy song song với dòng sông.				VOICEVOX_後鬼_人間ver._1c368407-52b9-43e4-83e6-60a62a652477.mp3	VOICEVOX_後鬼_人間ver._0d3877da-1434-4bb1-8ce1-06671ad34efb.mp3	
+N1語彙Riki::Bài 1	ありきたり	ありきたり	Bình thường, tầm thường (nhàm chán)	どこにでもある、ありふれた（悪い意味）。	Có ở khắp nơi, tầm thường (mang nghĩa không tốt).			そのドラマはありきたりの内容でつまらない。	Bộ phim đó có nội dung quá ư bình thường, chán ngắt.	「平凡」とは異なり、悪いニュアンスが強い。			VOICEVOX_後鬼_人間ver._f658ee48-8290-46fe-aa3f-3b95f4b000ef.mp3	VOICEVOX_後鬼_人間ver._5a1b235d-f7ff-438b-b26d-a6011ac2b249.mp3	
+N1語彙Riki::Bài 1	落胆	らくたん	Nản lòng, chán nản	期待や希望どおりにならずがっかりすること。	Thất vọng, chán nản vì không như mong đợi.			その候補者は選挙の結果に落胆した。	Ứng cử viên đó chán nản với kết quả bầu cử.	類：がっかり、失望、落ち込む。			VOICEVOX_後鬼_人間ver._c0967e76-89ad-4462-bff8-834009d80cde.mp3	VOICEVOX_後鬼_人間ver._4a20ad96-ee8b-4d13-a5ff-0a96ffe46c75.mp3	
+N1語彙Riki::Bài 1	大筋	おおすじ	Phác thảo, tóm lược	物事のだいたいのところ、基本的な部分。	Hầu hết nội dung, những điểm cơ bản.			会議で計画の大筋を説明する。; 話の大筋をつかむ。	Trình bày đại ý về kế hoạch trong cuộc họp.; Nắm bắt phần cốt lõi câu chuyện.	概要・概略↔詳細。			VOICEVOX_後鬼_人間ver._207e44d4-e4bf-417f-a07b-994fc94867a4.mp3	VOICEVOX_後鬼_人間ver._7858d882-9fb3-4229-8138-2a3dfdcb3df6.mp3	
+N1語彙Riki::Bài 1	究明	きゅうめい	Điều tra làm rõ	物事を明らかにすること。原因を突き止める。	Làm sáng tỏ sự việc, nguyên nhân.	<li><div><strong>Điều tra, làm sáng tỏ, nghiên cứu kỹ lưỡng</strong>&nbsp;→ chỉ việc tìm hiểu bản chất, nguyên nhân của một sự việc để đưa ra kết luận rõ ràng.</div></li><li><div>Mang sắc thái&nbsp;<strong>trang trọng, hàn lâm</strong>, thường dùng trong lĩnh vực học thuật, khoa học, pháp luật, báo chí.</div></li><li><div>Không dùng cho hành động “tìm kiếm đồ vật” bình thường, mà thiên về&nbsp;<strong>lý do, nguyên nhân, chân tướng</strong>.</div></li>	<li><br></li>	警察は事故の原因を究明している。	Cảnh sát đang điều tra làm rõ nguyên nhân vụ tai nạn.	"<li><div>火災の原因を<strong>究明</strong>するために専門家が調査を行った。<br>
+→ Các chuyên gia đã tiến hành điều tra để làm sáng tỏ nguyên nhân vụ cháy.</div>
+</li>
+<li>
+<div>この病気の発生メカニズムを<strong>究明</strong>する研究が進められている。<br>
+→ Các nghiên cứu đang được tiến hành để làm sáng tỏ cơ chế phát sinh của căn bệnh này.</div>
+</li>
+<li>
+<div>事故の責任を<strong>究明</strong>する必要がある。<br>
+→ Cần phải làm rõ trách nhiệm trong vụ tai nạn.</div></li>"			VOICEVOX_後鬼_人間ver._1d43ab9a-5e96-4719-bbd7-ac7e7f8b2727.mp3	VOICEVOX_後鬼_人間ver._fc73cda5-e79c-499c-90f3-3ffd9c741ee6.mp3	
+N1語彙Riki::Bài 1	加工	かこう	Gia công, chế biến	原料や製品に手を加えて新しい製品を作ること。	Bổ sung, thay đổi nguyên liệu/sp khác để tạo ra sản phẩm mới.	加工食品	Thực phẩm đã qua chế biến	牛乳は加工されてバターやチーズになる。	Sữa được chế biến thành bơ và pho mát.	フォトショップで写真を加工するなど。			VOICEVOX_後鬼_人間ver._2b5b257b-bf00-4d19-9f65-935082193698.mp3	VOICEVOX_後鬼_人間ver._afe0bf34-7bce-463d-840b-7a2a66b9459d.mp3	
+N1語彙Riki::Bài 1	刺激	しげき	Truyền cảm hứng, khích lệ (kích thích)	気持ちを興奮させるさま。	Làm tâm trạng phấn chấn, hào hứng.	刺激を与える/受ける	Truyền cảm hứng / Nhận được khích lệ	リーダーはメンバーに良い刺激を与える能力が必要だ。	Người lãnh đạo cần khả năng truyền cảm hứng tích cực cho thành viên.	刺激的な味や年下との交際など、幅広く使う。			VOICEVOX_後鬼_人間ver._b73d28e5-90e7-43b0-a7ff-49cf35dbe07e.mp3	VOICEVOX_後鬼_人間ver._3b14e075-2cb4-4b89-9bea-bf77129994d2.mp3	
+N1語彙Riki::Bài 1	断念	だんねん	Từ bỏ	やりたかったことを諦める。	Từ bỏ điều từng muốn làm.			社長が新規事業を断念したそうだ。	Nghe nói giám đốc đã từ bỏ kế hoạch kinh doanh mới.	類：諦める。			VOICEVOX_後鬼_人間ver._5057f916-e664-41a9-83af-973af5d5d97d.mp3	VOICEVOX_後鬼_人間ver._34b12b3f-50e7-4771-a9c3-7e7dd4004171.mp3	
+N1語彙Riki::Bài 1	免除	めんじょ	Miễn trừ	義務を果たさなくてもよいと許すこと。	Cho phép không phải thực hiện nghĩa vụ.			実務経験のある人は実技試験が免除となる。	Người có kinh nghiệm thực tế được miễn thi thực hành.				VOICEVOX_後鬼_人間ver._40f90110-00a0-4121-82fd-0033eaccce9c.mp3	VOICEVOX_後鬼_人間ver._66cb5fa9-7c43-40fd-be5e-89dc17f71b1d.mp3	
+N1語彙Riki::Bài 1	妥協	だきょう	Thỏa hiệp	①完璧を求めつつも70点でもOKにする。②お互い譲って意見をまとめる。	①Muốn hoàn hảo, nhưng chấp nhận 70 điểm cũng được. ②Hai bên nhượng bộ để thống nhất ý kiến.	妥協点を探す	Tìm điểm thỏa hiệp	彼女は何ごとにも妥協しない人だ。; 両国は平和のために互いに妥協した。	Cô ấy là người không bao giờ thỏa hiệp trong mọi việc.; Hai nước đã thỏa hiệp với nhau vì hòa bình.				VOICEVOX_後鬼_人間ver._d6f6187b-17cc-4a20-905e-5eff63b2d08d.mp3	VOICEVOX_後鬼_人間ver._c1fcea72-1288-4b40-89e7-03a93fcf2406.mp3	
+N1語彙Riki::Bài 1	寄与	きよ	Đóng góp, cống hiến	役に立つことを行う。貢献。	Làm việc có ích, đóng góp vào tập thể.			会社の発展に彼の働きが大きく寄与した。	Công việc của anh ấy đã đóng góp rất lớn vào sự phát triển của công ty.	類：貢献。			VOICEVOX_後鬼_人間ver._2fa293b6-30b6-4228-8b95-dac477326547.mp3	VOICEVOX_後鬼_人間ver._b7af3dde-af2d-4a67-9d38-7a5d26a0c9f5.mp3	
+N1語彙Riki::Bài 1	人出	ひとで	Số người có mặt, đám đông	人が多く出て集まること。特別な機会など。	Việc nhiều người tập trung tại một nơi vì lý do nào đó.			コロナが流行しているので、人出の多い場所は避けよう。	Vì dịch corona bùng phát nên hãy tránh nơi đông người.	人だかり&lt;人出&lt;群衆。			VOICEVOX_後鬼_人間ver._f6118630-95f2-47d2-8824-03f653de9770.mp3	VOICEVOX_後鬼_人間ver._48ddcfc8-b27a-4414-ae42-ee364b7f20a4.mp3	
+N1語彙Riki::Bài 1	先方	せんぽう	Đối phương, bên kia, đối tác	相手方（特に取引先など）。	Đối phương, nhất là trong kinh doanh (đối tác).			取引内容について先方と打ち合わせをした。	Tôi đã bàn bạc với đối tác về nội dung giao dịch.	類：相手。			VOICEVOX_後鬼_人間ver._60366d5e-8a67-4304-94c2-28f5223f24e6.mp3	VOICEVOX_後鬼_人間ver._7f3d1681-e4aa-41fd-bcc9-5f2069c1990b.mp3	
