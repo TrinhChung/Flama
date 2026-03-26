@@ -17,6 +17,7 @@ from app.repositories.study_repository import (
     RELEARNING_QUEUE,
     REVIEW_QUEUE,
     counter_bucket_for_progress_values,
+    effective_due_at_for_progress_values,
     normalize_progress_queue as _normalize_progress_queue,
 )
 from models import db
@@ -296,9 +297,20 @@ def browse_status_code(*, queue: str | None, due_at: datetime | None, now: datet
 def resolve_browse_queue_due(
     *,
     progress_obj: CardProgress | None,
+    now: datetime,
+    timezone_name: str = "UTC",
 ) -> tuple[str, datetime | None]:
     if progress_obj is not None:
-        return _normalize_progress_queue(progress_obj.queue), progress_obj.due_at
+        return (
+            _normalize_progress_queue(progress_obj.queue),
+            effective_due_at_for_progress_values(
+                queue=progress_obj.queue,
+                due_at=progress_obj.due_at,
+                due_day=progress_obj.due_day,
+                now=now,
+                timezone_name=timezone_name,
+            ),
+        )
     return NEW_QUEUE, None
 
 
@@ -307,6 +319,7 @@ def build_browse_row(
     deck_name_lookup: dict[int, str],
     now: datetime,
     progress_obj: CardProgress | None = None,
+    timezone_name: str = "UTC",
 ) -> dict[str, Any]:
     note_obj = card_obj.note
     display_triplet = note_display_triplet(note_obj)
@@ -318,7 +331,11 @@ def build_browse_row(
     template_name = card_obj.template.name if card_obj.template else "Card"
     card_type = f"{note_type_name} / {template_name}" if template_name else note_type_name
     deck_name = deck_name_lookup.get((note_obj.deck_id or 0) if note_obj else 0, "")
-    queue_value, due_at_value = resolve_browse_queue_due(progress_obj=progress_obj)
+    queue_value, due_at_value = resolve_browse_queue_due(
+        progress_obj=progress_obj,
+        now=now,
+        timezone_name=timezone_name,
+    )
     status_code = browse_status_code(queue=queue_value, due_at=due_at_value, now=now)
 
     return {
@@ -347,6 +364,7 @@ def build_browse_card_detail(
     deck_name_lookup: dict[int, str],
     now: datetime,
     progress_obj: CardProgress | None = None,
+    timezone_name: str = "UTC",
 ) -> dict[str, Any]:
     note_obj = card_obj.note
     note_type_obj = note_obj.note_type if note_obj else None
@@ -396,7 +414,13 @@ def build_browse_card_detail(
         ]
 
     return {
-        "card": build_browse_row(card_obj, deck_name_lookup, now, progress_obj=progress_obj),
+        "card": build_browse_row(
+            card_obj,
+            deck_name_lookup,
+            now,
+            progress_obj=progress_obj,
+            timezone_name=timezone_name,
+        ),
         "note": {
             "id": note_obj.id if note_obj else None,
             "note_type_id": note_obj.note_type_id if note_obj else None,
@@ -551,6 +575,7 @@ def build_browse_deck_tree_payload(
             CardProgress.queue,
             CardProgress.due_at,
             CardProgress.due_day,
+            CardProgress.is_suspended,
         )
         .select_from(Card)
         .join(Note, Card.note_id == Note.id)
@@ -560,7 +585,7 @@ def build_browse_deck_tree_payload(
     if not admin_mode:
         state_query = state_query.filter(Note.user_id == user_id)
 
-    for deck_id, progress_queue, progress_due_at, progress_due_day in state_query.all():
+    for deck_id, progress_queue, progress_due_at, progress_due_day, progress_is_suspended in state_query.all():
         if not deck_id:
             continue
         bucket = direct_counts.setdefault(
@@ -572,6 +597,7 @@ def build_browse_deck_tree_payload(
             queue=progress_queue,
             due_at=progress_due_at,
             due_day=progress_due_day,
+            is_suspended=progress_is_suspended,
             now=now,
             timezone_name=timezone_name,
         )
@@ -616,6 +642,7 @@ def build_browse_deck_tree_payload(
                     CardProgress.queue,
                     CardProgress.due_at,
                     CardProgress.due_day,
+                    CardProgress.is_suspended,
                 )
                 .select_from(Card)
                 .join(Note, Card.note_id == Note.id)
@@ -631,7 +658,13 @@ def build_browse_deck_tree_payload(
                     Card.created_at <= snapshot_at,
                 )
 
-            for source_deck_id, progress_queue, progress_due_at, progress_due_day in clone_query.all():
+            for (
+                source_deck_id,
+                progress_queue,
+                progress_due_at,
+                progress_due_day,
+                progress_is_suspended,
+            ) in clone_query.all():
                 if source_deck_id is None:
                     continue
                 local_deck_id = source_to_local.get(int(source_deck_id))
@@ -647,6 +680,7 @@ def build_browse_deck_tree_payload(
                     queue=progress_queue,
                     due_at=progress_due_at,
                     due_day=progress_due_day,
+                    is_suspended=progress_is_suspended,
                     now=now,
                     timezone_name=timezone_name,
                 )
@@ -843,6 +877,7 @@ def count_due_note_cards(
             queue=progress.queue if progress else None,
             due_at=progress.due_at if progress else None,
             due_day=progress.due_day if progress else None,
+            is_suspended=progress.is_suspended if progress else None,
             now=now,
             timezone_name=timezone_name,
         )

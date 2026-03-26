@@ -19,8 +19,10 @@ from . import *
 from app.repositories.study_repository import (
     card_state_from_progress as _card_state_from_progress,
     apply_card_state_to_progress as _apply_card_state_to_progress,
+    is_progress_suspended as _is_progress_suspended,
     query_pending_learning_summary as _query_pending_learning_summary,
     query_next_due_card_id as _query_next_due_card_id,
+    query_study_queue_counts as _query_study_queue_counts,
 )
 
 from app.routes.flashcards import (
@@ -95,6 +97,12 @@ def study_next():
 
     now = datetime.utcnow()
     timezone_name = get_effective_timezone_name(getattr(current_user, "timezone", "UTC"))
+    new_count, learn_count, due_count = _query_study_queue_counts(
+        query,
+        user_id=current_user.id,
+        now=now,
+        timezone_name=timezone_name,
+    )
     selected_card_id = _query_next_due_card_id(
         query,
         user_id=current_user.id,
@@ -112,9 +120,11 @@ def study_next():
             return jsonify(
                 {
                     "card_id": None,
-                    "message": "No cards are due right now.",
+                    "message": "Learning is still in progress.",
                     "session_state": "waiting",
-                    "pending_learning_count": pending_learning_count,
+                    "new_count": new_count,
+                    "learn_count": learn_count,
+                    "due_count": due_count,
                     "next_due_at": (
                         f"{next_due_at.isoformat(timespec='seconds')}Z"
                         if next_due_at is not None
@@ -122,7 +132,16 @@ def study_next():
                     ),
                 }
             )
-        return jsonify({"card_id": None, "message": "No due cards.", "session_state": "complete"})
+        return jsonify(
+            {
+                "card_id": None,
+                "message": "No due cards.",
+                "session_state": "complete",
+                "new_count": new_count,
+                "learn_count": learn_count,
+                "due_count": due_count,
+            }
+        )
 
     selected_card = query.filter(Card.id == selected_card_id).first()
     if not selected_card:
@@ -177,6 +196,9 @@ def study_next():
             "rendered_front_html": rendered["front_html"],
             "rendered_back_html": rendered["back_html"],
             "intervals_preview": interval_preview,
+            "new_count": new_count,
+            "learn_count": learn_count,
+            "due_count": due_count,
             "can_edit_card": bool(note and note.user_id == current_user.id),
             "save_card_url": (
                 url_for("flashcards.study_edit_card", card_id=selected_card.id)
@@ -244,15 +266,21 @@ def study_answer(card_id: str):
         )
         db.session.add(progress)
         db.session.flush()
+    elif _is_progress_suspended(progress):
+        return _api_error("CARD_SUSPENDED", "Card is suspended.", status=409)
 
     # Capture for optimistic locking (detect concurrent reviews)
     expected_last_reviewed_at = progress.last_reviewed_at
 
     now = datetime.utcnow()
-    timezone_name = get_effective_timezone_name(
-        validated_answer.timezone or getattr(current_user, "timezone", "UTC")
-    )
+    timezone_name = get_effective_timezone_name(getattr(current_user, "timezone", "UTC"))
     current_state = _card_state_from_progress(progress, now, timezone_name=timezone_name)
+    answer_preview = computeAnswerPreview(
+        current_state,
+        default_deck_options(),
+        now,
+        timezone_name=timezone_name,
+    )
     review_mode = normalize_review_mode(current_state.type)
     updated_state = applyAnswer(  # type: ignore[arg-type]
         current_state,
@@ -293,12 +321,8 @@ def study_answer(card_id: str):
             "success": True,
             "next_url": next_url,
             "next_card_url": next_card_url,
-            "intervals_preview": computeAnswerPreview(
-                updated_state,
-                default_deck_options(),
-                now,
-                timezone_name=timezone_name,
-            ),
+            "intervals_preview": answer_preview,
+            "applied_interval": answer_preview.get(rating),
         }
     )
 

@@ -39,6 +39,13 @@
 
   {% if card %}
   <section class="study-card-shell">
+    <section class="study-empty study-empty-inline d-none" id="study-inline-waiting" aria-live="polite">
+      <h3 id="study-inline-waiting-title">Learning in progress.</h3>
+      <p id="study-inline-waiting-summary">
+        You still have {{ due_learn }} Learn card{% if due_learn != 1 %}s{% endif %} in this session.
+      </p>
+      <p id="study-inline-waiting-next" class="d-none"></p>
+    </section>
     <div class="study-card" id="study-card" data-card-id="{{ card.id }}" data-study-scope="{{ study_scope }}"
       data-scope-id="{{ study_scope_id }}" data-answer-url="{{ answer_url or '' }}"
       data-note-id="{{ card.note_id or '' }}" data-can-edit="{{ '1' if can_edit_current_card else '0' }}">
@@ -54,17 +61,24 @@
   {% else %}
 
   <section class="study-empty">
-    {% if pending_learning_count %}
-    <h3>No cards due right now.</h3>
-    <p>You still have {{ pending_learning_count }} learning card{% if pending_learning_count != 1 %}s{% endif %} scheduled later in this session.</p>
+    <div class="study-counters-line study-counters-line-empty">
+      <span class="scl-new">New <strong data-study-count-value="new">{{ due_new }}</strong></span>
+      <span class="scl-sep">&middot;</span>
+      <span class="scl-learn">Learn <strong data-study-count-value="learn">{{ due_learn }}</strong></span>
+      <span class="scl-sep">&middot;</span>
+      <span class="scl-due">Due <strong data-study-count-value="due">{{ due_review }}</strong></span>
+    </div>
+    {% if is_waiting_session %}
+    <h3>Learning in progress.</h3>
+    <p>You still have {{ due_learn }} Learn card{% if due_learn != 1 %}s{% endif %} in this session.</p>
     {% if next_learning_due_at_iso %}
     <p id="study-waiting-next-due" data-next-due-at="{{ next_learning_due_at_iso }}">
-      Next card will be ready soon.
+      Next Learn card will be ready soon.
     </p>
     {% endif %}
     {% else %}
     <h3>No due cards in this deck.</h3>
-    <p>Hôm nay bạn đã học xong deck này.</p>
+    <p>You have finished this deck for now.</p>
     {% endif %}
     <div class="d-flex gap-2 justify-content-center flex-wrap">
       {% set button_label = 'Continue' %}
@@ -94,12 +108,13 @@
     <div class="d-flex flex-grow-1 justify-content-center">
       <div class="study-bottom-actions front-actions" id="front-actions">
         <div class="study-counters-line">
-          <span class="scl-new">New <strong>{{ due_new }}</strong></span>
-          <span class="scl-sep">·</span>
-          <span class="scl-learn">Learn <strong>{{ due_learn }}</strong></span>
-          <span class="scl-sep">·</span>
-          <span class="scl-due">Due <strong>{{ due_review }}</strong></span>
+          <span class="scl-new">New <strong data-study-count-value="new">{{ due_new }}</strong></span>
+          <span class="scl-sep">&middot;</span>
+          <span class="scl-learn">Learn <strong data-study-count-value="learn">{{ due_learn }}</strong></span>
+          <span class="scl-sep">&middot;</span>
+          <span class="scl-due">Due <strong data-study-count-value="due">{{ due_review }}</strong></span>
         </div>
+        <p class="study-flow-message d-none" id="study-flow-message" aria-live="polite"></p>
         <button class="btn btn-light answer-btn show-answer" id="show-answer-btn">Show Answer</button>
       </div>
       <div class="study-bottom-actions back-actions d-none" id="back-actions">
@@ -132,7 +147,7 @@
 
     <div class="study-bottom-side study-bottom-side-right">
       <button type="button" class="btn btn-sm btn-outline-secondary study-focus-btn" id="study-fullscreen-btn"
-        title="Bật toàn màn hình">
+        title="Báº­t toÃ n mÃ n hÃ¬nh">
         <i class="bi bi-arrows-fullscreen" data-fullscreen-icon></i>
         <span class="d-none d-sm-inline" data-fullscreen-label>Focus</span>
       </button>
@@ -168,8 +183,8 @@
         </form>
       </div>
       <div class="modal-footer py-2">
-        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Đóng (Cancel)</button>
-        <button type="button" class="btn btn-primary btn-sm" id="study-edit-save-btn">Lưu thay đổi (Save)</button>
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">ÄÃ³ng (Cancel)</button>
+        <button type="button" class="btn btn-primary btn-sm" id="study-edit-save-btn">LÆ°u thay Ä‘á»•i (Save)</button>
       </div>
     </div>
   </div>
@@ -187,14 +202,14 @@
     overflow: hidden;
   }
 
-  /* ── Dashboard Toolbar (shared) ── */
+  /* â”€â”€ Dashboard Toolbar (shared) â”€â”€ */
   .study-page .dash-toolbar {
     margin-bottom: 0.5rem;
     padding: 0.4rem 0.6rem;
     flex-shrink: 0;
   }
 
-  /* ── Deck context breadcrumb ── */
+  /* â”€â”€ Deck context breadcrumb â”€â”€ */
   .deck-context-bar {
     display: flex;
     align-items: center;
@@ -289,6 +304,10 @@
     padding: 2rem 1rem;
   }
 
+  .study-empty-inline {
+    margin-top: 0;
+  }
+
   .study-bottom-bar {
     position: fixed;
     left: 0;
@@ -310,6 +329,14 @@
     margin: 0 auto;
     gap: 0.75rem;
     flex-wrap: wrap;
+  }
+
+  .study-flow-message {
+    margin: 0;
+    color: var(--flama-text-2);
+    font-size: 0.95rem;
+    font-weight: 600;
+    text-align: center;
   }
 
   .study-bottom-side {
@@ -444,7 +471,7 @@
     background: linear-gradient(180deg, var(--flama-surface), #f3fff6);
   }
 
-  /* Compact counters line — same row as Show Answer */
+  /* Compact counters line â€” same row as Show Answer */
   .front-actions {
     flex-wrap: nowrap !important;
     gap: 1rem !important;
@@ -724,7 +751,7 @@
   }
 </style>
 
-{% if not card and pending_learning_count and next_learning_due_at_iso %}
+{% if not card and is_waiting_session and next_learning_due_at_iso %}
 <script>
   (() => {
     const nextDueEl = document.getElementById("study-waiting-next-due");
@@ -745,7 +772,7 @@
     function renderWaitingState() {
       const remainingMs = nextDueMs - Date.now();
       if (remainingMs <= 0) {
-        nextDueEl.textContent = "Next card is ready now. Reloading...";
+        nextDueEl.textContent = "Your next Learn card is ready now. Reloading...";
         window.setTimeout(() => window.location.reload(), 600);
         return false;
       }
@@ -756,7 +783,7 @@
         ? `${minutes}m ${String(seconds).padStart(2, "0")}s`
         : `${seconds}s`;
       const dueLabel = timeFormatter ? timeFormatter.format(new Date(nextDueMs)) : nextDueAt;
-      nextDueEl.textContent = `Next card is due at ${dueLabel} (${countdown}).`;
+      nextDueEl.textContent = `Next Learn card is due at ${dueLabel} (${countdown}).`;
       return true;
     }
 
@@ -786,8 +813,14 @@
     const showAnswerBtn = document.getElementById("show-answer-btn");
     const frontActions = document.getElementById("front-actions");
     const backActions = document.getElementById("back-actions");
+    const flowMessageEl = document.getElementById("study-flow-message");
+    const inlineWaitingEl = document.getElementById("study-inline-waiting");
+    const inlineWaitingSummaryEl = document.getElementById("study-inline-waiting-summary");
+    const inlineWaitingNextEl = document.getElementById("study-inline-waiting-next");
+    const countValueEls = Array.from(document.querySelectorAll("[data-study-count-value]"));
     let cardShownAtMs = performance.now();
     let submittingAnswer = false;
+    let waitingIntervalId = null;
     const editConfigEl = document.getElementById("studyEditConfig");
     const editModalEl = document.getElementById("studyEditModal");
     const editErrorEl = document.getElementById("study-edit-error");
@@ -811,6 +844,10 @@
     let editSaving = false;
     let studyMarkdownManager = null;
     let studyMarkdownEditors = new Map();
+    const timeFormatter =
+      typeof Intl !== "undefined" && Intl.DateTimeFormat
+        ? new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" })
+        : null;
 
     if (canEditCard && editConfigEl) {
       try {
@@ -895,7 +932,7 @@
     function renderMarkdownPreviewHtml(rawMarkdown) {
       const source = String(rawMarkdown || "").replace(/\r\n?/g, "\n");
       if (!source.trim()) {
-        return '<div class="study-edit-markdown-preview-empty">Preview trống.</div>';
+        return '<div class="study-edit-markdown-preview-empty">Preview trá»‘ng.</div>';
       }
 
       const imageRe = /!\[([^\]]*)\]\(([^)\s]+)\)/g;
@@ -928,7 +965,7 @@
 
       return chunks.length
         ? chunks.join("")
-        : '<div class="study-edit-markdown-preview-empty">Preview trống.</div>';
+        : '<div class="study-edit-markdown-preview-empty">Preview trá»‘ng.</div>';
     }
 
     function syncStudyMarkdownPreview(textarea) {
@@ -999,12 +1036,12 @@
 
     async function uploadStudyMarkdownInlineImage({ fieldName, file, textarea }) {
       if (!fieldName || !isImageFile(file)) {
-        setEditError("Chỉ hỗ trợ upload ảnh cho markdown.");
+        setEditError("Chá»‰ há»— trá»£ upload áº£nh cho markdown.");
         return;
       }
       const noteId = String(editConfig?.note_id || "").trim();
       if (!noteId) {
-        setEditError("Không tìm thấy note để upload markdown image.");
+        setEditError("KhÃ´ng tÃ¬m tháº¥y note Ä‘á»ƒ upload markdown image.");
         return;
       }
 
@@ -1208,7 +1245,7 @@
         editSaveBtn.disabled = editLoading || editSaving;
         editSaveBtn.innerHTML = editSaving
           ? '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Saving...'
-          : "Lưu thay đổi (Save)";
+          : "LÆ°u thay Ä‘á»•i (Save)";
       }
     }
 
@@ -1308,7 +1345,7 @@
         return {
           ok: false,
           noChanges: false,
-          error: `Required field không được để trống: ${missingRequired.join(", ")}`,
+          error: `Required field khÃ´ng Ä‘Æ°á»£c Ä‘á»ƒ trá»‘ng: ${missingRequired.join(", ")}`,
           fieldValues,
         };
       }
@@ -1363,7 +1400,7 @@
         return {
           ok: false,
           noChanges: false,
-          error: `Required field khÃ´ng Ä‘Æ°á»£c Ä‘á»ƒ trá»‘ng: ${missingRequired.join(", ")}`,
+          error: `Required field khÃƒÂ´ng Ã„â€˜Ã†Â°Ã¡Â»Â£c Ã„â€˜Ã¡Â»Æ’ trÃ¡Â»â€˜ng: ${missingRequired.join(", ")}`,
           fieldValues,
         };
       }
@@ -1377,7 +1414,7 @@
 
     async function saveEditedCard() {
       if (!editConfig || !editConfig.save_card_url) {
-        setEditError("Edit API chưa sẵn sàng.");
+        setEditError("Edit API chÆ°a sáºµn sÃ ng.");
         return;
       }
 
@@ -1495,8 +1532,8 @@
       }
       const isActive = Boolean(getFullscreenElement());
       fullscreenBtn.classList.toggle("is-active", isActive);
-      fullscreenBtn.title = isActive ? "Thoát toàn màn hình (Esc)" : "Bật toàn màn hình";
-      fullscreenBtn.setAttribute("aria-label", isActive ? "Thoát toàn màn hình" : "Bật toàn màn hình");
+      fullscreenBtn.title = isActive ? "ThoÃ¡t toÃ n mÃ n hÃ¬nh (Esc)" : "Báº­t toÃ n mÃ n hÃ¬nh";
+      fullscreenBtn.setAttribute("aria-label", isActive ? "ThoÃ¡t toÃ n mÃ n hÃ¬nh" : "Báº­t toÃ n mÃ n hÃ¬nh");
       if (fullscreenLabelEl) {
         fullscreenLabelEl.textContent = isActive ? "Exit" : "Focus";
       }
@@ -1524,7 +1561,7 @@
           studyPageRoot.webkitRequestFullscreen();
         }
       } catch (_error) {
-        // Browser chặn fullscreen nếu chưa có user gesture hoặc không hỗ trợ.
+        // Browser cháº·n fullscreen náº¿u chÆ°a cÃ³ user gesture hoáº·c khÃ´ng há»— trá»£.
       } finally {
         updateFullscreenUi();
       }
@@ -1547,6 +1584,121 @@
           btn.disabled = isDisabled;
         }
       });
+    }
+
+    function updateStudyCounts(payload) {
+      if (!payload || typeof payload !== "object") {
+        return;
+      }
+      const counts = {
+        new: Number(payload.new_count ?? NaN),
+        learn: Number(payload.learn_count ?? NaN),
+        due: Number(payload.due_count ?? NaN),
+      };
+      countValueEls.forEach((el) => {
+        const key = String(el.getAttribute("data-study-count-value") || "").trim();
+        if (!key || !Number.isFinite(counts[key])) {
+          return;
+        }
+        el.textContent = String(Math.max(0, Math.trunc(counts[key])));
+      });
+    }
+
+    function clearWaitingTimer() {
+      if (waitingIntervalId != null) {
+        window.clearInterval(waitingIntervalId);
+        waitingIntervalId = null;
+      }
+    }
+
+    function hideWaitingState() {
+      clearWaitingTimer();
+      if (inlineWaitingEl) {
+        inlineWaitingEl.classList.add("d-none");
+      }
+      if (inlineWaitingNextEl) {
+        inlineWaitingNextEl.classList.add("d-none");
+        inlineWaitingNextEl.textContent = "";
+      }
+      if (flowMessageEl) {
+        flowMessageEl.classList.add("d-none");
+        flowMessageEl.textContent = "";
+      }
+      if (showAnswerBtn) {
+        showAnswerBtn.classList.remove("d-none");
+      }
+      if (cardRoot) {
+        cardRoot.classList.remove("d-none");
+      }
+    }
+
+    async function pollNextCard(nextCardUrl) {
+      if (!nextCardUrl) {
+        return;
+      }
+      try {
+        const nextResp = await fetch(nextCardUrl, { method: "GET" });
+        const nextPayload = await nextResp.json().catch(() => ({}));
+        if (!nextResp.ok) {
+          return;
+        }
+        if (handleStudyPayload(nextPayload, { nextCardUrl })) {
+          return;
+        }
+        const nextUrl = String(nextPayload.next_url || "");
+        if (nextUrl) {
+          window.location.href = nextUrl;
+          return;
+        }
+        window.location.reload();
+      } catch (_error) {
+        // Best-effort poll; keep waiting UI visible until the next tick.
+      }
+    }
+
+    function startWaitingTimer(nextDueAt, nextCardUrl) {
+      clearWaitingTimer();
+      const nextDueMs = Date.parse(String(nextDueAt || ""));
+      if (!Number.isFinite(nextDueMs)) {
+        return;
+      }
+
+      function renderWaitingState() {
+        const remainingMs = nextDueMs - Date.now();
+        if (remainingMs <= 0) {
+          if (flowMessageEl) {
+            flowMessageEl.textContent = "Your next Learn card is ready now.";
+          }
+          if (inlineWaitingNextEl) {
+            inlineWaitingNextEl.classList.remove("d-none");
+            inlineWaitingNextEl.textContent = "Your next Learn card is ready now.";
+          }
+          clearWaitingTimer();
+          window.setTimeout(() => {
+            pollNextCard(nextCardUrl).catch(() => undefined);
+          }, 250);
+          return;
+        }
+
+        const remainingSeconds = Math.ceil(remainingMs / 1000);
+        const minutes = Math.floor(remainingSeconds / 60);
+        const seconds = remainingSeconds % 60;
+        const countdown = minutes > 0
+          ? `${minutes}m ${String(seconds).padStart(2, "0")}s`
+          : `${seconds}s`;
+        const dueLabel = timeFormatter ? timeFormatter.format(new Date(nextDueMs)) : String(nextDueAt || "");
+        const message = `Next Learn card is due at ${dueLabel} (${countdown}).`;
+        if (flowMessageEl) {
+          flowMessageEl.textContent = message;
+        }
+        if (inlineWaitingNextEl) {
+          inlineWaitingNextEl.classList.remove("d-none");
+          inlineWaitingNextEl.textContent = message;
+        }
+      }
+
+      renderWaitingState();
+      waitingIntervalId = window.setInterval(renderWaitingState, 1000);
     }
 
     function normalizeIntervalLabel(intervalInfo) {
@@ -1592,6 +1744,44 @@
       backActions.classList.add("d-none");
     }
 
+    function applyWaitingStatePayload(payload, options = {}) {
+      if (!payload || typeof payload !== "object") {
+        return false;
+      }
+      if (String(payload.session_state || "").trim().toLowerCase() !== "waiting") {
+        return false;
+      }
+
+      updateStudyCounts(payload);
+      resetToFrontFace();
+      if (cardRoot) {
+        cardRoot.classList.add("d-none");
+      }
+      if (inlineWaitingEl) {
+        inlineWaitingEl.classList.remove("d-none");
+      }
+      if (showAnswerBtn) {
+        showAnswerBtn.classList.add("d-none");
+      }
+      if (flowMessageEl) {
+        flowMessageEl.classList.remove("d-none");
+      }
+
+      const learnCount = Math.max(0, Math.trunc(Number(payload.learn_count || 0)));
+      const summary = learnCount > 0
+        ? `You still have ${learnCount} Learn card${learnCount === 1 ? "" : "s"} in this session.`
+        : "Learning is still in progress.";
+      if (inlineWaitingSummaryEl) {
+        inlineWaitingSummaryEl.textContent = summary;
+      }
+      if (flowMessageEl) {
+        flowMessageEl.textContent = summary;
+      }
+
+      startWaitingTimer(payload.next_due_at, String(options.nextCardUrl || ""));
+      return true;
+    }
+
     function applyNextCardPayload(payload) {
       if (!payload || typeof payload !== "object") {
         return false;
@@ -1600,6 +1790,8 @@
       if (!nextCardId) {
         return false;
       }
+      hideWaitingState();
+      updateStudyCounts(payload);
       if (front && typeof payload.rendered_front_html === "string") {
         front.innerHTML = payload.rendered_front_html;
       }
@@ -1619,6 +1811,20 @@
       activateCurrentFaceScripts();
       updateIntervalPreview(payload.intervals_preview);
       return true;
+    }
+
+    function handleStudyPayload(payload, options = {}) {
+      if (!payload || typeof payload !== "object") {
+        return false;
+      }
+      if (applyNextCardPayload(payload)) {
+        return true;
+      }
+      if (applyWaitingStatePayload(payload, options)) {
+        return true;
+      }
+      updateStudyCounts(payload);
+      return false;
     }
 
     async function submitRating(rating) {
@@ -1657,11 +1863,11 @@
           try {
             const nextResp = await fetch(nextCardUrl, { method: "GET" });
             const nextPayload = await nextResp.json().catch(() => ({}));
-            if (nextResp.ok && applyNextCardPayload(nextPayload)) {
+            if (nextResp.ok && handleStudyPayload(nextPayload, { nextCardUrl })) {
               return;
             }
           } catch (_error) {
-            // Fallback dưới đây.
+            // Fallback dÆ°á»›i Ä‘Ã¢y.
           }
         }
         const nextUrl = String(data.next_url || "");
@@ -1707,7 +1913,7 @@
       );
       if (!canFullscreen) {
         fullscreenBtn.disabled = true;
-        fullscreenBtn.title = "Trình duyệt không hỗ trợ toàn màn hình";
+        fullscreenBtn.title = "TrÃ¬nh duyá»‡t khÃ´ng há»— trá»£ toÃ n mÃ n hÃ¬nh";
       } else {
         fullscreenBtn.addEventListener("click", () => {
           toggleFullscreen().catch(() => undefined);

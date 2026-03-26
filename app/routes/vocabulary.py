@@ -37,9 +37,12 @@ from app.repositories.study_repository import (
     NEW_QUEUE,
     RELEARNING_QUEUE,
     REVIEW_QUEUE,
+    active_progress_expr as _active_progress_expr,
     apply_card_state_to_progress as _apply_card_state_to_progress,
     card_state_from_progress as _card_state_from_progress,
     load_card_progress_map as _load_card_progress_map_for_user,
+    normalized_queue_expr as _normalized_queue_expr,
+    review_due_expr as _review_due_expr,
     select_next_due_card_from_loaded as _select_next_due_card_from_loaded,
     summarize_pending_learning_from_loaded as _summarize_pending_learning_from_loaded,
 )
@@ -610,13 +613,21 @@ def browse_api_cards():
         )
 
     now = datetime.utcnow()
+    normalized_progress_queue = _normalized_queue_expr(progress_alias)
+    query = query.filter(_active_progress_expr(progress_alias))
     if status == NEW_QUEUE:
-        query = query.filter(db.or_(progress_alias.id.is_(None), progress_alias.queue == NEW_QUEUE))
+        query = query.filter(
+            db.or_(
+                progress_alias.id.is_(None),
+                normalized_progress_queue == NEW_QUEUE,
+            )
+        )
     elif status == "learn":
-        query = query.filter(progress_alias.queue.in_([LEARN_QUEUE, LEARNING_QUEUE, RELEARNING_QUEUE]))
+        query = query.filter(normalized_progress_queue.in_([LEARNING_QUEUE, RELEARNING_QUEUE]))
     elif status in {"due", REVIEW_QUEUE}:
-        query = query.filter(progress_alias.queue == REVIEW_QUEUE).filter(
-            or_(progress_alias.due_at.is_(None), progress_alias.due_at <= now)
+        query = query.filter(
+            normalized_progress_queue == REVIEW_QUEUE,
+            _review_due_expr(progress_alias, now=now),
         )
 
     if sort_by == "deck":
@@ -629,11 +640,27 @@ def browse_api_cards():
         sort_expr = func.lower(db.cast(Note.field_values, db.Text))
         query = query.order_by(sort_expr.desc() if sort_dir == "desc" else sort_expr.asc(), Card.updated_at.desc())
     else:
+        due_sort_day_expr = db.case(
+            (normalized_progress_queue == REVIEW_QUEUE, progress_alias.due_day),
+            else_=None,
+        )
         due_sort_expr = progress_alias.due_at
         if sort_dir == "desc":
-            query = query.order_by(due_sort_expr.is_(None), due_sort_expr.desc(), Card.updated_at.desc())
+            query = query.order_by(
+                due_sort_day_expr.is_(None),
+                due_sort_day_expr.desc().nullslast(),
+                due_sort_expr.is_(None),
+                due_sort_expr.desc(),
+                Card.updated_at.desc(),
+            )
         else:
-            query = query.order_by(due_sort_expr.is_(None), due_sort_expr.asc(), Card.updated_at.desc())
+            query = query.order_by(
+                due_sort_day_expr.is_(None),
+                due_sort_day_expr.asc().nullslast(),
+                due_sort_expr.is_(None),
+                due_sort_expr.asc(),
+                Card.updated_at.desc(),
+            )
 
     pagination = query.paginate(page=page, per_page=per_page, error_out=False)
     progress_map = _load_card_progress_map([card_obj.id for card_obj in pagination.items])
@@ -644,6 +671,7 @@ def browse_api_cards():
             deck_lookup,
             now,
             progress_obj=progress_map.get(card_obj.id),
+            timezone_name=get_effective_timezone_name(getattr(current_user, "timezone", "UTC")),
         )
         if not is_admin_user(current_user) and card_obj.note and card_obj.note.user_id != current_user.id:
             clone_scope = share_ctrl.resolve_clone_scope_for_card(
@@ -726,6 +754,7 @@ def browse_api_card_detail(card_id: str):
         deck_lookup,
         datetime.utcnow(),
         progress_obj=progress,
+        timezone_name=get_effective_timezone_name(getattr(current_user, "timezone", "UTC")),
     )
     if clone_scope is not None:
         payload = _apply_clone_overlay_to_browse_payload(
@@ -838,7 +867,13 @@ def browse_api_card_update(card_id: str):
             card_id=card_obj.id,
         ).first()
         now = datetime.utcnow()
-        detail_payload = vocabulary_ctrl.build_browse_card_detail(card_obj, deck_lookup, now, progress_obj=progress)
+        detail_payload = vocabulary_ctrl.build_browse_card_detail(
+            card_obj,
+            deck_lookup,
+            now,
+            progress_obj=progress,
+            timezone_name=get_effective_timezone_name(getattr(current_user, "timezone", "UTC")),
+        )
         detail_payload = _apply_clone_overlay_to_browse_payload(
             payload=detail_payload,
             card_obj=card_obj,
@@ -897,8 +932,20 @@ def browse_api_card_update(card_id: str):
     return jsonify(
         {
             "success": True,
-            "row": vocabulary_ctrl.build_browse_row(card_obj, deck_lookup, now, progress_obj=progress),
-            "detail": vocabulary_ctrl.build_browse_card_detail(card_obj, deck_lookup, now, progress_obj=progress),
+            "row": vocabulary_ctrl.build_browse_row(
+                card_obj,
+                deck_lookup,
+                now,
+                progress_obj=progress,
+                timezone_name=get_effective_timezone_name(getattr(current_user, "timezone", "UTC")),
+            ),
+            "detail": vocabulary_ctrl.build_browse_card_detail(
+                card_obj,
+                deck_lookup,
+                now,
+                progress_obj=progress,
+                timezone_name=get_effective_timezone_name(getattr(current_user, "timezone", "UTC")),
+            ),
         }
     )
 
@@ -1907,7 +1954,7 @@ def study_deck(deck_id: int):
         due_learn=due_learn,
         due_review=due_review,
         due_total=due_new + due_learn + due_review,
-        pending_learning_count=pending_learning_count,
+        is_waiting_session=bool(pending_learning_count and next_learning_due_at is not None),
         next_learning_due_at_iso=(
             f"{next_learning_due_at.isoformat(timespec='seconds')}Z"
             if next_learning_due_at is not None

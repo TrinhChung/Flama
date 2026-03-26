@@ -10,7 +10,7 @@ from models.card_progress import CardProgress
 from app.repositories.study_repository import (
     apply_card_state_to_progress as _apply_card_state_to_progress,
 )
-from app.services.stats_overview import record_review_event, update_user_timezone
+from app.services.stats_overview import record_review_event
 from app.routes.flashcards import (
     _touch_note_type_install_usage,
     _resolve_local_clone_deck_id_for_source_deck,
@@ -81,8 +81,6 @@ def apply_study_answer_and_commit(
 
     if local_deck_id_for_usage is not None:
         _touch_deck_install_usage(user_id=user.id, local_deck_id=local_deck_id_for_usage, activity_at=now)
-
-    update_user_timezone(user, payload.get("timezone"))
 
     record_review_event(
         user_id=user.id,

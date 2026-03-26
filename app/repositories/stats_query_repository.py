@@ -8,6 +8,7 @@ from typing import Any
 from models import db
 from models.flashcard import Card, Note, ReviewEvent
 from models.card_progress import CardProgress
+from app.repositories.study_repository import REVIEW_QUEUE, normalize_progress_queue
 
 UTC = timezone.utc
 
@@ -52,6 +53,24 @@ def _utc_to_local_day(moment: datetime, timezone_obj) -> date:
     else:
         utc_moment = utc_moment.astimezone(UTC)
     return utc_moment.astimezone(timezone_obj).date()
+
+
+def _progress_due_local_day(
+    *,
+    due_at: datetime | None,
+    due_day: int | None,
+    queue_value: Any,
+    timezone_obj,
+) -> date | None:
+    queue_norm = normalize_progress_queue(queue_value)
+    if queue_norm == REVIEW_QUEUE and due_day is not None:
+        try:
+            return date.fromordinal(int(due_day))
+        except (TypeError, ValueError):
+            return None
+    if due_at is None:
+        return None
+    return _utc_to_local_day(due_at, timezone_obj)
 
 def _query_daily_review_aggregates_mysql(
     *,
@@ -343,25 +362,31 @@ def query_future_due_day_counts(
     start_utc: datetime,
     end_utc: datetime,
 ) -> dict[date, int]:
-    if can_use_mysql_local_day_sql(timezone_name=timezone_name):
-        return _query_future_due_day_counts_mysql(
-            user_id=user_id,
-            mysql_timezone="+00:00",
-            start_utc=start_utc,
-            end_utc=end_utc,
+    start_local_day = _utc_to_local_day(start_utc, timezone_obj)
+    end_local_day = _utc_to_local_day(end_utc, timezone_obj)
+    rows = query_due_progress_rows(user_id=user_id)
+
+    by_day: dict[date, int] = {}
+    for due_at, due_day, queue_value in rows:
+        local_day = _progress_due_local_day(
+            due_at=due_at,
+            due_day=due_day,
+            queue_value=queue_value,
+            timezone_obj=timezone_obj,
         )
-    return _query_future_due_day_counts_python(
-        user_id=user_id,
-        timezone_obj=timezone_obj,
-        start_utc=start_utc,
-        end_utc=end_utc,
-    )
+        if local_day is None:
+            continue
+        if local_day < start_local_day or local_day >= end_local_day:
+            continue
+        by_day[local_day] = _safe_int(by_day.get(local_day)) + 1
+    return by_day
 
 
 def build_progress_rows_query(*, user_id: int):
     return (
         db.session.query(
             CardProgress.due_at,
+            CardProgress.due_day,
             CardProgress.queue,
             CardProgress.interval_days,
             CardProgress.is_suspended,
@@ -484,11 +509,25 @@ def query_interval_days_rows(
     *,
     user_id: int,
     scope_deck_ids: list[int] | None,
-) -> list[tuple[Any]]:
+) -> list[tuple[Any, Any]]:
     query = build_progress_rows_query(user_id=user_id)
     query = apply_scope_filter(query, scope_deck_ids)
     query = query.filter(
         db.or_(CardProgress.is_suspended.is_(False), CardProgress.is_suspended.is_(None))
     )
-    return query.with_entities(CardProgress.interval_days).all()
+    return query.with_entities(CardProgress.interval_days, CardProgress.queue).all()
+
+
+def query_due_progress_rows(
+    *,
+    user_id: int,
+    scope_deck_ids: list[int] | None = None,
+) -> list[tuple[Any, Any, Any]]:
+    query = build_progress_rows_query(user_id=user_id)
+    query = apply_scope_filter(query, scope_deck_ids)
+    query = query.filter(
+        db.or_(CardProgress.due_at.isnot(None), CardProgress.due_day.isnot(None)),
+        db.or_(CardProgress.is_suspended.is_(False), CardProgress.is_suspended.is_(None)),
+    )
+    return query.with_entities(CardProgress.due_at, CardProgress.due_day, CardProgress.queue).all()
 

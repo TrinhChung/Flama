@@ -71,6 +71,7 @@ class StatsOverviewTests(unittest.TestCase):
         *,
         due_at: datetime | None,
         queue: str = "review",
+        due_day: int | None = None,
         is_suspended: bool = False,
     ):
         db.session.add(
@@ -78,6 +79,7 @@ class StatsOverviewTests(unittest.TestCase):
                 user_id=self.user_id,
                 queue=queue,
                 due_at=due_at,
+                due_day=due_day,
                 interval_days=1,
                 is_suspended=is_suspended,
             )
@@ -214,6 +216,27 @@ class StatsOverviewTests(unittest.TestCase):
             self.assertEqual(jan_11["cards"], 1)
             self.assertEqual(jan_11["source"], "due")
             self.assertTrue(jan_11["is_future"])
+
+    def test_future_due_uses_review_due_day_over_stale_due_at(self):
+        with self.app.app_context():
+            self._add_progress(
+                due_at=datetime(2026, 1, 10, 8, 0, 0),
+                due_day=datetime(2026, 1, 12).date().toordinal(),
+                queue="review",
+            )
+            db.session.commit()
+
+            payload = build_stats_overview(
+                user_id=self.user_id,
+                year=2026,
+                timezone_name="UTC",
+                now_utc=datetime(2026, 1, 10, 12, 0, 0),
+            )
+
+            jan_12 = self._heatmap_day(payload, "2026-01-12")
+            self.assertEqual(jan_12["cards"], 1)
+            self.assertEqual(jan_12["source"], "due")
+            self.assertTrue(jan_12["is_future"])
 
     def test_non_utc_mysql_falls_back_to_python_aggregation(self):
         with self.app.app_context():

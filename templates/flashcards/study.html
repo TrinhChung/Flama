@@ -129,8 +129,8 @@
         });
         setStatus(`Answer saved (${rating}). Loading next card...`);
         await loadNextCard();
-        if (data?.intervals_preview?.[rating]?.label) {
-          setStatus(`Answer saved (${rating}: ${data.intervals_preview[rating].label}).`);
+        if (data?.applied_interval?.label) {
+          setStatus(`Answer saved (${rating}: ${data.applied_interval.label}).`);
         }
       } catch (error) {
         setStatus(error.message);

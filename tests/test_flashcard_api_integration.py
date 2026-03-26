@@ -3,11 +3,12 @@
 import io
 import re
 import unittest
-from datetime import datetime
+from datetime import datetime, timedelta
 from unittest.mock import patch
 
 from app import create_app
 from app.services import flashcards_share as share_ctrl
+from app.services.anki_scheduler import _day_index, _day_index_to_datetime, default_deck_options
 from models import db
 from models.flashcard import (
     Card,
@@ -1625,9 +1626,78 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
 
         self.assertIsNone(waiting_payload.get("card_id"))
         self.assertEqual(waiting_payload.get("session_state"), "waiting")
-        self.assertEqual(int(waiting_payload.get("pending_learning_count") or 0), 1)
-        self.assertTrue(str(waiting_payload.get("message") or "").startswith("No cards are due right now"))
+        self.assertEqual(int(waiting_payload.get("new_count") or 0), 0)
+        self.assertEqual(int(waiting_payload.get("learn_count") or 0), 1)
+        self.assertEqual(int(waiting_payload.get("due_count") or 0), 0)
+        self.assertNotIn("pending_learning_count", waiting_payload)
+        self.assertTrue(str(waiting_payload.get("message") or "").startswith("Learning is still in progress"))
         self.assertTrue(str(waiting_payload.get("next_due_at") or "").endswith("Z"))
+
+    def test_study_next_aggregates_due_now_and_due_later_cards_into_learn_count(self):
+        note_type = self._create_note_type()
+        note_type_id = note_type["id"]
+        for word in ("犬", "猫"):
+            create_resp = self.client.post(
+                "/api/notes",
+                json={
+                    "note_type_id": note_type_id,
+                    "deck_id": self.deck_id,
+                    "field_values": {
+                        "Word": word,
+                        "Reading": word,
+                        "Meaning": word,
+                    },
+                },
+            )
+            self.assertEqual(create_resp.status_code, 201)
+
+        with self.app.app_context():
+            cards = (
+                Card.query.join(Note, Card.note_id == Note.id)
+                .filter(Note.deck_id == self.deck_id)
+                .order_by(Card.id.asc())
+                .all()
+            )
+            self.assertEqual(len(cards), 2)
+            due_now_card = cards[0]
+            due_later_card = cards[1]
+            now = datetime.utcnow()
+            db.session.add(
+                CardProgress(
+                    user_id=self.user_id,
+                    card_id=due_now_card.id,
+                    queue="learning",
+                    due_at=now - timedelta(minutes=1),
+                    interval_days=0,
+                    ease_factor=default_deck_options().startingEase,
+                    reps=1,
+                    lapses=0,
+                )
+            )
+            db.session.add(
+                CardProgress(
+                    user_id=self.user_id,
+                    card_id=due_later_card.id,
+                    queue="learning",
+                    due_at=now + timedelta(minutes=15),
+                    interval_days=0,
+                    ease_factor=default_deck_options().startingEase,
+                    reps=1,
+                    lapses=0,
+                )
+            )
+            db.session.commit()
+            due_now_card_id = due_now_card.id
+
+        next_resp = self.client.get(f"/api/study/next?scope=deck&scope_id={self.deck_id}")
+        self.assertEqual(next_resp.status_code, 200)
+        next_payload = next_resp.get_json()
+
+        self.assertEqual(next_payload.get("card_id"), due_now_card_id)
+        self.assertEqual(int(next_payload.get("new_count") or 0), 0)
+        self.assertEqual(int(next_payload.get("learn_count") or 0), 2)
+        self.assertEqual(int(next_payload.get("due_count") or 0), 0)
+        self.assertNotIn("pending_learning_count", next_payload)
 
     def test_vocabulary_study_deck_shows_waiting_state_for_pending_learning(self):
         note_type = self._create_note_type()
@@ -1666,10 +1736,170 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         self.assertEqual(study_resp.status_code, 200)
         html = study_resp.get_data(as_text=True)
 
-        self.assertIn("No cards due right now.", html)
-        self.assertIn("learning cards", html)
+        self.assertIn("Learning in progress.", html)
+        self.assertRegex(html, r"Learn\s*<strong[^>]*>3</strong>")
         self.assertIn('id="study-waiting-next-due"', html)
-        self.assertNotIn("Hôm nay bạn đã học xong deck này.", html)
+        self.assertNotIn("Later", html)
+        self.assertNotIn("No cards due right now.", html)
+        self.assertNotIn("You have finished this deck for now.", html)
+
+    def test_study_answer_uses_persisted_timezone_and_returns_applied_preview(self):
+        note_type = self._create_note_type()
+        note_type_id = note_type["id"]
+        create_resp = self.client.post(
+            "/api/notes",
+            json={
+                "note_type_id": note_type_id,
+                "deck_id": self.deck_id,
+                "field_values": {
+                    "Word": "æ°´",
+                    "Reading": "ã¿ãš",
+                    "Meaning": "water",
+                },
+            },
+        )
+        self.assertEqual(create_resp.status_code, 201)
+
+        fixed_now = datetime(2026, 2, 22, 18, 55, 0)
+        with patch("app.routes.flashcards.study.datetime") as mock_datetime:
+            mock_datetime.utcnow.return_value = fixed_now
+
+            next_resp = self.client.get(f"/api/study/next?scope=deck&scope_id={self.deck_id}")
+            self.assertEqual(next_resp.status_code, 200)
+            next_payload = next_resp.get_json()
+
+            answer_resp = self.client.post(
+                f"/api/study/{next_payload['card_id']}/answer",
+                json={
+                    "rating": "good",
+                    "scope": "deck",
+                    "scope_id": self.deck_id,
+                    "timezone": "Asia/Tokyo",
+                },
+            )
+
+        self.assertEqual(answer_resp.status_code, 200)
+        answer_payload = answer_resp.get_json()
+        self.assertEqual(
+            answer_payload["applied_interval"]["label"],
+            next_payload["intervals_preview"]["good"]["label"],
+        )
+        self.assertEqual(
+            answer_payload["intervals_preview"]["good"]["label"],
+            next_payload["intervals_preview"]["good"]["label"],
+        )
+
+        with self.app.app_context():
+            user = User.query.get(self.user_id)
+            self.assertEqual(user.timezone, "UTC")
+
+            progress = CardProgress.query.filter_by(
+                user_id=self.user_id,
+                card_id=next_payload["card_id"],
+            ).first()
+            self.assertIsNotNone(progress)
+            self.assertEqual(progress.queue, "learning")
+            self.assertIsNone(progress.due_day)
+            self.assertEqual(progress.due_at, fixed_now + timedelta(minutes=10))
+
+    def test_study_and_browse_exclude_suspended_cards(self):
+        note_type = self._create_note_type()
+        note_type_id = note_type["id"]
+        note_resp = self.client.post(
+            "/api/notes",
+            json={
+                "note_type_id": note_type_id,
+                "deck_id": self.deck_id,
+                "field_values": {
+                    "Word": "ç©º",
+                    "Reading": "ãã‚‰",
+                    "Meaning": "sky",
+                },
+            },
+        )
+        self.assertEqual(note_resp.status_code, 201)
+
+        with self.app.app_context():
+            card = Card.query.join(Note, Card.note_id == Note.id).filter(Note.deck_id == self.deck_id).first()
+            progress = CardProgress(
+                user_id=self.user_id,
+                card_id=card.id,
+                queue="review",
+                due_at=datetime.utcnow() - timedelta(days=1),
+                due_day=_day_index(datetime.utcnow(), default_deck_options().dayBoundaryHourLocal),
+                is_suspended=True,
+                interval_days=3,
+            )
+            db.session.add(progress)
+            db.session.commit()
+
+        next_resp = self.client.get(f"/api/study/next?scope=deck&scope_id={self.deck_id}")
+        self.assertEqual(next_resp.status_code, 200)
+        next_payload = next_resp.get_json()
+        self.assertIsNone(next_payload.get("card_id"))
+        self.assertEqual(next_payload.get("session_state"), "complete")
+
+        browse_resp = self.client.get(f"/vocabulary/api/browse/cards?deck_id={self.deck_id}")
+        self.assertEqual(browse_resp.status_code, 200)
+        browse_payload = browse_resp.get_json()
+        self.assertEqual(browse_payload["total"], 0)
+
+        study_resp = self.client.get(f"/vocabulary/study/deck/{self.deck_id}")
+        self.assertEqual(study_resp.status_code, 200)
+        self.assertIn("No due cards in this deck.", study_resp.get_data(as_text=True))
+
+    def test_review_due_day_wins_over_stale_due_at_in_study_and_browse(self):
+        note_type = self._create_note_type()
+        note_type_id = note_type["id"]
+        note_resp = self.client.post(
+            "/api/notes",
+            json={
+                "note_type_id": note_type_id,
+                "deck_id": self.deck_id,
+                "field_values": {
+                    "Word": "ç«",
+                    "Reading": "ã²",
+                    "Meaning": "fire",
+                },
+            },
+        )
+        self.assertEqual(note_resp.status_code, 201)
+
+        now_utc = datetime.utcnow()
+        options = default_deck_options()
+        tomorrow_due_day = _day_index(now_utc, options.dayBoundaryHourLocal) + 1
+        expected_due_at = _day_index_to_datetime(
+            tomorrow_due_day,
+            options.dayBoundaryHourLocal,
+            timezone_name="UTC",
+        )
+
+        with self.app.app_context():
+            card = Card.query.join(Note, Card.note_id == Note.id).filter(Note.deck_id == self.deck_id).first()
+            progress = CardProgress(
+                user_id=self.user_id,
+                card_id=card.id,
+                queue="review",
+                due_at=now_utc - timedelta(days=1),
+                due_day=tomorrow_due_day,
+                interval_days=5,
+            )
+            db.session.add(progress)
+            db.session.commit()
+
+        next_resp = self.client.get(f"/api/study/next?scope=deck&scope_id={self.deck_id}")
+        self.assertEqual(next_resp.status_code, 200)
+        self.assertIsNone(next_resp.get_json().get("card_id"))
+
+        due_resp = self.client.get(f"/vocabulary/api/browse/cards?deck_id={self.deck_id}&status=due")
+        self.assertEqual(due_resp.status_code, 200)
+        self.assertEqual(due_resp.get_json()["total"], 0)
+
+        all_resp = self.client.get(f"/vocabulary/api/browse/cards?deck_id={self.deck_id}")
+        self.assertEqual(all_resp.status_code, 200)
+        all_payload = all_resp.get_json()
+        self.assertEqual(all_payload["total"], 1)
+        self.assertEqual(all_payload["items"][0]["due_at"], expected_due_at.isoformat())
 
     def test_study_next_defers_inline_template_script(self):
         note_type_resp = self.client.post(

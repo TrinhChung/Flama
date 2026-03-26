@@ -22,6 +22,7 @@ REVIEW_QUEUE = "review"
 NEW_QUEUE = "new"
 LEARNING_QUEUE = "learning"
 RELEARNING_QUEUE = "relearning"
+LEARNING_LATER_BUCKET = "learning_later"
 
 
 def normalize_progress_queue(value: str | None) -> str:
@@ -143,20 +144,55 @@ def _resolve_review_due_day(
     )
 
 
-def counter_bucket_for_progress_values(
+def is_progress_suspended(progress: CardProgress | None) -> bool:
+    return bool(progress is not None and getattr(progress, "is_suspended", False))
+
+
+def _is_suspended_value(is_suspended: bool | None) -> bool:
+    return bool(is_suspended)
+
+
+def effective_due_at_for_progress_values(
     *,
     queue: str | None,
     due_at: datetime | None,
     due_day: int | None,
     now: datetime,
     timezone_name: str = "UTC",
+) -> datetime | None:
+    queue_norm = normalize_progress_queue(queue)
+    if queue_norm == NEW_QUEUE:
+        return None
+    if queue_norm == REVIEW_QUEUE and due_day is not None:
+        options = default_deck_options()
+        return _day_index_to_datetime(
+            int(due_day),
+            options.dayBoundaryHourLocal,
+            timezone_name=timezone_name,
+        )
+    return due_at
+
+
+def study_bucket_for_progress_values(
+    *,
+    queue: str | None,
+    due_at: datetime | None,
+    due_day: int | None,
+    is_suspended: bool | None,
+    now: datetime,
+    timezone_name: str = "UTC",
 ) -> str | None:
+    if _is_suspended_value(is_suspended):
+        return None
+
     queue_norm = normalize_progress_queue(queue)
     if queue_norm == NEW_QUEUE:
         return NEW_QUEUE
     if queue_norm in {LEARNING_QUEUE, RELEARNING_QUEUE}:
-        if due_at is None or due_at < _next_day_boundary(now=now, timezone_name=timezone_name):
+        if due_at is None or due_at <= now:
             return LEARNING_QUEUE
+        if due_at < _next_day_boundary(now=now, timezone_name=timezone_name):
+            return LEARNING_LATER_BUCKET
         return None
     if queue_norm == REVIEW_QUEUE:
         review_due_day = _resolve_review_due_day(
@@ -171,25 +207,72 @@ def counter_bucket_for_progress_values(
     return NEW_QUEUE
 
 
+def counter_bucket_for_progress_values(
+    *,
+    queue: str | None,
+    due_at: datetime | None,
+    due_day: int | None,
+    is_suspended: bool | None = None,
+    now: datetime,
+    timezone_name: str = "UTC",
+) -> str | None:
+    bucket = study_bucket_for_progress_values(
+        queue=queue,
+        due_at=due_at,
+        due_day=due_day,
+        is_suspended=is_suspended,
+        now=now,
+        timezone_name=timezone_name,
+    )
+    if bucket == LEARNING_LATER_BUCKET:
+        return LEARNING_QUEUE
+    return bucket
+
+
 def is_due(progress: CardProgress | None, now: datetime, *, timezone_name: str = "UTC") -> bool:
     if progress is None:
         return True
-    queue = normalize_progress_queue(progress.queue)
-    if queue == NEW_QUEUE:
-        return True
-    if queue in {LEARNING_QUEUE, RELEARNING_QUEUE}:
-        if progress.due_at is None:
-            return True
-        return progress.due_at <= now
-    if queue == REVIEW_QUEUE:
-        review_due_day = _resolve_review_due_day(
+    return (
+        study_bucket_for_progress_values(
+            queue=progress.queue,
             due_at=progress.due_at,
             due_day=progress.due_day,
+            is_suspended=progress.is_suspended,
             now=now,
             timezone_name=timezone_name,
         )
-        return review_due_day <= _today_day_index(now=now, timezone_name=timezone_name)
-    return progress.due_at is None or progress.due_at <= now
+        in {NEW_QUEUE, LEARNING_QUEUE, REVIEW_QUEUE}
+    )
+
+
+def normalized_queue_expr(progress_alias):
+    normalized_queue = db.func.lower(db.func.coalesce(progress_alias.queue, NEW_QUEUE))
+    return db.case(
+        (normalized_queue == LEARN_QUEUE, LEARNING_QUEUE),
+        else_=normalized_queue,
+    )
+
+
+def active_progress_expr(progress_alias):
+    return db.or_(
+        progress_alias.id.is_(None),
+        progress_alias.is_suspended.is_(False),
+        progress_alias.is_suspended.is_(None),
+    )
+
+
+def review_due_expr(progress_alias, *, now: datetime, timezone_name: str = "UTC"):
+    today_day_index = _today_day_index(now=now, timezone_name=timezone_name)
+    return db.or_(
+        progress_alias.due_day <= today_day_index,
+        db.and_(
+            progress_alias.due_day.is_(None),
+            db.or_(
+                progress_alias.due_at.is_(None),
+                progress_alias.due_at <= now,
+            ),
+        ),
+    )
 
 
 def query_next_due_card_id(
@@ -204,25 +287,10 @@ def query_next_due_card_id(
         progress_alias.card_id == Card.id,
         progress_alias.user_id == user_id,
     )
-    normalized_queue = db.func.lower(db.func.coalesce(progress_alias.queue, NEW_QUEUE))
-    normalized_queue = db.case(
-        (normalized_queue == LEARN_QUEUE, LEARNING_QUEUE),
-        else_=normalized_queue,
-    )
-    today_day_index = _today_day_index(now=now, timezone_name=timezone_name)
+    normalized_queue = normalized_queue_expr(progress_alias)
     learning_due_expr = db.or_(
         progress_alias.due_at.is_(None),
         progress_alias.due_at <= now,
-    )
-    review_due_expr = db.or_(
-        progress_alias.due_day <= today_day_index,
-        db.and_(
-            progress_alias.due_day.is_(None),
-            db.or_(
-                progress_alias.due_at.is_(None),
-                progress_alias.due_at <= now,
-            ),
-        ),
     )
     is_due_expr = db.or_(
         progress_alias.id.is_(None),
@@ -233,7 +301,7 @@ def query_next_due_card_id(
         ),
         db.and_(
             normalized_queue == REVIEW_QUEUE,
-            review_due_expr,
+            review_due_expr(progress_alias, now=now, timezone_name=timezone_name),
         ),
     )
     queue_priority = db.case(
@@ -242,15 +310,23 @@ def query_next_due_card_id(
         (normalized_queue == REVIEW_QUEUE, 2),
         else_=3,
     )
+    review_due_sort_key = db.case(
+        (normalized_queue == REVIEW_QUEUE, progress_alias.due_day),
+        else_=None,
+    )
     due_sort_key = db.case(
-        (normalized_queue == NEW_QUEUE, None),
-        else_=progress_alias.due_at,
+        (
+            normalized_queue.in_([LEARNING_QUEUE, RELEARNING_QUEUE, REVIEW_QUEUE]),
+            progress_alias.due_at,
+        ),
+        else_=None,
     )
     row = (
         query.outerjoin(progress_alias, progress_join)
-        .filter(is_due_expr)
+        .filter(active_progress_expr(progress_alias), is_due_expr)
         .order_by(
             queue_priority.asc(),
+            review_due_sort_key.asc().nullslast(),
             due_sort_key.asc().nullslast(),
             Card.created_at.asc(),
             Card.id.asc(),
@@ -329,17 +405,78 @@ def summarize_pending_learning_from_loaded(
         progress = progress_map.get(card_obj.id)
         if progress is None:
             continue
-        queue = normalize_progress_queue(progress.queue)
-        due_at = progress.due_at
-        if queue not in {LEARNING_QUEUE, RELEARNING_QUEUE}:
+        if is_progress_suspended(progress):
             continue
-        if due_at is None or due_at <= now or due_at >= next_day_boundary:
+        due_at = progress.due_at
+        if (
+            study_bucket_for_progress_values(
+                queue=progress.queue,
+                due_at=due_at,
+                due_day=progress.due_day,
+                is_suspended=progress.is_suspended,
+                now=now,
+                timezone_name=timezone_name,
+            )
+            != LEARNING_LATER_BUCKET
+        ):
             continue
         pending_count += 1
         if next_due_at is None or due_at < next_due_at:
             next_due_at = due_at
 
     return pending_count, next_due_at
+
+
+def query_study_queue_counts(
+    query,
+    *,
+    user_id: int,
+    now: datetime,
+    timezone_name: str = "UTC",
+) -> tuple[int, int, int]:
+    progress_alias = aliased(CardProgress)
+    progress_join = db.and_(
+        progress_alias.card_id == Card.id,
+        progress_alias.user_id == user_id,
+    )
+    rows = (
+        query.outerjoin(progress_alias, progress_join)
+        .order_by(None)
+        .with_entities(
+            Card.id,
+            progress_alias.queue,
+            progress_alias.due_at,
+            progress_alias.due_day,
+            progress_alias.is_suspended,
+        )
+        .all()
+    )
+
+    new_count = 0
+    learn_count = 0
+    due_count = 0
+    seen_card_ids: set[str] = set()
+    for card_id, queue, due_at, due_day, is_suspended in rows:
+        card_id_str = str(card_id or "").strip()
+        if not card_id_str or card_id_str in seen_card_ids:
+            continue
+        seen_card_ids.add(card_id_str)
+        count_bucket = counter_bucket_for_progress_values(
+            queue=queue,
+            due_at=due_at,
+            due_day=due_day,
+            is_suspended=is_suspended,
+            now=now,
+            timezone_name=timezone_name,
+        )
+        if count_bucket == NEW_QUEUE:
+            new_count += 1
+        elif count_bucket == LEARNING_QUEUE:
+            learn_count += 1
+        elif count_bucket == REVIEW_QUEUE:
+            due_count += 1
+
+    return new_count, learn_count, due_count
 
 
 def query_pending_learning_summary(
@@ -354,15 +491,12 @@ def query_pending_learning_summary(
         progress_alias.card_id == Card.id,
         progress_alias.user_id == user_id,
     )
-    normalized_queue = db.func.lower(db.func.coalesce(progress_alias.queue, NEW_QUEUE))
-    normalized_queue = db.case(
-        (normalized_queue == LEARN_QUEUE, LEARNING_QUEUE),
-        else_=normalized_queue,
-    )
+    normalized_queue = normalized_queue_expr(progress_alias)
     next_day_boundary = _next_day_boundary(now=now, timezone_name=timezone_name)
     row = (
         query.outerjoin(progress_alias, progress_join)
         .filter(
+            active_progress_expr(progress_alias),
             normalized_queue.in_([LEARNING_QUEUE, RELEARNING_QUEUE]),
             progress_alias.due_at.isnot(None),
             progress_alias.due_at > now,
