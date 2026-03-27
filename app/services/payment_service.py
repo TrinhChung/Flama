@@ -654,6 +654,36 @@ def _validate_deck_item_for_checkout(deck_item: DeckMarketplaceItem, *, user_id:
     }
 
 
+def _resolve_existing_access_for_product(*, product_type: str, product_ref_id: str, user_id: int) -> dict[str, Any] | None:
+    if product_type == "note_type":
+        install = payment_repository.get_note_type_install(
+            user_id=user_id,
+            source_note_type_id=product_ref_id,
+        )
+        if install is None:
+            return None
+        return {
+            "already_installed": True,
+            "source_note_type_id": product_ref_id,
+            "installed_note_type_id": install.installed_note_type_id,
+        }
+
+    if product_type == "deck_marketplace_item":
+        install = payment_repository.get_deck_install(
+            user_id=user_id,
+            deck_item_id=product_ref_id,
+        )
+        if install is None:
+            return None
+        return {
+            "already_installed": True,
+            "deck_item_id": product_ref_id,
+            "installed_deck_id": install.local_deck_id,
+        }
+
+    return None
+
+
 def _load_checkout_context(*, product_type: str, product_ref_id: str, user_id: int) -> dict[str, Any]:
     if product_type == "note_type":
         source_note_type = NoteType.query.get(product_ref_id)
@@ -841,13 +871,36 @@ def _sync_attempt_with_payos(order: PaymentOrder, attempt: PaymentAttempt, *, no
         return "block"
 
     if provider_status == "PAID":
-        attempt.status = "manual_review"
-        attempt.manual_review_reason = (
-            "PayOS đã ghi nhận đơn này là đã thanh toán nhưng hệ thống chưa hoàn tất xác nhận nội bộ."
-        )
-        order.status = "under_review"
-        order.closed_at = None
-        return "block"
+        provider_amount_minor = int(provider_state.get("amount_minor") or 0)
+        provider_amount_paid_minor = int(provider_state.get("amount_paid_minor") or 0)
+        if provider_amount_minor and provider_amount_minor != int(attempt.amount_minor or 0):
+            attempt.status = "manual_review"
+            attempt.manual_review_reason = (
+                "PayOS xác nhận thanh toán thành công nhưng số tiền trên PayOS không khớp với đơn hàng."
+            )
+            order.status = "under_review"
+            order.closed_at = None
+            return "block"
+        if provider_amount_paid_minor and provider_amount_paid_minor != int(attempt.amount_minor or 0):
+            attempt.status = "manual_review"
+            attempt.manual_review_reason = (
+                "PayOS xác nhận thanh toán thành công nhưng số tiền thực nhận không khớp với đơn hàng."
+            )
+            order.status = "under_review"
+            order.closed_at = None
+            return "block"
+
+        attempt.status = "confirmed"
+        attempt.confirmed_at = attempt.confirmed_at or now
+        attempt.failed_at = None
+        attempt.failure_code = None
+        attempt.failure_message = None
+        attempt.manual_review_reason = None
+        order.status = "paid"
+        order.paid_at = order.paid_at or now
+        order.closed_at = now
+        _ensure_entitlements_for_confirmed_order(order, attempt, now=now)
+        return "completed"
 
     attempt.status = "manual_review"
     attempt.manual_review_reason = (
@@ -880,6 +933,9 @@ def _create_or_reuse_order_for_context(
             resolution = _sync_attempt_with_payos(order, latest_attempt, now=now)
             dirty = dirty or resolution != "reuse"
             if resolution == "reuse":
+                db.session.commit()
+                return order, False
+            if resolution == "completed":
                 db.session.commit()
                 return order, False
             if resolution == "block":
@@ -962,6 +1018,17 @@ def prepare_checkout_for_product(
         buyer_email=buyer_email,
     )
     fresh_order = payment_repository.get_order_by_id(order.id) or order
+    if fresh_order.status == "paid" and fresh_order.grant_status == "completed":
+        existing_access = _resolve_existing_access_for_product(
+            product_type=product_type,
+            product_ref_id=product_ref_id,
+            user_id=user_id,
+        )
+        if existing_access is not None:
+            return {
+                "payment_required": False,
+                **existing_access,
+            }
     return {
         "payment_required": True,
         "created": created,
@@ -979,7 +1046,7 @@ def get_order_detail_for_user(*, order_id: str, user_id: int) -> dict[str, Any]:
     latest_attempt = _latest_attempt(order)
     if latest_attempt is not None and latest_attempt.status in ACTIVE_ATTEMPT_STATUSES and order.status == "pending_payment":
         resolution = _sync_attempt_with_payos(order, latest_attempt, now=_utcnow())
-        if resolution in {"reuse", "block", "recreate"}:
+        if resolution in {"reuse", "completed", "block", "recreate"}:
             db.session.commit()
             order = payment_repository.get_order_for_user(order_id, user_id) or order
     return serialize_order(order)

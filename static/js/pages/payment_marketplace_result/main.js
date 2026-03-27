@@ -190,13 +190,17 @@
         });
     }
 
+    function getActiveCheckoutUrl(order) {
+        return order?.active_attempt?.checkout?.checkout_url || order?.active_attempt?.checkout_url || "";
+    }
+
     function resolveRetryConfig(order) {
-        const checkoutUrl = order?.active_attempt?.checkout?.checkout_url || order?.active_attempt?.checkout_url || "";
+        const checkoutUrl = getActiveCheckoutUrl(order);
         const status = String(order?.status || "").trim().toLowerCase();
         if (status === "pending_payment") {
             return {
-                label: checkoutUrl ? "Tiếp tục thanh toán" : "Tạo lại đơn thanh toán",
-                enabled: true,
+                label: checkoutUrl ? "Tiếp tục thanh toán" : "Đang chờ thanh toán",
+                enabled: Boolean(checkoutUrl),
             };
         }
         if (status === "expired" || status === "failed" || status === "canceled") {
@@ -259,6 +263,17 @@
 
     async function retryPurchase() {
         clearError();
+        const currentOrder = state.order || {};
+        const currentStatus = String(currentOrder.status || "").trim().toLowerCase();
+        const currentCheckoutUrl = getActiveCheckoutUrl(currentOrder);
+        if (currentStatus === "pending_payment") {
+            if (currentCheckoutUrl) {
+                window.location.href = currentCheckoutUrl;
+                return;
+            }
+            throw new Error("Đơn hàng này vẫn đang chờ thanh toán. Vui lòng dùng lại liên kết PayOS hiện tại.");
+        }
+
         const installUrl = getInstallUrl(state.productType, state.productRefId);
         if (!installUrl) {
             throw new Error("Không xác định được sản phẩm để mua lại.");
@@ -274,7 +289,7 @@
         state.orderId = order.id || state.orderId;
         renderOrder(order);
 
-        const checkoutUrl = order?.active_attempt?.checkout?.checkout_url || order?.active_attempt?.checkout_url;
+        const checkoutUrl = getActiveCheckoutUrl(order);
         if (checkoutUrl && order?.status === "pending_payment") {
             window.location.href = checkoutUrl;
         }

@@ -449,7 +449,7 @@ def install_shared_note_type(note_type_id: str):
                 status=exc.status,
                 field=exc.field,
             )
-        return jsonify(checkout), 202
+        return jsonify(checkout), 202 if checkout.get("payment_required") else 200
 
     installed_copy = _clone_note_type_for_user(source_note_type, current_user.id)
     now = datetime.utcnow()
@@ -839,7 +839,7 @@ def install_shared_deck_item(deck_item_id: str):
                     status=exc.status,
                     field=exc.field,
                 )
-            return jsonify(checkout), 202
+            return jsonify(checkout), 202 if checkout.get("payment_required") else 200
 
         try:
             install_result = flashcards_share.install_shared_deck_item_for_user(

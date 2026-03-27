@@ -459,6 +459,61 @@ class PaymentOrderFlowTests(unittest.TestCase):
             latest_attempt = max(expired_order.attempts, key=lambda row: row.created_at)
             self.assertEqual(latest_attempt.status, "expired")
 
+    def test_paid_note_type_return_flow_auto_grants_when_payos_state_is_paid(self):
+        note_type_id = self._create_note_type(pricing_mode="paid", price_amount_minor=50000)
+
+        with patch(
+            "app.services.payment.provider.payos_provider.create_checkout_session",
+            side_effect=self._fake_checkout_session,
+        ):
+            install_response = self.client.post(f"/api/shared/note-types/{note_type_id}/install")
+
+        self.assertEqual(install_response.status_code, 202)
+        order_id = (((install_response.get_json() or {}).get("order") or {}).get("id"))
+        self.assertTrue(order_id)
+
+        with patch(
+            "app.services.payment.provider.payos_provider.get_payment_link_state",
+            return_value=self._fake_payment_link_state(status="PAID"),
+        ):
+            order_response = self.client.get(f"/api/payments/orders/{order_id}")
+
+        self.assertEqual(order_response.status_code, 200)
+        order_detail = order_response.get_json() or {}
+        self.assertEqual(order_detail.get("status"), "paid")
+        self.assertEqual(order_detail.get("grant_status"), "completed")
+        self.assertEqual((order_detail.get("status_display") or {}).get("code"), "paid")
+
+        with self.app.app_context():
+            install = NoteTypeInstall.query.filter_by(
+                source_note_type_id=note_type_id,
+                user_id=self.buyer_id,
+            ).first()
+            self.assertIsNotNone(install)
+
+    def test_paid_note_type_second_install_returns_already_installed_after_payos_paid_sync(self):
+        note_type_id = self._create_note_type(pricing_mode="paid", price_amount_minor=50000)
+
+        with patch(
+            "app.services.payment.provider.payos_provider.create_checkout_session",
+            side_effect=self._fake_checkout_session,
+        ):
+            first_response = self.client.post(f"/api/shared/note-types/{note_type_id}/install")
+
+        self.assertEqual(first_response.status_code, 202)
+
+        with patch(
+            "app.services.payment.provider.payos_provider.get_payment_link_state",
+            return_value=self._fake_payment_link_state(status="PAID"),
+        ):
+            second_response = self.client.post(f"/api/shared/note-types/{note_type_id}/install")
+
+        self.assertEqual(second_response.status_code, 200)
+        second_payload = second_response.get_json() or {}
+        self.assertFalse(second_payload.get("payment_required"))
+        self.assertTrue(second_payload.get("already_installed"))
+        self.assertEqual(second_payload.get("source_note_type_id"), note_type_id)
+
     def test_marketplace_payment_result_page_renders(self):
         note_type_id = self._create_note_type(pricing_mode="paid", price_amount_minor=33000)
 
