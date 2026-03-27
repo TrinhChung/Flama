@@ -1,60 +1,56 @@
-# Nihongo Flask Auth Starter
+# Nihongo Flask Starter
 
-Lightweight Flask + MySQL starter project that focuses on user registration, login, and logout using Flask-Login.
+Lightweight Flask + MySQL application for vocabulary learning, flashcards, marketplace installs, and payOS-based payment flows.
 
 ## Documentation
+
 - Setup and basic commands: `README_SETUP.md`
-- One-command DB reseed script: `scripts/reseed_db.sh`
+- Payment architecture and operations: `docs/FLAMA_PAYMENT_ARCHITECTURE.md`
+- System architecture overview: `docs/SYSTEM_ARCHITECTURE.md`
 - Flashcard V2 migration runbook: `docs/FLASHCARD_V2_RUNBOOK.md`
+- One-command DB reseed script: `scripts/reseed_db.sh`
 
 ## Core Features
+
 - Flask application factory pattern with SQLAlchemy models.
 - Environment-based configuration via `.env` and `python-dotenv`.
 - Secure password hashing and session management handled by Flask-Login.
-- Vocabulary management: duyệt danh sách bài chia tự động mỗi 60 từ, nhập liệu hàng loạt qua CSV và chỉnh sửa nhanh mọi trường dữ liệu ngay trong bảng.
-- Giao diện bài học hỗ trợ kéo giãn cột và tự lưu kích thước cho từng tài khoản.
-- Bootstrap 5 templates for a quick, responsive UI.
+- Vocabulary management and flashcard study flows.
+- Marketplace sharing for note types and decks.
+- payOS-first payment domain centered on orders, payment attempts, webhook processing, and entitlements.
+- Admin payment operations for order history, transaction history, and operational monitoring.
+- User order history pages for clear order and payment visibility.
 
 ## Requirements
+
 - Python 3.10+
-- MySQL server with an empty schema (default name `flama`).
-- Python dependencies listed in `requirements.txt` (includes `cryptography` for MySQL caching_sha2 auth and `Flask-Migrate` for database migrations).
+- MySQL server with an empty schema (default name `flama`)
+- Python dependencies listed in `requirements.txt`
 
 ## Project Structure
-```
+
+```text
 wsgi.py                 # Flask entry point
 app/
-├── __init__.py         # Application factory and configuration
-├── extensions.py       # Shared Flask extensions (LoginManager)
-├── routes/
-│   ├── __init__.py     # Blueprint registration
-│   ├── auth.py         # Authentication routes
-│   ├── main.py         # Landing page and dashboard
-│   └── vocabulary.py   # Vocabulary lessons, CSV import, deck editing
-models/
-├── __init__.py         # SQLAlchemy instance
-├── user.py             # User model definition
-└── vocabulary_entry.py # Vocabulary table schema
+|-- __init__.py         # Application factory and configuration
+|-- extensions.py       # Shared Flask extensions
+|-- routes/             # Blueprints and HTTP entrypoints
+|-- services/           # Business logic and orchestration
+|-- repositories/       # Query and persistence helpers
+|-- validators/         # Request validation and normalization
+models/                 # SQLAlchemy model definitions
 templates/              # Jinja2 templates
 static/                 # Static assets
-requirements.txt        # Python dependencies
-.env                    # Environment configuration (never commit real secrets)
-.venv/                  # Optional local virtual environment
+docs/                   # Technical documentation
 ```
 
-## Flashcard V2 (Anki-like)
-- New NoteType/FieldDef/Template/Note/Card/Media model is available.
-- Management UI:
-  - `/flashcards/note-types`
-  - `/flashcards/note-types/<note_type_id>`
-  - `/flashcards/notes/new`
-  - `/flashcards/study`
-- API root:
-  - `/api/note-types`
-  - `/api/notes`
-  - `/api/study`
+## Payment Direction
 
-### Assumptions recorded for review
-- Legacy data does not contain user ownership on `vocabulary_entries`; migration maps to one target user.
-- Shared deck clone uses overlay-only model (`logical overlay` + pinned snapshot).
-- Field rename uses job-tracking record but executes synchronously in current version.
+The repository is payOS-first.
+
+- `PAYMENTS_PROVIDER=payos` is the intended configuration.
+- User-facing payment UI is limited to order history and order detail.
+- Admin-facing payment UI is operational and centered on orders, transactions, and dashboard monitoring.
+- Older payment migration notes are not part of the active architecture direction.
+
+See `docs/FLAMA_PAYMENT_ARCHITECTURE.md` before changing the payment domain.

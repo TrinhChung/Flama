@@ -265,6 +265,31 @@ copy .env_example .env
 scripts\reseed_db.bat
 ```
 
+## Payment Setup (payOS only)
+
+Payment direction hien tai cua FLAMA la payOS-first. Neu can bat thanh toan marketplace, dung cac bien sau trong `.env`:
+
+- `PAYMENTS_ENABLED=1`
+- `PAYMENTS_PROVIDER=payos`
+- `PAYMENTS_PAID_INSTALL_REQUIRED=1` neu marketplace item phai thanh toan truoc khi cap quyen
+- `PAYMENTS_WEBHOOK_AUTO_GRANT_ENABLED=1` neu muon webhook payOS tu dong confirm va grant quyen
+- `PAYMENTS_ORDER_EXPIRY_SECONDS=1800` hoac gia tri phu hop voi chinh sach het han
+- `PAYOS_CLIENT_ID`
+- `PAYOS_API_KEY`
+- `PAYOS_CHECKSUM_KEY`
+
+Luu y:
+
+- Gia tri mac dinh trong `.env_example` da theo huong payOS-first.
+- `PAYMENTS_V1_ENABLED` chi con ton tai de tuong thich nguoc trong code. Khong dung bien nay cho setup moi.
+- Khong them lai bien moi truong payment deprecated vao `.env`, setup guide, hay tai lieu van hanh.
+- Webhook canonical hien tai la `POST /api/payments/providers/payos/webhook`.
+
+Tai lieu payment canonical:
+
+- `docs/FLAMA_PAYMENT_ARCHITECTURE.md`
+- `docs/SYSTEM_ARCHITECTURE.md`
+
 ## Core Commands
 
 ### Chung

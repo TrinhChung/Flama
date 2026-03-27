@@ -97,12 +97,3 @@ def payos_webhook():
     except payment_service.PaymentServiceError as exc:
         return _api_error(exc.error, exc.message, status=exc.status, field=exc.field)
     return jsonify(result), status
-
-
-@payments_bp.route("/api/payments/providers/vietqr/webhook", methods=["POST"])
-def deprecated_vietqr_webhook():
-    try:
-        result, status = payment_service.process_payos_webhook_request(request.get_data(cache=True))
-    except payment_service.PaymentServiceError as exc:
-        return _api_error(exc.error, exc.message, status=exc.status, field=exc.field)
-    return jsonify(result), status

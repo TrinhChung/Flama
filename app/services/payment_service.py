@@ -1471,8 +1471,3 @@ def process_payos_webhook_request(raw_payload: bytes | str) -> tuple[dict[str, A
     except payos_provider.PayOSProviderError as exc:
         raise PaymentServiceError(exc.code, str(exc), status=exc.status) from exc
     return process_payment_webhook(normalized_payload, signature_valid=True)
-
-
-def process_vietqr_webhook(normalized_payload: dict[str, Any], *, signature_valid: bool) -> tuple[dict[str, Any], int]:
-    """Deprecated compatibility wrapper kept during the payOS-first recovery."""
-    return process_payment_webhook(normalized_payload, signature_valid=signature_valid)
