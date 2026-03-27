@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Transactions{% endblock %}
+
+{% block styles %}
+<style>
+  {% include "components/payment_management_styles.html" %}
+</style>
+{% endblock %}
+
+{% block content %}
+<section class="payment-page">
+  <div class="payment-shell">
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
+      <div>
+        <div class="payment-kicker mb-1">Admin Transactions</div>
+        <h1 class="h3 mb-1">Lich su giao dich</h1>
+        <p class="payment-muted mb-0">Theo doi tung payment attempt, ref provider, webhook va cac truong hop can doi soat.</p>
+      </div>
+      <div class="payment-toolbar-actions">
+        <a class="btn btn-outline-secondary" href="{{ url_for('admin_payments.dashboard_page') }}">Ve dashboard</a>
+        <a class="btn btn-outline-secondary" href="{{ url_for('admin_payments.orders_page') }}">Xem don hang</a>
+      </div>
+    </div>
+
+    <form method="GET" action="{{ url_for('admin_payments.transactions_page') }}" class="payment-toolbar-card payment-filters mb-3">
+      <input type="hidden" name="page" value="1">
+      <div class="row g-2 align-items-end">
+        <div class="col-12 col-lg-3">
+          <label class="form-label mb-1">Tim kiem</label>
+          <input class="form-control" type="text" name="q" value="{{ filters.q }}" placeholder="Attempt id, provider ref, order code">
+        </div>
+        <div class="col-6 col-lg-2">
+          <label class="form-label mb-1">Buyer</label>
+          <input class="form-control" type="text" name="buyer" value="{{ filters.buyer }}" placeholder="Username / email">
+        </div>
+        <div class="col-6 col-lg-2">
+          <label class="form-label mb-1">Order code</label>
+          <input class="form-control" type="text" name="order_code" value="{{ filters.order_code }}">
+        </div>
+        <div class="col-6 col-lg-1">
+          <label class="form-label mb-1">Status</label>
+          <select class="form-select" name="status">
+            <option value="all" {% if filters.status == "all" %}selected{% endif %}>Tat ca</option>
+            <option value="created" {% if filters.status == "created" %}selected{% endif %}>Created</option>
+            <option value="pending" {% if filters.status == "pending" %}selected{% endif %}>Pending</option>
+            <option value="confirmed" {% if filters.status == "confirmed" %}selected{% endif %}>Confirmed</option>
+            <option value="manual_review" {% if filters.status == "manual_review" %}selected{% endif %}>Review</option>
+            <option value="expired" {% if filters.status == "expired" %}selected{% endif %}>Expired</option>
+            <option value="failed" {% if filters.status == "failed" %}selected{% endif %}>Failed</option>
+            <option value="canceled" {% if filters.status == "canceled" %}selected{% endif %}>Canceled</option>
+          </select>
+        </div>
+        <div class="col-6 col-lg-1">
+          <label class="form-label mb-1">Provider</label>
+          <select class="form-select" name="provider">
+            <option value="all" {% if filters.provider == "all" %}selected{% endif %}>Tat ca</option>
+            <option value="payos" {% if filters.provider == "payos" %}selected{% endif %}>payOS</option>
+          </select>
+        </div>
+        <div class="col-6 col-lg-1">
+          <label class="form-label mb-1">Webhook</label>
+          <select class="form-select" name="webhook_status">
+            <option value="all" {% if filters.webhook_status == "all" %}selected{% endif %}>Tat ca</option>
+            <option value="received" {% if filters.webhook_status == "received" %}selected{% endif %}>Received</option>
+            <option value="processed" {% if filters.webhook_status == "processed" %}selected{% endif %}>Processed</option>
+            <option value="ignored" {% if filters.webhook_status == "ignored" %}selected{% endif %}>Ignored</option>
+            <option value="failed" {% if filters.webhook_status == "failed" %}selected{% endif %}>Failed</option>
+          </select>
+        </div>
+        <div class="col-6 col-lg-1">
+          <label class="form-label mb-1">Sort</label>
+          <select class="form-select" name="sort">
+            <option value="created_desc" {% if filters.sort == "created_desc" %}selected{% endif %}>Moi nhat</option>
+            <option value="created_asc" {% if filters.sort == "created_asc" %}selected{% endif %}>Cu nhat</option>
+            <option value="amount_desc" {% if filters.sort == "amount_desc" %}selected{% endif %}>Tien giam</option>
+            <option value="amount_asc" {% if filters.sort == "amount_asc" %}selected{% endif %}>Tien tang</option>
+          </select>
+        </div>
+      </div>
+      <div class="row g-2 align-items-end mt-1">
+        <div class="col-6 col-lg-2">
+          <label class="form-label mb-1">Tu ngay</label>
+          <input class="form-control" type="date" name="date_from" value="{{ filters.date_from }}">
+        </div>
+        <div class="col-6 col-lg-2">
+          <label class="form-label mb-1">Den ngay</label>
+          <input class="form-control" type="date" name="date_to" value="{{ filters.date_to }}">
+        </div>
+        <div class="col-6 col-lg-2">
+          <label class="form-label mb-1">Payment method</label>
+          <input class="form-control" type="text" name="payment_method" value="{{ '' if filters.payment_method == 'all' else filters.payment_method }}">
+        </div>
+        <div class="col-6 col-lg-1">
+          <label class="form-label mb-1">Min</label>
+          <input class="form-control" type="number" min="0" name="min_amount" value="{{ filters.min_amount_minor or '' }}">
+        </div>
+        <div class="col-6 col-lg-1">
+          <label class="form-label mb-1">Max</label>
+          <input class="form-control" type="number" min="0" name="max_amount" value="{{ filters.max_amount_minor or '' }}">
+        </div>
+        <div class="col-6 col-lg-1">
+          <label class="form-label mb-1">Moi trang</label>
+          <select class="form-select" name="per_page">
+            <option value="20" {% if per_page == 20 %}selected{% endif %}>20</option>
+            <option value="50" {% if per_page == 50 %}selected{% endif %}>50</option>
+            <option value="100" {% if per_page == 100 %}selected{% endif %}>100</option>
+          </select>
+        </div>
+        <div class="col-6 col-lg-1">
+          <button type="submit" class="btn btn-primary w-100">Loc</button>
+        </div>
+      </div>
+    </form>
+
+    <div class="payment-section-card">
+      <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+        <div class="small payment-muted">Tong {{ "{:,}".format(total) }} giao dich</div>
+        <div class="small payment-muted">Trang {{ page }}/{{ total_pages }}</div>
+      </div>
+      {% if items %}
+      <div class="payment-table-wrap">
+        <table class="table payment-table">
+          <thead>
+            <tr>
+              <th>Attempt</th>
+              <th>Order</th>
+              <th>Buyer</th>
+              <th>Provider</th>
+              <th>Status</th>
+              <th>Webhook</th>
+              <th>So tien</th>
+              <th>Tao luc</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in items %}
+            <tr>
+              <td><a class="text-decoration-none fw-semibold code" href="{{ url_for('admin_payments.transaction_detail_page', attempt_id=item.id) }}">{{ item.id[:8] }}</a></td>
+              <td><a class="text-decoration-none code" href="{{ url_for('admin_payments.order_detail_page', order_id=item.order_id) }}">{{ item.merchant_order_code }}</a></td>
+              <td>
+                <div class="fw-semibold">{{ item.buyer.username or "-" }}</div>
+                <div class="small payment-muted">{{ item.buyer.email or "-" }}</div>
+              </td>
+              <td>{{ item.provider_code }}</td>
+              <td><span class="payment-badge" data-tone="primary">{{ item.status_label }}</span></td>
+              <td>
+                {% if item.webhook_status_label %}
+                <span class="payment-badge" data-tone="secondary">{{ item.webhook_status_label }}</span>
+                {% else %}
+                <span class="payment-muted">-</span>
+                {% endif %}
+              </td>
+              <td>{{ item.amount_display }}</td>
+              <td>{{ item.created_at_display }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="payment-empty">
+        <div class="fw-semibold mb-2">Khong tim thay giao dich phu hop</div>
+        <div>Thu doi bo loc hoac khoang thoi gian.</div>
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3">
+      <a
+        class="btn btn-outline-secondary {% if not has_prev %}disabled{% endif %}"
+        href="{{ url_for('admin_payments.transactions_page', page=prev_num, per_page=per_page, q=filters.q, buyer=filters.buyer, order_code=filters.order_code, status=filters.status, provider=filters.provider, payment_method=filters.payment_method, webhook_status=filters.webhook_status, date_from=filters.date_from, date_to=filters.date_to, min_amount=filters.min_amount_minor, max_amount=filters.max_amount_minor, sort=filters.sort) }}"
+      >
+        Truoc
+      </a>
+      <a
+        class="btn btn-outline-secondary {% if not has_next %}disabled{% endif %}"
+        href="{{ url_for('admin_payments.transactions_page', page=next_num, per_page=per_page, q=filters.q, buyer=filters.buyer, order_code=filters.order_code, status=filters.status, provider=filters.provider, payment_method=filters.payment_method, webhook_status=filters.webhook_status, date_from=filters.date_from, date_to=filters.date_to, min_amount=filters.min_amount_minor, max_amount=filters.max_amount_minor, sort=filters.sort) }}"
+      >
+        Sau
+      </a>
+    </div>
+  </div>
+</section>
+{% endblock %}

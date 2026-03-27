@@ -4,8 +4,15 @@
       <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Flama" class="flama-icon">
       <span class="brand-text">Flama</span>
     </a>
-    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
-      aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+    <button
+      class="navbar-toggler"
+      type="button"
+      data-bs-toggle="collapse"
+      data-bs-target="#navbarNav"
+      aria-controls="navbarNav"
+      aria-expanded="false"
+      aria-label="Toggle navigation"
+    >
       <span class="navbar-toggler-icon"></span>
     </button>
     <div class="collapse navbar-collapse" id="navbarNav">
@@ -16,7 +23,6 @@
             <i class="bi bi-speedometer2"></i> Tổng quan
           </a>
         </li>
-
 
         <li class="nav-item dropdown">
           <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
@@ -46,7 +52,6 @@
                 <i class="bi bi-layers"></i> Quản lý loại thẻ
               </a>
             </li>
-
           </ul>
         </li>
 
@@ -59,6 +64,21 @@
             <li>
               <a class="dropdown-item" href="{{ url_for('admin.user_management_page') }}">
                 <i class="bi bi-people"></i> Người dùng và phân quyền
+              </a>
+            </li>
+            <li>
+              <a class="dropdown-item" href="{{ url_for('admin_payments.dashboard_page') }}">
+                <i class="bi bi-receipt"></i> Dashboard thanh toán
+              </a>
+            </li>
+            <li>
+              <a class="dropdown-item" href="{{ url_for('admin_payments.orders_page') }}">
+                <i class="bi bi-bag-check"></i> Quản lý đơn hàng
+              </a>
+            </li>
+            <li>
+              <a class="dropdown-item" href="{{ url_for('admin_payments.transactions_page') }}">
+                <i class="bi bi-arrow-left-right"></i> Lịch sử giao dịch
               </a>
             </li>
             <li>
@@ -86,8 +106,11 @@
             {% else %}
             <li><span class="dropdown-item-text role-badge user">Vai trò: Người dùng</span></li>
             {% endif %}
+            <li><hr class="dropdown-divider"></li>
             <li>
-              <hr class="dropdown-divider">
+              <a class="dropdown-item" href="{{ url_for('user_orders.order_history_page') }}">
+                <i class="bi bi-clock-history"></i> Lịch sử đơn hàng
+              </a>
             </li>
             <li>
               <a class="dropdown-item text-danger" href="{{ url_for('auth.logout') }}">

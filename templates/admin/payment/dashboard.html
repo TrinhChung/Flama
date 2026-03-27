@@ -1,0 +1,229 @@
+{% extends "base.html" %}
+
+{% block title %}Payment Operations{% endblock %}
+
+{% block styles %}
+<style>
+  {% include "components/payment_management_styles.html" %}
+</style>
+{% endblock %}
+
+{% block content %}
+<section class="payment-page">
+  <div class="payment-shell">
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
+      <div>
+        <div class="payment-kicker mb-1">Admin Payment Ops</div>
+        <h1 class="h3 mb-1">Dashboard thanh toan</h1>
+        <p class="payment-muted mb-0">Theo doi don hang, giao dich bat thuong, webhook loi va hieu qua van hanh.</p>
+      </div>
+      <div class="payment-toolbar-actions">
+        <a class="btn btn-outline-secondary" href="{{ url_for('admin_payments.orders_page') }}">Quan ly don hang</a>
+        <a class="btn btn-outline-secondary" href="{{ url_for('admin_payments.transactions_page') }}">Quan ly giao dich</a>
+      </div>
+    </div>
+
+    <form method="GET" action="{{ url_for('admin_payments.dashboard_page') }}" class="payment-toolbar-card payment-filters mb-3">
+      <div class="row g-2 align-items-end">
+        <div class="col-12 col-md-3">
+          <label class="form-label mb-1">Pham vi</label>
+          <select class="form-select" name="period">
+            <option value="7d" {% if filters.period == "7d" %}selected{% endif %}>7 ngay</option>
+            <option value="30d" {% if filters.period == "30d" %}selected{% endif %}>30 ngay</option>
+            <option value="90d" {% if filters.period == "90d" %}selected{% endif %}>90 ngay</option>
+            <option value="all" {% if filters.period == "all" %}selected{% endif %}>Toan bo</option>
+          </select>
+        </div>
+        <div class="col-12 col-md-2">
+          <button type="submit" class="btn btn-primary w-100">Cap nhat</button>
+        </div>
+      </div>
+    </form>
+
+    <div class="payment-summary-grid mb-3">
+      {% for card in dashboard.cards %}
+      <div class="payment-summary-card" data-tone="{{ card.tone }}">
+        <div class="payment-summary-label">{{ card.label }}</div>
+        <div class="payment-summary-value">{{ card.value }}</div>
+        <div class="payment-summary-hint">{{ card.hint }}</div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="row g-3 mb-3">
+      <div class="col-12 col-lg-4">
+        <div class="payment-section-card h-100">
+          <h2 class="h5 mb-3">Phan bo trang thai don</h2>
+          <div class="payment-bar-list">
+            {% for row in dashboard.order_status_distribution %}
+            {% set total = dashboard.order_metrics.total_orders or 1 %}
+            <div class="payment-bar-row">
+              <div>{{ row.status }}</div>
+              <div class="payment-bar-track"><div class="payment-bar-fill" style="width: {{ ((row.count / total) * 100)|round(1) }}%;"></div></div>
+              <div class="text-end">{{ "{:,}".format(row.count) }}</div>
+            </div>
+            {% else %}
+            <div class="payment-muted">Khong co du lieu.</div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+      <div class="col-12 col-lg-4">
+        <div class="payment-section-card h-100">
+          <h2 class="h5 mb-3">Phan bo trang thai giao dich</h2>
+          <div class="payment-bar-list">
+            {% for row in dashboard.attempt_status_distribution %}
+            {% set total = dashboard.attempt_metrics.total_attempts or 1 %}
+            <div class="payment-bar-row">
+              <div>{{ row.status }}</div>
+              <div class="payment-bar-track"><div class="payment-bar-fill" style="width: {{ ((row.count / total) * 100)|round(1) }}%;"></div></div>
+              <div class="text-end">{{ "{:,}".format(row.count) }}</div>
+            </div>
+            {% else %}
+            <div class="payment-muted">Khong co du lieu.</div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+      <div class="col-12 col-lg-4">
+        <div class="payment-section-card h-100">
+          <h2 class="h5 mb-3">Volume theo ngay</h2>
+          <div class="payment-bar-list">
+            {% for row in dashboard.daily_volume %}
+            <div class="payment-bar-row">
+              <div>{{ row.day }}</div>
+              <div class="payment-bar-track"><div class="payment-bar-fill" style="width: {{ row.attempt_bar_pct }}%;"></div></div>
+              <div class="text-end">{{ row.attempt_count }}</div>
+            </div>
+            {% else %}
+            <div class="payment-muted">Chua co giao dich.</div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row g-3 mb-3">
+      <div class="col-12 col-lg-6">
+        <div class="payment-section-card h-100">
+          <h2 class="h5 mb-3">Recent orders</h2>
+          {% if dashboard.recent_orders %}
+          <div class="payment-table-wrap">
+            <table class="table payment-table">
+              <thead>
+                <tr>
+                  <th>Ma don</th>
+                  <th>Buyer</th>
+                  <th>So tien</th>
+                  <th>Trang thai</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for item in dashboard.recent_orders %}
+                <tr>
+                  <td><a class="text-decoration-none code" href="{{ url_for('admin_payments.order_detail_page', order_id=item.id) }}">{{ item.merchant_order_code }}</a></td>
+                  <td>{{ item.buyer.username or item.buyer.email }}</td>
+                  <td>{{ item.total_amount_display }}</td>
+                  <td><span class="payment-badge" data-tone="{{ item.status_tone }}">{{ item.status_label }}</span></td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% else %}
+          <div class="payment-muted">Khong co don hang.</div>
+          {% endif %}
+        </div>
+      </div>
+      <div class="col-12 col-lg-6">
+        <div class="payment-section-card h-100">
+          <h2 class="h5 mb-3">Recent abnormal attempts</h2>
+          {% if dashboard.recent_abnormal_attempts %}
+          <div class="payment-table-wrap">
+            <table class="table payment-table">
+              <thead>
+                <tr>
+                  <th>Giao dich</th>
+                  <th>Buyer</th>
+                  <th>Status</th>
+                  <th>Tao luc</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for item in dashboard.recent_abnormal_attempts %}
+                <tr>
+                  <td><a class="text-decoration-none code" href="{{ url_for('admin_payments.transaction_detail_page', attempt_id=item.id) }}">{{ item.id[:8] }}</a></td>
+                  <td>{{ item.buyer.username or item.buyer.email }}</td>
+                  <td><span class="payment-badge" data-tone="warning">{{ item.status_label }}</span></td>
+                  <td>{{ item.created_at_display }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% else %}
+          <div class="payment-muted">Khong co giao dich bat thuong.</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="row g-3">
+      <div class="col-12 col-lg-6">
+        <div class="payment-section-card h-100">
+          <h2 class="h5 mb-3">Webhook failures</h2>
+          {% if dashboard.recent_webhook_failures %}
+          <div class="payment-timeline">
+            {% for row in dashboard.recent_webhook_failures %}
+            <div class="payment-timeline-item">
+              <div class="d-flex justify-content-between gap-3">
+                <div>
+                  <div class="fw-semibold">{{ row.event_type }}</div>
+                  <div class="payment-timeline-meta">{{ row.received_at_display }}{% if row.merchant_order_code %} | {{ row.merchant_order_code }}{% endif %}</div>
+                </div>
+                <span class="payment-badge" data-tone="danger">{{ row.processing_status }}</span>
+              </div>
+              {% if row.error_message %}
+              <div class="small mt-2 text-danger">{{ row.error_message }}</div>
+              {% endif %}
+            </div>
+            {% endfor %}
+          </div>
+          {% else %}
+          <div class="payment-muted">Khong co webhook loi.</div>
+          {% endif %}
+        </div>
+      </div>
+      <div class="col-12 col-lg-6">
+        <div class="payment-section-card h-100">
+          <h2 class="h5 mb-3">Provider breakdown</h2>
+          {% if dashboard.provider_breakdown %}
+          <div class="payment-table-wrap">
+            <table class="table payment-table">
+              <thead>
+                <tr>
+                  <th>Provider</th>
+                  <th>Attempts</th>
+                  <th>Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in dashboard.provider_breakdown %}
+                <tr>
+                  <td>{{ row.provider_code }}</td>
+                  <td>{{ "{:,}".format(row.attempt_count) }}</td>
+                  <td>{{ "{:,.0f}".format(row.attempt_amount_minor) }} VND</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% else %}
+          <div class="payment-muted">Khong co provider du lieu.</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}
