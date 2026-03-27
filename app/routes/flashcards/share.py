@@ -12,6 +12,7 @@ from models.flashcard import *
 from models.deck import Deck
 from models.card_progress import CardProgress
 from app.services import flashcards_share
+from app.services import payment_service
 from app.utils.permissions import is_admin_user
 
 # Import everything from core module so routes can use helpers
@@ -298,8 +299,8 @@ def list_shared_note_types():
     tags = {item.lower() for item in _normalize_marketplace_tags(request.args.get("tags"))}
     pricing_mode = (request.args.get("pricing_mode") or request.args.get("pricing") or "").strip().lower()
     sort_key = (request.args.get("sort") or "popular").strip().lower()
-    min_price_cents = _parse_query_price_cents("min_price")
-    max_price_cents = _parse_query_price_cents("max_price")
+    min_price_amount_minor = _parse_query_price_amount_minor("min_price")
+    max_price_amount_minor = _parse_query_price_amount_minor("max_price")
 
     visible_note_types = [
         item for item in NoteType.query.order_by(NoteType.updated_at.desc()).all()
@@ -311,8 +312,8 @@ def list_shared_note_types():
         category=category,
         tags=tags,
         pricing_mode=pricing_mode,
-        min_price_cents=min_price_cents,
-        max_price_cents=max_price_cents,
+        min_price_amount_minor=min_price_amount_minor,
+        max_price_amount_minor=max_price_amount_minor,
     )
     sorted_items = _sort_note_type_items(filtered, sort_key)
 
@@ -418,15 +419,36 @@ def install_shared_note_type(note_type_id: str):
                 "already_installed": True,
             }
         )
+    if source_note_type.pricing_mode == "paid":
+        if not payment_service.paid_install_interception_enabled():
+            return _api_error(
+                "PAYMENT_UNAVAILABLE",
+                "Paid installs are not enabled yet.",
+                status=503,
+            )
+        try:
+            checkout = payment_service.prepare_checkout_for_product(
+                user_id=current_user.id,
+                product_type="note_type",
+                product_ref_id=source_note_type.id,
+            )
+        except payment_service.PaymentServiceError as exc:
+            return _api_error(
+                exc.error,
+                exc.message,
+                status=exc.status,
+                field=exc.field,
+            )
+        return jsonify(checkout), 202
 
     installed_copy = _clone_note_type_for_user(source_note_type, current_user.id)
     now = datetime.utcnow()
-    purchase_price_cents = int(source_note_type.price_cents or 0) if source_note_type.pricing_mode == "paid" else 0
+    purchase_amount_minor = int(source_note_type.price_amount_minor or 0) if source_note_type.pricing_mode == "paid" else 0
     install_row = NoteTypeInstall(
         source_note_type_id=source_note_type.id,
         installed_note_type_id=installed_copy.id,
         user_id=current_user.id,
-        purchase_price_cents=purchase_price_cents,
+        purchase_amount_minor=purchase_amount_minor,
         installed_at=now,
         purchased_at=now if source_note_type.pricing_mode == "paid" else None,
     )
@@ -437,7 +459,7 @@ def install_shared_note_type(note_type_id: str):
         {
             "source_note_type_id": source_note_type.id,
             "installed_note_type_id": installed_copy.id,
-            "price_cents": purchase_price_cents,
+            "price_amount_minor": purchase_amount_minor,
         },
     )
     db.session.commit()
@@ -445,7 +467,8 @@ def install_shared_note_type(note_type_id: str):
         {
             "installed_note_type_id": installed_copy.id,
             "source_note_type_id": source_note_type.id,
-            "purchase_price_cents": purchase_price_cents,
+            "purchase_amount_minor": purchase_amount_minor,
+            "purchase_price_cents": purchase_amount_minor,
         }
     ), 201
 
@@ -561,8 +584,8 @@ def list_shared_decks():
     tags = {item.lower() for item in _normalize_marketplace_tags(request.args.get("tags"))}
     pricing_mode = (request.args.get("pricing_mode") or request.args.get("pricing") or "").strip().lower()
     sort_key = (request.args.get("sort") or "popular").strip().lower()
-    min_price_cents = _parse_query_price_cents("min_price")
-    max_price_cents = _parse_query_price_cents("max_price")
+    min_price_amount_minor = _parse_query_price_amount_minor("min_price")
+    max_price_amount_minor = _parse_query_price_amount_minor("max_price")
 
     visible_items = [
         item for item in DeckMarketplaceItem.query.order_by(DeckMarketplaceItem.updated_at.desc()).all()
@@ -574,8 +597,8 @@ def list_shared_decks():
         category=category,
         tags=tags,
         pricing_mode=pricing_mode,
-        min_price_cents=min_price_cents,
-        max_price_cents=max_price_cents,
+        min_price_amount_minor=min_price_amount_minor,
+        max_price_amount_minor=max_price_amount_minor,
     )
     sorted_items = _sort_deck_items(filtered, sort_key)
     installs = DeckInstall.query.filter_by(user_id=current_user.id).all()
@@ -607,7 +630,7 @@ def create_shared_deck_item():
         preview_text=(payload.get("preview_text") or "").strip() or None,
         sample_cards_count=0,
         pricing_mode="free",
-        price_cents=0,
+        price_amount_minor=0,
         version="1.0.0",
         publish_status="private",
         is_official=False,
@@ -779,6 +802,28 @@ def install_shared_deck_item(deck_item_id: str):
                     time.sleep(0.05 * attempt)
                     continue
                 raise
+
+        if deck_item.pricing_mode == "paid":
+            if not payment_service.paid_install_interception_enabled():
+                return _api_error(
+                    "PAYMENT_UNAVAILABLE",
+                    "Paid installs are not enabled yet.",
+                    status=503,
+                )
+            try:
+                checkout = payment_service.prepare_checkout_for_product(
+                    user_id=current_user.id,
+                    product_type="deck_marketplace_item",
+                    product_ref_id=deck_item.id,
+                )
+            except payment_service.PaymentServiceError as exc:
+                return _api_error(
+                    exc.error,
+                    exc.message,
+                    status=exc.status,
+                    field=exc.field,
+                )
+            return jsonify(checkout), 202
 
         try:
             install_result = flashcards_share.install_shared_deck_item_for_user(

@@ -11,13 +11,41 @@ class ReviewEvent(db.Model):
     card_id = db.Column(db.String(64), nullable=False, index=True)
     deck_id = db.Column(db.Integer, nullable=True, index=True)
     note_type_id = db.Column(db.String(36), nullable=True, index=True)
+    scheduler_preset_id = db.Column(
+        db.Integer,
+        db.ForeignKey("scheduler_presets.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     reviewed_at = db.Column(db.DateTime, nullable=False, index=True)
     duration_ms = db.Column(db.Integer, nullable=True)
     rating = db.Column(db.String(20), nullable=False)
     mode = db.Column(db.String(20), nullable=False)
+    scheduler_mode = db.Column(db.String(20), nullable=False, default="legacy", index=True)
+    review_kind = db.Column(db.String(20), nullable=False, default="review", index=True)
+    queue_before = db.Column(db.String(20), nullable=True)
+    queue_after = db.Column(db.String(20), nullable=True)
+    interval_days_before = db.Column(db.Float, nullable=True)
+    interval_days_after = db.Column(db.Float, nullable=True)
+    due_day_before = db.Column(db.Integer, nullable=True)
+    due_day_after = db.Column(db.Integer, nullable=True)
+    days_late = db.Column(db.Integer, nullable=True)
+    ease_factor_before = db.Column(db.Float, nullable=True)
+    ease_factor_after = db.Column(db.Float, nullable=True)
+    memory_stability_before = db.Column(db.Float, nullable=True)
+    memory_stability_after = db.Column(db.Float, nullable=True)
+    memory_difficulty_before = db.Column(db.Float, nullable=True)
+    memory_difficulty_after = db.Column(db.Float, nullable=True)
+    leeched_after = db.Column(db.Boolean, nullable=False, default=False)
+    suspended_after = db.Column(db.Boolean, nullable=False, default=False)
+    payload_json = db.Column(db.Text, nullable=False, default="{}")
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     __table_args__ = (
         db.Index("ix_review_events_user_reviewed_at", "user_id", "reviewed_at"),
         db.Index("ix_review_events_user_card_reviewed_at", "user_id", "card_id", "reviewed_at"),
+        db.Index("ix_review_events_user_scheduler_reviewed_at", "user_id", "scheduler_mode", "reviewed_at"),
+        db.Index("ix_review_events_user_kind_reviewed_at", "user_id", "review_kind", "reviewed_at"),
     )
+
+    scheduler_preset = db.relationship("SchedulerPreset", back_populates="review_events")

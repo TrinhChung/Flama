@@ -79,14 +79,14 @@ class TestCounterLogic(unittest.TestCase):
         is_learn = due_at and due_at < self.next_boundary
         self.assertTrue(is_learn)
 
-    def test_learning_card_due_tomorrow_does_not_count(self):
-        """Learning card due tomorrow should not count as Learn."""
+    def test_learning_card_due_after_boundary_still_counts_as_learn_session(self):
+        """Learning card scheduled after the boundary still belongs to Learn."""
         # Card due well past next day boundary
         due_at = self.next_boundary + timedelta(hours=1)
-        
-        # Should NOT count as learn
-        is_learn = due_at and due_at < self.next_boundary
-        self.assertFalse(is_learn)
+
+        # It should still remain in the learning session.
+        is_learn = due_at is not None and due_at > self.now
+        self.assertTrue(is_learn)
 
     def test_review_card_due_today_counts_as_due(self):
         """Review card due today should count as Due."""
@@ -132,14 +132,14 @@ class TestCounterLogic(unittest.TestCase):
         
         self.assertEqual(actual_boundary_day, expected_day)
 
-    def test_learning_at_boundary_edge(self):
-        """Learning card due exactly at next boundary should not count."""
+    def test_learning_at_boundary_edge_still_counts_as_session_learning(self):
+        """Learning card due exactly at the next boundary should still count."""
         # Card due exactly at next boundary
         due_at = self.next_boundary
-        
-        # Should NOT count (due to < not <=)
-        is_learn = due_at and due_at < self.next_boundary
-        self.assertFalse(is_learn)
+
+        # It is still pending learning for the current session.
+        is_learn = due_at is not None and due_at > self.now
+        self.assertTrue(is_learn)
 
     def test_learning_just_before_boundary(self):
         """Learning card just before boundary should count."""
@@ -197,7 +197,7 @@ class TestCounterLogic(unittest.TestCase):
         due_new, due_learn, due_review = count_due_note_cards(cards, progress_map, now=self.now)
 
         self.assertEqual(due_new, 1)
-        self.assertEqual(due_learn, 2)
+        self.assertEqual(due_learn, 3)
         self.assertEqual(due_review, 1)
 
     def test_pending_learning_summary_tracks_learning_cards_due_later_today(self):
@@ -234,7 +234,7 @@ class TestCounterLogic(unittest.TestCase):
         )
 
         self.assertEqual(pending_count, 1)
-        self.assertEqual(next_due_at, self.now + timedelta(minutes=15))
+        self.assertEqual(next_due_at, self.next_boundary + timedelta(hours=1))
 
     def test_select_next_due_card_skips_learning_cards_scheduled_for_later_today(self):
         cards = [
@@ -263,6 +263,24 @@ class TestCounterLogic(unittest.TestCase):
         self.assertIsNotNone(selected)
         self.assertEqual(selected.id, "review-due")
 
+    def test_select_next_due_card_uses_learn_ahead_when_only_learning_remains(self):
+        cards = [
+            SimpleNamespace(id="learn-future", created_at=self.now),
+        ]
+        progress_map = {
+            "learn-future": CardProgress(
+                user_id=1,
+                card_id="learn-future",
+                queue="learning",
+                due_at=self.now + timedelta(minutes=15),
+            ),
+        }
+
+        selected = select_next_due_card_from_loaded(cards, progress_map, now=self.now)
+
+        self.assertIsNotNone(selected)
+        self.assertEqual(selected.id, "learn-future")
+
     def test_select_next_due_card_skips_suspended_cards(self):
         cards = [
             SimpleNamespace(id="suspended-review", created_at=self.now),
@@ -290,6 +308,33 @@ class TestCounterLogic(unittest.TestCase):
 
         self.assertIsNotNone(selected)
         self.assertEqual(selected.id, "review-due")
+
+    def test_select_next_due_card_prefers_earlier_review_due_day_over_stale_due_at(self):
+        cards = [
+            SimpleNamespace(id="review-overdue", created_at=self.now),
+            SimpleNamespace(id="review-today", created_at=self.now + timedelta(seconds=1)),
+        ]
+        progress_map = {
+            "review-overdue": CardProgress(
+                user_id=1,
+                card_id="review-overdue",
+                queue="review",
+                due_at=self.now + timedelta(days=2),
+                due_day=self.today_idx - 1,
+            ),
+            "review-today": CardProgress(
+                user_id=1,
+                card_id="review-today",
+                queue="review",
+                due_at=self.now - timedelta(days=2),
+                due_day=self.today_idx,
+            ),
+        }
+
+        selected = select_next_due_card_from_loaded(cards, progress_map, now=self.now)
+
+        self.assertIsNotNone(selected)
+        self.assertEqual(selected.id, "review-overdue")
 
 
 if __name__ == '__main__':

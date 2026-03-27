@@ -70,6 +70,36 @@ import {
         }
     }
 
+    function formatCurrencyMinor(amount) {
+        return window.Utils.formatVnd(amount);
+    }
+
+    function formatCount(value) {
+        return window.Utils.formatNumber(value);
+    }
+
+    function formatPrice(value) {
+        return window.Utils.formatPriceDisplay(value);
+    }
+
+    function buildPaymentInstructions(payload) {
+        const order = payload?.order || {};
+        const checkout = order?.active_attempt?.checkout || {};
+        const lines = [
+            "Đã tạo đơn thanh toán.",
+            "Mã đơn: " + (order.merchant_order_code || order.id || "N/A"),
+            "Số tiền: " + formatCurrencyMinor(checkout.amount_minor || order.total_amount_minor || 0),
+            "Ngân hàng BIN: " + (checkout.bank_bin || "N/A"),
+            "Số tài khoản: " + (checkout.account_no || "N/A"),
+            "Tên tài khoản: " + (checkout.account_name || "N/A"),
+            "Nội dung CK: " + (checkout.payment_reference || "N/A"),
+        ];
+        if (order?.active_attempt?.expires_at) {
+            lines.push("Hết hạn: " + formatDate(order.active_attempt.expires_at));
+        }
+        return lines.join("\n");
+    }
+
     function buildNoteTypeDetailUrl(noteTypeId) {
         if (!noteTypeDetailUrlTemplate) return "#";
         return noteTypeDetailUrlTemplate.replace("__NOTE_TYPE_ID__", encodeURIComponent(noteTypeId));
@@ -119,7 +149,7 @@ import {
             activeSampleIndex = 0;
         }
         if (testNoteEl) {
-            testNoteEl.textContent = "Dang hien thi " + normalized.length + " tu ngau nhien de mo phong preview card.";
+            testNoteEl.textContent = "Dang hien thi " + formatCount(normalized.length) + " tu ngau nhien de mo phong preview card.";
         }
 
         normalized.forEach((sample, index) => {
@@ -241,7 +271,10 @@ import {
         }
 
         if (deckDetail.can_rate) {
-            if (ratingHintEl) ratingHintEl.textContent = "Bạn có thể đánh giá ngay.";
+            if (ratingHintEl) {
+                const remaining = Number(deckDetail.review_submissions_remaining ?? 0);
+                ratingHintEl.textContent = "Bạn có thể đánh giá ngay. Lượt còn lại: " + formatCount(remaining) + "/2.";
+            }
             setRatingInputDisabled(false);
         } else {
             if (ratingHintEl) ratingHintEl.textContent = "Cần cài đặt và dùng thực tế trước khi đánh giá.";
@@ -328,14 +361,14 @@ import {
         if (metaEl) {
             metaEl.textContent = "Tác giả: " + (deckDetail.author?.username || "Unknown")
                 + " | Danh mục: " + (deckDetail.primary_category || "General")
-                + " | Giá: " + (deckDetail.price_display || "Free");
+                + " | Giá: " + formatPrice(deckDetail.price_display || "Miễn phí");
         }
         if (descriptionEl) descriptionEl.textContent = deckDetail.description || "Không có mô tả.";
         if (previewTextEl) previewTextEl.textContent = deckDetail.preview_text || "Không có preview text.";
         if (statsEl) {
-            statsEl.textContent = "Sample cards: " + (deckDetail.sample_cards_count || 0)
-                + " | Rating: " + Number(deckDetail.rating_avg || 0).toFixed(2) + " (" + (deckDetail.rating_count || 0) + ")"
-                + " | Active usage: " + (deckDetail.active_usage_count || 0) + "/" + (deckDetail.install_count || 0)
+            statsEl.textContent = "Sample cards: " + formatCount(deckDetail.sample_cards_count || 0)
+                + " | Rating: " + Number(deckDetail.rating_avg || 0).toFixed(2) + " (" + formatCount(deckDetail.rating_count || 0) + ")"
+                + " | Active usage: " + formatCount(deckDetail.active_usage_count || 0) + "/" + formatCount(deckDetail.install_count || 0)
                 + " | Cập nhật: " + (formatDate(deckDetail.updated_at) || "N/A");
         }
 
@@ -351,7 +384,11 @@ import {
         if (!deckDetail || deckDetail.is_owner || deckDetail.is_installed) return;
         if (installBtn) installBtn.disabled = true;
         try {
-            await installDeck(deckItemId);
+            const response = await installDeck(deckItemId);
+            if (response?.payment_required && response?.order) {
+                window.alert(buildPaymentInstructions(response));
+                return;
+            }
             await loadDeckDetail();
         } finally {
             renderInstallState();

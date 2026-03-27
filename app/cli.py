@@ -15,6 +15,7 @@ from flask import Flask
 
 from app.services.flashcard_import import ImportValidationError, read_delimited_rows
 from app.services.flashcard_legacy import ensure_legacy_note_type, ensure_quiz_note_type
+from app.services import payment_service
 from app.services.user_roles import ensure_default_user_roles
 from app.services.tts_provider_service import (
     VOICEVOX_AUDIO_BASE_URL,
@@ -144,6 +145,16 @@ def register_cli_commands(app: Flask) -> None:
             f"updated={result.get('updated', 0)}. "
             f"VoiceVox endpoints: audio={VOICEVOX_AUDIO_BASE_URL}, "
             f"speakers={VOICEVOX_SPEAKERS_URL}, points={VOICEVOX_POINTS_URL}."
+        )
+
+    @app.cli.command("payments-expire-stale")
+    def payments_expire_stale() -> None:
+        """Expire stale unpaid payment attempts/orders."""
+        result = payment_service.expire_stale_orders()
+        click.echo(
+            "Done. "
+            f"expired_attempts={int(result.get('expired_attempts') or 0)}, "
+            f"expired_orders={int(result.get('expired_orders') or 0)}"
         )
 
     @app.cli.command("dev-purge-data")
@@ -584,7 +595,7 @@ def _upsert_seeded_deck_marketplace_item(
         deck_item.preview_text = deck_item.preview_text or f"Default seeded deck: {deck.name}"
         deck_item.sample_cards_count = max(int(deck_item.sample_cards_count or 0), sample_cards_count)
         deck_item.pricing_mode = "free"
-        deck_item.price_cents = 0
+        deck_item.price_amount_minor = 0
         deck_item.publish_status = "published"
         deck_item.is_official = True
         deck_item.published_at = deck_item.published_at or datetime.utcnow()
@@ -602,7 +613,7 @@ def _upsert_seeded_deck_marketplace_item(
             preview_text=f"Default seeded deck: {deck.name}",
             sample_cards_count=sample_cards_count,
             pricing_mode="free",
-            price_cents=0,
+            price_amount_minor=0,
             version="1.0.0",
             publish_status="published",
             is_official=True,

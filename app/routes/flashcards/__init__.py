@@ -196,15 +196,18 @@ def _normalize_tags(raw_tags: Any) -> list[str]:
 def _normalize_marketplace_tags(raw_tags: Any) -> list[str]:
     return marketplace_query_service.normalize_marketplace_tags(raw_tags)
 
-def _parse_price_cents(raw_price: Any) -> int | None:
-    return marketplace_query_service.parse_price_cents(raw_price)
+def _parse_price_amount_minor(raw_price: Any) -> int | None:
+    return marketplace_query_service.parse_price_amount_minor(raw_price)
 
-def _normalize_pricing(payload: dict[str, Any], *, current_mode: str, current_price_cents: int) -> tuple[str, int, str | None]:
+def _normalize_pricing(payload: dict[str, Any], *, current_mode: str, current_price_amount_minor: int) -> tuple[str, int, str | None]:
     return marketplace_query_service.normalize_pricing(
         payload,
         current_mode=current_mode,
-        current_price_cents=current_price_cents,
+        current_price_amount_minor=current_price_amount_minor,
     )
+
+def _parse_price_cents(raw_price: Any) -> int | None:
+    return _parse_price_amount_minor(raw_price)
 
 def _build_preview_sample_values(field_defs: list[FieldDef]) -> dict[str, Any]:
     sample_values: dict[str, Any] = {}
@@ -447,8 +450,8 @@ def _filter_note_type_items(
     category: str,
     tags: set[str],
     pricing_mode: str,
-    min_price_cents: int | None,
-    max_price_cents: int | None,
+    min_price_amount_minor: int | None,
+    max_price_amount_minor: int | None,
 ) -> list[NoteType]:
     return marketplace_query_service.filter_note_type_items(
         note_types,
@@ -456,8 +459,8 @@ def _filter_note_type_items(
         category=category,
         tags=tags,
         pricing_mode=pricing_mode,
-        min_price_cents=min_price_cents,
-        max_price_cents=max_price_cents,
+        min_price_amount_minor=min_price_amount_minor,
+        max_price_amount_minor=max_price_amount_minor,
     )
 
 def _filter_deck_items(
@@ -467,8 +470,8 @@ def _filter_deck_items(
     category: str,
     tags: set[str],
     pricing_mode: str,
-    min_price_cents: int | None,
-    max_price_cents: int | None,
+    min_price_amount_minor: int | None,
+    max_price_amount_minor: int | None,
 ) -> list[DeckMarketplaceItem]:
     return marketplace_query_service.filter_deck_items(
         deck_items,
@@ -476,8 +479,8 @@ def _filter_deck_items(
         category=category,
         tags=tags,
         pricing_mode=pricing_mode,
-        min_price_cents=min_price_cents,
-        max_price_cents=max_price_cents,
+        min_price_amount_minor=min_price_amount_minor,
+        max_price_amount_minor=max_price_amount_minor,
     )
 
 def _sort_note_type_items(items: list[NoteType], sort_key: str) -> list[NoteType]:
@@ -625,8 +628,11 @@ def _resolve_import_execution_payload(payload: dict[str, Any]) -> tuple[dict[str
         admin_mode=is_admin_user(current_user),
     )
 
+def _parse_query_price_amount_minor(param_name: str) -> int | None:
+    return marketplace_query_service.parse_query_price_amount_minor(request.args.get(param_name))
+
 def _parse_query_price_cents(param_name: str) -> int | None:
-    return marketplace_query_service.parse_query_price_cents(request.args.get(param_name))
+    return _parse_query_price_amount_minor(param_name)
 
 def _get_shared_note_type_for_view(note_type_id: str) -> NoteType | None:
     note_type = NoteType.query.get(note_type_id)

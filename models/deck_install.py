@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from sqlalchemy import UniqueConstraint
+from sqlalchemy.orm import synonym
 
 from models import db
 from models.model_uuid import uuid_str
@@ -43,7 +44,8 @@ class DeckInstall(db.Model):
         index=True,
     )
     base_snapshot_at = db.Column(db.DateTime, nullable=True, index=True)
-    purchase_price_cents = db.Column(db.Integer, nullable=False, default=0)
+    purchase_amount_minor = db.Column(db.Integer, nullable=False, default=0)
+    purchase_price_cents = synonym("purchase_amount_minor")
     installed_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     purchased_at = db.Column(db.DateTime, nullable=True)
     first_use_at = db.Column(db.DateTime, nullable=True)

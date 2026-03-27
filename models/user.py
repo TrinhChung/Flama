@@ -28,6 +28,17 @@ class User(UserMixin, db.Model):
         back_populates="user",
         cascade="all, delete-orphan",
     )
+    scheduler_settings = db.relationship(
+        "UserSchedulerSettings",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        uselist=False,
+    )
+    scheduler_presets = db.relationship(
+        "SchedulerPreset",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
     role = db.relationship("UserRole", back_populates="users")
 
     @property

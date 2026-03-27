@@ -14,25 +14,25 @@
       <div class="col-6 col-lg-3">
         <div class="summary-card h-100">
           <div class="summary-label">Tổng cấu hình</div>
-          <div class="summary-value">{{ summary.total_count }}</div>
+          <div class="summary-value">{{ summary.total_count|format_number }}</div>
         </div>
       </div>
       <div class="col-6 col-lg-3">
         <div class="summary-card h-100">
           <div class="summary-label">Đang hoạt động</div>
-          <div class="summary-value text-success">{{ summary.active_count }}</div>
+          <div class="summary-value text-success">{{ summary.active_count|format_number }}</div>
         </div>
       </div>
       <div class="col-6 col-lg-3">
         <div class="summary-card h-100">
           <div class="summary-label">Yêu cầu API key</div>
-          <div class="summary-value">{{ summary.requires_key_count }}</div>
+          <div class="summary-value">{{ summary.requires_key_count|format_number }}</div>
         </div>
       </div>
       <div class="col-6 col-lg-3">
         <div class="summary-card h-100">
           <div class="summary-label">Đang hiển thị</div>
-          <div class="summary-value">{{ summary.filtered_count }}</div>
+          <div class="summary-value">{{ summary.filtered_count|format_number }}</div>
         </div>
       </div>
     </div>

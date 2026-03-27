@@ -79,7 +79,8 @@ def share_deck_page(deck_id: int):
         tags = [t.strip() for t in tags_raw.split(",") if t.strip()]
         pricing_mode = request.form.get("pricing_mode", "free")
         # Ensure only published free, logic can be updated for payment later
-        price_cents = int(request.form.get("price_cents", 0)) if pricing_mode == "paid" else 0
+        raw_price_amount_minor = request.form.get("price_amount_minor", request.form.get("price_cents", 0))
+        price_amount_minor = int(raw_price_amount_minor) if pricing_mode == "paid" else 0
         
         if not title:
             flash("Tên hiển thị không được để trống.", "danger")
@@ -108,7 +109,7 @@ def share_deck_page(deck_id: int):
         existing_item.primary_category = primary_category
         existing_item.tags = tags
         existing_item.pricing_mode = pricing_mode
-        existing_item.price_cents = price_cents
+        existing_item.price_amount_minor = price_amount_minor
         existing_item.source_note_type_id = resolved_note_type_id
         existing_item.publish_status = "published"
 
@@ -324,7 +325,7 @@ def seed_marketplace_defaults():
     note_type.tags = note_type.tags or ["official", "default", "japanese"]
     note_type.preview_text = note_type.preview_text or "Word / Reading / Meaning default layout."
     note_type.pricing_mode = "free"
-    note_type.price_cents = 0
+    note_type.price_amount_minor = 0
     note_type.version = note_type.version or "1.0.0"
     note_type.is_official = True
     note_type.publish_status = "published"
@@ -360,7 +361,7 @@ def seed_marketplace_defaults():
             preview_text="Starter deck with basic Japanese vocabulary.",
             sample_cards_count=20,
             pricing_mode="free",
-            price_cents=0,
+            price_amount_minor=0,
             version="1.0.0",
             publish_status="published",
             is_official=True,
@@ -369,4 +370,3 @@ def seed_marketplace_defaults():
     from app.services.flashcard_import_service import seed_marketplace_defaults_commit
     seed_marketplace_defaults_commit(admin_id, note_type, deck_item, is_new_deck_item)
     return jsonify({"note_type_id": note_type.id, "deck_item_id": deck_item.id})
-

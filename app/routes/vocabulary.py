@@ -51,8 +51,8 @@ from app.utils.permissions import is_admin_user
 from app.services import tts_provider_service
 from app.services.anki_scheduler import (
     computeAnswerPreview,
-    default_deck_options,
 )
+from app.services.scheduler_config_service import resolve_deck_options
 from app.services.flashcard_renderer import TemplateCompileError, render_template_pair
 from app.services.stats_overview import get_effective_timezone_name
 from app.validators import (
@@ -648,7 +648,7 @@ def browse_api_cards():
         if sort_dir == "desc":
             query = query.order_by(
                 due_sort_day_expr.is_(None),
-                due_sort_day_expr.desc().nullslast(),
+                due_sort_day_expr.desc(),
                 due_sort_expr.is_(None),
                 due_sort_expr.desc(),
                 Card.updated_at.desc(),
@@ -656,7 +656,7 @@ def browse_api_cards():
         else:
             query = query.order_by(
                 due_sort_day_expr.is_(None),
-                due_sort_day_expr.asc().nullslast(),
+                due_sort_day_expr.asc(),
                 due_sort_expr.is_(None),
                 due_sort_expr.asc(),
                 Card.updated_at.desc(),
@@ -1777,6 +1777,7 @@ def _select_next_note_card(
         progress_map,
         now=now,
         timezone_name=timezone_name,
+        user_id=current_user.id,
     )
 
 
@@ -1826,6 +1827,7 @@ def _summarize_pending_learning_cards(
         progress_map,
         now=now,
         timezone_name=timezone_name,
+        user_id=current_user.id,
     )
 
 
@@ -1871,14 +1873,20 @@ def study_deck(deck_id: int):
 
     next_intervals_preview = None
     if selected_card:
+        deck_options = resolve_deck_options(
+            user_id=current_user.id,
+            deck_id=getattr(selected_card.note, "deck_id", None),
+        )
         card_state = _card_state_from_progress(
             progress_map.get(selected_card.id),
             now,
             timezone_name=timezone_name,
+            user_id=current_user.id,
+            options=deck_options,
         )
         next_intervals_preview = computeAnswerPreview(
             card_state,
-            default_deck_options(),
+            deck_options,
             now,
             timezone_name=timezone_name,
         )

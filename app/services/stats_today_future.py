@@ -18,6 +18,8 @@ from app.repositories.stats_query_repository import (
     query_due_progress_rows,
     query_interval_days_rows,
 )
+from app.services.anki_scheduler import _day_index, _day_index_to_datetime
+from app.services.scheduler_config_service import resolve_day_boundary_hour_local
 from app.repositories.study_repository import REVIEW_QUEUE, normalize_progress_queue
 from app.utils.permissions import is_admin_user
 
@@ -177,10 +179,11 @@ def _future_window_end_offset(future_range: str) -> int | None:
 def _aggregate_future_due_python(
     *,
     rows: list[tuple[Any, Any, Any]],
-    timezone_obj,
+    timezone_name: str,
     today_local: date,
     backlog: bool,
     end_offset: int | None,
+    day_boundary_hour_local: int,
 ) -> tuple[dict[int, dict[str, int]], int]:
     by_offset: dict[int, dict[str, int]] = {}
 
@@ -194,8 +197,13 @@ def _aggregate_future_due_python(
         else:
             if due_at is None:
                 continue
-            due_utc = due_at if due_at.tzinfo else due_at.replace(tzinfo=UTC)
-            due_local_day = due_utc.astimezone(timezone_obj).date()
+            due_local_day = date.fromordinal(
+                _day_index(
+                    due_at,
+                    day_boundary_hour_local,
+                    timezone_name=timezone_name,
+                )
+            )
 
         if due_local_day is None:
             continue
@@ -317,13 +325,25 @@ def build_today_future_stats(
             parsed_deck_id = None
 
     timezone_effective = _effective_timezone_name(timezone_name)
-    timezone_obj = _build_timezone_obj(timezone_effective)
     now_utc_naive = _ensure_naive_utc(now_utc or datetime.utcnow())
-    now_local = now_utc_naive.replace(tzinfo=UTC).astimezone(timezone_obj)
-    today_local = now_local.date()
+    day_boundary_hour = resolve_day_boundary_hour_local(user_id=user_id)
+    today_day_index = _day_index(
+        now_utc_naive,
+        day_boundary_hour,
+        timezone_name=timezone_effective,
+    )
+    today_local = date.fromordinal(today_day_index)
 
-    today_start_utc = _local_start_to_utc_naive(today_local, timezone_obj)
-    tomorrow_start_utc = _local_start_to_utc_naive(today_local + timedelta(days=1), timezone_obj)
+    today_start_utc = _day_index_to_datetime(
+        today_day_index,
+        day_boundary_hour,
+        timezone_name=timezone_effective,
+    )
+    tomorrow_start_utc = _day_index_to_datetime(
+        today_day_index + 1,
+        day_boundary_hour,
+        timezone_name=timezone_effective,
+    )
 
     scope_deck_ids = _resolve_scope_deck_ids(scope=effective_scope, deck_id=parsed_deck_id)
 
@@ -344,10 +364,11 @@ def build_today_future_stats(
     )
     due_by_offset, min_negative_offset = _aggregate_future_due_python(
         rows=rows,
-        timezone_obj=timezone_obj,
+        timezone_name=timezone_effective,
         today_local=today_local,
         backlog=effective_backlog,
         end_offset=end_offset,
+        day_boundary_hour_local=day_boundary_hour,
     )
 
     series, window_days, total_reviews = _build_future_series(
