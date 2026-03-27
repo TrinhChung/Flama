@@ -285,7 +285,7 @@
   function renderMarkdownPreviewHtml(rawMarkdown) {
     const source = String(rawMarkdown || "").replace(/\r\n?/g, "\n");
     if (!source.trim()) {
-      return '<div class="browse-editor-markdown-preview-empty">Preview trống.</div>';
+      return '<div class="browse-editor-markdown-preview-empty">Khung xem trước đang trống.</div>';
     }
 
     const imageRe = /!\[([^\]]*)\]\(([^)\s]+)\)/g;
@@ -318,7 +318,7 @@
 
     return chunks.length
       ? chunks.join("")
-      : '<div class="browse-editor-markdown-preview-empty">Preview trống.</div>';
+      : '<div class="browse-editor-markdown-preview-empty">Khung xem trước đang trống.</div>';
   }
 
   function syncMarkdownPreviewForTextarea(textarea) {
@@ -493,11 +493,11 @@
   }
 
   function updateContextLabel() {
-    const contextText = state.selectedShortcut === "current" ? "Current deck" : "All decks";
+    const contextText = state.selectedShortcut === "current" ? "Deck hiện tại" : "Tất cả deck";
     const selectedDeckName =
       state.selectedDeckId != null
         ? (state.deckLookup.get(state.selectedDeckId)?.name || "Deck")
-        : "All Decks";
+        : "Tất cả deck";
     if (els.contextLabel) {
       els.contextLabel.textContent = `${contextText} | ${selectedDeckName}`;
     }
@@ -796,7 +796,12 @@
     updateVoicevoxSelectedNotesLabel();
 
     if (els.voicevoxKeyStatus) {
-      const statusText = String(state.voicevox.keyStatus || "unknown");
+      const rawStatus = String(state.voicevox.keyStatus || "unknown").toLowerCase();
+      const statusText = rawStatus === "valid"
+        ? "Hợp lệ"
+        : rawStatus === "invalid"
+          ? "Không hợp lệ"
+          : "Chưa kiểm tra";
       const detailText = String(state.voicevox.lastValidationError || "").trim();
       els.voicevoxKeyStatus.textContent = detailText
         ? `Trạng thái key: ${statusText} | ${detailText}`
@@ -851,7 +856,7 @@
     if (els.voicevoxSourceField) {
       const optionsHtml = sourceOptions.length
         ? sourceOptions.map((item) => `<option value="${escapeHtml(item.name)}">${escapeHtml(item.label)}</option>`).join("")
-        : '<option value="">(No source field)</option>';
+        : '<option value="">(Không có trường nguồn)</option>';
       els.voicevoxSourceField.innerHTML = optionsHtml;
       els.voicevoxSourceField.value = String(state.voicevox.sourceField || "");
       if (sourceOptions.length > 0 && !els.voicevoxSourceField.value) {
@@ -863,7 +868,7 @@
     if (els.voicevoxDestinationField) {
       const optionsHtml = destinationOptions.length
         ? destinationOptions.map((item) => `<option value="${escapeHtml(item.name)}">${escapeHtml(item.label)}</option>`).join("")
-        : '<option value="">(No destination field)</option>';
+        : '<option value="">(Không có trường đích)</option>';
       els.voicevoxDestinationField.innerHTML = optionsHtml;
       els.voicevoxDestinationField.value = String(state.voicevox.destinationField || "");
       if (destinationOptions.length > 0 && !els.voicevoxDestinationField.value) {
@@ -1004,14 +1009,14 @@
       els.voicevoxPreviewBtn.disabled = loading;
       els.voicevoxPreviewBtn.innerHTML = state.voicevox.previewing || state.voicevox.validatingKey
         ? '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span>'
-        : '<i class="bi bi-play-fill"></i> Preview Voice';
+        : '<i class="bi bi-play-fill"></i> Nghe thử giọng đọc';
     }
     if (els.voicevoxGenerateBtn) {
       els.voicevoxGenerateBtn.disabled = loading;
       const showSpinner = state.voicevox.validatingKey || (state.voicevox.generating && state.voicevox.generationMode !== "retry");
       els.voicevoxGenerateBtn.innerHTML = showSpinner
         ? '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span>'
-        : "Generate Audio";
+        : "Tạo audio";
     }
     if (els.voicevoxRetryFailedBtn) {
       const failedCount = Array.isArray(state.voicevox.failedNotes) ? state.voicevox.failedNotes.length : 0;
@@ -1351,7 +1356,7 @@
         .join("\n");
       const detailText = sampleText ? `\n${sampleText}` : "";
       window.alert(
-        `Cảnh báo: có ${warningCount} note đang có dữ liệu không phải âm thanh trong field '${state.voicevox.destinationField}'.\nHệ thống sẽ tiếp tục generate và ghi đè giá trị cũ.${detailText}`
+        `Cảnh báo: có ${warningCount} note đang có dữ liệu không phải âm thanh trong trường '${state.voicevox.destinationField}'.\nHệ thống sẽ tiếp tục tạo audio và ghi đè giá trị cũ.${detailText}`
       );
       return true;
     } catch (error) {
@@ -1442,14 +1447,14 @@
     const characterId = String(state.voicevox.characterId || "").trim();
     const previewText = pickVoicevoxPreviewText();
     if (!characterId) {
-      window.alert("Vui lòng chọn Speaker trước khi preview.");
+      window.alert("Vui lòng chọn nhân vật trước khi nghe thử.");
       return;
     }
     if (!previewText) {
-      window.alert("Không có text ở Source field để preview.");
+      window.alert("Không có văn bản trong trường nguồn để nghe thử.");
       return;
     }
-    const keyValid = await validateVoicevoxApiKeyBeforeAction("preview audio");
+    const keyValid = await validateVoicevoxApiKeyBeforeAction("nghe thử audio");
     if (!keyValid) {
       return;
     }
@@ -1512,7 +1517,7 @@
         throw playError;
       }
     } catch (error) {
-      window.alert(`Preview VoiceVox thất bại: ${error.message}`);
+      window.alert(`Nghe thử VoiceVox thất bại: ${error.message}`);
     } finally {
       state.voicevox.previewing = false;
       setVoicevoxActionState();
@@ -1800,23 +1805,23 @@
     }
     const cardIds = selectedVoicevoxCardIds();
     if (!cardIds.length) {
-      window.alert("Vui lòng chọn note/card trước khi Generate Audio.");
+      window.alert("Vui lòng chọn note hoặc card trước khi tạo audio.");
       return;
     }
     if (!state.voicevox.sourceField || !state.voicevox.destinationField) {
-      window.alert("Vui lòng chọn Source field và Destination field.");
+      window.alert("Vui lòng chọn trường nguồn và trường đích.");
       return;
     }
     if (!state.voicevox.characterId) {
-      window.alert("Vui lòng chọn Speaker.");
+      window.alert("Vui lòng chọn nhân vật.");
       return;
     }
     const targets = collectVoicevoxTargetsFromCardIds(cardIds);
     if (!targets.length) {
-      window.alert("Không có note hợp lệ để generate audio.");
+      window.alert("Không có note hợp lệ để tạo audio.");
       return;
     }
-    const keyValid = await validateVoicevoxApiKeyBeforeAction("generate audio");
+    const keyValid = await validateVoicevoxApiKeyBeforeAction("tạo audio");
     if (!keyValid) {
       return;
     }
@@ -1832,7 +1837,7 @@
     try {
       await runVoicevoxGenerateBatches(targets, "all");
     } catch (error) {
-      window.alert(`Generate VoiceVox thất bại: ${error.message}`);
+      window.alert(`Tạo audio VoiceVox thất bại: ${error.message}`);
     } finally {
       clearVoicevoxGenerateController();
       state.voicevox.cancelRequested = false;
@@ -1853,11 +1858,11 @@
       return;
     }
     if (!state.voicevox.sourceField || !state.voicevox.destinationField) {
-      window.alert("Vui lòng chọn Source field và Destination field.");
+      window.alert("Vui lòng chọn trường nguồn và trường đích.");
       return;
     }
     if (!state.voicevox.characterId) {
-      window.alert("Vui lòng chọn Speaker.");
+      window.alert("Vui lòng chọn nhân vật.");
       return;
     }
 
@@ -1966,7 +1971,7 @@
       els.shortcutCurrent.classList.toggle("is-active", state.selectedShortcut === "current");
       const disabled = state.currentDeckId == null;
       els.shortcutCurrent.disabled = disabled;
-      els.shortcutCurrent.title = disabled ? "No current deck in this screen context" : "Jump to current deck";
+      els.shortcutCurrent.title = disabled ? "Không có deck hiện tại trong ngữ cảnh màn hình này" : "Chuyển nhanh về deck hiện tại";
     }
   }
 
@@ -2088,7 +2093,7 @@
       }
       els.tableBody.innerHTML = `
         <tr>
-          <td colspan="${state.checkboxMode ? "8" : "7"}" class="browse-empty-cell">No cards match current deck/filters.</td>
+          <td colspan="${state.checkboxMode ? "8" : "7"}" class="browse-empty-cell">Không có thẻ nào khớp deck hoặc bộ lọc hiện tại.</td>
         </tr>
       `;
       return;
@@ -2131,10 +2136,10 @@
     }
     const loaded = state.rows.length;
     const total = state.total || 0;
-    const suffix = state.hasNext ? " | more..." : "";
+    const suffix = state.hasNext ? " | còn nữa..." : "";
     const selectedCount = state.selectedCardIds.size;
-    const selectedText = selectedCount ? ` | selected: ${selectedCount}` : "";
-    els.tableMeta.textContent = `${loaded}/${total} cards${selectedText}${suffix}`;
+    const selectedText = selectedCount ? ` | đã chọn: ${selectedCount}` : "";
+    els.tableMeta.textContent = `${loaded}/${total} thẻ${selectedText}${suffix}`;
     if (els.bulkDeleteBtn) {
       els.bulkDeleteBtn.disabled = selectedCount === 0;
     }
@@ -2219,16 +2224,16 @@
           const commonAttrs = `data-browse-field="${escapeHtml(name)}" data-browse-type="${escapeHtml(type)}"`;
           if (type === "image" || type === "audio" || type === "diagram") {
             const mediaMeta = media
-              ? `File: ${escapeHtml(media.filename || media.id || "")}`
-              : "No media attached yet.";
+              ? `Tệp: ${escapeHtml(media.filename || media.id || "")}`
+              : "Chưa có media đính kèm.";
             const allowPreviewBtn = type !== "audio";
             const previewBtn = media && allowPreviewBtn
-              ? `<a class="btn btn-sm btn-outline-secondary browse-editor-media-preview" href="${escapeHtml(media.url || "#")}" target="_blank" rel="noopener">Preview</a>`
+              ? `<a class="btn btn-sm btn-outline-secondary browse-editor-media-preview" href="${escapeHtml(media.url || "#")}" target="_blank" rel="noopener">Xem trước</a>`
               : "";
             return `
               <div class="browse-editor-field">
                 <label>${escapeHtml(name)} ${requiredBadge}</label>
-                <input type="text" ${commonAttrs} class="form-control form-control-sm" value="${escapeHtml(value)}" placeholder="Media asset id or URL">
+                <input type="text" ${commonAttrs} class="form-control form-control-sm" value="${escapeHtml(value)}" placeholder="ID media hoặc URL">
                 <div class="browse-editor-media-meta">${mediaMeta}</div>
                 <div class="browse-editor-media-actions">
                   ${previewBtn}
@@ -2312,16 +2317,16 @@
           const commonAttrs = `data-browse-field="${escapeHtml(name)}" data-browse-type="${escapeHtml(type)}"`;
           if (type === "image" || type === "audio" || type === "diagram") {
             const mediaMeta = media
-              ? `File: ${escapeHtml(media.filename || media.id || "")}`
-              : "No media attached yet.";
+              ? `Tệp: ${escapeHtml(media.filename || media.id || "")}`
+              : "Chưa có media đính kèm.";
             const allowPreviewBtn = type !== "audio";
             const previewBtn = media && allowPreviewBtn
-              ? `<a class="btn btn-sm btn-outline-secondary browse-editor-media-preview" href="${escapeHtml(media.url || "#")}" target="_blank" rel="noopener">Preview</a>`
+              ? `<a class="btn btn-sm btn-outline-secondary browse-editor-media-preview" href="${escapeHtml(media.url || "#")}" target="_blank" rel="noopener">Xem trước</a>`
               : "";
             return `
               <div class="browse-editor-field">
                 <label>${escapeHtml(name)} ${requiredBadge}</label>
-                <input type="text" ${commonAttrs} class="form-control form-control-sm" value="${escapeHtml(value)}" placeholder="Media asset id or URL">
+                <input type="text" ${commonAttrs} class="form-control form-control-sm" value="${escapeHtml(value)}" placeholder="ID media hoặc URL">
                 <div class="browse-editor-media-meta">${mediaMeta}</div>
                 <div class="browse-editor-media-actions">
                   ${previewBtn}
@@ -2598,7 +2603,7 @@
         state.dirtyFields.clear();
         renderEditor();
         updateVoicevoxSelectedNotesLabel();
-        window.alert(`Cannot load card detail: ${error.message}`);
+        window.alert(`Không tải được chi tiết thẻ: ${error.message}`);
       }
     } finally {
       state.loadingDetail = false;
@@ -2672,11 +2677,11 @@
       await loadCards({ reset: true, keepSelection: true });
       return true;
     } catch (error) {
-      window.alert(`Save failed: ${error.message}`);
+      window.alert(`Lưu thay đổi thất bại: ${error.message}`);
       return false;
     } finally {
       if (els.saveBtn) {
-        els.saveBtn.innerHTML = "Save";
+        els.saveBtn.innerHTML = "Lưu";
       }
       setSaveButtons();
     }

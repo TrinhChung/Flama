@@ -1,7 +1,18 @@
 export async function requestJson(url, options = {}) {
     const response = await fetch(url, options);
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.message || "Request failed.");
+    if (!response.ok) {
+        const error = new Error(
+            data.message
+            || (response.status >= 500
+                ? "Máy chủ đang bận hoặc tạm thời không phản hồi. Vui lòng thử lại sau."
+                : "Không thể hoàn tất yêu cầu.")
+        );
+        error.status = response.status;
+        error.code = data.error || "REQUEST_FAILED";
+        error.payload = data;
+        throw error;
+    }
     return data;
 }
 
@@ -11,6 +22,10 @@ export async function fetchDeckDetail(deckItemId) {
 
 export async function installDeck(deckItemId) {
     return requestJson(`/api/shared/decks/${deckItemId}/install`, { method: "POST" });
+}
+
+export async function fetchPaymentOrder(orderId) {
+    return requestJson(`/api/payments/orders/${encodeURIComponent(orderId)}`);
 }
 
 export async function submitRating(deckItemId, rating, comment) {

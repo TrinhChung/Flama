@@ -7,7 +7,7 @@ import json
 import re
 import tempfile
 from datetime import datetime, timedelta
-from io import TextIOWrapper
+from io import BytesIO, TextIOWrapper
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -23,6 +23,7 @@ IMPORT_MAX_ISSUES = 300
 IMPORT_TMP_ROOT = Path(tempfile.gettempdir()) / "flama_flashcard_import"
 IMPORT_TOKEN_REGEX = re.compile(r"^[a-f0-9-]{8,64}$")
 _WHITESPACE_RE = re.compile(r"\s+")
+_IMPORT_DIRECTIVE_RE = re.compile(r"^\s*#\s*([^:]+):(.*)$")
 
 
 class ImportValidationError(ValueError):
@@ -54,6 +55,108 @@ def resolve_delimiter(mode: str | None, custom_delimiter: str | None) -> str:
     if len(delimiter) != 1:
         raise ImportValidationError("custom_delimiter must contain exactly one character")
     return delimiter
+
+
+def _normalize_directive_key(value: str | None) -> str:
+    text = "" if value is None else str(value)
+    return _WHITESPACE_RE.sub(" ", text.strip().lower())
+
+
+def _resolve_separator_directive(value: str | None) -> str | None:
+    token = "" if value is None else str(value).strip()
+    if not token:
+        return None
+    if len(token) == 1:
+        return token
+
+    normalized = token.lower()
+    aliases = {
+        r"\t": "\t",
+        "bar": "|",
+        "colon": ":",
+        "comma": ",",
+        "pipe": "|",
+        "semicolon": ";",
+        "space": " ",
+        "tab": "\t",
+    }
+    return aliases.get(normalized)
+
+
+def _consume_import_preamble(text_file: TextIOWrapper) -> dict[str, Any]:
+    directives: dict[str, str] = {}
+    skipped_lines = 0
+    separator_override: str | None = None
+
+    while True:
+        position = text_file.tell()
+        line = text_file.readline()
+        if line == "":
+            break
+
+        stripped = line.strip()
+        if not stripped:
+            skipped_lines += 1
+            continue
+
+        match = _IMPORT_DIRECTIVE_RE.match(stripped)
+        if match is None:
+            text_file.seek(position)
+            break
+
+        skipped_lines += 1
+        directive_key = _normalize_directive_key(match.group(1))
+        directive_value = (match.group(2) or "").strip()
+        directives[directive_key] = directive_value
+
+        if directive_key == "separator":
+            resolved = _resolve_separator_directive(directive_value)
+            if resolved is not None:
+                separator_override = resolved
+
+    return {
+        "directives": directives,
+        "preamble_lines": skipped_lines,
+        "separator": separator_override,
+    }
+
+
+def _prepare_import_reader(
+    text_file: TextIOWrapper,
+    requested_delimiter: str,
+) -> tuple[Any, dict[str, Any]]:
+    preamble = _consume_import_preamble(text_file)
+    effective_delimiter = str(preamble.get("separator") or requested_delimiter or ",")
+    preamble["delimiter"] = effective_delimiter
+    return csv.reader(text_file, delimiter=effective_delimiter), preamble
+
+
+def read_delimited_rows(
+    *,
+    file_bytes: bytes,
+    delimiter: str,
+) -> tuple[list[list[str]], dict[str, Any]]:
+    """Parse delimited text using the same preamble rules as the import flow."""
+    if not file_bytes:
+        return [], {"delimiter": delimiter, "preamble_lines": 0, "preamble_directives": {}}
+
+    try:
+        with BytesIO(file_bytes) as raw_buffer, TextIOWrapper(raw_buffer, encoding="utf-8-sig", newline="") as text_file:
+            reader, preamble = _prepare_import_reader(text_file, delimiter)
+            rows: list[list[str]] = []
+            for row in reader:
+                row_values = ["" if value is None else str(value) for value in row]
+                if not any(cell.strip() for cell in row_values):
+                    continue
+                rows.append(row_values)
+    except csv.Error as exc:
+        raise ImportValidationError(f"Failed to parse delimited file: {exc}") from exc
+
+    return rows, {
+        "delimiter": str(preamble.get("delimiter") or delimiter),
+        "preamble_lines": int(preamble.get("preamble_lines") or 0),
+        "preamble_directives": dict(preamble.get("directives") or {}),
+    }
 
 
 def create_import_session(
@@ -90,7 +193,7 @@ def create_import_session(
         "user_id": int(user_id),
         "filename": filename,
         "file_size": len(file_bytes),
-        "delimiter": delimiter,
+        "delimiter": str(summary.get("delimiter") or delimiter),
         "has_header": bool(has_header),
         "created_at": datetime.utcnow().isoformat(),
         "column_count": int(summary.get("column_count") or 0),
@@ -180,11 +283,16 @@ def scan_import_session(
     total_rows = 0
     max_columns = 0
     first_data_columns = 0
+    effective_delimiter = delimiter
+    preamble_lines = 0
+    preamble_directives: dict[str, str] = {}
 
     try:
-        with data_path.open("rb") as raw_file:
-            text_file = TextIOWrapper(raw_file, encoding="utf-8-sig", newline="")
-            reader = csv.reader(text_file, delimiter=delimiter)
+        with data_path.open("rb") as raw_file, TextIOWrapper(raw_file, encoding="utf-8-sig", newline="") as text_file:
+            reader, preamble = _prepare_import_reader(text_file, delimiter)
+            effective_delimiter = str(preamble.get("delimiter") or delimiter)
+            preamble_lines = int(preamble.get("preamble_lines") or 0)
+            preamble_directives = dict(preamble.get("directives") or {})
             for row_index, row in enumerate(reader, start=1):
                 row_values = ["" if value is None else str(value) for value in row]
                 max_columns = max(max_columns, len(row_values))
@@ -243,7 +351,7 @@ def scan_import_session(
 
     return {
         "token": token,
-        "delimiter": delimiter,
+        "delimiter": effective_delimiter,
         "has_header": bool(has_header),
         "header": header,
         "columns": columns,
@@ -252,6 +360,8 @@ def scan_import_session(
         "total_rows": total_rows,
         "preview_rows": preview_rows,
         "warnings": warnings,
+        "preamble_lines": preamble_lines,
+        "preamble_directives": preamble_directives,
     }
 
 
@@ -581,9 +691,9 @@ def run_import(
     highest_required_index = max(mapped_column_indexes) if mapped_column_indexes else -1
 
     try:
-        with data_path.open("rb") as raw_file:
-            text_file = TextIOWrapper(raw_file, encoding="utf-8-sig", newline="")
-            reader = csv.reader(text_file, delimiter=delimiter)
+        with data_path.open("rb") as raw_file, TextIOWrapper(raw_file, encoding="utf-8-sig", newline="") as text_file:
+            reader, preamble = _prepare_import_reader(text_file, delimiter)
+            delimiter = str(preamble.get("delimiter") or delimiter)
             for row_number, raw_row in enumerate(reader, start=1):
                 if row_number == 1 and has_header:
                     continue

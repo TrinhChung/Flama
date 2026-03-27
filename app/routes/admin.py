@@ -13,6 +13,7 @@ from sqlalchemy.orm import selectinload
 
 from app.utils.permissions import is_admin_user
 from app.services import admin_service
+from app.services import payout_service
 from app.services import support_donation_service
 from app.services import tts_provider_service
 from app.validators import RequestValidationError, escape_like_pattern, sanitize_query_text
@@ -52,6 +53,10 @@ def _ensure_admin_access():
         return None
     flash("Ban khong co quyen truy cap trang quan tri.", "warning")
     return redirect(url_for("main.dashboard"))
+
+
+def _parse_bool_query(value: str | None) -> bool:
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 @admin_bp.route("/support-donation", methods=["GET", "POST"])
@@ -535,6 +540,71 @@ def batch_update_status_api():
             "results": results,
         }
     )
+
+
+@admin_bp.route("/api/payouts", methods=["POST"])
+@login_required
+def create_payout_batch_api():
+    if not is_admin_user(current_user):
+        return jsonify({"message": "Unauthorized"}), 403
+
+    payload = request.get_json(silent=True)
+    try:
+        result = payout_service.create_payout_batch(
+            actor_user_id=current_user.id,
+            raw_payload=payload,
+        )
+    except RequestValidationError as exc:
+        return jsonify({"error": exc.code, "message": str(exc), "field": exc.field}), exc.status
+    except payout_service.PayoutServiceError as exc:
+        return (
+            jsonify(
+                {
+                    "error": exc.code,
+                    "message": str(exc),
+                    "batch_id": exc.batch_id,
+                }
+            ),
+            exc.status,
+        )
+
+    status_code = 201 if result.created else 200
+    return (
+        jsonify(
+            {
+                "duplicate_reused": bool(result.duplicate_reused),
+                "batch": payout_service.serialize_payout_batch(result.batch),
+            }
+        ),
+        status_code,
+    )
+
+
+@admin_bp.route("/api/payouts/<int:batch_id>", methods=["GET"])
+@login_required
+def payout_batch_detail_api(batch_id: int):
+    if not is_admin_user(current_user):
+        return jsonify({"message": "Unauthorized"}), 403
+
+    refresh = _parse_bool_query(request.args.get("refresh"))
+    try:
+        batch = payout_service.get_payout_batch(batch_id=batch_id, refresh=refresh)
+    except payout_service.PayoutServiceError as exc:
+        return (
+            jsonify(
+                {
+                    "error": exc.code,
+                    "message": str(exc),
+                    "batch_id": exc.batch_id,
+                }
+            ),
+            exc.status,
+        )
+
+    if batch is None:
+        return jsonify({"error": "NOT_FOUND", "message": "Payout batch not found."}), 404
+
+    return jsonify({"batch": payout_service.serialize_payout_batch(batch)})
 
 
 @admin_bp.route("/users/<int:user_id>/role", methods=["POST"])

@@ -69,7 +69,7 @@ def login():
             return render_template("login.html")
 
         if not login_user(user):
-            flash("Tai khoan da bi vo hieu hoa.", "danger")
+            flash("Tài khoản của bạn đã bị vô hiệu hóa.", "danger")
             return render_template("login.html")
         flash("Đăng nhập thành công!", "success")
         next_url = request.args.get("next")

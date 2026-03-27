@@ -299,12 +299,22 @@
       return Number.isFinite(value) ? Math.round(value) : 0;
     }
 
+    function formatInteger(rawValue) {
+      return window.Utils.formatNumber(intVal(rawValue));
+    }
+
     function numberVal(rawValue, digits = 1) {
       const value = Number(rawValue || 0);
       if (!Number.isFinite(value)) {
-        return (0).toFixed(digits);
+        return window.Utils.formatNumber(0, {
+          minimumFractionDigits: digits,
+          maximumFractionDigits: digits,
+        });
       }
-      return value.toFixed(digits);
+      return window.Utils.formatNumber(value, {
+        minimumFractionDigits: digits,
+        maximumFractionDigits: digits,
+      });
     }
 
     function selectedScope() {
@@ -431,9 +441,9 @@
                     return "";
                   }
                   if (context.datasetIndex === 0) {
-                    return `Due: ${intVal(point.due_count)}`;
+                    return `Due: ${formatInteger(point.due_count)}`;
                   }
-                  return `Cumulative: ${intVal(point.cumulative)}`;
+                  return `Cumulative: ${formatInteger(point.cumulative)}`;
                 },
                 afterBody(context) {
                   const idx = context && context.length > 0 ? context[0].dataIndex : -1;
@@ -442,7 +452,7 @@
                     return [];
                   }
                   const b = point.breakdown;
-                  return [`New: ${intVal(b.new)}  Learn: ${intVal(b.learn)}  Review: ${intVal(b.review)}`];
+                  return [`New: ${formatInteger(b.new)}  Learn: ${formatInteger(b.learn)}  Review: ${formatInteger(b.review)}`];
                 },
               },
             },
@@ -500,13 +510,13 @@
         todayMessageEl.textContent = today.message || "No cards have been studied today.";
       }
       if (totalReviewsEl) {
-        totalReviewsEl.textContent = `Total: ${intVal(totals.total_reviews)} reviews`;
+        totalReviewsEl.textContent = `Total: ${formatInteger(totals.total_reviews)} reviews`;
       }
       if (averageReviewsEl) {
         averageReviewsEl.textContent = `Average: ${numberVal(totals.avg_reviews_per_day, 1)} review/day`;
       }
       if (dueTomorrowEl) {
-        dueTomorrowEl.textContent = `Due tomorrow: ${intVal(totals.due_tomorrow)} reviews`;
+        dueTomorrowEl.textContent = `Due tomorrow: ${formatInteger(totals.due_tomorrow)} reviews`;
       }
       if (dailyLoadEl) {
         dailyLoadEl.textContent = `Daily load: ${numberVal(totals.daily_load, 1)} reviews/day`;

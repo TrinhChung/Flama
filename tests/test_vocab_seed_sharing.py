@@ -119,6 +119,128 @@ class VocabSeedSharingTests(unittest.TestCase):
             ).count()
             self.assertGreater(quiz_note_count, 0)
 
+    def test_vocab_seed_supports_legacy_txt_dump_for_standard_vocab(self):
+        legacy_root = Path(tempfile.mkdtemp(prefix="flama-legacy-seed-"))
+        try:
+            legacy_dir = legacy_root / "ChungBech"
+            legacy_dir.mkdir(parents=True, exist_ok=True)
+            legacy_file = legacy_dir / "ChungBechN1__言葉__Bài 01.txt"
+            legacy_file.write_text(
+                (
+                    "#separator:tab\n"
+                    "#html:true\n"
+                    "#tags column:16\n"
+                    "N1語彙Riki::Bài 1\t配布\tはいふ\tPhân phát\t不特定多数の人に配ること。\tPhân phát cho nhiều người.\t"
+                    "チラシを配布する\tPhát tờ rơi\t駅前で配布した。\tPhát ở trước ga.\t\t\t\tvoice-1.mp3\texample-1.mp3\tseeded\n"
+                    "N1語彙Riki::Bài 1\t完結\tかんけつ\tKết thúc\t物事が終わること。\tHoàn thành trọn vẹn.\t\t\t"
+                    "ドラマが完結する。\tBộ phim kết thúc.\t\t\"<li>Dòng 1\nDòng 2</li>\"\t\tvoice-2.mp3\texample-2.mp3\tseeded\n"
+                ),
+                encoding="utf-8",
+            )
+
+            result = self.runner.invoke(
+                args=[
+                    "vocab-seed",
+                    "--path",
+                    str(legacy_root),
+                    "--owner-user-id",
+                    str(self.user_id),
+                    "--no-share-seeded-decks",
+                ],
+            )
+            self.assertEqual(result.exit_code, 0, msg=result.output)
+
+            with self.app.app_context():
+                note_type = NoteType.query.filter_by(
+                    user_id=self.user_id,
+                    name="Flama Standard Vocabulary",
+                ).first()
+                self.assertIsNotNone(note_type)
+
+                leaf_deck = Deck.query.filter_by(
+                    owner_user_id=self.user_id,
+                    name="ChungBechN1__言葉__Bài 01",
+                ).first()
+                self.assertIsNotNone(leaf_deck)
+
+                notes = Note.query.filter_by(
+                    user_id=self.user_id,
+                    note_type_id=note_type.id,  # type: ignore[union-attr]
+                    deck_id=leaf_deck.id,  # type: ignore[union-attr]
+                ).all()
+                self.assertEqual(len(notes), 2)
+
+                note_by_word = {
+                    str((note.field_values or {}).get("word")): (note.field_values or {})
+                    for note in notes
+                }
+                self.assertIn("配布", note_by_word)
+                self.assertIn("完結", note_by_word)
+
+                first = note_by_word["配布"]
+                self.assertIsNone(first.get("hanviet"))
+                self.assertIsNone(first.get("diagram"))
+                self.assertEqual(first.get("word_audio"), "voice-1.mp3")
+                self.assertEqual(first.get("example_audio"), "example-1.mp3")
+
+                second = note_by_word["完結"]
+                self.assertEqual(second.get("reading"), "かんけつ")
+                self.assertEqual(second.get("additional_note_vi"), "<li>Dòng 1\nDòng 2</li>")
+                self.assertIsNone(second.get("image"))
+        finally:
+            shutil.rmtree(legacy_root, ignore_errors=True)
+
+    def test_vocab_seed_supports_path_pointing_directly_to_seed_subfolder(self):
+        direct_root = Path(tempfile.mkdtemp(prefix="flama-direct-seed-"))
+        try:
+            target_dir = direct_root / "ChungBech"
+            target_dir.mkdir(parents=True, exist_ok=True)
+            (target_dir / "Lesson 1.txt").write_text(
+                (
+                    "#separator:tab\n"
+                    "#html:true\n"
+                    "#tags column:16\n"
+                    "Deck A\t犬\tいぬ\tdog\t\t\t\t\t\t\t\t\t\tword-audio.mp3\texample-audio.mp3\tseeded\n"
+                ),
+                encoding="utf-8",
+            )
+
+            result = self.runner.invoke(
+                args=[
+                    "vocab-seed",
+                    "--path",
+                    str(target_dir),
+                    "--owner-user-id",
+                    str(self.user_id),
+                    "--no-share-seeded-decks",
+                ],
+            )
+            self.assertEqual(result.exit_code, 0, msg=result.output)
+
+            with self.app.app_context():
+                top_deck = Deck.query.filter_by(
+                    owner_user_id=self.user_id,
+                    parent_id=None,
+                    name="ChungBech",
+                ).first()
+                self.assertIsNotNone(top_deck)
+
+                leaf_deck = Deck.query.filter_by(
+                    owner_user_id=self.user_id,
+                    parent_id=top_deck.id,  # type: ignore[union-attr]
+                    name="Lesson 1",
+                ).first()
+                self.assertIsNotNone(leaf_deck)
+
+                note = Note.query.filter_by(
+                    user_id=self.user_id,
+                    deck_id=leaf_deck.id,  # type: ignore[union-attr]
+                ).first()
+                self.assertIsNotNone(note)
+                self.assertEqual((note.field_values or {}).get("word"), "犬")  # type: ignore[union-attr]
+        finally:
+            shutil.rmtree(direct_root, ignore_errors=True)
+
 
 if __name__ == "__main__":
     unittest.main()

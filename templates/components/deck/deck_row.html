@@ -24,9 +24,9 @@
     <span class="anki-name">{{ node.label }}</span>
   </div>
   <div class="anki-stats">
-    <span class="new">{{ node.new_count }}</span>
-    <span class="learn">{{ node.learn_count }}</span>
-    <span class="due">{{ node.due_count }}</span>
+    <span class="new">{{ node.new_count|format_number }}</span>
+    <span class="learn">{{ node.learn_count|format_number }}</span>
+    <span class="due">{{ node.due_count|format_number }}</span>
   </div>
 </div>
 

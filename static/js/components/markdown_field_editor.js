@@ -528,7 +528,7 @@
     const start = Number(textarea.selectionStart ?? 0);
     const end = Number(textarea.selectionEnd ?? start);
     const before = current.slice(0, start);
-    const selected = current.slice(start, end) || "Heading";
+    const selected = current.slice(start, end) || "Tiêu đề";
     const clean = selected.replace(/^#{1,3}\s+/, "");
     const prefix = level === "paragraph" ? "" : `${"#".repeat(Number(level) || 1)} `;
     const replacement = clean
@@ -552,39 +552,39 @@
     toolbar.className = "flama-md-toolbar is-disabled";
     toolbar.innerHTML = `
       <div class="flama-md-toolbar__meta">
-        <span class="flama-md-toolbar__title">Markdown editor</span>
+        <span class="flama-md-toolbar__title">Trình soạn markdown</span>
         <span class="flama-md-toolbar__target">Chọn field</span>
-        <span class="flama-md-toolbar__mode">Visual</span>
+        <span class="flama-md-toolbar__mode">Trực quan</span>
       </div>
       <div class="flama-md-toolbar__group">
-        <select class="flama-md-toolbar__select" data-md-action="heading" aria-label="Heading">
-          <option value="paragraph">Text</option>
-          <option value="1">Heading 1</option>
-          <option value="2">Heading 2</option>
-          <option value="3">Heading 3</option>
+        <select class="flama-md-toolbar__select" data-md-action="heading" aria-label="Kiểu tiêu đề">
+          <option value="paragraph">Văn bản</option>
+          <option value="1">Tiêu đề 1</option>
+          <option value="2">Tiêu đề 2</option>
+          <option value="3">Tiêu đề 3</option>
         </select>
       </div>
       <div class="flama-md-toolbar__group">
-        <button type="button" class="flama-md-toolbar__btn" data-md-action="bold" title="Bold"><i class="bi bi-type-bold"></i></button>
-        <button type="button" class="flama-md-toolbar__btn" data-md-action="italic" title="Italic"><i class="bi bi-type-italic"></i></button>
-        <button type="button" class="flama-md-toolbar__btn" data-md-action="strike" title="Strikethrough"><i class="bi bi-type-strikethrough"></i></button>
+        <button type="button" class="flama-md-toolbar__btn" data-md-action="bold" title="In đậm"><i class="bi bi-type-bold"></i></button>
+        <button type="button" class="flama-md-toolbar__btn" data-md-action="italic" title="In nghiêng"><i class="bi bi-type-italic"></i></button>
+        <button type="button" class="flama-md-toolbar__btn" data-md-action="strike" title="Gạch ngang"><i class="bi bi-type-strikethrough"></i></button>
       </div>
       <div class="flama-md-toolbar__group">
-        <button type="button" class="flama-md-toolbar__btn" data-md-action="bullet" title="Bullet list"><i class="bi bi-list-ul"></i></button>
-        <button type="button" class="flama-md-toolbar__btn" data-md-action="ordered" title="Numbered list"><i class="bi bi-list-ol"></i></button>
-        <button type="button" class="flama-md-toolbar__btn" data-md-action="quote" title="Quote"><i class="bi bi-blockquote-left"></i></button>
+        <button type="button" class="flama-md-toolbar__btn" data-md-action="bullet" title="Danh sách chấm đầu dòng"><i class="bi bi-list-ul"></i></button>
+        <button type="button" class="flama-md-toolbar__btn" data-md-action="ordered" title="Danh sách đánh số"><i class="bi bi-list-ol"></i></button>
+        <button type="button" class="flama-md-toolbar__btn" data-md-action="quote" title="Trích dẫn"><i class="bi bi-blockquote-left"></i></button>
       </div>
       <div class="flama-md-toolbar__group">
-        <button type="button" class="flama-md-toolbar__btn" data-md-action="code" title="Inline code"><i class="bi bi-code"></i></button>
-        <button type="button" class="flama-md-toolbar__btn" data-md-action="codeblock" title="Code block"><i class="bi bi-braces-asterisk"></i></button>
-        <button type="button" class="flama-md-toolbar__btn" data-md-action="link" title="Link"><i class="bi bi-link-45deg"></i></button>
+        <button type="button" class="flama-md-toolbar__btn" data-md-action="code" title="Mã inline"><i class="bi bi-code"></i></button>
+        <button type="button" class="flama-md-toolbar__btn" data-md-action="codeblock" title="Khối mã"><i class="bi bi-braces-asterisk"></i></button>
+        <button type="button" class="flama-md-toolbar__btn" data-md-action="link" title="Liên kết"><i class="bi bi-link-45deg"></i></button>
       </div>
       <div class="flama-md-toolbar__group">
-        <button type="button" class="flama-md-toolbar__btn" data-md-action="undo" title="Undo"><i class="bi bi-arrow-counterclockwise"></i></button>
-        <button type="button" class="flama-md-toolbar__btn" data-md-action="redo" title="Redo"><i class="bi bi-arrow-clockwise"></i></button>
+        <button type="button" class="flama-md-toolbar__btn" data-md-action="undo" title="Hoàn tác"><i class="bi bi-arrow-counterclockwise"></i></button>
+        <button type="button" class="flama-md-toolbar__btn" data-md-action="redo" title="Làm lại"><i class="bi bi-arrow-clockwise"></i></button>
       </div>
       <div class="flama-md-toolbar__group">
-        <button type="button" class="flama-md-toolbar__mode-toggle" data-md-action="toggle-mode">Raw mode</button>
+        <button type="button" class="flama-md-toolbar__mode-toggle" data-md-action="toggle-mode">Chế độ markdown</button>
       </div>
     `;
     toolbarHost.replaceChildren(toolbar);
@@ -610,38 +610,38 @@
       <div class="flama-md-toolbar__top">
         <div class="flama-md-toolbar__meta">
           <span class="flama-md-toolbar__title">Markdown</span>
-          <span class="flama-md-toolbar__target">Chon field</span>
-          <span class="flama-md-toolbar__mode">Visual</span>
+          <span class="flama-md-toolbar__target">Chọn field</span>
+          <span class="flama-md-toolbar__mode">Trực quan</span>
         </div>
-        <button type="button" class="flama-md-toolbar__mode-toggle" data-md-action="toggle-mode">Raw mode</button>
+        <button type="button" class="flama-md-toolbar__mode-toggle" data-md-action="toggle-mode">Chế độ markdown</button>
       </div>
       <div class="flama-md-toolbar__controls">
         <div class="flama-md-toolbar__group">
-          <select class="flama-md-toolbar__select" data-md-action="heading" aria-label="Heading">
-            <option value="paragraph">Text</option>
-            <option value="1">Heading 1</option>
-            <option value="2">Heading 2</option>
-            <option value="3">Heading 3</option>
+          <select class="flama-md-toolbar__select" data-md-action="heading" aria-label="Kiểu tiêu đề">
+            <option value="paragraph">Văn bản</option>
+            <option value="1">Tiêu đề 1</option>
+            <option value="2">Tiêu đề 2</option>
+            <option value="3">Tiêu đề 3</option>
           </select>
         </div>
         <div class="flama-md-toolbar__group">
-          <button type="button" class="flama-md-toolbar__btn" data-md-action="bold" title="Bold"><i class="bi bi-type-bold"></i></button>
-          <button type="button" class="flama-md-toolbar__btn" data-md-action="italic" title="Italic"><i class="bi bi-type-italic"></i></button>
-          <button type="button" class="flama-md-toolbar__btn" data-md-action="strike" title="Strikethrough"><i class="bi bi-type-strikethrough"></i></button>
+          <button type="button" class="flama-md-toolbar__btn" data-md-action="bold" title="In đậm"><i class="bi bi-type-bold"></i></button>
+          <button type="button" class="flama-md-toolbar__btn" data-md-action="italic" title="In nghiêng"><i class="bi bi-type-italic"></i></button>
+          <button type="button" class="flama-md-toolbar__btn" data-md-action="strike" title="Gạch ngang"><i class="bi bi-type-strikethrough"></i></button>
         </div>
         <div class="flama-md-toolbar__group">
-          <button type="button" class="flama-md-toolbar__btn" data-md-action="bullet" title="Bullet list"><i class="bi bi-list-ul"></i></button>
-          <button type="button" class="flama-md-toolbar__btn" data-md-action="ordered" title="Numbered list"><i class="bi bi-list-ol"></i></button>
-          <button type="button" class="flama-md-toolbar__btn" data-md-action="quote" title="Quote"><i class="bi bi-blockquote-left"></i></button>
+          <button type="button" class="flama-md-toolbar__btn" data-md-action="bullet" title="Danh sách chấm đầu dòng"><i class="bi bi-list-ul"></i></button>
+          <button type="button" class="flama-md-toolbar__btn" data-md-action="ordered" title="Danh sách đánh số"><i class="bi bi-list-ol"></i></button>
+          <button type="button" class="flama-md-toolbar__btn" data-md-action="quote" title="Trích dẫn"><i class="bi bi-blockquote-left"></i></button>
         </div>
         <div class="flama-md-toolbar__group">
-          <button type="button" class="flama-md-toolbar__btn" data-md-action="code" title="Inline code"><i class="bi bi-code"></i></button>
-          <button type="button" class="flama-md-toolbar__btn" data-md-action="codeblock" title="Code block"><i class="bi bi-braces-asterisk"></i></button>
-          <button type="button" class="flama-md-toolbar__btn" data-md-action="link" title="Link"><i class="bi bi-link-45deg"></i></button>
+          <button type="button" class="flama-md-toolbar__btn" data-md-action="code" title="Mã inline"><i class="bi bi-code"></i></button>
+          <button type="button" class="flama-md-toolbar__btn" data-md-action="codeblock" title="Khối mã"><i class="bi bi-braces-asterisk"></i></button>
+          <button type="button" class="flama-md-toolbar__btn" data-md-action="link" title="Liên kết"><i class="bi bi-link-45deg"></i></button>
         </div>
         <div class="flama-md-toolbar__group">
-          <button type="button" class="flama-md-toolbar__btn" data-md-action="undo" title="Undo"><i class="bi bi-arrow-counterclockwise"></i></button>
-          <button type="button" class="flama-md-toolbar__btn" data-md-action="redo" title="Redo"><i class="bi bi-arrow-clockwise"></i></button>
+          <button type="button" class="flama-md-toolbar__btn" data-md-action="undo" title="Hoàn tác"><i class="bi bi-arrow-counterclockwise"></i></button>
+          <button type="button" class="flama-md-toolbar__btn" data-md-action="redo" title="Làm lại"><i class="bi bi-arrow-clockwise"></i></button>
         </div>
       </div>
     `;
@@ -667,12 +667,12 @@
       targetEl.textContent = disabled ? "Chọn field" : this.activeEditor.label;
     }
     if (modeEl) {
-      modeEl.textContent = disabled ? "Visual" : this.activeEditor.modeLabel();
+      modeEl.textContent = disabled ? "Trực quan" : this.activeEditor.modeLabel();
     }
     if (toggleEl) {
       toggleEl.textContent = disabled
-        ? "Raw mode"
-        : (this.activeEditor.mode === "visual" ? "Raw mode" : "Visual mode");
+        ? "Chế độ markdown"
+        : (this.activeEditor.mode === "visual" ? "Chế độ markdown" : "Chế độ trực quan");
     }
     if (headingEl && !disabled) {
       headingEl.value = this.activeEditor.detectHeadingLevel();
@@ -706,15 +706,15 @@
     const toggleEl = this.toolbar.querySelector('[data-md-action="toggle-mode"]');
     const headingEl = this.toolbar.querySelector('[data-md-action="heading"]');
     if (targetEl) {
-      targetEl.textContent = disabled ? "Chon field" : this.activeEditor.label;
+      targetEl.textContent = disabled ? "Chọn field" : this.activeEditor.label;
     }
     if (modeEl) {
-      modeEl.textContent = disabled ? "Visual" : this.activeEditor.modeLabel();
+      modeEl.textContent = disabled ? "Trực quan" : this.activeEditor.modeLabel();
     }
     if (toggleEl) {
       toggleEl.textContent = disabled
-        ? "Raw mode"
-        : (this.activeEditor.mode === "visual" ? "Raw mode" : "Visual mode");
+        ? "Chế độ markdown"
+        : (this.activeEditor.mode === "visual" ? "Chế độ markdown" : "Chế độ trực quan");
     }
     if (headingEl && !disabled) {
       headingEl.value = this.activeEditor.detectHeadingLevel();
@@ -831,7 +831,7 @@
   }
 
   MarkdownFieldEditor.prototype.modeLabel = function () {
-    return this.mode === "visual" ? "Visual" : "Raw";
+    return this.mode === "visual" ? "Trực quan" : "Markdown";
   };
 
   MarkdownFieldEditor.prototype.activate = function () {
@@ -1057,11 +1057,11 @@
     this.activate();
     if (this.mode === "raw") {
       if (action === "bold") {
-        wrapSelectionWithTextareaSyntax(this.raw, "**", "**", "bold");
+        wrapSelectionWithTextareaSyntax(this.raw, "**", "**", "in đậm");
       } else if (action === "italic") {
-        wrapSelectionWithTextareaSyntax(this.raw, "*", "*", "italic");
+        wrapSelectionWithTextareaSyntax(this.raw, "*", "*", "in nghiêng");
       } else if (action === "strike") {
-        wrapSelectionWithTextareaSyntax(this.raw, "~~", "~~", "text");
+        wrapSelectionWithTextareaSyntax(this.raw, "~~", "~~", "văn bản");
       } else if (action === "bullet") {
         toggleLinePrefix(this.raw, "- ", false);
       } else if (action === "ordered") {
@@ -1069,14 +1069,14 @@
       } else if (action === "quote") {
         toggleLinePrefix(this.raw, "> ", false);
       } else if (action === "code") {
-        wrapSelectionWithTextareaSyntax(this.raw, "`", "`", "code");
+        wrapSelectionWithTextareaSyntax(this.raw, "`", "`", "mã");
       } else if (action === "codeblock") {
-        wrapSelectionWithTextareaSyntax(this.raw, "```\n", "\n```", "code");
+        wrapSelectionWithTextareaSyntax(this.raw, "```\n", "\n```", "mã");
       } else if (action === "link") {
         const existing = this.raw.value.slice(this.raw.selectionStart || 0, this.raw.selectionEnd || 0);
         const href = promptLinkValue(existing);
         if (href) {
-          wrapSelectionWithTextareaSyntax(this.raw, "[", `](${href})`, "link");
+          wrapSelectionWithTextareaSyntax(this.raw, "[", `](${href})`, "liên kết");
         }
       } else if (action === "undo") {
         document.execCommand("undo");
@@ -1103,11 +1103,11 @@
     } else if (action === "code") {
       const selection = window.getSelection();
       const text = selection ? selection.toString() : "";
-      document.execCommand("insertHTML", false, `<code>${escapeHtml(text || "code")}</code>`);
+      document.execCommand("insertHTML", false, `<code>${escapeHtml(text || "mã")}</code>`);
     } else if (action === "codeblock") {
       const selection = window.getSelection();
       const text = selection ? selection.toString() : "";
-      document.execCommand("insertHTML", false, `<pre><code>${escapeHtml(text || "code")}</code></pre>`);
+      document.execCommand("insertHTML", false, `<pre><code>${escapeHtml(text || "mã")}</code></pre>`);
     } else if (action === "link") {
       const selection = window.getSelection();
       const href = promptLinkValue(selection ? selection.toString() : "");

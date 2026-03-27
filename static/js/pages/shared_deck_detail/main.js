@@ -19,6 +19,7 @@ import {
 
     const deckItemId = root.getAttribute("data-deck-item-id");
     const noteTypeDetailUrlTemplate = root.getAttribute("data-note-type-url-template"); // Needs to be injected via HTML
+    const paymentResultUrl = root.getAttribute("data-payment-result-url") || "";
 
     const titleEl = document.getElementById("deck-title");
     const metaEl = document.getElementById("deck-meta-line");
@@ -47,6 +48,13 @@ import {
     const frontBtn = document.getElementById("deck-preview-side-front");
     const backBtn = document.getElementById("deck-preview-side-back");
     const errorEl = document.getElementById("deck-detail-error");
+    const paymentPanelEl = document.getElementById("deck-payment-panel");
+    const paymentHeadlineEl = document.getElementById("deck-payment-headline");
+    const paymentMessageEl = document.getElementById("deck-payment-message");
+    const paymentBadgeEl = document.getElementById("deck-payment-badge");
+    const paymentNextActionEl = document.getElementById("deck-payment-next-action");
+    const paymentLinesEl = document.getElementById("deck-payment-lines");
+    const paymentInstructionsEl = document.getElementById("deck-payment-instructions");
 
     let deckDetail = null;
     let sourceNoteTypeDetail = null;
@@ -58,7 +66,7 @@ import {
 
     function showError(message) {
         if (errorEl) {
-            errorEl.textContent = message || "Request failed.";
+            errorEl.textContent = message || "Không thể xử lý yêu cầu lúc này.";
             errorEl.classList.remove("d-none");
         }
     }
@@ -70,9 +78,183 @@ import {
         }
     }
 
+    function formatCurrencyMinor(amount) {
+        return window.Utils.formatVnd(amount);
+    }
+
+    function formatCount(value) {
+        return window.Utils.formatNumber(value);
+    }
+
+    function formatPrice(value) {
+        return window.Utils.formatPriceDisplay(value);
+    }
+
+    function buildPaymentInstructions(payload) {
+        const order = payload?.order || {};
+        const checkout = order?.active_attempt?.checkout || {};
+        const checkoutUrl = checkout.checkout_url || "Không có";
+        const lines = [
+            "Đã tạo đơn thanh toán.",
+            "Mã đơn: " + (order.merchant_order_code || order.id || "Không có"),
+            "Số tiền: " + formatCurrencyMinor(checkout.amount_minor || order.total_amount_minor || 0),
+            "Ngân hàng BIN: " + (checkout.bank_bin || "Không có"),
+            "Số tài khoản: " + (checkout.account_no || "Không có"),
+            "Tên tài khoản: " + (checkout.account_name || "Không có"),
+            "Nội dung CK: " + (checkout.payment_reference || "Không có"),
+        ];
+        if (order?.active_attempt?.expires_at) {
+            lines.push("Hết hạn: " + formatDate(order.active_attempt.expires_at));
+        }
+        return lines.join("\n");
+    }
+
+    function hidePaymentOrder() {
+        if (!paymentPanelEl) return;
+        paymentPanelEl.classList.add("d-none");
+        paymentPanelEl.removeAttribute("data-tone");
+    }
+
+    function buildFallbackOrderMessage(order) {
+        const headline = order?.headline || order?.status_display?.headline || "Đơn hàng đã được tạo.";
+        const message = order?.message || order?.status_display?.description || "";
+        const nextAction = order?.next_action || "";
+        const parts = [headline];
+        if (message) parts.push(message);
+        if (nextAction) parts.push("Tiếp theo: " + nextAction);
+        return parts.join("\n\n");
+    }
+
+    function renderPaymentLineValue(line) {
+        if (!line) return "Không có";
+        if (line.type === "amount_minor") {
+            return formatCurrencyMinor(line.value_minor || 0);
+        }
+        if (line.type === "datetime") {
+            return formatDate(line.value) || "Không có";
+        }
+        return String(line.value || "Không có");
+    }
+
+    function renderPaymentLines(lines) {
+        if (!paymentLinesEl) return;
+        paymentLinesEl.innerHTML = "";
+        const normalized = Array.isArray(lines) ? lines : [];
+        if (!normalized.length) {
+            const emptyEl = document.createElement("div");
+            emptyEl.className = "text-muted small";
+            emptyEl.textContent = "Chưa có thêm thông tin chi tiết cho đơn hàng này.";
+            paymentLinesEl.appendChild(emptyEl);
+            return;
+        }
+
+        normalized.forEach((line) => {
+            const rowEl = document.createElement("div");
+            rowEl.className = "flama-payment-line";
+
+            const labelEl = document.createElement("div");
+            labelEl.className = "flama-payment-label";
+            labelEl.textContent = line.label || "Thông tin";
+
+            const valueEl = document.createElement("div");
+            valueEl.className = "flama-payment-value";
+            if (line.key === "payment_reference" || line.key === "merchant_order_code") {
+                valueEl.classList.add("is-code");
+            }
+
+            if (line.type === "url" && line.value) {
+                const linkEl = document.createElement("a");
+                linkEl.href = line.value;
+                linkEl.target = "_blank";
+                linkEl.rel = "noopener noreferrer";
+                linkEl.textContent = "Mở lại trang thanh toán PayOS";
+                valueEl.appendChild(linkEl);
+            } else {
+                valueEl.textContent = renderPaymentLineValue(line);
+            }
+
+            rowEl.appendChild(labelEl);
+            rowEl.appendChild(valueEl);
+            paymentLinesEl.appendChild(rowEl);
+        });
+    }
+
+    function renderPaymentInstructions(instructions) {
+        if (!paymentInstructionsEl) return;
+        paymentInstructionsEl.innerHTML = "";
+        const normalized = Array.isArray(instructions) ? instructions.filter(Boolean) : [];
+        const items = normalized.length ? normalized : ["Theo dõi trạng thái đơn hàng tại trang này."];
+        items.forEach((instruction) => {
+            const itemEl = document.createElement("li");
+            itemEl.textContent = instruction;
+            paymentInstructionsEl.appendChild(itemEl);
+        });
+    }
+
+    function renderPaymentOrder(order) {
+        if (!paymentPanelEl || !order) return;
+        const statusDisplay = order.status_display || {};
+        paymentPanelEl.classList.remove("d-none");
+        paymentPanelEl.setAttribute("data-tone", statusDisplay.tone || "info");
+        if (paymentBadgeEl) {
+            paymentBadgeEl.textContent = statusDisplay.label || "Đơn hàng";
+        }
+        if (paymentHeadlineEl) {
+            paymentHeadlineEl.textContent = order.headline || statusDisplay.headline || "Chi tiết đơn hàng";
+        }
+        if (paymentMessageEl) {
+            paymentMessageEl.textContent = order.message || statusDisplay.description || "";
+        }
+        if (paymentNextActionEl) {
+            paymentNextActionEl.textContent = order.next_action ? ("Tiếp theo: " + order.next_action) : "";
+        }
+        renderPaymentLines(order.order_detail_lines || []);
+        renderPaymentInstructions(order.instructions || []);
+    }
+
+    function consumePaymentOrderIdFromLocation() {
+        const url = new URL(window.location.href);
+        const orderId = url.searchParams.get("payment_order_id");
+        if (!orderId) return "";
+        url.searchParams.delete("payment_order_id");
+        url.searchParams.delete("payment_product_type");
+        url.searchParams.delete("payment_product_ref_id");
+        window.history.replaceState({}, document.title, url.toString());
+        return orderId;
+    }
+
+    async function syncReturnedPayment() {
+        const orderId = consumePaymentOrderIdFromLocation();
+        if (!orderId) return;
+        try {
+            const order = await fetchPaymentOrder(orderId);
+            renderPaymentOrder(order);
+            if (order?.status === "paid" && order?.grant_status === "completed") {
+                await loadDeckDetail();
+                renderPaymentOrder(order);
+                return;
+            }
+        } catch (error) {
+            showError(error.message || "Không thể đồng bộ trạng thái đơn hàng từ PayOS.");
+        }
+    }
+
     function buildNoteTypeDetailUrl(noteTypeId) {
         if (!noteTypeDetailUrlTemplate) return "#";
         return noteTypeDetailUrlTemplate.replace("__NOTE_TYPE_ID__", encodeURIComponent(noteTypeId));
+    }
+
+    function buildPaymentResultUrl(orderId, productType, productRefId) {
+        if (!paymentResultUrl || !orderId) return "";
+        const url = new URL(paymentResultUrl, window.location.origin);
+        url.searchParams.set("payment_order_id", orderId);
+        if (productType) {
+            url.searchParams.set("payment_product_type", productType);
+        }
+        if (productRefId) {
+            url.searchParams.set("payment_product_ref_id", productRefId);
+        }
+        return url.toString();
     }
 
     function getActiveSample() {
@@ -88,12 +270,12 @@ import {
 
         if (!sampleLabelEl) return;
         if (!hasSamples) {
-            sampleLabelEl.textContent = "Khong co tu mau.";
+            sampleLabelEl.textContent = "Chưa có từ mẫu.";
             return;
         }
         const sample = getActiveSample();
-        const word = ((sample?.word || "").trim() || ("Tu #" + String(activeSampleIndex + 1)));
-        sampleLabelEl.textContent = "Mau " + String(activeSampleIndex + 1) + "/" + String(testSamples.length) + ": " + word;
+        const word = ((sample?.word || "").trim() || ("Từ #" + String(activeSampleIndex + 1)));
+        sampleLabelEl.textContent = "Mẫu " + String(activeSampleIndex + 1) + "/" + String(testSamples.length) + ": " + word;
     }
 
     function renderTestSamples(samples) {
@@ -106,10 +288,10 @@ import {
             activeSampleIndex = -1;
             const emptyRow = document.createElement("div");
             emptyRow.className = "list-group-item px-0 text-muted";
-            emptyRow.textContent = "Deck nay chua co tu mau de test.";
+            emptyRow.textContent = "Deck này chưa có từ mẫu để thử nhanh.";
             testSamplesEl.appendChild(emptyRow);
             if (testNoteEl) {
-                testNoteEl.textContent = "Khong co du lieu de lay 5 tu mau.";
+                testNoteEl.textContent = "Không có dữ liệu để lấy tối đa 5 từ mẫu.";
             }
             renderSampleNavState();
             return;
@@ -119,7 +301,7 @@ import {
             activeSampleIndex = 0;
         }
         if (testNoteEl) {
-            testNoteEl.textContent = "Dang hien thi " + normalized.length + " tu ngau nhien de mo phong preview card.";
+            testNoteEl.textContent = "Đang hiển thị " + formatCount(normalized.length) + " từ ngẫu nhiên để mô phỏng thẻ xem trước.";
         }
 
         normalized.forEach((sample, index) => {
@@ -134,7 +316,7 @@ import {
             textWrap.className = "d-flex flex-wrap justify-content-between align-items-start gap-2";
             const wordEl = document.createElement("div");
             wordEl.className = "fw-semibold";
-            wordEl.textContent = (sample?.word || "").trim() || ("Tu #" + String(index + 1));
+            wordEl.textContent = (sample?.word || "").trim() || ("Từ #" + String(index + 1));
             const metaWrap = document.createElement("div");
             metaWrap.appendChild(wordEl);
 
@@ -142,14 +324,14 @@ import {
             if (reading) {
                 const readingEl = document.createElement("div");
                 readingEl.className = "small text-muted";
-                readingEl.textContent = "Reading: " + reading;
+                readingEl.textContent = "Cách đọc: " + reading;
                 metaWrap.appendChild(readingEl);
             }
 
             const meaning = (sample?.meaning || "").trim();
             const meaningEl = document.createElement("div");
             meaningEl.className = "small";
-            meaningEl.textContent = meaning ? ("Hint: " + meaning) : "Hint: (khong co)";
+            meaningEl.textContent = meaning ? ("Gợi ý: " + meaning) : "Gợi ý: (không có)";
 
             textWrap.appendChild(metaWrap);
             textWrap.appendChild(meaningEl);
@@ -169,7 +351,7 @@ import {
 
     function setLoadingPreview(message) {
         if (!previewFrame) return;
-        const safeMessage = message || "Loading preview...";
+        const safeMessage = message || "Đang tải phần xem trước...";
         previewFrame.srcdoc = "<!doctype html><html><body><div style='padding:12px;color:#6c757d;'>" + safeMessage + "</div></body></html>";
     }
 
@@ -178,7 +360,7 @@ import {
         const html = previewSide === "back"
             ? (previewPayload?.back_html || "")
             : (previewPayload?.front_html || "");
-        const fallback = "<div style='padding:12px;color:#6c757d;'>Empty preview.</div>";
+        const fallback = "<div style='padding:12px;color:#6c757d;'>Chưa có nội dung xem trước.</div>";
         previewFrame.srcdoc = "<!doctype html><html><head><meta charset='utf-8'></head><body><div style='padding:8px;'>" + (html || fallback) + "</div></body></html>";
     }
 
@@ -241,7 +423,10 @@ import {
         }
 
         if (deckDetail.can_rate) {
-            if (ratingHintEl) ratingHintEl.textContent = "Bạn có thể đánh giá ngay.";
+            if (ratingHintEl) {
+                const remaining = Number(deckDetail.review_submissions_remaining ?? 0);
+                ratingHintEl.textContent = "Bạn có thể đánh giá ngay. Lượt còn lại: " + formatCount(remaining) + "/2.";
+            }
             setRatingInputDisabled(false);
         } else {
             if (ratingHintEl) ratingHintEl.textContent = "Cần cài đặt và dùng thực tế trước khi đánh giá.";
@@ -324,19 +509,19 @@ import {
         clearError();
         deckDetail = await fetchDeckDetail(deckItemId);
 
-        if (titleEl) titleEl.textContent = deckDetail.title || "Shared deck";
+        if (titleEl) titleEl.textContent = deckDetail.title || "Deck chia sẻ";
         if (metaEl) {
-            metaEl.textContent = "Tác giả: " + (deckDetail.author?.username || "Unknown")
-                + " | Danh mục: " + (deckDetail.primary_category || "General")
-                + " | Giá: " + (deckDetail.price_display || "Free");
+            metaEl.textContent = "Tác giả: " + (deckDetail.author?.username || "Không rõ")
+                + " | Danh mục: " + (deckDetail.primary_category || "Chung")
+                + " | Giá: " + formatPrice(deckDetail.price_display || "Miễn phí");
         }
         if (descriptionEl) descriptionEl.textContent = deckDetail.description || "Không có mô tả.";
-        if (previewTextEl) previewTextEl.textContent = deckDetail.preview_text || "Không có preview text.";
+        if (previewTextEl) previewTextEl.textContent = deckDetail.preview_text || "Không có nội dung xem trước.";
         if (statsEl) {
-            statsEl.textContent = "Sample cards: " + (deckDetail.sample_cards_count || 0)
-                + " | Rating: " + Number(deckDetail.rating_avg || 0).toFixed(2) + " (" + (deckDetail.rating_count || 0) + ")"
-                + " | Active usage: " + (deckDetail.active_usage_count || 0) + "/" + (deckDetail.install_count || 0)
-                + " | Cập nhật: " + (formatDate(deckDetail.updated_at) || "N/A");
+            statsEl.textContent = "Thẻ mẫu: " + formatCount(deckDetail.sample_cards_count || 0)
+                + " | Đánh giá: " + Number(deckDetail.rating_avg || 0).toFixed(2) + " (" + formatCount(deckDetail.rating_count || 0) + ")"
+                + " | Lượt dùng: " + formatCount(deckDetail.active_usage_count || 0) + "/" + formatCount(deckDetail.install_count || 0)
+                + " | Cập nhật: " + (formatDate(deckDetail.updated_at) || "Không rõ");
         }
 
         if (tagsEl) renderTags(tagsEl, deckDetail.tags || []);
@@ -351,7 +536,28 @@ import {
         if (!deckDetail || deckDetail.is_owner || deckDetail.is_installed) return;
         if (installBtn) installBtn.disabled = true;
         try {
-            await installDeck(deckItemId);
+            const response = await installDeck(deckItemId);
+            if (response?.payment_required && response?.order) {
+                const checkoutUrl = response?.order?.active_attempt?.checkout?.checkout_url
+                    || response?.order?.active_attempt?.checkout_url;
+                if (checkoutUrl && response?.order?.status === "pending_payment") {
+                    window.location.href = checkoutUrl;
+                    return;
+                }
+                showError(response?.order?.next_action || "Không lấy được liên kết PayOS cho đơn hàng này.");
+                const resultUrl = buildPaymentResultUrl(
+                    response?.order?.id || "",
+                    "deck_marketplace_item",
+                    deckItemId,
+                );
+                if (resultUrl) {
+                    window.location.href = resultUrl;
+                    return;
+                }
+                window.alert(buildFallbackOrderMessage(response.order));
+                return;
+            }
+            hidePaymentOrder();
             await loadDeckDetail();
         } finally {
             renderInstallState();

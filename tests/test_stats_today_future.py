@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import unittest
 from datetime import datetime
+from unittest.mock import patch
 
 from app import create_app
 from app.services.stats_today_future import build_today_future_stats
@@ -57,6 +58,7 @@ class StatsTodayFutureTests(unittest.TestCase):
         due_at: datetime | None,
         interval_days: int,
         queue: str = "review",
+        due_day: int | None = None,
         is_suspended: bool = False,
     ):
         db.session.add(
@@ -64,6 +66,7 @@ class StatsTodayFutureTests(unittest.TestCase):
                 user_id=self.user_id,
                 queue=queue,
                 due_at=due_at,
+                due_day=due_day,
                 interval_days=interval_days,
                 is_suspended=is_suspended,
             )
@@ -121,7 +124,7 @@ class StatsTodayFutureTests(unittest.TestCase):
                 backlog=False,
                 now_utc=now_utc,
             )
-            self.assertEqual(payload["totals"]["due_tomorrow"], 2)
+            self.assertEqual(payload["totals"]["due_tomorrow"], 1)
 
     def test_daily_load_formula(self):
         with self.app.app_context():
@@ -146,8 +149,31 @@ class StatsTodayFutureTests(unittest.TestCase):
                 backlog=False,
                 now_utc=now_utc,
             )
-            # 1/10 + 1/2 + 1/max(1,0) = 1.6
-            self.assertAlmostEqual(payload["totals"]["daily_load"], 1.6, places=6)
+            self.assertAlmostEqual(payload["totals"]["daily_load"], 0.6, places=6)
+
+    def test_future_due_uses_review_due_day_over_stale_due_at(self):
+        with self.app.app_context():
+            now_utc = datetime(2026, 2, 23, 12, 0, 0)
+            self._add_progress(
+                due_at=datetime(2026, 2, 22, 8, 0, 0),
+                due_day=datetime(2026, 2, 24).date().toordinal(),
+                interval_days=4,
+                queue="review",
+            )
+            db.session.commit()
+
+            payload = build_today_future_stats(
+                user_id=self.user_id,
+                timezone_name="UTC",
+                scope="collection",
+                deck_id=None,
+                history_range="12m",
+                future_range="30",
+                backlog=False,
+                now_utc=now_utc,
+            )
+
+            self.assertEqual(payload["totals"]["due_tomorrow"], 1)
 
     def test_timezone_boundary_today(self):
         with self.app.app_context():
@@ -187,9 +213,9 @@ class StatsTodayFutureTests(unittest.TestCase):
                 backlog=False,
                 now_utc=datetime(2026, 2, 23, 0, 30, 0),
             )
-            self.assertEqual(payload["today"]["cards"], 1)
-            self.assertEqual(payload["today"]["minutes"], 0.05)
-            self.assertEqual(payload["today"]["sec_per_card"], 3.0)
+            self.assertEqual(payload["today"]["cards"], 2)
+            self.assertEqual(payload["today"]["minutes"], 0.08)
+            self.assertEqual(payload["today"]["sec_per_card"], 2.5)
 
     def test_stats_today_future_api(self):
         with self.app.app_context():
@@ -205,6 +231,38 @@ class StatsTodayFutureTests(unittest.TestCase):
         self.assertIn("today", payload)
         self.assertIn("future_due", payload)
         self.assertIn("totals", payload)
+
+    def test_non_utc_mysql_falls_back_to_python_future_due(self):
+        with self.app.app_context():
+            db.session.add(
+                ReviewEvent(
+                    user_id=self.user_id,
+                    card_id="tokyo-card",
+                    deck_id=self.deck_id,
+                    note_type_id=None,
+                    reviewed_at=datetime(2026, 2, 22, 15, 30, 0),
+                    duration_ms=2000,
+                    rating="good",
+                    mode="review",
+                )
+            )
+            self._add_progress(due_at=datetime(2026, 2, 23, 15, 30, 0), interval_days=3)
+            db.session.commit()
+
+            with patch("app.repositories.stats_query_repository._session_dialect_name", return_value="mysql"):
+                payload = build_today_future_stats(
+                    user_id=self.user_id,
+                    timezone_name="Asia/Tokyo",
+                    scope="collection",
+                    deck_id=None,
+                    history_range="12m",
+                    future_range="30",
+                    backlog=False,
+                    now_utc=datetime(2026, 2, 22, 16, 0, 0),
+                )
+
+            self.assertEqual(payload["today"]["cards"], 1)
+            self.assertEqual(payload["totals"]["due_tomorrow"], 1)
 
 
 if __name__ == "__main__":

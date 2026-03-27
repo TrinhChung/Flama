@@ -13,7 +13,9 @@ from typing import Dict, Iterable, List
 import click
 from flask import Flask
 
+from app.services.flashcard_import import ImportValidationError, read_delimited_rows
 from app.services.flashcard_legacy import ensure_legacy_note_type, ensure_quiz_note_type
+from app.services import payment_service
 from app.services.user_roles import ensure_default_user_roles
 from app.services.tts_provider_service import (
     VOICEVOX_AUDIO_BASE_URL,
@@ -47,7 +49,24 @@ SEED_OPTIONAL_FIELDS = (
     "word_audio",
     "example_audio",
 )
-SEED_SUPPORTED_SUFFIXES = {".tsv", ".csv"}
+SEED_LEGACY_POSITIONAL_FIELDS = (
+    "deck",
+    "word",
+    "reading",
+    "translation_vi",
+    "meaning_jp",
+    "meaning_vi",
+    "usage_jp",
+    "usage_vi",
+    "example_jp",
+    "example_vi",
+    "additional_note_jp",
+    "additional_note_vi",
+    "image",
+    "word_audio",
+    "example_audio",
+)
+SEED_SUPPORTED_SUFFIXES = {".tsv", ".csv", ".txt"}
 
 QUIZ_DUMP_DIR = Path("static") / "deck_dumps" / "trac_nghiem_markdown"
 QUIZ_DUMP_MANIFEST = "deck_manifest.json"
@@ -126,6 +145,16 @@ def register_cli_commands(app: Flask) -> None:
             f"updated={result.get('updated', 0)}. "
             f"VoiceVox endpoints: audio={VOICEVOX_AUDIO_BASE_URL}, "
             f"speakers={VOICEVOX_SPEAKERS_URL}, points={VOICEVOX_POINTS_URL}."
+        )
+
+    @app.cli.command("payments-expire-stale")
+    def payments_expire_stale() -> None:
+        """Expire stale unpaid payment attempts/orders."""
+        result = payment_service.expire_stale_orders()
+        click.echo(
+            "Done. "
+            f"expired_attempts={int(result.get('expired_attempts') or 0)}, "
+            f"expired_orders={int(result.get('expired_orders') or 0)}"
         )
 
     @app.cli.command("dev-purge-data")
@@ -207,8 +236,16 @@ def register_cli_commands(app: Flask) -> None:
 
         stats = SeedStats()
         start_dirs = sorted((p for p in root.iterdir() if p.is_dir()), key=_natural_sort_key)
-        if not start_dirs:
-            click.echo(f"No subfolders found in {root}. Nothing to seed.")
+        root_seed_files = sorted(
+            (
+                p
+                for p in root.iterdir()
+                if p.is_file() and p.suffix.lower() in SEED_SUPPORTED_SUFFIXES
+            ),
+            key=_natural_sort_key,
+        )
+        if not start_dirs and not root_seed_files:
+            click.echo(f"No subfolders or seed files found in {root}. Nothing to seed.")
             return
 
         target_user = User.query.get(owner_user_id) if owner_user_id else User.query.order_by(User.id.asc()).first()
@@ -224,7 +261,11 @@ def register_cli_commands(app: Flask) -> None:
         click.echo(
             f"Also ensured quiz_note_type={quiz_note_type.id}, template={quiz_template.id}"
         )
-        for start_dir in start_dirs:
+        top_level_seed_dirs = list(start_dirs)
+        if not top_level_seed_dirs and root_seed_files:
+            top_level_seed_dirs = [root]
+
+        for start_dir in top_level_seed_dirs:
             top_deck = _seed_dir_to_deck(
                 directory=start_dir,
                 parent_deck_id=None,
@@ -554,7 +595,7 @@ def _upsert_seeded_deck_marketplace_item(
         deck_item.preview_text = deck_item.preview_text or f"Default seeded deck: {deck.name}"
         deck_item.sample_cards_count = max(int(deck_item.sample_cards_count or 0), sample_cards_count)
         deck_item.pricing_mode = "free"
-        deck_item.price_cents = 0
+        deck_item.price_amount_minor = 0
         deck_item.publish_status = "published"
         deck_item.is_official = True
         deck_item.published_at = deck_item.published_at or datetime.utcnow()
@@ -572,7 +613,7 @@ def _upsert_seeded_deck_marketplace_item(
             preview_text=f"Default seeded deck: {deck.name}",
             sample_cards_count=sample_cards_count,
             pricing_mode="free",
-            price_cents=0,
+            price_amount_minor=0,
             version="1.0.0",
             publish_status="published",
             is_official=True,
@@ -594,52 +635,107 @@ def _build_header_mapping(fieldnames: Iterable[str]) -> Dict[str, str]:
     return mapping
 
 
+def _default_seed_delimiter(file_path: Path) -> str:
+    return "\t" if file_path.suffix.lower() in {".tsv", ".txt"} else ","
+
+
+def _clean_seed_cell(value: str | None) -> str | None:
+    cleaned = (value or "").replace("\r", "").strip()
+    return cleaned or None
+
+
+def _looks_like_seed_header_row(row: list[str]) -> bool:
+    normalized = {_normalize_header(value) for value in row if _normalize_header(value)}
+    return all(field in normalized for field in SEED_REQUIRED_FIELDS)
+
+
+def _load_seed_rows_from_header_rows(rows: List[List[str]]) -> List[Dict[str, str | None]]:
+    headers = rows[0]
+    mapping = _build_header_mapping(headers)
+    items: List[Dict[str, str | None]] = []
+
+    for row_values in rows[1:]:
+        raw = {
+            headers[index]: row_values[index] if index < len(row_values) else ""
+            for index in range(len(headers))
+        }
+        deck = _clean_seed_cell(raw.get(mapping["deck"]))
+        word = _clean_seed_cell(raw.get(mapping["word"]))
+        if not deck or not word:
+            continue
+
+        payload: Dict[str, str | None] = {"deck": deck, "word": word}
+        for field in SEED_OPTIONAL_FIELDS:
+            source_key = mapping.get(field)
+            payload[field] = _clean_seed_cell(raw.get(source_key) if source_key else None)
+        items.append(payload)
+
+    return items
+
+
+def _load_seed_rows_from_legacy_rows(rows: List[List[str]], file_path: Path) -> List[Dict[str, str | None]]:
+    items: List[Dict[str, str | None]] = []
+
+    for row_index, row_values in enumerate(rows, start=1):
+        if len(row_values) < 2:
+            raise click.ClickException(
+                f"Unsupported legacy seed row in {file_path} at data row {row_index}: expected at least 2 columns."
+            )
+
+        payload: Dict[str, str | None] = {
+            field_name: _clean_seed_cell(row_values[index]) if index < len(row_values) else None
+            for index, field_name in enumerate(SEED_LEGACY_POSITIONAL_FIELDS)
+        }
+        deck = payload.get("deck")
+        word = payload.get("word")
+        if not deck or not word:
+            continue
+
+        normalized_payload: Dict[str, str | None] = {"deck": deck, "word": word}
+        for field in SEED_OPTIONAL_FIELDS:
+            normalized_payload[field] = payload.get(field)
+        items.append(normalized_payload)
+
+    return items
+
+
 def _load_seed_rows(file_path: Path) -> List[Dict[str, str | None]]:
-    delimiter = "\t" if file_path.suffix.lower() == ".tsv" else ","
-    with file_path.open("r", encoding="utf-8-sig", newline="") as infile:
-        reader = csv.DictReader(infile, delimiter=delimiter)
-        if not reader.fieldnames:
-            raise click.ClickException(f"Missing header row in file: {file_path}")
-        mapping = _build_header_mapping(reader.fieldnames)
-        rows: List[Dict[str, str | None]] = []
-        for raw in reader:
-            if not raw:
-                continue
-            deck = (raw.get(mapping["deck"]) or "").strip()
-            word = (raw.get(mapping["word"]) or "").strip()
-            if not deck or not word:
-                continue
-            payload: Dict[str, str | None] = {"deck": deck, "word": word}
-            for field in SEED_OPTIONAL_FIELDS:
-                source_key = mapping.get(field)
-                if not source_key:
-                    payload[field] = None
-                    continue
-                cleaned = (raw.get(source_key) or "").replace("\r", "").strip()
-                payload[field] = cleaned or None
-            rows.append(payload)
-        return rows
+    try:
+        raw_rows, _ = read_delimited_rows(
+            file_bytes=file_path.read_bytes(),
+            delimiter=_default_seed_delimiter(file_path),
+        )
+    except OSError as exc:
+        raise click.ClickException(f"Failed to read seed file {file_path}: {exc}") from exc
+    except ImportValidationError as exc:
+        raise click.ClickException(f"Failed to parse seed file {file_path}: {exc}") from exc
+
+    if not raw_rows:
+        return []
+    if _looks_like_seed_header_row(raw_rows[0]):
+        return _load_seed_rows_from_header_rows(raw_rows)
+    return _load_seed_rows_from_legacy_rows(raw_rows, file_path)
 
 
-def _seed_row_to_field_values(row: Dict[str, str | None]) -> Dict[str, str]:
+def _seed_row_to_field_values(row: Dict[str, str | None]) -> Dict[str, str | None]:
     """Map seed CSV row columns into default Flama note field_values JSON."""
     return {
         "word": row.get("word") or "",
-        "hanviet": row.get("hanviet") or "",
-        "reading": row.get("reading") or "",
-        "translation_vi": row.get("translation_vi") or "",
-        "meaning_jp": row.get("meaning_jp") or "",
-        "meaning_vi": row.get("meaning_vi") or "",
-        "usage_jp": row.get("usage_jp") or "",
-        "usage_vi": row.get("usage_vi") or "",
-        "example_jp": row.get("example_jp") or "",
-        "example_vi": row.get("example_vi") or "",
-        "additional_note_jp": row.get("additional_note_jp") or "",
-        "additional_note_vi": row.get("additional_note_vi") or "",
-        "image": row.get("image") or "",
-        "diagram": row.get("diagram") or "",
-        "word_audio": row.get("word_audio") or "",
-        "example_audio": row.get("example_audio") or "",
+        "hanviet": row.get("hanviet"),
+        "reading": row.get("reading"),
+        "translation_vi": row.get("translation_vi"),
+        "meaning_jp": row.get("meaning_jp"),
+        "meaning_vi": row.get("meaning_vi"),
+        "usage_jp": row.get("usage_jp"),
+        "usage_vi": row.get("usage_vi"),
+        "example_jp": row.get("example_jp"),
+        "example_vi": row.get("example_vi"),
+        "additional_note_jp": row.get("additional_note_jp"),
+        "additional_note_vi": row.get("additional_note_vi"),
+        "image": row.get("image"),
+        "diagram": row.get("diagram"),
+        "word_audio": row.get("word_audio"),
+        "example_audio": row.get("example_audio"),
     }
 
 

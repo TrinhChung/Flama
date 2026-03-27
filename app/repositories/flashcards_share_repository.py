@@ -396,15 +396,26 @@ def check_note_type_name_exists(
     return query.first() is not None
 
 
+def get_note_type_ids_for_decks_notes(
+    deck_ids: List[int],
+    owner_user_id: Optional[int] = None,
+) -> List[str]:
+    """Returns distinct note_type IDs used by notes across a deck set."""
+    normalized_deck_ids = sorted({int(deck_id) for deck_id in deck_ids if deck_id is not None})
+    if not normalized_deck_ids:
+        return []
+    query = db.session.query(Note.note_type_id).filter(Note.deck_id.in_(normalized_deck_ids))
+    if owner_user_id is not None:
+        query = query.filter(Note.user_id == owner_user_id)
+    return sorted({str(row[0]) for row in query.distinct().all() if row and row[0]})
+
+
 def get_note_type_ids_for_deck_notes(
     deck_id: int,
     owner_user_id: Optional[int] = None,
 ) -> List[str]:
-    """Returns distinct note_type IDs used by notes in a deck."""
-    query = db.session.query(Note.note_type_id).filter(Note.deck_id == deck_id)
-    if owner_user_id is not None:
-        query = query.filter(Note.user_id == owner_user_id)
-    return sorted({str(row[0]) for row in query.distinct().all() if row and row[0]})
+    """Returns distinct note_type IDs used by notes in a single deck."""
+    return get_note_type_ids_for_decks_notes([deck_id], owner_user_id)
 
 
 def get_note_type_ids_for_user_deck_notes(

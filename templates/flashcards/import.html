@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 
-{% block title %}Import Flashcards{% endblock %}
+{% block title %}Import flashcard{% endblock %}
 
 {% block content %}
 <section class="import-page">
   {% set toolbar_variant = 'study' %}
   {% set toolbar_active_tab = 'import' %}
-  {% set toolbar_aria_label = 'Import actions' %}
+  {% set toolbar_aria_label = 'Thao tác import' %}
   {% if initial_deck_id %}
   {% set toolbar_current_deck_id = initial_deck_id %}
   {% else %}
@@ -19,19 +19,19 @@
   <div class="import-shell card">
     <div class="card-body">
       <div class="import-head">
-        <h2 class="h5 mb-1">Import Notes/Cards</h2>
-        <p class="text-muted mb-0">CSV, TSV, hoặc delimiter tùy chỉnh. Flow: Auto Parse -> Mapping -> Estimate ->
-          Execute.</p>
+        <h2 class="h5 mb-1">Import note/thẻ</h2>
+        <p class="text-muted mb-0">CSV, TSV hoặc ký tự phân tách tùy chỉnh. Quy trình: Tự parse -> Ánh xạ -> Ước lượng ->
+          Thực thi.</p>
       </div>
 
       <div class="row g-3 mt-2">
         <div class="col-md-6">
-          <label class="form-label" for="targetDeckSelect">Target deck</label>
+            <label class="form-label" for="targetDeckSelect">Deck đích</label>
           <select id="targetDeckSelect" class="form-select"></select>
         </div>
         <div class="col-md-6">
           <div class="d-flex align-items-center justify-content-between mb-1">
-            <label class="form-label mb-0" for="noteTypeSelect">Note type</label>
+            <label class="form-label mb-0" for="noteTypeSelect">Loại note</label>
             <span id="noteTypeAutoSelectBadge" class="import-auto-badge d-none"><i class="bi bi-magic"></i> Tự động theo
               deck anh/chị em</span>
           </div>
@@ -43,25 +43,25 @@
 
       <section class="wizard-step">
         <div class="import-step-title">
-          <h3 class="h6 mb-0">Step A - Upload & Parse</h3>
+          <h3 class="h6 mb-0">Bước A - Tải file & Parse</h3>
           <span id="parseStateBadge" class="import-status-badge import-status-badge--idle">Chưa có file</span>
         </div>
         <div class="row g-3 align-items-end">
           <div class="col-lg-4">
-            <label class="form-label" for="importFileInput">File (csv/tsv/txt)</label>
+            <label class="form-label" for="importFileInput">Tệp (csv/tsv/txt)</label>
             <input id="importFileInput" class="form-control" type="file"
               accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values,text/plain">
           </div>
           <div class="col-lg-3">
-            <label class="form-label" for="delimiterModeSelect">Delimiter</label>
+            <label class="form-label" for="delimiterModeSelect">Ký tự phân tách</label>
             <select id="delimiterModeSelect" class="form-select">
               <option value="csv">CSV (,)</option>
               <option value="tsv">TSV (tab)</option>
-              <option value="custom">Custom</option>
+              <option value="custom">Tùy chỉnh</option>
             </select>
           </div>
           <div class="col-lg-3">
-            <label class="form-label" for="customDelimiterInput">Custom char</label>
+            <label class="form-label" for="customDelimiterInput">Ký tự tùy chỉnh</label>
             <input id="customDelimiterInput" class="form-control" maxlength="1" placeholder="|" disabled>
           </div>
           <div class="col-lg-2 d-grid">
@@ -76,15 +76,19 @@
         <div id="previewWrap" class="import-preview-panel mt-3" hidden>
           <div class="import-preview-toolbar">
             <div>
-              <div class="import-preview-title">Preview dữ liệu</div>
+              <div class="import-preview-title">Xem trước dữ liệu</div>
               <div id="previewCaption" class="import-preview-caption">Chọn file để xem trước dữ liệu import.</div>
             </div>
             <div class="import-preview-actions">
-              <div class="import-toggle-group" role="group" aria-label="Header row mode">
+              <label class="import-preview-select-all" for="previewSelectAllInput">
+                <input id="previewSelectAllInput" class="form-check-input mt-0" type="checkbox">
+                <span>Chọn tất cả cột</span>
+              </label>
+              <div class="import-toggle-group" role="group" aria-label="Chế độ dòng tiêu đề">
                 <input class="import-toggle-input" type="radio" name="previewHeaderMode" id="previewHeaderOn" value="1" checked>
-                <label class="import-toggle-chip" for="previewHeaderOn">Có header</label>
+                <label class="import-toggle-chip" for="previewHeaderOn">Có tiêu đề</label>
                 <input class="import-toggle-input" type="radio" name="previewHeaderMode" id="previewHeaderOff" value="0">
-                <label class="import-toggle-chip" for="previewHeaderOff">Không header</label>
+                <label class="import-toggle-chip" for="previewHeaderOff">Không có tiêu đề</label>
               </div>
             </div>
           </div>
@@ -102,16 +106,16 @@
       <hr class="my-4">
 
       <section class="wizard-step">
-        <h3 class="h6">Step B - Mapping Column -> Field</h3>
-        <p class="small text-muted mb-2">Mỗi field chọn một nguồn: cột, Ignore, hoặc Constant value.</p>
+        <h3 class="h6">Bước B - Ánh xạ cột -> trường</h3>
+        <p class="small text-muted mb-2">Mỗi trường chọn một nguồn: cột, Bỏ qua hoặc Giá trị cố định.</p>
         <div id="mappingWarnings" class="small text-warning mb-2"></div>
         <div class="table-responsive" id="mappingWrap" hidden>
           <table class="table table-sm align-middle">
             <thead>
               <tr>
-                <th style="width: 28%;">Field</th>
-                <th style="width: 42%;">Source</th>
-                <th style="width: 30%;">Constant value</th>
+                <th style="width: 28%;">Trường</th>
+                <th style="width: 42%;">Nguồn</th>
+                <th style="width: 30%;">Giá trị cố định</th>
               </tr>
             </thead>
             <tbody id="mappingBody"></tbody>
@@ -122,29 +126,29 @@
       <hr class="my-4">
 
       <section class="wizard-step">
-        <h3 class="h6">Step C - Import Mode</h3>
+        <h3 class="h6">Bước C - Chế độ import</h3>
         <div class="row g-3">
           <div class="col-lg-6">
-            <label class="form-label d-block">Mode</label>
+            <label class="form-label d-block">Chế độ</label>
             <div class="form-check"><input class="form-check-input" type="radio" name="importMode" id="modeInsert"
-                value="insert_only"><label class="form-check-label" for="modeInsert">Insert only</label></div>
+                value="insert_only"><label class="form-check-label" for="modeInsert">Chỉ thêm mới</label></div>
             <div class="form-check"><input class="form-check-input" type="radio" name="importMode" id="modeUpdate"
-                value="update_only"><label class="form-check-label" for="modeUpdate">Update only</label></div>
+                value="update_only"><label class="form-check-label" for="modeUpdate">Chỉ cập nhật</label></div>
             <div class="form-check"><input class="form-check-input" type="radio" name="importMode" id="modeUpsert"
-                value="upsert" checked><label class="form-check-label" for="modeUpsert">Insert + Update (Upsert)</label>
+                value="upsert" checked><label class="form-check-label" for="modeUpsert">Thêm mới + Cập nhật (Upsert)</label>
             </div>
             <div class="form-check mt-2"><input class="form-check-input" type="checkbox" id="dontOverwriteEmptyInput"
-                checked><label class="form-check-label" for="dontOverwriteEmptyInput">Don't overwrite empty
-                (safe)</label></div>
+                checked><label class="form-check-label" for="dontOverwriteEmptyInput">Không ghi đè giá trị rỗng
+                (an toàn)</label></div>
             <p class="small text-muted mt-2 mb-0">
-              Insert only: chỉ thêm mới, nếu đã tồn tại thì bỏ qua. Update only: chỉ cập nhật bản ghi đã tồn tại.
-              Upsert: nếu đã tồn tại thì cập nhật, chưa có thì thêm mới.
+              Chỉ thêm mới: chỉ tạo bản ghi mới, nếu đã tồn tại thì bỏ qua. Chỉ cập nhật: chỉ cập nhật bản ghi đã tồn tại.
+              Thêm mới + cập nhật: nếu đã tồn tại thì cập nhật, chưa có thì thêm mới.
             </p>
           </div>
           <div class="col-lg-6">
-            <label class="form-label d-block">Uniqueness key (chọn 1 hoặc nhiều field để đối chiếu)</label>
+            <label class="form-label d-block">Khóa đối chiếu (chọn 1 hoặc nhiều trường để so khớp)</label>
             <p class="small text-muted mb-2">
-              Hệ thống sẽ dựa vào các field bạn chọn để kiểm tra dữ liệu cũ: trùng khóa thì xem là đã tồn tại, không
+              Hệ thống sẽ dựa vào các trường bạn chọn để kiểm tra dữ liệu cũ: trùng khóa thì xem là đã tồn tại, không
               trùng khóa thì xem là bản ghi mới.
             </p>
             <div id="uniquenessFieldsWrap" class="import-uniq-wrap"></div>
@@ -154,7 +158,7 @@
         <div class="form-check mt-2 d-none" id="columnMismatchConfirmWrap">
           <input class="form-check-input" type="checkbox" id="columnMismatchConfirmInput">
           <label class="form-check-label text-danger" for="columnMismatchConfirmInput">Tôi xác nhận tiếp tục dù số cột
-            không khớp note type</label>
+            không khớp loại note</label>
         </div>
       </section>
 
@@ -162,51 +166,51 @@
 
       <section class="wizard-step">
         <div class="import-step-title">
-          <h3 class="h6 mb-0">Step D - Review & Execute</h3>
+          <h3 class="h6 mb-0">Bước D - Rà soát & thực thi</h3>
           <span id="stepDStateBadge" class="import-status-badge import-status-badge--idle">Chờ parse</span>
         </div>
-        <p class="small text-muted mb-2">Để tránh import nhầm dữ liệu: hãy estimate trước, kiểm tra kết quả, rồi mới
-          execute import.</p>
+        <p class="small text-muted mb-2">Để tránh import nhầm dữ liệu: hãy ước lượng trước, kiểm tra kết quả, rồi mới
+          thực thi import.</p>
 
         <div class="import-step-guide">
           <div class="import-guide-item">
             <span class="import-guide-index">1</span>
             <div>
-              <div class="fw-semibold">Estimate trước khi import</div>
-              <div class="small text-muted">Kiểm tra tổng số dòng hợp lệ/lỗi và các row issues trước khi chạy thật.
+              <div class="fw-semibold">Ước lượng trước khi import</div>
+              <div class="small text-muted">Kiểm tra tổng số dòng hợp lệ/lỗi và các lỗi theo dòng trước khi chạy thật.
               </div>
             </div>
           </div>
           <div class="import-guide-item">
             <span class="import-guide-index">2</span>
             <div>
-              <div class="fw-semibold">Xác nhận summary + issues</div>
-              <div class="small text-muted">Nếu có lỗi, quay lại Step B/C để chỉnh mapping hoặc uniqueness key.</div>
+              <div class="fw-semibold">Xác nhận tổng kết + lỗi</div>
+              <div class="small text-muted">Nếu có lỗi, quay lại Bước B/C để chỉnh ánh xạ hoặc khóa đối chiếu.</div>
             </div>
           </div>
           <div class="import-guide-item">
             <span class="import-guide-index">3</span>
             <div>
-              <div class="fw-semibold">Execute Import</div>
-              <div class="small text-muted">Chỉ bấm khi đã estimate ổn. Hệ thống sẽ hiển thị report cuối cùng.</div>
+              <div class="fw-semibold">Thực thi import</div>
+              <div class="small text-muted">Chỉ bấm khi phần ước lượng đã ổn. Hệ thống sẽ hiển thị báo cáo cuối cùng.</div>
             </div>
           </div>
         </div>
 
-        <div id="stepDHint" class="import-step-hint import-step-hint--info mt-3">Bắt đầu bằng Step A: upload file để hệ
+        <div id="stepDHint" class="import-step-hint import-step-hint--info mt-3">Bắt đầu từ Bước A: tải file để hệ
           thống parse.</div>
 
         <div class="d-flex flex-wrap gap-2 mt-3 import-step-actions">
           <button id="estimateBtn" class="btn import-btn import-btn--secondary" type="button" disabled>1.
-            Estimate</button>
-          <button id="executeBtn" class="btn import-btn import-btn--primary" type="button" disabled>2. Execute
-            Import</button>
+            Ước lượng</button>
+          <button id="executeBtn" class="btn import-btn import-btn--primary" type="button" disabled>2. Thực thi
+            import</button>
         </div>
 
         <div id="progressWrap" class="mt-3 d-none">
-          <div class="progress" role="progressbar" aria-label="Import progress">
+          <div class="progress" role="progressbar" aria-label="Tiến trình import">
             <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated" style="width: 100%;">
-              Running...</div>
+              Đang chạy...</div>
           </div>
         </div>
 
@@ -217,15 +221,15 @@
         </div>
 
         <div id="issuesWrap" class="mt-3 d-none">
-          <h4 class="h6">Row issues (first 300 rows)</h4>
+          <h4 class="h6">Lỗi theo dòng (300 dòng đầu tiên)</h4>
           <div class="table-responsive">
             <table class="table table-sm table-bordered">
               <thead>
                 <tr>
-                  <th style="width: 80px;">Row</th>
-                  <th style="width: 100px;">Kind</th>
-                  <th style="width: 180px;">Reason</th>
-                  <th>Message</th>
+                  <th style="width: 80px;">Dòng</th>
+                  <th style="width: 100px;">Loại</th>
+                  <th style="width: 180px;">Nguyên nhân</th>
+                  <th>Chi tiết</th>
                 </tr>
               </thead>
               <tbody id="issuesBody"></tbody>
@@ -520,6 +524,20 @@
     flex-wrap: wrap;
   }
 
+  .import-preview-select-all {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.45rem 0.75rem;
+    border-radius: 999px;
+    background: #fff;
+    border: 1px solid var(--flama-border);
+    color: var(--flama-text-2);
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
   .import-toggle-group {
     display: inline-flex;
     align-items: center;
@@ -579,15 +597,52 @@
     top: 0;
     z-index: 1;
     background: #fff7f0;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
   }
 
   .import-preview-table td {
     white-space: normal;
     word-break: break-word;
     vertical-align: top;
+  }
+
+  .import-preview-column-toggle {
+    display: grid;
+    gap: 0.35rem;
+    align-items: flex-start;
+  }
+
+  .import-preview-column-topline {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+  }
+
+  .import-preview-column-title {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--flama-text);
+    line-height: 1.25;
+  }
+
+  .import-preview-column-meta {
+    display: block;
+    font-size: 0.72rem;
+    color: var(--flama-text-2);
+    line-height: 1.2;
+  }
+
+  .import-preview-table th.is-excluded,
+  .import-preview-table td.is-excluded {
+    background: #f7f7f8;
+    color: var(--flama-text-2);
+  }
+
+  .import-preview-table td.is-excluded .preview-cell-text {
+    opacity: 0.58;
   }
 
   .import-preview-table .preview-cell-text {
@@ -667,17 +722,21 @@
 
     const config = JSON.parse(configEl.textContent || "{}");
     const PARSE_BUTTON_LABEL = "Parse lại";
-    const ESTIMATE_BUTTON_LABEL = "1. Estimate";
-    const EXECUTE_BUTTON_LABEL = "2. Execute Import";
+    const ESTIMATE_BUTTON_LABEL = "1. Ước lượng";
+    const EXECUTE_BUTTON_LABEL = "2. Thực thi import";
     const SUPPORTED_IMPORT_EXTENSIONS = new Set(["csv", "tsv", "txt"]);
+    const DECK_COLUMN_HINTS = new Set(["deck", "deckname", "deckpath", "decks", "sourcedeck", "targetdeck"]);
 
     const state = {
       token: null,
       columns: [],
+      selectedColumnIndexes: [],
+      autoExcludedColumnIndexes: [],
       previewRows: [],
       hasHeader: true,
       warnings: [],
       mapping: {},
+      parseMetaInfo: null,
       lastSummary: null,
       parsed: false,
       running: false,
@@ -701,6 +760,7 @@
       parseMeta: document.getElementById("parseMeta"),
       previewWrap: document.getElementById("previewWrap"),
       previewCaption: document.getElementById("previewCaption"),
+      previewSelectAllInput: document.getElementById("previewSelectAllInput"),
       previewTable: document.getElementById("previewTable"),
       previewHeaderRow: document.getElementById("previewHeaderRow"),
       previewBody: document.getElementById("previewBody"),
@@ -798,6 +858,181 @@
       return Array.isArray(noteType?.fields) ? noteType.fields : [];
     }
 
+    function normalizeImportName(value) {
+      return String(value == null ? "" : value).trim().toLowerCase().replace(/[^a-z0-9]+/g, "");
+    }
+
+    function normalizeColumnIndexes(indexes) {
+      const available = new Set(
+        (Array.isArray(state.columns) ? state.columns : [])
+          .map((col) => Number(col.index))
+          .filter((value) => Number.isInteger(value) && value >= 0)
+      );
+      const normalized = (Array.isArray(indexes) ? indexes : [])
+        .map((value) => Number(value))
+        .filter((value, position, list) => (
+          Number.isInteger(value)
+          && value >= 0
+          && available.has(value)
+          && list.indexOf(value) === position
+        ))
+        .sort((left, right) => left - right);
+      return normalized;
+    }
+
+    function getSelectedColumnIndexes() {
+      return normalizeColumnIndexes(state.selectedColumnIndexes);
+    }
+
+    function getSelectedColumns() {
+      const selected = new Set(getSelectedColumnIndexes());
+      const columns = Array.isArray(state.columns) ? state.columns : [];
+      return columns
+        .filter((column) => selected.has(Number(column.index)))
+        .map((column, effectiveIndex) => ({
+          ...column,
+          effectiveIndex,
+        }));
+    }
+
+    function isLikelyDeckColumn(column) {
+      if (!column || !state.hasHeader) {
+        return false;
+      }
+      return DECK_COLUMN_HINTS.has(normalizeImportName(column.name || column.display || ""));
+    }
+
+    function initializeColumnSelection() {
+      const allIndexes = normalizeColumnIndexes(
+        (Array.isArray(state.columns) ? state.columns : []).map((column) => column.index)
+      );
+      state.selectedColumnIndexes = allIndexes.slice();
+      state.autoExcludedColumnIndexes = [];
+
+      const firstColumn = Array.isArray(state.columns) && state.columns.length ? state.columns[0] : null;
+      if (allIndexes.length > 1 && isLikelyDeckColumn(firstColumn)) {
+        const firstIndex = Number(firstColumn.index);
+        state.selectedColumnIndexes = allIndexes.filter((value) => value !== firstIndex);
+        state.autoExcludedColumnIndexes = [firstIndex];
+      }
+      syncPreviewSelectAll();
+    }
+
+    function buildSuggestedMappingForSelection() {
+      const fields = getFields();
+      const selectedColumns = getSelectedColumns();
+      const headerMap = new Map();
+      const suggestions = {};
+
+      if (state.hasHeader) {
+        selectedColumns.forEach((column) => {
+          const normalized = normalizeImportName(column.name || "");
+          if (normalized && !headerMap.has(normalized)) {
+            headerMap.set(normalized, Number(column.index));
+          }
+        });
+      }
+
+      fields.forEach((field, position) => {
+        let mappedIndex = null;
+        if (state.hasHeader) {
+          mappedIndex = headerMap.get(normalizeImportName(field.name)) ?? null;
+        }
+        if (mappedIndex == null && position < selectedColumns.length) {
+          mappedIndex = Number(selectedColumns[position].index);
+        }
+
+        suggestions[field.name] = mappedIndex == null
+          ? { source_type: "ignore", column_index: null, constant_value: "" }
+          : { source_type: "column", column_index: mappedIndex, constant_value: "" };
+      });
+
+      return suggestions;
+    }
+
+    function getColumnMismatchWarning() {
+      if (!state.parsed) {
+        return null;
+      }
+
+      const selectedCount = getSelectedColumns().length;
+      const fieldCount = getFields().length;
+      if (selectedCount < fieldCount) {
+        return {
+          severity: "danger",
+          message: `Bạn đang chọn ${selectedCount} cột, nhưng loại note hiện có ${fieldCount} trường.`,
+        };
+      }
+      if (selectedCount > fieldCount) {
+        return {
+          severity: "warning",
+          message: `Bạn đang chọn ${selectedCount} cột, nhưng loại note hiện có ${fieldCount} trường.`,
+        };
+      }
+      return null;
+    }
+
+    function syncPreviewSelectAll() {
+      if (!els.previewSelectAllInput) {
+        return;
+      }
+      const totalColumns = Array.isArray(state.columns) ? state.columns.length : 0;
+      const selectedCount = getSelectedColumnIndexes().length;
+      els.previewSelectAllInput.indeterminate = selectedCount > 0 && selectedCount < totalColumns;
+      els.previewSelectAllInput.checked = totalColumns > 0 && selectedCount === totalColumns;
+      els.previewSelectAllInput.disabled = totalColumns === 0;
+    }
+
+    function resetReviewState() {
+      state.lastSummary = null;
+      state.hasEstimated = false;
+      state.executionDone = false;
+      els.progressWrap.classList.add("d-none");
+      els.progressBar.classList.add("progress-bar-animated");
+      els.progressBar.textContent = "Đang chạy...";
+      els.summaryBox.classList.add("d-none");
+      els.issuesWrap.classList.add("d-none");
+      refreshImportUiState();
+    }
+
+    function renderParseMeta() {
+      if (!state.parseMetaInfo) {
+        els.parseMeta.textContent = "";
+        return;
+      }
+
+      const selectedColumnCount = getSelectedColumns().length;
+      els.parseMeta.innerHTML = `
+        <span class="import-help-pill"><i class="bi bi-file-earmark-text"></i> ${escapeHtml(state.parseMetaInfo.filename || "")}</span>
+        <span class="import-help-pill"><i class="bi bi-table"></i> Dòng: ${escapeHtml(state.parseMetaInfo.totalRows || 0)}</span>
+        <span class="import-help-pill"><i class="bi bi-columns-gap"></i> Cột: ${escapeHtml(selectedColumnCount)}/${escapeHtml(state.parseMetaInfo.columnCount || 0)}</span>
+        <span class="import-help-pill"><i class="bi bi-filter"></i> Ký tự phân tách: ${escapeHtml(state.parseMetaInfo.delimiterLabel || "")}</span>
+      `;
+    }
+
+    function applyColumnSelection(indexes, { keepAutoExcluded = false } = {}) {
+      state.selectedColumnIndexes = normalizeColumnIndexes(indexes);
+      if (keepAutoExcluded) {
+        state.autoExcludedColumnIndexes = normalizeColumnIndexes(state.autoExcludedColumnIndexes)
+          .filter((index) => !state.selectedColumnIndexes.includes(index));
+      } else {
+        state.autoExcludedColumnIndexes = [];
+      }
+
+      syncPreviewSelectAll();
+
+      if (!state.parsed) {
+        return;
+      }
+
+      resetReviewState();
+      applySuggestedMapping(buildSuggestedMappingForSelection());
+      renderParseMeta();
+      renderPreviewTable();
+      renderWarnings();
+      renderMappingWarnings([]);
+    }
+
     function getSelectedImportMode() {
       const checked = document.querySelector('input[name="importMode"]:checked');
       return checked ? checked.value : "upsert";
@@ -862,7 +1097,7 @@
               <div class="fw-semibold mb-1">${escapeHtml(title)}</div>
               <div>${escapeHtml(message)}</div>
             </div>
-            <button type="button" class="${closeBtnClass} me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+            <button type="button" class="${closeBtnClass} me-2 m-auto" data-bs-dismiss="toast" aria-label="Đóng"></button>
           </div>
         </div>
       `;
@@ -921,33 +1156,33 @@
 
     function updateStepDStatus() {
       if (state.running) {
-        setStatusBadge(els.stepDStateBadge, "info", "Đang execute");
+        setStatusBadge(els.stepDStateBadge, "info", "Đang thực thi");
         setStepDHint("Import đang chạy. Vui lòng đợi hoàn tất để xem báo cáo cuối cùng.", "info");
         return;
       }
 
       if (state.estimating) {
-        setStatusBadge(els.stepDStateBadge, "info", "Đang estimate");
+        setStatusBadge(els.stepDStateBadge, "info", "Đang ước lượng");
         setStepDHint("Hệ thống đang tính toán số lượng bản ghi sẽ được thêm/cập nhật/bỏ qua.", "info");
         return;
       }
 
       if (!state.parsed) {
         setStatusBadge(els.stepDStateBadge, "idle", "Chờ parse");
-        setStepDHint("Bắt đầu bằng Step A: upload file để hệ thống parse.", "info");
+        setStepDHint("Bắt đầu từ Bước A: tải file để hệ thống parse.", "info");
         return;
       }
 
       if (!state.hasEstimated) {
-        setStatusBadge(els.stepDStateBadge, "warning", "Cần estimate");
-        setStepDHint("Nhấn 1. Estimate để xem trước kết quả import trước khi chạy thật.", "warning");
+        setStatusBadge(els.stepDStateBadge, "warning", "Cần ước lượng");
+        setStepDHint("Nhấn 1. Ước lượng để xem trước kết quả import trước khi chạy thật.", "warning");
         return;
       }
 
       const summaryErrors = Number(state.lastSummary?.summary?.errors || 0);
       if (summaryErrors > 0) {
         setStatusBadge(els.stepDStateBadge, "danger", "Có lỗi cần xử lý");
-        setStepDHint("Estimate cho thấy có dòng lỗi. Hãy xem bảng Row issues trước khi execute.", "danger");
+        setStepDHint("Phần ước lượng cho thấy có dòng lỗi. Hãy xem bảng lỗi theo dòng trước khi thực thi.", "danger");
         return;
       }
 
@@ -957,8 +1192,8 @@
         return;
       }
 
-      setStatusBadge(els.stepDStateBadge, "success", "Sẵn sàng execute");
-      setStepDHint("Estimate đã ổn. Nhấn 2. Execute Import để thực thi import.", "success");
+      setStatusBadge(els.stepDStateBadge, "success", "Sẵn sàng thực thi");
+      setStepDHint("Phần ước lượng đã ổn. Nhấn 2. Thực thi import để chạy thật.", "success");
     }
 
     function refreshImportUiState() {
@@ -999,6 +1234,76 @@
       }
     }
 
+    function delimiterSelectionFromChar(delimiter) {
+      if (delimiter === "\t") {
+        return { mode: "tsv", customDelimiter: "" };
+      }
+      if (delimiter === ",") {
+        return { mode: "csv", customDelimiter: "" };
+      }
+      if (typeof delimiter === "string" && delimiter.length === 1) {
+        return { mode: "custom", customDelimiter: delimiter };
+      }
+      return null;
+    }
+
+    function formatDelimiterLabel(delimiter) {
+      if (delimiter === "\t") return "tab";
+      if (delimiter === ",") return ",";
+      if (typeof delimiter === "string" && delimiter.length === 1) return delimiter;
+      return "";
+    }
+
+    function normalizeDirectiveKey(value) {
+      return String(value == null ? "" : value).trim().toLowerCase().replace(/\s+/g, " ");
+    }
+
+    function resolveSeparatorDirective(value) {
+      const token = String(value == null ? "" : value).trim();
+      if (!token) return null;
+      if (token.length === 1) return token;
+
+      const normalized = token.toLowerCase();
+      const aliases = {
+        "\\t": "\t",
+        bar: "|",
+        colon: ":",
+        comma: ",",
+        pipe: "|",
+        semicolon: ";",
+        space: " ",
+        tab: "\t",
+      };
+      return Object.prototype.hasOwnProperty.call(aliases, normalized) ? aliases[normalized] : null;
+    }
+
+    function parseTxtImportPreamble(sampleText) {
+      const lines = String(sampleText == null ? "" : sampleText).split(/\r?\n/);
+      const directives = {};
+      let firstDataLine = "";
+      let hasDirectives = false;
+
+      for (const line of lines) {
+        const trimmed = String(line || "").trim();
+        if (!trimmed) continue;
+
+        const match = trimmed.match(/^#\s*([^:]+):(.*)$/);
+        if (!match) {
+          firstDataLine = trimmed;
+          break;
+        }
+
+        hasDirectives = true;
+        directives[normalizeDirectiveKey(match[1])] = String(match[2] || "").trim();
+      }
+
+      return {
+        directives,
+        firstDataLine,
+        hasDirectives,
+      };
+    }
+
     function setParseButtonLoading(isLoading) {
       if (!els.parseBtn) return;
       els.parseBtn.disabled = Boolean(isLoading);
@@ -1015,10 +1320,16 @@
     async function detectTxtDelimiter(file) {
       try {
         const sampleText = await file.slice(0, 8192).text();
-        const firstLine = sampleText
-          .split(/\r?\n/)
-          .map((line) => line.trim())
-          .find((line) => line.length > 0);
+        const preamble = parseTxtImportPreamble(sampleText);
+        const directiveDelimiter = resolveSeparatorDirective(preamble.directives.separator);
+        if (directiveDelimiter) {
+          const resolved = delimiterSelectionFromChar(directiveDelimiter);
+          if (resolved) {
+            return { ...resolved, hasHeader: false };
+          }
+        }
+
+        const firstLine = preamble.firstDataLine;
         if (!firstLine) {
           return null;
         }
@@ -1040,7 +1351,11 @@
         });
 
         if (!best) return null;
-        return { mode: best.mode, customDelimiter: best.customDelimiter };
+        return {
+          mode: best.mode,
+          customDelimiter: best.customDelimiter,
+          hasHeader: preamble.hasDirectives ? false : undefined,
+        };
       } catch (_error) {
         return null;
       }
@@ -1065,7 +1380,12 @@
 
       const detectedTxtDelimiter = await detectTxtDelimiter(file);
       if (detectedTxtDelimiter) {
-        return { ok: true, mode: detectedTxtDelimiter.mode, customDelimiter: detectedTxtDelimiter.customDelimiter };
+        return {
+          ok: true,
+          mode: detectedTxtDelimiter.mode,
+          customDelimiter: detectedTxtDelimiter.customDelimiter,
+          hasHeader: detectedTxtDelimiter.hasHeader,
+        };
       }
 
       const current = readCurrentDelimiterSelection();
@@ -1103,10 +1423,13 @@
     function resetParseState({ keepWarning = false } = {}) {
       state.token = null;
       state.columns = [];
+      state.selectedColumnIndexes = [];
+      state.autoExcludedColumnIndexes = [];
       state.previewRows = [];
       state.hasHeader = getHasHeaderEnabled();
       state.warnings = [];
       state.mapping = {};
+      state.parseMetaInfo = null;
       state.lastSummary = null;
       state.parsed = false;
       state.parseFailed = false;
@@ -1117,11 +1440,12 @@
       els.parseMeta.textContent = "";
       els.progressWrap.classList.add("d-none");
       els.progressBar.classList.add("progress-bar-animated");
-      els.progressBar.textContent = "Running...";
+      els.progressBar.textContent = "Đang chạy...";
       els.summaryBox.classList.add("d-none");
       els.issuesWrap.classList.add("d-none");
       els.columnMismatchConfirmWrap.classList.add("d-none");
       els.columnMismatchConfirmInput.checked = false;
+      syncPreviewSelectAll();
       if (!keepWarning) {
         setAlert("");
       }
@@ -1144,9 +1468,9 @@
       const initial = String(config.initial_note_type_id ?? "");
       const options = getNoteTypeOptions().map((item) => {
         const selected = String(item.id) === initial ? " selected" : "";
-        return `<option value="${escapeHtml(item.id)}"${selected}>${escapeHtml(item.name || "(Unnamed note type)")}</option>`;
+        return `<option value="${escapeHtml(item.id)}"${selected}>${escapeHtml(item.name || "(Loại note chưa đặt tên)")}</option>`;
       });
-      els.noteTypeSelect.innerHTML = options.length ? options.join("") : '<option value="">(No note type)</option>';
+      els.noteTypeSelect.innerHTML = options.length ? options.join("") : '<option value="">(Chưa có loại note)</option>';
     }
 
     function applySuggestedMapping(suggestedMapping) {
@@ -1202,10 +1526,16 @@
     function renderPreviewTable() {
       if (!state.parsed || !state.columns.length) {
         els.previewWrap.hidden = true;
+        syncPreviewSelectAll();
         return;
       }
       els.previewWrap.hidden = false;
       syncHeaderControls();
+      syncPreviewSelectAll();
+
+      const selectedColumns = getSelectedColumns();
+      const selectedSet = new Set(selectedColumns.map((column) => Number(column.index)));
+      const effectiveIndexBySource = new Map(selectedColumns.map((column) => [Number(column.index), column.effectiveIndex]));
 
       if (els.previewTable) {
         const minWidthPx = Math.max(760, state.columns.length * 180);
@@ -1214,17 +1544,45 @@
 
       if (els.previewCaption) {
         const rowCount = Array.isArray(state.previewRows) ? state.previewRows.length : 0;
+        const totalColumns = Array.isArray(state.columns) ? state.columns.length : 0;
+        const selectionSummary = `Đang chọn ${selectedColumns.length}/${totalColumns} cột.`;
+        const autoExcludedNote = state.autoExcludedColumnIndexes.length
+          ? " Cột đầu tiên được bỏ chọn tự động vì dòng tiêu đề trùng tên deck."
+          : "";
         els.previewCaption.textContent = state.hasHeader
-          ? `Đang dùng dòng đầu tiên làm header. Preview ${rowCount} dòng dữ liệu đầu tiên.`
-          : `Đang xem dữ liệu thô. Preview ${rowCount} dòng đầu tiên, bao gồm cả dòng đầu nếu có tiêu đề.`;
+          ? `Đang dùng dòng đầu tiên làm dòng tiêu đề. Xem trước ${rowCount} dòng dữ liệu đầu tiên. ${selectionSummary}${autoExcludedNote}`
+          : `Đang xem dữ liệu thô. Xem trước ${rowCount} dòng đầu tiên. ${selectionSummary}${autoExcludedNote}`;
       }
 
       els.previewHeaderRow.innerHTML = state.columns
-        .map((col) => `<th>Col ${col.index + 1}: ${escapeHtml(col.display || "")}</th>`)
+        .map((col) => {
+          const sourceIndex = Number(col.index);
+          const isSelected = selectedSet.has(sourceIndex);
+          const effectiveIndex = effectiveIndexBySource.has(sourceIndex)
+            ? Number(effectiveIndexBySource.get(sourceIndex))
+            : -1;
+          const titleLabel = isSelected
+            ? `Cột ${effectiveIndex + 1}: ${escapeHtml(col.display || "")}`
+            : `Bỏ qua: ${escapeHtml(col.display || "")}`;
+          const metaLabel = isSelected
+            ? `Cột nguồn ${sourceIndex + 1}`
+            : `Đã bỏ qua cột nguồn ${sourceIndex + 1}`;
+          return `
+            <th class="${isSelected ? "" : "is-excluded"}">
+              <label class="import-preview-column-toggle">
+                <span class="import-preview-column-topline">
+                  <input class="form-check-input mt-0" type="checkbox" data-preview-column-index="${sourceIndex}"${isSelected ? " checked" : ""}>
+                  <span class="import-preview-column-title">${titleLabel}</span>
+                </span>
+                <span class="import-preview-column-meta">${metaLabel}</span>
+              </label>
+            </th>
+          `;
+        })
         .join("");
 
       if (!state.previewRows.length) {
-        els.previewBody.innerHTML = `<tr><td colspan="${Math.max(state.columns.length, 1)}" class="text-muted text-center">No data rows found.</td></tr>`;
+        els.previewBody.innerHTML = `<tr><td colspan="${Math.max(state.columns.length, 1)}" class="text-muted text-center">Không tìm thấy dòng dữ liệu nào.</td></tr>`;
         return;
       }
 
@@ -1232,10 +1590,12 @@
         .map((row) => {
           const cells = [];
           for (let idx = 0; idx < state.columns.length; idx += 1) {
+            const sourceIndex = Number(state.columns[idx]?.index ?? idx);
             const fullValue = String(row[idx] || "");
             const shortValue = truncatePreviewValue(fullValue);
+            const isSelected = selectedSet.has(sourceIndex);
             cells.push(
-              `<td title="${escapeHtml(fullValue)}"><div class="preview-cell-text">${escapeHtml(shortValue)}</div></td>`
+              `<td class="${isSelected ? "" : "is-excluded"}" title="${escapeHtml(fullValue)}"><div class="preview-cell-text">${escapeHtml(shortValue)}</div></td>`
             );
           }
           return `<tr>${cells.join("")}</tr>`;
@@ -1244,15 +1604,15 @@
     }
 
     function renderWarnings() {
-      if (!state.warnings.length) {
+      const mismatch = getColumnMismatchWarning();
+      if (!mismatch) {
         setAlert("");
         els.columnMismatchConfirmWrap.classList.add("d-none");
         els.columnMismatchConfirmInput.checked = false;
         return;
       }
-      const first = state.warnings[0];
-      const kind = first.severity === "danger" ? "danger" : "warning";
-      setAlert(first.message || "Column mismatch detected.", kind);
+      const kind = mismatch.severity === "danger" ? "danger" : "warning";
+      setAlert(mismatch.message || "Phát hiện lệch số cột.", kind);
       els.columnMismatchConfirmWrap.classList.remove("d-none");
     }
 
@@ -1273,16 +1633,17 @@
       }
       els.mappingWrap.hidden = false;
       const sampleRow = getSampleRowForMapping();
+      const selectedColumns = getSelectedColumns();
 
       els.mappingBody.innerHTML = fields
         .map((field) => {
           const mappingValue = state.mapping[field.name] || { source_type: "ignore", column_index: null, constant_value: "" };
           const selectValue = mappingSelectValue(mappingValue);
-          const columnOptions = state.columns
+          const columnOptions = selectedColumns
             .map((col) => {
               const optionValue = `col:${col.index}`;
               const isSelected = selectValue === optionValue ? " selected" : "";
-              return `<option value="${optionValue}"${isSelected}>Column ${col.index + 1} - ${escapeHtml(col.display || "")}</option>`;
+               return `<option value="${optionValue}"${isSelected}>Cột ${col.effectiveIndex + 1} - ${escapeHtml(col.display || "")}</option>`;
             })
             .join("");
           const requiredBadge = field.required ? '<span class="text-danger">*</span>' : "";
@@ -1306,8 +1667,8 @@
               </td>
               <td>
                 <select class="form-select form-select-sm" data-map-select="${escapeHtml(field.name)}">
-                  <option value="ignore"${selectValue === "ignore" ? " selected" : ""}>Ignore</option>
-                  <option value="constant"${selectValue === "constant" ? " selected" : ""}>Constant value</option>
+                  <option value="ignore"${selectValue === "ignore" ? " selected" : ""}>Bỏ qua</option>
+                  <option value="constant"${selectValue === "constant" ? " selected" : ""}>Giá trị cố định</option>
                   ${columnOptions}
                 </select>
               </td>
@@ -1323,7 +1684,7 @@
     function renderUniquenessFields() {
       const fields = getFields();
       if (!fields.length) {
-        els.uniquenessFieldsWrap.innerHTML = '<div class="text-muted small">No fields</div>';
+        els.uniquenessFieldsWrap.innerHTML = '<div class="text-muted small">Chưa có trường nào</div>';
         return;
       }
 
@@ -1387,28 +1748,34 @@
 
     function validateBeforeSubmit() {
       if (!state.parsed || !state.token) {
-        return { ok: false, errors: ["Hãy upload file để hệ thống parse trước khi estimate/execute."] };
+        return { ok: false, errors: ["Hãy tải file để hệ thống parse trước khi ước lượng hoặc thực thi."] };
       }
 
       readMappingFromDom();
 
       const fields = getFields();
+      const selectedColumns = getSelectedColumns();
+      const effectiveIndexBySource = new Map(selectedColumns.map((column) => [Number(column.index), column.effectiveIndex]));
       const uniq = readUniquenessFields();
       const errors = [];
       const warnings = [];
 
+      if (!selectedColumns.length) {
+        errors.push("Phải chọn ít nhất 1 cột để import.");
+      }
+
       if (!uniq.length) {
-        errors.push("Phải chọn ít nhất 1 uniqueness key field.");
+        errors.push("Phải chọn ít nhất 1 trường khóa đối chiếu.");
       }
 
       const usedColumns = new Map();
       fields.forEach((field) => {
         const mapVal = state.mapping[field.name] || { source_type: "ignore" };
         if (field.required && mapVal.source_type === "ignore") {
-          errors.push(`Required field '${field.name}' chưa được mapping.`);
+          errors.push(`Trường bắt buộc '${field.name}' chưa được ánh xạ.`);
         }
         if (uniq.includes(field.name) && mapVal.source_type === "ignore") {
-          errors.push(`Uniqueness field '${field.name}' chưa được mapping.`);
+          errors.push(`Trường khóa đối chiếu '${field.name}' chưa được ánh xạ.`);
         }
         if (mapVal.source_type === "column" && typeof mapVal.column_index === "number") {
           const list = usedColumns.get(mapVal.column_index) || [];
@@ -1419,12 +1786,15 @@
 
       Array.from(usedColumns.entries()).forEach(([columnIdx, names]) => {
         if (names.length > 1) {
-          warnings.push(`Column ${columnIdx + 1} đang map cho nhiều field: ${names.join(", ")}`);
+          const effectiveIndex = effectiveIndexBySource.has(columnIdx)
+            ? Number(effectiveIndexBySource.get(columnIdx)) + 1
+            : columnIdx + 1;
+          warnings.push(`Cột ${effectiveIndex} đang được ánh xạ cho nhiều trường: ${names.join(", ")}`);
         }
       });
 
-      if (state.warnings.length && !els.columnMismatchConfirmInput.checked) {
-        errors.push("Bạn cần xác nhận column mismatch trước khi chạy import.");
+      if (getColumnMismatchWarning() && !els.columnMismatchConfirmInput.checked) {
+        errors.push("Bạn cần xác nhận lệch số cột trước khi chạy import.");
       }
 
       return {
@@ -1443,13 +1813,13 @@
 
       els.summaryBox.classList.remove("d-none");
       const items = [
-        ["Total rows", summary.total_rows],
-        ["Valid rows", summary.valid_rows],
-        ["Inserted", summary.inserted],
-        ["Updated", summary.updated],
-        ["Skipped", summary.skipped],
-        ["Unchanged", summary.unchanged],
-        ["Errors", summary.errors],
+        ["Tổng dòng", summary.total_rows],
+        ["Dòng hợp lệ", summary.valid_rows],
+        ["Thêm mới", summary.inserted],
+        ["Cập nhật", summary.updated],
+        ["Bỏ qua", summary.skipped],
+        ["Không đổi", summary.unchanged],
+        ["Lỗi", summary.errors],
       ];
 
       const heading = title ? `<div class="col-12 fw-semibold mb-1">${escapeHtml(title)}</div>` : "";
@@ -1477,6 +1847,7 @@
     }
 
     function buildRequestPayload() {
+      const effectiveMismatch = getColumnMismatchWarning();
       const payload = {
         token: state.token,
         note_type_id: String(els.noteTypeSelect.value || ""),
@@ -1485,7 +1856,9 @@
         uniqueness_fields: readUniquenessFields(),
         mapping: state.mapping,
         dont_overwrite_empty: Boolean(els.dontOverwriteEmptyInput.checked),
-        confirm_column_mismatch: Boolean(els.columnMismatchConfirmInput.checked),
+        confirm_column_mismatch: effectiveMismatch
+          ? Boolean(els.columnMismatchConfirmInput.checked)
+          : Boolean(state.warnings.length),
       };
       return payload;
     }
@@ -1501,7 +1874,7 @@
 
       const noteTypeId = String(els.noteTypeSelect.value || "").trim();
       if (!noteTypeId) {
-        setAlert("Hãy chọn note type trước khi parse.", "warning");
+        setAlert("Hãy chọn loại note trước khi parse.", "warning");
         state.parseFailed = false;
         resetParseState({ keepWarning: true });
         return;
@@ -1515,16 +1888,20 @@
           state.parseFailed = true;
           refreshImportUiState();
           setAlert(inferred.message || "Không thể xác định delimiter từ file đã chọn.", "danger");
-          showToast(inferred.message || "Không thể tự parse file đã chọn.", { kind: "danger", title: "Auto Parse thất bại" });
+          showToast(inferred.message || "Không thể tự parse file đã chọn.", { kind: "danger", title: "Tự parse thất bại" });
           return;
         }
         mode = inferred.mode;
         customDelimiter = inferred.customDelimiter || "";
+        if (typeof inferred.hasHeader === "boolean") {
+          state.hasHeader = inferred.hasHeader;
+          syncHeaderControls();
+        }
         applyDelimiterSelection(mode, customDelimiter);
       }
 
       if (mode === "custom" && customDelimiter.length !== 1) {
-        setAlert("Custom delimiter phải là đúng 1 ký tự.", "danger");
+        setAlert("Ký tự phân tách tùy chỉnh phải gồm đúng 1 ký tự.", "danger");
         resetParseState({ keepWarning: true });
         state.parseFailed = true;
         refreshImportUiState();
@@ -1553,7 +1930,7 @@
         });
         const payload = await response.json().catch(() => ({}));
         if (!response.ok) {
-          throw new Error(payload.message || payload.error || "Parse failed");
+          throw new Error(payload.message || payload.error || "Parse thất bại");
         }
 
         state.token = payload.token || null;
@@ -1566,24 +1943,32 @@
         state.hasEstimated = false;
         state.executionDone = false;
 
-        applySuggestedMapping(payload.suggested_mapping || {});
+        const resolvedDelimiter = typeof payload.delimiter === "string" ? payload.delimiter : "";
+        const resolvedSelection = delimiterSelectionFromChar(resolvedDelimiter);
+        if (resolvedSelection) {
+          applyDelimiterSelection(resolvedSelection.mode, resolvedSelection.customDelimiter);
+        }
+
+        initializeColumnSelection();
+        applySuggestedMapping(buildSuggestedMappingForSelection());
         renderPreviewTable();
         renderWarnings();
         renderUniquenessFields();
 
         const columnCount = Number(payload.column_count || 0);
         const totalRows = Number(payload.total_rows || 0);
-        const delimiterLabel = mode === "tsv" ? "tab" : (mode === "custom" ? customDelimiter : ",");
-        els.parseMeta.innerHTML = `
-          <span class="import-help-pill"><i class="bi bi-file-earmark-text"></i> ${escapeHtml(file.name)}</span>
-          <span class="import-help-pill"><i class="bi bi-table"></i> Rows: ${escapeHtml(totalRows)}</span>
-          <span class="import-help-pill"><i class="bi bi-columns-gap"></i> Columns: ${escapeHtml(columnCount)}</span>
-          <span class="import-help-pill"><i class="bi bi-filter"></i> Delimiter: ${escapeHtml(delimiterLabel)}</span>
-        `;
+        const delimiterLabel = formatDelimiterLabel(resolvedDelimiter) || (mode === "tsv" ? "tab" : (mode === "custom" ? customDelimiter : ","));
+        state.parseMetaInfo = {
+          filename: file.name,
+          totalRows,
+          columnCount,
+          delimiterLabel,
+        };
+        renderParseMeta();
       } catch (error) {
         state.parseFailed = true;
-        setAlert(error.message || "Parse failed.", "danger");
-        showToast(error.message || "Không thể parse file.", { kind: "danger", title: "Auto Parse thất bại" });
+        setAlert(error.message || "Parse thất bại.", "danger");
+        showToast(error.message || "Không thể parse file.", { kind: "danger", title: "Tự parse thất bại" });
       } finally {
         state.isParsing = false;
         setParseButtonLoading(false);
@@ -1601,7 +1986,7 @@
       renderMappingWarnings(validation.warnings);
       if (!validation.ok) {
         setAlert(validation.errors[0], "danger");
-        showToast(validation.errors[0], { kind: "danger", title: "Estimate thất bại" });
+        showToast(validation.errors[0], { kind: "danger", title: "Ước lượng thất bại" });
         return;
       }
 
@@ -1620,32 +2005,32 @@
         });
         const data = await response.json().catch(() => ({}));
         if (!response.ok) {
-          throw new Error(data.message || data.error || "Estimate failed");
+          throw new Error(data.message || data.error || "Ước lượng thất bại");
         }
 
         state.lastSummary = data;
         state.hasEstimated = true;
         state.executionDone = false;
-        renderSummary(data, "Estimated summary");
+        renderSummary(data, "Tổng kết ước lượng");
         renderIssues(data);
 
         const summary = data.summary || {};
         const summaryErrors = Number(summary.errors || 0);
         if (summaryErrors > 0) {
-          showToast(`Estimate hoàn tất nhưng có ${summaryErrors} lỗi. Hãy kiểm tra Row issues.`, {
+          showToast(`Ước lượng hoàn tất nhưng có ${summaryErrors} lỗi. Hãy kiểm tra bảng lỗi theo dòng.`, {
             kind: "warning",
-            title: "Estimate hoàn tất",
+            title: "Ước lượng hoàn tất",
           });
         } else {
-          showToast("Estimate hoàn tất. Bạn có thể tiếp tục Execute Import.", {
+          showToast("Ước lượng hoàn tất. Bạn có thể tiếp tục thực thi import.", {
             kind: "success",
-            title: "Estimate thành công",
+            title: "Ước lượng thành công",
           });
         }
       } catch (error) {
         state.hasEstimated = false;
-        setAlert(error.message || "Estimate failed", "danger");
-        showToast(error.message || "Không thể estimate import.", { kind: "danger", title: "Estimate thất bại" });
+        setAlert(error.message || "Ước lượng thất bại", "danger");
+        showToast(error.message || "Không thể ước lượng import.", { kind: "danger", title: "Ước lượng thất bại" });
       } finally {
         state.estimating = false;
         els.estimateBtn.textContent = ESTIMATE_BUTTON_LABEL;
@@ -1658,7 +2043,7 @@
       renderMappingWarnings(validation.warnings);
       if (!validation.ok) {
         setAlert(validation.errors[0], "danger");
-        showToast(validation.errors[0], { kind: "danger", title: "Execute thất bại" });
+        showToast(validation.errors[0], { kind: "danger", title: "Thực thi thất bại" });
         return;
       }
 
@@ -1666,10 +2051,10 @@
       state.running = true;
       state.executionDone = false;
       refreshImportUiState();
-      els.executeBtn.innerHTML = '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span> Running...';
+      els.executeBtn.innerHTML = '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span> Đang chạy...';
       els.progressWrap.classList.remove("d-none");
       els.progressBar.classList.add("progress-bar-animated");
-      els.progressBar.textContent = "Running...";
+      els.progressBar.textContent = "Đang chạy...";
       setAlert("");
 
       try {
@@ -1680,27 +2065,27 @@
         });
         const data = await response.json().catch(() => ({}));
         if (!response.ok) {
-          throw new Error(data.message || data.error || "Execute failed");
+          throw new Error(data.message || data.error || "Thực thi import thất bại");
         }
 
         state.executionDone = true;
-        renderSummary(data, "Execution report");
+        renderSummary(data, "Báo cáo thực thi");
         renderIssues(data);
         els.progressBar.classList.remove("progress-bar-animated");
-        els.progressBar.textContent = "Done";
+        els.progressBar.textContent = "Hoàn tất";
 
         const summary = data.summary || {};
         const inserted = Number(summary.inserted || 0);
         const updated = Number(summary.updated || 0);
         const skipped = Number(summary.skipped || 0);
         showToast(
-          `Hoàn tất import. Inserted: ${inserted}, Updated: ${updated}, Skipped: ${skipped}.`,
+          `Hoàn tất import. Thêm mới: ${inserted}, Cập nhật: ${updated}, Bỏ qua: ${skipped}.`,
           { kind: "success", title: "Import thành công" }
         );
       } catch (error) {
         state.executionDone = false;
-        setAlert(error.message || "Execute failed", "danger");
-        showToast(error.message || "Không thể execute import.", { kind: "danger", title: "Import thất bại" });
+        setAlert(error.message || "Thực thi import thất bại", "danger");
+        showToast(error.message || "Không thể thực thi import.", { kind: "danger", title: "Import thất bại" });
       } finally {
         state.running = false;
         els.executeBtn.textContent = EXECUTE_BUTTON_LABEL;
@@ -1785,6 +2170,46 @@
         });
       });
 
+      if (els.previewSelectAllInput) {
+        els.previewSelectAllInput.addEventListener("change", () => {
+          if (state.isParsing || state.estimating || state.running) {
+            syncPreviewSelectAll();
+            return;
+          }
+          const allIndexes = (Array.isArray(state.columns) ? state.columns : []).map((column) => Number(column.index));
+          const nextIndexes = els.previewSelectAllInput.checked ? allIndexes : [];
+          applyColumnSelection(nextIndexes);
+        });
+      }
+
+      if (els.previewTable) {
+        els.previewTable.addEventListener("change", (event) => {
+          const target = event.target;
+          if (!(target instanceof HTMLElement) || !target.hasAttribute("data-preview-column-index")) {
+            return;
+          }
+          if (state.isParsing || state.estimating || state.running) {
+            renderPreviewTable();
+            return;
+          }
+
+          const rawIndex = Number(target.getAttribute("data-preview-column-index"));
+          if (!Number.isInteger(rawIndex) || rawIndex < 0) {
+            return;
+          }
+
+          const nextIndexes = getSelectedColumnIndexes();
+          const selectedSet = new Set(nextIndexes);
+          const shouldSelect = target instanceof HTMLInputElement ? Boolean(target.checked) : !selectedSet.has(rawIndex);
+          if (shouldSelect) {
+            selectedSet.add(rawIndex);
+          } else {
+            selectedSet.delete(rawIndex);
+          }
+          applyColumnSelection(Array.from(selectedSet));
+        });
+      }
+
       els.mappingBody.addEventListener("change", (event) => {
         const target = event.target;
         if (!(target instanceof HTMLElement)) return;
@@ -1825,6 +2250,7 @@
       renderUniquenessFields();
       handleDelimiterModeChange();
       syncHeaderControls();
+      syncPreviewSelectAll();
       els.estimateBtn.textContent = ESTIMATE_BUTTON_LABEL;
       els.executeBtn.textContent = EXECUTE_BUTTON_LABEL;
       setParseButtonLoading(false);

@@ -15,12 +15,13 @@ from app.repositories.deck_tree_query import (
     query_accessible_stats_decks,
 )
 from app.repositories.stats_query_repository import (
-    aggregate_future_due_offsets_mysql,
-    query_due_queue_rows_python,
+    query_due_progress_rows,
     query_interval_days_rows,
 )
+from app.services.anki_scheduler import _day_index, _day_index_to_datetime
+from app.services.scheduler_config_service import resolve_day_boundary_hour_local
+from app.repositories.study_repository import REVIEW_QUEUE, normalize_progress_queue
 from app.utils.permissions import is_admin_user
-from models import db
 
 UTC = timezone.utc
 DEFAULT_TIMEZONE = "UTC"
@@ -177,20 +178,35 @@ def _future_window_end_offset(future_range: str) -> int | None:
 
 def _aggregate_future_due_python(
     *,
-    rows: list[tuple[Any, Any]],
-    timezone_obj,
+    rows: list[tuple[Any, Any, Any]],
+    timezone_name: str,
     today_local: date,
     backlog: bool,
     end_offset: int | None,
+    day_boundary_hour_local: int,
 ) -> tuple[dict[int, dict[str, int]], int]:
     by_offset: dict[int, dict[str, int]] = {}
 
-    for due_at, queue_value in rows:
-        if due_at is None:
-            continue
+    for due_at, due_day, queue_value in rows:
+        queue_norm = normalize_progress_queue(queue_value)
+        if queue_norm == REVIEW_QUEUE and due_day is not None:
+            try:
+                due_local_day = date.fromordinal(int(due_day))
+            except (TypeError, ValueError):
+                continue
+        else:
+            if due_at is None:
+                continue
+            due_local_day = date.fromordinal(
+                _day_index(
+                    due_at,
+                    day_boundary_hour_local,
+                    timezone_name=timezone_name,
+                )
+            )
 
-        due_utc = due_at if due_at.tzinfo else due_at.replace(tzinfo=UTC)
-        due_local_day = due_utc.astimezone(timezone_obj).date()
+        if due_local_day is None:
+            continue
         day_offset = (due_local_day - today_local).days
 
         if not backlog and day_offset < 0:
@@ -198,9 +214,6 @@ def _aggregate_future_due_python(
         if end_offset is not None and day_offset > end_offset:
             continue
 
-        queue_norm = str(queue_value or "").strip().lower()
-        if queue_norm == "learn":
-            queue_norm = "learning"
         bucket = by_offset.setdefault(
             int(day_offset),
             {
@@ -280,7 +293,9 @@ def _compute_daily_load(*, user_id: int, scope_deck_ids: list[int] | None) -> fl
     )
 
     total = 0.0
-    for (interval_days,) in rows:
+    for interval_days, queue_value in rows:
+        if normalize_progress_queue(queue_value) != REVIEW_QUEUE:
+            continue
         interval_value = float(interval_days or 0)
         total += 1.0 / max(1.0, interval_value)
     return total
@@ -310,13 +325,25 @@ def build_today_future_stats(
             parsed_deck_id = None
 
     timezone_effective = _effective_timezone_name(timezone_name)
-    timezone_obj = _build_timezone_obj(timezone_effective)
     now_utc_naive = _ensure_naive_utc(now_utc or datetime.utcnow())
-    now_local = now_utc_naive.replace(tzinfo=UTC).astimezone(timezone_obj)
-    today_local = now_local.date()
+    day_boundary_hour = resolve_day_boundary_hour_local(user_id=user_id)
+    today_day_index = _day_index(
+        now_utc_naive,
+        day_boundary_hour,
+        timezone_name=timezone_effective,
+    )
+    today_local = date.fromordinal(today_day_index)
 
-    today_start_utc = _local_start_to_utc_naive(today_local, timezone_obj)
-    tomorrow_start_utc = _local_start_to_utc_naive(today_local + timedelta(days=1), timezone_obj)
+    today_start_utc = _day_index_to_datetime(
+        today_day_index,
+        day_boundary_hour,
+        timezone_name=timezone_effective,
+    )
+    tomorrow_start_utc = _day_index_to_datetime(
+        today_day_index + 1,
+        day_boundary_hour,
+        timezone_name=timezone_effective,
+    )
 
     scope_deck_ids = _resolve_scope_deck_ids(scope=effective_scope, deck_id=parsed_deck_id)
 
@@ -331,35 +358,18 @@ def build_today_future_stats(
 
     end_offset = _future_window_end_offset(effective_future_range)
 
-    dialect = db.session.get_bind().dialect.name if db.session.get_bind() is not None else ""
-    if dialect == "mysql":
-        due_by_offset, min_negative_offset = aggregate_future_due_offsets_mysql(
-            user_id=user_id,
-            scope_deck_ids=scope_deck_ids,
-            timezone_name=timezone_effective,
-            backlog=effective_backlog,
-            end_offset=end_offset,
-            today_local=today_local,
-        )
-    else:
-        end_utc_exclusive = None
-        if end_offset is not None:
-            end_utc_exclusive = _local_start_to_utc_naive(today_local + timedelta(days=end_offset + 1), timezone_obj)
-
-        rows = query_due_queue_rows_python(
-            user_id=user_id,
-            scope_deck_ids=scope_deck_ids,
-            today_start_utc=today_start_utc,
-            end_utc_exclusive=end_utc_exclusive,
-            include_backlog=effective_backlog,
-        )
-        due_by_offset, min_negative_offset = _aggregate_future_due_python(
-            rows=rows,
-            timezone_obj=timezone_obj,
-            today_local=today_local,
-            backlog=effective_backlog,
-            end_offset=end_offset,
-        )
+    rows = query_due_progress_rows(
+        user_id=user_id,
+        scope_deck_ids=scope_deck_ids,
+    )
+    due_by_offset, min_negative_offset = _aggregate_future_due_python(
+        rows=rows,
+        timezone_name=timezone_effective,
+        today_local=today_local,
+        backlog=effective_backlog,
+        end_offset=end_offset,
+        day_boundary_hour_local=day_boundary_hour,
+    )
 
     series, window_days, total_reviews = _build_future_series(
         by_offset=due_by_offset,

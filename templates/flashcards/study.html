@@ -1,46 +1,46 @@
 {% extends "base.html" %}
 
-{% block title %}Flashcard Study{% endblock %}
+{% block title %}Học flashcard{% endblock %}
 {% block navbar %}{% endblock %}
 
 {% block content %}
 <section class="py-3" id="flashcard-study-root">
   <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap mb-3">
-    <h2 class="h4 mb-0">Study (Template Renderer)</h2>
-    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('main.dashboard') }}">Back</a>
+    <h2 class="h4 mb-0">Học thử (Template Renderer)</h2>
+    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('main.dashboard') }}">Quay lại</a>
   </div>
 
   <div class="card card-body mb-3">
     <div class="row g-2 align-items-end">
       <div class="col-md-4">
-        <label class="form-label">Scope</label>
+        <label class="form-label">Phạm vi</label>
         <select id="study-scope" class="form-select">
           <option value="deck">Deck</option>
-          <option value="note_type">NoteType</option>
+          <option value="note_type">Loại note</option>
         </select>
       </div>
       <div class="col-md-4">
-        <label class="form-label">Scope ID</label>
-        <input id="scope-id" class="form-control" placeholder="deck id or note_type id" />
+        <label class="form-label">ID phạm vi</label>
+        <input id="scope-id" class="form-control" placeholder="deck id hoặc note_type id" />
       </div>
       <div class="col-md-4 d-grid">
-        <button id="load-next-btn" class="btn btn-primary">Load Next Card</button>
+        <button id="load-next-btn" class="btn btn-primary">Tải thẻ tiếp theo</button>
       </div>
     </div>
-    <small class="text-muted mt-2">For deck scope: use a deck id. For note_type scope: paste note_type uuid.</small>
+    <small class="text-muted mt-2">Nếu chọn deck thì nhập deck id. Nếu chọn loại note thì dán note_type uuid.</small>
   </div>
 
   <div class="card">
     <div class="card-body">
       <iframe id="study-frame" sandbox="allow-same-origin allow-scripts" class="w-100 border rounded" style="min-height: 320px;"></iframe>
       <div class="d-flex gap-2 flex-wrap mt-3">
-        <button class="btn btn-outline-secondary" id="show-answer-btn">Show Answer</button>
-        <button class="btn btn-outline-danger rating-btn" data-rating="again">Again</button>
-        <button class="btn btn-outline-warning rating-btn" data-rating="hard">Hard</button>
-        <button class="btn btn-outline-primary rating-btn" data-rating="good">Good</button>
-        <button class="btn btn-outline-success rating-btn" data-rating="easy">Easy</button>
+        <button class="btn btn-outline-secondary" id="show-answer-btn">Hiện đáp án</button>
+        <button class="btn btn-outline-danger rating-btn" data-rating="again">Học lại</button>
+        <button class="btn btn-outline-warning rating-btn" data-rating="hard">Khó</button>
+        <button class="btn btn-outline-primary rating-btn" data-rating="good">Tốt</button>
+        <button class="btn btn-outline-success rating-btn" data-rating="easy">Dễ</button>
       </div>
-      <small id="study-status" class="d-block mt-2 text-muted">No card loaded.</small>
+      <small id="study-status" class="d-block mt-2 text-muted">Chưa tải thẻ nào.</small>
     </div>
   </div>
 </section>
@@ -67,7 +67,7 @@
 
     function renderCardFace() {
       if (!currentCard) {
-        frameEl.srcdoc = "<p style='padding:12px;'>No card loaded.</p>";
+        frameEl.srcdoc = "<p style='padding:12px;'>Chưa tải thẻ nào.</p>";
         return;
       }
       const html = showingBack ? currentCard.rendered_back_html : currentCard.rendered_front_html;
@@ -78,7 +78,7 @@
       const response = await fetch(url, options);
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error(data.message || "Request failed.");
+        throw new Error(data.message || "Yêu cầu thất bại.");
       }
       return data;
     }
@@ -87,32 +87,51 @@
       const scope = scopeEl.value;
       const scopeId = (scopeIdEl.value || "").trim();
       if (!scopeId) {
-        setStatus("scope_id is required.");
+        setStatus("Bạn cần nhập scope_id.");
         return;
       }
-      setStatus("Loading next card...");
+      setStatus("Đang tải thẻ tiếp theo...");
       try {
         const data = await requestJson(`/api/study/next?scope=${encodeURIComponent(scope)}&scope_id=${encodeURIComponent(scopeId)}`);
         if (!data.card_id) {
           currentCard = null;
           cardShownAtMs = null;
           renderCardFace();
-          setStatus(data.message || "No due cards.");
+          setStatus(data.message || "Hiện không có thẻ đến hạn.");
           return;
         }
         currentCard = data;
         showingBack = false;
         cardShownAtMs = performance.now();
         renderCardFace();
-        setStatus(`Loaded card ${data.card_id}`);
+        setStatus(`Đã tải thẻ #${data.card_id}.`);
       } catch (error) {
         setStatus(error.message);
       }
     }
 
+    function applyStudyPayload(payload) {
+      if (!payload || typeof payload !== "object") {
+        return false;
+      }
+      if (payload.card_id) {
+        currentCard = payload;
+        showingBack = false;
+        cardShownAtMs = performance.now();
+        renderCardFace();
+        setStatus(`Đã tải thẻ #${payload.card_id}.`);
+        return true;
+      }
+      currentCard = null;
+      cardShownAtMs = null;
+      renderCardFace();
+      setStatus(payload.message || "Hiện không có thẻ đến hạn.");
+      return false;
+    }
+
     async function answerCard(rating) {
       if (!currentCard?.card_id) {
-        setStatus("No card loaded.");
+        setStatus("Chưa tải thẻ nào.");
         return;
       }
       try {
@@ -125,12 +144,24 @@
         const data = await requestJson(`/api/study/${currentCard.card_id}/answer`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ rating, duration_ms: durationMs, timezone }),
+          body: JSON.stringify({
+            rating,
+            scope: scopeEl.value,
+            scope_id: (scopeIdEl.value || "").trim(),
+            duration_ms: durationMs,
+            timezone
+          }),
         });
-        setStatus(`Answer saved (${rating}). Loading next card...`);
+        if (applyStudyPayload(data.next_card_payload)) {
+          if (data?.applied_interval?.label) {
+            setStatus(`Đã lưu câu trả lời (${rating}: ${data.applied_interval.label}).`);
+          }
+          return;
+        }
+        setStatus(`Đã lưu câu trả lời (${rating}). Đang tải thẻ tiếp theo...`);
         await loadNextCard();
-        if (data?.intervals_preview?.[rating]?.label) {
-          setStatus(`Answer saved (${rating}: ${data.intervals_preview[rating].label}).`);
+        if (data?.applied_interval?.label) {
+          setStatus(`Đã lưu câu trả lời (${rating}: ${data.applied_interval.label}).`);
         }
       } catch (error) {
         setStatus(error.message);
@@ -140,12 +171,12 @@
     loadNextBtn?.addEventListener("click", loadNextCard);
     showAnswerBtn?.addEventListener("click", () => {
       if (!currentCard) {
-        setStatus("No card loaded.");
+        setStatus("Chưa tải thẻ nào.");
         return;
       }
       showingBack = true;
       renderCardFace();
-      setStatus("Showing back side.");
+      setStatus("Đang hiển thị mặt sau.");
     });
     ratingButtons.forEach((button) => {
       button.addEventListener("click", () => answerCard(button.getAttribute("data-rating")));

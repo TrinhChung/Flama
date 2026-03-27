@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+
+{% block title %}Chi tiết giao dịch{% endblock %}
+
+{% block styles %}
+<style>
+  {% include "components/payment_management_styles.html" %}
+</style>
+{% endblock %}
+
+{% block content %}
+<section class="payment-page">
+  <div class="payment-shell" style="max-width: 1180px;">
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
+      <div>
+        <div class="payment-kicker mb-1">Chi tiết giao dịch</div>
+        <h1 class="h3 mb-1 code">{{ attempt.id }}</h1>
+        <p class="payment-muted mb-0">Theo dõi mã ref provider, trạng thái webhook và liên kết tới đơn hàng gốc.</p>
+      </div>
+      <div class="payment-toolbar-actions">
+        <a class="btn btn-outline-secondary" href="{{ url_for('admin_payments.transactions_page') }}">Quay lại giao dịch</a>
+        {% if attempt.order %}
+        <a class="btn btn-outline-secondary" href="{{ url_for('admin_payments.order_detail_page', order_id=attempt.order.id) }}">Mở đơn hàng</a>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="payment-summary-grid mb-3">
+      <div class="payment-summary-card" data-tone="primary">
+        <div class="payment-summary-label">Trạng thái</div>
+        <div class="payment-summary-value">{{ attempt.status_label }}</div>
+        <div class="payment-summary-hint">{{ attempt.provider_code }} / {{ attempt.payment_method_code }}</div>
+      </div>
+      <div class="payment-summary-card" data-tone="success">
+        <div class="payment-summary-label">Số tiền</div>
+        <div class="payment-summary-value">{{ attempt.amount_display }}</div>
+      </div>
+      <div class="payment-summary-card" data-tone="secondary">
+        <div class="payment-summary-label">Đơn hàng</div>
+        <div class="payment-summary-value" style="font-size: 1rem;">{{ attempt.order.merchant_order_code if attempt.order else "-" }}</div>
+      </div>
+      <div class="payment-summary-card" data-tone="warning">
+        <div class="payment-summary-label">Sự kiện webhook</div>
+        <div class="payment-summary-value">{{ attempt.webhook_count }}</div>
+        <div class="payment-summary-hint">{{ attempt.latest_webhook_status_label or "Chưa có webhook" }}</div>
+      </div>
+    </div>
+
+    <div class="row g-3 mb-3">
+      <div class="col-12 col-lg-7">
+        <div class="payment-section-card h-100">
+          <h2 class="h5 mb-3">Thông tin giao dịch</h2>
+          <div class="payment-detail-grid">
+            <div class="payment-detail-line">
+              <div class="payment-detail-label">Tạo lúc</div>
+              <div class="payment-detail-value">{{ attempt.created_at_display }}</div>
+            </div>
+            <div class="payment-detail-line">
+              <div class="payment-detail-label">Cập nhật lúc</div>
+              <div class="payment-detail-value">{{ attempt.updated_at_display }}</div>
+            </div>
+            <div class="payment-detail-line">
+              <div class="payment-detail-label">Mã thanh toán từ provider</div>
+              <div class="payment-detail-value code">{{ attempt.provider_payment_id or "-" }}</div>
+            </div>
+            <div class="payment-detail-line">
+              <div class="payment-detail-label">Mã đơn từ provider</div>
+              <div class="payment-detail-value code">{{ attempt.provider_order_code or "-" }}</div>
+            </div>
+            <div class="payment-detail-line">
+              <div class="payment-detail-label">Nội dung chuyển khoản kỳ vọng</div>
+              <div class="payment-detail-value code">{{ attempt.expected_payment_reference or "-" }}</div>
+            </div>
+            <div class="payment-detail-line">
+              <div class="payment-detail-label">Hết hạn lúc</div>
+              <div class="payment-detail-value">{{ attempt.expires_at_display }}</div>
+            </div>
+            <div class="payment-detail-line">
+              <div class="payment-detail-label">Xác nhận lúc</div>
+              <div class="payment-detail-value">{{ attempt.confirmed_at_display }}</div>
+            </div>
+            <div class="payment-detail-line">
+              <div class="payment-detail-label">Lỗi lúc</div>
+              <div class="payment-detail-value">{{ attempt.failed_at_display }}</div>
+            </div>
+            {% if attempt.checkout_url %}
+            <div class="payment-detail-line">
+              <div class="payment-detail-label">Checkout URL</div>
+              <div class="payment-detail-value"><a href="{{ attempt.checkout_url }}" target="_blank" rel="noopener">{{ attempt.checkout_url }}</a></div>
+            </div>
+            {% endif %}
+          </div>
+          {% if attempt.failure_message %}
+          <div class="alert alert-danger mt-3 mb-0">{{ attempt.failure_message }}</div>
+          {% elif attempt.manual_review_reason %}
+          <div class="alert alert-warning mt-3 mb-0">{{ attempt.manual_review_reason }}</div>
+          {% endif %}
+        </div>
+      </div>
+      <div class="col-12 col-lg-5">
+        <div class="payment-section-card h-100">
+          <h2 class="h5 mb-3">Đơn hàng liên kết</h2>
+          {% if attempt.order %}
+            <div class="payment-timeline">
+            <div class="payment-timeline-item">
+              <div class="fw-semibold">{{ attempt.order.merchant_order_code }}</div>
+              <div class="payment-timeline-meta">Người mua: {{ attempt.order.buyer.username or "-" }} | {{ attempt.order.buyer.email or "-" }}</div>
+              <div class="payment-timeline-meta">Số mục: {{ attempt.order.item_rows|length }}</div>
+            </div>
+            {% for item in attempt.order.item_rows %}
+            <div class="payment-timeline-item">
+              <div class="fw-semibold">{{ item.title_snapshot }}</div>
+              <div class="payment-timeline-meta">{{ item.product_type }} | {{ item.product_ref_id }}</div>
+            </div>
+            {% endfor %}
+          </div>
+          {% else %}
+          <div class="payment-muted">Không tìm thấy đơn hàng liên kết.</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="row g-3">
+      <div class="col-12 col-lg-5">
+        <div class="payment-section-card h-100">
+          <h2 class="h5 mb-3">Metadata từ provider</h2>
+          {% if attempt.provider_metadata %}
+          <div class="payment-detail-grid">
+            {% for key, value in attempt.provider_metadata.items() %}
+            <div class="payment-detail-line">
+              <div class="payment-detail-label">{{ key }}</div>
+              <div class="payment-detail-value">{{ value }}</div>
+            </div>
+            {% endfor %}
+          </div>
+          {% else %}
+          <div class="payment-muted">Không có metadata.</div>
+          {% endif %}
+        </div>
+      </div>
+      <div class="col-12 col-lg-7">
+        <div class="payment-section-card h-100">
+          <h2 class="h5 mb-3">Lịch sử webhook</h2>
+          {% if attempt.events %}
+          <div class="payment-timeline">
+            {% for event in attempt.events %}
+            <div class="payment-timeline-item">
+              <div class="d-flex justify-content-between gap-3">
+                <div>
+                  <div class="fw-semibold">{{ event.event_type }}</div>
+                  <div class="payment-timeline-meta">{{ event.received_at_display }} | key {{ event.event_key[:12] }}...</div>
+                </div>
+                <span class="payment-badge" data-tone="{% if event.processing_status == 'failed' %}danger{% elif event.processing_status == 'processed' %}success{% else %}secondary{% endif %}">
+                  {{ event.processing_status_label }}
+                </span>
+              </div>
+              <div class="small mt-2">Chữ ký hợp lệ: {{ "Có" if event.signature_valid else "Không" }}</div>
+              {% if event.error_message %}
+              <div class="small text-danger mt-1">{{ event.error_message }}</div>
+              {% endif %}
+            </div>
+            {% endfor %}
+          </div>
+          {% else %}
+          <div class="payment-muted">Chưa có sự kiện webhook.</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

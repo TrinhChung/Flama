@@ -1,44 +1,44 @@
 {% extends "base.html" %}
 
-{% block title %}Shared NoteTypes{% endblock %}
+{% block title %}Template chia sẻ{% endblock %}
 
 {% block content %}
 <section class="py-3" id="shared-note-types-root">
   <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
     <div>
-      <h2 class="h4 mb-0">Shared NoteTypes</h2>
-      <small class="text-muted">Install free/paid NoteTypes, then rate after real usage.</small>
+      <h2 class="h4 mb-0">Template chia sẻ</h2>
+      <small class="text-muted">Cài template miễn phí hoặc trả phí, sau đó đánh giá khi đã dùng thực tế.</small>
     </div>
     <div class="d-flex gap-2">
-      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('flashcards.note_type_manager') }}">My NoteTypes</a>
-      <button class="btn btn-outline-primary btn-sm" id="seed-defaults-btn">Seed Official/Default</button>
+      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('flashcards.note_type_manager') }}">Template của tôi</a>
+      <button class="btn btn-outline-primary btn-sm" id="seed-defaults-btn">Nạp mẫu mặc định</button>
     </div>
   </div>
 
   <form id="note-type-filter-form" class="card card-body mb-3">
     <div class="row g-2">
       <div class="col-md-4">
-        <input class="form-control form-control-sm" name="q" placeholder="Search title or description">
+        <input class="form-control form-control-sm" name="q" placeholder="Tìm theo tên hoặc mô tả">
       </div>
       <div class="col-md-2">
-        <input class="form-control form-control-sm" name="category" placeholder="Category">
+        <input class="form-control form-control-sm" name="category" placeholder="Danh mục">
       </div>
       <div class="col-md-2">
-        <input class="form-control form-control-sm" name="tags" placeholder="tags,comma,separated">
+        <input class="form-control form-control-sm" name="tags" placeholder="tag1,tag2,tag3">
       </div>
       <div class="col-md-2">
         <select class="form-select form-select-sm" name="pricing_mode">
-          <option value="">All pricing</option>
-          <option value="free">Free</option>
-          <option value="paid">Paid</option>
+          <option value="">Mọi mức giá</option>
+          <option value="free">Miễn phí</option>
+          <option value="paid">Trả phí</option>
         </select>
       </div>
       <div class="col-md-2">
         <select class="form-select form-select-sm" name="sort">
-          <option value="popular">Popular</option>
-          <option value="top_rated">Top rated</option>
-          <option value="newest">Newest</option>
-          <option value="recently_updated">Recently updated</option>
+          <option value="popular">Phổ biến</option>
+          <option value="top_rated">Đánh giá cao</option>
+          <option value="newest">Mới nhất</option>
+          <option value="recently_updated">Cập nhật gần đây</option>
         </select>
       </div>
     </div>
@@ -47,24 +47,24 @@
   <div class="row g-3 mb-4">
     <div class="col-lg-6">
       <div class="card card-body">
-        <h3 class="h6 mb-2">Recommended for you</h3>
-        <div id="recommended-list" class="small text-muted">Loading...</div>
+        <h3 class="h6 mb-2">Gợi ý cho bạn</h3>
+        <div id="recommended-list" class="small text-muted">Đang tải...</div>
       </div>
     </div>
     <div class="col-lg-6">
       <div class="card card-body">
-        <h3 class="h6 mb-2">Trending</h3>
-        <div id="trending-list" class="small text-muted">Loading...</div>
+        <h3 class="h6 mb-2">Đang nổi bật</h3>
+        <div id="trending-list" class="small text-muted">Đang tải...</div>
       </div>
     </div>
   </div>
 
   <div class="card">
     <div class="card-header py-2">
-      <strong>Marketplace</strong>
+      <strong>Marketplace template</strong>
     </div>
     <div id="note-type-items" class="list-group list-group-flush">
-      <div class="list-group-item text-muted">Loading...</div>
+      <div class="list-group-item text-muted">Đang tải...</div>
     </div>
   </div>
 </section>
@@ -103,6 +103,7 @@
     const root = document.getElementById("shared-note-types-root");
     if (!root) return;
     const detailUrlTemplate = "{{ url_for('flashcards.shared_note_type_detail_page', note_type_id='__NOTE_TYPE_ID__') }}";
+    const paymentResultUrl = "{{ url_for('payments.marketplace_payment_result_page') }}";
     const filterForm = document.getElementById("note-type-filter-form");
     const itemsRoot = document.getElementById("note-type-items");
     const recommendedRoot = document.getElementById("recommended-list");
@@ -112,12 +113,40 @@
     async function requestJson(url, options = {}) {
       const response = await fetch(url, options);
       const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.message || "Request failed.");
+      if (!response.ok) {
+        throw new Error(
+          data.message
+          || (response.status >= 500
+            ? "Máy chủ đang bận hoặc tạm thời không phản hồi. Vui lòng thử lại sau."
+            : "Không thể hoàn tất yêu cầu.")
+        );
+      }
       return data;
     }
 
     function buildDetailUrl(noteTypeId) {
       return detailUrlTemplate.replace("__NOTE_TYPE_ID__", encodeURIComponent(noteTypeId));
+    }
+
+    function buildPaymentResultUrl(orderId, productType, productRefId) {
+      if (!paymentResultUrl || !orderId) return "";
+      const url = new URL(paymentResultUrl, window.location.origin);
+      url.searchParams.set("payment_order_id", orderId);
+      if (productType) {
+        url.searchParams.set("payment_product_type", productType);
+      }
+      if (productRefId) {
+        url.searchParams.set("payment_product_ref_id", productRefId);
+      }
+      return url.toString();
+    }
+
+    function formatCount(value) {
+      return window.Utils.formatNumber(value);
+    }
+
+    function formatPrice(value) {
+      return window.Utils.formatPriceDisplay(value);
     }
 
     function rowActions(item) {
@@ -130,7 +159,7 @@
           </div>
         `;
       }
-      const installLabel = item.is_installed ? "Installed" : (item.pricing_mode === "paid" ? "Buy / Install" : "Get / Install");
+      const installLabel = item.is_installed ? "Đã cài đặt" : (item.pricing_mode === "paid" ? "Mua / Cài đặt" : "Cài đặt");
       const installDisabled = item.is_installed ? "disabled" : "";
       return `
         <div class="d-flex gap-2">
@@ -141,7 +170,7 @@
 
     function renderItems(items) {
       if (!items.length) {
-        itemsRoot.innerHTML = `<div class="list-group-item text-muted">No shared note types found.</div>`;
+        itemsRoot.innerHTML = `<div class="list-group-item text-muted">Không tìm thấy template chia sẻ phù hợp.</div>`;
         return;
       }
       itemsRoot.innerHTML = items.map((item) => `
@@ -149,9 +178,9 @@
           <div class="d-flex justify-content-between align-items-start gap-2">
             <div>
               <a href="${buildDetailUrl(item.id)}" class="fw-semibold text-reset text-decoration-none" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">${item.title || item.name}</a>
-              <div class="small text-muted">By ${item.author?.username || "Unknown"} · ${item.primary_category || "General"} · ${item.price_display}</div>
+              <div class="small text-muted">Tác giả: ${item.author?.username || "Không rõ"} · Danh mục: ${item.primary_category || "Chung"} · Giá: ${formatPrice(item.price_display)}</div>
               <div class="small mt-1">${item.description || ""}</div>
-              <div class="small text-muted mt-1">Rating ${Number(item.rating_avg || 0).toFixed(2)} (${item.rating_count || 0}) · Usage ${item.active_usage_count || 0}/${item.install_count || 0}</div>
+              <div class="small text-muted mt-1">Đánh giá: ${Number(item.rating_avg || 0).toFixed(2)} (${formatCount(item.rating_count || 0)}) · Lượt dùng: ${formatCount(item.active_usage_count || 0)}/${formatCount(item.install_count || 0)}</div>
             </div>
             ${rowActions(item)}
           </div>
@@ -161,12 +190,12 @@
 
     function renderSimpleList(container, items, titleKey = "title") {
       if (!items || !items.length) {
-        container.textContent = "No data.";
+        container.textContent = "Chưa có dữ liệu.";
         return;
       }
       container.innerHTML = items.slice(0, 5).map((item) => {
-        const title = item[titleKey] || item.name || "Untitled";
-        return `<div class="mb-1"><a href="${buildDetailUrl(item.id)}">${title}</a> <span class="text-muted">(${item.price_display})</span></div>`;
+        const title = item[titleKey] || item.name || "Chưa đặt tên";
+        return `<div class="mb-1"><a href="${buildDetailUrl(item.id)}">${title}</a> <span class="text-muted">(${formatPrice(item.price_display)})</span></div>`;
       }).join("");
     }
 
@@ -189,7 +218,25 @@
     }
 
     async function onInstall(id) {
-      await requestJson(`/api/shared/note-types/${id}/install`, { method: "POST" });
+      const response = await requestJson(`/api/shared/note-types/${id}/install`, { method: "POST" });
+      if (response?.payment_required && response?.order) {
+        const checkoutUrl = response?.order?.active_attempt?.checkout?.checkout_url
+          || response?.order?.active_attempt?.checkout_url;
+        if (checkoutUrl && response?.order?.status === "pending_payment") {
+          window.location.href = checkoutUrl;
+          return;
+        }
+        const resultUrl = buildPaymentResultUrl(
+          response?.order?.id || "",
+          "note_type",
+          id,
+        );
+        if (resultUrl) {
+          window.location.href = resultUrl;
+          return;
+        }
+        return;
+      }
       await Promise.all([loadItems(), loadRecommendations()]);
     }
 

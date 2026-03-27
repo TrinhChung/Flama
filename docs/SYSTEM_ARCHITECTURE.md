@@ -1,7 +1,7 @@
 # Flama (Nihongo) System Architecture
 
 ## 1. Overview
-Flama is a lightweight web application designed for vocabulary learning. It provides user authentication, vocabulary management (bulk import, inline editing), and a spaced repetition flashcard system inspired by Anki.
+Flama is a lightweight web application designed for vocabulary learning. It provides user authentication, vocabulary management (bulk import, inline editing), a spaced repetition flashcard system inspired by Anki, and a marketplace/payment domain for paid learning content.
 
 ## 2. Technology Stack
 - **Backend Framework**: Python 3.10+, Flask
@@ -18,8 +18,8 @@ The backend follows the Flask Application Factory pattern to ensure clean config
 - `app/`: Main application package
   - `__init__.py`: Application factory (`create_app`), initializes extensions, and registers blueprints.
   - `extensions.py`: Shared Flask extensions (e.g., `login_manager`, `migrate`).
-  - `routes/`: Application controllers/blueprints covering different domains (`auth.py`, `main.py`, `vocabulary.py`, `flashcards.py`, `admin.py`).
-  - `services/`: Encapsulated business logic (e.g., role management).
+  - `routes/`: Application blueprints covering different domains (`auth.py`, `main.py`, `vocabulary.py`, `flashcards/*`, `payments.py`, `admin.py`, `admin_payments.py`, `user_orders.py`).
+  - `services/`: Encapsulated business logic including payment/order orchestration and admin query services.
   - `cli.py`: Custom Flask CLI commands for administrative tasks (like data seeding).
 - `models/`: SQLAlchemy data model definitions.
 - `templates/`: Jinja2 templates, highly structured to promote reusability (`templates/components/`).
@@ -40,6 +40,22 @@ The application connects to a MySQL database, with the schema fully defined and 
   - **Media**: `MediaAsset`
   - **Marketplace & Sharing**: `DeckMarketplaceItem`, `DeckInstall`, `NoteTypeInstall`, `DeckReview`, `NoteTypeReview`
   - **Background Jobs**: `FieldRenameJob`
+- **Payment & Commerce**:
+  - **Order / Checkout**: `PaymentOrder`, `PaymentOrderItem`
+  - **Transaction-facing payment state**: `PaymentAttempt`
+  - **Webhook / callback audit**: `PaymentWebhookEvent`
+  - **Fulfillment ledger**: `PaymentEntitlement`
+  - **Admin payout operations**: `PayoutBatch`, `PayoutBatchItem`
+
+### 4.2 Payment Architecture Direction
+
+- payOS is the primary and intended payment provider for the current repository.
+- The payment domain is organized around order management, payment attempts, webhook processing, and entitlement fulfillment.
+- User-facing payment surfaces are intentionally simple: order history and order detail.
+- Admin-facing payment surfaces are operational: dashboard, global order management, and transaction management.
+- Older provider-specific payment experiments are not an equal architecture track.
+
+For payment-specific architecture details, use `docs/FLAMA_PAYMENT_ARCHITECTURE.md`.
 
 ## 5. Frontend Architecture
 The frontend employs a custom component-based architecture built with Jinja2 macros and modular static assets. This provides a maintainable UI without the overhead of a heavy JavaScript framework.
@@ -54,13 +70,19 @@ The frontend employs a custom component-based architecture built with Jinja2 mac
 - **Services**:
   - `web`: The Flask application running via `wsgi.py` on port 4789.
   - `db`: MySQL 8.0 database container with persistent volume storage (`flama_db_data`).
-- **Configuration**: Secrets and environment-specific settings are injected via a `.env` file (loaded by `python-dotenv`). Important keys include database connection parameters (`DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_NAME`), `SECRET_KEY`, and feature flags like `USE_NEW_CARD_MODEL`.
+- **Configuration**: Secrets and environment-specific settings are injected via a `.env` file (loaded by `python-dotenv`). Important keys include database connection parameters (`DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_NAME`), `SECRET_KEY`, feature flags like `USE_NEW_CARD_MODEL`, and payment settings such as `PAYMENTS_ENABLED`, `PAYMENTS_PROVIDER=payos`, `PAYOS_CLIENT_ID`, `PAYOS_API_KEY`, and `PAYOS_CHECKSUM_KEY`.
 
 ## 7. Key Workflows
 - **Authentication Flow**: Secure password hashing with standard session-based login mechanisms.
 - **Data Initialization (Seeding)**: Custom CLI commands allow seeding vocabulary from CSV/TSV files into isolated deck structures.
 - **Vocabulary Import & Management**: Users can bulk import CSV data and utilize a spreadsheet-like grid for inline editing, which saves custom column width preferences per user.
 - **Spaced Repetition (Flashcard V2)**: Advanced scheduling subsystem that tracks user reviews on individual `Card` records generated from `Note` data and associated `Template` definitions.
+- **Marketplace Payment Flow**:
+  - paid marketplace content creates a `PaymentOrder`
+  - payOS checkout creates or reuses a `PaymentAttempt`
+  - payOS webhook or explicit state sync confirms payment
+  - fulfillment grants access through `PaymentEntitlement` and the existing install tables
+  - admin payment screens monitor abnormal attempts, webhook failures, and order state
 
 ## 8. Layer Responsibility Rules (Agent Guardrails)
 These rules are mandatory for all contributors and coding agents to prevent logic from being added to the wrong layer.

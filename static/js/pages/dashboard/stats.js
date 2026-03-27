@@ -152,10 +152,11 @@ export function initStats() {
                 const cards = toInt(item.cards);
                 const level = heatLevel(cards, maxCards);
                 const day = String(item.day || item.date || "");
-                const sourceLabel = String(item.source || "reviewed").toLowerCase() === "due" ? "Due" : "Reviewed";
+                const source = String(item.source || "reviewed").toLowerCase() === "due" ? "due" : "reviewed";
+                const sourceLabel = source === "due" ? "Due" : "Reviewed";
                 const cell = document.createElement("button");
                 cell.type = "button";
-                cell.className = `stats-day stats-day--level-${level}${item.is_future ? " stats-day--future" : ""}`;
+                cell.className = `stats-day stats-day--${source} stats-day--level-${level}${item.is_future ? " stats-day--future" : ""}`;
                 cell.setAttribute("aria-label", `${day} ${sourceLabel.toLowerCase()} ${cards} cards`);
                 cell.title = `${day} · ${sourceLabel}: ${cards} cards`;
                 const showTooltip = () => updateStatsTooltip(item);

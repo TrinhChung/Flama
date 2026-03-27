@@ -127,6 +127,72 @@ class StudyCounterIntegrationTest(unittest.TestCase):
             self.assertIsNotNone(progress.interval_days)
             self.assertGreater(progress.interval_days, 0)
 
+    def test_review_interval_persistence_matches_due_day_rounding(self):
+        """Stored review interval should match the rounded due-day offset."""
+        with self.app.app_context():
+            from app.services.anki_scheduler import _day_index, default_deck_options, applyAnswer
+            from app.routes.vocabulary import _card_state_from_progress, _apply_card_state_to_progress
+
+            progress = CardProgress(
+                user_id=self.user_id,
+                card_id=self.card_ids[2],
+                queue="review",
+                due_at=datetime.utcnow(),
+                due_day=None,
+                interval_days=10,
+                ease_factor=2.5,
+            )
+            db.session.add(progress)
+            db.session.commit()
+
+            options = default_deck_options()
+            now = datetime(2026, 2, 22, 9, 0, 0)
+
+            state = _card_state_from_progress(progress, now)
+            updated_state = applyAnswer(state, options, now, "easy")
+            _apply_card_state_to_progress(progress, updated_state, now)
+            db.session.commit()
+
+            current_day = _day_index(now, options.dayBoundaryHourLocal)
+            progress = CardProgress.query.filter_by(
+                user_id=self.user_id,
+                card_id=self.card_ids[2],
+            ).first()
+
+            self.assertEqual(progress.queue, "review")
+            self.assertEqual(progress.interval_days, progress.due_day - current_day)
+
+    def test_interday_learning_persists_boundary_due_time(self):
+        with self.app.app_context():
+            from app.services.anki_scheduler import default_deck_options, applyAnswer
+            from app.routes.vocabulary import _card_state_from_progress, _apply_card_state_to_progress
+
+            progress = CardProgress(
+                user_id=self.user_id,
+                card_id=self.card_ids[3],
+                queue="new",
+            )
+            db.session.add(progress)
+            db.session.commit()
+
+            options = default_deck_options()
+            now = datetime(2026, 2, 22, 18, 55, 0)
+
+            state = _card_state_from_progress(progress, now, timezone_name="Asia/Tokyo")
+            updated_state = applyAnswer(state, options, now, "good", timezone_name="Asia/Tokyo")
+            _apply_card_state_to_progress(progress, updated_state, now, timezone_name="Asia/Tokyo")
+            db.session.commit()
+
+            progress = CardProgress.query.filter_by(
+                user_id=self.user_id,
+                card_id=self.card_ids[3],
+            ).first()
+
+            self.assertEqual(progress.queue, "learning")
+            self.assertEqual(progress.interval_days, 1)
+            self.assertEqual(progress.due_at, datetime(2026, 2, 22, 19, 0, 0))
+            self.assertEqual(progress.due_day, datetime(2026, 2, 23).date().toordinal())
+
 
 if __name__ == '__main__':
     unittest.main()

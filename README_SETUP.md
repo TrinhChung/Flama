@@ -16,7 +16,7 @@ bash scripts/setup_github_workspace.sh
 # 3) Chay app
 flask --app wsgi.py run --host=0.0.0.0 --port=4789
 ```
-myenv\Scripts\activate
+.venv\Scripts\activate
 ### Windows PowerShell
 
 ```powershell
@@ -265,6 +265,31 @@ copy .env_example .env
 scripts\reseed_db.bat
 ```
 
+## Payment Setup (payOS only)
+
+Payment direction hien tai cua FLAMA la payOS-first. Neu can bat thanh toan marketplace, dung cac bien sau trong `.env`:
+
+- `PAYMENTS_ENABLED=1`
+- `PAYMENTS_PROVIDER=payos`
+- `PAYMENTS_PAID_INSTALL_REQUIRED=1` neu marketplace item phai thanh toan truoc khi cap quyen
+- `PAYMENTS_WEBHOOK_AUTO_GRANT_ENABLED=1` neu muon webhook payOS tu dong confirm va grant quyen
+- `PAYMENTS_ORDER_EXPIRY_SECONDS=1800` hoac gia tri phu hop voi chinh sach het han
+- `PAYOS_CLIENT_ID`
+- `PAYOS_API_KEY`
+- `PAYOS_CHECKSUM_KEY`
+
+Luu y:
+
+- Gia tri mac dinh trong `.env_example` da theo huong payOS-first.
+- `PAYMENTS_V1_ENABLED` chi con ton tai de tuong thich nguoc trong code. Khong dung bien nay cho setup moi.
+- Khong them lai bien moi truong payment deprecated vao `.env`, setup guide, hay tai lieu van hanh.
+- Webhook canonical hien tai la `POST /api/payments/providers/payos/webhook`.
+
+Tai lieu payment canonical:
+
+- `docs/FLAMA_PAYMENT_ARCHITECTURE.md`
+- `docs/SYSTEM_ARCHITECTURE.md`
+
 ## Core Commands
 
 ### Chung
@@ -293,6 +318,69 @@ powershell -ExecutionPolicy Bypass -File .\scripts\reseed_db.ps1
 REM Windows Command Prompt
 scripts\reseed_db.bat
 ```
+
+### Seed Vocabulary Data
+
+`vocab-seed` doc duoc du lieu tu `static/seed_data` va tao deck tree theo folder/file:
+
+- Folder -> deck node
+- File `.csv` / `.tsv` / `.txt` -> leaf deck
+- Reseed full DB mac dinh se chay: `flask --app wsgi.py vocab-seed --path "static/seed_data" --replace-lessons`
+
+Neu muon seed rieng mot nhom du lieu, co the chay truc tiep:
+
+```bash
+flask --app wsgi.py vocab-seed --path "static/seed_data/ChungBech" --replace-lessons
+```
+
+```powershell
+flask --app wsgi.py vocab-seed --path "static/seed_data/ChungBech" --replace-lessons
+```
+
+```bat
+flask --app wsgi.py vocab-seed --path "static/seed_data/ChungBech" --replace-lessons
+```
+
+### Legacy TXT Seed (ChungBech)
+
+Flow seed hien tai da ho tro file `.txt` kieu Anki export co preamble nhu:
+
+```text
+#separator:tab
+#html:true
+#tags column:16
+```
+
+File mau hien dat tai `static/seed_data/ChungBech/ChungBechN1__言葉__Bài 01.txt`.
+
+Khi seed file `.txt` legacy nay, he thong tai su dung parser import delimited hien co va map sang note type `Flama Standard Vocabulary` theo thu tu cot:
+
+```text
+1 Deck
+2 Word
+3 Reading
+4 Translation_VI
+5 Meaning_JP
+6 Meaning_VI
+7 Usage_JP
+8 Usage_VI
+9 Example_JP
+10 Example_VI
+11 Additional_Note_JP
+12 Additional_Note_VI
+13 image
+14 Word_Audio
+15 Example_Audio
+16 tags (bo qua trong vocab-seed)
+```
+
+Luu y:
+
+- Bo du lieu ChungBech khong co `hanviet`, nen field `hanviet` duoc seed la `null`.
+- File `.txt` legacy nay khong co `diagram`, nen field `diagram` duoc seed la `null`.
+- Bat ky truong nao khong co du lieu trong file cung duoc seed la `null`.
+- `#tags column` duoc dung de parser doc dung format, nhung cot tags khong duoc ghi vao field values cua note.
+- De them full data sau nay, chi can dat them file/folder cung format vao `static/seed_data/ChungBech/` roi chay lai `vocab-seed --replace-lessons`.
 
 ## Luu y media/audio
 

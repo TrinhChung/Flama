@@ -112,6 +112,7 @@ def build_dashboard_data(current_user) -> Tuple[List[DeckNode], int, int, int, b
                 CardProgress.queue,
                 CardProgress.due_at,
                 CardProgress.due_day,
+                CardProgress.is_suspended,
             )
             .select_from(Card)
             .join(Note, Card.note_id == Note.id)
@@ -122,7 +123,7 @@ def build_dashboard_data(current_user) -> Tuple[List[DeckNode], int, int, int, b
             )
             .all()
         )
-        for deck_id, progress_queue, progress_due_at, progress_due_day in state_rows:
+        for deck_id, progress_queue, progress_due_at, progress_due_day, progress_is_suspended in state_rows:
             if not deck_id:
                 continue
             bucket = card_counts_by_deck.setdefault(
@@ -134,6 +135,7 @@ def build_dashboard_data(current_user) -> Tuple[List[DeckNode], int, int, int, b
                 queue=progress_queue,
                 due_at=progress_due_at,
                 due_day=progress_due_day,
+                is_suspended=progress_is_suspended,
                 now=now,
                 timezone_name=timezone_name,
             )
@@ -172,6 +174,7 @@ def build_dashboard_data(current_user) -> Tuple[List[DeckNode], int, int, int, b
                         CardProgress.queue,
                         CardProgress.due_at,
                         CardProgress.due_day,
+                        CardProgress.is_suspended,
                     )
                     .select_from(Card)
                     .join(Note, Card.note_id == Note.id)
@@ -187,7 +190,13 @@ def build_dashboard_data(current_user) -> Tuple[List[DeckNode], int, int, int, b
                         Card.created_at <= snapshot_at,
                     )
 
-                for source_deck_id, progress_queue, progress_due_at, progress_due_day in clone_query.all():
+                for (
+                    source_deck_id,
+                    progress_queue,
+                    progress_due_at,
+                    progress_due_day,
+                    progress_is_suspended,
+                ) in clone_query.all():
                     if source_deck_id is None:
                         continue
                     local_deck_id = source_to_local.get(int(source_deck_id))
@@ -202,6 +211,7 @@ def build_dashboard_data(current_user) -> Tuple[List[DeckNode], int, int, int, b
                         queue=progress_queue,
                         due_at=progress_due_at,
                         due_day=progress_due_day,
+                        is_suspended=progress_is_suspended,
                         now=now,
                         timezone_name=timezone_name,
                     )
