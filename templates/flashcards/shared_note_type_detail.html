@@ -170,8 +170,15 @@
     }
 
     function formatCurrencyMinor(amount) {
-      const value = Number(amount || 0);
-      return new Intl.NumberFormat("vi-VN").format(value) + " VNĐ";
+      return window.Utils.formatVnd(amount);
+    }
+
+    function formatCount(value) {
+      return window.Utils.formatNumber(value);
+    }
+
+    function formatPrice(value) {
+      return window.Utils.formatPriceDisplay(value);
     }
 
     function buildPaymentInstructions(payload) {
@@ -334,7 +341,7 @@
 
       if (detail.can_rate) {
         const remaining = Number(detail.review_submissions_remaining ?? 0);
-        ratingHintEl.textContent = "Bạn có thể đánh giá ngay. Lượt còn lại: " + remaining + "/2.";
+        ratingHintEl.textContent = "Bạn có thể đánh giá ngay. Lượt còn lại: " + formatCount(remaining) + "/2.";
         setRatingInputDisabled(false);
       } else {
         if (Number(detail.review_submissions_remaining ?? 0) <= 0) {
@@ -380,12 +387,12 @@
       titleEl.textContent = detail.title || detail.name || "Shared template";
       metaEl.textContent = "Tác giả: " + (detail.author?.username || "Unknown")
         + " | Danh mục: " + (detail.primary_category || "General")
-        + " | Giá: " + (detail.price_display || "Free");
+        + " | Giá: " + formatPrice(detail.price_display || "Free");
       descriptionEl.textContent = detail.description || "Không có mô tả.";
       previewTextEl.textContent = detail.preview_text || "Không có preview text.";
       statsEl.textContent = "Rating: " + Number(detail.rating_avg || 0).toFixed(2)
-        + " (" + (detail.rating_count || 0) + ")"
-        + " | Active usage: " + (detail.active_usage_count || 0) + "/" + (detail.install_count || 0)
+        + " (" + formatCount(detail.rating_count || 0) + ")"
+        + " | Active usage: " + formatCount(detail.active_usage_count || 0) + "/" + formatCount(detail.install_count || 0)
         + " | Cập nhật: " + (formatDate(detail.updated_at) || "N/A");
 
       renderTags(detail.tags || []);

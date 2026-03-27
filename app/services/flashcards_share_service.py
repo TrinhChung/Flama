@@ -532,7 +532,11 @@ def resolve_single_note_type_for_deck(
     deck_id: int,
     owner_user_id: int | None = None,
 ) -> tuple[str | None, str | None]:
-    note_type_ids = flashcards_share_repository.get_note_type_ids_for_deck_notes(deck_id, owner_user_id)
+    deck_ids = collect_subtree_ids(deck_id)
+    note_type_ids = flashcards_share_repository.get_note_type_ids_for_decks_notes(
+        deck_ids,
+        owner_user_id,
+    )
 
     if not note_type_ids:
         return None, "Deck has no notes, cannot infer source_note_type_id."

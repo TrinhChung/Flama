@@ -17,9 +17,9 @@
     <span class="deck-name">{{ node.label }}</span>
   </div>
   <div class="deck-stats-col">
-    <span class="stat-num stat-new">{{ node.new_count }}</span>
-    <span class="stat-num stat-learn">{{ node.learn_count }}</span>
-    <span class="stat-num stat-due">{{ node.due_count }}</span>
+    <span class="stat-num stat-new">{{ node.new_count|format_number }}</span>
+    <span class="stat-num stat-learn">{{ node.learn_count|format_number }}</span>
+    <span class="stat-num stat-due">{{ node.due_count|format_number }}</span>
     <div class="deck-settings-wrapper dropdown">
       <button class="deck-settings-btn" type="button" data-bs-toggle="dropdown" aria-expanded="false"
         aria-label="Deck Settings" title="Deck Settings">

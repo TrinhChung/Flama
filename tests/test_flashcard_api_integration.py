@@ -258,6 +258,53 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         self.assertIn("\u732b", selected_preview["front_html"])
         self.assertIn("\u306d\u3053", selected_preview["back_html"])
 
+    def test_share_deck_page_publishes_parent_deck_using_child_deck_note_type(self):
+        note_type = self._create_note_type()
+        note_type_id = note_type["id"]
+
+        with self.app.app_context():
+            child_deck = Deck(name="Deck Child", parent_id=self.deck_id)
+            db.session.add(child_deck)
+            db.session.flush()
+            child_deck_id = child_deck.id
+            db.session.commit()
+
+        note_resp = self.client.post(
+            "/api/notes",
+            json={
+                "note_type_id": note_type_id,
+                "deck_id": child_deck_id,
+                "field_values": {
+                    "Word": "\u72ac",
+                    "Reading": "\u3044\u306c",
+                    "Meaning": "dog",
+                },
+            },
+        )
+        self.assertEqual(note_resp.status_code, 201)
+
+        share_resp = self.client.post(
+            f"/flashcards/decks/{self.deck_id}/share",
+            data={
+                "title": "Shared Parent Deck",
+                "description": "Deck description",
+                "preview_text": "Preview",
+                "primary_category": "Japanese",
+                "tags": "jlpt,n1",
+                "pricing_mode": "free",
+            },
+            follow_redirects=False,
+        )
+        self.assertEqual(share_resp.status_code, 302)
+        self.assertIn("/flashcards/shared-decks", share_resp.headers.get("Location", ""))
+
+        with self.app.app_context():
+            deck_item = DeckMarketplaceItem.query.filter_by(source_deck_id=self.deck_id).first()
+            self.assertIsNotNone(deck_item)
+            self.assertEqual(deck_item.source_note_type_id, note_type_id)
+            self.assertEqual(deck_item.title, "Shared Parent Deck")
+            self.assertEqual(deck_item.publish_status, "published")
+
     def test_shared_deck_preview_requires_source_note_type_when_notes_missing(self):
         with self.app.app_context():
             deck_item = DeckMarketplaceItem(

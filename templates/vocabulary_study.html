@@ -42,7 +42,7 @@
     <section class="study-empty study-empty-inline d-none" id="study-inline-waiting" aria-live="polite">
       <h3 id="study-inline-waiting-title">Learning in progress.</h3>
       <p id="study-inline-waiting-summary">
-        You still have {{ due_learn }} Learn card{% if due_learn != 1 %}s{% endif %} in this session.
+        You still have {{ due_learn|format_number }} Learn card{% if due_learn != 1 %}s{% endif %} in this session.
       </p>
       <p id="study-inline-waiting-next" class="d-none"></p>
     </section>
@@ -62,15 +62,15 @@
 
   <section class="study-empty">
     <div class="study-counters-line study-counters-line-empty">
-      <span class="scl-new">New <strong data-study-count-value="new">{{ due_new }}</strong></span>
+      <span class="scl-new">New <strong data-study-count-value="new">{{ due_new|format_number }}</strong></span>
       <span class="scl-sep">&middot;</span>
-      <span class="scl-learn">Learn <strong data-study-count-value="learn">{{ due_learn }}</strong></span>
+      <span class="scl-learn">Learn <strong data-study-count-value="learn">{{ due_learn|format_number }}</strong></span>
       <span class="scl-sep">&middot;</span>
-      <span class="scl-due">Due <strong data-study-count-value="due">{{ due_review }}</strong></span>
+      <span class="scl-due">Due <strong data-study-count-value="due">{{ due_review|format_number }}</strong></span>
     </div>
     {% if is_waiting_session %}
     <h3>Learning in progress.</h3>
-    <p>You still have {{ due_learn }} Learn card{% if due_learn != 1 %}s{% endif %} in this session.</p>
+    <p>You still have {{ due_learn|format_number }} Learn card{% if due_learn != 1 %}s{% endif %} in this session.</p>
     {% if next_learning_due_at_iso %}
     <p id="study-waiting-next-due" data-next-due-at="{{ next_learning_due_at_iso }}">
       Next Learn card will be ready soon.
@@ -108,11 +108,11 @@
     <div class="d-flex flex-grow-1 justify-content-center">
       <div class="study-bottom-actions front-actions" id="front-actions">
         <div class="study-counters-line">
-          <span class="scl-new">New <strong data-study-count-value="new">{{ due_new }}</strong></span>
+          <span class="scl-new">New <strong data-study-count-value="new">{{ due_new|format_number }}</strong></span>
           <span class="scl-sep">&middot;</span>
-          <span class="scl-learn">Learn <strong data-study-count-value="learn">{{ due_learn }}</strong></span>
+          <span class="scl-learn">Learn <strong data-study-count-value="learn">{{ due_learn|format_number }}</strong></span>
           <span class="scl-sep">&middot;</span>
-          <span class="scl-due">Due <strong data-study-count-value="due">{{ due_review }}</strong></span>
+          <span class="scl-due">Due <strong data-study-count-value="due">{{ due_review|format_number }}</strong></span>
         </div>
         <p class="study-flow-message d-none" id="study-flow-message" aria-live="polite"></p>
         <button class="btn btn-light answer-btn show-answer" id="show-answer-btn">Show Answer</button>
@@ -1600,7 +1600,7 @@
         if (!key || !Number.isFinite(counts[key])) {
           return;
         }
-        el.textContent = String(Math.max(0, Math.trunc(counts[key])));
+        el.textContent = window.Utils.formatNumber(Math.max(0, Math.trunc(counts[key])));
       });
     }
 

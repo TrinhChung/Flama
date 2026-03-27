@@ -14,19 +14,19 @@
       <div class="col-12 col-md-4">
         <div class="summary-card h-100">
           <div class="summary-label">Tổng số user</div>
-          <div class="summary-value">{{ total_users }}</div>
+          <div class="summary-value">{{ total_users|format_number }}</div>
         </div>
       </div>
       <div class="col-6 col-md-4">
         <div class="summary-card h-100">
           <div class="summary-label">Active</div>
-          <div class="summary-value text-success">{{ active_users }}</div>
+          <div class="summary-value text-success">{{ active_users|format_number }}</div>
         </div>
       </div>
       <div class="col-6 col-md-4">
         <div class="summary-card h-100">
           <div class="summary-label">Disabled</div>
-          <div class="summary-value text-danger">{{ disabled_users }}</div>
+          <div class="summary-value text-danger">{{ disabled_users|format_number }}</div>
         </div>
       </div>
     </div>
@@ -176,7 +176,7 @@
       </div>
       <div class="card-footer bg-white d-flex flex-wrap align-items-center justify-content-between gap-2">
         <div class="small text-muted">
-          Total {{ pagination_total }} user | Page {{ page }}/{{ total_pages }}
+          Total {{ pagination_total|format_number }} user | Page {{ page|format_number }}/{{ total_pages|format_number }}
         </div>
         <nav aria-label="Pagination">
           <ul class="pagination pagination-sm mb-0 flama-pagination">
@@ -491,7 +491,7 @@
     function buildStatusSummary(payload) {
       const success = payload.success_count || 0;
       const fail = payload.fail_count || 0;
-      return `Kết quả batch: thành công ${success}, thất bại ${fail}.`;
+      return `Kết quả batch: thành công ${window.Utils.formatNumber(success)}, thất bại ${window.Utils.formatNumber(fail)}.`;
     }
 
     async function runBatchStatus(action) {
@@ -500,7 +500,7 @@
         return;
       }
       const actionLabel = action === "disable" ? "vô hiệu hóa" : "kích hoạt";
-      if (!window.confirm(`Bạn có chắc muốn ${actionLabel} ${ids.length} user?`)) {
+      if (!window.confirm(`Bạn có chắc muốn ${actionLabel} ${window.Utils.formatNumber(ids.length)} user?`)) {
         return;
       }
 

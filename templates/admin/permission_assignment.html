@@ -21,7 +21,7 @@
           <div class="card-body">
             <div class="d-flex justify-content-between align-items-center mb-3">
               <h2 class="h6 mb-0">Danh sách đã chọn</h2>
-              <span class="badge text-bg-light border" id="selectedCountBadge">{{ users|length }} user</span>
+              <span class="badge text-bg-light border" id="selectedCountBadge">{{ users|length|format_number }} user</span>
             </div>
             <div class="table-responsive">
               <table class="table table-sm align-middle mb-0" id="selectedUsersTable">
@@ -230,7 +230,7 @@
 
     function renderSelectionState() {
       const count = selectedIds.size;
-      selectedCountBadge.textContent = `${count} user`;
+      selectedCountBadge.textContent = `${window.Utils.formatNumber(count)} user`;
       emptySelectionState.classList.toggle("d-none", count > 0);
       applyBtn.disabled = count === 0;
     }
@@ -282,7 +282,7 @@
 
     function renderResults(payload) {
       resultPanel.classList.remove("d-none");
-      resultSummary.textContent = `Thành công: ${payload.success_count || 0} | Thất bại: ${payload.fail_count || 0}`;
+      resultSummary.textContent = `Thành công: ${window.Utils.formatNumber(payload.success_count || 0)} | Thất bại: ${window.Utils.formatNumber(payload.fail_count || 0)}`;
       resultTbody.innerHTML = "";
       const rows = payload.results || [];
       rows.forEach((item) => {
@@ -337,7 +337,7 @@
 
       const selectedRoleOption = roleSelect.selectedOptions[0];
       const roleName = selectedRoleOption.textContent.trim();
-      const confirmed = window.confirm(`Gán ${roleName} cho ${ids.length} users?`);
+      const confirmed = window.confirm(`Gán ${roleName} cho ${window.Utils.formatNumber(ids.length)} users?`);
       if (!confirmed) {
         return;
       }

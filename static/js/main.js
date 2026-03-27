@@ -28,6 +28,60 @@ const Utils = {
   },
 
   /**
+   * Format number with comma thousands separators.
+   * @param {number|string} value
+   * @param {{minimumFractionDigits?: number, maximumFractionDigits?: number}} options
+   * @returns {string}
+   */
+  formatNumber: (value, options = {}) => {
+    if (value === null || value === undefined || value === '') return '';
+    const normalized = typeof value === 'string' ? value.replace(/,/g, '').trim() : value;
+    const numericValue = Number(normalized);
+    if (!Number.isFinite(numericValue)) {
+      return String(value);
+    }
+    const minimumFractionDigits = Number.isInteger(options.minimumFractionDigits)
+      ? Math.max(0, options.minimumFractionDigits)
+      : 0;
+    const maximumFractionDigits = Number.isInteger(options.maximumFractionDigits)
+      ? Math.max(minimumFractionDigits, options.maximumFractionDigits)
+      : (Number.isInteger(numericValue) ? 0 : Math.max(minimumFractionDigits, 2));
+    return new Intl.NumberFormat('en-US', {
+      minimumFractionDigits,
+      maximumFractionDigits,
+    }).format(numericValue);
+  },
+
+  /**
+   * Format an amount and append VND suffix.
+   * @param {number|string} value
+   * @returns {string}
+   */
+  formatVnd: (value) => {
+    const formatted = Utils.formatNumber(value);
+    return formatted ? `${formatted} VNĐ` : '';
+  },
+
+  /**
+   * Preserve the existing currency/text wrapper while formatting the numeric part.
+   * @param {string} value
+   * @returns {string}
+   */
+  formatPriceDisplay: (value) => {
+    const text = String(value || '').trim();
+    if (!text) return '';
+    const match = text.match(/^(\D*?)([-+]?\d[\d,]*(?:\.\d+)?)(\D*)$/);
+    if (!match) return text;
+    const [, prefix, rawNumber, suffix] = match;
+    const fractionPart = rawNumber.includes('.') ? rawNumber.split('.', 2)[1] : '';
+    const formattedNumber = Utils.formatNumber(rawNumber, {
+      minimumFractionDigits: fractionPart.length,
+      maximumFractionDigits: fractionPart.length,
+    });
+    return `${prefix}${formattedNumber}${suffix}`.trim();
+  },
+
+  /**
    * Debounce function
    * @param {Function} fn - Function to debounce
    * @param {number} delay - Delay in ms
@@ -78,6 +132,8 @@ const Utils = {
     return div.innerHTML;
   },
 };
+
+window.Utils = Utils;
 
 // Global error handler
 window.addEventListener('error', (event) => {

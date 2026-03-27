@@ -13,6 +13,7 @@ from models import db
 from .cli import register_cli_commands
 from .extensions import login_manager, migrate
 from .routes import register_blueprints
+from .template_formatters import format_number, format_price_display, format_vnd
 from .services.tts_provider_service import ensure_default_tts_providers
 from .services.user_management_schema import ensure_user_management_schema
 from .services.user_roles import ensure_default_user_roles
@@ -110,6 +111,9 @@ def create_app(config: Optional[dict] = None) -> Flask:
     db.init_app(app)
     migrate.init_app(app, db)
     login_manager.init_app(app)
+    app.jinja_env.filters["format_number"] = format_number
+    app.jinja_env.filters["format_vnd"] = format_vnd
+    app.jinja_env.filters["format_price_display"] = format_price_display
 
     from models.user import User
     from models.user_scheduler_settings import UserSchedulerSettings  # noqa: F401  # register model
