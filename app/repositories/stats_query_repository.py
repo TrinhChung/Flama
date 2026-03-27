@@ -8,9 +8,11 @@ from typing import Any
 from models import db
 from models.flashcard import Card, Note, ReviewEvent
 from models.card_progress import CardProgress
+from app.services.anki_scheduler import _day_index, default_deck_options
 from app.repositories.study_repository import REVIEW_QUEUE, normalize_progress_queue
 
 UTC = timezone.utc
+DAY_BOUNDARY_HOUR = default_deck_options().dayBoundaryHourLocal
 
 
 def _session_dialect_name() -> str:
@@ -55,12 +57,22 @@ def _utc_to_local_day(moment: datetime, timezone_obj) -> date:
     return utc_moment.astimezone(timezone_obj).date()
 
 
+def _utc_to_business_day(moment: datetime, *, timezone_name: str) -> date:
+    return date.fromordinal(
+        _day_index(
+            moment,
+            DAY_BOUNDARY_HOUR,
+            timezone_name=timezone_name,
+        )
+    )
+
+
 def _progress_due_local_day(
     *,
     due_at: datetime | None,
     due_day: int | None,
     queue_value: Any,
-    timezone_obj,
+    timezone_name: str,
 ) -> date | None:
     queue_norm = normalize_progress_queue(queue_value)
     if queue_norm == REVIEW_QUEUE and due_day is not None:
@@ -70,7 +82,7 @@ def _progress_due_local_day(
             return None
     if due_at is None:
         return None
-    return _utc_to_local_day(due_at, timezone_obj)
+    return _utc_to_business_day(due_at, timezone_name=timezone_name)
 
 def _query_daily_review_aggregates_mysql(
     *,
@@ -80,7 +92,10 @@ def _query_daily_review_aggregates_mysql(
     end_utc: datetime,
 ) -> dict[date, dict[str, int]]:
     local_day_expr = db.func.date(
-        db.func.convert_tz(ReviewEvent.reviewed_at, "+00:00", mysql_timezone)
+        db.func.date_sub(
+            ReviewEvent.reviewed_at,
+            db.text(f"INTERVAL {DAY_BOUNDARY_HOUR} HOUR"),
+        )
     )
     duration_expr = db.func.coalesce(
         db.func.sum(
@@ -128,7 +143,7 @@ def _query_daily_review_aggregates_mysql(
 def _query_daily_review_aggregates_python(
     *,
     user_id: int,
-    timezone_obj,
+    timezone_name: str,
     start_utc: datetime,
     end_utc: datetime,
 ) -> dict[date, dict[str, int]]:
@@ -146,7 +161,7 @@ def _query_daily_review_aggregates_python(
     for reviewed_at, duration_ms in rows:
         if reviewed_at is None:
             continue
-        local_day = _utc_to_local_day(reviewed_at, timezone_obj)
+        local_day = _utc_to_business_day(reviewed_at, timezone_name=timezone_name)
         bucket = by_day.setdefault(local_day, {"cards": 0, "duration_ms": 0})
         bucket["cards"] += 1
         duration = _safe_int(duration_ms)
@@ -172,7 +187,7 @@ def query_daily_review_aggregates(
         )
     return _query_daily_review_aggregates_python(
         user_id=user_id,
-        timezone_obj=timezone_obj,
+        timezone_name=timezone_name,
         start_utc=start_utc,
         end_utc=end_utc,
     )
@@ -185,7 +200,10 @@ def _query_active_review_days_mysql(
     end_utc: datetime,
 ) -> set[date]:
     local_day_expr = db.func.date(
-        db.func.convert_tz(ReviewEvent.reviewed_at, "+00:00", mysql_timezone)
+        db.func.date_sub(
+            ReviewEvent.reviewed_at,
+            db.text(f"INTERVAL {DAY_BOUNDARY_HOUR} HOUR"),
+        )
     )
     rows = (
         db.session.query(local_day_expr.label("local_day"))
@@ -208,7 +226,7 @@ def _query_active_review_days_mysql(
 def _query_active_review_days_python(
     *,
     user_id: int,
-    timezone_obj,
+    timezone_name: str,
     end_utc: datetime,
 ) -> set[date]:
     rows = (
@@ -224,7 +242,7 @@ def _query_active_review_days_python(
     for (reviewed_at,) in rows:
         if reviewed_at is None:
             continue
-        result.add(_utc_to_local_day(reviewed_at, timezone_obj))
+        result.add(_utc_to_business_day(reviewed_at, timezone_name=timezone_name))
     return result
 
 
@@ -243,7 +261,7 @@ def query_active_review_days(
         )
     return _query_active_review_days_python(
         user_id=user_id,
-        timezone_obj=timezone_obj,
+        timezone_name=timezone_name,
         end_utc=end_utc,
     )
 
@@ -362,8 +380,8 @@ def query_future_due_day_counts(
     start_utc: datetime,
     end_utc: datetime,
 ) -> dict[date, int]:
-    start_local_day = _utc_to_local_day(start_utc, timezone_obj)
-    end_local_day = _utc_to_local_day(end_utc, timezone_obj)
+    start_local_day = _utc_to_business_day(start_utc, timezone_name=timezone_name)
+    end_local_day = _utc_to_business_day(end_utc, timezone_name=timezone_name)
     rows = query_due_progress_rows(user_id=user_id)
 
     by_day: dict[date, int] = {}
@@ -372,7 +390,7 @@ def query_future_due_day_counts(
             due_at=due_at,
             due_day=due_day,
             queue_value=queue_value,
-            timezone_obj=timezone_obj,
+            timezone_name=timezone_name,
         )
         if local_day is None:
             continue
@@ -530,4 +548,3 @@ def query_due_progress_rows(
         db.or_(CardProgress.is_suspended.is_(False), CardProgress.is_suspended.is_(None)),
     )
     return query.with_entities(CardProgress.due_at, CardProgress.due_day, CardProgress.queue).all()
-

@@ -7,6 +7,7 @@ import re
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from app.services.anki_scheduler import _day_index, _day_index_to_datetime, default_deck_options
 from app.repositories.stats_query_repository import (
     query_active_review_days,
     query_daily_review_aggregates,
@@ -18,6 +19,7 @@ from models.flashcard import ReviewEvent
 UTC = timezone.utc
 DEFAULT_TIMEZONE = "UTC"
 VALID_REVIEW_MODES = {"new", "learn", "review"}
+DAY_BOUNDARY_HOUR = default_deck_options().dayBoundaryHourLocal
 FALLBACK_FIXED_OFFSETS_MINUTES = {
     "ASIA/HO_CHI_MINH": 7 * 60,
     "ASIA/BANGKOK": 7 * 60,
@@ -228,15 +230,27 @@ def build_stats_overview(
     effective_timezone_name = get_effective_timezone_name(timezone_name)
     timezone_obj = _build_timezone_obj(effective_timezone_name)
     now_utc_naive = _ensure_naive_utc(now_utc or datetime.utcnow())
-    now_local = now_utc_naive.replace(tzinfo=UTC).astimezone(timezone_obj)
-    today_local = now_local.date()
+    today_day_index = _day_index(
+        now_utc_naive,
+        DAY_BOUNDARY_HOUR,
+        timezone_name=effective_timezone_name,
+    )
+    today_local = date.fromordinal(today_day_index)
 
     selected_year = year if year is not None else today_local.year
     year_start = date(selected_year, 1, 1)
     year_end = date(selected_year, 12, 31)
 
-    year_start_utc = _local_start_to_utc_naive(year_start, timezone_obj)
-    year_end_utc = _local_start_to_utc_naive(date(selected_year + 1, 1, 1), timezone_obj)
+    year_start_utc = _day_index_to_datetime(
+        year_start.toordinal(),
+        DAY_BOUNDARY_HOUR,
+        timezone_name=effective_timezone_name,
+    )
+    year_end_utc = _day_index_to_datetime(
+        date(selected_year + 1, 1, 1).toordinal(),
+        DAY_BOUNDARY_HOUR,
+        timezone_name=effective_timezone_name,
+    )
 
     day_map = query_daily_review_aggregates(
         user_id=user_id,
@@ -250,7 +264,11 @@ def build_stats_overview(
     if selected_year == today_local.year:
         future_start_local = today_local + timedelta(days=1)
         if future_start_local <= year_end:
-            future_start_utc = _local_start_to_utc_naive(future_start_local, timezone_obj)
+            future_start_utc = _day_index_to_datetime(
+                future_start_local.toordinal(),
+                DAY_BOUNDARY_HOUR,
+                timezone_name=effective_timezone_name,
+            )
             due_day_map = query_future_due_day_counts(
                 user_id=user_id,
                 timezone_name=effective_timezone_name,
@@ -259,8 +277,16 @@ def build_stats_overview(
                 end_utc=year_end_utc,
             )
 
-    today_start_utc = _local_start_to_utc_naive(today_local, timezone_obj)
-    tomorrow_start_utc = _local_start_to_utc_naive(today_local + timedelta(days=1), timezone_obj)
+    today_start_utc = _day_index_to_datetime(
+        today_day_index,
+        DAY_BOUNDARY_HOUR,
+        timezone_name=effective_timezone_name,
+    )
+    tomorrow_start_utc = _day_index_to_datetime(
+        today_day_index + 1,
+        DAY_BOUNDARY_HOUR,
+        timezone_name=effective_timezone_name,
+    )
     today_map = query_daily_review_aggregates(
         user_id=user_id,
         timezone_name=effective_timezone_name,

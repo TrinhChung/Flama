@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Mapping
 
 from sqlalchemy.orm import aliased
@@ -11,6 +11,7 @@ from app.services.anki_scheduler import (
     CardState,
     _day_index,
     _day_index_to_datetime,
+    _round_review_interval,
     default_deck_options,
 )
 from models import db
@@ -65,6 +66,12 @@ def card_state_from_progress(
             options.dayBoundaryHourLocal,
             timezone_name=timezone_name,
         )
+    if due_day is not None and progress.due_at is None:
+        due_at = _day_index_to_datetime(
+            int(due_day),
+            options.dayBoundaryHourLocal,
+            timezone_name=timezone_name,
+        )
 
     return CardState(
         type=queue,  # type: ignore[arg-type]
@@ -76,6 +83,7 @@ def card_state_from_progress(
         reps=int(progress.reps or 0),
         lapses=int(progress.lapses or 0),
         lastReviewAt=progress.last_reviewed_at,
+        suspended=bool(progress.is_suspended),
     )
 
 
@@ -90,7 +98,7 @@ def apply_card_state_to_progress(
     queue = normalize_progress_queue(card_state.type)
     due_at = card_state.due
     due_day = card_state.dueDay
-    if due_day is not None:
+    if due_day is not None and (queue == REVIEW_QUEUE or due_at is None):
         due_at = _day_index_to_datetime(
             int(due_day),
             options.dayBoundaryHourLocal,
@@ -101,8 +109,15 @@ def apply_card_state_to_progress(
     progress.step_index = int(card_state.stepIndex or 0)
     progress.due_at = due_at
     progress.due_day = due_day
-    progress.interval_days = int(round(float(card_state.intervalDays or 0)))
+    if queue == REVIEW_QUEUE:
+        progress.interval_days = _round_review_interval(
+            float(card_state.intervalDays or 0),
+            options,
+        )
+    else:
+        progress.interval_days = int(round(float(card_state.intervalDays or 0)))
     progress.ease_factor = float(card_state.ease or options.startingEase)
+    progress.is_suspended = bool(card_state.suspended)
     progress.reps = int(card_state.reps or 0)
     progress.lapses = int(card_state.lapses or 0)
     progress.last_reviewed_at = card_state.lastReviewAt or now
@@ -125,6 +140,11 @@ def _next_day_boundary(*, now: datetime, timezone_name: str) -> datetime:
         options.dayBoundaryHourLocal,
         timezone_name=timezone_name,
     )
+
+
+def _learn_ahead_cutoff(*, now: datetime) -> datetime:
+    options = default_deck_options()
+    return now + timedelta(seconds=max(0, int(options.learnAheadSeconds or 0)))
 
 
 def _resolve_review_due_day(
@@ -163,6 +183,13 @@ def effective_due_at_for_progress_values(
     queue_norm = normalize_progress_queue(queue)
     if queue_norm == NEW_QUEUE:
         return None
+    if queue_norm in {LEARNING_QUEUE, RELEARNING_QUEUE} and due_day is not None and due_at is None:
+        options = default_deck_options()
+        return _day_index_to_datetime(
+            int(due_day),
+            options.dayBoundaryHourLocal,
+            timezone_name=timezone_name,
+        )
     if queue_norm == REVIEW_QUEUE and due_day is not None:
         options = default_deck_options()
         return _day_index_to_datetime(
@@ -171,6 +198,29 @@ def effective_due_at_for_progress_values(
             timezone_name=timezone_name,
         )
     return due_at
+
+
+def _is_learning_due_now(
+    *,
+    due_at: datetime | None,
+    due_day: int | None,
+    now: datetime,
+    timezone_name: str,
+) -> bool:
+    if due_day is not None:
+        return int(due_day) <= _today_day_index(now=now, timezone_name=timezone_name)
+    return due_at is None or due_at <= now
+
+
+def _is_learning_due_within_ahead_limit(
+    *,
+    due_at: datetime | None,
+    due_day: int | None,
+    now: datetime,
+) -> bool:
+    if due_day is not None or due_at is None or due_at <= now:
+        return False
+    return due_at <= _learn_ahead_cutoff(now=now)
 
 
 def study_bucket_for_progress_values(
@@ -189,11 +239,14 @@ def study_bucket_for_progress_values(
     if queue_norm == NEW_QUEUE:
         return NEW_QUEUE
     if queue_norm in {LEARNING_QUEUE, RELEARNING_QUEUE}:
-        if due_at is None or due_at <= now:
+        if _is_learning_due_now(
+            due_at=due_at,
+            due_day=due_day,
+            now=now,
+            timezone_name=timezone_name,
+        ):
             return LEARNING_QUEUE
-        if due_at < _next_day_boundary(now=now, timezone_name=timezone_name):
-            return LEARNING_LATER_BUCKET
-        return None
+        return LEARNING_LATER_BUCKET
     if queue_norm == REVIEW_QUEUE:
         review_due_day = _resolve_review_due_day(
             due_at=due_at,
@@ -288,9 +341,19 @@ def query_next_due_card_id(
         progress_alias.user_id == user_id,
     )
     normalized_queue = normalized_queue_expr(progress_alias)
+    today_day_index = _today_day_index(now=now, timezone_name=timezone_name)
     learning_due_expr = db.or_(
-        progress_alias.due_at.is_(None),
-        progress_alias.due_at <= now,
+        db.and_(
+            progress_alias.due_day.isnot(None),
+            progress_alias.due_day <= today_day_index,
+        ),
+        db.and_(
+            progress_alias.due_day.is_(None),
+            db.or_(
+                progress_alias.due_at.is_(None),
+                progress_alias.due_at <= now,
+            ),
+        ),
     )
     is_due_expr = db.or_(
         progress_alias.id.is_(None),
@@ -335,7 +398,28 @@ def query_next_due_card_id(
         .first()
     )
     if not row:
-        return None
+        learn_ahead_cutoff = _learn_ahead_cutoff(now=now)
+        row = (
+            query.outerjoin(progress_alias, progress_join)
+            .filter(
+                active_progress_expr(progress_alias),
+                normalized_queue.in_([LEARNING_QUEUE, RELEARNING_QUEUE]),
+                progress_alias.due_day.is_(None),
+                progress_alias.due_at.isnot(None),
+                progress_alias.due_at > now,
+                progress_alias.due_at <= learn_ahead_cutoff,
+            )
+            .order_by(
+                queue_priority.asc(),
+                progress_alias.due_at.asc(),
+                Card.created_at.asc(),
+                Card.id.asc(),
+            )
+            .with_entities(Card.id)
+            .first()
+        )
+        if not row:
+            return None
     return str(row[0])
 
 
@@ -360,17 +444,44 @@ def select_next_due_card_from_loaded(
     due_learn: list[Card] = []
     due_review: list[Card] = []
     due_new: list[Card] = []
+    learn_ahead_relearn: list[Card] = []
+    learn_ahead_learn: list[Card] = []
 
-    def _sort_key(card_obj: Card):
+    def _learning_sort_key(card_obj: Card):
         progress = progress_map.get(card_obj.id)
         due_at = progress.due_at if progress is not None else None
         return (due_at or datetime.max, card_obj.created_at or datetime.max, card_obj.id)
 
+    def _review_sort_key(card_obj: Card):
+        progress = progress_map.get(card_obj.id)
+        review_due_day = _resolve_review_due_day(
+            due_at=progress.due_at if progress is not None else None,
+            due_day=progress.due_day if progress is not None else None,
+            now=now,
+            timezone_name=timezone_name,
+        )
+        due_at = progress.due_at if progress is not None else None
+        return (
+            review_due_day,
+            due_at or datetime.max,
+            card_obj.created_at or datetime.max,
+            card_obj.id,
+        )
+
     for card_obj in cards:
         progress = progress_map.get(card_obj.id)
-        if not is_due(progress, now, timezone_name=timezone_name):
-            continue
         queue = normalize_progress_queue(progress.queue) if progress else NEW_QUEUE
+        if not is_due(progress, now, timezone_name=timezone_name):
+            if progress and queue in {LEARNING_QUEUE, RELEARNING_QUEUE} and _is_learning_due_within_ahead_limit(
+                due_at=progress.due_at,
+                due_day=progress.due_day,
+                now=now,
+            ):
+                if queue == RELEARNING_QUEUE:
+                    learn_ahead_relearn.append(card_obj)
+                else:
+                    learn_ahead_learn.append(card_obj)
+            continue
         if queue == RELEARNING_QUEUE:
             due_relearn.append(card_obj)
         elif queue == LEARNING_QUEUE:
@@ -382,11 +493,18 @@ def select_next_due_card_from_loaded(
 
     for group in (due_relearn, due_learn, due_review):
         if group:
-            group.sort(key=_sort_key)
+            if group is due_review:
+                group.sort(key=_review_sort_key)
+            else:
+                group.sort(key=_learning_sort_key)
             return group[0]
     if due_new:
         due_new.sort(key=lambda card_obj: (card_obj.created_at or datetime.max, card_obj.id))
         return due_new[0]
+    for group in (learn_ahead_relearn, learn_ahead_learn):
+        if group:
+            group.sort(key=_learning_sort_key)
+            return group[0]
     return None
 
 
@@ -397,9 +515,10 @@ def summarize_pending_learning_from_loaded(
     now: datetime,
     timezone_name: str = "UTC",
 ) -> tuple[int, datetime | None]:
-    next_day_boundary = _next_day_boundary(now=now, timezone_name=timezone_name)
     pending_count = 0
     next_due_at: datetime | None = None
+    today_day_index = _today_day_index(now=now, timezone_name=timezone_name)
+    learn_ahead_cutoff = _learn_ahead_cutoff(now=now)
 
     for card_obj in cards:
         progress = progress_map.get(card_obj.id)
@@ -407,18 +526,20 @@ def summarize_pending_learning_from_loaded(
             continue
         if is_progress_suspended(progress):
             continue
-        due_at = progress.due_at
-        if (
-            study_bucket_for_progress_values(
-                queue=progress.queue,
-                due_at=due_at,
-                due_day=progress.due_day,
-                is_suspended=progress.is_suspended,
-                now=now,
-                timezone_name=timezone_name,
-            )
-            != LEARNING_LATER_BUCKET
-        ):
+        queue = normalize_progress_queue(progress.queue)
+        if queue not in {LEARNING_QUEUE, RELEARNING_QUEUE}:
+            continue
+        due_at = effective_due_at_for_progress_values(
+            queue=progress.queue,
+            due_at=progress.due_at,
+            due_day=progress.due_day,
+            now=now,
+            timezone_name=timezone_name,
+        )
+        if progress.due_day is not None:
+            if int(progress.due_day) <= today_day_index:
+                continue
+        elif due_at is None or due_at <= learn_ahead_cutoff:
             continue
         pending_count += 1
         if next_due_at is None or due_at < next_due_at:
@@ -492,15 +613,24 @@ def query_pending_learning_summary(
         progress_alias.user_id == user_id,
     )
     normalized_queue = normalized_queue_expr(progress_alias)
-    next_day_boundary = _next_day_boundary(now=now, timezone_name=timezone_name)
+    today_day_index = _today_day_index(now=now, timezone_name=timezone_name)
+    learn_ahead_cutoff = _learn_ahead_cutoff(now=now)
     row = (
         query.outerjoin(progress_alias, progress_join)
         .filter(
             active_progress_expr(progress_alias),
             normalized_queue.in_([LEARNING_QUEUE, RELEARNING_QUEUE]),
-            progress_alias.due_at.isnot(None),
-            progress_alias.due_at > now,
-            progress_alias.due_at < next_day_boundary,
+            db.or_(
+                db.and_(
+                    progress_alias.due_day.isnot(None),
+                    progress_alias.due_day > today_day_index,
+                ),
+                db.and_(
+                    progress_alias.due_day.is_(None),
+                    progress_alias.due_at.isnot(None),
+                    progress_alias.due_at > learn_ahead_cutoff,
+                ),
+            ),
         )
         .order_by(None)
         .with_entities(

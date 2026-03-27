@@ -124,7 +124,7 @@ class StatsTodayFutureTests(unittest.TestCase):
                 backlog=False,
                 now_utc=now_utc,
             )
-            self.assertEqual(payload["totals"]["due_tomorrow"], 2)
+            self.assertEqual(payload["totals"]["due_tomorrow"], 1)
 
     def test_daily_load_formula(self):
         with self.app.app_context():
@@ -213,9 +213,9 @@ class StatsTodayFutureTests(unittest.TestCase):
                 backlog=False,
                 now_utc=datetime(2026, 2, 23, 0, 30, 0),
             )
-            self.assertEqual(payload["today"]["cards"], 1)
-            self.assertEqual(payload["today"]["minutes"], 0.05)
-            self.assertEqual(payload["today"]["sec_per_card"], 3.0)
+            self.assertEqual(payload["today"]["cards"], 2)
+            self.assertEqual(payload["today"]["minutes"], 0.08)
+            self.assertEqual(payload["today"]["sec_per_card"], 2.5)
 
     def test_stats_today_future_api(self):
         with self.app.app_context():

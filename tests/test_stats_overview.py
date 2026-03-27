@@ -199,9 +199,9 @@ class StatsOverviewTests(unittest.TestCase):
 
     def test_future_due_local_day_boundary(self):
         with self.app.app_context():
-            # UTC+7 local boundary: 17:30 UTC -> next local day.
+            # UTC+7 study-day boundary is 04:00 local, so 00:30 local still belongs to Jan 10.
             self._add_progress(due_at=datetime(2026, 1, 10, 17, 30, 0))
-            # Still same local day, not counted as future due card for Jan 11.
+            # Still same study day, also not counted as future due card for Jan 11.
             self._add_progress(due_at=datetime(2026, 1, 10, 16, 30, 0))
             db.session.commit()
 
@@ -213,7 +213,7 @@ class StatsOverviewTests(unittest.TestCase):
             )
 
             jan_11 = self._heatmap_day(payload, "2026-01-11")
-            self.assertEqual(jan_11["cards"], 1)
+            self.assertEqual(jan_11["cards"], 0)
             self.assertEqual(jan_11["source"], "due")
             self.assertTrue(jan_11["is_future"])
 
@@ -251,11 +251,11 @@ class StatsOverviewTests(unittest.TestCase):
                     now_utc=datetime(2026, 1, 10, 16, 0, 0),
                 )
 
-            jan_11 = self._heatmap_day(payload, "2026-01-11")
+            jan_10 = self._heatmap_day(payload, "2026-01-10")
             self.assertEqual(payload["today"]["cards"], 1)
-            self.assertEqual(jan_11["cards"], 1)
-            self.assertEqual(jan_11["source"], "reviewed")
-            self.assertFalse(jan_11["is_future"])
+            self.assertEqual(jan_10["cards"], 1)
+            self.assertEqual(jan_10["source"], "reviewed")
+            self.assertFalse(jan_10["is_future"])
 
 
 if __name__ == "__main__":

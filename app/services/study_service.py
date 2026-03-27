@@ -75,6 +75,11 @@ def apply_study_answer_and_commit(
         )
 
     _apply_card_state_to_progress(progress, updated_state, now, timezone_name=timezone_name)
+    if getattr(updated_state, "leeched", False):
+        current_tags = [str(tag).strip() for tag in (card.note.tags or []) if str(tag).strip()]
+        normalized_tags = {tag.lower() for tag in current_tags}
+        if "leech" not in normalized_tags:
+            card.note.tags = current_tags + ["leech"]
     _touch_note_type_install_usage(user_id=user.id, installed_note_type_id=card.note.note_type_id, activity_at=now)
 
     local_deck_id_for_usage = _resolve_local_deck_id(card, clone_scope, requested_scope_id)

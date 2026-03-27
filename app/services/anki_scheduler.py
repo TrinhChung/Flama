@@ -1,4 +1,4 @@
-"""Anki-like legacy SM-2 scheduler (non-FSRS)."""
+"""Anki-like scheduler covering legacy SM-2-like behavior and FSRS hooks."""
 
 from __future__ import annotations
 
@@ -8,9 +8,30 @@ from typing import Dict, Literal, Optional
 
 Answer = Literal["again", "hard", "good", "easy"]
 CardType = Literal["new", "learning", "review", "relearning"]
+SchedulerMode = Literal["legacy", "fsrs"]
 
 
 UTC = timezone.utc
+
+
+@dataclass
+class FsrsMemoryState:
+    stability: float
+    difficulty: float
+
+
+@dataclass
+class FsrsAnswerState:
+    intervalDays: float
+    memory: Optional[FsrsMemoryState] = None
+
+
+@dataclass
+class FsrsNextStates:
+    again: FsrsAnswerState
+    hard: FsrsAnswerState
+    good: FsrsAnswerState
+    easy: FsrsAnswerState
 
 
 @dataclass
@@ -24,6 +45,10 @@ class CardState:
     reps: int = 0
     lapses: int = 0
     lastReviewAt: Optional[datetime] = None
+    reviewKind: str = "review"
+    suspended: bool = False
+    leeched: bool = False
+    memoryState: Optional[FsrsMemoryState] = None
 
 
 @dataclass
@@ -41,6 +66,12 @@ class DeckOptions:
     minEase: float = 1.30
     maxIntervalDays: int = 36500
     dayBoundaryHourLocal: int = 4
+    learnAheadSeconds: int = 20 * 60
+    leechThreshold: int = 8
+    leechSuspend: bool = True
+    schedulerMode: SchedulerMode = "legacy"
+    fsrsNextStates: Optional[FsrsNextStates] = None
+    reviewFuzzFactor: Optional[float] = None
     fuzz: bool = False
 
 
@@ -59,6 +90,12 @@ def default_deck_options() -> DeckOptions:
         minEase=1.30,
         maxIntervalDays=36500,
         dayBoundaryHourLocal=4,
+        learnAheadSeconds=20 * 60,
+        leechThreshold=8,
+        leechSuspend=True,
+        schedulerMode="legacy",
+        fsrsNextStates=None,
+        reviewFuzzFactor=None,
         fuzz=False,
     )
 
@@ -208,6 +245,7 @@ def _apply_review(
     timezone_name: str,
 ) -> CardState:
     ivl = max(float(options.minimumIntervalDays), float(state.intervalDays or 0))
+    scheduled_days = _round_review_interval(ivl, options)
     ease = float(state.ease or options.startingEase)
     current_day = _day_index(now, options.dayBoundaryHourLocal, timezone_name=timezone_name)
     scheduled_due_day = state.dueDay
@@ -217,13 +255,18 @@ def _apply_review(
             options.dayBoundaryHourLocal,
             timezone_name=timezone_name,
         )
-    days_late = max(0, current_day - scheduled_due_day)
+    days_late = current_day - scheduled_due_day
+    state.reviewKind = "filtered" if days_late < 0 else "review"
 
     if answer == "again":
         state.lapses = max(0, int(state.lapses)) + 1
+        state.leeched = _leech_threshold_met(state.lapses, options.leechThreshold)
+        state.suspended = bool(state.leeched and options.leechSuspend)
         state.ease = max(options.minEase, ease - 0.20)
-        lapse_interval = max(float(options.minimumIntervalDays), ivl * float(options.newIntervalFactor))
+        lapse_interval = _failing_review_interval(scheduled_days, options)
         state.intervalDays = lapse_interval
+        if _is_fsrs_mode(options):
+            state.memoryState = _memory_state_for_answer(options, "again")
         if options.relearningSteps:
             state.type = "relearning"
             state.stepIndex = 0
@@ -238,19 +281,77 @@ def _apply_review(
         # no relearning steps: immediately stay review at minimum/lapse interval
         return _set_review_due(state, now, lapse_interval, options, timezone_name=timezone_name)
 
+    if _is_fsrs_mode(options):
+        next_intervals = _passing_fsrs_review_intervals(scheduled_days, options)
+        raw_next = next_intervals[answer]
+    elif days_late < 0:
+        raw_next = _passing_early_review_interval(
+            scheduled_days,
+            days_late,
+            ease,
+            answer,
+            options,
+        )
+    elif answer == "hard":
+        raw_next = _legacy_nonearly_review_interval(
+            float(scheduled_days) * float(options.hardFactor),
+            0 if float(options.hardFactor) <= 1.0 else scheduled_days + 1,
+            options,
+        )
+    elif answer == "good":
+        hard_minimum = 0 if float(options.hardFactor) <= 1.0 else scheduled_days + 1
+        hard_interval = _legacy_nonearly_review_interval(
+            float(scheduled_days) * float(options.hardFactor),
+            hard_minimum,
+            options,
+        )
+        good_minimum = scheduled_days + 1 if float(options.hardFactor) <= 1.0 else hard_interval + 1
+        base = float(scheduled_days) + (max(0, days_late) / 2.0)
+        raw_next = _legacy_nonearly_review_interval(
+            base * ease,
+            int(good_minimum),
+            options,
+        )
+    else:  # easy
+        if float(options.hardFactor) <= 1.0:
+            hard_interval = _legacy_nonearly_review_interval(
+                float(scheduled_days) * float(options.hardFactor),
+                0,
+                options,
+            )
+            good_minimum = scheduled_days + 1
+        else:
+            hard_interval = _legacy_nonearly_review_interval(
+                float(scheduled_days) * float(options.hardFactor),
+                scheduled_days + 1,
+                options,
+            )
+            good_minimum = hard_interval + 1
+        good_interval = _legacy_nonearly_review_interval(
+            (float(scheduled_days) + (max(0, days_late) / 2.0)) * ease,
+            int(good_minimum),
+            options,
+        )
+        base = float(scheduled_days) + float(max(0, days_late))
+        raw_next = _legacy_nonearly_review_interval(
+            base * ease * float(options.easyBonus),
+            int(good_interval + 1),
+            options,
+        )
+
     if answer == "hard":
         state.ease = max(options.minEase, ease - 0.15)
-        raw_next = ivl * float(options.hardFactor) * float(options.intervalModifier)
     elif answer == "good":
-        base = ivl + (days_late / 2.0)
-        raw_next = base * ease * float(options.intervalModifier)
         state.ease = ease
-    else:  # easy
+    else:
         state.ease = ease + 0.15
-        base = ivl + float(days_late)
-        raw_next = base * ease * float(options.easyBonus) * float(options.intervalModifier)
 
-    raw_next = max(raw_next, ivl + 1.0)
+    if _is_fsrs_mode(options):
+        state.memoryState = _memory_state_for_answer(options, answer)
+    elif days_late < 0:
+        raw_next = max(float(options.minimumIntervalDays), raw_next)
+    else:
+        raw_next = max(raw_next, float(options.minimumIntervalDays))
     return _set_review_due(state, now, raw_next, options, timezone_name=timezone_name)
 
 
@@ -288,12 +389,13 @@ def _set_learning_due(
     now_day = _day_index(now, boundary_hour, timezone_name=timezone_name)
     target_day = _day_index(target_due, boundary_hour, timezone_name=timezone_name)
     state.type = "relearning" if relearning else "learning"
-    state.intervalDays = float(state.intervalDays or 0)
     if target_day == now_day:
+        state.intervalDays = 0.0
         state.due = target_due
         state.dueDay = None
         return state
 
+    state.intervalDays = float(max(1, target_day - now_day))
     state.dueDay = target_day
     state.due = _day_index_to_datetime(target_day, boundary_hour, timezone_name=timezone_name)
     return state
@@ -340,13 +442,23 @@ def _preview_from_state(
             "label": f"{rounded_days}d",
         }
 
-    due = state.due
     if state.dueDay is not None:
-        due = _day_index_to_datetime(
+        current_day = _day_index(now, options.dayBoundaryHourLocal, timezone_name=timezone_name)
+        interval_days = max(1, int(state.dueDay - current_day))
+        due = state.due or _day_index_to_datetime(
             state.dueDay,
             options.dayBoundaryHourLocal,
             timezone_name=timezone_name,
         )
+        delta_seconds = max(0, int((due - now).total_seconds())) if due is not None else None
+        return {
+            "seconds": delta_seconds,
+            "days": float(interval_days),
+            "intervalDays": interval_days,
+            "label": f"{interval_days}d",
+        }
+
+    due = state.due
     if due is None:
         return {"seconds": None, "days": None, "intervalDays": None, "label": "n/a"}
 
@@ -385,6 +497,188 @@ def _round_review_interval(raw_days: float, options: DeckOptions) -> int:
 
 def _clamp_review_interval(raw_days: float, options: DeckOptions) -> float:
     return min(float(options.maxIntervalDays), max(float(options.minimumIntervalDays), raw_days))
+
+
+def _failing_review_interval(scheduled_days: int, options: DeckOptions) -> float:
+    if _is_fsrs_mode(options):
+        states = options.fsrsNextStates
+        if states is None:
+            return float(options.minimumIntervalDays)
+        return max(float(options.minimumIntervalDays), float(states.again.intervalDays))
+    return float(
+        _with_review_fuzz(
+            max(1.0, float(scheduled_days)) * float(options.newIntervalFactor),
+            options.minimumIntervalDays,
+            options.maxIntervalDays,
+            options,
+        )
+    )
+
+
+def _passing_fsrs_review_intervals(scheduled_days: int, options: DeckOptions) -> Dict[Answer, float]:
+    states = options.fsrsNextStates
+    if states is None:
+        raise ValueError("FSRS mode requires fsrsNextStates.")
+
+    def greater_than_last(interval_days: float) -> int:
+        rounded = int(interval_days + 0.5)
+        if rounded > scheduled_days:
+            return scheduled_days + 1
+        return 0
+
+    hard = _constrain_passing_interval(
+        float(states.hard.intervalDays),
+        max(1, greater_than_last(float(states.hard.intervalDays))),
+        options,
+        use_fuzz=True,
+        apply_interval_modifier=False,
+    )
+    good = _constrain_passing_interval(
+        float(states.good.intervalDays),
+        max(hard + 1, greater_than_last(float(states.good.intervalDays))),
+        options,
+        use_fuzz=True,
+        apply_interval_modifier=False,
+    )
+    easy = _constrain_passing_interval(
+        float(states.easy.intervalDays),
+        max(good + 1, greater_than_last(float(states.easy.intervalDays))),
+        options,
+        use_fuzz=True,
+        apply_interval_modifier=False,
+    )
+    return {
+        "hard": float(hard),
+        "good": float(good),
+        "easy": float(easy),
+    }
+
+
+def _passing_early_review_interval(
+    scheduled_days: int,
+    days_late: int,
+    ease: float,
+    answer: Answer,
+    options: DeckOptions,
+) -> float:
+    elapsed_days = max(0.0, float(scheduled_days + days_late))
+    scheduled = max(1.0, float(scheduled_days))
+
+    if answer == "hard":
+        half_usual = float(options.hardFactor) / 2.0
+        base_interval = max(elapsed_days * float(options.hardFactor), scheduled * half_usual)
+    elif answer == "good":
+        base_interval = max(elapsed_days * ease, scheduled)
+    else:
+        reduced_bonus = float(options.easyBonus) - ((float(options.easyBonus) - 1.0) / 2.0)
+        base_interval = max(elapsed_days * ease, scheduled) * reduced_bonus
+
+    return float(
+        _constrain_passing_interval(
+            base_interval,
+            0,
+            options,
+            use_fuzz=False,
+            apply_interval_modifier=True,
+        )
+    )
+
+
+def _legacy_nonearly_review_interval(
+    raw_interval_days: float,
+    minimum_days: int,
+    options: DeckOptions,
+) -> float:
+    adjusted = float(raw_interval_days) * float(options.intervalModifier)
+    minimum = max(float(options.minimumIntervalDays), float(minimum_days))
+    if options.reviewFuzzFactor is not None:
+        return float(
+            _with_review_fuzz(
+                adjusted,
+                int(minimum),
+                int(options.maxIntervalDays),
+                options,
+            )
+        )
+    return max(minimum, _clamp_review_interval(adjusted, options))
+
+
+def _constrain_passing_interval(
+    interval_days: float,
+    minimum_days: int,
+    options: DeckOptions,
+    *,
+    use_fuzz: bool,
+    apply_interval_modifier: bool,
+) -> int:
+    interval = float(interval_days)
+    if apply_interval_modifier:
+        interval *= float(options.intervalModifier)
+
+    minimum = max(1, min(int(minimum_days), int(options.maxIntervalDays)))
+    maximum = max(1, int(options.maxIntervalDays))
+    if use_fuzz:
+        return _with_review_fuzz(interval, minimum, maximum, options)
+
+    rounded = int(interval + 0.5)
+    return max(minimum, min(maximum, rounded))
+
+
+def _with_review_fuzz(interval_days: float, minimum_days: int, maximum_days: int, options: DeckOptions) -> int:
+    fuzz_factor = options.reviewFuzzFactor
+    clamped_interval = max(float(minimum_days), min(float(maximum_days), float(interval_days)))
+    if fuzz_factor is None:
+        rounded = int(clamped_interval + 0.5)
+        return max(minimum_days, min(maximum_days, rounded))
+
+    lower, upper = _constrained_fuzz_bounds(clamped_interval, minimum_days, maximum_days)
+    span = 1 + upper - lower
+    value = int((lower + (float(fuzz_factor) * span)) // 1)
+    return max(lower, min(upper, value))
+
+
+def _constrained_fuzz_bounds(interval_days: float, minimum_days: int, maximum_days: int) -> tuple[int, int]:
+    minimum = min(int(minimum_days), int(maximum_days))
+    interval = max(float(minimum), min(float(maximum_days), float(interval_days)))
+    lower, upper = _fuzz_bounds(interval)
+    lower = max(minimum, min(int(maximum_days), lower))
+    upper = max(minimum, min(int(maximum_days), upper))
+    if upper == lower and upper > 2 and upper < int(maximum_days):
+        upper = lower + 1
+    return lower, upper
+
+
+def _fuzz_bounds(interval_days: float) -> tuple[int, int]:
+    delta = _fuzz_delta(interval_days)
+    return (int(interval_days - delta + 0.5), int(interval_days + delta + 0.5))
+
+
+def _fuzz_delta(interval_days: float) -> float:
+    if interval_days < 2.5:
+        return 0.0
+    delta = 1.0
+    for start, end, factor in ((2.5, 7.0, 0.15), (7.0, 20.0, 0.1), (20.0, float("inf"), 0.05)):
+        delta += factor * max(0.0, min(interval_days, end) - start)
+    return delta
+
+
+def _leech_threshold_met(lapses: int, threshold: int) -> bool:
+    if int(threshold) <= 0:
+        return False
+    half_threshold = max(1, -(-int(threshold) // 2))
+    return lapses >= threshold and (lapses - threshold) % half_threshold == 0
+
+
+def _is_fsrs_mode(options: DeckOptions) -> bool:
+    return str(options.schedulerMode or "legacy").strip().lower() == "fsrs" and options.fsrsNextStates is not None
+
+
+def _memory_state_for_answer(options: DeckOptions, answer: Answer) -> Optional[FsrsMemoryState]:
+    states = options.fsrsNextStates
+    if states is None:
+        return None
+    state = getattr(states, answer, None)
+    return state.memory if state is not None else None
 
 
 def _day_index(moment: datetime, boundary_hour: int, *, timezone_name: str = "UTC") -> int:
@@ -444,4 +738,8 @@ def _clone_card(card: CardState) -> CardState:
         reps=int(card.reps or 0),
         lapses=int(card.lapses or 0),
         lastReviewAt=card.lastReviewAt,
+        reviewKind=str(card.reviewKind or "review"),
+        suspended=bool(card.suspended),
+        leeched=bool(card.leeched),
+        memoryState=card.memoryState,
     )
