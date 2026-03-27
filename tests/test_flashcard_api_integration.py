@@ -1595,6 +1595,43 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             self.assertIn(progress.queue, {"learning", "review", "relearning", "new"})
             self.assertIsNotNone(progress.reps)
 
+    def test_study_answer_returns_prefetched_next_card_payload(self):
+        note_type = self._create_note_type()
+        note_type_id = note_type["id"]
+        for word in ("猫", "犬"):
+            create_resp = self.client.post(
+                "/api/notes",
+                json={
+                    "note_type_id": note_type_id,
+                    "deck_id": self.deck_id,
+                    "field_values": {
+                        "Word": word,
+                        "Reading": word,
+                        "Meaning": word,
+                    },
+                },
+            )
+            self.assertEqual(create_resp.status_code, 201)
+
+        next_resp = self.client.get(f"/api/study/next?scope=deck&scope_id={self.deck_id}")
+        self.assertEqual(next_resp.status_code, 200)
+        next_payload = next_resp.get_json()
+        self.assertIsNotNone(next_payload.get("card_id"))
+
+        answer_resp = self.client.post(
+            f"/api/study/{next_payload['card_id']}/answer",
+            json={"rating": "good", "scope": "deck", "scope_id": self.deck_id},
+        )
+        self.assertEqual(answer_resp.status_code, 200)
+        answer_payload = answer_resp.get_json()
+
+        prefetched_payload = answer_payload.get("next_card_payload") or {}
+        self.assertIsNotNone(prefetched_payload.get("card_id"))
+        self.assertNotEqual(prefetched_payload.get("card_id"), next_payload.get("card_id"))
+        self.assertIn(prefetched_payload.get("card_id"), prefetched_payload.get("save_card_url", ""))
+        self.assertEqual(int(prefetched_payload.get("new_count") or 0), 1)
+        self.assertEqual(int(prefetched_payload.get("learn_count") or 0), 1)
+
     def test_study_next_uses_learn_ahead_when_only_intraday_learning_remains(self):
         note_type = self._create_note_type()
         note_type_id = note_type["id"]
@@ -1621,6 +1658,11 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             json={"rating": "good", "scope": "deck", "scope_id": self.deck_id},
         )
         self.assertEqual(answer_resp.status_code, 200)
+        answer_payload = answer_resp.get_json()
+        self.assertEqual(
+            (answer_payload.get("next_card_payload") or {}).get("card_id"),
+            payload.get("card_id"),
+        )
 
         waiting_resp = self.client.get(f"/api/study/next?scope=deck&scope_id={self.deck_id}")
         self.assertEqual(waiting_resp.status_code, 200)
@@ -1736,11 +1778,20 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
                 json={"rating": "good", "scope": "deck", "scope_id": self.deck_id},
             )
             self.assertEqual(answer_resp.status_code, 200)
+            answer_payload = answer_resp.get_json()
 
             waiting_resp = self.client.get(f"/api/study/next?scope=deck&scope_id={self.deck_id}")
             self.assertEqual(waiting_resp.status_code, 200)
             waiting_payload = waiting_resp.get_json()
 
+        self.assertEqual(
+            (answer_payload.get("next_card_payload") or {}).get("session_state"),
+            "waiting",
+        )
+        self.assertEqual(
+            (answer_payload.get("next_card_payload") or {}).get("next_due_at"),
+            "2026-02-22T19:00:00Z",
+        )
         self.assertIsNone(waiting_payload.get("card_id"))
         self.assertEqual(waiting_payload.get("session_state"), "waiting")
         self.assertEqual(int(waiting_payload.get("learn_count") or 0), 1)

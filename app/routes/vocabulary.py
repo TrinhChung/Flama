@@ -648,7 +648,7 @@ def browse_api_cards():
         if sort_dir == "desc":
             query = query.order_by(
                 due_sort_day_expr.is_(None),
-                due_sort_day_expr.desc().nullslast(),
+                due_sort_day_expr.desc(),
                 due_sort_expr.is_(None),
                 due_sort_expr.desc(),
                 Card.updated_at.desc(),
@@ -656,7 +656,7 @@ def browse_api_cards():
         else:
             query = query.order_by(
                 due_sort_day_expr.is_(None),
-                due_sort_day_expr.asc().nullslast(),
+                due_sort_day_expr.asc(),
                 due_sort_expr.is_(None),
                 due_sort_expr.asc(),
                 Card.updated_at.desc(),

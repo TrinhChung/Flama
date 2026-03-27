@@ -54,6 +54,16 @@ def _coerce_bool_env(name: str, *, default: bool) -> bool:
     return default
 
 
+def _coerce_int_env(name: str, *, default: int) -> int:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
+    try:
+        return int(str(raw_value).strip())
+    except (TypeError, ValueError):
+        return default
+
+
 def create_app(config: Optional[dict] = None) -> Flask:
     """Application factory that sets up Flask, database, and authentication."""
     app = Flask(
@@ -74,6 +84,23 @@ def create_app(config: Optional[dict] = None) -> Flask:
         os.getenv("FLASHCARD_MEDIA_SCAN_ENABLED", "0").strip().lower() in {"1", "true", "yes", "on"}
     )
     app.config["FLASHCARD_MEDIA_SCANNER"] = None
+    app.config["PAYMENTS_V1_ENABLED"] = _coerce_bool_env("PAYMENTS_V1_ENABLED", default=False)
+    app.config["PAYMENTS_PAID_INSTALL_REQUIRED"] = _coerce_bool_env("PAYMENTS_PAID_INSTALL_REQUIRED", default=False)
+    app.config["PAYMENTS_WEBHOOK_AUTO_GRANT_ENABLED"] = _coerce_bool_env(
+        "PAYMENTS_WEBHOOK_AUTO_GRANT_ENABLED",
+        default=False,
+    )
+    app.config["PAYMENTS_VIETQR_CLIENT_ID"] = os.getenv("PAYMENTS_VIETQR_CLIENT_ID", "").strip()
+    app.config["PAYMENTS_VIETQR_API_KEY"] = os.getenv("PAYMENTS_VIETQR_API_KEY", "").strip()
+    app.config["PAYMENTS_VIETQR_WEBHOOK_SECRET"] = os.getenv("PAYMENTS_VIETQR_WEBHOOK_SECRET", "").strip()
+    app.config["PAYMENTS_VIETQR_ACCOUNT_NO"] = os.getenv("PAYMENTS_VIETQR_ACCOUNT_NO", "").strip()
+    app.config["PAYMENTS_VIETQR_ACCOUNT_NAME"] = os.getenv("PAYMENTS_VIETQR_ACCOUNT_NAME", "").strip()
+    app.config["PAYMENTS_VIETQR_BANK_BIN"] = os.getenv("PAYMENTS_VIETQR_BANK_BIN", "").strip()
+    app.config["PAYMENTS_VIETQR_TEMPLATE"] = os.getenv("PAYMENTS_VIETQR_TEMPLATE", "").strip()
+    app.config["PAYMENTS_ORDER_EXPIRY_SECONDS"] = _coerce_int_env(
+        "PAYMENTS_ORDER_EXPIRY_SECONDS",
+        default=30 * 60,
+    )
     if config:
         app.config.update(config)
 
@@ -94,6 +121,11 @@ def create_app(config: Optional[dict] = None) -> Flask:
     from models.tts_user_provider_profile import TtsUserProviderProfile  # noqa: F401  # register model
     from models.support_donation_config import SupportDonationConfig  # noqa: F401  # register model
     from models.card_progress import CardProgress  # noqa: F401  # register model
+    from models.payment_attempt import PaymentAttempt  # noqa: F401  # register model
+    from models.payment_entitlement import PaymentEntitlement  # noqa: F401  # register model
+    from models.payment_order import PaymentOrder  # noqa: F401  # register model
+    from models.payment_order_item import PaymentOrderItem  # noqa: F401  # register model
+    from models.payment_webhook_event import PaymentWebhookEvent  # noqa: F401  # register model
     from models.column_preference import (
         VocabularyColumnPreference,
     )  # noqa: F401  # register model

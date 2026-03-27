@@ -12,6 +12,7 @@ from models.flashcard import *
 from models.deck import Deck
 from models.card_progress import CardProgress
 from app.services import flashcards_share
+from app.services import payment_service
 from app.utils.permissions import is_admin_user
 
 # Import everything from core module so routes can use helpers
@@ -418,6 +419,27 @@ def install_shared_note_type(note_type_id: str):
                 "already_installed": True,
             }
         )
+    if source_note_type.pricing_mode == "paid":
+        if not payment_service.paid_install_interception_enabled():
+            return _api_error(
+                "PAYMENT_UNAVAILABLE",
+                "Paid installs are not enabled yet.",
+                status=503,
+            )
+        try:
+            checkout = payment_service.prepare_checkout_for_product(
+                user_id=current_user.id,
+                product_type="note_type",
+                product_ref_id=source_note_type.id,
+            )
+        except payment_service.PaymentServiceError as exc:
+            return _api_error(
+                exc.error,
+                exc.message,
+                status=exc.status,
+                field=exc.field,
+            )
+        return jsonify(checkout), 202
 
     installed_copy = _clone_note_type_for_user(source_note_type, current_user.id)
     now = datetime.utcnow()
@@ -779,6 +801,28 @@ def install_shared_deck_item(deck_item_id: str):
                     time.sleep(0.05 * attempt)
                     continue
                 raise
+
+        if deck_item.pricing_mode == "paid":
+            if not payment_service.paid_install_interception_enabled():
+                return _api_error(
+                    "PAYMENT_UNAVAILABLE",
+                    "Paid installs are not enabled yet.",
+                    status=503,
+                )
+            try:
+                checkout = payment_service.prepare_checkout_for_product(
+                    user_id=current_user.id,
+                    product_type="deck_marketplace_item",
+                    product_ref_id=deck_item.id,
+                )
+            except payment_service.PaymentServiceError as exc:
+                return _api_error(
+                    exc.error,
+                    exc.message,
+                    status=exc.status,
+                    field=exc.field,
+                )
+            return jsonify(checkout), 202
 
         try:
             install_result = flashcards_share.install_shared_deck_item_for_user(

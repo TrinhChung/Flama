@@ -169,6 +169,29 @@
       return date.toLocaleString();
     }
 
+    function formatCurrencyMinor(amount) {
+      const value = Number(amount || 0);
+      return new Intl.NumberFormat("vi-VN").format(value) + " VNĐ";
+    }
+
+    function buildPaymentInstructions(payload) {
+      const order = payload?.order || {};
+      const checkout = order?.active_attempt?.checkout || {};
+      const lines = [
+        "Đã tạo đơn thanh toán.",
+        "Mã đơn: " + (order.merchant_order_code || order.id || "N/A"),
+        "Số tiền: " + formatCurrencyMinor(checkout.amount_minor || order.total_amount_minor || 0),
+        "Ngân hàng BIN: " + (checkout.bank_bin || "N/A"),
+        "Số tài khoản: " + (checkout.account_no || "N/A"),
+        "Tên tài khoản: " + (checkout.account_name || "N/A"),
+        "Nội dung CK: " + (checkout.payment_reference || "N/A"),
+      ];
+      if (order?.active_attempt?.expires_at) {
+        lines.push("Hết hạn: " + formatDate(order.active_attempt.expires_at));
+      }
+      return lines.join("\n");
+    }
+
     async function requestJson(url, options = {}) {
       const response = await fetch(url, options);
       const data = await response.json().catch(() => ({}));
@@ -383,7 +406,11 @@
       if (!detail || detail.is_owner || detail.is_installed) return;
       installBtn.disabled = true;
       try {
-        await requestJson(`/api/shared/note-types/${noteTypeId}/install`, { method: "POST" });
+        const response = await requestJson(`/api/shared/note-types/${noteTypeId}/install`, { method: "POST" });
+        if (response?.payment_required && response?.order) {
+          window.alert(buildPaymentInstructions(response));
+          return;
+        }
         await loadDetail();
       } finally {
         renderInstallState();

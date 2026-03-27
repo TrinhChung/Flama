@@ -70,6 +70,28 @@ import {
         }
     }
 
+    function formatCurrencyMinor(amount) {
+        return new Intl.NumberFormat("vi-VN").format(Number(amount || 0)) + " VNĐ";
+    }
+
+    function buildPaymentInstructions(payload) {
+        const order = payload?.order || {};
+        const checkout = order?.active_attempt?.checkout || {};
+        const lines = [
+            "Đã tạo đơn thanh toán.",
+            "Mã đơn: " + (order.merchant_order_code || order.id || "N/A"),
+            "Số tiền: " + formatCurrencyMinor(checkout.amount_minor || order.total_amount_minor || 0),
+            "Ngân hàng BIN: " + (checkout.bank_bin || "N/A"),
+            "Số tài khoản: " + (checkout.account_no || "N/A"),
+            "Tên tài khoản: " + (checkout.account_name || "N/A"),
+            "Nội dung CK: " + (checkout.payment_reference || "N/A"),
+        ];
+        if (order?.active_attempt?.expires_at) {
+            lines.push("Hết hạn: " + formatDate(order.active_attempt.expires_at));
+        }
+        return lines.join("\n");
+    }
+
     function buildNoteTypeDetailUrl(noteTypeId) {
         if (!noteTypeDetailUrlTemplate) return "#";
         return noteTypeDetailUrlTemplate.replace("__NOTE_TYPE_ID__", encodeURIComponent(noteTypeId));
@@ -351,7 +373,11 @@ import {
         if (!deckDetail || deckDetail.is_owner || deckDetail.is_installed) return;
         if (installBtn) installBtn.disabled = true;
         try {
-            await installDeck(deckItemId);
+            const response = await installDeck(deckItemId);
+            if (response?.payment_required && response?.order) {
+                window.alert(buildPaymentInstructions(response));
+                return;
+            }
             await loadDeckDetail();
         } finally {
             renderInstallState();

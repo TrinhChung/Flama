@@ -1859,6 +1859,12 @@
           return;
         }
         const nextCardUrl = String(data.next_card_url || "");
+        const nextCardPayload = data.next_card_payload && typeof data.next_card_payload === "object"
+          ? data.next_card_payload
+          : null;
+        if (nextCardPayload && handleStudyPayload(nextCardPayload, { nextCardUrl })) {
+          return;
+        }
         if (nextCardUrl) {
           try {
             const nextResp = await fetch(nextCardUrl, { method: "GET" });

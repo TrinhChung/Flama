@@ -519,8 +519,10 @@ def query_next_due_card_id(
         .filter(active_progress_expr(progress_alias), is_due_expr)
         .order_by(
             queue_priority.asc(),
-            review_due_sort_key.asc().nullslast(),
-            due_sort_key.asc().nullslast(),
+            review_due_sort_key.is_(None).asc(),
+            review_due_sort_key.asc(),
+            due_sort_key.is_(None).asc(),
+            due_sort_key.asc(),
             Card.created_at.asc(),
             Card.id.asc(),
         )

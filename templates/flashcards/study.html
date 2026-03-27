@@ -110,6 +110,25 @@
       }
     }
 
+    function applyStudyPayload(payload) {
+      if (!payload || typeof payload !== "object") {
+        return false;
+      }
+      if (payload.card_id) {
+        currentCard = payload;
+        showingBack = false;
+        cardShownAtMs = performance.now();
+        renderCardFace();
+        setStatus(`Loaded card ${payload.card_id}`);
+        return true;
+      }
+      currentCard = null;
+      cardShownAtMs = null;
+      renderCardFace();
+      setStatus(payload.message || "No due cards.");
+      return false;
+    }
+
     async function answerCard(rating) {
       if (!currentCard?.card_id) {
         setStatus("No card loaded.");
@@ -125,8 +144,20 @@
         const data = await requestJson(`/api/study/${currentCard.card_id}/answer`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ rating, duration_ms: durationMs, timezone }),
+          body: JSON.stringify({
+            rating,
+            scope: scopeEl.value,
+            scope_id: (scopeIdEl.value || "").trim(),
+            duration_ms: durationMs,
+            timezone
+          }),
         });
+        if (applyStudyPayload(data.next_card_payload)) {
+          if (data?.applied_interval?.label) {
+            setStatus(`Answer saved (${rating}: ${data.applied_interval.label}).`);
+          }
+          return;
+        }
         setStatus(`Answer saved (${rating}). Loading next card...`);
         await loadNextCard();
         if (data?.applied_interval?.label) {
