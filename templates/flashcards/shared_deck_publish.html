@@ -60,18 +60,18 @@
                                 <label for="pricing_mode" class="form-label fw-semibold">Giá</label>
                                 <select class="form-select" id="pricing_mode" name="pricing_mode">
                                     <option value="free" {% if not existing_item or existing_item.pricing_mode=='free'
-                                        %}selected{% endif %}>Miễn phí (Free)</option>
+                                        %}selected{% endif %}>Miễn phí</option>
                                     <option value="paid" {% if existing_item and existing_item.pricing_mode=='paid'
-                                        %}selected{% endif %}>Có phí (Paid)</option>
+                                        %}selected{% endif %}>Có phí (VNĐ)</option>
                                 </select>
                             </div>
                         </div>
 
-                        <div class="mb-3" id="price_cents_container" style="display: none;">
-                            <label for="price_cents" class="form-label fw-semibold">Giá trị (VNĐ)</label>
-                            <input type="number" class="form-control" id="price_cents" name="price_cents" min="0"
-                                step="1000" value="{{ existing_item.price_cents if existing_item else 0 }}">
-                            <small class="text-muted">Nhập số tiền VNĐ. Bỏ trống hoặc 0 nếu miễn phí.</small>
+                        <div class="mb-3" id="price_amount_minor_container" style="display: none;">
+                            <label for="price_amount_minor" class="form-label fw-semibold">Giá (VNĐ)</label>
+                            <input type="number" class="form-control" id="price_amount_minor" name="price_amount_minor" min="0"
+                                step="1000" value="{{ existing_item.price_amount_minor if existing_item else 0 }}">
+                            <small class="text-muted">Nhập số tiền theo đơn vị VNĐ. Bỏ trống hoặc 0 nếu miễn phí.</small>
                         </div>
 
                         <div class="mb-3">
@@ -113,7 +113,7 @@
 <script>
     document.addEventListener('DOMContentLoaded', () => {
         const pricingSelect = document.getElementById('pricing_mode');
-        const priceContainer = document.getElementById('price_cents_container');
+        const priceContainer = document.getElementById('price_amount_minor_container');
 
         function togglePriceInput() {
             if (pricingSelect.value === 'paid') {

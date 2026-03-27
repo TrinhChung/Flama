@@ -595,7 +595,7 @@ def _upsert_seeded_deck_marketplace_item(
         deck_item.preview_text = deck_item.preview_text or f"Default seeded deck: {deck.name}"
         deck_item.sample_cards_count = max(int(deck_item.sample_cards_count or 0), sample_cards_count)
         deck_item.pricing_mode = "free"
-        deck_item.price_cents = 0
+        deck_item.price_amount_minor = 0
         deck_item.publish_status = "published"
         deck_item.is_official = True
         deck_item.published_at = deck_item.published_at or datetime.utcnow()
@@ -613,7 +613,7 @@ def _upsert_seeded_deck_marketplace_item(
             preview_text=f"Default seeded deck: {deck.name}",
             sample_cards_count=sample_cards_count,
             pricing_mode="free",
-            price_cents=0,
+            price_amount_minor=0,
             version="1.0.0",
             publish_status="published",
             is_official=True,

@@ -399,7 +399,7 @@
     titleEl.textContent = deckDetail.title || "Shared deck";
     metaEl.textContent = "Tác giả: " + (deckDetail.author?.username || "Unknown")
       + " | Danh mục: " + (deckDetail.primary_category || "General")
-      + " | Giá: " + (deckDetail.price_display || "Free");
+      + " | Giá: " + (deckDetail.price_display || "Miễn phí");
     descriptionEl.textContent = deckDetail.description || "Không có mô tả.";
     previewTextEl.textContent = deckDetail.preview_text || "Không có preview text.";
     statsEl.textContent = "Sample cards: " + (deckDetail.sample_cards_count || 0)

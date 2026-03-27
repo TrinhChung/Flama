@@ -13,7 +13,8 @@ class TemplateFormattersTestCase(unittest.TestCase):
         self.assertEqual(format_number("1234567.5", digits=2), "1,234,567.50")
 
     def test_format_price_display_preserves_wrappers(self):
-        self.assertEqual(format_price_display("$1234567.50"), "$1,234,567.50")
+        self.assertEqual(format_price_display("₫1234567"), "₫1,234,567")
+        self.assertEqual(format_price_display("1234567 VND"), "1,234,567 VND")
         self.assertEqual(format_price_display("1234567 VNĐ"), "1,234,567 VNĐ")
 
     def test_format_vnd_appends_suffix(self):

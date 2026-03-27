@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import random
+import re
 from datetime import datetime
 from typing import Any
 
 from app.repositories.deck_tree_query import collect_subtree_ids
+from app.template_formatters import format_vnd
 from models import db
 from models.flashcard import DeckInstall, DeckMarketplaceItem, FieldDef, Note, NoteType, Template
 
@@ -46,6 +48,7 @@ def serialize_template(template: Template) -> dict[str, Any]:
 
 
 def serialize_note_type(note_type: NoteType) -> dict[str, Any]:
+    price_amount_minor = int(note_type.price_amount_minor or 0)
     return {
         "id": note_type.id,
         "name": note_type.name,
@@ -56,7 +59,8 @@ def serialize_note_type(note_type: NoteType) -> dict[str, Any]:
         "preview_text": note_type.preview_text,
         "preview_image_url": note_type.preview_image_url,
         "pricing_mode": note_type.pricing_mode,
-        "price_cents": int(note_type.price_cents or 0),
+        "price_amount_minor": price_amount_minor,
+        "price_cents": price_amount_minor,
         "version": note_type.version,
         "changelog": note_type.changelog,
         "publish_status": note_type.publish_status,
@@ -104,71 +108,94 @@ def normalize_marketplace_tags(raw_tags: Any) -> list[str]:
     return dedup
 
 
-def parse_price_cents(raw_price: Any) -> int | None:
+def parse_price_amount_minor(raw_price: Any) -> int | None:
     if raw_price in (None, ""):
+        return None
+    if isinstance(raw_price, bool):
         return None
     if isinstance(raw_price, int):
         return raw_price
     if isinstance(raw_price, float):
-        return int(round(raw_price * 100))
+        return int(raw_price) if raw_price.is_integer() else None
     text = str(raw_price).strip()
     if not text:
         return None
-    if "." in text:
+    normalized = re.sub(r"(?i)\s*(vnđ|vnd|₫)\s*$", "", text).strip()
+    if not normalized:
+        return None
+    compact = re.sub(r"\s+", "", normalized)
+    if re.fullmatch(r"[-+]?\d+", compact):
         try:
-            return int(round(float(text) * 100))
+            return int(compact)
         except ValueError:
             return None
-    try:
-        return int(text)
-    except ValueError:
-        return None
+    if re.fullmatch(r"[-+]?\d{1,3}(?:[.,]\d{3})+", compact):
+        try:
+            return int(compact.replace(".", "").replace(",", ""))
+        except ValueError:
+            return None
+    return None
+
+
+def parse_price_cents(raw_price: Any) -> int | None:
+    return parse_price_amount_minor(raw_price)
 
 
 def normalize_pricing(
     payload: dict[str, Any],
     *,
     current_mode: str,
-    current_price_cents: int,
+    current_price_amount_minor: int,
 ) -> tuple[str, int, str | None]:
     mode_raw = payload.get("pricing_mode", payload.get("pricing"))
     mode = current_mode
     if mode_raw is not None:
         mode_candidate = str(mode_raw).strip().lower()
         if mode_candidate not in {"free", "paid"}:
-            return mode, current_price_cents, "pricing_mode must be 'free' or 'paid'."
+            return mode, current_price_amount_minor, "pricing_mode must be 'free' or 'paid'."
         mode = mode_candidate
 
-    price_cents = current_price_cents
-    if "price_cents" in payload:
-        parsed_price = parse_price_cents(payload.get("price_cents"))
+    price_amount_minor = current_price_amount_minor
+    if "price_amount_minor" in payload:
+        parsed_price = parse_price_amount_minor(payload.get("price_amount_minor"))
         if parsed_price is None:
-            return mode, current_price_cents, "price_cents is invalid."
-        price_cents = parsed_price
+            return mode, current_price_amount_minor, "price_amount_minor is invalid."
+        price_amount_minor = parsed_price
+    elif "price_cents" in payload:
+        parsed_price = parse_price_amount_minor(payload.get("price_cents"))
+        if parsed_price is None:
+            return mode, current_price_amount_minor, "price_amount_minor is invalid."
+        price_amount_minor = parsed_price
     elif "price" in payload:
-        parsed_price = parse_price_cents(payload.get("price"))
+        parsed_price = parse_price_amount_minor(payload.get("price"))
         if parsed_price is None:
-            return mode, current_price_cents, "price is invalid."
-        price_cents = parsed_price
+            return mode, current_price_amount_minor, "price is invalid."
+        price_amount_minor = parsed_price
 
     if mode == "free":
         return mode, 0, None
-    if price_cents <= 0:
-        return mode, price_cents, "Paid items must have price > 0."
-    return mode, price_cents, None
+    if price_amount_minor <= 0:
+        return mode, price_amount_minor, "Paid items must have price > 0."
+    return mode, price_amount_minor, None
+
+
+def _format_marketplace_price_display(pricing_mode: str, amount_minor: int) -> str:
+    if pricing_mode == "free":
+        return "Miễn phí"
+    return format_vnd(amount_minor)
 
 
 def serialize_note_type_marketplace_card(note_type: NoteType) -> dict[str, Any]:
     payload = serialize_note_type(note_type)
-    payload["price_display"] = (
-        "Free"
-        if note_type.pricing_mode == "free"
-        else f"${(note_type.price_cents or 0) / 100:.2f}"
+    payload["price_display"] = _format_marketplace_price_display(
+        str(note_type.pricing_mode or "free"),
+        int(note_type.price_amount_minor or 0),
     )
     return payload
 
 
 def serialize_deck_marketplace_item(deck_item: DeckMarketplaceItem) -> dict[str, Any]:
+    price_amount_minor = int(deck_item.price_amount_minor or 0)
     return {
         "id": deck_item.id,
         "title": deck_item.title,
@@ -180,11 +207,11 @@ def serialize_deck_marketplace_item(deck_item: DeckMarketplaceItem) -> dict[str,
         "source_deck_id": deck_item.source_deck_id,
         "source_note_type_id": deck_item.source_note_type_id,
         "pricing_mode": deck_item.pricing_mode,
-        "price_cents": int(deck_item.price_cents or 0),
-        "price_display": (
-            "Free"
-            if deck_item.pricing_mode == "free"
-            else f"${(deck_item.price_cents or 0) / 100:.2f}"
+        "price_amount_minor": price_amount_minor,
+        "price_cents": price_amount_minor,
+        "price_display": _format_marketplace_price_display(
+            str(deck_item.pricing_mode or "free"),
+            price_amount_minor,
         ),
         "version": deck_item.version,
         "changelog": deck_item.changelog,
@@ -310,8 +337,8 @@ def filter_note_type_items(
     category: str,
     tags: set[str],
     pricing_mode: str,
-    min_price_cents: int | None,
-    max_price_cents: int | None,
+    min_price_amount_minor: int | None,
+    max_price_amount_minor: int | None,
 ) -> list[NoteType]:
     filtered: list[NoteType] = []
     for note_type in note_types:
@@ -324,10 +351,10 @@ def filter_note_type_items(
             continue
         if pricing_mode in {"free", "paid"} and note_type.pricing_mode != pricing_mode:
             continue
-        price_value = int(note_type.price_cents or 0)
-        if min_price_cents is not None and price_value < min_price_cents:
+        price_value = int(note_type.price_amount_minor or 0)
+        if min_price_amount_minor is not None and price_value < min_price_amount_minor:
             continue
-        if max_price_cents is not None and price_value > max_price_cents:
+        if max_price_amount_minor is not None and price_value > max_price_amount_minor:
             continue
         filtered.append(note_type)
     return filtered
@@ -340,8 +367,8 @@ def filter_deck_items(
     category: str,
     tags: set[str],
     pricing_mode: str,
-    min_price_cents: int | None,
-    max_price_cents: int | None,
+    min_price_amount_minor: int | None,
+    max_price_amount_minor: int | None,
 ) -> list[DeckMarketplaceItem]:
     filtered: list[DeckMarketplaceItem] = []
     for deck_item in deck_items:
@@ -354,10 +381,10 @@ def filter_deck_items(
             continue
         if pricing_mode in {"free", "paid"} and deck_item.pricing_mode != pricing_mode:
             continue
-        price_value = int(deck_item.price_cents or 0)
-        if min_price_cents is not None and price_value < min_price_cents:
+        price_value = int(deck_item.price_amount_minor or 0)
+        if min_price_amount_minor is not None and price_value < min_price_amount_minor:
             continue
-        if max_price_cents is not None and price_value > max_price_cents:
+        if max_price_amount_minor is not None and price_value > max_price_amount_minor:
             continue
         filtered.append(deck_item)
     return filtered
@@ -559,16 +586,20 @@ def top_items_by_category_decks(
     return result
 
 
-def parse_query_price_cents(raw_value: Any) -> int | None:
+def parse_query_price_amount_minor(raw_value: Any) -> int | None:
     if raw_value is None:
         return None
     text = str(raw_value).strip()
     if not text:
         return None
-    parsed = parse_price_cents(text)
+    parsed = parse_price_amount_minor(text)
     if parsed is None:
         return None
     return max(0, parsed)
+
+
+def parse_query_price_cents(raw_value: Any) -> int | None:
+    return parse_query_price_amount_minor(raw_value)
 
 def get_visible_note_types(user_id: int) -> list[NoteType]:
     from app.services import flashcards_share as flashcards_share

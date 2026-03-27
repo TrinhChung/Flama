@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from sqlalchemy import UniqueConstraint
+from sqlalchemy.orm import synonym
 
 from models import db
 from models.model_uuid import uuid_str
@@ -23,7 +24,8 @@ class NoteTypeInstall(db.Model):
         index=True,
     )
     user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    purchase_price_cents = db.Column(db.Integer, nullable=False, default=0)
+    purchase_amount_minor = db.Column(db.Integer, nullable=False, default=0)
+    purchase_price_cents = synonym("purchase_amount_minor")
     installed_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     purchased_at = db.Column(db.DateTime, nullable=True)
     first_use_at = db.Column(db.DateTime, nullable=True)
@@ -45,4 +47,3 @@ class NoteTypeInstall(db.Model):
     __table_args__ = (
         UniqueConstraint("source_note_type_id", "user_id", name="uq_note_type_installs_source_user"),
     )
-

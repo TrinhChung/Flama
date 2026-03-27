@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from sqlalchemy import UniqueConstraint
+from sqlalchemy.orm import synonym
 
 from models import db
 from models.model_uuid import uuid_str
@@ -23,7 +24,8 @@ class NoteType(db.Model):
         default="free",
         index=True,
     )
-    price_cents = db.Column(db.Integer, nullable=False, default=0)
+    price_amount_minor = db.Column(db.Integer, nullable=False, default=0)
+    price_cents = synonym("price_amount_minor")
     version = db.Column(db.String(50), nullable=False, default="1.0.0")
     changelog = db.Column(db.Text, nullable=True)
     publish_status = db.Column(
@@ -76,4 +78,3 @@ class NoteType(db.Model):
     __table_args__ = (
         UniqueConstraint("user_id", "name", name="uq_note_types_user_name"),
     )
-

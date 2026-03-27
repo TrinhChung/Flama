@@ -61,17 +61,17 @@ class PaymentOrderFlowTests(unittest.TestCase):
             db.session.remove()
             db.drop_all()
 
-    def _create_note_type(self, *, pricing_mode: str, price_cents: int) -> str:
+    def _create_note_type(self, *, pricing_mode: str, price_amount_minor: int) -> str:
         with self.app.app_context():
             note_type = NoteType(
                 user_id=self.owner_id,
-                name=f"NT-{pricing_mode}-{price_cents}",
+                name=f"NT-{pricing_mode}-{price_amount_minor}",
                 description="desc",
                 primary_category="General",
                 tags=[],
                 preview_text="preview",
                 pricing_mode=pricing_mode,
-                price_cents=price_cents,
+                price_amount_minor=price_amount_minor,
                 version="1.0.0",
                 publish_status="published",
             )
@@ -100,11 +100,11 @@ class PaymentOrderFlowTests(unittest.TestCase):
             db.session.commit()
             return note_type.id
 
-    def _create_deck_item(self, *, pricing_mode: str, price_cents: int) -> str:
+    def _create_deck_item(self, *, pricing_mode: str, price_amount_minor: int) -> str:
         with self.app.app_context():
-            note_type_id = self._create_note_type(pricing_mode="free", price_cents=0)
+            note_type_id = self._create_note_type(pricing_mode="free", price_amount_minor=0)
             deck = Deck(
-                name=f"Deck-{pricing_mode}-{price_cents}",
+                name=f"Deck-{pricing_mode}-{price_amount_minor}",
                 owner_user_id=self.owner_id,
                 note_type_id=note_type_id,
             )
@@ -121,7 +121,7 @@ class PaymentOrderFlowTests(unittest.TestCase):
                 tags=[],
                 preview_text="preview",
                 pricing_mode=pricing_mode,
-                price_cents=price_cents,
+                price_amount_minor=price_amount_minor,
                 version="1.0.0",
                 publish_status="published",
             )
@@ -147,7 +147,7 @@ class PaymentOrderFlowTests(unittest.TestCase):
             }
 
     def test_free_note_type_install_still_creates_install_row(self):
-        note_type_id = self._create_note_type(pricing_mode="free", price_cents=0)
+        note_type_id = self._create_note_type(pricing_mode="free", price_amount_minor=0)
 
         response = self.client.post(f"/api/shared/note-types/{note_type_id}/install")
         self.assertEqual(response.status_code, 201)
@@ -163,7 +163,7 @@ class PaymentOrderFlowTests(unittest.TestCase):
             self.assertEqual(PaymentOrder.query.count(), 0)
 
     def test_free_deck_install_still_creates_install_row(self):
-        deck_item_id = self._create_deck_item(pricing_mode="free", price_cents=0)
+        deck_item_id = self._create_deck_item(pricing_mode="free", price_amount_minor=0)
 
         response = self.client.post(f"/api/shared/decks/{deck_item_id}/install")
         self.assertEqual(response.status_code, 201)
@@ -179,7 +179,7 @@ class PaymentOrderFlowTests(unittest.TestCase):
             self.assertEqual(PaymentOrder.query.count(), 0)
 
     def test_paid_note_type_install_returns_order_until_webhook_confirms(self):
-        note_type_id = self._create_note_type(pricing_mode="paid", price_cents=50000)
+        note_type_id = self._create_note_type(pricing_mode="paid", price_amount_minor=50000)
 
         install_response = self.client.post(f"/api/shared/note-types/{note_type_id}/install")
         self.assertEqual(install_response.status_code, 202)
@@ -227,7 +227,7 @@ class PaymentOrderFlowTests(unittest.TestCase):
             self.assertEqual(entitlement.status, "active")
 
     def test_paid_deck_install_duplicate_webhook_does_not_duplicate_entitlement_or_install(self):
-        deck_item_id = self._create_deck_item(pricing_mode="paid", price_cents=75000)
+        deck_item_id = self._create_deck_item(pricing_mode="paid", price_amount_minor=75000)
 
         install_response = self.client.post(f"/api/shared/decks/{deck_item_id}/install")
         self.assertEqual(install_response.status_code, 202)

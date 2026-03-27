@@ -225,7 +225,7 @@ def create_shared_deck_item(
         preview_text=(payload.get("preview_text") or "").strip() or None,
         sample_cards_count=0,
         pricing_mode="free",
-        price_cents=0,
+        price_amount_minor=0,
         version="1.0.0",
         publish_status="private",
         is_official=False,
@@ -322,12 +322,12 @@ def sync_deck_item_source_note_type_and_commit(
 def install_shared_note_type(source_note_type: NoteType, user_id: int) -> tuple[NoteType | None, int | None]:
     installed_copy = flashcards_share.clone_note_type_for_user(source_note_type, user_id)
     now = datetime.utcnow()
-    purchase_price_cents = int(source_note_type.price_cents or 0) if source_note_type.pricing_mode == "paid" else 0
+    purchase_amount_minor = int(source_note_type.price_amount_minor or 0) if source_note_type.pricing_mode == "paid" else 0
     install_row = NoteTypeInstall(
         source_note_type_id=source_note_type.id,
         installed_note_type_id=installed_copy.id,
         user_id=user_id,
-        purchase_price_cents=purchase_price_cents,
+        purchase_amount_minor=purchase_amount_minor,
         installed_at=now,
         purchased_at=now if source_note_type.pricing_mode == "paid" else None,
     )
@@ -345,11 +345,12 @@ def install_shared_note_type(source_note_type: NoteType, user_id: int) -> tuple[
         {
             "source_note_type_id": source_note_type.id,
             "installed_note_type_id": installed_copy.id,
-            "price_cents": purchase_price_cents,
+            "price_amount_minor": purchase_amount_minor,
+            "price_cents": purchase_amount_minor,
         },
     )
     db.session.commit()
-    return installed_copy, purchase_price_cents
+    return installed_copy, purchase_amount_minor
 
 
 def rate_shared_note_type(note_type: NoteType, user_id: int, rating: int, comment: str | None) -> None:
@@ -918,7 +919,7 @@ def validate_note_type_publish_requirements(note_type: NoteType) -> str | None:
         return "Preview text or preview image is required for publish."
     if not (note_type.version or "").strip():
         return "Version is required for publish."
-    if note_type.pricing_mode == "paid" and int(note_type.price_cents or 0) <= 0:
+    if note_type.pricing_mode == "paid" and int(note_type.price_amount_minor or 0) <= 0:
         return "Paid note type must have a positive price."
     if not note_type.field_defs:
         return "At least one field is required for publish."
@@ -959,15 +960,15 @@ def apply_note_type_marketplace_payload(
     if "changelog" in payload:
         note_type.changelog = (payload.get("changelog") or "").strip() or None
 
-    pricing_mode, price_cents, pricing_error = marketplace_query_service.normalize_pricing(
+    pricing_mode, price_amount_minor, pricing_error = marketplace_query_service.normalize_pricing(
         payload,
         current_mode=str(note_type.pricing_mode or "free"),
-        current_price_cents=int(note_type.price_cents or 0),
+        current_price_amount_minor=int(note_type.price_amount_minor or 0),
     )
     if pricing_error:
         return pricing_error
     note_type.pricing_mode = pricing_mode
-    note_type.price_cents = price_cents
+    note_type.price_amount_minor = price_amount_minor
 
     if "is_official" in payload:
         if not allow_set_official:
@@ -1002,7 +1003,7 @@ def validate_deck_publish_requirements(deck_item: DeckMarketplaceItem) -> str | 
         return "Preview text or sample_cards_count > 0 is required for publish."
     if not (deck_item.version or "").strip():
         return "Version is required for publish."
-    if deck_item.pricing_mode == "paid" and int(deck_item.price_cents or 0) <= 0:
+    if deck_item.pricing_mode == "paid" and int(deck_item.price_amount_minor or 0) <= 0:
         return "Paid deck must have a positive price."
     if deck_item.source_deck_id is None:
         return "source_deck_id is required for publish."
@@ -1062,15 +1063,15 @@ def apply_deck_marketplace_payload(
     if "changelog" in payload:
         deck_item.changelog = (payload.get("changelog") or "").strip() or None
 
-    pricing_mode, price_cents, pricing_error = marketplace_query_service.normalize_pricing(
+    pricing_mode, price_amount_minor, pricing_error = marketplace_query_service.normalize_pricing(
         payload,
         current_mode=str(deck_item.pricing_mode or "free"),
-        current_price_cents=int(deck_item.price_cents or 0),
+        current_price_amount_minor=int(deck_item.price_amount_minor or 0),
     )
     if pricing_error:
         return pricing_error
     deck_item.pricing_mode = pricing_mode
-    deck_item.price_cents = price_cents
+    deck_item.price_amount_minor = price_amount_minor
 
     if "is_official" in payload:
         if not allow_set_official:
@@ -1586,7 +1587,7 @@ def clone_note_type_for_user(source_note_type: NoteType, user_id: int) -> NoteTy
         preview_text=source_note_type.preview_text,
         preview_image_url=source_note_type.preview_image_url,
         pricing_mode="free",
-        price_cents=0,
+        price_amount_minor=0,
         version=source_note_type.version or "1.0.0",
         changelog=source_note_type.changelog,
         publish_status="private",
@@ -1643,21 +1644,21 @@ def ensure_note_type_install_for_user(
 
     installed_copy = flashcards_share.clone_note_type_for_user(source_note_type, user_id)
     now = installed_at or datetime.utcnow()
-    purchase_price_cents = int(source_note_type.price_cents or 0) if source_note_type.pricing_mode == "paid" else 0
+    purchase_amount_minor = int(source_note_type.price_amount_minor or 0) if source_note_type.pricing_mode == "paid" else 0
 
     if install_row is None:
         install_row = NoteTypeInstall(
             source_note_type_id=source_note_type.id,
             installed_note_type_id=installed_copy.id,
             user_id=user_id,
-            purchase_price_cents=purchase_price_cents,
+            purchase_amount_minor=purchase_amount_minor,
             installed_at=now,
             purchased_at=now if source_note_type.pricing_mode == "paid" else None,
         )
         db.session.add(install_row)
     else:
         install_row.installed_note_type_id = installed_copy.id
-        install_row.purchase_price_cents = purchase_price_cents
+        install_row.purchase_amount_minor = purchase_amount_minor
         if install_row.installed_at is None:
             install_row.installed_at = now
         install_row.purchased_at = now if source_note_type.pricing_mode == "paid" else None
@@ -2485,7 +2486,7 @@ def install_shared_deck_item_for_user(
         if installed_note_type_id:
             note_type_id_map[source_note_type_id] = installed_note_type_id
 
-    purchase_price_cents = int(deck_item.price_cents or 0) if deck_item.pricing_mode == "paid" else 0
+    purchase_amount_minor = int(deck_item.price_amount_minor or 0) if deck_item.pricing_mode == "paid" else 0
     install = DeckInstall(
         deck_item_id=deck_item.id,
         user_id=user_id,
@@ -2495,7 +2496,7 @@ def install_shared_deck_item_for_user(
         source_note_type_id=(deck_item.source_note_type_id or "").strip() or None,
         source_owner_user_id=deck_item.owner_user_id,
         base_snapshot_at=now,
-        purchase_price_cents=purchase_price_cents,
+        purchase_amount_minor=purchase_amount_minor,
         installed_at=now,
         purchased_at=now if deck_item.pricing_mode == "paid" else None,
     )
@@ -2521,11 +2522,13 @@ def install_shared_deck_item_for_user(
         "response": {
             "deck_item_id": deck_item.id,
             "installed_deck_id": local_deck_id,
-            "purchase_price_cents": purchase_price_cents,
+            "purchase_amount_minor": purchase_amount_minor,
+            "purchase_price_cents": purchase_amount_minor,
         },
         "audit": {
             "deck_item_id": deck_item.id,
             "local_deck_id": local_deck_id,
-            "price_cents": purchase_price_cents,
+            "price_amount_minor": purchase_amount_minor,
+            "price_cents": purchase_amount_minor,
         },
     }

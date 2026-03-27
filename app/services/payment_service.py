@@ -215,7 +215,7 @@ def _validate_note_type_for_checkout(source_note_type: NoteType, *, user_id: int
             "Owner cannot purchase own note type.",
             status=409,
         )
-    if source_note_type.pricing_mode != "paid" or int(source_note_type.price_cents or 0) <= 0:
+    if source_note_type.pricing_mode != "paid" or int(source_note_type.price_amount_minor or 0) <= 0:
         raise PaymentServiceError(
             "PAYMENT_NOT_REQUIRED",
             "This note type does not require payment.",
@@ -230,11 +230,12 @@ def _validate_note_type_for_checkout(source_note_type: NoteType, *, user_id: int
         "product_type": "note_type",
         "product_ref_id": source_note_type.id,
         "title_snapshot": source_note_type.name,
-        "amount_minor": int(source_note_type.price_cents or 0),
+        "amount_minor": int(source_note_type.price_amount_minor or 0),
         "product_snapshot": {
             "title": source_note_type.name,
             "pricing_mode": source_note_type.pricing_mode,
-            "source_price_integer": int(source_note_type.price_cents or 0),
+            "source_price_amount_minor": int(source_note_type.price_amount_minor or 0),
+            "source_price_integer": int(source_note_type.price_amount_minor or 0),
             "version": source_note_type.version,
             "owner_user_id": source_note_type.user_id,
         },
@@ -276,7 +277,7 @@ def _validate_deck_item_for_checkout(deck_item: DeckMarketplaceItem, *, user_id:
             "Owner cannot purchase own deck item.",
             status=409,
         )
-    if deck_item.pricing_mode != "paid" or int(deck_item.price_cents or 0) <= 0:
+    if deck_item.pricing_mode != "paid" or int(deck_item.price_amount_minor or 0) <= 0:
         raise PaymentServiceError(
             "PAYMENT_NOT_REQUIRED",
             "This deck does not require payment.",
@@ -288,11 +289,12 @@ def _validate_deck_item_for_checkout(deck_item: DeckMarketplaceItem, *, user_id:
         "product_type": "deck_marketplace_item",
         "product_ref_id": deck_item.id,
         "title_snapshot": deck_item.title,
-        "amount_minor": int(deck_item.price_cents or 0),
+        "amount_minor": int(deck_item.price_amount_minor or 0),
         "product_snapshot": {
             "title": deck_item.title,
             "pricing_mode": deck_item.pricing_mode,
-            "source_price_integer": int(deck_item.price_cents or 0),
+            "source_price_amount_minor": int(deck_item.price_amount_minor or 0),
+            "source_price_integer": int(deck_item.price_amount_minor or 0),
             "version": deck_item.version,
             "owner_user_id": deck_item.owner_user_id,
             "source_deck_id": deck_item.source_deck_id,

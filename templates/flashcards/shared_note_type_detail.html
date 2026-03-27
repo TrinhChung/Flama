@@ -387,7 +387,7 @@
       titleEl.textContent = detail.title || detail.name || "Shared template";
       metaEl.textContent = "Tác giả: " + (detail.author?.username || "Unknown")
         + " | Danh mục: " + (detail.primary_category || "General")
-        + " | Giá: " + formatPrice(detail.price_display || "Free");
+        + " | Giá: " + formatPrice(detail.price_display || "Miễn phí");
       descriptionEl.textContent = detail.description || "Không có mô tả.";
       previewTextEl.textContent = detail.preview_text || "Không có preview text.";
       statsEl.textContent = "Rating: " + Number(detail.rating_avg || 0).toFixed(2)

@@ -294,6 +294,30 @@ def _ensure_backward_compatible_schema() -> None:
         schema_changed = True
         return True
 
+    def _rename_int_column_if_present(
+        table_name: str,
+        old_name: str,
+        new_name: str,
+        *,
+        nullable: bool = False,
+        default: int = 0,
+    ) -> bool:
+        nonlocal schema_changed
+        column_names = _column_names(table_name)
+        if new_name in column_names or old_name not in column_names:
+            return False
+        if is_mysql:
+            null_sql = "NULL" if nullable else "NOT NULL"
+            ddl_sql = (
+                f"ALTER TABLE {table_name} CHANGE COLUMN {old_name} {new_name} "
+                f"INT {null_sql} DEFAULT {default}"
+            )
+        else:
+            ddl_sql = f"ALTER TABLE {table_name} RENAME COLUMN {old_name} TO {new_name}"
+        db.session.execute(sa.text(ddl_sql))
+        schema_changed = True
+        return True
+
     if inspector.has_table("users"):
         user_columns = {column["name"] for column in inspector.get_columns("users")}
         if "timezone" not in user_columns:
@@ -304,6 +328,11 @@ def _ensure_backward_compatible_schema() -> None:
                 sa.text("UPDATE users SET timezone = 'UTC' WHERE timezone IS NULL OR timezone = ''")
             )
             schema_changed = True
+
+    _rename_int_column_if_present("note_types", "price_cents", "price_amount_minor")
+    _rename_int_column_if_present("deck_marketplace_items", "price_cents", "price_amount_minor")
+    _rename_int_column_if_present("note_type_installs", "purchase_price_cents", "purchase_amount_minor")
+    _rename_int_column_if_present("deck_installs", "purchase_price_cents", "purchase_amount_minor")
 
     inspector = sa.inspect(bind)
     if inspector.has_table("user_scheduler_settings"):

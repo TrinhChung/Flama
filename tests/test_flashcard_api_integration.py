@@ -215,7 +215,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
                 tags=[],
                 preview_text="Preview",
                 pricing_mode="free",
-                price_cents=0,
+                price_amount_minor=0,
                 version="1.0.0",
                 publish_status="published",
             )
@@ -317,7 +317,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
                 tags=[],
                 preview_text="Preview",
                 pricing_mode="free",
-                price_cents=0,
+                price_amount_minor=0,
                 version="1.0.0",
                 publish_status="published",
             )
@@ -380,7 +380,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
                 tags=[],
                 preview_text="Preview",
                 pricing_mode="free",
-                price_cents=0,
+                price_amount_minor=0,
                 version="1.0.0",
                 publish_status="published",
             )
@@ -469,7 +469,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
                 tags=[],
                 preview_text="Preview",
                 pricing_mode="free",
-                price_cents=0,
+                price_amount_minor=0,
                 version="1.0.0",
                 publish_status="published",
             )
@@ -626,7 +626,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
                 tags=[],
                 preview_text="Preview",
                 pricing_mode="free",
-                price_cents=0,
+                price_amount_minor=0,
                 version="1.0.0",
                 publish_status="published",
             )
@@ -704,7 +704,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
                 tags=[],
                 preview_text="Preview",
                 pricing_mode="free",
-                price_cents=0,
+                price_amount_minor=0,
                 version="1.0.0",
                 publish_status="published",
             )
@@ -805,7 +805,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
                 tags=[],
                 preview_text="Preview",
                 pricing_mode="free",
-                price_cents=0,
+                price_amount_minor=0,
                 version="1.0.0",
                 publish_status="published",
             )
@@ -969,7 +969,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
                 tags=[],
                 preview_text="Preview",
                 pricing_mode="free",
-                price_cents=0,
+                price_amount_minor=0,
                 version="1.0.0",
                 publish_status="published",
             )
@@ -1088,7 +1088,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
                 tags=[],
                 preview_text="Preview",
                 pricing_mode="free",
-                price_cents=0,
+                price_amount_minor=0,
                 version="1.0.0",
                 publish_status="published",
             )
@@ -1155,7 +1155,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
                 tags=[],
                 preview_text="Preview",
                 pricing_mode="free",
-                price_cents=0,
+                price_amount_minor=0,
                 version="1.0.0",
                 publish_status="published",
             )
@@ -1243,7 +1243,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
                 tags=[],
                 preview_text="Preview",
                 pricing_mode="free",
-                price_cents=0,
+                price_amount_minor=0,
                 version="1.0.0",
                 publish_status="published",
             )
@@ -1368,7 +1368,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
                 tags=[],
                 preview_text="Preview",
                 pricing_mode="free",
-                price_cents=0,
+                price_amount_minor=0,
                 version="1.0.0",
                 publish_status="published",
             )
@@ -1424,7 +1424,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
                 tags=[],
                 preview_text="Preview",
                 pricing_mode="free",
-                price_cents=0,
+                price_amount_minor=0,
                 version="1.0.0",
                 publish_status="published",
             )
@@ -1466,7 +1466,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
                 tags=[],
                 preview_text="Preview",
                 pricing_mode="free",
-                price_cents=0,
+                price_amount_minor=0,
                 version="1.0.0",
                 publish_status="published",
             )
@@ -2790,7 +2790,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
                 primary_category="General",
                 preview_text="preview",
                 pricing_mode="free",
-                price_cents=0,
+                price_amount_minor=0,
                 publish_status="published",
                 version="1.0.0",
             )
@@ -2855,7 +2855,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
                 tags=[],
                 preview_text="preview",
                 pricing_mode="free",
-                price_cents=0,
+                price_amount_minor=0,
                 version="1.0.0",
                 publish_status="published",
             )

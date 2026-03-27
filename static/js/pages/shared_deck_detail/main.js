@@ -361,7 +361,7 @@ import {
         if (metaEl) {
             metaEl.textContent = "Tác giả: " + (deckDetail.author?.username || "Unknown")
                 + " | Danh mục: " + (deckDetail.primary_category || "General")
-                + " | Giá: " + formatPrice(deckDetail.price_display || "Free");
+                + " | Giá: " + formatPrice(deckDetail.price_display || "Miễn phí");
         }
         if (descriptionEl) descriptionEl.textContent = deckDetail.description || "Không có mô tả.";
         if (previewTextEl) previewTextEl.textContent = deckDetail.preview_text || "Không có preview text.";

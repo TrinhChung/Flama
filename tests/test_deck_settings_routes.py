@@ -340,7 +340,7 @@ class DeckSettingsRoutesTests(unittest.TestCase):
                 primary_category="General",
                 tags=[],
                 pricing_mode="free",
-                price_cents=0,
+                price_amount_minor=0,
                 version="1.0.0",
                 publish_status="published",
             )
@@ -456,7 +456,7 @@ class DeckSettingsRoutesTests(unittest.TestCase):
                 primary_category="General",
                 tags=[],
                 pricing_mode="free",
-                price_cents=0,
+                price_amount_minor=0,
                 version="1.0.0",
                 publish_status="published",
             )
@@ -524,7 +524,7 @@ class DeckSettingsRoutesTests(unittest.TestCase):
                 primary_category="General",
                 tags=[],
                 pricing_mode="free",
-                price_cents=0,
+                price_amount_minor=0,
                 version="1.0.0",
                 publish_status="published",
             )
@@ -605,7 +605,7 @@ class DeckSettingsRoutesTests(unittest.TestCase):
                 primary_category="General",
                 tags=[],
                 pricing_mode="free",
-                price_cents=0,
+                price_amount_minor=0,
                 version="1.0.0",
                 publish_status="published",
             )
