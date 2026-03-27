@@ -16,7 +16,7 @@ bash scripts/setup_github_workspace.sh
 # 3) Chay app
 flask --app wsgi.py run --host=0.0.0.0 --port=4789
 ```
-myenv\Scripts\activate
+.venv\Scripts\activate
 ### Windows PowerShell
 
 ```powershell

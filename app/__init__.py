@@ -95,6 +95,8 @@ def create_app(config: Optional[dict] = None) -> Flask:
     from models.column_preference import (
         VocabularyColumnPreference,
     )  # noqa: F401  # register model
+    from models.payout_batch import PayoutBatch  # noqa: F401  # register model
+    from models.payout_batch_item import PayoutBatchItem  # noqa: F401  # register model
     from models.flashcard import (  # noqa: F401  # register model
         AuditLog,
         Card,
