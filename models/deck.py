@@ -27,6 +27,12 @@ class Deck(db.Model):
         nullable=True,
         index=True,
     )
+    scheduler_preset_id = db.Column(
+        db.Integer,
+        db.ForeignKey("scheduler_presets.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     name = db.Column(db.String(255), nullable=False)
     description = db.Column(db.Text, nullable=True)
     position = db.Column(db.Integer, nullable=False, default=0)
@@ -37,6 +43,7 @@ class Deck(db.Model):
 
     owner = db.relationship("User", foreign_keys=[owner_user_id])
     note_type = db.relationship("NoteType", foreign_keys=[note_type_id])
+    scheduler_preset = db.relationship("SchedulerPreset", back_populates="decks")
     parent = db.relationship(
         "Deck",
         remote_side=[id],

@@ -7,7 +7,8 @@ import re
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from app.services.anki_scheduler import _day_index, _day_index_to_datetime, default_deck_options
+from app.services.anki_scheduler import _day_index, _day_index_to_datetime
+from app.services.scheduler_config_service import resolve_day_boundary_hour_local
 from app.repositories.stats_query_repository import (
     query_active_review_days,
     query_daily_review_aggregates,
@@ -19,7 +20,6 @@ from models.flashcard import ReviewEvent
 UTC = timezone.utc
 DEFAULT_TIMEZONE = "UTC"
 VALID_REVIEW_MODES = {"new", "learn", "review"}
-DAY_BOUNDARY_HOUR = default_deck_options().dayBoundaryHourLocal
 FALLBACK_FIXED_OFFSETS_MINUTES = {
     "ASIA/HO_CHI_MINH": 7 * 60,
     "ASIA/BANGKOK": 7 * 60,
@@ -203,6 +203,25 @@ def record_review_event(
     duration_ms: Any = None,
     deck_id: int | None = None,
     note_type_id: str | None = None,
+    scheduler_preset_id: int | None = None,
+    scheduler_mode: str | None = None,
+    review_kind: str | None = None,
+    queue_before: str | None = None,
+    queue_after: str | None = None,
+    interval_days_before: float | None = None,
+    interval_days_after: float | None = None,
+    due_day_before: int | None = None,
+    due_day_after: int | None = None,
+    days_late: int | None = None,
+    ease_factor_before: float | None = None,
+    ease_factor_after: float | None = None,
+    memory_stability_before: float | None = None,
+    memory_stability_after: float | None = None,
+    memory_difficulty_before: float | None = None,
+    memory_difficulty_after: float | None = None,
+    leeched_after: bool = False,
+    suspended_after: bool = False,
+    payload_json: str | None = None,
 ) -> ReviewEvent:
     review_time = _ensure_naive_utc(reviewed_at or datetime.utcnow())
     normalized_mode = normalize_review_mode(mode)
@@ -217,6 +236,25 @@ def record_review_event(
         duration_ms=_normalize_duration_ms(duration_ms),
         rating=normalized_rating,
         mode=normalized_mode if normalized_mode in VALID_REVIEW_MODES else "review",
+        scheduler_preset_id=scheduler_preset_id,
+        scheduler_mode=str(scheduler_mode or "legacy"),
+        review_kind=str(review_kind or "review"),
+        queue_before=queue_before,
+        queue_after=queue_after,
+        interval_days_before=interval_days_before,
+        interval_days_after=interval_days_after,
+        due_day_before=due_day_before,
+        due_day_after=due_day_after,
+        days_late=days_late,
+        ease_factor_before=ease_factor_before,
+        ease_factor_after=ease_factor_after,
+        memory_stability_before=memory_stability_before,
+        memory_stability_after=memory_stability_after,
+        memory_difficulty_before=memory_difficulty_before,
+        memory_difficulty_after=memory_difficulty_after,
+        leeched_after=bool(leeched_after),
+        suspended_after=bool(suspended_after),
+        payload_json=payload_json or "{}",
     )
 
 
@@ -230,9 +268,10 @@ def build_stats_overview(
     effective_timezone_name = get_effective_timezone_name(timezone_name)
     timezone_obj = _build_timezone_obj(effective_timezone_name)
     now_utc_naive = _ensure_naive_utc(now_utc or datetime.utcnow())
+    day_boundary_hour = resolve_day_boundary_hour_local(user_id=user_id)
     today_day_index = _day_index(
         now_utc_naive,
-        DAY_BOUNDARY_HOUR,
+        day_boundary_hour,
         timezone_name=effective_timezone_name,
     )
     today_local = date.fromordinal(today_day_index)
@@ -243,12 +282,12 @@ def build_stats_overview(
 
     year_start_utc = _day_index_to_datetime(
         year_start.toordinal(),
-        DAY_BOUNDARY_HOUR,
+        day_boundary_hour,
         timezone_name=effective_timezone_name,
     )
     year_end_utc = _day_index_to_datetime(
         date(selected_year + 1, 1, 1).toordinal(),
-        DAY_BOUNDARY_HOUR,
+        day_boundary_hour,
         timezone_name=effective_timezone_name,
     )
 
@@ -258,6 +297,7 @@ def build_stats_overview(
         timezone_obj=timezone_obj,
         start_utc=year_start_utc,
         end_utc=year_end_utc,
+        day_boundary_hour_local=day_boundary_hour,
     )
 
     due_day_map: dict[date, int] = {}
@@ -266,7 +306,7 @@ def build_stats_overview(
         if future_start_local <= year_end:
             future_start_utc = _day_index_to_datetime(
                 future_start_local.toordinal(),
-                DAY_BOUNDARY_HOUR,
+                day_boundary_hour,
                 timezone_name=effective_timezone_name,
             )
             due_day_map = query_future_due_day_counts(
@@ -275,16 +315,17 @@ def build_stats_overview(
                 timezone_obj=timezone_obj,
                 start_utc=future_start_utc,
                 end_utc=year_end_utc,
+                day_boundary_hour_local=day_boundary_hour,
             )
 
     today_start_utc = _day_index_to_datetime(
         today_day_index,
-        DAY_BOUNDARY_HOUR,
+        day_boundary_hour,
         timezone_name=effective_timezone_name,
     )
     tomorrow_start_utc = _day_index_to_datetime(
         today_day_index + 1,
-        DAY_BOUNDARY_HOUR,
+        day_boundary_hour,
         timezone_name=effective_timezone_name,
     )
     today_map = query_daily_review_aggregates(
@@ -293,6 +334,7 @@ def build_stats_overview(
         timezone_obj=timezone_obj,
         start_utc=today_start_utc,
         end_utc=tomorrow_start_utc,
+        day_boundary_hour_local=day_boundary_hour,
     )
     today_data = today_map.get(today_local, {"cards": 0, "duration_ms": 0})
     today_cards = _safe_int(today_data.get("cards"))
@@ -337,6 +379,7 @@ def build_stats_overview(
         timezone_name=effective_timezone_name,
         timezone_obj=timezone_obj,
         end_utc=tomorrow_start_utc,
+        day_boundary_hour_local=day_boundary_hour,
     )
     current_streak_days = _current_streak_from_active_days(
         active_days=all_active_days,

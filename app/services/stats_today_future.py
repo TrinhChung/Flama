@@ -18,13 +18,13 @@ from app.repositories.stats_query_repository import (
     query_due_progress_rows,
     query_interval_days_rows,
 )
-from app.services.anki_scheduler import _day_index, _day_index_to_datetime, default_deck_options
+from app.services.anki_scheduler import _day_index, _day_index_to_datetime
+from app.services.scheduler_config_service import resolve_day_boundary_hour_local
 from app.repositories.study_repository import REVIEW_QUEUE, normalize_progress_queue
 from app.utils.permissions import is_admin_user
 
 UTC = timezone.utc
 DEFAULT_TIMEZONE = "UTC"
-DAY_BOUNDARY_HOUR = default_deck_options().dayBoundaryHourLocal
 FALLBACK_FIXED_OFFSETS_MINUTES = {
     "ASIA/HO_CHI_MINH": 7 * 60,
     "ASIA/BANGKOK": 7 * 60,
@@ -183,6 +183,7 @@ def _aggregate_future_due_python(
     today_local: date,
     backlog: bool,
     end_offset: int | None,
+    day_boundary_hour_local: int,
 ) -> tuple[dict[int, dict[str, int]], int]:
     by_offset: dict[int, dict[str, int]] = {}
 
@@ -199,7 +200,7 @@ def _aggregate_future_due_python(
             due_local_day = date.fromordinal(
                 _day_index(
                     due_at,
-                    DAY_BOUNDARY_HOUR,
+                    day_boundary_hour_local,
                     timezone_name=timezone_name,
                 )
             )
@@ -325,21 +326,22 @@ def build_today_future_stats(
 
     timezone_effective = _effective_timezone_name(timezone_name)
     now_utc_naive = _ensure_naive_utc(now_utc or datetime.utcnow())
+    day_boundary_hour = resolve_day_boundary_hour_local(user_id=user_id)
     today_day_index = _day_index(
         now_utc_naive,
-        DAY_BOUNDARY_HOUR,
+        day_boundary_hour,
         timezone_name=timezone_effective,
     )
     today_local = date.fromordinal(today_day_index)
 
     today_start_utc = _day_index_to_datetime(
         today_day_index,
-        DAY_BOUNDARY_HOUR,
+        day_boundary_hour,
         timezone_name=timezone_effective,
     )
     tomorrow_start_utc = _day_index_to_datetime(
         today_day_index + 1,
-        DAY_BOUNDARY_HOUR,
+        day_boundary_hour,
         timezone_name=timezone_effective,
     )
 
@@ -366,6 +368,7 @@ def build_today_future_stats(
         today_local=today_local,
         backlog=effective_backlog,
         end_offset=end_offset,
+        day_boundary_hour_local=day_boundary_hour,
     )
 
     series, window_days, total_reviews = _build_future_series(

@@ -846,8 +846,30 @@ def _merge_card_progress_rows_for_cutover(
             target.due_at = row.due_at
             target.due_day = row.due_day
             target.interval_days = row.interval_days
+            if hasattr(target, "interval_days_raw"):
+                target.interval_days_raw = getattr(row, "interval_days_raw", None)
             target.is_suspended = bool(row.is_suspended)
+            if hasattr(target, "is_buried"):
+                target.is_buried = bool(getattr(row, "is_buried", False))
+            if hasattr(target, "buried_until_day"):
+                target.buried_until_day = getattr(row, "buried_until_day", None)
             target.ease_factor = row.ease_factor
+            if hasattr(target, "review_kind"):
+                target.review_kind = getattr(row, "review_kind", target.review_kind)
+            if hasattr(target, "scheduler_mode"):
+                target.scheduler_mode = getattr(row, "scheduler_mode", target.scheduler_mode)
+            if hasattr(target, "memory_stability"):
+                target.memory_stability = getattr(row, "memory_stability", None)
+            if hasattr(target, "memory_difficulty"):
+                target.memory_difficulty = getattr(row, "memory_difficulty", None)
+            if hasattr(target, "suspension_reason"):
+                target.suspension_reason = getattr(row, "suspension_reason", None)
+            if hasattr(target, "last_leech_at"):
+                target.last_leech_at = getattr(row, "last_leech_at", None)
+            if hasattr(target, "last_leech_lapses"):
+                target.last_leech_lapses = int(getattr(row, "last_leech_lapses", 0) or 0)
+            if hasattr(target, "last_review_event_id"):
+                target.last_review_event_id = getattr(row, "last_review_event_id", None)
             target.last_reviewed_at = row.last_reviewed_at or target.last_reviewed_at
         target.reps = max(int(target.reps or 0), int(row.reps or 0))
         target.lapses = max(int(target.lapses or 0), int(row.lapses or 0))

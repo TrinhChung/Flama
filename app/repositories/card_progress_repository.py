@@ -266,4 +266,6 @@ def query_interval_days_rows(
     query = query.filter(
         db.or_(CardProgress.is_suspended.is_(False), CardProgress.is_suspended.is_(None))
     )
-    return query.with_entities(CardProgress.interval_days).all()
+    return query.with_entities(
+        db.func.coalesce(CardProgress.interval_days_raw, CardProgress.interval_days)
+    ).all()

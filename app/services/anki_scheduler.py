@@ -46,7 +46,9 @@ class CardState:
     lapses: int = 0
     lastReviewAt: Optional[datetime] = None
     reviewKind: str = "review"
+    schedulerMode: str = "legacy"
     suspended: bool = False
+    suspensionReason: Optional[str] = None
     leeched: bool = False
     memoryState: Optional[FsrsMemoryState] = None
 
@@ -129,6 +131,9 @@ def applyAnswer(
     state.type = normalized_type
     state.reps = max(0, int(state.reps)) + 1
     state.lastReviewAt = now
+    state.schedulerMode = str(options.schedulerMode or "legacy")
+    if normalized_type in {"new", "learning", "relearning"}:
+        state.reviewKind = "learning"
 
     if normalized_type in {"new", "learning"}:
         return _apply_learning(
@@ -262,6 +267,7 @@ def _apply_review(
         state.lapses = max(0, int(state.lapses)) + 1
         state.leeched = _leech_threshold_met(state.lapses, options.leechThreshold)
         state.suspended = bool(state.leeched and options.leechSuspend)
+        state.suspensionReason = "leech" if state.suspended else None
         state.ease = max(options.minEase, ease - 0.20)
         lapse_interval = _failing_review_interval(scheduled_days, options)
         state.intervalDays = lapse_interval
@@ -739,7 +745,9 @@ def _clone_card(card: CardState) -> CardState:
         lapses=int(card.lapses or 0),
         lastReviewAt=card.lastReviewAt,
         reviewKind=str(card.reviewKind or "review"),
+        schedulerMode=str(card.schedulerMode or "legacy"),
         suspended=bool(card.suspended),
+        suspensionReason=card.suspensionReason,
         leeched=bool(card.leeched),
         memoryState=card.memoryState,
     )

@@ -45,6 +45,7 @@ from app.validators import (
     validate_study_next_query,
 )
 from app.services.stats_overview import get_effective_timezone_name
+from app.services.scheduler_config_service import resolve_deck_options
 from app.presenters.vocabulary_presenter import note_field_values_as_strings
 
 
@@ -149,16 +150,25 @@ def study_next():
     if clone_scope is not None and not _is_card_visible_in_clone_scope(scope=clone_scope, card_obj=selected_card):
         return jsonify({"card_id": None, "message": "No due cards."})
 
+    note = selected_card.note
     progress = CardProgress.query.filter_by(user_id=current_user.id, card_id=selected_card.id).first()
-    card_state = _card_state_from_progress(progress, now, timezone_name=timezone_name)
+    deck_options = resolve_deck_options(
+        user_id=current_user.id,
+        deck_id=getattr(note, "deck_id", None),
+    )
+    card_state = _card_state_from_progress(
+        progress,
+        now,
+        timezone_name=timezone_name,
+        user_id=current_user.id,
+        options=deck_options,
+    )
     interval_preview = computeAnswerPreview(
         card_state,
-        default_deck_options(),
+        deck_options,
         now,
         timezone_name=timezone_name,
     )
-
-    note = selected_card.note
     template = selected_card.template
     render_field_defs = note.note_type.field_defs
     render_field_values = note.field_values or {}
@@ -251,6 +261,10 @@ def study_answer(card_id: str):
             return _api_error("FIELD_NOT_FOUND", "Card not found.", status=404)
 
     progress = CardProgress.query.filter_by(user_id=current_user.id, card_id=card.id).first()
+    deck_options = resolve_deck_options(
+        user_id=current_user.id,
+        deck_id=getattr(card.note, "deck_id", None),
+    )
     if progress is None:
         progress = CardProgress(
             user_id=current_user.id,
@@ -260,7 +274,7 @@ def study_answer(card_id: str):
             due_at=None,
             due_day=None,
             interval_days=0,
-            ease_factor=default_deck_options().startingEase,
+            ease_factor=deck_options.startingEase,
             reps=0,
             lapses=0,
         )
@@ -274,17 +288,23 @@ def study_answer(card_id: str):
 
     now = datetime.utcnow()
     timezone_name = get_effective_timezone_name(getattr(current_user, "timezone", "UTC"))
-    current_state = _card_state_from_progress(progress, now, timezone_name=timezone_name)
+    current_state = _card_state_from_progress(
+        progress,
+        now,
+        timezone_name=timezone_name,
+        user_id=current_user.id,
+        options=deck_options,
+    )
     answer_preview = computeAnswerPreview(
         current_state,
-        default_deck_options(),
+        deck_options,
         now,
         timezone_name=timezone_name,
     )
     review_mode = normalize_review_mode(current_state.type)
     updated_state = applyAnswer(  # type: ignore[arg-type]
         current_state,
-        default_deck_options(),
+        deck_options,
         now,
         rating,
         timezone_name=timezone_name,
@@ -297,6 +317,7 @@ def study_answer(card_id: str):
             card=card,
             progress=progress,
             expected_last_reviewed_at=expected_last_reviewed_at,
+            current_state=current_state,
             updated_state=updated_state,
             now=now,
             rating=rating,
@@ -305,6 +326,7 @@ def study_answer(card_id: str):
             clone_scope=clone_scope,
             requested_scope_id=requested_scope_id,
             timezone_name=timezone_name,
+            deck_options=deck_options,
         )
     except ConcurrentReviewError as exc:
         return _api_error("CONCURRENT_REVIEW", str(exc), status=409)
