@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Payment Operations{% endblock %}
+{% block title %}Vận hành thanh toán{% endblock %}
 
 {% block styles %}
 <style>
@@ -13,29 +13,29 @@
   <div class="payment-shell">
     <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
       <div>
-        <div class="payment-kicker mb-1">Admin Payment Ops</div>
-        <h1 class="h3 mb-1">Dashboard thanh toan</h1>
-        <p class="payment-muted mb-0">Theo doi don hang, giao dich bat thuong, webhook loi va hieu qua van hanh.</p>
+        <div class="payment-kicker mb-1">Vận hành thanh toán</div>
+        <h1 class="h3 mb-1">Dashboard thanh toán</h1>
+        <p class="payment-muted mb-0">Theo dõi đơn hàng, giao dịch bất thường, webhook lỗi và hiệu quả vận hành.</p>
       </div>
       <div class="payment-toolbar-actions">
-        <a class="btn btn-outline-secondary" href="{{ url_for('admin_payments.orders_page') }}">Quan ly don hang</a>
-        <a class="btn btn-outline-secondary" href="{{ url_for('admin_payments.transactions_page') }}">Quan ly giao dich</a>
+        <a class="btn btn-outline-secondary" href="{{ url_for('admin_payments.orders_page') }}">Quản lý đơn hàng</a>
+        <a class="btn btn-outline-secondary" href="{{ url_for('admin_payments.transactions_page') }}">Quản lý giao dịch</a>
       </div>
     </div>
 
     <form method="GET" action="{{ url_for('admin_payments.dashboard_page') }}" class="payment-toolbar-card payment-filters mb-3">
       <div class="row g-2 align-items-end">
         <div class="col-12 col-md-3">
-          <label class="form-label mb-1">Pham vi</label>
+          <label class="form-label mb-1">Phạm vi</label>
           <select class="form-select" name="period">
-            <option value="7d" {% if filters.period == "7d" %}selected{% endif %}>7 ngay</option>
-            <option value="30d" {% if filters.period == "30d" %}selected{% endif %}>30 ngay</option>
-            <option value="90d" {% if filters.period == "90d" %}selected{% endif %}>90 ngay</option>
-            <option value="all" {% if filters.period == "all" %}selected{% endif %}>Toan bo</option>
+            <option value="7d" {% if filters.period == "7d" %}selected{% endif %}>7 ngày</option>
+            <option value="30d" {% if filters.period == "30d" %}selected{% endif %}>30 ngày</option>
+            <option value="90d" {% if filters.period == "90d" %}selected{% endif %}>90 ngày</option>
+            <option value="all" {% if filters.period == "all" %}selected{% endif %}>Toàn bộ</option>
           </select>
         </div>
         <div class="col-12 col-md-2">
-          <button type="submit" class="btn btn-primary w-100">Cap nhat</button>
+          <button type="submit" class="btn btn-primary w-100">Cập nhật</button>
         </div>
       </div>
     </form>
@@ -53,7 +53,7 @@
     <div class="row g-3 mb-3">
       <div class="col-12 col-lg-4">
         <div class="payment-section-card h-100">
-          <h2 class="h5 mb-3">Phan bo trang thai don</h2>
+          <h2 class="h5 mb-3">Phân bố trạng thái đơn</h2>
           <div class="payment-bar-list">
             {% for row in dashboard.order_status_distribution %}
             {% set total = dashboard.order_metrics.total_orders or 1 %}
@@ -63,14 +63,14 @@
               <div class="text-end">{{ "{:,}".format(row.count) }}</div>
             </div>
             {% else %}
-            <div class="payment-muted">Khong co du lieu.</div>
+            <div class="payment-muted">Không có dữ liệu.</div>
             {% endfor %}
           </div>
         </div>
       </div>
       <div class="col-12 col-lg-4">
         <div class="payment-section-card h-100">
-          <h2 class="h5 mb-3">Phan bo trang thai giao dich</h2>
+          <h2 class="h5 mb-3">Phân bố trạng thái giao dịch</h2>
           <div class="payment-bar-list">
             {% for row in dashboard.attempt_status_distribution %}
             {% set total = dashboard.attempt_metrics.total_attempts or 1 %}
@@ -80,14 +80,14 @@
               <div class="text-end">{{ "{:,}".format(row.count) }}</div>
             </div>
             {% else %}
-            <div class="payment-muted">Khong co du lieu.</div>
+            <div class="payment-muted">Không có dữ liệu.</div>
             {% endfor %}
           </div>
         </div>
       </div>
       <div class="col-12 col-lg-4">
         <div class="payment-section-card h-100">
-          <h2 class="h5 mb-3">Volume theo ngay</h2>
+          <h2 class="h5 mb-3">Lưu lượng theo ngày</h2>
           <div class="payment-bar-list">
             {% for row in dashboard.daily_volume %}
             <div class="payment-bar-row">
@@ -96,7 +96,7 @@
               <div class="text-end">{{ row.attempt_count }}</div>
             </div>
             {% else %}
-            <div class="payment-muted">Chua co giao dich.</div>
+            <div class="payment-muted">Chưa có giao dịch.</div>
             {% endfor %}
           </div>
         </div>
@@ -106,16 +106,16 @@
     <div class="row g-3 mb-3">
       <div class="col-12 col-lg-6">
         <div class="payment-section-card h-100">
-          <h2 class="h5 mb-3">Recent orders</h2>
+          <h2 class="h5 mb-3">Đơn gần đây</h2>
           {% if dashboard.recent_orders %}
           <div class="payment-table-wrap">
             <table class="table payment-table">
               <thead>
                 <tr>
-                  <th>Ma don</th>
-                  <th>Buyer</th>
-                  <th>So tien</th>
-                  <th>Trang thai</th>
+                  <th>Mã đơn</th>
+                  <th>Người mua</th>
+                  <th>Số tiền</th>
+                  <th>Trạng thái</th>
                 </tr>
               </thead>
               <tbody>
@@ -131,22 +131,22 @@
             </table>
           </div>
           {% else %}
-          <div class="payment-muted">Khong co don hang.</div>
+          <div class="payment-muted">Không có đơn hàng.</div>
           {% endif %}
         </div>
       </div>
       <div class="col-12 col-lg-6">
         <div class="payment-section-card h-100">
-          <h2 class="h5 mb-3">Recent abnormal attempts</h2>
+          <h2 class="h5 mb-3">Giao dịch bất thường gần đây</h2>
           {% if dashboard.recent_abnormal_attempts %}
           <div class="payment-table-wrap">
             <table class="table payment-table">
               <thead>
                 <tr>
-                  <th>Giao dich</th>
-                  <th>Buyer</th>
-                  <th>Status</th>
-                  <th>Tao luc</th>
+                  <th>Giao dịch</th>
+                  <th>Người mua</th>
+                  <th>Trạng thái</th>
+                  <th>Tạo lúc</th>
                 </tr>
               </thead>
               <tbody>
@@ -162,7 +162,7 @@
             </table>
           </div>
           {% else %}
-          <div class="payment-muted">Khong co giao dich bat thuong.</div>
+          <div class="payment-muted">Không có giao dịch bất thường.</div>
           {% endif %}
         </div>
       </div>
@@ -171,7 +171,7 @@
     <div class="row g-3">
       <div class="col-12 col-lg-6">
         <div class="payment-section-card h-100">
-          <h2 class="h5 mb-3">Webhook failures</h2>
+          <h2 class="h5 mb-3">Webhook lỗi</h2>
           {% if dashboard.recent_webhook_failures %}
           <div class="payment-timeline">
             {% for row in dashboard.recent_webhook_failures %}
@@ -190,21 +190,21 @@
             {% endfor %}
           </div>
           {% else %}
-          <div class="payment-muted">Khong co webhook loi.</div>
+          <div class="payment-muted">Không có webhook lỗi.</div>
           {% endif %}
         </div>
       </div>
       <div class="col-12 col-lg-6">
         <div class="payment-section-card h-100">
-          <h2 class="h5 mb-3">Provider breakdown</h2>
+          <h2 class="h5 mb-3">Phân bổ theo provider</h2>
           {% if dashboard.provider_breakdown %}
           <div class="payment-table-wrap">
             <table class="table payment-table">
               <thead>
                 <tr>
                   <th>Provider</th>
-                  <th>Attempts</th>
-                  <th>Amount</th>
+                  <th>Số lượt</th>
+                  <th>Số tiền</th>
                 </tr>
               </thead>
               <tbody>
@@ -219,7 +219,7 @@
             </table>
           </div>
           {% else %}
-          <div class="payment-muted">Khong co provider du lieu.</div>
+          <div class="payment-muted">Không có dữ liệu provider.</div>
           {% endif %}
         </div>
       </div>

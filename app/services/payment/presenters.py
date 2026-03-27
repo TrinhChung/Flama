@@ -13,21 +13,21 @@ from models.payment_webhook_event import PaymentWebhookEvent
 
 
 ATTEMPT_STATUS_LABELS = {
-    "created": "Moi tao",
-    "pending": "Dang cho thanh toan",
-    "confirmed": "Da xac nhan",
-    "manual_review": "Can kiem tra",
-    "expired": "Da het han",
-    "canceled": "Da huy",
-    "failed": "That bai",
-    "refunded": "Da hoan tien",
+    "created": "Mới tạo",
+    "pending": "Đang chờ thanh toán",
+    "confirmed": "Đã xác nhận",
+    "manual_review": "Cần kiểm tra",
+    "expired": "Đã hết hạn",
+    "canceled": "Đã hủy",
+    "failed": "Thất bại",
+    "refunded": "Đã hoàn tiền",
 }
 
 WEBHOOK_STATUS_LABELS = {
-    "received": "Da nhan",
-    "processed": "Da xu ly",
-    "ignored": "Bo qua",
-    "failed": "Xu ly loi",
+    "received": "Đã nhận",
+    "processed": "Đã xử lý",
+    "ignored": "Bỏ qua",
+    "failed": "Xử lý lỗi",
 }
 
 

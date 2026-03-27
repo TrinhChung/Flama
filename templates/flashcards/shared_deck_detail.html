@@ -14,8 +14,8 @@
       <small class="flama-meta-line" id="deck-meta-line"></small>
     </div>
     <div class="d-flex gap-2">
-      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('flashcards.shared_decks_page') }}">← Quay lại</a>
-      <button class="btn btn-primary btn-sm" id="deck-install-btn" type="button">Install</button>
+      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('flashcards.shared_decks_page') }}">← Quay lại danh sách deck</a>
+      <button class="btn btn-primary btn-sm" id="deck-install-btn" type="button">Cài đặt</button>
     </div>
   </div>
 
@@ -379,7 +379,7 @@
     <div class="flama-section-card" id="deck-template-preview-card">
       <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
         <div>
-          <h3 class="flama-section-title mb-0">Preview cards</h3>
+          <h3 class="flama-section-title mb-0">Xem trước thẻ</h3>
           <small style="color:var(--flama-text-2);" id="deck-template-note"></small>
         </div>
         <div class="d-flex gap-2 align-items-center flex-wrap">
@@ -391,15 +391,15 @@
             </svg>
             <span id="deck-template-name-display">Đang tải...</span>
           </a>
-          <div class="btn-group btn-group-sm flama-btn-group" role="group" aria-label="Deck preview side">
+          <div class="btn-group btn-group-sm flama-btn-group" role="group" aria-label="Mặt xem trước của deck">
             <button class="btn btn-outline-secondary active" id="deck-preview-side-front" type="button"
-              data-side="front">Front</button>
+              data-side="front">Mặt trước</button>
             <button class="btn btn-outline-secondary" id="deck-preview-side-back" type="button"
-              data-side="back">Back</button>
+              data-side="back">Mặt sau</button>
           </div>
-          <div class="btn-group btn-group-sm" role="group" aria-label="Deck preview sample nav">
-            <button class="btn btn-outline-secondary" id="deck-preview-sample-prev" type="button">‹ Prev</button>
-            <button class="btn btn-outline-secondary" id="deck-preview-sample-next" type="button">Next ›</button>
+          <div class="btn-group btn-group-sm" role="group" aria-label="Điều hướng từ mẫu">
+            <button class="btn btn-outline-secondary" id="deck-preview-sample-prev" type="button">‹ Trước</button>
+            <button class="btn btn-outline-secondary" id="deck-preview-sample-next" type="button">Sau ›</button>
           </div>
           <small style="color:var(--flama-text-2);" id="deck-preview-sample-label"></small>
         </div>

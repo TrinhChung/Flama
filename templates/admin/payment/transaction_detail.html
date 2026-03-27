@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Transaction Detail{% endblock %}
+{% block title %}Chi tiết giao dịch{% endblock %}
 
 {% block styles %}
 <style>
@@ -13,74 +13,74 @@
   <div class="payment-shell" style="max-width: 1180px;">
     <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
       <div>
-        <div class="payment-kicker mb-1">Admin Transaction Detail</div>
+        <div class="payment-kicker mb-1">Chi tiết giao dịch</div>
         <h1 class="h3 mb-1 code">{{ attempt.id }}</h1>
-        <p class="payment-muted mb-0">Theo doi provider refs, webhook status va lien ket den order goc.</p>
+        <p class="payment-muted mb-0">Theo dõi mã ref provider, trạng thái webhook và liên kết tới đơn hàng gốc.</p>
       </div>
       <div class="payment-toolbar-actions">
-        <a class="btn btn-outline-secondary" href="{{ url_for('admin_payments.transactions_page') }}">Quay lai giao dich</a>
+        <a class="btn btn-outline-secondary" href="{{ url_for('admin_payments.transactions_page') }}">Quay lại giao dịch</a>
         {% if attempt.order %}
-        <a class="btn btn-outline-secondary" href="{{ url_for('admin_payments.order_detail_page', order_id=attempt.order.id) }}">Mo order</a>
+        <a class="btn btn-outline-secondary" href="{{ url_for('admin_payments.order_detail_page', order_id=attempt.order.id) }}">Mở đơn hàng</a>
         {% endif %}
       </div>
     </div>
 
     <div class="payment-summary-grid mb-3">
       <div class="payment-summary-card" data-tone="primary">
-        <div class="payment-summary-label">Status</div>
+        <div class="payment-summary-label">Trạng thái</div>
         <div class="payment-summary-value">{{ attempt.status_label }}</div>
         <div class="payment-summary-hint">{{ attempt.provider_code }} / {{ attempt.payment_method_code }}</div>
       </div>
       <div class="payment-summary-card" data-tone="success">
-        <div class="payment-summary-label">So tien</div>
+        <div class="payment-summary-label">Số tiền</div>
         <div class="payment-summary-value">{{ attempt.amount_display }}</div>
       </div>
       <div class="payment-summary-card" data-tone="secondary">
-        <div class="payment-summary-label">Order</div>
+        <div class="payment-summary-label">Đơn hàng</div>
         <div class="payment-summary-value" style="font-size: 1rem;">{{ attempt.order.merchant_order_code if attempt.order else "-" }}</div>
       </div>
       <div class="payment-summary-card" data-tone="warning">
-        <div class="payment-summary-label">Webhook events</div>
+        <div class="payment-summary-label">Sự kiện webhook</div>
         <div class="payment-summary-value">{{ attempt.webhook_count }}</div>
-        <div class="payment-summary-hint">{{ attempt.latest_webhook_status_label or "Chua co webhook" }}</div>
+        <div class="payment-summary-hint">{{ attempt.latest_webhook_status_label or "Chưa có webhook" }}</div>
       </div>
     </div>
 
     <div class="row g-3 mb-3">
       <div class="col-12 col-lg-7">
         <div class="payment-section-card h-100">
-          <h2 class="h5 mb-3">Thong tin giao dich</h2>
+          <h2 class="h5 mb-3">Thông tin giao dịch</h2>
           <div class="payment-detail-grid">
             <div class="payment-detail-line">
-              <div class="payment-detail-label">Created</div>
+              <div class="payment-detail-label">Tạo lúc</div>
               <div class="payment-detail-value">{{ attempt.created_at_display }}</div>
             </div>
             <div class="payment-detail-line">
-              <div class="payment-detail-label">Updated</div>
+              <div class="payment-detail-label">Cập nhật lúc</div>
               <div class="payment-detail-value">{{ attempt.updated_at_display }}</div>
             </div>
             <div class="payment-detail-line">
-              <div class="payment-detail-label">Provider payment id</div>
+              <div class="payment-detail-label">Mã thanh toán từ provider</div>
               <div class="payment-detail-value code">{{ attempt.provider_payment_id or "-" }}</div>
             </div>
             <div class="payment-detail-line">
-              <div class="payment-detail-label">Provider order code</div>
+              <div class="payment-detail-label">Mã đơn từ provider</div>
               <div class="payment-detail-value code">{{ attempt.provider_order_code or "-" }}</div>
             </div>
             <div class="payment-detail-line">
-              <div class="payment-detail-label">Expected reference</div>
+              <div class="payment-detail-label">Nội dung chuyển khoản kỳ vọng</div>
               <div class="payment-detail-value code">{{ attempt.expected_payment_reference or "-" }}</div>
             </div>
             <div class="payment-detail-line">
-              <div class="payment-detail-label">Expires at</div>
+              <div class="payment-detail-label">Hết hạn lúc</div>
               <div class="payment-detail-value">{{ attempt.expires_at_display }}</div>
             </div>
             <div class="payment-detail-line">
-              <div class="payment-detail-label">Confirmed at</div>
+              <div class="payment-detail-label">Xác nhận lúc</div>
               <div class="payment-detail-value">{{ attempt.confirmed_at_display }}</div>
             </div>
             <div class="payment-detail-line">
-              <div class="payment-detail-label">Failed at</div>
+              <div class="payment-detail-label">Lỗi lúc</div>
               <div class="payment-detail-value">{{ attempt.failed_at_display }}</div>
             </div>
             {% if attempt.checkout_url %}
@@ -99,13 +99,13 @@
       </div>
       <div class="col-12 col-lg-5">
         <div class="payment-section-card h-100">
-          <h2 class="h5 mb-3">Linked order</h2>
+          <h2 class="h5 mb-3">Đơn hàng liên kết</h2>
           {% if attempt.order %}
             <div class="payment-timeline">
             <div class="payment-timeline-item">
               <div class="fw-semibold">{{ attempt.order.merchant_order_code }}</div>
-              <div class="payment-timeline-meta">Buyer: {{ attempt.order.buyer.username or "-" }} | {{ attempt.order.buyer.email or "-" }}</div>
-              <div class="payment-timeline-meta">Items: {{ attempt.order.item_rows|length }}</div>
+              <div class="payment-timeline-meta">Người mua: {{ attempt.order.buyer.username or "-" }} | {{ attempt.order.buyer.email or "-" }}</div>
+              <div class="payment-timeline-meta">Số mục: {{ attempt.order.item_rows|length }}</div>
             </div>
             {% for item in attempt.order.item_rows %}
             <div class="payment-timeline-item">
@@ -115,7 +115,7 @@
             {% endfor %}
           </div>
           {% else %}
-          <div class="payment-muted">Khong tim thay order lien ket.</div>
+          <div class="payment-muted">Không tìm thấy đơn hàng liên kết.</div>
           {% endif %}
         </div>
       </div>
@@ -124,7 +124,7 @@
     <div class="row g-3">
       <div class="col-12 col-lg-5">
         <div class="payment-section-card h-100">
-          <h2 class="h5 mb-3">Provider metadata</h2>
+          <h2 class="h5 mb-3">Metadata từ provider</h2>
           {% if attempt.provider_metadata %}
           <div class="payment-detail-grid">
             {% for key, value in attempt.provider_metadata.items() %}
@@ -135,13 +135,13 @@
             {% endfor %}
           </div>
           {% else %}
-          <div class="payment-muted">Khong co metadata.</div>
+          <div class="payment-muted">Không có metadata.</div>
           {% endif %}
         </div>
       </div>
       <div class="col-12 col-lg-7">
         <div class="payment-section-card h-100">
-          <h2 class="h5 mb-3">Webhook timeline</h2>
+          <h2 class="h5 mb-3">Lịch sử webhook</h2>
           {% if attempt.events %}
           <div class="payment-timeline">
             {% for event in attempt.events %}
@@ -155,7 +155,7 @@
                   {{ event.processing_status_label }}
                 </span>
               </div>
-              <div class="small mt-2">Signature valid: {{ "Yes" if event.signature_valid else "No" }}</div>
+              <div class="small mt-2">Chữ ký hợp lệ: {{ "Có" if event.signature_valid else "Không" }}</div>
               {% if event.error_message %}
               <div class="small text-danger mt-1">{{ event.error_message }}</div>
               {% endif %}
@@ -163,7 +163,7 @@
             {% endfor %}
           </div>
           {% else %}
-          <div class="payment-muted">Chua co webhook event.</div>
+          <div class="payment-muted">Chưa có sự kiện webhook.</div>
           {% endif %}
         </div>
       </div>

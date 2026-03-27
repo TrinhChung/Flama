@@ -10,8 +10,8 @@
       <small class="text-muted" id="nt-meta-line"></small>
     </div>
     <div class="d-flex gap-2">
-      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('flashcards.shared_note_types_page') }}">Quay lại Shared NoteTypes</a>
-      <button class="btn btn-primary btn-sm" id="install-btn" type="button">Install</button>
+      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('flashcards.shared_note_types_page') }}">Quay lại danh sách template</a>
+      <button class="btn btn-primary btn-sm" id="install-btn" type="button">Cài đặt</button>
     </div>
   </div>
 
@@ -176,12 +176,12 @@
 
     <div class="card card-body mb-3">
       <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
-        <h3 class="h6 mb-0">Preview template</h3>
+        <h3 class="h6 mb-0">Xem trước template</h3>
         <div class="d-flex gap-2 align-items-center">
           <select class="form-select form-select-sm" id="template-select" style="min-width: 220px;"></select>
-          <div class="btn-group btn-group-sm" role="group" aria-label="Preview side">
-            <button class="btn btn-outline-secondary active" id="preview-side-front" type="button" data-side="front">Front</button>
-            <button class="btn btn-outline-secondary" id="preview-side-back" type="button" data-side="back">Back</button>
+          <div class="btn-group btn-group-sm" role="group" aria-label="Mặt xem trước">
+            <button class="btn btn-outline-secondary active" id="preview-side-front" type="button" data-side="front">Mặt trước</button>
+            <button class="btn btn-outline-secondary" id="preview-side-back" type="button" data-side="back">Mặt sau</button>
           </div>
         </div>
       </div>
@@ -320,12 +320,12 @@
       const checkout = order?.active_attempt?.checkout || {};
       const lines = [
         "Đã tạo đơn thanh toán.",
-        "Mã đơn: " + (order.merchant_order_code || order.id || "N/A"),
+        "Mã đơn: " + (order.merchant_order_code || order.id || "Không có"),
         "Số tiền: " + formatCurrencyMinor(checkout.amount_minor || order.total_amount_minor || 0),
-        "Ngân hàng BIN: " + (checkout.bank_bin || "N/A"),
-        "Số tài khoản: " + (checkout.account_no || "N/A"),
-        "Tên tài khoản: " + (checkout.account_name || "N/A"),
-        "Nội dung CK: " + (checkout.payment_reference || "N/A"),
+        "Ngân hàng BIN: " + (checkout.bank_bin || "Không có"),
+        "Số tài khoản: " + (checkout.account_no || "Không có"),
+        "Tên tài khoản: " + (checkout.account_name || "Không có"),
+        "Nội dung CK: " + (checkout.payment_reference || "Không có"),
       ];
       if (order?.active_attempt?.expires_at) {
         lines.push("Hết hạn: " + formatDate(order.active_attempt.expires_at));
@@ -350,14 +350,14 @@
     }
 
     function renderPaymentLineValue(line) {
-      if (!line) return "N/A";
+      if (!line) return "Không có";
       if (line.type === "amount_minor") {
         return formatCurrencyMinor(line.value_minor || 0);
       }
       if (line.type === "datetime") {
-        return formatDate(line.value) || "N/A";
+        return formatDate(line.value) || "Không có";
       }
-      return String(line.value || "N/A");
+      return String(line.value || "Không có");
     }
 
     function renderPaymentLines(lines) {
@@ -482,7 +482,7 @@
     }
 
     function setLoadingPreview(message) {
-      const safeMessage = message || "Loading preview...";
+      const safeMessage = message || "Đang tải phần xem trước...";
       previewFrame.srcdoc = "<!doctype html><html><body><div style='padding:12px;color:#6c757d;'>" + safeMessage + "</div></body></html>";
     }
 
@@ -632,7 +632,7 @@
       const html = previewSide === "back"
         ? (previewPayload?.back_html || "")
         : (previewPayload?.front_html || "");
-      const fallback = "<div style='padding:12px;color:#6c757d;'>Empty preview.</div>";
+      const fallback = "<div style='padding:12px;color:#6c757d;'>Chưa có nội dung xem trước.</div>";
       previewFrame.srcdoc = "<!doctype html><html><head><meta charset='utf-8'></head><body><div style='padding:8px;'>" + (html || fallback) + "</div></body></html>";
     }
 
@@ -659,16 +659,16 @@
       const previousTemplateId = selectedTemplateId;
       detail = await requestJson(`/api/shared/note-types/${noteTypeId}`);
 
-      titleEl.textContent = detail.title || detail.name || "Shared template";
-      metaEl.textContent = "Tác giả: " + (detail.author?.username || "Unknown")
-        + " | Danh mục: " + (detail.primary_category || "General")
+      titleEl.textContent = detail.title || detail.name || "Template chia sẻ";
+      metaEl.textContent = "Tác giả: " + (detail.author?.username || "Không rõ")
+        + " | Danh mục: " + (detail.primary_category || "Chung")
         + " | Giá: " + formatPrice(detail.price_display || "Miễn phí");
       descriptionEl.textContent = detail.description || "Không có mô tả.";
-      previewTextEl.textContent = detail.preview_text || "Không có preview text.";
-      statsEl.textContent = "Rating: " + Number(detail.rating_avg || 0).toFixed(2)
+      previewTextEl.textContent = detail.preview_text || "Không có nội dung xem trước.";
+      statsEl.textContent = "Đánh giá: " + Number(detail.rating_avg || 0).toFixed(2)
         + " (" + formatCount(detail.rating_count || 0) + ")"
-        + " | Active usage: " + formatCount(detail.active_usage_count || 0) + "/" + formatCount(detail.install_count || 0)
-        + " | Cập nhật: " + (formatDate(detail.updated_at) || "N/A");
+        + " | Lượt dùng: " + formatCount(detail.active_usage_count || 0) + "/" + formatCount(detail.install_count || 0)
+        + " | Cập nhật: " + (formatDate(detail.updated_at) || "Không rõ");
 
       renderTags(detail.tags || []);
       renderFieldList(detail.field_defs || []);

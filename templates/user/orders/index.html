@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Lich su don hang{% endblock %}
+{% block title %}Lịch sử đơn hàng{% endblock %}
 
 {% block styles %}
 <style>
@@ -13,9 +13,9 @@
   <div class="payment-shell">
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
       <div>
-        <div class="payment-kicker mb-1">Order History</div>
-        <h1 class="h3 mb-1">Lich su don hang</h1>
-        <p class="payment-muted mb-0">Xem cac don da tao, trang thai thanh toan va truy cap chi tiet tung don.</p>
+        <div class="payment-kicker mb-1">Đơn hàng của bạn</div>
+        <h1 class="h3 mb-1">Lịch sử đơn hàng</h1>
+        <p class="payment-muted mb-0">Theo dõi các đơn đã tạo, trạng thái thanh toán và mở chi tiết từng đơn.</p>
       </div>
     </div>
 
@@ -23,42 +23,42 @@
       <input type="hidden" name="page" value="1">
       <div class="row g-2 align-items-end">
         <div class="col-12 col-lg-4">
-          <label class="form-label mb-1">Tim kiem</label>
-          <input class="form-control" type="text" name="q" value="{{ filters.q }}" placeholder="Ma don, san pham">
+          <label class="form-label mb-1">Tìm kiếm</label>
+          <input class="form-control" type="text" name="q" value="{{ filters.q }}" placeholder="Mã đơn, tên sản phẩm">
         </div>
         <div class="col-6 col-lg-2">
-          <label class="form-label mb-1">Trang thai don</label>
+          <label class="form-label mb-1">Trạng thái đơn</label>
           <select class="form-select" name="order_status">
-            <option value="all" {% if filters.order_status == "all" %}selected{% endif %}>Tat ca</option>
-            <option value="pending_payment" {% if filters.order_status == "pending_payment" %}selected{% endif %}>Dang cho</option>
-            <option value="paid" {% if filters.order_status == "paid" %}selected{% endif %}>Da thanh toan</option>
-            <option value="under_review" {% if filters.order_status == "under_review" %}selected{% endif %}>Can review</option>
-            <option value="expired" {% if filters.order_status == "expired" %}selected{% endif %}>Het han</option>
-            <option value="failed" {% if filters.order_status == "failed" %}selected{% endif %}>That bai</option>
-            <option value="refunded" {% if filters.order_status == "refunded" %}selected{% endif %}>Hoan tien</option>
+            <option value="all" {% if filters.order_status == "all" %}selected{% endif %}>Tất cả</option>
+            <option value="pending_payment" {% if filters.order_status == "pending_payment" %}selected{% endif %}>Đang chờ</option>
+            <option value="paid" {% if filters.order_status == "paid" %}selected{% endif %}>Đã thanh toán</option>
+            <option value="under_review" {% if filters.order_status == "under_review" %}selected{% endif %}>Cần kiểm tra</option>
+            <option value="expired" {% if filters.order_status == "expired" %}selected{% endif %}>Hết hạn</option>
+            <option value="failed" {% if filters.order_status == "failed" %}selected{% endif %}>Thất bại</option>
+            <option value="refunded" {% if filters.order_status == "refunded" %}selected{% endif %}>Hoàn tiền</option>
           </select>
         </div>
         <div class="col-6 col-lg-2">
-          <label class="form-label mb-1">Thanh toan</label>
+          <label class="form-label mb-1">Thanh toán</label>
           <select class="form-select" name="payment_status">
-            <option value="all" {% if filters.payment_status == "all" %}selected{% endif %}>Tat ca</option>
-            <option value="pending" {% if filters.payment_status == "pending" %}selected{% endif %}>Dang cho</option>
-            <option value="confirmed" {% if filters.payment_status == "confirmed" %}selected{% endif %}>Da xac nhan</option>
-            <option value="manual_review" {% if filters.payment_status == "manual_review" %}selected{% endif %}>Can kiem tra</option>
-            <option value="expired" {% if filters.payment_status == "expired" %}selected{% endif %}>Het han</option>
-            <option value="failed" {% if filters.payment_status == "failed" %}selected{% endif %}>That bai</option>
+            <option value="all" {% if filters.payment_status == "all" %}selected{% endif %}>Tất cả</option>
+            <option value="pending" {% if filters.payment_status == "pending" %}selected{% endif %}>Đang chờ</option>
+            <option value="confirmed" {% if filters.payment_status == "confirmed" %}selected{% endif %}>Đã xác nhận</option>
+            <option value="manual_review" {% if filters.payment_status == "manual_review" %}selected{% endif %}>Cần kiểm tra</option>
+            <option value="expired" {% if filters.payment_status == "expired" %}selected{% endif %}>Hết hạn</option>
+            <option value="failed" {% if filters.payment_status == "failed" %}selected{% endif %}>Thất bại</option>
           </select>
         </div>
         <div class="col-6 col-lg-2">
-          <label class="form-label mb-1">Loai san pham</label>
+          <label class="form-label mb-1">Loại sản phẩm</label>
           <select class="form-select" name="product_type">
-            <option value="all" {% if filters.product_type == "all" %}selected{% endif %}>Tat ca</option>
+            <option value="all" {% if filters.product_type == "all" %}selected{% endif %}>Tất cả</option>
             <option value="note_type" {% if filters.product_type == "note_type" %}selected{% endif %}>Template</option>
             <option value="deck_marketplace_item" {% if filters.product_type == "deck_marketplace_item" %}selected{% endif %}>Deck</option>
           </select>
         </div>
         <div class="col-6 col-lg-1">
-          <label class="form-label mb-1">Moi trang</label>
+          <label class="form-label mb-1">Mỗi trang</label>
           <select class="form-select" name="per_page">
             <option value="10" {% if per_page == 10 %}selected{% endif %}>10</option>
             <option value="20" {% if per_page == 20 %}selected{% endif %}>20</option>
@@ -66,14 +66,14 @@
           </select>
         </div>
         <div class="col-6 col-lg-1">
-          <button type="submit" class="btn btn-primary w-100">Loc</button>
+          <button type="submit" class="btn btn-primary w-100">Lọc</button>
         </div>
       </div>
     </form>
 
     <div class="payment-section-card">
       <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
-        <div class="small payment-muted">Tong {{ "{:,}".format(total) }} don hang</div>
+        <div class="small payment-muted">Tổng {{ "{:,}".format(total) }} đơn hàng</div>
         <div class="small payment-muted">Trang {{ page }}/{{ total_pages }}</div>
       </div>
       {% if items %}
@@ -81,13 +81,13 @@
         <table class="table payment-table">
           <thead>
             <tr>
-              <th>Ma don</th>
-              <th>San pham</th>
-              <th>So tien</th>
-              <th>Trang thai don</th>
-              <th>Thanh toan</th>
-              <th>Tao luc</th>
-              <th>Da thanh toan</th>
+              <th>Mã đơn</th>
+              <th>Sản phẩm</th>
+              <th>Số tiền</th>
+              <th>Trạng thái đơn</th>
+              <th>Thanh toán</th>
+              <th>Tạo lúc</th>
+              <th>Đã thanh toán</th>
             </tr>
           </thead>
           <tbody>
@@ -101,7 +101,7 @@
               <td>
                 <div class="fw-semibold">{{ item.title }}</div>
                 {% if item.item_count > 1 %}
-                <div class="small payment-muted">{{ item.item_count }} muc</div>
+                <div class="small payment-muted">{{ item.item_count }} mục</div>
                 {% endif %}
               </td>
               <td>{{ item.total_amount_display }}</td>
@@ -122,8 +122,8 @@
       </div>
       {% else %}
       <div class="payment-empty">
-        <div class="fw-semibold mb-2">Chua co don hang phu hop</div>
-        <div>Ban co the quay lai marketplace de mua san pham moi.</div>
+        <div class="fw-semibold mb-2">Chưa có đơn hàng phù hợp</div>
+        <div>Bạn có thể quay lại marketplace để mua thêm sản phẩm.</div>
       </div>
       {% endif %}
     </div>
@@ -133,7 +133,7 @@
         class="btn btn-outline-secondary {% if not has_prev %}disabled{% endif %}"
         href="{{ url_for('user_orders.order_history_page', page=prev_num, per_page=per_page, q=filters.q, order_status=filters.order_status, payment_status=filters.payment_status, product_type=filters.product_type) }}"
       >
-        Truoc
+        Trước
       </a>
       <a
         class="btn btn-outline-secondary {% if not has_next %}disabled{% endif %}"

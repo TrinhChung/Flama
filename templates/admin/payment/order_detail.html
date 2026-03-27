@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Admin Order Detail{% endblock %}
+{% block title %}Chi tiết đơn hàng quản trị{% endblock %}
 
 {% block styles %}
 <style>
@@ -15,36 +15,36 @@
   <div class="payment-shell" style="max-width: 1180px;">
     <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
       <div>
-        <div class="payment-kicker mb-1">Admin Order Detail</div>
+        <div class="payment-kicker mb-1">Chi tiết đơn hàng</div>
         <h1 class="h3 mb-1">{{ serialized.merchant_order_code }}</h1>
         <p class="payment-muted mb-0">{{ serialized.message }}</p>
       </div>
       <div class="payment-toolbar-actions">
-        <a class="btn btn-outline-secondary" href="{{ url_for('admin_payments.orders_page') }}">Quay lai danh sach</a>
+        <a class="btn btn-outline-secondary" href="{{ url_for('admin_payments.orders_page') }}">Quay lại danh sách</a>
         {% if order.attempt_rows %}
-        <a class="btn btn-outline-secondary" href="{{ url_for('admin_payments.transaction_detail_page', attempt_id=order.attempt_rows[0].id) }}">Mo giao dich moi nhat</a>
+        <a class="btn btn-outline-secondary" href="{{ url_for('admin_payments.transaction_detail_page', attempt_id=order.attempt_rows[0].id) }}">Mở giao dịch mới nhất</a>
         {% endif %}
       </div>
     </div>
 
     <div class="payment-summary-grid mb-3">
       <div class="payment-summary-card" data-tone="{{ status_display.tone or 'primary' }}">
-        <div class="payment-summary-label">Trang thai don</div>
+        <div class="payment-summary-label">Trạng thái đơn</div>
         <div class="payment-summary-value">{{ status_display.label or serialized.status }}</div>
         <div class="payment-summary-hint">{{ serialized.next_action or "" }}</div>
       </div>
       <div class="payment-summary-card" data-tone="primary">
-        <div class="payment-summary-label">Buyer</div>
+        <div class="payment-summary-label">Người mua</div>
         <div class="payment-summary-value" style="font-size: 1rem;">{{ order.buyer.username or "-" }}</div>
         <div class="payment-summary-hint">{{ order.buyer.email or "-" }}</div>
       </div>
       <div class="payment-summary-card" data-tone="success">
-        <div class="payment-summary-label">Tong thanh toan</div>
+        <div class="payment-summary-label">Tổng thanh toán</div>
         <div class="payment-summary-value">{{ "{:,.0f}".format(serialized.total_amount_minor or 0) }} {{ serialized.currency_code or "VND" }}</div>
-        <div class="payment-summary-hint">Grant status: {{ serialized.grant_status }}</div>
+        <div class="payment-summary-hint">Trạng thái cấp quyền: {{ serialized.grant_status }}</div>
       </div>
       <div class="payment-summary-card" data-tone="secondary">
-        <div class="payment-summary-label">Seller</div>
+        <div class="payment-summary-label">Người bán</div>
         <div class="payment-summary-value" style="font-size: 1rem;">{{ order.seller_labels|join(', ') if order.seller_labels else "-" }}</div>
       </div>
     </div>
@@ -52,7 +52,7 @@
     <div class="row g-3 mb-3">
       <div class="col-12 col-lg-7">
         <div class="payment-section-card h-100">
-          <h2 class="h5 mb-3">Thong tin order</h2>
+          <h2 class="h5 mb-3">Thông tin đơn hàng</h2>
           <div class="payment-detail-grid">
             {% for line in serialized.order_detail_lines or [] %}
             <div class="payment-detail-line">
@@ -73,7 +73,7 @@
       </div>
       <div class="col-12 col-lg-5">
         <div class="payment-section-card h-100">
-          <h2 class="h5 mb-3">Items</h2>
+          <h2 class="h5 mb-3">Sản phẩm trong đơn</h2>
           <div class="payment-timeline">
             {% for item in order.item_rows %}
             <div class="payment-timeline-item">
@@ -81,11 +81,11 @@
                 <div>
                   <div class="fw-semibold">{{ item.title_snapshot }}</div>
                   <div class="payment-timeline-meta">{{ item.product_type }} | ref {{ item.product_ref_id }}</div>
-                  <div class="payment-timeline-meta">Seller: {{ item.seller_label or "-" }}</div>
+                  <div class="payment-timeline-meta">Người bán: {{ item.seller_label or "-" }}</div>
                 </div>
                 <div class="text-end">
                   <div class="fw-semibold">{{ item.line_total_display }}</div>
-                  <div class="payment-timeline-meta">SL {{ item.quantity }}</div>
+                  <div class="payment-timeline-meta">Số lượng: {{ item.quantity }}</div>
                 </div>
               </div>
             </div>
@@ -98,7 +98,7 @@
     <div class="row g-3 mb-3">
       <div class="col-12 col-lg-7">
         <div class="payment-section-card h-100">
-          <h2 class="h5 mb-3">Lich su payment attempts</h2>
+          <h2 class="h5 mb-3">Lịch sử lượt thanh toán</h2>
           {% if order.attempt_rows %}
           <div class="payment-timeline">
             {% for attempt in order.attempt_rows %}
@@ -110,12 +110,12 @@
                 </div>
                 <div class="d-flex gap-2 align-items-start">
                   <span class="payment-badge" data-tone="primary">{{ attempt.status_label }}</span>
-                  <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('admin_payments.transaction_detail_page', attempt_id=attempt.id) }}">Chi tiet</a>
+                  <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('admin_payments.transaction_detail_page', attempt_id=attempt.id) }}">Chi tiết</a>
                 </div>
               </div>
-              <div class="small mb-1">Amount: {{ attempt.amount_display }}</div>
+              <div class="small mb-1">Số tiền: {{ attempt.amount_display }}</div>
               {% if attempt.expected_payment_reference %}
-              <div class="small mb-1">Reference: <span class="code">{{ attempt.expected_payment_reference }}</span></div>
+              <div class="small mb-1">Nội dung chuyển khoản: <span class="code">{{ attempt.expected_payment_reference }}</span></div>
               {% endif %}
               {% if attempt.failure_message %}
               <div class="small text-danger">{{ attempt.failure_message }}</div>
@@ -126,33 +126,33 @@
             {% endfor %}
           </div>
           {% else %}
-          <div class="payment-muted">Chua co payment attempt.</div>
+          <div class="payment-muted">Chưa có lượt thanh toán nào.</div>
           {% endif %}
         </div>
       </div>
       <div class="col-12 col-lg-5">
         <div class="payment-section-card h-100">
-          <h2 class="h5 mb-3">Entitlements</h2>
+          <h2 class="h5 mb-3">Cấp quyền</h2>
           {% if order.entitlement_rows %}
           <div class="payment-timeline">
             {% for row in order.entitlement_rows %}
             <div class="payment-timeline-item">
               <div class="fw-semibold">{{ row.resource_type }}</div>
-              <div class="payment-timeline-meta">Resource: {{ row.resource_ref_id }}</div>
-              <div class="payment-timeline-meta">Status: {{ row.status_label }}</div>
-              <div class="payment-timeline-meta">Granted: {{ row.granted_at_display }}</div>
+              <div class="payment-timeline-meta">Tài nguyên: {{ row.resource_ref_id }}</div>
+              <div class="payment-timeline-meta">Trạng thái: {{ row.status_label }}</div>
+              <div class="payment-timeline-meta">Đã cấp lúc: {{ row.granted_at_display }}</div>
             </div>
             {% endfor %}
           </div>
           {% else %}
-          <div class="payment-muted">Don nay chua co entitlement.</div>
+          <div class="payment-muted">Đơn này chưa có bản ghi cấp quyền.</div>
           {% endif %}
         </div>
       </div>
     </div>
 
     <div class="payment-section-card">
-      <h2 class="h5 mb-3">Huong dan hien tai cho user</h2>
+      <h2 class="h5 mb-3">Hướng dẫn đang hiển thị cho người dùng</h2>
       {% if serialized.instructions %}
       <ul class="mb-0">
         {% for row in serialized.instructions %}
@@ -160,7 +160,7 @@
         {% endfor %}
       </ul>
       {% else %}
-      <div class="payment-muted">Khong co huong dan bo sung.</div>
+      <div class="payment-muted">Không có hướng dẫn bổ sung.</div>
       {% endif %}
     </div>
   </div>

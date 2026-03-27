@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Admin Transactions{% endblock %}
+{% block title %}Lịch sử giao dịch{% endblock %}
 
 {% block styles %}
 <style>
@@ -13,13 +13,13 @@
   <div class="payment-shell">
     <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
       <div>
-        <div class="payment-kicker mb-1">Admin Transactions</div>
-        <h1 class="h3 mb-1">Lich su giao dich</h1>
-        <p class="payment-muted mb-0">Theo doi tung payment attempt, ref provider, webhook va cac truong hop can doi soat.</p>
+        <div class="payment-kicker mb-1">Giao dịch</div>
+        <h1 class="h3 mb-1">Lịch sử giao dịch</h1>
+        <p class="payment-muted mb-0">Theo dõi từng lượt thanh toán, mã ref provider, webhook và các trường hợp cần đối soát.</p>
       </div>
       <div class="payment-toolbar-actions">
-        <a class="btn btn-outline-secondary" href="{{ url_for('admin_payments.dashboard_page') }}">Ve dashboard</a>
-        <a class="btn btn-outline-secondary" href="{{ url_for('admin_payments.orders_page') }}">Xem don hang</a>
+        <a class="btn btn-outline-secondary" href="{{ url_for('admin_payments.dashboard_page') }}">Về dashboard</a>
+        <a class="btn btn-outline-secondary" href="{{ url_for('admin_payments.orders_page') }}">Xem đơn hàng</a>
       </div>
     </div>
 
@@ -27,7 +27,7 @@
       <input type="hidden" name="page" value="1">
       <div class="row g-2 align-items-end">
         <div class="col-12 col-lg-3">
-          <label class="form-label mb-1">Tim kiem</label>
+          <label class="form-label mb-1">Tìm kiếm</label>
           <input class="form-control" type="text" name="q" value="{{ filters.q }}" placeholder="Attempt id, provider ref, order code">
         </div>
         <div class="col-6 col-lg-2">
@@ -35,60 +35,60 @@
           <input class="form-control" type="text" name="buyer" value="{{ filters.buyer }}" placeholder="Username / email">
         </div>
         <div class="col-6 col-lg-2">
-          <label class="form-label mb-1">Order code</label>
+          <label class="form-label mb-1">Mã đơn hàng</label>
           <input class="form-control" type="text" name="order_code" value="{{ filters.order_code }}">
         </div>
         <div class="col-6 col-lg-1">
-          <label class="form-label mb-1">Status</label>
+          <label class="form-label mb-1">Trạng thái</label>
           <select class="form-select" name="status">
-            <option value="all" {% if filters.status == "all" %}selected{% endif %}>Tat ca</option>
-            <option value="created" {% if filters.status == "created" %}selected{% endif %}>Created</option>
-            <option value="pending" {% if filters.status == "pending" %}selected{% endif %}>Pending</option>
-            <option value="confirmed" {% if filters.status == "confirmed" %}selected{% endif %}>Confirmed</option>
-            <option value="manual_review" {% if filters.status == "manual_review" %}selected{% endif %}>Review</option>
-            <option value="expired" {% if filters.status == "expired" %}selected{% endif %}>Expired</option>
-            <option value="failed" {% if filters.status == "failed" %}selected{% endif %}>Failed</option>
-            <option value="canceled" {% if filters.status == "canceled" %}selected{% endif %}>Canceled</option>
+            <option value="all" {% if filters.status == "all" %}selected{% endif %}>Tất cả</option>
+            <option value="created" {% if filters.status == "created" %}selected{% endif %}>Mới tạo</option>
+            <option value="pending" {% if filters.status == "pending" %}selected{% endif %}>Đang chờ</option>
+            <option value="confirmed" {% if filters.status == "confirmed" %}selected{% endif %}>Đã xác nhận</option>
+            <option value="manual_review" {% if filters.status == "manual_review" %}selected{% endif %}>Cần kiểm tra</option>
+            <option value="expired" {% if filters.status == "expired" %}selected{% endif %}>Hết hạn</option>
+            <option value="failed" {% if filters.status == "failed" %}selected{% endif %}>Thất bại</option>
+            <option value="canceled" {% if filters.status == "canceled" %}selected{% endif %}>Đã hủy</option>
           </select>
         </div>
         <div class="col-6 col-lg-1">
           <label class="form-label mb-1">Provider</label>
           <select class="form-select" name="provider">
-            <option value="all" {% if filters.provider == "all" %}selected{% endif %}>Tat ca</option>
+            <option value="all" {% if filters.provider == "all" %}selected{% endif %}>Tất cả</option>
             <option value="payos" {% if filters.provider == "payos" %}selected{% endif %}>payOS</option>
           </select>
         </div>
         <div class="col-6 col-lg-1">
           <label class="form-label mb-1">Webhook</label>
           <select class="form-select" name="webhook_status">
-            <option value="all" {% if filters.webhook_status == "all" %}selected{% endif %}>Tat ca</option>
-            <option value="received" {% if filters.webhook_status == "received" %}selected{% endif %}>Received</option>
-            <option value="processed" {% if filters.webhook_status == "processed" %}selected{% endif %}>Processed</option>
-            <option value="ignored" {% if filters.webhook_status == "ignored" %}selected{% endif %}>Ignored</option>
-            <option value="failed" {% if filters.webhook_status == "failed" %}selected{% endif %}>Failed</option>
+            <option value="all" {% if filters.webhook_status == "all" %}selected{% endif %}>Tất cả</option>
+            <option value="received" {% if filters.webhook_status == "received" %}selected{% endif %}>Đã nhận</option>
+            <option value="processed" {% if filters.webhook_status == "processed" %}selected{% endif %}>Đã xử lý</option>
+            <option value="ignored" {% if filters.webhook_status == "ignored" %}selected{% endif %}>Bỏ qua</option>
+            <option value="failed" {% if filters.webhook_status == "failed" %}selected{% endif %}>Lỗi</option>
           </select>
         </div>
         <div class="col-6 col-lg-1">
-          <label class="form-label mb-1">Sort</label>
+          <label class="form-label mb-1">Sắp xếp</label>
           <select class="form-select" name="sort">
-            <option value="created_desc" {% if filters.sort == "created_desc" %}selected{% endif %}>Moi nhat</option>
-            <option value="created_asc" {% if filters.sort == "created_asc" %}selected{% endif %}>Cu nhat</option>
-            <option value="amount_desc" {% if filters.sort == "amount_desc" %}selected{% endif %}>Tien giam</option>
-            <option value="amount_asc" {% if filters.sort == "amount_asc" %}selected{% endif %}>Tien tang</option>
+            <option value="created_desc" {% if filters.sort == "created_desc" %}selected{% endif %}>Mới nhất</option>
+            <option value="created_asc" {% if filters.sort == "created_asc" %}selected{% endif %}>Cũ nhất</option>
+            <option value="amount_desc" {% if filters.sort == "amount_desc" %}selected{% endif %}>Tiền giảm dần</option>
+            <option value="amount_asc" {% if filters.sort == "amount_asc" %}selected{% endif %}>Tiền tăng dần</option>
           </select>
         </div>
       </div>
       <div class="row g-2 align-items-end mt-1">
         <div class="col-6 col-lg-2">
-          <label class="form-label mb-1">Tu ngay</label>
+          <label class="form-label mb-1">Từ ngày</label>
           <input class="form-control" type="date" name="date_from" value="{{ filters.date_from }}">
         </div>
         <div class="col-6 col-lg-2">
-          <label class="form-label mb-1">Den ngay</label>
+          <label class="form-label mb-1">Đến ngày</label>
           <input class="form-control" type="date" name="date_to" value="{{ filters.date_to }}">
         </div>
         <div class="col-6 col-lg-2">
-          <label class="form-label mb-1">Payment method</label>
+          <label class="form-label mb-1">Phương thức</label>
           <input class="form-control" type="text" name="payment_method" value="{{ '' if filters.payment_method == 'all' else filters.payment_method }}">
         </div>
         <div class="col-6 col-lg-1">
@@ -100,7 +100,7 @@
           <input class="form-control" type="number" min="0" name="max_amount" value="{{ filters.max_amount_minor or '' }}">
         </div>
         <div class="col-6 col-lg-1">
-          <label class="form-label mb-1">Moi trang</label>
+          <label class="form-label mb-1">Mỗi trang</label>
           <select class="form-select" name="per_page">
             <option value="20" {% if per_page == 20 %}selected{% endif %}>20</option>
             <option value="50" {% if per_page == 50 %}selected{% endif %}>50</option>
@@ -108,14 +108,14 @@
           </select>
         </div>
         <div class="col-6 col-lg-1">
-          <button type="submit" class="btn btn-primary w-100">Loc</button>
+          <button type="submit" class="btn btn-primary w-100">Lọc</button>
         </div>
       </div>
     </form>
 
     <div class="payment-section-card">
       <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
-        <div class="small payment-muted">Tong {{ "{:,}".format(total) }} giao dich</div>
+        <div class="small payment-muted">Tổng {{ "{:,}".format(total) }} giao dịch</div>
         <div class="small payment-muted">Trang {{ page }}/{{ total_pages }}</div>
       </div>
       {% if items %}
@@ -123,14 +123,14 @@
         <table class="table payment-table">
           <thead>
             <tr>
-              <th>Attempt</th>
-              <th>Order</th>
-              <th>Buyer</th>
+              <th>Mã giao dịch</th>
+              <th>Mã đơn</th>
+              <th>Người mua</th>
               <th>Provider</th>
-              <th>Status</th>
+              <th>Trạng thái</th>
               <th>Webhook</th>
-              <th>So tien</th>
-              <th>Tao luc</th>
+              <th>Số tiền</th>
+              <th>Tạo lúc</th>
             </tr>
           </thead>
           <tbody>
@@ -160,8 +160,8 @@
       </div>
       {% else %}
       <div class="payment-empty">
-        <div class="fw-semibold mb-2">Khong tim thay giao dich phu hop</div>
-        <div>Thu doi bo loc hoac khoang thoi gian.</div>
+        <div class="fw-semibold mb-2">Không tìm thấy giao dịch phù hợp</div>
+        <div>Hãy thử đổi bộ lọc hoặc khoảng thời gian.</div>
       </div>
       {% endif %}
     </div>
@@ -171,7 +171,7 @@
         class="btn btn-outline-secondary {% if not has_prev %}disabled{% endif %}"
         href="{{ url_for('admin_payments.transactions_page', page=prev_num, per_page=per_page, q=filters.q, buyer=filters.buyer, order_code=filters.order_code, status=filters.status, provider=filters.provider, payment_method=filters.payment_method, webhook_status=filters.webhook_status, date_from=filters.date_from, date_to=filters.date_to, min_amount=filters.min_amount_minor, max_amount=filters.max_amount_minor, sort=filters.sort) }}"
       >
-        Truoc
+        Trước
       </a>
       <a
         class="btn btn-outline-secondary {% if not has_next %}disabled{% endif %}"

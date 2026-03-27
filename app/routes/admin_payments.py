@@ -22,7 +22,7 @@ MAX_PAGE_SIZE = 100
 def _ensure_admin_access():
     if is_admin_user(current_user):
         return None
-    flash("Ban khong co quyen truy cap trang quan tri.", "warning")
+    flash("Bạn không có quyền truy cập khu vực quản trị thanh toán.", "warning")
     return redirect(url_for("main.dashboard"))
 
 

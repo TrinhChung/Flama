@@ -9,7 +9,7 @@ export function renderTags(tagsEl, tags) {
     tagsEl.innerHTML = "";
     const normalized = Array.isArray(tags) ? tags : [];
     if (!normalized.length) {
-        tagsEl.textContent = "Không có tags.";
+        tagsEl.textContent = "Chưa có thẻ gắn.";
         return;
     }
     normalized.forEach((tag) => {

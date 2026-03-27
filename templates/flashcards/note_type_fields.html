@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Edit Fields{% endblock %}
+{% block title %}Chỉnh sửa trường{% endblock %}
 
 {% block styles %}
 <style>
@@ -114,13 +114,13 @@
     <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
         <div>
             <h2 class="h4 mb-0">{{ note_type.name }}</h2>
-            <small class="text-muted">Field management</small>
+            <small class="text-muted">Quản lý trường</small>
         </div>
         <div class="d-flex gap-2">
-            <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('flashcards.note_type_manager') }}">Back</a>
+            <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('flashcards.note_type_manager') }}">Quay lại</a>
             <a class="btn btn-outline-secondary btn-sm"
                 href="{{ url_for('flashcards.note_type_detail_page', note_type_id=note_type.id) }}">
-                <i class="bi bi-code-slash"></i> Edit Templates
+                <i class="bi bi-code-slash"></i> Sửa template
             </a>
         </div>
     </div>
@@ -131,33 +131,33 @@
         <div class="col-lg-5 col-md-6">
             <div class="card card-body h-100">
                 <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h3 class="h6 mb-0">Fields</h3>
+                    <h3 class="h6 mb-0">Danh sách trường</h3>
                     <button class="btn btn-sm btn-outline-primary" id="btn-show-add-field">
-                        <i class="bi bi-plus"></i> Add
+                        <i class="bi bi-plus"></i> Thêm
                     </button>
                 </div>
-                <p class="fields-info-text mb-2"><i class="bi bi-info-circle"></i> Drag and drop to reorder fields</p>
+                <p class="fields-info-text mb-2"><i class="bi bi-info-circle"></i> Kéo thả để sắp xếp lại các trường</p>
 
                 <div class="fields-list-wrap">
                     <div id="field-list-body" class="fields-list"></div>
-                    <div id="field-list-empty" class="field-list-empty d-none">No fields yet. Click Add to create one.</div>
+                    <div id="field-list-empty" class="field-list-empty d-none">Chưa có trường nào. Bấm Thêm để tạo trường mới.</div>
                 </div>
             </div>
         </div>
 
         <div class="col-lg-7 col-md-6">
             <div class="card card-body h-100" id="field-detail-card" style="display: none;">
-                <h3 class="h6 mb-3">Field Properties</h3>
+                <h3 class="h6 mb-3">Thuộc tính trường</h3>
                 <form id="edit-field-form">
                     <input type="hidden" id="edit-field-id" />
 
                     <div class="mb-3">
-                        <label class="form-label small fw-bold text-muted">Field Name</label>
+                        <label class="form-label small fw-bold text-muted">Tên trường</label>
                         <input type="text" class="form-control form-control-sm" id="edit-field-name" required />
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label small fw-bold text-muted">Type</label>
+                        <label class="form-label small fw-bold text-muted">Kiểu dữ liệu</label>
                         <select class="form-select form-select-sm" id="edit-field-type">
                             <option value="text">text</option>
                             <option value="richtext">richtext</option>
@@ -170,28 +170,28 @@
 
                     <div class="mb-4 form-check pt-1">
                         <input type="checkbox" class="form-check-input" id="edit-field-required" />
-                        <label class="form-check-label small text-muted ms-1" for="edit-field-required">Required field</label>
+                        <label class="form-check-label small text-muted ms-1" for="edit-field-required">Trường bắt buộc</label>
                     </div>
 
                     <div class="d-flex justify-content-between pt-3 border-top mt-auto">
-                        <button type="button" class="btn btn-sm btn-outline-danger" id="btn-delete-field">Delete</button>
+                        <button type="button" class="btn btn-sm btn-outline-danger" id="btn-delete-field">Xóa</button>
                         <button type="submit" class="btn btn-sm btn-primary"
-                            style="background-color: var(--flama-orange-600); border-color: var(--flama-orange-600);">Save Changes</button>
+                            style="background-color: var(--flama-orange-600); border-color: var(--flama-orange-600);">Lưu thay đổi</button>
                     </div>
                     <small id="field-error" class="text-danger d-none mt-2"></small>
                 </form>
             </div>
 
             <div class="card card-body h-100" id="add-field-card" style="display: none;">
-                <h3 class="h6 mb-3">Add New Field</h3>
+                <h3 class="h6 mb-3">Thêm trường mới</h3>
                 <form id="add-field-form">
                     <div class="mb-3">
-                        <label class="form-label small fw-bold text-muted">Field Name</label>
-                        <input type="text" class="form-control form-control-sm" id="new-field-name" placeholder="e.g. PitchAccent" required />
+                        <label class="form-label small fw-bold text-muted">Tên trường</label>
+                        <input type="text" class="form-control form-control-sm" id="new-field-name" placeholder="Ví dụ: PitchAccent" required />
                     </div>
 
                     <div class="mb-4">
-                        <label class="form-label small fw-bold text-muted">Type</label>
+                        <label class="form-label small fw-bold text-muted">Kiểu dữ liệu</label>
                         <select class="form-select form-select-sm" id="new-field-type">
                             <option value="text">text</option>
                             <option value="richtext">richtext</option>
@@ -203,9 +203,9 @@
                     </div>
 
                     <div class="d-flex justify-content-end pt-3 border-top gap-2 mt-auto">
-                        <button type="button" class="btn btn-sm btn-outline-secondary" id="btn-cancel-add">Cancel</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="btn-cancel-add">Hủy</button>
                         <button type="submit" class="btn btn-sm btn-primary"
-                            style="background-color: var(--flama-orange-600); border-color: var(--flama-orange-600);">Add Field</button>
+                            style="background-color: var(--flama-orange-600); border-color: var(--flama-orange-600);">Tạo trường</button>
                     </div>
                     <small id="add-field-error" class="text-danger d-none mt-2"></small>
                 </form>
@@ -215,7 +215,7 @@
                 id="empty-selection-card" style="display: flex;">
                 <div class="text-center">
                     <i class="bi bi-input-cursor-text mb-2" style="font-size: 2rem; opacity: 0.5;"></i>
-                    <p class="mb-0">Select a field to edit its properties</p>
+                    <p class="mb-0">Chọn một trường để chỉnh sửa thuộc tính</p>
                 </div>
             </div>
         </div>
@@ -499,7 +499,7 @@
             if (!fieldId) return;
             clearError(fieldError);
             clearGlobalError();
-            if (!window.confirm("Delete this field? Existing values will be removed.")) return;
+            if (!window.confirm("Xóa trường này? Các giá trị hiện có của trường sẽ bị xóa.")) return;
 
             try {
                 await requestJson(`/api/note-types/${noteTypeId}/fields/${fieldId}`, { method: "DELETE" });

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Study - {{ selected_deck.name }}{% endblock %}
+{% block title %}Học - {{ selected_deck.name }}{% endblock %}
 {% block navbar %}{% endblock %}
 
 {% block footer %}{% endblock %}
@@ -9,7 +9,7 @@
 <div class="study-page" id="study-page-root">
   {% set toolbar_variant = 'study' %}
   {% set toolbar_active_tab = 'study' %}
-  {% set toolbar_aria_label = 'Study actions' %}
+  {% set toolbar_aria_label = 'Thao tác học' %}
   {% set toolbar_study_href = '#' %}
   {% set toolbar_browse_href = url_for('vocabulary.browse') %}
   {% set toolbar_browse_context = 'study' %}
@@ -40,9 +40,9 @@
   {% if card %}
   <section class="study-card-shell">
     <section class="study-empty study-empty-inline d-none" id="study-inline-waiting" aria-live="polite">
-      <h3 id="study-inline-waiting-title">Learning in progress.</h3>
+      <h3 id="study-inline-waiting-title">Buổi học vẫn đang tiếp tục.</h3>
       <p id="study-inline-waiting-summary">
-        You still have {{ due_learn|format_number }} Learn card{% if due_learn != 1 %}s{% endif %} in this session.
+        Bạn vẫn còn {{ due_learn|format_number }} thẻ đang học trong buổi này.
       </p>
       <p id="study-inline-waiting-next" class="d-none"></p>
     </section>
@@ -62,31 +62,31 @@
 
   <section class="study-empty">
     <div class="study-counters-line study-counters-line-empty">
-      <span class="scl-new">New <strong data-study-count-value="new">{{ due_new|format_number }}</strong></span>
+      <span class="scl-new">Mới <strong data-study-count-value="new">{{ due_new|format_number }}</strong></span>
       <span class="scl-sep">&middot;</span>
-      <span class="scl-learn">Learn <strong data-study-count-value="learn">{{ due_learn|format_number }}</strong></span>
+      <span class="scl-learn">Đang học <strong data-study-count-value="learn">{{ due_learn|format_number }}</strong></span>
       <span class="scl-sep">&middot;</span>
-      <span class="scl-due">Due <strong data-study-count-value="due">{{ due_review|format_number }}</strong></span>
+      <span class="scl-due">Đến hạn <strong data-study-count-value="due">{{ due_review|format_number }}</strong></span>
     </div>
     {% if is_waiting_session %}
-    <h3>Learning in progress.</h3>
-    <p>You still have {{ due_learn|format_number }} Learn card{% if due_learn != 1 %}s{% endif %} in this session.</p>
+    <h3>Buổi học vẫn đang tiếp tục.</h3>
+    <p>Bạn vẫn còn {{ due_learn|format_number }} thẻ đang học trong buổi này.</p>
     {% if next_learning_due_at_iso %}
     <p id="study-waiting-next-due" data-next-due-at="{{ next_learning_due_at_iso }}">
-      Next Learn card will be ready soon.
+      Thẻ đang học tiếp theo sẽ sẵn sàng sau ít phút nữa.
     </p>
     {% endif %}
     {% else %}
-    <h3>No due cards in this deck.</h3>
-    <p>You have finished this deck for now.</p>
+    <h3>Deck này hiện không còn thẻ đến hạn.</h3>
+    <p>Bạn đã hoàn thành lượt học hiện tại của deck này.</p>
     {% endif %}
     <div class="d-flex gap-2 justify-content-center flex-wrap">
-      {% set button_label = 'Continue' %}
+      {% set button_label = 'Tiếp tục' %}
       {% set button_href = next_study_url %}
       {% set button_type = 'outline-secondary' %}
       {% include 'components/button.html' with context %}
 
-      {% set button_label = 'Back home' %}
+      {% set button_label = 'Về dashboard' %}
       {% set button_href = url_for('main.dashboard') %}
       {% set button_type = 'primary' %}
       {% include 'components/button.html' with context %}
@@ -99,8 +99,8 @@
     <div class="study-bottom-side study-bottom-side-left">
       {% if can_edit_current_card %}
       <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal"
-        data-bs-target="#studyEditModal" id="study-edit-btn" title="Edit Card">
-        <i class="bi bi-pencil"></i> <span class="d-none d-sm-inline">Edit</span>
+        data-bs-target="#studyEditModal" id="study-edit-btn" title="Sửa thẻ hiện tại">
+        <i class="bi bi-pencil"></i> <span class="d-none d-sm-inline">Sửa</span>
       </button>
       {% endif %}
     </div>
@@ -108,36 +108,36 @@
     <div class="d-flex flex-grow-1 justify-content-center">
       <div class="study-bottom-actions front-actions" id="front-actions">
         <div class="study-counters-line">
-          <span class="scl-new">New <strong data-study-count-value="new">{{ due_new|format_number }}</strong></span>
+          <span class="scl-new">Mới <strong data-study-count-value="new">{{ due_new|format_number }}</strong></span>
           <span class="scl-sep">&middot;</span>
-          <span class="scl-learn">Learn <strong data-study-count-value="learn">{{ due_learn|format_number }}</strong></span>
+          <span class="scl-learn">Đang học <strong data-study-count-value="learn">{{ due_learn|format_number }}</strong></span>
           <span class="scl-sep">&middot;</span>
-          <span class="scl-due">Due <strong data-study-count-value="due">{{ due_review|format_number }}</strong></span>
+          <span class="scl-due">Đến hạn <strong data-study-count-value="due">{{ due_review|format_number }}</strong></span>
         </div>
         <p class="study-flow-message d-none" id="study-flow-message" aria-live="polite"></p>
-        <button class="btn btn-light answer-btn show-answer" id="show-answer-btn">Show Answer</button>
+        <button class="btn btn-light answer-btn show-answer" id="show-answer-btn">Hiện đáp án</button>
       </div>
       <div class="study-bottom-actions back-actions d-none" id="back-actions">
         <button class="btn btn-light answer-btn again" data-rating="again">
-          Again
+          Học lại
           {% if next_intervals_preview and next_intervals_preview.get('again') %}
           <span class="answer-ivl">{{ next_intervals_preview['again']['label'] }}</span>
           {% endif %}
         </button>
         <button class="btn btn-light answer-btn hard" data-rating="hard">
-          Hard
+          Khó
           {% if next_intervals_preview and next_intervals_preview.get('hard') %}
           <span class="answer-ivl">{{ next_intervals_preview['hard']['label'] }}</span>
           {% endif %}
         </button>
         <button class="btn btn-light answer-btn good" data-rating="good">
-          Good
+          Tốt
           {% if next_intervals_preview and next_intervals_preview.get('good') %}
           <span class="answer-ivl">{{ next_intervals_preview['good']['label'] }}</span>
           {% endif %}
         </button>
         <button class="btn btn-light answer-btn easy" data-rating="easy">
-          Easy
+          Dễ
           {% if next_intervals_preview and next_intervals_preview.get('easy') %}
           <span class="answer-ivl">{{ next_intervals_preview['easy']['label'] }}</span>
           {% endif %}
@@ -147,9 +147,9 @@
 
     <div class="study-bottom-side study-bottom-side-right">
       <button type="button" class="btn btn-sm btn-outline-secondary study-focus-btn" id="study-fullscreen-btn"
-        title="Báº­t toÃ n mÃ n hÃ¬nh">
+        title="Bật toàn màn hình">
         <i class="bi bi-arrows-fullscreen" data-fullscreen-icon></i>
-        <span class="d-none d-sm-inline" data-fullscreen-label>Focus</span>
+        <span class="d-none d-sm-inline" data-fullscreen-label>Toàn màn hình</span>
       </button>
     </div>
   </div>
@@ -172,8 +172,8 @@
   <div class="modal-dialog modal-dialog-centered modal-lg">
     <div class="modal-content">
       <div class="modal-header py-2">
-        <h5 class="modal-title fs-6 fw-bold text-dark">Edit Current Card</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        <h5 class="modal-title fs-6 fw-bold text-dark">Sửa thẻ hiện tại</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Đóng"></button>
       </div>
       <div class="modal-body overflow-auto study-edit-modal-body">
         <div id="study-edit-error" class="alert alert-danger d-none py-2" role="alert"></div>
@@ -183,8 +183,8 @@
         </form>
       </div>
       <div class="modal-footer py-2">
-        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">ÄÃ³ng (Cancel)</button>
-        <button type="button" class="btn btn-primary btn-sm" id="study-edit-save-btn">LÆ°u thay Ä‘á»•i (Save)</button>
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Đóng</button>
+        <button type="button" class="btn btn-primary btn-sm" id="study-edit-save-btn">Lưu thay đổi</button>
       </div>
     </div>
   </div>
@@ -471,7 +471,7 @@
     background: linear-gradient(180deg, var(--flama-surface), #f3fff6);
   }
 
-  /* Compact counters line â€” same row as Show Answer */
+  /* Dòng bộ đếm gọn, nằm cùng hàng với nút hiện đáp án */
   .front-actions {
     flex-wrap: nowrap !important;
     gap: 1rem !important;
@@ -772,7 +772,7 @@
     function renderWaitingState() {
       const remainingMs = nextDueMs - Date.now();
       if (remainingMs <= 0) {
-        nextDueEl.textContent = "Your next Learn card is ready now. Reloading...";
+        nextDueEl.textContent = "Thẻ đang học tiếp theo đã sẵn sàng. Đang tải lại...";
         window.setTimeout(() => window.location.reload(), 600);
         return false;
       }
@@ -783,7 +783,7 @@
         ? `${minutes}m ${String(seconds).padStart(2, "0")}s`
         : `${seconds}s`;
       const dueLabel = timeFormatter ? timeFormatter.format(new Date(nextDueMs)) : nextDueAt;
-      nextDueEl.textContent = `Next Learn card is due at ${dueLabel} (${countdown}).`;
+      nextDueEl.textContent = `Thẻ đang học tiếp theo sẽ đến hạn lúc ${dueLabel} (${countdown}).`;
       return true;
     }
 
@@ -932,7 +932,7 @@
     function renderMarkdownPreviewHtml(rawMarkdown) {
       const source = String(rawMarkdown || "").replace(/\r\n?/g, "\n");
       if (!source.trim()) {
-        return '<div class="study-edit-markdown-preview-empty">Preview trá»‘ng.</div>';
+        return '<div class="study-edit-markdown-preview-empty">Khung xem trước đang trống.</div>';
       }
 
       const imageRe = /!\[([^\]]*)\]\(([^)\s]+)\)/g;
@@ -965,7 +965,7 @@
 
       return chunks.length
         ? chunks.join("")
-        : '<div class="study-edit-markdown-preview-empty">Preview trá»‘ng.</div>';
+        : '<div class="study-edit-markdown-preview-empty">Khung xem trước đang trống.</div>';
     }
 
     function syncStudyMarkdownPreview(textarea) {
@@ -1036,12 +1036,12 @@
 
     async function uploadStudyMarkdownInlineImage({ fieldName, file, textarea }) {
       if (!fieldName || !isImageFile(file)) {
-        setEditError("Chá»‰ há»— trá»£ upload áº£nh cho markdown.");
+        setEditError("Chỉ hỗ trợ tải ảnh lên cho trường markdown.");
         return;
       }
       const noteId = String(editConfig?.note_id || "").trim();
       if (!noteId) {
-        setEditError("KhÃ´ng tÃ¬m tháº¥y note Ä‘á»ƒ upload markdown image.");
+        setEditError("Không tìm thấy note để tải ảnh markdown lên.");
         return;
       }
 
@@ -1057,12 +1057,12 @@
         });
         const payload = await response.json().catch(() => ({}));
         if (!response.ok) {
-          throw new Error(payload.message || payload.error || "Upload markdown image failed.");
+          throw new Error(payload.message || payload.error || "Upload ảnh markdown thất bại.");
         }
         insertMarkdownImageSyntax(textarea, payload.url, payload.filename || file.name);
         setEditError("");
       } catch (error) {
-        setEditError(error.message || "Upload markdown image failed.");
+        setEditError(error.message || "Upload ảnh markdown thất bại.");
       } finally {
         textarea.disabled = false;
         textarea.classList.remove("is-dragover");
@@ -1132,11 +1132,11 @@
     async function uploadStudyMarkdownImage(file, editor) {
       const fieldName = String(editor?.fieldName || "").trim();
       if (!fieldName || !isImageFile(file)) {
-        throw new Error("Chi ho tro upload anh cho markdown.");
+        throw new Error("Chỉ hỗ trợ tải ảnh lên cho trường markdown.");
       }
       const noteId = String(editConfig?.note_id || "").trim();
       if (!noteId) {
-        throw new Error("Khong tim thay note de upload markdown image.");
+        throw new Error("Không tìm thấy note để tải ảnh markdown lên.");
       }
 
       const formData = new FormData();
@@ -1149,7 +1149,7 @@
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error(payload.message || payload.error || "Upload markdown image failed.");
+        throw new Error(payload.message || payload.error || "Upload ảnh markdown thất bại.");
       }
       setEditError("");
       return payload;
@@ -1244,8 +1244,8 @@
       if (editSaveBtn) {
         editSaveBtn.disabled = editLoading || editSaving;
         editSaveBtn.innerHTML = editSaving
-          ? '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Saving...'
-          : "LÆ°u thay Ä‘á»•i (Save)";
+          ? '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Đang lưu...'
+          : "Lưu thay đổi";
       }
     }
 
@@ -1253,7 +1253,7 @@
       if (!editFieldsWrapEl) return;
       if (!Array.isArray(fieldDefs) || !fieldDefs.length) {
         resetStudyMarkdownEditors();
-        editFieldsWrapEl.innerHTML = '<div class="col-12 small text-muted">No editable fields found.</div>';
+        editFieldsWrapEl.innerHTML = '<div class="col-12 small text-muted">Không có trường nào để chỉnh sửa.</div>';
         return;
       }
 
@@ -1300,7 +1300,7 @@
         const response = await fetch(String(editConfig.load_note_url), { method: "GET" });
         const payload = await response.json().catch(() => ({}));
         if (!response.ok) {
-          throw new Error(payload.message || payload.error || "Failed to load note values.");
+          throw new Error(payload.message || payload.error || "Không tải được dữ liệu note hiện tại.");
         }
         const latestValues = (payload.field_values && typeof payload.field_values === "object") ? payload.field_values : {};
         editFieldValues = latestValues;
@@ -1308,7 +1308,7 @@
         renderEditFields(editFieldDefs, editFieldValues);
       } catch (error) {
         renderEditFields(editFieldDefs, editFieldValues);
-        setEditError(error.message || "Failed to load note values.");
+        setEditError(error.message || "Không tải được dữ liệu note hiện tại.");
       } finally {
         setEditLoading(false);
       }
@@ -1316,7 +1316,7 @@
 
     function collectEditPayload() {
       if (!Array.isArray(editFieldDefs) || !editFieldDefs.length) {
-        return { ok: false, noChanges: false, error: "No editable fields found.", fieldValues: {} };
+        return { ok: false, noChanges: false, error: "Không tìm thấy trường nào có thể chỉnh sửa.", fieldValues: {} };
       }
 
       const fieldValues = {};
@@ -1345,7 +1345,7 @@
         return {
           ok: false,
           noChanges: false,
-          error: `Required field khÃ´ng Ä‘Æ°á»£c Ä‘á»ƒ trá»‘ng: ${missingRequired.join(", ")}`,
+          error: `Các trường bắt buộc không được để trống: ${missingRequired.join(", ")}`,
           fieldValues,
         };
       }
@@ -1359,7 +1359,7 @@
 
     function collectEditPayload() {
       if (!Array.isArray(editFieldDefs) || !editFieldDefs.length) {
-        return { ok: false, noChanges: false, error: "No editable fields found.", fieldValues: {} };
+        return { ok: false, noChanges: false, error: "Không tìm thấy trường nào có thể chỉnh sửa.", fieldValues: {} };
       }
 
       const fieldValues = {};
@@ -1400,7 +1400,7 @@
         return {
           ok: false,
           noChanges: false,
-          error: `Required field khÃƒÂ´ng Ã„â€˜Ã†Â°Ã¡Â»Â£c Ã„â€˜Ã¡Â»Æ’ trÃ¡Â»â€˜ng: ${missingRequired.join(", ")}`,
+          error: `Các trường bắt buộc không được để trống: ${missingRequired.join(", ")}`,
           fieldValues,
         };
       }
@@ -1414,13 +1414,13 @@
 
     async function saveEditedCard() {
       if (!editConfig || !editConfig.save_card_url) {
-        setEditError("Edit API chÆ°a sáºµn sÃ ng.");
+        setEditError("API chỉnh sửa hiện chưa sẵn sàng.");
         return;
       }
 
       const payloadState = collectEditPayload();
       if (!payloadState.ok) {
-        setEditError(payloadState.error || "Invalid edit payload.");
+        setEditError(payloadState.error || "Dữ liệu chỉnh sửa chưa hợp lệ.");
         return;
       }
       if (payloadState.noChanges) {
@@ -1442,7 +1442,7 @@
         });
         const payload = await response.json().catch(() => ({}));
         if (!response.ok || !payload.success) {
-          throw new Error(payload.message || payload.error || "Failed to save card edits.");
+          throw new Error(payload.message || payload.error || "Không lưu được thay đổi của thẻ.");
         }
 
         editFieldValues = (payload.field_values && typeof payload.field_values === "object")
@@ -1470,7 +1470,7 @@
           instance.hide();
         }
       } catch (error) {
-        setEditError(error.message || "Failed to save card edits.");
+        setEditError(error.message || "Không lưu được thay đổi của thẻ.");
       } finally {
         setEditSaving(false);
       }
@@ -1532,10 +1532,10 @@
       }
       const isActive = Boolean(getFullscreenElement());
       fullscreenBtn.classList.toggle("is-active", isActive);
-      fullscreenBtn.title = isActive ? "ThoÃ¡t toÃ n mÃ n hÃ¬nh (Esc)" : "Báº­t toÃ n mÃ n hÃ¬nh";
-      fullscreenBtn.setAttribute("aria-label", isActive ? "ThoÃ¡t toÃ n mÃ n hÃ¬nh" : "Báº­t toÃ n mÃ n hÃ¬nh");
+      fullscreenBtn.title = isActive ? "Thoát toàn màn hình (Esc)" : "Bật toàn màn hình";
+      fullscreenBtn.setAttribute("aria-label", isActive ? "Thoát toàn màn hình" : "Bật toàn màn hình");
       if (fullscreenLabelEl) {
-        fullscreenLabelEl.textContent = isActive ? "Exit" : "Focus";
+        fullscreenLabelEl.textContent = isActive ? "Thoát toàn màn hình" : "Toàn màn hình";
       }
       if (fullscreenIconEl) {
         fullscreenIconEl.classList.toggle("bi-arrows-fullscreen", !isActive);
@@ -1561,7 +1561,7 @@
           studyPageRoot.webkitRequestFullscreen();
         }
       } catch (_error) {
-        // Browser cháº·n fullscreen náº¿u chÆ°a cÃ³ user gesture hoáº·c khÃ´ng há»— trá»£.
+        // Trình duyệt có thể chặn fullscreen nếu chưa có user gesture hoặc không hỗ trợ.
       } finally {
         updateFullscreenUi();
       }
@@ -1667,11 +1667,11 @@
         const remainingMs = nextDueMs - Date.now();
         if (remainingMs <= 0) {
           if (flowMessageEl) {
-            flowMessageEl.textContent = "Your next Learn card is ready now.";
+            flowMessageEl.textContent = "Thẻ đang học tiếp theo đã sẵn sàng.";
           }
           if (inlineWaitingNextEl) {
             inlineWaitingNextEl.classList.remove("d-none");
-            inlineWaitingNextEl.textContent = "Your next Learn card is ready now.";
+            inlineWaitingNextEl.textContent = "Thẻ đang học tiếp theo đã sẵn sàng.";
           }
           clearWaitingTimer();
           window.setTimeout(() => {
@@ -1687,7 +1687,7 @@
           ? `${minutes}m ${String(seconds).padStart(2, "0")}s`
           : `${seconds}s`;
         const dueLabel = timeFormatter ? timeFormatter.format(new Date(nextDueMs)) : String(nextDueAt || "");
-        const message = `Next Learn card is due at ${dueLabel} (${countdown}).`;
+        const message = `Thẻ đang học tiếp theo sẽ đến hạn lúc ${dueLabel} (${countdown}).`;
         if (flowMessageEl) {
           flowMessageEl.textContent = message;
         }
@@ -1769,8 +1769,8 @@
 
       const learnCount = Math.max(0, Math.trunc(Number(payload.learn_count || 0)));
       const summary = learnCount > 0
-        ? `You still have ${learnCount} Learn card${learnCount === 1 ? "" : "s"} in this session.`
-        : "Learning is still in progress.";
+        ? `Bạn vẫn còn ${learnCount} thẻ đang học trong buổi này.`
+        : "Buổi học vẫn đang tiếp tục.";
       if (inlineWaitingSummaryEl) {
         inlineWaitingSummaryEl.textContent = summary;
       }
@@ -1873,7 +1873,7 @@
               return;
             }
           } catch (_error) {
-            // Fallback dÆ°á»›i Ä‘Ã¢y.
+            // Chuyển sang nhánh fallback bên dưới.
           }
         }
         const nextUrl = String(data.next_url || "");
@@ -1919,7 +1919,7 @@
       );
       if (!canFullscreen) {
         fullscreenBtn.disabled = true;
-        fullscreenBtn.title = "TrÃ¬nh duyá»‡t khÃ´ng há»— trá»£ toÃ n mÃ n hÃ¬nh";
+        fullscreenBtn.title = "Trình duyệt không hỗ trợ toàn màn hình";
       } else {
         fullscreenBtn.addEventListener("click", () => {
           toggleFullscreen().catch(() => undefined);
