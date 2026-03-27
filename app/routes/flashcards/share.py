@@ -41,6 +41,10 @@ def _count_user_market_review_submissions(
     return total
 
 
+def _marketplace_payment_redirect_url(endpoint: str, **values: object) -> str:
+    return url_for(endpoint, _external=True, **values)
+
+
 
 @flashcards_bp.route("/flashcards/shared-note-types")
 @login_required
@@ -423,7 +427,7 @@ def install_shared_note_type(note_type_id: str):
         if not payment_service.paid_install_interception_enabled():
             return _api_error(
                 "PAYMENT_UNAVAILABLE",
-                "Paid installs are not enabled yet.",
+                "Thanh toán cho nội dung trả phí chưa được bật trong môi trường này. Vui lòng thử lại sau.",
                 status=503,
             )
         try:
@@ -431,6 +435,12 @@ def install_shared_note_type(note_type_id: str):
                 user_id=current_user.id,
                 product_type="note_type",
                 product_ref_id=source_note_type.id,
+                return_url=_marketplace_payment_redirect_url(
+                    "payments.marketplace_payment_result_page",
+                ),
+                cancel_url=_marketplace_payment_redirect_url(
+                    "payments.marketplace_payment_result_page",
+                ),
             )
         except payment_service.PaymentServiceError as exc:
             return _api_error(
@@ -807,7 +817,7 @@ def install_shared_deck_item(deck_item_id: str):
             if not payment_service.paid_install_interception_enabled():
                 return _api_error(
                     "PAYMENT_UNAVAILABLE",
-                    "Paid installs are not enabled yet.",
+                    "Thanh toán cho nội dung trả phí chưa được bật trong môi trường này. Vui lòng thử lại sau.",
                     status=503,
                 )
             try:
@@ -815,6 +825,12 @@ def install_shared_deck_item(deck_item_id: str):
                     user_id=current_user.id,
                     product_type="deck_marketplace_item",
                     product_ref_id=deck_item.id,
+                    return_url=_marketplace_payment_redirect_url(
+                        "payments.marketplace_payment_result_page",
+                    ),
+                    cancel_url=_marketplace_payment_redirect_url(
+                        "payments.marketplace_payment_result_page",
+                    ),
                 )
             except payment_service.PaymentServiceError as exc:
                 return _api_error(
@@ -855,7 +871,7 @@ def install_shared_deck_item(deck_item_id: str):
             if _is_mysql_deadlock(exc):
                 return _api_error(
                     "DEADLOCK_RETRY_EXCEEDED",
-                    "Database deadlock detected. Please retry the install request.",
+                    "Hệ thống đang bận khi cài deck này. Vui lòng thử lại sau vài giây.",
                     status=409,
                 )
             raise
@@ -882,7 +898,7 @@ def install_shared_deck_item(deck_item_id: str):
             if _is_mysql_deadlock(exc):
                 return _api_error(
                     "DEADLOCK_RETRY_EXCEEDED",
-                    "Database deadlock detected. Please retry the install request.",
+                    "Hệ thống đang bận khi cài deck này. Vui lòng thử lại sau vài giây.",
                     status=409,
                 )
             raise
@@ -891,7 +907,7 @@ def install_shared_deck_item(deck_item_id: str):
 
     return _api_error(
         "DEADLOCK_RETRY_EXCEEDED",
-        "Database deadlock detected. Please retry the install request.",
+        "Hệ thống đang bận khi cài deck này. Vui lòng thử lại sau vài giây.",
         status=409,
     )
 

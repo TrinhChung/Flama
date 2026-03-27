@@ -4,7 +4,7 @@ import os
 from functools import lru_cache
 
 from payos import PayOS
-from payos.types import Payout, PayoutBatchRequest
+from payos.types import CreatePaymentLinkRequest, CreatePaymentLinkResponse, PaymentLink, Payout, PayoutBatchRequest, Webhook
 
 
 class PayOSConfigurationError(RuntimeError):
@@ -14,6 +14,26 @@ class PayOSConfigurationError(RuntimeError):
 def create_payout_batch(*, batch_data: PayoutBatchRequest, idempotency_key: str) -> Payout:
     client = get_payos_client()
     return client.payouts.batch.create(batch_data=batch_data, idempotency_key=idempotency_key)
+
+
+def create_payment_link(*, payment_data: CreatePaymentLinkRequest) -> CreatePaymentLinkResponse:
+    client = get_payos_client()
+    return client.payment_requests.create(payment_data=payment_data)
+
+
+def get_payment_link(identifier: str | int) -> PaymentLink:
+    client = get_payos_client()
+    return client.payment_requests.get(identifier)
+
+
+def cancel_payment_link(identifier: str | int, *, cancellation_reason: str | None = None) -> PaymentLink:
+    client = get_payos_client()
+    return client.payment_requests.cancel(identifier, cancellation_reason=cancellation_reason)
+
+
+def verify_webhook_data(payload: bytes | str) -> Webhook:
+    client = get_payos_client()
+    return client.webhooks.verify(payload)
 
 
 def get_payout(identifier: str) -> Payout:

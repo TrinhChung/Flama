@@ -103,6 +103,7 @@
     const root = document.getElementById("shared-note-types-root");
     if (!root) return;
     const detailUrlTemplate = "{{ url_for('flashcards.shared_note_type_detail_page', note_type_id='__NOTE_TYPE_ID__') }}";
+    const paymentResultUrl = "{{ url_for('payments.marketplace_payment_result_page') }}";
     const filterForm = document.getElementById("note-type-filter-form");
     const itemsRoot = document.getElementById("note-type-items");
     const recommendedRoot = document.getElementById("recommended-list");
@@ -112,12 +113,32 @@
     async function requestJson(url, options = {}) {
       const response = await fetch(url, options);
       const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.message || "Request failed.");
+      if (!response.ok) {
+        throw new Error(
+          data.message
+          || (response.status >= 500
+            ? "Máy chủ đang bận hoặc tạm thời không phản hồi. Vui lòng thử lại sau."
+            : "Không thể hoàn tất yêu cầu.")
+        );
+      }
       return data;
     }
 
     function buildDetailUrl(noteTypeId) {
       return detailUrlTemplate.replace("__NOTE_TYPE_ID__", encodeURIComponent(noteTypeId));
+    }
+
+    function buildPaymentResultUrl(orderId, productType, productRefId) {
+      if (!paymentResultUrl || !orderId) return "";
+      const url = new URL(paymentResultUrl, window.location.origin);
+      url.searchParams.set("payment_order_id", orderId);
+      if (productType) {
+        url.searchParams.set("payment_product_type", productType);
+      }
+      if (productRefId) {
+        url.searchParams.set("payment_product_ref_id", productRefId);
+      }
+      return url.toString();
     }
 
     function formatCount(value) {
@@ -197,7 +218,25 @@
     }
 
     async function onInstall(id) {
-      await requestJson(`/api/shared/note-types/${id}/install`, { method: "POST" });
+      const response = await requestJson(`/api/shared/note-types/${id}/install`, { method: "POST" });
+      if (response?.payment_required && response?.order) {
+        const checkoutUrl = response?.order?.active_attempt?.checkout?.checkout_url
+          || response?.order?.active_attempt?.checkout_url;
+        if (checkoutUrl && response?.order?.status === "pending_payment") {
+          window.location.href = checkoutUrl;
+          return;
+        }
+        const resultUrl = buildPaymentResultUrl(
+          response?.order?.id || "",
+          "note_type",
+          id,
+        );
+        if (resultUrl) {
+          window.location.href = resultUrl;
+          return;
+        }
+        return;
+      }
       await Promise.all([loadItems(), loadRecommendations()]);
     }
 

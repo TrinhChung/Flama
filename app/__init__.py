@@ -85,19 +85,17 @@ def create_app(config: Optional[dict] = None) -> Flask:
         os.getenv("FLASHCARD_MEDIA_SCAN_ENABLED", "0").strip().lower() in {"1", "true", "yes", "on"}
     )
     app.config["FLASHCARD_MEDIA_SCANNER"] = None
-    app.config["PAYMENTS_V1_ENABLED"] = _coerce_bool_env("PAYMENTS_V1_ENABLED", default=False)
+    app.config["PAYMENTS_ENABLED"] = _coerce_bool_env(
+        "PAYMENTS_ENABLED",
+        default=_coerce_bool_env("PAYMENTS_V1_ENABLED", default=False),
+    )
+    app.config["PAYMENTS_V1_ENABLED"] = app.config["PAYMENTS_ENABLED"]
+    app.config["PAYMENTS_PROVIDER"] = (os.getenv("PAYMENTS_PROVIDER", "payos").strip().lower() or "payos")
     app.config["PAYMENTS_PAID_INSTALL_REQUIRED"] = _coerce_bool_env("PAYMENTS_PAID_INSTALL_REQUIRED", default=False)
     app.config["PAYMENTS_WEBHOOK_AUTO_GRANT_ENABLED"] = _coerce_bool_env(
         "PAYMENTS_WEBHOOK_AUTO_GRANT_ENABLED",
         default=False,
     )
-    app.config["PAYMENTS_VIETQR_CLIENT_ID"] = os.getenv("PAYMENTS_VIETQR_CLIENT_ID", "").strip()
-    app.config["PAYMENTS_VIETQR_API_KEY"] = os.getenv("PAYMENTS_VIETQR_API_KEY", "").strip()
-    app.config["PAYMENTS_VIETQR_WEBHOOK_SECRET"] = os.getenv("PAYMENTS_VIETQR_WEBHOOK_SECRET", "").strip()
-    app.config["PAYMENTS_VIETQR_ACCOUNT_NO"] = os.getenv("PAYMENTS_VIETQR_ACCOUNT_NO", "").strip()
-    app.config["PAYMENTS_VIETQR_ACCOUNT_NAME"] = os.getenv("PAYMENTS_VIETQR_ACCOUNT_NAME", "").strip()
-    app.config["PAYMENTS_VIETQR_BANK_BIN"] = os.getenv("PAYMENTS_VIETQR_BANK_BIN", "").strip()
-    app.config["PAYMENTS_VIETQR_TEMPLATE"] = os.getenv("PAYMENTS_VIETQR_TEMPLATE", "").strip()
     app.config["PAYMENTS_ORDER_EXPIRY_SECONDS"] = _coerce_int_env(
         "PAYMENTS_ORDER_EXPIRY_SECONDS",
         default=30 * 60,

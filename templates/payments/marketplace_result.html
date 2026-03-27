@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+
+{% block title %}Kết quả thanh toán{% endblock %}
+
+{% block styles %}
+<style>
+  .marketplace-payment-shell {
+    max-width: 920px;
+    margin: 0 auto;
+  }
+
+  .marketplace-payment-card {
+    border: 1px solid var(--flama-border, #dee2e6);
+    border-radius: 0.9rem;
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+  }
+
+  .marketplace-payment-card[data-tone="success"] {
+    border-color: rgba(25, 135, 84, 0.24);
+  }
+
+  .marketplace-payment-card[data-tone="warning"] {
+    border-color: rgba(245, 159, 0, 0.24);
+  }
+
+  .marketplace-payment-card[data-tone="danger"] {
+    border-color: rgba(220, 53, 69, 0.24);
+  }
+
+  .marketplace-payment-card[data-tone="secondary"] {
+    border-color: rgba(108, 117, 125, 0.24);
+  }
+
+  .marketplace-payment-eyebrow {
+    color: #9a3412;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .marketplace-payment-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.4rem 0.8rem;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    background: rgba(13, 110, 253, 0.08);
+    border: 1px solid rgba(13, 110, 253, 0.14);
+    color: #0d6efd;
+    white-space: nowrap;
+  }
+
+  .marketplace-payment-card[data-tone="success"] .marketplace-payment-badge {
+    background: rgba(25, 135, 84, 0.12);
+    border-color: rgba(25, 135, 84, 0.22);
+    color: #198754;
+  }
+
+  .marketplace-payment-card[data-tone="warning"] .marketplace-payment-badge {
+    background: rgba(245, 159, 0, 0.12);
+    border-color: rgba(245, 159, 0, 0.22);
+    color: #b7791f;
+  }
+
+  .marketplace-payment-card[data-tone="danger"] .marketplace-payment-badge {
+    background: rgba(220, 53, 69, 0.12);
+    border-color: rgba(220, 53, 69, 0.22);
+    color: #b02a37;
+  }
+
+  .marketplace-payment-card[data-tone="secondary"] .marketplace-payment-badge {
+    background: rgba(108, 117, 125, 0.12);
+    border-color: rgba(108, 117, 125, 0.22);
+    color: #495057;
+  }
+
+  .marketplace-payment-lines {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .marketplace-payment-line {
+    padding-bottom: 0.75rem;
+    border-bottom: 1px dashed #dee2e6;
+  }
+
+  .marketplace-payment-line:last-child {
+    padding-bottom: 0;
+    border-bottom: none;
+  }
+
+  .marketplace-payment-label {
+    color: #6c757d;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .marketplace-payment-value {
+    margin-top: 0.15rem;
+    font-size: 0.97rem;
+    font-weight: 500;
+    word-break: break-word;
+  }
+
+  .marketplace-payment-value.is-code {
+    font-family: var(--font-family-mono, monospace);
+  }
+
+  .marketplace-payment-value a {
+    text-decoration: none;
+  }
+
+  .marketplace-payment-value a:hover {
+    text-decoration: underline;
+  }
+
+  .marketplace-payment-list {
+    margin: 0;
+    padding-left: 1.15rem;
+    color: #6c757d;
+  }
+
+  .marketplace-payment-list li + li {
+    margin-top: 0.45rem;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<section
+  class="py-4"
+  id="marketplace-payment-result-root"
+  data-payment-order-id="{{ payment_order_id }}"
+  data-payment-product-type="{{ payment_product_type }}"
+  data-payment-product-ref-id="{{ payment_product_ref_id }}"
+  data-note-type-market-url="{{ url_for('flashcards.shared_note_types_page') }}"
+  data-deck-market-url="{{ url_for('flashcards.shared_decks_page') }}"
+  data-note-type-install-url-template="{{ url_for('flashcards.install_shared_note_type', note_type_id='__NOTE_TYPE_ID__') }}"
+  data-deck-install-url-template="{{ url_for('flashcards.install_shared_deck_item', deck_item_id='__DECK_ITEM_ID__') }}"
+>
+  <div class="marketplace-payment-shell">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
+      <div>
+        <div class="marketplace-payment-eyebrow mb-1">Payment Result</div>
+        <h1 class="h3 mb-1">Kết quả mua hàng</h1>
+        <p class="text-muted mb-0" id="marketplace-payment-subtitle">
+          Theo dõi trạng thái đơn hàng, quay lại marketplace hoặc tạo lại phiên thanh toán khi cần.
+        </p>
+      </div>
+      <a class="btn btn-outline-secondary" id="marketplace-payment-back-link" href="{{ url_for('flashcards.shared_note_types_page') }}">
+        Quay lại market
+      </a>
+    </div>
+
+    <div class="alert alert-danger d-none" id="marketplace-payment-error" role="alert"></div>
+
+    <div class="card card-body marketplace-payment-card mb-3" id="marketplace-payment-card" data-tone="info">
+      <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
+        <div>
+          <div class="marketplace-payment-eyebrow mb-2">Đơn hàng</div>
+          <div class="h4 mb-2" id="marketplace-payment-headline">Đang tải trạng thái đơn hàng...</div>
+          <div class="text-muted" id="marketplace-payment-message"></div>
+        </div>
+        <span class="marketplace-payment-badge" id="marketplace-payment-badge">Đang tải</span>
+      </div>
+      <div class="small text-muted mb-3" id="marketplace-payment-next-action"></div>
+      <div class="row g-3">
+        <div class="col-lg-6">
+          <div class="small fw-semibold mb-2">Chi tiết đơn hàng</div>
+          <div class="marketplace-payment-lines" id="marketplace-payment-lines"></div>
+        </div>
+        <div class="col-lg-6">
+          <div class="small fw-semibold mb-2">Lưu ý cho bạn</div>
+          <ul class="marketplace-payment-list" id="marketplace-payment-instructions"></ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="card card-body marketplace-payment-card">
+      <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+        <div>
+          <div class="fw-semibold mb-1">Bước tiếp theo</div>
+          <div class="small text-muted" id="marketplace-payment-footer">
+            Bạn có thể quay lại marketplace hoặc tiếp tục xử lý đơn hàng tại đây.
+          </div>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+          <a class="btn btn-outline-secondary" id="marketplace-payment-back-btn" href="{{ url_for('flashcards.shared_note_types_page') }}">
+            Quay lại market
+          </a>
+          <button class="btn btn-primary" id="marketplace-payment-retry-btn" type="button">
+            Mua lại
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script type="module" src="{{ url_for('static', filename='js/pages/payment_marketplace_result/main.js') }}"></script>
+{% endblock %}

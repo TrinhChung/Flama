@@ -2,13 +2,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from flask import Blueprint, current_app, jsonify, request
+from flask import Blueprint, jsonify, render_template, request
 from flask_login import current_user, login_required
 
 from app.services import payment_service
 from app.validators.payment_input import (
     normalize_order_create_payload,
-    normalize_vietqr_webhook_payload,
 )
 
 
@@ -28,16 +27,15 @@ def _api_error(
     return jsonify(payload), status
 
 
-def _resolve_vietqr_signature_valid() -> bool:
-    expected_secret = str(current_app.config.get("PAYMENTS_VIETQR_WEBHOOK_SECRET") or "").strip()
-    header_value = (
-        request.headers.get("X-Flama-Vietqr-Webhook-Secret")
-        or request.headers.get("X-Flama-Webhook-Secret")
-        or ""
-    ).strip()
-    if not expected_secret:
-        return False
-    return header_value == expected_secret
+@payments_bp.route("/payments/marketplace-result", methods=["GET"])
+@login_required
+def marketplace_payment_result_page():
+    return render_template(
+        "payments/marketplace_result.html",
+        payment_order_id=(request.args.get("payment_order_id") or "").strip(),
+        payment_product_type=(request.args.get("payment_product_type") or "").strip(),
+        payment_product_ref_id=(request.args.get("payment_product_ref_id") or "").strip(),
+    )
 
 
 @payments_bp.route("/api/payments/orders", methods=["POST"])
@@ -53,6 +51,8 @@ def create_payment_order():
             user_id=current_user.id,
             product_type=normalized_payload["product_type"],
             product_ref_id=normalized_payload["product_ref_id"],
+            return_url=normalized_payload.get("return_url") or request.referrer or request.host_url,
+            cancel_url=normalized_payload.get("cancel_url") or request.referrer or request.host_url,
         )
     except payment_service.PaymentServiceError as exc:
         return _api_error(exc.error, exc.message, status=exc.status, field=exc.field)
@@ -89,24 +89,20 @@ def cancel_payment_order(order_id: str):
     return jsonify(result)
 
 
+@payments_bp.route("/api/payments/providers/payos/webhook", methods=["POST"])
+def payos_webhook():
+    raw_payload = request.get_data(cache=True)
+    try:
+        result, status = payment_service.process_payos_webhook_request(raw_payload)
+    except payment_service.PaymentServiceError as exc:
+        return _api_error(exc.error, exc.message, status=exc.status, field=exc.field)
+    return jsonify(result), status
+
+
 @payments_bp.route("/api/payments/providers/vietqr/webhook", methods=["POST"])
-def vietqr_webhook():
-    payload = request.get_json(silent=True) or {}
-    normalized_payload, message, field = normalize_vietqr_webhook_payload(payload)
-    if normalized_payload is None:
-        return _api_error("VALIDATION_ERROR", message or "Invalid payload.", field=field)
-
-    expected_secret = str(current_app.config.get("PAYMENTS_VIETQR_WEBHOOK_SECRET") or "").strip()
-    signature_valid = _resolve_vietqr_signature_valid()
-    if expected_secret and not signature_valid:
-        return _api_error(
-            "INVALID_WEBHOOK_SIGNATURE",
-            "Webhook signature is invalid.",
-            status=403,
-        )
-
-    result, status = payment_service.process_vietqr_webhook(
-        normalized_payload,
-        signature_valid=signature_valid,
-    )
+def deprecated_vietqr_webhook():
+    try:
+        result, status = payment_service.process_payos_webhook_request(request.get_data(cache=True))
+    except payment_service.PaymentServiceError as exc:
+        return _api_error(exc.error, exc.message, status=exc.status, field=exc.field)
     return jsonify(result), status

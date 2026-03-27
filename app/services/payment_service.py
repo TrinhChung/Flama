@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from secrets import randbelow
+import time
 from typing import Any
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from uuid import uuid4
 
-from flask import current_app
 from sqlalchemy.exc import IntegrityError
 
 from app.repositories import payment_repository
+from app.services.payment import config as payment_config
+from app.services.payment.provider import payos_provider
 from app.services import flashcards_share_service
 from models import db
 from models.deck_marketplace_item import DeckMarketplaceItem
@@ -23,8 +27,9 @@ DEFAULT_ORDER_EXPIRY_SECONDS = 30 * 60
 DEFAULT_VISIBLE_PUBLISH_STATUSES = {"published", "unlisted"}
 ACTIVE_ATTEMPT_STATUSES = {"created", "pending"}
 TERMINAL_ORDER_STATUSES = {"paid", "expired", "canceled", "failed", "refunded"}
-PAYMENT_PROVIDER_CODE = "vietqr"
-PAYMENT_METHOD_CODE = "vietqr_transfer"
+PAYMENT_PROVIDER_CODE = "payos"
+PAYMENT_METHOD_CODE = "payos_checkout"
+PAYOS_PROVIDER_REUSABLE_STATUSES = {"PENDING", "PROCESSING"}
 
 
 class PaymentServiceError(Exception):
@@ -44,15 +49,15 @@ class PaymentServiceError(Exception):
 
 
 def payments_enabled() -> bool:
-    return bool(current_app.config.get("PAYMENTS_V1_ENABLED", False))
+    return payment_config.payments_enabled()
 
 
 def paid_install_interception_enabled() -> bool:
-    return payments_enabled() and bool(current_app.config.get("PAYMENTS_PAID_INSTALL_REQUIRED", False))
+    return payment_config.paid_install_interception_enabled()
 
 
 def webhook_auto_grant_enabled() -> bool:
-    return payments_enabled() and bool(current_app.config.get("PAYMENTS_WEBHOOK_AUTO_GRANT_ENABLED", False))
+    return payment_config.webhook_auto_grant_enabled()
 
 
 def _utcnow() -> datetime:
@@ -63,31 +68,333 @@ def _iso(dt: datetime | None) -> str | None:
     return dt.isoformat() if dt is not None else None
 
 
+def _clean_text(value: Any) -> str:
+    return str(value or "").strip()
+
+
+def _product_type_label(product_type: str) -> str:
+    return {
+        "note_type": "template",
+        "deck_marketplace_item": "deck",
+    }.get(_clean_text(product_type), "sản phẩm")
+
+
+def _product_title_from_order(order: PaymentOrder) -> str:
+    if not order.items:
+        return "Sản phẩm"
+    titles = [_clean_text(item.title_snapshot) or _product_type_label(item.product_type) for item in order.items]
+    if len(titles) == 1:
+        return titles[0]
+    return f"{titles[0]} và {len(titles) - 1} mục khác"
+
+
+def _grant_status_display(grant_status: str) -> dict[str, str]:
+    token = _clean_text(grant_status).lower()
+    if token == "completed":
+        return {
+            "code": token,
+            "label": "Đã cấp quyền",
+            "description": "Bạn đã nhận được quyền truy cập cho sản phẩm trong đơn hàng này.",
+        }
+    if token == "failed":
+        return {
+            "code": token,
+            "label": "Cấp quyền lỗi",
+            "description": "Thanh toán có thể đã được xác nhận nhưng hệ thống chưa cấp quyền hoàn tất.",
+        }
+    return {
+        "code": token or "pending",
+        "label": "Chờ cấp quyền",
+        "description": "Hệ thống chưa hoàn tất bước cấp quyền cho sản phẩm sau thanh toán.",
+    }
+
+
+def _attempt_status_display(attempt: PaymentAttempt) -> dict[str, str]:
+    status = _clean_text(attempt.status).lower()
+    if status == "confirmed":
+        return {
+            "code": status,
+            "label": "Đã xác nhận",
+            "description": "PayOS đã xác nhận thanh toán thành công cho lượt thanh toán này.",
+        }
+    if status == "manual_review":
+        return {
+            "code": status,
+            "label": "Cần kiểm tra",
+            "description": _clean_text(attempt.manual_review_reason)
+            or "Thanh toán đã được ghi nhận nhưng chưa thể đối soát tự động.",
+        }
+    if status == "expired":
+        return {
+            "code": status,
+            "label": "Đã hết hạn",
+            "description": _clean_text(attempt.failure_message) or "Lượt thanh toán này đã quá hạn.",
+        }
+    if status == "canceled":
+        return {
+            "code": status,
+            "label": "Đã hủy",
+            "description": _clean_text(attempt.failure_message) or "Lượt thanh toán đã bị hủy.",
+        }
+    if status == "failed":
+        return {
+            "code": status,
+            "label": "Thất bại",
+            "description": _clean_text(attempt.failure_message) or "Lượt thanh toán này không thành công.",
+        }
+    return {
+        "code": status or "pending",
+        "label": "Đang chờ thanh toán",
+        "description": "Đơn hàng đã được tạo và đang chờ thanh toán hoặc chờ PayOS xác nhận.",
+    }
+
+
+def _build_order_status_display(order: PaymentOrder, attempt: PaymentAttempt | None) -> dict[str, str]:
+    status = _clean_text(order.status).lower()
+    grant_status = _clean_text(order.grant_status).lower()
+    if status == "paid" and grant_status == "completed":
+        return {
+            "code": status,
+            "tone": "success",
+            "label": "Thanh toán thành công",
+            "headline": "Đơn hàng đã được thanh toán và cấp quyền thành công.",
+            "description": "Bạn có thể sử dụng ngay sản phẩm vừa mua mà không cần thao tác thêm.",
+        }
+    if status == "paid":
+        return {
+            "code": status,
+            "tone": "warning",
+            "label": "Đã thanh toán",
+            "headline": "Thanh toán đã được xác nhận nhưng cấp quyền chưa hoàn tất.",
+            "description": "Hệ thống đang xử lý bước cấp quyền cho sản phẩm. Không cần thanh toán lại.",
+        }
+    if status == "under_review":
+        reason = _clean_text(attempt.manual_review_reason if attempt is not None else "")
+        return {
+            "code": status,
+            "tone": "warning",
+            "label": "Cần kiểm tra thủ công",
+            "headline": "Đơn hàng cần được kiểm tra thêm trước khi cấp quyền.",
+            "description": reason or "Thanh toán đã được ghi nhận nhưng chưa thể đối soát tự động.",
+        }
+    if status == "expired":
+        return {
+            "code": status,
+            "tone": "secondary",
+            "label": "Đơn đã hết hạn",
+            "headline": "Đơn hàng này không còn hiệu lực để thanh toán tự động.",
+            "description": "Nếu bạn vẫn muốn mua, hãy tạo đơn mới. Không nên chuyển tiền vào đơn đã hết hạn.",
+        }
+    if status == "canceled":
+        return {
+            "code": status,
+            "tone": "secondary",
+            "label": "Đơn đã hủy",
+            "headline": "Đơn hàng đã được hủy.",
+            "description": "Đơn này sẽ không tiếp tục xử lý thanh toán hoặc cấp quyền.",
+        }
+    if status == "failed":
+        reason = _clean_text((attempt.failure_message if attempt is not None else "") or "")
+        return {
+            "code": status,
+            "tone": "danger",
+            "label": "Thanh toán thất bại",
+            "headline": "Đơn hàng không thể xác nhận thanh toán thành công.",
+            "description": reason or "PayOS không trả về trạng thái thanh toán thành công cho đơn này.",
+        }
+    if status == "refunded":
+        return {
+            "code": status,
+            "tone": "secondary",
+            "label": "Đã hoàn tiền",
+            "headline": "Đơn hàng đã được hoàn tiền.",
+            "description": "Quyền truy cập liên quan đến đơn này có thể đã bị thu hồi hoặc sẽ được xử lý riêng.",
+        }
+    return {
+        "code": status or "pending_payment",
+        "tone": "info",
+        "label": "Đang chờ thanh toán",
+        "headline": "Đơn hàng đã được tạo và đang chờ PayOS xác nhận.",
+        "description": "Sau khi thanh toán đúng thông tin, hệ thống sẽ tự động cấp quyền khi PayOS gửi xác nhận.",
+    }
+
+
+def _build_order_next_action(order: PaymentOrder, attempt: PaymentAttempt | None) -> str:
+    status = _clean_text(order.status).lower()
+    grant_status = _clean_text(order.grant_status).lower()
+    if status == "pending_payment":
+        if attempt is not None and attempt.checkout_url:
+            if attempt.expires_at is not None:
+                return "Mở lại liên kết PayOS hoặc thanh toán đúng thông tin trước thời điểm hết hạn của đơn."
+            return "Mở lại liên kết PayOS và thanh toán đúng số tiền cùng nội dung chuyển khoản đã hiển thị."
+        return "Tạo lại đơn hoặc liên hệ hỗ trợ nếu bạn không thấy liên kết thanh toán hợp lệ."
+    if status == "under_review":
+        return "Không thanh toán lại ngay. Nếu tiền đã bị trừ, hãy liên hệ hỗ trợ và gửi kèm mã đơn hàng để đối soát."
+    if status == "paid" and grant_status != "completed":
+        return "Không cần thanh toán lại. Hãy chờ hệ thống hoàn tất bước cấp quyền hoặc liên hệ hỗ trợ nếu chậm bất thường."
+    if status == "expired":
+        return "Tạo một đơn hàng mới nếu bạn vẫn muốn mua sản phẩm này."
+    if status == "failed":
+        return "Kiểm tra lại thông tin thanh toán rồi tạo đơn mới. Nếu đã bị trừ tiền, hãy liên hệ hỗ trợ."
+    if status == "canceled":
+        return "Tạo đơn mới nếu bạn muốn tiếp tục mua sản phẩm."
+    if status == "paid":
+        return "Bạn có thể quay lại trang chi tiết sản phẩm và sử dụng ngay nội dung đã mua."
+    return "Theo dõi trạng thái đơn hàng trên trang này cho đến khi PayOS gửi xác nhận cuối cùng."
+
+
+def _build_order_instructions(order: PaymentOrder, attempt: PaymentAttempt | None) -> list[str]:
+    status = _clean_text(order.status).lower()
+    instructions: list[str] = []
+    if status == "pending_payment":
+        instructions.append("Thanh toán đúng số tiền của đơn hàng.")
+        instructions.append("Giữ nguyên nội dung chuyển khoản để hệ thống đối soát tự động.")
+        if attempt is not None and attempt.expires_at is not None:
+            instructions.append("Hoàn tất thanh toán trước thời điểm hết hạn để tránh đơn tự đóng.")
+        if attempt is not None and attempt.checkout_url:
+            instructions.append("Nếu đã rời trang thanh toán, bạn có thể mở lại liên kết PayOS tại màn hình kết quả đơn hàng.")
+        return instructions
+    if status == "under_review":
+        return [
+            "Không thanh toán lại ngay để tránh bị trừ tiền nhiều lần.",
+            "Giữ lại ảnh chụp giao dịch hoặc mã tham chiếu nếu ngân hàng đã báo trừ tiền.",
+            "Liên hệ hỗ trợ và cung cấp mã đơn hàng để được kiểm tra thủ công nhanh hơn.",
+        ]
+    if status == "expired":
+        return [
+            "Đơn đã hết hạn nên không nên tiếp tục chuyển tiền vào thông tin cũ.",
+            "Tạo đơn mới nếu bạn vẫn muốn mua sản phẩm.",
+        ]
+    if status == "failed":
+        return [
+            "Kiểm tra lại trạng thái giao dịch trên PayOS hoặc ứng dụng ngân hàng trước khi thử lại.",
+            "Nếu tiền đã bị trừ nhưng đơn vẫn báo thất bại, hãy liên hệ hỗ trợ kèm mã đơn hàng.",
+        ]
+    if status == "paid" and _clean_text(order.grant_status).lower() != "completed":
+        return [
+            "Không cần thanh toán lại.",
+            "Hệ thống đang hoàn tất bước cấp quyền sau thanh toán.",
+        ]
+    if status == "paid":
+        return [
+            "Quyền truy cập đã được cấp tự động.",
+            "Nếu chưa thấy sản phẩm khả dụng ngay, hãy tải lại trang chi tiết sản phẩm.",
+        ]
+    return []
+
+
+def _build_order_detail_lines(order: PaymentOrder, attempt: PaymentAttempt | None) -> list[dict[str, Any]]:
+    lines: list[dict[str, Any]] = [
+        {
+            "key": "merchant_order_code",
+            "label": "Mã đơn hàng",
+            "type": "text",
+            "value": order.merchant_order_code,
+        },
+        {
+            "key": "product_title",
+            "label": "Sản phẩm",
+            "type": "text",
+            "value": _product_title_from_order(order),
+        },
+        {
+            "key": "total_amount_minor",
+            "label": "Tổng thanh toán",
+            "type": "amount_minor",
+            "value_minor": int(order.total_amount_minor or 0),
+            "currency_code": order.currency_code or "VND",
+        },
+        {
+            "key": "order_status",
+            "label": "Trạng thái đơn",
+            "type": "status",
+            "value": _build_order_status_display(order, attempt)["label"],
+        },
+        {
+            "key": "grant_status",
+            "label": "Trạng thái cấp quyền",
+            "type": "status",
+            "value": _grant_status_display(order.grant_status)["label"],
+        },
+    ]
+    if attempt is not None:
+        lines.append(
+            {
+                "key": "attempt_status",
+                "label": "Trạng thái thanh toán",
+                "type": "status",
+                "value": _attempt_status_display(attempt)["label"],
+            }
+        )
+        if attempt.expected_payment_reference:
+            lines.append(
+                {
+                    "key": "payment_reference",
+                    "label": "Nội dung chuyển khoản",
+                    "type": "text",
+                    "value": attempt.expected_payment_reference,
+                }
+            )
+        if attempt.checkout_url:
+            lines.append(
+                {
+                    "key": "checkout_url",
+                    "label": "Liên kết thanh toán",
+                    "type": "url",
+                    "value": attempt.checkout_url,
+                }
+            )
+        if attempt.expires_at is not None:
+            lines.append(
+                {
+                    "key": "expires_at",
+                    "label": "Hạn thanh toán",
+                    "type": "datetime",
+                    "value": _iso(attempt.expires_at),
+                }
+            )
+        if attempt.confirmed_at is not None:
+            lines.append(
+                {
+                    "key": "confirmed_at",
+                    "label": "Thời điểm xác nhận",
+                    "type": "datetime",
+                    "value": _iso(attempt.confirmed_at),
+                }
+            )
+    if order.paid_at is not None:
+        lines.append(
+            {
+                "key": "paid_at",
+                "label": "Thời điểm thanh toán",
+                "type": "datetime",
+                "value": _iso(order.paid_at),
+            }
+        )
+    return lines
+
+
 def _require_payments_enabled() -> None:
     if not payments_enabled():
         raise PaymentServiceError(
             "PAYMENT_UNAVAILABLE",
-            "Payment system is not enabled.",
+            "Hệ thống thanh toán đang tạm thời không khả dụng. Vui lòng thử lại sau.",
             status=503,
         )
 
 
-def _require_provider_configuration() -> dict[str, Any]:
-    account_no = str(current_app.config.get("PAYMENTS_VIETQR_ACCOUNT_NO") or "").strip()
-    bank_bin = str(current_app.config.get("PAYMENTS_VIETQR_BANK_BIN") or "").strip()
-    if not account_no or not bank_bin:
+def _require_supported_provider() -> None:
+    provider_code = payment_config.payment_provider_code()
+    if provider_code != PAYMENT_PROVIDER_CODE:
         raise PaymentServiceError(
-            "PAYMENT_PROVIDER_NOT_CONFIGURED",
-            "Payment provider is not configured yet.",
+            "PAYMENT_PROVIDER_UNSUPPORTED",
+            f"Cổng thanh toán '{provider_code}' hiện chưa được hỗ trợ trong môi trường này.",
             status=503,
         )
-
-    return {
-        "account_no": account_no,
-        "account_name": str(current_app.config.get("PAYMENTS_VIETQR_ACCOUNT_NAME") or "").strip() or None,
-        "bank_bin": bank_bin,
-        "template": str(current_app.config.get("PAYMENTS_VIETQR_TEMPLATE") or "").strip() or None,
-    }
+    try:
+        payos_provider.assert_payos_provider_available()
+    except payos_provider.PayOSProviderError as exc:
+        raise PaymentServiceError(exc.code, str(exc), status=exc.status) from exc
 
 
 def _build_merchant_order_code() -> str:
@@ -96,6 +403,20 @@ def _build_merchant_order_code() -> str:
 
 def _build_payment_reference() -> str:
     return f"FLAMA{uuid4().hex[:10].upper()}"
+
+
+def _build_provider_order_code() -> int:
+    timestamp_millis = int(time.time() * 1000)
+    return int(f"{timestamp_millis}{randbelow(1000):03d}")
+
+
+def _append_payment_context(url: str, *, order_id: str, product_type: str, product_ref_id: str) -> str:
+    parts = urlsplit(url)
+    query = dict(parse_qsl(parts.query, keep_blank_values=True))
+    query["payment_order_id"] = order_id
+    query["payment_product_type"] = product_type
+    query["payment_product_ref_id"] = product_ref_id
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
 
 
 def _latest_attempt(order: PaymentOrder) -> PaymentAttempt | None:
@@ -117,7 +438,7 @@ def _maybe_expire_order(order: PaymentOrder, *, now: datetime | None = None) -> 
     attempt.status = "expired"
     attempt.failed_at = attempt.failed_at or current_time
     attempt.failure_code = attempt.failure_code or "expired"
-    attempt.failure_message = attempt.failure_message or "Payment attempt expired."
+    attempt.failure_message = attempt.failure_message or "Lượt thanh toán đã hết hạn trước khi PayOS xác nhận thành công."
 
     other_non_terminal_attempts = any(
         row.id != attempt.id and row.status in ACTIVE_ATTEMPT_STATUSES.union({"manual_review"})
@@ -147,11 +468,13 @@ def _serialize_attempt(attempt: PaymentAttempt | None) -> dict[str, Any] | None:
     if attempt is None:
         return None
     provider_metadata = attempt.provider_metadata_json or {}
+    status_display = _attempt_status_display(attempt)
     return {
         "id": attempt.id,
         "provider_code": attempt.provider_code,
         "payment_method_code": attempt.payment_method_code,
         "status": attempt.status,
+        "status_display": status_display,
         "amount_minor": int(attempt.amount_minor or 0),
         "currency_code": attempt.currency_code,
         "provider_payment_id": attempt.provider_payment_id,
@@ -167,11 +490,18 @@ def _serialize_attempt(attempt: PaymentAttempt | None) -> dict[str, Any] | None:
         "provider_metadata": provider_metadata,
         "created_at": _iso(attempt.created_at),
         "updated_at": _iso(attempt.updated_at),
+        "message": status_display["description"],
         "checkout": {
+            "provider": attempt.provider_code,
+            "checkout_url": attempt.checkout_url,
+            "payment_link_id": attempt.provider_payment_id,
+            "provider_order_code": attempt.provider_order_code,
             "bank_bin": provider_metadata.get("bank_bin"),
             "account_no": provider_metadata.get("account_no"),
             "account_name": provider_metadata.get("account_name"),
             "template": provider_metadata.get("template"),
+            "qr_code": provider_metadata.get("qr_code"),
+            "provider_status": provider_metadata.get("provider_status"),
             "amount_minor": int(attempt.amount_minor or 0),
             "currency_code": attempt.currency_code,
             "payment_reference": attempt.expected_payment_reference,
@@ -182,11 +512,18 @@ def _serialize_attempt(attempt: PaymentAttempt | None) -> dict[str, Any] | None:
 
 def serialize_order(order: PaymentOrder) -> dict[str, Any]:
     latest_attempt = _latest_attempt(order)
+    status_display = _build_order_status_display(order, latest_attempt)
+    grant_status_display = _grant_status_display(order.grant_status)
+    next_action = _build_order_next_action(order, latest_attempt)
+    instructions = _build_order_instructions(order, latest_attempt)
+    order_detail_lines = _build_order_detail_lines(order, latest_attempt)
     return {
         "id": order.id,
         "merchant_order_code": order.merchant_order_code,
         "status": order.status,
+        "status_display": status_display,
         "grant_status": order.grant_status,
+        "grant_status_display": grant_status_display,
         "currency_code": order.currency_code,
         "subtotal_amount_minor": int(order.subtotal_amount_minor or 0),
         "discount_amount_minor": int(order.discount_amount_minor or 0),
@@ -195,6 +532,11 @@ def serialize_order(order: PaymentOrder) -> dict[str, Any]:
         "closed_at": _iso(order.closed_at),
         "created_at": _iso(order.created_at),
         "updated_at": _iso(order.updated_at),
+        "message": status_display["description"],
+        "headline": status_display["headline"],
+        "next_action": next_action,
+        "instructions": instructions,
+        "order_detail_lines": order_detail_lines,
         "items": [_serialize_order_item(item) for item in order.items],
         "attempts": [_serialize_attempt(attempt) for attempt in order.attempts],
         "active_attempt": _serialize_attempt(latest_attempt),
@@ -206,19 +548,19 @@ def _validate_note_type_for_checkout(source_note_type: NoteType, *, user_id: int
     if status not in DEFAULT_VISIBLE_PUBLISH_STATUSES:
         raise PaymentServiceError(
             "VALIDATION_ERROR",
-            "This note type is not available for purchase.",
+            "Template này hiện không mở bán hoặc không còn khả dụng để thanh toán.",
             status=409,
         )
     if source_note_type.user_id == user_id:
         raise PaymentServiceError(
             "VALIDATION_ERROR",
-            "Owner cannot purchase own note type.",
+            "Bạn không thể mua chính template do mình phát hành.",
             status=409,
         )
     if source_note_type.pricing_mode != "paid" or int(source_note_type.price_amount_minor or 0) <= 0:
         raise PaymentServiceError(
             "PAYMENT_NOT_REQUIRED",
-            "This note type does not require payment.",
+            "Template này hiện không yêu cầu thanh toán.",
             status=409,
         )
 
@@ -268,19 +610,19 @@ def _validate_deck_item_for_checkout(deck_item: DeckMarketplaceItem, *, user_id:
     if status not in DEFAULT_VISIBLE_PUBLISH_STATUSES:
         raise PaymentServiceError(
             "VALIDATION_ERROR",
-            "This deck is not available for purchase.",
+            "Deck này hiện không mở bán hoặc không còn khả dụng để thanh toán.",
             status=409,
         )
     if deck_item.owner_user_id == user_id:
         raise PaymentServiceError(
             "VALIDATION_ERROR",
-            "Owner cannot purchase own deck item.",
+            "Bạn không thể mua chính deck do mình phát hành.",
             status=409,
         )
     if deck_item.pricing_mode != "paid" or int(deck_item.price_amount_minor or 0) <= 0:
         raise PaymentServiceError(
             "PAYMENT_NOT_REQUIRED",
-            "This deck does not require payment.",
+            "Deck này hiện không yêu cầu thanh toán.",
             status=409,
         )
 
@@ -316,7 +658,7 @@ def _load_checkout_context(*, product_type: str, product_ref_id: str, user_id: i
     if product_type == "note_type":
         source_note_type = NoteType.query.get(product_ref_id)
         if source_note_type is None:
-            raise PaymentServiceError("FIELD_NOT_FOUND", "Note type not found.", status=404)
+            raise PaymentServiceError("FIELD_NOT_FOUND", "Không tìm thấy template cần thanh toán.", status=404)
         context = _validate_note_type_for_checkout(source_note_type, user_id=user_id)
         context["product"] = source_note_type
         return context
@@ -324,31 +666,77 @@ def _load_checkout_context(*, product_type: str, product_ref_id: str, user_id: i
     if product_type == "deck_marketplace_item":
         deck_item = DeckMarketplaceItem.query.get(product_ref_id)
         if deck_item is None:
-            raise PaymentServiceError("FIELD_NOT_FOUND", "Deck item not found.", status=404)
+            raise PaymentServiceError("FIELD_NOT_FOUND", "Không tìm thấy deck cần thanh toán.", status=404)
         context = _validate_deck_item_for_checkout(deck_item, user_id=user_id)
         context["product"] = deck_item
         return context
 
     raise PaymentServiceError(
         "VALIDATION_ERROR",
-        "Unsupported product_type.",
+        "Loại sản phẩm thanh toán không hợp lệ.",
         status=400,
         field="product_type",
     )
 
 
-def _build_checkout_attempt(order: PaymentOrder, *, amount_minor: int, title_snapshot: str) -> PaymentAttempt:
-    provider_metadata = _require_provider_configuration()
+def _build_checkout_attempt(
+    order: PaymentOrder,
+    *,
+    amount_minor: int,
+    title_snapshot: str,
+    product_type: str,
+    product_ref_id: str,
+    return_url: str,
+    cancel_url: str,
+    buyer_email: str | None = None,
+) -> PaymentAttempt:
+    _require_supported_provider()
+    if not return_url or not cancel_url:
+        raise PaymentServiceError(
+            "PAYMENT_RETURN_URL_REQUIRED",
+            "Không thể tạo đơn thanh toán vì thiếu liên kết quay lại sau khi rời PayOS.",
+            status=400,
+        )
     now = _utcnow()
     reference = _build_payment_reference()
-    expires_at = now + timedelta(seconds=int(current_app.config.get("PAYMENTS_ORDER_EXPIRY_SECONDS", DEFAULT_ORDER_EXPIRY_SECONDS)))
+    expires_at = now + timedelta(seconds=payment_config.order_expiry_seconds(default=DEFAULT_ORDER_EXPIRY_SECONDS))
+    provider_order_code = _build_provider_order_code()
+    resolved_return_url = _append_payment_context(
+        return_url,
+        order_id=order.id,
+        product_type=product_type,
+        product_ref_id=product_ref_id,
+    )
+    resolved_cancel_url = _append_payment_context(
+        cancel_url,
+        order_id=order.id,
+        product_type=product_type,
+        product_ref_id=product_ref_id,
+    )
+    try:
+        checkout_session = payos_provider.create_checkout_session(
+            provider_order_code=provider_order_code,
+            amount_minor=int(amount_minor or 0),
+            title_snapshot=title_snapshot,
+            payment_reference=reference,
+            return_url=resolved_return_url,
+            cancel_url=resolved_cancel_url,
+            expires_at=expires_at,
+            buyer_email=buyer_email,
+        )
+    except payos_provider.PayOSProviderError as exc:
+        raise PaymentServiceError(exc.code, str(exc), status=exc.status) from exc
+    provider_metadata = dict(checkout_session.get("provider_metadata") or {})
     provider_metadata.update(
         {
             "merchant_order_code": order.merchant_order_code,
             "title_snapshot": title_snapshot,
             "amount_minor": int(amount_minor or 0),
-            "currency_code": "VND",
+            "currency_code": checkout_session.get("currency_code") or "VND",
             "payment_reference": reference,
+            "return_url": resolved_return_url,
+            "cancel_url": resolved_cancel_url,
+            "provider_raw_response": checkout_session.get("raw_response") or {},
         }
     )
     return PaymentAttempt(
@@ -357,16 +745,127 @@ def _build_checkout_attempt(order: PaymentOrder, *, amount_minor: int, title_sna
         payment_method_code=PAYMENT_METHOD_CODE,
         status="pending",
         amount_minor=int(amount_minor or 0),
-        currency_code="VND",
-        provider_order_code=order.merchant_order_code,
+        currency_code=str(checkout_session.get("currency_code") or "VND"),
+        provider_payment_id=str(checkout_session.get("provider_payment_id") or "") or None,
+        provider_order_code=str(checkout_session.get("provider_order_code") or provider_order_code),
         expected_payment_reference=reference,
-        checkout_url=None,
+        checkout_url=str(checkout_session.get("checkout_url") or "") or None,
         provider_metadata_json=provider_metadata,
-        expires_at=expires_at,
+        expires_at=checkout_session.get("expires_at") or expires_at,
     )
 
 
-def _create_or_reuse_order_for_context(context: dict[str, Any], *, user_id: int) -> tuple[PaymentOrder, bool]:
+def _sync_attempt_with_payos(order: PaymentOrder, attempt: PaymentAttempt, *, now: datetime) -> str:
+    if attempt.provider_code != PAYMENT_PROVIDER_CODE or not attempt.checkout_url:
+        attempt.status = "failed"
+        attempt.failed_at = now
+        attempt.failure_code = "superseded"
+        attempt.failure_message = "Lượt thanh toán cũ không còn đủ dữ liệu để tiếp tục nên hệ thống sẽ tạo lượt mới."
+        order.status = "failed"
+        order.closed_at = now
+        return "recreate"
+
+    provider_payment_id = _clean_text(attempt.provider_payment_id)
+    provider_order_code = _clean_text(attempt.provider_order_code)
+    if not provider_payment_id and not provider_order_code:
+        return "reuse"
+
+    try:
+        provider_state = payos_provider.get_payment_link_state(
+            provider_payment_id=provider_payment_id or None,
+            provider_order_code=provider_order_code or None,
+        )
+    except payos_provider.PayOSProviderError as exc:
+        if exc.status in {400, 404, 409}:
+            attempt.status = "failed"
+            attempt.failed_at = now
+            attempt.failure_code = "provider_link_unavailable"
+            attempt.failure_message = "Liên kết thanh toán cũ không còn khả dụng trên PayOS nên hệ thống sẽ tạo đơn mới."
+            order.status = "failed"
+            order.closed_at = now
+            return "recreate"
+        return "reuse"
+
+    provider_status = _clean_text(provider_state.get("status")).upper()
+    provider_metadata = dict(attempt.provider_metadata_json or {})
+    provider_metadata["provider_status"] = provider_status or provider_metadata.get("provider_status")
+    provider_metadata["payment_link_state"] = provider_state.get("raw_response") or {}
+    provider_metadata["amount_paid_minor"] = int(provider_state.get("amount_paid_minor") or 0)
+    provider_metadata["amount_remaining_minor"] = int(provider_state.get("amount_remaining_minor") or 0)
+    provider_metadata["provider_state_checked_at"] = _iso(now)
+    if provider_state.get("cancellation_reason"):
+        provider_metadata["provider_cancellation_reason"] = provider_state["cancellation_reason"]
+    if provider_state.get("canceled_at"):
+        provider_metadata["provider_canceled_at"] = provider_state["canceled_at"]
+    attempt.provider_metadata_json = provider_metadata
+
+    if provider_status in PAYOS_PROVIDER_REUSABLE_STATUSES:
+        attempt.status = "pending"
+        return "reuse"
+
+    if provider_status == "EXPIRED":
+        attempt.status = "expired"
+        attempt.failed_at = attempt.failed_at or now
+        attempt.failure_code = "expired"
+        attempt.failure_message = "Lượt thanh toán cũ đã hết hạn trên PayOS."
+        order.status = "expired"
+        order.closed_at = now
+        return "recreate"
+
+    if provider_status == "CANCELLED":
+        attempt.status = "canceled"
+        attempt.failed_at = attempt.failed_at or now
+        attempt.failure_code = "canceled"
+        attempt.failure_message = (
+            _clean_text(provider_state.get("cancellation_reason"))
+            or "Phiên thanh toán cũ đã bị hủy hoặc đóng trên PayOS."
+        )
+        order.status = "canceled"
+        order.closed_at = now
+        return "recreate"
+
+    if provider_status == "FAILED":
+        attempt.status = "failed"
+        attempt.failed_at = attempt.failed_at or now
+        attempt.failure_code = "provider_failed"
+        attempt.failure_message = "PayOS báo phiên thanh toán cũ không còn xử lý được."
+        order.status = "failed"
+        order.closed_at = now
+        return "recreate"
+
+    if provider_status == "UNDERPAID":
+        attempt.status = "manual_review"
+        attempt.manual_review_reason = "PayOS ghi nhận giao dịch chưa đủ số tiền nên cần kiểm tra thủ công."
+        order.status = "under_review"
+        order.closed_at = None
+        return "block"
+
+    if provider_status == "PAID":
+        attempt.status = "manual_review"
+        attempt.manual_review_reason = (
+            "PayOS đã ghi nhận đơn này là đã thanh toán nhưng hệ thống chưa hoàn tất xác nhận nội bộ."
+        )
+        order.status = "under_review"
+        order.closed_at = None
+        return "block"
+
+    attempt.status = "manual_review"
+    attempt.manual_review_reason = (
+        f"PayOS trả về trạng thái '{provider_status or 'UNKNOWN'}' nên hệ thống không tự động tái sử dụng lượt thanh toán này."
+    )
+    order.status = "under_review"
+    order.closed_at = None
+    return "block"
+
+
+def _create_or_reuse_order_for_context(
+    context: dict[str, Any],
+    *,
+    user_id: int,
+    return_url: str,
+    cancel_url: str,
+    buyer_email: str | None = None,
+) -> tuple[PaymentOrder, bool]:
     now = _utcnow()
     pending_orders = payment_repository.list_reusable_orders_for_product(
         user_id=user_id,
@@ -378,9 +877,16 @@ def _create_or_reuse_order_for_context(context: dict[str, Any], *, user_id: int)
         dirty = _maybe_expire_order(order, now=now) or dirty
         latest_attempt = _latest_attempt(order)
         if latest_attempt and latest_attempt.status in ACTIVE_ATTEMPT_STATUSES and order.status == "pending_payment":
-            if dirty:
+            resolution = _sync_attempt_with_payos(order, latest_attempt, now=now)
+            dirty = dirty or resolution != "reuse"
+            if resolution == "reuse":
                 db.session.commit()
-            return order, False
+                return order, False
+            if resolution == "block":
+                db.session.commit()
+                return order, False
+            if resolution == "recreate":
+                continue
 
     order = PaymentOrder(
         user_id=user_id,
@@ -412,13 +918,25 @@ def _create_or_reuse_order_for_context(context: dict[str, Any], *, user_id: int)
         order,
         amount_minor=context["amount_minor"],
         title_snapshot=context["title_snapshot"],
+        product_type=context["product_type"],
+        product_ref_id=context["product_ref_id"],
+        return_url=return_url,
+        cancel_url=cancel_url,
+        buyer_email=buyer_email,
     )
     db.session.add(attempt)
     db.session.commit()
     return order, True
 
 
-def prepare_checkout_for_product(*, user_id: int, product_type: str, product_ref_id: str) -> dict[str, Any]:
+def prepare_checkout_for_product(
+    *,
+    user_id: int,
+    product_type: str,
+    product_ref_id: str,
+    return_url: str | None = None,
+    cancel_url: str | None = None,
+) -> dict[str, Any]:
     _require_payments_enabled()
     context = _load_checkout_context(
         product_type=product_type,
@@ -432,7 +950,17 @@ def prepare_checkout_for_product(*, user_id: int, product_type: str, product_ref
             **existing_access,
         }
 
-    order, created = _create_or_reuse_order_for_context(context, user_id=user_id)
+    buyer_email = None
+    product = context.get("product")
+    if product_type == "note_type" and product is not None:
+        buyer_email = None
+    order, created = _create_or_reuse_order_for_context(
+        context,
+        user_id=user_id,
+        return_url=str(return_url or "").strip(),
+        cancel_url=str(cancel_url or return_url or "").strip(),
+        buyer_email=buyer_email,
+    )
     fresh_order = payment_repository.get_order_by_id(order.id) or order
     return {
         "payment_required": True,
@@ -444,16 +972,23 @@ def prepare_checkout_for_product(*, user_id: int, product_type: str, product_ref
 def get_order_detail_for_user(*, order_id: str, user_id: int) -> dict[str, Any]:
     order = payment_repository.get_order_for_user(order_id, user_id)
     if order is None:
-        raise PaymentServiceError("FIELD_NOT_FOUND", "Payment order not found.", status=404)
+        raise PaymentServiceError("FIELD_NOT_FOUND", "Không tìm thấy đơn hàng thanh toán.", status=404)
     if _maybe_expire_order(order):
         db.session.commit()
+        order = payment_repository.get_order_for_user(order_id, user_id) or order
+    latest_attempt = _latest_attempt(order)
+    if latest_attempt is not None and latest_attempt.status in ACTIVE_ATTEMPT_STATUSES and order.status == "pending_payment":
+        resolution = _sync_attempt_with_payos(order, latest_attempt, now=_utcnow())
+        if resolution in {"reuse", "block", "recreate"}:
+            db.session.commit()
+            order = payment_repository.get_order_for_user(order_id, user_id) or order
     return serialize_order(order)
 
 
 def cancel_order_for_user(*, order_id: str, user_id: int) -> dict[str, Any]:
     order = payment_repository.get_order_for_user(order_id, user_id)
     if order is None:
-        raise PaymentServiceError("FIELD_NOT_FOUND", "Payment order not found.", status=404)
+        raise PaymentServiceError("FIELD_NOT_FOUND", "Không tìm thấy đơn hàng thanh toán.", status=404)
     if _maybe_expire_order(order):
         db.session.commit()
         order = payment_repository.get_order_for_user(order_id, user_id) or order
@@ -462,7 +997,7 @@ def cancel_order_for_user(*, order_id: str, user_id: int) -> dict[str, Any]:
     if order.status in TERMINAL_ORDER_STATUSES - {"canceled"}:
         raise PaymentServiceError(
             "PAYMENT_ORDER_NOT_CANCELABLE",
-            "Only pending payment orders can be canceled.",
+            "Chỉ đơn đang chờ thanh toán mới có thể hủy. Đơn này đã ở trạng thái cuối cùng.",
             status=409,
         )
 
@@ -472,7 +1007,7 @@ def cancel_order_for_user(*, order_id: str, user_id: int) -> dict[str, Any]:
         latest_attempt.status = "canceled"
         latest_attempt.failed_at = now
         latest_attempt.failure_code = "canceled"
-        latest_attempt.failure_message = "Canceled by user."
+        latest_attempt.failure_message = "Người dùng đã chủ động hủy lượt thanh toán này."
 
     order.status = "canceled"
     order.closed_at = now
@@ -506,7 +1041,7 @@ def _fulfill_order_item(*, order: PaymentOrder, order_item: PaymentOrderItem, at
     if order_item.product_type == "note_type":
         source_note_type = NoteType.query.get(order_item.product_ref_id)
         if source_note_type is None:
-            raise PaymentServiceError("FIELD_NOT_FOUND", "Purchased note type no longer exists.", status=404)
+            raise PaymentServiceError("FIELD_NOT_FOUND", "Template đã thanh toán không còn tồn tại để cấp quyền.", status=404)
         install_row = flashcards_share_service.ensure_note_type_install_for_user(
             source_note_type=source_note_type,
             user_id=order.user_id,
@@ -521,7 +1056,7 @@ def _fulfill_order_item(*, order: PaymentOrder, order_item: PaymentOrderItem, at
     if order_item.product_type == "deck_marketplace_item":
         deck_item = DeckMarketplaceItem.query.get(order_item.product_ref_id)
         if deck_item is None:
-            raise PaymentServiceError("FIELD_NOT_FOUND", "Purchased deck no longer exists.", status=404)
+            raise PaymentServiceError("FIELD_NOT_FOUND", "Deck đã thanh toán không còn tồn tại để cấp quyền.", status=404)
         install_result = flashcards_share_service.install_shared_deck_item_for_user(
             deck_item,
             user_id=order.user_id,
@@ -552,7 +1087,7 @@ def _fulfill_order_item(*, order: PaymentOrder, order_item: PaymentOrderItem, at
                 grant_data["installed_note_type_id"] = note_type_install.installed_note_type_id
         return grant_data
 
-    raise PaymentServiceError("VALIDATION_ERROR", "Unsupported product type in order.", status=400)
+    raise PaymentServiceError("VALIDATION_ERROR", "Đơn hàng chứa loại sản phẩm không được hỗ trợ.", status=400)
 
 
 def _ensure_entitlements_for_confirmed_order(order: PaymentOrder, attempt: PaymentAttempt, *, now: datetime) -> None:
@@ -673,19 +1208,19 @@ def _process_webhook_event(event_id: str, normalized_payload: dict[str, Any], *,
     now = _utcnow()
     event = payment_repository.get_webhook_event_by_id(event_id)
     if event is None:
-        raise PaymentServiceError("FIELD_NOT_FOUND", "Webhook event not found.", status=404)
+        raise PaymentServiceError("FIELD_NOT_FOUND", "Không tìm thấy sự kiện webhook cần xử lý.", status=404)
 
     attempts = _resolve_webhook_attempt_candidates(normalized_payload)
     if not attempts:
         event.processing_status = "ignored"
-        event.error_message = "No matching order or attempt found."
+        event.error_message = "Không tìm thấy đơn hàng hoặc lượt thanh toán khớp với webhook này."
         event.processed_at = now
         db.session.commit()
         return {"status": "ignored", "event_id": event.id}, 200
 
     if len(attempts) != 1:
         event.processing_status = "ignored"
-        event.error_message = "Webhook matched multiple payment attempts."
+        event.error_message = "Webhook khớp với nhiều lượt thanh toán nên cần bỏ qua để tránh đối soát sai."
         event.processed_at = now
         db.session.commit()
         return {"status": "ignored", "event_id": event.id}, 200
@@ -694,7 +1229,7 @@ def _process_webhook_event(event_id: str, normalized_payload: dict[str, Any], *,
     initial_order = initial_attempt.order
     if initial_order is None:
         event.processing_status = "ignored"
-        event.error_message = "Matched payment attempt has no parent order."
+        event.error_message = "Lượt thanh toán khớp được tìm thấy nhưng không còn gắn với đơn hàng hợp lệ."
         event.processed_at = now
         db.session.commit()
         return {"status": "ignored", "event_id": event.id}, 200
@@ -705,7 +1240,7 @@ def _process_webhook_event(event_id: str, normalized_payload: dict[str, Any], *,
     )
     if order is None or attempt is None:
         event.processing_status = "ignored"
-        event.error_message = "Payment attempt could not be reloaded."
+        event.error_message = "Không thể tải lại đơn hàng hoặc lượt thanh toán để xử lý webhook."
         event.processed_at = now
         db.session.commit()
         return {"status": "ignored", "event_id": event.id}, 200
@@ -727,7 +1262,7 @@ def _process_webhook_event(event_id: str, normalized_payload: dict[str, Any], *,
             order=order,
             attempt=attempt,
             event=event,
-            reason="Webhook signature missing or invalid.",
+            reason="Webhook từ PayOS không vượt qua bước xác minh chữ ký nên cần kiểm tra thủ công.",
             now=now,
         )
         db.session.commit()
@@ -735,7 +1270,7 @@ def _process_webhook_event(event_id: str, normalized_payload: dict[str, Any], *,
 
     if order.status in {"canceled", "failed", "refunded"}:
         event.processing_status = "ignored"
-        event.error_message = f"Order is already closed with status '{order.status}'."
+        event.error_message = f"Đơn hàng đã đóng trước đó với trạng thái '{order.status}'."
         event.processed_at = now
         db.session.commit()
         return {"status": "ignored", "order": serialize_order(order)}, 200
@@ -745,7 +1280,10 @@ def _process_webhook_event(event_id: str, normalized_payload: dict[str, Any], *,
             order=order,
             attempt=attempt,
             event=event,
-            reason=f"Provider reported non-success status '{normalized_payload.get('status') or 'unknown'}'.",
+            reason=(
+                "PayOS trả về trạng thái không thành công"
+                f" ('{normalized_payload.get('status') or 'unknown'}') cho đơn hàng này."
+            ),
             now=now,
         )
         db.session.commit()
@@ -756,7 +1294,7 @@ def _process_webhook_event(event_id: str, normalized_payload: dict[str, Any], *,
             order=order,
             attempt=attempt,
             event=event,
-            reason="Payment amount mismatch.",
+            reason="Số tiền PayOS gửi về không khớp với số tiền của đơn hàng nên cần kiểm tra thủ công.",
             now=now,
         )
         db.session.commit()
@@ -769,7 +1307,7 @@ def _process_webhook_event(event_id: str, normalized_payload: dict[str, Any], *,
             order=order,
             attempt=attempt,
             event=event,
-            reason="Payment reference mismatch.",
+            reason="Nội dung chuyển khoản PayOS gửi về không khớp với mã tham chiếu của đơn hàng.",
             now=now,
         )
         db.session.commit()
@@ -798,7 +1336,7 @@ def _process_webhook_event(event_id: str, normalized_payload: dict[str, Any], *,
     return {"status": "processed", "order": serialize_order(order)}, 200
 
 
-def process_vietqr_webhook(normalized_payload: dict[str, Any], *, signature_valid: bool) -> tuple[dict[str, Any], int]:
+def process_payment_webhook(normalized_payload: dict[str, Any], *, signature_valid: bool) -> tuple[dict[str, Any], int]:
     now = _utcnow()
     event = PaymentWebhookEvent(
         provider_code=PAYMENT_PROVIDER_CODE,
@@ -823,7 +1361,7 @@ def process_vietqr_webhook(normalized_payload: dict[str, Any], *, signature_vali
         event = payment_repository.get_webhook_event_by_id(event.id)
         if event is not None:
             event.processing_status = "ignored"
-            event.error_message = "Payments are disabled."
+            event.error_message = "Hệ thống thanh toán đang tắt nên webhook chỉ được ghi nhận chứ không xử lý."
             event.processed_at = now
             db.session.commit()
         return {"status": "ignored", "event_id": event.id}, 200
@@ -832,7 +1370,7 @@ def process_vietqr_webhook(normalized_payload: dict[str, Any], *, signature_vali
         event = payment_repository.get_webhook_event_by_id(event.id)
         if event is not None:
             event.processing_status = "ignored"
-            event.error_message = "Webhook auto grant is disabled."
+            event.error_message = "Chế độ tự cấp quyền từ webhook đang tắt nên cần xử lý thủ công."
             event.processed_at = now
             db.session.commit()
         return {"status": "ignored", "event_id": event.id}, 202
@@ -854,5 +1392,20 @@ def process_vietqr_webhook(normalized_payload: dict[str, Any], *, signature_vali
         return {
             "status": "failed",
             "event_id": event.id,
-            "message": "Webhook logged for manual retry.",
+            "message": "Webhook đã được lưu để kiểm tra và xử lý lại thủ công.",
         }, 200
+
+
+def process_payos_webhook_request(raw_payload: bytes | str) -> tuple[dict[str, Any], int]:
+    _require_payments_enabled()
+    _require_supported_provider()
+    try:
+        normalized_payload = payos_provider.verify_webhook_payload(raw_payload)
+    except payos_provider.PayOSProviderError as exc:
+        raise PaymentServiceError(exc.code, str(exc), status=exc.status) from exc
+    return process_payment_webhook(normalized_payload, signature_valid=True)
+
+
+def process_vietqr_webhook(normalized_payload: dict[str, Any], *, signature_valid: bool) -> tuple[dict[str, Any], int]:
+    """Deprecated compatibility wrapper kept during the payOS-first recovery."""
+    return process_payment_webhook(normalized_payload, signature_valid=signature_valid)

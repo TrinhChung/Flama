@@ -19,6 +19,7 @@ import {
 
     const deckItemId = root.getAttribute("data-deck-item-id");
     const noteTypeDetailUrlTemplate = root.getAttribute("data-note-type-url-template"); // Needs to be injected via HTML
+    const paymentResultUrl = root.getAttribute("data-payment-result-url") || "";
 
     const titleEl = document.getElementById("deck-title");
     const metaEl = document.getElementById("deck-meta-line");
@@ -47,6 +48,13 @@ import {
     const frontBtn = document.getElementById("deck-preview-side-front");
     const backBtn = document.getElementById("deck-preview-side-back");
     const errorEl = document.getElementById("deck-detail-error");
+    const paymentPanelEl = document.getElementById("deck-payment-panel");
+    const paymentHeadlineEl = document.getElementById("deck-payment-headline");
+    const paymentMessageEl = document.getElementById("deck-payment-message");
+    const paymentBadgeEl = document.getElementById("deck-payment-badge");
+    const paymentNextActionEl = document.getElementById("deck-payment-next-action");
+    const paymentLinesEl = document.getElementById("deck-payment-lines");
+    const paymentInstructionsEl = document.getElementById("deck-payment-instructions");
 
     let deckDetail = null;
     let sourceNoteTypeDetail = null;
@@ -58,7 +66,7 @@ import {
 
     function showError(message) {
         if (errorEl) {
-            errorEl.textContent = message || "Request failed.";
+            errorEl.textContent = message || "Không thể xử lý yêu cầu lúc này.";
             errorEl.classList.remove("d-none");
         }
     }
@@ -85,6 +93,7 @@ import {
     function buildPaymentInstructions(payload) {
         const order = payload?.order || {};
         const checkout = order?.active_attempt?.checkout || {};
+        const checkoutUrl = checkout.checkout_url || "N/A";
         const lines = [
             "Đã tạo đơn thanh toán.",
             "Mã đơn: " + (order.merchant_order_code || order.id || "N/A"),
@@ -100,9 +109,152 @@ import {
         return lines.join("\n");
     }
 
+    function hidePaymentOrder() {
+        if (!paymentPanelEl) return;
+        paymentPanelEl.classList.add("d-none");
+        paymentPanelEl.removeAttribute("data-tone");
+    }
+
+    function buildFallbackOrderMessage(order) {
+        const headline = order?.headline || order?.status_display?.headline || "Đơn hàng đã được tạo.";
+        const message = order?.message || order?.status_display?.description || "";
+        const nextAction = order?.next_action || "";
+        const parts = [headline];
+        if (message) parts.push(message);
+        if (nextAction) parts.push("Tiếp theo: " + nextAction);
+        return parts.join("\n\n");
+    }
+
+    function renderPaymentLineValue(line) {
+        if (!line) return "N/A";
+        if (line.type === "amount_minor") {
+            return formatCurrencyMinor(line.value_minor || 0);
+        }
+        if (line.type === "datetime") {
+            return formatDate(line.value) || "N/A";
+        }
+        return String(line.value || "N/A");
+    }
+
+    function renderPaymentLines(lines) {
+        if (!paymentLinesEl) return;
+        paymentLinesEl.innerHTML = "";
+        const normalized = Array.isArray(lines) ? lines : [];
+        if (!normalized.length) {
+            const emptyEl = document.createElement("div");
+            emptyEl.className = "text-muted small";
+            emptyEl.textContent = "Chưa có thêm thông tin chi tiết cho đơn hàng này.";
+            paymentLinesEl.appendChild(emptyEl);
+            return;
+        }
+
+        normalized.forEach((line) => {
+            const rowEl = document.createElement("div");
+            rowEl.className = "flama-payment-line";
+
+            const labelEl = document.createElement("div");
+            labelEl.className = "flama-payment-label";
+            labelEl.textContent = line.label || "Thông tin";
+
+            const valueEl = document.createElement("div");
+            valueEl.className = "flama-payment-value";
+            if (line.key === "payment_reference" || line.key === "merchant_order_code") {
+                valueEl.classList.add("is-code");
+            }
+
+            if (line.type === "url" && line.value) {
+                const linkEl = document.createElement("a");
+                linkEl.href = line.value;
+                linkEl.target = "_blank";
+                linkEl.rel = "noopener noreferrer";
+                linkEl.textContent = "Mở lại trang thanh toán PayOS";
+                valueEl.appendChild(linkEl);
+            } else {
+                valueEl.textContent = renderPaymentLineValue(line);
+            }
+
+            rowEl.appendChild(labelEl);
+            rowEl.appendChild(valueEl);
+            paymentLinesEl.appendChild(rowEl);
+        });
+    }
+
+    function renderPaymentInstructions(instructions) {
+        if (!paymentInstructionsEl) return;
+        paymentInstructionsEl.innerHTML = "";
+        const normalized = Array.isArray(instructions) ? instructions.filter(Boolean) : [];
+        const items = normalized.length ? normalized : ["Theo dõi trạng thái đơn hàng tại trang này."];
+        items.forEach((instruction) => {
+            const itemEl = document.createElement("li");
+            itemEl.textContent = instruction;
+            paymentInstructionsEl.appendChild(itemEl);
+        });
+    }
+
+    function renderPaymentOrder(order) {
+        if (!paymentPanelEl || !order) return;
+        const statusDisplay = order.status_display || {};
+        paymentPanelEl.classList.remove("d-none");
+        paymentPanelEl.setAttribute("data-tone", statusDisplay.tone || "info");
+        if (paymentBadgeEl) {
+            paymentBadgeEl.textContent = statusDisplay.label || "Đơn hàng";
+        }
+        if (paymentHeadlineEl) {
+            paymentHeadlineEl.textContent = order.headline || statusDisplay.headline || "Chi tiết đơn hàng";
+        }
+        if (paymentMessageEl) {
+            paymentMessageEl.textContent = order.message || statusDisplay.description || "";
+        }
+        if (paymentNextActionEl) {
+            paymentNextActionEl.textContent = order.next_action ? ("Tiếp theo: " + order.next_action) : "";
+        }
+        renderPaymentLines(order.order_detail_lines || []);
+        renderPaymentInstructions(order.instructions || []);
+    }
+
+    function consumePaymentOrderIdFromLocation() {
+        const url = new URL(window.location.href);
+        const orderId = url.searchParams.get("payment_order_id");
+        if (!orderId) return "";
+        url.searchParams.delete("payment_order_id");
+        url.searchParams.delete("payment_product_type");
+        url.searchParams.delete("payment_product_ref_id");
+        window.history.replaceState({}, document.title, url.toString());
+        return orderId;
+    }
+
+    async function syncReturnedPayment() {
+        const orderId = consumePaymentOrderIdFromLocation();
+        if (!orderId) return;
+        try {
+            const order = await fetchPaymentOrder(orderId);
+            renderPaymentOrder(order);
+            if (order?.status === "paid" && order?.grant_status === "completed") {
+                await loadDeckDetail();
+                renderPaymentOrder(order);
+                return;
+            }
+        } catch (error) {
+            showError(error.message || "Không thể đồng bộ trạng thái đơn hàng từ PayOS.");
+        }
+    }
+
     function buildNoteTypeDetailUrl(noteTypeId) {
         if (!noteTypeDetailUrlTemplate) return "#";
         return noteTypeDetailUrlTemplate.replace("__NOTE_TYPE_ID__", encodeURIComponent(noteTypeId));
+    }
+
+    function buildPaymentResultUrl(orderId, productType, productRefId) {
+        if (!paymentResultUrl || !orderId) return "";
+        const url = new URL(paymentResultUrl, window.location.origin);
+        url.searchParams.set("payment_order_id", orderId);
+        if (productType) {
+            url.searchParams.set("payment_product_type", productType);
+        }
+        if (productRefId) {
+            url.searchParams.set("payment_product_ref_id", productRefId);
+        }
+        return url.toString();
     }
 
     function getActiveSample() {
@@ -386,9 +538,26 @@ import {
         try {
             const response = await installDeck(deckItemId);
             if (response?.payment_required && response?.order) {
-                window.alert(buildPaymentInstructions(response));
+                const checkoutUrl = response?.order?.active_attempt?.checkout?.checkout_url
+                    || response?.order?.active_attempt?.checkout_url;
+                if (checkoutUrl && response?.order?.status === "pending_payment") {
+                    window.location.href = checkoutUrl;
+                    return;
+                }
+                showError(response?.order?.next_action || "Không lấy được liên kết PayOS cho đơn hàng này.");
+                const resultUrl = buildPaymentResultUrl(
+                    response?.order?.id || "",
+                    "deck_marketplace_item",
+                    deckItemId,
+                );
+                if (resultUrl) {
+                    window.location.href = resultUrl;
+                    return;
+                }
+                window.alert(buildFallbackOrderMessage(response.order));
                 return;
             }
+            hidePaymentOrder();
             await loadDeckDetail();
         } finally {
             renderInstallState();
