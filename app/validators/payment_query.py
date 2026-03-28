@@ -30,7 +30,7 @@ ATTEMPT_STATUS_VALUES = {
 }
 WEBHOOK_STATUS_VALUES = {"all", "received", "processed", "ignored", "failed"}
 PROVIDER_VALUES = {"all", "payos"}
-PRODUCT_TYPE_VALUES = {"all", "note_type", "deck_marketplace_item"}
+PRODUCT_TYPE_VALUES = {"all", "note_type", "deck_marketplace_item", "support_donation"}
 ORDER_SORT_VALUES = {"created_desc", "created_asc", "amount_desc", "amount_asc"}
 ATTEMPT_SORT_VALUES = {"created_desc", "created_asc", "amount_desc", "amount_asc"}
 DASHBOARD_RANGE_VALUES = {"7d", "30d", "90d", "all"}

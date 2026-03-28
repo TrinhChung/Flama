@@ -79,33 +79,36 @@ def create_checkout_session(
             status=502,
         ) from exc
 
+    payload = _serialize_model(response)
     metadata = {
-        "bank_bin": response.bin,
-        "account_no": response.account_number,
-        "account_name": response.account_name,
-        "amount_minor": int(response.amount),
-        "currency_code": response.currency,
-        "provider_status": response.status,
-        "payment_reference": response.description,
-        "payment_link_id": response.payment_link_id,
-        "checkout_url": response.checkout_url,
-        "qr_code": response.qr_code,
+        "bank_bin": _value_from_model(response, payload, "bin"),
+        "account_no": _value_from_model(response, payload, "account_number", "accountNumber"),
+        "account_name": _value_from_model(response, payload, "account_name", "accountName"),
+        "amount_minor": int(_value_from_model(response, payload, "amount") or 0),
+        "currency_code": _value_from_model(response, payload, "currency") or "VND",
+        "provider_status": _value_from_model(response, payload, "status"),
+        "payment_reference": _value_from_model(response, payload, "description"),
+        "payment_link_id": _value_from_model(response, payload, "payment_link_id", "paymentLinkId"),
+        "checkout_url": _value_from_model(response, payload, "checkout_url", "checkoutUrl"),
+        "qr_code": _value_from_model(response, payload, "qr_code", "qrCode"),
     }
     provider_expires_at = (
-        datetime.utcfromtimestamp(int(response.expired_at))
-        if response.expired_at is not None
+        datetime.utcfromtimestamp(
+            int(_value_from_model(response, payload, "expired_at", "expiredAt"))
+        )
+        if _value_from_model(response, payload, "expired_at", "expiredAt") is not None
         else expires_at
     )
     return {
         "provider_code": "payos",
-        "provider_order_code": str(response.order_code),
-        "provider_payment_id": str(response.payment_link_id),
-        "checkout_url": response.checkout_url,
-        "amount_minor": int(response.amount),
-        "currency_code": response.currency or "VND",
+        "provider_order_code": str(_value_from_model(response, payload, "order_code", "orderCode") or provider_order_code),
+        "provider_payment_id": str(_value_from_model(response, payload, "payment_link_id", "paymentLinkId") or ""),
+        "checkout_url": _value_from_model(response, payload, "checkout_url", "checkoutUrl"),
+        "amount_minor": int(_value_from_model(response, payload, "amount") or 0),
+        "currency_code": _value_from_model(response, payload, "currency") or "VND",
         "expires_at": provider_expires_at,
         "provider_metadata": metadata,
-        "raw_response": _serialize_model(response),
+        "raw_response": payload,
     }
 
 
@@ -146,15 +149,28 @@ def get_payment_link_state(
     payload = _serialize_model(response)
     return {
         "provider_code": "payos",
-        "provider_payment_id": str(response.id or provider_payment_id or "").strip() or None,
-        "provider_order_code": str(response.order_code or provider_order_code or "").strip() or None,
-        "status": str(response.status or "").strip().upper(),
-        "amount_minor": int(response.amount or 0),
-        "amount_paid_minor": int(response.amount_paid or 0),
-        "amount_remaining_minor": int(response.amount_remaining or 0),
-        "cancellation_reason": str(response.cancellation_reason or "").strip() or None,
-        "canceled_at": str(response.canceled_at or "").strip() or None,
-        "created_at": str(response.created_at or "").strip() or None,
+        "provider_payment_id": str(
+            _value_from_model(response, payload, "id", "payment_link_id", "paymentLinkId")
+            or provider_payment_id
+            or ""
+        ).strip() or None,
+        "provider_order_code": str(
+            _value_from_model(response, payload, "order_code", "orderCode")
+            or provider_order_code
+            or ""
+        ).strip() or None,
+        "status": str(_value_from_model(response, payload, "status") or "").strip().upper(),
+        "amount_minor": int(_value_from_model(response, payload, "amount") or 0),
+        "amount_paid_minor": int(_value_from_model(response, payload, "amount_paid", "amountPaid") or 0),
+        "amount_remaining_minor": int(_value_from_model(response, payload, "amount_remaining", "amountRemaining") or 0),
+        "currency_code": str(_value_from_model(response, payload, "currency") or "VND").strip() or "VND",
+        "payment_reference": str(_value_from_model(response, payload, "description") or "").strip() or None,
+        "checkout_url": str(_value_from_model(response, payload, "checkout_url", "checkoutUrl") or "").strip() or None,
+        "cancellation_reason": str(
+            _value_from_model(response, payload, "cancellation_reason", "cancellationReason") or ""
+        ).strip() or None,
+        "canceled_at": str(_value_from_model(response, payload, "canceled_at", "canceledAt") or "").strip() or None,
+        "created_at": str(_value_from_model(response, payload, "created_at", "createdAt") or "").strip() or None,
         "raw_response": payload,
     }
 
@@ -217,6 +233,16 @@ def _serialize_model(model: Any) -> dict[str, Any]:
     if hasattr(model, "model_dump"):
         return model.model_dump()
     return dict(model)
+
+
+def _value_from_model(model: Any, payload: dict[str, Any], *keys: str) -> Any:
+    for key in keys:
+        if key in payload and payload[key] is not None:
+            return payload[key]
+        value = getattr(model, key, None)
+        if value is not None:
+            return value
+    return None
 
 
 def _to_unix_seconds(value: datetime) -> int:

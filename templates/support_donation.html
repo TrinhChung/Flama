@@ -1,72 +1,201 @@
 {% extends "base.html" %}
 
-{% block title %}Ủng hộ duy trì hệ thống – Flama{% endblock %}
+{% block title %}Ủng hộ duy trì hệ thống - Flama{% endblock %}
 
 {% block content %}
-<section class="support-page">
+<section
+  class="support-page"
+  id="support-donation-root"
+  data-checkout-url="{{ url_for('main.support_donation_checkout_api') }}"
+  data-result-url="{{ url_for('main.support_donation_result_page', _external=True) }}"
+>
   <div class="support-card">
     <header class="support-header">
+      <span class="support-kicker">Support Flama</span>
       <h1>{{ donation_config.title if donation_config and donation_config.title else default_support_title }}</h1>
       <p class="support-intro">
         {{ donation_config.description if donation_config and donation_config.description else default_support_description }}
       </p>
     </header>
 
-    {% if not donation_config %}
-    <div class="alert alert-warning mb-4" role="alert">
-      Hệ thống chưa có thông tin tài trợ. Vui lòng quay lại sau.
-    </div>
-    {% endif %}
-
-    <div class="support-grid">
-      <article class="support-panel">
-        <h2 class="panel-title"><i class="bi bi-bank"></i> Thông tin chuyển khoản</h2>
-
-        {% if donation_config and donation_config.account_name and donation_config.account_number %}
-        <div class="copy-field">
-          <label for="supportAccountName">Tên tài khoản</label>
-          <div class="copy-input-wrap">
-            <input id="supportAccountName" type="text" value="{{ donation_config.account_name }}" readonly>
-            <button type="button" class="dash-btn dash-btn--ghost copy-btn" data-copy-target="supportAccountName">
-              <i class="bi bi-copy"></i> Sao chép
-            </button>
+    <section class="support-payos-panel" aria-label="Ủng hộ cho Flama">
+      <div class="support-payos-copy">
+        <h2>Ủng hộ cho Flama</h2>
+        <div class="support-payos-copy-block">
+          <p class="support-payos-lead">
+            Bạn có thể tự do chọn số tiền muốn gửi để ủng hộ.
+          </p>
+          <p class="support-payos-copy-text">
+            Sự đóng góp của bạn không chỉ là hỗ trợ về mặt tài chính mà còn là sự đồng hành, tiếp thêm động lực để chúng tôi tiếp tục duy trì, cải thiện và phát triển giá trị cho cộng đồng.
+          </p>
+        </div>
+        <div class="support-payos-helper">
+          <div class="support-payos-helper-title">Ghi nhận trong lịch sử</div>
+          <div class="support-payos-helper-copy">
+            <p>
+              Chúng tôi rất mong có thể ghi nhận sự đóng góp của bạn.
+            </p>
+            <p>
+              Vì vậy, nếu thuận tiện, hãy đăng nhập trước khi thực hiện ủng hộ để hệ thống lưu lại thông tin này trong lịch sử đơn hàng của bạn. Việc này sẽ giúp bạn dễ theo dõi và quản lý các lần ủng hộ đã thực hiện.
+            </p>
           </div>
+          {% if current_user.is_authenticated %}
+          <p class="support-payos-helper-status mb-0">
+            Bạn đang đăng nhập, nên nếu không chọn chế độ ẩn danh thì lần ủng hộ này sẽ được ghi nhận cho bạn.
+          </p>
+          {% endif %}
         </div>
+      </div>
 
-        <div class="copy-field">
-          <label for="supportAccountNumber">Số tài khoản</label>
-          <div class="copy-input-wrap">
-            <input id="supportAccountNumber" type="text" value="{{ donation_config.account_number }}" readonly>
-            <button type="button" class="dash-btn dash-btn--ghost copy-btn" data-copy-target="supportAccountNumber">
-              <i class="bi bi-copy"></i> Sao chép
-            </button>
-          </div>
-        </div>
-        {% else %}
-        <div class="panel-empty">
-          Chưa có thông tin tên tài khoản và số tài khoản.
-        </div>
-        {% endif %}
-      </article>
-
-      <article class="support-panel">
-        <h2 class="panel-title"><i class="bi bi-qr-code"></i> Mã QR tài trợ</h2>
-        {% if donation_config and donation_config.qr_image_storage_path %}
-        <figure class="qr-figure">
-          <img
-            src="{{ url_for('main.support_donation_qr_image') }}?v={{ (donation_config.updated_at.timestamp() | int) if donation_config.updated_at else 0 }}"
-            alt="Mã QR tài trợ"
-            loading="lazy"
+      <div class="support-payos-form">
+        <label class="support-label" for="supportDonationAmount">Chọn số tiền bạn muốn gửi</label>
+        <div class="support-amount-wrap">
+          <input
+            id="supportDonationAmount"
+            class="support-amount-input"
+            type="number"
+            min="{{ support_donation_min_amount }}"
+            max="{{ support_donation_max_amount }}"
+            step="1000"
+            inputmode="numeric"
+            placeholder="Ví dụ: 100000"
+            value="{{ support_donation_suggested_amounts[1] if support_donation_suggested_amounts|length > 1 else support_donation_min_amount }}"
           >
-          <figcaption>Quét mã để ủng hộ duy trì hệ thống.</figcaption>
-        </figure>
-        {% else %}
-        <div class="panel-empty">
-          Chưa có ảnh QR. Bạn vẫn có thể chuyển khoản thủ công theo thông tin bên trái.
+          <span class="support-amount-unit">VND</span>
+        </div>
+        <div class="support-amount-hint" id="supportDonationAmountHint">
+          Nhập mức phù hợp với bạn. Tối thiểu {{ support_donation_min_amount|format_number }} VND, tối đa {{ support_donation_max_amount|format_number }} VND.
+        </div>
+
+        {% if support_donation_suggested_amounts %}
+        <div class="support-suggested-list" aria-label="Mức gợi ý">
+          {% for amount in support_donation_suggested_amounts %}
+          <button type="button" class="support-suggested-btn" data-amount="{{ amount }}">
+            {{ amount|format_number }} VND
+          </button>
+          {% endfor %}
         </div>
         {% endif %}
-      </article>
-    </div>
+
+        {% if current_user.is_authenticated %}
+        <div class="support-privacy-note">
+          Nếu bạn muốn đóng góp một cách riêng tư, bạn vẫn có thể chọn chế độ ẩn danh. Sự ủng hộ thầm lặng của bạn vẫn luôn rất đáng quý và trân trọng.
+        </div>
+        <label class="support-checkbox">
+          <input type="checkbox" id="supportDonationAnonymous">
+          <span>Ủng hộ ở chế độ ẩn danh, không ghi nhận lần đóng góp này vào lịch sử đơn hàng của tôi</span>
+        </label>
+        {% else %}
+        <div class="support-note support-note--highlight">
+          Bạn đang ủng hộ ở chế độ riêng tư. Nếu muốn hệ thống lưu lại lần đóng góp này trong lịch sử đơn hàng, hãy đăng nhập trước khi thanh toán. Dù theo cách nào, sự ủng hộ của bạn vẫn luôn rất đáng trân trọng đối với chúng tôi và cả cộng đồng.
+        </div>
+        {% endif %}
+
+        <div class="support-actions">
+          <button type="button" class="dash-btn dash-btn--primary support-submit-btn" id="supportDonationCheckoutBtn">
+            <i class="bi bi-credit-card-2-front"></i> Tiếp tục với PayOS
+          </button>
+          {% if current_user.is_authenticated %}
+          <a href="{{ url_for('user_orders.order_history_page', product_type='support_donation') }}" class="dash-btn dash-btn--ghost support-submit-btn support-history-link">
+            <i class="bi bi-clock-history"></i> Xem lịch sử donate
+          </a>
+          {% endif %}
+        </div>
+
+        <div class="alert alert-danger d-none mb-0" id="supportDonationError" role="alert"></div>
+      </div>
+    </section>
+
+    <section class="support-status-card d-none" id="supportDonationStatusCard" aria-label="Trạng thái thanh toán">
+      <div class="support-status-head">
+        <div>
+          <div class="support-status-kicker">Kết quả ủng hộ</div>
+          <div class="support-status-title" id="supportDonationStatusTitle">Đang tải trạng thái...</div>
+          <div class="support-status-message" id="supportDonationStatusMessage"></div>
+        </div>
+        <span class="support-status-badge" id="supportDonationStatusBadge">Đang tải</span>
+      </div>
+      <div class="support-status-next-action" id="supportDonationNextAction"></div>
+      <div class="support-status-grid">
+        <div class="support-status-block">
+          <div class="support-block-title">Chi tiết</div>
+          <div class="support-status-lines" id="supportDonationDetailLines"></div>
+        </div>
+        <div class="support-status-block">
+          <div class="support-block-title">Lưu ý</div>
+          <ul class="support-status-list" id="supportDonationInstructions"></ul>
+        </div>
+      </div>
+      <div class="support-status-actions">
+        <a class="dash-btn dash-btn--primary d-none" id="supportDonationCheckoutAgainBtn" href="#" target="_blank" rel="noopener">
+          <i class="bi bi-box-arrow-up-right"></i> Mở lại trang thanh toán
+        </a>
+        <button type="button" class="dash-btn dash-btn--ghost" id="supportDonationDismissBtn">
+          <i class="bi bi-x-circle"></i> Đóng
+        </button>
+      </div>
+    </section>
+
+    {% if donation_config and (donation_config.account_name or donation_config.account_number or donation_config.qr_image_storage_path) %}
+    <section class="support-fallback">
+      <div class="support-fallback-head">
+        <h2>Chuyển khoản thủ công</h2>
+        <p class="support-muted mb-0">
+          Nếu thanh toán trực tuyến tạm thời không khả dụng, bạn vẫn có thể ủng hộ bằng chuyển khoản trực tiếp.
+        </p>
+      </div>
+
+      <div class="support-grid">
+        <article class="support-panel">
+          <h3 class="panel-title"><i class="bi bi-bank"></i> Thông tin tài khoản</h3>
+
+          {% if donation_config.account_name or donation_config.account_number %}
+          {% if donation_config.account_name %}
+          <div class="copy-field">
+            <label for="supportAccountName">Tên tài khoản</label>
+            <div class="copy-input-wrap">
+              <input id="supportAccountName" type="text" value="{{ donation_config.account_name }}" readonly>
+              <button type="button" class="dash-btn dash-btn--ghost copy-btn" data-copy-target="supportAccountName">
+                <i class="bi bi-copy"></i> Sao chép
+              </button>
+            </div>
+          </div>
+          {% endif %}
+
+          {% if donation_config.account_number %}
+          <div class="copy-field">
+            <label for="supportAccountNumber">Số tài khoản</label>
+            <div class="copy-input-wrap">
+              <input id="supportAccountNumber" type="text" value="{{ donation_config.account_number }}" readonly>
+              <button type="button" class="dash-btn dash-btn--ghost copy-btn" data-copy-target="supportAccountNumber">
+                <i class="bi bi-copy"></i> Sao chép
+              </button>
+            </div>
+          </div>
+          {% endif %}
+          {% else %}
+          <div class="panel-empty">Chưa có thông tin tài khoản thủ công.</div>
+          {% endif %}
+        </article>
+
+        <article class="support-panel">
+          <h3 class="panel-title"><i class="bi bi-qr-code"></i> QR thủ công</h3>
+          {% if donation_config.qr_image_storage_path %}
+          <figure class="qr-figure">
+            <img
+              src="{{ url_for('main.support_donation_qr_image') }}?v={{ (donation_config.updated_at.timestamp() | int) if donation_config.updated_at else 0 }}"
+              alt="Mã QR tài trợ"
+              loading="lazy"
+            >
+            <figcaption>Quét mã nếu bạn muốn chuyển khoản trực tiếp.</figcaption>
+          </figure>
+          {% else %}
+          <div class="panel-empty">Chưa có ảnh QR thủ công.</div>
+          {% endif %}
+        </article>
+      </div>
+    </section>
+    {% endif %}
 
     <section class="thanks-section" aria-label="Lời cảm ơn">
       <h2><i class="bi bi-heart"></i> Lời cảm ơn</h2>
@@ -79,40 +208,450 @@
 {% block styles %}
 <style>
   .support-page {
-    max-width: 980px;
+    max-width: 1040px;
     margin: 0 auto;
     padding: 0.25rem 0 1rem;
   }
 
   .support-card {
-    background: var(--flama-surface);
+    background:
+      radial-gradient(circle at top right, rgba(255, 220, 192, 0.45), transparent 34%),
+      linear-gradient(180deg, rgba(255, 248, 242, 0.96), rgba(255, 255, 255, 0.98));
     border: 1px solid var(--flama-border);
-    border-radius: 18px;
-    box-shadow: 0 8px 24px rgba(31, 26, 23, 0.08);
+    border-radius: 22px;
+    box-shadow: 0 12px 32px rgba(31, 26, 23, 0.08);
     padding: 1rem;
   }
 
-  .support-header h1 {
-    font-size: clamp(1.5rem, 2.4vw, 2rem);
-    margin-bottom: 0.65rem;
+  .support-kicker {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.28rem 0.7rem;
+    border-radius: 999px;
+    background: rgba(224, 92, 7, 0.1);
+    color: #b45309;
+    font-size: 0.76rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
   }
 
-  .support-intro {
+  .support-header h1 {
+    font-size: clamp(1.65rem, 2.7vw, 2.3rem);
+    margin: 0.8rem 0 0.65rem;
+  }
+
+  .support-intro,
+  .support-muted,
+  .support-note,
+  .support-status-message,
+  .support-status-next-action {
     color: var(--flama-text-2);
-    margin-bottom: 1.1rem;
     line-height: 1.65;
   }
 
+  .support-payos-panel,
+  .support-fallback,
+  .support-status-card {
+    border: none;
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.84);
+    box-shadow: 0 10px 24px rgba(31, 26, 23, 0.04);
+  }
+
+  .support-payos-panel {
+    margin-top: 1rem;
+    padding: 1.05rem 1rem;
+  }
+
+  .support-payos-panel h2,
+  .support-fallback h2,
+  .thanks-section h2 {
+    font-size: 1.08rem;
+    margin-bottom: 0.35rem;
+  }
+
+  .support-payos-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 0.95rem;
+  }
+
+  .support-payos-copy-block {
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+    max-width: 760px;
+  }
+
+  .support-payos-lead,
+  .support-payos-copy-text,
+  .support-payos-helper-copy p,
+  .support-payos-helper-status {
+    margin: 0;
+  }
+
+  .support-payos-lead {
+    color: var(--flama-text);
+    font-size: 1rem;
+    font-weight: 600;
+    line-height: 1.75;
+  }
+
+  .support-payos-copy-text {
+    color: var(--flama-text-2);
+    font-size: 0.95rem;
+    line-height: 1.72;
+  }
+
+  .support-payos-helper {
+    width: 100%;
+    max-width: none;
+    padding: 0.9rem 1rem;
+    border-radius: 14px;
+    border: none;
+    background: rgba(250, 248, 245, 0.94);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.42);
+  }
+
+  .support-payos-helper-title {
+    margin-bottom: 0.42rem;
+    color: var(--flama-text-2);
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: none;
+  }
+
+  .support-payos-helper-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+    color: var(--flama-text-2);
+    line-height: 1.68;
+  }
+
+  .support-payos-helper-status {
+    margin-top: 0.68rem;
+    color: var(--flama-text-2);
+    font-size: 0.9rem;
+    line-height: 1.6;
+  }
+
+  .support-payos-form {
+    margin-top: 1.3rem;
+    padding-top: 0.2rem;
+  }
+
+  .support-label,
+  .copy-field label,
+  .support-block-title {
+    display: inline-block;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--flama-text-2);
+    margin-bottom: 0.42rem;
+  }
+
+  .support-amount-wrap {
+    position: relative;
+  }
+
+  .support-amount-input {
+    width: 100%;
+    min-height: 3.25rem;
+    border: 1px solid rgba(224, 92, 7, 0.25);
+    border-radius: 14px;
+    padding: 0.7rem 4.5rem 0.7rem 0.95rem;
+    font-size: 1.15rem;
+    font-weight: 700;
+    background: #fffdfb;
+    color: var(--flama-text);
+  }
+
+  .support-amount-input:focus {
+    outline: none;
+    border-color: rgba(224, 92, 7, 0.58);
+    box-shadow: 0 0 0 0.22rem rgba(224, 92, 7, 0.12);
+  }
+
+  .support-amount-unit {
+    position: absolute;
+    right: 0.95rem;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 0.84rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: var(--flama-text-2);
+    text-transform: uppercase;
+  }
+
+  .support-amount-hint {
+    margin-top: 0.45rem;
+    font-size: 0.86rem;
+    color: var(--flama-text-2);
+  }
+
+  .support-suggested-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    margin-top: 0.9rem;
+  }
+
+  .support-suggested-btn {
+    border: 1px solid rgba(224, 92, 7, 0.18);
+    background: rgba(255, 246, 239, 0.9);
+    color: #9a3412;
+    border-radius: 999px;
+    padding: 0.48rem 0.9rem;
+    font-size: 0.92rem;
+    font-weight: 600;
+    transition: transform 0.14s ease, border-color 0.14s ease, background 0.14s ease;
+  }
+
+  .support-suggested-btn:hover {
+    transform: translateY(-1px);
+    border-color: rgba(224, 92, 7, 0.34);
+    background: rgba(255, 237, 223, 0.95);
+  }
+
+  .support-checkbox,
+  .support-note {
+    display: flex;
+    gap: 0.55rem;
+    align-items: flex-start;
+    margin-top: 1rem;
+    font-size: 0.92rem;
+    line-height: 1.6;
+  }
+
+  .support-privacy-note,
+  .support-note {
+    padding: 0.85rem 0.95rem;
+    border-radius: 14px;
+    border: none;
+    background: rgba(250, 248, 245, 0.9);
+  }
+
+  .support-note--highlight {
+    color: var(--flama-text);
+  }
+
+  .support-privacy-note {
+    margin-top: 1.1rem;
+    color: var(--flama-text-2);
+  }
+
+  .support-checkbox {
+    padding: 0.88rem 0.95rem;
+    border-radius: 14px;
+    border: none;
+    background: rgba(250, 248, 245, 0.94);
+    box-shadow: 0 4px 10px rgba(31, 26, 23, 0.035);
+  }
+
+  .support-checkbox span {
+    color: var(--flama-text);
+    line-height: 1.58;
+  }
+
+  .support-checkbox input {
+    width: 1.02rem;
+    height: 1.02rem;
+    margin-top: 0.16rem;
+    accent-color: #e05c07;
+    flex: 0 0 auto;
+  }
+
+  .support-actions,
+  .support-status-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.7rem;
+    margin-top: 1rem;
+  }
+
+  .support-submit-btn {
+    min-height: 2.7rem;
+  }
+
+  .support-history-link {
+    color: var(--flama-text-2);
+    border-color: rgba(148, 163, 184, 0.28);
+    background: rgba(255, 255, 255, 0.7);
+  }
+
+  .support-status-card {
+    margin-top: 1rem;
+    padding: 1rem;
+  }
+
+  .support-status-card[data-tone="success"] {
+    border-color: rgba(25, 135, 84, 0.28);
+    background: rgba(240, 255, 247, 0.95);
+  }
+
+  .support-status-card[data-tone="warning"] {
+    border-color: rgba(245, 158, 11, 0.28);
+    background: rgba(255, 251, 235, 0.95);
+  }
+
+  .support-status-card[data-tone="danger"] {
+    border-color: rgba(220, 53, 69, 0.28);
+    background: rgba(255, 244, 245, 0.95);
+  }
+
+  .support-status-card[data-tone="secondary"] {
+    border-color: rgba(148, 163, 184, 0.3);
+    background: rgba(248, 250, 252, 0.97);
+  }
+
+  .support-status-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    align-items: flex-start;
+  }
+
+  .support-status-kicker {
+    color: #b45309;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 0.35rem;
+  }
+
+  .support-status-title {
+    font-size: 1.18rem;
+    font-weight: 700;
+    color: var(--flama-text);
+  }
+
+  .support-status-badge {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: 0.38rem 0.82rem;
+    font-size: 0.8rem;
+    font-weight: 700;
+    border: 1px solid rgba(13, 110, 253, 0.16);
+    background: rgba(13, 110, 253, 0.08);
+    color: #0d6efd;
+  }
+
+  .support-status-card[data-tone="success"] .support-status-badge {
+    background: rgba(25, 135, 84, 0.12);
+    color: #198754;
+    border-color: rgba(25, 135, 84, 0.22);
+  }
+
+  .support-status-card[data-tone="warning"] .support-status-badge {
+    background: rgba(245, 158, 11, 0.12);
+    color: #b45309;
+    border-color: rgba(245, 158, 11, 0.24);
+  }
+
+  .support-status-card[data-tone="danger"] .support-status-badge {
+    background: rgba(220, 53, 69, 0.12);
+    color: #b02a37;
+    border-color: rgba(220, 53, 69, 0.22);
+  }
+
+  .support-status-card[data-tone="secondary"] .support-status-badge {
+    background: rgba(100, 116, 139, 0.12);
+    color: #475569;
+    border-color: rgba(100, 116, 139, 0.22);
+  }
+
+  .support-status-next-action {
+    margin-top: 0.8rem;
+  }
+
+  .support-status-grid,
   .support-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 1rem;
+    margin-top: 1rem;
+  }
+
+  .support-status-block {
+    border-radius: 14px;
+    border: none;
+    background: rgba(255, 255, 255, 0.78);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+    padding: 0.9rem;
+  }
+
+  .support-status-lines {
+    display: flex;
+    flex-direction: column;
+    gap: 0.72rem;
+  }
+
+  .support-status-line {
+    padding-bottom: 0.72rem;
+    border-bottom: 1px dashed rgba(148, 163, 184, 0.34);
+  }
+
+  .support-status-line:last-child {
+    padding-bottom: 0;
+    border-bottom: none;
+  }
+
+  .support-status-line-label {
+    font-size: 0.76rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--flama-text-2);
+  }
+
+  .support-status-line-value {
+    margin-top: 0.18rem;
+    font-size: 0.96rem;
+    word-break: break-word;
+  }
+
+  .support-status-line-value.is-code {
+    font-family: var(--font-family-mono, monospace);
+  }
+
+  .support-status-line-value a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .support-status-line-value a:hover {
+    text-decoration: underline;
+  }
+
+  .support-status-list {
+    margin: 0;
+    padding-left: 1.1rem;
+    color: var(--flama-text-2);
+  }
+
+  .support-status-list li + li {
+    margin-top: 0.45rem;
+  }
+
+  .support-fallback {
+    margin-top: 1rem;
+    padding: 0.05rem 0;
+    background: transparent;
+    box-shadow: none;
   }
 
   .support-panel {
-    border: 1px solid var(--flama-border);
-    border-radius: 14px;
-    background: #fff;
+    border: none;
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.82);
+    box-shadow: 0 8px 18px rgba(31, 26, 23, 0.035);
     padding: 1rem;
   }
 
@@ -120,20 +659,12 @@
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    font-size: 1.02rem;
+    font-size: 1rem;
     margin-bottom: 0.85rem;
   }
 
   .copy-field + .copy-field {
     margin-top: 0.8rem;
-  }
-
-  .copy-field label {
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-semibold);
-    color: var(--flama-text-2);
-    margin-bottom: 0.35rem;
-    display: inline-block;
   }
 
   .copy-input-wrap {
@@ -190,18 +721,11 @@
 
   .thanks-section {
     margin-top: 1rem;
-    border-radius: 14px;
-    border: 1px solid rgba(224, 92, 7, 0.25);
-    background: linear-gradient(135deg, rgba(255, 243, 235, 0.95), rgba(255, 241, 231, 0.9));
+    border-radius: 18px;
+    border: none;
+    background: linear-gradient(135deg, rgba(252, 247, 242, 0.96), rgba(255, 251, 247, 0.94));
+    box-shadow: 0 8px 18px rgba(31, 26, 23, 0.03);
     padding: 0.95rem 1rem;
-  }
-
-  .thanks-section h2 {
-    font-size: 1rem;
-    margin-bottom: 0.45rem;
-    display: flex;
-    gap: 0.45rem;
-    align-items: center;
   }
 
   .thanks-section p {
@@ -211,15 +735,16 @@
   }
 
   @media (max-width: 900px) {
-    .support-grid {
+    .support-grid,
+    .support-status-grid {
       grid-template-columns: 1fr;
     }
   }
 
   @media (max-width: 576px) {
     .support-card {
-      padding: 0.8rem;
-      border-radius: 14px;
+      padding: 0.85rem;
+      border-radius: 16px;
     }
 
     .copy-input-wrap {
@@ -227,9 +752,19 @@
       align-items: stretch;
     }
 
-    .copy-btn {
+    .copy-btn,
+    .support-submit-btn {
       width: 100%;
       justify-content: center;
+    }
+
+    .support-status-head {
+      flex-direction: column;
+    }
+
+    .support-actions,
+    .support-status-actions {
+      flex-direction: column;
     }
   }
 </style>
@@ -238,6 +773,56 @@
 {% block scripts %}
 <script>
   (function () {
+    const root = document.getElementById("support-donation-root");
+    if (!root) return;
+
+    const checkoutUrl = root.dataset.checkoutUrl || "";
+    const resultUrl = root.dataset.resultUrl || "";
+    const statusUrl = root.dataset.statusUrl || "";
+    const orderUrlTemplate = root.dataset.orderUrlTemplate || "";
+    const isAuthenticated = root.dataset.isAuthenticated === "true";
+
+    const amountInput = document.getElementById("supportDonationAmount");
+    const amountHint = document.getElementById("supportDonationAmountHint");
+    const anonymousInput = document.getElementById("supportDonationAnonymous");
+    const checkoutBtn = document.getElementById("supportDonationCheckoutBtn");
+    const errorEl = document.getElementById("supportDonationError");
+
+    const statusCard = document.getElementById("supportDonationStatusCard");
+    const statusTitleEl = document.getElementById("supportDonationStatusTitle");
+    const statusMessageEl = document.getElementById("supportDonationStatusMessage");
+    const statusBadgeEl = document.getElementById("supportDonationStatusBadge");
+    const statusNextActionEl = document.getElementById("supportDonationNextAction");
+    const detailLinesEl = document.getElementById("supportDonationDetailLines");
+    const instructionsEl = document.getElementById("supportDonationInstructions");
+    const checkoutAgainBtn = document.getElementById("supportDonationCheckoutAgainBtn");
+    const dismissBtn = document.getElementById("supportDonationDismissBtn");
+
+    function formatAmount(value, currency) {
+      const amount = Number(value || 0);
+      return new Intl.NumberFormat("vi-VN").format(amount) + " " + (currency || "VND");
+    }
+
+    function showError(message) {
+      if (!errorEl) return;
+      errorEl.textContent = message || "Không thể tạo phiên ủng hộ lúc này.";
+      errorEl.classList.remove("d-none");
+    }
+
+    function hideError() {
+      if (!errorEl) return;
+      errorEl.textContent = "";
+      errorEl.classList.add("d-none");
+    }
+
+    function setLoading(loading) {
+      if (!checkoutBtn) return;
+      checkoutBtn.disabled = loading;
+      checkoutBtn.innerHTML = loading
+        ? '<i class="bi bi-arrow-repeat"></i> Đang tạo phiên thanh toán...'
+        : '<i class="bi bi-credit-card-2-front"></i> Tiếp tục với PayOS';
+    }
+
     function fallbackCopy(text) {
       const input = document.createElement("input");
       input.value = text;
@@ -245,6 +830,190 @@
       input.select();
       document.execCommand("copy");
       document.body.removeChild(input);
+    }
+
+    async function requestJson(url, options) {
+      const response = await fetch(url, {
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        ...options,
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload.message || "Không thể xử lý yêu cầu.");
+      }
+      return payload;
+    }
+
+    function baseReturnUrl() {
+      return resultUrl || window.location.href;
+    }
+
+    function sanitizeAmount() {
+      const rawValue = String(amountInput?.value || "").replace(/,/g, "").trim();
+      const amount = Number.parseInt(rawValue, 10);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        return null;
+      }
+      if (amountHint) {
+        amountHint.textContent = "Bạn sẽ được chuyển sang trang thanh toán với số tiền " + formatAmount(amount, "VND") + ".";
+      }
+      return amount;
+    }
+
+    function renderLineValue(line) {
+      if (!line) return "-";
+      if (line.type === "amount_minor") {
+        return formatAmount(line.value_minor, line.currency_code);
+      }
+      return line.value || "-";
+    }
+
+    function renderDetailLines(lines) {
+      if (!detailLinesEl) return;
+      detailLinesEl.innerHTML = "";
+      if (!Array.isArray(lines) || !lines.length) {
+        const emptyEl = document.createElement("div");
+        emptyEl.className = "support-muted";
+        emptyEl.textContent = "Chưa có thêm chi tiết.";
+        detailLinesEl.appendChild(emptyEl);
+        return;
+      }
+
+      lines.forEach((line) => {
+        const rowEl = document.createElement("div");
+        rowEl.className = "support-status-line";
+
+        const labelEl = document.createElement("div");
+        labelEl.className = "support-status-line-label";
+        labelEl.textContent = line.label || "Chi tiết";
+
+        const valueEl = document.createElement("div");
+        valueEl.className = "support-status-line-value";
+        if (line.key === "merchant_order_code" || line.key === "payment_reference") {
+          valueEl.classList.add("is-code");
+        }
+
+        if (line.type === "url" && line.value) {
+          const linkEl = document.createElement("a");
+          linkEl.href = line.value;
+          linkEl.target = "_blank";
+          linkEl.rel = "noopener";
+          linkEl.textContent = "Mở lại trang thanh toán";
+          valueEl.appendChild(linkEl);
+        } else {
+          valueEl.textContent = renderLineValue(line);
+        }
+
+        rowEl.appendChild(labelEl);
+        rowEl.appendChild(valueEl);
+        detailLinesEl.appendChild(rowEl);
+      });
+    }
+
+    function renderInstructions(instructions) {
+      if (!instructionsEl) return;
+      instructionsEl.innerHTML = "";
+      if (!Array.isArray(instructions) || !instructions.length) {
+        const itemEl = document.createElement("li");
+        itemEl.textContent = "Không có lưu ý bổ sung.";
+        instructionsEl.appendChild(itemEl);
+        return;
+      }
+
+      instructions.forEach((instruction) => {
+        const itemEl = document.createElement("li");
+        itemEl.textContent = instruction;
+        instructionsEl.appendChild(itemEl);
+      });
+    }
+
+    function renderStatusPayload(payload) {
+      if (!statusCard || !payload) return;
+      const statusDisplay = payload.status_display || {};
+      const checkout = ((payload.active_attempt || {}).checkout || {});
+
+      statusCard.classList.remove("d-none");
+      statusCard.setAttribute("data-tone", statusDisplay.tone || "info");
+      if (statusTitleEl) {
+        statusTitleEl.textContent = payload.headline || statusDisplay.headline || "Trạng thái thanh toán";
+      }
+      if (statusMessageEl) {
+        statusMessageEl.textContent = payload.message || statusDisplay.description || "";
+      }
+      if (statusBadgeEl) {
+        statusBadgeEl.textContent = statusDisplay.label || "Đơn";
+      }
+      if (statusNextActionEl) {
+        statusNextActionEl.textContent = payload.next_action ? ("Tiếp theo: " + payload.next_action) : "";
+      }
+      renderDetailLines(payload.order_detail_lines || []);
+      renderInstructions(payload.instructions || []);
+
+      if (checkoutAgainBtn) {
+        const checkoutHref = checkout.checkout_url || "";
+        if (checkoutHref && payload.status === "pending_payment") {
+          checkoutAgainBtn.href = checkoutHref;
+          checkoutAgainBtn.classList.remove("d-none");
+        } else {
+          checkoutAgainBtn.removeAttribute("href");
+          checkoutAgainBtn.classList.add("d-none");
+        }
+      }
+    }
+
+    function consumeReturnParams() {
+      const url = new URL(window.location.href);
+      const nativeProviderOrderCode = url.searchParams.get("orderCode");
+      const result = {
+        paymentOrderId: url.searchParams.get("payment_order_id"),
+        anonymousMode: url.searchParams.get("support_checkout_mode"),
+        providerOrderCode: url.searchParams.get("support_provider_order_code") || nativeProviderOrderCode,
+      };
+
+      if (result.paymentOrderId || result.providerOrderCode) {
+        [
+          "payment_order_id",
+          "payment_product_type",
+          "payment_product_ref_id",
+          "support_checkout_mode",
+          "support_provider_order_code",
+          "code",
+          "id",
+          "cancel",
+          "status",
+          "orderCode"
+        ].forEach((key) => url.searchParams.delete(key));
+        window.history.replaceState({}, "", url.toString());
+      }
+      return result;
+    }
+
+    async function syncReturnStatus() {
+      const params = consumeReturnParams();
+      try {
+        if (params.paymentOrderId && isAuthenticated && orderUrlTemplate) {
+          try {
+            const url = orderUrlTemplate.replace("__ORDER_ID__", encodeURIComponent(params.paymentOrderId));
+            const payload = await requestJson(url, { method: "GET" });
+            renderStatusPayload(payload);
+            return;
+          } catch (error) {
+            if (!(params.providerOrderCode && statusUrl)) {
+              throw error;
+            }
+          }
+        }
+
+        if (params.providerOrderCode && statusUrl) {
+          const url = new URL(statusUrl, window.location.origin);
+          url.searchParams.set("provider_order_code", params.providerOrderCode);
+          const payload = await requestJson(url.toString(), { method: "GET" });
+          renderStatusPayload(payload);
+        }
+      } catch (error) {
+        showError(error.message || "Không thể đồng bộ trạng thái thanh toán.");
+      }
     }
 
     document.querySelectorAll("[data-copy-target]").forEach((button) => {
@@ -270,6 +1039,55 @@
         }
       });
     });
+
+    document.querySelectorAll("[data-amount]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const amount = button.getAttribute("data-amount");
+        if (amountInput) {
+          amountInput.value = amount || "";
+          sanitizeAmount();
+          amountInput.focus();
+        }
+      });
+    });
+
+    amountInput?.addEventListener("input", sanitizeAmount);
+
+    checkoutBtn?.addEventListener("click", async () => {
+      const amountMinor = sanitizeAmount();
+      if (!amountMinor) {
+        showError("Vui lòng nhập số tiền hợp lệ.");
+        return;
+      }
+      hideError();
+      setLoading(true);
+
+      try {
+        const payload = await requestJson(checkoutUrl, {
+          method: "POST",
+          body: JSON.stringify({
+            amount_minor: amountMinor,
+            anonymous: Boolean(anonymousInput?.checked),
+            return_url: baseReturnUrl(),
+            cancel_url: baseReturnUrl(),
+          }),
+        });
+
+        const savedCheckoutUrl = (((payload.order || {}).active_attempt || {}).checkout || {}).checkout_url;
+        const anonymousCheckoutUrl = ((payload.checkout || {}).checkout_url) || "";
+        const redirectUrl = savedCheckoutUrl || anonymousCheckoutUrl;
+        if (!redirectUrl) {
+          throw new Error("Không lấy được liên kết thanh toán cho phiên ủng hộ này.");
+        }
+        window.location.assign(redirectUrl);
+      } catch (error) {
+        showError(error.message || "Không thể tạo phiên ủng hộ lúc này.");
+      } finally {
+        setLoading(false);
+      }
+    });
+
+    sanitizeAmount();
   })();
 </script>
 {% endblock %}

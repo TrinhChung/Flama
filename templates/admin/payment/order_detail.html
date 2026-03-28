@@ -15,7 +15,7 @@
   <div class="payment-shell" style="max-width: 1180px;">
     <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
       <div>
-        <div class="payment-kicker mb-1">Chi tiết đơn hàng</div>
+        <div class="payment-kicker mb-1">Chi tiết giao dịch</div>
         <h1 class="h3 mb-1">{{ serialized.merchant_order_code }}</h1>
         <p class="payment-muted mb-0">{{ serialized.message }}</p>
       </div>
@@ -29,7 +29,7 @@
 
     <div class="payment-summary-grid mb-3">
       <div class="payment-summary-card" data-tone="{{ status_display.tone or 'primary' }}">
-        <div class="payment-summary-label">Trạng thái đơn</div>
+        <div class="payment-summary-label">Trạng thái</div>
         <div class="payment-summary-value">{{ status_display.label or serialized.status }}</div>
         <div class="payment-summary-hint">{{ serialized.next_action or "" }}</div>
       </div>
@@ -41,10 +41,10 @@
       <div class="payment-summary-card" data-tone="success">
         <div class="payment-summary-label">Tổng thanh toán</div>
         <div class="payment-summary-value">{{ "{:,.0f}".format(serialized.total_amount_minor or 0) }} {{ serialized.currency_code or "VND" }}</div>
-        <div class="payment-summary-hint">Trạng thái cấp quyền: {{ serialized.grant_status }}</div>
+        <div class="payment-summary-hint">Trạng thái ghi nhận: {{ serialized.grant_status_display.label if serialized.grant_status_display else serialized.grant_status }}</div>
       </div>
       <div class="payment-summary-card" data-tone="secondary">
-        <div class="payment-summary-label">Người bán</div>
+        <div class="payment-summary-label">Người nhận</div>
         <div class="payment-summary-value" style="font-size: 1rem;">{{ order.seller_labels|join(', ') if order.seller_labels else "-" }}</div>
       </div>
     </div>
@@ -52,7 +52,7 @@
     <div class="row g-3 mb-3">
       <div class="col-12 col-lg-7">
         <div class="payment-section-card h-100">
-          <h2 class="h5 mb-3">Thông tin đơn hàng</h2>
+          <h2 class="h5 mb-3">Thông tin giao dịch</h2>
           <div class="payment-detail-grid">
             {% for line in serialized.order_detail_lines or [] %}
             <div class="payment-detail-line">
@@ -73,15 +73,15 @@
       </div>
       <div class="col-12 col-lg-5">
         <div class="payment-section-card h-100">
-          <h2 class="h5 mb-3">Sản phẩm trong đơn</h2>
+          <h2 class="h5 mb-3">Mục trong giao dịch</h2>
           <div class="payment-timeline">
             {% for item in order.item_rows %}
             <div class="payment-timeline-item">
               <div class="d-flex justify-content-between gap-3">
                 <div>
                   <div class="fw-semibold">{{ item.title_snapshot }}</div>
-                  <div class="payment-timeline-meta">{{ item.product_type }} | ref {{ item.product_ref_id }}</div>
-                  <div class="payment-timeline-meta">Người bán: {{ item.seller_label or "-" }}</div>
+                  <div class="payment-timeline-meta">{{ item.product_type_label }} | ref {{ item.product_ref_id }}</div>
+                  <div class="payment-timeline-meta">Người nhận: {{ item.seller_label or "-" }}</div>
                 </div>
                 <div class="text-end">
                   <div class="fw-semibold">{{ item.line_total_display }}</div>
@@ -132,20 +132,20 @@
       </div>
       <div class="col-12 col-lg-5">
         <div class="payment-section-card h-100">
-          <h2 class="h5 mb-3">Cấp quyền</h2>
+          <h2 class="h5 mb-3">Kết quả sau thanh toán</h2>
           {% if order.entitlement_rows %}
           <div class="payment-timeline">
             {% for row in order.entitlement_rows %}
             <div class="payment-timeline-item">
-              <div class="fw-semibold">{{ row.resource_type }}</div>
+              <div class="fw-semibold">{{ row.resource_type_label }}</div>
               <div class="payment-timeline-meta">Tài nguyên: {{ row.resource_ref_id }}</div>
               <div class="payment-timeline-meta">Trạng thái: {{ row.status_label }}</div>
-              <div class="payment-timeline-meta">Đã cấp lúc: {{ row.granted_at_display }}</div>
+              <div class="payment-timeline-meta">Ghi nhận lúc: {{ row.granted_at_display }}</div>
             </div>
             {% endfor %}
           </div>
           {% else %}
-          <div class="payment-muted">Đơn này chưa có bản ghi cấp quyền.</div>
+          <div class="payment-muted">Giao dịch này chưa có bản ghi ghi nhận sau thanh toán.</div>
           {% endif %}
         </div>
       </div>

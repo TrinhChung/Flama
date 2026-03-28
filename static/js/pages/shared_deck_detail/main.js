@@ -19,6 +19,7 @@ import {
 
     const deckItemId = root.getAttribute("data-deck-item-id");
     const noteTypeDetailUrlTemplate = root.getAttribute("data-note-type-url-template"); // Needs to be injected via HTML
+    const shareEditUrlTemplate = root.getAttribute("data-share-edit-url-template") || "";
     const paymentResultUrl = root.getAttribute("data-payment-result-url") || "";
 
     const titleEl = document.getElementById("deck-title");
@@ -29,6 +30,7 @@ import {
     const statsEl = document.getElementById("deck-stats");
     const testSamplesEl = document.getElementById("deck-test-samples");
     const testNoteEl = document.getElementById("deck-test-note");
+    const editBtn = document.getElementById("deck-edit-btn");
     const installBtn = document.getElementById("deck-install-btn");
     const myReviewEl = document.getElementById("deck-my-review");
     const ratingValueEl = document.getElementById("deck-rating-value");
@@ -244,6 +246,11 @@ import {
         return noteTypeDetailUrlTemplate.replace("__NOTE_TYPE_ID__", encodeURIComponent(noteTypeId));
     }
 
+    function buildShareEditUrl(sourceDeckId) {
+        if (!shareEditUrlTemplate || !sourceDeckId) return "";
+        return shareEditUrlTemplate.replace("/0/share", `/${encodeURIComponent(sourceDeckId)}/share`);
+    }
+
     function buildPaymentResultUrl(orderId, productType, productRefId) {
         if (!paymentResultUrl || !orderId) return "";
         const url = new URL(paymentResultUrl, window.location.origin);
@@ -371,11 +378,23 @@ import {
 
     function renderInstallState() {
         if (!deckDetail || !installBtn) return;
+        const editUrl = buildShareEditUrl(deckDetail.source_deck_id);
+        if (editBtn) {
+            if (deckDetail.is_owner && editUrl) {
+                editBtn.href = editUrl;
+                editBtn.classList.remove("d-none");
+            } else {
+                editBtn.href = "#";
+                editBtn.classList.add("d-none");
+            }
+        }
         if (deckDetail.is_owner) {
+            installBtn.classList.toggle("d-none", Boolean(editUrl));
             installBtn.textContent = "Bạn là tác giả";
             installBtn.disabled = true;
             return;
         }
+        installBtn.classList.remove("d-none");
         if (deckDetail.is_installed) {
             installBtn.textContent = "Đã cài đặt";
             installBtn.disabled = true;

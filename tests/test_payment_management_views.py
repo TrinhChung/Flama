@@ -313,8 +313,8 @@ class PaymentManagementViewTests(unittest.TestCase):
         response = self.client.get("/admin/payments?period=30d", follow_redirects=False)
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Dashboard", response.data)
-        self.assertIn(b"Recent orders", response.data)
-        self.assertIn(b"Webhook failures", response.data)
+        self.assertIn("Đơn gần đây".encode("utf-8"), response.data)
+        self.assertIn("Webhook lỗi".encode("utf-8"), response.data)
 
 
 if __name__ == "__main__":

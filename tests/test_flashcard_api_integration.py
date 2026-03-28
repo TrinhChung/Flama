@@ -305,6 +305,36 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             self.assertEqual(deck_item.title, "Shared Parent Deck")
             self.assertEqual(deck_item.publish_status, "published")
 
+    def test_shared_decks_page_includes_share_edit_url_template(self):
+        response = self.client.get("/flashcards/shared-decks")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"/flashcards/decks/0/share", response.data)
+
+    def test_shared_deck_detail_page_exposes_share_edit_action(self):
+        with self.app.app_context():
+            deck_item = DeckMarketplaceItem(
+                owner_user_id=self.user_id,
+                source_deck_id=self.deck_id,
+                source_note_type_id=None,
+                title="Shared Deck Detail Edit",
+                description="Deck description",
+                primary_category="General",
+                tags=[],
+                preview_text="Preview",
+                pricing_mode="free",
+                price_amount_minor=0,
+                version="1.0.0",
+                publish_status="published",
+            )
+            db.session.add(deck_item)
+            db.session.commit()
+            deck_item_id = deck_item.id
+
+        response = self.client.get(f"/flashcards/shared-decks/{deck_item_id}")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'id="deck-edit-btn"', response.data)
+        self.assertIn(b"/flashcards/decks/0/share", response.data)
+
     def test_shared_deck_preview_requires_source_note_type_when_notes_missing(self):
         with self.app.app_context():
             deck_item = DeckMarketplaceItem(

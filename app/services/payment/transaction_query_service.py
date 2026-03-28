@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.repositories.payment import transaction_queries
-from app.services.payment.presenters import build_attempt_row, build_transaction_row
+from app.services.payment.presenters import build_attempt_row, build_transaction_row, product_type_label
 from app.validators.payment_query import TransactionFilterInput
 
 
@@ -41,6 +41,7 @@ def get_admin_transaction_detail(attempt_id: str) -> dict[str, Any] | None:
                 {
                     "title_snapshot": item.title_snapshot,
                     "product_type": item.product_type,
+                    "product_type_label": product_type_label(item.product_type),
                     "product_ref_id": item.product_ref_id,
                 }
                 for item in attempt.order.items

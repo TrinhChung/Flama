@@ -5,6 +5,7 @@
 {% block content %}
 <section class="py-3" id="shared-deck-detail-root" data-deck-item-id="{{ deck_item_id }}"
   data-note-type-url-template="{{ url_for('flashcards.shared_note_type_detail_page', note_type_id='__NOTE_TYPE_ID__') }}"
+  data-share-edit-url-template="{{ url_for('flashcards.share_deck_page', deck_id=0) }}"
   data-payment-result-url="{{ url_for('payments.marketplace_payment_result_page') }}">
 
   <!-- ── Page Header ── -->
@@ -15,6 +16,7 @@
     </div>
     <div class="d-flex gap-2">
       <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('flashcards.shared_decks_page') }}">← Quay lại danh sách deck</a>
+      <a class="btn btn-outline-primary btn-sm d-none" id="deck-edit-btn" href="#">Chỉnh sửa</a>
       <button class="btn btn-primary btn-sm" id="deck-install-btn" type="button">Cài đặt</button>
     </div>
   </div>

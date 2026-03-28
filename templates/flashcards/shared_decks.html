@@ -100,6 +100,7 @@
     const root = document.getElementById("shared-decks-root");
     if (!root) return;
     const detailUrlTemplate = "{{ url_for('flashcards.shared_deck_detail_page', deck_item_id='__DECK_ITEM_ID__') }}";
+    const shareEditUrlTemplate = "{{ url_for('flashcards.share_deck_page', deck_id=0) }}";
     const paymentResultUrl = "{{ url_for('payments.marketplace_payment_result_page') }}";
     const filterForm = document.getElementById("deck-filter-form");
     const itemsRoot = document.getElementById("deck-items");
@@ -125,6 +126,11 @@
       return detailUrlTemplate.replace("__DECK_ITEM_ID__", encodeURIComponent(deckItemId));
     }
 
+    function buildShareEditUrl(sourceDeckId) {
+      if (!sourceDeckId) return "";
+      return shareEditUrlTemplate.replace("/0/share", `/${encodeURIComponent(sourceDeckId)}/share`);
+    }
+
     function buildPaymentResultUrl(orderId, productType, productRefId) {
       if (!paymentResultUrl || !orderId) return "";
       const url = new URL(paymentResultUrl, window.location.origin);
@@ -148,6 +154,14 @@
 
     function rowActions(item) {
       if (item.is_owner) {
+        const editUrl = buildShareEditUrl(item.source_deck_id);
+        if (editUrl) {
+          return `
+            <div class="d-flex gap-2">
+              <a class="btn btn-sm btn-outline-warning" href="${editUrl}">✏️ Chỉnh sửa</a>
+            </div>
+          `;
+        }
         return `
           <div class="d-flex gap-2">
             <button class="btn btn-sm btn-outline-warning edit-btn" data-id="${item.id}"

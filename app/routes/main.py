@@ -13,13 +13,20 @@ from app.services.anki_scheduler import (
     _day_index as scheduler_day_index,
     _day_index_to_datetime as scheduler_day_index_to_datetime,
 )
+from app.services import payment_service
 from app.services import support_donation_service
 from app.services import tts_provider_service
+from app.services.payment.provider import payos_provider
 from app.services.stats_overview import build_stats_overview
 from app.services.stats_today_future import build_today_future_stats, list_stats_decks
 from app.utils.deck_move_token import create_deck_move_token
 from app.utils.permissions import is_admin_user
 from app.validators import RequestValidationError
+from app.validators.support_donation import (
+    MAX_DONATION_AMOUNT_MINOR,
+    MIN_DONATION_AMOUNT_MINOR,
+    normalize_support_donation_checkout_payload,
+)
 from sqlalchemy.exc import SQLAlchemyError
 from models import db
 from models.flashcard import Card, DeckCloneDeckMap, DeckInstall, Note
@@ -35,6 +42,13 @@ def _day_index(moment: datetime, boundary_hour: int) -> int:
 
 def _day_index_to_datetime(day_index: int, boundary_hour: int) -> datetime:
     return scheduler_day_index_to_datetime(day_index, boundary_hour)
+
+
+def _support_api_error(error: str, message: str, *, status: int = 400, field: str | None = None):
+    payload = {"error": error, "message": message}
+    if field is not None:
+        payload["field"] = field
+    return jsonify(payload), status
 
 
 @main_bp.route("/")
@@ -68,7 +82,15 @@ def support_donation_page():
         default_support_title=support_donation_service.DEFAULT_TITLE,
         default_support_description=support_donation_service.DEFAULT_DESCRIPTION,
         default_thank_you_message=support_donation_service.DEFAULT_THANK_YOU,
+        support_donation_min_amount=MIN_DONATION_AMOUNT_MINOR,
+        support_donation_max_amount=MAX_DONATION_AMOUNT_MINOR,
+        support_donation_suggested_amounts=support_donation_service.get_suggested_amounts(),
     )
+
+
+@main_bp.route("/support-donation/result")
+def support_donation_result_page():
+    return render_template("support_donation_result.html")
 
 
 @main_bp.route("/support-donation/qr")
@@ -97,6 +119,68 @@ def support_donation_qr_image():
     )
     response.headers["X-Content-Type-Options"] = "nosniff"
     return response
+
+
+@main_bp.route("/api/support-donation/checkout", methods=["POST"])
+def support_donation_checkout_api():
+    payload = request.get_json(silent=True) or {}
+    normalized_payload, message, field = normalize_support_donation_checkout_payload(payload)
+    if normalized_payload is None:
+        return _support_api_error("VALIDATION_ERROR", message or "Invalid payload.", field=field)
+
+    default_return_url = url_for("main.support_donation_result_page", _external=True)
+    return_url = normalized_payload.return_url or default_return_url
+    cancel_url = normalized_payload.cancel_url or return_url
+    anonymous_checkout = bool(normalized_payload.anonymous or not current_user.is_authenticated)
+
+    if not payment_service.payments_enabled():
+        return _support_api_error(
+            "PAYMENT_UNAVAILABLE",
+            "Hệ thống thanh toán đang tạm thời không khả dụng. Vui lòng thử lại sau.",
+            status=503,
+        )
+
+    try:
+        if anonymous_checkout:
+            result = support_donation_service.create_anonymous_checkout(
+                amount_minor=normalized_payload.amount_minor,
+                return_url=return_url,
+                cancel_url=cancel_url,
+            )
+            return jsonify(result), 201
+
+        result = payment_service.prepare_support_donation_checkout(
+            user_id=current_user.id,
+            amount_minor=normalized_payload.amount_minor,
+            return_url=return_url,
+            cancel_url=cancel_url,
+        )
+    except payment_service.PaymentServiceError as exc:
+        return _support_api_error(exc.error, exc.message, status=exc.status, field=exc.field)
+    except payos_provider.PayOSProviderError as exc:
+        return _support_api_error(exc.code, str(exc), status=exc.status)
+
+    status_code = 201 if result.get("created") else 200
+    return jsonify(result), status_code
+
+
+@main_bp.route("/api/support-donation/checkout-status", methods=["GET"])
+def support_donation_checkout_status_api():
+    provider_order_code = str(request.args.get("provider_order_code") or "").strip()
+    if not provider_order_code:
+        return _support_api_error(
+            "VALIDATION_ERROR",
+            "provider_order_code is required.",
+            field="provider_order_code",
+        )
+
+    try:
+        payload = support_donation_service.get_anonymous_checkout_status(
+            provider_order_code=provider_order_code,
+        )
+    except payos_provider.PayOSProviderError as exc:
+        return _support_api_error(exc.code, str(exc), status=exc.status)
+    return jsonify(payload)
 
 
 @main_bp.route("/dashboard")

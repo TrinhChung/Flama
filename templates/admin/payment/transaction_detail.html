@@ -15,12 +15,12 @@
       <div>
         <div class="payment-kicker mb-1">Chi tiết giao dịch</div>
         <h1 class="h3 mb-1 code">{{ attempt.id }}</h1>
-        <p class="payment-muted mb-0">Theo dõi mã ref provider, trạng thái webhook và liên kết tới đơn hàng gốc.</p>
+        <p class="payment-muted mb-0">Theo dõi ref provider, trạng thái webhook và liên kết tới giao dịch gốc.</p>
       </div>
       <div class="payment-toolbar-actions">
         <a class="btn btn-outline-secondary" href="{{ url_for('admin_payments.transactions_page') }}">Quay lại giao dịch</a>
         {% if attempt.order %}
-        <a class="btn btn-outline-secondary" href="{{ url_for('admin_payments.order_detail_page', order_id=attempt.order.id) }}">Mở đơn hàng</a>
+        <a class="btn btn-outline-secondary" href="{{ url_for('admin_payments.order_detail_page', order_id=attempt.order.id) }}">Mở giao dịch gốc</a>
         {% endif %}
       </div>
     </div>
@@ -36,7 +36,7 @@
         <div class="payment-summary-value">{{ attempt.amount_display }}</div>
       </div>
       <div class="payment-summary-card" data-tone="secondary">
-        <div class="payment-summary-label">Đơn hàng</div>
+        <div class="payment-summary-label">Đơn gốc</div>
         <div class="payment-summary-value" style="font-size: 1rem;">{{ attempt.order.merchant_order_code if attempt.order else "-" }}</div>
       </div>
       <div class="payment-summary-card" data-tone="warning">
@@ -99,9 +99,9 @@
       </div>
       <div class="col-12 col-lg-5">
         <div class="payment-section-card h-100">
-          <h2 class="h5 mb-3">Đơn hàng liên kết</h2>
+          <h2 class="h5 mb-3">Giao dịch liên kết</h2>
           {% if attempt.order %}
-            <div class="payment-timeline">
+          <div class="payment-timeline">
             <div class="payment-timeline-item">
               <div class="fw-semibold">{{ attempt.order.merchant_order_code }}</div>
               <div class="payment-timeline-meta">Người mua: {{ attempt.order.buyer.username or "-" }} | {{ attempt.order.buyer.email or "-" }}</div>
@@ -110,12 +110,12 @@
             {% for item in attempt.order.item_rows %}
             <div class="payment-timeline-item">
               <div class="fw-semibold">{{ item.title_snapshot }}</div>
-              <div class="payment-timeline-meta">{{ item.product_type }} | {{ item.product_ref_id }}</div>
+              <div class="payment-timeline-meta">{{ item.product_type_label }} | {{ item.product_ref_id }}</div>
             </div>
             {% endfor %}
           </div>
           {% else %}
-          <div class="payment-muted">Không tìm thấy đơn hàng liên kết.</div>
+          <div class="payment-muted">Không tìm thấy giao dịch liên kết.</div>
           {% endif %}
         </div>
       </div>
