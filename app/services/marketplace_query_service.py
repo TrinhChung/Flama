@@ -9,6 +9,7 @@ from typing import Any
 
 from app.repositories.deck_tree_query import collect_subtree_ids
 from app.template_formatters import format_vnd
+from app.services import marketplace_taxonomy_service
 from models import db
 from models.flashcard import DeckInstall, DeckMarketplaceItem, FieldDef, Note, NoteType, Template
 
@@ -49,6 +50,8 @@ def serialize_template(template: Template) -> dict[str, Any]:
 
 def serialize_note_type(note_type: NoteType) -> dict[str, Any]:
     price_amount_minor = int(note_type.price_amount_minor or 0)
+    taxonomy_metadata = marketplace_taxonomy_service.get_item_taxonomy(note_type, content_type="note_type")
+    taxonomy_display = marketplace_taxonomy_service.build_taxonomy_display(taxonomy_metadata, content_type="note_type")
     return {
         "id": note_type.id,
         "name": note_type.name,
@@ -56,6 +59,12 @@ def serialize_note_type(note_type: NoteType) -> dict[str, Any]:
         "description": note_type.description,
         "primary_category": note_type.primary_category,
         "tags": note_type.tags or [],
+        "display_tags": marketplace_taxonomy_service.merge_detail_tags(
+            free_tags=note_type.tags or [],
+            metadata=taxonomy_metadata,
+            content_type="note_type",
+        ),
+        "taxonomy_metadata": taxonomy_metadata,
         "preview_text": note_type.preview_text,
         "preview_image_url": note_type.preview_image_url,
         "pricing_mode": note_type.pricing_mode,
@@ -74,6 +83,7 @@ def serialize_note_type(note_type: NoteType) -> dict[str, Any]:
         "author": serialize_author(note_type.owner),
         "created_at": note_type.created_at.isoformat() if note_type.created_at else None,
         "updated_at": note_type.updated_at.isoformat() if note_type.updated_at else None,
+        **taxonomy_display,
         "field_defs": [
             serialize_field(field)
             for field in sorted(note_type.field_defs, key=lambda item: item.position)
@@ -196,12 +206,26 @@ def serialize_note_type_marketplace_card(note_type: NoteType) -> dict[str, Any]:
 
 def serialize_deck_marketplace_item(deck_item: DeckMarketplaceItem) -> dict[str, Any]:
     price_amount_minor = int(deck_item.price_amount_minor or 0)
+    taxonomy_metadata = marketplace_taxonomy_service.get_item_taxonomy(
+        deck_item,
+        content_type="deck_marketplace_item",
+    )
+    taxonomy_display = marketplace_taxonomy_service.build_taxonomy_display(
+        taxonomy_metadata,
+        content_type="deck_marketplace_item",
+    )
     return {
         "id": deck_item.id,
         "title": deck_item.title,
         "description": deck_item.description,
         "primary_category": deck_item.primary_category,
         "tags": deck_item.tags or [],
+        "display_tags": marketplace_taxonomy_service.merge_detail_tags(
+            free_tags=deck_item.tags or [],
+            metadata=taxonomy_metadata,
+            content_type="deck_marketplace_item",
+        ),
+        "taxonomy_metadata": taxonomy_metadata,
         "preview_text": deck_item.preview_text,
         "sample_cards_count": int(deck_item.sample_cards_count or 0),
         "source_deck_id": deck_item.source_deck_id,
@@ -226,6 +250,7 @@ def serialize_deck_marketplace_item(deck_item: DeckMarketplaceItem) -> dict[str,
         "archived_at": deck_item.archived_at.isoformat() if deck_item.archived_at else None,
         "updated_at": deck_item.updated_at.isoformat() if deck_item.updated_at else None,
         "created_at": deck_item.created_at.isoformat() if deck_item.created_at else None,
+        **taxonomy_display,
     }
 
 

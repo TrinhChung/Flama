@@ -15,6 +15,7 @@ from models.deck_review import DeckReview
 from models.field_def import FieldDef
 from models.field_rename_job import FieldRenameJob
 from models.media_asset import MediaAsset
+from models.marketplace_saved_item import MarketplaceSavedItem
 from models.note import Note
 from models.note_type import NoteType
 from models.note_type_install import NoteTypeInstall
@@ -38,6 +39,7 @@ __all__ = [
     "FieldDef",
     "FieldRenameJob",
     "MediaAsset",
+    "MarketplaceSavedItem",
     "Note",
     "NoteType",
     "NoteTypeInstall",

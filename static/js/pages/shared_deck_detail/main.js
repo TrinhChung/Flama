@@ -1,659 +1,400 @@
 import {
-    fetchDeckDetail,
-    installDeck,
-    submitRating,
-    fetchSourceNoteType,
-    fetchTemplatePreview
-} from './api.js';
+  fetchDeckDetail,
+  installDeck,
+  submitRating,
+  fetchSourceNoteType,
+  fetchTemplatePreview,
+  requestJson,
+} from "./api.js";
 
 import {
-    formatDate,
-    renderTags,
-    normalizeRatingValue,
-    paintRatingStars
-} from './ui.js';
+  formatDate,
+  renderTags,
+  normalizeRatingValue,
+  paintRatingStars,
+} from "./ui.js";
 
-(() => {
-    const root = document.getElementById("shared-deck-detail-root");
-    if (!root) return;
+const root = document.getElementById("shared-deck-detail-root");
 
-    const deckItemId = root.getAttribute("data-deck-item-id");
-    const noteTypeDetailUrlTemplate = root.getAttribute("data-note-type-url-template"); // Needs to be injected via HTML
-    const shareEditUrlTemplate = root.getAttribute("data-share-edit-url-template") || "";
-    const paymentResultUrl = root.getAttribute("data-payment-result-url") || "";
+if (root) {
+  const deckItemId = root.getAttribute("data-deck-item-id") || "";
+  const noteTypeDetailUrlTemplate = root.getAttribute("data-note-type-url-template") || "";
+  const shareEditUrlTemplate = root.getAttribute("data-share-edit-url-template") || "";
+  const paymentResultUrl = root.getAttribute("data-payment-result-url") || "";
+  const saveUrlTemplate = root.getAttribute("data-save-url-template") || "";
+  const marketUrl = root.getAttribute("data-market-url") || "/";
+  const ordersUrl = root.getAttribute("data-orders-url") || "/";
 
-    const titleEl = document.getElementById("deck-title");
-    const metaEl = document.getElementById("deck-meta-line");
-    const descriptionEl = document.getElementById("deck-description");
-    const previewTextEl = document.getElementById("deck-preview-text");
-    const tagsEl = document.getElementById("deck-tags");
-    const statsEl = document.getElementById("deck-stats");
-    const testSamplesEl = document.getElementById("deck-test-samples");
-    const testNoteEl = document.getElementById("deck-test-note");
-    const editBtn = document.getElementById("deck-edit-btn");
-    const installBtn = document.getElementById("deck-install-btn");
-    const myReviewEl = document.getElementById("deck-my-review");
-    const ratingValueEl = document.getElementById("deck-rating-value");
-    const ratingStarsEl = document.getElementById("deck-rating-stars");
-    const ratingValueLabelEl = document.getElementById("deck-rating-value-label");
-    const ratingStarButtons = Array.from(ratingStarsEl?.querySelectorAll(".shared-rating-star") || []);
-    const ratingCommentEl = document.getElementById("deck-rating-comment");
-    const ratingHintEl = document.getElementById("deck-rating-hint");
-    const ratingSubmitBtn = document.getElementById("deck-rating-submit-btn");
-    const sourceNoteTypeLink = document.getElementById("source-note-type-link");
-    const templateNameDisplayEl = document.getElementById("deck-template-name-display");
-    const templateNoteEl = document.getElementById("deck-template-note");
-    const samplePrevBtn = document.getElementById("deck-preview-sample-prev");
-    const sampleNextBtn = document.getElementById("deck-preview-sample-next");
-    const sampleLabelEl = document.getElementById("deck-preview-sample-label");
-    const previewFrame = document.getElementById("deck-template-preview-frame");
-    const frontBtn = document.getElementById("deck-preview-side-front");
-    const backBtn = document.getElementById("deck-preview-side-back");
-    const errorEl = document.getElementById("deck-detail-error");
-    const paymentPanelEl = document.getElementById("deck-payment-panel");
-    const paymentHeadlineEl = document.getElementById("deck-payment-headline");
-    const paymentMessageEl = document.getElementById("deck-payment-message");
-    const paymentBadgeEl = document.getElementById("deck-payment-badge");
-    const paymentNextActionEl = document.getElementById("deck-payment-next-action");
-    const paymentLinesEl = document.getElementById("deck-payment-lines");
-    const paymentInstructionsEl = document.getElementById("deck-payment-instructions");
+  const titleEls = [document.getElementById("deck-title"), document.getElementById("deck-title-secondary")];
+  const metaEl = document.getElementById("deck-meta-line");
+  const descriptionEl = document.getElementById("deck-description");
+  const previewTextEl = document.getElementById("deck-preview-text");
+  const tagsEl = document.getElementById("deck-tags");
+  const statsEl = document.getElementById("deck-stats");
+  const badgesEl = document.getElementById("deck-badges");
+  const coverLabelEl = document.getElementById("deck-cover-label");
+  const authorNameEl = document.getElementById("author-name");
+  const authorSummaryEl = document.getElementById("author-summary");
+  const authorStoreLinkEl = document.getElementById("author-store-link");
+  const authorOtherItemsEl = document.getElementById("deck-author-other-items");
+  const communityReviewsEl = document.getElementById("deck-community-reviews");
+  const relatedItemsEl = document.getElementById("deck-related-items");
+  const testSamplesEl = document.getElementById("deck-test-samples");
+  const testNoteEl = document.getElementById("deck-test-note");
+  const editBtn = document.getElementById("deck-edit-btn");
+  const saveBtn = document.getElementById("deck-save-btn");
+  const installBtn = document.getElementById("deck-install-btn");
+  const myReviewEl = document.getElementById("deck-my-review");
+  const ratingValueEl = document.getElementById("deck-rating-value");
+  const ratingStarsEl = document.getElementById("deck-rating-stars");
+  const ratingValueLabelEl = document.getElementById("deck-rating-value-label");
+  const ratingStarButtons = Array.from(ratingStarsEl?.querySelectorAll(".shared-rating-star") || []);
+  const ratingCommentEl = document.getElementById("deck-rating-comment");
+  const ratingHintEl = document.getElementById("deck-rating-hint");
+  const ratingSubmitBtn = document.getElementById("deck-rating-submit-btn");
+  const sourceNoteTypeLink = document.getElementById("source-note-type-link");
+  const templateNameDisplayEl = document.getElementById("deck-template-name-display");
+  const templateNoteEl = document.getElementById("deck-template-note");
+  const samplePrevBtn = document.getElementById("deck-preview-sample-prev");
+  const sampleNextBtn = document.getElementById("deck-preview-sample-next");
+  const sampleLabelEl = document.getElementById("deck-preview-sample-label");
+  const previewFrame = document.getElementById("deck-template-preview-frame");
+  const frontBtn = document.getElementById("deck-preview-side-front");
+  const backBtn = document.getElementById("deck-preview-side-back");
+  const errorEl = document.getElementById("deck-detail-error");
+  const paymentPanelEl = document.getElementById("deck-payment-panel");
+  const paymentHeadlineEl = document.getElementById("deck-payment-headline");
+  const paymentMessageEl = document.getElementById("deck-payment-message");
+  const paymentBadgeEl = document.getElementById("deck-payment-badge");
+  const paymentNextActionEl = document.getElementById("deck-payment-next-action");
+  const paymentLinesEl = document.getElementById("deck-payment-lines");
+  const paymentInstructionsEl = document.getElementById("deck-payment-instructions");
 
-    let deckDetail = null;
-    let sourceNoteTypeDetail = null;
-    let selectedTemplateId = "";
-    let previewPayload = null;
-    let previewSide = "front";
-    let testSamples = [];
-    let activeSampleIndex = -1;
+  let deckDetail = null;
+  let selectedTemplateId = "";
+  let previewPayload = null;
+  let previewSide = "front";
+  let testSamples = [];
+  let activeSampleIndex = -1;
 
-    function showError(message) {
-        if (errorEl) {
-            errorEl.textContent = message || "Không thể xử lý yêu cầu lúc này.";
-            errorEl.classList.remove("d-none");
-        }
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#39;");
+  }
+
+  function showError(message) {
+    errorEl.textContent = message || "Không thể tải dữ liệu.";
+    errorEl.classList.remove("d-none");
+  }
+
+  function clearError() {
+    errorEl.textContent = "";
+    errorEl.classList.add("d-none");
+  }
+
+  function formatCount(value) {
+    return window.Utils?.formatNumber ? window.Utils.formatNumber(value) : String(value || 0);
+  }
+
+  function buildUrl(template, value) {
+    return String(template || "").replaceAll("__ITEM_ID__", encodeURIComponent(value || ""));
+  }
+
+  function buildNoteTypeDetailUrl(noteTypeId) {
+    return noteTypeDetailUrlTemplate.replace("__NOTE_TYPE_ID__", encodeURIComponent(noteTypeId || ""));
+  }
+
+  function buildEditUrl(sourceDeckId) {
+    if (!sourceDeckId) return "#";
+    return shareEditUrlTemplate.replace("/0/share", `/${encodeURIComponent(sourceDeckId)}/share`);
+  }
+
+  function renderBadges(badges) {
+    badgesEl.innerHTML = (badges || []).map((badge) => `<span class="market-badge">${escapeHtml(badge)}</span>`).join("");
+  }
+
+  function renderMiniCards(container, items, emptyText) {
+    if (!container) return;
+    if (!items || !items.length) {
+      container.innerHTML = `<div class="market-empty-state">${escapeHtml(emptyText)}</div>`;
+      return;
     }
+    container.innerHTML = items.map((item) => `
+      <article class="market-review-item">
+        <div class="market-purchase-title">
+          <a class="market-text-link" href="${escapeHtml(`${marketUrl}?author=${encodeURIComponent(item.author_filter_token || item.author?.username || "")}`)}">${escapeHtml(item.author?.username || "Không rõ")}</a>
+          ·
+          <a class="market-text-link" href="${escapeHtml(`${marketUrl.replace(/\/$/, "")}/${encodeURIComponent(item.id)}`)}">${escapeHtml(item.title || "Untitled")}</a>
+        </div>
+        <div class="market-feedback-meta mt-2">${escapeHtml(item.price_display || "Miễn phí")} · ${Number(item.rating_avg || 0).toFixed(1)} sao</div>
+      </article>
+    `).join("");
+  }
 
-    function clearError() {
-        if (errorEl) {
-            errorEl.textContent = "";
-            errorEl.classList.add("d-none");
-        }
+  function renderReviews(reviews) {
+    if (!reviews || !reviews.length) {
+      communityReviewsEl.innerHTML = `<div class="market-empty-state">Chưa có đánh giá cộng đồng.</div>`;
+      return;
     }
+    communityReviewsEl.innerHTML = reviews.map((review) => `
+      <article class="market-review-item">
+        <div class="market-review-stars">${"★".repeat(Math.max(1, Number(review.rating || 0)))} ${Number(review.rating || 0)}/5</div>
+        <div class="market-feedback-meta mt-2">${escapeHtml(review.username || "Người dùng")} · ${escapeHtml(formatDate(review.updated_at))}</div>
+        <div class="market-detail-richtext mt-2">${escapeHtml(review.comment || "Người dùng chưa để lại nhận xét.")}</div>
+      </article>
+    `).join("");
+  }
 
-    function formatCurrencyMinor(amount) {
-        return window.Utils.formatVnd(amount);
+  function renderAuthorProfile(profile) {
+    authorNameEl.textContent = profile?.username || "Không rõ";
+    authorSummaryEl.textContent = `${formatCount(profile?.published_count || 0)} ấn phẩm · ${formatCount(profile?.total_installs || 0)} lượt sở hữu · ${Number(profile?.avg_rating || 0).toFixed(1)} sao`;
+    if (deckDetail?.author?.username) {
+      authorStoreLinkEl.href = `${marketUrl}?author=${encodeURIComponent(deckDetail.author.username)}`;
     }
+  }
 
-    function formatCount(value) {
-        return window.Utils.formatNumber(value);
+  function setLoadingPreview(message) {
+    previewFrame.srcdoc = `<!doctype html><html><body><div style="padding:12px;color:#61708b;">${escapeHtml(message || "Đang tải phần xem trước...")}</div></body></html>`;
+  }
+
+  function renderPreviewFrame() {
+    const html = previewSide === "back" ? (previewPayload?.back_html || "") : (previewPayload?.front_html || "");
+    previewFrame.srcdoc = `<!doctype html><html><body><div style="padding:12px;">${html || "<div style='color:#61708b;'>Chưa có nội dung xem trước.</div>"}</div></body></html>`;
+  }
+
+  function getActiveSample() {
+    return activeSampleIndex >= 0 && activeSampleIndex < testSamples.length ? testSamples[activeSampleIndex] : null;
+  }
+
+  function renderSampleNavState() {
+    const hasSamples = testSamples.length > 0;
+    samplePrevBtn.disabled = !hasSamples;
+    sampleNextBtn.disabled = !hasSamples;
+    sampleLabelEl.textContent = hasSamples
+      ? `Mẫu ${activeSampleIndex + 1}/${testSamples.length}: ${(getActiveSample()?.word || "").trim() || "Từ mẫu"}`
+      : "Chưa có từ mẫu.";
+  }
+
+  function renderTestSamples(samples) {
+    testSamples = Array.isArray(samples) ? samples : [];
+    if (!testSamples.length) {
+      activeSampleIndex = -1;
+      testSamplesEl.innerHTML = `<div class="market-empty-state">Deck này chưa có thẻ mẫu để chạy thử nhanh.</div>`;
+      testNoteEl.textContent = "Không có dữ liệu để lấy từ mẫu.";
+      renderSampleNavState();
+      return;
     }
-
-    function formatPrice(value) {
-        return window.Utils.formatPriceDisplay(value);
+    if (activeSampleIndex < 0 || activeSampleIndex >= testSamples.length) {
+      activeSampleIndex = 0;
     }
+    testNoteEl.textContent = `Đang hiển thị ${formatCount(testSamples.length)} mẫu ngẫu nhiên để mô phỏng trải nghiệm học.`;
+    testSamplesEl.innerHTML = testSamples.map((sample, index) => `
+      <button class="btn ${index === activeSampleIndex ? "btn-dark" : "btn-outline-secondary"} text-start" type="button" data-sample-index="${index}">
+        <strong>${escapeHtml(sample.word || `Từ #${index + 1}`)}</strong>
+        <div class="small ${index === activeSampleIndex ? "text-white-50" : "text-muted"}">${escapeHtml(sample.reading || sample.meaning || "Không có mô tả")}</div>
+      </button>
+    `).join("");
+    renderSampleNavState();
+  }
 
-    function buildPaymentInstructions(payload) {
-        const order = payload?.order || {};
-        const checkout = order?.active_attempt?.checkout || {};
-        const checkoutUrl = checkout.checkout_url || "Không có";
-        const lines = [
-            "Đã tạo đơn thanh toán.",
-            "Mã đơn: " + (order.merchant_order_code || order.id || "Không có"),
-            "Số tiền: " + formatCurrencyMinor(checkout.amount_minor || order.total_amount_minor || 0),
-            "Ngân hàng BIN: " + (checkout.bank_bin || "Không có"),
-            "Số tài khoản: " + (checkout.account_no || "Không có"),
-            "Tên tài khoản: " + (checkout.account_name || "Không có"),
-            "Nội dung CK: " + (checkout.payment_reference || "Không có"),
-        ];
-        if (order?.active_attempt?.expires_at) {
-            lines.push("Hết hạn: " + formatDate(order.active_attempt.expires_at));
-        }
-        return lines.join("\n");
+  function renderInstallState() {
+    if (!deckDetail) return;
+    const editUrl = buildEditUrl(deckDetail.source_deck_id);
+    editBtn.classList.toggle("d-none", !(deckDetail.is_owner && editUrl));
+    saveBtn.classList.toggle("d-none", !!deckDetail.is_owner);
+    if (deckDetail.is_owner) {
+      if (editUrl) editBtn.href = editUrl;
+      installBtn.textContent = "Bạn là tác giả";
+      installBtn.disabled = true;
+      return;
     }
-
-    function hidePaymentOrder() {
-        if (!paymentPanelEl) return;
-        paymentPanelEl.classList.add("d-none");
-        paymentPanelEl.removeAttribute("data-tone");
+    if (deckDetail.is_installed) {
+      installBtn.textContent = "Đã cài";
+      installBtn.disabled = true;
+      return;
     }
-
-    function buildFallbackOrderMessage(order) {
-        const headline = order?.headline || order?.status_display?.headline || "Đơn hàng đã được tạo.";
-        const message = order?.message || order?.status_display?.description || "";
-        const nextAction = order?.next_action || "";
-        const parts = [headline];
-        if (message) parts.push(message);
-        if (nextAction) parts.push("Tiếp theo: " + nextAction);
-        return parts.join("\n\n");
+    if (deckDetail.ownership_status === "owned_pending") {
+      installBtn.textContent = "Xem đơn hàng";
+      installBtn.disabled = false;
+      return;
     }
+    installBtn.textContent = deckDetail.pricing_mode === "paid" ? "Mua" : "Tải xuống";
+    installBtn.disabled = false;
+  }
 
-    function renderPaymentLineValue(line) {
-        if (!line) return "Không có";
-        if (line.type === "amount_minor") {
-            return formatCurrencyMinor(line.value_minor || 0);
-        }
-        if (line.type === "datetime") {
-            return formatDate(line.value) || "Không có";
-        }
-        return String(line.value || "Không có");
+  function renderRatingState() {
+    const review = deckDetail?.my_review || null;
+    if (review) {
+      myReviewEl.textContent = `Đánh giá của bạn: ${review.rating}/5${review.comment ? ` · ${review.comment}` : ""} · ${formatDate(review.updated_at)}`;
+      ratingCommentEl.value = review.comment || "";
+      ratingValueEl.value = String(review.rating || 5);
+      paintRatingStars(ratingStarButtons, normalizeRatingValue(review.rating || 5), ratingValueLabelEl);
+    } else {
+      myReviewEl.textContent = "Bạn chưa đánh giá deck này.";
+      ratingCommentEl.value = "";
+      ratingValueEl.value = "5";
+      paintRatingStars(ratingStarButtons, 5, ratingValueLabelEl);
     }
-
-    function renderPaymentLines(lines) {
-        if (!paymentLinesEl) return;
-        paymentLinesEl.innerHTML = "";
-        const normalized = Array.isArray(lines) ? lines : [];
-        if (!normalized.length) {
-            const emptyEl = document.createElement("div");
-            emptyEl.className = "text-muted small";
-            emptyEl.textContent = "Chưa có thêm thông tin chi tiết cho đơn hàng này.";
-            paymentLinesEl.appendChild(emptyEl);
-            return;
-        }
-
-        normalized.forEach((line) => {
-            const rowEl = document.createElement("div");
-            rowEl.className = "flama-payment-line";
-
-            const labelEl = document.createElement("div");
-            labelEl.className = "flama-payment-label";
-            labelEl.textContent = line.label || "Thông tin";
-
-            const valueEl = document.createElement("div");
-            valueEl.className = "flama-payment-value";
-            if (line.key === "payment_reference" || line.key === "merchant_order_code") {
-                valueEl.classList.add("is-code");
-            }
-
-            if (line.type === "url" && line.value) {
-                const linkEl = document.createElement("a");
-                linkEl.href = line.value;
-                linkEl.target = "_blank";
-                linkEl.rel = "noopener noreferrer";
-                linkEl.textContent = "Mở lại trang thanh toán PayOS";
-                valueEl.appendChild(linkEl);
-            } else {
-                valueEl.textContent = renderPaymentLineValue(line);
-            }
-
-            rowEl.appendChild(labelEl);
-            rowEl.appendChild(valueEl);
-            paymentLinesEl.appendChild(rowEl);
-        });
+    if (deckDetail?.can_rate) {
+      ratingHintEl.textContent = `Bạn còn ${formatCount(deckDetail.review_submissions_remaining || 0)}/2 lượt đánh giá.`;
+      ratingCommentEl.disabled = false;
+      ratingSubmitBtn.disabled = false;
+      ratingStarButtons.forEach((button) => { button.disabled = false; });
+    } else {
+      ratingHintEl.textContent = "Cần cài đặt và dùng thực tế trước khi gửi đánh giá.";
+      ratingCommentEl.disabled = true;
+      ratingSubmitBtn.disabled = true;
+      ratingStarButtons.forEach((button) => { button.disabled = true; });
     }
+  }
 
-    function renderPaymentInstructions(instructions) {
-        if (!paymentInstructionsEl) return;
-        paymentInstructionsEl.innerHTML = "";
-        const normalized = Array.isArray(instructions) ? instructions.filter(Boolean) : [];
-        const items = normalized.length ? normalized : ["Theo dõi trạng thái đơn hàng tại trang này."];
-        items.forEach((instruction) => {
-            const itemEl = document.createElement("li");
-            itemEl.textContent = instruction;
-            paymentInstructionsEl.appendChild(itemEl);
-        });
+  async function loadTemplatePreview() {
+    if (!deckDetail?.source_note_type_id || !selectedTemplateId) {
+      setLoadingPreview("Deck này chưa có template preview.");
+      return;
     }
+    const selectedSample = getActiveSample();
+    previewPayload = await fetchTemplatePreview(deckItemId, selectedTemplateId, selectedSample?.note_id);
+    renderPreviewFrame();
+  }
 
-    function renderPaymentOrder(order) {
-        if (!paymentPanelEl || !order) return;
-        const statusDisplay = order.status_display || {};
-        paymentPanelEl.classList.remove("d-none");
-        paymentPanelEl.setAttribute("data-tone", statusDisplay.tone || "info");
-        if (paymentBadgeEl) {
-            paymentBadgeEl.textContent = statusDisplay.label || "Đơn hàng";
-        }
-        if (paymentHeadlineEl) {
-            paymentHeadlineEl.textContent = order.headline || statusDisplay.headline || "Chi tiết đơn hàng";
-        }
-        if (paymentMessageEl) {
-            paymentMessageEl.textContent = order.message || statusDisplay.description || "";
-        }
-        if (paymentNextActionEl) {
-            paymentNextActionEl.textContent = order.next_action ? ("Tiếp theo: " + order.next_action) : "";
-        }
-        renderPaymentLines(order.order_detail_lines || []);
-        renderPaymentInstructions(order.instructions || []);
+  async function loadSourceNoteType() {
+    if (!deckDetail?.source_note_type_id) {
+      sourceNoteTypeLink.classList.add("disabled");
+      sourceNoteTypeLink.href = "#";
+      templateNameDisplayEl.textContent = "Không có template";
+      templateNoteEl.textContent = "Deck này chưa liên kết note type nguồn.";
+      setLoadingPreview("Deck này chưa có template preview.");
+      return;
     }
-
-    function consumePaymentOrderIdFromLocation() {
-        const url = new URL(window.location.href);
-        const orderId = url.searchParams.get("payment_order_id");
-        if (!orderId) return "";
-        url.searchParams.delete("payment_order_id");
-        url.searchParams.delete("payment_product_type");
-        url.searchParams.delete("payment_product_ref_id");
-        window.history.replaceState({}, document.title, url.toString());
-        return orderId;
+    sourceNoteTypeLink.classList.remove("disabled");
+    sourceNoteTypeLink.href = buildNoteTypeDetailUrl(deckDetail.source_note_type_id);
+    const sourceNoteType = deckDetail.source_note_type || await fetchSourceNoteType(deckDetail.source_note_type_id);
+    const templates = Array.isArray(sourceNoteType.templates) ? sourceNoteType.templates.slice().sort((a, b) => (a.position || 0) - (b.position || 0)) : [];
+    if (!templates.length) {
+      templateNameDisplayEl.textContent = "Không có template";
+      templateNoteEl.textContent = "Note type nguồn chưa có template để preview.";
+      setLoadingPreview("Không có template preview khả dụng.");
+      return;
     }
+    selectedTemplateId = templates[0].id;
+    templateNameDisplayEl.textContent = sourceNoteType.title || sourceNoteType.name || templates[0].name;
+    templateNoteEl.textContent = `Preview lấy từ note type nguồn: ${sourceNoteType.title || sourceNoteType.name || "Không rõ"}`;
+    await loadTemplatePreview();
+  }
 
-    async function syncReturnedPayment() {
-        const orderId = consumePaymentOrderIdFromLocation();
-        if (!orderId) return;
-        try {
-            const order = await fetchPaymentOrder(orderId);
-            renderPaymentOrder(order);
-            if (order?.status === "paid" && order?.grant_status === "completed") {
-                await loadDeckDetail();
-                renderPaymentOrder(order);
-                return;
-            }
-        } catch (error) {
-            showError(error.message || "Không thể đồng bộ trạng thái đơn hàng từ PayOS.");
-        }
-    }
-
-    function buildNoteTypeDetailUrl(noteTypeId) {
-        if (!noteTypeDetailUrlTemplate) return "#";
-        return noteTypeDetailUrlTemplate.replace("__NOTE_TYPE_ID__", encodeURIComponent(noteTypeId));
-    }
-
-    function buildShareEditUrl(sourceDeckId) {
-        if (!shareEditUrlTemplate || !sourceDeckId) return "";
-        return shareEditUrlTemplate.replace("/0/share", `/${encodeURIComponent(sourceDeckId)}/share`);
-    }
-
-    function buildPaymentResultUrl(orderId, productType, productRefId) {
-        if (!paymentResultUrl || !orderId) return "";
-        const url = new URL(paymentResultUrl, window.location.origin);
-        url.searchParams.set("payment_order_id", orderId);
-        if (productType) {
-            url.searchParams.set("payment_product_type", productType);
-        }
-        if (productRefId) {
-            url.searchParams.set("payment_product_ref_id", productRefId);
-        }
-        return url.toString();
-    }
-
-    function getActiveSample() {
-        if (!Array.isArray(testSamples)) return null;
-        if (activeSampleIndex < 0 || activeSampleIndex >= testSamples.length) return null;
-        return testSamples[activeSampleIndex];
-    }
-
-    function renderSampleNavState() {
-        const hasSamples = Array.isArray(testSamples) && testSamples.length > 0;
-        if (samplePrevBtn) samplePrevBtn.disabled = !hasSamples;
-        if (sampleNextBtn) sampleNextBtn.disabled = !hasSamples;
-
-        if (!sampleLabelEl) return;
-        if (!hasSamples) {
-            sampleLabelEl.textContent = "Chưa có từ mẫu.";
-            return;
-        }
-        const sample = getActiveSample();
-        const word = ((sample?.word || "").trim() || ("Từ #" + String(activeSampleIndex + 1)));
-        sampleLabelEl.textContent = "Mẫu " + String(activeSampleIndex + 1) + "/" + String(testSamples.length) + ": " + word;
-    }
-
-    function renderTestSamples(samples) {
-        if (!testSamplesEl) return;
-        testSamplesEl.innerHTML = "";
-
-        const normalized = Array.isArray(samples) ? samples : [];
-        testSamples = normalized;
-        if (!normalized.length) {
-            activeSampleIndex = -1;
-            const emptyRow = document.createElement("div");
-            emptyRow.className = "list-group-item px-0 text-muted";
-            emptyRow.textContent = "Deck này chưa có từ mẫu để thử nhanh.";
-            testSamplesEl.appendChild(emptyRow);
-            if (testNoteEl) {
-                testNoteEl.textContent = "Không có dữ liệu để lấy tối đa 5 từ mẫu.";
-            }
-            renderSampleNavState();
-            return;
-        }
-
-        if (activeSampleIndex < 0 || activeSampleIndex >= normalized.length) {
-            activeSampleIndex = 0;
-        }
-        if (testNoteEl) {
-            testNoteEl.textContent = "Đang hiển thị " + formatCount(normalized.length) + " từ ngẫu nhiên để mô phỏng thẻ xem trước.";
-        }
-
-        normalized.forEach((sample, index) => {
-            const row = document.createElement("button");
-            row.type = "button";
-            row.className = "list-group-item list-group-item-action px-0 text-start";
-            if (index === activeSampleIndex) {
-                row.classList.add("active");
-            }
-
-            const textWrap = document.createElement("div");
-            textWrap.className = "d-flex flex-wrap justify-content-between align-items-start gap-2";
-            const wordEl = document.createElement("div");
-            wordEl.className = "fw-semibold";
-            wordEl.textContent = (sample?.word || "").trim() || ("Từ #" + String(index + 1));
-            const metaWrap = document.createElement("div");
-            metaWrap.appendChild(wordEl);
-
-            const reading = (sample?.reading || "").trim();
-            if (reading) {
-                const readingEl = document.createElement("div");
-                readingEl.className = "small text-muted";
-                readingEl.textContent = "Cách đọc: " + reading;
-                metaWrap.appendChild(readingEl);
-            }
-
-            const meaning = (sample?.meaning || "").trim();
-            const meaningEl = document.createElement("div");
-            meaningEl.className = "small";
-            meaningEl.textContent = meaning ? ("Gợi ý: " + meaning) : "Gợi ý: (không có)";
-
-            textWrap.appendChild(metaWrap);
-            textWrap.appendChild(meaningEl);
-            row.appendChild(textWrap);
-
-            row.addEventListener("click", () => {
-                activeSampleIndex = index;
-                renderTestSamples(testSamples);
-                renderSampleNavState();
-                loadTemplatePreview().catch((error) => showError(error.message));
-            });
-
-            testSamplesEl.appendChild(row);
-        });
-        renderSampleNavState();
-    }
-
-    function setLoadingPreview(message) {
-        if (!previewFrame) return;
-        const safeMessage = message || "Đang tải phần xem trước...";
-        previewFrame.srcdoc = "<!doctype html><html><body><div style='padding:12px;color:#6c757d;'>" + safeMessage + "</div></body></html>";
-    }
-
-    function renderPreviewFrame() {
-        if (!previewFrame) return;
-        const html = previewSide === "back"
-            ? (previewPayload?.back_html || "")
-            : (previewPayload?.front_html || "");
-        const fallback = "<div style='padding:12px;color:#6c757d;'>Chưa có nội dung xem trước.</div>";
-        previewFrame.srcdoc = "<!doctype html><html><head><meta charset='utf-8'></head><body><div style='padding:8px;'>" + (html || fallback) + "</div></body></html>";
-    }
-
-    function applySideButtons() {
-        if (frontBtn) frontBtn.classList.toggle("active", previewSide === "front");
-        if (backBtn) backBtn.classList.toggle("active", previewSide === "back");
-    }
-
-    function renderInstallState() {
-        if (!deckDetail || !installBtn) return;
-        const editUrl = buildShareEditUrl(deckDetail.source_deck_id);
-        if (editBtn) {
-            if (deckDetail.is_owner && editUrl) {
-                editBtn.href = editUrl;
-                editBtn.classList.remove("d-none");
-            } else {
-                editBtn.href = "#";
-                editBtn.classList.add("d-none");
-            }
-        }
-        if (deckDetail.is_owner) {
-            installBtn.classList.toggle("d-none", Boolean(editUrl));
-            installBtn.textContent = "Bạn là tác giả";
-            installBtn.disabled = true;
-            return;
-        }
-        installBtn.classList.remove("d-none");
-        if (deckDetail.is_installed) {
-            installBtn.textContent = "Đã cài đặt";
-            installBtn.disabled = true;
-            return;
-        }
-        installBtn.textContent = deckDetail.pricing_mode === "paid" ? "Mua / Cài đặt" : "Cài đặt";
-        installBtn.disabled = false;
-    }
-
-    function setSelectedRating(value) {
-        const normalized = normalizeRatingValue(value);
-        if (ratingValueEl) ratingValueEl.value = String(normalized);
-        paintRatingStars(ratingStarButtons, normalized, ratingValueLabelEl);
-    }
-
-    function setRatingInputDisabled(disabled) {
-        const isDisabled = Boolean(disabled);
-        if (ratingValueEl) ratingValueEl.disabled = isDisabled;
-        if (ratingCommentEl) ratingCommentEl.disabled = isDisabled;
-        if (ratingSubmitBtn) ratingSubmitBtn.disabled = isDisabled;
-        if (ratingStarsEl) {
-            ratingStarsEl.classList.toggle("is-disabled", isDisabled);
-            ratingStarsEl.setAttribute("aria-disabled", isDisabled ? "true" : "false");
-        }
-        ratingStarButtons.forEach((button) => {
-            button.disabled = isDisabled;
-        });
-    }
-
-    function renderRatingState() {
-        if (!deckDetail) return;
-        const review = deckDetail.my_review || null;
-        if (review) {
-            if (myReviewEl) {
-                myReviewEl.textContent = "Đánh giá của bạn: " + review.rating + "/5"
-                    + (review.comment ? " - " + review.comment : "")
-                    + (review.updated_at ? " (" + formatDate(review.updated_at) + ")" : "");
-            }
-            setSelectedRating(review.rating || 5);
-            if (ratingCommentEl) ratingCommentEl.value = review.comment || "";
-        } else {
-            if (myReviewEl) myReviewEl.textContent = "Bạn chưa đánh giá deck này.";
-            setSelectedRating(5);
-            if (ratingCommentEl) ratingCommentEl.value = "";
-        }
-
-        if (deckDetail.can_rate) {
-            if (ratingHintEl) {
-                const remaining = Number(deckDetail.review_submissions_remaining ?? 0);
-                ratingHintEl.textContent = "Bạn có thể đánh giá ngay. Lượt còn lại: " + formatCount(remaining) + "/2.";
-            }
-            setRatingInputDisabled(false);
-        } else {
-            if (ratingHintEl) ratingHintEl.textContent = "Cần cài đặt và dùng thực tế trước khi đánh giá.";
-            setRatingInputDisabled(true);
-        }
-    }
-
-    function renderTemplateName(templates, defaultName) {
-        const normalized = Array.isArray(templates) ? templates.slice().sort((a, b) => (a.position || 0) - (b.position || 0)) : [];
-        if (!normalized.length) {
-            if (templateNameDisplayEl) templateNameDisplayEl.textContent = "Không có template";
-            selectedTemplateId = "";
-            return;
-        }
-        const defaultTemplate = normalized.find(t => t.is_default) || normalized[0];
-        selectedTemplateId = defaultTemplate.id;
-        if (templateNameDisplayEl) {
-            templateNameDisplayEl.textContent = "Template: " + (defaultName || defaultTemplate.name);
-        }
-    }
-
-    async function loadTemplatePreview() {
-        if (!deckDetail || !deckDetail.source_note_type_id || !selectedTemplateId) {
-            setLoadingPreview("Deck này chưa có template preview.");
-            return;
-        }
-        const selectedSample = getActiveSample();
-        const noteId = selectedSample?.note_id;
-
-        setLoadingPreview();
-        previewPayload = await fetchTemplatePreview(deckItemId, selectedTemplateId, noteId);
-        renderPreviewFrame();
-    }
-
-    async function loadSourceNoteType() {
-        sourceNoteTypeDetail = null;
-        selectedTemplateId = "";
-        previewPayload = null;
-
-        if (!deckDetail || !deckDetail.source_note_type_id) {
-            if (sourceNoteTypeLink) {
-                sourceNoteTypeLink.classList.add("disabled");
-                sourceNoteTypeLink.setAttribute("href", "#");
-            }
-            if (templateNoteEl) templateNoteEl.textContent = "Deck này không liên kết note type nguồn.";
-            if (templateNameDisplayEl) templateNameDisplayEl.textContent = "Không có template";
-            setLoadingPreview("Deck này không có template preview.");
-            return;
-        }
-
-        if (sourceNoteTypeLink) {
-            sourceNoteTypeLink.classList.remove("disabled");
-            sourceNoteTypeLink.setAttribute("href", buildNoteTypeDetailUrl(deckDetail.source_note_type_id));
-        }
-
-        const sourceFromDeckDetail = deckDetail.source_note_type || null;
-        if (sourceFromDeckDetail && Array.isArray(sourceFromDeckDetail.templates) && sourceFromDeckDetail.templates.length) {
-            sourceNoteTypeDetail = sourceFromDeckDetail;
-            const displayName = sourceNoteTypeDetail.title || sourceNoteTypeDetail.name || "";
-            renderTemplateName(sourceNoteTypeDetail.templates || [], displayName);
-            if (templateNoteEl) templateNoteEl.textContent = "Preview lấy từ note type nguồn: " + displayName;
-            await loadTemplatePreview();
-            return;
-        }
-
-        try {
-            sourceNoteTypeDetail = await fetchSourceNoteType(deckDetail.source_note_type_id);
-            const displayName = sourceNoteTypeDetail.title || sourceNoteTypeDetail.name || "";
-            renderTemplateName(sourceNoteTypeDetail.templates || [], displayName);
-            if (templateNoteEl) templateNoteEl.textContent = "Preview lấy từ note type nguồn: " + displayName;
-            await loadTemplatePreview();
-        } catch (error) {
-            if (templateNoteEl) templateNoteEl.textContent = "Không thể tải template preview nguồn.";
-            if (templateNameDisplayEl) templateNameDisplayEl.textContent = "Không có template";
-            setLoadingPreview("Không có template preview khả dụng.");
-        }
-    }
-
-    async function loadDeckDetail() {
-        clearError();
-        deckDetail = await fetchDeckDetail(deckItemId);
-
-        if (titleEl) titleEl.textContent = deckDetail.title || "Deck chia sẻ";
-        if (metaEl) {
-            metaEl.textContent = "Tác giả: " + (deckDetail.author?.username || "Không rõ")
-                + " | Danh mục: " + (deckDetail.primary_category || "Chung")
-                + " | Giá: " + formatPrice(deckDetail.price_display || "Miễn phí");
-        }
-        if (descriptionEl) descriptionEl.textContent = deckDetail.description || "Không có mô tả.";
-        if (previewTextEl) previewTextEl.textContent = deckDetail.preview_text || "Không có nội dung xem trước.";
-        if (statsEl) {
-            statsEl.textContent = "Thẻ mẫu: " + formatCount(deckDetail.sample_cards_count || 0)
-                + " | Đánh giá: " + Number(deckDetail.rating_avg || 0).toFixed(2) + " (" + formatCount(deckDetail.rating_count || 0) + ")"
-                + " | Lượt dùng: " + formatCount(deckDetail.active_usage_count || 0) + "/" + formatCount(deckDetail.install_count || 0)
-                + " | Cập nhật: " + (formatDate(deckDetail.updated_at) || "Không rõ");
-        }
-
-        if (tagsEl) renderTags(tagsEl, deckDetail.tags || []);
-        renderTestSamples(deckDetail.test_samples || []);
-        renderSampleNavState();
-        renderInstallState();
-        renderRatingState();
-        await loadSourceNoteType();
-    }
-
-    async function onInstall() {
-        if (!deckDetail || deckDetail.is_owner || deckDetail.is_installed) return;
-        if (installBtn) installBtn.disabled = true;
-        try {
-            const response = await installDeck(deckItemId);
-            if (response?.payment_required && response?.order) {
-                const checkoutUrl = response?.order?.active_attempt?.checkout?.checkout_url
-                    || response?.order?.active_attempt?.checkout_url;
-                if (checkoutUrl && response?.order?.status === "pending_payment") {
-                    window.location.href = checkoutUrl;
-                    return;
-                }
-                showError(response?.order?.next_action || "Không lấy được liên kết PayOS cho đơn hàng này.");
-                const resultUrl = buildPaymentResultUrl(
-                    response?.order?.id || "",
-                    "deck_marketplace_item",
-                    deckItemId,
-                );
-                if (resultUrl) {
-                    window.location.href = resultUrl;
-                    return;
-                }
-                window.alert(buildFallbackOrderMessage(response.order));
-                return;
-            }
-            hidePaymentOrder();
-            await loadDeckDetail();
-        } finally {
-            renderInstallState();
-        }
-    }
-
-    async function onRateSubmit() {
-        if (!deckDetail || !deckDetail.can_rate) return;
-        const rating = Number(ratingValueEl?.value || "5");
-        if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
-            window.alert("Rating phải từ 1 đến 5.");
-            return;
-        }
-        const comment = (ratingCommentEl?.value || "").trim();
-        await submitRating(deckItemId, rating, comment);
-        await loadDeckDetail();
-    }
-
-    installBtn?.addEventListener("click", () => {
-        onInstall().catch((error) => showError(error.message));
+  async function loadDeckDetail() {
+    clearError();
+    deckDetail = await fetchDeckDetail(deckItemId);
+    titleEls.forEach((el) => {
+      if (el) el.textContent = deckDetail.title || "Deck";
     });
+    coverLabelEl.textContent = (deckDetail.level_tokens || [deckDetail.primary_category || "Deck"]).join(" · ");
+    metaEl.textContent = `Tác giả: ${deckDetail.author?.username || "Không rõ"} · ${deckDetail.primary_category || "Chung"} · ${deckDetail.price_display || "Miễn phí"}`;
+    descriptionEl.textContent = deckDetail.description || "Chưa có mô tả.";
+    previewTextEl.textContent = deckDetail.preview_text || "Chưa có preview text.";
+    statsEl.textContent = `${Number(deckDetail.rating_avg || 0).toFixed(1)} sao · ${formatCount(deckDetail.rating_count || 0)} đánh giá · ${formatCount(deckDetail.install_count || 0)} lượt sở hữu · cập nhật ${formatDate(deckDetail.updated_at)}`;
+    renderBadges(deckDetail.badges || []);
+    renderTags(tagsEl, deckDetail.display_tags || deckDetail.tags || []);
+    renderAuthorProfile(deckDetail.author_profile || {});
+    renderMiniCards(authorOtherItemsEl, deckDetail.author_other_items || [], "Tác giả này chưa có deck công khai khác.");
+    renderMiniCards(relatedItemsEl, deckDetail.related_items || [], "Chưa có gợi ý liên quan.");
+    renderReviews(deckDetail.recent_reviews || []);
+    renderTestSamples(deckDetail.test_samples || []);
+    renderInstallState();
+    renderRatingState();
+    saveBtn.textContent = deckDetail.is_saved ? "Đã lưu" : "Lưu";
+    await loadSourceNoteType();
+  }
 
-    ratingSubmitBtn?.addEventListener("click", () => {
-        onRateSubmit().catch((error) => showError(error.message));
+  async function handleInstall() {
+    if (deckDetail?.ownership_status === "owned_pending") {
+      window.location.href = ordersUrl;
+      return;
+    }
+    const response = await installDeck(deckItemId);
+    if (response?.payment_required && response?.order) {
+      const checkoutUrl = response?.order?.active_attempt?.checkout?.checkout_url
+        || response?.order?.active_attempt?.checkout_url;
+      if (checkoutUrl && response?.order?.status === "pending_payment") {
+        window.location.href = checkoutUrl;
+        return;
+      }
+      const url = new URL(paymentResultUrl, window.location.origin);
+      url.searchParams.set("payment_order_id", response?.order?.id || "");
+      url.searchParams.set("payment_product_type", "deck_marketplace_item");
+      url.searchParams.set("payment_product_ref_id", deckItemId);
+      window.location.href = url.toString();
+      return;
+    }
+    paymentPanelEl.classList.add("d-none");
+    await loadDeckDetail();
+  }
+
+  async function handleSave() {
+    await requestJson(buildUrl(saveUrlTemplate, deckItemId), { method: deckDetail?.is_saved ? "DELETE" : "POST" });
+    await loadDeckDetail();
+  }
+
+  async function handleSubmitRating() {
+    await submitRating(deckItemId, Number(ratingValueEl.value || "5"), String(ratingCommentEl.value || "").trim());
+    await loadDeckDetail();
+  }
+
+  installBtn?.addEventListener("click", () => {
+    handleInstall().catch((error) => showError(error.message));
+  });
+
+  saveBtn?.addEventListener("click", () => {
+    handleSave().catch((error) => showError(error.message));
+  });
+
+  ratingSubmitBtn?.addEventListener("click", () => {
+    handleSubmitRating().catch((error) => showError(error.message));
+  });
+
+  testSamplesEl?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-sample-index]");
+    if (!button) return;
+    activeSampleIndex = Number(button.getAttribute("data-sample-index") || "0");
+    renderTestSamples(testSamples);
+    loadTemplatePreview().catch((error) => showError(error.message));
+  });
+
+  [frontBtn, backBtn].forEach((button) => {
+    button?.addEventListener("click", () => {
+      previewSide = button.getAttribute("data-side") || "front";
+      frontBtn.classList.toggle("active", previewSide === "front");
+      backBtn.classList.toggle("active", previewSide === "back");
+      renderPreviewFrame();
     });
+  });
 
-    ratingStarButtons.forEach((button) => {
-        button.addEventListener("mouseenter", () => {
-            if (button.disabled) return;
-            paintRatingStars(ratingStarButtons, normalizeRatingValue(button.getAttribute("data-value") || "5"), ratingValueLabelEl);
-        });
+  samplePrevBtn?.addEventListener("click", () => {
+    if (!testSamples.length) return;
+    activeSampleIndex = (activeSampleIndex - 1 + testSamples.length) % testSamples.length;
+    renderTestSamples(testSamples);
+    loadTemplatePreview().catch((error) => showError(error.message));
+  });
 
-        button.addEventListener("focus", () => {
-            if (button.disabled) return;
-            paintRatingStars(ratingStarButtons, normalizeRatingValue(button.getAttribute("data-value") || "5"), ratingValueLabelEl);
-        });
+  sampleNextBtn?.addEventListener("click", () => {
+    if (!testSamples.length) return;
+    activeSampleIndex = (activeSampleIndex + 1) % testSamples.length;
+    renderTestSamples(testSamples);
+    loadTemplatePreview().catch((error) => showError(error.message));
+  });
 
-        button.addEventListener("click", () => {
-            if (button.disabled) return;
-            setSelectedRating(button.getAttribute("data-value") || "5");
-        });
+  ratingStarButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      const value = normalizeRatingValue(button.getAttribute("data-value") || "5");
+      ratingValueEl.value = String(value);
+      paintRatingStars(ratingStarButtons, value, ratingValueLabelEl);
     });
+  });
 
-    ratingStarsEl?.addEventListener("mouseleave", () => {
-        paintRatingStars(ratingStarButtons, normalizeRatingValue(ratingValueEl?.value || "5"), ratingValueLabelEl);
-    });
-
-    ratingStarsEl?.addEventListener("focusout", (event) => {
-        if (!ratingStarsEl.contains(event.relatedTarget)) {
-            paintRatingStars(ratingStarButtons, normalizeRatingValue(ratingValueEl?.value || "5"), ratingValueLabelEl);
-        }
-    });
-
-    [frontBtn, backBtn].forEach((button) => {
-        button?.addEventListener("click", () => {
-            previewSide = button.getAttribute("data-side") || "front";
-            applySideButtons();
-            renderPreviewFrame();
-        });
-    });
-
-    samplePrevBtn?.addEventListener("click", () => {
-        if (!Array.isArray(testSamples) || !testSamples.length) return;
-        activeSampleIndex = (activeSampleIndex - 1 + testSamples.length) % testSamples.length;
-        renderTestSamples(testSamples);
-        loadTemplatePreview().catch((error) => showError(error.message));
-    });
-
-    sampleNextBtn?.addEventListener("click", () => {
-        if (!Array.isArray(testSamples) || !testSamples.length) return;
-        activeSampleIndex = (activeSampleIndex + 1) % testSamples.length;
-        renderTestSamples(testSamples);
-        loadTemplatePreview().catch((error) => showError(error.message));
-    });
-
-    setSelectedRating(ratingValueEl?.value || "5");
-    setRatingInputDisabled(true);
-    applySideButtons();
-    loadDeckDetail().catch((error) => showError(error.message));
-})();
+  loadDeckDetail().catch((error) => showError(error.message));
+}

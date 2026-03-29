@@ -131,6 +131,7 @@ def create_app(config: Optional[dict] = None) -> Flask:
     from models.column_preference import (
         VocabularyColumnPreference,
     )  # noqa: F401  # register model
+    from models.marketplace_saved_item import MarketplaceSavedItem  # noqa: F401  # register model
     from models.payout_batch import PayoutBatch  # noqa: F401  # register model
     from models.payout_batch_item import PayoutBatchItem  # noqa: F401  # register model
     from models.flashcard import (  # noqa: F401  # register model
@@ -333,6 +334,32 @@ def _ensure_backward_compatible_schema() -> None:
     _rename_int_column_if_present("deck_marketplace_items", "price_cents", "price_amount_minor")
     _rename_int_column_if_present("note_type_installs", "purchase_price_cents", "purchase_amount_minor")
     _rename_int_column_if_present("deck_installs", "purchase_price_cents", "purchase_amount_minor")
+
+    note_type_taxonomy_ddl = (
+        "ALTER TABLE note_types ADD COLUMN taxonomy_metadata JSON NULL"
+        if is_mysql
+        else "ALTER TABLE note_types ADD COLUMN taxonomy_metadata TEXT NULL"
+    )
+    if _ensure_column("note_types", "taxonomy_metadata", note_type_taxonomy_ddl):
+        db.session.execute(
+            sa.text(
+                "UPDATE note_types SET taxonomy_metadata = '{}' "
+                "WHERE taxonomy_metadata IS NULL OR taxonomy_metadata = ''"
+            )
+        )
+
+    deck_taxonomy_ddl = (
+        "ALTER TABLE deck_marketplace_items ADD COLUMN taxonomy_metadata JSON NULL"
+        if is_mysql
+        else "ALTER TABLE deck_marketplace_items ADD COLUMN taxonomy_metadata TEXT NULL"
+    )
+    if _ensure_column("deck_marketplace_items", "taxonomy_metadata", deck_taxonomy_ddl):
+        db.session.execute(
+            sa.text(
+                "UPDATE deck_marketplace_items SET taxonomy_metadata = '{}' "
+                "WHERE taxonomy_metadata IS NULL OR taxonomy_metadata = ''"
+            )
+        )
 
     inspector = sa.inspect(bind)
     if inspector.has_table("user_scheduler_settings"):

@@ -12,6 +12,7 @@ from models.flashcard import *
 from models.deck import Deck
 from models.card_progress import CardProgress
 from app.services import flashcards_share
+from app.services import marketplace_hub_service
 from app.services import payment_service
 from app.utils.permissions import is_admin_user
 
@@ -65,6 +66,78 @@ def shared_decks_page():
 @login_required
 def shared_deck_detail_page(deck_item_id: str):
     return render_template("flashcards/shared_deck_detail.html", deck_item_id=deck_item_id)
+
+
+@flashcards_bp.route("/api/shared/note-types/hub", methods=["GET"])
+@login_required
+def shared_note_types_hub():
+    filters = marketplace_hub_service.parse_marketplace_filters(request.args)
+    payload = marketplace_hub_service.build_note_type_marketplace_hub(
+        user_id=current_user.id,
+        filters=filters,
+    )
+    return jsonify(payload)
+
+
+@flashcards_bp.route("/api/shared/decks/hub", methods=["GET"])
+@login_required
+def shared_decks_hub():
+    filters = marketplace_hub_service.parse_marketplace_filters(request.args)
+    payload = marketplace_hub_service.build_deck_marketplace_hub(
+        user_id=current_user.id,
+        filters=filters,
+    )
+    return jsonify(payload)
+
+
+@flashcards_bp.route("/api/shared/note-types/<note_type_id>/save", methods=["POST", "DELETE"])
+@login_required
+def save_shared_note_type(note_type_id: str):
+    note_type = _get_shared_note_type_for_view(note_type_id)
+    if not note_type:
+        return _api_error("FIELD_NOT_FOUND", "Note type not found.", status=404)
+    if note_type.user_id == current_user.id:
+        return _api_error("VALIDATION_ERROR", "Owner cannot save own note type.", status=409)
+    if request.method == "POST":
+        marketplace_hub_service.save_item_for_user(
+            user_id=current_user.id,
+            product_type="note_type",
+            product_ref_id=note_type.id,
+        )
+        db.session.commit()
+        return jsonify({"saved": True, "note_type_id": note_type.id})
+    marketplace_hub_service.remove_saved_item_for_user(
+        user_id=current_user.id,
+        product_type="note_type",
+        product_ref_id=note_type.id,
+    )
+    db.session.commit()
+    return jsonify({"saved": False, "note_type_id": note_type.id})
+
+
+@flashcards_bp.route("/api/shared/decks/<deck_item_id>/save", methods=["POST", "DELETE"])
+@login_required
+def save_shared_deck_item(deck_item_id: str):
+    deck_item = _get_shared_deck_item_for_view(deck_item_id)
+    if not deck_item:
+        return _api_error("FIELD_NOT_FOUND", "Deck item not found.", status=404)
+    if deck_item.owner_user_id == current_user.id:
+        return _api_error("VALIDATION_ERROR", "Owner cannot save own deck item.", status=409)
+    if request.method == "POST":
+        marketplace_hub_service.save_item_for_user(
+            user_id=current_user.id,
+            product_type="deck_marketplace_item",
+            product_ref_id=deck_item.id,
+        )
+        db.session.commit()
+        return jsonify({"saved": True, "deck_item_id": deck_item.id})
+    marketplace_hub_service.remove_saved_item_for_user(
+        user_id=current_user.id,
+        product_type="deck_marketplace_item",
+        product_ref_id=deck_item.id,
+    )
+    db.session.commit()
+    return jsonify({"saved": False, "deck_item_id": deck_item.id})
 
 @flashcards_bp.route("/api/note-types", methods=["POST"])
 @login_required
@@ -369,6 +442,12 @@ def get_shared_note_type_detail(note_type_id: str):
         }
         if review
         else None
+    )
+    payload.update(
+        marketplace_hub_service.build_note_type_detail_extras(
+            note_type=note_type,
+            user_id=current_user.id,
+        )
     )
     return jsonify(payload)
 
@@ -695,6 +774,12 @@ def get_shared_deck_item(deck_item_id: str):
     payload["review_submission_count"] = review_submission_count
     payload["review_submissions_remaining"] = review_submissions_remaining
     payload["can_rate"] = bool(payload.get("can_rate")) and review_submissions_remaining > 0
+    payload.update(
+        marketplace_hub_service.build_deck_detail_extras(
+            deck_item=deck_item,
+            user_id=current_user.id,
+        )
+    )
 
     return jsonify(payload)
 

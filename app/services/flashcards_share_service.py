@@ -13,7 +13,7 @@ from sqlalchemy.exc import OperationalError
 
 from app.repositories import flashcards_share_repository
 from app.repositories.deck_tree_query import collect_ancestor_ids, collect_subtree_ids
-from app.services import marketplace_query_service
+from app.services import marketplace_query_service, marketplace_taxonomy_service
 from models import db
 from models.flashcard import (
     Card,
@@ -925,6 +925,12 @@ def validate_note_type_publish_requirements(note_type: NoteType) -> str | None:
         return "At least one field is required for publish."
     if not note_type.templates:
         return "At least one card template is required for publish."
+    taxonomy_error = marketplace_taxonomy_service.validate_required_taxonomy(
+        note_type.taxonomy_metadata if isinstance(note_type.taxonomy_metadata, dict) else {},
+        content_type="note_type",
+    )
+    if taxonomy_error:
+        return taxonomy_error
     return None
 
 def apply_note_type_marketplace_payload(
@@ -935,6 +941,31 @@ def apply_note_type_marketplace_payload(
     publish_statuses_visible: set[str] | None = None,
 ) -> str | None:
     visible_statuses = publish_statuses_visible or DEFAULT_VISIBLE_PUBLISH_STATUSES
+    taxonomy_keys = {
+        "taxonomy_domain",
+        "domain",
+        "taxonomy_subject",
+        "subject",
+        "taxonomy_difficulty_band",
+        "difficulty_band",
+        "level_band",
+        "taxonomy_framework",
+        "framework",
+        "taxonomy_framework_level",
+        "framework_level",
+        "taxonomy_framework_track",
+        "framework_track",
+        "taxonomy_learning_goals",
+        "learning_goals",
+        "taxonomy_primary_topics",
+        "primary_topics",
+        "taxonomy_format_features",
+        "format_features",
+        "taxonomy_audience",
+        "audience",
+        "taxonomy_best_used_for",
+        "best_used_for",
+    }
 
     if "title" in payload or "name" in payload:
         new_name = (payload.get("title") or payload.get("name") or "").strip()
@@ -951,6 +982,17 @@ def apply_note_type_marketplace_payload(
         note_type.primary_category = (payload.get("primary_category") or "").strip() or None
     if "tags" in payload:
         note_type.tags = marketplace_query_service.normalize_marketplace_tags(payload.get("tags"))
+    if any(key in payload for key in taxonomy_keys):
+        taxonomy_metadata, taxonomy_error = marketplace_taxonomy_service.normalize_taxonomy_payload(
+            payload,
+            content_type="note_type",
+        )
+        if taxonomy_error:
+            return taxonomy_error
+        note_type.taxonomy_metadata = taxonomy_metadata
+        suggested_category = marketplace_taxonomy_service.suggest_primary_category(taxonomy_metadata)
+        if suggested_category:
+            note_type.primary_category = suggested_category
     if "preview_text" in payload:
         note_type.preview_text = (payload.get("preview_text") or "").strip() or None
     if "preview_image_url" in payload:
@@ -1015,6 +1057,12 @@ def validate_deck_publish_requirements(deck_item: DeckMarketplaceItem) -> str | 
         return "source_note_type_id not found for publish."
     if not source_note_type.templates:
         return "source_note_type_id must reference a note type that has at least one template."
+    taxonomy_error = marketplace_taxonomy_service.validate_required_taxonomy(
+        deck_item.taxonomy_metadata if isinstance(deck_item.taxonomy_metadata, dict) else {},
+        content_type="deck_marketplace_item",
+    )
+    if taxonomy_error:
+        return taxonomy_error
     return None
 
 def apply_deck_marketplace_payload(
@@ -1025,6 +1073,29 @@ def apply_deck_marketplace_payload(
     publish_statuses_visible: set[str] | None = None,
 ) -> str | None:
     visible_statuses = publish_statuses_visible or DEFAULT_VISIBLE_PUBLISH_STATUSES
+    taxonomy_keys = {
+        "taxonomy_domain",
+        "domain",
+        "taxonomy_subject",
+        "subject",
+        "taxonomy_difficulty_band",
+        "difficulty_band",
+        "level_band",
+        "taxonomy_framework",
+        "framework",
+        "taxonomy_framework_level",
+        "framework_level",
+        "taxonomy_framework_track",
+        "framework_track",
+        "taxonomy_learning_goals",
+        "learning_goals",
+        "taxonomy_primary_topics",
+        "primary_topics",
+        "taxonomy_format_features",
+        "format_features",
+        "taxonomy_audience",
+        "audience",
+    }
 
     if "title" in payload:
         title = (payload.get("title") or "").strip()
@@ -1040,6 +1111,17 @@ def apply_deck_marketplace_payload(
         deck_item.primary_category = category
     if "tags" in payload:
         deck_item.tags = marketplace_query_service.normalize_marketplace_tags(payload.get("tags"))
+    if any(key in payload for key in taxonomy_keys):
+        taxonomy_metadata, taxonomy_error = marketplace_taxonomy_service.normalize_taxonomy_payload(
+            payload,
+            content_type="deck_marketplace_item",
+        )
+        if taxonomy_error:
+            return taxonomy_error
+        deck_item.taxonomy_metadata = taxonomy_metadata
+        suggested_category = marketplace_taxonomy_service.suggest_primary_category(taxonomy_metadata)
+        if suggested_category:
+            deck_item.primary_category = suggested_category
     if "preview_text" in payload:
         deck_item.preview_text = (payload.get("preview_text") or "").strip() or None
     if "sample_cards_count" in payload:

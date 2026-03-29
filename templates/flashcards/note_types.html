@@ -39,6 +39,8 @@
                 href="{{ url_for('flashcards.note_type_fields_page', note_type_id=note_type.id) }}">Fields</a>
               <a class="btn btn-sm btn-outline-primary ms-1"
                 href="{{ url_for('flashcards.note_type_detail_page', note_type_id=note_type.id) }}">Templates</a>
+              <a class="btn btn-sm btn-dark ms-1"
+                href="{{ url_for('flashcards.share_note_type_page', note_type_id=note_type.id) }}">Share</a>
               <button class="btn btn-sm btn-outline-danger ms-1 delete-note-type-btn"
                 data-id="{{ note_type.id }}">Delete</button>
             </td>

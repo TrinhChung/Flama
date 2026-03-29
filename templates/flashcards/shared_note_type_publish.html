@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+
+{% block title %}Share Note Type{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/marketplace_hybrid.css') }}">
+{% endblock %}
+
+{% block content %}
+<section class="container py-4">
+  <div class="row justify-content-center">
+    <div class="col-xl-10">
+      <div class="market-space-panel">
+        <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
+          <div>
+            <div class="market-hub-section-kicker">Study Catalog</div>
+            <h1 class="market-hub-section-title h3 mb-2">Share note type vao danh muc hoc</h1>
+            <p class="text-muted mb-0">
+              Mo ta note type nay phu hop de hoc gi, cho ai, va can duoc phan loai nhu the nao trong learner catalog.
+            </p>
+          </div>
+          <div class="d-flex flex-wrap gap-2">
+            <a class="btn btn-outline-secondary" href="{{ url_for('flashcards.note_type_detail_page', note_type_id=note_type.id) }}">Ve editor</a>
+            <a class="btn btn-outline-secondary" href="{{ url_for('flashcards.note_type_manager') }}">Kho template</a>
+          </div>
+        </div>
+
+        <form method="post" action="{{ url_for('flashcards.share_note_type_page', note_type_id=note_type.id) }}" class="row g-4">
+          <div class="col-lg-5">
+            <div class="market-author-card h-100">
+              <div class="market-hub-section-kicker">Template Basics</div>
+              <h2 class="market-hub-section-title h5 mb-3">{{ note_type.name }}</h2>
+
+              <div class="mb-3">
+                <label class="form-label fw-semibold" for="title">Title</label>
+                <input
+                  class="form-control"
+                  id="title"
+                  name="title"
+                  required
+                  value="{{ form_state.title }}"
+                  placeholder="Japanese cloze for reading drills"
+                >
+              </div>
+
+              <div class="mb-3">
+                <label class="form-label fw-semibold" for="preview_text">Preview text</label>
+                <input
+                  class="form-control"
+                  id="preview_text"
+                  name="preview_text"
+                  maxlength="160"
+                  value="{{ form_state.preview_text }}"
+                  placeholder="1 dong de nguoi hoc hieu nhanh dung de hoc gi."
+                >
+              </div>
+
+              <div class="mb-3">
+                <label class="form-label fw-semibold" for="description">Description</label>
+                <textarea
+                  class="form-control"
+                  id="description"
+                  name="description"
+                  rows="6"
+                  required
+                  placeholder="Noi ro luong su dung, kieu bai hoc, cach setup deck va truong hop nen dung."
+                >{{ form_state.description }}</textarea>
+              </div>
+
+              <div class="row g-3">
+                <div class="col-md-6">
+                  <label class="form-label fw-semibold" for="pricing_mode">Pricing</label>
+                  <select class="form-select" id="pricing_mode" name="pricing_mode">
+                    <option value="free" {% if form_state.pricing_mode != 'paid' %}selected{% endif %}>Free</option>
+                    <option value="paid" {% if form_state.pricing_mode == 'paid' %}selected{% endif %}>Paid</option>
+                  </select>
+                </div>
+                <div class="col-md-6" id="price_amount_minor_wrap">
+                  <label class="form-label fw-semibold" for="price_amount_minor">Price (VND)</label>
+                  <input
+                    class="form-control"
+                    id="price_amount_minor"
+                    name="price_amount_minor"
+                    type="number"
+                    min="0"
+                    step="1000"
+                    value="{{ form_state.price_amount_minor }}"
+                  >
+                </div>
+              </div>
+
+              <div class="row g-3 mt-0">
+                <div class="col-md-6">
+                  <label class="form-label fw-semibold" for="version">Version</label>
+                  <input class="form-control" id="version" name="version" value="{{ form_state.version or '1.0.0' }}">
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label fw-semibold" for="tags">Free tags</label>
+                  <input
+                    class="form-control"
+                    id="tags"
+                    name="tags"
+                    value="{{ form_state.tags|join(', ') }}"
+                    placeholder="optional, comma separated"
+                  >
+                </div>
+              </div>
+
+              <div class="mt-3">
+                <label class="form-label fw-semibold" for="changelog">Changelog</label>
+                <textarea
+                  class="form-control"
+                  id="changelog"
+                  name="changelog"
+                  rows="3"
+                  placeholder="Neu co thay doi field, template, example, preview..."
+                >{{ form_state.changelog }}</textarea>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-lg-7">
+            <div class="market-author-card h-100">
+              {% include "flashcards/_marketplace_taxonomy_fields.html" %}
+            </div>
+          </div>
+
+          <div class="col-12">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+              <p class="text-muted small mb-0">
+                Owner tools van nam trong editor. Listing nay chi xac dinh cach note type xuat hien va duoc loc trong public catalog.
+              </p>
+              <div class="d-flex flex-wrap gap-2">
+                <a class="btn btn-outline-secondary" href="{{ url_for('flashcards.note_type_detail_page', note_type_id=note_type.id) }}">Huy</a>
+                <button class="btn btn-dark" type="submit">Cap nhat listing</button>
+              </div>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script type="module" src="{{ url_for('static', filename='js/components/marketplace_taxonomy_form.js') }}"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    const pricingSelect = document.getElementById("pricing_mode");
+    const priceWrap = document.getElementById("price_amount_minor_wrap");
+
+    const togglePrice = () => {
+      const isPaid = pricingSelect?.value === "paid";
+      if (priceWrap) {
+        priceWrap.classList.toggle("d-none", !isPaid);
+      }
+    };
+
+    pricingSelect?.addEventListener("change", togglePrice);
+    togglePrice();
+  });
+</script>
+{% endblock %}

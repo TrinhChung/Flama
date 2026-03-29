@@ -16,6 +16,7 @@ class NoteType(db.Model):
     description = db.Column(db.Text, nullable=True)
     primary_category = db.Column(db.String(120), nullable=True, index=True)
     tags = db.Column(db.JSON, nullable=False, default=list)
+    taxonomy_metadata = db.Column(db.JSON, nullable=False, default=dict)
     preview_text = db.Column(db.Text, nullable=True)
     preview_image_url = db.Column(db.String(512), nullable=True)
     pricing_mode = db.Column(

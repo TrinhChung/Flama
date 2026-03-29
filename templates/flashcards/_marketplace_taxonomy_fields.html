@@ -1,0 +1,89 @@
+<section
+  class="market-taxonomy-builder"
+  data-taxonomy-form-root
+  data-taxonomy-schema='{{ taxonomy_schema|tojson|forceescape }}'
+  data-taxonomy-initial='{{ taxonomy_initial|tojson|forceescape }}'
+  data-content-type="{{ taxonomy_content_type }}"
+>
+  <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+    <div>
+      <h3 class="h6 mb-1">Phan loai de nguoi hoc tim dung noi dung</h3>
+      <p class="text-muted small mb-0">
+        Chon linh vuc, muc tieu hoc, trinh do va topic chinh. Day la metadata chinh cho sidebar filter.
+      </p>
+    </div>
+    <span class="badge text-bg-light border">{{ "Note type" if taxonomy_content_type == "note_type" else "Deck" }}</span>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-md-6">
+      <label class="form-label fw-semibold" for="taxonomy-domain">Domain</label>
+      <select class="form-select" id="taxonomy-domain" name="taxonomy_domain" data-taxonomy-select="domain"></select>
+    </div>
+    <div class="col-md-6">
+      <label class="form-label fw-semibold" for="taxonomy-subject">Subject</label>
+      <select class="form-select" id="taxonomy-subject" name="taxonomy_subject" data-taxonomy-select="subject"></select>
+    </div>
+    <div class="col-md-6">
+      <label class="form-label fw-semibold" for="taxonomy-difficulty">Difficulty band</label>
+      <select class="form-select" id="taxonomy-difficulty" name="taxonomy_difficulty_band" data-taxonomy-select="difficulty_band"></select>
+    </div>
+    <div class="col-md-6">
+      <label class="form-label fw-semibold" for="taxonomy-audience">Audience</label>
+      <select class="form-select" id="taxonomy-audience" name="taxonomy_audience" data-taxonomy-select="audience"></select>
+    </div>
+    <div class="col-md-4">
+      <label class="form-label fw-semibold" for="taxonomy-framework">Framework</label>
+      <select class="form-select" id="taxonomy-framework" name="taxonomy_framework" data-taxonomy-select="framework"></select>
+    </div>
+    <div class="col-md-4">
+      <label class="form-label fw-semibold" for="taxonomy-framework-level">Framework level</label>
+      <select class="form-select" id="taxonomy-framework-level" name="taxonomy_framework_level" data-taxonomy-select="framework_level"></select>
+    </div>
+    <div class="col-md-4">
+      <label class="form-label fw-semibold" for="taxonomy-framework-track">Track</label>
+      <select class="form-select" id="taxonomy-framework-track" name="taxonomy_framework_track" data-taxonomy-select="framework_track"></select>
+    </div>
+    {% if taxonomy_content_type == "note_type" %}
+      <div class="col-md-6" data-taxonomy-best-used-for-wrap>
+        <label class="form-label fw-semibold" for="taxonomy-best-used-for">Best used for</label>
+        <select class="form-select" id="taxonomy-best-used-for" name="taxonomy_best_used_for" data-taxonomy-select="best_used_for"></select>
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="market-taxonomy-checklist mt-4">
+    <div class="market-taxonomy-group">
+      <div class="d-flex justify-content-between align-items-center gap-2 mb-2">
+        <div>
+          <label class="form-label fw-semibold mb-0">Learning goals</label>
+          <div class="text-muted small">Chon toi da 3 muc tieu hoc chinh.</div>
+        </div>
+        <span class="badge text-bg-light border">1-3</span>
+      </div>
+      <div class="market-taxonomy-options" data-taxonomy-checkbox-group="learning_goals"></div>
+    </div>
+
+    <div class="market-taxonomy-group">
+      <div class="d-flex justify-content-between align-items-center gap-2 mb-2">
+        <div>
+          <label class="form-label fw-semibold mb-0">Primary topics / skills</label>
+          <div class="text-muted small">Chon toi da 5 topic ky nang de card hien thi ro rang.</div>
+        </div>
+        <span class="badge text-bg-light border">1-5</span>
+      </div>
+      <div class="market-taxonomy-options" data-taxonomy-checkbox-group="primary_topics"></div>
+    </div>
+
+    <div class="market-taxonomy-group">
+      <div class="d-flex justify-content-between align-items-center gap-2 mb-2">
+        <div>
+          <label class="form-label fw-semibold mb-0">Format features</label>
+          <div class="text-muted small">Preview, audio, cloze, exam style, example sentence...</div>
+        </div>
+        <span class="badge text-bg-light border">0-4</span>
+      </div>
+      <div class="market-taxonomy-options" data-taxonomy-checkbox-group="format_features"></div>
+    </div>
+  </div>
+</section>
