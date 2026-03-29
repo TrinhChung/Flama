@@ -70,15 +70,55 @@ if (root) {
       .replaceAll("__ORDER_ID__", encodeURIComponent(value || ""));
   }
 
-  function buildCoverTone(seed) {
-    let hash = 0;
-    const text = String(seed || "seed");
-    for (let index = 0; index < text.length; index += 1) {
-      hash = ((hash << 5) - hash) + text.charCodeAt(index);
-      hash |= 0;
-    }
-    const hue = Math.abs(hash) % 360;
-    return `--cover-start:hsl(${hue} 42% 42%);--cover-end:hsl(${(hue + 52) % 360} 42% 26%);`;
+  function normalizeLabel(value) {
+    return String(value || "")
+      .toLowerCase()
+      .replaceAll("đ", "d")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
+  }
+
+  function isGenericCardLabel(value) {
+    const normalized = normalizeLabel(value);
+    return [
+      "",
+      "general",
+      "chung",
+      "hoc tap",
+      "seeded deck",
+      "seeded note type",
+      "seeded template",
+    ].includes(normalized);
+  }
+
+  function dedupeLabels(values, options = {}) {
+    const { exclude = [], limit = 3, allowGeneric = false } = options;
+    const seen = new Set(exclude.map((value) => normalizeLabel(value)).filter(Boolean));
+    const rows = [];
+
+    (values || []).forEach((value) => {
+      const text = String(value || "").trim();
+      const normalized = normalizeLabel(text);
+      if (!text || !normalized || seen.has(normalized)) return;
+      if (!allowGeneric && isGenericCardLabel(text)) return;
+      seen.add(normalized);
+      rows.push(text);
+    });
+
+    return rows.slice(0, limit);
+  }
+
+  function formatBadgeLabel(badge) {
+    const normalized = normalizeLabel(badge);
+    if (normalized === "official") return "Chính thức";
+    if (normalized === "cua ban") return "Của bạn";
+    if (normalized === "da cai") return "Đã cài";
+    if (normalized === "da mua") return "Đã mua";
+    if (normalized === "da luu") return "Đã lưu";
+    if (normalized === "mien phi") return "Miễn phí";
+    return String(badge || "");
   }
 
   function requestJson(url, options = {}) {
@@ -155,7 +195,10 @@ if (root) {
   }
 
   function renderBadges(badges = []) {
-    return badges.map((badge) => `<span class="market-badge">${escapeHtml(badge)}</span>`).join("");
+    return dedupeLabels(badges, { limit: 3, allowGeneric: true })
+      .filter((badge) => normalizeLabel(badge) !== "mien phi")
+      .map((badge) => `<span class="market-badge">${escapeHtml(formatBadgeLabel(badge))}</span>`)
+      .join("");
   }
 
   function renderPrimaryButton(item, mode) {
@@ -181,37 +224,47 @@ if (root) {
 
   function renderCard(item, mode = "discover") {
     const title = item.title || item.name || "Untitled";
-    const coverLabels = [item.subject_label, item.framework_level_label, item.difficulty_label].filter(Boolean);
-    const supportLabels = [
-      ...(item.learning_goal_labels || []).slice(0, 2),
-      ...(item.primary_topic_labels || []).slice(0, 2),
-    ].filter(Boolean);
-    const coverText = (coverLabels.length ? coverLabels : [item.primary_category || "Học tập"]).join(" | ");
-    const supportChips = (supportLabels.length ? supportLabels : [item.subject_label || item.primary_category || "Học tập"])
-      .map((chip) => `<span class="market-support-chip">${escapeHtml(chip)}</span>`)
+    const badgeMarkup = renderBadges(item.badges || []);
+    const metaChips = dedupeLabels(
+      [item.subject_label, item.framework_level_label, item.difficulty_label],
+      { limit: 3 },
+    );
+    const supportLabels = dedupeLabels(
+      [
+        ...(item.learning_goal_labels || []),
+        ...(item.primary_topic_labels || []),
+        ...(item.display_tags || []).slice(0, 2),
+        item.subject_label ? "" : item.primary_category,
+      ],
+      { exclude: metaChips, limit: 3 },
+    );
+    const allChips = [...metaChips, ...supportLabels];
+    const supportChips = allChips
+      .map((chip, index) => `<span class="market-support-chip ${index < metaChips.length ? "is-key" : ""}">${escapeHtml(chip)}</span>`)
       .join("");
 
     return `
       <article class="market-card" data-item-id="${escapeHtml(item.id)}">
-        <div class="market-card-cover" style="${buildCoverTone(item.id || title)}">
-          <div class="market-cover-badges">${renderBadges(item.badges || [])}</div>
-          <div class="market-cover-label">${escapeHtml(coverText)}</div>
-          <div class="market-cover-title">${escapeHtml(title)}</div>
-        </div>
         <div class="market-card-body">
-          <div>
+          ${badgeMarkup ? `<div class="market-card-badges">${badgeMarkup}</div>` : ""}
+          <div class="market-card-head">
             <a class="market-card-title-link" href="${escapeHtml(buildUrl(detailTemplate, item.id))}">
               <h3 class="market-card-title">${escapeHtml(title)}</h3>
             </a>
-            <div class="market-card-meta mt-2">
+            <div class="market-card-meta">
               <button class="btn btn-link btn-sm p-0 align-baseline market-text-link" type="button" data-filter-author="${escapeHtml(item.author_filter_token || "")}">
                 ${escapeHtml(item.author?.username || "Không rõ")}
               </button>
-              | ${escapeHtml(item.price_display || "Miễn phí")}
+              <span class="market-card-meta-divider" aria-hidden="true">•</span>
+              <span class="market-card-price">${escapeHtml(item.price_display || "Miễn phí")}</span>
             </div>
-            <p class="market-card-description mt-2">${escapeHtml(item.short_description || item.preview_text || "")}</p>
-            <div class="market-card-support mt-3">${supportChips}</div>
-            <div class="market-card-summary mt-3">${Number(item.rating_avg || 0).toFixed(1)} sao | ${formatCount(item.install_count || 0)} lượt dùng</div>
+          </div>
+          ${supportChips ? `<div class="market-card-support">${supportChips}</div>` : ""}
+          <p class="market-card-description">${escapeHtml(item.short_description || item.preview_text || "")}</p>
+          <div class="market-card-summary">
+            <span>${Number(item.rating_avg || 0).toFixed(1)} sao</span>
+            <span class="market-card-meta-divider" aria-hidden="true">•</span>
+            <span>${formatCount(item.install_count || 0)} lượt dùng</span>
           </div>
           <div class="market-card-actions">
             ${renderPrimaryButton(item, mode)}
