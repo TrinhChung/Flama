@@ -105,7 +105,7 @@
       {% endif %}
     </div>
 
-    <div class="d-flex flex-grow-1 justify-content-center">
+    <div class="study-bottom-center d-flex flex-grow-1 justify-content-center">
       <div class="study-bottom-actions front-actions" id="front-actions">
         <div class="study-counters-line">
           <span class="scl-new">Mới <strong data-study-count-value="new">{{ due_new|format_number }}</strong></span>
@@ -258,6 +258,7 @@
     margin: 0 auto;
     overflow: hidden;
     min-height: 0;
+    min-width: 0;
   }
 
   .study-card {
@@ -265,6 +266,7 @@
     display: flex;
     flex-direction: column;
     min-height: 0;
+    min-width: 0;
   }
 
   .card-face {
@@ -272,11 +274,42 @@
     padding: 0 0.8rem 1rem;
     flex: 1;
     min-height: 0;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
 
   .card-face.is-active {
     display: block;
     overflow-y: auto;
+  }
+
+  .card-face img,
+  .card-face video,
+  .card-face canvas,
+  .card-face svg,
+  .card-face audio,
+  .card-face iframe {
+    max-width: 100%;
+  }
+
+  .card-face audio {
+    width: min(100%, 20rem);
+  }
+
+  .card-face iframe {
+    width: 100%;
+  }
+
+  .card-face table {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+  }
+
+  .card-face pre {
+    max-width: 100%;
+    overflow: auto;
   }
 
   .audio-inline-btn {
@@ -329,6 +362,12 @@
     margin: 0 auto;
     gap: 0.75rem;
     flex-wrap: wrap;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .study-bottom-center {
+    min-width: 0;
   }
 
   .study-flow-message {
@@ -747,6 +786,91 @@
 
     .card-face {
       padding: 0 0.4rem 1rem;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .study-page {
+      padding-bottom: 10rem;
+    }
+
+    .deck-context-bar {
+      padding-inline: 0.25rem 0.45rem;
+    }
+
+    .deck-ctx-name {
+      max-width: none;
+    }
+
+    .study-bottom-bar {
+      display: flex !important;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.55rem;
+    }
+
+    .study-bottom-side {
+      min-width: 0;
+      flex: 0 0 auto;
+    }
+
+    .study-bottom-side-left {
+      order: 1;
+    }
+
+    .study-bottom-side-right {
+      order: 2;
+      margin-left: auto;
+    }
+
+    .study-bottom-center {
+      order: 3;
+      width: 100%;
+      flex-basis: 100%;
+    }
+
+    .front-actions {
+      width: 100%;
+      flex-wrap: wrap !important;
+      gap: 0.55rem !important;
+    }
+
+    .back-actions {
+      width: 100%;
+      max-width: none;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.5rem;
+    }
+
+    .back-actions .answer-btn {
+      width: 100%;
+      min-width: 0;
+    }
+
+    .study-counters-line {
+      width: 100%;
+      justify-content: center;
+      flex-wrap: wrap;
+      white-space: normal;
+      row-gap: 0.1rem;
+    }
+
+    .study-flow-message {
+      width: 100%;
+    }
+
+    .answer-btn.show-answer {
+      width: 100%;
+      min-width: 0;
+      padding-inline: 1rem;
+    }
+
+    .study-focus-btn,
+    #study-edit-btn {
+      min-width: 2.5rem;
+      justify-content: center;
     }
   }
 </style>

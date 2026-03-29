@@ -7,7 +7,7 @@
 <div class="deck-row" data-node-id="{{ node.deck_id }}" data-node-name="{{ node.label }}"
   data-parent-id="{{ node.parent_id if node.parent_id is not none else '' }}" data-open-url="{{ node.href }}"
   data-move-alias="{{ node.move_alias }}" data-move-token="{{ node.move_token }}">
-  <div class="deck-name-col" style="padding-left: {{ node.depth * 1.5 }}rem;">
+  <div class="deck-name-col" style="--deck-indent: {{ node.depth * 1.5 }}rem;">
     {% if node.children %}
     <button class="tree-toggle" type="button" data-node-id="{{ node.deck_id }}" data-expanded="true"
       aria-label="Toggle child decks">-</button>
@@ -211,7 +211,7 @@
   <section class="deck-board" aria-labelledby="anki-decks-title">
     <header class="deck-board-head">
       <div class="head-left">
-        <h3 id="anki-decks-title" class="section-title mb-0" style="font-size: 1.25rem;">Deck</h3>
+        <h3 id="anki-decks-title" class="section-title mb-0">Deck</h3>
       </div>
       <div class="head-right">
         <span>New</span>
@@ -257,18 +257,24 @@
     --count-due: var(--flama-orange-600, #ea580c);
     /* Flama Orange */
     --settings-col-width: 30px;
+    --stats-col-width: 64px;
+    --stats-col-gap: 0.5rem;
     --dashboard-board-max-width: 1100px;
     --dashboard-font-family: var(--font-family-base);
 
     max-width: 1200px;
+    width: 100%;
+    min-width: 0;
     margin: 0 auto;
     padding: 0.25rem 1rem 2rem;
+    overflow-x: clip;
   }
 
   /* ── Deck Board & Container ── */
   .deck-board {
     width: 100%;
     max-width: min(var(--dashboard-board-max-width), 100%);
+    min-width: 0;
     margin: 0 auto;
     background: #ffffff;
     border: 1px solid var(--flama-border);
@@ -290,14 +296,15 @@
 
   .head-left h3 {
     margin: 0;
+    font-size: 1.25rem;
     color: #4b5563;
   }
 
   /* Grid alignment for stats columns */
   .head-right {
     display: grid;
-    grid-template-columns: repeat(3, 64px) var(--settings-col-width);
-    gap: 0.5rem;
+    grid-template-columns: repeat(3, var(--stats-col-width)) var(--settings-col-width);
+    gap: var(--stats-col-gap);
     text-align: right;
     align-items: center;
     font-size: 0.82rem;
@@ -341,6 +348,7 @@
     align-items: center;
     min-width: 0;
     flex: 1;
+    padding-left: var(--deck-indent, 0rem);
     padding-right: 1rem;
   }
 
@@ -403,8 +411,8 @@
 
   .deck-stats-col {
     display: grid;
-    grid-template-columns: repeat(3, 64px) var(--settings-col-width);
-    gap: 0.5rem;
+    grid-template-columns: repeat(3, var(--stats-col-width)) var(--settings-col-width);
+    gap: var(--stats-col-gap);
     text-align: right;
     align-items: center;
   }
@@ -624,6 +632,7 @@
   .stats-board {
     width: 100%;
     max-width: min(var(--dashboard-board-max-width), 100%);
+    min-width: 0;
     margin: 1.4rem auto 0;
     padding: 1.35rem 1.5rem 1.2rem;
     border: 1px solid var(--flama-border);
@@ -680,12 +689,15 @@
   }
 
   .stats-heatmap-scroll {
+    width: 100%;
+    min-width: 0;
     overflow-x: hidden;
     padding: 0 0 0.45rem;
   }
 
   .stats-heatmap {
     width: 100%;
+    min-width: 0;
     margin: 0;
     display: grid;
     grid-template-columns: repeat(var(--stats-week-count, 53), minmax(0, 1fr));
@@ -854,17 +866,39 @@
   /* Mobile (< 600px) */
   @media (max-width: 599px) {
     .anki-home {
-      padding: 0.25rem 0.25rem 2rem;
-    }
-
-    .head-right {
-      display: none;
-      /* Hide global column headers on mobile */
+      --settings-col-width: 24px;
+      --stats-col-width: 2.3rem;
+      --stats-col-gap: 0.3rem;
+      padding: 0.25rem 0 2rem;
     }
 
     .deck-board {
-      padding: 0.85rem 0.85rem;
-      border-radius: 10px;
+      max-width: 100%;
+      padding: 0.2rem 0;
+      border: none;
+      border-radius: 0;
+      background: transparent;
+      box-shadow: none;
+    }
+
+    .deck-board-head {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      column-gap: 0.4rem;
+      padding-bottom: 0.45rem;
+      margin-bottom: 0.2rem;
+      border-bottom-width: 1px;
+    }
+
+    .head-left h3 {
+      font-size: 1rem;
+    }
+
+    .head-right {
+      font-size: 0.66rem;
+      letter-spacing: 0.04em;
+      white-space: nowrap;
     }
 
     .stats-board {
@@ -883,6 +917,7 @@
 
     .stats-heatmap {
       width: max-content;
+      min-width: max-content;
       margin: 0;
       display: flex;
       gap: 3px;
@@ -919,67 +954,63 @@
     }
 
     .deck-row {
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 0.5rem;
-      padding: 0.75rem 0.1rem;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      column-gap: 0.4rem;
+      padding: 0.62rem 0;
+      border-radius: 0;
       border-bottom: 1px solid #f3f4f6;
     }
 
     .deck-row:hover {
       box-shadow: none;
-      background: #fafafa;
+      background: #fff8f5;
     }
 
     .deck-name-col {
-      width: 100%;
-      padding-right: 0;
+      width: auto;
+      padding-left: min(var(--deck-indent, 0rem), 0.9rem);
+      padding-right: 0.35rem;
     }
 
     .deck-name {
-      white-space: normal;
-      font-size: 1rem;
+      white-space: nowrap;
+      font-size: 0.98rem;
     }
 
     .deck-stats-col {
-      width: 100%;
-      padding-left: 2rem;
+      width: auto;
+      padding-left: 0;
       display: grid;
-      grid-template-columns: repeat(3, 1fr) var(--settings-col-width);
-      text-align: left;
+      grid-template-columns: repeat(3, minmax(0, var(--stats-col-width))) var(--settings-col-width);
+      text-align: right;
       align-items: center;
-      gap: 0.5rem;
+      gap: var(--stats-col-gap);
     }
 
-    /* Add mini inline headers on mobile via pseudo-elements */
-    .stat-new::before {
-      content: "New";
-      display: block;
-      font-size: 0.72rem;
-      color: #9ca3af;
-      text-transform: uppercase;
-      font-weight: 600;
-      margin-bottom: 0.1rem;
+    .stat-num {
+      font-size: 0.95rem;
     }
 
-    .stat-learn::before {
-      content: "Learn";
-      display: block;
-      font-size: 0.72rem;
-      color: #9ca3af;
-      text-transform: uppercase;
-      font-weight: 600;
-      margin-bottom: 0.1rem;
+    .tree-toggle,
+    .tree-spacer {
+      width: 20px;
+      height: 20px;
+      margin-right: 0.3rem;
     }
 
-    .stat-due::before {
-      content: "Due";
-      display: block;
-      font-size: 0.72rem;
-      color: #9ca3af;
-      text-transform: uppercase;
-      font-weight: 600;
-      margin-bottom: 0.1rem;
+    .tree-toggle {
+      font-size: 1rem;
+    }
+
+    .deck-settings-btn {
+      width: 1.6rem;
+      height: 1.6rem;
+    }
+
+    .deck-settings-btn i {
+      font-size: 0.82rem;
     }
 
     .onboarding-panel {
