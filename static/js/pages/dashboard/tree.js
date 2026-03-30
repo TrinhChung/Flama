@@ -2,6 +2,11 @@ export function initDeckTree(rowMap, toggleMap) {
     const rows = Array.from(document.querySelectorAll(".deck-row[data-node-id]"));
     let selectedDeckId = null;
 
+    function setToggleExpanded(toggle, expanded) {
+        toggle.dataset.expanded = expanded ? "true" : "false";
+        toggle.setAttribute("aria-expanded", expanded ? "true" : "false");
+    }
+
     // ── Study button navigation ──────────────────────────────────────────
     const studyTabBtn = document.getElementById('study-tab-btn');
     const baseStudyUrl = studyTabBtn ? studyTabBtn.dataset.baseStudyUrl : '/vocabulary/study/deck/';
@@ -41,12 +46,12 @@ export function initDeckTree(rowMap, toggleMap) {
 
     document.querySelectorAll(".tree-toggle[data-node-id]").forEach((toggle) => {
         toggleMap.set(toggle.dataset.nodeId, toggle);
+        setToggleExpanded(toggle, toggle.dataset.expanded !== "false");
         toggle.addEventListener("click", (event) => {
             event.preventDefault();
-            event.stopPropagation();
+            event.stopImmediatePropagation();
             const expanded = toggle.dataset.expanded === "true";
-            toggle.dataset.expanded = expanded ? "false" : "true";
-            toggle.textContent = expanded ? "+" : "-";
+            setToggleExpanded(toggle, !expanded);
             refreshVisibility();
         });
     });

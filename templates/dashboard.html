@@ -10,7 +10,9 @@
   <div class="deck-name-col" style="--deck-indent: {{ node.depth * 1.5 }}rem;">
     {% if node.children %}
     <button class="tree-toggle" type="button" data-node-id="{{ node.deck_id }}" data-expanded="true"
-      aria-label="Toggle child decks">-</button>
+      aria-expanded="true" aria-label="Toggle child decks">
+      <i class="bi bi-chevron-right tree-toggle-icon" aria-hidden="true"></i>
+    </button>
     {% else %}
     <span class="tree-spacer"></span>
     {% endif %}
@@ -548,17 +550,29 @@
     background: transparent;
     border: none;
     color: #6b7280;
-    font-size: 1.25rem;
     line-height: 1;
-    font-weight: 600;
     cursor: pointer;
     border-radius: 4px;
-    transition: all 0.2s;
+    transition: background-color 0.2s ease, color 0.2s ease;
   }
 
-  .tree-toggle:hover {
+  .tree-toggle:hover,
+  .tree-toggle:focus-visible {
     background: #f3f4f6;
     color: var(--flama-orange-600);
+  }
+
+  .tree-toggle:focus-visible {
+    outline: none;
+  }
+
+  .tree-toggle-icon {
+    font-size: 0.95rem;
+    transition: transform 0.2s ease;
+  }
+
+  .tree-toggle[data-expanded="true"] .tree-toggle-icon {
+    transform: rotate(90deg);
   }
 
   .is-collapsed {
@@ -1001,7 +1015,11 @@
     }
 
     .tree-toggle {
-      font-size: 1rem;
+      font-size: inherit;
+    }
+
+    .tree-toggle-icon {
+      font-size: 0.85rem;
     }
 
     .deck-settings-btn {
