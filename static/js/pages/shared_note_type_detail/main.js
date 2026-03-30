@@ -267,7 +267,7 @@ if (root) {
       if (el) el.textContent = detail.title || detail.name || "Template";
     });
     if (coverLabelEl) coverLabelEl.textContent = (detail.level_tokens || [detail.primary_category || "Template"]).join(" · ");
-    metaEl.textContent = `Tác giả: ${detail.author?.username || "Không rõ"} · ${detail.primary_category || "Chung"} · ${detail.price_display || "Miễn phí"}`;
+    metaEl.innerHTML = `<strong>${detail.primary_category || "Chung"}</strong> · ${detail.price_display || "Miễn phí"}`;
     descriptionEl.textContent = detail.description || "Chưa có mô tả.";
     previewTextEl.textContent = detail.preview_text || "Chưa có preview text.";
     statsEl.textContent = `${Number(detail.rating_avg || 0).toFixed(1)} sao · ${formatCount(detail.rating_count || 0)} đánh giá · ${formatCount(detail.install_count || 0)} lượt sở hữu · cập nhật ${formatDate(detail.updated_at)}`;

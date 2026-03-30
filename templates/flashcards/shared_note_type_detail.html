@@ -17,13 +17,8 @@
   data-save-url-template="{{ url_for('flashcards.save_shared_note_type', note_type_id='__ITEM_ID__') }}"
   data-payment-result-url="{{ url_for('payments.marketplace_payment_result_page') }}"
 >
-  <div class="market-detail-top">
-    <a class="btn btn-outline-secondary" href="{{ url_for('flashcards.shared_note_types_page') }}">Quay lại marketplace</a>
-    <div class="market-detail-actions">
-      <a class="btn btn-outline-secondary d-none" id="edit-btn" href="{{ url_for('flashcards.share_note_type_page', note_type_id=note_type_id) }}">Chỉnh sửa</a>
-      <button class="btn btn-outline-secondary" id="save-btn" type="button">Lưu</button>
-      <button class="btn btn-dark" id="install-btn" type="button">Tải xuống</button>
-    </div>
+  <div class="market-detail-top mb-3">
+    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('flashcards.shared_note_types_page') }}"><i class="bi bi-arrow-left"></i> Quay lại marketplace</a>
   </div>
 
   <div class="alert alert-danger d-none" id="detail-error" role="alert"></div>
@@ -32,13 +27,25 @@
     <div class="market-featured-card">
       <div class="market-featured-body">
         <div>
-          <div class="market-hub-section-kicker">Template Detail</div>
-          <h1 class="market-featured-title" id="nt-title-secondary">Đang tải...</h1>
-          <div class="market-featured-meta" id="nt-meta-line"></div>
-          <p class="market-card-description mt-2" id="nt-description"></p>
-          <div class="market-card-summary mt-2" id="nt-stats"></div>
-          <div class="mt-3" id="nt-tags"></div>
-          <p class="market-detail-richtext mt-3 mb-0" id="nt-preview-text"></p>
+          <div id="nt-badges" class="mb-2"></div>
+          <h1 class="market-featured-title mb-2" id="nt-title-secondary">Đang tải...</h1>
+          <p class="lead text-muted mb-4" id="nt-preview-text"></p>
+
+          <div class="d-flex flex-wrap align-items-center gap-3 mb-4">
+            <div class="market-featured-meta mb-0" id="nt-meta-line"></div>
+            <div class="market-card-summary mb-0" id="nt-stats"></div>
+          </div>
+
+          <div class="d-flex flex-wrap gap-2 mb-4">
+            <button class="btn btn-dark px-4" id="install-btn" type="button">Tải xuống</button>
+            <button class="btn btn-outline-secondary" id="save-btn" type="button">Lưu</button>
+            <a class="btn btn-outline-secondary d-none" id="edit-btn" href="{{ url_for('flashcards.share_note_type_page', note_type_id=note_type_id) }}">Chỉnh sửa</a>
+          </div>
+
+          <hr class="mb-4">
+          <div class="market-hub-section-kicker mb-3">Chi tiết</div>
+          <p class="market-card-description" id="nt-description"></p>
+          <div class="mt-4" id="nt-tags"></div>
         </div>
       </div>
     </div>

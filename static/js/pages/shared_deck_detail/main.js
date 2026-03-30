@@ -323,7 +323,7 @@ if (root) {
       if (el) el.textContent = deckDetail.title || "Deck";
     });
     if (coverLabelEl) coverLabelEl.textContent = (deckDetail.level_tokens || [deckDetail.primary_category || "Deck"]).join(" · ");
-    metaEl.textContent = `Tác giả: ${deckDetail.author?.username || "Không rõ"} · ${deckDetail.primary_category || "Chung"} · ${deckDetail.price_display || "Miễn phí"}`;
+    metaEl.innerHTML = `<strong>${deckDetail.primary_category || "Chung"}</strong> · ${deckDetail.price_display || "Miễn phí"}`;
     descriptionEl.textContent = deckDetail.description || "Chưa có mô tả.";
     previewTextEl.textContent = deckDetail.preview_text || "Chưa có preview text.";
     statsEl.textContent = `${Number(deckDetail.rating_avg || 0).toFixed(1)} sao · ${formatCount(deckDetail.rating_count || 0)} đánh giá · ${formatCount(deckDetail.install_count || 0)} lượt sở hữu · cập nhật ${formatDate(deckDetail.updated_at)}`;
