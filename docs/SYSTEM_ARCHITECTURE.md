@@ -16,7 +16,7 @@ The backend follows the Flask Application Factory pattern to ensure clean config
 
 ### 3.1 Directory Layout
 - `app/`: Main application package
-  - `__init__.py`: Application factory (`create_app`), initializes extensions, and registers blueprints.
+  - `__init__.py`: Application factory (`create_app`), initializes extensions, runs startup schema compatibility/cutover hooks, and registers blueprints.
   - `extensions.py`: Shared Flask extensions (e.g., `login_manager`, `migrate`).
   - `routes/`: Application blueprints covering different domains (`auth.py`, `main.py`, `vocabulary.py`, `flashcards/*`, `payments.py`, `admin.py`, `admin_payments.py`, `user_orders.py`).
   - `services/`: Encapsulated business logic including payment/order orchestration and admin query services.
@@ -38,7 +38,7 @@ The application connects to a MySQL database, with the schema fully defined and 
   - **Schema Definition**: `NoteType`, `FieldDef`, `Template`
   - **Content & Scheduling**: `Note`, `Card`
   - **Media**: `MediaAsset`
-  - **Marketplace & Sharing**: `DeckMarketplaceItem`, `DeckInstall`, `NoteTypeInstall`, `DeckReview`, `NoteTypeReview`
+  - **Marketplace & Sharing**: `DeckMarketplaceItem`, `DeckInstall`, `DeckCloneDeckMap`, `DeckCloneFieldDefOverride`, `DeckCloneAddedFieldDef`, `DeckCloneFieldOrderOverride`, `DeckCloneNoteFieldOverride`, `NoteTypeInstall`, `DeckReview`, `NoteTypeReview`
   - **Background Jobs**: `FieldRenameJob`
 - **Payment & Commerce**:
   - **Order / Checkout**: `PaymentOrder`, `PaymentOrderItem`
@@ -70,13 +70,18 @@ The frontend employs a custom component-based architecture built with Jinja2 mac
 - **Services**:
   - `web`: The Flask application running via `wsgi.py` on port 4789.
   - `db`: MySQL 8.0 database container with persistent volume storage (`flama_db_data`).
-- **Configuration**: Secrets and environment-specific settings are injected via a `.env` file (loaded by `python-dotenv`). Important keys include database connection parameters (`DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_NAME`), `SECRET_KEY`, feature flags like `USE_NEW_CARD_MODEL`, and payment settings such as `PAYMENTS_ENABLED`, `PAYMENTS_PROVIDER=payos`, `PAYOS_CLIENT_ID`, `PAYOS_API_KEY`, and `PAYOS_CHECKSUM_KEY`.
+- **Configuration**: Secrets and environment-specific settings are injected via a `.env` file (loaded by `python-dotenv`). Important keys include database connection parameters (`DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_NAME`), `SECRET_KEY`, media/cutover settings such as `FLASHCARD_MEDIA_UPLOAD_ROOT` and `FLASHCARDS_SHARE_CUTOVER_FAIL_ON_MISMATCH`, and payment settings such as `PAYMENTS_ENABLED`, `PAYMENTS_PROVIDER=payos`, `PAYOS_CLIENT_ID`, `PAYOS_API_KEY`, and `PAYOS_CHECKSUM_KEY`.
 
 ## 7. Key Workflows
 - **Authentication Flow**: Secure password hashing with standard session-based login mechanisms.
 - **Data Initialization (Seeding)**: Custom CLI commands allow seeding vocabulary from CSV/TSV files into isolated deck structures.
 - **Vocabulary Import & Management**: Users can bulk import CSV data and utilize a spreadsheet-like grid for inline editing, which saves custom column width preferences per user.
 - **Spaced Repetition (Flashcard V2)**: Advanced scheduling subsystem that tracks user reviews on individual `Card` records generated from `Note` data and associated `Template` definitions.
+- **Shared Deck Clone / Overlay Flow**:
+  - shared deck installs are logical-overlay only
+  - install creates a local deck subtree plus pointer rows in `DeckCloneDeckMap`
+  - installer may receive a `NoteTypeInstall` copy when the shared deck is bound to a source note type
+  - browse/study read source rows inside the pinned install snapshot and apply `DeckClone*` overrides for local changes
 - **Marketplace Payment Flow**:
   - paid marketplace content creates a `PaymentOrder`
   - payOS checkout creates or reuses a `PaymentAttempt`
