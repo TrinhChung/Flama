@@ -60,4 +60,5 @@ class DeckMarketplaceItem(db.Model):
     source_deck = db.relationship("Deck", foreign_keys=[source_deck_id])
     source_note_type = db.relationship("NoteType", foreign_keys=[source_note_type_id])
     installs = db.relationship("DeckInstall", back_populates="deck_item", cascade="all, delete-orphan")
+    change_requests = db.relationship("DeckChangeRequest", back_populates="deck_item")
     reviews = db.relationship("DeckReview", back_populates="deck_item", cascade="all, delete-orphan")

@@ -134,6 +134,9 @@ def create_app(config: Optional[dict] = None) -> Flask:
     from models.marketplace_saved_item import MarketplaceSavedItem  # noqa: F401  # register model
     from models.payout_batch import PayoutBatch  # noqa: F401  # register model
     from models.payout_batch_item import PayoutBatchItem  # noqa: F401  # register model
+    from models.deck_change_request import DeckChangeRequest  # noqa: F401
+    from models.deck_change_request_item import DeckChangeRequestItem  # noqa: F401
+    from models.deck_change_request_conflict import DeckChangeRequestConflict  # noqa: F401
     from models.flashcard import (  # noqa: F401  # register model
         AuditLog,
         Card,
@@ -990,6 +993,18 @@ def _ensure_backward_compatible_schema() -> None:
             )
             install_columns.add("base_snapshot_at")
             schema_changed = True
+        if "last_synced_at" not in install_columns:
+            db.session.execute(
+                sa.text("ALTER TABLE deck_installs ADD COLUMN last_synced_at DATETIME NULL")
+            )
+            install_columns.add("last_synced_at")
+            schema_changed = True
+        if "last_sync_status" not in install_columns:
+            db.session.execute(
+                sa.text("ALTER TABLE deck_installs ADD COLUMN last_sync_status VARCHAR(32) NULL")
+            )
+            install_columns.add("last_sync_status")
+            schema_changed = True
 
         install_indexes = {index["name"] for index in inspector.get_indexes("deck_installs")}
         if "clone_mode" in install_columns and "ix_deck_installs_clone_mode" not in install_indexes:
@@ -1015,6 +1030,16 @@ def _ensure_backward_compatible_schema() -> None:
         if "base_snapshot_at" in install_columns and "ix_deck_installs_base_snapshot_at" not in install_indexes:
             db.session.execute(
                 sa.text("CREATE INDEX ix_deck_installs_base_snapshot_at ON deck_installs (base_snapshot_at)")
+            )
+            schema_changed = True
+        if "last_synced_at" in install_columns and "ix_deck_installs_last_synced_at" not in install_indexes:
+            db.session.execute(
+                sa.text("CREATE INDEX ix_deck_installs_last_synced_at ON deck_installs (last_synced_at)")
+            )
+            schema_changed = True
+        if "last_sync_status" in install_columns and "ix_deck_installs_last_sync_status" not in install_indexes:
+            db.session.execute(
+                sa.text("CREATE INDEX ix_deck_installs_last_sync_status ON deck_installs (last_sync_status)")
             )
             schema_changed = True
 

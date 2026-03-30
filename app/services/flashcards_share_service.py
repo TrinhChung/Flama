@@ -2069,6 +2069,10 @@ def upsert_clone_overlay(
 ) -> tuple[dict[str, int], str | None]:
     if deck_install.clone_mode != "logical_overlay":
         return {}, "This install does not support overlay edits."
+    from app.services import deck_change_request_service
+
+    if deck_change_request_service.has_pending_review_request_for_install(deck_install.id):
+        return {}, "Local clone edits are locked while a change request is pending review."
 
     counters = {
         "updated_defs": 0,
@@ -2283,6 +2287,7 @@ def upsert_clone_overlay(
                 override.value = item.get("value")
                 counters["updated_note_fields"] += 1
 
+    deck_install.last_sync_status = "needs_sync"
     return counters, None
 
 def deck_installs_covering_deck(*, user_id: int, deck_id: int) -> list[DeckInstall]:

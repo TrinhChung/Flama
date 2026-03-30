@@ -25,6 +25,14 @@ from .flashcard_input import (
     validate_study_card_edit_request,
     validate_study_next_query,
 )
+from .deck_change_request import (
+    ChangeRequestConflictResolutionInput,
+    ChangeRequestDraftInput,
+    ChangeRequestReviewInput,
+    validate_change_request_conflict_resolution_request,
+    validate_change_request_draft_request,
+    validate_change_request_review_request,
+)
 from .payout_input import (
     ValidatedCreatePayoutBatchInput,
     ValidatedPayoutBatchItemInput,
@@ -34,6 +42,9 @@ from .payout_input import (
 __all__ = [
     "ALLOWED_MEDIA_EXTENSIONS_BY_FAMILY",
     "ALLOWED_MEDIA_MIME_TYPES",
+    "ChangeRequestConflictResolutionInput",
+    "ChangeRequestDraftInput",
+    "ChangeRequestReviewInput",
     "MediaUploadValidationResult",
     "NoteMutationInput",
     "RequestValidationError",
@@ -49,6 +60,9 @@ __all__ = [
     "sanitize_plain_text",
     "sanitize_query_text",
     "sanitize_rich_text",
+    "validate_change_request_conflict_resolution_request",
+    "validate_change_request_draft_request",
+    "validate_change_request_review_request",
     "validate_browse_card_update_request",
     "validate_legacy_browse_note_update_request",
     "validate_media_upload_request",

@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+
+{% block title %}Change Request Detail{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/marketplace_hybrid.css') }}">
+{% endblock %}
+
+{% block content %}
+<section
+  class="market-detail-page"
+  id="deck-change-request-detail-root"
+  data-request-id="{{ request_id }}"
+  data-inbox-url="{{ url_for('flashcards.deck_change_request_inbox_page') }}"
+  data-requester-url-template="{{ url_for('flashcards.shared_deck_change_request_page', deck_item_id='__DECK_ITEM_ID__') }}"
+>
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <a class="btn btn-outline-secondary" id="change-request-detail-back-link" href="{{ url_for('flashcards.deck_change_request_inbox_page') }}">Quay lại inbox</a>
+  </div>
+
+  <div class="market-space-panel mb-3">
+    <div class="market-shelf-header">
+      <div>
+        <div class="market-shelf-kicker">Review</div>
+        <h1 class="market-hub-section-title h3 mb-0">Change Request Detail</h1>
+      </div>
+    </div>
+    <div class="alert alert-danger d-none" id="change-request-detail-error" role="alert"></div>
+    <div class="alert alert-info d-none" id="change-request-detail-status" role="status"></div>
+    <div id="change-request-detail-summary"></div>
+  </div>
+
+  <section class="market-space-panel mb-3">
+    <div class="market-shelf-header">
+      <div>
+        <div class="market-shelf-kicker">Diff</div>
+        <h2 class="market-hub-section-title h4 mb-0">Proposed changes</h2>
+      </div>
+    </div>
+    <div id="change-request-detail-items"></div>
+  </section>
+
+  <section class="market-space-panel mb-3">
+    <div class="market-shelf-header">
+      <div>
+        <div class="market-shelf-kicker">Conflicts</div>
+        <h2 class="market-hub-section-title h4 mb-0">Conflict history</h2>
+      </div>
+    </div>
+    <div id="change-request-detail-conflicts"></div>
+  </section>
+
+  <section class="market-space-panel">
+    <div class="market-shelf-header">
+      <div>
+        <div class="market-shelf-kicker">Decision</div>
+        <h2 class="market-hub-section-title h4 mb-0">Approve or reject</h2>
+      </div>
+    </div>
+    <label class="form-label" for="change-request-review-comment">Nhận xét của owner</label>
+    <textarea class="form-control" id="change-request-review-comment" rows="4" placeholder="Lý do approve hoặc reject."></textarea>
+    <div class="d-flex flex-wrap gap-2 mt-3">
+      <button class="btn btn-dark" id="change-request-approve-btn" type="button">Approve và merge</button>
+      <button class="btn btn-outline-danger" id="change-request-reject-btn" type="button">Reject</button>
+    </div>
+  </section>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script type="module" src="{{ url_for('static', filename='js/pages/deck_change_requests/detail.js') }}"></script>
+{% endblock %}

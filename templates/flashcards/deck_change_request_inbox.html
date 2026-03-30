@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+
+{% block title %}Incoming Change Requests{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/marketplace_hybrid.css') }}">
+{% endblock %}
+
+{% block content %}
+<section
+  class="market-detail-page"
+  id="deck-change-request-inbox-root"
+  data-deck-item-id="{{ deck_item_id }}"
+  data-request-detail-url-template="{{ url_for('flashcards.deck_change_request_detail_page', request_id='__REQUEST_ID__') }}"
+  data-market-url="{{ url_for('flashcards.shared_decks_page') }}"
+>
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <a class="btn btn-outline-secondary" href="{{ url_for('flashcards.shared_decks_page') }}">Quay lại marketplace</a>
+  </div>
+
+  <div class="market-space-panel">
+    <div class="market-shelf-header">
+      <div>
+        <div class="market-shelf-kicker">Owner Inbox</div>
+        <h1 class="market-hub-section-title h3 mb-0">Incoming Change Requests</h1>
+      </div>
+    </div>
+    <p class="market-detail-meta mb-3" id="change-request-inbox-meta">Đang tải danh sách request chờ review...</p>
+    <div class="alert alert-danger d-none" id="change-request-inbox-error" role="alert"></div>
+    <div id="change-request-inbox-items"></div>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script type="module" src="{{ url_for('static', filename='js/pages/deck_change_requests/inbox.js') }}"></script>
+{% endblock %}

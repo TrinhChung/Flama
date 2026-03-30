@@ -665,4 +665,4 @@ def _get_shared_deck_item_for_view(deck_item_id: str) -> DeckMarketplaceItem | N
 __all__ = [name for name in globals() if not name.startswith("__")]
 
 # Register sub-routes
-from . import note_type, share, import_export, study, media
+from . import note_type, share, import_export, study, media, change_requests
