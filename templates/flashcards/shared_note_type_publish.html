@@ -14,13 +14,13 @@
         <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
           <div>
             <div class="market-hub-section-kicker">Study Catalog</div>
-            <h1 class="market-hub-section-title h3 mb-2">Share note type vao danh muc hoc</h1>
+            <h1 class="market-hub-section-title h3 mb-2">Share note type vào danh mục học</h1>
             <p class="text-muted mb-0">
-              Mo ta note type nay phu hop de hoc gi, cho ai, va can duoc phan loai nhu the nao trong learner catalog.
+              Mô tả note type này phù hợp để học gì, cho ai, và cần được phân loại như thế nào trong learner catalog.
             </p>
           </div>
           <div class="d-flex flex-wrap gap-2">
-            <a class="btn btn-outline-secondary" href="{{ url_for('flashcards.note_type_detail_page', note_type_id=note_type.id) }}">Ve editor</a>
+            <a class="btn btn-outline-secondary" href="{{ url_for('flashcards.note_type_detail_page', note_type_id=note_type.id) }}">Về editor</a>
             <a class="btn btn-outline-secondary" href="{{ url_for('flashcards.note_type_manager') }}">Kho template</a>
           </div>
         </div>
@@ -51,7 +51,7 @@
                   name="preview_text"
                   maxlength="160"
                   value="{{ form_state.preview_text }}"
-                  placeholder="1 dong de nguoi hoc hieu nhanh dung de hoc gi."
+                  placeholder="1 dòng để người học hiểu nhanh dùng để học gì."
                 >
               </div>
 
@@ -63,7 +63,7 @@
                   name="description"
                   rows="6"
                   required
-                  placeholder="Noi ro luong su dung, kieu bai hoc, cach setup deck va truong hop nen dung."
+                  placeholder="Nói rõ luồng sử dụng, kiểu bài học, cách setup deck và trường hợp nên dùng."
                 >{{ form_state.description }}</textarea>
               </div>
 
@@ -113,7 +113,7 @@
                   id="changelog"
                   name="changelog"
                   rows="3"
-                  placeholder="Neu co thay doi field, template, example, preview..."
+                  placeholder="Nếu có thay đổi field, template, example, preview..."
                 >{{ form_state.changelog }}</textarea>
               </div>
             </div>
@@ -128,11 +128,11 @@
           <div class="col-12">
             <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
               <p class="text-muted small mb-0">
-                Owner tools van nam trong editor. Listing nay chi xac dinh cach note type xuat hien va duoc loc trong public catalog.
+                Owner tools vẫn nằm trong editor. Listing này chỉ xác định cách note type xuất hiện và được lọc trong public catalog.
               </p>
               <div class="d-flex flex-wrap gap-2">
-                <a class="btn btn-outline-secondary" href="{{ url_for('flashcards.note_type_detail_page', note_type_id=note_type.id) }}">Huy</a>
-                <button class="btn btn-dark" type="submit">Cap nhat listing</button>
+                <a class="btn btn-outline-secondary" href="{{ url_for('flashcards.note_type_detail_page', note_type_id=note_type.id) }}">Hủy</a>
+                <button class="btn btn-dark" type="submit">Cập nhật listing</button>
               </div>
             </div>
           </div>

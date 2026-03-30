@@ -14,17 +14,17 @@
         <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
           <div>
             <div class="market-hub-section-kicker">Study Catalog</div>
-            <h1 class="market-hub-section-title h3 mb-2">Share deck vao danh muc hoc</h1>
+            <h1 class="market-hub-section-title h3 mb-2">Share deck vào danh mục học</h1>
             <p class="text-muted mb-0">
-              Giai thich deck dung de hoc gi, phu hop trinh do nao, va gan metadata de learner loc nhanh hon.
+              Giải thích deck dùng để học gì, phù hợp trình độ nào, và gắn metadata để learner lọc nhanh hơn.
             </p>
           </div>
-          <a class="btn btn-outline-secondary" href="{{ url_for('main.dashboard') }}">Quay lai dashboard</a>
+          <a class="btn btn-outline-secondary" href="{{ url_for('main.dashboard') }}">Quay lại dashboard</a>
         </div>
 
         {% if existing_item %}
           <div class="alert alert-info">
-            Deck nay da co listing. Ban dang cap nhat metadata va thong tin hien thi cho learner view.
+            Deck này đã có listing. Bạn đang cập nhật metadata và thông tin hiển thị cho learner view.
           </div>
         {% endif %}
 
@@ -54,7 +54,7 @@
                   name="preview_text"
                   maxlength="160"
                   value="{{ form_state.preview_text }}"
-                  placeholder="1 dong mo ta ngan de learner scan nhanh."
+                  placeholder="1 dòng mô tả ngắn để learner scan nhanh."
                 >
               </div>
 
@@ -66,7 +66,7 @@
                   name="description"
                   rows="6"
                   required
-                  placeholder="Noi ro muc tieu hoc, doi tuong phu hop, cach dung deck va diem khac biet."
+                  placeholder="Nói rõ mục tiêu học, đối tượng phù hợp, cách dùng deck và điểm khác biệt."
                 >{{ form_state.description }}</textarea>
               </div>
 
@@ -116,7 +116,7 @@
                   id="changelog"
                   name="changelog"
                   rows="3"
-                  placeholder="Neu co thay doi noi dung hoc, preview, audio, sample..."
+                  placeholder="Nếu có thay đổi nội dung học, preview, audio, sample..."
                 >{{ form_state.changelog }}</textarea>
               </div>
             </div>
@@ -131,12 +131,12 @@
           <div class="col-12">
             <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
               <p class="text-muted small mb-0">
-                Listing se duoc publish o learner catalog. Sidebar filter va ket qua tim kiem se dung metadata nay.
+                Listing sẽ được publish ở learner catalog. Sidebar filter và kết quả tìm kiếm sẽ dùng metadata này.
               </p>
               <div class="d-flex flex-wrap gap-2">
-                <a class="btn btn-outline-secondary" href="{{ url_for('main.dashboard') }}">Huy</a>
+                <a class="btn btn-outline-secondary" href="{{ url_for('main.dashboard') }}">Hủy</a>
                 <button class="btn btn-dark" type="submit">
-                  {% if existing_item %}Cap nhat listing{% else %}Publish deck{% endif %}
+                  {% if existing_item %}Cập nhật listing{% else %}Publish deck{% endif %}
                 </button>
               </div>
             </div>
