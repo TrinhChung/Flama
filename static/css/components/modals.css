@@ -9,7 +9,7 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
-.modal-dialog {
+.modal-dialog:not(.modal-fullscreen):not([class*="modal-fullscreen-"]) {
   max-width: min(calc(100vw - 2rem), var(--bs-modal-width));
 }
 
@@ -61,7 +61,7 @@
 }
 
 @media (max-width: 576px) {
-  .modal-dialog {
+  .modal-dialog:not(.modal-fullscreen):not([class*="modal-fullscreen-"]) {
     margin: 0.5rem;
     max-width: calc(100vw - 1rem);
   }
