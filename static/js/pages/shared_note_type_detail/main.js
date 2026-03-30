@@ -98,7 +98,9 @@ if (root) {
   }
 
   function renderBadges(badges) {
-    badgesEl.innerHTML = (badges || []).map((badge) => `<span class="market-badge">${escapeHtml(badge)}</span>`).join("");
+    if (badgesEl) {
+      badgesEl.innerHTML = (badges || []).map((badge) => `<span class="market-badge">${escapeHtml(badge)}</span>`).join("");
+    }
   }
 
   function renderTagList(tags) {
@@ -264,7 +266,7 @@ if (root) {
     titleEls.forEach((el) => {
       if (el) el.textContent = detail.title || detail.name || "Template";
     });
-    coverLabelEl.textContent = (detail.level_tokens || [detail.primary_category || "Template"]).join(" · ");
+    if (coverLabelEl) coverLabelEl.textContent = (detail.level_tokens || [detail.primary_category || "Template"]).join(" · ");
     metaEl.textContent = `Tác giả: ${detail.author?.username || "Không rõ"} · ${detail.primary_category || "Chung"} · ${detail.price_display || "Miễn phí"}`;
     descriptionEl.textContent = detail.description || "Chưa có mô tả.";
     previewTextEl.textContent = detail.preview_text || "Chưa có preview text.";

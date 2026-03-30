@@ -20,6 +20,8 @@ if (root) {
   const deckItemId = root.getAttribute("data-deck-item-id") || "";
   const noteTypeDetailUrlTemplate = root.getAttribute("data-note-type-url-template") || "";
   const shareEditUrlTemplate = root.getAttribute("data-share-edit-url-template") || "";
+  const changeRequestUrlTemplate = root.getAttribute("data-change-request-url-template") || "";
+  const changeRequestInboxUrl = root.getAttribute("data-change-request-inbox-url") || "";
   const paymentResultUrl = root.getAttribute("data-payment-result-url") || "";
   const saveUrlTemplate = root.getAttribute("data-save-url-template") || "";
   const marketUrl = root.getAttribute("data-market-url") || "/";
@@ -42,6 +44,8 @@ if (root) {
   const testSamplesEl = document.getElementById("deck-test-samples");
   const testNoteEl = document.getElementById("deck-test-note");
   const editBtn = document.getElementById("deck-edit-btn");
+  const changeRequestBtn = document.getElementById("deck-change-request-btn");
+  const changeRequestInboxBtn = document.getElementById("deck-change-request-inbox-btn");
   const saveBtn = document.getElementById("deck-save-btn");
   const installBtn = document.getElementById("deck-install-btn");
   const myReviewEl = document.getElementById("deck-my-review");
@@ -113,8 +117,23 @@ if (root) {
     return shareEditUrlTemplate.replace("/0/share", `/${encodeURIComponent(sourceDeckId)}/share`);
   }
 
+  function buildChangeRequestUrl(itemId) {
+    return changeRequestUrlTemplate.replace("__ITEM_ID__", encodeURIComponent(itemId || ""));
+  }
+
+  function buildChangeRequestInboxUrl(itemId) {
+    if (!changeRequestInboxUrl) return "#";
+    const url = new URL(changeRequestInboxUrl, window.location.origin);
+    if (itemId) {
+      url.searchParams.set("deck_item_id", itemId);
+    }
+    return `${url.pathname}${url.search}`;
+  }
+
   function renderBadges(badges) {
-    badgesEl.innerHTML = (badges || []).map((badge) => `<span class="market-badge">${escapeHtml(badge)}</span>`).join("");
+    if (badgesEl) {
+      badgesEl.innerHTML = (badges || []).map((badge) => `<span class="market-badge">${escapeHtml(badge)}</span>`).join("");
+    }
   }
 
   function renderMiniCards(container, items, emptyText) {
@@ -204,8 +223,18 @@ if (root) {
   function renderInstallState() {
     if (!deckDetail) return;
     const editUrl = buildEditUrl(deckDetail.source_deck_id);
+    const requestUrl = buildChangeRequestUrl(deckItemId);
+    const inboxUrl = buildChangeRequestInboxUrl(deckItemId);
     editBtn.classList.toggle("d-none", !(deckDetail.is_owner && editUrl));
+    changeRequestInboxBtn.classList.toggle("d-none", !deckDetail.is_owner);
+    changeRequestBtn.classList.toggle("d-none", !!deckDetail.is_owner || !deckDetail.is_installed);
     saveBtn.classList.toggle("d-none", !!deckDetail.is_owner);
+    if (deckDetail.is_owner) {
+      changeRequestInboxBtn.href = inboxUrl;
+    }
+    if (!deckDetail.is_owner && deckDetail.is_installed) {
+      changeRequestBtn.href = requestUrl;
+    }
     if (deckDetail.is_owner) {
       if (editUrl) editBtn.href = editUrl;
       installBtn.textContent = "Bạn là tác giả";
@@ -293,7 +322,7 @@ if (root) {
     titleEls.forEach((el) => {
       if (el) el.textContent = deckDetail.title || "Deck";
     });
-    coverLabelEl.textContent = (deckDetail.level_tokens || [deckDetail.primary_category || "Deck"]).join(" · ");
+    if (coverLabelEl) coverLabelEl.textContent = (deckDetail.level_tokens || [deckDetail.primary_category || "Deck"]).join(" · ");
     metaEl.textContent = `Tác giả: ${deckDetail.author?.username || "Không rõ"} · ${deckDetail.primary_category || "Chung"} · ${deckDetail.price_display || "Miễn phí"}`;
     descriptionEl.textContent = deckDetail.description || "Chưa có mô tả.";
     previewTextEl.textContent = deckDetail.preview_text || "Chưa có preview text.";
