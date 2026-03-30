@@ -13,6 +13,8 @@
   data-deck-item-id="{{ deck_item_id }}"
   data-note-type-url-template="{{ url_for('flashcards.shared_note_type_detail_page', note_type_id='__NOTE_TYPE_ID__') }}"
   data-share-edit-url-template="{{ url_for('flashcards.share_deck_page', deck_id=0) }}"
+  data-change-request-url-template="{{ url_for('flashcards.shared_deck_change_request_page', deck_item_id='__ITEM_ID__') }}"
+  data-change-request-inbox-url="{{ url_for('flashcards.deck_change_request_inbox_page') }}"
   data-payment-result-url="{{ url_for('payments.marketplace_payment_result_page') }}"
   data-save-url-template="{{ url_for('flashcards.save_shared_deck_item', deck_item_id='__ITEM_ID__') }}"
   data-market-url="{{ url_for('flashcards.shared_decks_page') }}"
@@ -22,6 +24,8 @@
     <a class="btn btn-outline-secondary" href="{{ url_for('flashcards.shared_decks_page') }}">Quay lại marketplace</a>
     <div class="market-detail-actions">
       <a class="btn btn-outline-secondary d-none" id="deck-edit-btn" href="#">Chỉnh sửa</a>
+      <a class="btn btn-outline-secondary d-none" id="deck-change-request-btn" href="#">Change request</a>
+      <a class="btn btn-outline-secondary d-none" id="deck-change-request-inbox-btn" href="#">Review requests</a>
       <button class="btn btn-outline-secondary" id="deck-save-btn" type="button">Lưu</button>
       <button class="btn btn-dark" id="deck-install-btn" type="button">Tải xuống</button>
     </div>
@@ -31,11 +35,6 @@
 
   <div class="market-detail-grid">
     <div class="market-featured-card">
-      <div class="market-featured-cover" id="deck-cover">
-        <div class="market-cover-badges" id="deck-badges"></div>
-        <div class="market-cover-label" id="deck-cover-label">Deck</div>
-        <div class="market-cover-title" id="deck-title">Đang tải...</div>
-      </div>
       <div class="market-featured-body">
         <div>
           <div class="market-hub-section-kicker">Deck Detail</div>
