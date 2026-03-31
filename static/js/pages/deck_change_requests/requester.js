@@ -8,9 +8,10 @@ import {
   syncRequest,
 } from "./api.js";
 import {
-  escapeHtml,
+  getRequestStatusMeta,
   renderChangeItems,
   renderConflicts,
+  renderLocalPreviewSummary,
   renderRequestSummary,
 } from "./ui.js";
 
@@ -20,9 +21,11 @@ if (root) {
   const deckItemId = root.getAttribute("data-deck-item-id") || "";
   const requestDetailUrlTemplate = root.getAttribute("data-request-detail-url-template") || "";
 
+  const pageTitleEl = document.getElementById("change-request-page-title");
   const titleEl = document.getElementById("change-request-title-input");
   const descriptionEl = document.getElementById("change-request-description-input");
   const metaEl = document.getElementById("change-request-page-meta");
+  const actionNoteEl = document.getElementById("change-request-action-note");
   const errorEl = document.getElementById("change-request-error");
   const statusEl = document.getElementById("change-request-status");
   const summaryEl = document.getElementById("change-request-summary");
@@ -45,58 +48,105 @@ if (root) {
     return requestDetailUrlTemplate.replace("__REQUEST_ID__", encodeURIComponent(requestId || ""));
   }
 
-  function setBusy(isBusy) {
-    state.busy = Boolean(isBusy);
-    [buildBtn, syncBtn, submitBtn, refreshBtn].forEach((button) => {
-      if (button) {
-        button.disabled = state.busy;
-      }
-    });
+  function setButtonContent(button, html) {
+    if (button) {
+      button.innerHTML = html;
+    }
+  }
+
+  function clearBanner(bannerEl, tone = "info") {
+    if (!bannerEl) return;
+    bannerEl.textContent = "";
+    bannerEl.classList.add("d-none");
+    bannerEl.classList.remove("change-request-banner--info", "change-request-banner--success", "change-request-banner--error");
+    bannerEl.classList.add(`change-request-banner--${tone}`);
   }
 
   function showError(message) {
-    errorEl.textContent = message || "Khong the hoan tat yeu cau.";
+    if (!errorEl) return;
+    errorEl.textContent = message || "Không thể hoàn tất yêu cầu.";
     errorEl.classList.remove("d-none");
   }
 
   function clearError() {
-    errorEl.textContent = "";
-    errorEl.classList.add("d-none");
+    clearBanner(errorEl, "error");
   }
 
-  function showStatus(message) {
+  function showStatus(message, tone = "info") {
+    if (!statusEl) return;
     statusEl.textContent = message || "";
-    statusEl.classList.toggle("d-none", !message);
+    statusEl.classList.remove("d-none");
+    statusEl.classList.remove("change-request-banner--info", "change-request-banner--success", "change-request-banner--error");
+    statusEl.classList.add(`change-request-banner--${tone}`);
   }
 
-  function renderPreviewSummary(preview) {
-    if (!preview || !preview.item_count) {
-      summaryEl.innerHTML = "<div class='market-empty-state'>Clone nay chua co local change de gui len upstream.</div>";
-      return;
+  function clearStatus() {
+    clearBanner(statusEl, "info");
+  }
+
+  function setBusy(isBusy) {
+    state.busy = Boolean(isBusy);
+    render();
+  }
+
+  function getRequesterHeadline(deckTitle) {
+    if (!state.request) {
+      return `Chuẩn bị request cho ${deckTitle}`;
     }
-    const changeCounts = Object.entries(preview.change_counts || {})
-      .map(([key, value]) => `${escapeHtml(key)}: ${escapeHtml(String(value))}`)
-      .join(" | ");
-    summaryEl.innerHTML = `
-      <div class="row g-3">
-        <div class="col-lg-8">
-          <div class="fw-semibold">Local clone changes</div>
-          <div class="small text-muted mt-1">Overlay fingerprint: ${escapeHtml(preview.overlay_fingerprint || "N/A")}</div>
-          <div class="small text-muted mt-1">Item count: ${escapeHtml(String(preview.item_count || 0))}</div>
-          ${changeCounts ? `<div class="small text-muted mt-1">${changeCounts}</div>` : ""}
-        </div>
-        <div class="col-lg-4">
-          <div class="small text-muted">Deck</div>
-          <div>${escapeHtml(state.deckDetail?.title || "Unknown deck")}</div>
-        </div>
-      </div>
-    `;
+    const statusMeta = getRequestStatusMeta(state.request.status);
+    return `${statusMeta.label} · ${deckTitle}`;
+  }
+
+  function getRequesterMeta(deckTitle) {
+    if (state.request) {
+      const statusMeta = getRequestStatusMeta(state.request.status);
+      return `${deckTitle} · ${statusMeta.description}`;
+    }
+
+    const itemCount = Number(state.localPreview?.item_count || 0);
+    if (itemCount > 0) {
+      return `${deckTitle} · Có ${itemCount} local change đang chờ tạo draft.`;
+    }
+    return `${deckTitle} · Clone hiện chưa có local change để gửi request.`;
+  }
+
+  function getActionNote() {
+    if (!state.request) {
+      if (Number(state.localPreview?.item_count || 0) > 0) {
+        return "Tạo draft để snapshot local overlay hiện tại, sau đó sync với upstream trước khi submit.";
+      }
+      return "Hãy tạo local edits trong clone trước. Màn này chỉ gửi được những thay đổi đang nằm trên overlay.";
+    }
+
+    switch (state.request.status) {
+      case "needs_sync":
+        return "Draft đang tồn tại nhưng chưa đủ mới. Chạy sync để kiểm tra upstream drift trước khi submit.";
+      case "has_conflict":
+        return "Cần resolve toàn bộ conflict bên dưới. Khi mọi conflict đã sạch, request sẽ quay lại trạng thái draft.";
+      case "draft":
+        return "Draft đã sạch conflict. Kiểm tra mô tả, review lại diff và bấm gửi review khi sẵn sàng.";
+      case "pending_review":
+        return "Request đã được submit. Bạn chỉ còn theo dõi detail cho đến khi owner review xong.";
+      default:
+        return "Theo dõi tiến độ trong panel Summary để biết bước tiếp theo của request.";
+    }
   }
 
   function render() {
     const deckTitle = state.deckDetail?.title || "Deck";
+    const requestStatus = state.request?.status || "";
+
+    if (pageTitleEl) {
+      pageTitleEl.textContent = getRequesterHeadline(deckTitle);
+    }
+    if (metaEl) {
+      metaEl.textContent = getRequesterMeta(deckTitle);
+    }
+    if (actionNoteEl) {
+      actionNoteEl.textContent = getActionNote();
+    }
+
     if (state.request) {
-      metaEl.textContent = `${deckTitle} | status: ${state.request.status || "unknown"}`;
       titleEl.value = state.request.title || "";
       descriptionEl.value = state.request.description || "";
       renderRequestSummary(summaryEl, state.request);
@@ -104,25 +154,71 @@ if (root) {
       renderConflicts(conflictsEl, state.request.conflicts || [], {
         interactive: Boolean(state.request.can_resolve),
       });
-      openDetailLink.classList.remove("d-none");
-      openDetailLink.href = buildRequestDetailUrl(state.request.id);
+
+      if (openDetailLink) {
+        openDetailLink.classList.remove("d-none");
+        openDetailLink.href = buildRequestDetailUrl(state.request.id);
+        openDetailLink.innerHTML = '<i class="bi bi-box-arrow-up-right"></i> Mở trang chi tiết';
+      }
     } else {
-      metaEl.textContent = `${deckTitle} | local clone changes`;
-      renderPreviewSummary(state.localPreview);
-      renderChangeItems(itemsEl, state.localPreview?.items || []);
+      renderLocalPreviewSummary(summaryEl, state.localPreview, { deckTitle });
+      renderChangeItems(itemsEl, state.localPreview?.items || [], {
+        emptyText: "Clone này chưa có local changes để dựng request.",
+      });
       renderConflicts(conflictsEl, []);
-      openDetailLink.classList.add("d-none");
-      openDetailLink.href = "#";
+
+      if (titleEl && !state.busy) {
+        titleEl.value = titleEl.value || "";
+      }
+      if (descriptionEl && !state.busy) {
+        descriptionEl.value = descriptionEl.value || "";
+      }
+      if (openDetailLink) {
+        openDetailLink.classList.add("d-none");
+        openDetailLink.href = "#";
+      }
     }
 
-    const requestStatus = state.request?.status || "";
-    syncBtn.disabled = state.busy || !state.request || requestStatus === "pending_review";
-    submitBtn.disabled = state.busy || !state.request;
+    setButtonContent(
+      buildBtn,
+      state.request
+        ? '<i class="bi bi-arrow-repeat"></i> Làm mới draft'
+        : '<i class="bi bi-stars"></i> Tạo draft',
+    );
+    setButtonContent(syncBtn, '<i class="bi bi-arrow-repeat"></i> Sync upstream');
+    setButtonContent(
+      submitBtn,
+      requestStatus === "pending_review"
+        ? '<i class="bi bi-hourglass-split"></i> Đang chờ review'
+        : '<i class="bi bi-send"></i> Gửi review',
+    );
+    setButtonContent(refreshBtn, '<i class="bi bi-arrow-clockwise"></i> Tải lại');
+
+    if (buildBtn) {
+      buildBtn.disabled = state.busy || requestStatus === "pending_review";
+    }
+    if (syncBtn) {
+      syncBtn.disabled = state.busy || !state.request || requestStatus === "pending_review";
+    }
+    if (submitBtn) {
+      submitBtn.disabled = state.busy || !state.request?.can_submit;
+    }
+    if (refreshBtn) {
+      refreshBtn.disabled = state.busy;
+    }
+
+    document.title = state.request?.title
+      ? `${state.request.title} | Deck Change Request`
+      : `${deckTitle} | Deck Change Request`;
   }
 
   async function loadState({ preserveInputs = false } = {}) {
     setBusy(true);
     clearError();
+    if (!preserveInputs) {
+      clearStatus();
+    }
+
     try {
       const [deckDetail, activePayload] = await Promise.all([
         fetchDeckDetail(deckItemId),
@@ -131,10 +227,12 @@ if (root) {
       state.deckDetail = deckDetail;
       state.request = activePayload?.request || null;
       state.localPreview = state.request ? null : await fetchLocalChanges(deckItemId);
+
       if (!preserveInputs && !state.request) {
         titleEl.value = "";
         descriptionEl.value = "";
       }
+
       render();
     } catch (error) {
       showError(error.message);
@@ -146,12 +244,13 @@ if (root) {
   async function runAction(action, successMessage) {
     setBusy(true);
     clearError();
-    showStatus("");
+    clearStatus();
+
     try {
       state.request = await action();
       state.localPreview = null;
       render();
-      showStatus(successMessage);
+      showStatus(successMessage, "success");
     } catch (error) {
       showError(error.message);
     } finally {
@@ -165,34 +264,36 @@ if (root) {
         title: titleEl.value,
         description: descriptionEl.value,
       }),
-      "Draft change request da duoc cap nhat.",
+      "Draft change request đã được cập nhật.",
     );
   });
 
   syncBtn?.addEventListener("click", async () => {
     if (!state.request?.id) {
-      showError("Hay tao draft truoc khi sync.");
+      showError("Hãy tạo draft trước khi sync.");
       return;
     }
+
     await runAction(
       () => syncRequest(deckItemId, state.request.id),
-      "Sync voi upstream da hoan tat.",
+      "Sync với upstream đã hoàn tất.",
     );
   });
 
   submitBtn?.addEventListener("click", async () => {
     if (!state.request?.id) {
-      showError("Hay tao draft truoc khi gui review.");
+      showError("Hãy tạo draft trước khi gửi review.");
       return;
     }
+
     await runAction(
       () => submitRequest(deckItemId, state.request.id),
-      "Change request da duoc gui cho owner review.",
+      "Change request đã được gửi cho owner review.",
     );
   });
 
   refreshBtn?.addEventListener("click", async () => {
-    showStatus("");
+    clearStatus();
     await loadState({ preserveInputs: true });
   });
 
@@ -202,22 +303,28 @@ if (root) {
       return;
     }
 
-    const conflictId = target.getAttribute("data-resolve-conflict-id");
-    const resolutionMode = target.getAttribute("data-resolution-mode");
+    const actionTarget = target.closest("[data-resolve-conflict-id], [data-manual-submit-conflict-id]");
+    if (!(actionTarget instanceof HTMLElement)) {
+      return;
+    }
+
+    const conflictId = actionTarget.getAttribute("data-resolve-conflict-id");
+    const resolutionMode = actionTarget.getAttribute("data-resolution-mode");
     if (conflictId && resolutionMode) {
       await runAction(
         () => resolveConflict(deckItemId, state.request.id, conflictId, {
           resolution_mode: resolutionMode,
         }),
-        "Conflict da duoc cap nhat.",
+        "Conflict đã được cập nhật.",
       );
       return;
     }
 
-    const manualConflictId = target.getAttribute("data-manual-submit-conflict-id");
+    const manualConflictId = actionTarget.getAttribute("data-manual-submit-conflict-id");
     if (!manualConflictId) {
       return;
     }
+
     const field = conflictsEl.querySelector(`[data-manual-conflict-id="${manualConflictId}"]`);
     const rawValue = field instanceof HTMLTextAreaElement ? field.value.trim() : "";
     let resolvedValue = rawValue;
@@ -228,12 +335,13 @@ if (root) {
         resolvedValue = rawValue;
       }
     }
+
     await runAction(
       () => resolveConflict(deckItemId, state.request.id, manualConflictId, {
         resolution_mode: "manual",
         resolved_value: resolvedValue,
       }),
-      "Conflict da duoc resolve bang gia tri thu cong.",
+      "Conflict đã được resolve bằng giá trị manual.",
     );
   });
 

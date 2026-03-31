@@ -4,80 +4,129 @@
 
 {% block styles %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/marketplace_hybrid.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/deck_change_requests.css') }}">
 {% endblock %}
 
 {% block content %}
 <section
-  class="market-detail-page"
+  class="market-detail-page change-request-shell change-request-shell--requester"
   id="shared-deck-change-request-root"
   data-deck-item-id="{{ deck_item_id }}"
   data-deck-detail-url="{{ url_for('flashcards.shared_deck_detail_page', deck_item_id=deck_item_id) }}"
   data-request-detail-url-template="{{ url_for('flashcards.deck_change_request_detail_page', request_id='__REQUEST_ID__') }}"
 >
-  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-    <a class="btn btn-outline-secondary" href="{{ url_for('flashcards.shared_deck_detail_page', deck_item_id=deck_item_id) }}">Quay lại deck</a>
-    <a class="btn btn-outline-secondary d-none" id="change-request-open-detail" href="#">Mở trang chi tiết</a>
+  <div class="change-request-hero change-request-hero--compact">
+    <div class="change-request-hero-nav">
+      <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('flashcards.shared_deck_detail_page', deck_item_id=deck_item_id) }}">
+        <i class="bi bi-arrow-left"></i> Quay lại deck
+      </a>
+      <a class="btn btn-sm btn-outline-secondary d-none" id="change-request-open-detail" href="#">
+        <i class="bi bi-box-arrow-up-right"></i> Mở trang chi tiết
+      </a>
+    </div>
+
+    <div class="change-request-hero-copy">
+      <div class="change-request-eyebrow">Contribution Flow</div>
+      <h1 class="change-request-hero-title" id="change-request-page-title">Chuẩn bị change request</h1>
+      <p class="change-request-hero-meta" id="change-request-page-meta">Đang tải thông tin deck và local overlay changes...</p>
+      <div class="change-request-banner change-request-banner--error d-none" id="change-request-error" role="alert"></div>
+      <div class="change-request-banner change-request-banner--info d-none" id="change-request-status" role="status" aria-live="polite"></div>
+    </div>
+
+    <details class="change-request-guide">
+      <summary class="change-request-guide-summary">
+        <i class="bi bi-list-check"></i> Xem hướng dẫn từng bước
+      </summary>
+      <ol class="change-request-guide-steps">
+        <li>Tạo draft từ local clone edits đang nằm trên overlay.</li>
+        <li>Sync với upstream để kiểm tra lệch dữ liệu và conflict.</li>
+        <li>Resolve tất cả conflict trước khi gửi review.</li>
+        <li>Submit để owner review, approve hoặc reject.</li>
+      </ol>
+    </details>
   </div>
 
-  <div class="market-space-panel mb-3">
-    <div class="market-shelf-header">
-      <div>
-        <div class="market-shelf-kicker">Contribution Flow</div>
-        <h1 class="market-hub-section-title h3 mb-0" id="change-request-page-title">Deck Change Request</h1>
-      </div>
-    </div>
-    <p class="market-detail-meta mb-3" id="change-request-page-meta">Đang tải thông tin deck...</p>
-    <div class="alert alert-danger d-none" id="change-request-error" role="alert"></div>
-    <div class="alert alert-info d-none" id="change-request-status" role="status"></div>
+  <div class="change-request-workspace">
+    <div class="change-request-main">
+      <section class="market-space-panel">
+        <div class="change-request-section-header">
+          <div>
+            <div class="market-shelf-kicker">Request Composer</div>
+            <h2 class="change-request-section-title">Mô tả đề xuất của bạn</h2>
+            <p class="change-request-section-meta change-request-copy mb-0">Đặt tiêu đề ngắn, giải thích phạm vi sửa và dùng action bar bên dưới để đi từng bước.</p>
+          </div>
+        </div>
 
-    <div class="row g-3">
-      <div class="col-lg-5">
-        <label class="form-label" for="change-request-title-input">Tiêu đề</label>
-        <input class="form-control" id="change-request-title-input" maxlength="255" placeholder="Ví dụ: Sửa ví dụ và chuẩn hóa field" />
-      </div>
-      <div class="col-lg-7">
-        <label class="form-label" for="change-request-description-input">Mô tả cho owner</label>
-        <textarea class="form-control" id="change-request-description-input" rows="3" placeholder="Nêu ngắn gọn bạn đã sửa gì và vì sao."></textarea>
-      </div>
+        <div class="row g-3">
+          <div class="col-lg-5">
+            <div class="change-request-field-group">
+              <label class="form-label mb-0" for="change-request-title-input">Tiêu đề</label>
+              <input class="form-control" id="change-request-title-input" maxlength="255" placeholder="Ví dụ: Chuẩn hóa field và sửa ví dụ" />
+              <div class="change-request-field-help">Tên ngắn giúp owner hiểu nhanh mục tiêu chính của request.</div>
+            </div>
+          </div>
+          <div class="col-lg-7">
+            <div class="change-request-field-group">
+              <label class="form-label mb-0" for="change-request-description-input">Ghi chú cho owner</label>
+              <textarea class="form-control" id="change-request-description-input" rows="4" placeholder="Tóm tắt bạn đã sửa gì, tại sao sửa và owner nên chú ý điểm nào khi review."></textarea>
+              <div class="change-request-field-help">Nêu rõ thay đổi nghiệp vụ, ví dụ field nào được sửa hoặc conflict nào owner cần kiểm tra kỹ.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="change-request-actions">
+          <button class="btn btn-dark" id="change-request-build-btn" type="button">
+            <i class="bi bi-stars"></i> Tạo draft
+          </button>
+          <button class="btn btn-outline-secondary" id="change-request-sync-btn" type="button">
+            <i class="bi bi-arrow-repeat"></i> Sync upstream
+          </button>
+          <button class="btn btn-outline-secondary" id="change-request-submit-btn" type="button">
+            <i class="bi bi-send"></i> Gửi review
+          </button>
+          <button class="btn btn-outline-secondary" id="change-request-refresh-btn" type="button">
+            <i class="bi bi-arrow-clockwise"></i> Tải lại
+          </button>
+        </div>
+        <p class="change-request-panel-note" id="change-request-action-note">Đang tải trạng thái request hiện tại...</p>
+      </section>
+
+      <section class="market-space-panel">
+        <div class="change-request-section-header">
+          <div>
+            <div class="market-shelf-kicker">Diff</div>
+            <h2 class="change-request-section-title">Local changes / request diff</h2>
+            <p class="change-request-section-meta change-request-copy mb-0">So sánh trước và sau để chắc rằng request chỉ chứa các chỉnh sửa bạn thực sự muốn gửi lên source deck.</p>
+          </div>
+        </div>
+        <div id="change-request-items"></div>
+      </section>
+
+      <section class="market-space-panel">
+        <div class="change-request-section-header">
+          <div>
+            <div class="market-shelf-kicker">Conflicts</div>
+            <h2 class="change-request-section-title">Conflict resolution</h2>
+            <p class="change-request-section-meta change-request-copy mb-0">Nếu upstream thay đổi sau khi clone, hãy chọn bên thắng hoặc nhập giá trị manual trước khi submit.</p>
+          </div>
+        </div>
+        <div id="change-request-conflicts"></div>
+      </section>
     </div>
 
-    <div class="d-flex flex-wrap gap-2 mt-3">
-      <button class="btn btn-dark" id="change-request-build-btn" type="button">Tạo hoặc làm mới draft</button>
-      <button class="btn btn-outline-secondary" id="change-request-sync-btn" type="button">Sync với upstream</button>
-      <button class="btn btn-outline-secondary" id="change-request-submit-btn" type="button">Gửi review</button>
-      <button class="btn btn-outline-secondary" id="change-request-refresh-btn" type="button">Tải lại</button>
-    </div>
+    <aside class="change-request-side">
+      <section class="market-space-panel change-request-sticky-panel">
+        <div class="change-request-section-header">
+          <div>
+            <div class="market-shelf-kicker">Summary</div>
+            <h2 class="change-request-section-title">Trạng thái hiện tại</h2>
+            <p class="change-request-section-meta change-request-copy mb-0">Panel này tổng hợp tiến độ và chỉ ra bước tiếp theo để request sẵn sàng cho review.</p>
+          </div>
+        </div>
+        <div id="change-request-summary"></div>
+      </section>
+    </aside>
   </div>
-
-  <section class="market-space-panel mb-3">
-    <div class="market-shelf-header">
-      <div>
-        <div class="market-shelf-kicker">Summary</div>
-        <h2 class="market-hub-section-title h4 mb-0">Trạng thái hiện tại</h2>
-      </div>
-    </div>
-    <div id="change-request-summary"></div>
-  </section>
-
-  <section class="market-space-panel mb-3">
-    <div class="market-shelf-header">
-      <div>
-        <div class="market-shelf-kicker">Diff</div>
-        <h2 class="market-hub-section-title h4 mb-0">Local changes / request diff</h2>
-      </div>
-    </div>
-    <div id="change-request-items"></div>
-  </section>
-
-  <section class="market-space-panel">
-    <div class="market-shelf-header">
-      <div>
-        <div class="market-shelf-kicker">Conflicts</div>
-        <h2 class="market-hub-section-title h4 mb-0">Conflict resolution</h2>
-      </div>
-    </div>
-    <div id="change-request-conflicts"></div>
-  </section>
 </section>
 {% endblock %}
 
