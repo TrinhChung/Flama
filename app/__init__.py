@@ -100,6 +100,16 @@ def create_app(config: Optional[dict] = None) -> Flask:
         "PAYMENTS_ORDER_EXPIRY_SECONDS",
         default=30 * 60,
     )
+    app.config["MCP_TOKEN_TTL_SECONDS"] = _coerce_int_env("MCP_TOKEN_TTL_SECONDS", default=10 * 60)
+    app.config["MCP_TOKEN_MAX_REQUESTS"] = _coerce_int_env("MCP_TOKEN_MAX_REQUESTS", default=30)
+    app.config["MCP_TOKEN_RATE_LIMIT_WINDOW_SECONDS"] = _coerce_int_env(
+        "MCP_TOKEN_RATE_LIMIT_WINDOW_SECONDS",
+        default=60,
+    )
+    app.config["MCP_TOKEN_RATE_LIMIT_MAX_REQUESTS"] = _coerce_int_env(
+        "MCP_TOKEN_RATE_LIMIT_MAX_REQUESTS",
+        default=20,
+    )
     if config:
         app.config.update(config)
 
@@ -114,6 +124,7 @@ def create_app(config: Optional[dict] = None) -> Flask:
     app.jinja_env.filters["format_price_display"] = format_price_display
 
     from models.user import User
+    from models.mcp_access_token import McpAccessToken  # noqa: F401  # register model
     from models.user_scheduler_settings import UserSchedulerSettings  # noqa: F401  # register model
     from models.user_role import UserRole  # noqa: F401  # register model
     from models.user_permission_audit_log import UserPermissionAuditLog  # noqa: F401

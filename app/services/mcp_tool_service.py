@@ -9,6 +9,9 @@ from app.repositories import vocabulary_repository
 
 MCP_PROTOCOL_VERSION = "2025-11-25"
 LIST_MY_DECKS_TOOL_NAME = "list_my_decks"
+TOOL_REQUIRED_SCOPES = {
+    LIST_MY_DECKS_TOOL_NAME: "deck:read",
+}
 
 LIST_MY_DECKS_TOOL = {
     "name": LIST_MY_DECKS_TOOL_NAME,
@@ -56,6 +59,10 @@ LIST_MY_DECKS_TOOL = {
 def list_mcp_tools() -> list[dict[str, Any]]:
     """Return the single tool exposed by the minimal MCP endpoint."""
     return [LIST_MY_DECKS_TOOL]
+
+
+def required_scope_for_tool(tool_name: str) -> str | None:
+    return TOOL_REQUIRED_SCOPES.get(str(tool_name or "").strip())
 
 
 def _compact_description(raw_value: str | None, *, max_length: int = 200) -> str | None:

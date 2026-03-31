@@ -7,7 +7,8 @@ import logging
 from flask import Blueprint, jsonify, make_response, request
 from flask_login import current_user
 
-from app.services import mcp_tool_service
+from app.services import mcp_auth_service, mcp_tool_service
+from app.services.mcp_access_token_service import McpAccessTokenError
 from app.validators import (
     RequestValidationError,
     validate_list_my_decks_arguments,
@@ -57,6 +58,16 @@ def _jsonrpc_result(request_id, result: dict, *, status: int = 200):
     return response
 
 
+def _auth_error_code(status: int) -> int:
+    if status == 401:
+        return -32001
+    if status == 403:
+        return -32003
+    if status == 429:
+        return -32029
+    return -32603
+
+
 @mcp_bp.route("/api/mcp", methods=["POST"])
 def mcp_api():
     try:
@@ -72,33 +83,13 @@ def mcp_api():
 
     request_id = rpc_request.request_id
 
-    if not current_user.is_authenticated:
-        logger.info("MCP rejected unauthenticated request for method=%s", rpc_request.method)
-        return _jsonrpc_error(
-            request_id,
-            code=-32001,
-            message="Authentication required.",
-            status=401,
-            data={"code": "AUTH_REQUIRED"},
-        )
-    if not getattr(current_user, "is_active", True):
-        logger.warning("MCP rejected disabled user request for user_id=%s", getattr(current_user, "id", None))
-        return _jsonrpc_error(
-            request_id,
-            code=-32003,
-            message="User account is disabled.",
-            status=403,
-            data={"code": "USER_DISABLED"},
-        )
-
-    logger.info(
-        "MCP request method=%s user_id=%s",
-        rpc_request.method,
-        getattr(current_user, "id", None),
-    )
-
+    auth_context = None
     try:
         if rpc_request.method == "initialize":
+            auth_context = mcp_auth_service.authenticate_mcp_request(
+                request=request,
+                session_user=current_user,
+            )
             return _jsonrpc_result(
                 request_id,
                 {
@@ -122,11 +113,19 @@ def mcp_api():
             )
 
         if rpc_request.method == "notifications/initialized":
+            auth_context = mcp_auth_service.authenticate_mcp_request(
+                request=request,
+                session_user=current_user,
+            )
             response = make_response("", 204)
             response.headers["MCP-Protocol-Version"] = mcp_tool_service.MCP_PROTOCOL_VERSION
             return response
 
         if rpc_request.method == "tools/list":
+            auth_context = mcp_auth_service.authenticate_mcp_request(
+                request=request,
+                session_user=current_user,
+            )
             return _jsonrpc_result(
                 request_id,
                 {
@@ -154,11 +153,17 @@ def mcp_api():
                 )
 
             validate_list_my_decks_arguments(rpc_request.params.get("arguments"))
-            result = mcp_tool_service.build_list_my_decks_tool_result(user_id=current_user.id)
+            auth_context = mcp_auth_service.authenticate_mcp_request(
+                request=request,
+                session_user=current_user,
+                required_scope=mcp_tool_service.required_scope_for_tool(tool_name),
+            )
+            result = mcp_tool_service.build_list_my_decks_tool_result(user_id=auth_context.user.id)
             logger.info(
-                "MCP tool=%s user_id=%s deck_count=%s",
+                "MCP tool=%s user_id=%s auth_type=%s deck_count=%s",
                 tool_name,
-                current_user.id,
+                auth_context.user.id,
+                auth_context.auth_type,
                 len(result.get("structuredContent", {}).get("decks", [])),
             )
             return _jsonrpc_result(request_id, result)
@@ -178,11 +183,25 @@ def mcp_api():
             status=exc.status,
             data={"field": exc.field, "code": exc.code},
         )
+    except McpAccessTokenError as exc:
+        logger.info(
+            "MCP auth failure method=%s code=%s status=%s",
+            rpc_request.method,
+            exc.code,
+            exc.status,
+        )
+        return _jsonrpc_error(
+            request_id,
+            code=_auth_error_code(exc.status),
+            message=str(exc),
+            status=exc.status,
+            data={"code": exc.code},
+        )
     except Exception:
         logger.exception(
             "Unhandled MCP error for method=%s user_id=%s",
             rpc_request.method,
-            getattr(current_user, "id", None),
+            getattr(getattr(auth_context, "user", None), "id", None),
         )
         return _jsonrpc_error(
             request_id,
