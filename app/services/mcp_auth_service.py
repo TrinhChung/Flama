@@ -65,3 +65,20 @@ def authenticate_mcp_request(
         token_id=None,
         scopes=("*",),
     )
+
+
+def authenticate_mcp_request_if_present(
+    *,
+    request: Request,
+    session_user,
+    required_scope: str | None = None,
+) -> McpRequestAuthContext | None:
+    """Authenticate only when session or Bearer credentials are actually present."""
+    auth_header = str(request.headers.get("Authorization") or "").strip()
+    if auth_header or getattr(session_user, "is_authenticated", False):
+        return authenticate_mcp_request(
+            request=request,
+            session_user=session_user,
+            required_scope=required_scope,
+        )
+    return None

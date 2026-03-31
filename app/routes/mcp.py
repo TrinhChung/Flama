@@ -7,11 +7,10 @@ import logging
 from flask import Blueprint, jsonify, make_response, request
 from flask_login import current_user
 
-from app.services import mcp_auth_service, mcp_tool_service
+from app.services import mcp_auth_service, mcp_tool_registry, mcp_tool_service
 from app.services.mcp_access_token_service import McpAccessTokenError
 from app.validators import (
     RequestValidationError,
-    validate_list_my_decks_arguments,
     validate_mcp_jsonrpc_request,
     validate_mcp_tool_call_params,
 )
@@ -86,7 +85,7 @@ def mcp_api():
     auth_context = None
     try:
         if rpc_request.method == "initialize":
-            auth_context = mcp_auth_service.authenticate_mcp_request(
+            auth_context = mcp_auth_service.authenticate_mcp_request_if_present(
                 request=request,
                 session_user=current_user,
             )
@@ -106,14 +105,15 @@ def mcp_api():
                         "description": "Minimal MCP endpoint for the authenticated user's decks.",
                     },
                     "instructions": (
-                        "Call tools/list, then tools/call with name='list_my_decks'. "
-                        "Do not send user_id; the server uses the current authenticated session."
+                        "Call tools/list to discover tools. "
+                        "Use tools/call with name='list_my_decks' after authenticating via session or Bearer token. "
+                        "Do not send user_id; the server derives the user from auth context."
                     ),
                 },
             )
 
         if rpc_request.method == "notifications/initialized":
-            auth_context = mcp_auth_service.authenticate_mcp_request(
+            auth_context = mcp_auth_service.authenticate_mcp_request_if_present(
                 request=request,
                 session_user=current_user,
             )
@@ -122,20 +122,20 @@ def mcp_api():
             return response
 
         if rpc_request.method == "tools/list":
-            auth_context = mcp_auth_service.authenticate_mcp_request(
+            auth_context = mcp_auth_service.authenticate_mcp_request_if_present(
                 request=request,
                 session_user=current_user,
             )
             return _jsonrpc_result(
                 request_id,
                 {
-                    "tools": mcp_tool_service.list_mcp_tools(),
+                    "tools": mcp_tool_registry.list_mcp_tools(),
                 },
             )
 
         if rpc_request.method == "tools/call":
-            validate_mcp_tool_call_params(rpc_request.params)
-            tool_name = str(rpc_request.params.get("name") or "").strip()
+            params = validate_mcp_tool_call_params(rpc_request.params)
+            tool_name = str(params.get("name") or "").strip()
             if not tool_name:
                 raise RequestValidationError(
                     "name là bắt buộc.",
@@ -143,7 +143,8 @@ def mcp_api():
                     status=400,
                     code="INVALID_PARAMS",
                 )
-            if tool_name != mcp_tool_service.LIST_MY_DECKS_TOOL_NAME:
+            tool_definition = mcp_tool_registry.get_mcp_tool(tool_name)
+            if tool_definition is None:
                 return _jsonrpc_error(
                     request_id,
                     code=-32602,
@@ -152,13 +153,16 @@ def mcp_api():
                     data={"field": "name", "code": "UNKNOWN_TOOL"},
                 )
 
-            validate_list_my_decks_arguments(rpc_request.params.get("arguments"))
             auth_context = mcp_auth_service.authenticate_mcp_request(
                 request=request,
                 session_user=current_user,
-                required_scope=mcp_tool_service.required_scope_for_tool(tool_name),
+                required_scope=tool_definition.required_scope,
             )
-            result = mcp_tool_service.build_list_my_decks_tool_result(user_id=auth_context.user.id)
+            result = mcp_tool_registry.call_mcp_tool(
+                tool_name=tool_name,
+                user_id=auth_context.user.id,
+                arguments=params.get("arguments"),
+            )
             logger.info(
                 "MCP tool=%s user_id=%s auth_type=%s deck_count=%s",
                 tool_name,

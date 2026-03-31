@@ -84,13 +84,16 @@ class McpListMyDecksTests(unittest.TestCase):
             headers={"MCP-Protocol-Version": "2025-11-25"},
         )
 
-    def test_mcp_requires_authenticated_user(self):
+    def test_tools_call_requires_authenticated_user(self):
         response = self._mcp_post(
             {
                 "jsonrpc": "2.0",
                 "id": 1,
-                "method": "tools/list",
-                "params": {},
+                "method": "tools/call",
+                "params": {
+                    "name": "list_my_decks",
+                    "arguments": {},
+                },
             }
         )
 
@@ -119,9 +122,7 @@ class McpListMyDecksTests(unittest.TestCase):
         self.assertEqual(payload["result"]["protocolVersion"], "2025-11-25")
         self.assertIn("tools", payload["result"]["capabilities"])
 
-    def test_tools_list_exposes_only_list_my_decks(self):
-        self._login_owner()
-
+    def test_tools_list_exposes_only_list_my_decks_without_auth(self):
         response = self._mcp_post(
             {
                 "jsonrpc": "2.0",
@@ -136,7 +137,10 @@ class McpListMyDecksTests(unittest.TestCase):
         tools = payload["result"]["tools"]
         self.assertEqual(len(tools), 1)
         self.assertEqual(tools[0]["name"], "list_my_decks")
+        self.assertEqual(tools[0]["title"], "List My Decks")
+        self.assertIn("currently authenticated user", tools[0]["description"])
         self.assertEqual(tools[0]["inputSchema"]["properties"], {})
+        self.assertFalse(tools[0]["inputSchema"]["additionalProperties"])
 
     def test_list_my_decks_returns_only_owned_decks(self):
         self._login_owner()

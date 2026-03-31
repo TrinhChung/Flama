@@ -1,68 +1,13 @@
-"""Minimal MCP tool service for authenticated deck access."""
+"""Minimal MCP tool execution service for authenticated deck access."""
 
 from __future__ import annotations
 
 import json
-from typing import Any
 
 from app.repositories import vocabulary_repository
 
 MCP_PROTOCOL_VERSION = "2025-11-25"
 LIST_MY_DECKS_TOOL_NAME = "list_my_decks"
-TOOL_REQUIRED_SCOPES = {
-    LIST_MY_DECKS_TOOL_NAME: "deck:read",
-}
-
-LIST_MY_DECKS_TOOL = {
-    "name": LIST_MY_DECKS_TOOL_NAME,
-    "title": "List My Decks",
-    "description": (
-        "Return decks owned by the currently authenticated user. "
-        "The server resolves the user from the existing auth session and accepts no user_id input."
-    ),
-    "inputSchema": {
-        "type": "object",
-        "properties": {},
-        "additionalProperties": False,
-    },
-    "outputSchema": {
-        "type": "object",
-        "properties": {
-            "decks": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "deck_id": {"type": "integer"},
-                        "name": {"type": "string"},
-                        "description": {"type": "string"},
-                        "created_at": {"type": "string", "format": "date-time"},
-                    },
-                    "required": ["deck_id", "name"],
-                    "additionalProperties": False,
-                },
-            }
-        },
-        "required": ["decks"],
-        "additionalProperties": False,
-    },
-    "annotations": {
-        "title": "List My Decks",
-        "readOnlyHint": True,
-        "idempotentHint": True,
-        "destructiveHint": False,
-        "openWorldHint": False,
-    },
-}
-
-
-def list_mcp_tools() -> list[dict[str, Any]]:
-    """Return the single tool exposed by the minimal MCP endpoint."""
-    return [LIST_MY_DECKS_TOOL]
-
-
-def required_scope_for_tool(tool_name: str) -> str | None:
-    return TOOL_REQUIRED_SCOPES.get(str(tool_name or "").strip())
 
 
 def _compact_description(raw_value: str | None, *, max_length: int = 200) -> str | None:

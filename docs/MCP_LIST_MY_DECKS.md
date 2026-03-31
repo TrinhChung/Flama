@@ -5,6 +5,7 @@ Endpoint MCP tối giản nằm tại `POST /api/mcp` và chỉ expose đúng 1 
 ## Auth
 
 - Tool không nhận `user_id`.
+- `tools/list` có thể gọi mà không cần đăng nhập, vì chỉ trả metadata của tool.
 - Nếu request có `Authorization: Bearer <token>` thì backend xác thực bằng MCP access token ngắn hạn.
 - Nếu không có Bearer token thì backend fallback về Flask session (`current_user`) như trước.
 - Nếu Bearer token hiện diện nhưng sai, hết hạn, bị revoke, vượt request cap, hoặc thiếu scope thì request bị reject và không fallback về session.
@@ -59,7 +60,6 @@ Authorization: Bearer <your-short-lived-mcp-token>
 POST /api/mcp
 Content-Type: application/json
 MCP-Protocol-Version: 2025-11-25
-Authorization: Bearer <your-short-lived-mcp-token>
 
 {
   "jsonrpc": "2.0",
