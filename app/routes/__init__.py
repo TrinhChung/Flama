@@ -7,6 +7,7 @@ from .admin import admin_bp
 from .admin_payments import admin_payments_bp
 from .flashcards import flashcards_bp
 from .main import main_bp
+from .mcp import mcp_bp
 from .payments import payments_bp
 from .user_orders import user_orders_bp
 from .vocabulary import vocabulary_bp
@@ -15,6 +16,7 @@ from .vocabulary import vocabulary_bp
 def register_blueprints(app: Flask) -> None:
     """Attach all blueprints to the Flask application."""
     app.register_blueprint(main_bp)
+    app.register_blueprint(mcp_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(admin_payments_bp)
