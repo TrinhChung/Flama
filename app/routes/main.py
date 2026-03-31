@@ -6,13 +6,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List
 
-from flask import Blueprint, abort, current_app, jsonify, redirect, render_template, request, send_file, url_for
+from flask import Blueprint, abort, current_app, flash, jsonify, redirect, render_template, request, send_file, url_for
 from flask_login import current_user, login_required
 
 from app.services.anki_scheduler import (
     _day_index as scheduler_day_index,
     _day_index_to_datetime as scheduler_day_index_to_datetime,
 )
+from app.services import mcp_access_token_service
 from app.services import payment_service
 from app.services import support_donation_service
 from app.services import tts_provider_service
@@ -49,6 +50,30 @@ def _support_api_error(error: str, message: str, *, status: int = 400, field: st
     if field is not None:
         payload["field"] = field
     return jsonify(payload), status
+
+
+def _render_dashboard_page():
+    from app.services.dashboard_service import build_dashboard_data
+
+    rows, total_new, total_learn, total_due, admin_mode = build_dashboard_data(current_user)
+    return render_template(
+        "dashboard.html",
+        deck_rows=rows,
+        total_new=total_new,
+        total_learn=total_learn,
+        total_due=total_due,
+        admin_mode=admin_mode,
+        stats_initial_year=datetime.utcnow().year,
+    )
+
+
+def _render_mcp_tokens_page(*, generated_mcp_token: dict | None = None):
+    return render_template(
+        "mcp_tokens.html",
+        mcp_generated_token=generated_mcp_token,
+        mcp_access_tokens=mcp_access_token_service.list_token_summaries(user_id=current_user.id),
+        mcp_token_policy=mcp_access_token_service.get_token_policy(),
+    )
 
 
 @main_bp.route("/")
@@ -186,18 +211,45 @@ def support_donation_checkout_status_api():
 @main_bp.route("/dashboard")
 @login_required
 def dashboard():
-    from app.services.dashboard_service import build_dashboard_data
-    rows, total_new, total_learn, total_due, admin_mode = build_dashboard_data(current_user)
+    return _render_dashboard_page()
 
-    return render_template(
-        "dashboard.html",
-        deck_rows=rows,
-        total_new=total_new,
-        total_learn=total_learn,
-        total_due=total_due,
-        admin_mode=admin_mode,
-        stats_initial_year=datetime.utcnow().year,
-    )
+
+@main_bp.route("/settings/mcp-tokens", methods=["GET"])
+@login_required
+def mcp_tokens_page():
+    return _render_mcp_tokens_page()
+
+
+@main_bp.route("/settings/mcp-tokens/generate", methods=["POST"])
+@login_required
+def generate_mcp_token():
+    try:
+        issued_token = mcp_access_token_service.issue_short_lived_token(user_id=current_user.id)
+        db.session.commit()
+    except SQLAlchemyError:
+        db.session.rollback()
+        flash("Không thể tạo MCP token lúc này. Vui lòng thử lại.", "danger")
+        return redirect(url_for("main.mcp_tokens_page"))
+
+    flash("MCP token mới đã được tạo. Hãy copy ngay bây giờ vì token chỉ hiện đúng một lần.", "success")
+    return _render_mcp_tokens_page(generated_mcp_token=issued_token.to_display_payload())
+
+
+@main_bp.route("/settings/mcp-tokens/<int:token_id>/revoke", methods=["POST"])
+@login_required
+def revoke_mcp_token(token_id: int):
+    try:
+        revoked = mcp_access_token_service.revoke_token(user_id=current_user.id, token_id=token_id)
+        if revoked:
+            db.session.commit()
+            flash("MCP token đã bị thu hồi.", "success")
+        else:
+            db.session.rollback()
+            flash("Không tìm thấy MCP token để thu hồi.", "warning")
+    except SQLAlchemyError:
+        db.session.rollback()
+        flash("Không thể thu hồi MCP token lúc này. Vui lòng thử lại.", "danger")
+    return redirect(url_for("main.mcp_tokens_page"))
 
 
 @main_bp.route("/statistics", methods=["GET"])
