@@ -583,6 +583,7 @@ def _build_note_type_library(
     saved_ids: set[str],
     purchase_history: list[dict[str, Any]],
 ) -> dict[str, Any]:
+    now = datetime.utcnow()
     install_map = {row.source_note_type_id: row for row in installs}
     source_ids = list(install_map.keys()) or [""]
     note_types = {
@@ -612,7 +613,7 @@ def _build_note_type_library(
         )
         payload["installed_at"] = install.installed_at.isoformat() if install.installed_at else None
         payload["last_activity_at"] = install.last_activity_at.isoformat() if install.last_activity_at else None
-        if flashcards_share_service.is_note_type_install_active(install):
+        if flashcards_share_service.is_note_type_install_active(install, now=now):
             using_now.append(payload)
         else:
             installed.append(payload)

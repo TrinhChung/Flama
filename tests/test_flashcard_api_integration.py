@@ -441,6 +441,40 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         self.assertIn("related_items", detail_payload)
         self.assertIn("recent_reviews", detail_payload)
 
+    def test_shared_note_type_hub_handles_installed_note_type_library(self):
+        with self.app.app_context():
+            seller = User(username="seller-installed", email="seller-installed@example.com")
+            seller.set_password("password")
+            db.session.add(seller)
+            db.session.flush()
+
+            note_type = NoteType(
+                user_id=seller.id,
+                name="Installed Library",
+                description="Installed template",
+                primary_category="Kanji",
+                tags=["jlpt"],
+                pricing_mode="free",
+                price_amount_minor=0,
+                publish_status="published",
+            )
+            db.session.add(note_type)
+            db.session.commit()
+            note_type_id = note_type.id
+
+        install_resp = self.client.post(f"/api/shared/note-types/{note_type_id}/install")
+        self.assertEqual(install_resp.status_code, 201)
+
+        hub_resp = self.client.get("/api/shared/note-types/hub")
+        self.assertEqual(hub_resp.status_code, 200)
+        hub_payload = hub_resp.get_json() or {}
+
+        library_rows = [
+            *(hub_payload.get("library", {}).get("using_now") or []),
+            *(hub_payload.get("library", {}).get("installed") or []),
+        ]
+        self.assertTrue(any(row.get("id") == note_type_id for row in library_rows))
+
     def test_shared_deck_hub_and_detail_include_saved_state(self):
         with self.app.app_context():
             seller = User(username="seller-two", email="seller-two@example.com")

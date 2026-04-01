@@ -15,22 +15,24 @@
   data-deck-detail-url="{{ url_for('flashcards.shared_deck_detail_page', deck_item_id=deck_item_id) }}"
   data-request-detail-url-template="{{ url_for('flashcards.deck_change_request_detail_page', request_id='__REQUEST_ID__') }}"
 >
-  <div class="change-request-hero change-request-hero--compact">
-    <div class="change-request-hero-nav">
-      <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('flashcards.shared_deck_detail_page', deck_item_id=deck_item_id) }}">
-        <i class="bi bi-arrow-left"></i> Quay lại deck
-      </a>
-      <a class="btn btn-sm btn-outline-secondary d-none" id="change-request-open-detail" href="#">
-        <i class="bi bi-box-arrow-up-right"></i> Mở trang chi tiết
-      </a>
-    </div>
+  <div class="change-request-topbar">
+    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('flashcards.shared_deck_detail_page', deck_item_id=deck_item_id) }}">
+      <i class="bi bi-arrow-left"></i> Quay lại deck
+    </a>
+    <a class="btn btn-sm btn-outline-secondary d-none" id="change-request-open-detail" href="#">
+      <i class="bi bi-box-arrow-up-right"></i> Chi tiết request
+    </a>
+  </div>
 
+  <div class="change-request-hero change-request-hero--compact">
     <div class="change-request-hero-copy">
       <div class="change-request-eyebrow">Contribution Flow</div>
       <h1 class="change-request-hero-title" id="change-request-page-title">Chuẩn bị change request</h1>
       <p class="change-request-hero-meta" id="change-request-page-meta">Đang tải thông tin deck và local overlay changes...</p>
-      <div class="change-request-banner change-request-banner--error d-none" id="change-request-error" role="alert"></div>
-      <div class="change-request-banner change-request-banner--info d-none" id="change-request-status" role="status" aria-live="polite"></div>
+      <div class="change-request-banner-stack">
+        <div class="change-request-banner change-request-banner--error d-none" id="change-request-error" role="alert"></div>
+        <div class="change-request-banner change-request-banner--info d-none" id="change-request-status" role="status" aria-live="polite"></div>
+      </div>
     </div>
 
     <details class="change-request-guide">
@@ -57,20 +59,17 @@
           </div>
         </div>
 
-        <div class="row g-3">
-          <div class="col-lg-5">
-            <div class="change-request-field-group">
-              <label class="form-label mb-0" for="change-request-title-input">Tiêu đề</label>
-              <input class="form-control" id="change-request-title-input" maxlength="255" placeholder="Ví dụ: Chuẩn hóa field và sửa ví dụ" />
-              <div class="change-request-field-help">Tên ngắn giúp owner hiểu nhanh mục tiêu chính của request.</div>
-            </div>
+        <div class="change-request-composer">
+          <div class="change-request-field-group">
+            <label class="form-label mb-0" for="change-request-title-input">Tiêu đề</label>
+            <input class="form-control" id="change-request-title-input" maxlength="255" placeholder="Ví dụ: Chuẩn hóa field và sửa ví dụ" />
+            <div class="change-request-field-help">Tên ngắn giúp owner hiểu nhanh mục tiêu chính của request.</div>
           </div>
-          <div class="col-lg-7">
-            <div class="change-request-field-group">
-              <label class="form-label mb-0" for="change-request-description-input">Ghi chú cho owner</label>
-              <textarea class="form-control" id="change-request-description-input" rows="4" placeholder="Tóm tắt bạn đã sửa gì, tại sao sửa và owner nên chú ý điểm nào khi review."></textarea>
-              <div class="change-request-field-help">Nêu rõ thay đổi nghiệp vụ, ví dụ field nào được sửa hoặc conflict nào owner cần kiểm tra kỹ.</div>
-            </div>
+
+          <div class="change-request-field-group">
+            <label class="form-label mb-0" for="change-request-description-input">Ghi chú cho owner</label>
+            <textarea class="form-control" id="change-request-description-input" rows="4" placeholder="Tóm tắt bạn đã sửa gì, tại sao sửa và owner nên chú ý điểm nào khi review."></textarea>
+            <div class="change-request-field-help">Nêu rõ thay đổi nghiệp vụ, ví dụ field nào được sửa hoặc conflict nào owner cần kiểm tra kỹ.</div>
           </div>
         </div>
 

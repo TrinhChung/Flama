@@ -15,6 +15,7 @@
   --change-request-danger-soft: rgba(164, 70, 57, 0.14);
   --change-request-muted-soft: rgba(102, 118, 143, 0.12);
   position: relative;
+  padding: 0.35rem 0 2rem;
   color: var(--change-request-ink);
 }
 
@@ -22,12 +23,29 @@
   content: "";
   position: absolute;
   inset: 0 0 auto;
-  height: 14rem;
+  height: 18rem;
   background:
-    radial-gradient(circle at top right, rgba(180, 87, 53, 0.08), transparent 32%),
-    linear-gradient(180deg, #f8f4ed 0%, #fbf9f5 100%);
+    radial-gradient(circle at top right, rgba(180, 87, 53, 0.13), transparent 30%),
+    radial-gradient(circle at left 12% top 18%, rgba(120, 133, 93, 0.1), transparent 26%),
+    linear-gradient(135deg, #f5ede0 0%, #f9f6f0 52%, #f0f4ef 100%);
   border-radius: 2rem;
   z-index: -1;
+}
+
+.change-request-topbar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.95rem;
+}
+
+.change-request-topbar .btn,
+.change-request-actions .btn {
+  border-radius: 999px;
+  font-family: "Manrope", sans-serif;
+  font-weight: 700;
 }
 
 .change-request-hero,
@@ -50,21 +68,12 @@
 
 .change-request-hero {
   border: 1px solid var(--market-line);
-  border-radius: 1.2rem;
-  padding: 1rem;
-  margin-bottom: 1rem;
+  border-radius: 1.55rem;
+  padding: 1.2rem 1.2rem 1rem;
+  margin-bottom: 1.15rem;
   background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 8px 20px rgba(25, 34, 50, 0.04);
-  backdrop-filter: blur(10px);
-}
-
-.change-request-hero-nav {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  align-items: center;
-  gap: 0.75rem;
-  margin-bottom: 1rem;
+  box-shadow: 0 18px 40px rgba(30, 36, 48, 0.08);
+  backdrop-filter: blur(12px);
 }
 
 .change-request-hero-grid {
@@ -74,12 +83,12 @@
 }
 
 .change-request-hero--compact .change-request-hero-copy {
-  gap: 0.55rem;
+  gap: 0.65rem;
 }
 
 .change-request-hero-copy {
   display: grid;
-  gap: 0.85rem;
+  gap: 0.95rem;
   align-content: start;
 }
 
@@ -109,7 +118,8 @@
 
 .change-request-hero-title {
   margin: 0;
-  font-size: clamp(1.45rem, 2.6vw, 2.1rem);
+  font-size: clamp(2rem, 4.2vw, 3.2rem);
+  letter-spacing: -0.03em;
 }
 
 .change-request-hero-meta,
@@ -133,6 +143,11 @@
 .change-request-copy {
   margin: 0;
   line-height: 1.7;
+}
+
+.change-request-banner-stack {
+  display: grid;
+  gap: 0.6rem;
 }
 
 .change-request-panel-note {
@@ -179,10 +194,10 @@
 }
 
 .change-request-guide {
-  margin-top: 0.85rem;
-  border: 1px solid var(--change-request-soft-line);
+  margin-top: 1rem;
+  border: 1px solid rgba(25, 34, 50, 0.08);
   border-radius: 1rem;
-  background: rgba(250, 250, 250, 0.88);
+  background: rgba(255, 255, 255, 0.72);
 }
 
 .change-request-guide[open] {
@@ -192,6 +207,7 @@
 .change-request-guide-summary {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 0.5rem;
   padding: 0.8rem 0.95rem;
   cursor: pointer;
@@ -208,7 +224,7 @@
 
 .change-request-guide-steps {
   margin: 0;
-  padding: 0 1rem 0.95rem 2rem;
+  padding: 0 1rem 1rem 2rem;
   color: var(--change-request-muted);
   font-family: "Manrope", sans-serif;
   line-height: 1.65;
@@ -247,8 +263,8 @@
 
 .change-request-workspace {
   display: grid;
-  grid-template-columns: minmax(0, 1.28fr) minmax(19rem, 0.92fr);
-  gap: 1rem;
+  grid-template-columns: minmax(0, 1.34fr) minmax(18.5rem, 0.86fr);
+  gap: 1.15rem;
 }
 
 .change-request-main,
@@ -269,21 +285,26 @@
   justify-content: space-between;
   align-items: end;
   gap: 0.85rem;
-  margin-bottom: 0.95rem;
+  margin-bottom: 1rem;
 }
 
 .change-request-section-title {
   margin: 0;
-  font-size: 1.35rem;
+  font-size: 1.26rem;
 }
 
 .change-request-section-meta {
   margin: 0.35rem 0 0;
 }
 
+.change-request-composer {
+  display: grid;
+  gap: 0.95rem;
+}
+
 .change-request-field-group {
   display: grid;
-  gap: 0.35rem;
+  gap: 0.42rem;
 }
 
 .change-request-field-help {
@@ -291,31 +312,50 @@
   line-height: 1.5;
 }
 
+.change-request-shell .form-control {
+  border-radius: 0.95rem;
+  border-color: rgba(25, 34, 50, 0.12);
+  background: rgba(255, 255, 255, 0.86);
+  color: var(--change-request-ink);
+  box-shadow: none;
+  min-height: 3rem;
+}
+
+.change-request-shell textarea.form-control {
+  min-height: 8rem;
+  resize: vertical;
+}
+
+.change-request-shell .form-control::placeholder {
+  color: rgba(102, 118, 143, 0.8);
+}
+
+.change-request-shell .form-control:focus {
+  border-color: rgba(180, 87, 53, 0.34);
+  box-shadow: 0 0 0 0.24rem rgba(180, 87, 53, 0.08);
+  background: #fff;
+}
+
 .change-request-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.7rem;
-  margin-top: 1rem;
+  margin-top: 1.05rem;
 }
 
 .change-request-actions .btn {
   min-height: 2.85rem;
   padding-inline: 1rem;
-  border-radius: 999px;
-  font-weight: 700;
+  font-size: 0.92rem;
 }
 
 .change-request-summary {
   display: grid;
-  gap: 0.75rem;
+  gap: 0.9rem;
 }
 
 .change-request-summary-head {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 0.85rem;
-  align-items: start;
+  display: none;
 }
 
 .change-request-summary-title {
@@ -406,8 +446,12 @@
 .change-request-stage-grid,
 .change-request-inbox-stats {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.75rem;
+}
+
+.change-request-stage-grid {
+  grid-template-columns: 1fr;
 }
 
 .change-request-metric-card,
@@ -457,6 +501,7 @@
   grid-template-columns: auto 1fr;
   gap: 0.75rem;
   align-items: start;
+  background: rgba(255, 255, 255, 0.88);
 }
 
 .change-request-stage-dot {
@@ -493,7 +538,7 @@
 
 .change-request-stage[data-state="current"] {
   border-color: rgba(180, 87, 53, 0.24);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(245, 234, 224, 0.8));
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(245, 234, 224, 0.84));
 }
 
 .change-request-stage[data-state="current"] .change-request-stage-dot {
@@ -515,7 +560,7 @@
 
 .change-request-note-card {
   padding: 0.85rem 0.95rem;
-  background: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.82);
 }
 
 .change-request-note-card + .change-request-note-card {
@@ -538,7 +583,7 @@
 }
 
 .change-request-entry {
-  padding: 0.95rem;
+  padding: 1rem;
   display: grid;
   gap: 0.8rem;
   background: rgba(255, 255, 255, 0.94);
@@ -568,13 +613,13 @@
 
 .change-request-card-title {
   margin: 0;
-  font-size: 1.18rem;
+  font-size: 1.04rem;
 }
 
 .change-request-card-meta {
   margin: 0.25rem 0 0;
-  font-size: 0.92rem;
-  line-height: 1.6;
+  font-size: 0.85rem;
+  line-height: 1.55;
 }
 
 .change-request-diff-grid {
@@ -589,12 +634,12 @@
 }
 
 .change-request-value-card[data-tone="after"] {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(233, 245, 237, 0.8));
-  border-color: rgba(45, 114, 84, 0.18);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(236, 245, 239, 0.84));
+  border-color: rgba(45, 114, 84, 0.16);
 }
 
 .change-request-value-card[data-tone="before"] {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(244, 245, 248, 0.86));
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(244, 245, 248, 0.88));
 }
 
 .change-request-value-label {
@@ -634,6 +679,14 @@
   border-radius: 1rem;
   padding: 0.9rem;
   background: rgba(255, 255, 255, 0.72);
+}
+
+.change-request-inline-copy {
+  margin: 0;
+  color: var(--change-request-muted);
+  font-family: "Manrope", sans-serif;
+  font-size: 0.86rem;
+  line-height: 1.55;
 }
 
 .change-request-empty {
@@ -763,11 +816,15 @@
     border-radius: 1.12rem;
   }
 
+  .change-request-topbar {
+    margin-bottom: 0.85rem;
+  }
+
   .change-request-hero {
     padding: 0.9rem;
   }
 
-  .change-request-hero-nav,
+  .change-request-topbar,
   .change-request-section-header,
   .change-request-entry-head,
   .change-request-inbox-top {
@@ -795,7 +852,7 @@
   .change-request-people-grid,
   .change-request-stage-grid,
   .change-request-inbox-stats {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
   }
 
   .change-request-filter-search {

@@ -89,12 +89,8 @@ if (root) {
     render();
   }
 
-  function getRequesterHeadline(deckTitle) {
-    if (!state.request) {
-      return `Chuẩn bị request cho ${deckTitle}`;
-    }
-    const statusMeta = getRequestStatusMeta(state.request.status);
-    return `${statusMeta.label} · ${deckTitle}`;
+  function getRequesterHeadline() {
+    return "Chuẩn bị change request";
   }
 
   function getRequesterMeta(deckTitle) {
@@ -127,8 +123,12 @@ if (root) {
         return "Draft đã sạch conflict. Kiểm tra mô tả, review lại diff và bấm gửi review khi sẵn sàng.";
       case "pending_review":
         return "Request đã được submit. Bạn chỉ còn theo dõi detail cho đến khi owner review xong.";
+      case "merged":
+        return "Request đã được merge vào source deck.";
+      case "rejected":
+        return "Request đã bị reject. Overlay edits vẫn còn trên local install của bạn.";
       default:
-        return "Theo dõi tiến độ trong panel Summary để biết bước tiếp theo của request.";
+        return "Theo dõi panel trạng thái để biết bước tiếp theo của request.";
     }
   }
 
@@ -137,7 +137,7 @@ if (root) {
     const requestStatus = state.request?.status || "";
 
     if (pageTitleEl) {
-      pageTitleEl.textContent = getRequesterHeadline(deckTitle);
+      pageTitleEl.textContent = getRequesterHeadline();
     }
     if (metaEl) {
       metaEl.textContent = getRequesterMeta(deckTitle);
@@ -147,8 +147,12 @@ if (root) {
     }
 
     if (state.request) {
-      titleEl.value = state.request.title || "";
-      descriptionEl.value = state.request.description || "";
+      if (titleEl) {
+        titleEl.value = state.request.title || "";
+      }
+      if (descriptionEl) {
+        descriptionEl.value = state.request.description || "";
+      }
       renderRequestSummary(summaryEl, state.request);
       renderChangeItems(itemsEl, state.request.items || []);
       renderConflicts(conflictsEl, state.request.conflicts || [], {
@@ -158,7 +162,6 @@ if (root) {
       if (openDetailLink) {
         openDetailLink.classList.remove("d-none");
         openDetailLink.href = buildRequestDetailUrl(state.request.id);
-        openDetailLink.innerHTML = '<i class="bi bi-box-arrow-up-right"></i> Mở trang chi tiết';
       }
     } else {
       renderLocalPreviewSummary(summaryEl, state.localPreview, { deckTitle });
@@ -207,9 +210,7 @@ if (root) {
       refreshBtn.disabled = state.busy;
     }
 
-    document.title = state.request?.title
-      ? `${state.request.title} | Deck Change Request`
-      : `${deckTitle} | Deck Change Request`;
+    document.title = `${getRequesterHeadline()} | ${deckTitle}`;
   }
 
   async function loadState({ preserveInputs = false } = {}) {
@@ -229,8 +230,12 @@ if (root) {
       state.localPreview = state.request ? null : await fetchLocalChanges(deckItemId);
 
       if (!preserveInputs && !state.request) {
-        titleEl.value = "";
-        descriptionEl.value = "";
+        if (titleEl) {
+          titleEl.value = "";
+        }
+        if (descriptionEl) {
+          descriptionEl.value = "";
+        }
       }
 
       render();
@@ -261,8 +266,8 @@ if (root) {
   buildBtn?.addEventListener("click", async () => {
     await runAction(
       () => createDraft(deckItemId, {
-        title: titleEl.value,
-        description: descriptionEl.value,
+        title: titleEl?.value || "",
+        description: descriptionEl?.value || "",
       }),
       "Draft change request đã được cập nhật.",
     );
@@ -341,7 +346,7 @@ if (root) {
         resolution_mode: "manual",
         resolved_value: resolvedValue,
       }),
-      "Conflict đã được resolve bằng giá trị manual.",
+      "Conflict đã được resolve bằng giá trị thủ công.",
     );
   });
 

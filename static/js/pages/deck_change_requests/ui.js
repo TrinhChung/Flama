@@ -95,17 +95,17 @@ const CHANGE_TYPE_META = {
 
 const CONFLICT_META = {
   note_field: {
-    label: "Note field conflict",
+    label: "Xung đột trường note",
     tone: "danger",
     icon: "bi-journal-x",
   },
   field_order: {
-    label: "Field order conflict",
+    label: "Xung đột thứ tự field",
     tone: "warning",
     icon: "bi-arrow-left-right",
   },
   field_def: {
-    label: "Field definition conflict",
+    label: "Xung đột field definition",
     tone: "danger",
     icon: "bi-braces-asterisk",
   },
@@ -191,11 +191,6 @@ function formatManualValue(value) {
   return JSON.stringify(value, null, 2);
 }
 
-function pluralize(count, singular, plural = `${singular}s`) {
-  const number = Number(count || 0);
-  return `${number} ${number === 1 ? singular : plural}`;
-}
-
 function humanizeChangeType(changeType) {
   const meta = CHANGE_TYPE_META[changeType];
   if (meta) {
@@ -271,16 +266,6 @@ function renderMetricCard(label, value, help, { compact = false } = {}) {
   `;
 }
 
-function renderPersonCard(label, value, meta) {
-  return `
-    <article class="change-request-person-card">
-      <div class="change-request-person-label">${escapeHtml(label)}</div>
-      <div class="change-request-person-value">${escapeHtml(value)}</div>
-      ${meta ? `<div class="change-request-person-meta">${escapeHtml(meta)}</div>` : ""}
-    </article>
-  `;
-}
-
 function renderNoteCard(title, body) {
   return `
     <article class="change-request-note-card">
@@ -311,8 +296,8 @@ function buildStageStates(status) {
     case "has_conflict":
       return {
         capture: "complete",
-        sync: "blocked",
-        submit: "upcoming",
+        sync: "complete",
+        submit: "blocked",
         review: "upcoming",
       };
     case "draft":
@@ -350,15 +335,19 @@ function buildStageStates(status) {
 
 function renderWorkflowStages(status) {
   const states = buildStageStates(status);
-  return WORKFLOW_STEPS.map((step) => `
-    <article class="change-request-stage" data-state="${escapeHtml(states[step.key] || "upcoming")}">
-      <span class="change-request-stage-dot">${escapeHtml(step.number)}</span>
-      <div>
-        <div class="change-request-stage-label">${escapeHtml(step.label)}</div>
-        <div class="change-request-stage-help">${escapeHtml(step.help)}</div>
-      </div>
-    </article>
-  `).join("");
+  return `
+    <div class="change-request-stage-grid">
+      ${WORKFLOW_STEPS.map((step) => `
+        <article class="change-request-stage" data-state="${escapeHtml(states[step.key] || "upcoming")}">
+          <span class="change-request-stage-dot">${escapeHtml(step.number)}</span>
+          <div>
+            <div class="change-request-stage-label">${escapeHtml(step.label)}</div>
+            <div class="change-request-stage-help">${escapeHtml(step.help)}</div>
+          </div>
+        </article>
+      `).join("")}
+    </div>
+  `;
 }
 
 function renderChangeCountChips(changeCounts) {
@@ -426,13 +415,48 @@ function buildSummaryBadges(requestData) {
       icon: "bi-send-check",
     }));
   } else if (requestData.can_resolve) {
-    badges.push(renderChip("Cần resolve conflict", {
+    badges.push(renderChip("Cần resolve", {
       tone: "danger",
       icon: "bi-tools",
     }));
   }
 
   return badges.join("");
+}
+
+function renderSummaryMeta(requestData) {
+  const chips = [];
+  if (requestData.title) {
+    chips.push(renderChip(requestData.title, {
+      tone: "neutral",
+      icon: "bi-card-text",
+    }));
+  }
+  if (requestData.deck_item?.title) {
+    chips.push(renderChip(`Deck ${requestData.deck_item.title}`, {
+      tone: "neutral",
+      icon: "bi-collection",
+    }));
+  }
+  if (requestData.requester?.username) {
+    chips.push(renderChip(`Requester ${requestData.requester.username}`, {
+      tone: "neutral",
+      icon: "bi-person",
+    }));
+  }
+  if (requestData.updated_at || requestData.created_at) {
+    chips.push(renderChip(`Updated ${formatDate(requestData.updated_at || requestData.created_at)}`, {
+      tone: "neutral",
+      icon: "bi-clock-history",
+    }));
+  }
+  if (requestData.last_synced_at) {
+    chips.push(renderChip(`Last sync ${formatDate(requestData.last_synced_at)}`, {
+      tone: "neutral",
+      icon: "bi-arrow-repeat",
+    }));
+  }
+  return chips.length ? `<div class="change-request-chip-list">${chips.join("")}</div>` : "";
 }
 
 export function renderRequestSummary(container, requestData, { emptyText = "Không có request." } = {}) {
@@ -443,87 +467,48 @@ export function renderRequestSummary(container, requestData, { emptyText = "Khô
     return;
   }
 
-  const statusMeta = getRequestStatusMeta(requestData.status);
-  const summaryNotes = [];
+  const countChips = renderChangeCountChips(requestData.change_counts);
+  const notes = [];
   if (requestData.description) {
-    summaryNotes.push(renderNoteCard("Mô tả từ requester", requestData.description));
+    notes.push(renderNoteCard("Ghi chú từ requester", requestData.description));
   }
   if (requestData.review_comment) {
-    summaryNotes.push(renderNoteCard("Nhận xét review", requestData.review_comment));
-  }
-
-  const countChips = renderChangeCountChips(requestData.change_counts);
-  const detailChips = [
-    renderChip(`Requester ${requestData.requester?.username || "Unknown"}`, {
-      tone: "neutral",
-      icon: "bi-person",
-    }),
-    renderChip(`Owner ${requestData.owner?.username || "Unknown"}`, {
-      tone: "neutral",
-      icon: "bi-person-badge",
-    }),
-    renderChip(`Deck ${requestData.deck_item?.title || "Unknown deck"}`, {
-      tone: "neutral",
-      icon: "bi-collection",
-    }),
-    renderChip(`${requestData.item_count || 0} changes`, {
-      tone: "info",
-      icon: "bi-diagram-3",
-    }),
-    renderChip(`${requestData.unresolved_conflict_count || 0} conflicts`, {
-      tone: Number(requestData.unresolved_conflict_count || 0) ? "danger" : "success",
-      icon: Number(requestData.unresolved_conflict_count || 0) ? "bi-exclamation-diamond" : "bi-check2-all",
-    }),
-  ];
-
-  const submittedLabel = requestData.submitted_at
-    ? `Submitted ${formatDate(requestData.submitted_at)}`
-    : `Updated ${formatDate(requestData.updated_at || requestData.created_at)}`;
-  detailChips.push(renderChip(submittedLabel, {
-    tone: "neutral",
-    icon: "bi-clock-history",
-  }));
-
-  if (requestData.last_synced_at) {
-    detailChips.push(renderChip(`Last sync ${formatDate(requestData.last_synced_at)}`, {
-      tone: "neutral",
-      icon: "bi-arrow-repeat",
-    }));
-  }
-
-  if (requestData.reviewed_by?.username) {
-    detailChips.push(renderChip(`Reviewed by ${requestData.reviewed_by.username}`, {
-      tone: "neutral",
-      icon: "bi-shield-check",
-    }));
+    notes.push(renderNoteCard("Nhận xét review", requestData.review_comment));
   }
 
   container.innerHTML = `
     <div class="change-request-summary">
-      <div class="change-request-summary-head">
-        <div>
-          <h3 class="change-request-summary-title">${escapeHtml(requestData.title || "Change Request")}</h3>
-          <p class="change-request-summary-subtitle change-request-copy">${escapeHtml(statusMeta.description)}</p>
-        </div>
-        <div class="change-request-status-list">
-          ${buildSummaryBadges(requestData)}
-        </div>
+      <div class="change-request-status-list">
+        ${buildSummaryBadges(requestData)}
       </div>
 
-      <div class="change-request-chip-list">
-        ${detailChips.join("")}
+      ${renderSummaryMeta(requestData)}
+
+      <div class="change-request-metric-grid">
+        ${renderMetricCard(
+          "Tổng thay đổi",
+          String(requestData.item_count || 0),
+          Number(requestData.item_count || 0) === 1 ? "1 mục trong request." : `${requestData.item_count || 0} mục trong request.`,
+        )}
+        ${renderMetricCard(
+          "Xung đột",
+          String(requestData.unresolved_conflict_count || 0),
+          Number(requestData.unresolved_conflict_count || 0) > 0 ? "Cần xử lý trước khi submit." : "Hiện không có conflict mở.",
+        )}
       </div>
 
       ${countChips ? `<div class="change-request-chip-list">${countChips}</div>` : ""}
 
+      ${renderWorkflowStages(requestData.status)}
+
       ${renderNoteCard("Bước tiếp theo", getRequestNextAction(requestData))}
 
-      ${summaryNotes.join("")}
+      ${notes.join("")}
 
       ${requestData.overlay_fingerprint ? `
-        <div class="change-request-fingerprint change-request-card-meta">
+        <p class="change-request-inline-copy">
           Overlay fingerprint: <code>${escapeHtml(truncateMiddle(requestData.overlay_fingerprint))}</code>
-        </div>
+        </p>
       ` : ""}
     </div>
   `;
@@ -539,21 +524,17 @@ export function renderLocalPreviewSummary(container, preview, { deckTitle = "Dec
     return;
   }
 
-  const changeCounts = renderChangeCountChips(preview.change_counts);
+  const countChips = renderChangeCountChips(preview.change_counts);
+  const groupCount = Object.keys(preview.change_counts || {}).length;
+
   container.innerHTML = `
     <div class="change-request-summary">
-      <div class="change-request-summary-head">
-        <div>
-          <h3 class="change-request-summary-title">Local overlay changes đã sẵn sàng</h3>
-          <p class="change-request-summary-subtitle change-request-copy">Kiểm tra diff, thêm mô tả và tạo draft để đóng gói proposal gửi cho owner.</p>
-        </div>
-        <div class="change-request-status-list">
-          ${renderStatusBadge("local_preview")}
-          ${renderChip(`${preview.item_count} thay đổi`, {
-            tone: "info",
-            icon: "bi-diagram-3",
-          })}
-        </div>
+      <div class="change-request-status-list">
+        ${renderStatusBadge("local_preview")}
+        ${renderChip(`${preview.item_count} thay đổi`, {
+          tone: "info",
+          icon: "bi-diagram-3",
+        })}
       </div>
 
       <div class="change-request-chip-list">
@@ -561,19 +542,36 @@ export function renderLocalPreviewSummary(container, preview, { deckTitle = "Dec
           tone: "neutral",
           icon: "bi-collection",
         })}
-        ${renderChip(`${Object.keys(preview.change_counts || {}).length} nhóm thay đổi`, {
+        ${renderChip(`${groupCount} nhóm thay đổi`, {
           tone: "neutral",
           icon: "bi-tags",
         })}
-        ${renderChip(`Fingerprint ${truncateMiddle(preview.overlay_fingerprint)}`, {
-          tone: "neutral",
-          icon: "bi-fingerprint",
-        })}
       </div>
 
-      ${changeCounts ? `<div class="change-request-chip-list">${changeCounts}</div>` : ""}
+      <div class="change-request-metric-grid">
+        ${renderMetricCard(
+          "Tổng thay đổi",
+          String(preview.item_count || 0),
+          "Các local edits sẽ được đóng gói vào draft.",
+        )}
+        ${renderMetricCard(
+          "Nhóm thay đổi",
+          String(groupCount),
+          "Giúp owner quét nhanh phạm vi chỉnh sửa.",
+        )}
+      </div>
+
+      ${countChips ? `<div class="change-request-chip-list">${countChips}</div>` : ""}
+
+      ${renderWorkflowStages("local_preview")}
 
       ${renderNoteCard("Bước tiếp theo", "Tạo draft để snapshot trạng thái overlay hiện tại, sau đó sync với upstream trước khi submit.")}
+
+      ${preview.overlay_fingerprint ? `
+        <p class="change-request-inline-copy">
+          Overlay fingerprint: <code>${escapeHtml(truncateMiddle(preview.overlay_fingerprint))}</code>
+        </p>
+      ` : ""}
     </div>
   `;
 }
@@ -590,9 +588,7 @@ export function renderChangeItems(container, items, { emptyText = "Không có th
   container.innerHTML = rows.map((item) => {
     const meta = getChangeTypeMeta(item.change_type);
     const metadata = item.metadata || {};
-    const chips = [
-      renderChip(meta.label, { tone: meta.tone, icon: meta.icon }),
-    ];
+    const chips = [renderChip(meta.label, { tone: meta.tone, icon: meta.icon })];
 
     if (metadata.field_name) {
       chips.push(renderChip(`Field ${metadata.field_name}`, {
@@ -619,7 +615,10 @@ export function renderChangeItems(container, items, { emptyText = "Không có th
           <div>
             <p class="change-request-entry-kicker">${escapeHtml(meta.kicker)}</p>
             <h3 class="change-request-card-title">${escapeHtml(item.path_label || meta.label)}</h3>
-            <p class="change-request-card-meta">${escapeHtml(meta.label)}${metadata.source_note_id ? ` · Source note ${metadata.source_note_id}` : ""}</p>
+            <p class="change-request-card-meta">
+              ${escapeHtml(meta.label)}
+              ${metadata.source_note_id ? ` · Source note ${escapeHtml(metadata.source_note_id)}` : ""}
+            </p>
           </div>
           <div class="change-request-chip-list">
             ${chips.join("")}
@@ -627,8 +626,8 @@ export function renderChangeItems(container, items, { emptyText = "Không có th
         </div>
 
         <div class="change-request-diff-grid">
-          ${renderValueCard("Before", item.before_value, { tone: "before" })}
-          ${renderValueCard("After", item.effective_after_value ?? item.after_value, { tone: "after" })}
+          ${renderValueCard("Trước", item.before_value, { tone: "before" })}
+          ${renderValueCard("Sau", item.effective_after_value ?? item.after_value, { tone: "after" })}
         </div>
       </article>
     `;
@@ -660,14 +659,25 @@ export function renderConflicts(container, conflicts, { interactive = false } = 
         }),
     ];
 
+    const valueCards = [
+      renderValueCard("Bản cục bộ", conflict.local_value, { tone: "after" }),
+      renderValueCard("Bản nguồn", conflict.upstream_value, { tone: "before" }),
+    ];
+
+    if (resolved) {
+      valueCards.push(renderValueCard("Giá trị đã chọn", conflict.resolved_value, { tone: "after" }));
+    }
+
     return `
       <article class="change-request-entry">
         <div class="change-request-entry-head">
           <div>
             <p class="change-request-entry-kicker">Conflict</p>
-            <h3 class="change-request-card-title">${escapeHtml(meta.label)}</h3>
+            <h3 class="change-request-card-title">${escapeHtml(conflict.path_label || meta.label)}</h3>
             <p class="change-request-card-meta">
-              ${resolved ? `Đã resolve lúc ${escapeHtml(formatDate(conflict.resolved_at))}` : "Cần quyết định trước khi request có thể tiếp tục."}
+              ${resolved
+                ? `Đã resolve lúc ${escapeHtml(formatDate(conflict.resolved_at))}.`
+                : "Chọn bản cục bộ, bản nguồn hoặc nhập giá trị thủ công trước khi submit."}
             </p>
           </div>
           <div class="change-request-chip-list">
@@ -676,26 +686,23 @@ export function renderConflicts(container, conflicts, { interactive = false } = 
         </div>
 
         <div class="change-request-diff-grid">
-          ${renderValueCard("Base", conflict.base_value, { tone: "before" })}
-          ${renderValueCard("Upstream", conflict.upstream_value, { tone: "before" })}
-          ${renderValueCard("Mine", conflict.local_value, { tone: "after" })}
-          ${renderValueCard("Resolved", conflict.resolved_value, { tone: "after" })}
+          ${valueCards.join("")}
         </div>
 
         ${interactive ? `
           <div class="change-request-conflict-actions">
             <button class="btn btn-dark btn-sm" type="button" data-resolve-conflict-id="${escapeHtml(conflict.id || "")}" data-resolution-mode="keep_mine">
-              <i class="bi bi-person-check"></i> Keep mine
+              <i class="bi bi-person-check"></i> Dùng bản cục bộ
             </button>
             <button class="btn btn-outline-secondary btn-sm" type="button" data-resolve-conflict-id="${escapeHtml(conflict.id || "")}" data-resolution-mode="keep_upstream">
-              <i class="bi bi-arrow-up-right-circle"></i> Keep upstream
+              <i class="bi bi-arrow-up-right-circle"></i> Dùng bản nguồn
             </button>
           </div>
           <div class="change-request-manual-card">
-            <label class="form-label small" for="manual-${escapeHtml(conflict.id || "")}">Manual value (JSON hoặc text)</label>
+            <label class="form-label small" for="manual-${escapeHtml(conflict.id || "")}">Giá trị thủ công (JSON hoặc text)</label>
             <textarea class="form-control" id="manual-${escapeHtml(conflict.id || "")}" rows="4" data-manual-conflict-id="${escapeHtml(conflict.id || "")}">${escapeHtml(formatManualValue(conflict.resolved_value))}</textarea>
             <button class="btn btn-outline-secondary btn-sm mt-2" type="button" data-manual-submit-conflict-id="${escapeHtml(conflict.id || "")}">
-              <i class="bi bi-save2"></i> Save manual resolution
+              <i class="bi bi-save2"></i> Lưu giá trị thủ công
             </button>
           </div>
         ` : ""}
