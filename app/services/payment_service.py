@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from secrets import randbelow
 import time
 from typing import Any
@@ -62,7 +62,7 @@ def webhook_auto_grant_enabled() -> bool:
 
 
 def _utcnow() -> datetime:
-    return datetime.utcnow()
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 def _iso(dt: datetime | None) -> str | None:
@@ -1111,7 +1111,7 @@ def _resolve_existing_access_for_product(*, product_type: str, product_ref_id: s
 
 def _load_checkout_context(*, product_type: str, product_ref_id: str, user_id: int) -> dict[str, Any]:
     if product_type == "note_type":
-        source_note_type = NoteType.query.get(product_ref_id)
+        source_note_type = db.session.get(NoteType, product_ref_id)
         if source_note_type is None:
             raise PaymentServiceError("FIELD_NOT_FOUND", "Không tìm thấy template cần thanh toán.", status=404)
         context = _validate_note_type_for_checkout(source_note_type, user_id=user_id)
@@ -1119,7 +1119,7 @@ def _load_checkout_context(*, product_type: str, product_ref_id: str, user_id: i
         return context
 
     if product_type == "deck_marketplace_item":
-        deck_item = DeckMarketplaceItem.query.get(product_ref_id)
+        deck_item = db.session.get(DeckMarketplaceItem, product_ref_id)
         if deck_item is None:
             raise PaymentServiceError("FIELD_NOT_FOUND", "Không tìm thấy deck cần thanh toán.", status=404)
         context = _validate_deck_item_for_checkout(deck_item, user_id=user_id)
@@ -1556,7 +1556,7 @@ def expire_stale_orders(*, now: datetime | None = None) -> dict[str, int]:
 
 def _fulfill_order_item(*, order: PaymentOrder, order_item: PaymentOrderItem, attempt: PaymentAttempt, now: datetime) -> dict[str, Any]:
     if order_item.product_type == "note_type":
-        source_note_type = NoteType.query.get(order_item.product_ref_id)
+        source_note_type = db.session.get(NoteType, order_item.product_ref_id)
         if source_note_type is None:
             raise PaymentServiceError("FIELD_NOT_FOUND", "Template đã thanh toán không còn tồn tại để cấp quyền.", status=404)
         install_row = flashcards_share_service.ensure_note_type_install_for_user(
@@ -1571,7 +1571,7 @@ def _fulfill_order_item(*, order: PaymentOrder, order_item: PaymentOrderItem, at
         }
 
     if order_item.product_type == "deck_marketplace_item":
-        deck_item = DeckMarketplaceItem.query.get(order_item.product_ref_id)
+        deck_item = db.session.get(DeckMarketplaceItem, order_item.product_ref_id)
         if deck_item is None:
             raise PaymentServiceError("FIELD_NOT_FOUND", "Deck đã thanh toán không còn tồn tại để cấp quyền.", status=404)
         install_result = flashcards_share_service.install_shared_deck_item_for_user(
@@ -1653,7 +1653,7 @@ def _ensure_entitlements_for_confirmed_order(order: PaymentOrder, attempt: Payme
 
 def _fulfill_order_item(*, order: PaymentOrder, order_item: PaymentOrderItem, attempt: PaymentAttempt, now: datetime) -> dict[str, Any]:
     if order_item.product_type == "note_type":
-        source_note_type = NoteType.query.get(order_item.product_ref_id)
+        source_note_type = db.session.get(NoteType, order_item.product_ref_id)
         if source_note_type is None:
             raise PaymentServiceError("FIELD_NOT_FOUND", "Template da thanh toan khong con ton tai de cap quyen.", status=404)
         install_row = flashcards_share_service.ensure_note_type_install_for_user(
@@ -1668,7 +1668,7 @@ def _fulfill_order_item(*, order: PaymentOrder, order_item: PaymentOrderItem, at
         }
 
     if order_item.product_type == "deck_marketplace_item":
-        deck_item = DeckMarketplaceItem.query.get(order_item.product_ref_id)
+        deck_item = db.session.get(DeckMarketplaceItem, order_item.product_ref_id)
         if deck_item is None:
             raise PaymentServiceError("FIELD_NOT_FOUND", "Deck da thanh toan khong con ton tai de cap quyen.", status=404)
         install_result = flashcards_share_service.install_shared_deck_item_for_user(

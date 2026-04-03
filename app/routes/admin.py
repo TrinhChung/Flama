@@ -13,7 +13,6 @@ from sqlalchemy.orm import selectinload
 
 from app.utils.permissions import is_admin_user
 from app.services import admin_service
-from app.services import payout_service
 from app.services import support_donation_service
 from app.services import tts_provider_service
 from app.validators import RequestValidationError, escape_like_pattern, sanitize_query_text
@@ -545,6 +544,8 @@ def batch_update_status_api():
 @admin_bp.route("/api/payouts", methods=["POST"])
 @login_required
 def create_payout_batch_api():
+    from app.services import payout_service
+
     if not is_admin_user(current_user):
         return jsonify({"message": "Unauthorized"}), 403
 
@@ -583,6 +584,8 @@ def create_payout_batch_api():
 @admin_bp.route("/api/payouts/<int:batch_id>", methods=["GET"])
 @login_required
 def payout_batch_detail_api(batch_id: int):
+    from app.services import payout_service
+
     if not is_admin_user(current_user):
         return jsonify({"message": "Unauthorized"}), 403
 

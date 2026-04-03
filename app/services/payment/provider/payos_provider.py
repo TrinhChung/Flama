@@ -4,9 +4,22 @@ import hashlib
 from datetime import datetime, timezone
 from typing import Any
 
-from payos import APIError, InvalidSignatureError, WebhookError
-from payos.types import CreatePaymentLinkRequest
-from payos.types.v2.payment_requests.payment_requests import ItemData
+try:
+    from payos import APIError, InvalidSignatureError, WebhookError
+    from payos.types import CreatePaymentLinkRequest
+    from payos.types.v2.payment_requests.payment_requests import ItemData
+except ModuleNotFoundError:
+    class APIError(Exception):
+        status_code = 502
+
+    class InvalidSignatureError(Exception):
+        pass
+
+    class WebhookError(Exception):
+        pass
+
+    CreatePaymentLinkRequest = Any  # type: ignore[misc,assignment]
+    ItemData = Any  # type: ignore[misc,assignment]
 
 from app.services import payos_client
 
@@ -20,7 +33,7 @@ class PayOSProviderError(RuntimeError):
 
 def assert_payos_provider_available() -> None:
     try:
-        payos_client.get_payos_client()
+        payos_client.validate_payos_configuration()
     except payos_client.PayOSConfigurationError as exc:
         raise PayOSProviderError(
             "Cấu hình payOS chưa đầy đủ nên chưa thể tạo thanh toán lúc này.",

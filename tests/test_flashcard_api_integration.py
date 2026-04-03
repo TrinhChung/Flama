@@ -344,6 +344,120 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         self.assertIn(b'id="deck-edit-btn"', response.data)
         self.assertIn(b"/flashcards/decks/0/share", response.data)
 
+    def test_shared_deck_api_create_persists_item_and_infers_source_note_type(self):
+        note_type = self._create_note_type()
+        note_type_id = note_type["id"]
+
+        note_resp = self.client.post(
+            "/api/notes",
+            json={
+                "note_type_id": note_type_id,
+                "deck_id": self.deck_id,
+                "field_values": {
+                    "Word": "\u72ac",
+                    "Reading": "\u3044\u306c",
+                    "Meaning": "dog",
+                },
+            },
+        )
+        self.assertEqual(note_resp.status_code, 201)
+
+        create_resp = self.client.post(
+            "/api/shared/decks",
+            json={
+                "title": "Shared Deck API Create",
+                "source_deck_id": self.deck_id,
+                "source_note_type_id": note_type_id,
+                "description": "Deck description",
+                "preview_text": "Preview",
+                "tags": ["jlpt", "n5"],
+                "pricing_mode": "free",
+                "taxonomy_domain": "language_learning",
+                "taxonomy_subject": "japanese",
+                "taxonomy_difficulty_band": "beginner",
+                "learning_goals": ["vocabulary"],
+                "primary_topics": ["reading_recall"],
+                "publish_status": "published",
+            },
+        )
+        self.assertEqual(create_resp.status_code, 201)
+        payload = create_resp.get_json() or {}
+        self.assertEqual(payload.get("title"), "Shared Deck API Create")
+        self.assertEqual(payload.get("source_deck_id"), self.deck_id)
+        self.assertEqual(payload.get("source_note_type_id"), note_type_id)
+
+        with self.app.app_context():
+            deck_item = DeckMarketplaceItem.query.filter_by(title="Shared Deck API Create").first()
+            self.assertIsNotNone(deck_item)
+            self.assertEqual(deck_item.source_deck_id, self.deck_id)
+            self.assertEqual(deck_item.source_note_type_id, note_type_id)
+
+    def test_shared_deck_api_patch_updates_item_for_owner(self):
+        note_type = self._create_note_type()
+        note_type_id = note_type["id"]
+
+        note_resp = self.client.post(
+            "/api/notes",
+            json={
+                "note_type_id": note_type_id,
+                "deck_id": self.deck_id,
+                "field_values": {
+                    "Word": "\u732b",
+                    "Reading": "\u306d\u3053",
+                    "Meaning": "cat",
+                },
+            },
+        )
+        self.assertEqual(note_resp.status_code, 201)
+
+        with self.app.app_context():
+            deck_item = DeckMarketplaceItem(
+                owner_user_id=self.user_id,
+                source_deck_id=self.deck_id,
+                source_note_type_id=note_type_id,
+                title="Shared Deck Before Patch",
+                description="Deck description",
+                primary_category="General",
+                tags=["old"],
+                preview_text="Preview",
+                pricing_mode="free",
+                price_amount_minor=0,
+                version="1.0.0",
+                publish_status="private",
+            )
+            db.session.add(deck_item)
+            db.session.commit()
+            deck_item_id = deck_item.id
+
+        patch_resp = self.client.patch(
+            f"/api/shared/decks/{deck_item_id}",
+            json={
+                "title": "Shared Deck After Patch",
+                "source_note_type_id": note_type_id,
+                "description": "Updated description",
+                "tags": ["updated", "deck"],
+                "taxonomy_domain": "language_learning",
+                "taxonomy_subject": "japanese",
+                "taxonomy_difficulty_band": "beginner",
+                "learning_goals": ["vocabulary"],
+                "primary_topics": ["reading_recall"],
+                "publish_status": "published",
+            },
+        )
+        self.assertEqual(patch_resp.status_code, 200)
+        payload = patch_resp.get_json() or {}
+        self.assertEqual(payload.get("title"), "Shared Deck After Patch")
+        self.assertEqual(payload.get("publish_status"), "published")
+        self.assertEqual(payload.get("tags"), ["updated", "deck"])
+
+        with self.app.app_context():
+            deck_item = db.session.get(DeckMarketplaceItem, deck_item_id)
+            self.assertIsNotNone(deck_item)
+            self.assertEqual(deck_item.title, "Shared Deck After Patch")  # type: ignore[union-attr]
+            self.assertEqual(deck_item.description, "Updated description")  # type: ignore[union-attr]
+            self.assertEqual(deck_item.publish_status, "published")  # type: ignore[union-attr]
+            self.assertEqual(deck_item.tags, ["updated", "deck"])  # type: ignore[union-attr]
+
     def test_share_note_type_page_updates_taxonomy_and_redirects_to_detail(self):
         note_type = self._create_note_type()
         note_type_id = note_type["id"]
@@ -822,7 +936,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         self.assertIn("\u72ac*", reload_items[0].get("word", ""))
 
         with self.app.app_context():
-            source_note = Note.query.get(row.get("note_id"))
+            source_note = db.session.get(Note, row.get("note_id"))
             self.assertIsNotNone(source_note)
             self.assertEqual((source_note.field_values or {}).get("Word"), "\u72ac")
             override_row = DeckCloneNoteFieldOverride.query.filter_by(
@@ -1430,13 +1544,13 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
 
         with (
             patch(
-                "app.routes.flashcards.share.share_ctrl.install_shared_deck_item_for_user",
+                "app.services.flashcards_share_service.install_shared_deck_item_for_user",
                 side_effect=[
                     deadlock_exc,
                     {"created": False, "response": expected_response},
                 ],
             ) as install_mock,
-            patch("app.routes.flashcards.time.sleep") as sleep_mock,
+            patch("app.services.flashcards_share_service.time.sleep") as sleep_mock,
         ):
             install_resp = learner_client.post(f"/api/shared/decks/{deck_item_id}/install")
 
@@ -2466,7 +2580,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         self.assertIn("<b>dog edited</b>", payload.get("rendered_back_html", ""))
 
         with self.app.app_context():
-            note = Note.query.get(note_id)
+            note = db.session.get(Note, note_id)
             self.assertIsNotNone(note)
             self.assertEqual(note.field_values.get("Word"), "\u72ac-edit")  # type: ignore[union-attr]
             self.assertEqual(note.field_values.get("Reading"), "\u3044\u306c-edit")  # type: ignore[union-attr]
@@ -2543,7 +2657,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         self.assertEqual(field_values.get("Meaning"), "dog")
 
         with self.app.app_context():
-            note = Note.query.get(note_id)
+            note = db.session.get(Note, note_id)
             self.assertIsNotNone(note)
             values = note.field_values or {}  # type: ignore[union-attr]
             self.assertEqual(values.get("Word"), "\u72ac-only-word-updated")
@@ -2651,12 +2765,57 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         self.assertEqual(detail_values.get("Meaning"), "dog")
 
         with self.app.app_context():
-            note = Note.query.get(note_id)
+            note = db.session.get(Note, note_id)
             self.assertIsNotNone(note)
             values = note.field_values or {}  # type: ignore[union-attr]
             self.assertEqual(values.get("Word"), "\u72ac-browse-updated")
             self.assertEqual(values.get("Reading"), "\u3044\u306c")
             self.assertEqual(values.get("Meaning"), "dog")
+
+    def test_browse_card_update_can_move_owned_card_to_another_deck(self):
+        note_type = self._create_note_type()
+        note_type_id = note_type["id"]
+
+        with self.app.app_context():
+            target_deck = Deck(name="Deck B")
+            db.session.add(target_deck)
+            db.session.commit()
+            target_deck_id = target_deck.id
+
+        note_resp = self.client.post(
+            "/api/notes",
+            json={
+                "note_type_id": note_type_id,
+                "deck_id": self.deck_id,
+                "field_values": {
+                    "Word": "\u732b",
+                    "Reading": "\u306d\u3053",
+                    "Meaning": "cat",
+                },
+            },
+        )
+        self.assertEqual(note_resp.status_code, 201)
+        note_id = note_resp.get_json()["id"]
+
+        with self.app.app_context():
+            card = Card.query.filter_by(note_id=note_id).first()
+            self.assertIsNotNone(card)
+            card_id = card.id  # type: ignore[union-attr]
+
+        patch_resp = self.client.patch(
+            f"/vocabulary/api/browse/cards/{card_id}",
+            json={"deck_id": target_deck_id},
+        )
+        self.assertEqual(patch_resp.status_code, 200)
+        payload = patch_resp.get_json() or {}
+        self.assertEqual(((payload.get("row") or {}).get("deck_id")), target_deck_id)
+        self.assertEqual(((payload.get("row") or {}).get("deck_name")), "Deck B")
+        self.assertEqual(((payload.get("detail") or {}).get("note") or {}).get("deck_id"), target_deck_id)
+
+        with self.app.app_context():
+            note = db.session.get(Note, note_id)
+            self.assertIsNotNone(note)
+            self.assertEqual(note.deck_id, target_deck_id)  # type: ignore[union-attr]
 
     def test_flashcard_import_parse_and_execute_upsert(self):
         note_type = self._create_note_type()

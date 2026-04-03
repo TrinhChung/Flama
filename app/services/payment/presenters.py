@@ -3,7 +3,6 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from app.services import payment_service
 from models.deck_marketplace_item import DeckMarketplaceItem
 from models.note_type import NoteType
 from models.payment_attempt import PaymentAttempt
@@ -38,6 +37,8 @@ PRODUCT_TYPE_LABELS = {
 
 
 def build_order_row(order: PaymentOrder) -> dict[str, Any]:
+    from app.services import payment_service
+
     payload = payment_service.serialize_order(order)
     status_display = payload.get("status_display") or {}
     active_attempt = payload.get("active_attempt") or {}
@@ -67,6 +68,8 @@ def build_order_row(order: PaymentOrder) -> dict[str, Any]:
 
 
 def build_order_detail_payload(order: PaymentOrder) -> dict[str, Any]:
+    from app.services import payment_service
+
     payload = payment_service.serialize_order(order)
     return {
         "id": order.id,

@@ -2,7 +2,7 @@
 
 import hashlib
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Dict, List
 
@@ -14,10 +14,8 @@ from app.services.anki_scheduler import (
     _day_index_to_datetime as scheduler_day_index_to_datetime,
 )
 from app.services import mcp_access_token_service
-from app.services import payment_service
 from app.services import support_donation_service
 from app.services import tts_provider_service
-from app.services.payment.provider import payos_provider
 from app.services.stats_overview import build_stats_overview
 from app.services.stats_today_future import build_today_future_stats, list_stats_decks
 from app.utils.deck_move_token import create_deck_move_token
@@ -63,7 +61,7 @@ def _render_dashboard_page():
         total_learn=total_learn,
         total_due=total_due,
         admin_mode=admin_mode,
-        stats_initial_year=datetime.utcnow().year,
+        stats_initial_year=datetime.now(UTC).year,
     )
 
 
@@ -148,6 +146,9 @@ def support_donation_qr_image():
 
 @main_bp.route("/api/support-donation/checkout", methods=["POST"])
 def support_donation_checkout_api():
+    from app.services import payment_service
+    from app.services.payment.provider import payos_provider
+
     payload = request.get_json(silent=True) or {}
     normalized_payload, message, field = normalize_support_donation_checkout_payload(payload)
     if normalized_payload is None:
@@ -191,6 +192,8 @@ def support_donation_checkout_api():
 
 @main_bp.route("/api/support-donation/checkout-status", methods=["GET"])
 def support_donation_checkout_status_api():
+    from app.services.payment.provider import payos_provider
+
     provider_order_code = str(request.args.get("provider_order_code") or "").strip()
     if not provider_order_code:
         return _support_api_error(

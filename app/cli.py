@@ -13,9 +13,10 @@ from typing import Dict, Iterable, List
 import click
 from flask import Flask
 
+from app.startup import run_startup_maintenance
+from app.startup_schema import ensure_backward_compatible_schema
 from app.services.flashcard_import import ImportValidationError, read_delimited_rows
 from app.services.flashcard_legacy import ensure_legacy_note_type, ensure_quiz_note_type
-from app.services import payment_service
 from app.services.user_roles import ensure_default_user_roles
 from app.services.tts_provider_service import (
     VOICEVOX_AUDIO_BASE_URL,
@@ -95,6 +96,71 @@ class SeedStats:
 def register_cli_commands(app: Flask) -> None:
     """Register custom Flask CLI commands."""
 
+    @app.cli.command("startup-maintenance")
+    @click.option("--skip-db-create-all", is_flag=True, default=False, help="Skip db.create_all().")
+    @click.option(
+        "--skip-user-management-schema",
+        is_flag=True,
+        default=False,
+        help="Skip user/role schema compatibility maintenance.",
+    )
+    @click.option(
+        "--skip-backward-compat-schema",
+        is_flag=True,
+        default=False,
+        help="Skip legacy backward-compatible schema patching.",
+    )
+    @click.option(
+        "--skip-user-role-seed",
+        is_flag=True,
+        default=False,
+        help="Skip default user-role seeding.",
+    )
+    @click.option(
+        "--skip-tts-provider-seed",
+        is_flag=True,
+        default=False,
+        help="Skip default TTS provider seeding.",
+    )
+    @click.option(
+        "--skip-clone-cutover",
+        is_flag=True,
+        default=False,
+        help="Skip one-time clone cutover maintenance.",
+    )
+    @click.option(
+        "--no-fail-on-mismatch",
+        is_flag=True,
+        default=False,
+        help="Do not fail the command when clone cutover detects mismatches.",
+    )
+    def startup_maintenance(
+        skip_db_create_all: bool,
+        skip_user_management_schema: bool,
+        skip_backward_compat_schema: bool,
+        skip_user_role_seed: bool,
+        skip_tts_provider_seed: bool,
+        skip_clone_cutover: bool,
+        no_fail_on_mismatch: bool,
+    ) -> None:
+        """Run startup maintenance explicitly from the CLI."""
+        config_overrides = {
+            "STARTUP_RUN_MAINTENANCE": True,
+            "STARTUP_RUN_DB_CREATE_ALL": not skip_db_create_all,
+            "STARTUP_RUN_USER_MANAGEMENT_SCHEMA": not skip_user_management_schema,
+            "STARTUP_RUN_BACKWARD_COMPAT_SCHEMA": not skip_backward_compat_schema,
+            "STARTUP_RUN_DEFAULT_USER_ROLE_SEED": not skip_user_role_seed,
+            "STARTUP_RUN_DEFAULT_TTS_PROVIDER_SEED": not skip_tts_provider_seed,
+            "STARTUP_RUN_CLONE_CUTOVER": not skip_clone_cutover,
+            "STARTUP_CUTOVER_FAIL_ON_MISMATCH": not no_fail_on_mismatch,
+        }
+        run_startup_maintenance(
+            app,
+            ensure_backward_compatible_schema=ensure_backward_compatible_schema,
+            config_overrides=config_overrides,
+        )
+        click.echo("Startup maintenance completed.")
+
     @app.cli.command("clone-cutover-overlay")
     @click.option(
         "--no-fail-on-mismatch",
@@ -150,6 +216,8 @@ def register_cli_commands(app: Flask) -> None:
     @app.cli.command("payments-expire-stale")
     def payments_expire_stale() -> None:
         """Expire stale unpaid payment attempts/orders."""
+        from app.services import payment_service
+
         result = payment_service.expire_stale_orders()
         click.echo(
             "Done. "

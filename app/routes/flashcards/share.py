@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 from flask import jsonify, request, redirect, url_for, flash, render_template, send_file, current_app
 from flask_login import current_user, login_required
 from sqlalchemy.exc import OperationalError
@@ -13,7 +13,6 @@ from models.deck import Deck
 from models.card_progress import CardProgress
 from app.services import flashcards_share
 from app.services import marketplace_hub_service
-from app.services import payment_service
 from app.utils.permissions import is_admin_user
 
 # Import everything from core module so routes can use helpers
@@ -23,6 +22,10 @@ from . import *
 share_ctrl = flashcards_share
 
 MAX_MARKET_REVIEW_SUBMISSIONS_PER_USER = 2
+
+
+def _utcnow() -> datetime:
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 def _count_user_market_review_submissions(
@@ -143,59 +146,17 @@ def save_shared_deck_item(deck_item_id: str):
 @login_required
 def create_note_type():
     payload = request.get_json(silent=True) or {}
-    name = (payload.get("name") or payload.get("title") or "").strip()
-    if not name:
-        return _api_error("VALIDATION_ERROR", "Note type name is required.", field="name")
-
-    if NoteType.query.filter_by(user_id=current_user.id, name=name).first():
-        return _api_error("VALIDATION_ERROR", "Note type already exists.", field="name")
-
-    note_type = NoteType(user_id=current_user.id, name=name)
-    db.session.add(note_type)
-    db.session.flush()
-
-    input_fields = payload.get("field_defs")
-    if not isinstance(input_fields, list) or not input_fields:
-        input_fields = [{"name": "Word", "field_type": "text", "position": 0, "required": True}]
-
-    for idx, row in enumerate(input_fields):
-        field_name = (row.get("name") or "").strip()
-        field_type = (row.get("field_type") or "text").strip()
-        required = bool(row.get("required", False))
-        if not field_name:
-            return _api_error("VALIDATION_ERROR", "Field name is required.", field="field_defs")
-        if field_type not in FIELD_TYPES:
-            return _api_error("VALIDATION_ERROR", f"Unsupported field_type: {field_type}", field="field_defs")
-        db.session.add(
-            FieldDef(
-                note_type_id=note_type.id,
-                name=field_name,
-                field_type=field_type,
-                position=int(row.get("position", idx)),
-                required=required,
-            )
-        )
-
-    template_payload = payload.get("template") or {}
-    front_html = (template_payload.get("front_html") or "{{Word}}").strip()
-    back_html = (template_payload.get("back_html") or "{{Word}}").strip()
-    shared_css = (template_payload.get("shared_css") or "").strip()
-    template = Template(
-        note_type_id=note_type.id,
-        name=(template_payload.get("name") or "Card 1").strip() or "Card 1",
-        front_html=front_html,
-        back_html=back_html,
-        shared_css=shared_css,
-        position=0,
-        is_default=True,
+    note_type, error_message, error_field = share_ctrl.create_note_type(
+        user_id=current_user.id,
+        payload=payload,
+        is_admin=is_admin_user(current_user),
     )
-    db.session.add(template)
-    metadata_error = _apply_note_type_marketplace_payload(note_type, payload)
-    if metadata_error:
-        db.session.rollback()
-        return _api_error("VALIDATION_ERROR", metadata_error)
-    _audit("note_type.create", {"note_type_id": note_type.id, "name": note_type.name})
-    db.session.commit()
+    if note_type is None:
+        return _api_error(
+            "VALIDATION_ERROR",
+            error_message or "Unable to create note type.",
+            field=error_field,
+        )
     return jsonify(_serialize_note_type(note_type)), 201
 
 @flashcards_bp.route("/api/note-types/<note_type_id>/templates", methods=["POST"])
@@ -205,27 +166,13 @@ def create_template(note_type_id: str):
     if not note_type:
         return _api_error("FIELD_NOT_FOUND", "Note type not found.", status=404)
     payload = request.get_json(silent=True) or {}
-    name = (payload.get("name") or "").strip() or f"Card {Template.query.filter_by(note_type_id=note_type.id).count() + 1}"
-    front_html = (payload.get("front_html") or "{{Word}}").strip()
-    back_html = (payload.get("back_html") or "{{Word}}").strip()
-    shared_css = (payload.get("shared_css") or "").strip()
-    max_pos = db.session.query(db.func.max(Template.position)).filter_by(note_type_id=note_type.id).scalar() or -1
-    template = Template(
+    template, error_message = share_ctrl.create_template(
         note_type_id=note_type.id,
-        name=name,
-        front_html=front_html,
-        back_html=back_html,
-        shared_css=shared_css,
-        position=max_pos + 1,
-        is_default=False,
+        user_id=current_user.id,
+        payload=payload,
     )
-    db.session.add(template)
-    db.session.flush()
-    notes = Note.query.filter_by(note_type_id=note_type.id, user_id=current_user.id).all()
-    for note in notes:
-        db.session.add(Card(note_id=note.id, template_id=template.id))
-    _audit("template.create", {"note_type_id": note_type.id, "template_id": template.id})
-    db.session.commit()
+    if template is None:
+        return _api_error("VALIDATION_ERROR", error_message or "Unable to create template.")
     return jsonify(_serialize_template(template)), 201
 
 @flashcards_bp.route("/api/note-types/<note_type_id>/templates/<template_id>", methods=["PATCH"])
@@ -481,7 +428,7 @@ def preview_shared_note_type_template(note_type_id: str, template_id: str):
 @flashcards_bp.route("/api/shared/note-types/<note_type_id>/install", methods=["POST"])
 @login_required
 def install_shared_note_type(note_type_id: str):
-    source_note_type = NoteType.query.get(note_type_id)
+    source_note_type = db.session.get(NoteType, note_type_id)
     if not source_note_type:
         return _api_error("FIELD_NOT_FOUND", "Note type not found.", status=404)
     status = str(source_note_type.publish_status or "").strip().lower()
@@ -503,6 +450,8 @@ def install_shared_note_type(note_type_id: str):
             }
         )
     if source_note_type.pricing_mode == "paid":
+        from app.services import payment_service
+
         if not payment_service.paid_install_interception_enabled():
             return _api_error(
                 "PAYMENT_UNAVAILABLE",
@@ -531,7 +480,7 @@ def install_shared_note_type(note_type_id: str):
         return jsonify(checkout), 202 if checkout.get("payment_required") else 200
 
     installed_copy = _clone_note_type_for_user(source_note_type, current_user.id)
-    now = datetime.utcnow()
+    now = _utcnow()
     purchase_amount_minor = int(source_note_type.price_amount_minor or 0) if source_note_type.pricing_mode == "paid" else 0
     install_row = NoteTypeInstall(
         source_note_type_id=source_note_type.id,
@@ -564,7 +513,7 @@ def install_shared_note_type(note_type_id: str):
 @flashcards_bp.route("/api/shared/note-types/<note_type_id>/rate", methods=["POST"])
 @login_required
 def rate_shared_note_type(note_type_id: str):
-    note_type = NoteType.query.get(note_type_id)
+    note_type = db.session.get(NoteType, note_type_id)
     if not note_type:
         return _api_error("FIELD_NOT_FOUND", "Note type not found.", status=404)
     if not _can_user_rate_note_type(note_type, user_id=current_user.id):
@@ -642,7 +591,7 @@ def shared_note_type_recommendations():
         for _, item in sorted(scored, key=lambda row: row[0], reverse=True)[:12]
     ]
 
-    trending_cutoff = datetime.utcnow() - timedelta(days=TRENDING_WINDOW_DAYS)
+    trending_cutoff = _utcnow() - timedelta(days=TRENDING_WINDOW_DAYS)
     trending_counts_raw = (
         db.session.query(NoteTypeInstall.source_note_type_id, db.func.count(NoteTypeInstall.id))
         .filter(NoteTypeInstall.installed_at >= trending_cutoff)
@@ -706,39 +655,18 @@ def list_shared_decks():
 @login_required
 def create_shared_deck_item():
     payload = request.get_json(silent=True) or {}
-    title = (payload.get("title") or "").strip()
-    if not title:
-        return _api_error("VALIDATION_ERROR", "title is required.", field="title")
-
-    deck_item = DeckMarketplaceItem(
-        owner_user_id=current_user.id,
-        title=title,
-        description=(payload.get("description") or "").strip(),
-        primary_category=(payload.get("primary_category") or "General").strip() or "General",
-        tags=_normalize_marketplace_tags(payload.get("tags")),
-        preview_text=(payload.get("preview_text") or "").strip() or None,
-        sample_cards_count=0,
-        pricing_mode="free",
-        price_amount_minor=0,
-        version="1.0.0",
-        publish_status="private",
-        is_official=False,
+    deck_item, validation_error, error_field = flashcards_share.create_shared_deck_item(
+        user_id=current_user.id,
+        payload=payload,
+        is_admin=is_admin_user(current_user),
+        require_source_note_type=True,
     )
-    db.session.add(deck_item)
-    validation_error = _apply_deck_marketplace_payload(deck_item, payload)
     if validation_error:
-        db.session.rollback()
-        return _api_error("VALIDATION_ERROR", validation_error)
-    if deck_item.source_deck_id is not None and not Deck.query.get(deck_item.source_deck_id):
-        db.session.rollback()
-        return _api_error("FIELD_NOT_FOUND", "source_deck_id not found.", field="source_deck_id", status=404)
-    bind_error = _bind_deck_item_source_note_type(deck_item, require_source_note_type=True)
-    if bind_error:
-        db.session.rollback()
-        return _api_error("VALIDATION_ERROR", bind_error, field="source_note_type_id")
-    _recompute_deck_item_market_stats(deck_item)
-    _audit("market.deck_item.create", {"deck_item_id": deck_item.id})
-    db.session.commit()
+        if error_field == "source_deck_id":
+            return _api_error("FIELD_NOT_FOUND", validation_error, field=error_field, status=404)
+        return _api_error("VALIDATION_ERROR", validation_error, field=error_field)
+    if deck_item is None:
+        return _api_error("VALIDATION_ERROR", "Failed to create deck item.")
     return jsonify(_serialize_deck_marketplace_item(deck_item)), 201
 
 @flashcards_bp.route("/api/shared/decks/<deck_item_id>", methods=["GET"])
@@ -803,7 +731,7 @@ def preview_shared_deck_template(deck_item_id: str, template_id: str):
     if not source_note_type_id:
         return _api_error("VALIDATION_ERROR", "Deck item has no source note type.", status=409)
 
-    note_type = NoteType.query.get(source_note_type_id)
+    note_type = db.session.get(NoteType, source_note_type_id)
     if not note_type:
         return _api_error("FIELD_NOT_FOUND", "Note type not found.", status=404)
 
@@ -845,60 +773,65 @@ def preview_shared_deck_template(deck_item_id: str, template_id: str):
 @flashcards_bp.route("/api/shared/decks/<deck_item_id>", methods=["PATCH"])
 @login_required
 def patch_shared_deck_item(deck_item_id: str):
-    deck_item = DeckMarketplaceItem.query.get(deck_item_id)
+    deck_item = db.session.get(DeckMarketplaceItem, deck_item_id)
     if not deck_item:
         return _api_error("FIELD_NOT_FOUND", "Deck item not found.", status=404)
     if deck_item.owner_user_id != current_user.id and not is_admin_user(current_user):
         return _api_error("VALIDATION_ERROR", "Only owner can edit deck item.", status=403)
 
     payload = request.get_json(silent=True) or {}
-    validation_error = _apply_deck_marketplace_payload(deck_item, payload)
+    _, validation_error, error_field = flashcards_share.update_shared_deck_item(
+        deck_item=deck_item,
+        user_id=current_user.id,
+        payload=payload,
+        is_admin=is_admin_user(current_user),
+        require_source_note_type=True,
+    )
     if validation_error:
-        return _api_error("VALIDATION_ERROR", validation_error)
-    if deck_item.source_deck_id is not None and not Deck.query.get(deck_item.source_deck_id):
-        return _api_error("FIELD_NOT_FOUND", "source_deck_id not found.", field="source_deck_id", status=404)
-    bind_error = _bind_deck_item_source_note_type(deck_item, require_source_note_type=True)
-    if bind_error:
-        return _api_error("VALIDATION_ERROR", bind_error, field="source_note_type_id")
-    _recompute_deck_item_market_stats(deck_item)
-    _audit("market.deck_item.update", {"deck_item_id": deck_item.id})
-    db.session.commit()
+        if error_field == "source_deck_id":
+            return _api_error("FIELD_NOT_FOUND", validation_error, field=error_field, status=404)
+        return _api_error("VALIDATION_ERROR", validation_error, field=error_field)
     return jsonify(_serialize_deck_marketplace_item(deck_item))
 
 @flashcards_bp.route("/api/shared/decks/<deck_item_id>/install", methods=["POST"])
 @login_required
 def install_shared_deck_item(deck_item_id: str):
-    for attempt in range(1, SHARED_DECK_INSTALL_MAX_RETRIES + 1):
-        deck_item = DeckMarketplaceItem.query.get(deck_item_id)
-        if not deck_item:
-            return _api_error("FIELD_NOT_FOUND", "Deck item not found.", status=404)
+    deck_item = db.session.get(DeckMarketplaceItem, deck_item_id)
+    if not deck_item:
+        return _api_error("FIELD_NOT_FOUND", "Deck item not found.", status=404)
 
-        bind_error, changed = flashcards_share.sync_deck_item_source_note_type(
-            deck_item,
-            require_source_note_type=True,
-        )
-        if bind_error:
-            return _api_error("VALIDATION_ERROR", bind_error, status=409)
+    if deck_item.pricing_mode == "paid":
+        for attempt in range(1, SHARED_DECK_INSTALL_MAX_RETRIES + 1):
+            bind_error, changed = flashcards_share.sync_deck_item_source_note_type(
+                deck_item,
+                require_source_note_type=True,
+            )
+            if bind_error:
+                return _api_error("VALIDATION_ERROR", bind_error, status=409)
 
-        if changed:
-            try:
-                db.session.commit()
-            except OperationalError as exc:
-                db.session.rollback()
-                if _is_mysql_deadlock(exc) and attempt < SHARED_DECK_INSTALL_MAX_RETRIES:
-                    logger.warning(
-                        "Deadlock while syncing source note type for shared deck install "
-                        "(deck_item_id=%s, user_id=%s, attempt=%s/%s)",
-                        deck_item_id,
-                        current_user.id,
-                        attempt,
-                        SHARED_DECK_INSTALL_MAX_RETRIES,
-                    )
-                    time.sleep(0.05 * attempt)
-                    continue
-                raise
+            if changed:
+                try:
+                    db.session.commit()
+                except OperationalError as exc:
+                    db.session.rollback()
+                    if _is_mysql_deadlock(exc) and attempt < SHARED_DECK_INSTALL_MAX_RETRIES:
+                        logger.warning(
+                            "Deadlock while syncing source note type for shared deck install "
+                            "(deck_item_id=%s, user_id=%s, attempt=%s/%s)",
+                            deck_item_id,
+                            current_user.id,
+                            attempt,
+                            SHARED_DECK_INSTALL_MAX_RETRIES,
+                        )
+                        time.sleep(0.05 * attempt)
+                        deck_item = db.session.get(DeckMarketplaceItem, deck_item_id)
+                        if deck_item is None:
+                            return _api_error("FIELD_NOT_FOUND", "Deck item not found.", status=404)
+                        continue
+                    raise
 
-        if deck_item.pricing_mode == "paid":
+            from app.services import payment_service
+
             if not payment_service.paid_install_interception_enabled():
                 return _api_error(
                     "PAYMENT_UNAVAILABLE",
@@ -926,75 +859,28 @@ def install_shared_deck_item(deck_item_id: str):
                 )
             return jsonify(checkout), 202 if checkout.get("payment_required") else 200
 
-        try:
-            install_result = flashcards_share.install_shared_deck_item_for_user(
-                deck_item,
-                user_id=current_user.id,
-                publish_statuses_visible=PUBLISH_STATUSES_VISIBLE,
-            )
-        except flashcards_share.ShareControllerError as exc:
-            db.session.rollback()
-            return _api_error(
-                exc.error,
-                exc.message,
-                status=exc.status,
-                field=exc.field,
-            )
-        except OperationalError as exc:
-            db.session.rollback()
-            if _is_mysql_deadlock(exc) and attempt < SHARED_DECK_INSTALL_MAX_RETRIES:
-                logger.warning(
-                    "Deadlock while installing shared deck "
-                    "(deck_item_id=%s, user_id=%s, attempt=%s/%s)",
-                    deck_item_id,
-                    current_user.id,
-                    attempt,
-                    SHARED_DECK_INSTALL_MAX_RETRIES,
-                )
-                time.sleep(0.05 * attempt)
-                continue
-            if _is_mysql_deadlock(exc):
-                return _api_error(
-                    "DEADLOCK_RETRY_EXCEEDED",
-                    "Hệ thống đang bận khi cài deck này. Vui lòng thử lại sau vài giây.",
-                    status=409,
-                )
-            raise
+        return _api_error(
+            "DEADLOCK_RETRY_EXCEEDED",
+            flashcards_share.SHARED_DECK_INSTALL_DEADLOCK_MESSAGE,
+            status=409,
+        )
 
-        if not install_result.get("created"):
-            return jsonify(install_result.get("response") or {})
-
-        _audit("market.deck_item.install", install_result.get("audit") or {})
-        try:
-            db.session.commit()
-        except OperationalError as exc:
-            db.session.rollback()
-            if _is_mysql_deadlock(exc) and attempt < SHARED_DECK_INSTALL_MAX_RETRIES:
-                logger.warning(
-                    "Deadlock while committing shared deck install "
-                    "(deck_item_id=%s, user_id=%s, attempt=%s/%s)",
-                    deck_item_id,
-                    current_user.id,
-                    attempt,
-                    SHARED_DECK_INSTALL_MAX_RETRIES,
-                )
-                time.sleep(0.05 * attempt)
-                continue
-            if _is_mysql_deadlock(exc):
-                return _api_error(
-                    "DEADLOCK_RETRY_EXCEEDED",
-                    "Hệ thống đang bận khi cài deck này. Vui lòng thử lại sau vài giây.",
-                    status=409,
-                )
-            raise
-
-        return jsonify(install_result.get("response") or {}), 201
-
-    return _api_error(
-        "DEADLOCK_RETRY_EXCEEDED",
-        "Hệ thống đang bận khi cài deck này. Vui lòng thử lại sau vài giây.",
-        status=409,
+    response_payload, error_message, error_field, status_code = flashcards_share.install_shared_deck_item(
+        deck_item_id=deck_item_id,
+        user_id=current_user.id,
+        publish_statuses_visible=PUBLISH_STATUSES_VISIBLE,
     )
+    if error_message:
+        error_code = "DEADLOCK_RETRY_EXCEEDED" if error_message == flashcards_share.SHARED_DECK_INSTALL_DEADLOCK_MESSAGE else (
+            "FIELD_NOT_FOUND" if status_code == 404 else "VALIDATION_ERROR"
+        )
+        return _api_error(
+            error_code,
+            error_message,
+            status=status_code,
+            field=error_field,
+        )
+    return jsonify(response_payload or {}), status_code
 
 @flashcards_bp.route("/api/shared/decks/<deck_item_id>/clone/overlay", methods=["POST"])
 @login_required
@@ -1038,7 +924,7 @@ def upsert_shared_deck_clone_overlay(deck_item_id: str):
 @flashcards_bp.route("/api/shared/decks/<deck_item_id>/rate", methods=["POST"])
 @login_required
 def rate_shared_deck_item(deck_item_id: str):
-    deck_item = DeckMarketplaceItem.query.get(deck_item_id)
+    deck_item = db.session.get(DeckMarketplaceItem, deck_item_id)
     if not deck_item:
         return _api_error("FIELD_NOT_FOUND", "Deck item not found.", status=404)
     if not _can_user_rate_deck(deck_item, user_id=current_user.id):
@@ -1116,7 +1002,7 @@ def shared_deck_recommendations():
         for _, item in sorted(scored, key=lambda row: row[0], reverse=True)[:12]
     ]
 
-    trending_cutoff = datetime.utcnow() - timedelta(days=TRENDING_WINDOW_DAYS)
+    trending_cutoff = _utcnow() - timedelta(days=TRENDING_WINDOW_DAYS)
     trending_counts_raw = (
         db.session.query(DeckInstall.deck_item_id, db.func.count(DeckInstall.id))
         .filter(DeckInstall.installed_at >= trending_cutoff)

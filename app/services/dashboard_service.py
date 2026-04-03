@@ -1,6 +1,6 @@
 import hashlib
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Dict, List, Tuple
 
 from flask import url_for
@@ -14,6 +14,10 @@ from app.repositories.study_repository import counter_bucket_for_progress_values
 from app.services.stats_overview import get_effective_timezone_name
 from app.utils.deck_move_token import create_deck_move_token
 from app.utils.permissions import is_admin_user
+
+
+def _utcnow() -> datetime:
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 @dataclass
@@ -94,7 +98,7 @@ def build_dashboard_data(current_user) -> Tuple[List[DeckNode], int, int, int, b
         else:
             decks = []
 
-    now = datetime.utcnow()
+    now = _utcnow()
 
     visible_deck_ids = [deck.id for deck in decks if deck.id is not None]
     card_counts_by_deck: Dict[int, Dict[str, int]] = {
