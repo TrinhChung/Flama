@@ -58,6 +58,23 @@
     /* ── Gradient ── */
     --flama-gradient: linear-gradient(135deg, #EF3303 0%, #FE6808 55%, #FEA00E 100%);
 
+    /* ── Button System ── */
+    --button-radius: 12px;
+    --button-radius-pill: 999px;
+    --button-height: 2.625rem;
+    --button-height-sm: 2.125rem;
+    --button-height-lg: 3rem;
+    --button-padding-y: 0.625rem;
+    --button-padding-x: 1rem;
+    --button-padding-x-sm: 0.8rem;
+    --button-padding-x-lg: 1.4rem;
+    --button-shadow-soft: 0 8px 20px rgba(31, 26, 23, 0.08);
+    --button-shadow-primary: 0 10px 24px rgba(224, 92, 7, 0.2);
+    --button-shadow-primary-hover: 0 14px 30px rgba(224, 92, 7, 0.26);
+    --button-shadow-danger: 0 10px 24px rgba(239, 51, 3, 0.18);
+    --button-shadow-danger-hover: 0 14px 30px rgba(239, 51, 3, 0.24);
+    --button-focus-ring: 0 0 0 0.22rem rgba(254, 104, 8, 0.18);
+
     /* ── Typography System ── */
     --font-family-base: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
     --font-family-mono: 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', monospace;

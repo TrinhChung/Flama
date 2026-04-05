@@ -7,35 +7,38 @@
   .marketplace-payment-shell {
     max-width: 920px;
     margin: 0 auto;
+    color: var(--flama-text);
+    font-family: var(--font-family-base);
   }
 
   .marketplace-payment-card {
-    border: 1px solid var(--flama-border, #dee2e6);
-    border-radius: 0.9rem;
-    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+    border: 1px solid var(--flama-border);
+    border-radius: 1rem;
+    background: rgba(255, 255, 255, 0.96);
+    box-shadow: 0 14px 30px rgba(31, 26, 23, 0.08);
   }
 
   .marketplace-payment-card[data-tone="success"] {
-    border-color: rgba(25, 135, 84, 0.24);
+    border-color: rgba(22, 163, 74, 0.24);
   }
 
   .marketplace-payment-card[data-tone="warning"] {
-    border-color: rgba(245, 159, 0, 0.24);
+    border-color: rgba(224, 141, 12, 0.24);
   }
 
   .marketplace-payment-card[data-tone="danger"] {
-    border-color: rgba(220, 53, 69, 0.24);
+    border-color: rgba(239, 51, 3, 0.24);
   }
 
   .marketplace-payment-card[data-tone="secondary"] {
-    border-color: rgba(108, 117, 125, 0.24);
+    border-color: rgba(233, 221, 212, 0.96);
   }
 
   .marketplace-payment-eyebrow {
-    color: #9a3412;
+    color: var(--flama-orange-700);
     font-size: 0.78rem;
-    font-weight: 700;
-    letter-spacing: 0.08em;
+    font-weight: 800;
+    letter-spacing: 0.12em;
     text-transform: uppercase;
   }
 
@@ -46,34 +49,34 @@
     border-radius: 999px;
     font-size: 0.8rem;
     font-weight: 700;
-    background: rgba(13, 110, 253, 0.08);
-    border: 1px solid rgba(13, 110, 253, 0.14);
-    color: #0d6efd;
+    background: var(--flama-orange-50);
+    border: 1px solid var(--flama-orange-200);
+    color: var(--flama-orange-700);
     white-space: nowrap;
   }
 
   .marketplace-payment-card[data-tone="success"] .marketplace-payment-badge {
-    background: rgba(25, 135, 84, 0.12);
-    border-color: rgba(25, 135, 84, 0.22);
-    color: #198754;
+    background: rgba(22, 163, 74, 0.12);
+    border-color: rgba(22, 163, 74, 0.22);
+    color: var(--flama-success);
   }
 
   .marketplace-payment-card[data-tone="warning"] .marketplace-payment-badge {
-    background: rgba(245, 159, 0, 0.12);
-    border-color: rgba(245, 159, 0, 0.22);
-    color: #b7791f;
+    background: rgba(224, 141, 12, 0.12);
+    border-color: rgba(224, 141, 12, 0.22);
+    color: var(--flama-warning);
   }
 
   .marketplace-payment-card[data-tone="danger"] .marketplace-payment-badge {
-    background: rgba(220, 53, 69, 0.12);
-    border-color: rgba(220, 53, 69, 0.22);
-    color: #b02a37;
+    background: rgba(239, 51, 3, 0.12);
+    border-color: rgba(239, 51, 3, 0.22);
+    color: var(--flama-danger);
   }
 
   .marketplace-payment-card[data-tone="secondary"] .marketplace-payment-badge {
-    background: rgba(108, 117, 125, 0.12);
-    border-color: rgba(108, 117, 125, 0.22);
-    color: #495057;
+    background: rgba(255, 241, 231, 0.92);
+    border-color: rgba(233, 221, 212, 0.96);
+    color: var(--flama-text-2);
   }
 
   .marketplace-payment-lines {
@@ -84,7 +87,7 @@
 
   .marketplace-payment-line {
     padding-bottom: 0.75rem;
-    border-bottom: 1px dashed #dee2e6;
+    border-bottom: 1px dashed rgba(233, 221, 212, 0.96);
   }
 
   .marketplace-payment-line:last-child {
@@ -93,10 +96,10 @@
   }
 
   .marketplace-payment-label {
-    color: #6c757d;
+    color: var(--flama-text-2);
     font-size: 0.75rem;
     font-weight: 600;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
   }
 
@@ -104,6 +107,7 @@
     margin-top: 0.15rem;
     font-size: 0.97rem;
     font-weight: 500;
+    color: var(--flama-text);
     word-break: break-word;
   }
 
@@ -112,17 +116,19 @@
   }
 
   .marketplace-payment-value a {
+    color: var(--flama-orange-700);
     text-decoration: none;
   }
 
   .marketplace-payment-value a:hover {
+    color: var(--flama-orange-800);
     text-decoration: underline;
   }
 
   .marketplace-payment-list {
     margin: 0;
     padding-left: 1.15rem;
-    color: #6c757d;
+    color: var(--flama-text-2);
   }
 
   .marketplace-payment-list li + li {

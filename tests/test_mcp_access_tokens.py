@@ -27,9 +27,19 @@ class McpAccessTokenTests(unittest.TestCase):
         mcp_access_token_service.reset_rate_limit_state()
 
         with self.app.app_context():
-            owner = User(username="token-owner", email="token-owner@example.com", timezone="UTC")
+            owner = User(
+                username="token-owner",
+                email="token-owner@example.com",
+                timezone="UTC",
+                is_admin=True,
+            )
             owner.set_password("password")
-            other = User(username="token-other", email="token-other@example.com", timezone="UTC")
+            other = User(
+                username="token-other",
+                email="token-other@example.com",
+                timezone="UTC",
+                is_admin=False,
+            )
             other.set_password("password")
             db.session.add_all([owner, other])
             db.session.flush()
@@ -63,6 +73,13 @@ class McpAccessTokenTests(unittest.TestCase):
         return self.client.post(
             "/login",
             data={"email": "token-owner@example.com", "password": "password"},
+            follow_redirects=True,
+        )
+
+    def _login_regular(self):
+        return self.client.post(
+            "/login",
+            data={"email": "token-other@example.com", "password": "password"},
             follow_redirects=True,
         )
 
@@ -112,6 +129,15 @@ class McpAccessTokenTests(unittest.TestCase):
         self.assertNotIn(token, dashboard_html)
         self.assertNotIn("MCP Access Token", dashboard_html)
 
+    def test_non_admin_dashboard_hides_mcp_link(self):
+        self._login_regular()
+
+        response = self.client.get("/dashboard")
+
+        self.assertEqual(response.status_code, 200)
+        html = response.get_data(as_text=True)
+        self.assertNotIn("MCP Tokens", html)
+
     def test_mcp_token_page_is_available_from_separate_route(self):
         self._login()
 
@@ -121,6 +147,25 @@ class McpAccessTokenTests(unittest.TestCase):
         html = response.get_data(as_text=True)
         self.assertIn("MCP Access Tokens", html)
         self.assertIn("Generate MCP token", html)
+
+    def test_non_admin_cannot_open_mcp_token_page(self):
+        self._login_regular()
+
+        response = self.client.get("/settings/mcp-tokens", follow_redirects=False)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/dashboard", response.headers.get("Location", ""))
+
+    def test_non_admin_cannot_generate_mcp_token(self):
+        self._login_regular()
+
+        response = self.client.post("/settings/mcp-tokens/generate", follow_redirects=False)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/dashboard", response.headers.get("Location", ""))
+        with self.app.app_context():
+            rows = McpAccessToken.query.filter_by(user_id=self.other_user_id).all()
+            self.assertEqual(rows, [])
 
     def test_bearer_token_can_call_mcp_without_session(self):
         token = self._generate_token()
@@ -136,6 +181,34 @@ class McpAccessTokenTests(unittest.TestCase):
         payload = response.get_json()
         decks = payload["result"]["structuredContent"]["decks"]
         self.assertEqual([deck["name"] for deck in decks], ["Owner Deck"])
+
+    def test_non_admin_session_cannot_call_mcp(self):
+        self._login_regular()
+
+        response = self.client.post(
+            "/api/mcp",
+            json=self._mcp_payload(),
+            headers={"MCP-Protocol-Version": "2025-11-25"},
+        )
+
+        self.assertEqual(response.status_code, 403)
+        payload = response.get_json()
+        self.assertEqual(payload["error"]["data"]["code"], "ADMIN_REQUIRED")
+
+    def test_non_admin_bearer_token_is_rejected(self):
+        with self.app.app_context():
+            issued_token = mcp_access_token_service.issue_short_lived_token(user_id=self.other_user_id)
+            db.session.commit()
+
+        response = self.app.test_client().post(
+            "/api/mcp",
+            json=self._mcp_payload(),
+            headers=self._mcp_headers(issued_token.token),
+        )
+
+        self.assertEqual(response.status_code, 403)
+        payload = response.get_json()
+        self.assertEqual(payload["error"]["data"]["code"], "ADMIN_REQUIRED")
 
     def test_invalid_bearer_does_not_fallback_to_session(self):
         self._login()

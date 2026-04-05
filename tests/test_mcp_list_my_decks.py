@@ -23,9 +23,19 @@ class McpListMyDecksTests(unittest.TestCase):
         self.client = self.app.test_client()
 
         with self.app.app_context():
-            owner = User(username="mcp-owner", email="mcp-owner@example.com", timezone="UTC")
+            owner = User(
+                username="mcp-owner",
+                email="mcp-owner@example.com",
+                timezone="UTC",
+                is_admin=True,
+            )
             owner.set_password("password")
-            other = User(username="mcp-other", email="mcp-other@example.com", timezone="UTC")
+            other = User(
+                username="mcp-other",
+                email="mcp-other@example.com",
+                timezone="UTC",
+                is_admin=False,
+            )
             other.set_password("password")
             db.session.add_all([owner, other])
             db.session.flush()
@@ -122,7 +132,23 @@ class McpListMyDecksTests(unittest.TestCase):
         self.assertEqual(payload["result"]["protocolVersion"], "2025-11-25")
         self.assertIn("tools", payload["result"]["capabilities"])
 
-    def test_tools_list_exposes_only_list_my_decks_without_auth(self):
+    def test_tools_list_requires_authenticated_admin(self):
+        response = self._mcp_post(
+            {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "tools/list",
+                "params": {},
+            }
+        )
+
+        self.assertEqual(response.status_code, 401)
+        payload = response.get_json()
+        self.assertEqual(payload["error"]["data"]["code"], "AUTH_REQUIRED")
+
+    def test_tools_list_exposes_only_list_my_decks_for_admin(self):
+        self._login_owner()
+
         response = self._mcp_post(
             {
                 "jsonrpc": "2.0",

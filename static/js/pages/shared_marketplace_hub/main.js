@@ -205,8 +205,8 @@ if (root) {
     const action = item.primary_action || "";
     if (action === "edit") {
       return mode === "seller"
-        ? `<button class="btn btn-dark" type="button" data-action="edit" data-edit-url="${escapeHtml(buildEditUrl(item))}">Chỉnh sửa</button>`
-        : `<a class="btn btn-dark" href="${escapeHtml(buildUrl(detailTemplate, item.id))}">Xem chi tiết</a>`;
+        ? `<button class="btn btn-primary" type="button" data-action="edit" data-edit-url="${escapeHtml(buildEditUrl(item))}">Chỉnh sửa</button>`
+        : `<a class="btn btn-primary" href="${escapeHtml(buildUrl(detailTemplate, item.id))}">Xem chi tiết</a>`;
     }
     if (action === "installed") {
       return `<button class="btn btn-outline-secondary" type="button" disabled>Đã cài</button>`;
@@ -214,7 +214,7 @@ if (root) {
     if (action === "order") {
       return `<button class="btn btn-outline-secondary" type="button" data-action="orders">Xem đơn hàng</button>`;
     }
-    return `<button class="btn btn-dark" type="button" data-action="install" data-id="${escapeHtml(item.id)}">${escapeHtml(item.primary_cta_label || "Thêm vào thư viện")}</button>`;
+    return `<button class="btn btn-primary" type="button" data-action="install" data-id="${escapeHtml(item.id)}">${escapeHtml(item.primary_cta_label || "Thêm vào thư viện")}</button>`;
   }
 
   function renderSaveButton(item, mode) {
@@ -501,7 +501,7 @@ if (root) {
             </div>
             <div class="market-card-actions">
               <a class="btn btn-outline-secondary" href="${escapeHtml(buildUrl(orderDetailTemplate, row.order_id))}">Xem đơn</a>
-              <a class="btn btn-dark" href="${escapeHtml(buildUrl(detailTemplate, row.product_ref_id))}">Mở nội dung</a>
+              <a class="btn btn-primary" href="${escapeHtml(buildUrl(detailTemplate, row.product_ref_id))}">Mở nội dung</a>
             </div>
           </div>
         `).join("")}

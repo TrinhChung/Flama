@@ -177,12 +177,12 @@ if (root) {
   }
 
   function setLoadingPreview(message) {
-    previewFrame.srcdoc = `<!doctype html><html><body><div style="padding:12px;color:#61708b;">${escapeHtml(message || "Đang tải phần xem trước...")}</div></body></html>`;
+    previewFrame.srcdoc = `<!doctype html><html><body style="background:#fffaf6;color:#1f1a17;"><div style="padding:12px;color:#6b625c;">${escapeHtml(message || "Đang tải phần xem trước...")}</div></body></html>`;
   }
 
   function renderPreviewFrame() {
     const html = previewSide === "back" ? (previewPayload?.back_html || "") : (previewPayload?.front_html || "");
-    previewFrame.srcdoc = `<!doctype html><html><body><div style="padding:12px;">${html || "<div style='color:#61708b;'>Chưa có nội dung xem trước.</div>"}</div></body></html>`;
+    previewFrame.srcdoc = `<!doctype html><html><body style="background:#fffaf6;color:#1f1a17;"><div style="padding:12px;">${html || "<div style='color:#6b625c;'>Chưa có nội dung xem trước.</div>"}</div></body></html>`;
   }
 
   function getActiveSample() {
@@ -212,9 +212,9 @@ if (root) {
     }
     testNoteEl.textContent = `Đang hiển thị ${formatCount(testSamples.length)} mẫu ngẫu nhiên để mô phỏng trải nghiệm học.`;
     testSamplesEl.innerHTML = testSamples.map((sample, index) => `
-      <button class="btn ${index === activeSampleIndex ? "btn-dark" : "btn-outline-secondary"} text-start" type="button" data-sample-index="${index}">
+      <button class="btn ${index === activeSampleIndex ? "btn-primary" : "btn-outline-secondary"} text-start" type="button" data-sample-index="${index}">
         <strong>${escapeHtml(sample.word || `Từ #${index + 1}`)}</strong>
-        <div class="small ${index === activeSampleIndex ? "text-white-50" : "text-muted"}">${escapeHtml(sample.reading || sample.meaning || "Không có mô tả")}</div>
+        <div class="small ${index === activeSampleIndex ? "text-white" : "text-muted"}">${escapeHtml(sample.reading || sample.meaning || "Không có mô tả")}</div>
       </button>
     `).join("");
     renderSampleNavState();

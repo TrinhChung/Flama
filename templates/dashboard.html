@@ -678,20 +678,34 @@
   .stats-year-btn {
     width: 2.15rem;
     height: 2.15rem;
-    border: 1px solid #d1d5db;
-    border-radius: 8px;
-    background: #efefef;
-    color: #6b7280;
+    border: 1px solid var(--flama-border);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.96);
+    color: var(--flama-text-2);
     display: inline-flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
+    box-shadow: 0 6px 16px rgba(31, 26, 23, 0.04);
+    transition:
+      transform 0.18s ease,
+      box-shadow 0.18s ease,
+      border-color 0.18s ease,
+      background 0.18s ease,
+      color 0.18s ease;
   }
 
   .stats-year-btn:hover {
     border-color: var(--flama-orange-300);
     color: var(--flama-orange-700);
-    background: #fff4ec;
+    background: var(--flama-orange-50);
+    box-shadow: 0 10px 20px rgba(31, 26, 23, 0.08);
+    transform: translateY(-1px);
+  }
+
+  .stats-year-btn:focus-visible {
+    outline: none;
+    box-shadow: var(--button-focus-ring), 0 10px 20px rgba(31, 26, 23, 0.08);
   }
 
   .stats-year-label {

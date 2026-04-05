@@ -9,6 +9,7 @@ from flask_login import current_user
 
 from app.services import mcp_auth_service, mcp_tool_registry, mcp_tool_service
 from app.services.mcp_access_token_service import McpAccessTokenError
+from app.utils.permissions import is_admin_user
 from app.validators import (
     RequestValidationError,
     validate_mcp_jsonrpc_request,
@@ -67,6 +68,16 @@ def _auth_error_code(status: int) -> int:
     return -32603
 
 
+def _ensure_mcp_admin_access(auth_context):
+    if is_admin_user(getattr(auth_context, "user", None)):
+        return auth_context
+    raise McpAccessTokenError(
+        "Admin access required.",
+        status=403,
+        code="ADMIN_REQUIRED",
+    )
+
+
 @mcp_bp.route("/api/mcp", methods=["POST"])
 def mcp_api():
     try:
@@ -85,9 +96,11 @@ def mcp_api():
     auth_context = None
     try:
         if rpc_request.method == "initialize":
-            auth_context = mcp_auth_service.authenticate_mcp_request_if_present(
-                request=request,
-                session_user=current_user,
+            auth_context = _ensure_mcp_admin_access(
+                mcp_auth_service.authenticate_mcp_request(
+                    request=request,
+                    session_user=current_user,
+                )
             )
             return _jsonrpc_result(
                 request_id,
@@ -113,18 +126,22 @@ def mcp_api():
             )
 
         if rpc_request.method == "notifications/initialized":
-            auth_context = mcp_auth_service.authenticate_mcp_request_if_present(
-                request=request,
-                session_user=current_user,
+            auth_context = _ensure_mcp_admin_access(
+                mcp_auth_service.authenticate_mcp_request(
+                    request=request,
+                    session_user=current_user,
+                )
             )
             response = make_response("", 204)
             response.headers["MCP-Protocol-Version"] = mcp_tool_service.MCP_PROTOCOL_VERSION
             return response
 
         if rpc_request.method == "tools/list":
-            auth_context = mcp_auth_service.authenticate_mcp_request_if_present(
-                request=request,
-                session_user=current_user,
+            auth_context = _ensure_mcp_admin_access(
+                mcp_auth_service.authenticate_mcp_request(
+                    request=request,
+                    session_user=current_user,
+                )
             )
             return _jsonrpc_result(
                 request_id,
@@ -153,10 +170,12 @@ def mcp_api():
                     data={"field": "name", "code": "UNKNOWN_TOOL"},
                 )
 
-            auth_context = mcp_auth_service.authenticate_mcp_request(
-                request=request,
-                session_user=current_user,
-                required_scope=tool_definition.required_scope,
+            auth_context = _ensure_mcp_admin_access(
+                mcp_auth_service.authenticate_mcp_request(
+                    request=request,
+                    session_user=current_user,
+                    required_scope=tool_definition.required_scope,
+                )
             )
             result = mcp_tool_registry.call_mcp_tool(
                 tool_name=tool_name,

@@ -39,6 +39,11 @@
                 <i class="bi bi-collection"></i> Shared Decks
               </a>
             </li>
+            <li>
+              <a class="dropdown-item" href="{{ url_for('flashcards.installed_decks_page') }}">
+                <i class="bi bi-journal-bookmark"></i> Deck đã cài
+              </a>
+            </li>
           </ul>
         </li>
 
@@ -113,9 +118,11 @@
               </a>
             </li>
             <li>
+              {% if current_user.is_admin %}
               <a class="dropdown-item" href="{{ url_for('main.mcp_tokens_page') }}">
                 <i class="bi bi-key"></i> MCP Tokens
               </a>
+              {% endif %}
             </li>
             <li>
               <a class="dropdown-item text-danger" href="{{ url_for('auth.logout') }}">

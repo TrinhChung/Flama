@@ -207,6 +207,49 @@ def build_deck_marketplace_hub(*, user_id: int, filters: dict[str, Any]) -> dict
     }
 
 
+def build_installed_deck_workspace(*, user_id: int) -> dict[str, Any]:
+    installs = DeckInstall.query.filter_by(user_id=user_id).all()
+    install_map = {row.deck_item_id: row for row in installs}
+    saved_ids = get_saved_item_ids(user_id=user_id, product_type="deck_marketplace_item")
+    source_ids = list(install_map.keys()) or [""]
+    deck_items = {
+        item.id: item
+        for item in DeckMarketplaceItem.query.filter(DeckMarketplaceItem.id.in_(source_ids)).all()
+    }
+
+    items: list[dict[str, Any]] = []
+    using_count = 0
+    available_count = 0
+
+    for install in sorted(installs, key=_deck_install_sort_key, reverse=True):
+        deck_item = deck_items.get(install.deck_item_id)
+        if deck_item is None:
+            continue
+        payload = _serialize_deck_install_library_row(
+            deck_item=deck_item,
+            install=install,
+            user_id=user_id,
+            install_map=install_map,
+            saved_ids=saved_ids,
+        )
+        is_active = flashcards_share_service.is_deck_install_active(install)
+        payload["install_bucket"] = "using_now" if is_active else "installed"
+        items.append(payload)
+        if is_active:
+            using_count += 1
+        else:
+            available_count += 1
+
+    return {
+        "summary": {
+            "total_installed_count": len(items),
+            "using_count": using_count,
+            "available_count": available_count,
+        },
+        "items": items,
+    }
+
+
 def save_item_for_user(*, user_id: int, product_type: str, product_ref_id: str) -> bool:
     product_type = _normalize_product_type(product_type)
     product_ref_id = str(product_ref_id or "").strip()
@@ -576,6 +619,33 @@ def _serialize_deck_card(
     return payload
 
 
+def _deck_install_sort_key(install: DeckInstall) -> tuple[datetime, datetime, str]:
+    return (
+        install.last_activity_at or datetime.min,
+        install.installed_at or datetime.min,
+        str(install.id or ""),
+    )
+
+
+def _serialize_deck_install_library_row(
+    *,
+    deck_item: DeckMarketplaceItem,
+    install: DeckInstall,
+    user_id: int,
+    install_map: dict[str, DeckInstall],
+    saved_ids: set[str],
+) -> dict[str, Any]:
+    payload = _serialize_deck_card(
+        deck_item,
+        user_id=user_id,
+        install_map=install_map,
+        saved_ids=saved_ids,
+        pending_owned_ids=set(),
+    )
+    payload["last_sync_status"] = str(install.last_sync_status or "").strip().lower() or None
+    return payload
+
+
 def _build_note_type_library(
     *,
     user_id: int,
@@ -676,22 +746,18 @@ def _build_deck_library(
     installed: list[dict[str, Any]] = []
     for install in sorted(
         installs,
-        key=lambda row: (
-            row.last_activity_at or datetime.min,
-            row.installed_at or datetime.min,
-            row.id,
-        ),
+        key=_deck_install_sort_key,
         reverse=True,
     ):
         deck_item = deck_items.get(install.deck_item_id)
         if deck_item is None:
             continue
-        payload = _serialize_deck_card(
-            deck_item,
+        payload = _serialize_deck_install_library_row(
+            deck_item=deck_item,
+            install=install,
             user_id=user_id,
             install_map=install_map,
             saved_ids=saved_ids,
-            pending_owned_ids=set(),
         )
         payload["installed_at"] = install.installed_at.isoformat() if install.installed_at else None
         payload["last_activity_at"] = install.last_activity_at.isoformat() if install.last_activity_at else None
