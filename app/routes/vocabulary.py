@@ -48,6 +48,7 @@ from app.repositories.study_repository import (
 )
 from app.utils.deck_move_token import parse_deck_move_token
 from app.utils.permissions import is_admin_user
+from app.utils.redirects import resolve_safe_next_url
 from app.services import tts_provider_service
 from app.services.anki_scheduler import (
     computeAnswerPreview,
@@ -124,18 +125,21 @@ def _legacy_structure_removed_response():
     if request.method == "GET":
         return message, 410
     flash(message, "warning")
-    next_url = (request.form.get("next") or request.args.get("next") or "").strip()
-    return redirect(next_url or url_for("vocabulary.browse"))
+    next_url = resolve_safe_next_url(
+        request.form.get("next") or request.args.get("next"),
+        default_endpoint="vocabulary.browse",
+    )
+    return redirect(next_url)
 
 
 
 
 def _resolve_next_url(default_endpoint: str = "main.dashboard") -> str:
     """Return a safe in-app redirect target from `next` form value."""
-    raw_next = (request.form.get("next") or "").strip()
-    if raw_next.startswith("/") and not raw_next.startswith("//"):
-        return raw_next
-    return url_for(default_endpoint)
+    return resolve_safe_next_url(
+        request.form.get("next"),
+        default_endpoint=default_endpoint,
+    )
 
 
 

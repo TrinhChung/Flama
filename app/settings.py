@@ -128,6 +128,10 @@ def build_app_config(overrides: Mapping[str, Any] | None = None) -> dict[str, An
         "PAYOS_CLIENT_ID": os.getenv("PAYOS_CLIENT_ID", "").strip(),
         "PAYOS_API_KEY": os.getenv("PAYOS_API_KEY", "").strip(),
         "PAYOS_CHECKSUM_KEY": os.getenv("PAYOS_CHECKSUM_KEY", "").strip(),
+        "SUPPORT_CONTACT_EMAIL": (
+            os.getenv("SUPPORT_CONTACT_EMAIL", "").strip()
+            or os.getenv("ADMIN_EMAIL", "").strip()
+        ),
     }
     config["PAYMENTS_V1_ENABLED"] = config["PAYMENTS_ENABLED"]
 
@@ -160,6 +164,14 @@ def _apply_startup_defaults(config: dict[str, Any]) -> None:
         "STARTUP_CUTOVER_FAIL_ON_MISMATCH",
         _startup_cutover_fail_on_mismatch_default(default_cutover_fail_on_mismatch),
     )
+    config.setdefault("WTF_CSRF_ENABLED", not testing)
+    config.setdefault("CSRF_EXEMPT_ENDPOINTS", {"payments.payos_webhook"})
+    config.setdefault("SESSION_COOKIE_HTTPONLY", True)
+    config.setdefault("SESSION_COOKIE_SAMESITE", "Lax")
+    config.setdefault("LOGIN_RATE_LIMIT_ENABLED", not testing)
+    config.setdefault("LOGIN_RATE_LIMIT_WINDOW_SECONDS", 60)
+    config.setdefault("LOGIN_RATE_LIMIT_MAX_ATTEMPTS", 5)
+    config.setdefault("LOGIN_RATE_LIMIT_LOCKOUT_SECONDS", 5 * 60)
 
 
 def _startup_cutover_fail_on_mismatch_default(default: bool) -> bool:

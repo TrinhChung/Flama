@@ -565,14 +565,7 @@ def seed_marketplace_defaults():
     if not is_admin_user(current_user):
         return _api_error("VALIDATION_ERROR", "Admin only endpoint.", status=403)
 
-    import os
-    from models.user import User
-    admin_email = os.environ.get("ADMIN_EMAIL", "chungtrinh2k2@gmail.com")
-    admin_user_name = os.environ.get("ADMIN_USERNAME") or os.environ.get("ADMIN_USER", "chungtrinh2k2")
-    admin_password = os.environ.get("ADMIN_PASSWORD", "chungtrinh1904")
-
-    from app.services.flashcard_import_service import admin_user_ensure_created
-    system_admin = admin_user_ensure_created(admin_email, admin_user_name, admin_password)
+    system_admin = current_user
     if not system_admin.is_admin:
         from app.services.flashcard_import_service import admin_user_set_is_admin
         admin_user_set_is_admin(system_admin)

@@ -3,6 +3,7 @@ from flask import Flask
 
 from models import db
 
+from .csrf import init_csrf_protection
 from .cli import register_cli_commands
 from .extensions import login_manager, migrate
 from .routes import register_blueprints
@@ -24,9 +25,11 @@ def create_app(config: Optional[dict] = None) -> Flask:
     db.init_app(app)
     migrate.init_app(app, db)
     login_manager.init_app(app)
+    init_csrf_protection(app)
     app.jinja_env.filters["format_number"] = format_number
     app.jinja_env.filters["format_vnd"] = format_vnd
     app.jinja_env.filters["format_price_display"] = format_price_display
+    app.jinja_env.globals["support_contact_email"] = app.config.get("SUPPORT_CONTACT_EMAIL", "")
 
     from models.user import User
     from models.mcp_access_token import McpAccessToken  # noqa: F401  # register model

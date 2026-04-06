@@ -73,7 +73,11 @@
     <div class="error-support">
       <p class="support-text">
         Nếu vấn đề này tiếp tục xảy ra, vui lòng 
-        <a href="mailto:chungtrinh2k2@gmail.com">liên hệ với chúng tôi</a>
+        {% if support_contact_email %}
+        <a href="mailto:{{ support_contact_email }}">liên hệ với chúng tôi</a>
+        {% else %}
+        liên hệ với quản trị viên
+        {% endif %}
       </p>
     </div>
 
