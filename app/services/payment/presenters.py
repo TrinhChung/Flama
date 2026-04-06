@@ -3,7 +3,6 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from app.services import payment_service
 from models.deck_marketplace_item import DeckMarketplaceItem
 from models.note_type import NoteType
 from models.payment_attempt import PaymentAttempt
@@ -30,8 +29,16 @@ WEBHOOK_STATUS_LABELS = {
     "failed": "Xử lý lỗi",
 }
 
+PRODUCT_TYPE_LABELS = {
+    "note_type": "Template",
+    "deck_marketplace_item": "Deck",
+    "support_donation": "Ủng hộ",
+}
+
 
 def build_order_row(order: PaymentOrder) -> dict[str, Any]:
+    from app.services import payment_service
+
     payload = payment_service.serialize_order(order)
     status_display = payload.get("status_display") or {}
     active_attempt = payload.get("active_attempt") or {}
@@ -61,6 +68,8 @@ def build_order_row(order: PaymentOrder) -> dict[str, Any]:
 
 
 def build_order_detail_payload(order: PaymentOrder) -> dict[str, Any]:
+    from app.services import payment_service
+
     payload = payment_service.serialize_order(order)
     return {
         "id": order.id,
@@ -73,6 +82,7 @@ def build_order_detail_payload(order: PaymentOrder) -> dict[str, Any]:
             {
                 "id": row.id,
                 "resource_type": row.resource_type,
+                "resource_type_label": product_type_label(row.resource_type),
                 "resource_ref_id": row.resource_ref_id,
                 "status": row.status,
                 "status_label": row.status.replace("_", " "),
@@ -89,6 +99,7 @@ def build_order_item_payload(item: PaymentOrderItem) -> dict[str, Any]:
     return {
         "id": item.id,
         "product_type": item.product_type,
+        "product_type_label": product_type_label(item.product_type),
         "product_ref_id": item.product_ref_id,
         "title_snapshot": item.title_snapshot,
         "quantity": int(item.quantity or 0),
@@ -190,6 +201,11 @@ def format_datetime(value: datetime | None) -> str:
     if value is None:
         return "-"
     return value.strftime("%Y-%m-%d %H:%M")
+
+
+def product_type_label(value: str) -> str:
+    token = str(value or "").strip().lower()
+    return PRODUCT_TYPE_LABELS.get(token, token or "Khác")
 
 
 def _build_buyer_payload(order: PaymentOrder | None) -> dict[str, Any]:

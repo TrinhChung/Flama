@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Any
 
@@ -24,6 +24,10 @@ from models import db
 from models.card_progress import CardProgress
 from models.deck import Deck
 from models.flashcard import Card, DeckCloneDeckMap, DeckInstall, Note
+
+
+def _utcnow() -> datetime:
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 @dataclass
@@ -551,7 +555,7 @@ def build_browse_deck_tree_payload(
     admin_mode: bool,
     timezone_name: str = "UTC",
 ) -> list[dict[str, Any]]:
-    now = datetime.utcnow()
+    now = _utcnow()
     scoped_decks = collect_accessible_browse_decks(user_id=user_id, admin_mode=admin_mode)
     if not scoped_decks:
         return []

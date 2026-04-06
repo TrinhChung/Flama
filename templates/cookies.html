@@ -259,7 +259,11 @@
       <h2>8. Liên hệ & Hỗ trợ</h2>
       <p>Nếu bạn có câu hỏi về chính sách cookie:</p>
       <ul>
-        <li><a href="mailto:chungtrinh2k2@gmail.com">chungtrinh2k2@gmail.com</a></li>
+        {% if support_contact_email %}
+        <li><a href="mailto:{{ support_contact_email }}">{{ support_contact_email }}</a></li>
+        {% else %}
+        <li>Vui lòng liên hệ quản trị viên để được hỗ trợ</li>
+        {% endif %}
         <li>Vui lòng nêu rõ câu hỏi của bạn</li>
         <li>Chúng tôi sẽ phản hồi trong vòng 5 - 7 ngày làm việc</li>
       </ul>

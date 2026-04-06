@@ -44,6 +44,8 @@ class DeckInstall(db.Model):
         index=True,
     )
     base_snapshot_at = db.Column(db.DateTime, nullable=True, index=True)
+    last_synced_at = db.Column(db.DateTime, nullable=True, index=True)
+    last_sync_status = db.Column(db.String(32), nullable=True, index=True)
     purchase_amount_minor = db.Column(db.Integer, nullable=False, default=0)
     purchase_price_cents = synonym("purchase_amount_minor")
     installed_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
@@ -81,6 +83,11 @@ class DeckInstall(db.Model):
     )
     clone_note_field_overrides = db.relationship(
         "DeckCloneNoteFieldOverride",
+        back_populates="deck_install",
+        cascade="all, delete-orphan",
+    )
+    change_requests = db.relationship(
+        "DeckChangeRequest",
         back_populates="deck_install",
         cascade="all, delete-orphan",
     )

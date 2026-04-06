@@ -5,7 +5,6 @@ from typing import Any
 from flask import Blueprint, jsonify, render_template, request
 from flask_login import current_user, login_required
 
-from app.services import payment_service
 from app.validators.payment_input import (
     normalize_order_create_payload,
 )
@@ -41,6 +40,8 @@ def marketplace_payment_result_page():
 @payments_bp.route("/api/payments/orders", methods=["POST"])
 @login_required
 def create_payment_order():
+    from app.services import payment_service
+
     payload = request.get_json(silent=True) or {}
     normalized_payload, message, field = normalize_order_create_payload(payload)
     if normalized_payload is None:
@@ -66,6 +67,8 @@ def create_payment_order():
 @payments_bp.route("/api/payments/orders/<order_id>", methods=["GET"])
 @login_required
 def get_payment_order(order_id: str):
+    from app.services import payment_service
+
     try:
         result = payment_service.get_order_detail_for_user(
             order_id=order_id,
@@ -79,6 +82,8 @@ def get_payment_order(order_id: str):
 @payments_bp.route("/api/payments/orders/<order_id>/cancel", methods=["POST"])
 @login_required
 def cancel_payment_order(order_id: str):
+    from app.services import payment_service
+
     try:
         result = payment_service.cancel_order_for_user(
             order_id=order_id,
@@ -91,6 +96,8 @@ def cancel_payment_order(order_id: str):
 
 @payments_bp.route("/api/payments/providers/payos/webhook", methods=["POST"])
 def payos_webhook():
+    from app.services import payment_service
+
     raw_payload = request.get_data(cache=True)
     try:
         result, status = payment_service.process_payos_webhook_request(raw_payload)

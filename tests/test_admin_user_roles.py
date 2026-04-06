@@ -190,7 +190,7 @@ class AdminUserRoleTests(unittest.TestCase):
 
         response = self._login("normal@example.com")
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"Tai khoan da bi vo hieu hoa.", response.data)
+        self.assertIn("Tài khoản của bạn đã bị vô hiệu hóa.", response.get_data(as_text=True))
 
     def test_list_users_api_supports_filters(self):
         self._login("admin@example.com")

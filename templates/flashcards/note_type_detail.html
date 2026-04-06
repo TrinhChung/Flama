@@ -13,6 +13,10 @@
       </div>
       <div class="d-flex gap-2">
         <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('flashcards.note_type_manager') }}">Back</a>
+        <a class="btn btn-dark btn-sm"
+          href="{{ url_for('flashcards.share_note_type_page', note_type_id=note_type.id) }}">
+          Share Listing
+        </a>
         <a class="btn btn-outline-secondary btn-sm"
           href="{{ url_for('flashcards.note_type_fields_page', note_type_id=note_type.id) }}">
           <i class="bi bi-gear"></i> Edit Fields

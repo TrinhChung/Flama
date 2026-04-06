@@ -635,7 +635,7 @@ def _parse_query_price_cents(param_name: str) -> int | None:
     return _parse_query_price_amount_minor(param_name)
 
 def _get_shared_note_type_for_view(note_type_id: str) -> NoteType | None:
-    note_type = NoteType.query.get(note_type_id)
+    note_type = db.session.get(NoteType, note_type_id)
     if not note_type:
         return None
 
@@ -648,7 +648,7 @@ def _get_shared_note_type_for_view(note_type_id: str) -> NoteType | None:
     return note_type
 
 def _get_shared_deck_item_for_view(deck_item_id: str) -> DeckMarketplaceItem | None:
-    deck_item = DeckMarketplaceItem.query.get(deck_item_id)
+    deck_item = db.session.get(DeckMarketplaceItem, deck_item_id)
     if not deck_item:
         return None
 
@@ -665,4 +665,4 @@ def _get_shared_deck_item_for_view(deck_item_id: str) -> DeckMarketplaceItem | N
 __all__ = [name for name in globals() if not name.startswith("__")]
 
 # Register sub-routes
-from . import note_type, share, import_export, study, media
+from . import note_type, share, import_export, study, media, change_requests

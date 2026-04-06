@@ -9,12 +9,16 @@ from models.deck_clone_deck_map import DeckCloneDeckMap
 from models.deck_clone_field_def_override import DeckCloneFieldDefOverride
 from models.deck_clone_field_order_override import DeckCloneFieldOrderOverride
 from models.deck_clone_note_field_override import DeckCloneNoteFieldOverride
+from models.deck_change_request import DeckChangeRequest
+from models.deck_change_request_conflict import DeckChangeRequestConflict
+from models.deck_change_request_item import DeckChangeRequestItem
 from models.deck_install import DeckInstall
 from models.deck_marketplace_item import DeckMarketplaceItem
 from models.deck_review import DeckReview
 from models.field_def import FieldDef
 from models.field_rename_job import FieldRenameJob
 from models.media_asset import MediaAsset
+from models.marketplace_saved_item import MarketplaceSavedItem
 from models.note import Note
 from models.note_type import NoteType
 from models.note_type_install import NoteTypeInstall
@@ -32,12 +36,16 @@ __all__ = [
     "DeckCloneFieldDefOverride",
     "DeckCloneFieldOrderOverride",
     "DeckCloneNoteFieldOverride",
+    "DeckChangeRequest",
+    "DeckChangeRequestConflict",
+    "DeckChangeRequestItem",
     "DeckInstall",
     "DeckMarketplaceItem",
     "DeckReview",
     "FieldDef",
     "FieldRenameJob",
     "MediaAsset",
+    "MarketplaceSavedItem",
     "Note",
     "NoteType",
     "NoteTypeInstall",

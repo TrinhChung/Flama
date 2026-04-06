@@ -2112,16 +2112,16 @@
         return `
           <tr class="${selected ? "is-selected" : ""}" data-card-id="${escapeHtml(row.card_id)}">
             ${state.checkboxMode
-            ? `<td class="browse-select-col"><input type="checkbox" class="form-check-input browse-row-checkbox" data-card-id="${escapeHtml(row.card_id)}" ${selected ? "checked" : ""}></td>`
+            ? `<td class="browse-select-col" data-label="Chọn"><input type="checkbox" class="form-check-input browse-row-checkbox" data-card-id="${escapeHtml(row.card_id)}" ${selected ? "checked" : ""}></td>`
             : ""
           }
-            <td title="${escapeHtml(row.card_type || "")}">${escapeHtml(row.card_type || "")}</td>
-            <td title="${escapeHtml(row.due_label || "")}">${escapeHtml(row.due_label || "")}</td>
-            <td title="${escapeHtml(row.deck_name || "")}">${escapeHtml(row.deck_name || "")}</td>
-            <td title="${escapeHtml(row.word || "")}">${escapeHtml(truncateDisplay(row.word || "", 120))}</td>
-            <td title="${escapeHtml(row.reading || "")}">${escapeHtml(truncateDisplay(row.reading || "", 120))}</td>
-            <td title="${escapeHtml(row.meaning || "")}">${escapeHtml(truncateDisplay(row.meaning || "", 200))}</td>
-            <td title="${escapeHtml(tags)}">${escapeHtml(truncateDisplay(tags, 120))}</td>
+            <td data-label="Loại thẻ" title="${escapeHtml(row.card_type || "")}">${escapeHtml(row.card_type || "")}</td>
+            <td data-label="Đến hạn" title="${escapeHtml(row.due_label || "")}">${escapeHtml(row.due_label || "")}</td>
+            <td data-label="Deck" title="${escapeHtml(row.deck_name || "")}">${escapeHtml(row.deck_name || "")}</td>
+            <td data-label="Từ" title="${escapeHtml(row.word || "")}">${escapeHtml(truncateDisplay(row.word || "", 120))}</td>
+            <td data-label="Cách đọc" title="${escapeHtml(row.reading || "")}">${escapeHtml(truncateDisplay(row.reading || "", 120))}</td>
+            <td data-label="Nghĩa" title="${escapeHtml(row.meaning || "")}">${escapeHtml(truncateDisplay(row.meaning || "", 200))}</td>
+            <td data-label="Tags" title="${escapeHtml(tags)}">${escapeHtml(truncateDisplay(tags, 120))}</td>
           </tr>
         `;
       })

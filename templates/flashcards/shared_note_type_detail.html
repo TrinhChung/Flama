@@ -1,790 +1,156 @@
 {% extends "base.html" %}
 
-{% block title %}Chi tiết Template{% endblock %}
+{% block title %}Chi tiết template{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/marketplace_hybrid.css') }}">
+{% endblock %}
 
 {% block content %}
-<section class="py-3" id="shared-note-type-detail-root" data-note-type-id="{{ note_type_id }}">
-  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-    <div>
-      <h2 class="h4 mb-0" id="nt-title">Đang tải...</h2>
-      <small class="text-muted" id="nt-meta-line"></small>
-    </div>
-    <div class="d-flex gap-2">
-      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('flashcards.shared_note_types_page') }}">Quay lại danh sách template</a>
-      <button class="btn btn-primary btn-sm" id="install-btn" type="button">Cài đặt</button>
-    </div>
+<section
+  class="market-detail-page"
+  id="shared-note-type-detail-root"
+  data-note-type-id="{{ note_type_id }}"
+  data-market-url="{{ url_for('flashcards.shared_note_types_page') }}"
+  data-orders-url="{{ url_for('user_orders.order_history_page') }}"
+  data-edit-url="{{ url_for('flashcards.share_note_type_page', note_type_id=note_type_id) }}"
+  data-save-url-template="{{ url_for('flashcards.save_shared_note_type', note_type_id='__ITEM_ID__') }}"
+  data-payment-result-url="{{ url_for('payments.marketplace_payment_result_page') }}"
+>
+  <div class="market-detail-top mb-3">
+    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('flashcards.shared_note_types_page') }}"><i class="bi bi-arrow-left"></i> Quay lại marketplace</a>
   </div>
 
   <div class="alert alert-danger d-none" id="detail-error" role="alert"></div>
 
-  <div class="card card-body mb-3 d-none" id="payment-order-panel">
-    <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
-      <div>
-        <h3 class="h6 mb-1">Chi tiết đơn hàng</h3>
-        <div class="fw-semibold" id="payment-order-headline"></div>
-        <div class="small text-muted" id="payment-order-message"></div>
-      </div>
-      <span class="shared-payment-badge" id="payment-order-badge"></span>
+  
+  <div class="market-space-panel mb-3">
+    <div id="nt-badges" class="mb-2"></div>
+    <h1 class="market-featured-title mb-1" id="nt-title-secondary">Đang tải...</h1>
+    <p class="market-detail-meta mb-3" id="nt-preview-text"></p>
+
+    <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+      <span class="market-featured-meta" id="nt-meta-line"></span>
+      <span class="text-muted">·</span>
+      <span class="market-card-summary" id="nt-stats"></span>
     </div>
-    <div class="small text-muted mb-3" id="payment-order-next-action"></div>
+
+    <div class="d-flex flex-wrap gap-2 mb-4">
+      <button class="btn btn-primary px-4" id="install-btn" type="button">Tải xuống</button>
+      <button class="btn btn-outline-secondary" id="save-btn" type="button">Lưu</button>
+      <a class="btn btn-outline-secondary d-none" id="edit-btn" href="{{ url_for('flashcards.share_note_type_page', note_type_id=note_type_id) }}">Chỉnh sửa</a>
+    </div>
+
+    <hr class="mb-3">
+    <p class="mb-2" id="nt-description"></p>
+    <div id="nt-tags"></div>
+  </div>
+
+  
+  <div class="market-space-panel mb-3">
     <div class="row g-3">
-      <div class="col-lg-6">
-        <div class="small fw-semibold mb-2">Thông tin đơn hàng</div>
-        <div class="shared-payment-lines" id="payment-order-lines"></div>
+      <div class="col-md-6">
+        <div class="market-hub-section-kicker mb-1">Tác giả</div>
+        <h2 class="h5 mb-1" id="author-name">Đang tải...</h2>
+        <div class="market-detail-meta mb-2" id="author-summary"></div>
+        <a class="btn btn-sm btn-outline-secondary" id="author-store-link" href="{{ url_for('flashcards.shared_note_types_page') }}">Xem gian hàng</a>
       </div>
-      <div class="col-lg-6">
-        <div class="small fw-semibold mb-2">Lưu ý cho bạn</div>
-        <ul class="shared-payment-list mb-0" id="payment-order-instructions"></ul>
+      <div class="col-md-6">
+        <div class="market-hub-section-kicker mb-2">Cùng tác giả</div>
+        <div id="author-other-items"></div>
       </div>
     </div>
   </div>
 
-  <style>
-    .shared-rating-stars {
-      display: inline-flex;
-      gap: 0.125rem;
-    }
-
-    .shared-rating-star {
-      border: 0;
-      background: transparent;
-      padding: 0;
-      font-size: 1.65rem;
-      line-height: 1;
-      color: #c9ced6;
-      cursor: pointer;
-      transition: color .15s ease, transform .15s ease;
-    }
-
-    .shared-rating-star.is-active {
-      color: #f4b400;
-    }
-
-    .shared-rating-star:hover,
-    .shared-rating-star:focus-visible {
-      color: #f4b400;
-      transform: translateY(-1px);
-      outline: none;
-    }
-
-    .shared-rating-stars.is-disabled .shared-rating-star {
-      cursor: not-allowed;
-      opacity: 0.55;
-      transform: none;
-    }
-
-    .shared-payment-badge {
-      display: inline-flex;
-      align-items: center;
-      padding: 0.3rem 0.7rem;
-      border-radius: 999px;
-      font-size: 0.75rem;
-      font-weight: 600;
-      background: rgba(13, 110, 253, 0.08);
-      border: 1px solid rgba(13, 110, 253, 0.16);
-      color: #0d6efd;
-      white-space: nowrap;
-    }
-
-    #payment-order-panel[data-tone="success"] .shared-payment-badge {
-      background: rgba(25, 135, 84, 0.12);
-      border-color: rgba(25, 135, 84, 0.22);
-      color: #198754;
-    }
-
-    #payment-order-panel[data-tone="warning"] .shared-payment-badge {
-      background: rgba(245, 159, 0, 0.12);
-      border-color: rgba(245, 159, 0, 0.22);
-      color: #b7791f;
-    }
-
-    #payment-order-panel[data-tone="danger"] .shared-payment-badge {
-      background: rgba(220, 53, 69, 0.12);
-      border-color: rgba(220, 53, 69, 0.22);
-      color: #b02a37;
-    }
-
-    #payment-order-panel[data-tone="secondary"] .shared-payment-badge {
-      background: rgba(108, 117, 125, 0.12);
-      border-color: rgba(108, 117, 125, 0.22);
-      color: #495057;
-    }
-
-    .shared-payment-lines {
-      display: flex;
-      flex-direction: column;
-      gap: 0.65rem;
-    }
-
-    .shared-payment-line {
-      display: flex;
-      flex-direction: column;
-      gap: 0.15rem;
-      padding-bottom: 0.65rem;
-      border-bottom: 1px dashed #dee2e6;
-    }
-
-    .shared-payment-line:last-child {
-      padding-bottom: 0;
-      border-bottom: none;
-    }
-
-    .shared-payment-label {
-      color: #6c757d;
-      font-size: 0.75rem;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-    }
-
-    .shared-payment-value {
-      font-size: 0.95rem;
-      font-weight: 500;
-      word-break: break-word;
-    }
-
-    .shared-payment-value.is-code {
-      font-family: var(--font-family-mono, monospace);
-    }
-
-    .shared-payment-value a {
-      text-decoration: none;
-    }
-
-    .shared-payment-value a:hover {
-      text-decoration: underline;
-    }
-
-    .shared-payment-list {
-      padding-left: 1.15rem;
-      color: #6c757d;
-      font-size: 0.9rem;
-    }
-
-    .shared-payment-list li + li {
-      margin-top: 0.45rem;
-    }
-  </style>
-
-  <div class="mx-auto" style="max-width: 920px;">
-    <div class="card card-body mb-3">
-      <h3 class="h6 mb-2">Thông tin template</h3>
-      <p class="mb-2" id="nt-description"></p>
-      <div class="mb-2" id="nt-tags"></div>
-      <p class="small text-muted mb-2" id="nt-preview-text"></p>
-      <div class="small text-muted" id="nt-stats"></div>
+  
+  <section class="market-space-panel mb-3">
+    <div class="market-shelf-header">
+      <div>
+        <div class="market-shelf-kicker">Preview</div>
+        <h2 class="market-hub-section-title h4 mb-0">Xem trước template</h2>
+      </div>
+      <div class="d-flex flex-wrap gap-2 align-items-center">
+        <select class="form-select" id="template-select" style="min-width: 220px;"></select>
+        <div class="btn-group" role="group" aria-label="Mặt xem trước">
+          <button class="btn btn-outline-secondary active" id="preview-side-front" type="button" data-side="front">Mặt trước</button>
+          <button class="btn btn-outline-secondary" id="preview-side-back" type="button" data-side="back">Mặt sau</button>
+        </div>
+      </div>
     </div>
+    <iframe id="template-preview-frame" class="market-preview-frame" sandbox="allow-same-origin allow-scripts"></iframe>
+  </section>
 
-    <div class="card card-body mb-3">
-      <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
-        <h3 class="h6 mb-0">Xem trước template</h3>
-        <div class="d-flex gap-2 align-items-center">
-          <select class="form-select form-select-sm" id="template-select" style="min-width: 220px;"></select>
-          <div class="btn-group btn-group-sm" role="group" aria-label="Mặt xem trước">
-            <button class="btn btn-outline-secondary active" id="preview-side-front" type="button" data-side="front">Mặt trước</button>
-            <button class="btn btn-outline-secondary" id="preview-side-back" type="button" data-side="back">Mặt sau</button>
+  
+  <section class="market-space-panel mb-3">
+    <div class="market-shelf-header">
+      <div>
+        <div class="market-shelf-kicker">Community Review</div>
+        <h2 class="market-hub-section-title h4 mb-0">Đánh giá và cảm nhận</h2>
+      </div>
+    </div>
+    <div class="mb-3" id="my-review"></div>
+    <div class="row g-3 align-items-start">
+      <div class="col-lg-5">
+        <label class="form-label" for="rating-value">Điểm</label>
+        <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+          <div class="shared-rating-stars" id="rating-stars" role="radiogroup" aria-label="Chọn số sao">
+            <button type="button" class="shared-rating-star" role="radio" data-value="1" aria-label="1 sao">★</button>
+            <button type="button" class="shared-rating-star" role="radio" data-value="2" aria-label="2 sao">★</button>
+            <button type="button" class="shared-rating-star" role="radio" data-value="3" aria-label="3 sao">★</button>
+            <button type="button" class="shared-rating-star" role="radio" data-value="4" aria-label="4 sao">★</button>
+            <button type="button" class="shared-rating-star" role="radio" data-value="5" aria-label="5 sao">★</button>
           </div>
+          <strong id="rating-value-label">5/5</strong>
+        </div>
+        <select class="form-select d-none" id="rating-value" aria-hidden="true">
+          <option value="5">5</option>
+          <option value="4">4</option>
+          <option value="3">3</option>
+          <option value="2">2</option>
+          <option value="1">1</option>
+        </select>
+        <label class="form-label mt-3" for="rating-comment">Nhận xét</label>
+        <textarea class="form-control" id="rating-comment" rows="4" placeholder="Điểm mạnh, tình huống nên dùng, mức độ phù hợp..."></textarea>
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3">
+          <small class="text-muted" id="rating-hint"></small>
+          <button class="btn btn-primary" id="rating-submit-btn" type="button">Gửi đánh giá</button>
         </div>
       </div>
-      <iframe id="template-preview-frame" class="w-100 border rounded" style="min-height: 420px;" sandbox="allow-same-origin allow-scripts"></iframe>
+      <div class="col-lg-7">
+        <div id="nt-community-reviews"></div>
+      </div>
     </div>
+  </section>
 
-    <div class="card card-body mb-3">
-      <h3 class="h6 mb-2">Đánh giá</h3>
-      <div class="small text-muted mb-2" id="my-review"></div>
-      <div class="row g-2 align-items-center">
-        <div class="col-12">
-          <label class="form-label mb-1" for="rating-value">Điểm</label>
-          <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
-            <div class="shared-rating-stars" id="rating-stars" role="radiogroup" aria-label="Chọn số sao">
-              <button type="button" class="shared-rating-star" role="radio" data-value="1" aria-label="1 sao" aria-checked="false">★</button>
-              <button type="button" class="shared-rating-star" role="radio" data-value="2" aria-label="2 sao" aria-checked="false">★</button>
-              <button type="button" class="shared-rating-star" role="radio" data-value="3" aria-label="3 sao" aria-checked="false">★</button>
-              <button type="button" class="shared-rating-star" role="radio" data-value="4" aria-label="4 sao" aria-checked="false">★</button>
-              <button type="button" class="shared-rating-star" role="radio" data-value="5" aria-label="5 sao" aria-checked="true">★</button>
-            </div>
-            <small class="text-muted fw-semibold" id="rating-value-label">5/5</small>
-          </div>
-          <select class="form-select form-select-sm d-none" id="rating-value" aria-hidden="true" tabindex="-1">
-            <option value="5">5</option>
-            <option value="4">4</option>
-            <option value="3">3</option>
-            <option value="2">2</option>
-            <option value="1">1</option>
-          </select>
-        </div>
-        <div class="col-12">
-          <label class="form-label mb-1" for="rating-comment">Nhận xét</label>
-          <textarea class="form-control form-control-sm" id="rating-comment" rows="2" placeholder="Viết nhận xét (tuỳ chọn)"></textarea>
-        </div>
-      </div>
-      <div class="d-flex justify-content-between align-items-center mt-2">
-        <small class="text-muted" id="rating-hint"></small>
-        <button class="btn btn-outline-primary btn-sm" id="rating-submit-btn" type="button">Gửi đánh giá</button>
+  
+  <section class="market-space-panel mb-3">
+    <div class="market-shelf-header">
+      <div>
+        <div class="market-shelf-kicker">Related</div>
+        <h2 class="market-hub-section-title h4 mb-0">Template liên quan</h2>
       </div>
     </div>
+    <div class="market-related-grid" id="nt-related-items"></div>
+  </section>
 
-    <div class="card card-body">
-      <h3 class="h6 mb-2">Danh sách field</h3>
-      <div id="field-list" class="small text-muted"></div>
+  
+  <div class="market-space-panel d-none" id="payment-order-panel">
+    <div class="market-shelf-header">
+      <div>
+        <div class="market-shelf-kicker">Payment</div>
+        <h2 class="market-hub-section-title h4 mb-0" id="payment-order-headline">Chi tiết đơn hàng</h2>
+      </div>
+      <span class="market-badge" id="payment-order-badge">Đơn hàng</span>
     </div>
+    <p class="market-detail-meta mb-2" id="payment-order-message"></p>
+    <p class="market-detail-meta mb-3" id="payment-order-next-action"></p>
+    <div class="market-purchase-list" id="payment-order-lines"></div>
+    <ul class="mt-3 mb-0" id="payment-order-instructions"></ul>
   </div>
 </section>
 {% endblock %}
 
 {% block scripts %}
-<script>
-  (() => {
-    const root = document.getElementById("shared-note-type-detail-root");
-    if (!root) return;
-
-    const noteTypeId = root.getAttribute("data-note-type-id");
-    const paymentResultUrl = "{{ url_for('payments.marketplace_payment_result_page') }}";
-    const titleEl = document.getElementById("nt-title");
-    const metaEl = document.getElementById("nt-meta-line");
-    const descriptionEl = document.getElementById("nt-description");
-    const previewTextEl = document.getElementById("nt-preview-text");
-    const tagsEl = document.getElementById("nt-tags");
-    const statsEl = document.getElementById("nt-stats");
-    const installBtn = document.getElementById("install-btn");
-    const ratingValueEl = document.getElementById("rating-value");
-    const ratingStarsEl = document.getElementById("rating-stars");
-    const ratingValueLabelEl = document.getElementById("rating-value-label");
-    const ratingStarButtons = Array.from(ratingStarsEl?.querySelectorAll(".shared-rating-star") || []);
-    const ratingCommentEl = document.getElementById("rating-comment");
-    const ratingSubmitBtn = document.getElementById("rating-submit-btn");
-    const ratingHintEl = document.getElementById("rating-hint");
-    const myReviewEl = document.getElementById("my-review");
-    const templateSelectEl = document.getElementById("template-select");
-    const previewFrame = document.getElementById("template-preview-frame");
-    const frontBtn = document.getElementById("preview-side-front");
-    const backBtn = document.getElementById("preview-side-back");
-    const fieldListEl = document.getElementById("field-list");
-    const errorEl = document.getElementById("detail-error");
-    const paymentPanelEl = document.getElementById("payment-order-panel");
-    const paymentHeadlineEl = document.getElementById("payment-order-headline");
-    const paymentMessageEl = document.getElementById("payment-order-message");
-    const paymentBadgeEl = document.getElementById("payment-order-badge");
-    const paymentNextActionEl = document.getElementById("payment-order-next-action");
-    const paymentLinesEl = document.getElementById("payment-order-lines");
-    const paymentInstructionsEl = document.getElementById("payment-order-instructions");
-
-    let detail = null;
-    let selectedTemplateId = "";
-    let previewPayload = null;
-    let previewSide = "front";
-
-    function showError(message) {
-      errorEl.textContent = message || "Không thể xử lý yêu cầu lúc này.";
-      errorEl.classList.remove("d-none");
-    }
-
-    function clearError() {
-      errorEl.textContent = "";
-      errorEl.classList.add("d-none");
-    }
-
-    function formatDate(isoString) {
-      if (!isoString) return "";
-      const date = new Date(isoString);
-      if (Number.isNaN(date.getTime())) return "";
-      return date.toLocaleString();
-    }
-
-    function formatCurrencyMinor(amount) {
-      return window.Utils.formatVnd(amount);
-    }
-
-    function formatCount(value) {
-      return window.Utils.formatNumber(value);
-    }
-
-    function formatPrice(value) {
-      return window.Utils.formatPriceDisplay(value);
-    }
-
-    function buildPaymentResultUrl(orderId, productType, productRefId) {
-      if (!paymentResultUrl || !orderId) return "";
-      const url = new URL(paymentResultUrl, window.location.origin);
-      url.searchParams.set("payment_order_id", orderId);
-      if (productType) {
-        url.searchParams.set("payment_product_type", productType);
-      }
-      if (productRefId) {
-        url.searchParams.set("payment_product_ref_id", productRefId);
-      }
-      return url.toString();
-    }
-
-    function buildPaymentInstructions(payload) {
-      const order = payload?.order || {};
-      const checkout = order?.active_attempt?.checkout || {};
-      const lines = [
-        "Đã tạo đơn thanh toán.",
-        "Mã đơn: " + (order.merchant_order_code || order.id || "Không có"),
-        "Số tiền: " + formatCurrencyMinor(checkout.amount_minor || order.total_amount_minor || 0),
-        "Ngân hàng BIN: " + (checkout.bank_bin || "Không có"),
-        "Số tài khoản: " + (checkout.account_no || "Không có"),
-        "Tên tài khoản: " + (checkout.account_name || "Không có"),
-        "Nội dung CK: " + (checkout.payment_reference || "Không có"),
-      ];
-      if (order?.active_attempt?.expires_at) {
-        lines.push("Hết hạn: " + formatDate(order.active_attempt.expires_at));
-      }
-      return lines.join("\n");
-    }
-
-    function hidePaymentOrder() {
-      if (!paymentPanelEl) return;
-      paymentPanelEl.classList.add("d-none");
-      paymentPanelEl.removeAttribute("data-tone");
-    }
-
-    function buildFallbackOrderMessage(order) {
-      const headline = order?.headline || order?.status_display?.headline || "Đơn hàng đã được tạo.";
-      const message = order?.message || order?.status_display?.description || "";
-      const nextAction = order?.next_action || "";
-      const parts = [headline];
-      if (message) parts.push(message);
-      if (nextAction) parts.push("Tiếp theo: " + nextAction);
-      return parts.join("\n\n");
-    }
-
-    function renderPaymentLineValue(line) {
-      if (!line) return "Không có";
-      if (line.type === "amount_minor") {
-        return formatCurrencyMinor(line.value_minor || 0);
-      }
-      if (line.type === "datetime") {
-        return formatDate(line.value) || "Không có";
-      }
-      return String(line.value || "Không có");
-    }
-
-    function renderPaymentLines(lines) {
-      if (!paymentLinesEl) return;
-      paymentLinesEl.innerHTML = "";
-      const normalized = Array.isArray(lines) ? lines : [];
-      if (!normalized.length) {
-        const emptyEl = document.createElement("div");
-        emptyEl.className = "text-muted small";
-        emptyEl.textContent = "Chưa có thêm thông tin chi tiết cho đơn hàng này.";
-        paymentLinesEl.appendChild(emptyEl);
-        return;
-      }
-
-      normalized.forEach((line) => {
-        const rowEl = document.createElement("div");
-        rowEl.className = "shared-payment-line";
-
-        const labelEl = document.createElement("div");
-        labelEl.className = "shared-payment-label";
-        labelEl.textContent = line.label || "Thông tin";
-
-        const valueEl = document.createElement("div");
-        valueEl.className = "shared-payment-value";
-        if (line.key === "payment_reference" || line.key === "merchant_order_code") {
-          valueEl.classList.add("is-code");
-        }
-
-        if (line.type === "url" && line.value) {
-          const linkEl = document.createElement("a");
-          linkEl.href = line.value;
-          linkEl.target = "_blank";
-          linkEl.rel = "noopener noreferrer";
-          linkEl.textContent = "Mở lại trang thanh toán PayOS";
-          valueEl.appendChild(linkEl);
-        } else {
-          valueEl.textContent = renderPaymentLineValue(line);
-        }
-
-        rowEl.appendChild(labelEl);
-        rowEl.appendChild(valueEl);
-        paymentLinesEl.appendChild(rowEl);
-      });
-    }
-
-    function renderPaymentInstructions(instructions) {
-      if (!paymentInstructionsEl) return;
-      paymentInstructionsEl.innerHTML = "";
-      const normalized = Array.isArray(instructions) ? instructions.filter(Boolean) : [];
-      const items = normalized.length ? normalized : ["Theo dõi trạng thái đơn hàng tại trang này."];
-      items.forEach((instruction) => {
-        const itemEl = document.createElement("li");
-        itemEl.textContent = instruction;
-        paymentInstructionsEl.appendChild(itemEl);
-      });
-    }
-
-    function renderPaymentOrder(order) {
-      if (!paymentPanelEl || !order) return;
-      const statusDisplay = order.status_display || {};
-      paymentPanelEl.classList.remove("d-none");
-      paymentPanelEl.setAttribute("data-tone", statusDisplay.tone || "info");
-      if (paymentBadgeEl) {
-        paymentBadgeEl.textContent = statusDisplay.label || "Đơn hàng";
-      }
-      if (paymentHeadlineEl) {
-        paymentHeadlineEl.textContent = order.headline || statusDisplay.headline || "Chi tiết đơn hàng";
-      }
-      if (paymentMessageEl) {
-        paymentMessageEl.textContent = order.message || statusDisplay.description || "";
-      }
-      if (paymentNextActionEl) {
-        paymentNextActionEl.textContent = order.next_action ? ("Tiếp theo: " + order.next_action) : "";
-      }
-      renderPaymentLines(order.order_detail_lines || []);
-      renderPaymentInstructions(order.instructions || []);
-    }
-
-    async function requestJson(url, options = {}) {
-      const response = await fetch(url, options);
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        const error = new Error(
-          data.message
-          || (response.status >= 500
-            ? "Máy chủ đang bận hoặc tạm thời không phản hồi. Vui lòng thử lại sau."
-            : "Không thể hoàn tất yêu cầu.")
-        );
-        error.status = response.status;
-        error.code = data.error || "REQUEST_FAILED";
-        error.payload = data;
-        throw error;
-      }
-      return data;
-    }
-
-    function consumePaymentOrderIdFromLocation() {
-      const url = new URL(window.location.href);
-      const orderId = url.searchParams.get("payment_order_id");
-      if (!orderId) return "";
-      url.searchParams.delete("payment_order_id");
-      url.searchParams.delete("payment_product_type");
-      url.searchParams.delete("payment_product_ref_id");
-      window.history.replaceState({}, document.title, url.toString());
-      return orderId;
-    }
-
-    async function syncReturnedPayment() {
-      const orderId = consumePaymentOrderIdFromLocation();
-      if (!orderId) return;
-      try {
-        const order = await requestJson(`/api/payments/orders/${encodeURIComponent(orderId)}`);
-        renderPaymentOrder(order);
-        if (order?.status === "paid" && order?.grant_status === "completed") {
-          await loadDetail();
-          renderPaymentOrder(order);
-          return;
-        }
-      } catch (error) {
-        showError(error.message || "Không thể đồng bộ trạng thái đơn hàng từ PayOS.");
-      }
-    }
-
-    function setLoadingPreview(message) {
-      const safeMessage = message || "Đang tải phần xem trước...";
-      previewFrame.srcdoc = "<!doctype html><html><body><div style='padding:12px;color:#6c757d;'>" + safeMessage + "</div></body></html>";
-    }
-
-    function renderTags(tags) {
-      tagsEl.innerHTML = "";
-      const normalized = Array.isArray(tags) ? tags : [];
-      if (!normalized.length) {
-        tagsEl.textContent = "Không có tags.";
-        return;
-      }
-      normalized.forEach((tag) => {
-        const span = document.createElement("span");
-        span.className = "badge bg-light text-dark border me-1 mb-1";
-        span.textContent = tag;
-        tagsEl.appendChild(span);
-      });
-    }
-
-    function renderFieldList(fields) {
-      const normalized = Array.isArray(fields) ? fields.slice().sort((a, b) => (a.position || 0) - (b.position || 0)) : [];
-      if (!normalized.length) {
-        fieldListEl.textContent = "Không có field.";
-        return;
-      }
-      const chips = normalized.map((field) => {
-        const required = field.required ? " (required)" : "";
-        return field.name + " [" + field.field_type + "]" + required;
-      });
-      fieldListEl.textContent = chips.join(" | ");
-    }
-
-    function renderTemplateSelect(templates) {
-      templateSelectEl.innerHTML = "";
-      const normalized = Array.isArray(templates) ? templates.slice().sort((a, b) => (a.position || 0) - (b.position || 0)) : [];
-      if (!normalized.length) {
-        const option = document.createElement("option");
-        option.value = "";
-        option.textContent = "Không có template";
-        templateSelectEl.appendChild(option);
-        templateSelectEl.disabled = true;
-        selectedTemplateId = "";
-        return;
-      }
-      normalized.forEach((template) => {
-        const option = document.createElement("option");
-        option.value = template.id;
-        option.textContent = template.is_default ? template.name + " (default)" : template.name;
-        templateSelectEl.appendChild(option);
-      });
-      if (!selectedTemplateId || !normalized.some((template) => template.id === selectedTemplateId)) {
-        selectedTemplateId = normalized[0].id;
-      }
-      templateSelectEl.value = selectedTemplateId;
-      templateSelectEl.disabled = false;
-    }
-
-    function renderInstallState() {
-      if (!detail) return;
-      if (detail.is_owner) {
-        installBtn.textContent = "Bạn là tác giả";
-        installBtn.disabled = true;
-        return;
-      }
-      if (detail.is_installed) {
-        installBtn.textContent = "Đã cài đặt";
-        installBtn.disabled = true;
-        return;
-      }
-      installBtn.textContent = detail.pricing_mode === "paid" ? "Mua / Cài đặt" : "Cài đặt";
-      installBtn.disabled = false;
-    }
-
-    function normalizeRatingValue(value) {
-      const parsed = Number(value);
-      if (!Number.isInteger(parsed)) return 5;
-      return Math.max(1, Math.min(5, parsed));
-    }
-
-    function paintRatingStars(value) {
-      const normalized = normalizeRatingValue(value);
-      ratingStarButtons.forEach((button) => {
-        const starValue = Number(button.getAttribute("data-value") || "0");
-        const isActive = starValue <= normalized;
-        button.classList.toggle("is-active", isActive);
-        button.setAttribute("aria-checked", starValue === normalized ? "true" : "false");
-      });
-      if (ratingValueLabelEl) {
-        ratingValueLabelEl.textContent = normalized + "/5";
-      }
-    }
-
-    function setSelectedRating(value) {
-      const normalized = normalizeRatingValue(value);
-      ratingValueEl.value = String(normalized);
-      paintRatingStars(normalized);
-    }
-
-    function setRatingInputDisabled(disabled) {
-      const isDisabled = Boolean(disabled);
-      ratingValueEl.disabled = isDisabled;
-      ratingCommentEl.disabled = isDisabled;
-      ratingSubmitBtn.disabled = isDisabled;
-      if (ratingStarsEl) {
-        ratingStarsEl.classList.toggle("is-disabled", isDisabled);
-        ratingStarsEl.setAttribute("aria-disabled", isDisabled ? "true" : "false");
-      }
-      ratingStarButtons.forEach((button) => {
-        button.disabled = isDisabled;
-      });
-    }
-
-    function buildStars(ratingValue) {
-      const normalized = normalizeRatingValue(ratingValue);
-      return "★".repeat(normalized) + "☆".repeat(5 - normalized);
-    }
-
-    function renderRatingState() {
-      if (!detail) return;
-      const review = detail.my_review || null;
-      if (review) {
-        myReviewEl.textContent = "Đánh giá của bạn: " + buildStars(review.rating) + " (" + review.rating + "/5)"
-          + (review.comment ? " - " + review.comment : "")
-          + (review.updated_at ? " (" + formatDate(review.updated_at) + ")" : "");
-        setSelectedRating(review.rating || 5);
-        ratingCommentEl.value = "";
-      } else {
-        myReviewEl.textContent = "Bạn chưa đánh giá template này.";
-        setSelectedRating(5);
-        ratingCommentEl.value = "";
-      }
-
-      if (detail.can_rate) {
-        const remaining = Number(detail.review_submissions_remaining ?? 0);
-        ratingHintEl.textContent = "Bạn có thể đánh giá ngay. Lượt còn lại: " + formatCount(remaining) + "/2.";
-        setRatingInputDisabled(false);
-      } else {
-        if (Number(detail.review_submissions_remaining ?? 0) <= 0) {
-          ratingHintEl.textContent = "Bạn đã dùng hết 2 lượt đánh giá cho template này.";
-        } else {
-          ratingHintEl.textContent = "Cần cài đặt và dùng thực tế trước khi đánh giá.";
-        }
-        setRatingInputDisabled(true);
-      }
-    }
-
-    function renderPreviewFrame() {
-      const html = previewSide === "back"
-        ? (previewPayload?.back_html || "")
-        : (previewPayload?.front_html || "");
-      const fallback = "<div style='padding:12px;color:#6c757d;'>Chưa có nội dung xem trước.</div>";
-      previewFrame.srcdoc = "<!doctype html><html><head><meta charset='utf-8'></head><body><div style='padding:8px;'>" + (html || fallback) + "</div></body></html>";
-    }
-
-    function applySideButtons() {
-      frontBtn.classList.toggle("active", previewSide === "front");
-      backBtn.classList.toggle("active", previewSide === "back");
-    }
-
-    async function loadPreview() {
-      if (!detail || !selectedTemplateId) {
-        setLoadingPreview("Không có template để preview.");
-        return;
-      }
-      setLoadingPreview();
-      previewPayload = await requestJson(`/api/shared/note-types/${noteTypeId}/templates/${selectedTemplateId}/preview`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-      });
-      renderPreviewFrame();
-    }
-
-    async function loadDetail() {
-      clearError();
-      const previousTemplateId = selectedTemplateId;
-      detail = await requestJson(`/api/shared/note-types/${noteTypeId}`);
-
-      titleEl.textContent = detail.title || detail.name || "Template chia sẻ";
-      metaEl.textContent = "Tác giả: " + (detail.author?.username || "Không rõ")
-        + " | Danh mục: " + (detail.primary_category || "Chung")
-        + " | Giá: " + formatPrice(detail.price_display || "Miễn phí");
-      descriptionEl.textContent = detail.description || "Không có mô tả.";
-      previewTextEl.textContent = detail.preview_text || "Không có nội dung xem trước.";
-      statsEl.textContent = "Đánh giá: " + Number(detail.rating_avg || 0).toFixed(2)
-        + " (" + formatCount(detail.rating_count || 0) + ")"
-        + " | Lượt dùng: " + formatCount(detail.active_usage_count || 0) + "/" + formatCount(detail.install_count || 0)
-        + " | Cập nhật: " + (formatDate(detail.updated_at) || "Không rõ");
-
-      renderTags(detail.tags || []);
-      renderFieldList(detail.field_defs || []);
-      selectedTemplateId = previousTemplateId;
-      renderTemplateSelect(detail.templates || []);
-      renderInstallState();
-      renderRatingState();
-
-      if (selectedTemplateId) {
-        await loadPreview();
-      } else {
-        setLoadingPreview("Không có template để preview.");
-      }
-    }
-
-    async function onInstall() {
-      if (!detail || detail.is_owner || detail.is_installed) return;
-      installBtn.disabled = true;
-      try {
-        const response = await requestJson(`/api/shared/note-types/${noteTypeId}/install`, { method: "POST" });
-        if (response?.payment_required && response?.order) {
-          const checkoutUrl = response?.order?.active_attempt?.checkout?.checkout_url
-            || response?.order?.active_attempt?.checkout_url;
-          if (checkoutUrl && response?.order?.status === "pending_payment") {
-            window.location.href = checkoutUrl;
-            return;
-          }
-          showError(response?.order?.next_action || "Không lấy được liên kết PayOS cho đơn hàng này.");
-          const resultUrl = buildPaymentResultUrl(
-            response?.order?.id || "",
-            "note_type",
-            noteTypeId,
-          );
-          if (resultUrl) {
-            window.location.href = resultUrl;
-            return;
-          }
-          window.alert(buildFallbackOrderMessage(response.order));
-          return;
-        }
-        hidePaymentOrder();
-        await loadDetail();
-      } finally {
-        renderInstallState();
-      }
-    }
-
-    async function onRateSubmit() {
-      if (!detail || !detail.can_rate) return;
-      const rating = Number(ratingValueEl.value || "5");
-      if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
-        window.alert("Rating phải từ 1 đến 5.");
-        return;
-      }
-      const comment = (ratingCommentEl.value || "").trim();
-      await requestJson(`/api/shared/note-types/${noteTypeId}/rate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rating, comment }),
-      });
-      ratingCommentEl.value = "";
-      await loadDetail();
-    }
-
-    installBtn?.addEventListener("click", () => {
-      onInstall().catch((error) => showError(error.message));
-    });
-
-    ratingSubmitBtn?.addEventListener("click", () => {
-      onRateSubmit().catch((error) => showError(error.message));
-    });
-
-    ratingStarButtons.forEach((button) => {
-      button.addEventListener("mouseenter", () => {
-        if (button.disabled) return;
-        paintRatingStars(button.getAttribute("data-value") || "5");
-      });
-
-      button.addEventListener("focus", () => {
-        if (button.disabled) return;
-        paintRatingStars(button.getAttribute("data-value") || "5");
-      });
-
-      button.addEventListener("click", () => {
-        if (button.disabled) return;
-        setSelectedRating(button.getAttribute("data-value") || "5");
-      });
-    });
-
-    ratingStarsEl?.addEventListener("mouseleave", () => {
-      paintRatingStars(ratingValueEl.value || "5");
-    });
-
-    ratingStarsEl?.addEventListener("focusout", (event) => {
-      if (!ratingStarsEl.contains(event.relatedTarget)) {
-        paintRatingStars(ratingValueEl.value || "5");
-      }
-    });
-
-    templateSelectEl?.addEventListener("change", () => {
-      selectedTemplateId = templateSelectEl.value;
-      loadPreview().catch((error) => showError(error.message));
-    });
-
-    [frontBtn, backBtn].forEach((button) => {
-      button?.addEventListener("click", () => {
-        previewSide = button.getAttribute("data-side") || "front";
-        applySideButtons();
-        renderPreviewFrame();
-      });
-    });
-
-    setSelectedRating(ratingValueEl.value || "5");
-    setRatingInputDisabled(true);
-    applySideButtons();
-    loadDetail().catch((error) => showError(error.message));
-  })();
-</script>
+<script type="module" src="{{ url_for('static', filename='js/pages/shared_note_type_detail/main.js') }}"></script>
 {% endblock %}
+

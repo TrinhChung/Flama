@@ -25,16 +25,34 @@ from .flashcard_input import (
     validate_study_card_edit_request,
     validate_study_next_query,
 )
+from .deck_change_request import (
+    ChangeRequestConflictResolutionInput,
+    ChangeRequestDraftInput,
+    ChangeRequestReviewInput,
+    validate_change_request_conflict_resolution_request,
+    validate_change_request_draft_request,
+    validate_change_request_review_request,
+)
 from .payout_input import (
     ValidatedCreatePayoutBatchInput,
     ValidatedPayoutBatchItemInput,
     validate_create_payout_batch_request,
 )
+from .mcp import (
+    McpJsonRpcRequest,
+    validate_list_my_decks_arguments,
+    validate_mcp_jsonrpc_request,
+    validate_mcp_tool_call_params,
+)
 
 __all__ = [
     "ALLOWED_MEDIA_EXTENSIONS_BY_FAMILY",
     "ALLOWED_MEDIA_MIME_TYPES",
+    "ChangeRequestConflictResolutionInput",
+    "ChangeRequestDraftInput",
+    "ChangeRequestReviewInput",
     "MediaUploadValidationResult",
+    "McpJsonRpcRequest",
     "NoteMutationInput",
     "RequestValidationError",
     "StudyAnswerInput",
@@ -49,9 +67,15 @@ __all__ = [
     "sanitize_plain_text",
     "sanitize_query_text",
     "sanitize_rich_text",
+    "validate_change_request_conflict_resolution_request",
+    "validate_change_request_draft_request",
+    "validate_change_request_review_request",
+    "validate_list_my_decks_arguments",
     "validate_browse_card_update_request",
     "validate_legacy_browse_note_update_request",
     "validate_media_upload_request",
+    "validate_mcp_jsonrpc_request",
+    "validate_mcp_tool_call_params",
     "validate_note_create_request",
     "validate_note_patch_request",
     "validate_create_payout_batch_request",

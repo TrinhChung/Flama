@@ -1,100 +1,138 @@
 # Clone Cutover Report (Logical Overlay Only)
 
-> Follow-up implementation plan for clone edit -> request -> review/merge flow:
+> Follow-up implementation plan cho clone edit -> request -> review/merge:
 > `docs/DECK_CHANGE_REQUEST_SIMPLE_PLAN.md`
->
-> Mandatory principle: if the root issue is data model/schema, prefer DB change over
-> workaround logic in routes/services.
 
-## 1) Inventory & Audit
+Tai lieu nay mo ta TRANG THAI HIEN TAI cua code, khong giu cac tham chieu controller cu nua.
 
-### a) Clone deck / install deck / get deck
-- `app/controllers/flashcards_share_controller.py::install_shared_deck_item_for_user`
-  - Status: migrated to new model only.
-  - Change: install now requires `source_deck_id`, always writes `clone_mode='logical_overlay'`, always creates pointer deck subtree map.
-- `app/routes/flashcards.py::POST /api/shared/decks/<deck_item_id>/install`
-  - Status: migrated to new model only.
-  - Change: install pipeline now calls overlay-only install flow; legacy branch removed.
-- `app/routes/vocabulary.py::browse/study APIs`
-  - Status: migrated to new model only.
-  - Change: read/render paths resolve clone scope from source decks + snapshot + overlay deltas.
+## 1) Current Runtime Inventory
 
-### b) Copy note_type / copy defs / copy notes/cards
-- Deck install auto-copy note type in `install_shared_deck_item_for_user`
-  - Status: removed.
-  - Change: removed auto `NoteTypeInstall` + cloned note type creation in deck install pipeline.
-- Full-copy clone notes/cards (legacy data)
-  - Status: migrated via cutover migration.
-  - Change: legacy local notes/cards -> source snapshot + note field overrides + progress remap.
-- Def-level differences
-  - Status: migrated to overlay payload where needed.
-  - Change: cutover builds `updated_defs` / `disabled_def_ids` / `added_defs` from local-vs-source field defs.
+### a) Shared deck install
 
-### c) Read/render deck (render/study/browse/export)
-- `app/routes/vocabulary.py` browse list/detail/update
-  - Status: migrated.
-  - Change: clone rows/details use overlay-computed values and local deck mapping.
-- `app/routes/flashcards.py` study next/answer
-  - Status: already overlay-based; retained.
+Entry points:
 
-### d) Edit deck / edit note / edit note_type
-- Browse edit for clone cards (`PATCH /vocabulary/api/browse/cards/<id>`)
-  - Status: migrated.
-  - Change: writes note deltas into `DeckCloneNoteFieldOverride`; no source-note mutation.
-- Deck/note-type marketplace edit
-  - Status: source binding hardened (`source_deck_id` required for shared deck items).
+1. Route: `app/routes/flashcards/share.py::POST /api/shared/decks/<deck_item_id>/install`
+2. Service: `app/services/flashcards_share_service.py::install_shared_deck_item_for_user`
 
-## 2) Old-model Artifacts Removed
+Status:
 
-- Removed legacy install branch:
-  - `legacy_copy` path in deck install flow.
-- Removed deck-install side-effect auto note type copy:
-  - removed `auto_note_type_installed` behavior in deck install response/audit.
-- Removed obsolete runtime feature toggle:
-  - `USE_NEW_CARD_MODEL` config removed from app bootstrap.
-- Removed model enum branch for legacy mode:
-  - `DeckInstall.clone_mode` moved from enum-with-legacy to plain string (overlay-only semantics).
+1. Dang chay tren model moi.
 
-## 3) Migration / Backfill Results
+Current behavior:
 
-### Migration entrypoints
-- Startup cutover hook:
-  - `app/__init__.py` calls `share_ctrl.cutover_clone_model_to_overlay_only(fail_on_mismatch=True)`.
-- Manual one-shot command:
-  - `flask clone-cutover-overlay [--no-fail-on-mismatch]`.
+1. Install bat buoc `source_deck_id`.
+2. Moi install moi luon tao `DeckInstall.clone_mode='logical_overlay'`.
+3. Install luu `source_deck_id`, `source_note_type_id`, `source_owner_user_id`, `base_snapshot_at`.
+4. He thong clone local deck subtree + tao `DeckCloneDeckMap`.
+5. He thong KHONG copy source `Note`/`Card` cho learner.
+6. Neu shared deck bind vao source note type, install flow van tao `NoteTypeInstall` + installed note type copy cho installer.
 
-### Cutover algorithm summary
-- Target set: `deck_installs` with `clone_mode != 'logical_overlay'` (or null).
-- For each install:
-  1. Resolve source/local roots, ensure/construct deck map.
-  2. Pair local legacy notes with source snapshot notes by mapped deck + deterministic ordering.
-  3. Build schema overlay deltas (defs) from local-vs-source note type defs.
-  4. Build note field overrides so rendered overlay equals legacy local note content.
-  5. Remap learner `card_progress` from local copied cards to source cards.
-  6. Validate migrated rendered values equal pre-cutover local values; fail on mismatch.
-  7. Delete legacy local copied notes/cards.
+### b) Read / render / browse / study
 
-### Verification sample (integration test)
-- Test: `test_cutover_migrates_legacy_full_copy_install_to_overlay`
-  - Migrated installs: `1`
-  - Failed installs: `0`
-  - Post-cutover:
-    - legacy local note deleted
-    - overlay row created (`DeckCloneNoteFieldOverride`)
-    - learner progress moved from local card to source card
-    - install mode normalized to logical overlay
+Entry points:
 
-## 4) Proof of No Legacy Path Remaining
+1. `app/routes/vocabulary.py`
+2. `app/services/flashcards_share_service.py`
+3. `app/repositories/flashcards_share_repository.py`
 
-### Keyword grep checks
-- `legacy_copy` in app/models/tests/docs: `0` results.
+Status:
 
-### Single model behavior proof points
-- Deck install now requires source deck and creates pointer+snapshot install only.
-- Browse/study/edit clone all read/write via snapshot+overlay pipeline.
-- Legacy full-copy installs are transformed or fail loudly (no silent skip).
+1. Dang dung source scope + snapshot + overlay.
 
-## 5) Residual Risks
+Current behavior:
 
-- Legacy installs with ambiguous historical structure (e.g., deck tree mismatch, note count mismatch, template mismatch) intentionally fail cutover with explicit error to avoid silent data corruption.
-- Def-level mapping for deeply customized legacy note types is heuristic (position-based); mismatch still fails at equivalence validation stage.
+1. Browse list/detail resolve clone scope tu `DeckInstall` + `DeckCloneDeckMap`.
+2. Study/browse doc source notes/cards trong source scope cua install.
+3. Render layer apply schema overlay + note field overrides.
+4. Source rows tao sau `base_snapshot_at` khong hien trong install cu.
+
+### c) Clone edit path
+
+Entry points:
+
+1. `app/routes/vocabulary.py::PATCH /api/browse/cards/<card_id>`
+2. `app/routes/flashcards/share.py::POST /api/shared/decks/<deck_item_id>/clone/overlay`
+3. `app/services/flashcards_share_service.py::upsert_clone_overlay`
+
+Status:
+
+1. Dang ship.
+
+Current behavior:
+
+1. Browse edit cho clone cards chi ghi vao `DeckCloneNoteFieldOverride`.
+2. API overlay rieng ghi schema + note deltas vao cac bang `DeckClone*`.
+3. Source note khong bi mutate truc tiep.
+4. Clone browse edit van reject:
+   - tag edit cho cloned cards
+   - move cloned cards sang deck local khac
+
+### d) Legacy cutover
+
+Entry points:
+
+1. Startup hook trong `app/__init__.py`
+2. CLI `flask clone-cutover-overlay [--no-fail-on-mismatch]`
+3. Service `app/services/flashcards_share_service.py::cutover_clone_model_to_overlay_only`
+
+Status:
+
+1. Dang duoc giu de xu ly install cu.
+
+Current behavior:
+
+1. Target set la install co `clone_mode != 'logical_overlay'` hoac null.
+2. Cutover build lai `DeckCloneDeckMap` neu can.
+3. Cutover sinh schema overlay rows + note field overrides tu local full-copy data cu.
+4. Cutover remap `CardProgress` tu local copied cards sang source cards.
+5. Sau khi validate tuong duong, local copied notes/cards cu bi xoa.
+
+## 2) Old-model Behavior Removed Khoi Runtime Paths
+
+1. New installs khong con tao copied notes/cards cho learner.
+2. `USE_NEW_CARD_MODEL` da bi bo khoi app bootstrap.
+3. `DeckInstall.clone_mode` tren luong install moi la overlay-only.
+4. `legacy_copy` hien chi con xuat hien trong test fixture va compatibility cutover path, khong phai luong install runtime.
+
+## 3) Migration / Backfill Entry Points
+
+1. Startup:
+   - `app/__init__.py` goi `cutover_clone_model_to_overlay_only(...)`
+2. CLI:
+   - `flask clone-cutover-overlay [--no-fail-on-mismatch]`
+3. Strictness control:
+   - startup co the dung `FLASHCARDS_SHARE_CUTOVER_FAIL_ON_MISMATCH`
+
+## 4) Verification Proof Points
+
+Integration tests da cover cac proof point quan trong:
+
+1. `test_shared_deck_install_clone_cards_visible_in_browse_api`
+   - clone deck browse/study duoc source cards qua local deck map
+2. `test_shared_deck_install_clones_source_note_type_for_installer`
+   - install van tao `NoteTypeInstall` khi co `source_note_type_id`
+3. `test_shared_deck_clone_overlay_saves_delta_only_and_updates_render`
+   - schema + note overlay rows duoc persist, render thay doi dung, learner khong co local copied notes
+4. `test_shared_deck_install_stress_grows_pointer_rows_not_note_rows`
+   - scale tang bang `DeckCloneDeckMap`, khong bang note copy
+5. `test_cutover_migrates_legacy_full_copy_install_to_overlay`
+   - install cu duoc cutover sang overlay va remap progress
+
+## 5) Follow-up Gap Sau Cutover
+
+Cutover da xong phan "clone local overlay edit". Repo hien tai VAN CHUA co:
+
+1. draft diff request
+2. sync/conflict state machine
+3. owner review inbox
+4. approve/reject/merge vao source
+
+Follow-up plan hien tai nam o:
+
+1. `docs/DECK_CHANGE_REQUEST_SIMPLE_PLAN.md`
+
+## 6) Residual Risks
+
+1. Legacy installs co lich su mo ho hoac deck tree/note pairing khong khop se fail loudly de tranh silent corruption.
+2. Source notes/cards/field defs tao sau snapshot van invisible voi install cu cho toi khi co chien luoc sync/request phu hop.
+3. Merge-back flow request/review/merge chua ton tai, nen current model dung o local overlay edit.

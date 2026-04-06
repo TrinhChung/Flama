@@ -4,13 +4,18 @@ from __future__ import annotations
 
 import random
 import re
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from app.repositories.deck_tree_query import collect_subtree_ids
 from app.template_formatters import format_vnd
+from app.services import marketplace_taxonomy_service
 from models import db
 from models.flashcard import DeckInstall, DeckMarketplaceItem, FieldDef, Note, NoteType, Template
+
+
+def _utcnow() -> datetime:
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 def serialize_author(user_obj: Any) -> dict[str, Any]:
@@ -49,6 +54,8 @@ def serialize_template(template: Template) -> dict[str, Any]:
 
 def serialize_note_type(note_type: NoteType) -> dict[str, Any]:
     price_amount_minor = int(note_type.price_amount_minor or 0)
+    taxonomy_metadata = marketplace_taxonomy_service.get_item_taxonomy(note_type, content_type="note_type")
+    taxonomy_display = marketplace_taxonomy_service.build_taxonomy_display(taxonomy_metadata, content_type="note_type")
     return {
         "id": note_type.id,
         "name": note_type.name,
@@ -56,6 +63,12 @@ def serialize_note_type(note_type: NoteType) -> dict[str, Any]:
         "description": note_type.description,
         "primary_category": note_type.primary_category,
         "tags": note_type.tags or [],
+        "display_tags": marketplace_taxonomy_service.merge_detail_tags(
+            free_tags=note_type.tags or [],
+            metadata=taxonomy_metadata,
+            content_type="note_type",
+        ),
+        "taxonomy_metadata": taxonomy_metadata,
         "preview_text": note_type.preview_text,
         "preview_image_url": note_type.preview_image_url,
         "pricing_mode": note_type.pricing_mode,
@@ -74,6 +87,7 @@ def serialize_note_type(note_type: NoteType) -> dict[str, Any]:
         "author": serialize_author(note_type.owner),
         "created_at": note_type.created_at.isoformat() if note_type.created_at else None,
         "updated_at": note_type.updated_at.isoformat() if note_type.updated_at else None,
+        **taxonomy_display,
         "field_defs": [
             serialize_field(field)
             for field in sorted(note_type.field_defs, key=lambda item: item.position)
@@ -196,12 +210,26 @@ def serialize_note_type_marketplace_card(note_type: NoteType) -> dict[str, Any]:
 
 def serialize_deck_marketplace_item(deck_item: DeckMarketplaceItem) -> dict[str, Any]:
     price_amount_minor = int(deck_item.price_amount_minor or 0)
+    taxonomy_metadata = marketplace_taxonomy_service.get_item_taxonomy(
+        deck_item,
+        content_type="deck_marketplace_item",
+    )
+    taxonomy_display = marketplace_taxonomy_service.build_taxonomy_display(
+        taxonomy_metadata,
+        content_type="deck_marketplace_item",
+    )
     return {
         "id": deck_item.id,
         "title": deck_item.title,
         "description": deck_item.description,
         "primary_category": deck_item.primary_category,
         "tags": deck_item.tags or [],
+        "display_tags": marketplace_taxonomy_service.merge_detail_tags(
+            free_tags=deck_item.tags or [],
+            metadata=taxonomy_metadata,
+            content_type="deck_marketplace_item",
+        ),
+        "taxonomy_metadata": taxonomy_metadata,
         "preview_text": deck_item.preview_text,
         "sample_cards_count": int(deck_item.sample_cards_count or 0),
         "source_deck_id": deck_item.source_deck_id,
@@ -226,6 +254,7 @@ def serialize_deck_marketplace_item(deck_item: DeckMarketplaceItem) -> dict[str,
         "archived_at": deck_item.archived_at.isoformat() if deck_item.archived_at else None,
         "updated_at": deck_item.updated_at.isoformat() if deck_item.updated_at else None,
         "created_at": deck_item.created_at.isoformat() if deck_item.created_at else None,
+        **taxonomy_display,
     }
 
 
@@ -508,7 +537,7 @@ def score_market_item(
         1.0, int(install_count or 0) / 200
     ) * 0.3
     days_since_update = (
-        (datetime.utcnow() - updated_at).days
+        (_utcnow() - updated_at).days
         if updated_at is not None
         else recency_window_days
     )
@@ -620,8 +649,6 @@ def get_visible_deck_items(user_id: int) -> list[DeckMarketplaceItem]:
 def get_note_type_recommendations(user_id: int, visible_items: list[NoteType]) -> dict[str, Any]:
     from app.services import flashcards_share as flashcards_share
     from models.flashcard import NoteTypeInstall
-    from models import db
-    from datetime import timedelta
     
     interests_categories, interests_tags = collect_user_market_interests(user_id)
     cold_start = not interests_categories and not interests_tags
@@ -650,7 +677,7 @@ def get_note_type_recommendations(user_id: int, visible_items: list[NoteType]) -
         for _, item in sorted(scored, key=lambda row: row[0], reverse=True)[:12]
     ]
 
-    trending_cutoff = datetime.utcnow() - timedelta(days=flashcards_share.TRENDING_WINDOW_DAYS)
+    trending_cutoff = _utcnow() - timedelta(days=flashcards_share.TRENDING_WINDOW_DAYS)
     trending_counts_raw = (
         db.session.query(NoteTypeInstall.source_note_type_id, db.func.count(NoteTypeInstall.id))
         .filter(NoteTypeInstall.installed_at >= trending_cutoff)
@@ -680,9 +707,6 @@ def get_note_type_recommendations(user_id: int, visible_items: list[NoteType]) -
 
 def get_deck_recommendations(user_id: int, visible_items: list[DeckMarketplaceItem]) -> dict[str, Any]:
     from app.services import flashcards_share as flashcards_share
-    from models.flashcard import DeckInstall
-    from models import db
-    from datetime import timedelta
     
     interests_categories, interests_tags = collect_user_market_interests(user_id)
     cold_start = not interests_categories and not interests_tags
@@ -711,7 +735,7 @@ def get_deck_recommendations(user_id: int, visible_items: list[DeckMarketplaceIt
         for _, item in sorted(scored, key=lambda row: row[0], reverse=True)[:12]
     ]
 
-    trending_cutoff = datetime.utcnow() - timedelta(days=flashcards_share.TRENDING_WINDOW_DAYS)
+    trending_cutoff = _utcnow() - timedelta(days=flashcards_share.TRENDING_WINDOW_DAYS)
     trending_counts_raw = (
         db.session.query(DeckInstall.deck_item_id, db.func.count(DeckInstall.id))
         .filter(DeckInstall.installed_at >= trending_cutoff)

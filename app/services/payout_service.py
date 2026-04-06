@@ -7,8 +7,32 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from payos import APIError
-from payos.types import Payout, PayoutBatchItem as PayOSPayoutBatchItem, PayoutBatchRequest
+try:
+    from payos import APIError
+    from payos.types import Payout, PayoutBatchItem as PayOSPayoutBatchItem, PayoutBatchRequest
+
+    _PAYOS_SDK_AVAILABLE = True
+except ModuleNotFoundError:
+    class APIError(Exception):
+        def __init__(
+            self,
+            message: str = "",
+            *,
+            status_code: int = 502,
+            error_code: str | None = None,
+            error_desc: str | None = None,
+            response: Any | None = None,
+        ) -> None:
+            super().__init__(message)
+            self.status_code = status_code
+            self.error_code = error_code
+            self.error_desc = error_desc
+            self.response = response
+
+    Payout = Any  # type: ignore[misc,assignment]
+    PayOSPayoutBatchItem = Any  # type: ignore[misc,assignment]
+    PayoutBatchRequest = Any  # type: ignore[misc,assignment]
+    _PAYOS_SDK_AVAILABLE = False
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from app.repositories import payout_repository
@@ -440,20 +464,30 @@ def _build_provider_request_payload(
     validated: ValidatedCreatePayoutBatchInput,
 ) -> tuple[PayoutBatchRequest, dict[str, Any], list[dict[str, object]]]:
     provider_items: list[dict[str, Any]] = []
+    request_items: list[dict[str, Any]] = []
     item_rows: list[dict[str, object]] = []
     for item in validated.payouts:
         provider_reference_id = _build_item_reference_id(
             batch_reference_id=batch_reference_id,
             item_reference_seed=item.reference_id,
         )
-        provider_item = PayOSPayoutBatchItem(
-            reference_id=provider_reference_id,
-            amount=item.amount,
-            description=item.description,
-            to_bin=item.to_bin,
-            to_account_number=item.to_account_number,
-        ).model_dump()
+        provider_item = {
+            "reference_id": provider_reference_id,
+            "amount": item.amount,
+            "description": item.description,
+            "to_bin": item.to_bin,
+            "to_account_number": item.to_account_number,
+        }
         provider_items.append(provider_item)
+        request_items.append(
+            {
+                "referenceId": provider_reference_id,
+                "amount": item.amount,
+                "description": item.description,
+                "toBin": item.to_bin,
+                "toAccountNumber": item.to_account_number,
+            }
+        )
         item_rows.append(
             {
                 "reference_id": provider_reference_id,
@@ -465,13 +499,22 @@ def _build_provider_request_payload(
             }
         )
 
+    request_payload = {
+        "referenceId": batch_reference_id,
+        "category": list(validated.category) or None,
+        "validateDestination": validated.validate_destination,
+        "payouts": request_items,
+    }
+    if not _PAYOS_SDK_AVAILABLE:
+        return request_payload, request_payload, item_rows
+
     request_model = PayoutBatchRequest(
         reference_id=batch_reference_id,
         category=list(validated.category) or None,
         validate_destination=validated.validate_destination,
         payouts=[PayOSPayoutBatchItem(**item) for item in provider_items],
     )
-    return request_model, request_model.model_dump_camel_case(), item_rows
+    return request_model, request_payload, item_rows
 
 
 def _build_api_error_payload(exc: APIError) -> dict[str, Any]:

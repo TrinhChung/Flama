@@ -94,17 +94,17 @@
             <tbody>
                 {% for row in rows %}
                 <tr class="fc-table__row" data-note-id="{{ row.note.id }}">
-                    <td class="fc-table__title">
+                    <td class="fc-table__title" data-label="Nội dung">
                         <span class="fc-note-preview">{{ row.title }}</span>
                     </td>
-                    <td>
+                    <td data-label="NoteType">
                         <span class="fc-tag">{{ row.note_type_name }}</span>
                     </td>
-                    <td class="fc-table__muted">
+                    <td class="fc-table__muted" data-label="Deck">
                         {% set deck = decks | selectattr('id', 'equalto', row.note.deck_id) | first %}
                         {% if deck %}{{ deck.name }}{% else %}—{% endif %}
                     </td>
-                    <td>
+                    <td data-label="Tags">
                         {% for tag in (row.note.tags or [])[:3] %}
                         <span class="fc-chip">{{ tag }}</span>
                         {% endfor %}
@@ -112,12 +112,12 @@
                         <span class="fc-chip fc-chip--more">+{{ (row.note.tags|length) - 3 }}</span>
                         {% endif %}
                     </td>
-                    <td class="fc-table__muted fc-table__date">
+                    <td class="fc-table__muted fc-table__date" data-label="Cập nhật">
                         {% if row.note.updated_at %}
                         {{ row.note.updated_at.strftime('%d/%m/%Y') }}
                         {% else %}—{% endif %}
                     </td>
-                    <td class="fc-table__actions">
+                    <td class="fc-table__actions" data-label="Thao tác">
                         <a class="btn-icon" href="{{ url_for('flashcards.note_edit_page', note_id=row.note.id) }}"
                             title="Chỉnh sửa">
                             <i class="bi bi-pencil"></i>
@@ -178,10 +178,12 @@
         max-width: 1100px;
         margin: 0 auto;
         padding: 1.5rem 0 4rem;
+        min-width: 0;
     }
 
     .fc-mgmt__header {
         margin-bottom: 1.5rem;
+        min-width: 0;
     }
 
     .fc-mgmt__title-row {
@@ -191,6 +193,7 @@
         gap: 1rem;
         margin-bottom: 1.25rem;
         flex-wrap: wrap;
+        min-width: 0;
     }
 
     .fc-mgmt__title {
@@ -217,42 +220,7 @@
         display: flex;
         gap: 0.6rem;
         flex-shrink: 0;
-    }
-
-    /* Buttons */
-    .btn-fc {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.4rem;
-        padding: 0.45rem 1rem;
-        border-radius: 8px;
-        font-size: 0.875rem;
-        font-weight: 600;
-        text-decoration: none;
-        transition: all 0.15s ease;
-        border: none;
-        cursor: pointer;
-    }
-
-    .btn-fc--primary {
-        background: var(--flama-gradient);
-        color: #fff;
-    }
-
-    .btn-fc--primary:hover {
-        opacity: 0.88;
-        color: #fff;
-    }
-
-    .btn-fc--outline {
-        background: transparent;
-        color: var(--flama-text);
-        border: 1.5px solid var(--flama-border);
-    }
-
-    .btn-fc--outline:hover {
-        border-color: var(--flama-orange-400);
-        color: var(--flama-orange-500);
+        min-width: 0;
     }
 
     /* Filter bar */
@@ -265,6 +233,7 @@
         border: 1px solid var(--flama-border);
         border-radius: 12px;
         padding: 1rem 1.25rem;
+        min-width: 0;
     }
 
     .fc-filter-bar__label {
@@ -279,6 +248,7 @@
 
     .fc-filter-bar__item {
         flex-shrink: 0;
+        min-width: 0;
     }
 
     .fc-filter-bar__item--grow {
@@ -299,6 +269,7 @@
         color: var(--flama-text);
         font-size: 0.875rem;
         min-width: 140px;
+        width: 100%;
     }
 
     .fc-search-wrap {
@@ -374,6 +345,7 @@
         border: 1px solid var(--flama-border);
         border-radius: 12px;
         overflow: hidden;
+        min-width: 0;
     }
 
     .fc-table {
@@ -553,6 +525,95 @@
     .fc-empty__text {
         color: var(--flama-text-2);
         margin-bottom: 1.25rem;
+    }
+
+    @media (max-width: 768px) {
+        .fc-mgmt {
+            padding: 1rem 0 3rem;
+        }
+
+        .fc-mgmt__title {
+            font-size: 1.35rem;
+        }
+
+        .fc-mgmt__header-actions {
+            width: 100%;
+        }
+
+        .fc-mgmt__header-actions > * {
+            width: 100%;
+            justify-content: center;
+        }
+
+        .fc-filter-bar {
+            padding: 0.85rem;
+        }
+
+        .fc-filter-bar__item {
+            flex: 1 1 calc(50% - 0.75rem);
+        }
+
+        .fc-filter-bar__item--grow,
+        .fc-filter-bar__item--btn {
+            flex-basis: 100%;
+        }
+
+        .fc-table thead {
+            display: none;
+        }
+
+        .fc-table,
+        .fc-table tbody,
+        .fc-table__row,
+        .fc-table td {
+            display: block;
+            width: 100%;
+        }
+
+        .fc-table tbody {
+            display: grid;
+            gap: 0.75rem;
+            padding: 0.75rem;
+        }
+
+        .fc-table__row {
+            border: 1px solid var(--flama-border);
+            border-radius: 12px;
+            padding: 0.8rem 0.9rem;
+            background: #fff;
+            box-shadow: 0 2px 8px rgba(31, 26, 23, 0.04);
+        }
+
+        .fc-table td {
+            display: grid;
+            grid-template-columns: minmax(6rem, 7rem) minmax(0, 1fr);
+            gap: 0.6rem;
+            padding: 0.3rem 0;
+            border: 0;
+        }
+
+        .fc-table td::before {
+            content: attr(data-label);
+            font-size: 0.7rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: var(--flama-text-2);
+        }
+
+        .fc-table__actions {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            gap: 0.45rem;
+            padding-top: 0.55rem;
+            margin-top: 0.35rem;
+            border-top: 1px solid var(--flama-border);
+        }
+
+        .fc-table__actions::before {
+            display: none;
+        }
     }
 </style>
 

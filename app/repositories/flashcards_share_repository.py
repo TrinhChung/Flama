@@ -373,7 +373,7 @@ def get_cards_for_note(note_id: str) -> List[Card]:
 
 def get_note_type_by_id(note_type_id: str) -> Optional[NoteType]:
     """Back-compat lookup for note type by ID."""
-    return NoteType.query.get(note_type_id)
+    return db.session.get(NoteType, note_type_id)
 
 
 def get_note_type_by_name(user_id: int, name: str) -> Optional[NoteType]:

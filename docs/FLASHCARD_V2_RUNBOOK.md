@@ -5,7 +5,8 @@
 - Legacy `VocabularyEntry` rows do not store owner user. Migration command assigns migrated notes to one target user (`--user-id`, default: first user).
 - Legacy rows map to a single `Legacy` template card. Multi-template support is enabled for new note types.
 - Field rename job is implemented as synchronous background-job emulation (job record is created and completed in the same request).
-- `USE_NEW_CARD_MODEL` defaults to `false` for safe transition; legacy study routes remain active.
+- Shared deck installs now use logical overlay only: install pins a snapshot, clones the deck tree, and stores local clone edits in `DeckClone*` tables instead of copying source notes/cards.
+- Legacy full-copy clone mode is only supported as cutover input, not as an active runtime mode.
 
 ## New Schema & Migration
 1. Install dependencies:
@@ -24,6 +25,10 @@ flask flashcard-migrate-legacy --user-id <USER_ID>
 ```powershell
 flask flashcard-migrate-legacy --user-id <USER_ID> --dry-run
 ```
+5. Optional manual clone cutover for old deck installs:
+```powershell
+flask clone-cutover-overlay
+```
 
 ## Verification Checklist
 - `COUNT(vocabulary_entries)` equals `COUNT(legacy notes for target user)`.
@@ -31,9 +36,18 @@ flask flashcard-migrate-legacy --user-id <USER_ID> --dry-run
 - `LegacyMigrationMap` row count equals `VocabularyEntry` row count.
 - Open `/flashcards/study` and review at least 10 migrated cards.
 - Open `/vocabulary/study/...` to confirm legacy study still works unchanged.
+- Install one shared deck and confirm the learner gets pointer rows (`DeckCloneDeckMap`) and `DeckInstall.clone_mode='logical_overlay'`, not copied learner notes.
+
+## Shared Deck Clone Notes
+- Shared deck install creates `DeckInstall` with pinned `base_snapshot_at`.
+- Install clones the local deck subtree and may also create `NoteTypeInstall` when the deck item is bound to a source note type.
+- Clone edits are stored in overlay tables such as `DeckCloneNoteFieldOverride`, not by mutating source notes/cards.
+- Startup automatically runs clone cutover for old installs through `cutover_clone_model_to_overlay_only(...)`.
 
 ## Rollback Strategy
-- Immediate rollback in runtime: keep `USE_NEW_CARD_MODEL=false`.
+- There is no runtime `USE_NEW_CARD_MODEL` rollback switch anymore.
+- For clone-cutover rollout issues, use DB backup/restore as the real rollback path.
+- Temporary recovery control only: set `FLASHCARDS_SHARE_CUTOVER_FAIL_ON_MISMATCH=0` if you need the app to boot while auditing failed legacy installs.
 - Data rollback for migration run: execute backfill in `--dry-run` first, then real run.
 - Schema rollback:
 ```powershell

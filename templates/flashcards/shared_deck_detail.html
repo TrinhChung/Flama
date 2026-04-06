@@ -1,460 +1,181 @@
 {% extends "base.html" %}
 
-{% block title %}Chi tiết Deck{% endblock %}
+{% block title %}Chi tiết deck{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/marketplace_hybrid.css') }}">
+{% endblock %}
 
 {% block content %}
-<section class="py-3" id="shared-deck-detail-root" data-deck-item-id="{{ deck_item_id }}"
+<section
+  class="market-detail-page"
+  id="shared-deck-detail-root"
+  data-deck-item-id="{{ deck_item_id }}"
   data-note-type-url-template="{{ url_for('flashcards.shared_note_type_detail_page', note_type_id='__NOTE_TYPE_ID__') }}"
-  data-payment-result-url="{{ url_for('payments.marketplace_payment_result_page') }}">
-
-  <!-- ── Page Header ── -->
-  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-    <div>
-      <h2 class="h4 mb-0 flama-page-title" id="deck-title">Đang tải...</h2>
-      <small class="flama-meta-line" id="deck-meta-line"></small>
-    </div>
-    <div class="d-flex gap-2">
-      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('flashcards.shared_decks_page') }}">← Quay lại danh sách deck</a>
-      <button class="btn btn-primary btn-sm" id="deck-install-btn" type="button">Cài đặt</button>
-    </div>
+  data-share-edit-url-template="{{ url_for('flashcards.share_deck_page', deck_id=0) }}"
+  data-change-request-url-template="{{ url_for('flashcards.shared_deck_change_request_page', deck_item_id='__ITEM_ID__') }}"
+  data-change-request-inbox-url="{{ url_for('flashcards.deck_change_request_inbox_page') }}"
+  data-payment-result-url="{{ url_for('payments.marketplace_payment_result_page') }}"
+  data-save-url-template="{{ url_for('flashcards.save_shared_deck_item', deck_item_id='__ITEM_ID__') }}"
+  data-market-url="{{ url_for('flashcards.shared_decks_page') }}"
+  data-orders-url="{{ url_for('user_orders.order_history_page') }}"
+>
+  <div class="market-detail-top mb-3">
+    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('flashcards.shared_decks_page') }}"><i class="bi bi-arrow-left"></i> Quay lại marketplace</a>
   </div>
 
   <div class="alert alert-danger d-none" id="deck-detail-error" role="alert"></div>
 
-  <div class="flama-section-card flama-payment-card d-none" id="deck-payment-panel">
-    <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
-      <div>
-        <div class="flama-section-title mb-2">Chi tiết đơn hàng</div>
-        <div class="flama-payment-headline" id="deck-payment-headline"></div>
-        <div class="flama-payment-message" id="deck-payment-message"></div>
-      </div>
-      <span class="flama-payment-badge" id="deck-payment-badge"></span>
+  
+  <div class="market-space-panel mb-3">
+    <div id="deck-badges" class="mb-2"></div>
+    <h1 class="market-featured-title mb-1" id="deck-title-secondary">Đang tải...</h1>
+    <p class="market-detail-meta mb-3" id="deck-preview-text"></p>
+
+    <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+      <span class="market-featured-meta" id="deck-meta-line"></span>
+      <span class="text-muted">·</span>
+      <span class="market-card-summary" id="deck-stats"></span>
     </div>
-    <div class="flama-payment-next-action" id="deck-payment-next-action"></div>
+
+    <div class="d-flex flex-wrap gap-2 mb-4">
+      <button class="btn btn-primary px-4" id="deck-install-btn" type="button">Tải xuống</button>
+      <button class="btn btn-outline-secondary" id="deck-save-btn" type="button">Lưu</button>
+      <a class="btn btn-outline-secondary d-none" id="deck-edit-btn" href="#">Chỉnh sửa</a>
+      <a class="btn btn-outline-secondary d-none" id="deck-change-request-btn" href="#">Change request</a>
+      <a class="btn btn-outline-secondary d-none" id="deck-change-request-inbox-btn" href="#">Review requests</a>
+    </div>
+
+    <hr class="mb-3">
+    <p class="mb-2" id="deck-description"></p>
+    <div id="deck-tags"></div>
+  </div>
+
+  
+  <div class="market-space-panel mb-3">
     <div class="row g-3">
-      <div class="col-lg-6">
-        <div class="flama-payment-subtitle">Thông tin đơn hàng</div>
-        <div class="flama-payment-lines" id="deck-payment-lines"></div>
+      <div class="col-md-6">
+        <div class="market-hub-section-kicker mb-1">Tác giả</div>
+        <h2 class="h5 mb-1" id="author-name">Đang tải...</h2>
+        <div class="market-detail-meta mb-2" id="author-summary"></div>
+        <a class="btn btn-sm btn-outline-secondary" id="author-store-link" href="{{ url_for('flashcards.shared_decks_page') }}">Xem gian hàng</a>
       </div>
-      <div class="col-lg-6">
-        <div class="flama-payment-subtitle">Lưu ý cho bạn</div>
-        <ul class="flama-payment-list mb-0" id="deck-payment-instructions"></ul>
+      <div class="col-md-6">
+        <div class="market-hub-section-kicker mb-2">Cùng tác giả</div>
+        <div id="deck-author-other-items"></div>
       </div>
     </div>
   </div>
 
-  <style>
-    /* ── Flama Shared Deck Detail ── */
-
-    .flama-page-title {
-      color: var(--flama-text);
-      font-weight: var(--font-weight-bold);
-    }
-
-    .flama-meta-line {
-      font-size: var(--font-size-sm);
-      color: var(--flama-text-2);
-    }
-
-    /* ── Section Cards ── */
-    .flama-section-card {
-      background: var(--flama-surface);
-      border: 1px solid var(--flama-border);
-      border-radius: 0.5rem;
-      padding: 1rem 1.25rem;
-      margin-bottom: 1rem;
-      box-shadow: 0 1px 4px rgba(31, 26, 23, 0.05);
-    }
-
-    .flama-section-title {
-      font-size: var(--font-size-sm);
-      font-weight: var(--font-weight-semibold);
-      color: var(--flama-orange-700);
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      margin-bottom: 0.75rem;
-      padding-bottom: 0.5rem;
-      border-bottom: 1px solid var(--flama-border);
-    }
-
-    /* ── Tags ── */
-    .flama-payment-card {
-      border-left: 4px solid var(--flama-orange-500);
-    }
-
-    .flama-payment-card[data-tone="success"] {
-      border-left-color: #198754;
-    }
-
-    .flama-payment-card[data-tone="warning"] {
-      border-left-color: #f59f00;
-    }
-
-    .flama-payment-card[data-tone="danger"] {
-      border-left-color: #dc3545;
-    }
-
-    .flama-payment-card[data-tone="secondary"] {
-      border-left-color: #6c757d;
-    }
-
-    .flama-payment-headline {
-      font-size: var(--font-size-base);
-      font-weight: var(--font-weight-semibold);
-      color: var(--flama-text);
-      margin-bottom: 0.35rem;
-    }
-
-    .flama-payment-message,
-    .flama-payment-next-action {
-      color: var(--flama-text-2);
-      font-size: var(--font-size-sm);
-    }
-
-    .flama-payment-next-action {
-      margin-bottom: 1rem;
-    }
-
-    .flama-payment-badge {
-      display: inline-flex;
-      align-items: center;
-      padding: 0.3rem 0.7rem;
-      border-radius: 999px;
-      font-size: var(--font-size-xs);
-      font-weight: var(--font-weight-semibold);
-      background: var(--flama-orange-100);
-      color: var(--flama-orange-700);
-      border: 1px solid var(--flama-orange-200);
-      white-space: nowrap;
-    }
-
-    .flama-payment-card[data-tone="success"] .flama-payment-badge {
-      background: rgba(25, 135, 84, 0.12);
-      border-color: rgba(25, 135, 84, 0.22);
-      color: #198754;
-    }
-
-    .flama-payment-card[data-tone="warning"] .flama-payment-badge {
-      background: rgba(245, 159, 0, 0.12);
-      border-color: rgba(245, 159, 0, 0.22);
-      color: #b7791f;
-    }
-
-    .flama-payment-card[data-tone="danger"] .flama-payment-badge {
-      background: rgba(220, 53, 69, 0.12);
-      border-color: rgba(220, 53, 69, 0.22);
-      color: #b02a37;
-    }
-
-    .flama-payment-card[data-tone="secondary"] .flama-payment-badge {
-      background: rgba(108, 117, 125, 0.12);
-      border-color: rgba(108, 117, 125, 0.22);
-      color: #495057;
-    }
-
-    .flama-payment-subtitle {
-      font-size: var(--font-size-sm);
-      font-weight: var(--font-weight-semibold);
-      color: var(--flama-text);
-      margin-bottom: 0.65rem;
-    }
-
-    .flama-payment-lines {
-      display: flex;
-      flex-direction: column;
-      gap: 0.65rem;
-    }
-
-    .flama-payment-line {
-      display: flex;
-      flex-direction: column;
-      gap: 0.15rem;
-      padding-bottom: 0.65rem;
-      border-bottom: 1px dashed var(--flama-border);
-    }
-
-    .flama-payment-line:last-child {
-      padding-bottom: 0;
-      border-bottom: none;
-    }
-
-    .flama-payment-label {
-      color: var(--flama-text-2);
-      font-size: var(--font-size-xs);
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-    }
-
-    .flama-payment-value {
-      color: var(--flama-text);
-      font-size: var(--font-size-sm);
-      font-weight: var(--font-weight-medium);
-      word-break: break-word;
-    }
-
-    .flama-payment-value.is-code {
-      font-family: var(--font-family-mono, monospace);
-    }
-
-    .flama-payment-value a {
-      color: var(--flama-orange-700);
-      text-decoration: none;
-    }
-
-    .flama-payment-value a:hover {
-      text-decoration: underline;
-    }
-
-    .flama-payment-list {
-      padding-left: 1.15rem;
-      color: var(--flama-text-2);
-      font-size: var(--font-size-sm);
-    }
-
-    .flama-payment-list li + li {
-      margin-top: 0.45rem;
-    }
-
-    .flama-tag {
-      display: inline-block;
-      padding: 0.2rem 0.6rem;
-      font-size: var(--font-size-xs);
-      font-weight: var(--font-weight-medium);
-      background-color: var(--flama-amber-50);
-      color: var(--flama-amber-800);
-      border: 1px solid var(--flama-amber-200);
-      border-radius: 999px;
-      margin-right: 0.35rem;
-      margin-bottom: 0.35rem;
-    }
-
-    /* ── Vocabulary / Test Sample List ── */
-    .flama-vocab-list {
-      display: flex;
-      flex-direction: column;
-      gap: 0;
-      border: 1px solid var(--flama-border);
-      border-radius: 0.5rem;
-      overflow: hidden;
-    }
-
-    .flama-vocab-item {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: space-between;
-      align-items: flex-start;
-      gap: 0.5rem;
-      padding: 0.6rem 0.9rem;
-      background: var(--flama-surface);
-      border: none;
-      border-bottom: 1px solid var(--flama-border);
-      text-align: left;
-      width: 100%;
-      cursor: pointer;
-      transition: background-color 0.15s ease;
-    }
-
-    .flama-vocab-item:last-child {
-      border-bottom: none;
-    }
-
-    .flama-vocab-item:hover {
-      background-color: var(--flama-orange-50);
-    }
-
-    .flama-vocab-item.is-active {
-      background-color: var(--flama-orange-100);
-      border-left: 3px solid var(--flama-orange-600);
-    }
-
-    .flama-vocab-word {
-      font-size: var(--font-size-sm);
-      font-weight: var(--font-weight-semibold);
-      color: var(--flama-text);
-    }
-
-    .flama-vocab-reading {
-      font-size: var(--font-size-xs);
-      color: var(--flama-text-2);
-      margin-top: 0.1rem;
-    }
-
-    .flama-vocab-hint {
-      font-size: var(--font-size-xs);
-      color: var(--flama-text-2);
-      font-style: italic;
-    }
-
-    .flama-vocab-empty {
-      padding: 0.75rem 1rem;
-      color: var(--flama-text-2);
-      font-size: var(--font-size-sm);
-      font-style: italic;
-    }
-
-    /* ── Rating Stars ── */
-    .shared-rating-stars {
-      display: inline-flex;
-      gap: 0.125rem;
-    }
-
-    .shared-rating-star {
-      border: 0;
-      background: transparent;
-      padding: 0;
-      font-size: 1.65rem;
-      line-height: 1;
-      color: var(--flama-border);
-      cursor: pointer;
-      transition: color .15s ease, transform .15s ease;
-    }
-
-    .shared-rating-star.is-active {
-      color: var(--flama-amber-500);
-    }
-
-    .shared-rating-star:hover,
-    .shared-rating-star:focus-visible {
-      color: var(--flama-amber-400);
-      transform: translateY(-1px);
-      outline: none;
-    }
-
-    .shared-rating-stars.is-disabled .shared-rating-star {
-      cursor: not-allowed;
-      opacity: 0.5;
-      transform: none;
-    }
-
-    /* ── Community Review Cards ── */
-    .flama-review-item {
-      border: 1px solid var(--flama-border);
-      border-radius: 0.5rem;
-      padding: 0.75rem 1rem;
-      margin-bottom: 0.6rem;
-      background: var(--flama-surface);
-    }
-
-    .flama-review-stars {
-      color: var(--flama-amber-500);
-      font-weight: var(--font-weight-semibold);
-    }
-
-    .flama-review-meta {
-      font-size: var(--font-size-xs);
-      color: var(--flama-text-2);
-      margin-top: 0.25rem;
-    }
-
-    /* ── Preview btn-group active override ── */
-    .flama-btn-group .btn.active,
-    .flama-btn-group .btn:focus.active {
-      background-color: var(--flama-orange-600);
-      border-color: var(--flama-orange-600);
-      color: #fff;
-    }
-  </style>
-
-  <div class="mx-auto" style="max-width: 920px;">
-
-    <!-- ── Thông tin deck ── -->
-    <div class="flama-section-card">
-      <h3 class="flama-section-title">Thông tin deck</h3>
-      <p class="mb-2" id="deck-description"></p>
-      <div class="mb-2" id="deck-tags"></div>
-      <p class="mb-1" style="font-size:var(--font-size-sm);color:var(--flama-text-2);" id="deck-preview-text"></p>
-      <div style="font-size:var(--font-size-sm);color:var(--flama-text-2);" id="deck-stats"></div>
-    </div>
-
-    <!-- ── Test nhanh ── -->
-    <div class="flama-section-card">
-      <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-        <h3 class="flama-section-title mb-0">Test nhanh <span style="font-weight:var(--font-weight-normal);text-transform:none;letter-spacing:0;">(tối đa 5 từ)</span></h3>
-        <small style="color:var(--flama-text-2);" id="deck-test-note">Chọn từ để nạp dữ liệu vào preview card.</small>
+  
+  <div class="market-space-panel d-none mb-3" id="deck-payment-panel">
+    <div class="market-shelf-header">
+      <div>
+        <div class="market-shelf-kicker">Payment</div>
+        <h2 class="market-hub-section-title h4 mb-0" id="deck-payment-headline">Chi tiết đơn hàng</h2>
       </div>
-      <div class="flama-vocab-list" id="deck-test-samples"></div>
+      <span class="market-badge" id="deck-payment-badge">Đơn hàng</span>
     </div>
-
-    <!-- ── Preview cards ── -->
-    <div class="flama-section-card" id="deck-template-preview-card">
-      <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-        <div>
-          <h3 class="flama-section-title mb-0">Xem trước thẻ</h3>
-          <small style="color:var(--flama-text-2);" id="deck-template-note"></small>
-        </div>
-        <div class="d-flex gap-2 align-items-center flex-wrap">
-          <a class="btn btn-outline-primary btn-sm d-flex align-items-center gap-2" id="source-note-type-link" href="#" target="_self">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor"
-              class="bi bi-file-earmark-code" viewBox="0 0 16 16">
-              <path d="M14 4.5V14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2h5.5zm-3 0A1.5 1.5 0 0 1 9.5 3V1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V4.5z" />
-              <path d="M8.646 6.646a.5.5 0 0 1 .708 0l2 2a.5.5 0 0 1 0 .708l-2 2a.5.5 0 0 1-.708-.708L10.293 9 8.646 7.354a.5.5 0 0 1 0-.708m-1.292 0a.5.5 0 0 0-.708 0l-2 2a.5.5 0 0 0 0 .708l2 2a.5.5 0 0 0 .708-.708L5.707 9l1.647-1.646a.5.5 0 0 0 0-.708" />
-            </svg>
-            <span id="deck-template-name-display">Đang tải...</span>
-          </a>
-          <div class="btn-group btn-group-sm flama-btn-group" role="group" aria-label="Mặt xem trước của deck">
-            <button class="btn btn-outline-secondary active" id="deck-preview-side-front" type="button"
-              data-side="front">Mặt trước</button>
-            <button class="btn btn-outline-secondary" id="deck-preview-side-back" type="button"
-              data-side="back">Mặt sau</button>
-          </div>
-          <div class="btn-group btn-group-sm" role="group" aria-label="Điều hướng từ mẫu">
-            <button class="btn btn-outline-secondary" id="deck-preview-sample-prev" type="button">‹ Trước</button>
-            <button class="btn btn-outline-secondary" id="deck-preview-sample-next" type="button">Sau ›</button>
-          </div>
-          <small style="color:var(--flama-text-2);" id="deck-preview-sample-label"></small>
-        </div>
-      </div>
-      <iframe id="deck-template-preview-frame" class="w-100 border rounded" style="min-height: 420px; border-color: var(--flama-border) !important;"
-        sandbox="allow-same-origin allow-scripts"></iframe>
-    </div>
-
-    <!-- ── Đánh giá của bạn ── -->
-    <div class="flama-section-card">
-      <h3 class="flama-section-title">Đánh giá của bạn</h3>
-      <div class="mb-2" style="font-size:var(--font-size-sm);color:var(--flama-text-2);" id="deck-my-review"></div>
-      <div class="row g-2 align-items-center">
-        <div class="col-12">
-          <label class="form-label mb-1" style="font-size:var(--font-size-sm);font-weight:var(--font-weight-medium);" for="deck-rating-value">Điểm</label>
-          <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
-            <div class="shared-rating-stars" id="deck-rating-stars" role="radiogroup" aria-label="Chọn số sao">
-              <button type="button" class="shared-rating-star" role="radio" data-value="1" aria-label="1 sao" aria-checked="false">★</button>
-              <button type="button" class="shared-rating-star" role="radio" data-value="2" aria-label="2 sao" aria-checked="false">★</button>
-              <button type="button" class="shared-rating-star" role="radio" data-value="3" aria-label="3 sao" aria-checked="false">★</button>
-              <button type="button" class="shared-rating-star" role="radio" data-value="4" aria-label="4 sao" aria-checked="false">★</button>
-              <button type="button" class="shared-rating-star" role="radio" data-value="5" aria-label="5 sao" aria-checked="true">★</button>
-            </div>
-            <small style="color:var(--flama-text-2);font-weight:var(--font-weight-semibold);" id="deck-rating-value-label">5/5</small>
-          </div>
-          <select class="form-select form-select-sm d-none" id="deck-rating-value" aria-hidden="true" tabindex="-1">
-            <option value="5">5</option>
-            <option value="4">4</option>
-            <option value="3">3</option>
-            <option value="2">2</option>
-            <option value="1">1</option>
-          </select>
-        </div>
-        <div class="col-12">
-          <label class="form-label mb-1" style="font-size:var(--font-size-sm);font-weight:var(--font-weight-medium);" for="deck-rating-comment">Nhận xét</label>
-          <textarea class="form-control form-control-sm" id="deck-rating-comment" rows="2"
-            placeholder="Viết nhận xét (tuỳ chọn)"></textarea>
-        </div>
-      </div>
-      <div class="d-flex justify-content-between align-items-center mt-2">
-        <small style="color:var(--flama-text-2);" id="deck-rating-hint"></small>
-        <button class="btn btn-outline-primary btn-sm" id="deck-rating-submit-btn" type="button">Gửi đánh giá</button>
-      </div>
-    </div>
-
-    <!-- ── Đánh giá cộng đồng ── -->
-    <div class="flama-section-card">
-      <h3 class="flama-section-title">Đánh giá cộng đồng</h3>
-      <div id="deck-community-reviews" style="font-size:var(--font-size-sm);color:var(--flama-text-2);">Đang tải đánh giá...</div>
-    </div>
-
+    <p class="market-detail-meta mb-2" id="deck-payment-message"></p>
+    <p class="market-detail-meta mb-3" id="deck-payment-next-action"></p>
+    <div class="market-purchase-list" id="deck-payment-lines"></div>
+    <ul class="mt-3 mb-0" id="deck-payment-instructions"></ul>
   </div>
+
+  
+  <section class="market-space-panel mb-3">
+    <div class="market-shelf-header">
+      <div>
+        <div class="market-shelf-kicker">Quick Preview</div>
+        <h2 class="market-hub-section-title h4 mb-0">Chạy thử preview theo thẻ mẫu</h2>
+      </div>
+    </div>
+    <p class="market-detail-meta mb-3" id="deck-test-note">Chọn từ để nạp vào phần xem trước.</p>
+    <div class="market-related-grid" id="deck-test-samples"></div>
+  </section>
+
+  
+  <section class="market-space-panel mb-3">
+    <div class="market-shelf-header">
+      <div>
+        <div class="market-shelf-kicker">Preview</div>
+        <h2 class="market-hub-section-title h4 mb-0">Xem trước deck theo note type nguồn</h2>
+      </div>
+      <div class="d-flex flex-wrap gap-2 align-items-center">
+        <a class="btn btn-outline-secondary" id="source-note-type-link" href="#">
+          <span id="deck-template-name-display">Đang tải...</span>
+        </a>
+        <div class="btn-group" role="group" aria-label="Mặt xem trước">
+          <button class="btn btn-outline-secondary active" id="deck-preview-side-front" type="button" data-side="front">Mặt trước</button>
+          <button class="btn btn-outline-secondary" id="deck-preview-side-back" type="button" data-side="back">Mặt sau</button>
+        </div>
+        <div class="btn-group" role="group" aria-label="Điều hướng mẫu">
+          <button class="btn btn-outline-secondary" id="deck-preview-sample-prev" type="button">‹ Trước</button>
+          <button class="btn btn-outline-secondary" id="deck-preview-sample-next" type="button">Sau ›</button>
+        </div>
+      </div>
+    </div>
+    <div class="market-detail-meta mb-3" id="deck-template-note"></div>
+    <div class="market-detail-meta mb-3" id="deck-preview-sample-label"></div>
+    <iframe id="deck-template-preview-frame" class="market-preview-frame" sandbox="allow-same-origin allow-scripts"></iframe>
+  </section>
+
+  
+  <section class="market-space-panel mb-3">
+    <div class="market-shelf-header">
+      <div>
+        <div class="market-shelf-kicker">Reviews</div>
+        <h2 class="market-hub-section-title h4 mb-0">Đánh giá và phản hồi</h2>
+      </div>
+    </div>
+    <div class="mb-3" id="deck-my-review"></div>
+    <div class="row g-3 align-items-start">
+      <div class="col-lg-5">
+        <label class="form-label" for="deck-rating-value">Điểm</label>
+        <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+          <div class="shared-rating-stars" id="deck-rating-stars" role="radiogroup" aria-label="Chọn số sao">
+            <button type="button" class="shared-rating-star" role="radio" data-value="1" aria-label="1 sao">★</button>
+            <button type="button" class="shared-rating-star" role="radio" data-value="2" aria-label="2 sao">★</button>
+            <button type="button" class="shared-rating-star" role="radio" data-value="3" aria-label="3 sao">★</button>
+            <button type="button" class="shared-rating-star" role="radio" data-value="4" aria-label="4 sao">★</button>
+            <button type="button" class="shared-rating-star" role="radio" data-value="5" aria-label="5 sao">★</button>
+          </div>
+          <strong id="deck-rating-value-label">5/5</strong>
+        </div>
+        <select class="form-select d-none" id="deck-rating-value" aria-hidden="true">
+          <option value="5">5</option>
+          <option value="4">4</option>
+          <option value="3">3</option>
+          <option value="2">2</option>
+          <option value="1">1</option>
+        </select>
+        <label class="form-label mt-3" for="deck-rating-comment">Nhận xét</label>
+        <textarea class="form-control" id="deck-rating-comment" rows="4" placeholder="Deck phù hợp với ai, điểm mạnh nào đáng chú ý..."></textarea>
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3">
+          <small class="text-muted" id="deck-rating-hint"></small>
+          <button class="btn btn-primary" id="deck-rating-submit-btn" type="button">Gửi đánh giá</button>
+        </div>
+      </div>
+      <div class="col-lg-7">
+        <div id="deck-community-reviews"></div>
+      </div>
+    </div>
+  </section>
+
+  
+  <section class="market-space-panel">
+    <div class="market-shelf-header">
+      <div>
+        <div class="market-shelf-kicker">Related</div>
+        <h2 class="market-hub-section-title h4 mb-0">Deck liên quan</h2>
+      </div>
+    </div>
+    <div class="market-related-grid" id="deck-related-items"></div>
+  </section>
 </section>
 {% endblock %}
 
 {% block scripts %}
 <script type="module" src="{{ url_for('static', filename='js/pages/shared_deck_detail/main.js') }}"></script>
 {% endblock %}
+
