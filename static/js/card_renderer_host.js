@@ -160,12 +160,27 @@
         allowedAudioUrls.add(normalized);
       }
     });
+    const templateKey = typeof basePayload.template_key === "string" ? basePayload.template_key.trim() : "";
+    const shellKey = typeof basePayload.shell_key === "string"
+      ? basePayload.shell_key.trim()
+      : templateKey;
+    const hasInlineScript = basePayload.has_inline_script === true || html.toLowerCase().includes("<script");
+    const supportsLivePatch = (
+      basePayload.supports_live_patch === true &&
+      templateKey.length > 0 &&
+      shellKey.length > 0 &&
+      !hasInlineScript
+    );
 
     return {
       html,
       allowed_media_urls: Array.from(allowedMediaUrls),
       allowed_audio_urls: Array.from(allowedAudioUrls),
       allowed_audio_asset_ids: Array.from(allowedAudioUrls).map(assetIdFromProxyRef).filter(Boolean),
+      template_key: templateKey,
+      shell_key: shellKey,
+      has_inline_script: hasInlineScript,
+      supports_live_patch: supportsLivePatch,
     };
   }
 
@@ -307,6 +322,48 @@
       "    }",
       "    lastHeight = height;",
       "    post('resize_request', { height: height });",
+      "  }",
+      "  function replaceRootContent(nextHtml) {",
+      "    var root = document.getElementById('flama-card-root');",
+      "    if (!root) {",
+      "      return;",
+      "    }",
+      "    if (typeof DOMParser !== 'function') {",
+      "      return;",
+      "    }",
+      "    var parsed = new DOMParser().parseFromString('<!doctype html><html><body>' + String(nextHtml || '') + '</body></html>', 'text/html');",
+      "    var fragment = document.createDocumentFragment();",
+      "    var parsedBody = parsed && parsed.body ? parsed.body : null;",
+      "    if (!parsedBody) {",
+      "      root.replaceChildren();",
+      "      return;",
+      "    }",
+      "    while (parsedBody.firstChild) {",
+      "      fragment.appendChild(document.importNode(parsedBody.firstChild, true));",
+      "      parsedBody.removeChild(parsedBody.firstChild);",
+      "    }",
+      "    root.replaceChildren(fragment);",
+      "  }",
+      "  function applyPatchedContent(payload) {",
+      "    if (payload && payload.config && typeof payload.config === 'object') {",
+      "      rendererConfig = payload.config;",
+      "    } else {",
+      "      rendererConfig = {};",
+      "    }",
+      "    if (payload && payload.context && typeof payload.context === 'object') {",
+      "      rendererContext = payload.context;",
+      "    } else {",
+      "      rendererContext = {};",
+      "    }",
+      "    replaceRootContent(payload && typeof payload.html === 'string' ? payload.html : '');",
+      "    applyAutoSplit();",
+      "    notifyHeight();",
+      "    if (typeof window.requestAnimationFrame === 'function') {",
+      "      window.requestAnimationFrame(notifyHeight);",
+      "    }",
+      "    if (payload && payload.reveal && typeof payload.reveal === 'object') {",
+      "      dispatchReveal(payload.reveal);",
+      "    }",
       "  }",
       "  function resolveAudioRef(ref) {",
       "    if (typeof ref !== 'string') {",
@@ -476,6 +533,10 @@
       "    }",
       "    if (data.action === 'reveal') {",
       "      dispatchReveal(data.payload || {});",
+      "      return;",
+      "    }",
+      "    if (data.action === 'patch_content') {",
+      "      applyPatchedContent(data.payload || {});",
       "    }",
       "  });",
       "  window.addEventListener('error', function (event) {",
@@ -497,12 +558,20 @@
       "      resizeObserver.observe(document.body);",
       "    }",
       "  }",
+      "  function announceReady() {",
+      "    if (announceReady.__done) {",
+      "      return;",
+      "    }",
+      "    announceReady.__done = true;",
+      "    applyAutoSplit();",
+      "    notifyHeight();",
+      "    post('renderer_ready', { height: measureHeight() });",
+      "  }",
       "  window.addEventListener('load', function () {",
-      "    window.requestAnimationFrame(function () {",
-      "      applyAutoSplit();",
-      "      notifyHeight();",
-      "      post('renderer_ready', { height: measureHeight() });",
-      "    });",
+      "    if (typeof window.requestAnimationFrame === 'function') {",
+      "      window.requestAnimationFrame(announceReady);",
+      "    }",
+      "    window.setTimeout(announceReady, 0);",
       "  });",
       "})();",
     ].join("\n");
@@ -546,9 +615,9 @@
       : {};
     let ready = false;
     let pendingRevealPayload = null;
-    let renderSequence = 0;
     const minHeight = clampFrameHeight(initialOptions.minHeight || DEFAULT_MIN_HEIGHT, DEFAULT_MIN_HEIGHT);
     const autoHeight = initialOptions.autoHeight !== false;
+    const enableLivePatch = initialOptions.enableLivePatch === true;
     const fixedHeight = clampFrameHeight(
       initialOptions.fixedHeight || initialOptions.minHeight || DEFAULT_MIN_HEIGHT,
       DEFAULT_MIN_HEIGHT
@@ -569,6 +638,39 @@
           allowedAudioUrls.add(normalized);
         }
       });
+    }
+
+    function normalizedListSignature(values) {
+      return normalizeStringList(values).slice().sort().join("|");
+    }
+
+    function canLivePatchPayload(nextPayload) {
+      if (!enableLivePatch || !ready || !instanceId || !frameEl.contentWindow || typeof global.DOMParser !== "function") {
+        return false;
+      }
+      if (!nextPayload || typeof nextPayload !== "object") {
+        return false;
+      }
+      if (!activePayload.supports_live_patch || !nextPayload.supports_live_patch) {
+        return false;
+      }
+      if (!activePayload.template_key || activePayload.template_key !== nextPayload.template_key) {
+        return false;
+      }
+      if (!activePayload.shell_key || activePayload.shell_key !== nextPayload.shell_key) {
+        return false;
+      }
+      // Keep the iframe CSP exact to the current document; if allowed media changes, reload.
+      if (normalizedListSignature(activePayload.allowed_media_urls) !== normalizedListSignature(nextPayload.allowed_media_urls)) {
+        return false;
+      }
+      if (normalizedListSignature(activePayload.allowed_audio_urls) !== normalizedListSignature(nextPayload.allowed_audio_urls)) {
+        return false;
+      }
+      if (normalizedListSignature(activePayload.allowed_audio_asset_ids) !== normalizedListSignature(nextPayload.allowed_audio_asset_ids)) {
+        return false;
+      }
+      return true;
     }
 
     function setFrameHeight(nextHeight) {
@@ -699,9 +801,42 @@
 
     global.addEventListener("message", handleRendererMessage);
 
+    function patch(nextPayload, renderOptions) {
+      const normalizedPayload = normalizeRendererSidePayload(nextPayload);
+      if (!canLivePatchPayload(normalizedPayload)) {
+        return false;
+      }
+      const optionsObject = renderOptions && typeof renderOptions === "object" ? renderOptions : {};
+      activePayload = normalizedPayload;
+      activeConfig = optionsObject.config && typeof optionsObject.config === "object"
+        ? optionsObject.config
+        : {};
+      activeContext = optionsObject.context && typeof optionsObject.context === "object"
+        ? optionsObject.context
+        : {};
+      syncAllowedAudioUrls(activePayload);
+      pendingRevealPayload = null;
+      if (optionsObject.resetViewport !== false) {
+        resetFrameViewport();
+      }
+      postHostMessage("patch_content", {
+        html: activePayload.html,
+        config: activeConfig,
+        context: activeContext,
+        reveal: optionsObject.revealOnReady && typeof optionsObject.revealOnReady === "object"
+          ? optionsObject.revealOnReady
+          : null,
+      });
+      return true;
+    }
+
     function render(nextPayload, renderOptions) {
       const optionsObject = renderOptions && typeof renderOptions === "object" ? renderOptions : {};
-      activePayload = normalizeRendererSidePayload(nextPayload);
+      const normalizedPayload = normalizeRendererSidePayload(nextPayload);
+      if (patch(normalizedPayload, optionsObject)) {
+        return;
+      }
+      activePayload = normalizedPayload;
       activeConfig = optionsObject.config && typeof optionsObject.config === "object"
         ? optionsObject.config
         : {};
@@ -714,8 +849,6 @@
       pendingRevealPayload = optionsObject.revealOnReady && typeof optionsObject.revealOnReady === "object"
         ? optionsObject.revealOnReady
         : null;
-      renderSequence += 1;
-      const currentRenderSequence = renderSequence;
       const renderBaseHeight = autoHeight
         ? (optionsObject.placeholderHeight || minHeight)
         : (optionsObject.fixedHeight || fixedHeight);
@@ -735,14 +868,7 @@
         bodyClass: optionsObject.bodyClass || "",
         allowedMediaUrls: activePayload.allowed_media_urls,
       });
-      frameEl.srcdoc = "";
-      global.requestAnimationFrame(function () {
-        if (currentRenderSequence !== renderSequence) {
-          return;
-        }
-        resetFrameViewport();
-        frameEl.srcdoc = documentHtml;
-      });
+      frameEl.srcdoc = documentHtml;
     }
 
     function reveal(payload) {
@@ -766,6 +892,7 @@
 
     return {
       render,
+      patch,
       reveal,
       destroy,
       createNoticeHtml,

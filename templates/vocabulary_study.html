@@ -999,10 +999,16 @@
     const initialRendererPayloadEl = document.getElementById("studyInitialRendererPayload");
     const rendererHost = window.FlamaCardRendererHost;
     const frontRenderer = frontFrame && rendererHost
-      ? rendererHost.createRendererFrameController(frontFrame, { minHeight: 260 })
+      ? rendererHost.createRendererFrameController(frontFrame, {
+        minHeight: 260,
+        enableLivePatch: true,
+      })
       : null;
     const backRenderer = backFrame && rendererHost
-      ? rendererHost.createRendererFrameController(backFrame, { minHeight: 260 })
+      ? rendererHost.createRendererFrameController(backFrame, {
+        minHeight: 260,
+        enableLivePatch: true,
+      })
       : null;
     const MARKDOWN_PROXY_MEDIA_RE = /^\/media\/proxy\/[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 
@@ -1106,7 +1112,7 @@
       }
     }
 
-    function renderStudyFace(side, reason, payload) {
+    function renderStudyFace(side, reason, payload, options = {}) {
       if (!rendererHost) {
         return;
       }
@@ -1121,6 +1127,7 @@
       const payloadForFrame = hasRenderableHtml
         ? sidePayload
         : { html: rendererHost.createNoticeHtml("Thẻ này hiện chưa có nội dung để hiển thị.") };
+      const shouldRevealOnReady = options.revealOnReady !== false;
       controller.render(payloadForFrame, {
         padding: "0 0.8rem 1rem",
         background: "transparent",
@@ -1132,10 +1139,12 @@
           scopeId,
         },
         context: buildRendererContext(payload),
-        revealOnReady: {
-          side: normalizedSide,
-          reason: String(reason || "render"),
-        },
+        revealOnReady: shouldRevealOnReady
+          ? {
+            side: normalizedSide,
+            reason: String(reason || "render"),
+          }
+          : null,
       });
       if (normalizedSide === "back") {
         backRendererLoaded = true;
@@ -1989,20 +1998,23 @@
       });
     }
 
-    function resetToFrontFace() {
+    function resetToFrontFace(options = {}) {
       if (!frontFrame || !backFrame || !frontActions || !backActions) {
         return;
       }
+      const revealFront = options.revealFront !== false;
       resetFrameViewport(frontFrame);
       resetFrameViewport(backFrame);
       frontFrame.classList.add("is-active");
       backFrame.classList.remove("is-active");
       frontActions.classList.remove("d-none");
       backActions.classList.add("d-none");
-      frontRenderer?.reveal({
-        side: "front",
-        reason: "show_front",
-      });
+      if (revealFront) {
+        frontRenderer?.reveal({
+          side: "front",
+          reason: "show_front",
+        });
+      }
     }
 
     function applyWaitingStatePayload(payload, options = {}) {
@@ -2014,7 +2026,7 @@
       }
 
       updateStudyCounts(payload);
-      resetToFrontFace();
+      resetToFrontFace({ revealFront: false });
       if (cardRoot) {
         cardRoot.classList.add("d-none");
       }
@@ -2062,8 +2074,9 @@
       }
       updateStudyEditConfigFromPayload(payload);
       cardShownAtMs = performance.now();
-      resetToFrontFace();
       renderStudyFace("front", "load_next_card", payload);
+      resetToFrontFace({ revealFront: false });
+      renderStudyFace("back", "preload_next_card_back", payload, { revealOnReady: false });
       updateIntervalPreview(payload.intervals_preview);
       return true;
     }
@@ -2190,6 +2203,12 @@
       field_values: editFieldValues,
       field_defs: editFieldDefs,
     });
+    renderStudyFace("back", "initial_preload_back", {
+      card_id: cardId,
+      note_id: String(cardRoot?.dataset.noteId || ""),
+      field_values: editFieldValues,
+      field_defs: editFieldDefs,
+    }, { revealOnReady: false });
   })();
 </script>
 {% endif %}

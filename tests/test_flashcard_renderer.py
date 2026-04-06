@@ -183,6 +183,30 @@ class FlashcardRendererTests(unittest.TestCase):
         self.assertIn("<script>window.__fc_test = true;</script>", html)
         payload = rendered["front_renderer_payload"]
         self.assertIn("window.__fc_test = true;", payload["html"])
+        self.assertTrue(payload["template_key"])
+        self.assertEqual(payload["shell_key"], payload["template_key"])
+        self.assertTrue(payload["has_inline_script"])
+        self.assertFalse(payload["supports_live_patch"])
+
+    def test_renderer_payload_exposes_live_patch_metadata_for_plain_template(self):
+        template = self._template("<div>{{Word}}</div>", "<div>{{Meaning}}</div>", "body{color:red;}")
+        fields = [self._field("Word"), self._field("Meaning")]
+        rendered = render_template_pair(
+            template=template,
+            field_defs=fields,
+            field_values={"Word": "犬", "Meaning": "dog"},
+            media_assets=[],
+        )
+        front_payload = rendered["front_renderer_payload"]
+        back_payload = rendered["back_renderer_payload"]
+        self.assertTrue(front_payload["template_key"])
+        self.assertEqual(front_payload["shell_key"], front_payload["template_key"])
+        self.assertTrue(front_payload["supports_live_patch"])
+        self.assertFalse(front_payload["has_inline_script"])
+        self.assertTrue(back_payload["template_key"])
+        self.assertEqual(back_payload["shell_key"], back_payload["template_key"])
+        self.assertTrue(back_payload["supports_live_patch"])
+        self.assertNotEqual(front_payload["template_key"], back_payload["template_key"])
 
     def test_external_script_src_is_removed_from_template_output(self):
         template = self._template(
@@ -230,6 +254,9 @@ class FlashcardRendererTests(unittest.TestCase):
         self.assertEqual(payload["allowed_audio_urls"], ["/media/proxy/audio-1"])
         self.assertEqual(payload["allowed_audio_asset_ids"], ["audio-1"])
         self.assertIn("/media/proxy/image-1", payload["allowed_media_urls"])
+        self.assertFalse(payload["supports_live_patch"])
+        self.assertEqual(payload["template_key"], "")
+        self.assertEqual(payload["shell_key"], "")
 
     def test_renderer_payload_extracts_legacy_audio_controls_with_source_tag(self):
         payload = build_renderer_side_payload(

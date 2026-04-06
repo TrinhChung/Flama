@@ -122,7 +122,7 @@ elif mistune is not None:
     # Fallback renderer when markdown-it-py is missing in runtime env.
     _markdown_parser = mistune.create_markdown(escape=True)
 _template_cache: OrderedDict[str, str] = OrderedDict()
-_preview_cache: dict[str, tuple[datetime, dict[str, str]]] = {}
+_preview_cache: dict[str, tuple[datetime, dict[str, Any]]] = {}
 _cache_lock = threading.Lock()
 _MAX_TEMPLATE_CACHE = 512
 _PREVIEW_TTL = timedelta(seconds=30)
@@ -214,6 +214,44 @@ def _extract_proxy_asset_id(media_url: str | None) -> str:
         return ""
     match = _PROXY_MEDIA_URL_RE.match(str(media_url).strip())
     return match.group(1) if match else ""
+
+
+def _short_sha256(value: str | None) -> str:
+    return hashlib.sha256(str(value or "").encode("utf-8")).hexdigest()[:16]
+
+
+def _renderer_shell_key(
+    *,
+    template: Any,
+    side: str,
+    side_source: str,
+    css: str,
+    field_defs: list[Any],
+) -> str:
+    field_defs_signature = "|".join(
+        [
+            ":".join(
+                [
+                    str(getattr(field_def, "name", "") or ""),
+                    str(getattr(field_def, "field_type", "") or ""),
+                    str(int(getattr(field_def, "position", 0) or 0)),
+                    "1" if bool(getattr(field_def, "required", False)) else "0",
+                ]
+            )
+            for field_def in field_defs
+        ]
+    )
+    return ":".join(
+        [
+            "tpl",
+            str(getattr(template, "id", "") or ""),
+            str(getattr(template, "updated_at", "") or ""),
+            str(side or ""),
+            _short_sha256(css),
+            _short_sha256(field_defs_signature),
+            _short_sha256(side_source),
+        ]
+    )
 
 
 def _sanitize_inline_script(attrs: str, body: str) -> str:
@@ -601,7 +639,13 @@ class _RenderedMediaMetadataParser(HTMLParser):
                 self.allowed_audio_urls.add(src)
 
 
-def build_renderer_side_payload(rendered_html: str | None) -> dict[str, Any]:
+def build_renderer_side_payload(
+    rendered_html: str | None,
+    *,
+    template_key: str | None = None,
+    shell_key: str | None = None,
+    supports_live_patch: bool | None = None,
+) -> dict[str, Any]:
     normalized_html = str(rendered_html or "")
     parser = _RenderedMediaMetadataParser()
     try:
@@ -610,6 +654,16 @@ def build_renderer_side_payload(rendered_html: str | None) -> dict[str, Any]:
     except Exception:
         logger.exception("Failed to derive renderer media metadata from rendered HTML.")
     allowed_audio_urls = sorted(parser.allowed_audio_urls)
+    normalized_template_key = str(template_key or "").strip()
+    normalized_shell_key = str(shell_key or normalized_template_key).strip()
+    has_inline_script = "<script" in normalized_html.lower()
+    resolved_live_patch = (
+        bool(supports_live_patch)
+        if supports_live_patch is not None
+        else bool(normalized_template_key and normalized_shell_key and not has_inline_script)
+    )
+    if has_inline_script:
+        resolved_live_patch = False
     return {
         "html": normalized_html,
         "allowed_media_urls": sorted(parser.allowed_media_urls),
@@ -619,6 +673,12 @@ def build_renderer_side_payload(rendered_html: str | None) -> dict[str, Any]:
             for asset_id in (_extract_proxy_asset_id(url) for url in allowed_audio_urls)
             if asset_id
         ],
+        "template_key": normalized_template_key,
+        "shell_key": normalized_shell_key,
+        "has_inline_script": has_inline_script,
+        "supports_live_patch": bool(
+            resolved_live_patch and normalized_template_key and normalized_shell_key
+        ),
     }
 
 
@@ -683,7 +743,7 @@ def render_template_pair(
     preview_note_key: str | None = None,
     allow_inline_script: bool = False,
     defer_inline_script: bool = False,
-) -> dict[str, str]:
+) -> dict[str, Any]:
     css = sanitize_css(getattr(template, "shared_css", ""))
     preview_key = None
     if preview_note_key:
@@ -715,6 +775,20 @@ def render_template_pair(
     back_hash = hashlib.sha256(back_source_prepared.encode("utf-8")).hexdigest()[:16]
     front_key = f"{template.id}:{template_updated}:front:{front_hash}"
     back_key = f"{template.id}:{template_updated}:back:{back_hash}"
+    front_template_key = _renderer_shell_key(
+        template=template,
+        side="front",
+        side_source=front_source_prepared,
+        css=css,
+        field_defs=field_defs,
+    )
+    back_template_key = _renderer_shell_key(
+        template=template,
+        side="back",
+        side_source=back_source_prepared,
+        css=css,
+        field_defs=field_defs,
+    )
     front_source = _cache_template(front_key, front_source_prepared)
     back_source = _cache_template(back_key, back_source_prepared)
 
@@ -733,8 +807,16 @@ def render_template_pair(
     result = {
         "front_html": scoped_front,
         "back_html": scoped_back,
-        "front_renderer_payload": build_renderer_side_payload(scoped_front),
-        "back_renderer_payload": build_renderer_side_payload(scoped_back),
+        "front_renderer_payload": build_renderer_side_payload(
+            scoped_front,
+            template_key=front_template_key,
+            shell_key=front_template_key,
+        ),
+        "back_renderer_payload": build_renderer_side_payload(
+            scoped_back,
+            template_key=back_template_key,
+            shell_key=back_template_key,
+        ),
     }
 
     if preview_key:

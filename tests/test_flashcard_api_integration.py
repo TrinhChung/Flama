@@ -2612,6 +2612,10 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         self.assertIn("<script", rendered_back)
         rendered_back_payload = payload.get("rendered_back_payload") or {}
         self.assertEqual(rendered_back_payload.get("html"), rendered_back)
+        self.assertTrue(rendered_back_payload.get("template_key"))
+        self.assertEqual(rendered_back_payload.get("shell_key"), rendered_back_payload.get("template_key"))
+        self.assertFalse(rendered_back_payload.get("supports_live_patch"))
+        self.assertTrue(rendered_back_payload.get("has_inline_script"))
 
     def test_study_next_payload_allowlists_legacy_audio_button_media(self):
         note_type_resp = self.client.post(
@@ -2733,6 +2737,10 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             (payload.get("rendered_back_payload") or {}).get("html"),
             payload.get("rendered_back_html", ""),
         )
+        self.assertTrue((payload.get("rendered_front_payload") or {}).get("template_key"))
+        self.assertTrue((payload.get("rendered_front_payload") or {}).get("supports_live_patch"))
+        self.assertTrue((payload.get("rendered_back_payload") or {}).get("template_key"))
+        self.assertTrue((payload.get("rendered_back_payload") or {}).get("supports_live_patch"))
 
         with self.app.app_context():
             note = db.session.get(Note, note_id)
