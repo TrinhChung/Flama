@@ -458,6 +458,11 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             self.assertEqual(deck_item.publish_status, "published")  # type: ignore[union-attr]
             self.assertEqual(deck_item.tags, ["updated", "deck"])  # type: ignore[union-attr]
 
+    def test_authenticated_navbar_includes_installed_decks_link(self):
+        response = self.client.get("/dashboard")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"/flashcards/installed-decks", response.data)
+
     def test_share_note_type_page_updates_taxonomy_and_redirects_to_detail(self):
         note_type = self._create_note_type()
         note_type_id = note_type["id"]
@@ -661,6 +666,66 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         self.assertIn("author_profile", detail_payload)
         self.assertIn("author_other_items", detail_payload)
         self.assertIn("related_items", detail_payload)
+
+    def test_installed_decks_page_lists_installed_deck_actions(self):
+        note_type = self._create_note_type()
+        note_type_id = note_type["id"]
+
+        owner_note_resp = self.client.post(
+            "/api/notes",
+            json={
+                "note_type_id": note_type_id,
+                "deck_id": self.deck_id,
+                "field_values": {
+                    "Word": "inu",
+                    "Reading": "いぬ",
+                    "Meaning": "dog",
+                },
+            },
+        )
+        self.assertEqual(owner_note_resp.status_code, 201)
+
+        with self.app.app_context():
+            learner = User(username="installed-page", email="installed-page@example.com", is_admin=False)
+            learner.set_password("password")
+            db.session.add(learner)
+            db.session.flush()
+
+            deck_item = DeckMarketplaceItem(
+                owner_user_id=self.user_id,
+                source_deck_id=self.deck_id,
+                source_note_type_id=note_type_id,
+                title="Installed Deck Workspace",
+                description="Deck description",
+                primary_category="General",
+                tags=["n4"],
+                preview_text="Preview",
+                pricing_mode="free",
+                price_amount_minor=0,
+                version="1.0.0",
+                publish_status="published",
+            )
+            db.session.add(deck_item)
+            db.session.commit()
+            deck_item_id = deck_item.id
+
+        learner_client = self.app.test_client()
+        learner_client.post(
+            "/login",
+            data={"email": "installed-page@example.com", "password": "password"},
+            follow_redirects=True,
+        )
+        install_resp = learner_client.post(f"/api/shared/decks/{deck_item_id}/install")
+        self.assertEqual(install_resp.status_code, 201)
+        installed_root_id = int((install_resp.get_json() or {}).get("installed_deck_id"))
+
+        response = learner_client.get("/flashcards/installed-decks")
+        self.assertEqual(response.status_code, 200)
+        html = response.get_data(as_text=True)
+        self.assertIn("Installed Deck Workspace", html)
+        self.assertIn(f"/flashcards/shared-decks/{deck_item_id}", html)
+        self.assertIn(f"/flashcards/shared-decks/{deck_item_id}/change-request", html)
+        self.assertIn(f"/vocabulary/study/deck/{installed_root_id}", html)
 
     def test_shared_deck_preview_requires_source_note_type_when_notes_missing(self):
         with self.app.app_context():

@@ -691,7 +691,7 @@ export function renderConflicts(container, conflicts, { interactive = false } = 
 
         ${interactive ? `
           <div class="change-request-conflict-actions">
-            <button class="btn btn-dark btn-sm" type="button" data-resolve-conflict-id="${escapeHtml(conflict.id || "")}" data-resolution-mode="keep_mine">
+            <button class="btn btn-primary btn-sm" type="button" data-resolve-conflict-id="${escapeHtml(conflict.id || "")}" data-resolution-mode="keep_mine">
               <i class="bi bi-person-check"></i> Dùng bản cục bộ
             </button>
             <button class="btn btn-outline-secondary btn-sm" type="button" data-resolve-conflict-id="${escapeHtml(conflict.id || "")}" data-resolution-mode="keep_upstream">

@@ -168,17 +168,31 @@
 }
 
 .browse-voicevox-btn {
-  border-radius: 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: var(--button-height-sm);
+  padding: 0.45rem 0.8rem;
+  border-radius: 10px;
   border: 1px solid transparent;
-  font-weight: 700;
+  font-size: 0.82rem;
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.2;
   letter-spacing: 0.01em;
-  transition: all 0.18s ease;
+  cursor: pointer;
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    background 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease;
   box-shadow: none;
 }
 
 .browse-voicevox-btn:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px rgba(254, 104, 8, 0.24);
+  box-shadow: var(--button-focus-ring);
 }
 
 .browse-voicevox-btn--preview {
@@ -200,9 +214,9 @@
 }
 
 .browse-voicevox-btn--cancel:hover {
-  background: #f7f3ef;
-  border-color: #d8c7ba;
-  color: var(--flama-text);
+  background: var(--flama-orange-50);
+  border-color: var(--flama-orange-300);
+  color: var(--flama-orange-700);
 }
 
 .browse-voicevox-btn--save {
@@ -215,6 +229,7 @@
   background: var(--flama-orange-100);
   border-color: var(--flama-orange-500);
   color: var(--flama-orange-800);
+  box-shadow: 0 8px 18px rgba(254, 104, 8, 0.12);
 }
 
 .browse-voicevox-btn--reset {
@@ -226,6 +241,7 @@
 .browse-voicevox-btn--reset:hover {
   background: var(--flama-amber-100);
   border-color: var(--flama-amber-400);
+  box-shadow: 0 8px 18px rgba(224, 141, 12, 0.12);
 }
 
 .browse-voicevox-btn--retry {
@@ -238,6 +254,7 @@
   background: #ffeede;
   border-color: #ea9d62;
   color: #a94908;
+  box-shadow: 0 8px 18px rgba(224, 92, 7, 0.12);
 }
 
 .browse-voicevox-btn--cancel-generate {
@@ -250,6 +267,7 @@
   background: #ffe6e6;
   border-color: #e78585;
   color: #982828;
+  box-shadow: 0 8px 18px rgba(239, 51, 3, 0.1);
 }
 
 .browse-voicevox-btn--generate {

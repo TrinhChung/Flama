@@ -74,6 +74,13 @@ def _render_mcp_tokens_page(*, generated_mcp_token: dict | None = None):
     )
 
 
+def _ensure_mcp_admin_access():
+    if is_admin_user(current_user):
+        return None
+    flash("Chỉ quản trị viên mới có thể truy cập MCP.", "warning")
+    return redirect(url_for("main.dashboard"))
+
+
 @main_bp.route("/")
 def index():
     if current_user.is_authenticated:
@@ -220,12 +227,18 @@ def dashboard():
 @main_bp.route("/settings/mcp-tokens", methods=["GET"])
 @login_required
 def mcp_tokens_page():
+    guard = _ensure_mcp_admin_access()
+    if guard is not None:
+        return guard
     return _render_mcp_tokens_page()
 
 
 @main_bp.route("/settings/mcp-tokens/generate", methods=["POST"])
 @login_required
 def generate_mcp_token():
+    guard = _ensure_mcp_admin_access()
+    if guard is not None:
+        return guard
     try:
         issued_token = mcp_access_token_service.issue_short_lived_token(user_id=current_user.id)
         db.session.commit()
@@ -241,6 +254,9 @@ def generate_mcp_token():
 @main_bp.route("/settings/mcp-tokens/<int:token_id>/revoke", methods=["POST"])
 @login_required
 def revoke_mcp_token(token_id: int):
+    guard = _ensure_mcp_admin_access()
+    if guard is not None:
+        return guard
     try:
         revoked = mcp_access_token_service.revoke_token(user_id=current_user.id, token_id=token_id)
         if revoked:

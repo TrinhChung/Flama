@@ -175,7 +175,7 @@ if (root) {
 
   function renderPreviewFrame() {
     const html = previewSide === "back" ? (previewPayload?.back_html || "") : (previewPayload?.front_html || "");
-    previewFrame.srcdoc = `<!doctype html><html><body><div style="padding:12px;">${html || "<div style='color:#61708b;'>Chưa có nội dung xem trước.</div>"}</div></body></html>`;
+    previewFrame.srcdoc = `<!doctype html><html><body style="background:#fffaf6;color:#1f1a17;"><div style="padding:12px;">${html || "<div style='color:#6b625c;'>Chưa có nội dung xem trước.</div>"}</div></body></html>`;
   }
 
   function renderPreviewControls(templates) {
@@ -249,7 +249,7 @@ if (root) {
 
   async function loadPreview() {
     if (!selectedTemplateId) {
-      previewFrame.srcdoc = "<!doctype html><html><body><div style='padding:12px;color:#61708b;'>Không có template để xem trước.</div></body></html>";
+      previewFrame.srcdoc = "<!doctype html><html><body style='background:#fffaf6;color:#1f1a17;'><div style='padding:12px;color:#6b625c;'>Không có template để xem trước.</div></body></html>";
       return;
     }
     previewPayload = await requestJson(`/api/shared/note-types/${noteTypeId}/templates/${selectedTemplateId}/preview`, {

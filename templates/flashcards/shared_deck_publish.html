@@ -7,7 +7,7 @@
 {% endblock %}
 
 {% block content %}
-<section class="container py-4">
+<section class="container py-4 market-detail-page">
   <div class="row justify-content-center">
     <div class="col-xl-10">
       <div class="market-space-panel">
@@ -135,7 +135,7 @@
               </p>
               <div class="d-flex flex-wrap gap-2">
                 <a class="btn btn-outline-secondary" href="{{ url_for('main.dashboard') }}">Hủy</a>
-                <button class="btn btn-dark" type="submit">
+                <button class="btn btn-primary" type="submit">
                   {% if existing_item %}Cập nhật listing{% else %}Publish deck{% endif %}
                 </button>
               </div>

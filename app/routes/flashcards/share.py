@@ -65,6 +65,15 @@ def shared_note_type_detail_page(note_type_id: str):
 def shared_decks_page():
     return render_template("flashcards/shared_decks.html")
 
+@flashcards_bp.route("/flashcards/installed-decks")
+@login_required
+def installed_decks_page():
+    workspace = marketplace_hub_service.build_installed_deck_workspace(user_id=current_user.id)
+    return render_template(
+        "flashcards/installed_decks.html",
+        installed_workspace=workspace,
+    )
+
 @flashcards_bp.route("/flashcards/shared-decks/<deck_item_id>")
 @login_required
 def shared_deck_detail_page(deck_item_id: str):
