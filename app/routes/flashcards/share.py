@@ -479,28 +479,12 @@ def install_shared_note_type(note_type_id: str):
             )
         return jsonify(checkout), 202 if checkout.get("payment_required") else 200
 
-    installed_copy = _clone_note_type_for_user(source_note_type, current_user.id)
-    now = _utcnow()
-    purchase_amount_minor = int(source_note_type.price_amount_minor or 0) if source_note_type.pricing_mode == "paid" else 0
-    install_row = NoteTypeInstall(
-        source_note_type_id=source_note_type.id,
-        installed_note_type_id=installed_copy.id,
+    installed_copy, purchase_amount_minor = flashcards_share.install_shared_note_type(
+        source_note_type=source_note_type,
         user_id=current_user.id,
-        purchase_amount_minor=purchase_amount_minor,
-        installed_at=now,
-        purchased_at=now if source_note_type.pricing_mode == "paid" else None,
     )
-    db.session.add(install_row)
-    _recompute_note_type_market_stats(source_note_type)
-    _audit(
-        "market.note_type.install",
-        {
-            "source_note_type_id": source_note_type.id,
-            "installed_note_type_id": installed_copy.id,
-            "price_amount_minor": purchase_amount_minor,
-        },
-    )
-    db.session.commit()
+    if installed_copy is None:
+        return _api_error("VALIDATION_ERROR", "Unable to install note type.", status=500)
     return jsonify(
         {
             "installed_note_type_id": installed_copy.id,
@@ -540,17 +524,12 @@ def rate_shared_note_type(note_type_id: str):
         return _api_error("VALIDATION_ERROR", "rating must be between 1 and 5.", field="rating")
     comment = (payload.get("comment") or "").strip() or None
 
-    review = NoteTypeReview.query.filter_by(note_type_id=note_type.id, user_id=current_user.id).first()
-    if review is None:
-        review = NoteTypeReview(note_type_id=note_type.id, user_id=current_user.id, rating=rating, comment=comment)
-        db.session.add(review)
-    else:
-        review.rating = rating
-        review.comment = comment
-
-    _recompute_note_type_market_stats(note_type)
-    _audit("market.note_type.rate", {"note_type_id": note_type.id, "rating": rating})
-    db.session.commit()
+    flashcards_share.rate_shared_note_type(
+        note_type=note_type,
+        user_id=current_user.id,
+        rating=rating,
+        comment=comment,
+    )
     return jsonify(
         {
             "note_type_id": note_type.id,
@@ -951,17 +930,12 @@ def rate_shared_deck_item(deck_item_id: str):
         return _api_error("VALIDATION_ERROR", "rating must be between 1 and 5.", field="rating")
     comment = (payload.get("comment") or "").strip() or None
 
-    review = DeckReview.query.filter_by(deck_item_id=deck_item.id, user_id=current_user.id).first()
-    if review is None:
-        review = DeckReview(deck_item_id=deck_item.id, user_id=current_user.id, rating=rating, comment=comment)
-        db.session.add(review)
-    else:
-        review.rating = rating
-        review.comment = comment
-
-    _recompute_deck_item_market_stats(deck_item)
-    _audit("market.deck_item.rate", {"deck_item_id": deck_item.id, "rating": rating})
-    db.session.commit()
+    flashcards_share.rate_shared_deck_item(
+        deck_item=deck_item,
+        user_id=current_user.id,
+        rating=rating,
+        comment=comment,
+    )
     return jsonify(
         {
             "deck_item_id": deck_item.id,

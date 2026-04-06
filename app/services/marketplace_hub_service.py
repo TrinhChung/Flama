@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 import re
 from typing import Any
 
@@ -27,6 +27,10 @@ MAX_FEEDBACK_ITEMS = 8
 MAX_RELATED_ITEMS = 6
 MAX_AUTHOR_ITEMS = 6
 TRENDING_WINDOW_DAYS = 7
+
+
+def _utcnow() -> datetime:
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 def parse_marketplace_filters(args: Any) -> dict[str, Any]:
@@ -583,7 +587,7 @@ def _build_note_type_library(
     saved_ids: set[str],
     purchase_history: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    now = datetime.utcnow()
+    now = _utcnow()
     install_map = {row.source_note_type_id: row for row in installs}
     source_ids = list(install_map.keys()) or [""]
     note_types = {
@@ -982,11 +986,12 @@ def _build_note_type_collections(
     pending_owned_ids: set[str],
 ) -> list[dict[str, Any]]:
     collections: list[dict[str, Any]] = []
+    items_by_id = {item.id: item for item in visible_items}
     grouped = marketplace_query_service.top_items_by_category_note_types(visible_items)
     for title, items in grouped.items():
         rows = []
         for payload in items[:MAX_SHELF_ITEMS]:
-            note_type = NoteType.query.get(payload["id"])
+            note_type = items_by_id.get(payload["id"])
             if note_type is None:
                 continue
             rows.append(
@@ -1011,11 +1016,12 @@ def _build_deck_collections(
     pending_owned_ids: set[str],
 ) -> list[dict[str, Any]]:
     collections: list[dict[str, Any]] = []
+    items_by_id = {item.id: item for item in visible_items}
     grouped = marketplace_query_service.top_items_by_category_decks(visible_items)
     for title, items in grouped.items():
         rows = []
         for payload in items[:MAX_SHELF_ITEMS]:
-            deck_item = DeckMarketplaceItem.query.get(payload["id"])
+            deck_item = items_by_id.get(payload["id"])
             if deck_item is None:
                 continue
             rows.append(
@@ -1154,7 +1160,7 @@ def _recommended_decks(*, user_id: int, visible_items: list[DeckMarketplaceItem]
 
 
 def _note_type_trending_counts() -> dict[str, int]:
-    cutoff = datetime.utcnow() - timedelta(days=TRENDING_WINDOW_DAYS)
+    cutoff = _utcnow() - timedelta(days=TRENDING_WINDOW_DAYS)
     rows = (
         db.session.query(NoteTypeInstall.source_note_type_id, db.func.count(NoteTypeInstall.id))
         .filter(NoteTypeInstall.installed_at >= cutoff)
@@ -1169,7 +1175,7 @@ def _note_type_trending_counts() -> dict[str, int]:
 
 
 def _deck_trending_counts() -> dict[str, int]:
-    cutoff = datetime.utcnow() - timedelta(days=TRENDING_WINDOW_DAYS)
+    cutoff = _utcnow() - timedelta(days=TRENDING_WINDOW_DAYS)
     rows = (
         db.session.query(DeckInstall.deck_item_id, db.func.count(DeckInstall.id))
         .filter(DeckInstall.installed_at >= cutoff)
