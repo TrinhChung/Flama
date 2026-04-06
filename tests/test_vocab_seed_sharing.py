@@ -1,13 +1,15 @@
 """Tests for vocab-seed marketplace auto-sharing behavior."""
 
+import runpy
 import shutil
 import tempfile
 import unittest
 from pathlib import Path
 
 from app import create_app
+from app.services.flashcard_legacy import LEGACY_FRONT_TEMPLATE, LEGACY_SHARED_CSS
 from models import db
-from models.flashcard import DeckMarketplaceItem, Note, NoteType
+from models.flashcard import DeckMarketplaceItem, Note, NoteType, Template
 from models.user import User
 from models.deck import Deck
 
@@ -90,6 +92,32 @@ class VocabSeedSharingTests(unittest.TestCase):
 
         with self.app.app_context():
             self.assertEqual(DeckMarketplaceItem.query.count(), 0)
+
+    def test_vocab_seed_uses_non_scrolling_front_template_for_default_vocab(self):
+        result = self.runner.invoke(
+            args=["vocab-seed", "--path", str(self.seed_dir), "--owner-user-id", str(self.user_id)],
+        )
+        self.assertEqual(result.exit_code, 0, msg=result.output)
+
+        with self.app.app_context():
+            note_type = NoteType.query.filter_by(
+                user_id=self.user_id,
+                name="Flama Standard Vocabulary",
+            ).first()
+            self.assertIsNotNone(note_type)
+
+            template = Template.query.filter_by(
+                note_type_id=note_type.id,  # type: ignore[union-attr]
+                is_default=True,
+            ).first()
+            self.assertIsNotNone(template)
+        self.assertIn('class="legacy-front"', template.front_html)  # type: ignore[union-attr]
+        self.assertIn('class="front-word"', template.front_html)  # type: ignore[union-attr]
+        self.assertIn("{{word}}", template.front_html)  # type: ignore[union-attr]
+        self.assertNotIn("100vh", template.front_html)  # type: ignore[union-attr]
+        self.assertIn("html, body, .card", template.shared_css)  # type: ignore[union-attr]
+        self.assertIn("height: 100%;", template.shared_css)  # type: ignore[union-attr]
+        self.assertNotIn("100vh", template.shared_css)  # type: ignore[union-attr]
 
     def test_vocab_seed_seeds_quiz_dump_deck_for_owner(self):
         result = self.runner.invoke(
@@ -189,6 +217,27 @@ class VocabSeedSharingTests(unittest.TestCase):
                 self.assertIsNone(second.get("image"))
         finally:
             shutil.rmtree(legacy_root, ignore_errors=True)
+
+    def test_reseed_script_front_template_avoids_viewport_height_wrapper(self):
+        seed_globals = runpy.run_path(
+            str(Path(__file__).resolve().parents[1] / "scripts" / "seed_flama_template.py")
+        )
+
+        front_html = seed_globals["FRONT_HTML"]
+        back_html = seed_globals["BACK_HTML"]
+        shared_css = seed_globals["CSS"]
+
+        self.assertIn('class="front-word"', front_html)
+        self.assertIn("{{word}}", front_html)
+        self.assertNotIn("100vh", front_html)
+        self.assertIn("{{#word_audio}}", back_html)
+        self.assertIn("{{#example_audio}}", back_html)
+        self.assertIn(".front-word", shared_css)
+        self.assertIn("html,", shared_css)
+        self.assertIn("height: 100%;", shared_css)
+        self.assertNotIn("100vh", shared_css)
+        self.assertEqual(LEGACY_FRONT_TEMPLATE.strip().count("{{word}}"), 1)
+        self.assertIn("height: 100%;", LEGACY_SHARED_CSS)
 
     def test_vocab_seed_supports_path_pointing_directly_to_seed_subfolder(self):
         direct_root = Path(tempfile.mkdtemp(prefix="flama-direct-seed-"))

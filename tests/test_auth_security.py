@@ -103,6 +103,18 @@ class AuthSecurityTests(unittest.TestCase):
             rows = Deck.query.filter_by(owner_user_id=self.user_id, name="Secure Deck").all()
             self.assertEqual(len(rows), 1)
 
+    def test_same_origin_header_does_not_bypass_csrf_token_requirement(self):
+        login_response = self._login()
+        self.assertEqual(login_response.status_code, 302)
+
+        blocked = self.client.post(
+            "/vocabulary/decks/create",
+            data={"name": "Origin Only Deck", "deck_path": "Origin Only Deck"},
+            headers={"Origin": "http://localhost"},
+            follow_redirects=False,
+        )
+        self.assertEqual(blocked.status_code, 400)
+
     def test_logout_get_is_safe_and_does_not_end_session(self):
         login_response = self._login()
         self.assertEqual(login_response.status_code, 302)

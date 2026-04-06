@@ -1,11 +1,13 @@
 """Unit + security tests for flashcard template rendering."""
 
 from datetime import datetime
+from html.parser import HTMLParser
 from types import SimpleNamespace
 import unittest
 
 from app.services.flashcard_renderer import (
     PREVIEW_MEDIA_IMAGE_TOKEN,
+    build_renderer_side_payload,
     build_render_context,
     is_field_empty,
     render_template_pair,
@@ -148,7 +150,7 @@ class FlashcardRendererTests(unittest.TestCase):
         self.assertIn("fc-preview-media-box", rendered["front_html"])
         self.assertIn("[Image: image]", rendered["front_html"])
 
-    def test_inline_script_and_audio_src_template_supported_when_enabled(self):
+    def test_inline_script_is_preserved_for_sandbox_renderer_output(self):
         template = self._template(
             """{{#word_audio}}<audio id="custom-audio" src="{{word_audio}}"></audio>{{/word_audio}}
             {{#hanviet}}<div>{{han_viet}}</div>{{/hanviet}}
@@ -178,10 +180,16 @@ class FlashcardRendererTests(unittest.TestCase):
         self.assertIn("HANVIET", html)
         self.assertIn("<img", html)
         self.assertIn("diagram-html", html)
-        self.assertIn("<script>", html)
+        self.assertIn("<script>window.__fc_test = true;</script>", html)
+        payload = rendered["front_renderer_payload"]
+        self.assertIn("window.__fc_test = true;", payload["html"])
 
-    def test_inline_script_can_be_deferred_when_enabled(self):
-        template = self._template("<div>{{Word}}</div><script>window.__defer_test__=1;</script>")
+    def test_external_script_src_is_removed_from_template_output(self):
+        template = self._template(
+            "<div>{{Word}}</div>"
+            "<script src=\"https://evil.example/payload.js\"></script>"
+            "<script>window.__safe_inline__=1;</script>"
+        )
         fields = [self._field("Word", "text")]
         rendered = render_template_pair(
             template=template,
@@ -192,10 +200,47 @@ class FlashcardRendererTests(unittest.TestCase):
             defer_inline_script=True,
         )
         html = rendered["front_html"]
-        self.assertIn("window.__defer_test__=1;", html)
-        self.assertIn('data-flama-inline-script="1"', html)
-        self.assertIn('type="application/x-flama-note-script"', html)
-        self.assertNotIn("<script>window.__defer_test__=1;</script>", html)
+        self.assertIn("window.__safe_inline__=1;", html)
+        self.assertNotIn("evil.example", html)
+        self.assertNotIn("<script src=", html)
+
+    def test_template_inline_handlers_are_preserved_for_sandbox_execution(self):
+        fields = [self._field("Word", "text"), self._field("Word_Audio", "audio")]
+        rendered = render_template_pair(
+            template=self._template(
+                "<button onclick=\"document.getElementById('voice').play()\">Play</button>"
+                "{{{Word_Audio}}}"
+            ),
+            field_defs=fields,
+            field_values={"Word": "犬", "Word_Audio": "/media/proxy/audio-1"},
+            media_assets=[],
+            allow_inline_script=True,
+            defer_inline_script=True,
+        )
+        html = rendered["front_html"]
+        self.assertIn("onclick=", html)
+        self.assertIn('data-flama-media-field="Word_Audio"', html)
+        self.assertIn('data-flama-media-asset-id="audio-1"', html)
+
+    def test_renderer_payload_extracts_allowlisted_audio_assets(self):
+        payload = build_renderer_side_payload(
+            "<audio data-flama-media-field=\"Word_Audio\" src=\"/media/proxy/audio-1\"></audio>"
+            "<img src=\"/media/proxy/image-1\">"
+        )
+        self.assertEqual(payload["allowed_audio_urls"], ["/media/proxy/audio-1"])
+        self.assertEqual(payload["allowed_audio_asset_ids"], ["audio-1"])
+        self.assertIn("/media/proxy/image-1", payload["allowed_media_urls"])
+
+    def test_renderer_payload_extracts_legacy_audio_controls_with_source_tag(self):
+        payload = build_renderer_side_payload(
+            "<audio id=\"voice\">"
+            "<source src=\"/media/proxy/audio-2\" type=\"audio/mpeg\">"
+            "</audio>"
+            "<button onclick=\"document.getElementById('voice').play()\">Play</button>"
+        )
+        self.assertEqual(payload["allowed_audio_urls"], ["/media/proxy/audio-2"])
+        self.assertEqual(payload["allowed_audio_asset_ids"], ["audio-2"])
+        self.assertIn("/media/proxy/audio-2", payload["allowed_media_urls"])
 
     def test_auto_split_attribute_is_preserved(self):
         template = self._template('<div auto-split>{{Word}}</div>')
@@ -205,7 +250,6 @@ class FlashcardRendererTests(unittest.TestCase):
             field_defs=fields,
             field_values={"Word": "A$B"},
             media_assets=[],
-            allow_inline_script=True,
         )
         self.assertIn("auto-split", rendered["front_html"])
 
@@ -280,6 +324,23 @@ class FlashcardSecurityTests(unittest.TestCase):
     def _field(self, name: str, field_type: str):
         return SimpleNamespace(name=name, field_type=field_type, required=False)
 
+    def _collect_start_tag_attrs(self, raw_html: str) -> list[dict[str, str]]:
+        class _AttrParser(HTMLParser):
+            def __init__(self) -> None:
+                super().__init__(convert_charrefs=True)
+                self.items: list[dict[str, str]] = []
+
+            def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+                normalized = {"__tag__": tag}
+                for name, value in attrs:
+                    normalized[str(name)] = "" if value is None else str(value)
+                self.items.append(normalized)
+
+        parser = _AttrParser()
+        parser.feed(raw_html)
+        parser.close()
+        return parser.items
+
     def test_xss_cases_from_spec(self):
         test_cases = [
             {
@@ -352,7 +413,6 @@ class FlashcardSecurityTests(unittest.TestCase):
                 "template": "<div data-x='{{Word}}'>safe</div>",
                 "fields": [self._field("Word", "text")],
                 "values": {"Word": '" onmouseover="alert(10)'},
-                "must_exclude": "<div data-x=",
             },
         ]
 
@@ -371,6 +431,12 @@ class FlashcardSecurityTests(unittest.TestCase):
                 must_exclude = case.get("must_exclude")
                 if must_exclude:
                     self.assertNotIn(must_exclude, html)
+                if case["name"] == "case10_attribute_injection_escaped":
+                    attrs = self._collect_start_tag_attrs(html)
+                    self.assertEqual(len(attrs), 1)
+                    self.assertEqual(attrs[0].get("__tag__"), "div")
+                    self.assertIn("data-x", attrs[0])
+                    self.assertNotIn("onmouseover", attrs[0])
 
 
 if __name__ == "__main__":

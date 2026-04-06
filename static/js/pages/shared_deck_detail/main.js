@@ -73,6 +73,10 @@ if (root) {
   const paymentNextActionEl = document.getElementById("deck-payment-next-action");
   const paymentLinesEl = document.getElementById("deck-payment-lines");
   const paymentInstructionsEl = document.getElementById("deck-payment-instructions");
+  const rendererHost = window.FlamaCardRendererHost;
+  const previewController = previewFrame && rendererHost
+    ? rendererHost.createRendererFrameController(previewFrame, { minHeight: 280 })
+    : null;
 
   let deckDetail = null;
   let selectedTemplateId = "";
@@ -177,12 +181,40 @@ if (root) {
   }
 
   function setLoadingPreview(message) {
-    previewFrame.srcdoc = `<!doctype html><html><body style="background:#fffaf6;color:#1f1a17;"><div style="padding:12px;color:#6b625c;">${escapeHtml(message || "Đang tải phần xem trước...")}</div></body></html>`;
+    previewController?.render(rendererHost.createNoticeHtml(message || "Dang tai phan xem truoc..."), {
+      padding: "12px",
+      background: "#fffaf6",
+      color: "#1f1a17",
+      config: {
+        mode: "shared_deck_preview",
+        side: previewSide,
+        deckItemId,
+      },
+    });
   }
 
   function renderPreviewFrame() {
-    const html = previewSide === "back" ? (previewPayload?.back_html || "") : (previewPayload?.front_html || "");
-    previewFrame.srcdoc = `<!doctype html><html><body style="background:#fffaf6;color:#1f1a17;"><div style="padding:12px;">${html || "<div style='color:#6b625c;'>Chưa có nội dung xem trước.</div>"}</div></body></html>`;
+    const sidePayload = previewSide === "back"
+      ? (previewPayload?.back_renderer_payload || previewPayload?.back_html || "")
+      : (previewPayload?.front_renderer_payload || previewPayload?.front_html || "");
+    previewController?.render(
+      sidePayload || rendererHost.createNoticeHtml("Chua co noi dung xem truoc."),
+      {
+        padding: "12px",
+        background: "#fffaf6",
+        color: "#1f1a17",
+        config: {
+          mode: "shared_deck_preview",
+          side: previewSide,
+          deckItemId,
+          templateId: selectedTemplateId,
+        },
+        revealOnReady: {
+          side: previewSide,
+          reason: "preview_render",
+        },
+      }
+    );
   }
 
   function getActiveSample() {

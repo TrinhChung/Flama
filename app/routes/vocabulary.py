@@ -79,7 +79,7 @@ _MD_LIST_MARKER_RE = re.compile(r"(?m)^\s{0,3}(?:[-+*]|\d+\.)\s+")
 
 
 def _utcnow() -> datetime:
-    return datetime.now(UTC).replace(tzinfo=None)
+    return datetime.utcnow()
 
 
 @vocabulary_bp.before_request
@@ -1777,12 +1777,12 @@ def study_deck(deck_id: int):
                     field_defs=overlay_field_defs,
                     field_values=overlay_field_values,
                     media_assets=selected_card.note.media_assets,
-                    allow_inline_script=True,
-                    defer_inline_script=True,
                 )
                 rendered_data = {
                     "front": rendered.get("front_html", ""),
                     "back": rendered.get("back_html", ""),
+                    "front_payload": rendered.get("front_renderer_payload"),
+                    "back_payload": rendered.get("back_renderer_payload"),
                 }
                 if card_payload is not None:
                     card_payload.field_values = {
@@ -1807,6 +1807,8 @@ def study_deck(deck_id: int):
         card=card_payload,
         rendered_front=rendered_data.get("front"),
         rendered_back=rendered_data.get("back"),
+        rendered_front_payload=rendered_data.get("front_payload"),
+        rendered_back_payload=rendered_data.get("back_payload"),
         due_new=due_new,
         due_learn=due_learn,
         due_review=due_review,

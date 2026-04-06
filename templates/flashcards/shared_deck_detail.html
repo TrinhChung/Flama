@@ -117,7 +117,7 @@
     </div>
     <div class="market-detail-meta mb-3" id="deck-template-note"></div>
     <div class="market-detail-meta mb-3" id="deck-preview-sample-label"></div>
-    <iframe id="deck-template-preview-frame" class="market-preview-frame" sandbox="allow-same-origin allow-scripts"></iframe>
+    <iframe id="deck-template-preview-frame" class="market-preview-frame" sandbox="allow-scripts"></iframe>
   </section>
 
   
@@ -176,6 +176,6 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="{{ url_for('static', filename='js/card_renderer_host.js') }}"></script>
 <script type="module" src="{{ url_for('static', filename='js/pages/shared_deck_detail/main.js') }}"></script>
 {% endblock %}
-

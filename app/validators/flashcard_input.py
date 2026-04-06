@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
@@ -29,12 +30,15 @@ _SCRIPT_TAG_RE = re.compile(r"(?is)<\s*script\b")
 _DANGEROUS_ELEMENT_RE = re.compile(r"(?is)<\s*(?:iframe|object|embed|foreignobject|script)\b")
 _EVENT_HANDLER_RE = re.compile(r"(?i)\bon[a-z0-9_-]+\s*=")
 _JS_URL_RE = re.compile(r"(?i)javascript\s*:")
+_SVG_DOCTYPE_RE = re.compile(r"(?is)<!DOCTYPE|<!ENTITY")
+_SVG_DANGEROUS_STYLE_RE = re.compile(r"(?i)(?:expression\s*\(|url\s*\(\s*['\"]?\s*javascript\s*:)")
 _ASSET_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$")
 _PROXY_MEDIA_URL_RE = re.compile(r"^/media/proxy/([A-Za-z0-9][A-Za-z0-9_-]{0,127})$")
 _MEDIA_FILENAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,254}$")
 _SOUND_TAG_RE = re.compile(r"^\[sound:([A-Za-z0-9][A-Za-z0-9_.-]{0,254})\]$")
 _SAFE_TIMEZONE_RE = re.compile(r"^[A-Za-z0-9_+/\-]{1,64}$")
 _CONTROL_CHAR_RE = re.compile(r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]")
+_DANGEROUS_SVG_ELEMENTS = {"script", "iframe", "object", "embed", "foreignobject", "link", "meta"}
 _SQLI_PROBE_RE = re.compile(
     r"(?i)(?:"
     r"--|/\*|\*/|"
@@ -779,19 +783,67 @@ def _detect_media_kind(content: bytes) -> str | None:
 
 def _looks_like_safe_svg(content: bytes) -> bool:
     try:
-        snippet = content[:8_192].decode("utf-8", errors="ignore").lstrip("\ufeff\t\r\n ").lower()
+        raw_text = content.decode("utf-8-sig")
     except UnicodeDecodeError:
         return False
 
-    if not snippet.startswith("<") or "<svg" not in snippet:
+    stripped = raw_text.lstrip("\ufeff\t\r\n ")
+    lowered = stripped.lower()
+
+    if not stripped.startswith("<") or "<svg" not in lowered:
         return False
-    if _SCRIPT_TAG_RE.search(snippet) or _DANGEROUS_ELEMENT_RE.search(snippet):
+    if _SVG_DOCTYPE_RE.search(raw_text):
         return False
-    if _EVENT_HANDLER_RE.search(snippet):
+    if _SCRIPT_TAG_RE.search(raw_text) or _DANGEROUS_ELEMENT_RE.search(raw_text):
         return False
-    if _JS_URL_RE.search(snippet):
+    if _EVENT_HANDLER_RE.search(raw_text):
         return False
+    if _JS_URL_RE.search(raw_text):
+        return False
+    if _SVG_DANGEROUS_STYLE_RE.search(raw_text):
+        return False
+
+    try:
+        root = ET.fromstring(raw_text)
+    except ET.ParseError:
+        return False
+
+    if _xml_local_name(root.tag) != "svg":
+        return False
+
+    for element in root.iter():
+        tag_name = _xml_local_name(element.tag)
+        if tag_name in _DANGEROUS_SVG_ELEMENTS:
+            return False
+
+        if tag_name == "style":
+            style_text = "".join(str(part or "") for part in element.itertext())
+            if _SVG_DANGEROUS_STYLE_RE.search(style_text) or _JS_URL_RE.search(style_text):
+                return False
+
+        for attr_name, attr_value in element.attrib.items():
+            normalized_attr = _xml_local_name(attr_name)
+            normalized_value = str(attr_value or "").strip()
+            lowered_value = normalized_value.lower()
+
+            if normalized_attr.startswith("on"):
+                return False
+            if _JS_URL_RE.search(normalized_value):
+                return False
+            if normalized_attr == "style" and _SVG_DANGEROUS_STYLE_RE.search(normalized_value):
+                return False
+            if normalized_attr == "href" and normalized_value and not lowered_value.startswith("#"):
+                return False
     return True
+
+
+def _xml_local_name(value: Any) -> str:
+    token = str(value or "")
+    if "}" in token:
+        token = token.rsplit("}", 1)[1]
+    if ":" in token:
+        token = token.rsplit(":", 1)[1]
+    return token.lower()
 
 
 def _scan_media_content(

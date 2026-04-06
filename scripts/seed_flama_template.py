@@ -21,9 +21,7 @@ from app.utils.bootstrap_admin import (
     resolve_bootstrap_admin_credentials,
 )
 
-FRONT_HTML = """<div style='height:100vh;text-align:center;display:flex;justify-content:center;align-items:center;font-size:70px;font-weight:bold;color:#e53c20'>
-{{word}}
-</div>"""
+FRONT_HTML = """<div class="front-word">{{word}}</div>"""
 
 BACK_HTML = """<div style='
     display: flex;
@@ -186,7 +184,34 @@ BACK_HTML = """<div style='
 })();
 </script>"""
 
-CSS = """.card {
+CSS = """html,
+body,
+.card {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+}
+body {
+    box-sizing: border-box;
+}
+.front-word {
+    box-sizing: border-box;
+    width: 100%;
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    font-family: arial;
+    font-size: clamp(48px, 9vw, 70px);
+    font-weight: bold;
+    line-height: 1.1;
+    text-align: center;
+    color: #e53c20;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+.card {
     font-family: arial;
     font-size: 20px;
     text-align: center;

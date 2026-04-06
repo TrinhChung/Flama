@@ -2,6 +2,36 @@
 
 {% block title %}Edit NoteType{% endblock %}
 
+{% block styles %}
+<style>
+  #note-type-detail-root {
+    overflow-anchor: none;
+  }
+
+  .note-type-editor-textarea {
+    min-height: clamp(24rem, 58vh, 36rem);
+    height: clamp(24rem, 58vh, 36rem);
+    resize: vertical;
+    overflow: auto;
+    overscroll-behavior: contain;
+  }
+
+  #template-preview-frame {
+    display: block;
+    min-height: clamp(24rem, 58vh, 36rem);
+    overflow-anchor: none;
+    background-color: #f8f9fa;
+  }
+
+  @media (max-width: 991.98px) {
+    .note-type-editor-textarea {
+      min-height: 20rem;
+      height: 20rem;
+    }
+  }
+</style>
+{% endblock %}
+
 {% block layout %}
 <main class="container-fluid px-3 px-lg-4">
   {% include 'components/alerts.html' %}
@@ -57,16 +87,13 @@
           </ul>
           <div class="tab-content flex-grow-1 d-flex flex-column" id="templateTabsContent">
             <div class="tab-pane fade show active flex-grow-1" id="front-pane" role="tabpanel">
-              <textarea id="front-html" class="form-control font-monospace h-100"
-                style="min-height: 400px; resize: vertical;"></textarea>
+              <textarea id="front-html" class="form-control font-monospace note-type-editor-textarea"></textarea>
             </div>
-            <div class="tab-pane fade flex-grow-1" id="back-pane" role="tabpanel" style="height: 100%;">
-              <textarea id="back-html" class="form-control font-monospace h-100"
-                style="min-height: 400px; resize: vertical;"></textarea>
+            <div class="tab-pane fade flex-grow-1" id="back-pane" role="tabpanel">
+              <textarea id="back-html" class="form-control font-monospace note-type-editor-textarea"></textarea>
             </div>
-            <div class="tab-pane fade flex-grow-1" id="css-pane" role="tabpanel" style="height: 100%;">
-              <textarea id="shared-css" class="form-control font-monospace h-100"
-                style="min-height: 400px; resize: vertical;"></textarea>
+            <div class="tab-pane fade flex-grow-1" id="css-pane" role="tabpanel">
+              <textarea id="shared-css" class="form-control font-monospace note-type-editor-textarea"></textarea>
             </div>
           </div>
 
@@ -84,8 +111,7 @@
             <h3 class="h6 mb-0">Live Preview</h3>
             <small class="text-muted">(Uses sample field data)</small>
           </div>
-          <iframe id="template-preview-frame" class="w-100 border rounded flex-grow-1"
-            style="min-height: 400px; background-color: #f8f9fa;" sandbox="allow-same-origin allow-scripts"></iframe>
+          <iframe id="template-preview-frame" class="w-100 border rounded flex-grow-1" sandbox="allow-scripts"></iframe>
         </div>
       </div>
     </div>
@@ -94,6 +120,7 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="{{ url_for('static', filename='js/card_renderer_host.js') }}"></script>
 <script>
   (() => {
     const root = document.getElementById("note-type-detail-root");
@@ -109,6 +136,14 @@
     const templateTabs = document.getElementById("templateTabs");
     const backTab = document.getElementById("back-tab");
     const placeholderToolbar = document.getElementById("placeholder-toolbar");
+    const rendererHost = window.FlamaCardRendererHost;
+    const previewController = previewFrame && rendererHost
+      ? rendererHost.createRendererFrameController(previewFrame, {
+        minHeight: 400,
+        fixedHeight: 560,
+        autoHeight: false,
+      })
+      : null;
 
     let noteType = null;
     let templates = [];
@@ -243,18 +278,25 @@
             use_sample_data: true,
           }),
         });
-        const previewHtml = activeSide === "back" ? (preview.back_html || "") : (preview.front_html || "");
+        const sidePayload = activeSide === "back"
+          ? (preview.back_renderer_payload || preview.back_html || "")
+          : (preview.front_renderer_payload || preview.front_html || "");
         const sideLabel = activeSide === "back" ? "Back" : "Front";
-        previewFrame.srcdoc = `
-          <!doctype html>
-          <html>
-          <head><meta charset="utf-8"></head>
-          <body>
-          <div style="padding:8px;min-height:240px">
-            ${previewHtml || `<div style="background-color:#f8f9fa;padding:12px;text-align:center;">Empty ${sideLabel} template</div>`}
-          </div>
-          </body></html>
-        `;
+        previewController?.render(
+          sidePayload || rendererHost.createNoticeHtml(`Empty ${sideLabel} template`),
+          {
+            padding: "8px",
+            background: "#f8f9fa",
+            config: {
+              mode: "note_type_preview",
+              side: activeSide,
+            },
+            revealOnReady: {
+              side: activeSide,
+              reason: "preview_render",
+            },
+          }
+        );
       } catch (error) {
         showError(templateError, error.message);
       }
