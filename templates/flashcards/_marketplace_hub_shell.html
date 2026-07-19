@@ -1,4 +1,6 @@
-<section class="market-hub-page" id="marketplace-hub-root" data-market-kind="{{ market_kind }}"
+<section class="market-hub-page{% if market_kind == 'note_type' %} market-hub-page--compact-catalog{% endif %}"
+  id="marketplace-hub-root" data-market-kind="{{ market_kind }}"
+  data-card-layout="{{ 'compact' if market_kind == 'note_type' else 'visual' }}"
   data-hub-url="{{ hub_url }}" data-detail-url-template="{{ detail_url_template }}"
   data-edit-url-template="{{ edit_url_template }}" data-install-url-template="{{ install_url_template }}"
   data-save-url-template="{{ save_url_template }}" data-orders-url="{{ orders_url }}"
@@ -17,6 +19,7 @@
       </div>
     </div>
 
+    {% if market_kind != 'note_type' %}
     <div class="market-hub-hero-panel">
       <div class="market-summary-grid market-summary-grid--hero" id="marketplace-hero-summary"></div>
       <div class="market-hub-hero-note">
@@ -26,6 +29,7 @@
         </p>
       </div>
     </div>
+    {% endif %}
   </section>
 
   <div class="market-hub-nav">
@@ -62,7 +66,9 @@
         </div>
       </div>
 
+      {% if market_kind != 'note_type' %}
       <section class="market-featured-stage d-none" id="marketplace-featured-stage"></section>
+      {% endif %}
 
       <div class="market-catalog-layout">
         <button class="market-mobile-filter-backdrop" type="button" hidden data-mobile-filter-close
@@ -107,8 +113,9 @@
           <section class="market-filter-section">
             <div class="market-filter-section-title">Loại và trạng thái</div>
             <div class="market-filter-stack">
-              <div class="market-filter-static-badge">{{ 'Deck' if market_kind == 'deck_marketplace_item' else 'Note
-                type' }}</div>
+              {% if market_kind == 'deck_marketplace_item' %}
+              <div class="market-filter-static-badge">Deck</div>
+              {% endif %}
               <label class="market-toolbar-field">
                 <span>Giá</span>
                 <select class="form-select" name="pricing_mode">
@@ -168,14 +175,23 @@
         </aside>
 
         <div class="market-catalog-main">
+          {% if market_kind != 'note_type' %}
           <section class="market-inline-section d-none" id="marketplace-library-spotlight"></section>
+          {% endif %}
 
           <div class="market-results-header">
             <div>
-              <div class="market-hub-section-kicker">Danh mục học</div>
-              <h2 class="market-hub-section-title mb-1">Kết quả phù hợp với nhu cầu học</h2>
-              <p class="market-section-help mb-0">Tập trung vào tìm, lọc, xem thử và thêm vào thư viện. Không lặp lại
-                các khối tiếp thị.</p>
+              <div class="market-hub-section-kicker">{{ 'Note type' if market_kind == 'note_type' else 'Danh mục học' }}</div>
+              <h2 class="market-hub-section-title mb-1">
+                {{ 'Danh sách note type' if market_kind == 'note_type' else 'Kết quả phù hợp với nhu cầu học' }}
+              </h2>
+              <p class="market-section-help mb-0">
+                {% if market_kind == 'note_type' %}
+                So sánh cấu trúc, mô tả và mức độ phổ biến trước khi thêm vào thư viện.
+                {% else %}
+                Tập trung vào tìm, lọc, xem thử và thêm vào thư viện.
+                {% endif %}
+              </p>
             </div>
             <div class="market-results-tools">
               <div class="market-applied-filters" id="marketplace-applied-filters"></div>
@@ -184,7 +200,9 @@
           </div>
 
           <div class="market-card-grid" id="marketplace-results-grid"></div>
+          {% if market_kind != 'note_type' %}
           <div class="market-discovery-shelves d-none" id="marketplace-discovery-shelves"></div>
+          {% endif %}
         </div>
       </div>
     </form>

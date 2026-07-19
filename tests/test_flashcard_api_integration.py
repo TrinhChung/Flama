@@ -499,6 +499,22 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             self.assertEqual((saved.taxonomy_metadata or {}).get("subject"), "japanese")
             self.assertEqual((saved.taxonomy_metadata or {}).get("best_used_for"), "vocabulary")
 
+    def test_shared_note_type_marketplace_uses_compact_catalog_shell(self):
+        note_type_response = self.client.get("/flashcards/shared-note-types")
+        self.assertEqual(note_type_response.status_code, 200)
+        note_type_html = note_type_response.get_data(as_text=True)
+        self.assertIn("market-hub-page--compact-catalog", note_type_html)
+        self.assertIn('data-card-layout="compact"', note_type_html)
+        self.assertIn("Tìm mẫu thẻ phù hợp", note_type_html)
+        self.assertNotIn('id="marketplace-featured-stage"', note_type_html)
+        self.assertNotIn('id="marketplace-hero-summary"', note_type_html)
+
+        deck_response = self.client.get("/flashcards/shared-decks")
+        self.assertEqual(deck_response.status_code, 200)
+        deck_html = deck_response.get_data(as_text=True)
+        self.assertIn('data-card-layout="visual"', deck_html)
+        self.assertIn('id="marketplace-featured-stage"', deck_html)
+
     def test_shared_note_type_hub_includes_saved_library_and_detail_extras(self):
         with self.app.app_context():
             seller = User(username="seller-one", email="seller-one@example.com")

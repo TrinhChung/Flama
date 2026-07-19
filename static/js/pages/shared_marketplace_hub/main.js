@@ -12,6 +12,7 @@ if (root) {
   const studyUrlTemplate = root.dataset.studyUrlTemplate || "";
   const libraryUrl = root.dataset.libraryUrl || "";
   const marketKind = root.dataset.marketKind || "";
+  const isCompactNoteTypeMarket = marketKind === "note_type";
 
   const filterForm = document.getElementById("marketplace-filter-form");
   const errorEl = document.getElementById("marketplace-hub-error");
@@ -257,6 +258,24 @@ if (root) {
       .join("");
   }
 
+  function buildCompactNoteTypeChips(item) {
+    return dedupeLabels(
+      [
+        item.framework_level_label,
+        item.difficulty_label,
+        ...(item.learning_goal_labels || []),
+        ...(item.primary_topic_labels || []),
+        ...(item.format_feature_labels || []),
+      ],
+      {
+        exclude: [item.subject_label, item.primary_category],
+        limit: 3,
+      },
+    )
+      .map((chip) => `<span class="market-support-chip">${escapeHtml(chip)}</span>`)
+      .join("");
+  }
+
   function buildActivityLine(item, mode = "discover") {
     const parts = [];
     if (mode === "library") {
@@ -272,6 +291,8 @@ if (root) {
       } else if (item.last_sync_status === "clean") {
         parts.push("Đã sync");
       }
+    } else if (isCompactNoteTypeMarket) {
+      if (item.updated_at) parts.push(`Cập nhật ${formatShortDate(item.updated_at)}`);
     } else {
       if (item.subject_label) parts.push(item.subject_label);
       if (item.framework_level_label) parts.push(item.framework_level_label);
@@ -358,19 +379,57 @@ if (root) {
   function renderCard(item, mode = "discover") {
     const title = item.title || item.name || "Untitled";
     const badgeMarkup = renderBadges(item.badges || []);
-    const supportChips = buildSupportChips(item);
+    const supportChips = isCompactNoteTypeMarket
+      ? buildCompactNoteTypeChips(item)
+      : buildSupportChips(item);
     const activityLine = buildActivityLine(item, mode);
     const detailUrl = buildUrl(detailTemplate, item.id);
     const description = item.short_description || item.preview_text || "Chưa có mô tả ngắn.";
-
-    return `
-      <article class="market-card market-card--${escapeHtml(mode)}" data-item-id="${escapeHtml(item.id)}">
+    const categoryLabel = isCompactNoteTypeMarket
+      ? (item.subject_label || item.primary_category || "General")
+      : (item.primary_category || "General");
+    const coverMarkup = isCompactNoteTypeMarket
+      ? ""
+      : `
         <a class="market-card-cover" href="${escapeHtml(detailUrl)}" style="${pickCoverPalette(item)}">
           ${badgeMarkup ? `<div class="market-cover-badges">${badgeMarkup}</div>` : ""}
           <div class="market-cover-label">${escapeHtml(buildCoverLabel(item))}</div>
           <div class="market-card-cover-title">${escapeHtml(title)}</div>
-        </a>
+        </a>`;
+    const statsMarkup = isCompactNoteTypeMarket
+      ? `
+        <div class="market-card-facts" aria-label="Tóm tắt note type">
+          <span class="market-card-fact market-card-price">${escapeHtml(item.price_display || "Miễn phí")}</span>
+          <span class="market-card-fact" title="Đánh giá">
+            <i class="bi bi-star-fill" aria-hidden="true"></i>
+            ${Number(item.rating_avg || 0).toFixed(1)} (${formatCount(item.rating_count || 0)})
+          </span>
+          <span class="market-card-fact" title="Lượt cài">
+            <i class="bi bi-download" aria-hidden="true"></i>
+            ${formatCount(item.install_count || 0)} lượt cài
+          </span>
+        </div>`
+      : `
+        <div class="market-card-statbar">
+          <div class="market-card-stat">
+            <strong>${escapeHtml(item.price_display || "Miễn phí")}</strong>
+            <span>${item.pricing_mode === "paid" ? "Giá hiện tại" : "Sẵn sàng dùng"}</span>
+          </div>
+          <div class="market-card-stat">
+            <strong>${Number(item.rating_avg || 0).toFixed(1)}</strong>
+            <span>${formatCount(item.rating_count || 0)} đánh giá</span>
+          </div>
+          <div class="market-card-stat">
+            <strong>${formatCount(item.install_count || 0)}</strong>
+            <span>${mode === "library" ? "lượt sở hữu" : "lượt cài"}</span>
+          </div>
+        </div>`;
+
+    return `
+      <article class="market-card market-card--${escapeHtml(mode)} ${isCompactNoteTypeMarket ? "market-card--compact-note-type" : ""}" data-item-id="${escapeHtml(item.id)}">
+        ${coverMarkup}
         <div class="market-card-body">
+          ${isCompactNoteTypeMarket && badgeMarkup ? `<div class="market-card-badges">${badgeMarkup}</div>` : ""}
           <div class="market-card-head">
             <a class="market-card-title-link" href="${escapeHtml(detailUrl)}">
               <h3 class="market-card-title">${escapeHtml(title)}</h3>
@@ -380,25 +439,12 @@ if (root) {
                 ${escapeHtml(item.author?.username || "Không rõ")}
               </button>
               <span class="market-card-meta-divider" aria-hidden="true">•</span>
-              <span>${escapeHtml(item.primary_category || "General")}</span>
+              <span>${escapeHtml(categoryLabel)}</span>
             </div>
           </div>
           <p class="market-card-description">${escapeHtml(description)}</p>
           ${supportChips ? `<div class="market-card-support">${supportChips}</div>` : ""}
-          <div class="market-card-statbar">
-            <div class="market-card-stat">
-              <strong>${escapeHtml(item.price_display || "Miễn phí")}</strong>
-              <span>${item.pricing_mode === "paid" ? "Giá hiện tại" : "Sẵn sàng dùng"}</span>
-            </div>
-            <div class="market-card-stat">
-              <strong>${Number(item.rating_avg || 0).toFixed(1)}</strong>
-              <span>${formatCount(item.rating_count || 0)} đánh giá</span>
-            </div>
-            <div class="market-card-stat">
-              <strong>${formatCount(item.install_count || 0)}</strong>
-              <span>${mode === "library" ? "lượt sở hữu" : "lượt cài"}</span>
-            </div>
-          </div>
+          ${statsMarkup}
           ${activityLine ? `<div class="market-card-summary">${escapeHtml(activityLine)}</div>` : ""}
           <div class="market-card-actions">
             ${renderPrimaryButton(item, mode)}
@@ -707,6 +753,7 @@ if (root) {
   }
 
   function renderLibrarySpotlight(payload) {
+    if (!librarySpotlightEl) return;
     const items = [...((payload.library?.using_now || []).slice(0, 2)), ...((payload.library?.installed || []).slice(0, 2))].slice(0, 4);
     if (!items.length) {
       librarySpotlightEl.classList.add("d-none");
