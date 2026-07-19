@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import random
 import re
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
+
+UTC = timezone.utc
 
 from app.repositories.deck_tree_query import collect_subtree_ids
 from app.template_formatters import format_vnd

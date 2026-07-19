@@ -1,7 +1,9 @@
 import hashlib
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Tuple
+
+UTC = timezone.utc
 
 from flask import url_for
 from sqlalchemy import or_

@@ -1,85 +1,90 @@
-name: Deploy Flama to VPS
+name: Deploy Flama to Hostinger VPS
 
 on:
   push:
     branches:
-      - master # Đã sửa thành nhánh master cho project Flama
+      - develop
+  workflow_dispatch:
+
+concurrency:
+  group: flama-hostinger-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment: Flama # Đã đổi tên environment
-    
+    environment: Flama
+    timeout-minutes: 15
+
+    env:
+      PROJECT_DIR: /opt/flama
+      RELEASE_ID: ${{ github.sha }}
+      SSH_HOST: ${{ secrets.SSH_HOST }}
+      SSH_PORT: ${{ secrets.SSH_PORT }}
+      SSH_USER: ${{ secrets.SSH_USER }}
+
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - name: Setup SSH
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -p ${{ secrets.SSH_PORT }} -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
+      - name: Build release archive
+        run: git archive --format=tar.gz --output="/tmp/flama-${RELEASE_ID}.tar.gz" HEAD
 
-      - name: Deploy to VPS
+      - name: Set up SSH
         env:
-          SSH_USER: ${{ secrets.SSH_USER }}
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_PORT: ${{ secrets.SSH_PORT }}
-          # Thêm biến DB_PASSWORD cho Flama lấy từ Github Secrets
-          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
         run: |
-          ssh -p $SSH_PORT $SSH_USER@$SSH_HOST << 'EOF'
-          set -e
-          
-          # Kiểm tra xem git có được cài đặt không
-          if ! command -v git &> /dev/null; then
-            echo "Error: Git is not installed on VPS"
-            echo "Please install Git manually: sudo apt-get install -y git"
-            exit 1
+          set -Eeuo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -p "$SSH_PORT" -H "$SSH_HOST" > ~/.ssh/known_hosts
+
+      - name: Upload release
+        run: |
+          set -Eeuo pipefail
+          scp -P "$SSH_PORT" \
+            "/tmp/flama-${RELEASE_ID}.tar.gz" \
+            "$SSH_USER@$SSH_HOST:/tmp/flama-${RELEASE_ID}.tar.gz"
+
+      - name: Activate release
+        run: |
+          set -Eeuo pipefail
+          ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
+            "PROJECT_DIR='$PROJECT_DIR' RELEASE_ID='$RELEASE_ID' bash -s" <<'REMOTE_SCRIPT'
+          set -Eeuo pipefail
+
+          release_dir="$PROJECT_DIR/releases/$RELEASE_ID"
+          archive_path="/tmp/flama-$RELEASE_ID.tar.gz"
+
+          test -f /etc/flama/flama.env
+          mkdir -p "$release_dir"
+          tar -xzf "$archive_path" -C "$release_dir"
+          rm -f "$archive_path"
+
+          if [ ! -x "$PROJECT_DIR/venv/bin/python" ]; then
+            python3 -m venv "$PROJECT_DIR/venv"
           fi
-          
-          # Kiểm tra xem docker-compose có được cài đặt không
-          if ! command -v docker &> /dev/null; then
-            echo "Docker not found, please install Docker first."
-            exit 1
-          fi
-          
-          # Di chuyển đến thư mục dự án hoặc tạo mới nếu chưa có
-          PROJECT_DIR="/home/$SSH_USER/flama-app"
-          if [ ! -d "$PROJECT_DIR" ]; then
-            mkdir -p "$PROJECT_DIR"
-            cd "$PROJECT_DIR"
-            git clone https://github.com/${{ github.repository }}.git .
-          else
-            cd "$PROJECT_DIR"
-            git fetch origin
-            git reset --hard origin/master
-          fi
-          
-          # Bổ sung các biến môi trường cấu hình Database thay thế .env_example của project Flama
-          if [ ! -f .env ]; then
-            echo "Creating .env file..."
-            cat > .env << ENVEOF
-          FLASK_APP=wsgi.py
-          FLASK_ENV=production
-          SECRET_KEY=$(openssl rand -hex 32)
-          DB_HOST=localhost
-          DB_PORT=3306
-          DB_USER=root
-          DB_PASSWORD=${DB_PASSWORD:-"your-db-password"}
-          DB_NAME=flama
-          USE_NEW_CARD_MODEL=true
-          FLASHCARD_MEDIA_MAX_BYTES=10485760
-          ENVEOF
-          fi
-          
-          # Dừng các container cũ nếu có
-          docker compose down || true
-          
-          # Xây dựng và chạy ứng dụng
-          docker compose up -d --build
-          
-          echo "Deployment successful!"
-          echo "Application is running on port 4789"
-          EOF
+
+          "$PROJECT_DIR/venv/bin/pip" install --disable-pip-version-check -r "$release_dir/requirements.txt"
+          install -m 0644 "$release_dir/deploy/flama.service" /etc/systemd/system/flama.service
+          ln -sfn "$release_dir" "$PROJECT_DIR/current"
+
+          systemctl daemon-reload
+          systemctl restart flama.service
+
+          for attempt in $(seq 1 20); do
+            if curl --fail --silent --show-error --max-time 5 http://127.0.0.1:4789/ >/dev/null; then
+              systemctl --no-pager --full status flama.service
+              exit 0
+            fi
+            sleep 3
+          done
+
+          systemctl --no-pager --full status flama.service || true
+          journalctl -u flama.service -n 100 --no-pager || true
+          exit 1
+          REMOTE_SCRIPT

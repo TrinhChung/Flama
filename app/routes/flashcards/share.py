@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
+from datetime import datetime, timezone
+
+UTC = timezone.utc
 from flask import jsonify, request, redirect, url_for, flash, render_template, send_file, current_app
 from flask_login import current_user, login_required
 from sqlalchemy.exc import OperationalError

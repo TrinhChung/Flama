@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import re
 from typing import Any
+
+UTC = timezone.utc
 
 from app.services import flashcards_share_service, marketplace_query_service, marketplace_taxonomy_service
 from app.services.payment import presenters as payment_presenters
