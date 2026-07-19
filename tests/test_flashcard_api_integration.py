@@ -1747,8 +1747,14 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         self.assertNotIn('data-entry-id="', html)
         self.assertIn('id="card-front-frame"', html)
         self.assertIn('id="card-back-frame"', html)
+        self.assertIn('class="card-face card-front is-active study-card-frame"', html)
+        self.assertIn('class="card-face card-back study-card-frame"', html)
+        self.assertIn(".card-face:not(.is-active)", html)
+        self.assertEqual(html.count('data-render-sizing="viewport"'), 2)
         self.assertIn('sandbox="allow-scripts"', html)
         self.assertIn('id="studyInitialRendererPayload"', html)
+        self.assertIn("autoHeight: false", html)
+        self.assertIn('padding: "0"', html)
         self.assertNotIn('id="card-front">', html)
 
     def test_vocabulary_study_topic_route_is_removed(self):

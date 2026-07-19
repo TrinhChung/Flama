@@ -49,8 +49,10 @@
     <div class="study-card" id="study-card" data-card-id="{{ card.id }}" data-study-scope="{{ study_scope }}"
       data-scope-id="{{ study_scope_id }}" data-answer-url="{{ answer_url or '' }}"
       data-note-id="{{ card.note_id or '' }}" data-can-edit="{{ '1' if can_edit_current_card else '0' }}">
-      <iframe class="card-face card-front is-active study-card-frame" id="card-front-frame" title="Mat truoc" sandbox="allow-scripts"></iframe>
-      <iframe class="card-face card-back study-card-frame" id="card-back-frame" title="Mat sau" sandbox="allow-scripts"></iframe>
+      <iframe class="card-face card-front is-active study-card-frame" id="card-front-frame" title="Mat truoc"
+        data-render-sizing="viewport" sandbox="allow-scripts"></iframe>
+      <iframe class="card-face card-back study-card-frame" id="card-back-frame" title="Mat sau"
+        data-render-sizing="viewport" sandbox="allow-scripts"></iframe>
     </div>
   </section>
   {% else %}
@@ -234,13 +236,13 @@
     display: flex;
     flex-direction: column;
     margin: 0;
-    padding: 0.8rem 0.8rem var(--study-bottom-bar-clearance);
+    padding: 0.8rem 0 var(--study-bottom-bar-clearance);
     overflow: hidden;
   }
 
   /* â”€â”€ Dashboard Toolbar (shared) â”€â”€ */
   .study-page .dash-toolbar {
-    margin-bottom: 0.5rem;
+    margin: 0 0.8rem 0.5rem;
     padding: 0.4rem 0.6rem;
     flex-shrink: 0;
   }
@@ -250,7 +252,7 @@
     display: flex;
     align-items: center;
     gap: 0.4rem;
-    padding: 0.3rem 0.6rem 0.55rem;
+    padding: 0.3rem 1.4rem 0.55rem;
     flex-shrink: 0;
   }
 
@@ -288,28 +290,35 @@
   }
 
   .study-card-shell {
-    flex: 1;
+    flex: 1 1 auto;
     display: flex;
-    width: min(1400px, 100%);
-    margin: 0 auto;
+    width: 100%;
+    max-width: none;
+    margin: 0;
     overflow: hidden;
     min-height: 0;
     min-width: 0;
   }
 
   .study-card {
+    position: relative;
+    flex: 1 1 auto;
     width: 100%;
-    display: flex;
-    flex-direction: column;
+    height: 100%;
     min-height: 0;
     min-width: 0;
+    overflow: hidden;
   }
 
   .card-face {
+    position: absolute;
+    inset: 0;
     display: none;
-    flex: 1;
+    width: 100%;
+    height: 100% !important;
     min-height: 0;
     min-width: 0;
+    max-width: none;
   }
 
   .card-face.is-active {
@@ -318,39 +327,16 @@
 
   .study-card-frame {
     width: 100%;
+    height: 100% !important;
     border: 0;
     background: transparent;
     padding: 0;
     margin: 0;
-    min-height: 240px;
+    min-height: 0;
   }
 
-  .card-face img,
-  .card-face video,
-  .card-face canvas,
-  .card-face svg,
-  .card-face audio,
-  .card-face iframe {
-    max-width: 100%;
-  }
-
-  .card-face audio {
-    width: min(100%, 20rem);
-  }
-
-  .card-face iframe {
-    width: 100%;
-  }
-
-  .card-face table {
-    display: block;
-    max-width: 100%;
-    overflow-x: auto;
-  }
-
-  .card-face pre {
-    max-width: 100%;
-    overflow: auto;
+  .card-face:not(.is-active) {
+    display: none !important;
   }
 
   .audio-inline-btn {
@@ -458,7 +444,7 @@
   .study-page:fullscreen,
   .study-page:-webkit-full-screen {
     margin: 0;
-    padding: 0.7rem 0.7rem 5rem;
+    padding: 0 0 5rem;
     height: 100dvh;
     max-height: 100dvh;
     background: radial-gradient(circle at 10% 0%, #fff8ef 0%, #fff3e8 40%, #fff8f3 100%);
@@ -473,7 +459,8 @@
 
   .study-page:fullscreen .study-card-shell,
   .study-page:-webkit-full-screen .study-card-shell {
-    width: min(1600px, 100%);
+    width: 100%;
+    max-width: none;
   }
 
   .answer-btn {
@@ -632,23 +619,19 @@
 
   /* Adjust card-face for front */
   .card-face.card-front {
-    flex-direction: column;
     padding: 0;
-    flex: 1;
-    min-height: 0;
     overflow: hidden;
   }
 
   .card-face.card-front.is-active {
-    display: flex;
+    display: block;
     overflow: hidden;
   }
 
-  /* Card back scrolls internally */
+  /* The iframe document owns vertical scrolling at the viewport edge. */
   .card-face.card-back.is-active {
     display: block;
-    overflow-y: auto;
-    flex: 1;
+    overflow: hidden;
   }
 
   .study-edit-modal-body {
@@ -791,8 +774,8 @@
 
     .study-page {
       margin: 0;
-      padding-left: 0.5rem;
-      padding-right: 0.5rem;
+      padding-left: 0;
+      padding-right: 0;
     }
 
     .study-tab {
@@ -824,7 +807,7 @@
     }
 
     .card-face {
-      padding: 0 0.4rem 1rem;
+      padding: 0;
     }
   }
 
@@ -834,7 +817,7 @@
     }
 
     .deck-context-bar {
-      padding-inline: 0.25rem 0.45rem;
+      padding-inline: 0.75rem;
     }
 
     .deck-ctx-name {
@@ -1001,12 +984,14 @@
     const frontRenderer = frontFrame && rendererHost
       ? rendererHost.createRendererFrameController(frontFrame, {
         minHeight: 260,
+        autoHeight: false,
         enableLivePatch: true,
       })
       : null;
     const backRenderer = backFrame && rendererHost
       ? rendererHost.createRendererFrameController(backFrame, {
         minHeight: 260,
+        autoHeight: false,
         enableLivePatch: true,
       })
       : null;
@@ -1129,7 +1114,7 @@
         : { html: rendererHost.createNoticeHtml("Thẻ này hiện chưa có nội dung để hiển thị.") };
       const shouldRevealOnReady = options.revealOnReady !== false;
       controller.render(payloadForFrame, {
-        padding: "0 0.8rem 1rem",
+        padding: "0",
         background: "transparent",
         color: "#1f1a17",
         config: {
