@@ -187,7 +187,11 @@
       <h2>Câu hỏi & Liên hệ</h2>
       <p>Nếu bạn có câu hỏi về các điều khoản này:</p>
       <ul>
-        <li><a href="mailto:chungtrinh2k2@gmail.com">chungtrinh2k2@gmail.com</a></li>
+        {% if support_contact_email %}
+        <li><a href="mailto:{{ support_contact_email }}">{{ support_contact_email }}</a></li>
+        {% else %}
+        <li>Vui lòng liên hệ quản trị viên để được hỗ trợ</li>
+        {% endif %}
         <li>Chúng tôi sẽ phản hồi trong vòng 5 - 7 ngày làm việc</li>
       </ul>
       <div class="legal-success">

@@ -25,7 +25,11 @@ LEGACY_FIELD_DEFS = [
     ("example_audio", "audio", False),
 ]
 
-LEGACY_FRONT_TEMPLATE = """<div class="legacy-front">{{word}}</div>"""
+LEGACY_FRONT_TEMPLATE = """
+<div class="legacy-front">
+  <div class="front-word">{{word}}</div>
+</div>
+"""
 
 LEGACY_BACK_TEMPLATE = """
 <div class="legacy-back">
@@ -48,7 +52,25 @@ LEGACY_BACK_TEMPLATE = """
 """
 
 LEGACY_SHARED_CSS = """
-.legacy-front { font-size: 52px; text-align: center; color: #e53c20; font-weight: 700; padding: 1rem; }
+html, body, .card { margin: 0; padding: 0; height: 100%; }
+body { box-sizing: border-box; }
+.legacy-front {
+  box-sizing: border-box;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  text-align: center;
+}
+.front-word {
+  color: #e53c20;
+  font-size: clamp(3rem, 9vw, 4.375rem);
+  font-weight: 700;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
 .legacy-back { font-family: Arial, sans-serif; font-size: 18px; line-height: 1.6; }
 .legacy-back .word-line { font-size: 36px; color: #e53c20; font-weight: 700; }
 .legacy-back .reading-line { color: #0f5132; font-weight: 700; }

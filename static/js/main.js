@@ -135,6 +135,80 @@ const Utils = {
 
 window.Utils = Utils;
 
+const Csrf = {
+  getToken: () => {
+    const meta = document.querySelector('meta[name="csrf-token"]');
+    return meta ? String(meta.getAttribute('content') || '').trim() : '';
+  },
+
+  isUnsafeMethod: (method) => {
+    const normalized = String(method || 'GET').toUpperCase();
+    return !['GET', 'HEAD', 'OPTIONS', 'TRACE'].includes(normalized);
+  },
+
+  isSameOrigin: (url) => {
+    try {
+      return new URL(url, window.location.origin).origin === window.location.origin;
+    } catch (_error) {
+      return false;
+    }
+  },
+
+  injectIntoForms: () => {
+    const token = Csrf.getToken();
+    if (!token) return;
+
+    document.querySelectorAll('form[method]').forEach((form) => {
+      const method = String(form.getAttribute('method') || 'GET').toUpperCase();
+      if (!Csrf.isUnsafeMethod(method)) return;
+      if (form.querySelector('input[name="_csrf_token"]')) return;
+
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = '_csrf_token';
+      input.value = token;
+      form.prepend(input);
+    });
+  },
+
+  patchFetch: () => {
+    if (typeof window.fetch !== 'function' || window.fetch.__flamaCsrfPatched) return;
+
+    const originalFetch = window.fetch.bind(window);
+    const wrappedFetch = (input, init) => {
+      const request = input instanceof Request ? input : null;
+      const method = String((init && init.method) || (request && request.method) || 'GET').toUpperCase();
+      const url = request ? request.url : String(input || '');
+
+      if (!Csrf.isUnsafeMethod(method) || !Csrf.isSameOrigin(url)) {
+        return originalFetch(input, init);
+      }
+
+      const token = Csrf.getToken();
+      if (!token) {
+        return originalFetch(input, init);
+      }
+
+      const options = init ? { ...init } : {};
+      const headers = new Headers(options.headers || (request ? request.headers : undefined));
+      if (!headers.has('X-CSRF-Token')) {
+        headers.set('X-CSRF-Token', token);
+      }
+      options.headers = headers;
+
+      if (request && !init) {
+        return originalFetch(new Request(request, { headers }));
+      }
+      return originalFetch(input, options);
+    };
+
+    wrappedFetch.__flamaCsrfPatched = true;
+    window.fetch = wrappedFetch;
+  },
+};
+
+window.Csrf = Csrf;
+
 // Global error handler
 window.addEventListener('error', (event) => {
   console.error('Global error:', event.error);
@@ -143,5 +217,12 @@ window.addEventListener('error', (event) => {
 
 // Log initialization
 document.addEventListener('DOMContentLoaded', () => {
+  Csrf.patchFetch();
+  Csrf.injectIntoForms();
   console.log('Application initialized');
 });
+
+if (document.readyState !== 'loading') {
+  Csrf.patchFetch();
+  Csrf.injectIntoForms();
+}

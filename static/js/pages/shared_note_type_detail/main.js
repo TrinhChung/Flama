@@ -50,6 +50,10 @@ if (root) {
   const paymentNextActionEl = document.getElementById("payment-order-next-action");
   const paymentLinesEl = document.getElementById("payment-order-lines");
   const paymentInstructionsEl = document.getElementById("payment-order-instructions");
+  const rendererHost = window.FlamaCardRendererHost;
+  const previewController = previewFrame && rendererHost
+    ? rendererHost.createRendererFrameController(previewFrame, { minHeight: 280 })
+    : null;
 
   let detail = null;
   let selectedTemplateId = "";
@@ -179,8 +183,27 @@ if (root) {
   }
 
   function renderPreviewFrame() {
-    const html = previewSide === "back" ? (previewPayload?.back_html || "") : (previewPayload?.front_html || "");
-    previewFrame.srcdoc = `<!doctype html><html><body style="background:#fffaf6;color:#1f1a17;"><div style="padding:12px;">${html || "<div style='color:#6b625c;'>Chưa có nội dung xem trước.</div>"}</div></body></html>`;
+    const sidePayload = previewSide === "back"
+      ? (previewPayload?.back_renderer_payload || previewPayload?.back_html || "")
+      : (previewPayload?.front_renderer_payload || previewPayload?.front_html || "");
+    previewController?.render(
+      sidePayload || rendererHost.createNoticeHtml("Chua co noi dung xem truoc."),
+      {
+        padding: "12px",
+        background: "#fffaf6",
+        color: "#1f1a17",
+        config: {
+          mode: "shared_note_type_preview",
+          side: previewSide,
+          noteTypeId,
+          templateId: selectedTemplateId,
+        },
+        revealOnReady: {
+          side: previewSide,
+          reason: "preview_render",
+        },
+      }
+    );
   }
 
   function renderPreviewControls(templates) {
@@ -254,7 +277,15 @@ if (root) {
 
   async function loadPreview() {
     if (!selectedTemplateId) {
-      previewFrame.srcdoc = "<!doctype html><html><body style='background:#fffaf6;color:#1f1a17;'><div style='padding:12px;color:#6b625c;'>Không có template để xem trước.</div></body></html>";
+      previewController?.render(rendererHost.createNoticeHtml("Khong co template de xem truoc."), {
+        padding: "12px",
+        background: "#fffaf6",
+        color: "#1f1a17",
+        config: {
+          mode: "shared_note_type_preview",
+          side: previewSide,
+        },
+      });
       return;
     }
     previewPayload = await requestJson(`/api/shared/note-types/${noteTypeId}/templates/${selectedTemplateId}/preview`, {

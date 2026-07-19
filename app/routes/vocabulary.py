@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import io
 import re
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Dict, List
@@ -48,6 +48,7 @@ from app.repositories.study_repository import (
 )
 from app.utils.deck_move_token import parse_deck_move_token
 from app.utils.permissions import is_admin_user
+from app.utils.redirects import resolve_safe_next_url
 from app.services import tts_provider_service
 from app.services.anki_scheduler import (
     computeAnswerPreview,
@@ -75,6 +76,10 @@ _MD_LINK_RE = re.compile(r"\[([^\]]+)\]\([^)]+\)")
 _MD_INLINE_STYLE_RE = re.compile(r"(\*\*|__|\*|_|~~|`)")
 _MD_HEADING_RE = re.compile(r"(?m)^\s{0,3}#{1,6}\s*")
 _MD_LIST_MARKER_RE = re.compile(r"(?m)^\s{0,3}(?:[-+*]|\d+\.)\s+")
+
+
+def _utcnow() -> datetime:
+    return datetime.utcnow()
 
 
 @vocabulary_bp.before_request
@@ -120,18 +125,21 @@ def _legacy_structure_removed_response():
     if request.method == "GET":
         return message, 410
     flash(message, "warning")
-    next_url = (request.form.get("next") or request.args.get("next") or "").strip()
-    return redirect(next_url or url_for("vocabulary.browse"))
+    next_url = resolve_safe_next_url(
+        request.form.get("next") or request.args.get("next"),
+        default_endpoint="vocabulary.browse",
+    )
+    return redirect(next_url)
 
 
 
 
 def _resolve_next_url(default_endpoint: str = "main.dashboard") -> str:
     """Return a safe in-app redirect target from `next` form value."""
-    raw_next = (request.form.get("next") or "").strip()
-    if raw_next.startswith("/") and not raw_next.startswith("//"):
-        return raw_next
-    return url_for(default_endpoint)
+    return resolve_safe_next_url(
+        request.form.get("next"),
+        default_endpoint=default_endpoint,
+    )
 
 
 
@@ -249,8 +257,8 @@ def _render_voicevox_filename(
         "uid": uuid4().hex[:12],
         "note_id": _slug_filename_component(note_id, fallback="note", max_len=36),
         "index": str(int(sequence)),
-        "date": datetime.utcnow().strftime("%Y%m%d"),
-        "timestamp": datetime.utcnow().strftime("%Y%m%d%H%M%S"),
+        "date": _utcnow().strftime("%Y%m%d"),
+        "timestamp": _utcnow().strftime("%Y%m%d%H%M%S"),
     }
     raw_template = str(template or "").strip() or "VOICEVOX-{{speaker}}_{{style}}_{{uid}}"
 
@@ -612,7 +620,7 @@ def browse_api_cards():
             func.lower(db.cast(Note.tags, db.Text)).like(tag_like, escape="\\")
         )
 
-    now = datetime.utcnow()
+    now = _utcnow()
     normalized_progress_queue = _normalized_queue_expr(progress_alias)
     query = query.filter(_active_progress_expr(progress_alias))
     if status == NEW_QUEUE:
@@ -752,7 +760,7 @@ def browse_api_card_detail(card_id: str):
     payload = vocabulary_ctrl.build_browse_card_detail(
         card_obj,
         deck_lookup,
-        datetime.utcnow(),
+        _utcnow(),
         progress_obj=progress,
         timezone_name=get_effective_timezone_name(getattr(current_user, "timezone", "UTC")),
     )
@@ -770,184 +778,25 @@ def browse_api_card_detail(card_id: str):
 @login_required
 def browse_api_card_update(card_id: str):
     """Update card note fields/deck/tags from Browse editor."""
-    from app.services import flashcards_share as share_ctrl
-    from models.flashcard import Card, Note, NoteType
+    from app.services import browse_card_service
 
-    query = Card.query.join(Note, Card.note_id == Note.id).filter(Card.id == card_id)
-    card_obj = query.options(
-        selectinload(Card.note).selectinload(Note.note_type).selectinload(NoteType.field_defs),
-        selectinload(Card.note).selectinload(Note.media_assets),
-        selectinload(Card.template),
-    ).first()
-    if not card_obj:
-        return jsonify({"error": "Card not found"}), 404
-
-    note_obj = card_obj.note
-    note_type_obj = note_obj.note_type if note_obj else None
-    if note_obj is None or note_type_obj is None:
-        return jsonify({"error": "Card note type not found"}), 404
-
-    clone_scope = None
-    if not is_admin_user(current_user) and note_obj and note_obj.user_id != current_user.id:
-        clone_scope = share_ctrl.resolve_clone_scope_for_card(
-            user_id=current_user.id,
-            card_obj=card_obj,
-        )
-        if clone_scope is None or not share_ctrl.is_card_visible_in_clone_scope(
-            scope=clone_scope,
-            card_obj=card_obj,
-        ):
-            return jsonify({"error": "Card not found"}), 404
-
+    admin_mode = is_admin_user(current_user)
     payload = request.get_json(silent=True) or {}
-    note_media_ids = _collect_note_media_refs(note_obj)
     try:
-        validated = validate_browse_card_update_request(
-            note_type=note_type_obj,
-            payload=payload,
-            current_values=dict(note_obj.field_values or {}),
-            note_media_ids=note_media_ids,
-        )
-    except RequestValidationError as exc:
-        return (
-            jsonify({"error": str(exc), "field": exc.field, "code": exc.code}),
-            exc.status,
-        )
-
-    if clone_scope is not None and not is_admin_user(current_user):
-        mapped_local_deck_id = (
-            (clone_scope.source_to_local_deck_id or {}).get(int(note_obj.deck_id or 0))
-            or clone_scope.install.local_deck_id
-        )
-        if validated.update_deck:
-            selected_deck_id = validated.deck_id
-            if selected_deck_id != (int(mapped_local_deck_id) if mapped_local_deck_id is not None else None):
-                return jsonify({"error": "Moving cloned cards across decks is not supported."}), 400
-
-        if validated.update_tags:
-            incoming_tags = validated.tags or []
-            current_tags = _normalize_tags_payload(note_obj.tags or [])
-            if incoming_tags != current_tags:
-                return jsonify({"error": "Editing tags for cloned cards is not supported."}), 400
-
-        note_override_items = []
-        for key_name, value in validated.field_updates.items():
-            note_override_items.append(
-                {
-                    "source_note_id": note_obj.id,
-                    "field_name": key_name,
-                    "operation": "set",
-                    "value": value,
-                }
-            )
-
-        if note_override_items:
-            _, validation_error = share_ctrl.upsert_clone_overlay(
-                deck_install=clone_scope.install,
-                payload={"note_field_overrides": note_override_items},
-            )
-            if validation_error:
-                db.session.rollback()
-                return jsonify({"error": validation_error}), 400
-        db.session.commit()
-
-        deck_lookup = {
-            deck.id: deck.name
-            for deck in vocabulary_ctrl.collect_accessible_browse_decks(
-                user_id=current_user.id,
-                admin_mode=is_admin_user(current_user),
-            )
-        }
-        for source_deck_id, local_deck_id in (clone_scope.source_to_local_deck_id or {}).items():
-            local_name = deck_lookup.get(int(local_deck_id))
-            if local_name:
-                deck_lookup.setdefault(int(source_deck_id), local_name)
-        progress = CardProgress.query.filter_by(
+        result = browse_card_service.update_browse_card(
             user_id=current_user.id,
-            card_id=card_obj.id,
-        ).first()
-        now = datetime.utcnow()
-        detail_payload = vocabulary_ctrl.build_browse_card_detail(
-            card_obj,
-            deck_lookup,
-            now,
-            progress_obj=progress,
+            admin_mode=admin_mode,
             timezone_name=get_effective_timezone_name(getattr(current_user, "timezone", "UTC")),
+            card_id=card_id,
+            payload=payload,
         )
-        detail_payload = _apply_clone_overlay_to_browse_payload(
-            payload=detail_payload,
-            card_obj=card_obj,
-            clone_scope=clone_scope,
-            deck_lookup=deck_lookup,
-        )
-        return jsonify(
-            {
-                "success": True,
-                "row": detail_payload.get("card"),
-                "detail": detail_payload,
-            }
-        )
-
-    if validated.update_deck:
-        selected_deck_id = validated.deck_id
-        if selected_deck_id is None:
-            note_obj.deck_id = None
-        else:
-            if not Deck.query.get(selected_deck_id):
-                return jsonify({"error": "Deck not found"}), 404
-            if not is_admin_user(current_user):
-                allowed_deck_ids = {
-                    deck.id
-                    for deck in vocabulary_ctrl.collect_accessible_browse_decks(
-                        user_id=current_user.id,
-                        admin_mode=is_admin_user(current_user),
-                    )
-                }
-                if selected_deck_id not in allowed_deck_ids:
-                    return jsonify({"error": "Deck is not accessible"}), 403
-            note_obj.deck_id = selected_deck_id
-
-    if validated.update_tags:
-        note_obj.tags = validated.tags
-
-    if validated.field_updates:
-        next_values = dict(note_obj.field_values or {})
-        for key_name, value in validated.field_updates.items():
-            next_values[key_name] = value
-        note_obj.field_values = next_values
-    db.session.commit()
-
-    deck_lookup = {
-        deck.id: deck.name
-        for deck in vocabulary_ctrl.collect_accessible_browse_decks(
-            user_id=current_user.id,
-            admin_mode=is_admin_user(current_user),
-        )
-    }
-    progress = CardProgress.query.filter_by(
-        user_id=current_user.id,
-        card_id=card_obj.id,
-    ).first()
-    now = datetime.utcnow()
-    return jsonify(
-        {
-            "success": True,
-            "row": vocabulary_ctrl.build_browse_row(
-                card_obj,
-                deck_lookup,
-                now,
-                progress_obj=progress,
-                timezone_name=get_effective_timezone_name(getattr(current_user, "timezone", "UTC")),
-            ),
-            "detail": vocabulary_ctrl.build_browse_card_detail(
-                card_obj,
-                deck_lookup,
-                now,
-                progress_obj=progress,
-                timezone_name=get_effective_timezone_name(getattr(current_user, "timezone", "UTC")),
-            ),
-        }
-    )
+    except browse_card_service.BrowseCardUpdateError as exc:
+        response = {"error": str(exc)}
+        if exc.include_details:
+            response["field"] = exc.field
+            response["code"] = exc.code
+        return jsonify(response), exc.status
+    return jsonify(result)
 
 
 @vocabulary_bp.route("/api/browse/voicevox/preview", methods=["POST"])
@@ -1847,7 +1696,7 @@ def study_deck(deck_id: int):
     subtree_ids = _collect_deck_subtree_ids(root_deck.id)
 
     cards = _query_study_cards_for_deck_ids(subtree_ids)
-    now = datetime.utcnow()
+    now = _utcnow()
     timezone_name = get_effective_timezone_name(getattr(current_user, "timezone", "UTC"))
     card_ids = [card_obj.id for card_obj in cards]
     progress_map = _load_card_progress_map(card_ids)
@@ -1928,12 +1777,12 @@ def study_deck(deck_id: int):
                     field_defs=overlay_field_defs,
                     field_values=overlay_field_values,
                     media_assets=selected_card.note.media_assets,
-                    allow_inline_script=True,
-                    defer_inline_script=True,
                 )
                 rendered_data = {
                     "front": rendered.get("front_html", ""),
                     "back": rendered.get("back_html", ""),
+                    "front_payload": rendered.get("front_renderer_payload"),
+                    "back_payload": rendered.get("back_renderer_payload"),
                 }
                 if card_payload is not None:
                     card_payload.field_values = {
@@ -1958,6 +1807,8 @@ def study_deck(deck_id: int):
         card=card_payload,
         rendered_front=rendered_data.get("front"),
         rendered_back=rendered_data.get("back"),
+        rendered_front_payload=rendered_data.get("front_payload"),
+        rendered_back_payload=rendered_data.get("back_payload"),
         due_new=due_new,
         due_learn=due_learn,
         due_review=due_review,

@@ -24,7 +24,6 @@ from app.validators.support_donation import (
     SUGGESTED_DONATION_AMOUNTS,
 )
 from app.services.payment import config as payment_config
-from app.services.payment.provider import payos_provider
 from models.support_donation_config import SupportDonationConfig
 
 DEFAULT_TITLE = "Ủng hộ duy trì hệ thống"
@@ -227,6 +226,8 @@ def create_anonymous_checkout(
     cancel_url: str,
     buyer_email: str | None = None,
 ) -> dict[str, Any]:
+    from app.services.payment.provider import payos_provider
+
     row = get_latest_config()
     title = _clean_text(row.title if row is not None else "") or DEFAULT_TITLE
     provider_order_code = _build_provider_order_code()
@@ -289,6 +290,8 @@ def create_anonymous_checkout(
 
 
 def get_anonymous_checkout_status(*, provider_order_code: str) -> dict[str, Any]:
+    from app.services.payment.provider import payos_provider
+
     provider_state = payos_provider.get_payment_link_state(provider_order_code=provider_order_code)
     provider_status = _clean_text(provider_state.get("status")).upper() or "PENDING"
     amount_minor = int(provider_state.get("amount_minor") or 0)

@@ -198,8 +198,6 @@ def _build_study_next_payload(
         field_defs=render_field_defs,
         field_values=render_field_values,
         media_assets=note.media_assets,
-        allow_inline_script=True,
-        defer_inline_script=True,
     )
     return {
         "card_id": selected_card.id,
@@ -207,6 +205,8 @@ def _build_study_next_payload(
         "template_id": template.id,
         "rendered_front_html": rendered["front_html"],
         "rendered_back_html": rendered["back_html"],
+        "rendered_front_payload": rendered.get("front_renderer_payload"),
+        "rendered_back_payload": rendered.get("back_renderer_payload"),
         "intervals_preview": interval_preview,
         "new_count": new_count,
         "learn_count": learn_count,

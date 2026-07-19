@@ -16,10 +16,12 @@ from models.flashcard import FieldDef, NoteType, Template, Note, Card
 from models.deck import Deck
 from models.card_progress import CardProgress
 from app.services.flashcard_legacy import ensure_quiz_note_type
+from app.utils.bootstrap_admin import (
+    MissingBootstrapAdminCredentials,
+    resolve_bootstrap_admin_credentials,
+)
 
-FRONT_HTML = """<div style='height:100vh;text-align:center;display:flex;justify-content:center;align-items:center;font-size:70px;font-weight:bold;color:#e53c20'>
-{{word}}
-</div>"""
+FRONT_HTML = """<div class="front-word">{{word}}</div>"""
 
 BACK_HTML = """<div style='
     display: flex;
@@ -182,7 +184,34 @@ BACK_HTML = """<div style='
 })();
 </script>"""
 
-CSS = """.card {
+CSS = """html,
+body,
+.card {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+}
+body {
+    box-sizing: border-box;
+}
+.front-word {
+    box-sizing: border-box;
+    width: 100%;
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    font-family: arial;
+    font-size: clamp(48px, 9vw, 70px);
+    font-weight: bold;
+    line-height: 1.1;
+    text-align: center;
+    color: #e53c20;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+.card {
     font-family: arial;
     font-size: 20px;
     text-align: center;
@@ -386,9 +415,15 @@ def seed_template():
         from dotenv import load_dotenv
 
         load_dotenv()
-        admin_email = os.environ.get("ADMIN_EMAIL", "chungtrinh2k2@gmail.com")
-        admin_user = os.environ.get("ADMIN_USERNAME") or os.environ.get("ADMIN_USER", "chungtrinh2k2")
-        admin_password = os.environ.get("ADMIN_PASSWORD", "chungtrinh1904")
+        try:
+            credentials = resolve_bootstrap_admin_credentials(require_password=True)
+        except MissingBootstrapAdminCredentials as exc:
+            raise RuntimeError(
+                "scripts/seed_flama_template.py yêu cầu ADMIN_EMAIL, ADMIN_USERNAME và ADMIN_PASSWORD trong .env."
+            ) from exc
+        admin_email = credentials.email
+        admin_user = credentials.username
+        admin_password = credentials.password
 
         user = User.query.filter_by(email=admin_email).first()
         if not user:
@@ -407,24 +442,42 @@ def seed_template():
                 db.session.commit()
                 print(f"Đã cập nhật quyền admin cho user: {admin_email}")
 
-        # ── Seed test user (dùng cho dev/QA) ──────────────────────────────────
-        TEST_EMAIL    = "test@flama.dev"
-        TEST_USERNAME = "testuser"
-        TEST_PASSWORD = "test1234"
-
-        test_user = User.query.filter_by(email=TEST_EMAIL).first()
-        if not test_user:
-            test_user = User(
-                email=TEST_EMAIL,
-                username=TEST_USERNAME,
-                is_admin=False,
+        if str(os.environ.get("SEED_TEST_USER", "")).strip().lower() in {"1", "true", "yes", "on"}:
+            test_email = str(os.environ.get("TEST_USER_EMAIL") or "").strip()
+            test_username = (
+                str(os.environ.get("TEST_USER_USERNAME") or "").strip()
+                or (test_email.split("@", 1)[0] if test_email and "@" in test_email else "")
             )
-            test_user.set_password(TEST_PASSWORD)
-            db.session.add(test_user)
-            db.session.commit()
-            print(f"Đã tạo test user: {TEST_EMAIL} / {TEST_PASSWORD}")
-        else:
-            print(f"Test user đã tồn tại: {TEST_EMAIL}")
+            test_password = str(os.environ.get("TEST_USER_PASSWORD") or "").strip()
+            missing_fields = [
+                field_name
+                for field_name, value in (
+                    ("TEST_USER_EMAIL", test_email),
+                    ("TEST_USER_USERNAME", test_username),
+                    ("TEST_USER_PASSWORD", test_password),
+                )
+                if not value
+            ]
+            if missing_fields:
+                raise RuntimeError(
+                    "SEED_TEST_USER=1 yêu cầu cấu hình đầy đủ: "
+                    + ", ".join(missing_fields)
+                    + "."
+                )
+
+            test_user = User.query.filter_by(email=test_email).first()
+            if not test_user:
+                test_user = User(
+                    email=test_email,
+                    username=test_username,
+                    is_admin=False,
+                )
+                test_user.set_password(test_password)
+                db.session.add(test_user)
+                db.session.commit()
+                print(f"Đã tạo test user: {test_email}")
+            else:
+                print(f"Test user đã tồn tại: {test_email}")
 
         # Kiểm tra xem NoteType "Flama Standard Vocabulary" đã có chưa
         fields = [

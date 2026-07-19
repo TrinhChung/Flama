@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import random
 import re
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from app.repositories.deck_tree_query import collect_subtree_ids
@@ -12,6 +12,10 @@ from app.template_formatters import format_vnd
 from app.services import marketplace_taxonomy_service
 from models import db
 from models.flashcard import DeckInstall, DeckMarketplaceItem, FieldDef, Note, NoteType, Template
+
+
+def _utcnow() -> datetime:
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 def serialize_author(user_obj: Any) -> dict[str, Any]:
@@ -533,7 +537,7 @@ def score_market_item(
         1.0, int(install_count or 0) / 200
     ) * 0.3
     days_since_update = (
-        (datetime.utcnow() - updated_at).days
+        (_utcnow() - updated_at).days
         if updated_at is not None
         else recency_window_days
     )
@@ -645,8 +649,6 @@ def get_visible_deck_items(user_id: int) -> list[DeckMarketplaceItem]:
 def get_note_type_recommendations(user_id: int, visible_items: list[NoteType]) -> dict[str, Any]:
     from app.services import flashcards_share as flashcards_share
     from models.flashcard import NoteTypeInstall
-    from models import db
-    from datetime import timedelta
     
     interests_categories, interests_tags = collect_user_market_interests(user_id)
     cold_start = not interests_categories and not interests_tags
@@ -675,7 +677,7 @@ def get_note_type_recommendations(user_id: int, visible_items: list[NoteType]) -
         for _, item in sorted(scored, key=lambda row: row[0], reverse=True)[:12]
     ]
 
-    trending_cutoff = datetime.utcnow() - timedelta(days=flashcards_share.TRENDING_WINDOW_DAYS)
+    trending_cutoff = _utcnow() - timedelta(days=flashcards_share.TRENDING_WINDOW_DAYS)
     trending_counts_raw = (
         db.session.query(NoteTypeInstall.source_note_type_id, db.func.count(NoteTypeInstall.id))
         .filter(NoteTypeInstall.installed_at >= trending_cutoff)
@@ -705,9 +707,6 @@ def get_note_type_recommendations(user_id: int, visible_items: list[NoteType]) -
 
 def get_deck_recommendations(user_id: int, visible_items: list[DeckMarketplaceItem]) -> dict[str, Any]:
     from app.services import flashcards_share as flashcards_share
-    from models.flashcard import DeckInstall
-    from models import db
-    from datetime import timedelta
     
     interests_categories, interests_tags = collect_user_market_interests(user_id)
     cold_start = not interests_categories and not interests_tags
@@ -736,7 +735,7 @@ def get_deck_recommendations(user_id: int, visible_items: list[DeckMarketplaceIt
         for _, item in sorted(scored, key=lambda row: row[0], reverse=True)[:12]
     ]
 
-    trending_cutoff = datetime.utcnow() - timedelta(days=flashcards_share.TRENDING_WINDOW_DAYS)
+    trending_cutoff = _utcnow() - timedelta(days=flashcards_share.TRENDING_WINDOW_DAYS)
     trending_counts_raw = (
         db.session.query(DeckInstall.deck_item_id, db.func.count(DeckInstall.id))
         .filter(DeckInstall.installed_at >= trending_cutoff)
