@@ -13,16 +13,18 @@
   {% set edit_url_template = url_for('flashcards.share_deck_page', deck_id=0) %}
   {% set install_url_template = url_for('flashcards.install_shared_deck_item', deck_item_id='__ITEM_ID__') %}
   {% set save_url_template = url_for('flashcards.save_shared_deck_item', deck_item_id='__ITEM_ID__') %}
+  {% set study_url_template = url_for('vocabulary.study_deck', deck_id=0) %}
   {% set orders_url = url_for('user_orders.order_history_page') %}
   {% set order_detail_url_template = url_for('user_orders.order_detail_page', order_id='__ORDER_ID__') %}
-  {% set workspace_url = url_for('main.dashboard') %}
-  {% set workspace_label = 'Kho deck của tôi' %}
+  {% set workspace_url = url_for('flashcards.installed_decks_page') %}
+  {% set workspace_label = 'Mở My Library' %}
+  {% set library_url = url_for('flashcards.installed_decks_page') %}
   {% set seller_cta_url = url_for('main.dashboard') %}
-  {% set seller_cta_label = 'Mở khu tác giả' %}
+  {% set seller_cta_label = 'Về dashboard' %}
   {% set payment_result_url = url_for('payments.marketplace_payment_result_page') %}
-  {% set eyebrow = 'Thư viện học tập cho deck' %}
-  {% set heading = 'Tìm deck để học theo mục tiêu, trình độ và nội dung' %}
-  {% set subtitle = 'Ưu tiên tìm kiếm, lọc, xem thử và thêm vào thư viện. Giảm cảm giác như một trang bán hàng khi dữ liệu còn ít.' %}
+  {% set eyebrow = 'Marketplace deck' %}
+  {% set heading = 'Khám phá deck học tập theo trình độ, mục tiêu và nhịp học của bạn' %}
+  {% set subtitle = 'Không gian này ưu tiên khám phá nhanh, lọc rõ ràng và truy cập lại nội dung đã cài. Các CTA và trạng thái được giữ cùng ngôn ngữ Flama với phần còn lại của ứng dụng.' %}
   {% include "flashcards/_marketplace_hub_shell.html" %}
 {% endblock %}
 

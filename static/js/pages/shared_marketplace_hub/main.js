@@ -9,14 +9,20 @@ if (root) {
   const ordersUrl = root.dataset.ordersUrl || "/";
   const orderDetailTemplate = root.dataset.orderDetailUrlTemplate || "";
   const paymentResultUrl = root.dataset.paymentResultUrl || "";
+  const studyUrlTemplate = root.dataset.studyUrlTemplate || "";
+  const libraryUrl = root.dataset.libraryUrl || "";
   const marketKind = root.dataset.marketKind || "";
 
   const filterForm = document.getElementById("marketplace-filter-form");
   const errorEl = document.getElementById("marketplace-hub-error");
+  const heroSummaryEl = document.getElementById("marketplace-hero-summary");
+  const heroNoteEl = document.getElementById("marketplace-hero-note");
   const resultsEl = document.getElementById("marketplace-results-grid");
   const resultsCountEl = document.getElementById("marketplace-results-count");
   const appliedFiltersEl = document.getElementById("marketplace-applied-filters");
   const quickFiltersEl = document.getElementById("marketplace-quick-filters");
+  const featuredStageEl = document.getElementById("marketplace-featured-stage");
+  const discoveryShelvesEl = document.getElementById("marketplace-discovery-shelves");
   const librarySpotlightEl = document.getElementById("marketplace-library-spotlight");
   const librarySummaryEl = document.getElementById("marketplace-library-summary");
   const librarySectionsEl = document.getElementById("marketplace-library-sections");
@@ -38,6 +44,12 @@ if (root) {
     ["format_features", "Đặc điểm", "checkbox", "format_features"],
   ];
   const multiFilters = new Set(["learning_goals", "primary_topics", "format_features"]);
+  const warmCoverPalettes = [
+    ["#ff8a4c", "#b73700"],
+    ["#ff9f43", "#c2410c"],
+    ["#f59e0b", "#c2410c"],
+    ["#fb923c", "#9a3412"],
+  ];
   const state = {
     payload: null,
     timer: 0,
@@ -64,10 +76,24 @@ if (root) {
     return Number.isNaN(date.getTime()) ? "Không rõ" : date.toLocaleString();
   }
 
+  function formatShortDate(value) {
+    const date = new Date(value || "");
+    if (Number.isNaN(date.getTime())) return "Không rõ";
+    return date.toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+    });
+  }
+
   function buildUrl(template, value) {
     return String(template || "")
       .replaceAll("__ITEM_ID__", encodeURIComponent(value || ""))
       .replaceAll("__ORDER_ID__", encodeURIComponent(value || ""));
+  }
+
+  function buildStudyUrl(deckId) {
+    if (!studyUrlTemplate || !deckId) return "";
+    return studyUrlTemplate.replace("/0", `/${encodeURIComponent(deckId)}`);
   }
 
   function normalizeLabel(value) {
@@ -194,37 +220,25 @@ if (root) {
     return url.toString();
   }
 
-  function renderBadges(badges = []) {
-    return dedupeLabels(badges, { limit: 3, allowGeneric: true })
-      .filter((badge) => normalizeLabel(badge) !== "mien phi")
-      .map((badge) => `<span class="market-badge">${escapeHtml(formatBadgeLabel(badge))}</span>`)
-      .join("");
+  function pickCoverPalette(item) {
+    const title = String(item?.title || item?.name || "");
+    const seed = Array.from(title).reduce((total, char) => total + char.charCodeAt(0), 0);
+    const [start, end] = warmCoverPalettes[seed % warmCoverPalettes.length];
+    return `--cover-start:${start};--cover-end:${end};`;
   }
 
-  function renderPrimaryButton(item, mode) {
-    const action = item.primary_action || "";
-    if (action === "edit") {
-      return mode === "seller"
-        ? `<button class="btn btn-primary" type="button" data-action="edit" data-edit-url="${escapeHtml(buildEditUrl(item))}">Chỉnh sửa</button>`
-        : `<a class="btn btn-primary" href="${escapeHtml(buildUrl(detailTemplate, item.id))}">Xem chi tiết</a>`;
-    }
-    if (action === "installed") {
-      return `<button class="btn btn-outline-secondary" type="button" disabled>Đã cài</button>`;
-    }
-    if (action === "order") {
-      return `<button class="btn btn-outline-secondary" type="button" data-action="orders">Xem đơn hàng</button>`;
-    }
-    return `<button class="btn btn-primary" type="button" data-action="install" data-id="${escapeHtml(item.id)}">${escapeHtml(item.primary_cta_label || "Thêm vào thư viện")}</button>`;
+  function buildCoverLabel(item) {
+    return (
+      (item?.level_tokens || []).slice(0, 2).join(" · ")
+      || item?.framework_level_label
+      || item?.difficulty_label
+      || item?.subject_label
+      || item?.primary_category
+      || (marketKind === "deck_marketplace_item" ? "Deck" : "Note type")
+    );
   }
 
-  function renderSaveButton(item, mode) {
-    if (item?.is_owner || mode === "seller") return "";
-    return `<button class="btn btn-outline-secondary" type="button" data-action="save" data-id="${escapeHtml(item.id)}" data-saved="${item.is_saved ? "1" : "0"}">${escapeHtml(item.is_saved ? "Đã lưu" : "Lưu")}</button>`;
-  }
-
-  function renderCard(item, mode = "discover") {
-    const title = item.title || item.name || "Untitled";
-    const badgeMarkup = renderBadges(item.badges || []);
+  function buildSupportChips(item) {
     const metaChips = dedupeLabels(
       [item.subject_label, item.framework_level_label, item.difficulty_label],
       { limit: 3 },
@@ -238,17 +252,127 @@ if (root) {
       ],
       { exclude: metaChips, limit: 3 },
     );
-    const allChips = [...metaChips, ...supportLabels];
-    const supportChips = allChips
+    return [...metaChips, ...supportLabels]
       .map((chip, index) => `<span class="market-support-chip ${index < metaChips.length ? "is-key" : ""}">${escapeHtml(chip)}</span>`)
       .join("");
+  }
+
+  function buildActivityLine(item, mode = "discover") {
+    const parts = [];
+    if (mode === "library") {
+      if (item.last_activity_at) {
+        parts.push(`Học gần đây ${formatShortDate(item.last_activity_at)}`);
+      } else if (item.installed_at) {
+        parts.push(`Đã thêm ${formatShortDate(item.installed_at)}`);
+      }
+      if (item.last_sync_status === "needs_sync") {
+        parts.push("Có thay đổi local");
+      } else if (item.last_sync_status === "has_conflict") {
+        parts.push("Cần xử lý conflict");
+      } else if (item.last_sync_status === "clean") {
+        parts.push("Đã sync");
+      }
+    } else {
+      if (item.subject_label) parts.push(item.subject_label);
+      if (item.framework_level_label) parts.push(item.framework_level_label);
+      if (!parts.length && item.primary_category) parts.push(item.primary_category);
+      if (item.updated_at) parts.push(`Cập nhật ${formatShortDate(item.updated_at)}`);
+    }
+    return parts.join(" · ");
+  }
+
+  function renderBadges(badges = []) {
+    return dedupeLabels(badges, { limit: 3, allowGeneric: true })
+      .filter((badge) => normalizeLabel(badge) !== "mien phi")
+      .map((badge) => `<span class="market-badge">${escapeHtml(formatBadgeLabel(badge))}</span>`)
+      .join("");
+  }
+
+  function renderPrimaryButton(item, mode = "discover") {
+    const detailUrl = buildUrl(detailTemplate, item.id);
+    const editUrl = buildEditUrl(item);
+    const action = item.primary_action || "";
+    const studyUrl = item.installed_deck_id ? buildStudyUrl(item.installed_deck_id) : "";
+
+    if (mode === "library") {
+      if (marketKind === "deck_marketplace_item" && item.is_installed && studyUrl) {
+        return `<a class="btn btn-primary" href="${escapeHtml(studyUrl)}">Học deck</a>`;
+      }
+      if (action === "order") {
+        return `<a class="btn btn-primary" href="${escapeHtml(ordersUrl)}">Xem đơn hàng</a>`;
+      }
+      if (action === "edit") {
+        return `<a class="btn btn-primary" href="${escapeHtml(editUrl)}">Chỉnh sửa</a>`;
+      }
+      if (!item.is_installed && action === "install") {
+        return `<button class="btn btn-primary" type="button" data-action="install" data-id="${escapeHtml(item.id)}">${escapeHtml(item.primary_cta_label || "Cài đặt")}</button>`;
+      }
+      return `<a class="btn btn-primary" href="${escapeHtml(detailUrl)}">Mở chi tiết</a>`;
+    }
+
+    if (mode === "seller") {
+      return action === "edit"
+        ? `<a class="btn btn-primary" href="${escapeHtml(editUrl)}">Chỉnh sửa</a>`
+        : `<a class="btn btn-primary" href="${escapeHtml(detailUrl)}">Xem chi tiết</a>`;
+    }
+
+    if (action === "edit") {
+      return `<a class="btn btn-primary" href="${escapeHtml(editUrl)}">Chỉnh sửa</a>`;
+    }
+    if (action === "installed") {
+      if (marketKind === "deck_marketplace_item" && studyUrl) {
+        return `<a class="btn btn-primary" href="${escapeHtml(studyUrl)}">Học deck</a>`;
+      }
+      return `<a class="btn btn-outline-secondary" href="${escapeHtml(detailUrl)}">Đã cài</a>`;
+    }
+    if (action === "order") {
+      return `<button class="btn btn-outline-secondary" type="button" data-action="orders">Xem đơn hàng</button>`;
+    }
+    return `<button class="btn btn-primary" type="button" data-action="install" data-id="${escapeHtml(item.id)}">${escapeHtml(item.primary_cta_label || "Thêm vào thư viện")}</button>`;
+  }
+
+  function renderSecondaryButtons(item, mode = "discover") {
+    const detailUrl = buildUrl(detailTemplate, item.id);
+    const actions = [];
+
+    if (mode === "discover") {
+      if (!item.is_owner) {
+        actions.push(`<button class="btn btn-outline-secondary" type="button" data-action="save" data-id="${escapeHtml(item.id)}" data-saved="${item.is_saved ? "1" : "0"}">${escapeHtml(item.is_saved ? "Đã lưu" : "Lưu")}</button>`);
+      }
+      actions.push(`<a class="btn btn-outline-secondary" href="${escapeHtml(detailUrl)}">Chi tiết</a>`);
+      return actions.join("");
+    }
+
+    if (mode === "seller") {
+      actions.push(`<a class="btn btn-outline-secondary" href="${escapeHtml(detailUrl)}">Xem market</a>`);
+      return actions.join("");
+    }
+
+    actions.push(`<a class="btn btn-outline-secondary" href="${escapeHtml(detailUrl)}">Chi tiết</a>`);
+    if (!item.is_owner && !item.is_installed) {
+      actions.push(`<button class="btn btn-outline-secondary" type="button" data-action="save" data-id="${escapeHtml(item.id)}" data-saved="${item.is_saved ? "1" : "0"}">${escapeHtml(item.is_saved ? "Đã lưu" : "Lưu")}</button>`);
+    }
+    return actions.join("");
+  }
+
+  function renderCard(item, mode = "discover") {
+    const title = item.title || item.name || "Untitled";
+    const badgeMarkup = renderBadges(item.badges || []);
+    const supportChips = buildSupportChips(item);
+    const activityLine = buildActivityLine(item, mode);
+    const detailUrl = buildUrl(detailTemplate, item.id);
+    const description = item.short_description || item.preview_text || "Chưa có mô tả ngắn.";
 
     return `
-      <article class="market-card" data-item-id="${escapeHtml(item.id)}">
+      <article class="market-card market-card--${escapeHtml(mode)}" data-item-id="${escapeHtml(item.id)}">
+        <a class="market-card-cover" href="${escapeHtml(detailUrl)}" style="${pickCoverPalette(item)}">
+          ${badgeMarkup ? `<div class="market-cover-badges">${badgeMarkup}</div>` : ""}
+          <div class="market-cover-label">${escapeHtml(buildCoverLabel(item))}</div>
+          <div class="market-card-cover-title">${escapeHtml(title)}</div>
+        </a>
         <div class="market-card-body">
-          ${badgeMarkup ? `<div class="market-card-badges">${badgeMarkup}</div>` : ""}
           <div class="market-card-head">
-            <a class="market-card-title-link" href="${escapeHtml(buildUrl(detailTemplate, item.id))}">
+            <a class="market-card-title-link" href="${escapeHtml(detailUrl)}">
               <h3 class="market-card-title">${escapeHtml(title)}</h3>
             </a>
             <div class="market-card-meta">
@@ -256,19 +380,29 @@ if (root) {
                 ${escapeHtml(item.author?.username || "Không rõ")}
               </button>
               <span class="market-card-meta-divider" aria-hidden="true">•</span>
-              <span class="market-card-price">${escapeHtml(item.price_display || "Miễn phí")}</span>
+              <span>${escapeHtml(item.primary_category || "General")}</span>
             </div>
           </div>
+          <p class="market-card-description">${escapeHtml(description)}</p>
           ${supportChips ? `<div class="market-card-support">${supportChips}</div>` : ""}
-          <p class="market-card-description">${escapeHtml(item.short_description || item.preview_text || "")}</p>
-          <div class="market-card-summary">
-            <span>${Number(item.rating_avg || 0).toFixed(1)} sao</span>
-            <span class="market-card-meta-divider" aria-hidden="true">•</span>
-            <span>${formatCount(item.install_count || 0)} lượt dùng</span>
+          <div class="market-card-statbar">
+            <div class="market-card-stat">
+              <strong>${escapeHtml(item.price_display || "Miễn phí")}</strong>
+              <span>${item.pricing_mode === "paid" ? "Giá hiện tại" : "Sẵn sàng dùng"}</span>
+            </div>
+            <div class="market-card-stat">
+              <strong>${Number(item.rating_avg || 0).toFixed(1)}</strong>
+              <span>${formatCount(item.rating_count || 0)} đánh giá</span>
+            </div>
+            <div class="market-card-stat">
+              <strong>${formatCount(item.install_count || 0)}</strong>
+              <span>${mode === "library" ? "lượt sở hữu" : "lượt cài"}</span>
+            </div>
           </div>
+          ${activityLine ? `<div class="market-card-summary">${escapeHtml(activityLine)}</div>` : ""}
           <div class="market-card-actions">
             ${renderPrimaryButton(item, mode)}
-            ${renderSaveButton(item, mode)}
+            ${renderSecondaryButtons(item, mode)}
           </div>
         </div>
       </article>
@@ -292,8 +426,9 @@ if (root) {
   }
 
   function renderSummaryCards(container, rows) {
+    if (!container) return;
     container.innerHTML = rows.map((row) => `
-      <article>
+      <article class="market-summary-card">
         <div class="market-summary-label">${escapeHtml(row[0])}</div>
         <div class="market-summary-value">${escapeHtml(row[1])}</div>
         <div class="market-summary-help">${escapeHtml(row[2])}</div>
@@ -426,7 +561,26 @@ if (root) {
         rows.push([name, value, formatLabel(name, value)]);
       });
     });
+    if (filters.min_rating) rows.push(["min_rating", String(filters.min_rating), `Từ ${filters.min_rating} sao`]);
+    if (filters.min_price != null) rows.push(["min_price", String(filters.min_price), `Giá từ ${formatCount(filters.min_price)}`]);
+    if (filters.max_price != null) rows.push(["max_price", String(filters.max_price), `Giá đến ${formatCount(filters.max_price)}`]);
     return rows;
+  }
+
+  function hasActiveFilters(payload) {
+    return collectActiveChips(payload?.filters || {}).length > 0;
+  }
+
+  function renderHeroSummary(payload) {
+    const summary = payload.summary || {};
+    const marketLabel = marketKind === "deck_marketplace_item" ? "Deck công khai" : "Note type công khai";
+    const libraryLabel = marketKind === "deck_marketplace_item" ? "Deck trong thư viện" : "Template trong thư viện";
+    renderSummaryCards(heroSummaryEl, [
+      [marketLabel, formatCount(summary.market_count || 0), "Sẵn sàng để khám phá từ hub market hiện tại."],
+      [libraryLabel, formatCount(summary.library_count || 0), "Nội dung bạn đã sở hữu hoặc đã cài gần đây."],
+      ["Đã lưu", formatCount(summary.saved_count || 0), "Danh sách quay lại sau khi chưa muốn cài ngay."],
+      ["Nội dung của bạn", formatCount(summary.seller_count || 0), "Các mục bạn đã chia sẻ hoặc đang quản lý."],
+    ]);
   }
 
   function renderAppliedFilters(payload) {
@@ -458,6 +612,100 @@ if (root) {
     `).join("");
   }
 
+  function renderFeaturedStage(payload) {
+    if (!featuredStageEl) return;
+    const heroItem = payload?.discovery?.hero || payload?.marketplace?.items?.[0];
+    if (!heroItem || hasActiveFilters(payload)) {
+      featuredStageEl.classList.add("d-none");
+      featuredStageEl.innerHTML = "";
+      return;
+    }
+
+    const badgeMarkup = renderBadges(heroItem.badges || []);
+    const supportChips = buildSupportChips(heroItem);
+    const detailUrl = buildUrl(detailTemplate, heroItem.id);
+    const activityLine = buildActivityLine(heroItem, "discover");
+
+    featuredStageEl.classList.remove("d-none");
+    featuredStageEl.innerHTML = `
+      <article class="market-featured-card market-featured-card--hero">
+        <a class="market-featured-cover" href="${escapeHtml(detailUrl)}" style="${pickCoverPalette(heroItem)}">
+          ${badgeMarkup ? `<div class="market-cover-badges">${badgeMarkup}</div>` : ""}
+          <div class="market-cover-label">${escapeHtml(buildCoverLabel(heroItem))}</div>
+          <div class="market-cover-title">${escapeHtml(heroItem.title || heroItem.name || "Untitled")}</div>
+        </a>
+
+        <div class="market-featured-body">
+          <div>
+            <div class="market-hub-section-kicker">Nổi bật</div>
+            <h2 class="market-featured-title">${escapeHtml(heroItem.title || heroItem.name || "Untitled")}</h2>
+            <p class="market-featured-meta mb-0">${escapeHtml(heroItem.preview_text || heroItem.short_description || "Đã chọn từ các mục nổi bật nhất trong marketplace hiện tại.")}</p>
+          </div>
+
+          <div class="market-featured-support">
+            ${supportChips || `<span class="market-support-chip is-key">${escapeHtml(heroItem.primary_category || "General")}</span>`}
+          </div>
+
+          <div class="market-featured-statline">
+            <div class="market-featured-stat">
+              <strong>${escapeHtml(heroItem.price_display || "Miễn phí")}</strong>
+              <span>${heroItem.pricing_mode === "paid" ? "Giá hiện tại" : "Có thể cài ngay"}</span>
+            </div>
+            <div class="market-featured-stat">
+              <strong>${Number(heroItem.rating_avg || 0).toFixed(1)}</strong>
+              <span>${formatCount(heroItem.rating_count || 0)} đánh giá</span>
+            </div>
+            <div class="market-featured-stat">
+              <strong>${formatCount(heroItem.install_count || 0)}</strong>
+              <span>lượt cài đặt</span>
+            </div>
+          </div>
+
+          ${activityLine ? `<div class="market-card-summary">${escapeHtml(activityLine)}</div>` : ""}
+
+          <div class="market-featured-actions">
+            ${renderPrimaryButton(heroItem, "discover")}
+            ${renderSecondaryButtons(heroItem, "discover")}
+          </div>
+        </div>
+      </article>
+    `;
+
+    if (heroNoteEl) {
+      heroNoteEl.textContent = heroItem.preview_text || "Mục nổi bật được chọn dựa trên hiệu suất, khả năng học nhanh và độ phù hợp với người dùng Flama.";
+    }
+  }
+
+  function renderDiscoverShelves(payload) {
+    if (!discoveryShelvesEl) return;
+    if (hasActiveFilters(payload)) {
+      discoveryShelvesEl.classList.add("d-none");
+      discoveryShelvesEl.innerHTML = "";
+      return;
+    }
+
+    const discovery = payload.discovery || {};
+    const sections = [];
+    if ((discovery.recommended || []).length) {
+      sections.push(renderShelf("Gợi ý cho bạn", "Phù hợp", discovery.recommended.slice(0, 4), "discover", "Chưa có gợi ý phù hợp."));
+    }
+    if ((discovery.new_releases || []).length) {
+      sections.push(renderShelf("Mới cập nhật", "Cập nhật", discovery.new_releases.slice(0, 4), "discover", "Chưa có nội dung mới."));
+    }
+    if ((discovery.best_sellers || []).length) {
+      sections.push(renderShelf("Được cài nhiều", "Phổ biến", discovery.best_sellers.slice(0, 4), "discover", "Chưa có bestseller."));
+    }
+
+    if (!sections.length) {
+      discoveryShelvesEl.classList.add("d-none");
+      discoveryShelvesEl.innerHTML = "";
+      return;
+    }
+
+    discoveryShelvesEl.classList.remove("d-none");
+    discoveryShelvesEl.innerHTML = sections.join("");
+  }
+
   function renderLibrarySpotlight(payload) {
     const items = [...((payload.library?.using_now || []).slice(0, 2)), ...((payload.library?.installed || []).slice(0, 2))].slice(0, 4);
     if (!items.length) {
@@ -471,9 +719,10 @@ if (root) {
       <div class="market-shelf-header">
         <div>
           <div class="market-shelf-kicker">Từ thư viện của bạn</div>
-          <h2 class="market-hub-section-title h5 mb-1">Tiếp tục học nhanh</h2>
-          <p class="market-section-help mb-0">Quay lại nội dung đã cài và đang dùng mà không phải đi qua nhiều block marketing.</p>
+          <h2 class="market-hub-section-title h5 mb-1">Tiếp tục nhanh từ nội dung đã cài</h2>
+          <p class="market-section-help mb-0">Đưa các mục bạn đang học hoặc vừa cài lại gần hơn với vùng khám phá.</p>
         </div>
+        ${libraryUrl ? `<a class="btn btn-outline-secondary btn-sm" href="${escapeHtml(libraryUrl)}">Mở thư viện chi tiết</a>` : ""}
       </div>
       <div class="market-card-grid market-card-grid--compact">${items.map((item) => renderCard(item, "library")).join("")}</div>
     `;
@@ -539,9 +788,12 @@ if (root) {
   function renderDiscover(payload) {
     const items = payload.marketplace?.items || [];
     resultsCountEl.textContent = `${formatCount(payload.marketplace?.result_count || items.length)} mục`;
+    renderHeroSummary(payload);
     renderQuickFilters(payload);
     renderAppliedFilters(payload);
+    renderFeaturedStage(payload);
     renderLibrarySpotlight(payload);
+    renderDiscoverShelves(payload);
     resultsEl.innerHTML = items.length
       ? items.map((item) => renderCard(item, "discover")).join("")
       : `<div class="market-empty-state">Không tìm thấy nội dung phù hợp với bộ lọc hiện tại.</div>`;
@@ -550,17 +802,17 @@ if (root) {
   function renderLibrary(payload) {
     const summary = payload.library?.summary || {};
     renderSummaryCards(librarySummaryEl, [
-      ["Đang học", formatCount(summary.using_count || 0), "Nội dung bạn vừa quay lại gần đây."],
-      ["Đã sở hữu", formatCount(summary.owned_count || 0), "Đã cài hoặc đã mua nhưng chưa cài."],
-      ["Đã lưu", formatCount(summary.saved_count || 0), "Danh sách để xem lại sau."],
-      ["Đơn hàng", formatCount(summary.purchase_count || 0), "Các giao dịch gắn với marketplace."],
+      ["Đang học", formatCount(summary.using_count || 0), "Các mục bạn vừa quay lại gần đây và nên tiếp tục."],
+      ["Đã sở hữu", formatCount(summary.owned_count || 0), "Đã cài hoặc đã mua nhưng chưa cài vào workspace."],
+      ["Đã lưu", formatCount(summary.saved_count || 0), "Các mục chờ quyết định hoặc quay lại sau."],
+      ["Đơn hàng", formatCount(summary.purchase_count || 0), "Lịch sử giao dịch gắn với marketplace hiện tại."],
     ]);
 
     librarySectionsEl.innerHTML = [
-      renderShelf("Đang học", "Tiếp tục", payload.library?.using_now || [], "library", "Bạn chưa có nội dung đang học."),
+      renderShelf("Đang học gần đây", "Tiếp tục", payload.library?.using_now || [], "library", "Bạn chưa có nội dung đang học."),
       renderShelf("Đã cài", "Đã cài", payload.library?.installed || [], "library", "Chưa có nội dung đã cài."),
-      renderShelf("Chờ cài đặt", "Đã mua", payload.library?.not_installed || [], "library", "Không có nội dung đang chờ cài đặt."),
-      renderShelf("Đã lưu", "Lưu lại", payload.library?.saved || [], "library", "Danh sách lưu đang trống."),
+      renderShelf("Đã mua chưa cài", "Đã mua", payload.library?.not_installed || [], "library", "Không có nội dung chờ cài đặt."),
+      renderShelf("Đã lưu", "Đã lưu", payload.library?.saved || [], "library", "Danh sách lưu đang trống."),
       renderPurchaseHistory(payload.library?.purchase_history || []),
     ].join("");
   }

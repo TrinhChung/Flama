@@ -8,7 +8,8 @@ if (root) {
   const saveUrlTemplate = root.getAttribute("data-save-url-template") || "";
   const paymentResultUrl = root.getAttribute("data-payment-result-url") || "";
 
-  const titleEls = [document.getElementById("nt-title"), document.getElementById("nt-title-secondary")];
+  const coverTitleEl = document.getElementById("nt-cover-title");
+  const titleEls = [document.getElementById("nt-title"), document.getElementById("nt-title-secondary"), coverTitleEl];
   const metaEl = document.getElementById("nt-meta-line");
   const descriptionEl = document.getElementById("nt-description");
   const statsEl = document.getElementById("nt-stats");
@@ -16,6 +17,10 @@ if (root) {
   const tagsEl = document.getElementById("nt-tags");
   const badgesEl = document.getElementById("nt-badges");
   const coverLabelEl = document.getElementById("nt-cover-label");
+  const priceDisplayEl = document.getElementById("nt-price-display");
+  const heroRatingEl = document.getElementById("nt-hero-rating");
+  const heroInstallsEl = document.getElementById("nt-hero-installs");
+  const heroUpdatedEl = document.getElementById("nt-hero-updated");
   const authorNameEl = document.getElementById("author-name");
   const authorSummaryEl = document.getElementById("author-summary");
   const authorStoreLinkEl = document.getElementById("author-store-link");
@@ -267,6 +272,10 @@ if (root) {
       if (el) el.textContent = detail.title || detail.name || "Template";
     });
     if (coverLabelEl) coverLabelEl.textContent = (detail.level_tokens || [detail.primary_category || "Template"]).join(" · ");
+    if (priceDisplayEl) priceDisplayEl.textContent = detail.price_display || "Miễn phí";
+    if (heroRatingEl) heroRatingEl.textContent = `${Number(detail.rating_avg || 0).toFixed(1)} / 5`;
+    if (heroInstallsEl) heroInstallsEl.textContent = formatCount(detail.install_count || 0);
+    if (heroUpdatedEl) heroUpdatedEl.textContent = formatDate(detail.updated_at || detail.created_at);
     metaEl.innerHTML = `<strong>${detail.primary_category || "Chung"}</strong> · ${detail.price_display || "Miễn phí"}`;
     descriptionEl.textContent = detail.description || "Chưa có mô tả.";
     previewTextEl.textContent = detail.preview_text || "Chưa có preview text.";
