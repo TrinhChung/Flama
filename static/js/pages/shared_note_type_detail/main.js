@@ -270,16 +270,24 @@ if (root) {
     return rendererHost?.createNoticeHtml(message) || `<div>${escapeHtml(message)}</div>`;
   }
 
+  function previewFrameHeight() {
+    const compactViewport = window.matchMedia("(max-width: 767px)").matches;
+    if (state.previewSide === "back") return 720;
+    return compactViewport ? 480 : 520;
+  }
+
   function renderPreviewFrame() {
     const sidePayload = state.previewSide === "back"
       ? (state.previewPayload?.back_renderer_payload || state.previewPayload?.back_html || "")
       : (state.previewPayload?.front_renderer_payload || state.previewPayload?.front_html || "");
     frameController?.render(sidePayload || previewNotice("Chưa có nội dung xem trước."), {
       padding: "0",
-      background: "#f7f9fc",
-      color: "#20242c",
+      background: "#fff7f0",
+      color: "#1f1a17",
+      placeholderHeight: previewFrameHeight(),
       config: {
         mode: "shared_note_type_preview",
+        heightMeasurement: "content-root",
         side: state.previewSide,
         noteTypeId,
         templateId: state.selectedTemplateId,
