@@ -67,6 +67,22 @@ SEED_LEGACY_POSITIONAL_FIELDS = (
     "word_audio",
     "example_audio",
 )
+SEED_FULL_POSITIONAL_FIELDS = (
+    "deck",
+    "word",
+    *SEED_OPTIONAL_FIELDS,
+)
+SEED_FULL_POSITIONAL_FIELDS_WITHOUT_DECK = (
+    "word",
+    *SEED_OPTIONAL_FIELDS,
+)
+SEED_ANKI_METADATA_COLUMN_DIRECTIVES = (
+    "deck column",
+    "guid column",
+    "notetype column",
+    "tags column",
+)
+SEED_ANKI_DECK_PATH_KEY = "_anki_deck_path"
 SEED_SUPPORTED_SUFFIXES = {".tsv", ".csv", ".txt"}
 
 QUIZ_DUMP_DIR = Path("static") / "deck_dumps" / "trac_nghiem_markdown"
@@ -268,7 +284,7 @@ def register_cli_commands(app: Flask) -> None:
         "--replace-lessons",
         is_flag=True,
         default=False,
-        help="Replace entries in existing file-decks instead of skipping them.",
+        help="Replace entries in existing seeded decks instead of skipping them.",
     )
     @click.option(
         "--owner-user-id",
@@ -294,7 +310,8 @@ def register_cli_commands(app: Flask) -> None:
         - `seed_data` is container only (not a deck node)
         - Subfolders under `seed_data` start hierarchy
         - Folder -> Deck node
-        - File (.tsv/.csv) -> Leaf deck node containing vocabulary entries
+        - Headered file (.tsv/.csv/.txt) -> Leaf deck named after the file
+        - Anki export with `#deck column` -> Decks split from that column
         """
 
         root_input = _resolve_seed_path(seed_path)
@@ -526,19 +543,98 @@ def _seed_file_to_leaf_deck(
     replace_existing: bool,
     stats: SeedStats,
 ) -> None:
-    leaf_name = file_path.stem.strip() or file_path.name
-    leaf_deck, created = _get_or_create_deck(
-        parent_deck_id=parent_deck_id,
-        owner_user_id=owner_user_id,
-        name=leaf_name,
-        description=f"Seeded from {file_path.name}",
-        stats=stats,
-    )
+    rows = _load_seed_rows(file_path)
+    if not rows:
+        stats.skipped_files += 1
+        click.echo(f"  Skip empty file: {file_path.name}")
+        return
 
+    anki_deck_groups = _group_rows_by_anki_deck(rows, file_path)
+    if not anki_deck_groups:
+        leaf_name = file_path.stem.strip() or file_path.name
+        leaf_deck, created = _get_or_create_deck(
+            parent_deck_id=parent_deck_id,
+            owner_user_id=owner_user_id,
+            name=leaf_name,
+            description=f"Seeded from {file_path.name}",
+            stats=stats,
+        )
+        status = _seed_rows_to_deck(
+            rows=rows,
+            deck=leaf_deck,
+            owner_user_id=owner_user_id,
+            note_type_id=note_type_id,
+            template_id=template_id,
+            replace_existing=replace_existing,
+            source_label=file_path.name,
+            stats=stats,
+        )
+        if status == "skipped":
+            stats.skipped_files += 1
+            return
+        if status == "replaced":
+            stats.replaced_files += 1
+        stats.seeded_files += 1
+        deck_state = "Created" if created else "Updated"
+        click.echo(f"  {deck_state} leaf deck: {leaf_name} ({len(rows)} rows)")
+        return
+
+    seeded_groups = 0
+    replaced_groups = 0
+    for deck_path, deck_rows in anki_deck_groups:
+        leaf_deck, created = _get_or_create_seed_deck_path(
+            parent_deck_id=parent_deck_id,
+            owner_user_id=owner_user_id,
+            path_parts=deck_path,
+            source_file=file_path,
+            stats=stats,
+        )
+        status = _seed_rows_to_deck(
+            rows=deck_rows,
+            deck=leaf_deck,
+            owner_user_id=owner_user_id,
+            note_type_id=note_type_id,
+            template_id=template_id,
+            replace_existing=replace_existing,
+            source_label=f"{file_path.name}::{'::'.join(deck_path)}",
+            stats=stats,
+        )
+        if status == "skipped":
+            continue
+        seeded_groups += 1
+        if status == "replaced":
+            replaced_groups += 1
+        deck_state = "Created" if created else "Updated"
+        click.echo(
+            f"  {deck_state} Anki deck: {'::'.join(deck_path)} ({len(deck_rows)} rows)"
+        )
+
+    if seeded_groups:
+        stats.seeded_files += 1
+        if replaced_groups:
+            stats.replaced_files += 1
+        click.echo(
+            f"  Split Anki export: {file_path.name} -> {len(anki_deck_groups)} deck(s)"
+        )
+    else:
+        stats.skipped_files += 1
+
+
+def _seed_rows_to_deck(
+    *,
+    rows: List[Dict[str, str | None]],
+    deck: Deck,
+    owner_user_id: int,
+    note_type_id: str,
+    template_id: str,
+    replace_existing: bool,
+    source_label: str,
+    stats: SeedStats,
+) -> str:
     existing_count = (
         db.session.query(db.func.count(Note.id))
         .filter(
-            Note.deck_id == leaf_deck.id,
+            Note.deck_id == deck.id,
             Note.user_id == owner_user_id,
             Note.note_type_id == note_type_id,
         )
@@ -546,13 +642,12 @@ def _seed_file_to_leaf_deck(
         or 0
     )
     if existing_count and not replace_existing:
-        stats.skipped_files += 1
-        click.echo(f"  Skip file (already seeded): {file_path.name}")
-        return
+        click.echo(f"  Skip deck (already seeded): {source_label}")
+        return "skipped"
     if existing_count and replace_existing:
         existing_notes = (
             Note.query.filter(
-                Note.deck_id == leaf_deck.id,
+                Note.deck_id == deck.id,
                 Note.user_id == owner_user_id,
                 Note.note_type_id == note_type_id,
             )
@@ -575,14 +670,7 @@ def _seed_file_to_leaf_deck(
         if existing_note_ids:
             Card.query.filter(Card.note_id.in_(existing_note_ids)).delete(synchronize_session=False)
             Note.query.filter(Note.id.in_(existing_note_ids)).delete(synchronize_session=False)
-        stats.replaced_files += 1
-        click.echo(f"  Replace file deck: {file_path.name}")
-
-    rows = _load_seed_rows(file_path)
-    if not rows:
-        stats.skipped_files += 1
-        click.echo(f"  Skip empty file: {file_path.name}")
-        return
+        click.echo(f"  Replace seeded deck: {source_label}")
 
     notes: list[Note] = []
     for row in rows:
@@ -590,7 +678,7 @@ def _seed_file_to_leaf_deck(
             Note(
                 note_type_id=note_type_id,
                 user_id=owner_user_id,
-                deck_id=leaf_deck.id,
+                deck_id=deck.id,
                 field_values=_seed_row_to_field_values(row),
                 tags=[],
             )
@@ -611,9 +699,35 @@ def _seed_file_to_leaf_deck(
 
     stats.created_notes += len(notes)
     stats.created_cards += len(cards)
-    stats.seeded_files += 1
-    deck_state = "Created" if created else "Updated"
-    click.echo(f"  {deck_state} leaf deck: {leaf_name} ({len(rows)} rows)")
+    return "replaced" if existing_count else "seeded"
+
+
+def _get_or_create_seed_deck_path(
+    *,
+    parent_deck_id: int,
+    owner_user_id: int,
+    path_parts: tuple[str, ...],
+    source_file: Path,
+    stats: SeedStats,
+) -> tuple[Deck, bool]:
+    current_parent_id = parent_deck_id
+    leaf_deck: Deck | None = None
+    leaf_created = False
+    for index, part in enumerate(path_parts):
+        is_leaf = index == len(path_parts) - 1
+        leaf_deck, created = _get_or_create_deck(
+            parent_deck_id=current_parent_id,
+            owner_user_id=owner_user_id,
+            name=part,
+            description=f"Seeded from {source_file.name}" if is_leaf else None,
+            stats=stats,
+        )
+        current_parent_id = leaf_deck.id
+        if is_leaf:
+            leaf_created = created
+    if leaf_deck is None:
+        raise click.ClickException(f"Anki deck path is empty in {source_file}")
+    return leaf_deck, leaf_created
 
 
 def _count_entries_in_deck_subtree(deck_id: int) -> int:
@@ -741,20 +855,121 @@ def _load_seed_rows_from_header_rows(rows: List[List[str]]) -> List[Dict[str, st
     return items
 
 
-def _load_seed_rows_from_legacy_rows(rows: List[List[str]], file_path: Path) -> List[Dict[str, str | None]]:
+def _parse_anki_column_indexes(
+    directives: Dict[str, str],
+    file_path: Path,
+) -> Dict[str, int]:
+    indexes: Dict[str, int] = {}
+    for directive in SEED_ANKI_METADATA_COLUMN_DIRECTIVES:
+        raw_value = directives.get(directive)
+        if raw_value is None:
+            continue
+        try:
+            one_based_index = int(raw_value)
+        except (TypeError, ValueError) as exc:
+            raise click.ClickException(
+                f"Invalid Anki directive #{directive}:{raw_value} in {file_path}: "
+                "column must be a positive integer."
+            ) from exc
+        if one_based_index < 1:
+            raise click.ClickException(
+                f"Invalid Anki directive #{directive}:{raw_value} in {file_path}: "
+                "column numbering starts at 1."
+            )
+        indexes[directive] = one_based_index - 1
+    return indexes
+
+
+def _strip_anki_metadata_columns(
+    row_values: List[str],
+    *,
+    column_indexes: Dict[str, int],
+    file_path: Path,
+    row_index: int,
+) -> tuple[List[str], str | None]:
+    for directive, column_index in column_indexes.items():
+        if column_index >= len(row_values):
+            raise click.ClickException(
+                f"Invalid Anki row in {file_path} at data row {row_index}: "
+                f"#{directive} points to column {column_index + 1}, "
+                f"but the row has only {len(row_values)} columns."
+            )
+
+    deck_column_index = column_indexes.get("deck column")
+    anki_deck_path = (
+        _clean_seed_cell(row_values[deck_column_index])
+        if deck_column_index is not None
+        else None
+    )
+    metadata_indexes = set(column_indexes.values())
+    field_values = [
+        value for index, value in enumerate(row_values) if index not in metadata_indexes
+    ]
+    return field_values, anki_deck_path
+
+
+def _select_seed_positional_fields(
+    *,
+    field_count: int,
+    has_anki_deck_column: bool,
+    file_path: Path,
+    row_index: int,
+) -> tuple[str, ...]:
+    if field_count == len(SEED_FULL_POSITIONAL_FIELDS):
+        return SEED_FULL_POSITIONAL_FIELDS
+    if has_anki_deck_column and field_count == len(SEED_FULL_POSITIONAL_FIELDS_WITHOUT_DECK):
+        return SEED_FULL_POSITIONAL_FIELDS_WITHOUT_DECK
+    if field_count == len(SEED_LEGACY_POSITIONAL_FIELDS):
+        return SEED_LEGACY_POSITIONAL_FIELDS
+    if field_count == len(SEED_FULL_POSITIONAL_FIELDS) + 1:
+        return SEED_FULL_POSITIONAL_FIELDS
+    if not has_anki_deck_column and field_count == len(SEED_LEGACY_POSITIONAL_FIELDS) + 1:
+        return SEED_LEGACY_POSITIONAL_FIELDS
+
+    expected_counts = {
+        len(SEED_LEGACY_POSITIONAL_FIELDS),
+        len(SEED_LEGACY_POSITIONAL_FIELDS) + 1,
+        len(SEED_FULL_POSITIONAL_FIELDS),
+        len(SEED_FULL_POSITIONAL_FIELDS) + 1,
+    }
+    if has_anki_deck_column:
+        expected_counts.add(len(SEED_FULL_POSITIONAL_FIELDS_WITHOUT_DECK))
+    expected_label = ", ".join(str(value) for value in sorted(expected_counts))
+    raise click.ClickException(
+        f"Unsupported Anki seed row in {file_path} at data row {row_index}: "
+        f"found {field_count} note-field columns after removing Anki metadata; "
+        f"expected {expected_label}."
+    )
+
+
+def _load_seed_rows_from_positional_rows(
+    rows: List[List[str]],
+    file_path: Path,
+    directives: Dict[str, str],
+) -> List[Dict[str, str | None]]:
+    column_indexes = _parse_anki_column_indexes(directives, file_path)
+    has_anki_deck_column = "deck column" in column_indexes
     items: List[Dict[str, str | None]] = []
 
     for row_index, row_values in enumerate(rows, start=1):
-        if len(row_values) < 2:
-            raise click.ClickException(
-                f"Unsupported legacy seed row in {file_path} at data row {row_index}: expected at least 2 columns."
-            )
+        note_field_values, anki_deck_path = _strip_anki_metadata_columns(
+            row_values,
+            column_indexes=column_indexes,
+            file_path=file_path,
+            row_index=row_index,
+        )
+        positional_fields = _select_seed_positional_fields(
+            field_count=len(note_field_values),
+            has_anki_deck_column=has_anki_deck_column,
+            file_path=file_path,
+            row_index=row_index,
+        )
 
         payload: Dict[str, str | None] = {
-            field_name: _clean_seed_cell(row_values[index]) if index < len(row_values) else None
-            for index, field_name in enumerate(SEED_LEGACY_POSITIONAL_FIELDS)
+            field_name: _clean_seed_cell(note_field_values[index])
+            for index, field_name in enumerate(positional_fields)
         }
-        deck = payload.get("deck")
+        deck = payload.get("deck") or anki_deck_path
         word = payload.get("word")
         if not deck or not word:
             continue
@@ -762,6 +977,8 @@ def _load_seed_rows_from_legacy_rows(rows: List[List[str]], file_path: Path) -> 
         normalized_payload: Dict[str, str | None] = {"deck": deck, "word": word}
         for field in SEED_OPTIONAL_FIELDS:
             normalized_payload[field] = payload.get(field)
+        if anki_deck_path:
+            normalized_payload[SEED_ANKI_DECK_PATH_KEY] = anki_deck_path
         items.append(normalized_payload)
 
     return items
@@ -769,7 +986,7 @@ def _load_seed_rows_from_legacy_rows(rows: List[List[str]], file_path: Path) -> 
 
 def _load_seed_rows(file_path: Path) -> List[Dict[str, str | None]]:
     try:
-        raw_rows, _ = read_delimited_rows(
+        raw_rows, metadata = read_delimited_rows(
             file_bytes=file_path.read_bytes(),
             delimiter=_default_seed_delimiter(file_path),
         )
@@ -782,7 +999,57 @@ def _load_seed_rows(file_path: Path) -> List[Dict[str, str | None]]:
         return []
     if _looks_like_seed_header_row(raw_rows[0]):
         return _load_seed_rows_from_header_rows(raw_rows)
-    return _load_seed_rows_from_legacy_rows(raw_rows, file_path)
+    directives = {
+        str(key): str(value)
+        for key, value in dict(metadata.get("preamble_directives") or {}).items()
+    }
+    return _load_seed_rows_from_positional_rows(raw_rows, file_path, directives)
+
+
+def _split_anki_deck_path(raw_path: str, file_path: Path) -> tuple[str, ...]:
+    parts = tuple(part.strip() for part in raw_path.split("::") if part.strip())
+    if not parts:
+        raise click.ClickException(f"Anki deck path is empty in {file_path}")
+    return parts
+
+
+def _common_anki_parent_prefix(paths: List[tuple[str, ...]]) -> tuple[str, ...]:
+    if not paths:
+        return ()
+    parent_paths = [path[:-1] for path in paths]
+    common: list[str] = []
+    for parts_at_depth in zip(*parent_paths):
+        if len(set(parts_at_depth)) != 1:
+            break
+        common.append(parts_at_depth[0])
+    return tuple(common)
+
+
+def _group_rows_by_anki_deck(
+    rows: List[Dict[str, str | None]],
+    file_path: Path,
+) -> List[tuple[tuple[str, ...], List[Dict[str, str | None]]]]:
+    routed_rows = [row for row in rows if row.get(SEED_ANKI_DECK_PATH_KEY)]
+    if not routed_rows:
+        return []
+    if len(routed_rows) != len(rows):
+        raise click.ClickException(
+            f"Anki export {file_path} mixes rows with and without a deck path."
+        )
+
+    grouped_by_full_path: Dict[tuple[str, ...], List[Dict[str, str | None]]] = {}
+    for row in rows:
+        raw_path = str(row.get(SEED_ANKI_DECK_PATH_KEY) or "")
+        full_path = _split_anki_deck_path(raw_path, file_path)
+        grouped_by_full_path.setdefault(full_path, []).append(row)
+
+    full_paths = list(grouped_by_full_path)
+    common_parent = _common_anki_parent_prefix(full_paths)
+    groups: List[tuple[tuple[str, ...], List[Dict[str, str | None]]]] = []
+    for full_path in sorted(full_paths, key=lambda path: _natural_sort_key(Path("::".join(path)))):
+        relative_path = full_path[len(common_parent):] or full_path[-1:]
+        groups.append((relative_path, grouped_by_full_path[full_path]))
+    return groups
 
 
 def _seed_row_to_field_values(row: Dict[str, str | None]) -> Dict[str, str | None]:

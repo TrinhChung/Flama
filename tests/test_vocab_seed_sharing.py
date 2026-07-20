@@ -218,6 +218,141 @@ class VocabSeedSharingTests(unittest.TestCase):
         finally:
             shutil.rmtree(legacy_root, ignore_errors=True)
 
+    def test_vocab_seed_splits_anki_export_by_deck_column(self):
+        export_root = Path(tempfile.mkdtemp(prefix="flama-anki-seed-"))
+        try:
+            tettei_dir = export_root / "Tettei N1"
+            tettei_dir.mkdir(parents=True, exist_ok=True)
+            export_file = tettei_dir / "Tettei N1 export.txt"
+            rows = [
+                [
+                    "ChungBechN1::語彙徹底N1::Bài 001",
+                    "N1::徹底N1",
+                    "維持",
+                    "DUY TRÌ",
+                    "いじ",
+                    "duy trì",
+                    "状態を保つこと",
+                    "giữ nguyên trạng thái",
+                    "状態を維持する",
+                    "duy trì trạng thái",
+                    "制度を維持する。",
+                    "Duy trì chế độ.",
+                    "保持との違い",
+                    "Khác với 保持",
+                    "image-1.jpg",
+                    "diagram-1.svg",
+                    "word-1.mp3",
+                    "example-1.mp3",
+                    "seeded",
+                ],
+                [
+                    "ChungBechN1::語彙徹底N1::Bài 002",
+                    "N1::徹底N2",
+                    "意図",
+                    "Ý ĐỒ",
+                    "いと",
+                    "ý đồ",
+                    "目的やねらい",
+                    "mục đích",
+                    "意図を持つ",
+                    "có ý đồ",
+                    "別の意図がある。",
+                    "Có ý đồ khác.",
+                    "目的より主観的",
+                    "Chủ quan hơn 目的",
+                    "",
+                    "",
+                    "word-2.mp3",
+                    "example-2.mp3",
+                    "seeded",
+                ],
+            ]
+            export_file.write_text(
+                "\n".join(
+                    [
+                        "#separator:tab",
+                        "#html:false",
+                        "#deck column:1",
+                        "#tags column:19",
+                        *("\t".join(row) for row in rows),
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            result = self.runner.invoke(
+                args=[
+                    "vocab-seed",
+                    "--path",
+                    str(export_root),
+                    "--owner-user-id",
+                    str(self.user_id),
+                    "--no-share-seeded-decks",
+                ],
+            )
+            self.assertEqual(result.exit_code, 0, msg=result.output)
+            self.assertIn("Split Anki export: Tettei N1 export.txt -> 2 deck(s)", result.output)
+
+            with self.app.app_context():
+                top_deck = Deck.query.filter_by(
+                    owner_user_id=self.user_id,
+                    parent_id=None,
+                    name="Tettei N1",
+                ).first()
+                self.assertIsNotNone(top_deck)
+
+                lesson_1 = Deck.query.filter_by(
+                    owner_user_id=self.user_id,
+                    parent_id=top_deck.id,  # type: ignore[union-attr]
+                    name="Bài 001",
+                ).first()
+                lesson_2 = Deck.query.filter_by(
+                    owner_user_id=self.user_id,
+                    parent_id=top_deck.id,  # type: ignore[union-attr]
+                    name="Bài 002",
+                ).first()
+                self.assertIsNotNone(lesson_1)
+                self.assertIsNotNone(lesson_2)
+                self.assertIsNone(Deck.query.filter_by(name="Tettei N1 export").first())
+                self.assertIsNone(Deck.query.filter_by(name="ChungBechN1").first())
+
+                first_note = Note.query.filter_by(deck_id=lesson_1.id).one()  # type: ignore[union-attr]
+                first_values = first_note.field_values or {}
+                self.assertEqual(first_values.get("word"), "維持")
+                self.assertEqual(first_values.get("hanviet"), "DUY TRÌ")
+                self.assertEqual(first_values.get("reading"), "いじ")
+                self.assertEqual(first_values.get("diagram"), "diagram-1.svg")
+                self.assertEqual(first_values.get("word_audio"), "word-1.mp3")
+                self.assertEqual(first_values.get("example_audio"), "example-1.mp3")
+                self.assertEqual(Note.query.filter_by(deck_id=lesson_2.id).count(), 1)  # type: ignore[union-attr]
+
+            replace_result = self.runner.invoke(
+                args=[
+                    "vocab-seed",
+                    "--path",
+                    str(export_root),
+                    "--owner-user-id",
+                    str(self.user_id),
+                    "--replace-lessons",
+                    "--no-share-seeded-decks",
+                ],
+            )
+            self.assertEqual(replace_result.exit_code, 0, msg=replace_result.output)
+            self.assertIn("Replace seeded deck: Tettei N1 export.txt::Bài 001", replace_result.output)
+            self.assertIn("Replace seeded deck: Tettei N1 export.txt::Bài 002", replace_result.output)
+            with self.app.app_context():
+                lesson_ids = [
+                    row[0]
+                    for row in db.session.query(Deck.id)
+                    .filter(Deck.name.in_(["Bài 001", "Bài 002"]))
+                    .all()
+                ]
+                self.assertEqual(Note.query.filter(Note.deck_id.in_(lesson_ids)).count(), 2)
+        finally:
+            shutil.rmtree(export_root, ignore_errors=True)
+
     def test_reseed_script_front_template_avoids_viewport_height_wrapper(self):
         seed_globals = runpy.run_path(
             str(Path(__file__).resolve().parents[1] / "scripts" / "seed_flama_template.py")
