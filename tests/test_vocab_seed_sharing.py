@@ -4,6 +4,7 @@ import runpy
 import shutil
 import tempfile
 import unittest
+from datetime import datetime
 from pathlib import Path
 
 from app import create_app
@@ -92,6 +93,118 @@ class VocabSeedSharingTests(unittest.TestCase):
 
         with self.app.app_context():
             self.assertEqual(DeckMarketplaceItem.query.count(), 0)
+
+    def test_vocab_seed_keeps_same_named_decks_scoped_to_owner_and_reattaches_listing(self):
+        with self.app.app_context():
+            other = User(username="other-seed-owner", email="other-seed-owner@example.com")
+            other.set_password("password")
+            db.session.add(other)
+            db.session.flush()
+            other_deck = Deck(
+                owner_user_id=other.id,
+                parent_id=None,
+                name="Unit 1",
+                position=1,
+            )
+            db.session.add(other_deck)
+            db.session.flush()
+            listing = DeckMarketplaceItem(
+                owner_user_id=self.user_id,
+                source_deck_id=other_deck.id,
+                title="Unit 1",
+                description="Seeded deck: Unit 1",
+                primary_category="Japanese",
+                tags=["seeded", "default"],
+                pricing_mode="free",
+                price_amount_minor=0,
+                version="1.0.0",
+                publish_status="archived",
+                is_official=True,
+            )
+            db.session.add(listing)
+            db.session.commit()
+            other_deck_id = other_deck.id
+            listing_id = listing.id
+
+        result = self.runner.invoke(
+            args=[
+                "vocab-seed",
+                "--path",
+                str(self.seed_dir),
+                "--owner-user-id",
+                str(self.user_id),
+                "--replace-lessons",
+            ],
+        )
+        self.assertEqual(result.exit_code, 0, msg=result.output)
+
+        with self.app.app_context():
+            owner_deck = Deck.query.filter_by(
+                owner_user_id=self.user_id,
+                parent_id=None,
+                name="Unit 1",
+            ).one()
+            self.assertNotEqual(owner_deck.id, other_deck_id)
+            self.assertEqual(Note.query.filter_by(deck_id=other_deck_id).count(), 0)
+
+            listing = db.session.get(DeckMarketplaceItem, listing_id)
+            self.assertIsNotNone(listing)
+            self.assertEqual(listing.source_deck_id, owner_deck.id)  # type: ignore[union-attr]
+            self.assertEqual(listing.publish_status, "published")  # type: ignore[union-attr]
+            self.assertIsNone(listing.archived_at)  # type: ignore[union-attr]
+            self.assertEqual(
+                DeckMarketplaceItem.query.filter_by(
+                    owner_user_id=self.user_id,
+                    title="Unit 1",
+                ).count(),
+                1,
+            )
+
+    def test_vocab_seed_restores_soft_deleted_owned_deck_and_listing(self):
+        archived_at = datetime(2026, 1, 1)
+        with self.app.app_context():
+            archived_deck = Deck(
+                owner_user_id=self.user_id,
+                parent_id=None,
+                name="Unit 1",
+                position=1,
+                deleted_at=archived_at,
+            )
+            db.session.add(archived_deck)
+            db.session.flush()
+            listing = DeckMarketplaceItem(
+                owner_user_id=self.user_id,
+                source_deck_id=archived_deck.id,
+                title="Unit 1",
+                description="Seeded deck: Unit 1",
+                primary_category="Japanese",
+                tags=["seeded", "default"],
+                pricing_mode="free",
+                price_amount_minor=0,
+                version="1.0.0",
+                publish_status="archived",
+                archived_at=archived_at,
+                is_official=True,
+            )
+            db.session.add(listing)
+            db.session.commit()
+            archived_deck_id = archived_deck.id
+            listing_id = listing.id
+
+        result = self.runner.invoke(
+            args=["vocab-seed", "--path", str(self.seed_dir), "--owner-user-id", str(self.user_id)],
+        )
+        self.assertEqual(result.exit_code, 0, msg=result.output)
+
+        with self.app.app_context():
+            restored_deck = db.session.get(Deck, archived_deck_id)
+            restored_listing = db.session.get(DeckMarketplaceItem, listing_id)
+            self.assertIsNotNone(restored_deck)
+            self.assertIsNone(restored_deck.deleted_at)  # type: ignore[union-attr]
+            self.assertGreater(Note.query.filter_by(user_id=self.user_id).count(), 0)
+            self.assertEqual(restored_listing.source_deck_id, archived_deck_id)  # type: ignore[union-attr]
+            self.assertEqual(restored_listing.publish_status, "published")  # type: ignore[union-attr]
+            self.assertIsNone(restored_listing.archived_at)  # type: ignore[union-attr]
 
     def test_vocab_seed_uses_non_scrolling_front_template_for_default_vocab(self):
         result = self.runner.invoke(

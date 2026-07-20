@@ -51,7 +51,7 @@ from app.repositories.study_repository import (
 from app.utils.deck_move_token import parse_deck_move_token
 from app.utils.permissions import is_admin_user
 from app.utils.redirects import resolve_safe_next_url
-from app.services import tts_provider_service
+from app.services import deck_management_service, tts_provider_service
 from app.services.anki_scheduler import (
     computeAnswerPreview,
 )
@@ -1477,40 +1477,30 @@ def _can_current_user_delete_cloned_deck(deck_obj: Deck) -> bool:
 @vocabulary_bp.route("/decks/<int:deck_id>/delete", methods=["POST"])
 @login_required
 def delete_deck(deck_id: int):
-    """Delete a deck subtree and all Note/Card data inside it."""
+    """Delete a local deck or archive a shared source deck."""
     deck = Deck.query.get_or_404(deck_id)
-    if not is_admin_user(current_user) and not _can_current_user_delete_cloned_deck(deck):
+    if (
+        not is_admin_user(current_user)
+        and deck.owner_user_id != current_user.id
+        and not _can_current_user_delete_cloned_deck(deck)
+    ):
         flash("You do not have permission to delete this deck.", "danger")
         return redirect(url_for("main.dashboard"))
 
     deck_name = deck.name
     next_url = _resolve_next_url()
-
-    deck_ids_to_delete = _collect_deck_subtree_ids(deck.id)
-
-    from models.flashcard import DeckInstall
-
-    install_query = DeckInstall.query.filter(DeckInstall.local_deck_id.in_(deck_ids_to_delete))
-    if not is_admin_user(current_user):
-        install_query = install_query.filter(DeckInstall.user_id == current_user.id)
-    install_query.delete(synchronize_session=False)
-
-    note_rows = db.session.query(Note.id).filter(Note.deck_id.in_(deck_ids_to_delete)).all()
-    note_ids = [str(row[0]) for row in note_rows if row and row[0]]
-    if note_ids:
-        card_rows = db.session.query(Card.id).filter(Card.note_id.in_(note_ids)).all()
-        card_ids = [str(row[0]) for row in card_rows if row and row[0]]
-        if card_ids:
-            CardProgress.query.filter(CardProgress.card_id.in_(card_ids)).delete(
-                synchronize_session=False
-            )
-            Card.query.filter(Card.id.in_(card_ids)).delete(synchronize_session=False)
-        Note.query.filter(Note.id.in_(note_ids)).delete(synchronize_session=False)
-
-    db.session.delete(deck)
-    db.session.commit()
-
-    flash(f"Deleted deck '{deck_name}' and all its contents.", "success")
+    deletion_mode = deck_management_service.delete_deck_subtree(
+        deck_obj=deck,
+        user_id=current_user.id,
+        is_admin=is_admin_user(current_user),
+    )
+    if deletion_mode == "archived":
+        flash(
+            f"Archived deck '{deck_name}'. Existing installs keep their cards and progress.",
+            "success",
+        )
+    else:
+        flash(f"Deleted deck '{deck_name}' and all its contents.", "success")
     return redirect(next_url)
 
 

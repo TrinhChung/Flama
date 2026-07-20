@@ -10,34 +10,39 @@
   <section class="market-space-panel market-hub-hero">
     <div class="market-hub-hero-copy">
       <div class="market-hub-eyebrow">{{ eyebrow }}</div>
-      <h1 class="market-hub-title mb-3">{{ heading }}</h1>
+      <h1 class="market-hub-title">{{ heading }}</h1>
       <p class="market-section-help market-hub-subtitle mb-0">{{ subtitle }}</p>
 
       <div class="market-hub-hero-actions">
         <a class="btn btn-primary" href="{{ workspace_url }}">{{ workspace_label }}</a>
+        {% if market_kind == 'deck_marketplace_item' %}
+        <a class="btn btn-outline-secondary" href="{{ orders_url }}">
+          <i class="bi bi-receipt" aria-hidden="true"></i> Đơn hàng
+        </a>
+        {% else %}
         <a class="btn btn-outline-secondary" href="{{ seller_cta_url }}">{{ seller_cta_label }}</a>
+        {% endif %}
       </div>
     </div>
 
-    {% if market_kind != 'note_type' %}
-    <div class="market-hub-hero-panel">
-      <div class="market-summary-grid market-summary-grid--hero" id="marketplace-hero-summary"></div>
-      <div class="market-hub-hero-note">
-        <div class="market-hub-section-kicker">Khám phá có định hướng</div>
-        <p class="market-section-help mb-0" id="marketplace-hero-note">
-          Đang tải tổng quan marketplace để hiển thị mục nổi bật, bộ lọc và thư viện của bạn.
-        </p>
-      </div>
+    {% if market_kind == 'deck_marketplace_item' %}
+    <div class="market-hub-mascot" aria-hidden="true">
+      <span class="market-hub-mascot-spark market-hub-mascot-spark--one"></span>
+      <span class="market-hub-mascot-spark market-hub-mascot-spark--two"></span>
+      <img src="{{ url_for('static', filename='images/pet.svg') }}" alt="">
     </div>
     {% endif %}
   </section>
 
   <div class="market-hub-nav">
     <div class="market-hub-switch" role="tablist" aria-label="Không gian học tập">
-      <button class="market-hub-switch-btn is-active" type="button" data-space="discover">Khám phá</button>
-      <button class="market-hub-switch-btn" type="button" data-space="library">Thư viện của tôi</button>
+      <button class="market-hub-switch-btn is-active" id="market-tab-discover" type="button" role="tab"
+        aria-selected="true" aria-controls="market-panel-discover" tabindex="0" data-space="discover">Khám phá</button>
+      <button class="market-hub-switch-btn" id="market-tab-library" type="button" role="tab"
+        aria-selected="false" aria-controls="market-panel-library" tabindex="-1" data-space="library">Thư viện của tôi</button>
     </div>
 
+    {% if market_kind == 'note_type' %}
     <div class="market-hub-nav-actions">
       <a class="btn btn-outline-secondary btn-sm" href="{{ library_url | default(workspace_url) }}">
         <i class="bi bi-collection"></i> Mở thư viện
@@ -46,29 +51,30 @@
         <i class="bi bi-receipt"></i> Đơn hàng
       </a>
     </div>
+    {% endif %}
   </div>
 
   <div class="alert alert-danger d-none" id="marketplace-hub-error" role="alert"></div>
+  <div class="visually-hidden" id="marketplace-hub-status" role="status" aria-live="polite"></div>
 
-  <section class="market-space-panel is-active market-space-panel--discover" data-space-panel="discover">
+  <section class="market-space-panel is-active market-space-panel--discover" id="market-panel-discover"
+    role="tabpanel" aria-labelledby="market-tab-discover" data-space-panel="discover">
     <form class="market-catalog-shell" id="marketplace-filter-form">
       <div class="market-catalog-toolbar">
         <div class="market-toolbar-primary">
           <label class="market-toolbar-search">
             <span class="visually-hidden">Tìm kiếm</span>
+            <i class="bi bi-search" aria-hidden="true"></i>
             <input class="form-control form-control-lg" type="text" name="q"
-              placeholder="Tìm theo tên, mô tả, tag, tác giả">
+              placeholder="Tìm bộ thẻ, chủ đề hoặc tác giả..." autocomplete="off">
           </label>
           <button class="btn btn-outline-secondary market-toolbar-filter-toggle" type="button"
             id="market-mobile-filter-open" aria-controls="marketplace-filter-sidebar" aria-expanded="false">
-            Lọc
+            <i class="bi bi-sliders" aria-hidden="true"></i> Bộ lọc
           </button>
         </div>
+        <div class="market-quick-filter-strip" id="marketplace-quick-filters" aria-label="Bộ lọc nhanh"></div>
       </div>
-
-      {% if market_kind != 'note_type' %}
-      <section class="market-featured-stage d-none" id="marketplace-featured-stage"></section>
-      {% endif %}
 
       <div class="market-catalog-layout">
         <button class="market-mobile-filter-backdrop" type="button" hidden data-mobile-filter-close
@@ -83,39 +89,11 @@
             <button class="btn btn-outline-secondary btn-sm" type="button" data-mobile-filter-close>Đóng</button>
           </div>
 
-          <section class="market-filter-section">
-            <div class="market-filter-section-title">Tìm và sắp xếp</div>
+          <section class="market-filter-section market-filter-section--primary">
+            <div class="market-filter-section-title">Bộ lọc học tập</div>
             <div class="market-filter-stack">
-              <div class="market-toolbar-controls market-toolbar-controls--sidebar">
-                <label class="market-toolbar-field">
-                  <span>Tác giả</span>
-                  <input class="form-control" type="text" name="author" placeholder="Tên tác giả">
-                </label>
-                <label class="market-toolbar-field">
-                  <span>Sắp xếp</span>
-                  <select class="form-select" name="sort">
-                    <option value="recently_updated">Cập nhật gần đây</option>
-                    <option value="popular">Phổ biến</option>
-                    <option value="top_rated">Đánh giá cao</option>
-                    <option value="newest">Mới thêm</option>
-                    <option value="best_selling">Được dùng nhiều</option>
-                    <option value="price_low">Giá tăng dần</option>
-                    <option value="price_high">Giá giảm dần</option>
-                  </select>
-                </label>
-                <button class="btn btn-outline-secondary" type="reset" id="market-filter-reset">Xóa lọc</button>
-              </div>
-
-              <div class="market-quick-filter-strip" id="marketplace-quick-filters"></div>
-            </div>
-          </section>
-
-          <section class="market-filter-section">
-            <div class="market-filter-section-title">Loại và trạng thái</div>
-            <div class="market-filter-stack">
-              {% if market_kind == 'deck_marketplace_item' %}
-              <div class="market-filter-static-badge">Deck</div>
-              {% endif %}
+              <div class="market-filter-group" data-filter-group="difficulty_band"></div>
+              <div class="market-filter-group" data-filter-group="learning_goals"></div>
               <label class="market-toolbar-field">
                 <span>Giá</span>
                 <select class="form-select" name="pricing_mode">
@@ -123,6 +101,16 @@
                   <option value="free">Miễn phí</option>
                   <option value="paid">Trả phí</option>
                 </select>
+              </label>
+            </div>
+          </section>
+
+          <details class="market-filter-advanced">
+            <summary>Bộ lọc nâng cao</summary>
+            <div class="market-filter-advanced-body">
+              <label class="market-toolbar-field">
+                <span>Tác giả</span>
+                <input class="form-control" type="text" name="author" placeholder="Tên tác giả">
               </label>
               <label class="market-toolbar-field">
                 <span>Xem thử</span>
@@ -149,66 +137,57 @@
                 <span>Giá đến</span>
                 <input class="form-control" type="number" min="0" step="1000" name="max_price" placeholder="200000">
               </label>
-            </div>
-          </section>
-
-          <section class="market-filter-section">
-            <div class="market-filter-section-title">Phân loại học tập</div>
-            <div class="market-filter-stack">
               <div class="market-filter-group" data-filter-group="domain"></div>
               <div class="market-filter-group" data-filter-group="subject"></div>
-              <div class="market-filter-group" data-filter-group="difficulty_band"></div>
               <div class="market-filter-group" data-filter-group="framework_level"></div>
               <div class="market-filter-group" data-filter-group="framework_track"></div>
               <div class="market-filter-group" data-filter-group="audience"></div>
-            </div>
-          </section>
-
-          <section class="market-filter-section">
-            <div class="market-filter-section-title">Mục tiêu và kỹ năng</div>
-            <div class="market-filter-stack">
-              <div class="market-filter-group" data-filter-group="learning_goals"></div>
               <div class="market-filter-group" data-filter-group="primary_topics"></div>
               <div class="market-filter-group" data-filter-group="format_features"></div>
             </div>
-          </section>
+          </details>
+
+          <button class="btn btn-outline-secondary market-filter-reset" type="reset" id="market-filter-reset">
+            <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i> Xóa bộ lọc
+          </button>
         </aside>
 
         <div class="market-catalog-main">
-          {% if market_kind != 'note_type' %}
-          <section class="market-inline-section d-none" id="marketplace-library-spotlight"></section>
-          {% endif %}
-
           <div class="market-results-header">
             <div>
-              <div class="market-hub-section-kicker">{{ 'Note type' if market_kind == 'note_type' else 'Danh mục học' }}</div>
               <h2 class="market-hub-section-title mb-1">
-                {{ 'Danh sách note type' if market_kind == 'note_type' else 'Kết quả phù hợp với nhu cầu học' }}
+                {{ 'Danh sách note type' if market_kind == 'note_type' else 'Bộ thẻ phù hợp' }}
               </h2>
-              <p class="market-section-help mb-0">
-                {% if market_kind == 'note_type' %}
-                So sánh cấu trúc, mô tả và mức độ phổ biến trước khi thêm vào thư viện.
-                {% else %}
-                Tập trung vào tìm, lọc, xem thử và thêm vào thư viện.
-                {% endif %}
-              </p>
+              <div class="market-applied-filters" id="marketplace-applied-filters"></div>
             </div>
             <div class="market-results-tools">
-              <div class="market-applied-filters" id="marketplace-applied-filters"></div>
               <div class="market-results-count" id="marketplace-results-count">0 mục</div>
+              <label class="market-results-sort">
+                <span class="visually-hidden">Sắp xếp</span>
+                <select class="form-select form-select-sm" name="sort" aria-label="Sắp xếp kết quả">
+                  <option value="recently_updated">Cập nhật gần đây</option>
+                  <option value="popular">Phổ biến</option>
+                  <option value="top_rated">Đánh giá cao</option>
+                  <option value="newest">Mới thêm</option>
+                  <option value="best_selling">Được dùng nhiều</option>
+                  <option value="price_low">Giá tăng dần</option>
+                  <option value="price_high">Giá giảm dần</option>
+                </select>
+              </label>
             </div>
           </div>
 
-          <div class="market-card-grid" id="marketplace-results-grid"></div>
           {% if market_kind != 'note_type' %}
-          <div class="market-discovery-shelves d-none" id="marketplace-discovery-shelves"></div>
+          <section class="market-featured-stage d-none" id="marketplace-featured-stage"></section>
           {% endif %}
+          <div class="market-card-grid" id="marketplace-results-grid"></div>
         </div>
       </div>
     </form>
   </section>
 
-  <section class="market-space-panel market-library-panel" data-space-panel="library" hidden>
+  <section class="market-space-panel market-library-panel" id="market-panel-library" role="tabpanel"
+    aria-labelledby="market-tab-library" data-space-panel="library" hidden>
     <section class="market-inline-section market-library-hero">
       <div>
         <div class="market-hub-section-kicker">My Library</div>

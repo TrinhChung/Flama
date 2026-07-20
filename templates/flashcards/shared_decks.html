@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Thư viện Deck{% endblock %}
+{% block title %}Thư viện bộ thẻ{% endblock %}
 
 {% block styles %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/marketplace_hybrid.css') }}">
@@ -17,14 +17,14 @@
   {% set orders_url = url_for('user_orders.order_history_page') %}
   {% set order_detail_url_template = url_for('user_orders.order_detail_page', order_id='__ORDER_ID__') %}
   {% set workspace_url = url_for('flashcards.installed_decks_page') %}
-  {% set workspace_label = 'Mở My Library' %}
+  {% set workspace_label = 'Bộ thẻ của tôi' %}
   {% set library_url = url_for('flashcards.installed_decks_page') %}
   {% set seller_cta_url = url_for('main.dashboard') %}
   {% set seller_cta_label = 'Về dashboard' %}
   {% set payment_result_url = url_for('payments.marketplace_payment_result_page') %}
-  {% set eyebrow = 'Marketplace deck' %}
-  {% set heading = 'Khám phá deck học tập theo trình độ, mục tiêu và nhịp học của bạn' %}
-  {% set subtitle = 'Không gian này ưu tiên khám phá nhanh, lọc rõ ràng và truy cập lại nội dung đã cài. Các CTA và trạng thái được giữ cùng ngôn ngữ Flama với phần còn lại của ứng dụng.' %}
+  {% set eyebrow = 'Học đúng thứ bạn cần' %}
+  {% set heading = 'Thư viện bộ thẻ' %}
+  {% set subtitle = 'Tìm một bộ thẻ phù hợp để bắt đầu học ngay hôm nay.' %}
   {% include "flashcards/_marketplace_hub_shell.html" %}
 {% endblock %}
 

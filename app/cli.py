@@ -450,13 +450,25 @@ def _get_or_create_deck(
         Deck.query.filter(
             Deck.parent_id == parent_deck_id,
             Deck.name == name,
+            Deck.owner_user_id == owner_user_id,
         )
         .order_by(Deck.id.asc())
         .first()
     )
+    if deck is None:
+        deck = (
+            Deck.query.filter(
+                Deck.parent_id == parent_deck_id,
+                Deck.name == name,
+                Deck.owner_user_id.is_(None),
+            )
+            .order_by(Deck.id.asc())
+            .first()
+        )
     if deck:
         if deck.owner_user_id is None:
             deck.owner_user_id = owner_user_id
+        deck.deleted_at = None
         return deck, False
 
     deck = Deck(
@@ -766,7 +778,25 @@ def _upsert_seeded_deck_marketplace_item(
         .order_by(DeckMarketplaceItem.created_at.asc(), DeckMarketplaceItem.id.asc())
         .first()
     )
+    if deck_item is None:
+        same_title_items = (
+            DeckMarketplaceItem.query.filter_by(
+                owner_user_id=owner_user_id,
+                title=deck.name,
+            )
+            .order_by(DeckMarketplaceItem.created_at.asc(), DeckMarketplaceItem.id.asc())
+            .all()
+        )
+        deck_item = next(
+            (
+                item
+                for item in same_title_items
+                if item.is_official and "seeded" in set(item.tags or [])
+            ),
+            None,
+        )
     if deck_item:
+        deck_item.source_deck_id = deck.id
         if not deck_item.title:
             deck_item.title = deck.name
         if not deck_item.description:
@@ -781,6 +811,7 @@ def _upsert_seeded_deck_marketplace_item(
         deck_item.publish_status = "published"
         deck_item.is_official = True
         deck_item.published_at = deck_item.published_at or datetime.utcnow()
+        deck_item.archived_at = None
         return False
 
     db.session.add(

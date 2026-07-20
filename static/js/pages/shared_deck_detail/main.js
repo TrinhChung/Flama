@@ -81,7 +81,11 @@ if (root) {
   const actionNoteEl = document.getElementById("deck-action-note");
   const rendererHost = window.FlamaCardRendererHost;
   const previewController = previewFrame && rendererHost
-    ? rendererHost.createRendererFrameController(previewFrame, { minHeight: 280 })
+    ? rendererHost.createRendererFrameController(previewFrame, {
+      minHeight: 280,
+      autoHeight: false,
+      fixedHeight: 416,
+    })
     : null;
 
   let deckDetail = null;

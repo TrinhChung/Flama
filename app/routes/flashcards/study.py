@@ -263,7 +263,7 @@ def _study_next_payload_for_scope(
 @flashcards_bp.route("/flashcards/study")
 @login_required
 def flashcard_study_page():
-    decks = Deck.query.order_by(Deck.name.asc()).all()
+    decks = Deck.query.filter(Deck.deleted_at.is_(None)).order_by(Deck.name.asc()).all()
     return render_template("flashcards/study.html", decks=decks)
 
 @flashcards_bp.route("/api/study/next", methods=["GET"])

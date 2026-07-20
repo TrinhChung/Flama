@@ -46,6 +46,7 @@ def build_dashboard_data(current_user) -> Tuple[List[DeckNode], int, int, int, b
     if admin_mode:
         decks = (
             Deck.query.filter(
+                Deck.deleted_at.is_(None),
                 or_(
                     Deck.owner_user_id == current_user.id,
                     Deck.owner_user_id.is_(None),
@@ -64,7 +65,10 @@ def build_dashboard_data(current_user) -> Tuple[List[DeckNode], int, int, int, b
             int(deck_id)
             for (deck_id,) in (
                 db.session.query(Deck.id)
-                .filter(Deck.owner_user_id == current_user.id)
+                .filter(
+                    Deck.owner_user_id == current_user.id,
+                    Deck.deleted_at.is_(None),
+                )
                 .all()
             )
             if deck_id is not None
@@ -82,13 +86,19 @@ def build_dashboard_data(current_user) -> Tuple[List[DeckNode], int, int, int, b
                 visible_ids.update(current_ids)
                 child_rows = (
                     db.session.query(Deck.id)
-                    .filter(Deck.parent_id.in_(current_ids))
+                    .filter(
+                        Deck.parent_id.in_(current_ids),
+                        Deck.deleted_at.is_(None),
+                    )
                     .all()
                 )
                 frontier = {int(row[0]) for row in child_rows if row and row[0] is not None}
 
             decks = (
-                Deck.query.filter(Deck.id.in_(visible_ids))
+                Deck.query.filter(
+                    Deck.id.in_(visible_ids),
+                    Deck.deleted_at.is_(None),
+                )
                 .order_by(
                     Deck.parent_id.isnot(None),
                     Deck.position,

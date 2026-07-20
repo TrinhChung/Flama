@@ -2,17 +2,23 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from sqlalchemy.exc import SQLAlchemyError
 
 from models import db
 from models.deck import Deck
-from models.flashcard import Card, DeckInstall, Note
+from models.flashcard import Card, DeckCloneDeckMap, DeckInstall, DeckMarketplaceItem, Note
 from models.card_progress import CardProgress
 from app.repositories import vocabulary_repository as vocabulary_ctrl
-from app.repositories.deck_tree_query import collect_subtree_ids as _collect_deck_subtree_ids
+from app.repositories.deck_tree_query import (
+    collect_ancestor_ids as _collect_deck_ancestor_ids,
+    collect_subtree_ids as _collect_deck_subtree_ids,
+)
 from app.utils.deck_move_token import parse_deck_move_token
+
+UTC = timezone.utc
 
 class DeckManagementError(Exception):
     pass
@@ -65,9 +71,41 @@ def move_deck(*, deck_obj: Deck, new_parent_id: Optional[int]) -> None:
     deck_obj.position = vocabulary_ctrl.next_deck_position(new_parent_id)
     db.session.commit()
 
-def delete_deck_subtree(*, deck_obj: Deck, user_id: int, is_admin: bool) -> None:
-    """Deletes a deck subtree including Notes, Cards, CardProgress, and DeckInstalls. Commits."""
+def delete_deck_subtree(*, deck_obj: Deck, user_id: int, is_admin: bool) -> str:
+    """Delete a local deck, or archive a shared source while preserving installs."""
     deck_ids_to_delete = _collect_deck_subtree_ids(deck_obj.id)
+
+    marketplace_source_ids = set(deck_ids_to_delete)
+    marketplace_source_ids.update(_collect_deck_ancestor_ids(deck_obj.id))
+    marketplace_items = (
+        DeckMarketplaceItem.query.filter(
+            DeckMarketplaceItem.source_deck_id.in_(marketplace_source_ids)
+        ).all()
+    )
+    has_overlay_dependents = (
+        db.session.query(DeckCloneDeckMap.id)
+        .filter(DeckCloneDeckMap.source_deck_id.in_(deck_ids_to_delete))
+        .first()
+        is not None
+    )
+    has_source_installs = (
+        db.session.query(DeckInstall.id)
+        .filter(DeckInstall.source_deck_id.in_(deck_ids_to_delete))
+        .first()
+        is not None
+    )
+
+    if marketplace_items or has_overlay_dependents or has_source_installs:
+        deleted_at = datetime.now(UTC).replace(tzinfo=None)
+        Deck.query.filter(Deck.id.in_(deck_ids_to_delete)).update(
+            {Deck.deleted_at: deleted_at},
+            synchronize_session=False,
+        )
+        for marketplace_item in marketplace_items:
+            marketplace_item.publish_status = "archived"
+            marketplace_item.archived_at = deleted_at
+        db.session.commit()
+        return "archived"
 
     install_query = DeckInstall.query.filter(DeckInstall.local_deck_id.in_(deck_ids_to_delete))
     if not is_admin:
@@ -88,6 +126,7 @@ def delete_deck_subtree(*, deck_obj: Deck, user_id: int, is_admin: bool) -> None
 
     db.session.delete(deck_obj)
     db.session.commit()
+    return "deleted"
 
 def reset_deck_progress(*, deck_obj: Deck, user_id: int) -> int:
     """Resets the review progress for all cards in a deck subtree for a specific user. Commits."""

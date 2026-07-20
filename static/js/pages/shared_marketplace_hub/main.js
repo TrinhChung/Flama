@@ -16,6 +16,7 @@ if (root) {
 
   const filterForm = document.getElementById("marketplace-filter-form");
   const errorEl = document.getElementById("marketplace-hub-error");
+  const statusEl = document.getElementById("marketplace-hub-status");
   const heroSummaryEl = document.getElementById("marketplace-hero-summary");
   const heroNoteEl = document.getElementById("marketplace-hero-note");
   const resultsEl = document.getElementById("marketplace-results-grid");
@@ -45,18 +46,15 @@ if (root) {
     ["format_features", "Đặc điểm", "checkbox", "format_features"],
   ];
   const multiFilters = new Set(["learning_goals", "primary_topics", "format_features"]);
-  const warmCoverPalettes = [
-    ["#ff8a4c", "#b73700"],
-    ["#ff9f43", "#c2410c"],
-    ["#f59e0b", "#c2410c"],
-    ["#fb923c", "#9a3412"],
-  ];
   const state = {
     payload: null,
     timer: 0,
     labels: {},
     space: "discover",
     mobileFilterOpen: false,
+    requestController: null,
+    lastFocusedElement: null,
+    pendingActions: new Set(),
   };
 
   function escapeHtml(value) {
@@ -74,13 +72,13 @@ if (root) {
 
   function formatDate(value) {
     const date = new Date(value || "");
-    return Number.isNaN(date.getTime()) ? "Không rõ" : date.toLocaleString();
+    return Number.isNaN(date.getTime()) ? "Không rõ" : date.toLocaleString("vi-VN");
   }
 
   function formatShortDate(value) {
     const date = new Date(value || "");
     if (Number.isNaN(date.getTime())) return "Không rõ";
-    return date.toLocaleDateString(undefined, {
+    return date.toLocaleDateString("vi-VN", {
       month: "short",
       day: "numeric",
     });
@@ -168,12 +166,30 @@ if (root) {
     errorEl.classList.add("d-none");
   }
 
+  function announce(message) {
+    if (statusEl) statusEl.textContent = message || "";
+  }
+
+  function setLoading(loading) {
+    root.setAttribute("aria-busy", loading ? "true" : "false");
+    resultsEl?.classList.toggle("is-loading", loading);
+    if (loading && !state.payload && resultsEl) {
+      resultsEl.innerHTML = Array.from({ length: 3 }, () => `
+        <div class="market-card-skeleton" aria-hidden="true">
+          <span></span><span></span><span></span><span></span>
+        </div>
+      `).join("");
+    }
+  }
+
   function isPhoneViewport() {
     return window.matchMedia("(max-width: 767.98px)").matches;
   }
 
   function setMobileFilterOpen(open) {
     const active = Boolean(open && isPhoneViewport() && state.space === "discover");
+    const wasActive = state.mobileFilterOpen;
+    if (active && !wasActive) state.lastFocusedElement = document.activeElement;
     state.mobileFilterOpen = active;
     root.classList.toggle("is-mobile-filter-open", active);
     document.body.classList.toggle("market-mobile-filter-lock", active);
@@ -182,9 +198,18 @@ if (root) {
     }
     if (filterSidebarEl) {
       filterSidebarEl.setAttribute("aria-hidden", active ? "false" : String(isPhoneViewport()));
+      filterSidebarEl.inert = Boolean(isPhoneViewport() && !active);
     }
     if (mobileFilterToggleEl) {
       mobileFilterToggleEl.setAttribute("aria-expanded", active ? "true" : "false");
+    }
+    if (active && !wasActive) {
+      window.requestAnimationFrame(() => {
+        filterSidebarEl?.querySelector("button, input, select, summary")?.focus();
+      });
+    } else if (!active && wasActive && state.lastFocusedElement instanceof HTMLElement) {
+      state.lastFocusedElement.focus();
+      state.lastFocusedElement = null;
     }
   }
 
@@ -192,7 +217,10 @@ if (root) {
     state.space = space;
     setMobileFilterOpen(false);
     switchButtons.forEach((button) => {
-      button.classList.toggle("is-active", button.dataset.space === space);
+      const isActive = button.dataset.space === space;
+      button.classList.toggle("is-active", isActive);
+      button.setAttribute("aria-selected", isActive ? "true" : "false");
+      button.tabIndex = isActive ? 0 : -1;
     });
     spacePanels.forEach((panel) => {
       const isActive = panel.dataset.spacePanel === space;
@@ -221,13 +249,6 @@ if (root) {
     return url.toString();
   }
 
-  function pickCoverPalette(item) {
-    const title = String(item?.title || item?.name || "");
-    const seed = Array.from(title).reduce((total, char) => total + char.charCodeAt(0), 0);
-    const [start, end] = warmCoverPalettes[seed % warmCoverPalettes.length];
-    return `--cover-start:${start};--cover-end:${end};`;
-  }
-
   function buildCoverLabel(item) {
     return (
       (item?.level_tokens || []).slice(0, 2).join(" · ")
@@ -237,6 +258,24 @@ if (root) {
       || item?.primary_category
       || (marketKind === "deck_marketplace_item" ? "Deck" : "Note type")
     );
+  }
+
+  function renderLearningPreview(item, options = {}) {
+    const { featured = false } = options;
+    const preview = item.preview_text || item.short_description || "Mở bộ thẻ để xem nội dung học thử.";
+    const sampleCount = Number(item.sample_cards_count || 0);
+    return `
+      <div class="market-learning-preview${featured ? " market-learning-preview--featured" : ""}">
+        <div class="market-learning-preview-head">
+          <span class="market-preview-level">${escapeHtml(buildCoverLabel(item))}</span>
+          ${sampleCount ? `<span class="market-preview-count"><i class="bi bi-stack" aria-hidden="true"></i> ${formatCount(sampleCount)} thẻ mẫu</span>` : ""}
+        </div>
+        <div class="market-learning-preview-card">
+          <span class="market-preview-label">Xem trước nội dung</span>
+          <p>${escapeHtml(preview)}</p>
+        </div>
+      </div>
+    `;
   }
 
   function buildSupportChips(item) {
@@ -309,6 +348,13 @@ if (root) {
       .join("");
   }
 
+  function getInstallLabel(item) {
+    if (item.pricing_mode === "paid") {
+      return item.price_display ? `Mua · ${item.price_display}` : "Mua bộ thẻ";
+    }
+    return marketKind === "deck_marketplace_item" ? "Cài miễn phí" : (item.primary_cta_label || "Thêm vào thư viện");
+  }
+
   function renderPrimaryButton(item, mode = "discover") {
     const detailUrl = buildUrl(detailTemplate, item.id);
     const editUrl = buildEditUrl(item);
@@ -326,7 +372,7 @@ if (root) {
         return `<a class="btn btn-primary" href="${escapeHtml(editUrl)}">Chỉnh sửa</a>`;
       }
       if (!item.is_installed && action === "install") {
-        return `<button class="btn btn-primary" type="button" data-action="install" data-id="${escapeHtml(item.id)}">${escapeHtml(item.primary_cta_label || "Cài đặt")}</button>`;
+        return `<button class="btn btn-primary" type="button" data-action="install" data-id="${escapeHtml(item.id)}">${escapeHtml(getInstallLabel(item))}</button>`;
       }
       return `<a class="btn btn-primary" href="${escapeHtml(detailUrl)}">Mở chi tiết</a>`;
     }
@@ -349,7 +395,7 @@ if (root) {
     if (action === "order") {
       return `<button class="btn btn-outline-secondary" type="button" data-action="orders">Xem đơn hàng</button>`;
     }
-    return `<button class="btn btn-primary" type="button" data-action="install" data-id="${escapeHtml(item.id)}">${escapeHtml(item.primary_cta_label || "Thêm vào thư viện")}</button>`;
+    return `<button class="btn btn-primary" type="button" data-action="install" data-id="${escapeHtml(item.id)}">${escapeHtml(getInstallLabel(item))}</button>`;
   }
 
   function renderSecondaryButtons(item, mode = "discover") {
@@ -358,7 +404,10 @@ if (root) {
 
     if (mode === "discover") {
       if (!item.is_owner) {
-        actions.push(`<button class="btn btn-outline-secondary" type="button" data-action="save" data-id="${escapeHtml(item.id)}" data-saved="${item.is_saved ? "1" : "0"}">${escapeHtml(item.is_saved ? "Đã lưu" : "Lưu")}</button>`);
+        const saveLabel = item.is_saved ? "Bỏ lưu" : "Lưu bộ thẻ";
+        actions.push(isCompactNoteTypeMarket
+          ? `<button class="btn btn-outline-secondary" type="button" data-action="save" data-id="${escapeHtml(item.id)}" data-saved="${item.is_saved ? "1" : "0"}">${escapeHtml(item.is_saved ? "Đã lưu" : "Lưu")}</button>`
+          : `<button class="btn btn-outline-secondary market-save-button${item.is_saved ? " is-saved" : ""}" type="button" data-action="save" data-id="${escapeHtml(item.id)}" data-saved="${item.is_saved ? "1" : "0"}" aria-label="${saveLabel}" title="${saveLabel}"><i class="bi ${item.is_saved ? "bi-bookmark-fill" : "bi-bookmark"}" aria-hidden="true"></i></button>`);
       }
       actions.push(`<a class="btn btn-outline-secondary" href="${escapeHtml(detailUrl)}">Chi tiết</a>`);
       return actions.join("");
@@ -391,10 +440,8 @@ if (root) {
     const coverMarkup = isCompactNoteTypeMarket
       ? ""
       : `
-        <a class="market-card-cover" href="${escapeHtml(detailUrl)}" style="${pickCoverPalette(item)}">
-          ${badgeMarkup ? `<div class="market-cover-badges">${badgeMarkup}</div>` : ""}
-          <div class="market-cover-label">${escapeHtml(buildCoverLabel(item))}</div>
-          <div class="market-card-cover-title">${escapeHtml(title)}</div>
+        <a class="market-card-preview-link" href="${escapeHtml(detailUrl)}" aria-label="Xem ${escapeHtml(title)}">
+          ${renderLearningPreview(item)}
         </a>`;
     const statsMarkup = isCompactNoteTypeMarket
       ? `
@@ -410,26 +457,17 @@ if (root) {
           </span>
         </div>`
       : `
-        <div class="market-card-statbar">
-          <div class="market-card-stat">
-            <strong>${escapeHtml(item.price_display || "Miễn phí")}</strong>
-            <span>${item.pricing_mode === "paid" ? "Giá hiện tại" : "Sẵn sàng dùng"}</span>
-          </div>
-          <div class="market-card-stat">
-            <strong>${Number(item.rating_avg || 0).toFixed(1)}</strong>
-            <span>${formatCount(item.rating_count || 0)} đánh giá</span>
-          </div>
-          <div class="market-card-stat">
-            <strong>${formatCount(item.install_count || 0)}</strong>
-            <span>${mode === "library" ? "lượt sở hữu" : "lượt cài"}</span>
-          </div>
+        <div class="market-card-facts" aria-label="Tóm tắt bộ thẻ">
+          <span class="market-card-fact market-card-price">${escapeHtml(item.price_display || "Miễn phí")}</span>
+          <span class="market-card-fact" title="Đánh giá"><i class="bi bi-star-fill" aria-hidden="true"></i> ${Number(item.rating_avg || 0).toFixed(1)} (${formatCount(item.rating_count || 0)})</span>
+          <span class="market-card-fact" title="Lượt cài"><i class="bi bi-people" aria-hidden="true"></i> ${formatCount(item.install_count || 0)} lượt cài</span>
         </div>`;
 
     return `
       <article class="market-card market-card--${escapeHtml(mode)} ${isCompactNoteTypeMarket ? "market-card--compact-note-type" : ""}" data-item-id="${escapeHtml(item.id)}">
         ${coverMarkup}
         <div class="market-card-body">
-          ${isCompactNoteTypeMarket && badgeMarkup ? `<div class="market-card-badges">${badgeMarkup}</div>` : ""}
+          ${badgeMarkup ? `<div class="market-card-badges">${badgeMarkup}</div>` : ""}
           <div class="market-card-head">
             <a class="market-card-title-link" href="${escapeHtml(detailUrl)}">
               <h3 class="market-card-title">${escapeHtml(title)}</h3>
@@ -632,8 +670,8 @@ if (root) {
   function renderAppliedFilters(payload) {
     const chips = collectActiveChips(payload.filters || {});
     appliedFiltersEl.innerHTML = chips.length
-      ? chips.map((chip) => `<button class="market-inline-chip" type="button" data-remove-filter="${escapeHtml(chip[0])}" data-remove-value="${escapeHtml(chip[1])}">${escapeHtml(chip[2])} <span aria-hidden="true">x</span></button>`).join("")
-      : `<span class="market-applied-placeholder">Chưa áp dụng bộ lọc.</span>`;
+      ? chips.map((chip) => `<button class="market-inline-chip" type="button" data-remove-filter="${escapeHtml(chip[0])}" data-remove-value="${escapeHtml(chip[1])}">${escapeHtml(chip[2])} <span aria-hidden="true">×</span></button>`).join("")
+      : "";
   }
 
   function renderQuickFilters(payload) {
@@ -641,17 +679,20 @@ if (root) {
     const filters = payload.filters || {};
     const rows = [];
 
-    (available.subjects || []).slice(0, 4).forEach((value) => {
+    (available.subjects || []).slice(0, 1).forEach((value) => {
       rows.push(["subject", value, formatLabel("subject", value), filters.subject === value]);
     });
-    (available.levels || []).slice(0, 3).forEach((value) => {
+    (available.levels || []).slice(0, 2).forEach((value) => {
       rows.push(["difficulty_band", value, formatLabel("difficulty_band", value), filters.difficulty_band === value]);
     });
-    (available.learning_goals || []).slice(0, 6).forEach((value) => {
+    (available.learning_goals || []).slice(0, 1).forEach((value) => {
       rows.push(["learning_goals", value, formatLabel("learning_goals", value), (filters.learning_goals || []).includes(value)]);
     });
+    if (marketKind === "deck_marketplace_item") {
+      rows.push(["pricing_mode", "free", "Miễn phí", filters.pricing_mode === "free"]);
+    }
 
-    quickFiltersEl.innerHTML = rows.map((row) => `
+    quickFiltersEl.innerHTML = rows.slice(0, 5).map((row) => `
       <button class="market-inline-chip ${row[3] ? "is-active" : ""}" type="button" data-quick-filter-name="${escapeHtml(row[0])}" data-quick-filter-value="${escapeHtml(row[1])}">
         ${escapeHtml(row[2])}
       </button>
@@ -675,15 +716,14 @@ if (root) {
     featuredStageEl.classList.remove("d-none");
     featuredStageEl.innerHTML = `
       <article class="market-featured-card market-featured-card--hero">
-        <a class="market-featured-cover" href="${escapeHtml(detailUrl)}" style="${pickCoverPalette(heroItem)}">
-          ${badgeMarkup ? `<div class="market-cover-badges">${badgeMarkup}</div>` : ""}
-          <div class="market-cover-label">${escapeHtml(buildCoverLabel(heroItem))}</div>
-          <div class="market-cover-title">${escapeHtml(heroItem.title || heroItem.name || "Untitled")}</div>
+        <a class="market-featured-preview-link" href="${escapeHtml(detailUrl)}" aria-label="Xem bộ thẻ nổi bật">
+          ${renderLearningPreview(heroItem, { featured: true })}
         </a>
 
         <div class="market-featured-body">
           <div>
-            <div class="market-hub-section-kicker">Nổi bật</div>
+            <div class="market-featured-kicker"><i class="bi bi-stars" aria-hidden="true"></i> Đề xuất cho bạn</div>
+            ${badgeMarkup ? `<div class="market-card-badges">${badgeMarkup}</div>` : ""}
             <h2 class="market-featured-title">${escapeHtml(heroItem.title || heroItem.name || "Untitled")}</h2>
             <p class="market-featured-meta mb-0">${escapeHtml(heroItem.preview_text || heroItem.short_description || "Đã chọn từ các mục nổi bật nhất trong marketplace hiện tại.")}</p>
           </div>
@@ -692,19 +732,10 @@ if (root) {
             ${supportChips || `<span class="market-support-chip is-key">${escapeHtml(heroItem.primary_category || "General")}</span>`}
           </div>
 
-          <div class="market-featured-statline">
-            <div class="market-featured-stat">
-              <strong>${escapeHtml(heroItem.price_display || "Miễn phí")}</strong>
-              <span>${heroItem.pricing_mode === "paid" ? "Giá hiện tại" : "Có thể cài ngay"}</span>
-            </div>
-            <div class="market-featured-stat">
-              <strong>${Number(heroItem.rating_avg || 0).toFixed(1)}</strong>
-              <span>${formatCount(heroItem.rating_count || 0)} đánh giá</span>
-            </div>
-            <div class="market-featured-stat">
-              <strong>${formatCount(heroItem.install_count || 0)}</strong>
-              <span>lượt cài đặt</span>
-            </div>
+          <div class="market-card-facts" aria-label="Tóm tắt bộ thẻ nổi bật">
+            <span class="market-card-fact market-card-price">${escapeHtml(heroItem.price_display || "Miễn phí")}</span>
+            <span class="market-card-fact"><i class="bi bi-star-fill" aria-hidden="true"></i> ${Number(heroItem.rating_avg || 0).toFixed(1)} (${formatCount(heroItem.rating_count || 0)})</span>
+            <span class="market-card-fact"><i class="bi bi-people" aria-hidden="true"></i> ${formatCount(heroItem.install_count || 0)} lượt cài</span>
           </div>
 
           ${activityLine ? `<div class="market-card-summary">${escapeHtml(activityLine)}</div>` : ""}
@@ -717,9 +748,7 @@ if (root) {
       </article>
     `;
 
-    if (heroNoteEl) {
-      heroNoteEl.textContent = heroItem.preview_text || "Mục nổi bật được chọn dựa trên hiệu suất, khả năng học nhanh và độ phù hợp với người dùng Flama.";
-    }
+    if (heroNoteEl) heroNoteEl.textContent = heroItem.preview_text || "Bộ thẻ phù hợp để bắt đầu học ngay.";
   }
 
   function renderDiscoverShelves(payload) {
@@ -834,16 +863,29 @@ if (root) {
 
   function renderDiscover(payload) {
     const items = payload.marketplace?.items || [];
+    const featuredItem = payload?.discovery?.hero || items[0];
+    const showFeatured = Boolean(featuredStageEl && featuredItem && !hasActiveFilters(payload));
+    const gridItems = showFeatured ? items.filter((item) => String(item.id) !== String(featuredItem.id)) : items;
     resultsCountEl.textContent = `${formatCount(payload.marketplace?.result_count || items.length)} mục`;
     renderHeroSummary(payload);
     renderQuickFilters(payload);
     renderAppliedFilters(payload);
     renderFeaturedStage(payload);
-    renderLibrarySpotlight(payload);
-    renderDiscoverShelves(payload);
-    resultsEl.innerHTML = items.length
-      ? items.map((item) => renderCard(item, "discover")).join("")
-      : `<div class="market-empty-state">Không tìm thấy nội dung phù hợp với bộ lọc hiện tại.</div>`;
+    if (isCompactNoteTypeMarket) {
+      renderLibrarySpotlight(payload);
+      renderDiscoverShelves(payload);
+    }
+    resultsEl.innerHTML = gridItems.length
+      ? gridItems.map((item) => renderCard(item, "discover")).join("")
+      : (items.length ? "" : `
+        <div class="market-empty-state market-empty-state--actionable">
+          <i class="bi bi-search" aria-hidden="true"></i>
+          <h3>Chưa tìm thấy bộ thẻ phù hợp</h3>
+          <p>Thử một từ khóa rộng hơn hoặc xóa các bộ lọc đang dùng.</p>
+          <button class="btn btn-primary" type="reset">Xóa bộ lọc</button>
+        </div>
+      `);
+    announce(`Đã tìm thấy ${formatCount(payload.marketplace?.result_count || items.length)} mục.`);
   }
 
   function renderLibrary(payload) {
@@ -894,38 +936,118 @@ if (root) {
     renderSeller(payload);
   }
 
+  function syncFilterUrl(params) {
+    if (marketKind !== "deck_marketplace_item") return;
+    const url = new URL(window.location.href);
+    url.search = params.toString();
+    window.history.replaceState({}, "", url);
+  }
+
   async function loadHub() {
+    state.requestController?.abort();
+    const controller = new AbortController();
+    state.requestController = controller;
     clearError();
-    const params = collectFilters();
+    setLoading(true);
+    announce("Đang cập nhật danh sách bộ thẻ.");
+    const params = !state.payload && window.location.search
+      ? new URLSearchParams(window.location.search)
+      : collectFilters();
     const query = params.toString();
-    const payload = await requestJson(query ? `${hubUrl}?${query}` : hubUrl);
-    renderAll(payload);
+    try {
+      const payload = await requestJson(query ? `${hubUrl}?${query}` : hubUrl, { signal: controller.signal });
+      if (controller.signal.aborted) return;
+      renderAll(payload);
+      syncFilterUrl(collectFilters());
+    } catch (error) {
+      if (error.name !== "AbortError") throw error;
+    } finally {
+      if (state.requestController === controller) {
+        state.requestController = null;
+        setLoading(false);
+      }
+    }
+  }
+
+  function setActionBusy(itemId, action, busy) {
+    root.querySelectorAll(`[data-action="${action}"][data-id="${CSS.escape(String(itemId))}"]`).forEach((button) => {
+      if (busy) {
+        button.dataset.originalHtml = button.innerHTML;
+        button.innerHTML = `<span class="spinner-border spinner-border-sm" aria-hidden="true"></span><span class="visually-hidden">Đang xử lý</span>`;
+      } else if (button.dataset.originalHtml) {
+        button.innerHTML = button.dataset.originalHtml;
+        delete button.dataset.originalHtml;
+      }
+      button.disabled = busy;
+      button.setAttribute("aria-busy", busy ? "true" : "false");
+    });
   }
 
   async function installItem(itemId) {
-    const response = await requestJson(buildUrl(installTemplate, itemId), { method: "POST" });
-    if (response?.payment_required && response?.order) {
-      const checkoutUrl = response?.order?.active_attempt?.checkout?.checkout_url || response?.order?.active_attempt?.checkout_url;
-      if (checkoutUrl && response?.order?.status === "pending_payment") {
-        window.location.href = checkoutUrl;
+    const actionKey = `install:${itemId}`;
+    if (state.pendingActions.has(actionKey)) return;
+    state.pendingActions.add(actionKey);
+    setActionBusy(itemId, "install", true);
+    try {
+      const response = await requestJson(buildUrl(installTemplate, itemId), { method: "POST" });
+      if (response?.payment_required && response?.order) {
+        const checkoutUrl = response?.order?.active_attempt?.checkout?.checkout_url || response?.order?.active_attempt?.checkout_url;
+        if (checkoutUrl && response?.order?.status === "pending_payment") {
+          window.location.href = checkoutUrl;
+          return;
+        }
+        window.location.href = buildPaymentResultUrl(response?.order?.id || "", itemId) || ordersUrl;
         return;
       }
-      window.location.href = buildPaymentResultUrl(response?.order?.id || "", itemId) || ordersUrl;
-      return;
+      announce("Đã thêm bộ thẻ vào thư viện.");
+      await loadHub();
+    } finally {
+      state.pendingActions.delete(actionKey);
+      setActionBusy(itemId, "install", false);
     }
-    await loadHub();
   }
 
   async function saveItem(itemId, isSaved) {
-    await requestJson(buildUrl(saveTemplate, itemId), { method: isSaved ? "DELETE" : "POST" });
-    await loadHub();
+    const actionKey = `save:${itemId}`;
+    if (state.pendingActions.has(actionKey)) return;
+    state.pendingActions.add(actionKey);
+    setActionBusy(itemId, "save", true);
+    try {
+      await requestJson(buildUrl(saveTemplate, itemId), { method: isSaved ? "DELETE" : "POST" });
+      announce(isSaved ? "Đã bỏ lưu bộ thẻ." : "Đã lưu bộ thẻ.");
+      await loadHub();
+    } finally {
+      state.pendingActions.delete(actionKey);
+      setActionBusy(itemId, "save", false);
+    }
   }
 
   function queueReload() {
     window.clearTimeout(state.timer);
     state.timer = window.setTimeout(() => {
+      const minPrice = Number(filterForm.elements.min_price?.value || 0);
+      const maxPrice = Number(filterForm.elements.max_price?.value || 0);
+      if (maxPrice && minPrice > maxPrice) {
+        showError("Giá tối thiểu không thể lớn hơn giá tối đa.");
+        return;
+      }
       loadHub().catch((error) => showError(error.message));
-    }, 180);
+    }, 280);
+  }
+
+  function resetFilters() {
+    Array.from(filterForm.elements).forEach((control) => {
+      if (!(control instanceof HTMLElement) || !control.getAttribute("name")) return;
+      if (control instanceof HTMLInputElement && control.type === "radio") {
+        control.checked = control.value === "";
+      } else if (control instanceof HTMLInputElement && control.type === "checkbox") {
+        control.checked = false;
+      } else if (control instanceof HTMLSelectElement) {
+        control.value = control.name === "sort" ? "recently_updated" : "";
+      } else if ("value" in control) {
+        control.value = "";
+      }
+    });
   }
 
   function clearNamedFilter(name, value) {
@@ -948,6 +1070,11 @@ if (root) {
 
   function toggleQuickFilter(name, value) {
     const inputs = Array.from(filterForm.querySelectorAll(`[name="${name}"]`));
+    const select = inputs.find((input) => input instanceof HTMLSelectElement);
+    if (select) {
+      select.value = select.value === value ? "" : value;
+      return;
+    }
     const target = inputs.find((input) => input.value === value);
     if (!target) return;
     if (target.type === "checkbox") {
@@ -962,6 +1089,17 @@ if (root) {
 
   switchButtons.forEach((button) => {
     button.addEventListener("click", () => switchSpace(button.dataset.space || "discover"));
+    button.addEventListener("keydown", (event) => {
+      if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+      event.preventDefault();
+      const currentIndex = switchButtons.indexOf(button);
+      let nextIndex = event.key === "Home" ? 0 : event.key === "End" ? switchButtons.length - 1 : currentIndex;
+      if (event.key === "ArrowRight") nextIndex = (currentIndex + 1) % switchButtons.length;
+      if (event.key === "ArrowLeft") nextIndex = (currentIndex - 1 + switchButtons.length) % switchButtons.length;
+      const nextButton = switchButtons[nextIndex];
+      switchSpace(nextButton.dataset.space || "discover");
+      nextButton.focus();
+    });
   });
 
   mobileFilterToggleEl?.addEventListener("click", () => {
@@ -988,13 +1126,30 @@ if (root) {
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && state.mobileFilterOpen) {
       setMobileFilterOpen(false);
+      return;
+    }
+    if (event.key === "Tab" && state.mobileFilterOpen && filterSidebarEl) {
+      const focusable = Array.from(filterSidebarEl.querySelectorAll("button:not([disabled]), input:not([disabled]), select:not([disabled]), summary, [href]"))
+        .filter((element) => !element.closest("[hidden]"));
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
     }
   });
 
   filterForm?.addEventListener("input", queueReload);
   filterForm?.addEventListener("change", queueReload);
-  filterForm?.addEventListener("reset", () => {
-    window.setTimeout(() => loadHub().catch((error) => showError(error.message)), 0);
+  filterForm?.addEventListener("reset", (event) => {
+    event.preventDefault();
+    resetFilters();
+    loadHub().catch((error) => showError(error.message));
   });
 
   root.addEventListener("click", (event) => {

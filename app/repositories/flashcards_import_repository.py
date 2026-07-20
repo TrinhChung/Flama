@@ -15,6 +15,7 @@ def collect_accessible_decks_for_import(*, user_id: int, admin_mode: bool) -> li
     if admin_mode:
         return (
             Deck.query.filter(
+                Deck.deleted_at.is_(None),
                 db.or_(
                     Deck.owner_user_id == user_id,
                     Deck.owner_user_id.is_(None),
@@ -33,7 +34,12 @@ def collect_accessible_decks_for_import(*, user_id: int, admin_mode: bool) -> li
     installed_root_ids = {int(row.local_deck_id) for row in installs if row.local_deck_id}
     owned_deck_ids = {
         int(row[0])
-        for row in db.session.query(Deck.id).filter(Deck.owner_user_id == user_id).all()
+        for row in db.session.query(Deck.id)
+        .filter(
+            Deck.owner_user_id == user_id,
+            Deck.deleted_at.is_(None),
+        )
+        .all()
         if row and row[0] is not None
     }
     initial_visible_ids = installed_root_ids | owned_deck_ids
@@ -49,13 +55,19 @@ def collect_accessible_decks_for_import(*, user_id: int, admin_mode: bool) -> li
         visible_ids.update(current_ids)
         child_rows = (
             db.session.query(Deck.id)
-            .filter(Deck.parent_id.in_(current_ids))
+            .filter(
+                Deck.parent_id.in_(current_ids),
+                Deck.deleted_at.is_(None),
+            )
             .all()
         )
         frontier = {int(row[0]) for row in child_rows if row and row[0] is not None}
 
     return (
-        Deck.query.filter(Deck.id.in_(visible_ids))
+        Deck.query.filter(
+            Deck.id.in_(visible_ids),
+            Deck.deleted_at.is_(None),
+        )
         .order_by(
             Deck.parent_id.isnot(None),
             Deck.position.asc(),

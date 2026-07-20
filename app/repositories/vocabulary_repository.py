@@ -66,7 +66,10 @@ def deck_name_exists_under_parent(
     if not normalized_name:
         return False
 
-    query = Deck.query.filter(db.func.lower(Deck.name) == normalized_name)
+    query = Deck.query.filter(
+        db.func.lower(Deck.name) == normalized_name,
+        Deck.deleted_at.is_(None),
+    )
     if parent_id is None:
         query = query.filter(Deck.parent_id.is_(None))
     else:
@@ -175,6 +178,7 @@ def upsert_deck_path(
         existing_query = Deck.query.filter(
             Deck.parent_id == current_parent_id,
             Deck.name == token,
+            Deck.deleted_at.is_(None),
         )
         if not admin_mode:
             existing_query = existing_query.filter(Deck.owner_user_id == owner_user_id)
@@ -446,6 +450,7 @@ def collect_accessible_browse_decks(*, user_id: int, admin_mode: bool) -> list[D
     if admin_mode:
         return (
             Deck.query.filter(
+                Deck.deleted_at.is_(None),
                 db.or_(
                     Deck.owner_user_id == user_id,
                     Deck.owner_user_id.is_(None),
@@ -460,7 +465,7 @@ def collect_accessible_browse_decks(*, user_id: int, admin_mode: bool) -> list[D
             .all()
         )
 
-    all_decks = Deck.query.order_by(
+    all_decks = Deck.query.filter(Deck.deleted_at.is_(None)).order_by(
         Deck.parent_id.isnot(None),
         Deck.position,
         Deck.created_at,
@@ -472,7 +477,10 @@ def collect_accessible_browse_decks(*, user_id: int, admin_mode: bool) -> list[D
 
     owned_deck_rows = (
         db.session.query(Deck.id)
-        .filter(Deck.owner_user_id == user_id)
+        .filter(
+            Deck.owner_user_id == user_id,
+            Deck.deleted_at.is_(None),
+        )
         .all()
     )
     visible_ids.update(int(row[0]) for row in owned_deck_rows if row and row[0] is not None)
@@ -504,7 +512,10 @@ def collect_accessible_browse_decks(*, user_id: int, admin_mode: bool) -> list[D
             visible_ids.update(current)
             child_rows = (
                 db.session.query(Deck.id)
-                .filter(Deck.parent_id.in_(current))
+                .filter(
+                    Deck.parent_id.in_(current),
+                    Deck.deleted_at.is_(None),
+                )
                 .all()
             )
             frontier = {int(row[0]) for row in child_rows if row and row[0] is not None}
