@@ -7,11 +7,10 @@
 {% endblock %}
 
 {% block content %}
-<section class="container py-4 market-detail-page">
-  <div class="row justify-content-center">
-    <div class="col-xl-10">
-      <div class="market-space-panel">
-        <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
+<section class="market-detail-page market-publish-page">
+  <div class="market-publish-layout">
+    <div class="market-publish-surface">
+      <div class="market-publish-header">
           <div>
             <div class="market-hub-section-kicker">Study Catalog</div>
             <h1 class="market-hub-section-title h3 mb-2">Share note type vào danh mục học</h1>
@@ -23,11 +22,11 @@
             <a class="btn btn-outline-secondary" href="{{ url_for('flashcards.note_type_detail_page', note_type_id=note_type.id) }}">Về editor</a>
             <a class="btn btn-outline-secondary" href="{{ url_for('flashcards.note_type_manager') }}">Kho template</a>
           </div>
-        </div>
+      </div>
 
-        <form method="post" action="{{ url_for('flashcards.share_note_type_page', note_type_id=note_type.id) }}" class="row g-4">
-          <div class="col-lg-5">
-            <div class="market-author-card h-100">
+        <form method="post" action="{{ url_for('flashcards.share_note_type_page', note_type_id=note_type.id) }}" class="market-publish-form">
+          <div class="market-publish-section market-publish-section--basics">
+            <div class="market-publish-section-content">
               <div class="market-hub-section-kicker">Template Basics</div>
               <h2 class="market-hub-section-title h5 mb-3">{{ note_type.name }}</h2>
 
@@ -119,13 +118,13 @@
             </div>
           </div>
 
-          <div class="col-lg-7">
-            <div class="market-author-card h-100">
+          <div class="market-publish-section market-publish-section--taxonomy">
+            <div class="market-publish-section-content">
               {% include "flashcards/_marketplace_taxonomy_fields.html" %}
             </div>
           </div>
 
-          <div class="col-12">
+          <footer class="market-publish-footer">
             <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
               <p class="text-muted small mb-0">
                 Owner tools vẫn nằm trong editor. Listing này chỉ xác định cách note type xuất hiện và được lọc trong public catalog.
@@ -135,7 +134,7 @@
                 <button class="btn btn-primary" type="submit">Cập nhật listing</button>
               </div>
             </div>
-          </div>
+          </footer>
         </form>
       </div>
     </div>

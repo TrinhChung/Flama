@@ -470,6 +470,14 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         note_type = self._create_note_type()
         note_type_id = note_type["id"]
 
+        page_resp = self.client.get(f"/flashcards/note-types/{note_type_id}/share")
+        self.assertEqual(page_resp.status_code, 200)
+        page_html = page_resp.get_data(as_text=True)
+        self.assertIn("market-publish-page", page_html)
+        self.assertIn("market-publish-form", page_html)
+        self.assertNotIn("col-xl-10", page_html)
+        self.assertNotIn("market-author-card h-100", page_html)
+
         share_resp = self.client.post(
             f"/flashcards/note-types/{note_type_id}/share",
             data={

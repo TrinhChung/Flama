@@ -1798,6 +1798,390 @@ body.market-mobile-filter-lock {
 }
 
 /* Flama Bright Focus — deck marketplace */
+/* Note type catalog: wide task surface with one clear layer of containment. */
+body:has(.market-hub-page--compact-catalog) main.container,
+body:has(.market-publish-page) main.container {
+  max-width: 92.5rem;
+  padding-inline: clamp(1rem, 2.5vw, 2rem);
+}
+
+.market-hub-page--compact-catalog {
+  padding: 0.5rem 0 2.5rem;
+}
+
+.market-hub-page--compact-catalog::before {
+  content: none;
+}
+
+.market-hub-page--compact-catalog .market-hub-hero {
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+  padding: 0 0 1.5rem;
+  border: 0;
+  border-bottom: 1px solid var(--market-line);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.market-hub-page--compact-catalog .market-hub-hero-copy {
+  gap: 0.5rem;
+}
+
+.market-hub-page--compact-catalog .market-hub-title {
+  font-size: 2rem;
+}
+
+.market-hub-page--compact-catalog .market-hub-hero-actions {
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.market-hub-page--compact-catalog .market-hub-nav {
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+.market-hub-page--compact-catalog .market-hub-switch {
+  gap: 0.25rem;
+  padding: 0.25rem;
+  box-shadow: none;
+}
+
+.market-hub-page--compact-catalog .market-space-panel--discover,
+.market-hub-page--compact-catalog .market-library-panel {
+  gap: 1.5rem;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.market-hub-page--compact-catalog .market-catalog-shell {
+  gap: 1.5rem;
+}
+
+.market-hub-page--compact-catalog .market-catalog-toolbar {
+  gap: 0.75rem;
+}
+
+.market-hub-page--compact-catalog .market-toolbar-search {
+  position: relative;
+}
+
+.market-hub-page--compact-catalog .market-toolbar-search > i {
+  position: absolute;
+  top: 50%;
+  left: 0.875rem;
+  z-index: 1;
+  color: var(--market-muted);
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.market-hub-page--compact-catalog .market-toolbar-search .form-control-lg {
+  min-height: 2.75rem;
+  padding: 0.625rem 0.75rem 0.625rem 2.5rem;
+}
+
+.market-hub-page--compact-catalog .market-catalog-layout {
+  grid-template-columns: minmax(16rem, 17rem) minmax(0, 1fr);
+  gap: 1.5rem;
+}
+
+.market-hub-page--compact-catalog .market-filter-sidebar,
+.market-hub-page--compact-catalog .market-filter-stack {
+  gap: 0.75rem;
+}
+
+.market-hub-page--compact-catalog .market-filter-sidebar {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.market-hub-page--compact-catalog .market-filter-section,
+.market-hub-page--compact-catalog .market-inline-section {
+  padding: 1rem;
+  border-radius: 0.75rem;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.market-hub-page--compact-catalog .market-filter-check {
+  min-height: 2.75rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.5rem;
+}
+
+.market-hub-page--compact-catalog .market-results-header {
+  gap: 0.75rem;
+  margin-bottom: 0;
+}
+
+.market-hub-page--compact-catalog .market-results-tools {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.market-hub-page--compact-catalog .market-results-sort .form-select {
+  min-width: 10rem;
+}
+
+.market-hub-page--compact-catalog .market-card-grid {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 19rem), 1fr));
+  gap: 1rem;
+}
+
+.market-hub-page--compact-catalog .market-card {
+  border-radius: 0.75rem;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.market-hub-page--compact-catalog .market-card-body {
+  gap: 0.5rem;
+  padding: 1rem;
+}
+
+.market-hub-page--compact-catalog .market-card-badges {
+  min-height: 0;
+}
+
+.market-card-skeleton--compact {
+  min-height: 12rem;
+  gap: 0.75rem;
+  padding: 1rem;
+  border-color: var(--market-line);
+  box-shadow: none;
+}
+
+.market-card-skeleton--compact span:first-child {
+  width: 42%;
+  height: 1rem;
+}
+
+.market-card-skeleton--compact span:nth-child(2) {
+  width: 78%;
+}
+
+.market-card-skeleton--compact span:nth-child(3) {
+  height: 3rem;
+}
+
+.market-card-skeleton--compact span:nth-child(4) {
+  width: 58%;
+}
+
+/* Note type publishing: one wide form, divided by structure instead of nested cards. */
+body:has(.market-publish-page) {
+  background: var(--flama-bg);
+}
+
+.market-publish-page {
+  width: 100%;
+  max-width: 86rem;
+  margin-inline: auto;
+  padding: 0.5rem 0 3rem;
+}
+
+.market-publish-page::before {
+  content: none;
+}
+
+.market-publish-layout,
+.market-publish-surface {
+  width: 100%;
+}
+
+.market-publish-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1.5rem;
+  padding-bottom: 1.5rem;
+}
+
+.market-publish-header > :first-child {
+  max-width: 48rem;
+}
+
+.market-publish-form {
+  display: grid;
+  grid-template-columns: minmax(22rem, 5fr) minmax(0, 7fr);
+  overflow: hidden;
+  border: 1px solid var(--market-line);
+  border-radius: 1rem;
+  background: var(--market-surface);
+}
+
+.market-publish-section {
+  min-width: 0;
+  padding: 1.5rem;
+}
+
+.market-publish-section--taxonomy {
+  border-left: 1px solid var(--market-line);
+}
+
+.market-publish-section-content {
+  min-width: 0;
+}
+
+.market-publish-footer {
+  grid-column: 1 / -1;
+  padding: 1rem 1.5rem;
+  border-top: 1px solid var(--market-line);
+  background: var(--flama-surface-2);
+}
+
+.market-publish-footer p {
+  max-width: 68ch;
+}
+
+.market-publish-page .market-taxonomy-builder {
+  gap: 0;
+}
+
+.market-publish-page .market-taxonomy-checklist {
+  gap: 0;
+  margin-top: 1.5rem !important;
+}
+
+.market-publish-page .market-taxonomy-group {
+  gap: 0.5rem;
+}
+
+.market-publish-page .market-taxonomy-group + .market-taxonomy-group {
+  margin-top: 1.25rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--market-line);
+}
+
+.market-publish-page .market-taxonomy-group > .d-flex {
+  margin-bottom: 0 !important;
+}
+
+.market-publish-page .market-taxonomy-options {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
+  gap: 0.5rem;
+}
+
+.market-publish-page .market-filter-check--taxonomy {
+  min-height: 2.75rem;
+  padding: 0.625rem 0.75rem;
+  border: 0;
+  border-radius: 0.5rem;
+  background: var(--flama-bg);
+}
+
+.market-publish-page .market-filter-check--taxonomy:hover {
+  background: var(--flama-orange-50);
+}
+
+.market-publish-page .row:has(#price_amount_minor_wrap.d-none) > :first-child {
+  width: 100%;
+}
+
+@media (max-width: 991.98px) {
+  .market-publish-form {
+    grid-template-columns: 1fr;
+  }
+
+  .market-publish-section--taxonomy {
+    border-top: 1px solid var(--market-line);
+    border-left: 0;
+  }
+}
+
+@media (max-width: 767.98px) {
+  .market-hub-page--compact-catalog,
+  .market-publish-page {
+    width: 100%;
+    margin-inline: 0;
+  }
+
+  .market-hub-page--compact-catalog {
+    padding-top: 0;
+  }
+
+  .market-hub-page--compact-catalog .market-hub-hero {
+    margin-bottom: 1rem;
+    padding: 0 0 1rem;
+  }
+
+  .market-hub-page--compact-catalog .market-hub-title {
+    font-size: 1.5rem;
+  }
+
+  .market-hub-page--compact-catalog .market-hub-nav {
+    margin-bottom: 1rem;
+  }
+
+  .market-hub-page--compact-catalog .market-hub-nav-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+
+  .market-hub-page--compact-catalog .market-results-header {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .market-hub-page--compact-catalog .market-results-tools {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .market-hub-page--compact-catalog .market-space-panel--discover {
+    padding: 0;
+  }
+
+  .market-publish-page {
+    padding: 0 0 2rem;
+  }
+
+  .market-publish-header {
+    align-items: flex-start;
+    gap: 1rem;
+    padding-bottom: 1rem;
+  }
+
+  .market-publish-header > .d-flex {
+    width: 100%;
+  }
+
+  .market-publish-header > .d-flex .btn {
+    flex: 1 1 0;
+  }
+
+  .market-publish-section {
+    padding: 1rem;
+  }
+
+  .market-publish-footer {
+    padding: 1rem;
+  }
+
+  .market-publish-footer > .d-flex {
+    display: grid !important;
+  }
+
+  .market-publish-footer > .d-flex > .d-flex {
+    width: 100%;
+  }
+
+  .market-publish-footer .btn {
+    flex: 1 1 0;
+  }
+}
+
 body:has(.market-hub-page[data-market-kind="deck_marketplace_item"]) {
   background: #f7f9fc;
 }
