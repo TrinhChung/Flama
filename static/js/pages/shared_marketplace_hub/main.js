@@ -9,14 +9,22 @@ if (root) {
   const ordersUrl = root.dataset.ordersUrl || "/";
   const orderDetailTemplate = root.dataset.orderDetailUrlTemplate || "";
   const paymentResultUrl = root.dataset.paymentResultUrl || "";
+  const studyUrlTemplate = root.dataset.studyUrlTemplate || "";
+  const libraryUrl = root.dataset.libraryUrl || "";
   const marketKind = root.dataset.marketKind || "";
+  const isCompactNoteTypeMarket = marketKind === "note_type";
 
   const filterForm = document.getElementById("marketplace-filter-form");
   const errorEl = document.getElementById("marketplace-hub-error");
+  const statusEl = document.getElementById("marketplace-hub-status");
+  const heroSummaryEl = document.getElementById("marketplace-hero-summary");
+  const heroNoteEl = document.getElementById("marketplace-hero-note");
   const resultsEl = document.getElementById("marketplace-results-grid");
   const resultsCountEl = document.getElementById("marketplace-results-count");
   const appliedFiltersEl = document.getElementById("marketplace-applied-filters");
   const quickFiltersEl = document.getElementById("marketplace-quick-filters");
+  const featuredStageEl = document.getElementById("marketplace-featured-stage");
+  const discoveryShelvesEl = document.getElementById("marketplace-discovery-shelves");
   const librarySpotlightEl = document.getElementById("marketplace-library-spotlight");
   const librarySummaryEl = document.getElementById("marketplace-library-summary");
   const librarySectionsEl = document.getElementById("marketplace-library-sections");
@@ -44,6 +52,10 @@ if (root) {
     labels: {},
     space: "discover",
     mobileFilterOpen: false,
+    requestController: null,
+    loadingTimer: 0,
+    lastFocusedElement: null,
+    pendingActions: new Set(),
   };
 
   function escapeHtml(value) {
@@ -61,13 +73,27 @@ if (root) {
 
   function formatDate(value) {
     const date = new Date(value || "");
-    return Number.isNaN(date.getTime()) ? "Không rõ" : date.toLocaleString();
+    return Number.isNaN(date.getTime()) ? "Không rõ" : date.toLocaleString("vi-VN");
+  }
+
+  function formatShortDate(value) {
+    const date = new Date(value || "");
+    if (Number.isNaN(date.getTime())) return "Không rõ";
+    return date.toLocaleDateString("vi-VN", {
+      month: "short",
+      day: "numeric",
+    });
   }
 
   function buildUrl(template, value) {
     return String(template || "")
       .replaceAll("__ITEM_ID__", encodeURIComponent(value || ""))
       .replaceAll("__ORDER_ID__", encodeURIComponent(value || ""));
+  }
+
+  function buildStudyUrl(deckId) {
+    if (!studyUrlTemplate || !deckId) return "";
+    return studyUrlTemplate.replace("/0", `/${encodeURIComponent(deckId)}`);
   }
 
   function normalizeLabel(value) {
@@ -141,12 +167,37 @@ if (root) {
     errorEl.classList.add("d-none");
   }
 
+  function announce(message) {
+    if (statusEl) statusEl.textContent = message || "";
+  }
+
+  function setLoading(loading) {
+    root.setAttribute("aria-busy", loading ? "true" : "false");
+    resultsEl?.classList.toggle("is-loading", loading);
+    window.clearTimeout(state.loadingTimer);
+    state.loadingTimer = 0;
+    if (!loading || state.payload || !resultsEl) return;
+
+    // Fast responses should paint content directly instead of flashing a fake loading state.
+    state.loadingTimer = window.setTimeout(() => {
+      if (state.payload || root.getAttribute("aria-busy") !== "true") return;
+      const compactClass = isCompactNoteTypeMarket ? " market-card-skeleton--compact" : "";
+      resultsEl.innerHTML = Array.from({ length: 3 }, () => `
+        <div class="market-card-skeleton${compactClass}" aria-hidden="true">
+          <span></span><span></span><span></span><span></span>
+        </div>
+      `).join("");
+    }, 160);
+  }
+
   function isPhoneViewport() {
     return window.matchMedia("(max-width: 767.98px)").matches;
   }
 
   function setMobileFilterOpen(open) {
     const active = Boolean(open && isPhoneViewport() && state.space === "discover");
+    const wasActive = state.mobileFilterOpen;
+    if (active && !wasActive) state.lastFocusedElement = document.activeElement;
     state.mobileFilterOpen = active;
     root.classList.toggle("is-mobile-filter-open", active);
     document.body.classList.toggle("market-mobile-filter-lock", active);
@@ -155,9 +206,18 @@ if (root) {
     }
     if (filterSidebarEl) {
       filterSidebarEl.setAttribute("aria-hidden", active ? "false" : String(isPhoneViewport()));
+      filterSidebarEl.inert = Boolean(isPhoneViewport() && !active);
     }
     if (mobileFilterToggleEl) {
       mobileFilterToggleEl.setAttribute("aria-expanded", active ? "true" : "false");
+    }
+    if (active && !wasActive) {
+      window.requestAnimationFrame(() => {
+        filterSidebarEl?.querySelector("button, input, select, summary")?.focus();
+      });
+    } else if (!active && wasActive && state.lastFocusedElement instanceof HTMLElement) {
+      state.lastFocusedElement.focus();
+      state.lastFocusedElement = null;
     }
   }
 
@@ -165,7 +225,10 @@ if (root) {
     state.space = space;
     setMobileFilterOpen(false);
     switchButtons.forEach((button) => {
-      button.classList.toggle("is-active", button.dataset.space === space);
+      const isActive = button.dataset.space === space;
+      button.classList.toggle("is-active", isActive);
+      button.setAttribute("aria-selected", isActive ? "true" : "false");
+      button.tabIndex = isActive ? 0 : -1;
     });
     spacePanels.forEach((panel) => {
       const isActive = panel.dataset.spacePanel === space;
@@ -194,37 +257,36 @@ if (root) {
     return url.toString();
   }
 
-  function renderBadges(badges = []) {
-    return dedupeLabels(badges, { limit: 3, allowGeneric: true })
-      .filter((badge) => normalizeLabel(badge) !== "mien phi")
-      .map((badge) => `<span class="market-badge">${escapeHtml(formatBadgeLabel(badge))}</span>`)
-      .join("");
+  function buildCoverLabel(item) {
+    return (
+      (item?.level_tokens || []).slice(0, 2).join(" · ")
+      || item?.framework_level_label
+      || item?.difficulty_label
+      || item?.subject_label
+      || item?.primary_category
+      || (marketKind === "deck_marketplace_item" ? "Deck" : "Note type")
+    );
   }
 
-  function renderPrimaryButton(item, mode) {
-    const action = item.primary_action || "";
-    if (action === "edit") {
-      return mode === "seller"
-        ? `<button class="btn btn-primary" type="button" data-action="edit" data-edit-url="${escapeHtml(buildEditUrl(item))}">Chỉnh sửa</button>`
-        : `<a class="btn btn-primary" href="${escapeHtml(buildUrl(detailTemplate, item.id))}">Xem chi tiết</a>`;
-    }
-    if (action === "installed") {
-      return `<button class="btn btn-outline-secondary" type="button" disabled>Đã cài</button>`;
-    }
-    if (action === "order") {
-      return `<button class="btn btn-outline-secondary" type="button" data-action="orders">Xem đơn hàng</button>`;
-    }
-    return `<button class="btn btn-primary" type="button" data-action="install" data-id="${escapeHtml(item.id)}">${escapeHtml(item.primary_cta_label || "Thêm vào thư viện")}</button>`;
+  function renderLearningPreview(item, options = {}) {
+    const { featured = false } = options;
+    const preview = item.preview_text || item.short_description || "Mở bộ thẻ để xem nội dung học thử.";
+    const sampleCount = Number(item.sample_cards_count || 0);
+    return `
+      <div class="market-learning-preview${featured ? " market-learning-preview--featured" : ""}">
+        <div class="market-learning-preview-head">
+          <span class="market-preview-level">${escapeHtml(buildCoverLabel(item))}</span>
+          ${sampleCount ? `<span class="market-preview-count"><i class="bi bi-stack" aria-hidden="true"></i> ${formatCount(sampleCount)} thẻ mẫu</span>` : ""}
+        </div>
+        <div class="market-learning-preview-card">
+          <span class="market-preview-label">Xem trước nội dung</span>
+          <p>${escapeHtml(preview)}</p>
+        </div>
+      </div>
+    `;
   }
 
-  function renderSaveButton(item, mode) {
-    if (item?.is_owner || mode === "seller") return "";
-    return `<button class="btn btn-outline-secondary" type="button" data-action="save" data-id="${escapeHtml(item.id)}" data-saved="${item.is_saved ? "1" : "0"}">${escapeHtml(item.is_saved ? "Đã lưu" : "Lưu")}</button>`;
-  }
-
-  function renderCard(item, mode = "discover") {
-    const title = item.title || item.name || "Untitled";
-    const badgeMarkup = renderBadges(item.badges || []);
+  function buildSupportChips(item) {
     const metaChips = dedupeLabels(
       [item.subject_label, item.framework_level_label, item.difficulty_label],
       { limit: 3 },
@@ -238,17 +300,184 @@ if (root) {
       ],
       { exclude: metaChips, limit: 3 },
     );
-    const allChips = [...metaChips, ...supportLabels];
-    const supportChips = allChips
+    return [...metaChips, ...supportLabels]
       .map((chip, index) => `<span class="market-support-chip ${index < metaChips.length ? "is-key" : ""}">${escapeHtml(chip)}</span>`)
       .join("");
+  }
+
+  function buildCompactNoteTypeChips(item) {
+    return dedupeLabels(
+      [
+        item.framework_level_label,
+        item.difficulty_label,
+        ...(item.learning_goal_labels || []),
+        ...(item.primary_topic_labels || []),
+        ...(item.format_feature_labels || []),
+      ],
+      {
+        exclude: [item.subject_label, item.primary_category],
+        limit: 3,
+      },
+    )
+      .map((chip) => `<span class="market-support-chip">${escapeHtml(chip)}</span>`)
+      .join("");
+  }
+
+  function buildActivityLine(item, mode = "discover") {
+    const parts = [];
+    if (mode === "library") {
+      if (item.last_activity_at) {
+        parts.push(`Học gần đây ${formatShortDate(item.last_activity_at)}`);
+      } else if (item.installed_at) {
+        parts.push(`Đã thêm ${formatShortDate(item.installed_at)}`);
+      }
+      if (item.last_sync_status === "needs_sync") {
+        parts.push("Có thay đổi local");
+      } else if (item.last_sync_status === "has_conflict") {
+        parts.push("Cần xử lý conflict");
+      } else if (item.last_sync_status === "clean") {
+        parts.push("Đã sync");
+      }
+    } else if (isCompactNoteTypeMarket) {
+      if (item.updated_at) parts.push(`Cập nhật ${formatShortDate(item.updated_at)}`);
+    } else {
+      if (item.subject_label) parts.push(item.subject_label);
+      if (item.framework_level_label) parts.push(item.framework_level_label);
+      if (!parts.length && item.primary_category) parts.push(item.primary_category);
+      if (item.updated_at) parts.push(`Cập nhật ${formatShortDate(item.updated_at)}`);
+    }
+    return parts.join(" · ");
+  }
+
+  function renderBadges(badges = []) {
+    return dedupeLabels(badges, { limit: 3, allowGeneric: true })
+      .filter((badge) => normalizeLabel(badge) !== "mien phi")
+      .map((badge) => `<span class="market-badge">${escapeHtml(formatBadgeLabel(badge))}</span>`)
+      .join("");
+  }
+
+  function getInstallLabel(item) {
+    if (item.pricing_mode === "paid") {
+      return item.price_display ? `Mua · ${item.price_display}` : "Mua bộ thẻ";
+    }
+    return marketKind === "deck_marketplace_item" ? "Cài miễn phí" : (item.primary_cta_label || "Thêm vào thư viện");
+  }
+
+  function renderPrimaryButton(item, mode = "discover") {
+    const detailUrl = buildUrl(detailTemplate, item.id);
+    const editUrl = buildEditUrl(item);
+    const action = item.primary_action || "";
+    const studyUrl = item.installed_deck_id ? buildStudyUrl(item.installed_deck_id) : "";
+
+    if (mode === "library") {
+      if (marketKind === "deck_marketplace_item" && item.is_installed && studyUrl) {
+        return `<a class="btn btn-primary" href="${escapeHtml(studyUrl)}">Học deck</a>`;
+      }
+      if (action === "order") {
+        return `<a class="btn btn-primary" href="${escapeHtml(ordersUrl)}">Xem đơn hàng</a>`;
+      }
+      if (action === "edit") {
+        return `<a class="btn btn-primary" href="${escapeHtml(editUrl)}">Chỉnh sửa</a>`;
+      }
+      if (!item.is_installed && action === "install") {
+        return `<button class="btn btn-primary" type="button" data-action="install" data-id="${escapeHtml(item.id)}">${escapeHtml(getInstallLabel(item))}</button>`;
+      }
+      return `<a class="btn btn-primary" href="${escapeHtml(detailUrl)}">Mở chi tiết</a>`;
+    }
+
+    if (mode === "seller") {
+      return action === "edit"
+        ? `<a class="btn btn-primary" href="${escapeHtml(editUrl)}">Chỉnh sửa</a>`
+        : `<a class="btn btn-primary" href="${escapeHtml(detailUrl)}">Xem chi tiết</a>`;
+    }
+
+    if (action === "edit") {
+      return `<a class="btn btn-primary" href="${escapeHtml(editUrl)}">Chỉnh sửa</a>`;
+    }
+    if (action === "installed") {
+      if (marketKind === "deck_marketplace_item" && studyUrl) {
+        return `<a class="btn btn-primary" href="${escapeHtml(studyUrl)}">Học deck</a>`;
+      }
+      return `<a class="btn btn-outline-secondary" href="${escapeHtml(detailUrl)}">Đã cài</a>`;
+    }
+    if (action === "order") {
+      return `<button class="btn btn-outline-secondary" type="button" data-action="orders">Xem đơn hàng</button>`;
+    }
+    return `<button class="btn btn-primary" type="button" data-action="install" data-id="${escapeHtml(item.id)}">${escapeHtml(getInstallLabel(item))}</button>`;
+  }
+
+  function renderSecondaryButtons(item, mode = "discover") {
+    const detailUrl = buildUrl(detailTemplate, item.id);
+    const actions = [];
+
+    if (mode === "discover") {
+      if (!item.is_owner) {
+        const saveLabel = item.is_saved ? "Bỏ lưu" : "Lưu bộ thẻ";
+        actions.push(isCompactNoteTypeMarket
+          ? `<button class="btn btn-outline-secondary" type="button" data-action="save" data-id="${escapeHtml(item.id)}" data-saved="${item.is_saved ? "1" : "0"}">${escapeHtml(item.is_saved ? "Đã lưu" : "Lưu")}</button>`
+          : `<button class="btn btn-outline-secondary market-save-button${item.is_saved ? " is-saved" : ""}" type="button" data-action="save" data-id="${escapeHtml(item.id)}" data-saved="${item.is_saved ? "1" : "0"}" aria-label="${saveLabel}" title="${saveLabel}"><i class="bi ${item.is_saved ? "bi-bookmark-fill" : "bi-bookmark"}" aria-hidden="true"></i></button>`);
+      }
+      actions.push(`<a class="btn btn-outline-secondary" href="${escapeHtml(detailUrl)}">Chi tiết</a>`);
+      return actions.join("");
+    }
+
+    if (mode === "seller") {
+      actions.push(`<a class="btn btn-outline-secondary" href="${escapeHtml(detailUrl)}">Xem market</a>`);
+      return actions.join("");
+    }
+
+    actions.push(`<a class="btn btn-outline-secondary" href="${escapeHtml(detailUrl)}">Chi tiết</a>`);
+    if (!item.is_owner && !item.is_installed) {
+      actions.push(`<button class="btn btn-outline-secondary" type="button" data-action="save" data-id="${escapeHtml(item.id)}" data-saved="${item.is_saved ? "1" : "0"}">${escapeHtml(item.is_saved ? "Đã lưu" : "Lưu")}</button>`);
+    }
+    return actions.join("");
+  }
+
+  function renderCard(item, mode = "discover") {
+    const title = item.title || item.name || "Untitled";
+    const badgeMarkup = renderBadges(item.badges || []);
+    const supportChips = isCompactNoteTypeMarket
+      ? buildCompactNoteTypeChips(item)
+      : buildSupportChips(item);
+    const activityLine = buildActivityLine(item, mode);
+    const detailUrl = buildUrl(detailTemplate, item.id);
+    const description = item.short_description || item.preview_text || "Chưa có mô tả ngắn.";
+    const categoryLabel = isCompactNoteTypeMarket
+      ? (item.subject_label || item.primary_category || "General")
+      : (item.primary_category || "General");
+    const coverMarkup = isCompactNoteTypeMarket
+      ? ""
+      : `
+        <a class="market-card-preview-link" href="${escapeHtml(detailUrl)}" aria-label="Xem ${escapeHtml(title)}">
+          ${renderLearningPreview(item)}
+        </a>`;
+    const statsMarkup = isCompactNoteTypeMarket
+      ? `
+        <div class="market-card-facts" aria-label="Tóm tắt note type">
+          <span class="market-card-fact market-card-price">${escapeHtml(item.price_display || "Miễn phí")}</span>
+          <span class="market-card-fact" title="Đánh giá">
+            <i class="bi bi-star-fill" aria-hidden="true"></i>
+            ${Number(item.rating_avg || 0).toFixed(1)} (${formatCount(item.rating_count || 0)})
+          </span>
+          <span class="market-card-fact" title="Lượt cài">
+            <i class="bi bi-download" aria-hidden="true"></i>
+            ${formatCount(item.install_count || 0)} lượt cài
+          </span>
+        </div>`
+      : `
+        <div class="market-card-facts" aria-label="Tóm tắt bộ thẻ">
+          <span class="market-card-fact market-card-price">${escapeHtml(item.price_display || "Miễn phí")}</span>
+          <span class="market-card-fact" title="Đánh giá"><i class="bi bi-star-fill" aria-hidden="true"></i> ${Number(item.rating_avg || 0).toFixed(1)} (${formatCount(item.rating_count || 0)})</span>
+          <span class="market-card-fact" title="Lượt cài"><i class="bi bi-people" aria-hidden="true"></i> ${formatCount(item.install_count || 0)} lượt cài</span>
+        </div>`;
 
     return `
-      <article class="market-card" data-item-id="${escapeHtml(item.id)}">
+      <article class="market-card market-card--${escapeHtml(mode)} ${isCompactNoteTypeMarket ? "market-card--compact-note-type" : ""}" data-item-id="${escapeHtml(item.id)}">
+        ${coverMarkup}
         <div class="market-card-body">
           ${badgeMarkup ? `<div class="market-card-badges">${badgeMarkup}</div>` : ""}
           <div class="market-card-head">
-            <a class="market-card-title-link" href="${escapeHtml(buildUrl(detailTemplate, item.id))}">
+            <a class="market-card-title-link" href="${escapeHtml(detailUrl)}">
               <h3 class="market-card-title">${escapeHtml(title)}</h3>
             </a>
             <div class="market-card-meta">
@@ -256,19 +485,16 @@ if (root) {
                 ${escapeHtml(item.author?.username || "Không rõ")}
               </button>
               <span class="market-card-meta-divider" aria-hidden="true">•</span>
-              <span class="market-card-price">${escapeHtml(item.price_display || "Miễn phí")}</span>
+              <span>${escapeHtml(categoryLabel)}</span>
             </div>
           </div>
+          <p class="market-card-description">${escapeHtml(description)}</p>
           ${supportChips ? `<div class="market-card-support">${supportChips}</div>` : ""}
-          <p class="market-card-description">${escapeHtml(item.short_description || item.preview_text || "")}</p>
-          <div class="market-card-summary">
-            <span>${Number(item.rating_avg || 0).toFixed(1)} sao</span>
-            <span class="market-card-meta-divider" aria-hidden="true">•</span>
-            <span>${formatCount(item.install_count || 0)} lượt dùng</span>
-          </div>
+          ${statsMarkup}
+          ${activityLine ? `<div class="market-card-summary">${escapeHtml(activityLine)}</div>` : ""}
           <div class="market-card-actions">
             ${renderPrimaryButton(item, mode)}
-            ${renderSaveButton(item, mode)}
+            ${renderSecondaryButtons(item, mode)}
           </div>
         </div>
       </article>
@@ -292,8 +518,9 @@ if (root) {
   }
 
   function renderSummaryCards(container, rows) {
+    if (!container) return;
     container.innerHTML = rows.map((row) => `
-      <article>
+      <article class="market-summary-card">
         <div class="market-summary-label">${escapeHtml(row[0])}</div>
         <div class="market-summary-value">${escapeHtml(row[1])}</div>
         <div class="market-summary-help">${escapeHtml(row[2])}</div>
@@ -426,14 +653,33 @@ if (root) {
         rows.push([name, value, formatLabel(name, value)]);
       });
     });
+    if (filters.min_rating) rows.push(["min_rating", String(filters.min_rating), `Từ ${filters.min_rating} sao`]);
+    if (filters.min_price != null) rows.push(["min_price", String(filters.min_price), `Giá từ ${formatCount(filters.min_price)}`]);
+    if (filters.max_price != null) rows.push(["max_price", String(filters.max_price), `Giá đến ${formatCount(filters.max_price)}`]);
     return rows;
+  }
+
+  function hasActiveFilters(payload) {
+    return collectActiveChips(payload?.filters || {}).length > 0;
+  }
+
+  function renderHeroSummary(payload) {
+    const summary = payload.summary || {};
+    const marketLabel = marketKind === "deck_marketplace_item" ? "Deck công khai" : "Note type công khai";
+    const libraryLabel = marketKind === "deck_marketplace_item" ? "Deck trong thư viện" : "Template trong thư viện";
+    renderSummaryCards(heroSummaryEl, [
+      [marketLabel, formatCount(summary.market_count || 0), "Sẵn sàng để khám phá từ hub market hiện tại."],
+      [libraryLabel, formatCount(summary.library_count || 0), "Nội dung bạn đã sở hữu hoặc đã cài gần đây."],
+      ["Đã lưu", formatCount(summary.saved_count || 0), "Danh sách quay lại sau khi chưa muốn cài ngay."],
+      ["Nội dung của bạn", formatCount(summary.seller_count || 0), "Các mục bạn đã chia sẻ hoặc đang quản lý."],
+    ]);
   }
 
   function renderAppliedFilters(payload) {
     const chips = collectActiveChips(payload.filters || {});
     appliedFiltersEl.innerHTML = chips.length
-      ? chips.map((chip) => `<button class="market-inline-chip" type="button" data-remove-filter="${escapeHtml(chip[0])}" data-remove-value="${escapeHtml(chip[1])}">${escapeHtml(chip[2])} <span aria-hidden="true">x</span></button>`).join("")
-      : `<span class="market-applied-placeholder">Chưa áp dụng bộ lọc.</span>`;
+      ? chips.map((chip) => `<button class="market-inline-chip" type="button" data-remove-filter="${escapeHtml(chip[0])}" data-remove-value="${escapeHtml(chip[1])}">${escapeHtml(chip[2])} <span aria-hidden="true">×</span></button>`).join("")
+      : "";
   }
 
   function renderQuickFilters(payload) {
@@ -441,24 +687,110 @@ if (root) {
     const filters = payload.filters || {};
     const rows = [];
 
-    (available.subjects || []).slice(0, 4).forEach((value) => {
+    (available.subjects || []).slice(0, 1).forEach((value) => {
       rows.push(["subject", value, formatLabel("subject", value), filters.subject === value]);
     });
-    (available.levels || []).slice(0, 3).forEach((value) => {
+    (available.levels || []).slice(0, 2).forEach((value) => {
       rows.push(["difficulty_band", value, formatLabel("difficulty_band", value), filters.difficulty_band === value]);
     });
-    (available.learning_goals || []).slice(0, 6).forEach((value) => {
+    (available.learning_goals || []).slice(0, 1).forEach((value) => {
       rows.push(["learning_goals", value, formatLabel("learning_goals", value), (filters.learning_goals || []).includes(value)]);
     });
+    if (marketKind === "deck_marketplace_item") {
+      rows.push(["pricing_mode", "free", "Miễn phí", filters.pricing_mode === "free"]);
+    }
 
-    quickFiltersEl.innerHTML = rows.map((row) => `
+    quickFiltersEl.innerHTML = rows.slice(0, 5).map((row) => `
       <button class="market-inline-chip ${row[3] ? "is-active" : ""}" type="button" data-quick-filter-name="${escapeHtml(row[0])}" data-quick-filter-value="${escapeHtml(row[1])}">
         ${escapeHtml(row[2])}
       </button>
     `).join("");
   }
 
+  function renderFeaturedStage(payload) {
+    if (!featuredStageEl) return;
+    const heroItem = payload?.discovery?.hero || payload?.marketplace?.items?.[0];
+    if (!heroItem || hasActiveFilters(payload)) {
+      featuredStageEl.classList.add("d-none");
+      featuredStageEl.innerHTML = "";
+      return;
+    }
+
+    const badgeMarkup = renderBadges(heroItem.badges || []);
+    const supportChips = buildSupportChips(heroItem);
+    const detailUrl = buildUrl(detailTemplate, heroItem.id);
+    const activityLine = buildActivityLine(heroItem, "discover");
+
+    featuredStageEl.classList.remove("d-none");
+    featuredStageEl.innerHTML = `
+      <article class="market-featured-card market-featured-card--hero">
+        <a class="market-featured-preview-link" href="${escapeHtml(detailUrl)}" aria-label="Xem bộ thẻ nổi bật">
+          ${renderLearningPreview(heroItem, { featured: true })}
+        </a>
+
+        <div class="market-featured-body">
+          <div>
+            <div class="market-featured-kicker"><i class="bi bi-stars" aria-hidden="true"></i> Đề xuất cho bạn</div>
+            ${badgeMarkup ? `<div class="market-card-badges">${badgeMarkup}</div>` : ""}
+            <h2 class="market-featured-title">${escapeHtml(heroItem.title || heroItem.name || "Untitled")}</h2>
+            <p class="market-featured-meta mb-0">${escapeHtml(heroItem.preview_text || heroItem.short_description || "Đã chọn từ các mục nổi bật nhất trong marketplace hiện tại.")}</p>
+          </div>
+
+          <div class="market-featured-support">
+            ${supportChips || `<span class="market-support-chip is-key">${escapeHtml(heroItem.primary_category || "General")}</span>`}
+          </div>
+
+          <div class="market-card-facts" aria-label="Tóm tắt bộ thẻ nổi bật">
+            <span class="market-card-fact market-card-price">${escapeHtml(heroItem.price_display || "Miễn phí")}</span>
+            <span class="market-card-fact"><i class="bi bi-star-fill" aria-hidden="true"></i> ${Number(heroItem.rating_avg || 0).toFixed(1)} (${formatCount(heroItem.rating_count || 0)})</span>
+            <span class="market-card-fact"><i class="bi bi-people" aria-hidden="true"></i> ${formatCount(heroItem.install_count || 0)} lượt cài</span>
+          </div>
+
+          ${activityLine ? `<div class="market-card-summary">${escapeHtml(activityLine)}</div>` : ""}
+
+          <div class="market-featured-actions">
+            ${renderPrimaryButton(heroItem, "discover")}
+            ${renderSecondaryButtons(heroItem, "discover")}
+          </div>
+        </div>
+      </article>
+    `;
+
+    if (heroNoteEl) heroNoteEl.textContent = heroItem.preview_text || "Bộ thẻ phù hợp để bắt đầu học ngay.";
+  }
+
+  function renderDiscoverShelves(payload) {
+    if (!discoveryShelvesEl) return;
+    if (hasActiveFilters(payload)) {
+      discoveryShelvesEl.classList.add("d-none");
+      discoveryShelvesEl.innerHTML = "";
+      return;
+    }
+
+    const discovery = payload.discovery || {};
+    const sections = [];
+    if ((discovery.recommended || []).length) {
+      sections.push(renderShelf("Gợi ý cho bạn", "Phù hợp", discovery.recommended.slice(0, 4), "discover", "Chưa có gợi ý phù hợp."));
+    }
+    if ((discovery.new_releases || []).length) {
+      sections.push(renderShelf("Mới cập nhật", "Cập nhật", discovery.new_releases.slice(0, 4), "discover", "Chưa có nội dung mới."));
+    }
+    if ((discovery.best_sellers || []).length) {
+      sections.push(renderShelf("Được cài nhiều", "Phổ biến", discovery.best_sellers.slice(0, 4), "discover", "Chưa có bestseller."));
+    }
+
+    if (!sections.length) {
+      discoveryShelvesEl.classList.add("d-none");
+      discoveryShelvesEl.innerHTML = "";
+      return;
+    }
+
+    discoveryShelvesEl.classList.remove("d-none");
+    discoveryShelvesEl.innerHTML = sections.join("");
+  }
+
   function renderLibrarySpotlight(payload) {
+    if (!librarySpotlightEl) return;
     const items = [...((payload.library?.using_now || []).slice(0, 2)), ...((payload.library?.installed || []).slice(0, 2))].slice(0, 4);
     if (!items.length) {
       librarySpotlightEl.classList.add("d-none");
@@ -471,9 +803,10 @@ if (root) {
       <div class="market-shelf-header">
         <div>
           <div class="market-shelf-kicker">Từ thư viện của bạn</div>
-          <h2 class="market-hub-section-title h5 mb-1">Tiếp tục học nhanh</h2>
-          <p class="market-section-help mb-0">Quay lại nội dung đã cài và đang dùng mà không phải đi qua nhiều block marketing.</p>
+          <h2 class="market-hub-section-title h5 mb-1">Tiếp tục nhanh từ nội dung đã cài</h2>
+          <p class="market-section-help mb-0">Đưa các mục bạn đang học hoặc vừa cài lại gần hơn với vùng khám phá.</p>
         </div>
+        ${libraryUrl ? `<a class="btn btn-outline-secondary btn-sm" href="${escapeHtml(libraryUrl)}">Mở thư viện chi tiết</a>` : ""}
       </div>
       <div class="market-card-grid market-card-grid--compact">${items.map((item) => renderCard(item, "library")).join("")}</div>
     `;
@@ -538,29 +871,45 @@ if (root) {
 
   function renderDiscover(payload) {
     const items = payload.marketplace?.items || [];
+    const featuredItem = payload?.discovery?.hero || items[0];
+    const showFeatured = Boolean(featuredStageEl && featuredItem && !hasActiveFilters(payload));
+    const gridItems = showFeatured ? items.filter((item) => String(item.id) !== String(featuredItem.id)) : items;
     resultsCountEl.textContent = `${formatCount(payload.marketplace?.result_count || items.length)} mục`;
+    renderHeroSummary(payload);
     renderQuickFilters(payload);
     renderAppliedFilters(payload);
-    renderLibrarySpotlight(payload);
-    resultsEl.innerHTML = items.length
-      ? items.map((item) => renderCard(item, "discover")).join("")
-      : `<div class="market-empty-state">Không tìm thấy nội dung phù hợp với bộ lọc hiện tại.</div>`;
+    renderFeaturedStage(payload);
+    if (isCompactNoteTypeMarket) {
+      renderLibrarySpotlight(payload);
+      renderDiscoverShelves(payload);
+    }
+    resultsEl.innerHTML = gridItems.length
+      ? gridItems.map((item) => renderCard(item, "discover")).join("")
+      : (items.length ? "" : `
+        <div class="market-empty-state market-empty-state--actionable">
+          <i class="bi bi-search" aria-hidden="true"></i>
+          <h3>Chưa tìm thấy bộ thẻ phù hợp</h3>
+          <p>Thử một từ khóa rộng hơn hoặc xóa các bộ lọc đang dùng.</p>
+          <button class="btn btn-primary" type="reset">Xóa bộ lọc</button>
+        </div>
+      `);
+    announce(`Đã tìm thấy ${formatCount(payload.marketplace?.result_count || items.length)} mục.`);
   }
 
   function renderLibrary(payload) {
     const summary = payload.library?.summary || {};
     renderSummaryCards(librarySummaryEl, [
-      ["Đang học", formatCount(summary.using_count || 0), "Nội dung bạn vừa quay lại gần đây."],
-      ["Đã sở hữu", formatCount(summary.owned_count || 0), "Đã cài hoặc đã mua nhưng chưa cài."],
-      ["Đã lưu", formatCount(summary.saved_count || 0), "Danh sách để xem lại sau."],
-      ["Đơn hàng", formatCount(summary.purchase_count || 0), "Các giao dịch gắn với marketplace."],
+      ["Đang học", formatCount(summary.using_count || 0), "Các mục bạn vừa quay lại gần đây và nên tiếp tục."],
+      ["Đã sở hữu", formatCount(summary.owned_count || 0), "Đã cài hoặc đã mua nhưng chưa cài vào workspace."],
+      ["Đã lưu", formatCount(summary.saved_count || 0), "Các mục chờ quyết định hoặc quay lại sau."],
+      ["Đơn hàng", formatCount(summary.purchase_count || 0), "Lịch sử giao dịch gắn với marketplace hiện tại."],
     ]);
 
     librarySectionsEl.innerHTML = [
-      renderShelf("Đang học", "Tiếp tục", payload.library?.using_now || [], "library", "Bạn chưa có nội dung đang học."),
+      renderShelf("Đang học gần đây", "Tiếp tục", payload.library?.using_now || [], "library", "Bạn chưa có nội dung đang học."),
       renderShelf("Đã cài", "Đã cài", payload.library?.installed || [], "library", "Chưa có nội dung đã cài."),
-      renderShelf("Chờ cài đặt", "Đã mua", payload.library?.not_installed || [], "library", "Không có nội dung đang chờ cài đặt."),
-      renderShelf("Đã lưu", "Lưu lại", payload.library?.saved || [], "library", "Danh sách lưu đang trống."),
+      renderShelf("Đã mua chưa cài", "Đã mua", payload.library?.not_installed || [], "library", "Không có nội dung chờ cài đặt."),
+      renderShelf("Đã lưu", "Đã lưu", payload.library?.saved || [], "library", "Danh sách lưu đang trống."),
       renderPurchaseHistory(payload.library?.purchase_history || []),
     ].join("");
   }
@@ -595,38 +944,118 @@ if (root) {
     renderSeller(payload);
   }
 
+  function syncFilterUrl(params) {
+    if (marketKind !== "deck_marketplace_item") return;
+    const url = new URL(window.location.href);
+    url.search = params.toString();
+    window.history.replaceState({}, "", url);
+  }
+
   async function loadHub() {
+    state.requestController?.abort();
+    const controller = new AbortController();
+    state.requestController = controller;
     clearError();
-    const params = collectFilters();
+    setLoading(true);
+    announce("Đang cập nhật danh sách bộ thẻ.");
+    const params = !state.payload && window.location.search
+      ? new URLSearchParams(window.location.search)
+      : collectFilters();
     const query = params.toString();
-    const payload = await requestJson(query ? `${hubUrl}?${query}` : hubUrl);
-    renderAll(payload);
+    try {
+      const payload = await requestJson(query ? `${hubUrl}?${query}` : hubUrl, { signal: controller.signal });
+      if (controller.signal.aborted) return;
+      renderAll(payload);
+      syncFilterUrl(collectFilters());
+    } catch (error) {
+      if (error.name !== "AbortError") throw error;
+    } finally {
+      if (state.requestController === controller) {
+        state.requestController = null;
+        setLoading(false);
+      }
+    }
+  }
+
+  function setActionBusy(itemId, action, busy) {
+    root.querySelectorAll(`[data-action="${action}"][data-id="${CSS.escape(String(itemId))}"]`).forEach((button) => {
+      if (busy) {
+        button.dataset.originalHtml = button.innerHTML;
+        button.innerHTML = `<span class="spinner-border spinner-border-sm" aria-hidden="true"></span><span class="visually-hidden">Đang xử lý</span>`;
+      } else if (button.dataset.originalHtml) {
+        button.innerHTML = button.dataset.originalHtml;
+        delete button.dataset.originalHtml;
+      }
+      button.disabled = busy;
+      button.setAttribute("aria-busy", busy ? "true" : "false");
+    });
   }
 
   async function installItem(itemId) {
-    const response = await requestJson(buildUrl(installTemplate, itemId), { method: "POST" });
-    if (response?.payment_required && response?.order) {
-      const checkoutUrl = response?.order?.active_attempt?.checkout?.checkout_url || response?.order?.active_attempt?.checkout_url;
-      if (checkoutUrl && response?.order?.status === "pending_payment") {
-        window.location.href = checkoutUrl;
+    const actionKey = `install:${itemId}`;
+    if (state.pendingActions.has(actionKey)) return;
+    state.pendingActions.add(actionKey);
+    setActionBusy(itemId, "install", true);
+    try {
+      const response = await requestJson(buildUrl(installTemplate, itemId), { method: "POST" });
+      if (response?.payment_required && response?.order) {
+        const checkoutUrl = response?.order?.active_attempt?.checkout?.checkout_url || response?.order?.active_attempt?.checkout_url;
+        if (checkoutUrl && response?.order?.status === "pending_payment") {
+          window.location.href = checkoutUrl;
+          return;
+        }
+        window.location.href = buildPaymentResultUrl(response?.order?.id || "", itemId) || ordersUrl;
         return;
       }
-      window.location.href = buildPaymentResultUrl(response?.order?.id || "", itemId) || ordersUrl;
-      return;
+      announce("Đã thêm bộ thẻ vào thư viện.");
+      await loadHub();
+    } finally {
+      state.pendingActions.delete(actionKey);
+      setActionBusy(itemId, "install", false);
     }
-    await loadHub();
   }
 
   async function saveItem(itemId, isSaved) {
-    await requestJson(buildUrl(saveTemplate, itemId), { method: isSaved ? "DELETE" : "POST" });
-    await loadHub();
+    const actionKey = `save:${itemId}`;
+    if (state.pendingActions.has(actionKey)) return;
+    state.pendingActions.add(actionKey);
+    setActionBusy(itemId, "save", true);
+    try {
+      await requestJson(buildUrl(saveTemplate, itemId), { method: isSaved ? "DELETE" : "POST" });
+      announce(isSaved ? "Đã bỏ lưu bộ thẻ." : "Đã lưu bộ thẻ.");
+      await loadHub();
+    } finally {
+      state.pendingActions.delete(actionKey);
+      setActionBusy(itemId, "save", false);
+    }
   }
 
   function queueReload() {
     window.clearTimeout(state.timer);
     state.timer = window.setTimeout(() => {
+      const minPrice = Number(filterForm.elements.min_price?.value || 0);
+      const maxPrice = Number(filterForm.elements.max_price?.value || 0);
+      if (maxPrice && minPrice > maxPrice) {
+        showError("Giá tối thiểu không thể lớn hơn giá tối đa.");
+        return;
+      }
       loadHub().catch((error) => showError(error.message));
     }, 180);
+  }
+
+  function resetFilters() {
+    Array.from(filterForm.elements).forEach((control) => {
+      if (!(control instanceof HTMLElement) || !control.getAttribute("name")) return;
+      if (control instanceof HTMLInputElement && control.type === "radio") {
+        control.checked = control.value === "";
+      } else if (control instanceof HTMLInputElement && control.type === "checkbox") {
+        control.checked = false;
+      } else if (control instanceof HTMLSelectElement) {
+        control.value = control.name === "sort" ? "recently_updated" : "";
+      } else if ("value" in control) {
+        control.value = "";
+      }
+    });
   }
 
   function clearNamedFilter(name, value) {
@@ -649,6 +1078,11 @@ if (root) {
 
   function toggleQuickFilter(name, value) {
     const inputs = Array.from(filterForm.querySelectorAll(`[name="${name}"]`));
+    const select = inputs.find((input) => input instanceof HTMLSelectElement);
+    if (select) {
+      select.value = select.value === value ? "" : value;
+      return;
+    }
     const target = inputs.find((input) => input.value === value);
     if (!target) return;
     if (target.type === "checkbox") {
@@ -663,6 +1097,17 @@ if (root) {
 
   switchButtons.forEach((button) => {
     button.addEventListener("click", () => switchSpace(button.dataset.space || "discover"));
+    button.addEventListener("keydown", (event) => {
+      if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+      event.preventDefault();
+      const currentIndex = switchButtons.indexOf(button);
+      let nextIndex = event.key === "Home" ? 0 : event.key === "End" ? switchButtons.length - 1 : currentIndex;
+      if (event.key === "ArrowRight") nextIndex = (currentIndex + 1) % switchButtons.length;
+      if (event.key === "ArrowLeft") nextIndex = (currentIndex - 1 + switchButtons.length) % switchButtons.length;
+      const nextButton = switchButtons[nextIndex];
+      switchSpace(nextButton.dataset.space || "discover");
+      nextButton.focus();
+    });
   });
 
   mobileFilterToggleEl?.addEventListener("click", () => {
@@ -689,13 +1134,30 @@ if (root) {
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && state.mobileFilterOpen) {
       setMobileFilterOpen(false);
+      return;
+    }
+    if (event.key === "Tab" && state.mobileFilterOpen && filterSidebarEl) {
+      const focusable = Array.from(filterSidebarEl.querySelectorAll("button:not([disabled]), input:not([disabled]), select:not([disabled]), summary, [href]"))
+        .filter((element) => !element.closest("[hidden]"));
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
     }
   });
 
   filterForm?.addEventListener("input", queueReload);
   filterForm?.addEventListener("change", queueReload);
-  filterForm?.addEventListener("reset", () => {
-    window.setTimeout(() => loadHub().catch((error) => showError(error.message)), 0);
+  filterForm?.addEventListener("reset", (event) => {
+    event.preventDefault();
+    resetFilters();
+    loadHub().catch((error) => showError(error.message));
   });
 
   root.addEventListener("click", (event) => {

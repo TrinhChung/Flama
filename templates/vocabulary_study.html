@@ -49,13 +49,10 @@
     <div class="study-card" id="study-card" data-card-id="{{ card.id }}" data-study-scope="{{ study_scope }}"
       data-scope-id="{{ study_scope_id }}" data-answer-url="{{ answer_url or '' }}"
       data-note-id="{{ card.note_id or '' }}" data-can-edit="{{ '1' if can_edit_current_card else '0' }}">
-      <div class="card-face card-front is-active" id="card-front">
-        {{ rendered_front | safe }}
-      </div>
-
-      <div class="card-face card-back" id="card-back">
-        {{ rendered_back | safe }}
-      </div>
+      <iframe class="card-face card-front is-active study-card-frame" id="card-front-frame" title="Mat truoc"
+        data-render-sizing="viewport" sandbox="allow-scripts"></iframe>
+      <iframe class="card-face card-back study-card-frame" id="card-back-frame" title="Mat sau"
+        data-render-sizing="viewport" sandbox="allow-scripts"></iframe>
     </div>
   </section>
   {% else %}
@@ -157,6 +154,7 @@
 </div>
 
 {% if card and can_edit_current_card %}
+<script src="{{ url_for('static', filename='js/card_renderer_host.js') }}"></script>
 <script id="studyEditConfig" type="application/json">
   {{ {
       "card_id": card.id,
@@ -165,6 +163,12 @@
       "field_values": card.field_values or {},
       "load_note_url": url_for("flashcards.get_note", note_id=card.note_id),
       "save_card_url": edit_card_api_url
+    } | tojson }}
+</script>
+<script id="studyInitialRendererPayload" type="application/json">
+  {{ {
+      "front": rendered_front_payload or {"html": rendered_front or ""},
+      "back": rendered_back_payload or {"html": rendered_back or ""}
     } | tojson }}
 </script>
 
@@ -189,22 +193,56 @@
     </div>
   </div>
 </div>
+{% elif card %}
+<script src="{{ url_for('static', filename='js/card_renderer_host.js') }}"></script>
+<script id="studyInitialRendererPayload" type="application/json">
+  {{ {
+      "front": rendered_front_payload or {"html": rendered_front or ""},
+      "back": rendered_back_payload or {"html": rendered_back or ""}
+    } | tojson }}
+</script>
 {% endif %}
 
 <style>
+  html,
+  body {
+    height: 100%;
+    overflow: hidden;
+  }
+
+  body {
+    overscroll-behavior: none;
+  }
+
+  main.container {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+  }
+
+  main.container > .alerts-container {
+    margin-bottom: 0;
+    flex: 0 0 auto;
+  }
+
   .study-page {
+    --study-bottom-bar-clearance: calc(5.5rem + env(safe-area-inset-bottom, 0px));
     height: 100vh;
+    height: 100dvh;
     max-height: 100vh;
+    max-height: 100dvh;
     display: flex;
     flex-direction: column;
-    margin: -1rem;
-    padding: 0.8rem 0.8rem 5rem;
+    margin: 0;
+    padding: 0.8rem 0 var(--study-bottom-bar-clearance);
     overflow: hidden;
   }
 
   /* â”€â”€ Dashboard Toolbar (shared) â”€â”€ */
   .study-page .dash-toolbar {
-    margin-bottom: 0.5rem;
+    margin: 0 0.8rem 0.5rem;
     padding: 0.4rem 0.6rem;
     flex-shrink: 0;
   }
@@ -214,7 +252,7 @@
     display: flex;
     align-items: center;
     gap: 0.4rem;
-    padding: 0.3rem 0.6rem 0.55rem;
+    padding: 0.3rem 1.4rem 0.55rem;
     flex-shrink: 0;
   }
 
@@ -252,64 +290,53 @@
   }
 
   .study-card-shell {
-    flex: 1;
+    flex: 1 1 auto;
     display: flex;
-    width: min(1400px, 100%);
-    margin: 0 auto;
+    width: 100%;
+    max-width: none;
+    margin: 0;
     overflow: hidden;
     min-height: 0;
     min-width: 0;
   }
 
   .study-card {
+    position: relative;
+    flex: 1 1 auto;
     width: 100%;
-    display: flex;
-    flex-direction: column;
+    height: 100%;
     min-height: 0;
     min-width: 0;
+    overflow: hidden;
   }
 
   .card-face {
+    position: absolute;
+    inset: 0;
     display: none;
-    padding: 0 0.8rem 1rem;
-    flex: 1;
+    width: 100%;
+    height: 100% !important;
     min-height: 0;
     min-width: 0;
-    overflow-wrap: anywhere;
-    word-break: break-word;
+    max-width: none;
   }
 
   .card-face.is-active {
     display: block;
-    overflow-y: auto;
   }
 
-  .card-face img,
-  .card-face video,
-  .card-face canvas,
-  .card-face svg,
-  .card-face audio,
-  .card-face iframe {
-    max-width: 100%;
-  }
-
-  .card-face audio {
-    width: min(100%, 20rem);
-  }
-
-  .card-face iframe {
+  .study-card-frame {
     width: 100%;
+    height: 100% !important;
+    border: 0;
+    background: transparent;
+    padding: 0;
+    margin: 0;
+    min-height: 0;
   }
 
-  .card-face table {
-    display: block;
-    max-width: 100%;
-    overflow-x: auto;
-  }
-
-  .card-face pre {
-    max-width: 100%;
-    overflow: auto;
+  .card-face:not(.is-active) {
+    display: none !important;
   }
 
   .audio-inline-btn {
@@ -350,7 +377,7 @@
     border-top: 1px solid var(--flama-border);
     box-shadow: 0 -8px 24px rgba(31, 26, 23, 0.08);
     backdrop-filter: blur(8px);
-    padding: 0.7rem 0.75rem;
+    padding: 0.7rem 0.75rem calc(0.7rem + env(safe-area-inset-bottom, 0px));
     z-index: 1050;
   }
 
@@ -417,7 +444,7 @@
   .study-page:fullscreen,
   .study-page:-webkit-full-screen {
     margin: 0;
-    padding: 0.7rem 0.7rem 5rem;
+    padding: 0 0 5rem;
     height: 100dvh;
     max-height: 100dvh;
     background: radial-gradient(circle at 10% 0%, #fff8ef 0%, #fff3e8 40%, #fff8f3 100%);
@@ -432,7 +459,8 @@
 
   .study-page:fullscreen .study-card-shell,
   .study-page:-webkit-full-screen .study-card-shell {
-    width: min(1600px, 100%);
+    width: 100%;
+    max-width: none;
   }
 
   .answer-btn {
@@ -591,23 +619,19 @@
 
   /* Adjust card-face for front */
   .card-face.card-front {
-    flex-direction: column;
     padding: 0;
-    flex: 1;
-    min-height: 0;
     overflow: hidden;
   }
 
   .card-face.card-front.is-active {
-    display: flex;
+    display: block;
     overflow: hidden;
   }
 
-  /* Card back scrolls internally */
+  /* The iframe document owns vertical scrolling at the viewport edge. */
   .card-face.card-back.is-active {
     display: block;
-    overflow-y: auto;
-    flex: 1;
+    overflow: hidden;
   }
 
   .study-edit-modal-body {
@@ -691,9 +715,7 @@
 
   @media (max-width: 768px) {
     .study-page {
-      height: 100dvh;
-      max-height: 100dvh;
-      padding-bottom: 4.5rem;
+      --study-bottom-bar-clearance: calc(5rem + env(safe-area-inset-bottom, 0px));
     }
 
     .card-front-header {
@@ -751,9 +773,9 @@
     }
 
     .study-page {
-      margin: -1rem -0.5rem;
-      padding-left: 0.5rem;
-      padding-right: 0.5rem;
+      margin: 0;
+      padding-left: 0;
+      padding-right: 0;
     }
 
     .study-tab {
@@ -762,7 +784,7 @@
     }
 
     .study-bottom-bar {
-      padding: 0.6rem 0.55rem;
+      padding: 0.6rem 0.55rem calc(0.6rem + env(safe-area-inset-bottom, 0px));
     }
 
     .study-bottom-actions {
@@ -785,17 +807,17 @@
     }
 
     .card-face {
-      padding: 0 0.4rem 1rem;
+      padding: 0;
     }
   }
 
   @media (max-width: 640px) {
     .study-page {
-      padding-bottom: 10rem;
+      --study-bottom-bar-clearance: calc(10rem + env(safe-area-inset-bottom, 0px));
     }
 
     .deck-context-bar {
-      padding-inline: 0.25rem 0.45rem;
+      padding-inline: 0.75rem;
     }
 
     .deck-ctx-name {
@@ -807,7 +829,7 @@
       flex-wrap: wrap;
       align-items: center;
       gap: 0.5rem;
-      padding: 0.55rem;
+      padding: 0.55rem 0.55rem calc(0.55rem + env(safe-area-inset-bottom, 0px));
     }
 
     .study-bottom-side {
@@ -932,8 +954,8 @@
     const studyScope = (cardRoot?.dataset.studyScope || "deck").toLowerCase();
     const scopeId = Number(cardRoot?.dataset.scopeId || 0);
     let answerUrl = String(cardRoot?.dataset.answerUrl || "");
-    const front = document.getElementById("card-front");
-    const back = document.getElementById("card-back");
+    const frontFrame = document.getElementById("card-front-frame");
+    const backFrame = document.getElementById("card-back-frame");
     const showAnswerBtn = document.getElementById("show-answer-btn");
     const frontActions = document.getElementById("front-actions");
     const backActions = document.getElementById("back-actions");
@@ -957,7 +979,22 @@
     const fullscreenBtn = document.getElementById("study-fullscreen-btn");
     const fullscreenIconEl = fullscreenBtn?.querySelector("[data-fullscreen-icon]");
     const fullscreenLabelEl = fullscreenBtn?.querySelector("[data-fullscreen-label]");
-    const deferredScriptSelector = 'script[data-flama-inline-script="1"]';
+    const initialRendererPayloadEl = document.getElementById("studyInitialRendererPayload");
+    const rendererHost = window.FlamaCardRendererHost;
+    const frontRenderer = frontFrame && rendererHost
+      ? rendererHost.createRendererFrameController(frontFrame, {
+        minHeight: 260,
+        autoHeight: false,
+        enableLivePatch: true,
+      })
+      : null;
+    const backRenderer = backFrame && rendererHost
+      ? rendererHost.createRendererFrameController(backFrame, {
+        minHeight: 260,
+        autoHeight: false,
+        enableLivePatch: true,
+      })
+      : null;
     const MARKDOWN_PROXY_MEDIA_RE = /^\/media\/proxy\/[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 
     let editConfig = null;
@@ -968,6 +1005,11 @@
     let editSaving = false;
     let studyMarkdownManager = null;
     let studyMarkdownEditors = new Map();
+    let currentRendererPayloads = {
+      front: { html: "" },
+      back: { html: "" },
+    };
+    let backRendererLoaded = false;
     const timeFormatter =
       typeof Intl !== "undefined" && Intl.DateTimeFormat
         ? new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" })
@@ -987,6 +1029,21 @@
       }
     }
 
+    if (initialRendererPayloadEl && rendererHost) {
+      try {
+        const initialRendererPayload = JSON.parse(initialRendererPayloadEl.textContent || "{}");
+        currentRendererPayloads = {
+          front: rendererHost.normalizeRendererSidePayload(initialRendererPayload.front || { html: "" }),
+          back: rendererHost.normalizeRendererSidePayload(initialRendererPayload.back || { html: "" }),
+        };
+      } catch (_error) {
+        currentRendererPayloads = {
+          front: rendererHost.normalizeRendererSidePayload({ html: "" }),
+          back: rendererHost.normalizeRendererSidePayload({ html: "" }),
+        };
+      }
+    }
+
     function syncStudyEditAvailability() {
       if (!cardRoot || !studyEditBtn) {
         return;
@@ -995,6 +1052,113 @@
       cardRoot.dataset.canEdit = enabled ? "1" : "0";
       studyEditBtn.disabled = !enabled;
       studyEditBtn.classList.toggle("d-none", !enabled);
+    }
+
+    function rendererPayloadFromStudyPayload(payload, side) {
+      if (!rendererHost || !payload || typeof payload !== "object") {
+        return { html: "" };
+      }
+      const payloadKey = side === "back" ? "rendered_back_payload" : "rendered_front_payload";
+      const htmlKey = side === "back" ? "rendered_back_html" : "rendered_front_html";
+      if (payload[payloadKey] && typeof payload[payloadKey] === "object") {
+        return rendererHost.normalizeRendererSidePayload(payload[payloadKey]);
+      }
+      if (typeof payload[htmlKey] === "string") {
+        return rendererHost.normalizeRendererSidePayload({ html: payload[htmlKey] });
+      }
+      return rendererHost.normalizeRendererSidePayload({ html: "" });
+    }
+
+    function buildRendererContext(payload) {
+      const source = payload && typeof payload === "object" ? payload : {};
+      return {
+        cardId: String(source.card_id || cardId || ""),
+        noteId: String(source.note_id || cardRoot?.dataset.noteId || ""),
+        fieldValues: source.field_values && typeof source.field_values === "object"
+          ? source.field_values
+          : (editFieldValues && typeof editFieldValues === "object" ? editFieldValues : {}),
+        fieldDefs: Array.isArray(source.field_defs)
+          ? source.field_defs
+          : (Array.isArray(editFieldDefs) ? editFieldDefs : []),
+        studyScope,
+        scopeId,
+      };
+    }
+
+    function resetFrameViewport(frameEl) {
+      if (!(frameEl instanceof HTMLIFrameElement)) {
+        return;
+      }
+      try {
+        frameEl.scrollTop = 0;
+        frameEl.scrollLeft = 0;
+      } catch (_error) {
+        // Best-effort only.
+      }
+    }
+
+    function renderStudyFace(side, reason, payload, options = {}) {
+      if (!rendererHost) {
+        return;
+      }
+      const normalizedSide = side === "back" ? "back" : "front";
+      const controller = normalizedSide === "back" ? backRenderer : frontRenderer;
+      if (!controller) {
+        return;
+      }
+      resetFrameViewport(controller === backRenderer ? backFrame : frontFrame);
+      const sidePayload = currentRendererPayloads[normalizedSide] || { html: "" };
+      const hasRenderableHtml = sidePayload && typeof sidePayload.html === "string" && sidePayload.html.trim().length > 0;
+      const payloadForFrame = hasRenderableHtml
+        ? sidePayload
+        : { html: rendererHost.createNoticeHtml("Thẻ này hiện chưa có nội dung để hiển thị.") };
+      const shouldRevealOnReady = options.revealOnReady !== false;
+      controller.render(payloadForFrame, {
+        padding: "0",
+        background: "transparent",
+        color: "#1f1a17",
+        config: {
+          mode: "vocabulary_study",
+          side: normalizedSide,
+          studyScope,
+          scopeId,
+        },
+        context: buildRendererContext(payload),
+        revealOnReady: shouldRevealOnReady
+          ? {
+            side: normalizedSide,
+            reason: String(reason || "render"),
+          }
+          : null,
+      });
+      if (normalizedSide === "back") {
+        backRendererLoaded = true;
+      }
+    }
+
+    function ensureBackRendererLoaded(reason, payload) {
+      if (!backRenderer) {
+        return;
+      }
+      if (!backRendererLoaded) {
+        renderStudyFace("back", reason, payload);
+        return;
+      }
+      backRenderer.reveal({
+        side: "back",
+        reason: String(reason || "reveal"),
+      });
+    }
+
+    function updateRendererPayloadsFromStudyPayload(payload) {
+      if (!rendererHost) {
+        return;
+      }
+      currentRendererPayloads = {
+        front: rendererPayloadFromStudyPayload(payload, "front"),
+        back: rendererPayloadFromStudyPayload(payload, "back"),
+      };
+      backRendererLoaded = false;
     }
 
     function updateStudyEditConfigFromPayload(payload) {
@@ -1580,14 +1744,8 @@
           editConfigEl.textContent = JSON.stringify(editConfig);
         }
 
-        if (front && typeof payload.rendered_front_html === "string") {
-          front.innerHTML = payload.rendered_front_html;
-        }
-        if (back && typeof payload.rendered_back_html === "string") {
-          back.innerHTML = payload.rendered_back_html;
-        }
-        applyAutoSplit();
-        activateCurrentFaceScripts();
+        updateRendererPayloadsFromStudyPayload(payload);
+        renderStudyFace("front", "edit_save", payload);
 
         if (editModalEl && typeof bootstrap !== "undefined" && bootstrap.Modal) {
           const instance = bootstrap.Modal.getOrCreateInstance(editModalEl);
@@ -1600,50 +1758,20 @@
       }
     }
 
-    function executeDeferredInlineScripts(faceEl) {
-      if (!(faceEl instanceof HTMLElement)) {
-        return;
-      }
-      const deferredScripts = faceEl.querySelectorAll(deferredScriptSelector);
-      deferredScripts.forEach((scriptNode) => {
-        if (!(scriptNode instanceof HTMLScriptElement)) {
-          return;
-        }
-        if (scriptNode.dataset.flamaInlineExecuted === "1") {
-          return;
-        }
-        scriptNode.dataset.flamaInlineExecuted = "1";
-
-        const executeNode = document.createElement("script");
-        const declaredType = String(scriptNode.dataset.flamaScriptType || "").trim().toLowerCase();
-        if (declaredType === "module") {
-          executeNode.type = "module";
-        }
-        executeNode.textContent = scriptNode.textContent || "";
-        faceEl.appendChild(executeNode);
-        executeNode.remove();
-      });
-    }
-
     function activateCurrentFaceScripts() {
-      if (front && front.classList.contains("is-active")) {
-        executeDeferredInlineScripts(front);
-        return;
-      }
-      if (back && back.classList.contains("is-active")) {
-        executeDeferredInlineScripts(back);
-      }
+      // Template JS now runs inside sandboxed iframes, not the parent page.
     }
 
     function showBack() {
-      if (!front || !back || !frontActions || !backActions) {
+      if (!frontFrame || !backFrame || !frontActions || !backActions) {
         return;
       }
-      front.classList.remove("is-active");
-      back.classList.add("is-active");
+      resetFrameViewport(backFrame);
+      frontFrame.classList.remove("is-active");
+      backFrame.classList.add("is-active");
       frontActions.classList.add("d-none");
       backActions.classList.remove("d-none");
-      activateCurrentFaceScripts();
+      ensureBackRendererLoaded("show_answer", editConfig || {});
     }
 
     function getFullscreenElement() {
@@ -1692,10 +1820,7 @@
     }
 
     function applyAutoSplit() {
-      document.querySelectorAll("div[auto-split]").forEach((el) => {
-        const text = el.innerHTML.replace(/\$/g, "<br>");
-        el.innerHTML = text;
-      });
+      // auto-split runs inside the sandbox renderer.
     }
 
     function setAnswerControlsDisabled(disabled) {
@@ -1858,14 +1983,23 @@
       });
     }
 
-    function resetToFrontFace() {
-      if (!front || !back || !frontActions || !backActions) {
+    function resetToFrontFace(options = {}) {
+      if (!frontFrame || !backFrame || !frontActions || !backActions) {
         return;
       }
-      front.classList.add("is-active");
-      back.classList.remove("is-active");
+      const revealFront = options.revealFront !== false;
+      resetFrameViewport(frontFrame);
+      resetFrameViewport(backFrame);
+      frontFrame.classList.add("is-active");
+      backFrame.classList.remove("is-active");
       frontActions.classList.remove("d-none");
       backActions.classList.add("d-none");
+      if (revealFront) {
+        frontRenderer?.reveal({
+          side: "front",
+          reason: "show_front",
+        });
+      }
     }
 
     function applyWaitingStatePayload(payload, options = {}) {
@@ -1877,7 +2011,7 @@
       }
 
       updateStudyCounts(payload);
-      resetToFrontFace();
+      resetToFrontFace({ revealFront: false });
       if (cardRoot) {
         cardRoot.classList.add("d-none");
       }
@@ -1916,12 +2050,7 @@
       }
       hideWaitingState();
       updateStudyCounts(payload);
-      if (front && typeof payload.rendered_front_html === "string") {
-        front.innerHTML = payload.rendered_front_html;
-      }
-      if (back && typeof payload.rendered_back_html === "string") {
-        back.innerHTML = payload.rendered_back_html;
-      }
+      updateRendererPayloadsFromStudyPayload(payload);
       cardId = nextCardId;
       answerUrl = `/api/study/${encodeURIComponent(nextCardId)}/answer`;
       if (cardRoot) {
@@ -1930,9 +2059,9 @@
       }
       updateStudyEditConfigFromPayload(payload);
       cardShownAtMs = performance.now();
-      resetToFrontFace();
-      applyAutoSplit();
-      activateCurrentFaceScripts();
+      renderStudyFace("front", "load_next_card", payload);
+      resetToFrontFace({ revealFront: false });
+      renderStudyFace("back", "preload_next_card_back", payload, { revealOnReady: false });
       updateIntervalPreview(payload.intervals_preview);
       return true;
     }
@@ -2053,8 +2182,18 @@
       }
       updateFullscreenUi();
     }
-    applyAutoSplit();
-    activateCurrentFaceScripts();
+    renderStudyFace("front", "initial", {
+      card_id: cardId,
+      note_id: String(cardRoot?.dataset.noteId || ""),
+      field_values: editFieldValues,
+      field_defs: editFieldDefs,
+    });
+    renderStudyFace("back", "initial_preload_back", {
+      card_id: cardId,
+      note_id: String(cardRoot?.dataset.noteId || ""),
+      field_values: editFieldValues,
+      field_defs: editFieldDefs,
+    }, { revealOnReady: false });
   })();
 </script>
 {% endif %}

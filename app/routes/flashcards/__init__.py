@@ -656,8 +656,15 @@ def _get_shared_deck_item_for_view(deck_item_id: str) -> DeckMarketplaceItem | N
     is_owner = deck_item.owner_user_id == current_user.id
     if status == "private" and not is_owner:
         return None
-    if status == "archived" and not is_owner:
-        return None
+    if status == "archived":
+        if is_owner:
+            return None
+        installed = DeckInstall.query.filter_by(
+            deck_item_id=deck_item.id,
+            user_id=current_user.id,
+        ).first()
+        if installed is None:
+            return None
     return deck_item
 
 

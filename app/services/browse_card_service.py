@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from typing import Any
+
+UTC = timezone.utc
 
 from app.repositories import browse_card_repository
 from app.repositories import vocabulary_repository as vocabulary_ctrl

@@ -192,7 +192,7 @@ export function initDeckModals(rowMap) {
                     window.alert("Bạn không có quyền xóa deck này.");
                     return;
                 }
-                if (confirm(`Xóa vĩnh viễn deck '${normalizedDeckName}' và toàn bộ deck con/nội dung?`)) {
+                if (confirm(`Xóa deck '${normalizedDeckName}' khỏi tài khoản? Nếu deck đang chia sẻ, nó sẽ bị ẩn khỏi kho nhưng người đã tải vẫn giữ nguyên dữ liệu.`)) {
                     deleteFormEl.action = `/vocabulary/decks/${deckIdText}/delete`;
                     deleteFormEl.submit();
                 }

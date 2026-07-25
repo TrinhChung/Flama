@@ -9,6 +9,7 @@ import re
 import threading
 from collections import OrderedDict
 from datetime import datetime, timedelta
+from html.parser import HTMLParser
 from typing import Any
 
 import bleach
@@ -121,7 +122,7 @@ elif mistune is not None:
     # Fallback renderer when markdown-it-py is missing in runtime env.
     _markdown_parser = mistune.create_markdown(escape=True)
 _template_cache: OrderedDict[str, str] = OrderedDict()
-_preview_cache: dict[str, tuple[datetime, dict[str, str]]] = {}
+_preview_cache: dict[str, tuple[datetime, dict[str, Any]]] = {}
 _cache_lock = threading.Lock()
 _MAX_TEMPLATE_CACHE = 512
 _PREVIEW_TTL = timedelta(seconds=30)
@@ -131,13 +132,22 @@ PREVIEW_MEDIA_DIAGRAM_TOKEN = "__fc_preview_diagram__"
 LINEBREAK_TOKEN = "__FC_LINEBREAK_TOKEN__"
 _INLINE_SCRIPT_RE = re.compile(r"(?is)<script\b([^>]*)>(.*?)</script>")
 _HTML_TAG_SPLIT_RE = re.compile(r"(<[^>]+>)")
+_SCRIPT_TYPE_RE = re.compile(
+    r"""(?is)\btype\s*=\s*(['"])(.*?)\1"""
+)
+_SCRIPT_SRC_RE = re.compile(r"""(?is)\bsrc\s*=""")
+_PROXY_MEDIA_URL_RE = re.compile(r"^/media/proxy/([A-Za-z0-9][A-Za-z0-9_-]{0,127})$")
+_SCRIPT_TOKEN_PREFIX = "__FC_INLINE_SCRIPT_BLOCK_"
+_ALLOWED_INLINE_SCRIPT_TYPES = {
+    "",
+    "text/javascript",
+    "application/javascript",
+    "application/ecmascript",
+    "text/ecmascript",
+    "module",
+}
 _SAFE_BUTTON_ONCLICK_RE = re.compile(
     r"""^\s*document\.getElementById\(\s*['"][A-Za-z0-9_-]+['"]\s*\)\.play\(\)\s*;?\s*$"""
-)
-_SCRIPT_TAG_RE = re.compile(r"(?is)^\s*<script\b([^>]*)>(.*?)</script>\s*$")
-_SCRIPT_TYPE_ATTR_RE = re.compile(
-    r"""\btype\s*=\s*("[^"]*"|'[^']*'|[^\s"'=<>`]+)""",
-    flags=re.IGNORECASE,
 )
 
 
@@ -145,7 +155,7 @@ class TemplateCompileError(ValueError):
     """Mustache template compile/parse error."""
 
 
-def _allowed_attr(tag: str, name: str, value: str) -> bool:
+def _strict_allowed_attr(tag: str, name: str, value: str) -> bool:
     lowered = name.lower()
     if lowered.startswith("on"):
         if lowered == "onclick" and tag == "button":
@@ -161,7 +171,7 @@ def _allowed_attr(tag: str, name: str, value: str) -> bool:
         return tag == "audio"
     if lowered in {"src", "href"}:
         val = (value or "").strip()
-        if val.startswith("/media/proxy/"):
+        if _PROXY_MEDIA_URL_RE.match(val):
             return True
         if lowered == "href" and val.startswith("https://"):
             return True
@@ -169,22 +179,116 @@ def _allowed_attr(tag: str, name: str, value: str) -> bool:
     return False
 
 
-def _extract_inline_scripts(source_html: str) -> tuple[str, list[str]]:
-    scripts: list[str] = []
+def _template_allowed_attr(tag: str, name: str, value: str) -> bool:
+    lowered = name.lower()
+    if lowered.startswith("on"):
+        return True
+    if lowered.startswith("data-") or lowered.startswith("aria-"):
+        return True
+    if lowered == "auto-split":
+        return tag in {"div", "p", "span", "li", "td"}
+    if lowered in {"class", "id", "style", "alt", "title", "role", "dir"}:
+        return True
+    if lowered in {"controls", "loop", "muted", "playsinline"}:
+        return tag in {"audio", "video"}
+    if lowered == "autoplay":
+        return tag in {"audio", "video"}
+    if lowered in {"preload", "poster"}:
+        return tag in {"audio", "video"}
+    if lowered in {"width", "height"}:
+        return tag in {"img", "video", "source", "audio", "table", "th", "td"}
+    if lowered in {"colspan", "rowspan"}:
+        return tag in {"th", "td"}
+    if lowered in {"src", "href"}:
+        val = (value or "").strip()
+        if _PROXY_MEDIA_URL_RE.match(val):
+            return True
+        if lowered == "href" and val.startswith("https://"):
+            return True
+        return False
+    return False
+
+
+def _extract_proxy_asset_id(media_url: str | None) -> str:
+    if not media_url:
+        return ""
+    match = _PROXY_MEDIA_URL_RE.match(str(media_url).strip())
+    return match.group(1) if match else ""
+
+
+def _short_sha256(value: str | None) -> str:
+    return hashlib.sha256(str(value or "").encode("utf-8")).hexdigest()[:16]
+
+
+def _renderer_shell_key(
+    *,
+    template: Any,
+    side: str,
+    side_source: str,
+    css: str,
+    field_defs: list[Any],
+) -> str:
+    field_defs_signature = "|".join(
+        [
+            ":".join(
+                [
+                    str(getattr(field_def, "name", "") or ""),
+                    str(getattr(field_def, "field_type", "") or ""),
+                    str(int(getattr(field_def, "position", 0) or 0)),
+                    "1" if bool(getattr(field_def, "required", False)) else "0",
+                ]
+            )
+            for field_def in field_defs
+        ]
+    )
+    return ":".join(
+        [
+            "tpl",
+            str(getattr(template, "id", "") or ""),
+            str(getattr(template, "updated_at", "") or ""),
+            str(side or ""),
+            _short_sha256(css),
+            _short_sha256(field_defs_signature),
+            _short_sha256(side_source),
+        ]
+    )
+
+
+def _sanitize_inline_script(attrs: str, body: str) -> str:
+    raw_attrs = attrs or ""
+    if _SCRIPT_SRC_RE.search(raw_attrs):
+        return ""
+    type_match = _SCRIPT_TYPE_RE.search(raw_attrs)
+    script_type = ""
+    if type_match:
+        script_type = str(type_match.group(2) or "").strip().lower()
+        if script_type not in _ALLOWED_INLINE_SCRIPT_TYPES:
+            return ""
+    if script_type:
+        return f"<script type=\"{html.escape(script_type, quote=True)}\">{body or ''}</script>"
+    return f"<script>{body or ''}</script>"
+
+
+def _extract_inline_scripts(source_html: str) -> tuple[str, list[tuple[str, str]]]:
+    scripts: list[tuple[str, str]] = []
 
     def _replace(match: re.Match[str]) -> str:
-        attrs = (match.group(1) or "").strip()
-        body = match.group(2) or ""
-        if re.search(r"\bsrc\s*=", attrs, flags=re.IGNORECASE):
+        safe_script = _sanitize_inline_script(match.group(1) or "", match.group(2) or "")
+        if not safe_script:
             return ""
-        # Keep only optional type attribute; strip everything else.
-        type_match = _SCRIPT_TYPE_ATTR_RE.search(attrs)
-        type_attr = f" type={type_match.group(1)}" if type_match else ""
-        scripts.append(f"<script{type_attr}>{body}</script>")
-        return ""
+        token = f"{_SCRIPT_TOKEN_PREFIX}{len(scripts)}__"
+        scripts.append((token, safe_script))
+        return token
 
     cleaned = _INLINE_SCRIPT_RE.sub(_replace, source_html or "")
     return cleaned, scripts
+
+
+def _restore_inline_scripts(source_html: str, scripts: list[tuple[str, str]]) -> str:
+    restored = source_html or ""
+    for token, script_html in scripts:
+        restored = restored.replace(token, script_html)
+    return restored
 
 
 def _upgrade_html_field_double_brace_tokens(
@@ -259,43 +363,6 @@ def _replace_linebreak_token_in_html_text_nodes(rendered_html: str) -> str:
     return "".join(chunks)
 
 
-def _strip_wrapped_attr_value(raw_value: str) -> str:
-    token = (raw_value or "").strip()
-    if len(token) >= 2 and (
-        (token.startswith('"') and token.endswith('"'))
-        or (token.startswith("'") and token.endswith("'"))
-    ):
-        return token[1:-1]
-    return token
-
-
-def _defer_inline_script_block(script_block: str) -> str:
-    match = _SCRIPT_TAG_RE.match(script_block or "")
-    if not match:
-        return (
-            '<script type="application/x-flama-note-script" '
-            f'data-flama-inline-script="1">{script_block or ""}</script>'
-        )
-
-    attrs = match.group(1) or ""
-    body = match.group(2) or ""
-    type_match = _SCRIPT_TYPE_ATTR_RE.search(attrs)
-    declared_type = (
-        _strip_wrapped_attr_value(type_match.group(1))
-        if type_match is not None
-        else ""
-    )
-    declared_attr = ""
-    if declared_type:
-        escaped_type = html.escape(declared_type, quote=True)
-        declared_attr = f' data-flama-script-type="{escaped_type}"'
-
-    return (
-        '<script type="application/x-flama-note-script" '
-        f'data-flama-inline-script="1"{declared_attr}>{body}</script>'
-    )
-
-
 def _restore_linebreak_token(raw_text: str) -> str:
     if LINEBREAK_TOKEN not in raw_text:
         return raw_text
@@ -316,10 +383,22 @@ def sanitize_html_fragment(raw_html: str | None) -> str:
     return bleach.clean(
         raw_html or "",
         tags=ALLOWED_HTML_TAGS,
-        attributes=_allowed_attr,
+        attributes=_strict_allowed_attr,
         strip=True,
         css_sanitizer=_css_sanitizer,
     )
+
+
+def sanitize_template_html_fragment(raw_html: str | None) -> str:
+    cleaned_html, scripts = _extract_inline_scripts(raw_html or "")
+    safe_html = bleach.clean(
+        cleaned_html,
+        tags=ALLOWED_HTML_TAGS,
+        attributes=_template_allowed_attr,
+        strip=True,
+        css_sanitizer=_css_sanitizer,
+    )
+    return _restore_inline_scripts(safe_html, scripts)
 
 
 def sanitize_richtext(raw_html: str | None) -> str:
@@ -525,9 +604,82 @@ def _render_media_html(field_type: str, value: Any, field_name: str, media_looku
         return ""
 
     escaped_alt = html.escape(field_name, quote=True)
+    escaped_field = html.escape(field_name, quote=True)
+    asset_id = _extract_proxy_asset_id(media_url)
+    media_attrs = [
+        f'data-flama-media-field="{escaped_field}"',
+        f'data-flama-media-kind="{html.escape(field_type, quote=True)}"',
+    ]
+    if asset_id:
+        media_attrs.append(f'data-flama-media-asset-id="{html.escape(asset_id, quote=True)}"')
+    joined_attrs = " ".join(media_attrs)
     if field_type == "audio":
-        return f"<audio controls src=\"{media_url}\"></audio>"
-    return f"<img src=\"{media_url}\" alt=\"{escaped_alt}\">"
+        return f"<audio controls {joined_attrs} src=\"{media_url}\"></audio>"
+    return f"<img {joined_attrs} src=\"{media_url}\" alt=\"{escaped_alt}\">"
+
+
+class _RenderedMediaMetadataParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.allowed_media_urls: set[str] = set()
+        self.allowed_audio_urls: set[str] = set()
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        attr_map = {str(name or "").lower(): str(value or "") for name, value in attrs}
+        src = attr_map.get("src", "").strip()
+        href = attr_map.get("href", "").strip()
+        media_url = src if src else href
+        if _PROXY_MEDIA_URL_RE.match(media_url):
+            self.allowed_media_urls.add(media_url)
+        if tag.lower() == "audio" and _PROXY_MEDIA_URL_RE.match(src):
+            self.allowed_audio_urls.add(src)
+        if tag.lower() == "source" and _PROXY_MEDIA_URL_RE.match(src):
+            type_value = str(attr_map.get("type", "") or "").strip().lower()
+            if type_value.startswith("audio/"):
+                self.allowed_audio_urls.add(src)
+
+
+def build_renderer_side_payload(
+    rendered_html: str | None,
+    *,
+    template_key: str | None = None,
+    shell_key: str | None = None,
+    supports_live_patch: bool | None = None,
+) -> dict[str, Any]:
+    normalized_html = str(rendered_html or "")
+    parser = _RenderedMediaMetadataParser()
+    try:
+        parser.feed(normalized_html)
+        parser.close()
+    except Exception:
+        logger.exception("Failed to derive renderer media metadata from rendered HTML.")
+    allowed_audio_urls = sorted(parser.allowed_audio_urls)
+    normalized_template_key = str(template_key or "").strip()
+    normalized_shell_key = str(shell_key or normalized_template_key).strip()
+    has_inline_script = "<script" in normalized_html.lower()
+    resolved_live_patch = (
+        bool(supports_live_patch)
+        if supports_live_patch is not None
+        else bool(normalized_template_key and normalized_shell_key and not has_inline_script)
+    )
+    if has_inline_script:
+        resolved_live_patch = False
+    return {
+        "html": normalized_html,
+        "allowed_media_urls": sorted(parser.allowed_media_urls),
+        "allowed_audio_urls": allowed_audio_urls,
+        "allowed_audio_asset_ids": [
+            asset_id
+            for asset_id in (_extract_proxy_asset_id(url) for url in allowed_audio_urls)
+            if asset_id
+        ],
+        "template_key": normalized_template_key,
+        "shell_key": normalized_shell_key,
+        "has_inline_script": has_inline_script,
+        "supports_live_patch": bool(
+            resolved_live_patch and normalized_template_key and normalized_shell_key
+        ),
+    }
 
 
 def build_render_context(
@@ -591,12 +743,8 @@ def render_template_pair(
     preview_note_key: str | None = None,
     allow_inline_script: bool = False,
     defer_inline_script: bool = False,
-) -> dict[str, str]:
+) -> dict[str, Any]:
     css = sanitize_css(getattr(template, "shared_css", ""))
-    if allow_inline_script and defer_inline_script:
-        inline_script_mode = "inline-on-deferred"
-    else:
-        inline_script_mode = "inline-on" if allow_inline_script else "inline-off"
     preview_key = None
     if preview_note_key:
         preview_hash = hashlib.sha256(
@@ -605,7 +753,6 @@ def render_template_pair(
                 + getattr(template, "back_html", "")
                 + css
                 + preview_note_key
-                + inline_script_mode
             ).encode("utf-8")
         ).hexdigest()
         preview_key = preview_hash
@@ -618,14 +765,6 @@ def render_template_pair(
     back_source_raw = getattr(template, "back_html", "")
     front_source_prepared = _upgrade_html_field_double_brace_tokens(front_source_raw, field_defs)
     back_source_prepared = _upgrade_html_field_double_brace_tokens(back_source_raw, field_defs)
-    # Always strip inline <script> blocks before bleach cleaning.
-    # When allow_inline_script=True we re-attach sanitized script blocks after rendering.
-    front_source_prepared, front_script_sources = _extract_inline_scripts(front_source_prepared)
-    back_source_prepared, back_script_sources = _extract_inline_scripts(back_source_prepared)
-    if not allow_inline_script:
-        front_script_sources = []
-        back_script_sources = []
-
     context = build_render_context(
         field_defs,
         field_values,
@@ -636,31 +775,49 @@ def render_template_pair(
     back_hash = hashlib.sha256(back_source_prepared.encode("utf-8")).hexdigest()[:16]
     front_key = f"{template.id}:{template_updated}:front:{front_hash}"
     back_key = f"{template.id}:{template_updated}:back:{back_hash}"
+    front_template_key = _renderer_shell_key(
+        template=template,
+        side="front",
+        side_source=front_source_prepared,
+        css=css,
+        field_defs=field_defs,
+    )
+    back_template_key = _renderer_shell_key(
+        template=template,
+        side="back",
+        side_source=back_source_prepared,
+        css=css,
+        field_defs=field_defs,
+    )
     front_source = _cache_template(front_key, front_source_prepared)
     back_source = _cache_template(back_key, back_source_prepared)
 
     try:
         front_rendered = chevron.render(front_source, context)
         back_rendered = chevron.render(back_source, context)
-        front_scripts = [_restore_linebreak_token(chevron.render(script_source, context)) for script_source in front_script_sources]
-        back_scripts = [_restore_linebreak_token(chevron.render(script_source, context)) for script_source in back_script_sources]
     except Exception as exc:
         raise TemplateCompileError(str(exc)) from exc
 
     front_rendered = _replace_linebreak_token_in_html_text_nodes(front_rendered)
     back_rendered = _replace_linebreak_token_in_html_text_nodes(back_rendered)
-    safe_front = sanitize_html_fragment(front_rendered)
-    safe_back = sanitize_html_fragment(back_rendered)
-    if allow_inline_script:
-        if defer_inline_script:
-            safe_front = f"{safe_front}{''.join(_defer_inline_script_block(item) for item in front_scripts)}"
-            safe_back = f"{safe_back}{''.join(_defer_inline_script_block(item) for item in back_scripts)}"
-        else:
-            safe_front = f"{safe_front}{''.join(front_scripts)}"
-            safe_back = f"{safe_back}{''.join(back_scripts)}"
+    safe_front = sanitize_template_html_fragment(front_rendered)
+    safe_back = sanitize_template_html_fragment(back_rendered)
     scoped_front = f"<style>{css}</style>{safe_front}" if css else safe_front
     scoped_back = f"<style>{css}</style>{safe_back}" if css else safe_back
-    result = {"front_html": scoped_front, "back_html": scoped_back}
+    result = {
+        "front_html": scoped_front,
+        "back_html": scoped_back,
+        "front_renderer_payload": build_renderer_side_payload(
+            scoped_front,
+            template_key=front_template_key,
+            shell_key=front_template_key,
+        ),
+        "back_renderer_payload": build_renderer_side_payload(
+            scoped_back,
+            template_key=back_template_key,
+            shell_key=back_template_key,
+        ),
+    }
 
     if preview_key:
         _preview_cache[preview_key] = (datetime.utcnow(), result)

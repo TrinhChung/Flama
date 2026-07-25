@@ -1,0 +1,26 @@
+[Unit]
+Description=Flama Nihongo Gunicorn application
+After=network-online.target mysql.service
+Wants=network-online.target
+Requires=mysql.service
+
+[Service]
+Type=simple
+User=flama
+Group=flama
+WorkingDirectory=/opt/flama/current
+EnvironmentFile=/etc/flama/flama.env
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/opt/flama/venv/bin/gunicorn --workers 1 --timeout 120 --bind 0.0.0.0:4789 --access-logfile - --error-logfile - wsgi:app
+Restart=on-failure
+RestartSec=5
+KillSignal=SIGQUIT
+TimeoutStopSec=30
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/var/lib/flama
+
+[Install]
+WantedBy=multi-user.target

@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
+from datetime import datetime, timezone
+
+UTC = timezone.utc
 from flask import jsonify, request, redirect, url_for, flash, render_template, send_file, current_app
 from flask_login import current_user, login_required
 from sqlalchemy.exc import OperationalError
@@ -301,7 +303,6 @@ def preview_template(note_type_id: str, template_id: str):
             field_values=sample_field_values,
             media_assets=sample_media_assets,
             preview_note_key=preview_note_key,
-            allow_inline_script=True,
         )
     except TemplateCompileError as exc:
         return _api_error("TEMPLATE_COMPILE_ERROR", str(exc), field="front_html")
@@ -427,7 +428,6 @@ def preview_shared_note_type_template(note_type_id: str, template_id: str):
             field_values=sample_field_values,
             media_assets=[],
             preview_note_key=f"shared-preview:{note_type.id}",
-            allow_inline_script=True,
         )
     except TemplateCompileError as exc:
         return _api_error("TEMPLATE_COMPILE_ERROR", str(exc), field="front_html")
@@ -751,7 +751,6 @@ def preview_shared_deck_template(deck_item_id: str, template_id: str):
             field_values=preview_field_values,
             media_assets=preview_media_assets,
             preview_note_key=preview_note_key,
-            allow_inline_script=True,
         )
     except TemplateCompileError as exc:
         return _api_error("TEMPLATE_COMPILE_ERROR", str(exc), field="front_html")

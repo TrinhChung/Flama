@@ -356,7 +356,11 @@ def get_max_deck_position(parent_deck_id: Optional[int]) -> int:
 
 def get_deck_with_notes_by_user_and_id(user_id: int, deck_id: int) -> Optional[Deck]:
     """Retrieves a deck if it belongs to the user."""
-    return Deck.query.filter_by(id=deck_id, owner_user_id=user_id).first()
+    return Deck.query.filter_by(
+        id=deck_id,
+        owner_user_id=user_id,
+        deleted_at=None,
+    ).first()
 
 def get_templates_by_note_type(note_type_id: str) -> List[Template]:
     """Retrieves all templates for a note type."""

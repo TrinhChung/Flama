@@ -32,7 +32,7 @@
 
   <div class="card">
     <div class="card-body">
-      <iframe id="study-frame" sandbox="allow-same-origin allow-scripts" class="w-100 border rounded" style="min-height: 320px;"></iframe>
+      <iframe id="study-frame" sandbox="allow-scripts" class="w-100 border rounded" style="min-height: 320px;"></iframe>
       <div class="d-flex gap-2 flex-wrap mt-3">
         <button class="btn btn-outline-secondary" id="show-answer-btn">Hiện đáp án</button>
         <button class="btn btn-outline-danger rating-btn" data-rating="again">Học lại</button>
@@ -47,6 +47,7 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="{{ url_for('static', filename='js/card_renderer_host.js') }}"></script>
 <script>
   (() => {
     const scopeEl = document.getElementById("study-scope");
@@ -56,6 +57,10 @@
     const loadNextBtn = document.getElementById("load-next-btn");
     const showAnswerBtn = document.getElementById("show-answer-btn");
     const ratingButtons = Array.from(document.querySelectorAll(".rating-btn"));
+    const rendererHost = window.FlamaCardRendererHost;
+    const rendererController = frameEl && rendererHost
+      ? rendererHost.createRendererFrameController(frameEl, { minHeight: 320 })
+      : null;
 
     let currentCard = null;
     let showingBack = false;
@@ -67,11 +72,46 @@
 
     function renderCardFace() {
       if (!currentCard) {
-        frameEl.srcdoc = "<p style='padding:12px;'>Chưa tải thẻ nào.</p>";
+        rendererController?.render(rendererHost.createNoticeHtml("Chua tai the nao."), {
+          padding: "12px",
+          background: "#ffffff",
+          color: "#1f1a17",
+          config: {
+            mode: "flashcard_study",
+            side: "front",
+          },
+        });
         return;
       }
-      const html = showingBack ? currentCard.rendered_back_html : currentCard.rendered_front_html;
-      frameEl.srcdoc = `<!doctype html><html><body style="margin:0;padding:8px;">${html || ""}</body></html>`;
+      const activeSide = showingBack ? "back" : "front";
+      const sidePayload = activeSide === "back"
+        ? (currentCard.rendered_back_payload || currentCard.rendered_back_html || "")
+        : (currentCard.rendered_front_payload || currentCard.rendered_front_html || "");
+      const normalizedPayload = rendererHost.normalizeRendererSidePayload(sidePayload || { html: "" });
+      const payloadForFrame = normalizedPayload.html.trim()
+        ? normalizedPayload
+        : { html: rendererHost.createNoticeHtml("Khong co noi dung the.") };
+      rendererController?.render(payloadForFrame, {
+        padding: "8px",
+        background: "#ffffff",
+        color: "#1f1a17",
+        config: {
+          mode: "flashcard_study",
+          side: activeSide,
+          scope: scopeEl?.value || "deck",
+          scopeId: (scopeIdEl?.value || "").trim(),
+        },
+        context: {
+          cardId: currentCard.card_id || "",
+          noteId: currentCard.note_id || "",
+          fieldValues: currentCard.field_values || {},
+          fieldDefs: currentCard.field_defs || [],
+        },
+        revealOnReady: {
+          side: activeSide,
+          reason: showingBack ? "show_answer" : "load_card",
+        },
+      });
     }
 
     async function requestJson(url, options = {}) {

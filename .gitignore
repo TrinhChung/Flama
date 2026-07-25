@@ -15,6 +15,8 @@ static/tmp/
 !/static/uploads/.gitignore
 /flama_media_storage/
 /output/
+/.playwright-cli/
+/.impeccable/
 
 
 /migrations/*

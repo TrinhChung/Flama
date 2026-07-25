@@ -11,8 +11,12 @@
 {% set summary = installed_workspace['summary'] or {} %}
 <section class="market-detail-page installed-decks-page">
   <section class="market-space-panel installed-decks-hero">
-    <div>
-      <div class="market-shelf-kicker">Installed Library</div>
+    <div class="installed-decks-hero__copy">
+      <div class="market-hub-switch installed-library-switch" role="tablist" aria-label="Không gian thư viện">
+        <button class="market-hub-switch-btn is-active" type="button">Deck đã cài</button>
+        <a class="market-hub-switch-btn" href="{{ url_for('flashcards.shared_note_types_page') }}">Marketplace note type</a>
+      </div>
+      <div class="market-shelf-kicker">Thư viện đã cài</div>
       <h1 class="market-hub-section-title installed-decks-title mb-2">Deck đã cài</h1>
       <p class="market-section-help mb-0">
         Mở nhanh deck bạn đã cài để học hoặc tạo change request mà không cần đi qua marketplace.
@@ -21,6 +25,9 @@
     <div class="installed-decks-hero-actions">
       <a class="btn btn-outline-secondary" href="{{ url_for('flashcards.shared_decks_page') }}">
         <i class="bi bi-shop"></i> Mở marketplace
+      </a>
+      <a class="btn btn-primary" href="{{ url_for('main.dashboard') }}">
+        <i class="bi bi-grid"></i> Về dashboard
       </a>
     </div>
   </section>

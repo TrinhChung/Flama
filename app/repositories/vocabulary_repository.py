@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from typing import Any
+
+UTC = timezone.utc
 
 from sqlalchemy.orm import selectinload
 
@@ -64,7 +66,10 @@ def deck_name_exists_under_parent(
     if not normalized_name:
         return False
 
-    query = Deck.query.filter(db.func.lower(Deck.name) == normalized_name)
+    query = Deck.query.filter(
+        db.func.lower(Deck.name) == normalized_name,
+        Deck.deleted_at.is_(None),
+    )
     if parent_id is None:
         query = query.filter(Deck.parent_id.is_(None))
     else:
@@ -173,6 +178,7 @@ def upsert_deck_path(
         existing_query = Deck.query.filter(
             Deck.parent_id == current_parent_id,
             Deck.name == token,
+            Deck.deleted_at.is_(None),
         )
         if not admin_mode:
             existing_query = existing_query.filter(Deck.owner_user_id == owner_user_id)
@@ -444,6 +450,7 @@ def collect_accessible_browse_decks(*, user_id: int, admin_mode: bool) -> list[D
     if admin_mode:
         return (
             Deck.query.filter(
+                Deck.deleted_at.is_(None),
                 db.or_(
                     Deck.owner_user_id == user_id,
                     Deck.owner_user_id.is_(None),
@@ -458,7 +465,7 @@ def collect_accessible_browse_decks(*, user_id: int, admin_mode: bool) -> list[D
             .all()
         )
 
-    all_decks = Deck.query.order_by(
+    all_decks = Deck.query.filter(Deck.deleted_at.is_(None)).order_by(
         Deck.parent_id.isnot(None),
         Deck.position,
         Deck.created_at,
@@ -470,7 +477,10 @@ def collect_accessible_browse_decks(*, user_id: int, admin_mode: bool) -> list[D
 
     owned_deck_rows = (
         db.session.query(Deck.id)
-        .filter(Deck.owner_user_id == user_id)
+        .filter(
+            Deck.owner_user_id == user_id,
+            Deck.deleted_at.is_(None),
+        )
         .all()
     )
     visible_ids.update(int(row[0]) for row in owned_deck_rows if row and row[0] is not None)
@@ -502,7 +512,10 @@ def collect_accessible_browse_decks(*, user_id: int, admin_mode: bool) -> list[D
             visible_ids.update(current)
             child_rows = (
                 db.session.query(Deck.id)
-                .filter(Deck.parent_id.in_(current))
+                .filter(
+                    Deck.parent_id.in_(current),
+                    Deck.deleted_at.is_(None),
+                )
                 .all()
             )
             frontier = {int(row[0]) for row in child_rows if row and row[0] is not None}
@@ -778,10 +791,10 @@ def build_note_study_card_payload(card_obj: Card | None) -> SimpleNamespace | No
     return SimpleNamespace(**payload)
 
 
-def render_note_study_flashcard(card_obj: Card | None) -> dict[str, str]:
+def render_note_study_flashcard(card_obj: Card | None) -> dict[str, Any]:
     from app.services.flashcard_renderer import TemplateCompileError, render_template_pair
 
-    ret = {"front": "", "back": ""}
+    ret: dict[str, Any] = {"front": "", "back": "", "front_payload": None, "back_payload": None}
     if not card_obj or not card_obj.note or not card_obj.template:
         return ret
 
@@ -797,11 +810,11 @@ def render_note_study_flashcard(card_obj: Card | None) -> dict[str, str]:
             field_values=note_obj.field_values or {},
             media_assets=note_obj.media_assets,
             preview_note_key=note_obj.id,
-            allow_inline_script=True,
-            defer_inline_script=True,
         )
         ret["front"] = rendered.get("front_html", "")
         ret["back"] = rendered.get("back_html", "")
+        ret["front_payload"] = rendered.get("front_renderer_payload")
+        ret["back_payload"] = rendered.get("back_renderer_payload")
     except TemplateCompileError as exc:
         ret["front"] = f"<div class='text-danger'>Error rendering front: {exc}</div>"
         ret["back"] = f"<div class='text-danger'>Error rendering back: {exc}</div>"

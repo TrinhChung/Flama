@@ -26,6 +26,11 @@ _MIN_WAV_BYTES = (
     b"D\xac\x00\x00\x88X\x01\x00\x02\x00\x10\x00data\x00\x00\x00\x00"
 )
 
+_SAFE_SVG_BYTES = (
+    b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10">'
+    b'<circle cx="5" cy="5" r="4" fill="red"/></svg>'
+)
+
 
 class FlashcardValidationSecurityTests(unittest.TestCase):
     def setUp(self):
@@ -198,6 +203,41 @@ class FlashcardValidationSecurityTests(unittest.TestCase):
             asset = MediaAsset.query.get(asset_id)
             self.assertIsNotNone(asset)
             self.assertEqual(asset.mime_type, "audio/wav")
+
+    def test_upload_valid_safe_svg_file(self):
+        note_type = self._create_note_type_with_media()
+        note_id = self._create_note(note_type["id"])
+
+        upload_resp = self.client.post(
+            f"/api/notes/{note_id}/media",
+            data={
+                "field_name": "Picture",
+                "file": (io.BytesIO(_SAFE_SVG_BYTES), "safe.svg", "image/svg+xml"),
+            },
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(upload_resp.status_code, 201)
+
+    def test_upload_rejects_svg_script_hidden_after_padding(self):
+        note_type = self._create_note_type_with_media()
+        note_id = self._create_note(note_type["id"])
+        padded_svg = (
+            b'<svg xmlns="http://www.w3.org/2000/svg">'
+            + (b" " * 9_000)
+            + b"<script>alert(1)</script><circle cx='5' cy='5' r='4'/></svg>"
+        )
+
+        upload_resp = self.client.post(
+            f"/api/notes/{note_id}/media",
+            data={
+                "field_name": "Picture",
+                "file": (io.BytesIO(padded_svg), "padded.svg", "image/svg+xml"),
+            },
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(upload_resp.status_code, 415)
+        payload = upload_resp.get_json() or {}
+        self.assertEqual(payload.get("error"), "MEDIA_SIGNATURE_INVALID")
 
     def test_patch_note_accepts_audio_filename_reference(self):
         note_type = self._create_note_type_with_media()

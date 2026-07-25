@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from secrets import randbelow
 import time
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from uuid import uuid4
+
+UTC = timezone.utc
 
 from sqlalchemy.exc import IntegrityError
 

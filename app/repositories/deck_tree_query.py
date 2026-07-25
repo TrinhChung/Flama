@@ -9,7 +9,7 @@ from models.card_progress import CardProgress
 
 
 def query_accessible_stats_decks(*, user_id: int, admin_mode: bool) -> list[Deck]:
-    query = Deck.query
+    query = Deck.query.filter(Deck.deleted_at.is_(None))
     if admin_mode:
         query = query.filter(
             db.or_(
@@ -34,7 +34,7 @@ def query_accessible_stats_decks(*, user_id: int, admin_mode: bool) -> list[Deck
 
     # Backward-compatible fallback for decks created before owner_user_id was populated.
     all_decks = (
-        Deck.query.order_by(
+        Deck.query.filter(Deck.deleted_at.is_(None)).order_by(
             Deck.parent_id.isnot(None),
             Deck.position,
             Deck.created_at,

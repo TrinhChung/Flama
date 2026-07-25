@@ -682,6 +682,12 @@ def ensure_backward_compatible_schema() -> None:
             )
             deck_columns.add("scheduler_preset_id")
             schema_changed = True
+        if "deleted_at" not in deck_columns:
+            db.session.execute(
+                sa.text("ALTER TABLE decks ADD COLUMN deleted_at DATETIME NULL")
+            )
+            deck_columns.add("deleted_at")
+            schema_changed = True
 
         deck_indexes = _index_names("decks")
         if "owner_user_id" in deck_columns and "ix_decks_owner_user_id" not in deck_indexes:
@@ -697,6 +703,11 @@ def ensure_backward_compatible_schema() -> None:
         if "scheduler_preset_id" in deck_columns and "ix_decks_scheduler_preset_id" not in deck_indexes:
             db.session.execute(
                 sa.text("CREATE INDEX ix_decks_scheduler_preset_id ON decks (scheduler_preset_id)")
+            )
+            schema_changed = True
+        if "deleted_at" in deck_columns and "ix_decks_deleted_at" not in deck_indexes:
+            db.session.execute(
+                sa.text("CREATE INDEX ix_decks_deleted_at ON decks (deleted_at)")
             )
             schema_changed = True
 

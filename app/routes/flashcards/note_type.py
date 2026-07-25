@@ -74,7 +74,7 @@ def note_editor_page():
         flash("Bạn không có quyền truy cập trang này.", "danger")
         return redirect(url_for("main.dashboard"))
     note_types = NoteType.query.filter_by(user_id=current_user.id).order_by(NoteType.name.asc()).all()
-    decks = Deck.query.order_by(Deck.name.asc()).all()
+    decks = Deck.query.filter(Deck.deleted_at.is_(None)).order_by(Deck.name.asc()).all()
     return render_template("flashcards/note_editor.html", note_types=note_types, decks=decks)
 
 @flashcards_bp.route("/flashcards/notes")
@@ -89,7 +89,7 @@ def notes_list_page():
         .order_by(NoteType.name.asc())
         .all()
     )
-    decks = Deck.query.order_by(Deck.name.asc()).all()
+    decks = Deck.query.filter(Deck.deleted_at.is_(None)).order_by(Deck.name.asc()).all()
 
     # Filters from query string
     selected_nt = request.args.get("note_type_id", "")
@@ -166,7 +166,7 @@ def note_edit_page(note_id: str):
     if not note:
         return redirect(url_for("flashcards.notes_list_page"))
     note_type = NoteType.query.get(note.note_type_id)
-    decks = Deck.query.order_by(Deck.name.asc()).all()
+    decks = Deck.query.filter(Deck.deleted_at.is_(None)).order_by(Deck.name.asc()).all()
     return render_template(
         "flashcards/note_edit.html",
         note=note,

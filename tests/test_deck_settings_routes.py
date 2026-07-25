@@ -555,7 +555,129 @@ class DeckSettingsRoutesTests(unittest.TestCase):
             self.assertIsNone(Deck.query.get(cloned_child_id))
             self.assertIsNone(DeckInstall.query.get(install_row_id))
 
-    def test_non_admin_cannot_delete_owned_deck_without_clone_install(self):
+    def test_deleting_shared_source_archives_it_without_breaking_installed_clone(self):
+        with self.app.app_context():
+            note_type = NoteType(user_id=self.admin_id, name="Protected Source Type")
+            source_root = Deck(
+                name="Protected Source",
+                parent_id=None,
+                owner_user_id=self.admin_id,
+                position=1,
+            )
+            local_root = Deck(
+                name="Installed Protected Source",
+                parent_id=None,
+                owner_user_id=self.other_user_id,
+                position=1,
+            )
+            db.session.add_all([note_type, source_root, local_root])
+            db.session.flush()
+            template = Template(
+                note_type_id=note_type.id,
+                name="Protected Source Template",
+                front_html="{{word}}",
+                back_html="{{word}}",
+                shared_css="",
+                position=0,
+                is_default=True,
+            )
+            db.session.add(template)
+            db.session.flush()
+            source_note = Note(
+                note_type_id=note_type.id,
+                user_id=self.admin_id,
+                deck_id=source_root.id,
+                field_values={"word": "維持"},
+                tags=[],
+            )
+            shared_item = DeckMarketplaceItem(
+                owner_user_id=self.admin_id,
+                source_deck_id=source_root.id,
+                source_note_type_id=note_type.id,
+                title="Protected Source",
+                description="Shared source deck",
+                primary_category="Japanese",
+                tags=["seeded"],
+                pricing_mode="free",
+                price_amount_minor=0,
+                version="1.0.0",
+                publish_status="published",
+            )
+            db.session.add_all([source_note, shared_item])
+            db.session.flush()
+            source_card = Card(note_id=source_note.id, template_id=template.id)
+            db.session.add(source_card)
+            db.session.flush()
+            install = DeckInstall(
+                deck_item_id=shared_item.id,
+                user_id=self.other_user_id,
+                local_deck_id=local_root.id,
+                clone_mode="logical_overlay",
+                source_deck_id=source_root.id,
+                source_note_type_id=note_type.id,
+                source_owner_user_id=self.admin_id,
+            )
+            db.session.add(install)
+            db.session.flush()
+            clone_map = DeckCloneDeckMap(
+                deck_install_id=install.id,
+                local_deck_id=local_root.id,
+                source_deck_id=source_root.id,
+            )
+            db.session.add(clone_map)
+            db.session.commit()
+            source_root_id = source_root.id
+            local_root_id = local_root.id
+            source_note_id = source_note.id
+            source_card_id = source_card.id
+            shared_item_id = shared_item.id
+            install_id = install.id
+            clone_map_id = clone_map.id
+
+        self._login_admin()
+        response = self.client.post(
+            f"/vocabulary/decks/{source_root_id}/delete",
+            data={"next": "/dashboard"},
+            follow_redirects=True,
+        )
+        self.assertEqual(response.status_code, 200)
+
+        with self.app.app_context():
+            source_root = db.session.get(Deck, source_root_id)
+            shared_item = db.session.get(DeckMarketplaceItem, shared_item_id)
+            self.assertIsNotNone(source_root)
+            self.assertIsNotNone(source_root.deleted_at)  # type: ignore[union-attr]
+            self.assertIsNotNone(db.session.get(Note, source_note_id))
+            self.assertIsNotNone(db.session.get(Card, source_card_id))
+            self.assertEqual(shared_item.publish_status, "archived")  # type: ignore[union-attr]
+            self.assertIsNotNone(shared_item.archived_at)  # type: ignore[union-attr]
+            self.assertIsNotNone(db.session.get(Deck, local_root_id))
+            self.assertIsNotNone(db.session.get(DeckInstall, install_id))
+            self.assertIsNotNone(db.session.get(DeckCloneDeckMap, clone_map_id))
+
+        dashboard_response = self.client.get("/dashboard")
+        self.assertNotIn('data-node-name="Protected Source"', dashboard_response.get_data(as_text=True))
+        author_detail = self.client.get(f"/api/shared/decks/{shared_item_id}")
+        self.assertEqual(author_detail.status_code, 404)
+        market_response = self.client.get("/api/shared/decks")
+        market_item_ids = {
+            item.get("id") for item in (market_response.get_json() or {}).get("items", [])
+        }
+        self.assertNotIn(shared_item_id, market_item_ids)
+
+        self.client.post("/logout")
+        self._login_other()
+        installed_detail = self.client.get(f"/api/shared/decks/{shared_item_id}")
+        self.assertEqual(installed_detail.status_code, 200)
+        installed_cards = self.client.get(
+            f"/vocabulary/api/browse/cards?deck_id={local_root_id}&include_subdecks=1"
+        )
+        installed_cards_payload = installed_cards.get_json() or {}
+        self.assertEqual(installed_cards.status_code, 200)
+        self.assertEqual(installed_cards_payload.get("total"), 1)
+        self.assertIn("維持", (installed_cards_payload.get("items") or [{}])[0].get("word", ""))
+
+    def test_non_admin_can_delete_owned_deck_without_clone_install(self):
         with self.app.app_context():
             owned_deck = Deck(
                 name="Owned Deck",
@@ -576,7 +698,7 @@ class DeckSettingsRoutesTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
 
         with self.app.app_context():
-            self.assertIsNotNone(Deck.query.get(owned_deck_id))
+            self.assertIsNone(Deck.query.get(owned_deck_id))
 
     def test_clone_owner_can_delete_subdeck_with_install_on_ancestor(self):
         with self.app.app_context():

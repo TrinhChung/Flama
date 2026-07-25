@@ -80,6 +80,8 @@ def update_study_card_note(
 
     rendered_front_html = ""
     rendered_back_html = ""
+    rendered_front_payload = None
+    rendered_back_payload = None
     if card.template:
         try:
             rendered = render_template_pair(
@@ -87,11 +89,11 @@ def update_study_card_note(
                 field_defs=note_type.field_defs,
                 field_values=note.field_values or {},
                 media_assets=note.media_assets,
-                allow_inline_script=True,
-                defer_inline_script=True,
             )
             rendered_front_html = rendered.get("front_html", "")
             rendered_back_html = rendered.get("back_html", "")
+            rendered_front_payload = rendered.get("front_renderer_payload")
+            rendered_back_payload = rendered.get("back_renderer_payload")
         except TemplateCompileError as exc:
             rendered_front_html = f"<div class='text-danger'>Error rendering front: {exc}</div>"
             rendered_back_html = f"<div class='text-danger'>Error rendering back: {exc}</div>"
@@ -107,5 +109,7 @@ def update_study_card_note(
         "meaning": display_triplet.get("meaning", ""),
         "rendered_front_html": rendered_front_html,
         "rendered_back_html": rendered_back_html,
+        "rendered_front_payload": rendered_front_payload,
+        "rendered_back_payload": rendered_back_payload,
         "updated_at": note.updated_at.isoformat() if note.updated_at else None,
     }

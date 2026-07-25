@@ -27,7 +27,8 @@ if (root) {
   const marketUrl = root.getAttribute("data-market-url") || "/";
   const ordersUrl = root.getAttribute("data-orders-url") || "/";
 
-  const titleEls = [document.getElementById("deck-title"), document.getElementById("deck-title-secondary")];
+  const coverTitleEl = document.getElementById("deck-cover-title");
+  const titleEls = [document.getElementById("deck-title"), document.getElementById("deck-title-secondary"), coverTitleEl];
   const metaEl = document.getElementById("deck-meta-line");
   const descriptionEl = document.getElementById("deck-description");
   const previewTextEl = document.getElementById("deck-preview-text");
@@ -35,6 +36,10 @@ if (root) {
   const statsEl = document.getElementById("deck-stats");
   const badgesEl = document.getElementById("deck-badges");
   const coverLabelEl = document.getElementById("deck-cover-label");
+  const priceDisplayEl = document.getElementById("deck-price-display");
+  const heroRatingEl = document.getElementById("deck-hero-rating");
+  const heroInstallsEl = document.getElementById("deck-hero-installs");
+  const heroUpdatedEl = document.getElementById("deck-hero-updated");
   const authorNameEl = document.getElementById("author-name");
   const authorSummaryEl = document.getElementById("author-summary");
   const authorStoreLinkEl = document.getElementById("author-store-link");
@@ -73,6 +78,15 @@ if (root) {
   const paymentNextActionEl = document.getElementById("deck-payment-next-action");
   const paymentLinesEl = document.getElementById("deck-payment-lines");
   const paymentInstructionsEl = document.getElementById("deck-payment-instructions");
+  const actionNoteEl = document.getElementById("deck-action-note");
+  const rendererHost = window.FlamaCardRendererHost;
+  const previewController = previewFrame && rendererHost
+    ? rendererHost.createRendererFrameController(previewFrame, {
+      minHeight: 280,
+      autoHeight: false,
+      fixedHeight: 416,
+    })
+    : null;
 
   let deckDetail = null;
   let selectedTemplateId = "";
@@ -177,12 +191,40 @@ if (root) {
   }
 
   function setLoadingPreview(message) {
-    previewFrame.srcdoc = `<!doctype html><html><body style="background:#fffaf6;color:#1f1a17;"><div style="padding:12px;color:#6b625c;">${escapeHtml(message || "Đang tải phần xem trước...")}</div></body></html>`;
+    previewController?.render(rendererHost.createNoticeHtml(message || "Dang tai phan xem truoc..."), {
+      padding: "12px",
+      background: "#fffaf6",
+      color: "#1f1a17",
+      config: {
+        mode: "shared_deck_preview",
+        side: previewSide,
+        deckItemId,
+      },
+    });
   }
 
   function renderPreviewFrame() {
-    const html = previewSide === "back" ? (previewPayload?.back_html || "") : (previewPayload?.front_html || "");
-    previewFrame.srcdoc = `<!doctype html><html><body style="background:#fffaf6;color:#1f1a17;"><div style="padding:12px;">${html || "<div style='color:#6b625c;'>Chưa có nội dung xem trước.</div>"}</div></body></html>`;
+    const sidePayload = previewSide === "back"
+      ? (previewPayload?.back_renderer_payload || previewPayload?.back_html || "")
+      : (previewPayload?.front_renderer_payload || previewPayload?.front_html || "");
+    previewController?.render(
+      sidePayload || rendererHost.createNoticeHtml("Chua co noi dung xem truoc."),
+      {
+        padding: "12px",
+        background: "#fffaf6",
+        color: "#1f1a17",
+        config: {
+          mode: "shared_deck_preview",
+          side: previewSide,
+          deckItemId,
+          templateId: selectedTemplateId,
+        },
+        revealOnReady: {
+          side: previewSide,
+          reason: "preview_render",
+        },
+      }
+    );
   }
 
   function getActiveSample() {
@@ -239,20 +281,32 @@ if (root) {
       if (editUrl) editBtn.href = editUrl;
       installBtn.textContent = "Bạn là tác giả";
       installBtn.disabled = true;
+      if (actionNoteEl) {
+        actionNoteEl.textContent = "Deck này thuộc tài khoản của bạn. Bạn có thể chỉnh sửa hoặc review change request từ sidebar.";
+      }
       return;
     }
     if (deckDetail.is_installed) {
       installBtn.textContent = "Đã cài";
       installBtn.disabled = true;
+      if (actionNoteEl) {
+        actionNoteEl.textContent = "Deck đã có trong thư viện của bạn. Dùng preview, đánh giá hoặc mở change request khi cần.";
+      }
       return;
     }
     if (deckDetail.ownership_status === "owned_pending") {
       installBtn.textContent = "Xem đơn hàng";
       installBtn.disabled = false;
+      if (actionNoteEl) {
+        actionNoteEl.textContent = "Đơn hàng đang chờ hoàn tất. Mở lịch sử đơn để kiểm tra thanh toán và quay lại cài đặt.";
+      }
       return;
     }
     installBtn.textContent = deckDetail.pricing_mode === "paid" ? "Mua" : "Tải xuống";
     installBtn.disabled = false;
+    if (actionNoteEl) {
+      actionNoteEl.textContent = "Cài deck để đồng bộ vào thư viện, chạy preview và gửi đánh giá hoặc change request.";
+    }
   }
 
   function renderRatingState() {
@@ -323,6 +377,10 @@ if (root) {
       if (el) el.textContent = deckDetail.title || "Deck";
     });
     if (coverLabelEl) coverLabelEl.textContent = (deckDetail.level_tokens || [deckDetail.primary_category || "Deck"]).join(" · ");
+    if (priceDisplayEl) priceDisplayEl.textContent = deckDetail.price_display || "Miễn phí";
+    if (heroRatingEl) heroRatingEl.textContent = `${Number(deckDetail.rating_avg || 0).toFixed(1)} / 5`;
+    if (heroInstallsEl) heroInstallsEl.textContent = formatCount(deckDetail.install_count || 0);
+    if (heroUpdatedEl) heroUpdatedEl.textContent = formatDate(deckDetail.updated_at || deckDetail.created_at);
     metaEl.innerHTML = `<strong>${deckDetail.primary_category || "Chung"}</strong> · ${deckDetail.price_display || "Miễn phí"}`;
     descriptionEl.textContent = deckDetail.description || "Chưa có mô tả.";
     previewTextEl.textContent = deckDetail.preview_text || "Chưa có preview text.";

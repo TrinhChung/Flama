@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hmac
 import secrets
-from urllib.parse import urlparse
 
 from flask import current_app, jsonify, render_template, request, session
 
@@ -56,9 +55,6 @@ def protect_from_csrf():
     if session_token and request_token and hmac.compare_digest(request_token, session_token):
         return None
 
-    if _is_same_origin_request():
-        return None
-
     return _csrf_error_response()
 
 
@@ -87,29 +83,6 @@ def _extract_request_token() -> str:
                     return value
 
     return ""
-
-
-def _is_same_origin_request() -> bool:
-    expected_origin = _origin_from_url(request.host_url)
-
-    origin = str(request.headers.get("Origin") or "").strip()
-    if origin:
-        return _origin_from_url(origin) == expected_origin
-
-    referer = str(request.headers.get("Referer") or "").strip()
-    if referer:
-        return _origin_from_url(referer) == expected_origin
-
-    return False
-
-
-def _origin_from_url(raw_url: str) -> str:
-    parsed = urlparse(str(raw_url or "").strip())
-    scheme = parsed.scheme.lower()
-    netloc = parsed.netloc.lower()
-    if not scheme or not netloc:
-        return ""
-    return f"{scheme}://{netloc}"
 
 
 def _csrf_error_response():

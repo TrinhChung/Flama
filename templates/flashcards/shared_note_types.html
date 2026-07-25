@@ -16,13 +16,14 @@
   {% set orders_url = url_for('user_orders.order_history_page') %}
   {% set order_detail_url_template = url_for('user_orders.order_detail_page', order_id='__ORDER_ID__') %}
   {% set workspace_url = url_for('flashcards.note_type_manager') %}
-  {% set workspace_label = 'Kho template của tôi' %}
-  {% set seller_cta_url = url_for('flashcards.note_type_manager') %}
-  {% set seller_cta_label = 'Mở khu tác giả' %}
+  {% set workspace_label = 'Quản lý note type' %}
+  {% set library_url = url_for('flashcards.note_type_manager') %}
+  {% set seller_cta_url = url_for('main.dashboard') %}
+  {% set seller_cta_label = 'Về dashboard' %}
   {% set payment_result_url = url_for('payments.marketplace_payment_result_page') %}
-  {% set eyebrow = 'Thư viện học tập cho note type' %}
-  {% set heading = 'Khám phá note type theo cách học, trình độ và mục tiêu học' %}
-  {% set subtitle = 'Chế độ người học tập trung vào tìm, lọc, xem thử và thêm vào thư viện. Công cụ dành cho tác giả được tách riêng thay vì chen vào khu khám phá.' %}
+  {% set eyebrow = 'Thư viện Note Type' %}
+  {% set heading = 'Tìm mẫu thẻ phù hợp' %}
+  {% set subtitle = 'Khám phá cấu trúc field và template được cộng đồng chia sẻ. Lọc theo chủ đề, trình độ hoặc mục tiêu học.' %}
   {% include "flashcards/_marketplace_hub_shell.html" %}
 {% endblock %}
 

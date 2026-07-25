@@ -2,9 +2,11 @@
 
 import hashlib
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List
+
+UTC = timezone.utc
 
 from flask import Blueprint, abort, current_app, flash, jsonify, redirect, render_template, request, send_file, url_for
 from flask_login import current_user, login_required
@@ -148,6 +150,7 @@ def support_donation_qr_image():
         max_age=300,
     )
     response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Content-Security-Policy"] = "default-src 'none'; sandbox"
     return response
 
 
