@@ -39,6 +39,14 @@ jobs:
           PAYOS_API_KEY: ${{ secrets.PAYOS_API_KEY }}
           PAYOS_CHECKSUM_KEY: ${{ secrets.PAYOS_CHECKSUM_KEY }}
           PAYOS_CLIENT_ID: ${{ secrets.PAYOS_CLIENT_ID }}
+          FLASK_APP: ${{ vars.FLASK_APP }}
+          DB_PORT: ${{ vars.DB_PORT }}
+          FLASHCARDS_SHARE_CUTOVER_FAIL_ON_MISMATCH: ${{ vars.FLASHCARDS_SHARE_CUTOVER_FAIL_ON_MISMATCH }}
+          FLASHCARD_MEDIA_MAX_BYTES: ${{ vars.FLASHCARD_MEDIA_MAX_BYTES }}
+          FLASHCARD_MEDIA_SCAN_ENABLED: ${{ vars.FLASHCARD_MEDIA_SCAN_ENABLED }}
+          PAYMENTS_ENABLED: ${{ vars.PAYMENTS_ENABLED }}
+          PAYMENTS_PAID_INSTALL_REQUIRED: ${{ vars.PAYMENTS_PAID_INSTALL_REQUIRED }}
+          PAYMENTS_PROVIDER: ${{ vars.PAYMENTS_PROVIDER }}
         run: |
           set -Eeuo pipefail
           managed_env_payload="$RUNNER_TEMP/flama-managed-${RELEASE_ID}.json"

@@ -14,7 +14,7 @@ import tempfile
 from pathlib import Path
 
 
-MANAGED_ENV_KEYS = (
+MANAGED_SECRET_KEYS = (
     "ADMIN_EMAIL",
     "ADMIN_PASSWORD",
     "ADMIN_USER",
@@ -22,6 +22,17 @@ MANAGED_ENV_KEYS = (
     "PAYOS_CHECKSUM_KEY",
     "PAYOS_CLIENT_ID",
 )
+MANAGED_VARIABLE_KEYS = (
+    "FLASK_APP",
+    "DB_PORT",
+    "FLASHCARDS_SHARE_CUTOVER_FAIL_ON_MISMATCH",
+    "FLASHCARD_MEDIA_MAX_BYTES",
+    "FLASHCARD_MEDIA_SCAN_ENABLED",
+    "PAYMENTS_ENABLED",
+    "PAYMENTS_PAID_INSTALL_REQUIRED",
+    "PAYMENTS_PROVIDER",
+)
+MANAGED_ENV_KEYS = MANAGED_SECRET_KEYS + MANAGED_VARIABLE_KEYS
 _ENV_ASSIGNMENT_RE = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=")
 
 
@@ -68,7 +79,7 @@ def build_payload(output_path: Path) -> None:
 
     if missing_keys:
         raise ManagedEnvironmentError(
-            "Missing required GitHub environment secrets: " + ", ".join(missing_keys)
+            "Missing required GitHub environment values: " + ", ".join(missing_keys)
         )
 
     payload = {

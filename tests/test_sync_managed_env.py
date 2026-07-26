@@ -26,6 +26,14 @@ class SyncManagedEnvironmentTests(unittest.TestCase):
             "PAYOS_API_KEY": "payos-api-key",
             "PAYOS_CHECKSUM_KEY": "payos-checksum-key",
             "PAYOS_CLIENT_ID": "payos-client-id",
+            "FLASK_APP": "wsgi.py",
+            "DB_PORT": "3306",
+            "FLASHCARDS_SHARE_CUTOVER_FAIL_ON_MISMATCH": "0",
+            "FLASHCARD_MEDIA_MAX_BYTES": "10485760",
+            "FLASHCARD_MEDIA_SCAN_ENABLED": "0",
+            "PAYMENTS_ENABLED": "1",
+            "PAYMENTS_PAID_INSTALL_REQUIRED": "1",
+            "PAYMENTS_PROVIDER": "payos",
         }
 
     def test_build_and_apply_updates_only_managed_keys(self):
@@ -55,6 +63,8 @@ class SyncManagedEnvironmentTests(unittest.TestCase):
             self.assertIn('ADMIN_EMAIL="admin@example.com"\n', content)
             self.assertIn('ADMIN_PASSWORD="password with spaces and \\"quotes\\""\n', content)
             self.assertIn('PAYOS_CLIENT_ID="payos-client-id"\n', content)
+            self.assertIn('PAYMENTS_ENABLED="1"\n', content)
+            self.assertIn('DB_PORT="3306"\n', content)
             if os.name != "nt":
                 self.assertEqual(os.stat(environment_path).st_mode & 0o777, 0o640)
 
@@ -83,7 +93,7 @@ class SyncManagedEnvironmentTests(unittest.TestCase):
             self.assertEqual(second_changed_keys, [])
             self.assertEqual(environment_path.read_text(encoding="utf-8"), first_content)
 
-    def test_build_rejects_missing_secret_without_writing_payload(self):
+    def test_build_rejects_missing_value_without_writing_payload(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             payload_path = Path(temporary_directory) / "managed.json"
             values = self._managed_values()
