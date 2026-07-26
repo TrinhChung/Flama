@@ -48,12 +48,41 @@
     --flama-text-2: #6B625C;
     /* secondary text */
 
+    /* ── Semantic UI Surfaces ── */
+    --flama-page-bg: var(--flama-bg);
+    --flama-panel-bg: var(--flama-surface);
+    --flama-panel-bg-subtle: var(--flama-surface-2);
+    --flama-panel-border: var(--flama-border);
+    --flama-panel-radius-sm: 0.5rem;
+    --flama-panel-radius: 0.75rem;
+    --flama-panel-radius-lg: 1rem;
+    --flama-panel-shadow: 0 2px 6px rgba(31, 26, 23, 0.06);
+    --flama-panel-shadow-raised: 0 6px 12px rgba(31, 26, 23, 0.08);
+
+    /* ── Semantic Form Controls ── */
+    --flama-control-bg: var(--flama-surface);
+    --flama-control-bg-disabled: var(--flama-surface-2);
+    --flama-control-border: var(--flama-border);
+    --flama-control-border-hover: var(--flama-orange-300);
+    --flama-control-border-focus: var(--flama-orange-600);
+    --flama-control-radius: 0.625rem;
+    --flama-control-height: 2.75rem;
+    --flama-control-focus-ring: 0 0 0 0.2rem rgba(224, 92, 7, 0.14);
+
     /* ── Semantic Colors ── */
     --flama-success: #16A34A;
     --flama-info: #2563EB;
     --flama-warning: var(--flama-amber-600);
     --flama-danger: #EF3303;
     /* from logo deep red-orange */
+    --flama-success-bg: #EAF7EE;
+    --flama-success-text: #116A2D;
+    --flama-info-bg: #EAF1FF;
+    --flama-info-text: #1E4F9A;
+    --flama-warning-bg: #FFF4DE;
+    --flama-warning-text: #765008;
+    --flama-danger-bg: #FFF0EC;
+    --flama-danger-text: #A52808;
 
     /* ── Gradient ── */
     --flama-gradient: linear-gradient(135deg, #EF3303 0%, #FE6808 55%, #FEA00E 100%);
@@ -68,18 +97,34 @@
     --button-padding-x: 1rem;
     --button-padding-x-sm: 0.8rem;
     --button-padding-x-lg: 1.4rem;
-    --button-shadow-soft: 0 8px 20px rgba(31, 26, 23, 0.08);
-    --button-shadow-primary: 0 10px 24px rgba(224, 92, 7, 0.2);
-    --button-shadow-primary-hover: 0 14px 30px rgba(224, 92, 7, 0.26);
-    --button-shadow-danger: 0 10px 24px rgba(239, 51, 3, 0.18);
-    --button-shadow-danger-hover: 0 14px 30px rgba(239, 51, 3, 0.24);
+    --button-primary-bg: var(--flama-orange-700);
+    --button-primary-bg-hover: var(--flama-orange-800);
+    --button-primary-bg-active: var(--flama-orange-900);
+    --button-secondary-bg: var(--flama-panel-bg);
+    --button-secondary-bg-hover: var(--flama-orange-50);
+    --button-danger-bg: var(--flama-danger);
+    --button-danger-bg-hover: #DB2D02;
+    --button-danger-bg-active: #B92301;
+    --button-shadow-soft: 0 2px 6px rgba(31, 26, 23, 0.08);
+    --button-shadow-primary: 0 2px 6px rgba(183, 75, 6, 0.2);
+    --button-shadow-primary-hover: 0 3px 8px rgba(147, 60, 5, 0.24);
+    --button-shadow-danger: 0 2px 6px rgba(239, 51, 3, 0.16);
+    --button-shadow-danger-hover: 0 3px 8px rgba(239, 51, 3, 0.22);
     --button-focus-ring: 0 0 0 0.22rem rgba(254, 104, 8, 0.18);
 
     /* ── Typography System ── */
-    --font-family-base: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    --font-family-base: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI Variable Text', 'Segoe UI', sans-serif;
     --font-family-mono: 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', monospace;
 
-    /* Font Sizes */
+    /* Fixed product type scale */
+    --text-caption: 0.8125rem;
+    --text-secondary: 0.875rem;
+    --text-body: 1rem;
+    --text-subheading: 1.125rem;
+    --text-heading: 1.5rem;
+    --text-page-title: 1.875rem;
+
+    /* Backward-compatible font-size aliases */
     --font-size-xs: 0.75rem;
     --font-size-sm: 0.875rem;
     --font-size-base: 1rem;

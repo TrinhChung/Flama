@@ -1094,16 +1094,9 @@ def _upsert_seeded_deck_marketplace_item(
     note_type_id: str,
     sample_cards_count: int,
 ) -> bool:
-    deck_item = (
-        DeckMarketplaceItem.query.filter_by(
-            owner_user_id=owner_user_id,
-            source_deck_id=deck.id,
-        )
-        .order_by(DeckMarketplaceItem.created_at.asc(), DeckMarketplaceItem.id.asc())
-        .first()
-    )
-    if deck_item is None:
-        same_title_items = (
+    same_title_seeded_items = [
+        item
+        for item in (
             DeckMarketplaceItem.query.filter_by(
                 owner_user_id=owner_user_id,
                 title=deck.name,
@@ -1111,15 +1104,29 @@ def _upsert_seeded_deck_marketplace_item(
             .order_by(DeckMarketplaceItem.created_at.asc(), DeckMarketplaceItem.id.asc())
             .all()
         )
-        deck_item = next(
-            (
-                item
-                for item in same_title_items
-                if item.is_official and "seeded" in set(item.tags or [])
-            ),
-            None,
-        )
+        if item.is_official and "seeded" in {str(tag).strip().lower() for tag in (item.tags or [])}
+    ]
+    deck_item = next(
+        (
+            item
+            for item in same_title_seeded_items
+            if item.source_deck_id == deck.id
+        ),
+        None,
+    )
+    if deck_item is None:
+        deck_item = same_title_seeded_items[0] if same_title_seeded_items else None
     if deck_item:
+        now = datetime.utcnow()
+        for duplicate in same_title_seeded_items:
+            if duplicate.id == deck_item.id:
+                continue
+            # Preserve historical installs/reviews while removing stale seed
+            # listings from active marketplace and owner-library surfaces.
+            duplicate.publish_status = "archived"
+            duplicate.archived_at = duplicate.archived_at or now
+            duplicate.is_official = False
+
         deck_item.source_deck_id = deck.id
         if not deck_item.title:
             deck_item.title = deck.name
@@ -1134,7 +1141,7 @@ def _upsert_seeded_deck_marketplace_item(
         deck_item.price_amount_minor = 0
         deck_item.publish_status = "published"
         deck_item.is_official = True
-        deck_item.published_at = deck_item.published_at or datetime.utcnow()
+        deck_item.published_at = deck_item.published_at or now
         deck_item.archived_at = None
         return False
 

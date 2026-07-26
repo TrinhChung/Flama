@@ -7,7 +7,7 @@
   data-order-detail-url-template="{{ order_detail_url_template }}" data-payment-result-url="{{ payment_result_url }}"
   data-study-url-template="{{ study_url_template | default('') }}"
   data-library-url="{{ library_url | default(workspace_url) }}">
-  <section class="market-space-panel market-hub-hero">
+  <section class="market-space-panel flama-box market-hub-hero">
     <div class="market-hub-hero-copy">
       <div class="market-hub-eyebrow">{{ eyebrow }}</div>
       <h1 class="market-hub-title">{{ heading }}</h1>
@@ -25,13 +25,6 @@
       </div>
     </div>
 
-    {% if market_kind == 'deck_marketplace_item' %}
-    <div class="market-hub-mascot" aria-hidden="true">
-      <span class="market-hub-mascot-spark market-hub-mascot-spark--one"></span>
-      <span class="market-hub-mascot-spark market-hub-mascot-spark--two"></span>
-      <img src="{{ url_for('static', filename='images/pet.svg') }}" alt="">
-    </div>
-    {% endif %}
   </section>
 
   <div class="market-hub-nav">
@@ -57,7 +50,7 @@
   <div class="alert alert-danger d-none" id="marketplace-hub-error" role="alert"></div>
   <div class="visually-hidden" id="marketplace-hub-status" role="status" aria-live="polite"></div>
 
-  <section class="market-space-panel is-active market-space-panel--discover" id="market-panel-discover"
+  <section class="market-space-panel flama-box is-active market-space-panel--discover" id="market-panel-discover"
     role="tabpanel" aria-labelledby="market-tab-discover" data-space-panel="discover">
     <form class="market-catalog-shell" id="marketplace-filter-form">
       <div class="market-catalog-toolbar">
@@ -89,7 +82,7 @@
             <button class="btn btn-outline-secondary btn-sm" type="button" data-mobile-filter-close>Đóng</button>
           </div>
 
-          <section class="market-filter-section market-filter-section--primary">
+          <section class="market-filter-section flama-box flama-box--flat market-filter-section--primary">
             <div class="market-filter-section-title">Bộ lọc học tập</div>
             <div class="market-filter-stack">
               <div class="market-filter-group" data-filter-group="difficulty_band"></div>
@@ -186,7 +179,7 @@
     </form>
   </section>
 
-  <section class="market-space-panel market-library-panel" id="market-panel-library" role="tabpanel"
+  <section class="market-space-panel flama-box market-library-panel" id="market-panel-library" role="tabpanel"
     aria-labelledby="market-tab-library" data-space-panel="library" hidden>
     <section class="market-inline-section market-library-hero">
       <div>

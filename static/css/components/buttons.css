@@ -159,14 +159,14 @@
 .btn-fc--primary,
 .import-btn--primary,
 .btn-flama--primary {
-  --btn-bg: var(--flama-gradient);
-  --btn-border: rgba(239, 51, 3, 0.14);
+  --btn-bg: var(--button-primary-bg);
+  --btn-border: var(--button-primary-bg);
   --btn-color: #fff;
-  --btn-hover-bg: linear-gradient(135deg, #dc3002 0%, #f45f04 55%, #f6990b 100%);
-  --btn-hover-border: rgba(183, 75, 6, 0.18);
+  --btn-hover-bg: var(--button-primary-bg-hover);
+  --btn-hover-border: var(--button-primary-bg-hover);
   --btn-hover-color: #fff;
-  --btn-active-bg: linear-gradient(135deg, #c62a02 0%, #df5605 55%, #e48a0b 100%);
-  --btn-active-border: rgba(147, 60, 5, 0.24);
+  --btn-active-bg: var(--button-primary-bg-active);
+  --btn-active-border: var(--button-primary-bg-active);
   --btn-active-color: #fff;
   --btn-shadow: var(--button-shadow-primary);
   --btn-shadow-hover: var(--button-shadow-primary-hover);
@@ -187,13 +187,13 @@
 }
 
 .btn-secondary {
-  --btn-bg: var(--flama-surface-2);
-  --btn-border: rgba(233, 221, 212, 0.95);
+  --btn-bg: var(--button-secondary-bg);
+  --btn-border: var(--flama-panel-border);
   --btn-color: var(--flama-text);
-  --btn-hover-bg: #ffede0;
+  --btn-hover-bg: var(--button-secondary-bg-hover);
   --btn-hover-border: var(--flama-orange-300);
   --btn-hover-color: var(--flama-orange-700);
-  --btn-active-bg: #ffe4d0;
+  --btn-active-bg: var(--flama-orange-100);
   --btn-active-border: var(--flama-orange-400);
   --btn-active-color: var(--flama-orange-800);
   --btn-shadow: var(--button-shadow-soft);
@@ -202,7 +202,7 @@
 
 .btn-outline-primary,
 .btn-fc--outline {
-  --btn-bg: rgba(255, 255, 255, 0.96);
+  --btn-bg: var(--flama-panel-bg);
   --btn-border: var(--flama-orange-300);
   --btn-color: var(--flama-orange-700);
   --btn-hover-bg: var(--flama-orange-50);
@@ -211,16 +211,16 @@
   --btn-active-bg: var(--flama-orange-100);
   --btn-active-border: var(--flama-orange-500);
   --btn-active-color: var(--flama-orange-800);
-  --btn-shadow: 0 6px 18px rgba(254, 104, 8, 0.06);
-  --btn-shadow-hover: 0 10px 20px rgba(254, 104, 8, 0.12);
+  --btn-shadow: var(--button-shadow-soft);
+  --btn-shadow-hover: var(--flama-panel-shadow-raised);
 }
 
 .btn-outline-secondary,
 .dash-btn--ghost,
 .import-btn--ghost,
 .btn-flama--secondary {
-  --btn-bg: rgba(255, 255, 255, 0.96);
-  --btn-border: var(--flama-border);
+  --btn-bg: var(--flama-panel-bg);
+  --btn-border: var(--flama-panel-border);
   --btn-color: var(--flama-text);
   --btn-hover-bg: var(--flama-orange-50);
   --btn-hover-border: var(--flama-orange-300);
@@ -228,8 +228,8 @@
   --btn-active-bg: var(--flama-orange-100);
   --btn-active-border: var(--flama-orange-400);
   --btn-active-color: var(--flama-orange-800);
-  --btn-shadow: 0 6px 18px rgba(31, 26, 23, 0.04);
-  --btn-shadow-hover: 0 10px 20px rgba(31, 26, 23, 0.08);
+  --btn-shadow: var(--button-shadow-soft);
+  --btn-shadow-hover: var(--flama-panel-shadow-raised);
 }
 
 .import-btn--secondary {
@@ -239,37 +239,37 @@
   --btn-hover-bg: var(--flama-orange-100);
   --btn-hover-border: var(--flama-orange-300);
   --btn-hover-color: var(--flama-orange-800);
-  --btn-active-bg: #ffd8bf;
+  --btn-active-bg: var(--flama-orange-100);
   --btn-active-border: var(--flama-orange-400);
   --btn-active-color: var(--flama-orange-800);
-  --btn-shadow: 0 8px 18px rgba(254, 104, 8, 0.1);
-  --btn-shadow-hover: 0 12px 22px rgba(254, 104, 8, 0.14);
+  --btn-shadow: var(--button-shadow-soft);
+  --btn-shadow-hover: var(--flama-panel-shadow-raised);
 }
 
 .btn-light {
-  --btn-bg: #fff;
-  --btn-border: rgba(233, 221, 212, 0.92);
+  --btn-bg: var(--flama-panel-bg);
+  --btn-border: var(--flama-panel-border);
   --btn-color: var(--flama-text);
   --btn-hover-bg: var(--flama-surface-2);
   --btn-hover-border: var(--flama-orange-300);
   --btn-hover-color: var(--flama-text);
-  --btn-active-bg: #ffeedd;
+  --btn-active-bg: var(--flama-orange-50);
   --btn-active-border: var(--flama-orange-400);
   --btn-active-color: var(--flama-orange-800);
-  --btn-shadow: 0 4px 12px rgba(31, 26, 23, 0.04);
-  --btn-shadow-hover: 0 10px 20px rgba(31, 26, 23, 0.08);
+  --btn-shadow: var(--button-shadow-soft);
+  --btn-shadow-hover: var(--flama-panel-shadow-raised);
 }
 
 .btn-danger,
 .btn-fc--danger {
-  --btn-bg: linear-gradient(180deg, #f24a20 0%, #ef3303 100%);
-  --btn-border: rgba(239, 51, 3, 0.18);
+  --btn-bg: var(--button-danger-bg);
+  --btn-border: var(--button-danger-bg);
   --btn-color: #fff;
-  --btn-hover-bg: linear-gradient(180deg, #e54118 0%, #db2d02 100%);
-  --btn-hover-border: rgba(239, 51, 3, 0.24);
+  --btn-hover-bg: var(--button-danger-bg-hover);
+  --btn-hover-border: var(--button-danger-bg-hover);
   --btn-hover-color: #fff;
-  --btn-active-bg: linear-gradient(180deg, #cf3a14 0%, #c22702 100%);
-  --btn-active-border: rgba(147, 23, 2, 0.28);
+  --btn-active-bg: var(--button-danger-bg-active);
+  --btn-active-border: var(--button-danger-bg-active);
   --btn-active-color: #fff;
   --btn-shadow: var(--button-shadow-danger);
   --btn-shadow-hover: var(--button-shadow-danger-hover);

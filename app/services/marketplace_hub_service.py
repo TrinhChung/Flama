@@ -12,6 +12,7 @@ UTC = timezone.utc
 from app.services import flashcards_share_service, marketplace_query_service, marketplace_taxonomy_service
 from app.services.payment import presenters as payment_presenters
 from models import db
+from models.deck import Deck
 from models.deck_install import DeckInstall
 from models.deck_marketplace_item import DeckMarketplaceItem
 from models.deck_review import DeckReview
@@ -264,6 +265,7 @@ def build_installed_deck_workspace(*, user_id: int) -> dict[str, Any]:
     items: list[dict[str, Any]] = []
     using_count = 0
     available_count = 0
+    owned_count = 0
 
     for install in sorted(installs, key=_deck_install_sort_key, reverse=True):
         deck_item = deck_items.get(install.deck_item_id)
@@ -284,11 +286,55 @@ def build_installed_deck_workspace(*, user_id: int) -> dict[str, Any]:
         else:
             available_count += 1
 
+    owned_items = (
+        DeckMarketplaceItem.query.join(
+            Deck,
+            Deck.id == DeckMarketplaceItem.source_deck_id,
+        )
+        .filter(
+            DeckMarketplaceItem.owner_user_id == user_id,
+            DeckMarketplaceItem.publish_status != "archived",
+            Deck.owner_user_id == user_id,
+            Deck.deleted_at.is_(None),
+        )
+        .order_by(
+            DeckMarketplaceItem.updated_at.desc(),
+            DeckMarketplaceItem.created_at.desc(),
+            DeckMarketplaceItem.id.asc(),
+        )
+        .all()
+    )
+    for deck_item in owned_items:
+        # A creator manages and studies the source deck directly. Creating a
+        # DeckInstall for their own listing would produce a redundant clone and
+        # break the logical-overlay ownership boundary.
+        if deck_item.id in install_map:
+            continue
+        payload = _serialize_deck_card(
+            deck_item,
+            user_id=user_id,
+            install_map=install_map,
+            saved_ids=saved_ids,
+            pending_owned_ids=set(),
+        )
+        payload.update(
+            {
+                "installed_deck_id": deck_item.source_deck_id,
+                "install_bucket": "owned",
+                "installed_at": None,
+                "last_activity_at": None,
+                "last_sync_status": None,
+            }
+        )
+        items.append(payload)
+        owned_count += 1
+
     return {
         "summary": {
             "total_installed_count": len(items),
             "using_count": using_count,
             "available_count": available_count,
+            "owned_count": owned_count,
         },
         "items": items,
     }
