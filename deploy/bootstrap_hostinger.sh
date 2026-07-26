@@ -21,9 +21,9 @@ install -d -m 0755 /opt/flama /opt/flama/releases
 install -d -m 0750 -o root -g flama /etc/flama
 install -d -m 0750 -o flama -g flama /var/lib/flama /var/lib/flama/media
 
-environment_file=/etc/flama/flama.env
+environment_file="${FLAMA_ENVIRONMENT_FILE:-/etc/flama/flama.env}"
 if [ ! -f "$environment_file" ]; then
-  database_password="$(openssl rand -hex 32)"
+  database_password="${DB_PASSWORD:-$(openssl rand -hex 32)}"
   secret_key="$(openssl rand -hex 32)"
 
   install -m 0640 -o root -g flama /dev/null "$environment_file"
@@ -45,20 +45,62 @@ PAYMENTS_PROVIDER=payos
 PAYMENTS_PAID_INSTALL_REQUIRED=0
 PAYMENTS_WEBHOOK_AUTO_GRANT_ENABLED=0
 ENVIRONMENT
-else
-  database_password="$(sed -n 's/^DB_PASSWORD=//p' "$environment_file" | head -n 1)"
 fi
 
-if ! printf '%s' "$database_password" | grep -Eq '^[0-9a-f]{64}$'; then
-  echo "DB_PASSWORD in $environment_file must be a 64-character hexadecimal value." >&2
+read_environment_value() {
+  python3 - "$environment_file" "$1" <<'PYTHON'
+import re
+import shlex
+import sys
+
+environment_path, requested_key = sys.argv[1:]
+assignment_pattern = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)$")
+
+with open(environment_path, encoding="utf-8") as handle:
+    for raw_line in handle:
+        match = assignment_pattern.match(raw_line.rstrip("\r\n"))
+        if match is None or match.group(1) != requested_key:
+            continue
+        lexer = shlex.shlex(match.group(2), posix=True)
+        lexer.whitespace_split = True
+        lexer.commenters = ""
+        values = list(lexer)
+        if len(values) != 1:
+            raise SystemExit(f"Invalid {requested_key} assignment in {environment_path}.")
+        print(values[0], end="")
+        break
+    else:
+        raise SystemExit(f"Missing {requested_key} in {environment_path}.")
+PYTHON
+}
+
+database_host="$(read_environment_value DB_HOST)"
+database_user="$(read_environment_value DB_USER)"
+database_password="$(read_environment_value DB_PASSWORD)"
+database_name="$(read_environment_value DB_NAME)"
+
+if ! printf '%s' "$database_host" | grep -Eq '^[A-Za-z0-9_.%-]+$'; then
+  echo "DB_HOST in $environment_file contains unsupported characters." >&2
+  exit 1
+fi
+if ! printf '%s' "$database_user" | grep -Eq '^[A-Za-z0-9_.%-]+$'; then
+  echo "DB_USER in $environment_file contains unsupported characters." >&2
+  exit 1
+fi
+if ! printf '%s' "$database_name" | grep -Eq '^[A-Za-z0-9_]+$'; then
+  echo "DB_NAME in $environment_file contains unsupported characters." >&2
+  exit 1
+fi
+if ! printf '%s' "$database_password" | grep -Eq '^[A-Za-z0-9._@%+=:,/-]{12,128}$'; then
+  echo "DB_PASSWORD in $environment_file must be 12-128 safe printable characters." >&2
   exit 1
 fi
 
 mysql --protocol=socket <<SQL
-CREATE DATABASE IF NOT EXISTS flama CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER IF NOT EXISTS 'flama'@'127.0.0.1' IDENTIFIED BY '$database_password';
-ALTER USER 'flama'@'127.0.0.1' IDENTIFIED BY '$database_password';
-GRANT ALL PRIVILEGES ON flama.* TO 'flama'@'127.0.0.1';
+CREATE DATABASE IF NOT EXISTS \`$database_name\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER IF NOT EXISTS '$database_user'@'$database_host' IDENTIFIED BY '$database_password';
+ALTER USER '$database_user'@'$database_host' IDENTIFIED BY '$database_password';
+GRANT ALL PRIVILEGES ON \`$database_name\`.* TO '$database_user'@'$database_host';
 FLUSH PRIVILEGES;
 SQL
 
