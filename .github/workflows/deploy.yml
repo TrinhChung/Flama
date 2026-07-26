@@ -31,6 +31,20 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Build managed environment payload
+        env:
+          ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+          ADMIN_USER: ${{ secrets.ADMIN_USER }}
+          PAYOS_API_KEY: ${{ secrets.PAYOS_API_KEY }}
+          PAYOS_CHECKSUM_KEY: ${{ secrets.PAYOS_CHECKSUM_KEY }}
+          PAYOS_CLIENT_ID: ${{ secrets.PAYOS_CLIENT_ID }}
+        run: |
+          set -Eeuo pipefail
+          managed_env_payload="$RUNNER_TEMP/flama-managed-${RELEASE_ID}.json"
+          python deploy/sync_managed_env.py build --output "$managed_env_payload"
+          echo "MANAGED_ENV_PAYLOAD=$managed_env_payload" >> "$GITHUB_ENV"
+
       - name: Build release archive
         run: git archive --format=tar.gz --output="/tmp/flama-${RELEASE_ID}.tar.gz" HEAD
 
@@ -44,12 +58,15 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -p "$SSH_PORT" -H "$SSH_HOST" > ~/.ssh/known_hosts
 
-      - name: Upload release
+      - name: Upload release and managed environment payload
         run: |
           set -Eeuo pipefail
           scp -P "$SSH_PORT" \
             "/tmp/flama-${RELEASE_ID}.tar.gz" \
             "$SSH_USER@$SSH_HOST:/tmp/flama-${RELEASE_ID}.tar.gz"
+          ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
+            "umask 077; cat > '/tmp/flama-${RELEASE_ID}.env.json'" \
+            < "$MANAGED_ENV_PAYLOAD"
 
       - name: Activate release
         run: |
@@ -60,11 +77,17 @@ jobs:
 
           release_dir="$PROJECT_DIR/releases/$RELEASE_ID"
           archive_path="/tmp/flama-$RELEASE_ID.tar.gz"
+          environment_file=/etc/flama/flama.env
+          managed_env_payload_path="/tmp/flama-$RELEASE_ID.env.json"
+          trap 'rm -f "$archive_path" "$managed_env_payload_path"' EXIT
 
-          test -f /etc/flama/flama.env
+          test -f "$environment_file"
+          test -f "$managed_env_payload_path"
           mkdir -p "$release_dir"
           tar -xzf "$archive_path" -C "$release_dir"
-          rm -f "$archive_path"
+          python3 "$release_dir/deploy/sync_managed_env.py" apply \
+            --env-file "$environment_file" \
+            --payload-file "$managed_env_payload_path"
 
           if [ ! -x "$PROJECT_DIR/venv/bin/python" ]; then
             python3 -m venv "$PROJECT_DIR/venv"
@@ -79,6 +102,11 @@ jobs:
 
           for attempt in $(seq 1 20); do
             if curl --fail --silent --show-error --max-time 5 http://127.0.0.1:4789/ >/dev/null; then
+              touch "$release_dir/.deployment_succeeded"
+              python3 "$release_dir/deploy/prune_releases.py" \
+                --releases-dir "$PROJECT_DIR/releases" \
+                --current-release "$release_dir" \
+                --keep 2
               systemctl --no-pager --full status flama.service
               exit 0
             fi
@@ -89,3 +117,10 @@ jobs:
           journalctl -u flama.service -n 100 --no-pager || true
           exit 1
           REMOTE_SCRIPT
+
+      - name: Remove local managed environment payload
+        if: always()
+        run: |
+          if [ -n "${MANAGED_ENV_PAYLOAD:-}" ]; then
+            rm -f -- "$MANAGED_ENV_PAYLOAD"
+          fi
