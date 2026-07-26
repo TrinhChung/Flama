@@ -1,16 +1,19 @@
 """Tests for vocab-seed marketplace auto-sharing behavior."""
 
+import os
 import runpy
 import shutil
 import tempfile
 import unittest
 from datetime import datetime
 from pathlib import Path
+from unittest.mock import patch
 
 from app import create_app
 from app.services.flashcard_legacy import LEGACY_FRONT_TEMPLATE, LEGACY_SHARED_CSS
 from models import db
-from models.flashcard import DeckMarketplaceItem, Note, NoteType, Template
+from models.card_progress import CardProgress
+from models.flashcard import Card, DeckMarketplaceItem, Note, NoteType, Template
 from models.user import User
 from models.deck import Deck
 
@@ -59,6 +62,221 @@ class VocabSeedSharingTests(unittest.TestCase):
         with self.app.app_context():
             db.session.remove()
             db.drop_all()
+
+    @staticmethod
+    def _deck_subtree_ids(root_deck_id: int) -> set[int]:
+        deck_ids = {root_deck_id}
+        pending = [root_deck_id]
+        while pending:
+            parent_id = pending.pop()
+            child_ids = [
+                row[0]
+                for row in db.session.query(Deck.id)
+                .filter(Deck.parent_id == parent_id)
+                .all()
+            ]
+            for child_id in child_ids:
+                if child_id in deck_ids:
+                    continue
+                deck_ids.add(child_id)
+                pending.append(child_id)
+        return deck_ids
+
+    def _count_notes_in_subtree(self, root_deck_id: int) -> int:
+        return Note.query.filter(
+            Note.deck_id.in_(self._deck_subtree_ids(root_deck_id))
+        ).count()
+
+    def _invoke_seed_data_ensure(
+        self,
+        *,
+        admin_email: str = "seed-owner@example.com",
+        admin_user: str = "seed-owner",
+    ):
+        with patch.dict(
+            os.environ,
+            {
+                "ADMIN_EMAIL": admin_email,
+                "ADMIN_USER": admin_user,
+            },
+            clear=False,
+        ):
+            return self.runner.invoke(
+                args=["seed-data-ensure", "--path", str(self.seed_dir)]
+            )
+
+    def test_seed_data_ensure_seeds_empty_database_then_fast_skips(self):
+        first_result = self._invoke_seed_data_ensure()
+        self.assertEqual(first_result.exit_code, 0, msg=first_result.output)
+        self.assertIn("Seed data is incomplete", first_result.output)
+        self.assertIn("Seed data ensure completed", first_result.output)
+
+        with self.app.app_context():
+            top_deck = Deck.query.filter_by(
+                owner_user_id=self.user_id,
+                parent_id=None,
+                name="Unit 1",
+            ).one()
+            self.assertGreater(Note.query.filter_by(user_id=self.user_id).count(), 0)
+            self.assertIsNotNone(
+                DeckMarketplaceItem.query.filter_by(
+                    owner_user_id=self.user_id,
+                    source_deck_id=top_deck.id,
+                    publish_status="published",
+                ).first()
+            )
+            card = (
+                Card.query.join(Note, Card.note_id == Note.id)
+                .filter(Note.user_id == self.user_id)
+                .order_by(Card.id.asc())
+                .first()
+            )
+            self.assertIsNotNone(card)
+            db.session.add(
+                CardProgress(
+                    user_id=self.user_id,
+                    card_id=card.id,  # type: ignore[union-attr]
+                    reps=7,
+                )
+            )
+            db.session.commit()
+            card_id = card.id  # type: ignore[union-attr]
+
+        second_result = self._invoke_seed_data_ensure()
+        self.assertEqual(second_result.exit_code, 0, msg=second_result.output)
+        self.assertIn("Seed data already complete", second_result.output)
+        self.assertNotIn("Seeding from:", second_result.output)
+
+        with self.app.app_context():
+            self.assertIsNotNone(db.session.get(Card, card_id))
+            progress = CardProgress.query.filter_by(
+                user_id=self.user_id,
+                card_id=card_id,
+            ).one()
+            self.assertEqual(progress.reps, 7)
+
+    def test_seed_data_ensure_adds_new_bundle_without_replacing_existing(self):
+        first_result = self._invoke_seed_data_ensure()
+        self.assertEqual(first_result.exit_code, 0, msg=first_result.output)
+
+        with self.app.app_context():
+            unit_one = Deck.query.filter_by(
+                owner_user_id=self.user_id,
+                parent_id=None,
+                name="Unit 1",
+            ).one()
+            unit_one_deck_ids = self._deck_subtree_ids(unit_one.id)
+            unit_one_note_ids = {
+                note.id
+                for note in Note.query.filter(
+                    Note.user_id == self.user_id,
+                    Note.deck_id.in_(unit_one_deck_ids),
+                ).all()
+            }
+
+            quiz_note_type = NoteType.query.filter_by(
+                user_id=self.user_id,
+                name="Trắc nghiệm",
+            ).one()
+            quiz_deck = Deck.query.filter_by(
+                owner_user_id=self.user_id,
+                parent_id=None,
+                name="Trac Nghiem Co Ban",
+            ).one()
+            quiz_card = (
+                Card.query.join(Note, Card.note_id == Note.id)
+                .filter(
+                    Note.note_type_id == quiz_note_type.id,
+                    Note.deck_id == quiz_deck.id,
+                )
+                .first()
+            )
+            self.assertIsNotNone(quiz_card)
+            db.session.add(
+                CardProgress(
+                    user_id=self.user_id,
+                    card_id=quiz_card.id,  # type: ignore[union-attr]
+                    reps=11,
+                )
+            )
+            db.session.commit()
+            quiz_card_id = quiz_card.id  # type: ignore[union-attr]
+
+        unit_two = self.seed_dir / "Unit 2"
+        unit_two.mkdir()
+        (unit_two / "Lesson 1.csv").write_text(
+            "deck,word,reading,translation_vi\n"
+            "Unit 2,学校,がっこう,school\n",
+            encoding="utf-8",
+        )
+
+        second_result = self._invoke_seed_data_ensure()
+        self.assertEqual(second_result.exit_code, 0, msg=second_result.output)
+        self.assertIn("seed bundle missing: Unit 2", second_result.output)
+        self.assertIn("Skip quiz deck (already seeded)", second_result.output)
+
+        with self.app.app_context():
+            unit_two_deck = Deck.query.filter_by(
+                owner_user_id=self.user_id,
+                parent_id=None,
+                name="Unit 2",
+            ).one()
+            self.assertGreater(
+                self._count_notes_in_subtree(unit_two_deck.id),
+                0,
+            )
+            current_unit_one_note_ids = {
+                note.id
+                for note in Note.query.filter_by(user_id=self.user_id).all()
+                if note.id in unit_one_note_ids
+            }
+            self.assertEqual(current_unit_one_note_ids, unit_one_note_ids)
+            progress = CardProgress.query.filter_by(
+                user_id=self.user_id,
+                card_id=quiz_card_id,
+            ).one()
+            self.assertEqual(progress.reps, 11)
+
+    def test_seed_data_ensure_reuses_existing_owner_after_bootstrap_admin_changes(self):
+        first_result = self._invoke_seed_data_ensure()
+        self.assertEqual(first_result.exit_code, 0, msg=first_result.output)
+
+        with self.app.app_context():
+            new_admin = User(
+                username="replacement-admin",
+                email="replacement-admin@example.com",
+                is_admin=True,
+            )
+            new_admin.set_password("password")
+            db.session.add(new_admin)
+            db.session.commit()
+            new_admin_id = new_admin.id
+
+        second_result = self._invoke_seed_data_ensure(
+            admin_email="replacement-admin@example.com",
+            admin_user="replacement-admin",
+        )
+        self.assertEqual(second_result.exit_code, 0, msg=second_result.output)
+        self.assertIn("Using existing canonical seed owner", second_result.output)
+        self.assertIn("Seed data already complete", second_result.output)
+
+        with self.app.app_context():
+            self.assertEqual(
+                Deck.query.filter_by(
+                    owner_user_id=self.user_id,
+                    parent_id=None,
+                    name="Unit 1",
+                ).count(),
+                1,
+            )
+            self.assertEqual(
+                Deck.query.filter_by(
+                    owner_user_id=new_admin_id,
+                    parent_id=None,
+                    name="Unit 1",
+                ).count(),
+                0,
+            )
 
     def test_vocab_seed_auto_shares_only_top_level_deck_by_default(self):
         result = self.runner.invoke(
