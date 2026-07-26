@@ -36,6 +36,7 @@ jobs:
           ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
           ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
           ADMIN_USER: ${{ secrets.ADMIN_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
           PAYOS_API_KEY: ${{ secrets.PAYOS_API_KEY }}
           PAYOS_CHECKSUM_KEY: ${{ secrets.PAYOS_CHECKSUM_KEY }}
           PAYOS_CLIENT_ID: ${{ secrets.PAYOS_CLIENT_ID }}
@@ -86,22 +87,43 @@ jobs:
           release_dir="$PROJECT_DIR/releases/$RELEASE_ID"
           archive_path="/tmp/flama-$RELEASE_ID.tar.gz"
           environment_file=/etc/flama/flama.env
+          desired_environment_file="/etc/flama/.flama.env.$RELEASE_ID"
           managed_env_payload_path="/tmp/flama-$RELEASE_ID.env.json"
-          trap 'rm -f "$archive_path" "$managed_env_payload_path"' EXIT
+          trap 'rm -f "$archive_path" "$managed_env_payload_path" "$desired_environment_file"' EXIT
 
           test -f "$environment_file"
           test -f "$managed_env_payload_path"
           mkdir -p "$release_dir"
           tar -xzf "$archive_path" -C "$release_dir"
+          cp -p "$environment_file" "$desired_environment_file"
           python3 "$release_dir/deploy/sync_managed_env.py" apply \
-            --env-file "$environment_file" \
+            --env-file "$desired_environment_file" \
             --payload-file "$managed_env_payload_path"
+          cp -p "$environment_file" /etc/flama/flama.env.bak
+          if ! FLAMA_ENVIRONMENT_FILE="$desired_environment_file" \
+            bash "$release_dir/deploy/bootstrap_hostinger.sh"; then
+            FLAMA_ENVIRONMENT_FILE="$environment_file" \
+              bash "$release_dir/deploy/bootstrap_hostinger.sh" || true
+            exit 1
+          fi
+          if ! mv -f "$desired_environment_file" "$environment_file"; then
+            FLAMA_ENVIRONMENT_FILE="$environment_file" \
+              bash "$release_dir/deploy/bootstrap_hostinger.sh" || true
+            exit 1
+          fi
 
           if [ ! -x "$PROJECT_DIR/venv/bin/python" ]; then
             python3 -m venv "$PROJECT_DIR/venv"
           fi
 
           "$PROJECT_DIR/venv/bin/pip" install --disable-pip-version-check -r "$release_dir/requirements.txt"
+          systemd-run --quiet --wait --collect --pipe \
+            --unit="flama-bootstrap-admin-$RELEASE_ID" \
+            --property=User=flama \
+            --property=Group=flama \
+            --property="WorkingDirectory=$release_dir" \
+            --property="EnvironmentFile=$environment_file" \
+            "$PROJECT_DIR/venv/bin/flask" --app wsgi.py bootstrap-admin-sync
           install -m 0644 "$release_dir/deploy/flama.service" /etc/systemd/system/flama.service
           ln -sfn "$release_dir" "$PROJECT_DIR/current"
 

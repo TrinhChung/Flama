@@ -23,6 +23,7 @@ class SyncManagedEnvironmentTests(unittest.TestCase):
             "ADMIN_EMAIL": "admin@example.com",
             "ADMIN_PASSWORD": "password with spaces and \"quotes\"",
             "ADMIN_USER": "admin",
+            "DB_PASSWORD": "debuggable-database-password",
             "PAYOS_API_KEY": "payos-api-key",
             "PAYOS_CHECKSUM_KEY": "payos-checksum-key",
             "PAYOS_CLIENT_ID": "payos-client-id",
@@ -62,6 +63,7 @@ class SyncManagedEnvironmentTests(unittest.TestCase):
             self.assertIn("DB_HOST=127.0.0.1\n", content)
             self.assertIn('ADMIN_EMAIL="admin@example.com"\n', content)
             self.assertIn('ADMIN_PASSWORD="password with spaces and \\"quotes\\""\n', content)
+            self.assertIn('DB_PASSWORD="debuggable-database-password"\n', content)
             self.assertIn('PAYOS_CLIENT_ID="payos-client-id"\n', content)
             self.assertIn('PAYMENTS_ENABLED="1"\n', content)
             self.assertIn('DB_PORT="3306"\n', content)

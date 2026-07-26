@@ -54,11 +54,15 @@ def serialize_template(template: Template) -> dict[str, Any]:
     }
 
 
-def serialize_note_type(note_type: NoteType) -> dict[str, Any]:
+def serialize_note_type(
+    note_type: NoteType,
+    *,
+    include_definition: bool = True,
+) -> dict[str, Any]:
     price_amount_minor = int(note_type.price_amount_minor or 0)
     taxonomy_metadata = marketplace_taxonomy_service.get_item_taxonomy(note_type, content_type="note_type")
     taxonomy_display = marketplace_taxonomy_service.build_taxonomy_display(taxonomy_metadata, content_type="note_type")
-    return {
+    payload = {
         "id": note_type.id,
         "name": note_type.name,
         "title": note_type.name,
@@ -90,15 +94,17 @@ def serialize_note_type(note_type: NoteType) -> dict[str, Any]:
         "created_at": note_type.created_at.isoformat() if note_type.created_at else None,
         "updated_at": note_type.updated_at.isoformat() if note_type.updated_at else None,
         **taxonomy_display,
-        "field_defs": [
+    }
+    if include_definition:
+        payload["field_defs"] = [
             serialize_field(field)
             for field in sorted(note_type.field_defs, key=lambda item: item.position)
-        ],
-        "templates": [
+        ]
+        payload["templates"] = [
             serialize_template(template)
             for template in sorted(note_type.templates, key=lambda item: item.position)
-        ],
-    }
+        ]
+    return payload
 
 
 def normalize_tags(raw_tags: Any) -> list[str]:
@@ -201,8 +207,15 @@ def _format_marketplace_price_display(pricing_mode: str, amount_minor: int) -> s
     return format_vnd(amount_minor)
 
 
-def serialize_note_type_marketplace_card(note_type: NoteType) -> dict[str, Any]:
-    payload = serialize_note_type(note_type)
+def serialize_note_type_marketplace_card(
+    note_type: NoteType,
+    *,
+    include_definition: bool = True,
+) -> dict[str, Any]:
+    payload = serialize_note_type(
+        note_type,
+        include_definition=include_definition,
+    )
     payload["price_display"] = _format_marketplace_price_display(
         str(note_type.pricing_mode or "free"),
         int(note_type.price_amount_minor or 0),
@@ -562,6 +575,7 @@ def top_items_by_category_note_types(
     *,
     limit_per_category: int = 5,
     max_categories: int = 3,
+    include_definition: bool = True,
 ) -> dict[str, list[dict[str, Any]]]:
     buckets: dict[str, list[NoteType]] = {}
     for item in items:
@@ -583,7 +597,13 @@ def top_items_by_category_note_types(
     result: dict[str, list[dict[str, Any]]] = {}
     for category in ranked_categories:
         sorted_bucket = sort_note_type_items(buckets[category], "popular")[:limit_per_category]
-        result[category] = [serialize_note_type_marketplace_card(item) for item in sorted_bucket]
+        result[category] = [
+            serialize_note_type_marketplace_card(
+                item,
+                include_definition=include_definition,
+            )
+            for item in sorted_bucket
+        ]
     return result
 
 

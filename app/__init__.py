@@ -51,6 +51,7 @@ def create_app(config: Optional[dict] = None) -> Flask:
         VocabularyColumnPreference,
     )  # noqa: F401  # register model
     from models.marketplace_saved_item import MarketplaceSavedItem  # noqa: F401  # register model
+    from models.shared_image_asset import SharedImageAsset  # noqa: F401  # register model
     from models.payout_batch import PayoutBatch  # noqa: F401  # register model
     from models.payout_batch_item import PayoutBatchItem  # noqa: F401  # register model
     from models.deck_change_request import DeckChangeRequest  # noqa: F401

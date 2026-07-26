@@ -17,6 +17,7 @@ from app.startup import run_startup_maintenance
 from app.startup_schema import ensure_backward_compatible_schema
 from app.services.flashcard_import import ImportValidationError, read_delimited_rows
 from app.services.flashcard_legacy import ensure_legacy_note_type, ensure_quiz_note_type
+from app.services.bootstrap_admin_service import sync_bootstrap_admin
 from app.services.user_roles import ensure_default_user_roles
 from app.services.tts_provider_service import (
     VOICEVOX_AUDIO_BASE_URL,
@@ -25,6 +26,7 @@ from app.services.tts_provider_service import (
     ensure_default_tts_providers,
 )
 from app.services import flashcards_share
+from app.utils.bootstrap_admin import resolve_bootstrap_admin_credentials
 from models import db
 from models.flashcard import Card, DeckMarketplaceItem, Note
 from models.user import User
@@ -215,6 +217,20 @@ def register_cli_commands(app: Flask) -> None:
         roles = UserRole.query.order_by(UserRole.position.asc(), UserRole.id.asc()).all()
         codes = ", ".join(role.code for role in roles)
         click.echo(f"Done. Seeded roles: {codes}")
+
+    @app.cli.command("bootstrap-admin-sync")
+    def bootstrap_admin_sync() -> None:
+        """Create or update the environment-managed admin account."""
+        credentials = resolve_bootstrap_admin_credentials(require_password=True)
+        result = sync_bootstrap_admin(db.session, credentials=credentials)
+        db.session.commit()
+        changed_fields = ",".join(result.changed_fields) or "none"
+        click.echo(
+            "Bootstrap admin synchronized. "
+            f"user_id={result.user_id} "
+            f"created={str(result.created).lower()} "
+            f"changed={changed_fields}"
+        )
 
     @app.cli.command("tts-provider-seed")
     def tts_provider_seed() -> None:

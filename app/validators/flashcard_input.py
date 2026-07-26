@@ -32,6 +32,8 @@ _EVENT_HANDLER_RE = re.compile(r"(?i)\bon[a-z0-9_-]+\s*=")
 _JS_URL_RE = re.compile(r"(?i)javascript\s*:")
 _SVG_DOCTYPE_RE = re.compile(r"(?is)<!DOCTYPE|<!ENTITY")
 _SVG_DANGEROUS_STYLE_RE = re.compile(r"(?i)(?:expression\s*\(|url\s*\(\s*['\"]?\s*javascript\s*:)")
+_SVG_URL_FUNCTION_RE = re.compile(r"(?is)url\s*\(\s*(['\"]?)(.*?)\1\s*\)")
+_SVG_IMPORT_RE = re.compile(r"(?i)@import\b")
 _ASSET_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$")
 _PROXY_MEDIA_URL_RE = re.compile(r"^/media/proxy/([A-Za-z0-9][A-Za-z0-9_-]{0,127})$")
 _MEDIA_FILENAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,254}$")
@@ -800,7 +802,9 @@ def _looks_like_safe_svg(content: bytes) -> bool:
         return False
     if _JS_URL_RE.search(raw_text):
         return False
-    if _SVG_DANGEROUS_STYLE_RE.search(raw_text):
+    if _SVG_DANGEROUS_STYLE_RE.search(raw_text) or _SVG_IMPORT_RE.search(raw_text):
+        return False
+    if _contains_external_svg_url(raw_text):
         return False
 
     try:
@@ -818,7 +822,12 @@ def _looks_like_safe_svg(content: bytes) -> bool:
 
         if tag_name == "style":
             style_text = "".join(str(part or "") for part in element.itertext())
-            if _SVG_DANGEROUS_STYLE_RE.search(style_text) or _JS_URL_RE.search(style_text):
+            if (
+                _SVG_DANGEROUS_STYLE_RE.search(style_text)
+                or _JS_URL_RE.search(style_text)
+                or _SVG_IMPORT_RE.search(style_text)
+                or _contains_external_svg_url(style_text)
+            ):
                 return False
 
         for attr_name, attr_value in element.attrib.items():
@@ -830,11 +839,24 @@ def _looks_like_safe_svg(content: bytes) -> bool:
                 return False
             if _JS_URL_RE.search(normalized_value):
                 return False
-            if normalized_attr == "style" and _SVG_DANGEROUS_STYLE_RE.search(normalized_value):
-                return False
+            if normalized_attr == "style":
+                if (
+                    _SVG_DANGEROUS_STYLE_RE.search(normalized_value)
+                    or _SVG_IMPORT_RE.search(normalized_value)
+                    or _contains_external_svg_url(normalized_value)
+                ):
+                    return False
             if normalized_attr == "href" and normalized_value and not lowered_value.startswith("#"):
                 return False
     return True
+
+
+def _contains_external_svg_url(value: str) -> bool:
+    for match in _SVG_URL_FUNCTION_RE.finditer(str(value or "")):
+        target = str(match.group(2) or "").strip()
+        if not target.startswith("#"):
+            return True
+    return False
 
 
 def _xml_local_name(value: Any) -> str:

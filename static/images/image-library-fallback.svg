@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 240" role="img" aria-labelledby="title description">
+  <title id="title">Image unavailable</title>
+  <desc id="description">Neutral placeholder used when an image key has no active image.</desc>
+  <rect width="320" height="240" rx="20" fill="#f7f3f0"/>
+  <rect x="58" y="44" width="204" height="152" rx="14" fill="#ffffff" stroke="#d8cec7" stroke-width="4"/>
+  <circle cx="116" cy="96" r="18" fill="#ffb27c"/>
+  <path d="M78 169l54-52 35 34 24-22 51 40H78z" fill="#f2d7c5"/>
+  <path d="M78 169l54-52 35 34 24-22 51 40" fill="none" stroke="#8a5a3b" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M148 87h24M160 75v24" stroke="#8a5a3b" stroke-width="6" stroke-linecap="round"/>
+</svg>

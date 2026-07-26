@@ -53,7 +53,6 @@ if (root) {
     space: "discover",
     mobileFilterOpen: false,
     requestController: null,
-    loadingTimer: 0,
     lastFocusedElement: null,
     pendingActions: new Set(),
   };
@@ -173,21 +172,6 @@ if (root) {
 
   function setLoading(loading) {
     root.setAttribute("aria-busy", loading ? "true" : "false");
-    resultsEl?.classList.toggle("is-loading", loading);
-    window.clearTimeout(state.loadingTimer);
-    state.loadingTimer = 0;
-    if (!loading || state.payload || !resultsEl) return;
-
-    // Fast responses should paint content directly instead of flashing a fake loading state.
-    state.loadingTimer = window.setTimeout(() => {
-      if (state.payload || root.getAttribute("aria-busy") !== "true") return;
-      const compactClass = isCompactNoteTypeMarket ? " market-card-skeleton--compact" : "";
-      resultsEl.innerHTML = Array.from({ length: 3 }, () => `
-        <div class="market-card-skeleton${compactClass}" aria-hidden="true">
-          <span></span><span></span><span></span><span></span>
-        </div>
-      `).join("");
-    }, 160);
   }
 
   function isPhoneViewport() {
@@ -961,6 +945,9 @@ if (root) {
     const params = !state.payload && window.location.search
       ? new URLSearchParams(window.location.search)
       : collectFilters();
+    if (isCompactNoteTypeMarket) {
+      params.set("compact", "1");
+    }
     const query = params.toString();
     try {
       const payload = await requestJson(query ? `${hubUrl}?${query}` : hubUrl, { signal: controller.signal });
