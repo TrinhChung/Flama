@@ -16,7 +16,12 @@ from flask import Flask
 from app.startup import run_startup_maintenance
 from app.startup_schema import ensure_backward_compatible_schema
 from app.services.flashcard_import import ImportValidationError, read_delimited_rows
-from app.services.flashcard_legacy import ensure_legacy_note_type, ensure_quiz_note_type
+from app.services.flashcard_legacy import (
+    LEGACY_NOTE_TYPE_NAME,
+    QUIZ_NOTE_TYPE_NAME,
+    ensure_legacy_note_type,
+    ensure_quiz_note_type,
+)
 from app.services.bootstrap_admin_service import sync_bootstrap_admin
 from app.services.user_roles import ensure_default_user_roles
 from app.services.tts_provider_service import (
@@ -28,7 +33,7 @@ from app.services.tts_provider_service import (
 from app.services import flashcards_share
 from app.utils.bootstrap_admin import resolve_bootstrap_admin_credentials
 from models import db
-from models.flashcard import Card, DeckMarketplaceItem, Note
+from models.flashcard import Card, DeckMarketplaceItem, Note, NoteType, Template
 from models.user import User
 from models.user_role import UserRole
 from models.deck import Deck
@@ -329,85 +334,388 @@ def register_cli_commands(app: Flask) -> None:
         - Headered file (.tsv/.csv/.txt) -> Leaf deck named after the file
         - Anki export with `#deck column` -> Decks split from that column
         """
-
-        root_input = _resolve_seed_path(seed_path)
-        root = _resolve_seed_root(root_input)
-        if not root.exists() or not root.is_dir():
-            raise click.ClickException(f"Seed path not found: {root}")
-
-        stats = SeedStats()
-        start_dirs = sorted((p for p in root.iterdir() if p.is_dir()), key=_natural_sort_key)
-        root_seed_files = sorted(
-            (
-                p
-                for p in root.iterdir()
-                if p.is_file() and p.suffix.lower() in SEED_SUPPORTED_SUFFIXES
-            ),
-            key=_natural_sort_key,
+        _seed_vocabulary_data(
+            seed_path=seed_path,
+            replace_lessons=replace_lessons,
+            owner_user_id=owner_user_id,
+            share_seeded_decks=share_seeded_decks,
         )
-        if not start_dirs and not root_seed_files:
-            click.echo(f"No subfolders or seed files found in {root}. Nothing to seed.")
+
+    @app.cli.command("seed-data-ensure")
+    @click.option(
+        "--path",
+        "seed_path",
+        default="static/seed_data",
+        show_default=True,
+        help="Seed source checked during deployment.",
+    )
+    @click.option(
+        "--share-seeded-decks/--no-share-seeded-decks",
+        default=True,
+        show_default=True,
+        help="Require top-level seeded decks to be published in the marketplace.",
+    )
+    def seed_data_ensure(
+        seed_path: str,
+        share_seeded_decks: bool,
+    ) -> None:
+        """Ensure production seed bundles exist without replacing existing data."""
+        credentials = resolve_bootstrap_admin_credentials(require_password=False)
+        bootstrap_user = User.query.filter_by(email=credentials.email).first()
+        if bootstrap_user is None:
+            raise click.ClickException(
+                "Bootstrap admin does not exist. Run bootstrap-admin-sync before seed-data-ensure."
+            )
+        target_user = _resolve_seed_data_owner(bootstrap_user)
+        if target_user.id != bootstrap_user.id:
+            click.echo(
+                "Using existing canonical seed owner. "
+                f"owner_user_id={target_user.id}, bootstrap_user_id={bootstrap_user.id}"
+            )
+
+        root = _resolve_seed_root(_resolve_seed_path(seed_path))
+        gaps = _find_seed_data_gaps(
+            root=root,
+            owner_user_id=target_user.id,
+            share_seeded_decks=share_seeded_decks,
+        )
+        if not gaps:
+            click.echo(
+                "Seed data already complete. "
+                f"owner_user_id={target_user.id}, path={root}"
+            )
             return
 
-        target_user = User.query.get(owner_user_id) if owner_user_id else User.query.order_by(User.id.asc()).first()
-        if target_user is None:
-            raise click.ClickException("No user found. Create at least one user before running vocab-seed.")
+        click.echo("Seed data is incomplete:")
+        for gap in gaps:
+            click.echo(f"- {gap}")
+        click.echo("Seeding only missing bundles; existing notes and progress are preserved.")
 
-        note_type, template = ensure_legacy_note_type(db.session, target_user.id)
-        quiz_note_type, quiz_template = ensure_quiz_note_type(db.session, target_user.id)
-        click.echo(f"Seeding from: {root}")
-        click.echo(
-            f"Using owner_user_id={target_user.id}, note_type={note_type.id}, template={template.id}"
-        )
-        click.echo(
-            f"Also ensured quiz_note_type={quiz_note_type.id}, template={quiz_template.id}"
-        )
-        top_level_seed_dirs = list(start_dirs)
-        if not top_level_seed_dirs and root_seed_files:
-            top_level_seed_dirs = [root]
-
-        for start_dir in top_level_seed_dirs:
-            top_deck = _seed_dir_to_deck(
-                directory=start_dir,
-                parent_deck_id=None,
-                owner_user_id=target_user.id,
-                note_type_id=note_type.id,
-                template_id=template.id,
-                replace_existing=replace_lessons,
-                stats=stats,
-            )
-            if share_seeded_decks:
-                subtree_entries = _count_entries_in_deck_subtree(top_deck.id)
-                shared_created = _upsert_seeded_deck_marketplace_item(
-                    deck=top_deck,
-                    owner_user_id=target_user.id,
-                    note_type_id=note_type.id,
-                    sample_cards_count=min(max(subtree_entries, 0), 20),
-                )
-                stats.shared_decks += 1
-                action = "Created" if shared_created else "Updated"
-                click.echo(f"{action} shared top-level deck item: {top_deck.name}")
-
-        quiz_deck, quiz_note_count = _seed_quiz_dump_for_user(
+        _seed_vocabulary_data(
+            seed_path=str(root),
+            replace_lessons=False,
             owner_user_id=target_user.id,
-            note_type_id=quiz_note_type.id,
-            template_id=quiz_template.id,
+            share_seeded_decks=share_seeded_decks,
+        )
+
+        remaining_gaps = _find_seed_data_gaps(
+            root=root,
+            owner_user_id=target_user.id,
+            share_seeded_decks=share_seeded_decks,
+        )
+        if remaining_gaps:
+            joined = "; ".join(remaining_gaps)
+            raise click.ClickException(
+                f"Seed data is still incomplete after ensure: {joined}"
+            )
+        click.echo(
+            "Seed data ensure completed. "
+            f"owner_user_id={target_user.id}, path={root}"
+        )
+
+
+def _resolve_seed_data_owner(bootstrap_user: User) -> User:
+    official_items = (
+        DeckMarketplaceItem.query.filter(
+            DeckMarketplaceItem.is_official.is_(True),
+            DeckMarketplaceItem.owner_user_id.is_not(None),
+        )
+        .order_by(
+            DeckMarketplaceItem.created_at.asc(),
+            DeckMarketplaceItem.id.asc(),
+        )
+        .all()
+    )
+    seeded_item = next(
+        (
+            item
+            for item in official_items
+            if "seeded" in {str(tag).strip().lower() for tag in (item.tags or [])}
+        ),
+        None,
+    )
+    if seeded_item is not None:
+        existing_owner = db.session.get(User, seeded_item.owner_user_id)
+        if existing_owner is not None:
+            return existing_owner
+
+    return bootstrap_user
+
+
+def _seed_vocabulary_data(
+    *,
+    seed_path: str,
+    replace_lessons: bool,
+    owner_user_id: int | None,
+    share_seeded_decks: bool,
+) -> SeedStats:
+    root_input = _resolve_seed_path(seed_path)
+    root = _resolve_seed_root(root_input)
+    if not root.exists() or not root.is_dir():
+        raise click.ClickException(f"Seed path not found: {root}")
+
+    stats = SeedStats()
+    start_dirs = sorted((p for p in root.iterdir() if p.is_dir()), key=_natural_sort_key)
+    root_seed_files = sorted(
+        (
+            p
+            for p in root.iterdir()
+            if p.is_file() and p.suffix.lower() in SEED_SUPPORTED_SUFFIXES
+        ),
+        key=_natural_sort_key,
+    )
+    if not start_dirs and not root_seed_files:
+        click.echo(f"No subfolders or seed files found in {root}. Nothing to seed.")
+        return stats
+
+    target_user = (
+        db.session.get(User, owner_user_id)
+        if owner_user_id
+        else User.query.order_by(User.id.asc()).first()
+    )
+    if target_user is None:
+        raise click.ClickException(
+            "No user found. Create at least one user before running vocab-seed."
+        )
+
+    note_type, template = ensure_legacy_note_type(db.session, target_user.id)
+    quiz_note_type, quiz_template = ensure_quiz_note_type(db.session, target_user.id)
+    click.echo(f"Seeding from: {root}")
+    click.echo(
+        f"Using owner_user_id={target_user.id}, "
+        f"note_type={note_type.id}, template={template.id}"
+    )
+    click.echo(
+        f"Also ensured quiz_note_type={quiz_note_type.id}, "
+        f"template={quiz_template.id}"
+    )
+    top_level_seed_dirs = list(start_dirs)
+    if not top_level_seed_dirs and root_seed_files:
+        top_level_seed_dirs = [root]
+
+    for start_dir in top_level_seed_dirs:
+        top_deck = _seed_dir_to_deck(
+            directory=start_dir,
+            parent_deck_id=None,
+            owner_user_id=target_user.id,
+            note_type_id=note_type.id,
+            template_id=template.id,
+            replace_existing=replace_lessons,
             stats=stats,
         )
-        if quiz_deck is not None:
-            click.echo(
-                f"Seeded quiz dump deck: {quiz_deck.name} ({quiz_note_count} notes)"
+        if share_seeded_decks:
+            subtree_entries = _count_entries_in_deck_subtree(top_deck.id)
+            shared_created = _upsert_seeded_deck_marketplace_item(
+                deck=top_deck,
+                owner_user_id=target_user.id,
+                note_type_id=note_type.id,
+                sample_cards_count=min(max(subtree_entries, 0), 20),
+            )
+            stats.shared_decks += 1
+            action = "Created" if shared_created else "Updated"
+            click.echo(f"{action} shared top-level deck item: {top_deck.name}")
+
+    quiz_deck, quiz_note_count = _seed_quiz_dump_for_user(
+        owner_user_id=target_user.id,
+        note_type_id=quiz_note_type.id,
+        template_id=quiz_template.id,
+        replace_existing=replace_lessons,
+        stats=stats,
+    )
+    if quiz_deck is not None:
+        click.echo(
+            f"Seeded quiz dump deck: {quiz_deck.name} ({quiz_note_count} notes)"
+        )
+
+    db.session.commit()
+    click.echo(
+        "Done. "
+        f"decks+{stats.created_decks}, files_seeded={stats.seeded_files}, "
+        f"notes+{stats.created_notes}, cards+{stats.created_cards}, "
+        f"replaced_files={stats.replaced_files}, "
+        f"skipped_files={stats.skipped_files}, "
+        f"shared_decks={stats.shared_decks}"
+    )
+    return stats
+
+
+def _find_seed_data_gaps(
+    *,
+    root: Path,
+    owner_user_id: int,
+    share_seeded_decks: bool,
+) -> list[str]:
+    """Return missing production seed components without parsing large dumps."""
+    if not root.exists() or not root.is_dir():
+        return [f"seed path not found: {root}"]
+
+    start_dirs = sorted((path for path in root.iterdir() if path.is_dir()), key=_natural_sort_key)
+    root_seed_files = sorted(
+        (
+            path
+            for path in root.iterdir()
+            if path.is_file() and path.suffix.lower() in SEED_SUPPORTED_SUFFIXES
+        ),
+        key=_natural_sort_key,
+    )
+    top_level_seed_dirs = list(start_dirs)
+    if not top_level_seed_dirs and root_seed_files:
+        top_level_seed_dirs = [root]
+    if not top_level_seed_dirs:
+        return [f"no seed bundles found in {root}"]
+
+    gaps: list[str] = []
+    legacy_note_type = (
+        NoteType.query.filter_by(
+            user_id=owner_user_id,
+            name=LEGACY_NOTE_TYPE_NAME,
+        )
+        .order_by(NoteType.created_at.asc(), NoteType.id.asc())
+        .first()
+    )
+    if legacy_note_type is None:
+        gaps.append(f"note type missing: {LEGACY_NOTE_TYPE_NAME}")
+    elif (
+        Template.query.filter_by(note_type_id=legacy_note_type.id)
+        .order_by(Template.position.asc(), Template.created_at.asc())
+        .first()
+        is None
+    ):
+        gaps.append(f"template missing for note type: {LEGACY_NOTE_TYPE_NAME}")
+
+    for directory in top_level_seed_dirs:
+        deck = (
+            Deck.query.filter(
+                Deck.owner_user_id == owner_user_id,
+                Deck.parent_id.is_(None),
+                Deck.name == directory.name,
+                Deck.deleted_at.is_(None),
+            )
+            .order_by(Deck.id.asc())
+            .first()
+        )
+        if deck is None:
+            gaps.append(f"seed bundle missing: {directory.name}")
+            continue
+        if _count_entries_in_deck_subtree(deck.id) <= 0:
+            gaps.append(f"seed bundle has no notes: {directory.name}")
+
+        if share_seeded_decks:
+            listing = (
+                DeckMarketplaceItem.query.filter(
+                    DeckMarketplaceItem.owner_user_id == owner_user_id,
+                    DeckMarketplaceItem.source_deck_id == deck.id,
+                    DeckMarketplaceItem.publish_status == "published",
+                    DeckMarketplaceItem.archived_at.is_(None),
+                )
+                .order_by(
+                    DeckMarketplaceItem.created_at.asc(),
+                    DeckMarketplaceItem.id.asc(),
+                )
+                .first()
+            )
+            if listing is None:
+                gaps.append(f"shared listing missing: {directory.name}")
+
+    for source_file in sorted(
+        (
+            path
+            for path in root.rglob("*")
+            if path.is_file() and path.suffix.lower() in SEED_SUPPORTED_SUFFIXES
+        ),
+        key=_natural_sort_key,
+    ):
+        source_decks = (
+            Deck.query.filter(
+                Deck.owner_user_id == owner_user_id,
+                Deck.description == f"Seeded from {source_file.name}",
+                Deck.deleted_at.is_(None),
+            )
+            .order_by(Deck.id.asc())
+            .all()
+        )
+        source_deck_ids = [deck.id for deck in source_decks]
+        seeded_note_count = 0
+        if source_deck_ids:
+            seeded_note_count = int(
+                db.session.query(db.func.count(Note.id))
+                .filter(
+                    Note.user_id == owner_user_id,
+                    Note.deck_id.in_(source_deck_ids),
+                )
+                .scalar()
+                or 0
+            )
+        if seeded_note_count <= 0:
+            gaps.append(
+                f"seed source missing: {source_file.relative_to(root).as_posix()}"
             )
 
-        db.session.commit()
-        click.echo(
-            "Done. "
-            f"decks+{stats.created_decks}, files_seeded={stats.seeded_files}, "
-            f"notes+{stats.created_notes}, cards+{stats.created_cards}, "
-            f"replaced_files={stats.replaced_files}, "
-            f"skipped_files={stats.skipped_files}, "
-            f"shared_decks={stats.shared_decks}"
+    dump_root, manifest_path = _resolve_quiz_dump_paths()
+    if manifest_path.exists():
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            gaps.append(f"quiz manifest invalid: {manifest_path}")
+            return gaps
+
+        quiz_note_type = (
+            NoteType.query.filter_by(
+                user_id=owner_user_id,
+                name=QUIZ_NOTE_TYPE_NAME,
+            )
+            .order_by(NoteType.created_at.asc(), NoteType.id.asc())
+            .first()
         )
+        if quiz_note_type is None:
+            gaps.append(f"note type missing: {QUIZ_NOTE_TYPE_NAME}")
+        elif (
+            Template.query.filter_by(note_type_id=quiz_note_type.id)
+            .order_by(Template.position.asc(), Template.created_at.asc())
+            .first()
+            is None
+        ):
+            gaps.append(f"template missing for note type: {QUIZ_NOTE_TYPE_NAME}")
+
+        quiz_deck_name = (
+            str(manifest.get("deck_name") or "Trac Nghiem Co Ban").strip()
+            or "Trac Nghiem Co Ban"
+        )
+        quiz_deck = (
+            Deck.query.filter(
+                Deck.owner_user_id == owner_user_id,
+                Deck.parent_id.is_(None),
+                Deck.name == quiz_deck_name,
+                Deck.deleted_at.is_(None),
+            )
+            .order_by(Deck.id.asc())
+            .first()
+        )
+        if quiz_deck is None:
+            gaps.append(f"quiz seed deck missing: {quiz_deck_name}")
+        elif quiz_note_type is not None:
+            quiz_notes = int(
+                db.session.query(db.func.count(Note.id))
+                .filter(
+                    Note.user_id == owner_user_id,
+                    Note.note_type_id == quiz_note_type.id,
+                    Note.deck_id == quiz_deck.id,
+                )
+                .scalar()
+                or 0
+            )
+            if quiz_notes <= 0:
+                gaps.append(f"quiz seed deck has no notes: {quiz_deck_name}")
+
+        dump_filename = (
+            str(manifest.get("file") or QUIZ_DUMP_DEFAULT_FILE).strip()
+            or QUIZ_DUMP_DEFAULT_FILE
+        )
+        if not (dump_root / dump_filename).is_file():
+            gaps.append(f"quiz dump file missing: {dump_root / dump_filename}")
+
+    return gaps
+
 
 def _resolve_seed_path(seed_path: str) -> Path:
     candidate = Path(seed_path)
@@ -1177,6 +1485,7 @@ def _seed_quiz_dump_for_user(
     owner_user_id: int,
     note_type_id: str,
     template_id: str,
+    replace_existing: bool,
     stats: SeedStats,
 ) -> tuple[Deck | None, int]:
     dump_root, manifest_path = _resolve_quiz_dump_paths()
@@ -1220,6 +1529,11 @@ def _seed_quiz_dump_for_user(
         .all()
     )
     existing_note_ids = [note.id for note in existing_notes]
+    if existing_note_ids and not replace_existing:
+        stats.skipped_files += 1
+        click.echo(f"Skip quiz deck (already seeded): {quiz_deck.name}")
+        return quiz_deck, len(existing_notes)
+
     if existing_note_ids:
         existing_card_ids = [
             row[0]
