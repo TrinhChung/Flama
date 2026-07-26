@@ -97,6 +97,19 @@ def build_app_config(overrides: Mapping[str, Any] | None = None) -> dict[str, An
         },
         "FLASHCARD_MEDIA_UPLOAD_ROOT": str(resolve_media_upload_root()),
         "FLASHCARD_MEDIA_MAX_BYTES": int(os.getenv("FLASHCARD_MEDIA_MAX_BYTES", str(10 * 1024 * 1024))),
+        "IMAGE_LIBRARY_MAX_BYTES": int(os.getenv("IMAGE_LIBRARY_MAX_BYTES", str(5 * 1024 * 1024))),
+        "IMAGE_LIBRARY_MAX_PIXELS": coerce_int_env(
+            "IMAGE_LIBRARY_MAX_PIXELS",
+            default=25_000_000,
+        ),
+        "IMAGE_LIBRARY_REMOTE_FETCH_TIMEOUT_SECONDS": coerce_int_env(
+            "IMAGE_LIBRARY_REMOTE_FETCH_TIMEOUT_SECONDS",
+            default=6,
+        ),
+        "IMAGE_LIBRARY_REMOTE_FETCH_MAX_REDIRECTS": coerce_int_env(
+            "IMAGE_LIBRARY_REMOTE_FETCH_MAX_REDIRECTS",
+            default=3,
+        ),
         "FLASHCARD_MEDIA_SCAN_ENABLED": (
             os.getenv("FLASHCARD_MEDIA_SCAN_ENABLED", "0").strip().lower() in {"1", "true", "yes", "on"}
         ),

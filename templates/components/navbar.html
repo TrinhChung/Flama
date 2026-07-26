@@ -39,11 +39,6 @@
                 <i class="bi bi-collection"></i> Shared Decks
               </a>
             </li>
-            <li>
-              <a class="dropdown-item" href="{{ url_for('flashcards.installed_decks_page') }}">
-                <i class="bi bi-journal-bookmark"></i> Deck đã cài
-              </a>
-            </li>
           </ul>
         </li>
 
@@ -55,6 +50,11 @@
             <li>
               <a class="dropdown-item" href="{{ url_for('flashcards.note_type_manager') }}">
                 <i class="bi bi-layers"></i> Quản lý loại thẻ
+              </a>
+            </li>
+            <li>
+              <a class="dropdown-item" href="{{ url_for('flashcards.installed_decks_page') }}">
+                <i class="bi bi-journal-bookmark"></i> Deck đã cài
               </a>
             </li>
           </ul>
@@ -94,6 +94,11 @@
             <li>
               <a class="dropdown-item" href="{{ url_for('admin.tts_provider_management_page') }}">
                 <i class="bi bi-soundwave"></i> TTS Provider Config
+              </a>
+            </li>
+            <li>
+              <a class="dropdown-item" href="{{ url_for('image_library.admin_page') }}">
+                <i class="bi bi-images"></i> Kho hình ảnh
               </a>
             </li>
           </ul>

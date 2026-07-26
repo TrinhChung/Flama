@@ -462,10 +462,26 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             self.assertEqual(deck_item.publish_status, "published")  # type: ignore[union-attr]
             self.assertEqual(deck_item.tags, ["updated", "deck"])  # type: ignore[union-attr]
 
-    def test_authenticated_navbar_includes_installed_decks_link(self):
+    def test_authenticated_navbar_places_installed_decks_under_content_management(self):
         response = self.client.get("/dashboard")
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"/flashcards/installed-decks", response.data)
+        html = response.get_data(as_text=True)
+
+        shared_menu = re.search(
+            r"Nguồn chia sẻ\s*</a>\s*<ul[^>]*>(.*?)</ul>",
+            html,
+            re.DOTALL,
+        )
+        content_menu = re.search(
+            r"Quản lý nội dung\s*</a>\s*<ul[^>]*>(.*?)</ul>",
+            html,
+            re.DOTALL,
+        )
+
+        self.assertIsNotNone(shared_menu)
+        self.assertIsNotNone(content_menu)
+        self.assertNotIn("/flashcards/installed-decks", shared_menu.group(1))
+        self.assertIn("/flashcards/installed-decks", content_menu.group(1))
 
     def test_share_note_type_page_updates_taxonomy_and_redirects_to_detail(self):
         note_type = self._create_note_type()

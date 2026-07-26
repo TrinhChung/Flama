@@ -239,6 +239,27 @@ class FlashcardValidationSecurityTests(unittest.TestCase):
         payload = upload_resp.get_json() or {}
         self.assertEqual(payload.get("error"), "MEDIA_SIGNATURE_INVALID")
 
+    def test_upload_rejects_svg_external_style_url(self):
+        note_type = self._create_note_type_with_media()
+        note_id = self._create_note(note_type["id"])
+        external_svg = (
+            b'<svg xmlns="http://www.w3.org/2000/svg">'
+            b'<style>circle { fill: url(https://attacker.example/payload); }</style>'
+            b"<circle cx='5' cy='5' r='4'/></svg>"
+        )
+
+        upload_resp = self.client.post(
+            f"/api/notes/{note_id}/media",
+            data={
+                "field_name": "Picture",
+                "file": (io.BytesIO(external_svg), "external.svg", "image/svg+xml"),
+            },
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(upload_resp.status_code, 415)
+        payload = upload_resp.get_json() or {}
+        self.assertEqual(payload.get("error"), "MEDIA_SIGNATURE_INVALID")
+
     def test_patch_note_accepts_audio_filename_reference(self):
         note_type = self._create_note_type_with_media()
         note_id = self._create_note(note_type["id"])

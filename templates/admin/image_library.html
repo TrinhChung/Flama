@@ -1,0 +1,322 @@
+{% extends "base.html" %}
+
+{% block title %}Kho hình ảnh - Flama{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/image_library.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="image-library-page">
+  <header class="image-library-header">
+    <div class="image-library-title">
+      <span class="image-library-title-icon" aria-hidden="true"><i class="bi bi-images"></i></span>
+      <div>
+        <h1>Kho hình ảnh dùng chung</h1>
+        <p class="image-library-intro">
+          Một image key, một nguồn ảnh dùng lại cho mọi deck và ngôn ngữ.
+        </p>
+      </div>
+    </div>
+    <div class="image-library-summary" aria-label="Thống kê kho hình ảnh">
+      <span><strong>{{ summary.total }}</strong> tổng số</span>
+      <span><strong>{{ summary.enabled }}</strong> đang bật</span>
+      <span><strong>{{ summary.missing_file }}</strong> chưa có tệp</span>
+    </div>
+  </header>
+
+  <div class="image-library-layout">
+    <aside class="image-library-editor" aria-labelledby="asset-form-title">
+      <div class="image-library-panel-heading">
+        <div>
+          <h2 id="asset-form-title">{{ edit_asset.image_key if edit_asset else "Thêm hình ảnh" }}</h2>
+          <p>{{ "Thay ảnh hoặc cập nhật thông tin của key này." if edit_asset else "Tạo key trước, bổ sung ảnh ngay hoặc để sau." }}</p>
+        </div>
+        {% if edit_asset %}
+          <a class="image-library-text-link" href="{{ url_for('image_library.admin_page', q=query, status=status) }}">
+            Tạo mới
+          </a>
+        {% endif %}
+      </div>
+
+      {% if edit_asset %}
+        <div class="image-library-current-preview">
+          <img
+            src="{{ url_for('image_library.admin_preview', asset_id=edit_asset.id, v=edit_asset.updated_at.timestamp()|int) }}"
+            alt="Ảnh hiện tại của {{ edit_asset.image_key }}"
+            width="320"
+            height="240"
+            decoding="async"
+          >
+          <span>Ảnh hiện tại</span>
+        </div>
+      {% endif %}
+
+      <form method="post" enctype="multipart/form-data" class="image-library-form" id="image-library-form">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="action" value="{{ 'update' if edit_asset else 'create' }}">
+        <input type="hidden" name="return_q" value="{{ query }}">
+        <input type="hidden" name="return_status" value="{{ status if status != 'all' else '' }}">
+        <input type="hidden" name="return_page" value="{{ page.page }}">
+        {% if edit_asset %}
+          <input type="hidden" name="asset_id" value="{{ edit_asset.id }}">
+        {% endif %}
+
+        <div class="image-library-field">
+          <label for="image-key">Image key</label>
+          <input
+            id="image-key"
+            name="image_key"
+            type="text"
+            value="{{ edit_asset.image_key if edit_asset else '' }}"
+            placeholder="school_bus"
+            maxlength="120"
+            pattern="[a-zA-Z0-9]+(?:[ _-][a-zA-Z0-9]+)*"
+            autocomplete="off"
+            {% if edit_asset %}readonly aria-readonly="true"{% else %}required{% endif %}
+          >
+          <small>
+            {% if edit_asset %}
+              Key được giữ cố định để các deck đang tham chiếu không bị hỏng.
+            {% else %}
+              Dùng chữ, số và dấu gạch dưới. Ví dụ: dog, apple, raise_hand.
+            {% endif %}
+          </small>
+        </div>
+
+        <div class="image-library-field">
+          <label for="image-description">Mô tả <span>(không bắt buộc)</span></label>
+          <textarea
+            id="image-description"
+            name="description"
+            rows="3"
+            maxlength="1000"
+            placeholder="Mô tả ngắn để quản trị viên dễ nhận biết"
+          >{{ edit_asset.description if edit_asset and edit_asset.description else '' }}</textarea>
+        </div>
+
+        <fieldset class="image-library-source">
+          <legend>Nguồn hình ảnh</legend>
+          <input
+            id="image-file"
+            name="image"
+            type="file"
+            accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml"
+            hidden
+          >
+          <div
+            id="image-dropzone"
+            class="image-library-dropzone"
+          >
+            <div id="image-source-empty" class="image-library-source-empty">
+              <span class="image-library-upload-icon" aria-hidden="true"><i class="bi bi-clipboard-plus"></i></span>
+              <span>
+                <strong>Chọn, kéo thả hoặc dán ảnh</strong>
+                <small>Nhấn Ctrl/Cmd+V khi đã copy hình ảnh</small>
+              </span>
+              <button class="btn btn-sm btn-outline-secondary" type="button" id="image-file-choose">
+                Chọn tệp
+              </button>
+            </div>
+            <div id="image-upload-preview" class="image-library-upload-preview" hidden>
+              <img alt="Xem trước tệp vừa chọn">
+              <span>
+                <strong id="image-file-label"></strong>
+                <small id="image-file-meta"></small>
+              </span>
+              <button type="button" id="image-file-clear" aria-label="Bỏ hình ảnh đã chọn">
+                <i class="bi bi-x-lg" aria-hidden="true"></i>
+              </button>
+            </div>
+          </div>
+
+          <div class="image-library-source-divider"><span>hoặc dùng link công khai</span></div>
+
+          <div class="image-library-url-input">
+            <i class="bi bi-link-45deg" aria-hidden="true"></i>
+            <label class="visually-hidden" for="image-source-url">Link hình ảnh</label>
+            <input
+              id="image-source-url"
+              name="source_url"
+              type="url"
+              inputmode="url"
+              autocomplete="url"
+              maxlength="2048"
+              placeholder="https://example.com/image.png"
+            >
+          </div>
+          <p class="image-library-source-help">
+            PNG, JPEG, GIF, WebP hoặc SVG · tối đa {{ (max_upload_bytes / 1024 / 1024)|round(0)|int }} MB.
+            {% if edit_asset %}Để trống nếu không thay ảnh.{% endif %}
+          </p>
+          <div class="image-library-security-note">
+            <i class="bi bi-shield-check" aria-hidden="true"></i>
+            <span>Link nội bộ bị chặn. Ảnh raster được giải mã và mã hóa lại để loại metadata cùng dữ liệu nhúng trước khi lưu.</span>
+          </div>
+          <p id="image-source-error" class="image-library-source-error" role="alert" hidden></p>
+        </fieldset>
+
+        <label class="image-library-switch">
+          <input
+            type="checkbox"
+            name="is_enabled"
+            value="1"
+            {% if not edit_asset or edit_asset.is_enabled %}checked{% endif %}
+          >
+          <span>
+            <strong>Bật hình ảnh</strong>
+            <small>Key bị tắt sẽ trả về ảnh fallback cho người dùng.</small>
+          </span>
+        </label>
+
+        <button type="submit" class="btn btn-primary image-library-submit">
+          <i class="bi {{ 'bi-check2' if edit_asset else 'bi-plus-lg' }}" aria-hidden="true"></i>
+          {{ "Lưu thay đổi" if edit_asset else "Thêm vào thư viện" }}
+        </button>
+      </form>
+    </aside>
+
+    <main class="image-library-browser">
+      <div class="image-library-browser-header">
+        <div>
+          <h2>Thư viện</h2>
+          <p>{{ page.total }} image key phù hợp</p>
+        </div>
+        <form method="get" class="image-library-search" role="search">
+          <label class="visually-hidden" for="image-library-query">Tìm theo image key</label>
+          <div class="image-library-search-input">
+            <i class="bi bi-search" aria-hidden="true"></i>
+            <input
+              id="image-library-query"
+              name="q"
+              type="search"
+              value="{{ query }}"
+              placeholder="Tìm theo key..."
+              autocomplete="off"
+            >
+          </div>
+          <label class="visually-hidden" for="image-library-status">Lọc trạng thái</label>
+          <select id="image-library-status" name="status" onchange="this.form.submit()">
+            <option value="all" {% if status == "all" %}selected{% endif %}>Tất cả trạng thái</option>
+            <option value="enabled" {% if status == "enabled" %}selected{% endif %}>Đang bật</option>
+            <option value="disabled" {% if status == "disabled" %}selected{% endif %}>Đã tắt</option>
+            <option value="missing_file" {% if status == "missing_file" %}selected{% endif %}>Chưa có tệp</option>
+          </select>
+          <button class="btn btn-outline-secondary" type="submit">Tìm</button>
+        </form>
+      </div>
+
+      {% if page.items %}
+        <div class="image-library-grid">
+          {% for asset in page.items %}
+            <article class="image-library-card{% if not asset.is_enabled %} is-disabled{% endif %}">
+              <div class="image-library-card-preview">
+                <img
+                  src="{{ url_for('image_library.admin_preview', asset_id=asset.id, v=asset.updated_at.timestamp()|int) }}"
+                  alt="Ảnh {{ asset.image_key }}"
+                  width="320"
+                  height="240"
+                  loading="lazy"
+                  decoding="async"
+                >
+                <span class="image-library-status {{ 'is-enabled' if asset.is_enabled else 'is-disabled' }}">
+                  {{ "Đang bật" if asset.is_enabled else "Đã tắt" }}
+                </span>
+                {% if not asset.storage_path %}
+                  <span class="image-library-fallback-badge">Fallback</span>
+                {% endif %}
+              </div>
+              <div class="image-library-card-body">
+                <div class="image-library-card-title">
+                  <code>{{ asset.image_key }}</code>
+                  <button
+                    type="button"
+                    class="image-library-copy"
+                    data-copy-value="{{ url_for('image_library.image_content', image_key=asset.image_key) }}"
+                    aria-label="Sao chép URL của {{ asset.image_key }}"
+                    title="Sao chép URL"
+                  >
+                    <i class="bi bi-copy" aria-hidden="true"></i>
+                  </button>
+                </div>
+                <p>{{ asset.description or "Chưa có mô tả." }}</p>
+                <dl class="image-library-meta">
+                  <div>
+                    <dt>Tệp</dt>
+                    <dd>{{ asset.filename or "Chưa tải lên" }}</dd>
+                  </div>
+                  <div>
+                    <dt>Cập nhật</dt>
+                    <dd>{{ asset.updated_at.strftime("%d/%m/%Y %H:%M") }}</dd>
+                  </div>
+                </dl>
+              </div>
+              <footer class="image-library-card-actions">
+                <a
+                  class="btn btn-sm btn-outline-primary"
+                  href="{{ url_for('image_library.admin_page', edit=asset.id, q=query, status=status, page=page.page) }}"
+                >
+                  <i class="bi bi-pencil" aria-hidden="true"></i>
+                  Chỉnh sửa
+                </a>
+                <form method="post">
+                  <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                  <input type="hidden" name="action" value="toggle">
+                  <input type="hidden" name="asset_id" value="{{ asset.id }}">
+                  <input type="hidden" name="is_enabled" value="{{ '0' if asset.is_enabled else '1' }}">
+                  <input type="hidden" name="return_q" value="{{ query }}">
+                  <input type="hidden" name="return_status" value="{{ status if status != 'all' else '' }}">
+                  <input type="hidden" name="return_page" value="{{ page.page }}">
+                  <button class="btn btn-sm btn-outline-secondary" type="submit">
+                    <i class="bi {{ 'bi-pause-circle' if asset.is_enabled else 'bi-play-circle' }}" aria-hidden="true"></i>
+                    {{ "Tắt" if asset.is_enabled else "Bật" }}
+                  </button>
+                </form>
+              </footer>
+            </article>
+          {% endfor %}
+        </div>
+
+        {% if page.pages > 1 %}
+          <nav class="image-library-pagination" aria-label="Phân trang kho hình ảnh">
+            <span>Trang {{ page.page }} / {{ page.pages }}</span>
+            <div>
+              {% if page.has_prev %}
+                <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('image_library.admin_page', q=query, status=status, page=page.page - 1) }}">
+                  <i class="bi bi-chevron-left" aria-hidden="true"></i>
+                  Trước
+                </a>
+              {% endif %}
+              {% if page.has_next %}
+                <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('image_library.admin_page', q=query, status=status, page=page.page + 1) }}">
+                  Sau
+                  <i class="bi bi-chevron-right" aria-hidden="true"></i>
+                </a>
+              {% endif %}
+            </div>
+          </nav>
+        {% endif %}
+      {% else %}
+        <div class="image-library-empty">
+          <div class="image-library-empty-icon"><i class="bi bi-images" aria-hidden="true"></i></div>
+          <h3>{{ "Không tìm thấy image key phù hợp" if query or status != "all" else "Kho hình ảnh đang trống" }}</h3>
+          <p>
+            {% if query or status != "all" %}
+              Thử đổi từ khóa hoặc bộ lọc trạng thái.
+            {% else %}
+              Tạo image key đầu tiên ở biểu mẫu bên trái. Bạn có thể tải hình ngay hoặc bổ sung sau.
+            {% endif %}
+          </p>
+          {% if query or status != "all" %}
+            <a class="btn btn-outline-secondary" href="{{ url_for('image_library.admin_page') }}">Xóa bộ lọc</a>
+          {% endif %}
+        </div>
+      {% endif %}
+    </main>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/pages/image_library_admin.js') }}"></script>
+{% endblock %}
