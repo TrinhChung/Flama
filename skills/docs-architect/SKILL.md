@@ -28,7 +28,7 @@ Then load task-specific context:
 
 - Flashcards, sharing, overlay installs: `docs/FLASHCARD_V2_RUNBOOK.md`, `docs/CLONE_CUTOVER_REPORT.md`, `app/routes/flashcards/`, `app/services/flashcards_share_service.py`
 - Vocabulary browse and study: `app/routes/vocabulary.py`, `app/repositories/vocabulary_repository.py`, `app/repositories/study_repository.py`, `app/services/anki_scheduler.py`
-- Frontend and components: `docs/COMPONENT_ARCHITECTURE.md`, `templates/base.html`, `templates/components/`, `static/js/`, `static/css/components/`
+- Frontend and components: `frontend/docs/COMPONENT_ARCHITECTURE.md`, `templates/base.html`, `templates/components/`, `static/js/`, `static/css/components/`
 - Admin, TTS, stats, dashboard: `app/routes/main.py`, `app/routes/admin.py`, related service and test files
 - Setup, seeding, and operational workflows: `scripts/setup_github_workspace.sh`, `scripts/setup_new_device.sh`, `scripts/reseed_db.sh`, `scripts/reseed_db.ps1`, `scripts/reseed_db.bat`, `.github/workflows/`
 
@@ -61,7 +61,7 @@ Then load task-specific context:
 
 - Overview and repo shape: `README.md`
 - Local setup and commands: `README_SETUP.md`, `.env_example`, `scripts/`
-- Architecture and boundaries: `docs/SYSTEM_ARCHITECTURE.md`, `docs/COMPONENT_ARCHITECTURE.md`
+- Architecture and boundaries: `docs/SYSTEM_ARCHITECTURE.md`, `frontend/docs/COMPONENT_ARCHITECTURE.md`
 - Flashcard, share, and cutover behavior: `docs/FLASHCARD_V2_RUNBOOK.md`, `docs/CLONE_CUTOVER_REPORT.md`
 - Migrations and schema repair: `migrations/`, `app/__init__.py`, `docs/LEGACY_SCHEMA_MIGRATION_PLAN.md`
 - Scheduler and study behavior: `docs/SCHEDULER_FIX_DOCUMENTATION.md`, related services and repositories

@@ -26,7 +26,7 @@ Then load task-specific context:
 - Flashcards, clone overlay, share, study: `docs/FLASHCARD_V2_RUNBOOK.md`, `docs/CLONE_CUTOVER_REPORT.md`, `app/routes/flashcards/`, `app/services/flashcards_share_service.py`
 - Vocabulary browse and study: `app/routes/vocabulary.py`, `app/repositories/vocabulary_repository.py`, `app/repositories/study_repository.py`, `app/services/anki_scheduler.py`
 - Admin, TTS, stats, dashboard: `app/routes/main.py`, `app/routes/admin.py`, related service and test files
-- UI and component work: `docs/COMPONENT_ARCHITECTURE.md`, `templates/base.html`, `templates/components/`, `static/css/components/`, `static/js/`
+- UI and component work: `frontend/docs/COMPONENT_ARCHITECTURE.md`, `templates/base.html`, `templates/components/`, `static/css/components/`, `static/js/`
 
 ## Workflow
 

@@ -12,8 +12,8 @@
 - Startup and config: `wsgi.py`, `app/__init__.py`, `app/extensions.py`, `app/routes/__init__.py`, `docker-compose.yml`, `README_SETUP.md`
 - Architecture context: `docs/SYSTEM_ARCHITECTURE.md`
 - Flashcard/share/clone work: `docs/FLASHCARD_V2_RUNBOOK.md`, `docs/CLONE_CUTOVER_REPORT.md`
-- UI structure: `docs/COMPONENT_ARCHITECTURE.md`, `templates/base.html`
-- Treat docs as guidance, not automatic ground truth. `README.md`, `docs/COMPONENT_ARCHITECTURE.md`, and parts of `docs/FLASHCARD_V2_RUNBOOK.md` lag the current codebase, so verify behavior in code before encoding agent instructions.
+- UI structure: `frontend/docs/COMPONENT_ARCHITECTURE.md`, `templates/base.html`
+- Treat docs as guidance, not automatic ground truth. `README.md`, `frontend/docs/COMPONENT_ARCHITECTURE.md`, and parts of `docs/FLASHCARD_V2_RUNBOOK.md` lag the current codebase, so verify behavior in code before encoding agent instructions.
 
 ## Runtime Flow
 - `wsgi.py` calls `create_app()`.
