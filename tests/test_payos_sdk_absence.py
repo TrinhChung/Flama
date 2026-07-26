@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import unittest
 from datetime import datetime, timedelta
+from unittest.mock import patch
 
 from app import create_app
+from app.services import payos_client, payout_service
 from app.services.payment.provider import payos_provider
 from models import db
 from models.user import User
@@ -14,6 +16,11 @@ from models.user_role import UserRole
 
 class PayOSSdkAbsenceTests(unittest.TestCase):
     def setUp(self):
+        for module in (payos_client, payout_service):
+            sdk_available_patcher = patch.object(module, "_PAYOS_SDK_AVAILABLE", False)
+            sdk_available_patcher.start()
+            self.addCleanup(sdk_available_patcher.stop)
+
         self.app = create_app(
             {
                 "TESTING": True,

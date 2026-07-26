@@ -53,8 +53,9 @@ class TtsUserProfileApiTests(unittest.TestCase):
             db.session.remove()
             db.drop_all()
 
-    def _login(self, email: str):
-        return self.client.post(
+    def _login(self, email: str, *, client=None):
+        active_client = client or self.client
+        return active_client.post(
             "/login",
             data={"email": email, "password": "password"},
             follow_redirects=True,
@@ -181,10 +182,10 @@ class TtsUserProfileApiTests(unittest.TestCase):
         )
         self.assertEqual(put_response.status_code, 200)
 
-        self.client.get("/logout", follow_redirects=True)
-        self._login("user-b@example.com")
+        user_b_client = self.app.test_client()
+        self._login("user-b@example.com", client=user_b_client)
 
-        get_response = self.client.get(f"/api/tts/providers/{VOICEVOX_PROVIDER_TYPE}/profile")
+        get_response = user_b_client.get(f"/api/tts/providers/{VOICEVOX_PROVIDER_TYPE}/profile")
         self.assertEqual(get_response.status_code, 200)
         get_payload = get_response.get_json()
         self.assertFalse(get_payload["profile"]["has_api_key"])
