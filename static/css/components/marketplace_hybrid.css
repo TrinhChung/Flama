@@ -1952,31 +1952,6 @@ body:has(.market-publish-page) main.container {
   min-height: 0;
 }
 
-.market-card-skeleton--compact {
-  min-height: 12rem;
-  gap: 0.75rem;
-  padding: 1rem;
-  border-color: var(--market-line);
-  box-shadow: none;
-}
-
-.market-card-skeleton--compact span:first-child {
-  width: 42%;
-  height: 1rem;
-}
-
-.market-card-skeleton--compact span:nth-child(2) {
-  width: 78%;
-}
-
-.market-card-skeleton--compact span:nth-child(3) {
-  height: 3rem;
-}
-
-.market-card-skeleton--compact span:nth-child(4) {
-  width: 58%;
-}
-
 /* Note type publishing: one wide form, divided by structure instead of nested cards. */
 body:has(.market-publish-page) {
   background: var(--flama-bg);
@@ -2764,41 +2739,6 @@ body:has(.market-hub-page[data-market-kind="deck_marketplace_item"]) {
   --btn-color: #8e3900;
 }
 
-.market-card-skeleton {
-  display: grid;
-  gap: 0.75rem;
-  min-height: 23rem;
-  padding: 1rem;
-  border: 1px solid #dde4ec;
-  border-radius: 0.9rem;
-  background: #fff;
-}
-
-.market-card-skeleton span {
-  display: block;
-  height: 1rem;
-  border-radius: 0.4rem;
-  background: linear-gradient(90deg, #eef2f6 25%, #f8fafc 50%, #eef2f6 75%);
-  background-size: 200% 100%;
-  animation: market-skeleton 1.4s infinite linear;
-}
-
-.market-card-skeleton span:first-child {
-  height: 10rem;
-}
-
-.market-card-skeleton span:nth-child(2) {
-  width: 74%;
-}
-
-.market-card-skeleton span:nth-child(4) {
-  width: 58%;
-}
-
-@keyframes market-skeleton {
-  to { background-position: -200% 0; }
-}
-
 .market-empty-state--actionable {
   grid-column: 1 / -1;
   padding: 2.4rem 1rem;
@@ -3020,8 +2960,7 @@ body:has(.market-hub-page[data-market-kind="deck_marketplace_item"]) {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .market-hub-page[data-market-kind="deck_marketplace_item"] .market-card,
-  .market-card-skeleton span {
+  .market-hub-page[data-market-kind="deck_marketplace_item"] .market-card {
     transition: none;
     animation: none;
   }

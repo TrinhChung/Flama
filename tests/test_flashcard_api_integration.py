@@ -28,6 +28,7 @@ from models.flashcard import (
 from models.user import User
 from models.deck import Deck
 from models.card_progress import CardProgress
+from sqlalchemy import event
 from sqlalchemy.exc import OperationalError
 
 _MIN_WAV_BYTES = (
@@ -522,6 +523,50 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         deck_html = deck_response.get_data(as_text=True)
         self.assertIn('data-card-layout="visual"', deck_html)
         self.assertIn('id="marketplace-featured-stage"', deck_html)
+
+    def test_shared_note_type_compact_hub_omits_unused_extended_payload(self):
+        note_type = self._create_note_type()
+        with self.app.app_context():
+            db.session.add_all(
+                [
+                    NoteType(
+                        user_id=self.user_id,
+                        name=f"Private compact {index}",
+                        publish_status="private",
+                    )
+                    for index in range(15)
+                ]
+            )
+            db.session.commit()
+            engine = db.engine
+
+        query_count = 0
+
+        def count_query(*_args, **_kwargs):
+            nonlocal query_count
+            query_count += 1
+
+        event.listen(engine, "before_cursor_execute", count_query)
+        try:
+            hub_response = self.client.get("/api/shared/note-types/hub?compact=1")
+        finally:
+            event.remove(engine, "before_cursor_execute", count_query)
+        self.assertEqual(hub_response.status_code, 200)
+        self.assertLessEqual(query_count, 10)
+        hub_payload = hub_response.get_json() or {}
+        marketplace_rows = (hub_payload.get("marketplace") or {}).get("items") or []
+        row = next(item for item in marketplace_rows if item.get("id") == note_type["id"])
+
+        self.assertNotIn("field_defs", row)
+        self.assertNotIn("templates", row)
+        self.assertEqual((hub_payload.get("discovery") or {}).get("recommended"), [])
+        self.assertEqual((hub_payload.get("seller") or {}).get("drafts"), [])
+
+        detail_response = self.client.get(f"/api/shared/note-types/{note_type['id']}")
+        self.assertEqual(detail_response.status_code, 200)
+        detail_payload = detail_response.get_json() or {}
+        self.assertTrue(detail_payload.get("field_defs"))
+        self.assertTrue(detail_payload.get("templates"))
 
     def test_shared_note_type_hub_includes_saved_library_and_detail_extras(self):
         with self.app.app_context():

@@ -89,6 +89,7 @@ def shared_note_types_hub():
     payload = marketplace_hub_service.build_note_type_marketplace_hub(
         user_id=current_user.id,
         filters=filters,
+        compact=request.args.get("compact") == "1",
     )
     return jsonify(payload)
 

@@ -4,6 +4,9 @@ from datetime import datetime, timedelta, timezone
 import re
 from typing import Any
 
+from sqlalchemy import or_
+from sqlalchemy.orm import joinedload
+
 UTC = timezone.utc
 
 from app.services import flashcards_share_service, marketplace_query_service, marketplace_taxonomy_service
@@ -77,16 +80,24 @@ def parse_marketplace_filters(args: Any) -> dict[str, Any]:
     }
 
 
-def build_note_type_marketplace_hub(*, user_id: int, filters: dict[str, Any]) -> dict[str, Any]:
-    visible_items = [
-        item
-        for item in NoteType.query.order_by(NoteType.updated_at.desc()).all()
-        if flashcards_share_service.is_note_type_visible_for_shared(
-            item,
-            user_id=user_id,
-            publish_statuses_visible=VISIBLE_PUBLISH_STATUSES,
+def build_note_type_marketplace_hub(
+    *,
+    user_id: int,
+    filters: dict[str, Any],
+    compact: bool = False,
+) -> dict[str, Any]:
+    visible_items = (
+        NoteType.query.options(joinedload(NoteType.owner))
+        .filter(
+            NoteType.publish_status != "archived",
+            or_(
+                NoteType.user_id == user_id,
+                NoteType.publish_status.in_(tuple(VISIBLE_PUBLISH_STATUSES)),
+            ),
         )
-    ]
+        .order_by(NoteType.updated_at.desc())
+        .all()
+    )
     installs = NoteTypeInstall.query.filter_by(user_id=user_id).all()
     install_map = {row.source_note_type_id: row for row in installs}
     saved_ids = get_saved_item_ids(user_id=user_id, product_type="note_type")
@@ -116,14 +127,41 @@ def build_note_type_marketplace_hub(*, user_id: int, filters: dict[str, Any]) ->
         saved_ids=saved_ids,
         purchase_history=purchase_history,
     )
-    seller_payload = _build_note_type_seller(user_id=user_id)
-    discovery_payload = _build_note_type_discovery(
-        user_id=user_id,
-        visible_items=visible_items,
-        install_map=install_map,
-        saved_ids=saved_ids,
-        pending_owned_ids=pending_owned_ids,
-    )
+    if compact:
+        seller_payload = {
+            "summary": {
+                "total_listings": 0,
+                "published_count": 0,
+                "draft_count": 0,
+                "archived_count": 0,
+                "total_installs": 0,
+                "active_usage_count": 0,
+                "avg_rating": 0.0,
+                "rating_count": 0,
+            },
+            "published": [],
+            "drafts": [],
+            "archived": [],
+            "recent_feedback": [],
+        }
+        discovery_payload = {
+            "hero": None,
+            "recommended": [],
+            "featured": [],
+            "new_releases": [],
+            "best_sellers": [],
+            "top_rated": [],
+            "collections": [],
+        }
+    else:
+        seller_payload = _build_note_type_seller(user_id=user_id)
+        discovery_payload = _build_note_type_discovery(
+            user_id=user_id,
+            visible_items=visible_items,
+            install_map=install_map,
+            saved_ids=saved_ids,
+            pending_owned_ids=pending_owned_ids,
+        )
     return {
         "market_kind": "note_type",
         "filters": filters,
@@ -511,7 +549,10 @@ def _serialize_note_type_card(
     saved_ids: set[str],
     pending_owned_ids: set[str],
 ) -> dict[str, Any]:
-    payload = marketplace_query_service.serialize_note_type_marketplace_card(note_type)
+    payload = marketplace_query_service.serialize_note_type_marketplace_card(
+        note_type,
+        include_definition=False,
+    )
     taxonomy_display = marketplace_taxonomy_service.build_taxonomy_display(
         payload.get("taxonomy_metadata") or {},
         content_type="note_type",
@@ -664,7 +705,11 @@ def _build_note_type_library(
     source_ids = list(install_map.keys()) or [""]
     note_types = {
         item.id: item
-        for item in NoteType.query.filter(NoteType.id.in_(source_ids)).all()
+        for item in (
+            NoteType.query.options(joinedload(NoteType.owner))
+            .filter(NoteType.id.in_(source_ids))
+            .all()
+        )
     }
     using_now: list[dict[str, Any]] = []
     installed: list[dict[str, Any]] = []
@@ -707,7 +752,11 @@ def _build_note_type_library(
             saved_ids=saved_ids,
             pending_owned_ids=not_installed_ids,
         )
-        for item in NoteType.query.filter(NoteType.id.in_(list(not_installed_ids) or [""])).all()
+        for item in (
+            NoteType.query.options(joinedload(NoteType.owner))
+            .filter(NoteType.id.in_(list(not_installed_ids) or [""]))
+            .all()
+        )
     ]
     saved_items = [
         _serialize_note_type_card(
@@ -717,7 +766,11 @@ def _build_note_type_library(
             saved_ids=saved_ids,
             pending_owned_ids=set(),
         )
-        for item in NoteType.query.filter(NoteType.id.in_(list(saved_ids) or [""])).all()
+        for item in (
+            NoteType.query.options(joinedload(NoteType.owner))
+            .filter(NoteType.id.in_(list(saved_ids) or [""]))
+            .all()
+        )
         if item.id not in install_map and item.id not in not_installed_ids and item.user_id != user_id
     ]
     return {
@@ -815,7 +868,8 @@ def _build_deck_library(
 
 def _build_note_type_seller(*, user_id: int) -> dict[str, Any]:
     owned_items = (
-        NoteType.query.filter_by(user_id=user_id)
+        NoteType.query.options(joinedload(NoteType.owner))
+        .filter_by(user_id=user_id)
         .order_by(NoteType.updated_at.desc(), NoteType.created_at.desc())
         .all()
     )
@@ -1055,7 +1109,10 @@ def _build_note_type_collections(
 ) -> list[dict[str, Any]]:
     collections: list[dict[str, Any]] = []
     items_by_id = {item.id: item for item in visible_items}
-    grouped = marketplace_query_service.top_items_by_category_note_types(visible_items)
+    grouped = marketplace_query_service.top_items_by_category_note_types(
+        visible_items,
+        include_definition=False,
+    )
     for title, items in grouped.items():
         rows = []
         for payload in items[:MAX_SHELF_ITEMS]:
@@ -1146,14 +1203,16 @@ def _build_purchase_history(*, user_id: int, product_type: str) -> list[dict[str
 
 
 def _recommended_note_types(*, user_id: int, visible_items: list[NoteType]) -> list[NoteType]:
+    candidate_items = [item for item in visible_items if item.user_id != user_id]
+    if not candidate_items:
+        return []
+
     interests_categories, interests_tags = marketplace_query_service.collect_user_market_interests(user_id)
     cold_start = not interests_categories and not interests_tags
     trending_counts = _note_type_trending_counts()
 
     scored: list[tuple[float, NoteType]] = []
-    for item in visible_items:
-        if item.user_id == user_id:
-            continue
+    for item in candidate_items:
         score = marketplace_query_service.score_market_item(
             item_category=item.primary_category,
             item_tags=item.tags or [],
@@ -1183,7 +1242,7 @@ def _recommended_note_types(*, user_id: int, visible_items: list[NoteType]) -> l
     )
     if ranked:
         return [item for _, item in ranked]
-    return [item for item in _sort_note_types(visible_items, sort_key="popular") if item.user_id != user_id]
+    return _sort_note_types(candidate_items, sort_key="popular")
 
 
 def _recommended_decks(*, user_id: int, visible_items: list[DeckMarketplaceItem]) -> list[DeckMarketplaceItem]:
