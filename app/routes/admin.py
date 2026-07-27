@@ -377,6 +377,8 @@ def user_management_page():
     per_page = admin_service.coerce_int(request.args.get("per_page"), default=DEFAULT_PAGE_SIZE, minimum=1, maximum=MAX_PAGE_SIZE)
     selected_ids = admin_service.parse_user_ids(request.args.get("selected_ids"))
 
+    roles = UserRole.query.order_by(UserRole.position.asc(), UserRole.id.asc()).all()
+
     template_context: dict[str, Any] = {
         "search_term": search_term,
         "status_filter": status_filter,
@@ -385,6 +387,7 @@ def user_management_page():
         "selected_ids": selected_ids,
         "selected_ids_csv": ",".join(str(user_id) for user_id in selected_ids),
         "users": [],
+        "roles": roles,
         "pagination_total": 0,
         "total_pages": 1,
         "has_error": False,

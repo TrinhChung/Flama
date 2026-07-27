@@ -37,6 +37,19 @@ from app.validators.payment_query import (
     parse_order_filters,
     parse_transaction_filters,
 )
+from app.routes.vocabulary import (
+    browse_api_cards,
+    browse_api_card_delete,
+    browse_api_card_detail,
+    browse_api_card_update,
+    browse_api_decks,
+    browse_api_decks_tree,
+    browse_api_notes,
+    browse_api_update_note,
+    browse_api_voicevox_generate,
+    browse_api_voicevox_precheck,
+    browse_api_voicevox_preview,
+)
 from models import db
 from models.deck import Deck
 from models.user import User
@@ -886,3 +899,71 @@ def delete_mcp_token(token_id: int):
         db.session.rollback()
         return _error("DB_ERROR", "Could not revoke the MCP token.", status=500)
     return "", 204
+
+
+@rest_api_bp.get("/browse/decks/tree")
+@login_required
+def rest_browse_decks_tree():
+    return browse_api_decks_tree()
+
+
+@rest_api_bp.get("/browse/decks")
+@login_required
+def rest_browse_decks():
+    return browse_api_decks()
+
+
+@rest_api_bp.get("/browse/cards")
+@login_required
+def rest_browse_cards():
+    return browse_api_cards()
+
+
+@rest_api_bp.get("/browse/cards/<card_id>")
+@login_required
+def rest_browse_card_detail(card_id: str):
+    return browse_api_card_detail(card_id)
+
+
+@rest_api_bp.patch("/browse/cards/<card_id>")
+@login_required
+def rest_browse_card_update(card_id: str):
+    return browse_api_card_update(card_id)
+
+
+@rest_api_bp.delete("/browse/cards/<card_id>")
+@login_required
+def rest_browse_card_delete(card_id: str):
+    return browse_api_card_delete(card_id)
+
+
+@rest_api_bp.get("/browse/notes")
+@login_required
+def rest_browse_notes():
+    return browse_api_notes()
+
+
+@rest_api_bp.patch("/browse/notes/<note_id>")
+@login_required
+def rest_browse_update_note(note_id: str):
+    return browse_api_update_note(note_id)
+
+
+@rest_api_bp.post("/browse/voicevox/preview")
+@login_required
+def rest_browse_voicevox_preview():
+    return browse_api_voicevox_preview()
+
+
+@rest_api_bp.post("/browse/voicevox/precheck")
+@login_required
+def rest_browse_voicevox_precheck():
+    return browse_api_voicevox_precheck()
+
+
+@rest_api_bp.post("/browse/voicevox/generate")
+@login_required
+def rest_browse_voicevox_generate():
+    return browse_api_voicevox_generate()
+
+

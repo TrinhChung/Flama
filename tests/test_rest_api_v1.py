@@ -349,6 +349,26 @@ class RestApiV1Tests(unittest.TestCase):
         self.assertEqual(update_response.status_code, 200)
         self.assertTrue(update_response.get_json()["item"]["is_disabled"])
 
+    def test_browse_rest_api_v1_endpoints(self):
+        self._login_admin()
+
+        decks_response = self.client.get("/api/v1/browse/decks")
+        self.assertEqual(decks_response.status_code, 200)
+        decks_data = decks_response.get_json()
+        self.assertIn("decks", decks_data)
+        self.assertIn("tree", decks_data)
+
+        tree_response = self.client.get("/api/v1/browse/decks/tree")
+        self.assertEqual(tree_response.status_code, 200)
+        self.assertIn("tree", tree_response.get_json())
+
+        cards_response = self.client.get("/api/v1/browse/cards?status=all&sort_by=due&sort_dir=asc&page=1&per_page=50")
+        self.assertEqual(cards_response.status_code, 200)
+        cards_data = cards_response.get_json()
+        self.assertIn("items", cards_data)
+        self.assertIn("total", cards_data)
+
 
 if __name__ == "__main__":
     unittest.main()
+

@@ -193,6 +193,14 @@ export function AppLayout() {
     return <PublicLayout bootstrap={bootstrap} />
   }
 
+  if (location.pathname === '/study' || location.pathname === '/browse') {
+    return (
+      <main className="h-screen h-[100dvh] w-full overflow-hidden bg-background text-foreground">
+        <Outlet />
+      </main>
+    )
+  }
+
   const title = pageTitles[location.pathname] || 'Flama'
 
   return (
