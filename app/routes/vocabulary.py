@@ -157,7 +157,8 @@ def index():
 @login_required
 def browse():
     """Anki-like browser interface."""
-    return render_template("vocabulary_browse.html")
+    from app.spa import serve_react_spa
+    return serve_react_spa()
 
 
 

@@ -40,32 +40,26 @@ from app.validators import (
 
 
 
+@flashcards_bp.route("/note-types")
 @flashcards_bp.route("/flashcards/note-types")
 @login_required
 def note_type_manager():
-    note_types = (
-        NoteType.query.filter_by(user_id=current_user.id)
-        .order_by(NoteType.updated_at.desc(), NoteType.created_at.desc())
-        .all()
-    )
-    return render_template("flashcards/note_types.html", note_types=note_types)
+    from app.spa import serve_react_spa
+    return serve_react_spa()
 
+@flashcards_bp.route("/note-types/<note_type_id>")
 @flashcards_bp.route("/flashcards/note-types/<note_type_id>")
 @login_required
 def note_type_detail_page(note_type_id: str):
-    note_type = _get_note_type_or_404(note_type_id)
-    if not note_type:
-        return redirect(url_for("flashcards.note_type_manager"))
-    notes = Note.query.filter_by(note_type_id=note_type_id, user_id=current_user.id).order_by(Note.created_at.desc()).limit(30).all()
-    return render_template("flashcards/note_type_detail.html", note_type=note_type, notes=notes)
+    from app.spa import serve_react_spa
+    return serve_react_spa()
 
+@flashcards_bp.route("/note-types/<note_type_id>/fields")
 @flashcards_bp.route("/flashcards/note-types/<note_type_id>/fields")
 @login_required
 def note_type_fields_page(note_type_id: str):
-    note_type = _get_note_type_or_404(note_type_id)
-    if not note_type:
-        return redirect(url_for("flashcards.note_type_manager"))
-    return render_template("flashcards/note_type_fields.html", note_type=note_type)
+    from app.spa import serve_react_spa
+    return serve_react_spa()
 
 @flashcards_bp.route("/flashcards/notes/new")
 @login_required

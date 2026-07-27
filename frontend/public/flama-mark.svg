@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">Flama</title>
+  <defs>
+    <linearGradient id="flame" x1="10" y1="54" x2="51" y2="6" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ef3303"/>
+      <stop offset=".58" stop-color="#fe6808"/>
+      <stop offset="1" stop-color="#fea00e"/>
+    </linearGradient>
+  </defs>
+  <path fill="url(#flame)" d="M35 3c3 12-8 15-5 26 1-7-5-10-5-16C14 23 8 32 10 43c2 12 12 18 23 18 13 0 23-9 23-22 0-9-5-18-14-25 1 9-3 13-6 17 2-11 1-18-1-28Z"/>
+  <path fill="#fff4ec" d="M33 57c-7 0-12-5-12-12 0-6 4-10 9-15-1 7 5 9 4 15 3-4 5-8 4-14 5 4 8 9 8 15 0 7-6 11-13 11Z" opacity=".94"/>
+</svg>

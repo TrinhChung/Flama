@@ -52,6 +52,13 @@ def _support_api_error(error: str, message: str, *, status: int = 400, field: st
     return jsonify(payload), status
 
 
+@main_bp.route("/assets/<path:filename>")
+def serve_react_assets(filename: str):
+    from app.spa import serve_react_spa_assets
+    return serve_react_spa_assets(filename)
+
+
+
 def _render_dashboard_page():
     from app.services.dashboard_service import build_dashboard_data
 
@@ -107,17 +114,8 @@ def cookies():
 
 @main_bp.route("/support-donation")
 def support_donation_page():
-    row = support_donation_service.get_latest_config()
-    return render_template(
-        "support_donation.html",
-        donation_config=row,
-        default_support_title=support_donation_service.DEFAULT_TITLE,
-        default_support_description=support_donation_service.DEFAULT_DESCRIPTION,
-        default_thank_you_message=support_donation_service.DEFAULT_THANK_YOU,
-        support_donation_min_amount=MIN_DONATION_AMOUNT_MINOR,
-        support_donation_max_amount=MAX_DONATION_AMOUNT_MINOR,
-        support_donation_suggested_amounts=support_donation_service.get_suggested_amounts(),
-    )
+    from app.spa import serve_react_spa
+    return serve_react_spa()
 
 
 @main_bp.route("/support-donation/result")
@@ -224,7 +222,8 @@ def support_donation_checkout_status_api():
 @main_bp.route("/dashboard")
 @login_required
 def dashboard():
-    return _render_dashboard_page()
+    from app.spa import serve_react_spa
+    return serve_react_spa()
 
 
 @main_bp.route("/settings/mcp-tokens", methods=["GET"])
