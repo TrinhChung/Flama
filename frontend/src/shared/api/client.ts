@@ -23,6 +23,12 @@ export function setCsrfToken(token: string) {
   meta?.setAttribute('content', token)
 }
 
+export function getCsrfToken(): string {
+  if (csrfToken) return csrfToken
+  const meta = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')
+  return meta?.getAttribute('content') || ''
+}
+
 function isUnsafeMethod(method: string) {
   return !['GET', 'HEAD', 'OPTIONS', 'TRACE'].includes(method.toUpperCase())
 }
@@ -35,12 +41,20 @@ export async function apiRequest<T>(
   const headers = new Headers(init.headers)
   headers.set('Accept', 'application/json')
 
-  if (isUnsafeMethod(method) && csrfToken) {
-    headers.set('X-CSRF-Token', csrfToken)
+  const effectiveCsrfToken = getCsrfToken()
+  if (isUnsafeMethod(method) && effectiveCsrfToken) {
+    headers.set('X-CSRF-Token', effectiveCsrfToken)
+    headers.set('X-CSRFToken', effectiveCsrfToken)
   }
   if (init.body && !(init.body instanceof FormData) && !(init.body instanceof URLSearchParams)) {
     headers.set('Content-Type', 'application/json')
   }
+  if (init.body instanceof FormData && effectiveCsrfToken) {
+    if (!init.body.has('_csrf_token') && !init.body.has('csrf_token')) {
+      init.body.append('csrf_token', effectiveCsrfToken)
+    }
+  }
+
 
   const response = await fetch(url, {
     ...init,

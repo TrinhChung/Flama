@@ -13,6 +13,12 @@ export type FutureDuePoint = {
   day_offset: number
   due_count: number
   cumulative: number
+  breakdown?: {
+    new: number
+    learn: number
+    review: number
+    relearn: number
+  }
 }
 
 export type TodayFutureStats = {

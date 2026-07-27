@@ -3415,6 +3415,15 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         self.assertIn("Bước D - Rà soát & thực thi", html)
         self.assertIn("previewSelectAllInput", html)
 
+    def test_flashcard_import_options_returns_options_json(self):
+        response = self.client.get("/api/flashcards/import/options")
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json() or {}
+        self.assertIn("deck_options", data)
+        self.assertIn("note_type_options", data)
+        self.assertIn("uniqueness_defaults", data)
+
+
     def test_shared_note_type_rate_is_limited_to_two_submissions_per_user(self):
         with self.app.app_context():
             owner = User(username="nt-owner", email="nt-owner@example.com", is_admin=False)

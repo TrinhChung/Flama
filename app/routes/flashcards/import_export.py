@@ -442,6 +442,71 @@ def flashcard_import_page():
         uniqueness_defaults=uniqueness_defaults,
     )
 
+
+@flashcards_bp.route("/api/flashcards/import/options")
+@login_required
+def flashcard_import_options():
+    decks = _collect_accessible_decks_for_import()
+    deck_map = {deck.id: deck for deck in decks}
+    deck_options = [
+        {
+            "id": deck.id,
+            "name": deck.name,
+            "path": _deck_path_label(deck, deck_map),
+            "note_type_id": deck.note_type_id,
+            "parent_id": deck.parent_id,
+        }
+        for deck in decks
+    ]
+
+    selected_deck_id: int | None = None
+    selected_deck_raw = (request.args.get("deck_id") or "").strip()
+    if selected_deck_raw:
+        try:
+            candidate = int(selected_deck_raw)
+            if candidate in deck_map:
+                selected_deck_id = candidate
+        except (TypeError, ValueError):
+            selected_deck_id = None
+    if selected_deck_id is None and deck_options:
+        selected_deck_id = int(deck_options[0]["id"])
+
+    note_types = (
+        NoteType.query.filter_by(user_id=current_user.id)
+        .order_by(NoteType.name.asc(), NoteType.updated_at.desc())
+        .all()
+    )
+    note_type_options = [_serialize_note_type_for_import(note_type) for note_type in note_types]
+    note_type_map = {item["id"]: item for item in note_type_options}
+
+    selected_note_type_id = (request.args.get("note_type_id") or "").strip() or None
+    if selected_note_type_id and selected_note_type_id not in note_type_map:
+        selected_note_type_id = None
+
+    if selected_note_type_id is None and selected_deck_id is not None:
+        inferred = _infer_default_note_type_id_for_deck(selected_deck_id)
+        if inferred and inferred in note_type_map:
+            selected_note_type_id = inferred
+
+    if selected_note_type_id is None and note_type_options:
+        selected_note_type_id = note_type_options[0]["id"]
+
+    uniqueness_defaults = {
+        note_type.id: _default_uniqueness_fields(note_type)
+        for note_type in note_types
+    }
+
+    return jsonify(
+        {
+            "deck_options": deck_options,
+            "note_type_options": note_type_options,
+            "initial_deck_id": selected_deck_id,
+            "initial_note_type_id": selected_note_type_id,
+            "uniqueness_defaults": uniqueness_defaults,
+        }
+    )
+
+
 @flashcards_bp.route("/api/flashcards/import/parse", methods=["POST"])
 @login_required
 def flashcard_import_parse():

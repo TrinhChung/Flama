@@ -42,6 +42,7 @@ const links: FrontendLinks = {
   study: '/study',
   note_types: '/note-types',
   installed_decks: '/installed-decks',
+  flashcard_import: '/flashcards/import',
   shared_decks: '/marketplace/decks',
   shared_note_types: '/marketplace/note-types',
   orders: '/orders',

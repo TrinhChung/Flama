@@ -56,6 +56,12 @@ const InstalledDecksPage = lazy(() =>
     default: module.InstalledDecksPage,
   })),
 )
+const ImportPage = lazy(() =>
+  import('./features/import/pages/ImportPage').then((module) => ({
+    default: module.ImportPage,
+  })),
+)
+
 const SharedDecksPage = lazy(() =>
   import('./features/marketplace/pages/MarketplacePages').then((module) => ({
     default: module.SharedDecksPage,
@@ -165,6 +171,15 @@ const router = createBrowserRouter([
             path: 'installed-decks',
             element: deferred(<InstalledDecksPage />),
           },
+          {
+            path: 'flashcards/import',
+            element: deferred(<ImportPage />),
+          },
+          {
+            path: 'import',
+            element: deferred(<ImportPage />),
+          },
+
           {
             path: 'marketplace/decks',
             element: deferred(<SharedDecksPage />),

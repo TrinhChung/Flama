@@ -26,6 +26,7 @@ export type FrontendLinks = {
   study: string
   note_types: string
   installed_decks: string
+  flashcard_import?: string | null
   shared_decks: string
   shared_note_types: string
   orders: string
