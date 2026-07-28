@@ -62,6 +62,12 @@ class RestApiV1Tests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         return response
 
+    def test_health_reports_application_and_database_readiness(self):
+        response = self.client.get("/api/health")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json(), {"status": "ok"})
+
     def test_session_bootstrap_and_api_auth_failure_are_json(self):
         session_response = self.client.get("/api/session")
         self.assertEqual(session_response.status_code, 200)

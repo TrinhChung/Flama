@@ -13,12 +13,14 @@ from .admin import admin_bp
 from .billing import billing_bp
 from .decks import decks_bp
 from .flashcards import flashcards_v1_bp
+from .health import health_bp
 from .identity import identity_bp
 from .learning import learning_bp
 from .marketplace import marketplace_installations_bp
 from .settings import settings_bp
 
 api_v1_bp = Blueprint("api_v1", __name__, url_prefix="/api")
+api_v1_bp.register_blueprint(health_bp)
 api_v1_bp.register_blueprint(identity_bp)
 api_v1_bp.register_blueprint(decks_bp, url_prefix="/decks")
 api_v1_bp.register_blueprint(flashcards_v1_bp)
