@@ -26,6 +26,10 @@ export default defineConfig(({ mode }) => {
           target: flaskOrigin,
           changeOrigin: false,
         },
+        '/static': {
+          target: flaskOrigin,
+          changeOrigin: false,
+        },
         '/support-donation': {
           target: flaskOrigin,
           changeOrigin: false,

@@ -1,0 +1,296 @@
+"""Application service for versioned deck mutations."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any
+
+from sqlalchemy.exc import SQLAlchemyError
+
+from app.repositories import vocabulary_repository
+from app.services import deck_management_service
+from models import db
+from models.deck import Deck
+
+
+class DeckApiError(RuntimeError):
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        *,
+        status: int,
+        field: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.code = code
+        self.status = status
+        self.field = field
+
+
+@dataclass(frozen=True)
+class DeckCreateResult:
+    created_count: int
+    created_names: list[str]
+    path_tokens: list[str]
+    final_deck: Deck | None
+
+
+@dataclass(frozen=True)
+class DeckUpdateResult:
+    changed: bool
+    deck: Deck
+
+
+def create_deck(
+    *,
+    payload: dict[str, Any],
+    user_id: int,
+    admin_mode: bool,
+) -> DeckCreateResult:
+    parent_id_raw = str(payload.get("parent_id") or "").strip()
+    deck_path_raw = str(
+        payload.get("path") or payload.get("deck_path") or ""
+    ).strip()
+    deck_name = str(payload.get("name") or "").strip() or "New Deck"
+
+    parent_resolution = vocabulary_repository.resolve_create_deck_parent(
+        parent_id_raw=parent_id_raw,
+        user_id=user_id,
+        admin_mode=admin_mode,
+    )
+    if parent_resolution.error:
+        raise DeckApiError(
+            "VALIDATION_ERROR",
+            parent_resolution.error,
+            status=400,
+            field="parent_id",
+        )
+
+    path_tokens = vocabulary_repository.parse_create_deck_tokens(
+        deck_path_raw=deck_path_raw,
+        fallback_name=deck_name,
+    )
+    path_tokens = vocabulary_repository.normalize_create_deck_tokens_for_parent(
+        path_tokens=path_tokens,
+        parent_path_tokens=vocabulary_repository.deck_name_path_tokens(
+            parent_resolution.parent_deck
+        ),
+        fallback_name=deck_name,
+    )
+    try:
+        result = vocabulary_repository.upsert_deck_path(
+            parent_id=parent_resolution.parent_id,
+            path_tokens=path_tokens,
+            owner_user_id=user_id,
+            admin_mode=admin_mode,
+        )
+        db.session.commit()
+    except SQLAlchemyError as exc:
+        db.session.rollback()
+        raise DeckApiError(
+            "DB_ERROR",
+            "Could not create the deck.",
+            status=500,
+        ) from exc
+    return DeckCreateResult(
+        created_count=int(result.created_count),
+        created_names=list(result.created_names),
+        path_tokens=list(result.path_tokens),
+        final_deck=result.final_deck,
+    )
+
+
+def update_deck(
+    *,
+    deck_id: int,
+    payload: dict[str, Any],
+) -> DeckUpdateResult:
+    deck = db.session.get(Deck, deck_id)
+    if deck is None or deck.deleted_at is not None:
+        raise DeckApiError(
+            "NOT_FOUND",
+            "Deck not found.",
+            status=404,
+        )
+
+    changed = False
+    if "name" in payload:
+        new_name = str(payload.get("name") or "").strip()
+        if not new_name:
+            raise DeckApiError(
+                "VALIDATION_ERROR",
+                "Deck name is required.",
+                status=400,
+                field="name",
+            )
+        if vocabulary_repository.deck_name_exists_under_parent(
+            parent_id=deck.parent_id,
+            name=new_name,
+            exclude_deck_id=deck.id,
+        ):
+            raise DeckApiError(
+                "CONFLICT",
+                "A deck with this name already exists at the selected level.",
+                status=409,
+                field="name",
+            )
+        if new_name != deck.name:
+            deck.name = new_name
+            changed = True
+
+    if "parent_id" in payload:
+        new_parent_id = _parse_parent_id(payload.get("parent_id"))
+        new_parent = (
+            db.session.get(Deck, new_parent_id) if new_parent_id else None
+        )
+        if new_parent_id is not None and (
+            new_parent is None or new_parent.deleted_at is not None
+        ):
+            raise DeckApiError(
+                "NOT_FOUND",
+                "Parent deck not found.",
+                status=404,
+            )
+
+        cursor = new_parent
+        while cursor is not None:
+            if cursor.id == deck.id:
+                raise DeckApiError(
+                    "VALIDATION_ERROR",
+                    "A deck cannot be moved into itself or its descendants.",
+                    status=400,
+                    field="parent_id",
+                )
+            cursor = cursor.parent
+
+        if vocabulary_repository.deck_name_exists_under_parent(
+            parent_id=new_parent_id,
+            name=deck.name,
+            exclude_deck_id=deck.id,
+        ):
+            raise DeckApiError(
+                "CONFLICT",
+                "The destination already contains a deck with this name.",
+                status=409,
+                field="parent_id",
+            )
+        if deck.parent_id != new_parent_id:
+            deck.parent_id = new_parent_id
+            deck.position = vocabulary_repository.next_deck_position(
+                new_parent_id
+            )
+            changed = True
+
+    if not changed:
+        return DeckUpdateResult(changed=False, deck=deck)
+    try:
+        db.session.commit()
+    except SQLAlchemyError as exc:
+        db.session.rollback()
+        raise DeckApiError(
+            "DB_ERROR",
+            "Could not update the deck.",
+            status=500,
+        ) from exc
+    return DeckUpdateResult(changed=True, deck=deck)
+
+
+def delete_deck(
+    *,
+    deck_id: int,
+    user_id: int,
+    admin_mode: bool,
+) -> str:
+    deck = _owned_deck_or_error(
+        deck_id=deck_id,
+        user_id=user_id,
+        admin_mode=admin_mode,
+        action="delete",
+    )
+    try:
+        return deck_management_service.delete_deck_subtree(
+            deck_obj=deck,
+            user_id=user_id,
+            is_admin=admin_mode,
+        )
+    except SQLAlchemyError as exc:
+        db.session.rollback()
+        raise DeckApiError(
+            "DB_ERROR",
+            "Could not delete the deck.",
+            status=500,
+        ) from exc
+
+
+def reset_deck_progress(
+    *,
+    deck_id: int,
+    user_id: int,
+    admin_mode: bool,
+) -> int:
+    deck = _owned_deck_or_error(
+        deck_id=deck_id,
+        user_id=user_id,
+        admin_mode=admin_mode,
+        action="reset",
+    )
+    try:
+        return int(
+            deck_management_service.reset_deck_progress(
+                deck_obj=deck,
+                user_id=user_id,
+            )
+        )
+    except SQLAlchemyError as exc:
+        db.session.rollback()
+        raise DeckApiError(
+            "DB_ERROR",
+            "Could not reset deck progress.",
+            status=500,
+        ) from exc
+
+
+def _parse_parent_id(raw_parent_id: Any) -> int | None:
+    if raw_parent_id in (None, ""):
+        return None
+    try:
+        return int(raw_parent_id)
+    except (TypeError, ValueError) as exc:
+        raise DeckApiError(
+            "VALIDATION_ERROR",
+            "parent_id must be an integer or null.",
+            status=400,
+            field="parent_id",
+        ) from exc
+
+
+def _owned_deck_or_error(
+    *,
+    deck_id: int,
+    user_id: int,
+    admin_mode: bool,
+    action: str,
+) -> Deck:
+    deck = db.session.get(Deck, deck_id)
+    if deck is None or deck.deleted_at is not None:
+        raise DeckApiError(
+            "NOT_FOUND",
+            "Deck not found.",
+            status=404,
+        )
+    permitted = bool(
+        admin_mode
+        or deck.owner_user_id == user_id
+        or vocabulary_repository.can_user_delete_cloned_deck(
+            deck_obj=deck,
+            user_id=user_id,
+        )
+    )
+    if not permitted:
+        raise DeckApiError(
+            "FORBIDDEN",
+            f"You cannot {action} this deck.",
+            status=403,
+        )
+    return deck

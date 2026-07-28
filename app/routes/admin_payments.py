@@ -32,13 +32,8 @@ def dashboard_page():
     guard = _ensure_admin_access()
     if guard is not None:
         return guard
-    filters = parse_dashboard_filters(request.args)
-    payload = dashboard_service.build_admin_dashboard(filters=filters)
-    return render_template(
-        "admin/payment/dashboard.html",
-        dashboard=payload,
-        filters=filters,
-    )
+    from app.spa import serve_react_spa
+    return serve_react_spa()
 
 
 @admin_payments_bp.route("/orders", methods=["GET"])

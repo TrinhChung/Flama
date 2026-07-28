@@ -1,6 +1,7 @@
 import { useEffect, useState, type ChangeEvent } from 'react'
 import { appApi } from '@/app/api'
 import { Button } from '@/components/ui/button'
+import { apiRequest } from '@/shared/api/client'
 
 type FieldDef = {
   name: string
@@ -247,14 +248,10 @@ export function EditCardModal({
       const isMarkdown = (fieldDefs.find((f) => f.name === fieldName)?.field_type || '').toLowerCase() === 'markdown'
       const endpoint = isMarkdown ? `/api/notes/${encodeURIComponent(noteId)}/markdown-media` : `/api/notes/${encodeURIComponent(noteId)}/media`
 
-      const response = await fetch(endpoint, {
+      const payload = await apiRequest<{ url?: string; asset_id?: string }>(endpoint, {
         method: 'POST',
         body: formData,
       })
-      const payload = await response.json().catch(() => ({}))
-      if (!response.ok) {
-        throw new Error(payload.message || payload.error || 'Upload media thất bại.')
-      }
       const url = payload.url || payload.asset_id || ''
       if (isMarkdown) {
         const markdownSnippet = `\n![${file.name}](${url})\n`

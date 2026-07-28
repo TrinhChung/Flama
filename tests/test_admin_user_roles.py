@@ -182,6 +182,30 @@ class AdminUserRoleTests(unittest.TestCase):
             user = User.query.get(self.normal_id)
             self.assertTrue(user.is_disabled)
 
+    def test_v1_batch_resources_are_canonical_and_json_guarded(self):
+        unauthenticated = self._post_json(
+            "/api/v1/admin/users/status/batch",
+            {"user_ids": [self.normal_id], "action": "disable"},
+        )
+        self.assertEqual(unauthenticated.status_code, 401)
+        self.assertEqual(
+            unauthenticated.get_json()["error"],
+            "AUTHENTICATION_REQUIRED",
+        )
+
+        self._login("admin@example.com")
+        response = self._post_json(
+            "/api/v1/admin/users/status/batch",
+            {"user_ids": [self.normal_id], "action": "disable"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["success_count"], 1)
+
+        with self.app.app_context():
+            user = db.session.get(User, self.normal_id)
+            self.assertIsNotNone(user)
+            self.assertTrue(user.is_disabled)
+
     def test_disabled_user_cannot_login(self):
         with self.app.app_context():
             user = User.query.get(self.normal_id)

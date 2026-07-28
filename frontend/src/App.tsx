@@ -146,6 +146,10 @@ const router = createBrowserRouter([
       { path: 'login', element: deferred(<LoginPage />) },
       { path: 'register', element: deferred(<RegisterPage />) },
       { path: 'support', element: deferred(<SupportPage />) },
+      {
+        path: 'support-donation',
+        element: <Navigate to="/support" replace />,
+      },
       { path: 'terms', element: deferred(<TermsPage />) },
       { path: 'privacy', element: deferred(<PrivacyPage />) },
       { path: 'cookies', element: deferred(<CookiesPage />) },
@@ -155,7 +159,15 @@ const router = createBrowserRouter([
           { path: 'dashboard', element: deferred(<DashboardPage />) },
           { path: 'statistics', element: deferred(<StatisticsPage />) },
           { path: 'browse', element: deferred(<BrowsePage />) },
+          {
+            path: 'vocabulary/browse',
+            element: <Navigate to="/browse" replace />,
+          },
           { path: 'study', element: deferred(<StudyPage />) },
+          {
+            path: 'flashcards/study',
+            element: <Navigate to="/study" replace />,
+          },
           { path: 'note-types', element: deferred(<NoteTypeManagerPage />) },
           {
             path: 'note-types/:id',
@@ -180,6 +192,10 @@ const router = createBrowserRouter([
           {
             path: 'installed-decks',
             element: deferred(<InstalledDecksPage />),
+          },
+          {
+            path: 'flashcards/installed-decks',
+            element: <Navigate to="/installed-decks" replace />,
           },
           {
             path: 'flashcards/import',

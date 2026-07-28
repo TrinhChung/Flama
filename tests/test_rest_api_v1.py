@@ -368,7 +368,26 @@ class RestApiV1Tests(unittest.TestCase):
         self.assertIn("items", cards_data)
         self.assertIn("total", cards_data)
 
+    def test_browse_voicevox_precheck_matches_legacy_adapter(self):
+        self._login_admin()
+        payload = {
+            "card_ids": [],
+            "destination_field": "Audio",
+        }
+
+        legacy_response = self.client.post(
+            "/vocabulary/api/browse/voicevox/precheck",
+            json=payload,
+        )
+        v1_response = self.client.post(
+            "/api/v1/browse/voicevox/precheck",
+            json=payload,
+        )
+
+        self.assertEqual(legacy_response.status_code, 200)
+        self.assertEqual(v1_response.status_code, 200)
+        self.assertEqual(v1_response.get_json(), legacy_response.get_json())
+
 
 if __name__ == "__main__":
     unittest.main()
-

@@ -33,13 +33,14 @@ function isUnsafeMethod(method: string) {
   return !['GET', 'HEAD', 'OPTIONS', 'TRACE'].includes(method.toUpperCase())
 }
 
-export async function apiRequest<T>(
+async function apiFetch(
   url: string,
   init: RequestInit = {},
-): Promise<T> {
+  accept = 'application/json',
+): Promise<Response> {
   const method = String(init.method || 'GET').toUpperCase()
   const headers = new Headers(init.headers)
-  headers.set('Accept', 'application/json')
+  headers.set('Accept', accept)
 
   const effectiveCsrfToken = getCsrfToken()
   if (isUnsafeMethod(method) && effectiveCsrfToken) {
@@ -67,20 +68,42 @@ export async function apiRequest<T>(
     throw new ApiError('Phiên đăng nhập đã hết hạn.', 401, 'AUTH_REQUIRED')
   }
 
-  const contentType = response.headers.get('content-type') || ''
-  const payload = contentType.includes('application/json')
-    ? ((await response.json()) as T & ErrorPayload)
-    : null
-
   if (!response.ok) {
+    const contentType = response.headers.get('content-type') || ''
+    const payload = contentType.includes('application/json')
+      ? ((await response.json()) as ErrorPayload)
+      : null
     throw new ApiError(
-      payload?.message || `Request failed with status ${response.status}.`,
+      payload?.message ||
+        payload?.error ||
+        `Request failed with status ${response.status}.`,
       response.status,
       payload?.error,
     )
   }
 
+  return response
+}
+
+export async function apiRequest<T>(
+  url: string,
+  init: RequestInit = {},
+): Promise<T> {
+  const response = await apiFetch(url, init)
+  const contentType = response.headers.get('content-type') || ''
+  const payload = contentType.includes('application/json')
+    ? ((await response.json()) as T)
+    : null
+
   return payload as T
+}
+
+export async function apiBlob(
+  url: string,
+  init: RequestInit = {},
+): Promise<Blob> {
+  const response = await apiFetch(url, init, 'audio/*, application/json')
+  return response.blob()
 }
 
 export async function apiJson<T>(

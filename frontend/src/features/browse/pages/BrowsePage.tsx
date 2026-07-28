@@ -27,6 +27,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { appApi } from '@/app/api'
+import { apiBlob } from '@/shared/api/client'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -400,9 +401,8 @@ export function BrowsePage() {
     const previewText = cards[0]?.word || cards[0]?.reading || 'こんにちは'
     setIsPreviewing(true)
     try {
-      const response = await fetch('/api/v1/browse/voicevox/preview', {
+      const blob = await apiBlob('/api/v1/browse/voicevox/preview', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           text: previewText,
           character_id: ttsCharacter || undefined,
@@ -418,13 +418,6 @@ export function BrowsePage() {
           },
         }),
       })
-
-      if (!response.ok) {
-        const errJson = (await response.json().catch(() => ({}))) as { error?: string }
-        throw new Error(errJson.error || 'Không thể tạo bản nghe thử.')
-      }
-
-      const blob = await response.blob()
       const url = URL.createObjectURL(blob)
 
       if (audioPlayerRef.current) {

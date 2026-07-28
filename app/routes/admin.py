@@ -366,47 +366,8 @@ def user_management_page():
     guard = _ensure_admin_access()
     if guard is not None:
         return guard
-
-    try:
-        search_term = sanitize_query_text(request.args.get("q"), field_name="q", max_length=120)
-    except RequestValidationError:
-        search_term = ""
-        flash("Invalid search query detected and ignored.", "warning")
-    status_filter = admin_service.normalize_status_filter(request.args.get("status"))
-    page = admin_service.coerce_int(request.args.get("page"), default=1, minimum=1)
-    per_page = admin_service.coerce_int(request.args.get("per_page"), default=DEFAULT_PAGE_SIZE, minimum=1, maximum=MAX_PAGE_SIZE)
-    selected_ids = admin_service.parse_user_ids(request.args.get("selected_ids"))
-
-    roles = UserRole.query.order_by(UserRole.position.asc(), UserRole.id.asc()).all()
-
-    template_context: dict[str, Any] = {
-        "search_term": search_term,
-        "status_filter": status_filter,
-        "page": page,
-        "per_page": per_page,
-        "selected_ids": selected_ids,
-        "selected_ids_csv": ",".join(str(user_id) for user_id in selected_ids),
-        "users": [],
-        "roles": roles,
-        "pagination_total": 0,
-        "total_pages": 1,
-        "has_error": False,
-        "error_message": "",
-        **admin_service.load_user_summary(),
-    }
-
-    try:
-        query = admin_service.build_users_query(search_term=search_term, status_filter=status_filter)
-        pagination = query.paginate(page=page, per_page=per_page, error_out=False)
-        template_context["users"] = pagination.items
-        template_context["pagination_total"] = pagination.total
-        template_context["total_pages"] = max(pagination.pages, 1)
-        template_context["page"] = pagination.page
-    except SQLAlchemyError:
-        template_context["has_error"] = True
-        template_context["error_message"] = "Khong the tai danh sach nguoi dung. Vui long thu lai."
-
-    return render_template("admin/users.html", **template_context)
+    from app.spa import serve_react_spa
+    return serve_react_spa()
 
 
 @admin_bp.route("/users/permissions", methods=["GET"])

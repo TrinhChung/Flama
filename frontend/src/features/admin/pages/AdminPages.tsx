@@ -250,7 +250,7 @@ export function AdminUsersPage() {
   const batchStatusMutation = useMutation({
     mutationFn: ({ ids, action }: { ids: number[]; action: 'activate' | 'disable' }) =>
       appApi.mutate<{ success_count?: number; fail_count?: number }>(
-        '/admin/api/users/status/batch',
+        '/admin/users/status/batch',
         'POST',
         { user_ids: ids, action },
       ),
@@ -267,7 +267,7 @@ export function AdminUsersPage() {
   const batchRoleMutation = useMutation({
     mutationFn: ({ ids, targetRoleId }: { ids: number[]; targetRoleId: number }) =>
       appApi.mutate<{ success_count?: number; fail_count?: number }>(
-        '/admin/api/users/roles/batch',
+        '/admin/users/roles/batch',
         'POST',
         { user_ids: ids, target_role_id: targetRoleId, mode: 'replace' },
       ),

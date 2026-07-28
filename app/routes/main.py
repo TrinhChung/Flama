@@ -18,15 +18,18 @@ from app.services.anki_scheduler import (
 from app.services import mcp_access_token_service
 from app.services import support_donation_service
 from app.services import tts_provider_service
+from app.services.support_checkout_service import (
+    SupportCheckoutError,
+    prepare_support_checkout,
+)
 from app.services.stats_overview import build_stats_overview
-from app.services.stats_today_future import build_today_future_stats, list_stats_decks
+from app.services.stats_today_future import build_today_future_stats
 from app.utils.deck_move_token import create_deck_move_token
 from app.utils.permissions import is_admin_user
 from app.validators import RequestValidationError
 from app.validators.support_donation import (
     MAX_DONATION_AMOUNT_MINOR,
     MIN_DONATION_AMOUNT_MINOR,
-    normalize_support_donation_checkout_payload,
 )
 from sqlalchemy.exc import SQLAlchemyError
 from models import db
@@ -94,22 +97,26 @@ def _ensure_mcp_admin_access():
 def index():
     if current_user.is_authenticated:
         return redirect(url_for("main.dashboard"))
-    return render_template("index.html")
+    from app.spa import serve_react_spa
+    return serve_react_spa()
 
 
 @main_bp.route("/terms")
 def terms():
-    return render_template("terms.html")
+    from app.spa import serve_react_spa
+    return serve_react_spa()
 
 
 @main_bp.route("/privacy")
 def privacy():
-    return render_template("privacy.html")
+    from app.spa import serve_react_spa
+    return serve_react_spa()
 
 
 @main_bp.route("/cookies")
 def cookies():
-    return render_template("cookies.html")
+    from app.spa import serve_react_spa
+    return serve_react_spa()
 
 
 @main_bp.route("/support-donation")
@@ -154,47 +161,30 @@ def support_donation_qr_image():
 
 @main_bp.route("/api/support-donation/checkout", methods=["POST"])
 def support_donation_checkout_api():
-    from app.services import payment_service
-    from app.services.payment.provider import payos_provider
-
-    payload = request.get_json(silent=True) or {}
-    normalized_payload, message, field = normalize_support_donation_checkout_payload(payload)
-    if normalized_payload is None:
-        return _support_api_error("VALIDATION_ERROR", message or "Invalid payload.", field=field)
-
-    default_return_url = url_for("main.support_donation_result_page", _external=True)
-    return_url = normalized_payload.return_url or default_return_url
-    cancel_url = normalized_payload.cancel_url or return_url
-    anonymous_checkout = bool(normalized_payload.anonymous or not current_user.is_authenticated)
-
-    if not payment_service.payments_enabled():
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
         return _support_api_error(
-            "PAYMENT_UNAVAILABLE",
-            "Hệ thống thanh toán đang tạm thời không khả dụng. Vui lòng thử lại sau.",
-            status=503,
+            "VALIDATION_ERROR",
+            "Payload must be a JSON object.",
         )
 
     try:
-        if anonymous_checkout:
-            result = support_donation_service.create_anonymous_checkout(
-                amount_minor=normalized_payload.amount_minor,
-                return_url=return_url,
-                cancel_url=cancel_url,
-            )
-            return jsonify(result), 201
-
-        result = payment_service.prepare_support_donation_checkout(
-            user_id=current_user.id,
-            amount_minor=normalized_payload.amount_minor,
-            return_url=return_url,
-            cancel_url=cancel_url,
+        result, status_code = prepare_support_checkout(
+            payload=payload,
+            authenticated=bool(current_user.is_authenticated),
+            user_id=int(current_user.id) if current_user.is_authenticated else None,
+            default_return_url=url_for(
+                "main.support_donation_result_page",
+                _external=True,
+            ),
         )
-    except payment_service.PaymentServiceError as exc:
-        return _support_api_error(exc.error, exc.message, status=exc.status, field=exc.field)
-    except payos_provider.PayOSProviderError as exc:
-        return _support_api_error(exc.code, str(exc), status=exc.status)
-
-    status_code = 201 if result.get("created") else 200
+    except SupportCheckoutError as exc:
+        return _support_api_error(
+            exc.code,
+            exc.message,
+            status=exc.status,
+            field=exc.field,
+        )
     return jsonify(result), status_code
 
 
@@ -276,24 +266,8 @@ def revoke_mcp_token(token_id: int):
 @main_bp.route("/statistics", methods=["GET"])
 @login_required
 def statistics_page():
-    decks = list_stats_decks(current_user.id)
-    deck_id_raw = (request.args.get("deck_id") or "").strip()
-    initial_deck_id = None
-    if deck_id_raw:
-        try:
-            initial_deck_id = int(deck_id_raw)
-        except ValueError:
-            initial_deck_id = None
-
-    deck_ids = {int(deck["id"]) for deck in decks}
-    if initial_deck_id not in deck_ids:
-        initial_deck_id = int(decks[0]["id"]) if decks else None
-
-    return render_template(
-        "statistics.html",
-        stats_decks=decks,
-        stats_initial_deck_id=initial_deck_id,
-    )
+    from app.spa import serve_react_spa
+    return serve_react_spa()
 
 
 @main_bp.route("/api/stats/overview", methods=["GET"])

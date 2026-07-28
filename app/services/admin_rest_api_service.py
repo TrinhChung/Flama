@@ -39,6 +39,14 @@ class AdminRestApiError(RuntimeError):
         self.field = field
 
 
+def get_tts_provider(provider_id: int) -> TtsProviderConfig | None:
+    return db.session.get(TtsProviderConfig, int(provider_id))
+
+
+def get_image_asset(asset_id: str) -> SharedImageAsset | None:
+    return image_library_repository.get_by_id(asset_id)
+
+
 def serialize_tts_provider(row: TtsProviderConfig) -> dict[str, Any]:
     return {
         "id": int(row.id),
