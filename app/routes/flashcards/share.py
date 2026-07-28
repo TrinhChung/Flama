@@ -6,13 +6,11 @@ import logging
 from datetime import datetime, timezone
 
 UTC = timezone.utc
-from flask import jsonify, request, redirect, url_for, flash, render_template, send_file, current_app
+from flask import jsonify, request, url_for, render_template
 from flask_login import current_user, login_required
 from sqlalchemy.exc import OperationalError
 from models import db
 from models.flashcard import *
-from models.deck import Deck
-from models.card_progress import CardProgress
 from app.services import flashcards_share
 from app.services import marketplace_hub_service
 from app.utils.permissions import is_admin_user
@@ -22,6 +20,7 @@ from . import *
 
 # Backward-compatible alias used by tests and legacy patch targets.
 share_ctrl = flashcards_share
+logger = logging.getLogger(__name__)
 
 MAX_MARKET_REVIEW_SUBMISSIONS_PER_USER = 2
 
@@ -157,158 +156,104 @@ def save_shared_deck_item(deck_item_id: str):
 @flashcards_bp.route("/api/note-types", methods=["POST"])
 @login_required
 def create_note_type():
-    payload = request.get_json(silent=True) or {}
-    note_type, error_message, error_field = share_ctrl.create_note_type(
-        user_id=current_user.id,
-        payload=payload,
-        is_admin=is_admin_user(current_user),
-    )
-    if note_type is None:
-        return _api_error(
-            "VALIDATION_ERROR",
-            error_message or "Unable to create note type.",
-            field=error_field,
+    from app.services import flashcard_content_service
+
+    try:
+        payload = flashcard_content_service.create_note_type(
+            user_id=current_user.id,
+            admin_mode=is_admin_user(current_user),
+            payload=request.get_json(silent=True) or {},
         )
-    return jsonify(_serialize_note_type(note_type)), 201
+    except flashcard_content_service.ContentApiError as exc:
+        return _api_error(
+            exc.error,
+            str(exc),
+            status=exc.status,
+            field=exc.field,
+        )
+    return jsonify(payload), 201
 
 @flashcards_bp.route("/api/note-types/<note_type_id>/templates", methods=["POST"])
 @login_required
 def create_template(note_type_id: str):
-    note_type = _get_note_type_or_404(note_type_id)
-    if not note_type:
-        return _api_error("FIELD_NOT_FOUND", "Note type not found.", status=404)
-    payload = request.get_json(silent=True) or {}
-    template, error_message = share_ctrl.create_template(
-        note_type_id=note_type.id,
-        user_id=current_user.id,
-        payload=payload,
-    )
-    if template is None:
-        return _api_error("VALIDATION_ERROR", error_message or "Unable to create template.")
-    return jsonify(_serialize_template(template)), 201
+    from app.services import flashcard_content_service
+
+    try:
+        payload = flashcard_content_service.create_template(
+            user_id=current_user.id,
+            note_type_id=note_type_id,
+            payload=request.get_json(silent=True) or {},
+        )
+    except flashcard_content_service.ContentApiError as exc:
+        return _api_error(
+            exc.error,
+            str(exc),
+            status=exc.status,
+            field=exc.field,
+        )
+    return jsonify(payload), 201
 
 @flashcards_bp.route("/api/note-types/<note_type_id>/templates/<template_id>", methods=["PATCH"])
 @login_required
 def patch_template(note_type_id: str, template_id: str):
-    note_type = _get_note_type_or_404(note_type_id)
-    if not note_type:
-        return _api_error("FIELD_NOT_FOUND", "Note type not found.", status=404)
-    template = Template.query.filter_by(id=template_id, note_type_id=note_type.id).first()
-    if not template:
-        return _api_error("FIELD_NOT_FOUND", "Template not found.", status=404)
-    payload = request.get_json(silent=True) or {}
-    if "name" in payload:
-        template.name = (payload.get("name") or "").strip() or template.name
-    if "front_html" in payload:
-        template.front_html = str(payload.get("front_html") or "")
-    if "back_html" in payload:
-        template.back_html = str(payload.get("back_html") or "")
-    if "shared_css" in payload:
-        template.shared_css = str(payload.get("shared_css") or "")
+    from app.services import flashcard_content_service
 
     try:
-        render_template_pair(
-            template=template,
-            field_defs=note_type.field_defs,
-            field_values={},
-            media_assets=[],
-            preview_note_key="validation",
+        payload = flashcard_content_service.update_template(
+            user_id=current_user.id,
+            note_type_id=note_type_id,
+            template_id=template_id,
+            payload=request.get_json(silent=True) or {},
         )
-    except TemplateCompileError as exc:
-        db.session.rollback()
-        return _api_error("TEMPLATE_COMPILE_ERROR", str(exc), field="front_html")
-
-    _audit("template.update", {"note_type_id": note_type.id, "template_id": template.id})
-    db.session.commit()
-    return jsonify(_serialize_template(template))
+    except flashcard_content_service.ContentApiError as exc:
+        return _api_error(
+            exc.error,
+            str(exc),
+            status=exc.status,
+            field=exc.field,
+        )
+    return jsonify(payload)
 
 @flashcards_bp.route("/api/note-types/<note_type_id>/templates/<template_id>/reset", methods=["POST"])
 @login_required
 def reset_template(note_type_id: str, template_id: str):
-    note_type = _get_note_type_or_404(note_type_id)
-    if not note_type:
-        return _api_error("FIELD_NOT_FOUND", "Note type not found.", status=404)
-    template = Template.query.filter_by(id=template_id, note_type_id=note_type.id).first()
-    if not template:
-        return _api_error("FIELD_NOT_FOUND", "Template not found.", status=404)
-    template.front_html = LEGACY_FRONT_TEMPLATE.strip()
-    template.back_html = LEGACY_BACK_TEMPLATE.strip()
-    template.shared_css = LEGACY_SHARED_CSS.strip()
-    db.session.commit()
-    return jsonify(_serialize_template(template))
+    from app.services import flashcard_content_service
+
+    try:
+        payload = flashcard_content_service.reset_template(
+            user_id=current_user.id,
+            note_type_id=note_type_id,
+            template_id=template_id,
+        )
+    except flashcard_content_service.ContentApiError as exc:
+        return _api_error(
+            exc.error,
+            str(exc),
+            status=exc.status,
+            field=exc.field,
+        )
+    return jsonify(payload)
 
 @flashcards_bp.route("/api/note-types/<note_type_id>/templates/<template_id>/preview", methods=["POST"])
 @login_required
 def preview_template(note_type_id: str, template_id: str):
-    note_type = _get_note_type_or_404(note_type_id)
-    if not note_type:
-        return _api_error("FIELD_NOT_FOUND", "Note type not found.", status=404)
-    template = Template.query.filter_by(id=template_id, note_type_id=note_type.id).first()
-    if not template:
-        return _api_error("FIELD_NOT_FOUND", "Template not found.", status=404)
-
-    payload = request.get_json(silent=True) or {}
-    note_id = (payload.get("note_id") or "").strip()
-    raw_use_sample_data = payload.get("use_sample_data", False)
-    use_sample_data = bool(raw_use_sample_data)
-    if isinstance(raw_use_sample_data, str):
-        use_sample_data = raw_use_sample_data.strip().lower() in {"1", "true", "yes", "on"}
-    
-    # Cho phép ghi đè nội dung HTML/CSS thông qua payload (phục vụ Live Preview chưa lưu)
-    preview_front_html = template.front_html
-    preview_back_html = template.back_html
-    preview_shared_css = template.shared_css
-    if "front_html" in payload:
-        preview_front_html = str(payload.get("front_html") or "")
-    if "back_html" in payload:
-        preview_back_html = str(payload.get("back_html") or "")
-    if "shared_css" in payload:
-        preview_shared_css = str(payload.get("shared_css") or "")
-
-    preview_template_obj = SimpleNamespace(
-        id=template.id,
-        front_html=preview_front_html,
-        back_html=preview_back_html,
-        shared_css=preview_shared_css,
-        updated_at=template.updated_at,
-    )
-
-    sample_field_values: dict[str, Any]
-    sample_media_assets: list[MediaAsset]
-    preview_note_key: str
-    if use_sample_data:
-        sample_field_values = _build_preview_sample_values(note_type.field_defs)
-        sample_media_assets = []
-        preview_note_key = f"sample:{note_type.id}"
-    else:
-        note = None
-        if note_id:
-            note = Note.query.filter_by(id=note_id, user_id=current_user.id, note_type_id=note_type.id).first()
-        if note is None:
-            note = (
-                Note.query.filter_by(note_type_id=note_type.id, user_id=current_user.id)
-                .order_by(Note.created_at.asc())
-                .first()
-            )
-        sample_field_values = {}
-        sample_media_assets = []
-        preview_note_key = note.id if note else "empty-note"
-        if note:
-            sample_field_values = note.field_values or {}
-            sample_media_assets = note.media_assets
+    from app.services import flashcard_content_service
 
     try:
-        rendered = render_template_pair(
-            template=preview_template_obj,
-            field_defs=note_type.field_defs,
-            field_values=sample_field_values,
-            media_assets=sample_media_assets,
-            preview_note_key=preview_note_key,
+        payload = flashcard_content_service.preview_template(
+            user_id=current_user.id,
+            note_type_id=note_type_id,
+            template_id=template_id,
+            payload=request.get_json(silent=True) or {},
         )
-    except TemplateCompileError as exc:
-        return _api_error("TEMPLATE_COMPILE_ERROR", str(exc), field="front_html")
-
-    return jsonify(rendered)
+    except flashcard_content_service.ContentApiError as exc:
+        return _api_error(
+            exc.error,
+            str(exc),
+            status=exc.status,
+            field=exc.field,
+        )
+    return jsonify(payload)
 
 @flashcards_bp.route("/api/note-types/<note_type_id>/publish", methods=["POST"])
 @login_required

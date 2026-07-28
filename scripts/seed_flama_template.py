@@ -21,21 +21,23 @@ from app.utils.bootstrap_admin import (
     resolve_bootstrap_admin_credentials,
 )
 
-FRONT_HTML = """<div class="front-word">{{word}}</div>"""
+FRONT_HTML = """<div style='height:100vh;text-align:center;display:flex;justify-content:center;align-items:center;font-size:70px;font-weight:bold;color:#e53c20'>
+{{word}}
+</div>"""
 
-BACK_HTML = """<div style='
+BACK_HTML = r"""<div style='
     display: flex;
     flex-direction: column;
     justify-content: flex-start;
     text-align: start;
     padding-left: 20px;
-    font-family: "Arial"; 
+    font-family: "Arial";
     font-size: 18px;'
 >
     <!-- Hiển thị từ vựng -->
     <div style='
-        font-family: "Arial"; 
-        font-size: 36px; 
+        font-family: "Arial";
+        font-size: 36px;
         font-weight: bold;
         display: flex;
         align-items: center;
@@ -54,7 +56,7 @@ BACK_HTML = """<div style='
     <div style='
         display: flex;
         font-weight: bold;
-        font-family: "Arial"; 
+        font-family: "Arial";
         font-size: 20px;
         flex-direction: column;
         text-transform: uppercase;'
@@ -184,34 +186,7 @@ BACK_HTML = """<div style='
 })();
 </script>"""
 
-CSS = """html,
-body,
-.card {
-    margin: 0;
-    padding: 0;
-    height: 100%;
-}
-body {
-    box-sizing: border-box;
-}
-.front-word {
-    box-sizing: border-box;
-    width: 100%;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 16px;
-    font-family: arial;
-    font-size: clamp(48px, 9vw, 70px);
-    font-weight: bold;
-    line-height: 1.1;
-    text-align: center;
-    color: #e53c20;
-    overflow-wrap: anywhere;
-    word-break: break-word;
-}
-.card {
+CSS = """.card {
     font-family: arial;
     font-size: 20px;
     text-align: center;

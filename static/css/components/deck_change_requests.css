@@ -1,35 +1,26 @@
 .change-request-shell {
-  --change-request-ink: #192232;
-  --change-request-muted: #66768f;
-  --change-request-line: rgba(25, 34, 50, 0.12);
-  --change-request-soft-line: rgba(25, 34, 50, 0.08);
-  --change-request-accent: #b45735;
-  --change-request-accent-soft: rgba(180, 87, 53, 0.12);
-  --change-request-info: #2f5e92;
-  --change-request-info-soft: rgba(47, 94, 146, 0.13);
-  --change-request-success: #2d7254;
-  --change-request-success-soft: rgba(45, 114, 84, 0.13);
-  --change-request-warning: #8d6518;
-  --change-request-warning-soft: rgba(141, 101, 24, 0.14);
-  --change-request-danger: #a44639;
-  --change-request-danger-soft: rgba(164, 70, 57, 0.14);
-  --change-request-muted-soft: rgba(102, 118, 143, 0.12);
+  --change-request-ink: var(--flama-text);
+  --change-request-muted: var(--flama-text-2);
+  --change-request-line: var(--flama-panel-border);
+  --change-request-soft-line: var(--flama-panel-border);
+  --change-request-accent: var(--flama-orange-700);
+  --change-request-accent-soft: var(--flama-orange-50);
+  --change-request-info: var(--flama-info-text);
+  --change-request-info-soft: var(--flama-info-bg);
+  --change-request-success: var(--flama-success-text);
+  --change-request-success-soft: var(--flama-success-bg);
+  --change-request-warning: var(--flama-warning-text);
+  --change-request-warning-soft: var(--flama-warning-bg);
+  --change-request-danger: var(--flama-danger-text);
+  --change-request-danger-soft: var(--flama-danger-bg);
+  --change-request-muted-soft: var(--flama-panel-bg-subtle);
   position: relative;
   padding: 0.35rem 0 2rem;
   color: var(--change-request-ink);
 }
 
 .change-request-shell::before {
-  content: "";
-  position: absolute;
-  inset: 0 0 auto;
-  height: 18rem;
-  background:
-    radial-gradient(circle at top right, rgba(180, 87, 53, 0.13), transparent 30%),
-    radial-gradient(circle at left 12% top 18%, rgba(120, 133, 93, 0.1), transparent 26%),
-    linear-gradient(135deg, #f5ede0 0%, #f9f6f0 52%, #f0f4ef 100%);
-  border-radius: 2rem;
-  z-index: -1;
+  content: none;
 }
 
 .change-request-topbar {
@@ -43,8 +34,8 @@
 
 .change-request-topbar .btn,
 .change-request-actions .btn {
-  border-radius: 999px;
-  font-family: "Manrope", sans-serif;
+  border-radius: var(--button-radius);
+  font-family: var(--font-family-base);
   font-weight: 700;
 }
 
@@ -68,12 +59,12 @@
 
 .change-request-hero {
   border: 1px solid var(--market-line);
-  border-radius: 1.55rem;
+  border-radius: var(--flama-panel-radius-lg);
   padding: 1.2rem 1.2rem 1rem;
   margin-bottom: 1.15rem;
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 18px 40px rgba(30, 36, 48, 0.08);
-  backdrop-filter: blur(12px);
+  background: var(--flama-panel-bg);
+  box-shadow: var(--flama-panel-shadow);
+  backdrop-filter: none;
 }
 
 .change-request-hero-grid {
@@ -94,11 +85,11 @@
 
 .change-request-eyebrow,
 .change-request-mini-label {
-  font-family: "Manrope", sans-serif;
+  font-family: var(--font-family-base);
   text-transform: uppercase;
-  letter-spacing: 0.16em;
-  font-size: 0.72rem;
-  font-weight: 800;
+  letter-spacing: 0.08em;
+  font-size: var(--text-caption);
+  font-weight: 700;
 }
 
 .change-request-eyebrow {
@@ -112,8 +103,8 @@
 .change-request-hero-title,
 .change-request-section-title,
 .change-request-card-title {
-  font-family: "Fraunces", Georgia, serif;
-  line-height: 1.08;
+  font-family: var(--font-family-base);
+  line-height: 1.2;
 }
 
 .change-request-hero-title {
@@ -135,7 +126,7 @@
 .change-request-person-meta,
 .change-request-field-help {
   color: var(--change-request-muted);
-  font-family: "Manrope", sans-serif;
+  font-family: var(--font-family-base);
 }
 
 .change-request-hero-meta,
@@ -163,8 +154,8 @@
 .change-request-inbox-card,
 .change-request-entry {
   border: 1px solid var(--change-request-line);
-  border-radius: 1.25rem;
-  background: rgba(255, 255, 255, 0.78);
+  border-radius: var(--flama-panel-radius);
+  background: var(--flama-panel-bg);
 }
 
 .change-request-hero-panel,
@@ -175,7 +166,7 @@
 .change-request-value-card,
 .change-request-entry,
 .change-request-inbox-card {
-  box-shadow: 0 8px 20px rgba(25, 34, 50, 0.04);
+  box-shadow: var(--flama-panel-shadow);
 }
 
 .change-request-hero-panel {
@@ -195,13 +186,13 @@
 
 .change-request-guide {
   margin-top: 1rem;
-  border: 1px solid rgba(25, 34, 50, 0.08);
-  border-radius: 1rem;
-  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid var(--flama-panel-border);
+  border-radius: var(--flama-panel-radius);
+  background: var(--flama-panel-bg);
 }
 
 .change-request-guide[open] {
-  background: rgba(255, 255, 255, 0.94);
+  background: var(--flama-panel-bg);
 }
 
 .change-request-guide-summary {
@@ -212,7 +203,7 @@
   padding: 0.8rem 0.95rem;
   cursor: pointer;
   list-style: none;
-  font-family: "Manrope", sans-serif;
+  font-family: var(--font-family-base);
   font-size: 0.9rem;
   font-weight: 700;
   color: var(--change-request-ink);
@@ -226,7 +217,7 @@
   margin: 0;
   padding: 0 1rem 1rem 2rem;
   color: var(--change-request-muted);
-  font-family: "Manrope", sans-serif;
+  font-family: var(--font-family-base);
   line-height: 1.65;
 }
 
@@ -237,7 +228,7 @@
 .change-request-banner {
   border-radius: 1rem;
   padding: 0.85rem 1rem;
-  font-family: "Manrope", sans-serif;
+  font-family: var(--font-family-base);
   font-weight: 700;
   line-height: 1.55;
   border: 1px solid transparent;
@@ -313,9 +304,9 @@
 }
 
 .change-request-shell .form-control {
-  border-radius: 0.95rem;
-  border-color: rgba(25, 34, 50, 0.12);
-  background: rgba(255, 255, 255, 0.86);
+  border-radius: var(--flama-control-radius);
+  border-color: var(--flama-control-border);
+  background: var(--flama-control-bg);
   color: var(--change-request-ink);
   box-shadow: none;
   min-height: 3rem;
@@ -331,9 +322,9 @@
 }
 
 .change-request-shell .form-control:focus {
-  border-color: rgba(180, 87, 53, 0.34);
-  box-shadow: 0 0 0 0.24rem rgba(180, 87, 53, 0.08);
-  background: #fff;
+  border-color: var(--flama-control-border-focus);
+  box-shadow: var(--flama-control-focus-ring);
+  background: var(--flama-control-bg);
 }
 
 .change-request-actions {
@@ -360,7 +351,7 @@
 
 .change-request-summary-title {
   margin: 0;
-  font-family: "Fraunces", Georgia, serif;
+  font-family: var(--font-family-base);
   font-size: 1.4rem;
   line-height: 1.14;
 }
@@ -384,7 +375,7 @@
   gap: 0.38rem;
   padding: 0.34rem 0.72rem;
   border-radius: 999px;
-  font-family: "Manrope", sans-serif;
+  font-family: var(--font-family-base);
   font-size: 0.76rem;
   font-weight: 800;
   letter-spacing: 0.04em;
@@ -470,7 +461,8 @@
 .change-request-person-value {
   margin-top: 0.35rem;
   color: var(--change-request-ink);
-  font-family: "Fraunces", Georgia, serif;
+  font-family: var(--font-family-base);
+  font-variant-numeric: tabular-nums;
 }
 
 .change-request-metric-value {
@@ -501,7 +493,7 @@
   grid-template-columns: auto 1fr;
   gap: 0.75rem;
   align-items: start;
-  background: rgba(255, 255, 255, 0.88);
+  background: var(--flama-panel-bg);
 }
 
 .change-request-stage-dot {
@@ -511,15 +503,15 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-family: "Manrope", sans-serif;
+  font-family: var(--font-family-base);
   font-weight: 800;
-  background: rgba(255, 255, 255, 0.88);
+  background: var(--flama-panel-bg);
   border: 1px solid var(--change-request-soft-line);
   color: var(--change-request-muted);
 }
 
 .change-request-stage-label {
-  font-family: "Manrope", sans-serif;
+  font-family: var(--font-family-base);
   font-weight: 800;
   color: var(--change-request-ink);
 }
@@ -537,8 +529,8 @@
 }
 
 .change-request-stage[data-state="current"] {
-  border-color: rgba(180, 87, 53, 0.24);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(245, 234, 224, 0.84));
+  border-color: var(--flama-orange-300);
+  background: var(--flama-orange-50);
 }
 
 .change-request-stage[data-state="current"] .change-request-stage-dot {
@@ -548,8 +540,8 @@
 }
 
 .change-request-stage[data-state="blocked"] {
-  border-color: rgba(164, 70, 57, 0.22);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(248, 232, 229, 0.82));
+  border-color: var(--flama-danger);
+  background: var(--flama-danger-bg);
 }
 
 .change-request-stage[data-state="blocked"] .change-request-stage-dot {
@@ -560,7 +552,7 @@
 
 .change-request-note-card {
   padding: 0.85rem 0.95rem;
-  background: rgba(255, 255, 255, 0.82);
+  background: var(--flama-panel-bg);
 }
 
 .change-request-note-card + .change-request-note-card {
@@ -569,7 +561,7 @@
 
 .change-request-note-title {
   margin: 0 0 0.3rem;
-  font-family: "Manrope", sans-serif;
+  font-family: var(--font-family-base);
   font-size: 0.88rem;
   font-weight: 800;
   text-transform: uppercase;
@@ -586,7 +578,7 @@
   padding: 1rem;
   display: grid;
   gap: 0.8rem;
-  background: rgba(255, 255, 255, 0.94);
+  background: var(--flama-panel-bg);
 }
 
 .change-request-entry + .change-request-entry {
@@ -604,7 +596,7 @@
 .change-request-entry-kicker {
   margin: 0 0 0.18rem;
   color: var(--change-request-muted);
-  font-family: "Manrope", sans-serif;
+  font-family: var(--font-family-base);
   font-size: 0.74rem;
   font-weight: 800;
   letter-spacing: 0.08em;
@@ -630,16 +622,16 @@
 
 .change-request-value-card {
   padding: 0.78rem 0.85rem;
-  background: rgba(255, 255, 255, 0.92);
+  background: var(--flama-panel-bg);
 }
 
 .change-request-value-card[data-tone="after"] {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(236, 245, 239, 0.84));
+  background: var(--flama-success-bg);
   border-color: rgba(45, 114, 84, 0.16);
 }
 
 .change-request-value-card[data-tone="before"] {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(244, 245, 248, 0.88));
+  background: var(--flama-panel-bg-subtle);
 }
 
 .change-request-value-label {
@@ -670,30 +662,30 @@
 }
 
 .change-request-conflict-actions .btn {
-  border-radius: 999px;
+  border-radius: var(--button-radius);
   font-weight: 700;
 }
 
 .change-request-manual-card {
-  border: 1px dashed rgba(25, 34, 50, 0.16);
-  border-radius: 1rem;
+  border: 1px dashed var(--flama-panel-border);
+  border-radius: var(--flama-panel-radius);
   padding: 0.9rem;
-  background: rgba(255, 255, 255, 0.72);
+  background: var(--flama-panel-bg-subtle);
 }
 
 .change-request-inline-copy {
   margin: 0;
   color: var(--change-request-muted);
-  font-family: "Manrope", sans-serif;
+  font-family: var(--font-family-base);
   font-size: 0.86rem;
   line-height: 1.55;
 }
 
 .change-request-empty {
   padding: 1rem 1.05rem;
-  border: 1px dashed rgba(25, 34, 50, 0.16);
-  border-radius: 1.2rem;
-  background: rgba(255, 255, 255, 0.58);
+  border: 1px dashed var(--flama-panel-border);
+  border-radius: var(--flama-panel-radius);
+  background: var(--flama-panel-bg-subtle);
   line-height: 1.7;
 }
 
@@ -706,7 +698,7 @@
   padding: 0.95rem;
   display: grid;
   gap: 0.7rem;
-  background: rgba(255, 255, 255, 0.94);
+  background: var(--flama-panel-bg);
 }
 
 .change-request-inbox-top {
@@ -719,7 +711,7 @@
 
 .change-request-inbox-title {
   margin: 0;
-  font-family: "Fraunces", Georgia, serif;
+  font-family: var(--font-family-base);
   font-size: 1.28rem;
   line-height: 1.12;
 }
@@ -745,18 +737,18 @@
   border: 1px solid var(--change-request-soft-line);
   border-radius: 999px;
   padding: 0.52rem 0.88rem;
-  background: rgba(255, 255, 255, 0.9);
+  background: var(--flama-panel-bg);
   color: var(--change-request-muted);
-  font-family: "Manrope", sans-serif;
+  font-family: var(--font-family-base);
   font-size: 0.88rem;
   font-weight: 700;
   line-height: 1;
 }
 
 .change-request-filter-btn.is-active {
-  border-color: rgba(180, 87, 53, 0.2);
+  border-color: var(--flama-orange-300);
   background: var(--change-request-accent-soft);
-  color: #8a4228;
+  color: var(--flama-orange-800);
 }
 
 .change-request-filter-search {
@@ -766,7 +758,7 @@
 .change-request-item-meta {
   margin: 0;
   color: var(--change-request-muted);
-  font-family: "Manrope", sans-serif;
+  font-family: var(--font-family-base);
   font-size: 0.9rem;
   line-height: 1.55;
 }
@@ -776,7 +768,7 @@
 }
 
 .change-request-panel--readonly textarea {
-  background-color: rgba(248, 249, 250, 0.86);
+  background-color: var(--flama-control-bg-disabled);
 }
 
 @keyframes change-request-rise {

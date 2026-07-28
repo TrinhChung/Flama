@@ -2,16 +2,13 @@
 
 from __future__ import annotations
 
-import logging
 from datetime import datetime
-from flask import jsonify, request, redirect, url_for, flash, render_template, send_file, current_app
+from flask import jsonify, request, redirect, url_for, flash, render_template
 from flask_login import current_user, login_required
-from sqlalchemy.exc import OperationalError
 from typing import Any
 from models import db
 from models.flashcard import *
 from models.deck import Deck
-from models.card_progress import CardProgress
 from app.services import marketplace_taxonomy_service
 from app.utils.permissions import is_admin_user
 
@@ -22,19 +19,15 @@ from app.routes.flashcards import (
     _api_error,
     _apply_deck_marketplace_payload,
     _apply_note_type_marketplace_payload,
-    _audit,
     _collect_accessible_decks_for_import,
     _deck_path_label,
     _default_uniqueness_fields,
     _get_note_type_or_404,
     _infer_default_note_type_id_for_deck,
     _parse_bool,
-    _recompute_deck_item_market_stats,
     _recompute_note_type_market_stats,
-    _resolve_import_execution_payload,
     _resolve_single_note_type_for_deck,
     _serialize_note_type_for_import,
-    _touch_note_type_install_usage,
 )
 
 
@@ -290,86 +283,7 @@ def _share_note_type_page_impl(note_type: NoteType):
 def share_deck_page(deck_id: int):
     deck = Deck.query.get_or_404(deck_id)
     return _share_deck_page_impl(deck)
-    
-    # Validation 1: Ownership
-    from app.services.deck_access_policy import can_user_edit_deck
-    if not can_user_edit_deck(current_user, deck):
-        flash("Bạn không có quyền chia sẻ deck này.", "danger")
-        return redirect(url_for("main.dashboard"))
 
-    # Validation 2: Is downloaded deck (cannot re-share a downloaded deck)
-    if deck.owner_user_id == current_user.id:
-        from models.flashcard import DeckInstall
-        # If user has an install record for this exact local deck, block re-sharing
-        if DeckInstall.query.filter_by(user_id=current_user.id, local_deck_id=deck.id).first():
-            flash("Bạn không thể chia sẻ lại deck đã được cài đặt từ Marketplace.", "danger")
-            return redirect(url_for("main.dashboard"))
-        
-    # Validation 3: Child deck of a shared deck cannot be shared
-    from models.flashcard import DeckMarketplaceItem
-    current_parent = deck.parent_id
-    while current_parent is not None:
-        parent_deck = Deck.query.get(current_parent)
-        if not parent_deck:
-            break
-        if DeckMarketplaceItem.query.filter_by(source_deck_id=parent_deck.id).first():
-            flash(f"Deck cha '{parent_deck.name}' đã được chia sẻ. Không thể chia sẻ riêng lẻ deck con.", "warning")
-            return redirect(url_for("main.dashboard"))
-        current_parent = parent_deck.parent_id
-
-    # Existing marketplace item
-    existing_item = DeckMarketplaceItem.query.filter_by(source_deck_id=deck.id).first()
-    existing_item_was_found = existing_item is not None
-
-    if request.method == "POST":
-        title = request.form.get("title", "").strip()
-        description = request.form.get("description", "").strip()
-        preview_text = request.form.get("preview_text", "").strip()
-        primary_category = request.form.get("primary_category", "Japanese").strip()
-        tags_raw = request.form.get("tags", "")
-        tags = [t.strip() for t in tags_raw.split(",") if t.strip()]
-        pricing_mode = request.form.get("pricing_mode", "free")
-        # Ensure only published free, logic can be updated for payment later
-        raw_price_amount_minor = request.form.get("price_amount_minor", request.form.get("price_cents", 0))
-        price_amount_minor = int(raw_price_amount_minor) if pricing_mode == "paid" else 0
-        
-        if not title:
-            flash("Tên hiển thị không được để trống.", "danger")
-            return render_template("flashcards/shared_deck_publish.html", deck=deck, existing_item=existing_item)
-
-        resolved_note_type_id, resolve_error = _resolve_single_note_type_for_deck(
-            deck_id=deck.id,
-            owner_user_id=current_user.id,
-        )
-        if resolve_error:
-            flash(resolve_error, "danger")
-            return render_template("flashcards/shared_deck_publish.html", deck=deck, existing_item=existing_item)            
-        if not existing_item:
-            existing_item = DeckMarketplaceItem(
-                source_deck_id=deck.id,
-                owner_user_id=current_user.id,
-                is_official=is_admin_user(current_user),
-                install_count=0,
-                rating_avg=0.0,
-                rating_count=0,
-            )
-            
-        existing_item.title = title
-        existing_item.description = description
-        existing_item.preview_text = preview_text
-        existing_item.primary_category = primary_category
-        existing_item.tags = tags
-        existing_item.pricing_mode = pricing_mode
-        existing_item.price_amount_minor = price_amount_minor
-        existing_item.source_note_type_id = resolved_note_type_id
-        existing_item.publish_status = "published"
-
-        from app.services.flashcard_import_service import share_deck_and_commit
-        share_deck_and_commit(existing_item, is_new=not existing_item_was_found)
-        flash("Tuyệt vời! Deck của bạn đã được chia sẻ lên Marketplace.", "success")
-        return redirect(url_for("flashcards.shared_decks_page"))
-
-    return render_template("flashcards/shared_deck_publish.html", deck=deck, existing_item=existing_item)
 
 @flashcards_bp.route("/flashcards/note-types/<note_type_id>/share", methods=["GET", "POST"])
 @login_required
@@ -442,122 +356,93 @@ def flashcard_import_page():
         uniqueness_defaults=uniqueness_defaults,
     )
 
+
+@flashcards_bp.route("/api/flashcards/import/options")
+@login_required
+def flashcard_import_options():
+    from app.services import flashcard_import_api_service
+
+    return jsonify(
+        flashcard_import_api_service.build_import_options(
+            user_id=current_user.id,
+            admin_mode=is_admin_user(current_user),
+            deck_id_raw=request.args.get("deck_id"),
+            note_type_id_raw=request.args.get("note_type_id"),
+        )
+    )
+
+
 @flashcards_bp.route("/api/flashcards/import/parse", methods=["POST"])
 @login_required
 def flashcard_import_parse():
-    note_type_id = (request.form.get("note_type_id") or "").strip()
-    note_type = _get_note_type_or_404(note_type_id)
-    if note_type is None:
-        return _api_error("FIELD_NOT_FOUND", "Note type not found.", status=404, field="note_type_id")
+    from app.services import flashcard_import_api_service
 
     upload = request.files.get("file")
-    if upload is None or not upload.filename:
-        return _api_error("VALIDATION_ERROR", "Import file is required.", field="file")
-
-    delimiter_mode = (request.form.get("delimiter_mode") or "csv").strip().lower()
-    custom_delimiter = request.form.get("custom_delimiter")
-    has_header = _parse_bool(request.form.get("has_header"), default=True)
-
     try:
-        delimiter = resolve_delimiter(delimiter_mode, custom_delimiter)
-    except ImportValidationError as exc:
-        return _api_error("VALIDATION_ERROR", str(exc), field="delimiter_mode")
-
-    file_bytes = upload.read()
-    try:
-        summary = create_import_session(
+        payload = flashcard_import_api_service.parse_import_file(
             user_id=current_user.id,
-            filename=upload.filename,
-            file_bytes=file_bytes,
-            delimiter=delimiter,
-            has_header=has_header,
-            field_count=len(note_type.field_defs),
+            note_type_id=str(request.form.get("note_type_id") or "").strip(),
+            filename=str(getattr(upload, "filename", "") or ""),
+            file_bytes=upload.read() if upload is not None else b"",
+            delimiter_mode=str(
+                request.form.get("delimiter_mode") or "csv"
+            ).strip().lower(),
+            custom_delimiter=request.form.get("custom_delimiter"),
+            has_header=_parse_bool(
+                request.form.get("has_header"),
+                default=True,
+            ),
         )
-    except ImportValidationError as exc:
-        return _api_error("VALIDATION_ERROR", str(exc))
-
-    suggestions = suggest_mapping(
-        field_defs=note_type.field_defs,
-        has_header=has_header,
-        header=summary.get("header") or [],
-        column_count=int(summary.get("column_count") or 0),
-    )
-
-    return jsonify(
-        {
-            "token": summary.get("token"),
-            "delimiter": summary.get("delimiter") or delimiter,
-            "has_header": bool(summary.get("has_header")),
-            "columns": summary.get("columns") or [],
-            "column_count": int(summary.get("column_count") or 0),
-            "total_rows": int(summary.get("total_rows") or 0),
-            "preview_rows": summary.get("preview_rows") or [],
-            "warnings": summary.get("warnings") or [],
-            "suggested_mapping": suggestions,
-        }
-    )
+    except flashcard_import_api_service.ImportApiError as exc:
+        return _api_error(
+            "FIELD_NOT_FOUND" if exc.status == 404 else "VALIDATION_ERROR",
+            str(exc),
+            status=exc.status,
+            field=exc.field,
+        )
+    return jsonify(payload)
 
 @flashcards_bp.route("/api/flashcards/import/estimate", methods=["POST"])
 @login_required
 def flashcard_import_estimate():
-    payload = request.get_json(silent=True) or {}
-    try:
-        session_meta, note_type, target_deck_id = _resolve_import_execution_payload(payload)
-        report = run_import(
-            user_id=current_user.id,
-            session_meta=session_meta,
-            note_type=note_type,
-            target_deck_id=target_deck_id,
-            mode=(payload.get("import_mode") or "upsert"),
-            uniqueness_fields=payload.get("uniqueness_fields") or [],
-            raw_mapping=payload.get("mapping") if isinstance(payload.get("mapping"), dict) else {},
-            dont_overwrite_empty=_parse_bool(payload.get("dont_overwrite_empty"), default=True),
-            confirm_column_mismatch=_parse_bool(payload.get("confirm_column_mismatch"), default=False),
-            apply_changes=False,
-            chunk_size=payload.get("chunk_size"),
-        )
-    except ImportValidationError as exc:
-        return _api_error("VALIDATION_ERROR", str(exc))
+    from app.services import flashcard_import_api_service
 
-    return jsonify(report)
+    try:
+        payload = flashcard_import_api_service.run_import_request(
+            user_id=current_user.id,
+            admin_mode=is_admin_user(current_user),
+            payload=request.get_json(silent=True) or {},
+            apply_changes=False,
+        )
+    except flashcard_import_api_service.ImportApiError as exc:
+        return _api_error(
+            "VALIDATION_ERROR",
+            str(exc),
+            status=exc.status,
+            field=exc.field,
+        )
+    return jsonify(payload)
 
 @flashcards_bp.route("/api/flashcards/import/execute", methods=["POST"])
 @login_required
 def flashcard_import_execute():
-    payload = request.get_json(silent=True) or {}
+    from app.services import flashcard_import_api_service
+
     try:
-        session_meta, note_type, target_deck_id = _resolve_import_execution_payload(payload)
-        report = run_import(
+        payload = flashcard_import_api_service.run_import_request(
             user_id=current_user.id,
-            session_meta=session_meta,
-            note_type=note_type,
-            target_deck_id=target_deck_id,
-            mode=(payload.get("import_mode") or "upsert"),
-            uniqueness_fields=payload.get("uniqueness_fields") or [],
-            raw_mapping=payload.get("mapping") if isinstance(payload.get("mapping"), dict) else {},
-            dont_overwrite_empty=_parse_bool(payload.get("dont_overwrite_empty"), default=True),
-            confirm_column_mismatch=_parse_bool(payload.get("confirm_column_mismatch"), default=False),
+            admin_mode=is_admin_user(current_user),
+            payload=request.get_json(silent=True) or {},
             apply_changes=True,
-            chunk_size=payload.get("chunk_size"),
         )
-    except ImportValidationError as exc:
-        return _api_error("VALIDATION_ERROR", str(exc))
-
-    summary = report.get("summary") or {}
-    if int(summary.get("inserted") or 0) > 0 or int(summary.get("updated") or 0) > 0:
-        _touch_note_type_install_usage(user_id=current_user.id, installed_note_type_id=note_type.id)
-        install_rows = NoteTypeInstall.query.filter_by(
-            user_id=current_user.id,
-            installed_note_type_id=note_type.id,
-        ).all()
-        for install in install_rows:
-            source_note_type = NoteType.query.get(install.source_note_type_id)
-            if source_note_type:
-                _recompute_note_type_market_stats(source_note_type)
-
-    from app.services.flashcard_import_service import flashcard_import_execute_commit
-    flashcard_import_execute_commit(note_type, target_deck_id, report.get("mode"), summary)
-    return jsonify(report)
+    except flashcard_import_api_service.ImportApiError as exc:
+        return _api_error(
+            "VALIDATION_ERROR",
+            str(exc),
+            status=exc.status,
+            field=exc.field,
+        )
+    return jsonify(payload)
 
 @flashcards_bp.route("/api/shared/seed-defaults", methods=["POST"])
 @login_required

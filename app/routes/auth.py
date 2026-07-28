@@ -17,6 +17,10 @@ def register():
     if current_user.is_authenticated:
         return redirect(url_for("main.dashboard"))
 
+    if request.method == "GET":
+        from app.spa import serve_react_spa
+        return serve_react_spa()
+
     if request.method == "POST":
         email = request.form.get("email", "").strip().lower()
         username = request.form.get("username", "").strip()
@@ -55,6 +59,10 @@ def register():
 def login():
     if current_user.is_authenticated:
         return redirect(url_for("main.dashboard"))
+
+    if request.method == "GET":
+        from app.spa import serve_react_spa
+        return serve_react_spa()
 
     if request.method == "POST":
         email = request.form.get("email", "").strip().lower()

@@ -6,8 +6,13 @@ import io
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
+
+from sqlalchemy.exc import SQLAlchemyError
+from werkzeug.datastructures import FileStorage
 
 from app import create_app
+from app.services import flashcard_media_api_service
 from models import db
 from models.deck import Deck
 from models.flashcard import MediaAsset, Note
@@ -183,6 +188,42 @@ class FlashcardValidationSecurityTests(unittest.TestCase):
         _ = proxy_resp.get_data()
         proxy_resp.close()
         self.assertEqual(proxy_resp.headers.get("X-Content-Type-Options"), "nosniff")
+
+    def test_v1_upload_removes_file_when_database_commit_fails(self):
+        note_type = self._create_note_type_with_media()
+        note_id = self._create_note(note_type["id"])
+
+        with self.app.app_context():
+            uploaded = FileStorage(
+                stream=io.BytesIO(_MIN_PNG_BYTES),
+                filename="rollback.png",
+                content_type="image/png",
+            )
+            with patch.object(
+                flashcard_media_api_service.db.session,
+                "commit",
+                side_effect=SQLAlchemyError("forced commit failure"),
+            ):
+                with self.assertRaises(SQLAlchemyError):
+                    flashcard_media_api_service.upload_media(
+                        user_id=self.user_id,
+                        note_id=note_id,
+                        field_name="Picture",
+                        uploaded=uploaded,
+                        upload_root=Path(self.upload_tmp.name),
+                        max_bytes=10 * 1024 * 1024,
+                        scanner=None,
+                        scan_enabled=False,
+                        markdown_inline=False,
+                    )
+
+            self.assertEqual(MediaAsset.query.filter_by(note_id=note_id).count(), 0)
+            stored_files = [
+                path
+                for path in Path(self.upload_tmp.name).rglob("*")
+                if path.is_file()
+            ]
+            self.assertEqual(stored_files, [])
 
     def test_upload_valid_audio_file(self):
         note_type = self._create_note_type_with_media()

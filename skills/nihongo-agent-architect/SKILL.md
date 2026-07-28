@@ -26,7 +26,7 @@ Then load task-specific context:
 - Flashcards, clone overlay, share, study: `docs/FLASHCARD_V2_RUNBOOK.md`, `docs/CLONE_CUTOVER_REPORT.md`, `app/routes/flashcards/`, `app/services/flashcards_share_service.py`
 - Vocabulary browse and study: `app/routes/vocabulary.py`, `app/repositories/vocabulary_repository.py`, `app/repositories/study_repository.py`, `app/services/anki_scheduler.py`
 - Admin, TTS, stats, dashboard: `app/routes/main.py`, `app/routes/admin.py`, related service and test files
-- UI and component work: `docs/COMPONENT_ARCHITECTURE.md`, `templates/base.html`, `templates/components/`, `static/css/components/`, `static/js/`
+- UI and component work: `frontend/docs/COMPONENT_ARCHITECTURE.md`, `templates/base.html`, `templates/components/`, `static/css/components/`, `static/js/`
 
 ## Workflow
 
@@ -50,7 +50,7 @@ Then load task-specific context:
 - `app/routes/vocabulary.py`, `app/routes/flashcards/__init__.py`, and `app/services/flashcards_share_service.py` are hotspot files. Future agents need warnings to change them surgically.
 - Shared deck installs are overlay-only. Clone edit flows must not mutate source notes or reintroduce legacy full-copy behavior.
 - Legacy Level/Topic/Lesson vocabulary routes intentionally return `410`.
-- The frontend is Jinja plus vanilla JS and CSS components, not a SPA.
+- The primary frontend is the React SPA (`frontend/src/`). Default all UI/UX work to `frontend/src/` unless legacy Jinja templates (`templates/`) are explicitly requested by the user.
 
 ## What Good Guidance Looks Like Here
 

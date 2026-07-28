@@ -25,60 +25,217 @@ LEGACY_FIELD_DEFS = [
     ("example_audio", "audio", False),
 ]
 
-LEGACY_FRONT_TEMPLATE = """
-<div class="legacy-front">
-  <div class="front-word">{{word}}</div>
-</div>
-"""
+LEGACY_FRONT_TEMPLATE = """<div style='height:100vh;text-align:center;display:flex;justify-content:center;align-items:center;font-size:70px;font-weight:bold;color:#e53c20'>
+{{word}}
+</div>"""
 
-LEGACY_BACK_TEMPLATE = """
-<div class="legacy-back">
-  <div class="word-line">{{word}}</div>
-  {{#reading}}<div class="reading-line">{{reading}} {{#hanviet}}「{{hanviet}}」{{/hanviet}}</div>{{/reading}}
-  {{#translation_vi}}<div class="translation-line">{{translation_vi}}</div>{{/translation_vi}}
-  {{#meaning_jp}}<div class="meaning-jp">{{{meaning_jp}}}</div>{{/meaning_jp}}
-  {{#meaning_vi}}<div class="meaning-vi">{{{meaning_vi}}}</div>{{/meaning_vi}}
-  {{#usage_jp}}<div class="usage-jp">{{{usage_jp}}}</div>{{/usage_jp}}
-  {{#usage_vi}}<div class="usage-vi">{{{usage_vi}}}</div>{{/usage_vi}}
-  {{#example_jp}}<div class="example-jp">{{{example_jp}}}</div>{{/example_jp}}
-  {{#example_vi}}<div class="example-vi">{{{example_vi}}}</div>{{/example_vi}}
-  {{#additional_note_jp}}<div class="note-jp">{{{additional_note_jp}}}</div>{{/additional_note_jp}}
-  {{#additional_note_vi}}<div class="note-vi">{{{additional_note_vi}}}</div>{{/additional_note_vi}}
-  {{#image}}<div class="image">{{{image}}}</div>{{/image}}
-  {{#diagram}}<div class="diagram">{{{diagram}}}</div>{{/diagram}}
-  {{#word_audio}}<div class="word-audio">{{{word_audio}}}</div>{{/word_audio}}
-  {{#example_audio}}<div class="example-audio">{{{example_audio}}}</div>{{/example_audio}}
-</div>
-"""
+LEGACY_BACK_TEMPLATE = r"""<div style='
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    text-align: start;
+    padding-left: 20px;
+    font-family: "Arial";
+    font-size: 18px;'
+>
+    <!-- Hiển thị từ vựng -->
+    <div style='
+        font-family: "Arial";
+        font-size: 36px;
+        font-weight: bold;
+        display: flex;
+        align-items: center;
+        color: #e53c20;
+        padding-top: 20px;'
+    >
+        {{word}}
+{{#word_audio}}
+  <audio id="custom-audio" src="{{word_audio}}"></audio>
+  <button onclick="document.getElementById('custom-audio').play()">🔊</button>
+{{/word_audio}}
+    </div>
 
-LEGACY_SHARED_CSS = """
-html, body, .card { margin: 0; padding: 0; height: 100%; }
-body { box-sizing: border-box; }
-.legacy-front {
-  box-sizing: border-box;
-  height: 100%;
+    <!-- Hiển thị cách đọc -->
+    {{#reading}}
+    <div style='
+        display: flex;
+        font-weight: bold;
+        font-family: "Arial";
+        font-size: 20px;
+        flex-direction: column;
+        text-transform: uppercase;'
+    >
+        <div style='font-family: "Arial"; display: flex'>
+            {{reading}} 「{{hanviet}}」
+        </div>
+        <div style='color: green; display: flex; padding-bottom: 10px' auto-split>
+            {{translation_vi}}
+        </div>
+    </div>
+    {{/reading}}
+
+    <!-- Hiển thị giải thích -->
+    {{#meaning_jp}}
+    <div style='display: flex; padding-top: 20px; color: #3367d6' auto-split>
+        ◆ {{meaning_jp}}
+    </div>
+    {{/meaning_jp}}
+
+    {{#meaning_vi}}
+    <div style='display: flex; padding-top: 10px' auto-split>
+        {{meaning_vi}}
+    </div>
+    {{/meaning_vi}}
+
+<!-- Ảnh minh hoạ stroke order -->
+{{#image}}
+<div class="kanji-stroke-images">
+  {{image}}
+</div>
+{{/image}}
+
+    <!-- Hiển thị cách sử dụng -->
+    {{#usage_jp}}
+    <div style='display: flex; padding-top: 20px; color: #3367d6; font-weight: bold;'>
+        ◆ Cách sử dụng:
+    </div>
+    <div style='display: flex; flex-direction: column; padding-top: 10px;'>
+        <div style="font-size: 20px;" auto-split>{{usage_jp}}</div>
+        {{#usage_vi}}
+        <div style="font-size: 16px; color: gray; margin-left: 10px;" auto-split>{{usage_vi}}</div>
+        {{/usage_vi}}
+    </div>
+    {{/usage_jp}}
+
+    <!-- Hiển thị ví dụ -->
+    {{#example_jp}}
+    <div style='display: flex; padding-top: 20px; color: #3367d6; font-weight: bold;'>
+        ◆ Câu ví dụ:
+    </div>
+    <div style='display: flex; flex-direction: column; padding-top: 10px;'>
+        <div style="font-size: 20px; display: flex; align-items: center;" auto-split>
+            {{example_jp}}
+{{#example_audio}}
+  <audio id="example-audio" src="{{example_audio}}"></audio>
+  <button onclick="document.getElementById('example-audio').play()">🔊</button>
+{{/example_audio}}
+        </div>
+        {{#example_vi}}
+        <div style="font-size: 16px; color: gray; margin-left: 10px;" auto-split>{{example_vi}}</div>
+        {{/example_vi}}
+    </div>
+    {{/example_jp}}
+
+    <!-- Hiển thị ghi chú -->
+    {{#additional_note_jp}}
+    <div style='display: flex; padding-top: 20px; font-family: "Arial";color: #3367d6'>
+        ◆ Ghi chú:
+    </div>
+    <div style='display: flex; padding-top: 10px' auto-split>
+        {{additional_note_jp}}
+    </div>
+    {{/additional_note_jp}}
+
+    {{#additional_note_vi}}
+    <div style='display: flex; padding-top: 10px;font-family: "Arial"; color: gray; font-size: 16px;' auto-split>
+        {{additional_note_vi}}
+    </div>
+    {{/additional_note_vi}}
+
+{{#diagram}}
+<div class="kanji-stroke-images">
+  {{diagram}}
+</div>
+{{/diagram}}
+</div>
+
+<!-- Script phát âm từ vựng và ví dụ -->
+<script>
+  (() => {
+    const wordAudio = document.getElementById("custom-audio");
+    const exampleAudio = document.getElementById("example-audio");
+
+    if (wordAudio) {
+      wordAudio.play().catch(err => {
+        console.error("Không thể phát âm từ vựng:", err);
+      });
+
+      wordAudio.onended = () => {
+        setTimeout(() => {
+          if (exampleAudio) {
+            exampleAudio.play().catch(err => {
+              console.error("Không thể phát câu ví dụ:", err);
+            });
+          }
+        }, 500);
+      };
+    }
+  })();
+
+(function() {
+  const selectorList = [
+    'div[auto-split]'
+  ];
+
+  selectorList.forEach(sel => {
+    document.querySelectorAll(sel).forEach(el => {
+      let text = el.innerHTML;
+
+      text = text
+        .replace(/\$/g, "<br>");
+
+      el.innerHTML = text;
+    });
+  });
+})();
+</script>"""
+
+LEGACY_SHARED_CSS = """.card {
+    font-family: arial;
+    font-size: 20px;
+    text-align: center;
+    color: black;
+    background-color: white;
+}
+.kanji-stroke-images {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1rem;
-  text-align: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-start;
+  align-items: flex-start;
+  margin-top: 15px;
+  line-height: 0;
 }
-.front-word {
-  color: #e53c20;
-  font-size: clamp(3rem, 9vw, 4.375rem);
-  font-weight: 700;
-  line-height: 1.1;
-  overflow-wrap: anywhere;
-  word-break: break-word;
+
+/* Desktop: ảnh cao 180px, width auto giữ tỉ lệ */
+.kanji-stroke-images > img {
+  height: 180px;
+  width: auto;
+  object-fit: contain;
+  border-radius: 6px;
+  display: block;
+  margin: 0 5px 10px 0; /* khoảng cách ảnh */
+  flex: none;           /* không chiếm % chiều ngang */
 }
-.legacy-back { font-family: Arial, sans-serif; font-size: 18px; line-height: 1.6; }
-.legacy-back .word-line { font-size: 36px; color: #e53c20; font-weight: 700; }
-.legacy-back .reading-line { color: #0f5132; font-weight: 700; }
-.legacy-back .translation-line { color: #198754; margin-bottom: 0.5rem; }
-.legacy-back .meaning-jp, .legacy-back .usage-jp, .legacy-back .example-jp, .legacy-back .note-jp { color: #3367d6; margin-top: 0.5rem; }
-.legacy-back .meaning-vi, .legacy-back .usage-vi, .legacy-back .example-vi, .legacy-back .note-vi { color: #495057; margin-top: 0.3rem; }
-.legacy-back img { max-width: 100%; height: auto; }
-"""
+
+/* Điện thoại: 2 ảnh 1 dòng, mỗi ảnh 48% chiều ngang, chiều cao theo % màn hình */
+@media (max-width: 480px) {
+  .kanji-stroke-images > img {
+    flex: 0 0 48%;       /* 2 ảnh 1 dòng */
+    height: 38vw;        /* chiều cao theo % màn hình */
+    width: auto;         /* width tự động */
+    margin: 0;
+  }
+}
+
+/* Điện thoại nhỏ hơn: 1 ảnh 1 dòng */
+@media (max-width: 320px) {
+  .kanji-stroke-images > img {
+    flex: 0 0 100%;      /* 1 ảnh 1 dòng */
+    height: 68vw;        /* chiều cao theo % màn hình */
+    width: auto;
+  }
+}"""
 
 QUIZ_NOTE_TYPE_NAME = "Tr\u1eafc nghi\u1ec7m"
 
@@ -202,12 +359,9 @@ def ensure_legacy_note_type(db_session, user_id: int) -> tuple[NoteType, Templat
         )
         db_session.add(template)
     else:
-        if not template.front_html:
-            template.front_html = LEGACY_FRONT_TEMPLATE.strip()
-        if not template.back_html:
-            template.back_html = LEGACY_BACK_TEMPLATE.strip()
-        if not template.shared_css:
-            template.shared_css = LEGACY_SHARED_CSS.strip()
+        template.front_html = LEGACY_FRONT_TEMPLATE.strip()
+        template.back_html = LEGACY_BACK_TEMPLATE.strip()
+        template.shared_css = LEGACY_SHARED_CSS.strip()
         template.is_default = True
 
     db_session.flush()

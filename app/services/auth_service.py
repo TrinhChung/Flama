@@ -6,7 +6,8 @@ from app.services.user_roles import ensure_default_user_roles
 from models import db
 from models.user import User
 
-def register_user_and_commit(email: str, username: str, password: str) -> None:
+
+def register_user_and_commit(email: str, username: str, password: str) -> User:
     existing_user_count = User.query.count()
     roles = ensure_default_user_roles(db.session)
     user = User(email=email, username=username)
@@ -21,3 +22,4 @@ def register_user_and_commit(email: str, username: str, password: str) -> None:
     user.set_password(password)
     db.session.add(user)
     db.session.commit()
+    return user

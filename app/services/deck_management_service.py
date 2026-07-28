@@ -129,21 +129,52 @@ def delete_deck_subtree(*, deck_obj: Deck, user_id: int, is_admin: bool) -> str:
     return "deleted"
 
 def reset_deck_progress(*, deck_obj: Deck, user_id: int) -> int:
-    """Resets the review progress for all cards in a deck subtree for a specific user. Commits."""
+    """Reset current-user progress, including logical-overlay source cards."""
     deck_ids = _collect_deck_subtree_ids(deck_obj.id)
-    card_rows = (
-        db.session.query(Card.id)
-        .join(Note, Card.note_id == Note.id)
-        .filter(Note.deck_id.in_(deck_ids))
-        .all()
-    )
-    card_ids = [str(row[0]) for row in card_rows if row and row[0]]
+    card_id_set = {
+        str(row[0])
+        for row in (
+            db.session.query(Card.id)
+            .join(Note, Card.note_id == Note.id)
+            .filter(Note.deck_id.in_(deck_ids))
+            .all()
+        )
+        if row and row[0]
+    }
+
+    from app.services import flashcards_share
+
+    seen_scopes: set[tuple[str, int]] = set()
+    for local_deck_id in sorted(
+        {int(item) for item in deck_ids if item is not None}
+    ):
+        clone_scope = flashcards_share.resolve_clone_scope_for_local_deck(
+            user_id=user_id,
+            local_deck_id=local_deck_id,
+        )
+        if clone_scope is None:
+            continue
+        scope_key = (
+            str(clone_scope.install.id),
+            int(clone_scope.local_scope_deck_id),
+        )
+        if scope_key in seen_scopes:
+            continue
+        seen_scopes.add(scope_key)
+        clone_rows = (
+            flashcards_share.query_clone_scope_cards(clone_scope)
+            .with_entities(Card.id)
+            .all()
+        )
+        card_id_set.update(
+            str(row[0]) for row in clone_rows if row and row[0]
+        )
 
     deleted_count = 0
-    if card_ids:
+    if card_id_set:
         deleted_count = CardProgress.query.filter(
             CardProgress.user_id == user_id,
-            CardProgress.card_id.in_(card_ids),
+            CardProgress.card_id.in_(sorted(card_id_set)),
         ).delete(synchronize_session=False) or 0
         db.session.commit()
     return deleted_count

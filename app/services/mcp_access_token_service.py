@@ -33,6 +33,10 @@ class McpAccessTokenError(RuntimeError):
         self.code = str(code)
 
 
+class McpAccessTokenPersistenceError(RuntimeError):
+    """Raised when an MCP token mutation cannot be committed."""
+
+
 @dataclass(frozen=True)
 class IssuedMcpAccessToken:
     token: str
@@ -192,6 +196,33 @@ def revoke_token(*, user_id: int, token_id: int) -> bool:
     db.session.add(row)
     current_app.logger.info("Revoked MCP token token_id=%s user_id=%s", token_id, user_id)
     return True
+
+
+def issue_token_and_commit(*, user_id: int) -> IssuedMcpAccessToken:
+    try:
+        issued = issue_short_lived_token(user_id=user_id)
+        db.session.commit()
+        return issued
+    except SQLAlchemyError as exc:
+        db.session.rollback()
+        raise McpAccessTokenPersistenceError(
+            "Could not create the MCP token."
+        ) from exc
+
+
+def revoke_token_and_commit(*, user_id: int, token_id: int) -> bool:
+    try:
+        revoked = revoke_token(user_id=user_id, token_id=token_id)
+        if not revoked:
+            db.session.rollback()
+            return False
+        db.session.commit()
+        return True
+    except SQLAlchemyError as exc:
+        db.session.rollback()
+        raise McpAccessTokenPersistenceError(
+            "Could not revoke the MCP token."
+        ) from exc
 
 
 def enforce_rate_limit(*, bucket_key: str) -> None:

@@ -253,6 +253,8 @@ if (root) {
   }
 
   function renderLearningPreview(item, options = {}) {
+    if (marketKind === "deck_marketplace_item") return "";
+
     const { featured = false } = options;
     const preview = item.preview_text || item.short_description || "Mở bộ thẻ để xem nội dung học thử.";
     const sampleCount = Number(item.sample_cards_count || 0);
@@ -456,7 +458,7 @@ if (root) {
         </div>`;
 
     return `
-      <article class="market-card market-card--${escapeHtml(mode)} ${isCompactNoteTypeMarket ? "market-card--compact-note-type" : ""}" data-item-id="${escapeHtml(item.id)}">
+      <article class="market-card flama-box flama-box--interactive market-card--${escapeHtml(mode)} ${isCompactNoteTypeMarket ? "market-card--compact-note-type" : ""}" data-item-id="${escapeHtml(item.id)}">
         ${coverMarkup}
         <div class="market-card-body">
           ${badgeMarkup ? `<div class="market-card-badges">${badgeMarkup}</div>` : ""}
@@ -707,11 +709,7 @@ if (root) {
 
     featuredStageEl.classList.remove("d-none");
     featuredStageEl.innerHTML = `
-      <article class="market-featured-card market-featured-card--hero">
-        <a class="market-featured-preview-link" href="${escapeHtml(detailUrl)}" aria-label="Xem bộ thẻ nổi bật">
-          ${renderLearningPreview(heroItem, { featured: true })}
-        </a>
-
+      <article class="market-featured-card flama-box flama-box--raised market-featured-card--hero">
         <div class="market-featured-body">
           <div>
             <div class="market-featured-kicker"><i class="bi bi-stars" aria-hidden="true"></i> Đề xuất cho bạn</div>

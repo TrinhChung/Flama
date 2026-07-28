@@ -403,14 +403,11 @@ class DeckSettingsRoutesTests(unittest.TestCase):
             self.assertEqual(owner_progress_count, 0)
             self.assertEqual(admin_progress_count, 1)
 
-    def test_non_admin_dashboard_includes_reset_form(self):
+    def test_non_admin_dashboard_serves_react_shell(self):
         self._login_other()
         response = self.client.get("/dashboard")
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b'id="deck-reset-form"', response.data)
-        self.assertIn(b'id="create-deck-btn"', response.data)
-        self.assertIn(b'id="createDeckModal"', response.data)
-        self.assertIn(b'/flashcards/note-types', response.data)
+        self.assertIn(b'<div id="root"></div>', response.data)
 
     def test_non_admin_can_open_note_type_manager_page(self):
         self._login_other()
@@ -425,7 +422,7 @@ class DeckSettingsRoutesTests(unittest.TestCase):
             follow_redirects=True,
         )
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"My Regular Deck", response.data)
+        self.assertIn(b'<div id="root"></div>', response.data)
 
         with self.app.app_context():
             deck = Deck.query.filter_by(name="My Regular Deck").first()
@@ -485,7 +482,7 @@ class DeckSettingsRoutesTests(unittest.TestCase):
             follow_redirects=True,
         )
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"Installed Child", response.data)
+        self.assertIn(b'<div id="root"></div>', response.data)
 
         with self.app.app_context():
             created = (

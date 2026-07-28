@@ -1,0 +1,67 @@
+/*
+ * Reusable Flama surfaces.
+ *
+ * Use .flama-box for grouped content, then choose one modifier only when
+ * hierarchy requires it. Page-specific CSS should change the custom
+ * properties instead of redefining colors, borders, radius, and shadows.
+ */
+
+.flama-page {
+  background: var(--flama-page-bg);
+  color: var(--flama-text);
+}
+
+.flama-box {
+  --box-bg: var(--flama-panel-bg);
+  --box-border: var(--flama-panel-border);
+  --box-radius: var(--flama-panel-radius);
+  --box-shadow: var(--flama-panel-shadow);
+  background: var(--box-bg);
+  border: 1px solid var(--box-border);
+  border-radius: var(--box-radius);
+  box-shadow: var(--box-shadow);
+}
+
+.flama-box--subtle {
+  --box-bg: var(--flama-panel-bg-subtle);
+}
+
+.flama-box--flat {
+  --box-shadow: none;
+}
+
+.flama-box--raised {
+  --box-shadow: var(--flama-panel-shadow-raised);
+}
+
+.flama-box--section {
+  padding: 1rem;
+}
+
+.flama-box--interactive {
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.18s ease;
+}
+
+.flama-box--interactive:hover {
+  border-color: var(--flama-orange-300);
+  box-shadow: var(--flama-panel-shadow-raised);
+  transform: translateY(-1px);
+}
+
+.flama-box--interactive:focus-within {
+  border-color: var(--flama-control-border-focus);
+  box-shadow: var(--flama-control-focus-ring);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flama-box--interactive {
+    transition: none;
+  }
+
+  .flama-box--interactive:hover {
+    transform: none;
+  }
+}

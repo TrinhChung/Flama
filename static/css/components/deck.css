@@ -89,8 +89,10 @@
 
 /* Deck List */
 .anki-deck-list {
-  border: 1px solid var(--flama-border);
-  border-radius: 0.375rem;
+  background: var(--flama-panel-bg);
+  border: 1px solid var(--flama-panel-border);
+  border-radius: var(--flama-panel-radius);
+  box-shadow: var(--flama-panel-shadow);
   overflow: hidden;
 }
 
@@ -98,7 +100,7 @@
   padding: 2rem;
   text-align: center;
   color: var(--flama-text-2);
-  background-color: var(--flama-surface-2);
+  background-color: var(--flama-panel-bg-subtle);
 }
 
 /* Tabs */

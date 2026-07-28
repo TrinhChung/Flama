@@ -1,5 +1,5 @@
 from typing import Optional
-from flask import Flask
+from flask import Flask, flash, jsonify, redirect, request, url_for
 
 from models import db
 
@@ -85,6 +85,21 @@ def create_app(config: Optional[dict] = None) -> Flask:
             return db.session.get(User, int(user_id))
         return None
 
+    @login_manager.unauthorized_handler
+    def handle_unauthorized():
+        if request.path.startswith("/api/"):
+            return (
+                jsonify(
+                    {
+                        "error": "AUTHENTICATION_REQUIRED",
+                        "message": "Authentication is required.",
+                    }
+                ),
+                401,
+            )
+        flash(login_manager.login_message, login_manager.login_message_category)
+        return redirect(url_for(login_manager.login_view, next=request.url))
+
     register_blueprints(app)
     register_cli_commands(app)
 
@@ -98,12 +113,17 @@ def create_app(config: Optional[dict] = None) -> Flask:
     @app.errorhandler(404)
     def page_not_found(error):
         """Handle 404 errors."""
+        if request.path.startswith("/api/"):
+            return jsonify({"error": "NOT_FOUND", "message": "Resource not found."}), 404
         from flask import render_template
         return render_template('error.html', error_code=404, error_message='Trang không tìm thấy'), 404
 
     @app.errorhandler(500)
     def internal_server_error(error):
         """Handle 500 errors."""
+        if request.path.startswith("/api/"):
+            _rollback_failed_session()
+            return jsonify({"error": "INTERNAL_ERROR", "message": "Internal server error."}), 500
         from flask import render_template
         _rollback_failed_session()
         return render_template('error.html', error_code=500, error_message='Lỗi máy chủ'), 500
@@ -111,12 +131,28 @@ def create_app(config: Optional[dict] = None) -> Flask:
     @app.errorhandler(403)
     def forbidden(error):
         """Handle 403 errors."""
+        if request.path.startswith("/api/"):
+            return jsonify({"error": "FORBIDDEN", "message": "Access is forbidden."}), 403
         from flask import render_template
         return render_template('error.html', error_code=403, error_message='Truy cập bị từ chối'), 403
 
     @app.errorhandler(Exception)
     def handle_exception(error):
         """Handle unexpected exceptions."""
+        if request.path.startswith("/api/"):
+            from werkzeug.exceptions import HTTPException
+            if isinstance(error, HTTPException):
+                status = int(error.code or 500)
+                code = str(error.name or "HTTP_ERROR").upper().replace(" ", "_")
+                return jsonify({"error": code, "message": str(error.description)}), status
+            import logging
+            _rollback_failed_session()
+            logging.getLogger(__name__).error(
+                "Unhandled API exception: %s",
+                error,
+                exc_info=True,
+            )
+            return jsonify({"error": "INTERNAL_ERROR", "message": "Internal server error."}), 500
         from flask import render_template
         import logging
         _rollback_failed_session()

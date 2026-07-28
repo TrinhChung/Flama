@@ -76,6 +76,12 @@ def update_study_card_note(
         next_values[key_name] = value
     if validated.field_updates:
         note.field_values = next_values
+    if validated.update_tags:
+        note.tags = validated.tags
+    if validated.update_deck:
+        note.deck_id = validated.deck_id
+
+    if validated.field_updates or validated.update_tags or validated.update_deck:
         study_edit_repo.commit_note_edit()
 
     rendered_front_html = ""
@@ -103,6 +109,8 @@ def update_study_card_note(
         "success": True,
         "card_id": card.id,
         "note_id": note.id,
+        "deck_id": note.deck_id,
+        "tags": note.tags or [],
         "field_values": note_field_values_as_strings(note),
         "word": display_triplet.get("word", ""),
         "reading": display_triplet.get("reading", ""),

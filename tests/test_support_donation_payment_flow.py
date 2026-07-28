@@ -138,6 +138,25 @@ class SupportDonationPaymentFlowTests(unittest.TestCase):
         with self.app.app_context():
             self.assertEqual(PaymentOrder.query.count(), 0)
 
+    def test_v1_support_checkout_exposes_frontend_checkout_url(self):
+        with patch(
+            "app.services.payment.provider.payos_provider.create_checkout_session",
+            side_effect=self._fake_checkout_session,
+        ):
+            response = self.client.post(
+                "/api/v1/support-donation/checkout",
+                json={"amount_minor": 120000},
+            )
+
+        self.assertEqual(response.status_code, 201)
+        payload = response.get_json() or {}
+        self.assertEqual(payload.get("checkout_mode"), "anonymous")
+        self.assertTrue(payload.get("checkout_url"))
+        self.assertEqual(
+            payload.get("checkout_url"),
+            ((payload.get("checkout") or {}).get("checkout_url")),
+        )
+
     def test_anonymous_support_donation_defaults_to_result_page_when_return_urls_are_omitted(self):
         with patch(
             "app.services.payment.provider.payos_provider.create_checkout_session",

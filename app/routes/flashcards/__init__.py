@@ -2,29 +2,19 @@
 
 from __future__ import annotations
 
-import hashlib
-
 import logging
 
 import time
 
 from datetime import datetime, timedelta
 
-from pathlib import Path
-
-from types import SimpleNamespace
-
 from typing import Any
 
 from flask import (
     Blueprint,
-    current_app,
-    flash,
     jsonify,
     redirect,
-    render_template,
     request,
-    send_file,
     url_for,
 )
 
@@ -38,35 +28,13 @@ from app.services import marketplace_query_service
 
 from app.services import flashcards_share
 
-from app.repositories.deck_tree_query import (
-    collect_subtree_ids as _collect_deck_subtree_ids,
-)
-
-from app.repositories.study_repository import (
-    apply_card_state_to_progress as _apply_card_state_to_progress,
-    card_state_from_progress as _card_state_from_progress,
-    query_next_due_card_id as _query_next_due_card_id,
-)
-
 from app.services.anki_scheduler import (
     applyAnswer,
     computeAnswerPreview,
-    default_deck_options,
 )
 
 from app.services.flashcard_legacy import (
-    LEGACY_BACK_TEMPLATE,
-    LEGACY_FRONT_TEMPLATE,
-    LEGACY_SHARED_CSS,
     ensure_legacy_note_type,
-)
-
-from app.services.flashcard_import import (
-    ImportValidationError,
-    create_import_session,
-    resolve_delimiter,
-    run_import,
-    suggest_mapping,
 )
 
 from app.services.flashcard_renderer import (
@@ -79,8 +47,6 @@ from app.services.flashcard_renderer import (
 
 from app.services.stats_overview import (
     normalize_review_mode,
-    record_review_event,
-    update_user_timezone,
 )
 
 from app.utils.permissions import is_admin_user
@@ -93,9 +59,7 @@ from models.flashcard import (
     Card,
     DeckInstall,
     DeckMarketplaceItem,
-    DeckReview,
     FieldDef,
-    FieldRenameJob,
     MediaAsset,
     Note,
     NoteType,
@@ -105,8 +69,6 @@ from models.flashcard import (
 )
 
 from models.deck import Deck
-
-from models.card_progress import CardProgress
 
 flashcards_bp = Blueprint("flashcards", __name__)
 
@@ -178,36 +140,15 @@ def _audit(action: str, payload: dict[str, Any] | None = None) -> None:
 def _get_note_type_or_404(note_type_id: str) -> NoteType | None:
     return NoteType.query.filter_by(id=note_type_id, user_id=current_user.id).first()
 
-def _serialize_author(user_obj: Any) -> dict[str, Any]:
-    return marketplace_query_service.serialize_author(user_obj)
 
-def _serialize_field(field: FieldDef) -> dict[str, Any]:
-    return marketplace_query_service.serialize_field(field)
 
-def _serialize_template(template: Template) -> dict[str, Any]:
-    return marketplace_query_service.serialize_template(template)
 
 def _serialize_note_type(note_type: NoteType) -> dict[str, Any]:
     return marketplace_query_service.serialize_note_type(note_type)
 
-def _normalize_tags(raw_tags: Any) -> list[str]:
-    return marketplace_query_service.normalize_tags(raw_tags)
 
 def _normalize_marketplace_tags(raw_tags: Any) -> list[str]:
     return marketplace_query_service.normalize_marketplace_tags(raw_tags)
-
-def _parse_price_amount_minor(raw_price: Any) -> int | None:
-    return marketplace_query_service.parse_price_amount_minor(raw_price)
-
-def _normalize_pricing(payload: dict[str, Any], *, current_mode: str, current_price_amount_minor: int) -> tuple[str, int, str | None]:
-    return marketplace_query_service.normalize_pricing(
-        payload,
-        current_mode=current_mode,
-        current_price_amount_minor=current_price_amount_minor,
-    )
-
-def _parse_price_cents(raw_price: Any) -> int | None:
-    return _parse_price_amount_minor(raw_price)
 
 def _build_preview_sample_values(field_defs: list[FieldDef]) -> dict[str, Any]:
     sample_values: dict[str, Any] = {}
@@ -222,8 +163,6 @@ def _build_preview_sample_values(field_defs: list[FieldDef]) -> dict[str, Any]:
             sample_values[field_def.name] = field_def.name
     return sample_values
 
-def _validate_note_type_publish_requirements(note_type: NoteType) -> str | None:
-    return flashcards_share.validate_note_type_publish_requirements(note_type)
 
 def _apply_note_type_marketplace_payload(note_type: NoteType, payload: dict[str, Any]) -> str | None:
     return flashcards_share.apply_note_type_marketplace_payload(
@@ -233,11 +172,7 @@ def _apply_note_type_marketplace_payload(note_type: NoteType, payload: dict[str,
         publish_statuses_visible=PUBLISH_STATUSES_VISIBLE,
     )
 
-def _make_unique_note_type_name(user_id: int, base_name: str) -> str:
-    return flashcards_share.make_unique_note_type_name(user_id, base_name)
 
-def _clone_note_type_for_user(source_note_type: NoteType, user_id: int) -> NoteType:
-    return flashcards_share.clone_note_type_for_user(source_note_type, user_id)
 
 def _touch_note_type_install_usage(*, user_id: int, installed_note_type_id: str, activity_at: datetime | None = None) -> None:
     flashcards_share.touch_note_type_install_usage(
@@ -246,20 +181,7 @@ def _touch_note_type_install_usage(*, user_id: int, installed_note_type_id: str,
         activity_at=activity_at,
     )
 
-def _note_type_reps_for_user(*, user_id: int, installed_note_type_id: str) -> int:
-    return flashcards_share.note_type_reps_for_user(
-        user_id=user_id,
-        installed_note_type_id=installed_note_type_id,
-    )
 
-def _is_note_type_install_active(install: NoteTypeInstall, *, now: datetime) -> bool:
-    return flashcards_share.is_note_type_install_active(
-        install,
-        now=now,
-        note_type_active_note_threshold=NOTE_TYPE_ACTIVE_NOTE_THRESHOLD,
-        note_type_active_review_threshold=NOTE_TYPE_ACTIVE_REVIEW_THRESHOLD,
-        note_type_active_days_threshold=NOTE_TYPE_ACTIVE_DAYS_THRESHOLD,
-    )
 
 def _recompute_note_type_market_stats(note_type: NoteType) -> None:
     flashcards_share.recompute_note_type_market_stats(
@@ -284,8 +206,6 @@ def _serialize_note_type_marketplace_card(note_type: NoteType) -> dict[str, Any]
 def _serialize_deck_marketplace_item(deck_item: DeckMarketplaceItem) -> dict[str, Any]:
     return marketplace_query_service.serialize_deck_marketplace_item(deck_item)
 
-def _validate_deck_publish_requirements(deck_item: DeckMarketplaceItem) -> str | None:
-    return flashcards_share.validate_deck_publish_requirements(deck_item)
 
 def _apply_deck_marketplace_payload(deck_item: DeckMarketplaceItem, payload: dict[str, Any]) -> str | None:
     return flashcards_share.apply_deck_marketplace_payload(
@@ -305,29 +225,7 @@ def _resolve_single_note_type_for_deck(
         owner_user_id=owner_user_id,
     )
 
-def _bind_deck_item_source_note_type(
-    deck_item: DeckMarketplaceItem,
-    *,
-    require_source_note_type: bool,
-) -> str | None:
-    return flashcards_share.bind_deck_item_source_note_type(
-        deck_item,
-        require_source_note_type=require_source_note_type,
-    )
 
-def _validate_note_type_consistency_for_deck(
-    *,
-    deck_id: int | None,
-    note_type_id: str,
-    user_id: int,
-    exclude_note_id: str | None = None,
-) -> str | None:
-    return flashcards_share.validate_note_type_consistency_for_deck(
-        deck_id=deck_id,
-        note_type_id=note_type_id,
-        user_id=user_id,
-        exclude_note_id=exclude_note_id,
-    )
 
 def _collect_accessible_decks_for_import() -> list[Deck]:
     return flashcard_import_ctrl.collect_accessible_decks_for_import(
@@ -350,8 +248,6 @@ def _infer_default_note_type_id_for_deck(deck_id: int | None) -> str | None:
         user_id=current_user.id,
     )
 
-def _deck_installs_covering_deck(*, user_id: int, deck_id: int) -> list[DeckInstall]:
-    return flashcards_share.deck_installs_covering_deck(user_id=user_id, deck_id=deck_id)
 
 def _touch_deck_install_usage(*, user_id: int, local_deck_id: int, activity_at: datetime | None = None) -> None:
     flashcards_share.touch_deck_install_usage(
@@ -412,20 +308,8 @@ def _get_user_deck_install_for_item(*, user_id: int, deck_item_id: str) -> DeckI
 def _upsert_clone_overlay(*, deck_install: DeckInstall, payload: dict[str, Any]) -> tuple[dict[str, int], str | None]:
     return flashcards_share.upsert_clone_overlay(deck_install=deck_install, payload=payload)
 
-def _deck_reps_for_user(*, user_id: int, local_deck_id: int) -> int:
-    return flashcards_share.deck_reps_for_user(user_id=user_id, local_deck_id=local_deck_id)
 
-def _is_deck_install_active(install: DeckInstall) -> bool:
-    return flashcards_share.is_deck_install_active(
-        install,
-        deck_active_review_threshold=DECK_ACTIVE_REVIEW_THRESHOLD,
-    )
 
-def _recompute_deck_item_market_stats(deck_item: DeckMarketplaceItem) -> None:
-    flashcards_share.recompute_deck_item_market_stats(
-        deck_item,
-        deck_active_review_threshold=DECK_ACTIVE_REVIEW_THRESHOLD,
-    )
 
 def _can_user_rate_deck(deck_item: DeckMarketplaceItem, *, user_id: int) -> bool:
     return flashcards_share.can_user_rate_deck(
@@ -440,8 +324,6 @@ def _is_note_type_visible_for_shared(note_type: NoteType) -> bool:
 def _is_deck_item_visible_for_shared(deck_item: DeckMarketplaceItem) -> bool:
     return flashcards_share.is_deck_item_visible_for_shared(deck_item)
 
-def _item_matches_search(query_text: str, *values: str | None) -> bool:
-    return marketplace_query_service.item_matches_search(query_text, *values)
 
 def _filter_note_type_items(
     note_types: list[NoteType],
@@ -535,73 +417,8 @@ def _top_items_by_category_decks(items: list[DeckMarketplaceItem], *, limit_per_
         max_categories=max_categories,
     )
 
-def _create_cards_for_note(note: Note) -> None:
-    templates = (
-        Template.query.filter_by(note_type_id=note.note_type_id)
-        .order_by(Template.position.asc())
-        .all()
-    )
-    existing_template_ids = {card.template_id for card in note.cards}
-    for template in templates:
-        if template.id in existing_template_ids:
-            continue
-        db.session.add(
-            Card(
-                note_id=note.id,
-                template_id=template.id,
-            )
-        )
 
-def _reorder_fields(note_type_id: str, reorder_payload: list[dict[str, Any]]) -> tuple[bool, str | None]:
-    fields = FieldDef.query.filter_by(note_type_id=note_type_id).all()
-    field_map = {field.id: field for field in fields}
-    if len(reorder_payload) != len(fields):
-        return False, "Reorder payload must include all fields."
 
-    seen = set()
-    for row in reorder_payload:
-        fid = row.get("id")
-        position = row.get("position")
-        if fid not in field_map:
-            return False, f"Unknown field id: {fid}"
-        if fid in seen:
-            return False, "Duplicate field id in reorder payload."
-        seen.add(fid)
-        try:
-            field_map[fid].position = int(position)
-        except (TypeError, ValueError):
-            return False, f"Invalid position for field {fid}"
-    return True, None
-
-def _run_field_rename_job(note_type: NoteType, field_def: FieldDef, old_name: str, new_name: str) -> FieldRenameJob:
-    job = FieldRenameJob(
-        note_type_id=note_type.id,
-        user_id=current_user.id,
-        field_def_id=field_def.id,
-        old_name=old_name,
-        new_name=new_name,
-        status="running",
-        total_notes=Note.query.filter_by(note_type_id=note_type.id, user_id=current_user.id).count(),
-        processed_notes=0,
-    )
-    db.session.add(job)
-    db.session.flush()
-    try:
-        notes = Note.query.filter_by(note_type_id=note_type.id, user_id=current_user.id).all()
-        for note in notes:
-            values = dict(note.field_values or {})
-            if old_name in values and new_name not in values:
-                values[new_name] = values.pop(old_name)
-            elif old_name in values:
-                values.pop(old_name)
-            note.field_values = values
-            job.processed_notes += 1
-        job.status = "completed"
-    except Exception as exc:  # pragma: no cover - defensive
-        job.status = "failed"
-        job.error_message = str(exc)
-        logger.exception("Field rename job failed: %s", job.id)
-    return job
 
 @flashcards_bp.after_request
 def _set_card_security_headers(response):
@@ -621,18 +438,10 @@ def _parse_bool(value: Any, *, default: bool = False) -> bool:
         return value
     return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
-def _resolve_import_execution_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], NoteType, int | None]:
-    return flashcard_import_ctrl.resolve_import_execution_payload(
-        payload=payload,
-        user_id=current_user.id,
-        admin_mode=is_admin_user(current_user),
-    )
 
 def _parse_query_price_amount_minor(param_name: str) -> int | None:
     return marketplace_query_service.parse_query_price_amount_minor(request.args.get(param_name))
 
-def _parse_query_price_cents(param_name: str) -> int | None:
-    return _parse_query_price_amount_minor(param_name)
 
 def _get_shared_note_type_for_view(note_type_id: str) -> NoteType | None:
     note_type = db.session.get(NoteType, note_type_id)

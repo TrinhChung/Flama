@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Deck đã cài{% endblock %}
+{% block title %}Thư viện deck{% endblock %}
 
 {% block styles %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/marketplace_hybrid.css') }}">
@@ -10,16 +10,16 @@
 {% block content %}
 {% set summary = installed_workspace['summary'] or {} %}
 <section class="market-detail-page installed-decks-page">
-  <section class="market-space-panel installed-decks-hero">
+  <section class="market-space-panel flama-box installed-decks-hero">
     <div class="installed-decks-hero__copy">
       <div class="market-hub-switch installed-library-switch" role="tablist" aria-label="Không gian thư viện">
-        <button class="market-hub-switch-btn is-active" type="button">Deck đã cài</button>
+        <button class="market-hub-switch-btn is-active" type="button">Thư viện deck</button>
         <a class="market-hub-switch-btn" href="{{ url_for('flashcards.shared_note_types_page') }}">Marketplace note type</a>
       </div>
-      <div class="market-shelf-kicker">Thư viện đã cài</div>
-      <h1 class="market-hub-section-title installed-decks-title mb-2">Deck đã cài</h1>
+      <div class="market-shelf-kicker">Học và quản lý</div>
+      <h1 class="market-hub-section-title installed-decks-title mb-2">Thư viện deck</h1>
       <p class="market-section-help mb-0">
-        Mở nhanh deck bạn đã cài để học hoặc tạo change request mà không cần đi qua marketplace.
+        Quản lý deck của bạn và mở nhanh những deck đã cài mà không cần quay lại marketplace.
       </p>
     </div>
     <div class="installed-decks-hero-actions">
@@ -33,20 +33,20 @@
   </section>
 
   <div class="market-summary-grid installed-decks-summary">
-    <article>
-      <div class="market-summary-label">Tổng deck đã cài</div>
+    <article class="flama-box flama-box--section">
+      <div class="market-summary-label">Trong thư viện</div>
       <div class="market-summary-value">{{ (summary.total_installed_count or 0) | format_number }}</div>
-      <div class="market-summary-help">Tất cả deck đã cài và đang có sẵn trong thư viện của bạn.</div>
+      <div class="market-summary-help">Gồm deck do bạn sở hữu và deck đã cài từ marketplace.</div>
     </article>
-    <article>
+    <article class="flama-box flama-box--section">
       <div class="market-summary-label">Đang học</div>
       <div class="market-summary-value">{{ (summary.using_count or 0) | format_number }}</div>
       <div class="market-summary-help">Deck có hoạt động gần đây để bạn quay lại nhanh hơn.</div>
     </article>
-    <article>
-      <div class="market-summary-label">Có sẵn</div>
-      <div class="market-summary-value">{{ (summary.available_count or 0) | format_number }}</div>
-      <div class="market-summary-help">Deck đã cài nhưng chưa được dùng gần đây.</div>
+    <article class="flama-box flama-box--section">
+      <div class="market-summary-label">Deck của bạn</div>
+      <div class="market-summary-value">{{ (summary.owned_count or 0) | format_number }}</div>
+      <div class="market-summary-help">Deck bạn là tác giả và có thể quản lý trực tiếp.</div>
     </article>
   </div>
 
@@ -54,11 +54,13 @@
   <div class="installed-decks-grid">
     {% for item in installed_workspace['items'] %}
     {% set sync_status = item.last_sync_status or '' %}
-    <article class="market-space-panel installed-deck-card">
+    <article class="market-space-panel flama-box flama-box--interactive installed-deck-card">
       <div class="installed-deck-card__header">
         <div class="installed-deck-card__copy">
           <div class="installed-deck-card__badges">
-            <span class="market-badge">{{ 'Đang học' if item.install_bucket == 'using_now' else 'Đã cài' }}</span>
+            <span class="market-badge">
+              {% if item.install_bucket == 'owned' %}Deck của bạn{% elif item.install_bucket == 'using_now' %}Đang học{% else %}Đã cài{% endif %}
+            </span>
             {% if sync_status == 'needs_sync' %}
             <span class="installed-deck-status" data-tone="warning">Có thay đổi local</span>
             {% elif sync_status == 'has_conflict' %}
@@ -137,13 +139,13 @@
     {% endfor %}
   </div>
   {% else %}
-  <section class="market-space-panel installed-decks-empty">
+  <section class="market-space-panel flama-box installed-decks-empty">
     <div class="installed-decks-empty__icon">
       <i class="bi bi-collection"></i>
     </div>
-    <h2 class="h4 mb-2">Bạn chưa có deck nào đã cài</h2>
+    <h2 class="h4 mb-2">Thư viện deck đang trống</h2>
     <p class="text-muted mb-3">
-      Khi cài deck từ marketplace, chúng sẽ xuất hiện ở đây để bạn mở lại nhanh và tạo change request dễ hơn.
+      Deck bạn tạo hoặc cài từ marketplace sẽ xuất hiện ở đây để học và quản lý nhanh hơn.
     </p>
     <a class="btn btn-primary" href="{{ url_for('flashcards.shared_decks_page') }}">
       <i class="bi bi-shop"></i> Đi tới marketplace

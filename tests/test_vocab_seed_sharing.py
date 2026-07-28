@@ -10,7 +10,11 @@ from pathlib import Path
 from unittest.mock import patch
 
 from app import create_app
-from app.services.flashcard_legacy import LEGACY_FRONT_TEMPLATE, LEGACY_SHARED_CSS
+from app.services.flashcard_legacy import (
+    LEGACY_BACK_TEMPLATE,
+    LEGACY_FRONT_TEMPLATE,
+    LEGACY_SHARED_CSS,
+)
 from models import db
 from models.card_progress import CardProgress
 from models.flashcard import Card, DeckMarketplaceItem, Note, NoteType, Template
@@ -296,6 +300,36 @@ class VocabSeedSharingTests(unittest.TestCase):
             self.assertEqual(item.pricing_mode, "free")
             self.assertEqual(item.source_deck_id, top_deck.id)
 
+    def test_seed_owner_sees_owned_listing_in_installed_deck_workspace(self):
+        result = self.runner.invoke(
+            args=["vocab-seed", "--path", str(self.seed_dir), "--owner-user-id", str(self.user_id)],
+        )
+        self.assertEqual(result.exit_code, 0, msg=result.output)
+
+        with self.app.app_context():
+            item = DeckMarketplaceItem.query.filter_by(
+                owner_user_id=self.user_id,
+                title="Unit 1",
+            ).one()
+            source_deck_id = item.source_deck_id
+            item_id = item.id
+
+        client = self.app.test_client()
+        login_response = client.post(
+            "/login",
+            data={"email": "seed-owner@example.com", "password": "password"},
+            follow_redirects=True,
+        )
+        self.assertEqual(login_response.status_code, 200)
+
+        response = client.get("/flashcards/installed-decks")
+        self.assertEqual(response.status_code, 200)
+        html = response.get_data(as_text=True)
+        self.assertIn("Unit 1", html)
+        self.assertIn("Deck của bạn", html)
+        self.assertIn(f"/flashcards/change-requests/incoming?deck_item_id={item_id}", html)
+        self.assertIn(f"/vocabulary/study/deck/{source_deck_id}", html)
+
     def test_vocab_seed_can_disable_auto_share(self):
         result = self.runner.invoke(
             args=[
@@ -378,6 +412,72 @@ class VocabSeedSharingTests(unittest.TestCase):
                 1,
             )
 
+    def test_vocab_seed_archives_stale_duplicate_official_listing(self):
+        with self.app.app_context():
+            current_deck = Deck(
+                owner_user_id=self.user_id,
+                parent_id=None,
+                name="Unit 1",
+                position=1,
+            )
+            other = User(username="stale-owner", email="stale-owner@example.com")
+            other.set_password("password")
+            db.session.add_all([current_deck, other])
+            db.session.flush()
+            stale_deck = Deck(
+                owner_user_id=other.id,
+                parent_id=None,
+                name="Unit 1",
+                position=1,
+            )
+            db.session.add(stale_deck)
+            db.session.flush()
+
+            current_listing = DeckMarketplaceItem(
+                owner_user_id=self.user_id,
+                source_deck_id=current_deck.id,
+                title="Unit 1",
+                description="Current",
+                primary_category="Japanese",
+                tags=["seeded", "default"],
+                pricing_mode="free",
+                price_amount_minor=0,
+                version="1.0.0",
+                publish_status="published",
+                is_official=True,
+            )
+            stale_listing = DeckMarketplaceItem(
+                owner_user_id=self.user_id,
+                source_deck_id=stale_deck.id,
+                title="Unit 1",
+                description="Stale",
+                primary_category="Japanese",
+                tags=["seeded", "default"],
+                pricing_mode="free",
+                price_amount_minor=0,
+                version="1.0.0",
+                publish_status="published",
+                is_official=True,
+            )
+            db.session.add_all([current_listing, stale_listing])
+            db.session.commit()
+            current_listing_id = current_listing.id
+            stale_listing_id = stale_listing.id
+
+        result = self.runner.invoke(
+            args=["vocab-seed", "--path", str(self.seed_dir), "--owner-user-id", str(self.user_id)],
+        )
+        self.assertEqual(result.exit_code, 0, msg=result.output)
+
+        with self.app.app_context():
+            current_listing = db.session.get(DeckMarketplaceItem, current_listing_id)
+            stale_listing = db.session.get(DeckMarketplaceItem, stale_listing_id)
+            self.assertEqual(current_listing.publish_status, "published")  # type: ignore[union-attr]
+            self.assertTrue(current_listing.is_official)  # type: ignore[union-attr]
+            self.assertEqual(stale_listing.publish_status, "archived")  # type: ignore[union-attr]
+            self.assertFalse(stale_listing.is_official)  # type: ignore[union-attr]
+            self.assertIsNotNone(stale_listing.archived_at)  # type: ignore[union-attr]
+
     def test_vocab_seed_restores_soft_deleted_owned_deck_and_listing(self):
         archived_at = datetime(2026, 1, 1)
         with self.app.app_context():
@@ -424,7 +524,7 @@ class VocabSeedSharingTests(unittest.TestCase):
             self.assertEqual(restored_listing.publish_status, "published")  # type: ignore[union-attr]
             self.assertIsNone(restored_listing.archived_at)  # type: ignore[union-attr]
 
-    def test_vocab_seed_uses_non_scrolling_front_template_for_default_vocab(self):
+    def test_vocab_seed_uses_canonical_template_and_only_two_default_note_types(self):
         result = self.runner.invoke(
             args=["vocab-seed", "--path", str(self.seed_dir), "--owner-user-id", str(self.user_id)],
         )
@@ -442,13 +542,31 @@ class VocabSeedSharingTests(unittest.TestCase):
                 is_default=True,
             ).first()
             self.assertIsNotNone(template)
-        self.assertIn('class="legacy-front"', template.front_html)  # type: ignore[union-attr]
-        self.assertIn('class="front-word"', template.front_html)  # type: ignore[union-attr]
-        self.assertIn("{{word}}", template.front_html)  # type: ignore[union-attr]
-        self.assertNotIn("100vh", template.front_html)  # type: ignore[union-attr]
-        self.assertIn("html, body, .card", template.shared_css)  # type: ignore[union-attr]
-        self.assertIn("height: 100%;", template.shared_css)  # type: ignore[union-attr]
-        self.assertNotIn("100vh", template.shared_css)  # type: ignore[union-attr]
+            note_type_names = {
+                row[0]
+                for row in db.session.query(NoteType.name)
+                .filter(NoteType.user_id == self.user_id)
+                .all()
+            }
+            template_names = {
+                row[0]
+                for row in db.session.query(Template.name)
+                .join(NoteType, Template.note_type_id == NoteType.id)
+                .filter(NoteType.user_id == self.user_id)
+                .all()
+            }
+
+        self.assertEqual(template.front_html, LEGACY_FRONT_TEMPLATE.strip())  # type: ignore[union-attr]
+        self.assertEqual(template.back_html, LEGACY_BACK_TEMPLATE.strip())  # type: ignore[union-attr]
+        self.assertEqual(template.shared_css, LEGACY_SHARED_CSS.strip())  # type: ignore[union-attr]
+        self.assertEqual(
+            note_type_names,
+            {"Flama Standard Vocabulary", "Trắc nghiệm"},
+        )
+        self.assertEqual(
+            template_names,
+            {"Default Flama Flashcard", "Default Quiz Flashcard"},
+        )
 
     def test_vocab_seed_seeds_quiz_dump_deck_for_owner(self):
         result = self.runner.invoke(
@@ -684,7 +802,7 @@ class VocabSeedSharingTests(unittest.TestCase):
         finally:
             shutil.rmtree(export_root, ignore_errors=True)
 
-    def test_reseed_script_front_template_avoids_viewport_height_wrapper(self):
+    def test_reseed_script_uses_canonical_flama_standard_vocabulary_template(self):
         seed_globals = runpy.run_path(
             str(Path(__file__).resolve().parents[1] / "scripts" / "seed_flama_template.py")
         )
@@ -693,17 +811,16 @@ class VocabSeedSharingTests(unittest.TestCase):
         back_html = seed_globals["BACK_HTML"]
         shared_css = seed_globals["CSS"]
 
-        self.assertIn('class="front-word"', front_html)
+        self.assertIn("height:100vh", front_html)
         self.assertIn("{{word}}", front_html)
-        self.assertNotIn("100vh", front_html)
         self.assertIn("{{#word_audio}}", back_html)
         self.assertIn("{{#example_audio}}", back_html)
-        self.assertIn(".front-word", shared_css)
-        self.assertIn("html,", shared_css)
-        self.assertIn("height: 100%;", shared_css)
-        self.assertNotIn("100vh", shared_css)
+        self.assertIn(".kanji-stroke-images", shared_css)
+        self.assertIn("@media (max-width: 480px)", shared_css)
+        self.assertEqual(front_html.strip(), LEGACY_FRONT_TEMPLATE.strip())
+        self.assertEqual(back_html.strip(), LEGACY_BACK_TEMPLATE.strip())
+        self.assertEqual(shared_css.strip(), LEGACY_SHARED_CSS.strip())
         self.assertEqual(LEGACY_FRONT_TEMPLATE.strip().count("{{word}}"), 1)
-        self.assertIn("height: 100%;", LEGACY_SHARED_CSS)
 
     def test_vocab_seed_supports_path_pointing_directly_to_seed_subfolder(self):
         direct_root = Path(tempfile.mkdtemp(prefix="flama-direct-seed-"))

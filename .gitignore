@@ -16,7 +16,6 @@ static/tmp/
 /flama_media_storage/
 /output/
 /.playwright-cli/
-/.impeccable/
 
 
 /migrations/*
