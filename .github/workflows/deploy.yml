@@ -40,6 +40,7 @@ jobs:
           PAYOS_API_KEY: ${{ secrets.PAYOS_API_KEY }}
           PAYOS_CHECKSUM_KEY: ${{ secrets.PAYOS_CHECKSUM_KEY }}
           PAYOS_CLIENT_ID: ${{ secrets.PAYOS_CLIENT_ID }}
+          CORS_ALLOWED_ORIGINS: ${{ vars.CORS_ALLOWED_ORIGINS }}
           FLASK_APP: ${{ vars.FLASK_APP }}
           DB_PORT: ${{ vars.DB_PORT }}
           FLASHCARDS_SHARE_CUTOVER_FAIL_ON_MISMATCH: ${{ vars.FLASHCARDS_SHARE_CUTOVER_FAIL_ON_MISMATCH }}

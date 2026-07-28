@@ -41,6 +41,14 @@ def coerce_int_env(name: str, *, default: int) -> int:
         return default
 
 
+def comma_separated_env(name: str) -> tuple[str, ...]:
+    return tuple(
+        value
+        for raw_value in os.getenv(name, "").split(",")
+        if (value := raw_value.strip().rstrip("/"))
+    )
+
+
 def resolve_media_upload_root(raw_value: str | None = None, *, base_dir: Path = BASE_DIR) -> Path:
     """Resolve media root path for local media uploads."""
     raw = str(raw_value or "").strip() or os.getenv("FLASHCARD_MEDIA_UPLOAD_ROOT", "").strip()
@@ -95,6 +103,7 @@ def build_app_config(overrides: Mapping[str, Any] | None = None) -> dict[str, An
             "pool_pre_ping": True,
             "pool_recycle": 1800,
         },
+        "CORS_ALLOWED_ORIGINS": comma_separated_env("CORS_ALLOWED_ORIGINS"),
         "FLASHCARD_MEDIA_UPLOAD_ROOT": str(resolve_media_upload_root()),
         "FLASHCARD_MEDIA_MAX_BYTES": int(os.getenv("FLASHCARD_MEDIA_MAX_BYTES", str(10 * 1024 * 1024))),
         "IMAGE_LIBRARY_MAX_BYTES": int(os.getenv("IMAGE_LIBRARY_MAX_BYTES", str(5 * 1024 * 1024))),

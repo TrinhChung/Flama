@@ -27,6 +27,7 @@ class SyncManagedEnvironmentTests(unittest.TestCase):
             "PAYOS_API_KEY": "payos-api-key",
             "PAYOS_CHECKSUM_KEY": "payos-checksum-key",
             "PAYOS_CLIENT_ID": "payos-client-id",
+            "CORS_ALLOWED_ORIGINS": "https://flama.stmtp.com",
             "FLASK_APP": "wsgi.py",
             "DB_PORT": "3306",
             "FLASHCARDS_SHARE_CUTOVER_FAIL_ON_MISMATCH": "0",
@@ -65,6 +66,7 @@ class SyncManagedEnvironmentTests(unittest.TestCase):
             self.assertIn('ADMIN_PASSWORD="password with spaces and \\"quotes\\""\n', content)
             self.assertIn('DB_PASSWORD="debuggable-database-password"\n', content)
             self.assertIn('PAYOS_CLIENT_ID="payos-client-id"\n', content)
+            self.assertIn('CORS_ALLOWED_ORIGINS="https://flama.stmtp.com"\n', content)
             self.assertIn('PAYMENTS_ENABLED="1"\n', content)
             self.assertIn('DB_PORT="3306"\n', content)
             if os.name != "nt":
