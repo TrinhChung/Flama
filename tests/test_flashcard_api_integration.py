@@ -142,11 +142,11 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         self.assertEqual(preview["front_renderer_payload"]["html"], preview["front_html"])
         self.assertEqual(preview["back_renderer_payload"]["html"], preview["back_html"])
 
-    def test_v1_content_crud_media_and_legacy_parity(self):
+    def test_canonical_api_content_crud_and_media_contract(self):
         create_response = self.client.post(
-            "/api/v1/note-types",
+            "/api/note-types",
             json={
-                "name": "V1 Content",
+                "name": "API Content",
                 "field_defs": [
                     {
                         "name": "Word",
@@ -171,13 +171,12 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         self.assertEqual(create_response.status_code, 201)
         note_type_id = create_response.get_json()["id"]
 
-        legacy_list = self.client.get("/api/note-types")
-        v1_list = self.client.get("/api/v1/note-types")
-        self.assertEqual(v1_list.status_code, 200)
-        self.assertEqual(v1_list.get_json(), legacy_list.get_json())
+        list_response = self.client.get("/api/note-types")
+        self.assertEqual(list_response.status_code, 200)
+        self.assertEqual(len(list_response.get_json()["items"]), 1)
 
         note_response = self.client.post(
-            "/api/v1/notes",
+            "/api/notes",
             json={
                 "note_type_id": note_type_id,
                 "deck_id": self.deck_id,
@@ -188,7 +187,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         note_id = note_response.get_json()["id"]
 
         upload_response = self.client.post(
-            f"/api/v1/notes/{note_id}/media",
+            f"/api/notes/{note_id}/media",
             data={
                 "field_name": "Audio",
                 "file": (io.BytesIO(_MIN_WAV_BYTES), "voice.wav"),
@@ -198,14 +197,14 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         self.assertEqual(upload_response.status_code, 201)
         asset_id = upload_response.get_json()["asset_id"]
 
-        detail_response = self.client.get(f"/api/v1/notes/{note_id}")
+        detail_response = self.client.get(f"/api/notes/{note_id}")
         self.assertEqual(detail_response.status_code, 200)
         self.assertEqual(
             detail_response.get_json()["field_values"]["Audio"],
             asset_id,
         )
         self.assertEqual(
-            self.client.get("/api/v1/flashcards/import/options").status_code,
+            self.client.get("/api/flashcards/import/options").status_code,
             200,
         )
 
@@ -530,7 +529,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             self.assertEqual(deck_item.tags, ["updated", "deck"])  # type: ignore[union-attr]
 
     def test_authenticated_navbar_places_installed_decks_under_content_management(self):
-        response = self.client.get("/api/v1/session")
+        response = self.client.get("/api/session")
         self.assertEqual(response.status_code, 200)
         data = response.get_json()
         self.assertTrue(data.get("authenticated"))
@@ -1824,7 +1823,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         install_resp = viewer_client.post(f"/api/shared/decks/{deck_item_id}/install")
         self.assertEqual(install_resp.status_code, 201)
 
-        dashboard_resp = viewer_client.get("/api/v1/dashboard")
+        dashboard_resp = viewer_client.get("/api/dashboard")
         self.assertEqual(dashboard_resp.status_code, 200)
         dashboard_items = dashboard_resp.get_json().get("items", [])
 
@@ -1857,7 +1856,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         )
         self.assertEqual(create_note_resp.status_code, 201)
 
-        dashboard_resp = self.client.get("/api/v1/dashboard")
+        dashboard_resp = self.client.get("/api/dashboard")
         self.assertEqual(dashboard_resp.status_code, 200)
         dashboard_items = dashboard_resp.get_json().get("items", [])
 

@@ -1,4 +1,8 @@
-"""REST API V1 parent blueprint."""
+"""Canonical REST API implementation.
+
+The package name remains ``v1`` as an internal implementation boundary, while
+the public HTTP namespace is intentionally unversioned at ``/api``.
+"""
 
 from __future__ import annotations
 
@@ -14,7 +18,7 @@ from .learning import learning_bp
 from .marketplace import marketplace_installations_bp
 from .settings import settings_bp
 
-api_v1_bp = Blueprint("api_v1", __name__, url_prefix="/api/v1")
+api_v1_bp = Blueprint("api_v1", __name__, url_prefix="/api")
 api_v1_bp.register_blueprint(identity_bp)
 api_v1_bp.register_blueprint(decks_bp, url_prefix="/decks")
 api_v1_bp.register_blueprint(flashcards_v1_bp)

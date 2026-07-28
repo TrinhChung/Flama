@@ -41,7 +41,7 @@ class SpaRouteTests(unittest.TestCase):
 
     def _login(self):
         response = self.client.post(
-            "/api/v1/auth/login",
+            "/api/auth/login",
             json={"email": "spa@example.com", "password": "password"},
         )
         self.assertEqual(response.status_code, 200)

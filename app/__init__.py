@@ -3,6 +3,7 @@ from flask import Flask, flash, jsonify, redirect, request, url_for
 
 from models import db
 
+from .cors import init_cors
 from .csrf import init_csrf_protection
 from .cli import register_cli_commands
 from .extensions import login_manager, migrate
@@ -26,6 +27,7 @@ def create_app(config: Optional[dict] = None) -> Flask:
     migrate.init_app(app, db)
     login_manager.init_app(app)
     init_csrf_protection(app)
+    init_cors(app)
     app.jinja_env.filters["format_number"] = format_number
     app.jinja_env.filters["format_vnd"] = format_vnd
     app.jinja_env.filters["format_price_display"] = format_price_display

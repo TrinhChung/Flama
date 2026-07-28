@@ -144,7 +144,7 @@ class SupportDonationPaymentFlowTests(unittest.TestCase):
             side_effect=self._fake_checkout_session,
         ):
             response = self.client.post(
-                "/api/v1/support-donation/checkout",
+                "/api/support-donation/checkout",
                 json={"amount_minor": 120000},
             )
 

@@ -19,13 +19,15 @@ def register_blueprints(app: Flask) -> None:
     """Attach all blueprints to the Flask application."""
     from app.api import register_api_blueprints
 
+    # The canonical /api namespace must be registered before legacy adapters
+    # that still expose overlapping compatibility rules.
+    register_api_blueprints(app)
     app.register_blueprint(main_bp)
     app.register_blueprint(mcp_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(admin_payments_bp)
     app.register_blueprint(payments_bp)
-    register_api_blueprints(app)
     app.register_blueprint(spa_routes_bp)
     app.register_blueprint(user_orders_bp)
     app.register_blueprint(vocabulary_bp)
