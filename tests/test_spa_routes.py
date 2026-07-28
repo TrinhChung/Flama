@@ -46,14 +46,16 @@ class SpaRouteTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 200)
 
-    def test_public_support_deep_link_serves_spa(self):
+    def test_public_deep_links_serve_spa(self):
         with patch(
             "app.routes.spa_routes.serve_react_spa",
             side_effect=self._shell,
         ):
-            response = self.client.get("/support")
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data, b"react-shell")
+            for path in ("/support", "/maintenance"):
+                with self.subTest(path=path):
+                    response = self.client.get(path)
+                    self.assertEqual(response.status_code, 200)
+                    self.assertEqual(response.data, b"react-shell")
 
     def test_private_canonical_deep_links_require_login_then_serve_spa(self):
         for path in (

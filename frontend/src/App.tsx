@@ -1,10 +1,15 @@
-import { lazy, Suspense, type ReactNode } from 'react'
+import { lazy, Suspense, useEffect, type ReactNode } from 'react'
 import { LoaderCircle } from 'lucide-react'
 import { Navigate, RouterProvider, createBrowserRouter } from 'react-router-dom'
 import { AppLayout } from './layouts/AppLayout'
 import { RequireAuth } from './features/auth/components/RequireAuth'
 import { LandingPage } from './pages/LandingPage'
+import { MaintenancePage } from './pages/MaintenancePage'
 import { NotFoundPage } from './pages/NotFoundPage'
+import {
+  MAINTENANCE_PATH,
+  subscribeBackendUnavailable,
+} from './shared/api/backendAvailability'
 
 const LoginPage = lazy(() =>
   import('./features/auth/pages/LoginPage').then((module) => ({
@@ -140,6 +145,10 @@ function deferred(element: ReactNode) {
 
 const router = createBrowserRouter([
   {
+    path: MAINTENANCE_PATH,
+    element: <MaintenancePage />,
+  },
+  {
     element: <AppLayout />,
     children: [
       { index: true, element: <LandingPage /> },
@@ -246,5 +255,15 @@ const router = createBrowserRouter([
 ])
 
 export default function App() {
+  useEffect(
+    () =>
+      subscribeBackendUnavailable(() => {
+        if (router.state.location.pathname !== MAINTENANCE_PATH) {
+          void router.navigate(MAINTENANCE_PATH, { replace: true })
+        }
+      }),
+    [],
+  )
+
   return <RouterProvider router={router} />
 }
