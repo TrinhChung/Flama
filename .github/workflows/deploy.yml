@@ -91,8 +91,63 @@ jobs:
           archive_path="/tmp/flama-$RELEASE_ID.tar.gz"
           environment_file=/etc/flama/flama.env
           desired_environment_file="/etc/flama/.flama.env.$RELEASE_ID"
+          environment_backup_file="/etc/flama/.flama.env.rollback.$RELEASE_ID"
           managed_env_payload_path="/tmp/flama-$RELEASE_ID.env.json"
-          trap 'rm -f "$archive_path" "$managed_env_payload_path" "$desired_environment_file"' EXIT
+          previous_release=""
+          activation_started=0
+          deployment_succeeded=0
+
+          rollback_activation() {
+            if [ "$activation_started" -ne 1 ] || [ "$deployment_succeeded" -eq 1 ]; then
+              return
+            fi
+
+            echo "Deployment failed after activation; restoring the previous release." >&2
+            if [ -f "$environment_backup_file" ]; then
+              cp -p "$environment_backup_file" "$environment_file"
+            fi
+
+            if [ -n "$previous_release" ] && [ -d "$previous_release" ]; then
+              if [ -f "$previous_release/deploy/flama.service" ]; then
+                install -m 0644 \
+                  "$previous_release/deploy/flama.service" \
+                  /etc/systemd/system/flama.service
+              fi
+              ln -sfn "$previous_release" "$PROJECT_DIR/current"
+              systemctl daemon-reload || true
+              systemctl restart flama.service || true
+
+              for attempt in $(seq 1 10); do
+                if curl --silent --show-error --max-time 5 \
+                  http://127.0.0.1:4789/ >/dev/null; then
+                  echo "Previous release restored: $previous_release" >&2
+                  return
+                fi
+                sleep 2
+              done
+
+              echo "Previous release was selected but did not become healthy." >&2
+              return
+            fi
+
+            systemctl stop flama.service || true
+            echo "No previous release was available; stopped flama.service." >&2
+          }
+
+          cleanup() {
+            status=$?
+            trap - EXIT
+            if [ "$status" -ne 0 ]; then
+              rollback_activation
+            fi
+            rm -f \
+              "$archive_path" \
+              "$managed_env_payload_path" \
+              "$desired_environment_file" \
+              "$environment_backup_file"
+            exit "$status"
+          }
+          trap cleanup EXIT
 
           test -f "$environment_file"
           test -f "$managed_env_payload_path"
@@ -102,18 +157,8 @@ jobs:
           python3 "$release_dir/deploy/sync_managed_env.py" apply \
             --env-file "$desired_environment_file" \
             --payload-file "$managed_env_payload_path"
-          cp -p "$environment_file" /etc/flama/flama.env.bak
-          if ! FLAMA_ENVIRONMENT_FILE="$desired_environment_file" \
-            bash "$release_dir/deploy/bootstrap_hostinger.sh"; then
-            FLAMA_ENVIRONMENT_FILE="$environment_file" \
-              bash "$release_dir/deploy/bootstrap_hostinger.sh" || true
-            exit 1
-          fi
-          if ! mv -f "$desired_environment_file" "$environment_file"; then
-            FLAMA_ENVIRONMENT_FILE="$environment_file" \
-              bash "$release_dir/deploy/bootstrap_hostinger.sh" || true
-            exit 1
-          fi
+          FLAMA_ENVIRONMENT_FILE="$desired_environment_file" \
+            bash "$release_dir/deploy/bootstrap_hostinger.sh"
 
           if [ ! -x "$PROJECT_DIR/venv/bin/python" ]; then
             python3 -m venv "$PROJECT_DIR/venv"
@@ -125,30 +170,50 @@ jobs:
             --property=User=flama \
             --property=Group=flama \
             --property="WorkingDirectory=$release_dir" \
-            --property="EnvironmentFile=$environment_file" \
+            --property="EnvironmentFile=$desired_environment_file" \
             "$PROJECT_DIR/venv/bin/flask" --app wsgi.py bootstrap-admin-sync
           systemd-run --quiet --wait --collect --pipe \
             --unit="flama-seed-data-$RELEASE_ID" \
             --property=User=flama \
             --property=Group=flama \
             --property="WorkingDirectory=$release_dir" \
-            --property="EnvironmentFile=$environment_file" \
+            --property="EnvironmentFile=$desired_environment_file" \
             "$PROJECT_DIR/venv/bin/flask" --app wsgi.py seed-data-ensure \
               --path static/seed_data
           install -m 0644 "$release_dir/deploy/flama.service" /etc/systemd/system/flama.service
+
+          previous_release="$(readlink -f "$PROJECT_DIR/current" 2>/dev/null || true)"
+          case "$previous_release" in
+            "$PROJECT_DIR"/releases/*)
+              if [ ! -d "$previous_release" ]; then
+                previous_release=""
+              fi
+              ;;
+            *)
+              previous_release=""
+              ;;
+          esac
+
+          cp -p "$environment_file" "$environment_backup_file"
+          cp -p "$environment_file" /etc/flama/flama.env.bak
+          activation_started=1
+          mv -f "$desired_environment_file" "$environment_file"
           ln -sfn "$release_dir" "$PROJECT_DIR/current"
 
           systemctl daemon-reload
+          systemctl enable flama.service
           systemctl restart flama.service
 
           for attempt in $(seq 1 20); do
-            if curl --fail --silent --show-error --max-time 5 http://127.0.0.1:4789/ >/dev/null; then
+            if curl --fail --silent --show-error --max-time 5 \
+              http://127.0.0.1:4789/api/health >/dev/null; then
               touch "$release_dir/.deployment_succeeded"
+              deployment_succeeded=1
               python3 "$release_dir/deploy/prune_releases.py" \
                 --releases-dir "$PROJECT_DIR/releases" \
                 --current-release "$release_dir" \
-                --keep 2
-              systemctl --no-pager --full status flama.service
+                --keep 2 || echo "Warning: failed to prune old releases." >&2
+              systemctl --no-pager --full status flama.service || true
               exit 0
             fi
             sleep 3
