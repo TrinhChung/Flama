@@ -230,7 +230,7 @@ export function ImportPage() {
       formData.append('custom_delimiter', customDelimiter)
       formData.append('has_header', hasHeader ? '1' : '0')
 
-      return apiRequest<ParseResponse>('/api/v1/flashcards/import/parse', {
+      return apiRequest<ParseResponse>('/api/flashcards/import/parse', {
         method: 'POST',
         body: formData,
       })

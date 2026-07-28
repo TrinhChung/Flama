@@ -276,7 +276,7 @@ class PaymentManagementViewTests(unittest.TestCase):
         self.assertEqual(page_response.status_code, 200)
         self.assertIn(b'<div id="root"></div>', page_response.data)
 
-        api_response = self.client.get("/api/v1/orders")
+        api_response = self.client.get("/api/orders")
         self.assertEqual(api_response.status_code, 200)
         order_codes = {
             row.get("merchant_order_code")
@@ -325,7 +325,7 @@ class PaymentManagementViewTests(unittest.TestCase):
         self.assertEqual(page_response.status_code, 200)
         self.assertIn(b'<div id="root"></div>', page_response.data)
 
-        api_response = self.client.get("/api/v1/admin/payments?period=30d")
+        api_response = self.client.get("/api/admin/payments?period=30d")
         self.assertEqual(api_response.status_code, 200)
         payload = api_response.get_json() or {}
         self.assertEqual(payload.get("period"), "30d")

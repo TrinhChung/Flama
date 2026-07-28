@@ -41,7 +41,7 @@ class AdminRestApiV1Tests(unittest.TestCase):
 
     def _login(self, email: str = "rest-admin@example.com"):
         response = self.client.post(
-            "/api/v1/auth/login",
+            "/api/auth/login",
             json={"email": email, "password": "password"},
         )
         self.assertEqual(response.status_code, 200)
@@ -49,12 +49,12 @@ class AdminRestApiV1Tests(unittest.TestCase):
     def test_tts_provider_crud(self):
         self._login()
 
-        list_response = self.client.get("/api/v1/admin/tts-providers")
+        list_response = self.client.get("/api/admin/tts-providers")
         self.assertEqual(list_response.status_code, 200)
         self.assertIn("items", list_response.get_json())
 
         create_response = self.client.post(
-            "/api/v1/admin/tts-providers",
+            "/api/admin/tts-providers",
             json={
                 "provider_name": "REST Test Provider",
                 "provider_type": "rest-test",
@@ -72,7 +72,7 @@ class AdminRestApiV1Tests(unittest.TestCase):
         self.assertTrue(item["is_active"])
 
         update_response = self.client.put(
-            f"/api/v1/admin/tts-providers/{item['id']}",
+            f"/api/admin/tts-providers/{item['id']}",
             json={
                 "provider_name": "REST Test Provider Updated",
                 "provider_type": "rest-test",
@@ -90,19 +90,19 @@ class AdminRestApiV1Tests(unittest.TestCase):
         self.assertEqual(updated["shared_config"]["region"], "test")
 
         delete_response = self.client.delete(
-            f"/api/v1/admin/tts-providers/{item['id']}"
+            f"/api/admin/tts-providers/{item['id']}"
         )
         self.assertEqual(delete_response.status_code, 204)
 
     def test_support_donation_get_and_update(self):
         self._login()
 
-        get_response = self.client.get("/api/v1/admin/support-donation")
+        get_response = self.client.get("/api/admin/support-donation")
         self.assertEqual(get_response.status_code, 200)
         self.assertIsNone(get_response.get_json()["item"]["id"])
 
         update_response = self.client.put(
-            "/api/v1/admin/support-donation",
+            "/api/admin/support-donation",
             json={
                 "title": "Support REST",
                 "description": "REST donation description",
@@ -116,19 +116,19 @@ class AdminRestApiV1Tests(unittest.TestCase):
         self.assertEqual(item["title"], "Support REST")
         self.assertEqual(item["account_number"], "123456789")
 
-        public_response = self.client.get("/api/v1/support-donation")
+        public_response = self.client.get("/api/support-donation")
         self.assertEqual(public_response.status_code, 200)
         self.assertEqual(public_response.get_json()["title"], "Support REST")
 
     def test_image_library_list_create_and_patch(self):
         self._login()
 
-        list_response = self.client.get("/api/v1/admin/image-library")
+        list_response = self.client.get("/api/admin/image-library")
         self.assertEqual(list_response.status_code, 200)
         self.assertEqual(list_response.get_json()["items"], [])
 
         create_response = self.client.post(
-            "/api/v1/admin/image-library",
+            "/api/admin/image-library",
             json={
                 "image_key": "rest_image",
                 "description": "Fileless image key",
@@ -141,7 +141,7 @@ class AdminRestApiV1Tests(unittest.TestCase):
         self.assertFalse(item["has_file"])
 
         patch_response = self.client.patch(
-            f"/api/v1/admin/image-library/{item['id']}",
+            f"/api/admin/image-library/{item['id']}",
             json={"is_enabled": False},
         )
         self.assertEqual(patch_response.status_code, 200)
@@ -151,7 +151,7 @@ class AdminRestApiV1Tests(unittest.TestCase):
 
     def test_regular_user_is_forbidden(self):
         self._login("rest-regular@example.com")
-        response = self.client.get("/api/v1/admin/tts-providers")
+        response = self.client.get("/api/admin/tts-providers")
         self.assertEqual(response.status_code, 403)
         self.assertEqual(response.get_json()["error"], "FORBIDDEN")
 

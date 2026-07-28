@@ -1,8 +1,13 @@
-# REST API V1 Migration Plan
+# REST API Migration Plan
+
+> Quyết định namespace ngày 2026-07-29: public API dùng một prefix canonical
+> `/api`, không đưa version vào URL. Thư mục `app/api/v1` và tên blueprint V1
+> tạm thời được giữ làm implementation boundary để tránh một đợt rename nội bộ
+> không liên quan tới HTTP contract.
 
 ## 1. Mục tiêu
 
-Hoàn tất quá trình chuyển frontend React sang REST API có version mà không làm thay đổi
+Hoàn tất quá trình chuyển frontend React sang REST API canonical mà không làm thay đổi
 nghiệp vụ hiện tại, không phá scheduler, media security, payment idempotency hoặc mô
 hình shared-deck logical overlay.
 
@@ -18,7 +23,7 @@ Migration này không bao gồm schema migration, scheduler rewrite hoặc API V
 Tại thời điểm lập kế hoạch:
 
 - 221 Flask route-rule.
-- 46 route-rule dưới `/api/v1`.
+- 46 route-rule dưới `/api`.
 - 93 API route-rule chưa version hóa.
 - 82 route page, file, redirect hoặc legacy.
 - Các route Level/Topic/Lesson/Entry đã retired và không được khôi phục.
@@ -41,9 +46,9 @@ REST API và React hiện mới migrate một phần:
 
 Các blocker đã xác định:
 
-1. Support checkout bị gọi thành `/api/v1/support-donation/checkout` nhưng endpoint đó
+1. Support checkout bị gọi thành `/api/support-donation/checkout` nhưng endpoint đó
    chưa tồn tại.
-2. Admin batch role/status bị gọi thành `/api/v1/admin/api/users/...` nhưng endpoint đó
+2. Admin batch role/status bị gọi thành `/api/admin/api/users/...` nhưng endpoint đó
    chưa tồn tại.
 3. VoiceVox preview và study media upload dùng `fetch` trực tiếp, không gửi CSRF.
 4. Flask chưa phục vụ SPA shell nhất quán cho các React deep-link.
@@ -55,7 +60,7 @@ Các blocker đã xác định:
 
 Một chức năng chỉ được đánh dấu `V1_PRIMARY` khi đồng thời đạt:
 
-1. Có endpoint canonical dưới `/api/v1`.
+1. Có endpoint canonical dưới `/api`.
 2. React và client nội bộ dùng endpoint V1.
 3. Handler V1 không gọi handler route legacy.
 4. V1 và legacy adapter gọi cùng application service.
@@ -171,12 +176,12 @@ Không redirect mutation legacy sang V1 và không để route gọi route.
 
 ## 5. Contract V1
 
-### 5.1 Versioning và naming
+### 5.1 Namespace và naming
 
-- Dùng path versioning `/api/v1`.
+- Dùng một public namespace `/api`; không đặt version trong URL.
 - URL dùng plural noun và kebab-case.
 - JSON tiếp tục dùng snake_case.
-- Không đổi path/status/payload V1 hiện tại chỉ để REST thuần hơn.
+- Không đổi status/payload hiện tại chỉ để REST thuần hơn.
 - Action endpoint như `progress-reset`, study answer hoặc preview được giữ trong V1
   nếu đổi tên làm tăng rủi ro; redesign dành cho V2.
 - Pagination dùng `page`, `per_page`; search dùng `q`.
@@ -201,7 +206,7 @@ V1 giữ envelope tương thích với client hiện tại:
 
 - First-party SPA tiếp tục dùng Flask-Login session.
 - Client dùng `credentials: same-origin`.
-- Unsafe method gửi CSRF token lấy từ `/api/v1/session`.
+- Unsafe method gửi CSRF token lấy từ `/api/session`.
 - Không bật CORS rộng.
 - Admin guard và JSON 401/403 dùng common API helper.
 - Bearer authentication chỉ được exempt CSRF cho endpoint/protocol thực sự dùng Bearer.
@@ -247,7 +252,7 @@ Acceptance:
 
 ### Phase 1 - Chia REST god-file
 
-- Tạo `app/api/common` và `app/api/v1`.
+- Tạo `app/api/common` và `app/api`.
 - Chia `rest_api.py` và `admin_rest_api.py` theo bounded context.
 - Giữ nguyên URL, status code và payload.
 - Đăng ký qua parent V1 blueprint.
@@ -282,7 +287,7 @@ Thứ tự:
 
 Acceptance từng slice:
 
-- React chỉ dùng `/api/v1`.
+- React chỉ dùng `/api`.
 - Legacy và V1 gọi cùng service.
 - Sanitization, CSP và media proxy không đổi.
 - File cleanup và rollback được test.
@@ -381,11 +386,11 @@ Tối thiểu phải kiểm tra:
 
 ### 2026-07-28 - Phase 0 hoàn tất
 
-- Đã tạo parent blueprint `app/api/v1` và common response/security helper.
+- Đã tạo parent blueprint `app/api` và common response/security helper.
 - Đã thêm canonical endpoint:
-  - `POST /api/v1/support-donation/checkout`
-  - `POST /api/v1/admin/users/status/batch`
-  - `POST /api/v1/admin/users/roles/batch`
+  - `POST /api/support-donation/checkout`
+  - `POST /api/admin/users/status/batch`
+  - `POST /api/admin/users/roles/batch`
 - Legacy và V1 support checkout đã dùng chung `support_checkout_service`; không thay
   đổi PayOS webhook.
 - Admin batch React đã trỏ đúng V1.
@@ -402,19 +407,19 @@ Tối thiểu phải kiểm tra:
 
 - Đã chuyển admin TTS, support config và image library khỏi
   `app/routes/admin_rest_api.py` sang:
-  - `app/api/v1/admin/tts.py`
-  - `app/api/v1/admin/support.py`
-  - `app/api/v1/admin/image_library.py`
+  - `app/api/admin/tts.py`
+  - `app/api/admin/support.py`
+  - `app/api/admin/image_library.py`
 - Đã chuyển user/admin payment/order/MCP-token resource vào bounded-context module
-  dưới `app/api/v1`.
+  dưới `app/api`.
 - Đã chuyển identity/session, deck, dashboard/statistics và installed-deck resource
   sang các module:
-  - `app/api/v1/identity/routes.py`
-  - `app/api/v1/decks/routes.py`
-  - `app/api/v1/analytics/routes.py`
-  - `app/api/v1/marketplace/installations.py`
+  - `app/api/identity/routes.py`
+  - `app/api/decks/routes.py`
+  - `app/api/analytics/routes.py`
+  - `app/api/marketplace/installations.py`
 - `app/routes/rest_api.py` và `app/routes/admin_rest_api.py` hiện chỉ còn
-  compatibility import; application đăng ký V1 duy nhất qua `app/api/v1`.
+  compatibility import; application đăng ký V1 duy nhất qua `app/api`.
 - MCP-token mutation đã chuyển transaction ownership từ API route vào service.
 - Identity/session, deck mutation và admin user mutation đã chuyển ORM query,
   transaction ownership và rollback sang:
@@ -424,7 +429,7 @@ Tối thiểu phải kiểm tra:
 - Browse deck/card/note và logical-clone overlay đã chuyển sang
   `app/services/browse_card_service.py`; VoiceVox preview/precheck/generate đã chuyển
   sang `app/services/browse_voicevox_service.py`.
-- `app/api/v1/learning/browse.py` hiện là V1 primary route, không còn import hoặc
+- `app/api/learning/browse.py` hiện là V1 primary route, không còn import hoặc
   gọi handler trong `app/routes/vocabulary.py`. Legacy Browse chỉ còn HTTP adapter
   gọi cùng service.
 - Không còn `from app.routes...`, ORM query hoặc `db.session` transaction trực tiếp
@@ -436,7 +441,7 @@ Tối thiểu phải kiểm tra:
 ### 2026-07-28 - Phase 3 hoàn tất
 
 - Đã thêm 28 canonical endpoint cho note type, field, template, note, media và
-  flashcard import dưới `app/api/v1/flashcards/`; V1 URL map hiện có 77 rule.
+  flashcard import dưới `app/api/flashcards/`; V1 URL map hiện có 77 rule.
 - HTTP parsing/response mapping nằm trong các module `note_types.py`, `notes.py`,
   `media.py` và `imports.py`; query, orchestration và transaction ownership nằm
   trong:
@@ -446,7 +451,7 @@ Tối thiểu phải kiểm tra:
 - Legacy flashcard endpoint và V1 endpoint gọi cùng application service để giữ
   behavior parity trong thời gian cutover.
 - React note-type manager/detail/fields, Library note-type list và Import page đã
-  chuyển sang `/api/v1`; không còn gọi `/api/note-types` hoặc
+  chuyển sang `/api`; không còn gọi `/api/note-types` hoặc
   `/api/flashcards/import`.
 - Media upload tiếp tục dùng validator chữ ký/kích thước, đường dẫn lưu trữ an toàn
   và `/media/proxy/<asset_id>`; không thay đổi renderer/CSP contract.

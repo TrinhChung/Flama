@@ -401,7 +401,7 @@ export function BrowsePage() {
     const previewText = cards[0]?.word || cards[0]?.reading || 'こんにちは'
     setIsPreviewing(true)
     try {
-      const blob = await apiBlob('/api/v1/browse/voicevox/preview', {
+      const blob = await apiBlob('/api/browse/voicevox/preview', {
         method: 'POST',
         body: JSON.stringify({
           text: previewText,
