@@ -1,10 +1,8 @@
 """Primary navigation routes."""
 
-import hashlib
-from dataclasses import dataclass, field
+from dataclasses import field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List
 
 UTC = timezone.utc
 
@@ -24,18 +22,10 @@ from app.services.support_checkout_service import (
 )
 from app.services.stats_overview import build_stats_overview
 from app.services.stats_today_future import build_today_future_stats
-from app.utils.deck_move_token import create_deck_move_token
 from app.utils.permissions import is_admin_user
 from app.validators import RequestValidationError
-from app.validators.support_donation import (
-    MAX_DONATION_AMOUNT_MINOR,
-    MIN_DONATION_AMOUNT_MINOR,
-)
 from sqlalchemy.exc import SQLAlchemyError
 from models import db
-from models.flashcard import Card, DeckCloneDeckMap, DeckInstall, Note
-from models.deck import Deck
-from models.card_progress import CardProgress
 
 main_bp = Blueprint("main", __name__)
 
@@ -60,21 +50,6 @@ def serve_react_assets(filename: str):
     from app.spa import serve_react_spa_assets
     return serve_react_spa_assets(filename)
 
-
-
-def _render_dashboard_page():
-    from app.services.dashboard_service import build_dashboard_data
-
-    rows, total_new, total_learn, total_due, admin_mode = build_dashboard_data(current_user)
-    return render_template(
-        "dashboard.html",
-        deck_rows=rows,
-        total_new=total_new,
-        total_learn=total_learn,
-        total_due=total_due,
-        admin_mode=admin_mode,
-        stats_initial_year=datetime.now(UTC).year,
-    )
 
 
 def _render_mcp_tokens_page(*, generated_mcp_token: dict | None = None):

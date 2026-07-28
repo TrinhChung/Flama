@@ -16,6 +16,9 @@ from app.utils.permissions import is_admin_user
 # Import everything from core module so routes can use helpers
 from . import *
 
+from app.repositories.deck_tree_query import (
+    collect_subtree_ids as _collect_deck_subtree_ids,
+)
 from app.repositories.study_repository import (
     card_state_from_progress as _card_state_from_progress,
     apply_card_state_to_progress as _apply_card_state_to_progress,
@@ -29,7 +32,6 @@ from app.routes.flashcards import (
     _api_error,
     _resolve_clone_scope_for_local_deck,
     _query_clone_scope_cards,
-    _collect_deck_subtree_ids,
     _is_card_visible_in_clone_scope,
     _build_clone_schema_view,
     _apply_clone_note_field_overrides,

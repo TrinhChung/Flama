@@ -1,17 +1,12 @@
 from __future__ import annotations
 
-from flask import Blueprint, abort, render_template, request
+from flask import Blueprint, abort, render_template
 from flask_login import current_user, login_required
 
-from app.services import admin_service
 from app.services.payment import order_query_service
-from app.validators.payment_query import parse_order_filters
 
 
 user_orders_bp = Blueprint("user_orders", __name__)
-
-DEFAULT_PAGE_SIZE = 10
-MAX_PAGE_SIZE = 50
 
 
 @user_orders_bp.route("/orders", methods=["GET"])

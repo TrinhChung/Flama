@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 
 from flask import Blueprint, current_app, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
@@ -21,7 +20,6 @@ from models import db
 from models.support_donation_config import SupportDonationConfig
 from models.tts_provider_config import TtsProviderConfig
 from models.user import User
-from models.user_permission_audit_log import UserPermissionAuditLog
 from models.user_role import UserRole
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")

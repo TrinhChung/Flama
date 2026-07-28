@@ -272,11 +272,19 @@ class PaymentManagementViewTests(unittest.TestCase):
 
     def test_user_order_history_lists_only_current_user_orders(self):
         self._login(self.buyer_email)
-        response = self.client.get("/orders", follow_redirects=False)
-        self.assertEqual(response.status_code, 200)
-        self.assertIn(b"ORD-PAID-001", response.data)
-        self.assertIn(b"ORD-PENDING-001", response.data)
-        self.assertNotIn(b"ORD-FAILED-001", response.data)
+        page_response = self.client.get("/orders", follow_redirects=False)
+        self.assertEqual(page_response.status_code, 200)
+        self.assertIn(b'<div id="root"></div>', page_response.data)
+
+        api_response = self.client.get("/api/v1/orders")
+        self.assertEqual(api_response.status_code, 200)
+        order_codes = {
+            row.get("merchant_order_code")
+            for row in (api_response.get_json() or {}).get("items", [])
+        }
+        self.assertIn("ORD-PAID-001", order_codes)
+        self.assertIn("ORD-PENDING-001", order_codes)
+        self.assertNotIn("ORD-FAILED-001", order_codes)
 
     def test_user_cannot_open_other_user_order_detail(self):
         self._login(self.buyer_email)
@@ -310,11 +318,20 @@ class PaymentManagementViewTests(unittest.TestCase):
 
     def test_admin_dashboard_renders_operational_sections(self):
         self._login(self.admin_email)
-        response = self.client.get("/admin/payments?period=30d", follow_redirects=False)
-        self.assertEqual(response.status_code, 200)
-        self.assertIn(b"Dashboard", response.data)
-        self.assertIn("Đơn gần đây".encode("utf-8"), response.data)
-        self.assertIn("Webhook lỗi".encode("utf-8"), response.data)
+        page_response = self.client.get(
+            "/admin/payments?period=30d",
+            follow_redirects=False,
+        )
+        self.assertEqual(page_response.status_code, 200)
+        self.assertIn(b'<div id="root"></div>', page_response.data)
+
+        api_response = self.client.get("/api/v1/admin/payments?period=30d")
+        self.assertEqual(api_response.status_code, 200)
+        payload = api_response.get_json() or {}
+        self.assertEqual(payload.get("period"), "30d")
+        self.assertIn("cards", payload)
+        self.assertIn("recent_orders", payload)
+        self.assertIn("recent_webhook_failures", payload)
 
 
 if __name__ == "__main__":

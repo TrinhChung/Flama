@@ -455,6 +455,22 @@ Tối thiểu phải kiểm tra:
 - Đã thêm V1 CRUD/media/import integration test, legacy/V1 parity test và mở rộng
   route-map snapshot lên 77 rule.
 
+### 2026-07-29 - Dọn dẹp sau Phase 1-3
+
+- Đã xóa các thân hàm legacy không thể chạy sau các lệnh `return` chuyển tiếp sang
+  application service trong flashcard note type, template, note, media và import.
+- Đã xóa `flashcard_media_service.py` không còn consumer; thu gọn
+  `note_type_service.py` và `flashcard_import_service.py` về các hàm còn được gọi.
+- Study route gọi trực tiếp repository thay vì đi vòng qua facade helper đã hết
+  vai trò; các import và helper backend không còn tham chiếu cũng đã được dọn.
+- Giữ nguyên `app/routes/rest_api.py` và `app/routes/admin_rest_api.py` vì đây vẫn
+  là compatibility import công khai, chưa đủ điều kiện xác nhận là dead code.
+- Giữ nguyên toàn bộ Jinja template và static asset cũ để tham khảo trong các phase
+  migrate giao diện tiếp theo. Chỉ xem xét xóa sau khi React đã đạt parity và hoàn
+  tất consumer cutover.
+- Hai test payment/order cũ đã được cập nhật để kiểm tra SPA shell và dữ liệu từ
+  REST API thay vì chờ HTML render trực tiếp từ Jinja.
+
 ### Verification đã chạy
 
 - `python -m compileall -q app`
@@ -468,6 +484,9 @@ Tối thiểu phải kiểm tra:
 - Phase 3: 106 focused regression test đã pass cho REST V1, flashcard
   CRUD/import/media security, deck settings và route-map snapshot. Frontend
   lint/type-check/build đã pass; chỉ còn warning lint/chunk-size đã tồn tại.
+- Cleanup sau Phase 1-3: 106 REST/flashcard regression test và 33 SPA/payment/admin
+  regression test đã pass; AST scan không còn statement trực tiếp nằm sau terminal
+  statement trong cùng block.
 
 ### Công việc còn lại trước khi migration hoàn tất
 

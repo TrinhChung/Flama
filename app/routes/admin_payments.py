@@ -4,10 +4,9 @@ from flask import Blueprint, abort, flash, redirect, render_template, request, u
 from flask_login import current_user, login_required
 
 from app.services import admin_service
-from app.services.payment import dashboard_service, order_query_service, transaction_query_service
+from app.services.payment import order_query_service, transaction_query_service
 from app.utils.permissions import is_admin_user
 from app.validators.payment_query import (
-    parse_dashboard_filters,
     parse_order_filters,
     parse_transaction_filters,
 )
