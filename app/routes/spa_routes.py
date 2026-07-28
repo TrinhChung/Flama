@@ -13,7 +13,8 @@ spa_routes_bp = Blueprint("spa_routes", __name__)
 
 
 @spa_routes_bp.get("/support")
-def support_page():
+@spa_routes_bp.get("/maintenance")
+def public_spa_page():
     return serve_react_spa()
 
 

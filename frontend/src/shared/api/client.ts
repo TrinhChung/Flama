@@ -1,4 +1,8 @@
 import { resolveBackendUrl } from '@/config/env'
+import {
+  isBackendUnavailableStatus,
+  reportBackendUnavailable,
+} from './backendAvailability'
 
 type ErrorPayload = {
   error?: string
@@ -58,13 +62,39 @@ async function apiFetch(
     }
   }
 
+  let response: Response
+  try {
+    response = await fetch(resolveBackendUrl(url), {
+      ...init,
+      method,
+      headers,
+      credentials: 'include',
+    })
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw error
+    }
 
-  const response = await fetch(resolveBackendUrl(url), {
-    ...init,
-    method,
-    headers,
-    credentials: 'include',
-  })
+    if (error instanceof TypeError) {
+      reportBackendUnavailable()
+      throw new ApiError(
+        'Không thể kết nối tới máy chủ.',
+        0,
+        'BACKEND_UNAVAILABLE',
+      )
+    }
+
+    throw error
+  }
+
+  if (isBackendUnavailableStatus(response.status)) {
+    reportBackendUnavailable()
+    throw new ApiError(
+      'Máy chủ đang tạm thời không sẵn sàng.',
+      response.status,
+      'BACKEND_UNAVAILABLE',
+    )
+  }
 
   if (response.redirected && new URL(response.url).pathname === '/login') {
     throw new ApiError('Phiên đăng nhập đã hết hạn.', 401, 'AUTH_REQUIRED')
@@ -128,17 +158,14 @@ export async function submitLegacyForm(
   if (csrfToken) {
     headers.set('X-CSRF-Token', csrfToken)
   }
-  const response = await fetch(resolveBackendUrl(url), {
-    method: 'POST',
-    body,
-    headers,
-    credentials: 'include',
-    redirect: 'follow',
-  })
-  if (!response.ok) {
-    throw new ApiError(
-      `Không thể hoàn tất thao tác (${response.status}).`,
-      response.status,
-    )
-  }
+  await apiFetch(
+    url,
+    {
+      method: 'POST',
+      body,
+      headers,
+      redirect: 'follow',
+    },
+    'text/html',
+  )
 }
