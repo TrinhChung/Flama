@@ -67,9 +67,19 @@ const SharedDecksPage = lazy(() =>
     default: module.SharedDecksPage,
   })),
 )
+const SharedDeckDetailPage = lazy(() =>
+  import('./features/marketplace/pages/MarketplacePages').then((module) => ({
+    default: module.SharedDeckDetailPage,
+  })),
+)
 const SharedNoteTypesPage = lazy(() =>
   import('./features/marketplace/pages/MarketplacePages').then((module) => ({
     default: module.SharedNoteTypesPage,
+  })),
+)
+const SharedNoteTypeDetailPage = lazy(() =>
+  import('./features/marketplace/pages/MarketplacePages').then((module) => ({
+    default: module.SharedNoteTypeDetailPage,
   })),
 )
 const OrdersPage = lazy(() =>
@@ -185,8 +195,24 @@ const router = createBrowserRouter([
             element: deferred(<SharedDecksPage />),
           },
           {
+            path: 'marketplace/decks/:id',
+            element: deferred(<SharedDeckDetailPage />),
+          },
+          {
+            path: 'flashcards/shared-decks/:id',
+            element: deferred(<SharedDeckDetailPage />),
+          },
+          {
             path: 'marketplace/note-types',
             element: deferred(<SharedNoteTypesPage />),
+          },
+          {
+            path: 'marketplace/note-types/:id',
+            element: deferred(<SharedNoteTypeDetailPage />),
+          },
+          {
+            path: 'flashcards/shared-note-types/:id',
+            element: deferred(<SharedNoteTypeDetailPage />),
           },
           { path: 'orders', element: deferred(<OrdersPage />) },
           { path: 'admin/users', element: deferred(<AdminUsersPage />) },

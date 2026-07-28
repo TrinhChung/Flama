@@ -591,24 +591,36 @@ def validate_study_card_edit_request(
     note_media_ids: set[str],
 ) -> NoteMutationInput:
     body = _payload_dict(payload)
-    _validate_allowed_keys(body, {"field_values"})
-    if "field_values" not in body:
-        raise RequestValidationError("field_values is required.", field="field_values")
+    _validate_allowed_keys(body, {"field_values", "deck_id", "tags"})
 
-    merged_values, field_updates = clean_note_field_values(
-        note_type=note_type,
-        raw_field_values=body.get("field_values"),
-        partial=True,
-        current_values=current_values,
-        note_media_ids=note_media_ids,
-    )
+    if "field_values" in body:
+        merged_values, field_updates = clean_note_field_values(
+            note_type=note_type,
+            raw_field_values=body.get("field_values"),
+            partial=True,
+            current_values=current_values,
+            note_media_ids=note_media_ids,
+        )
+    else:
+        merged_values, field_updates = clean_note_field_values(
+            note_type=note_type,
+            raw_field_values=None,
+            partial=True,
+            current_values=current_values,
+            note_media_ids=note_media_ids,
+        )
+
     return NoteMutationInput(
         field_values=merged_values,
         field_updates=field_updates,
-        tags=None,
-        deck_id=None,
-        update_tags=False,
-        update_deck=False,
+        tags=normalize_tags(body.get("tags")) if "tags" in body else None,
+        deck_id=(
+            parse_nullable_int(body.get("deck_id"), field_name="deck_id")
+            if "deck_id" in body
+            else None
+        ),
+        update_tags=("tags" in body),
+        update_deck=("deck_id" in body),
     )
 
 

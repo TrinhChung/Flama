@@ -589,6 +589,8 @@
       "html, body { margin: 0; padding: 0; background: " + background + "; color: " + textColor + "; overflow-x: hidden; }",
       "body { padding: " + padding + "; }",
       "#flama-card-root { min-height: 0; overflow-wrap: anywhere; word-break: break-word; }",
+      "#flama-card-root > div:first-child { margin-top: 0 !important; }",
+      "#flama-card-root [style*=\"height:100vh\"], #flama-card-root [style*=\"height: 100vh\"], #flama-card-root [style*=\"height:100%\"], #flama-card-root [style*=\"height: 100%\"], #flama-card-root [style*=\"min-height:100vh\"], #flama-card-root [style*=\"min-height: 100vh\"] { height: auto !important; min-height: 0 !important; }",
       "#flama-card-root img, #flama-card-root video, #flama-card-root canvas, #flama-card-root svg, #flama-card-root audio { max-width: 100%; }",
       "#flama-card-root audio { width: min(100%, 20rem); }",
       "#flama-card-root table { display: block; max-width: 100%; overflow-x: auto; }",

@@ -159,10 +159,15 @@
   {{ {
       "card_id": card.id,
       "note_id": card.note_id,
+      "deck_id": card.deck_id if card.deck_id is defined else selected_deck.id,
+      "tags": card.tags if card.tags is defined else [],
+      "note_type_name": card.note_type_name if card.note_type_name is defined else "",
       "field_defs": card.field_defs or [],
       "field_values": card.field_values or {},
+      "decks": user_decks_payload or [],
       "load_note_url": url_for("flashcards.get_note", note_id=card.note_id),
-      "save_card_url": edit_card_api_url
+      "save_card_url": edit_card_api_url,
+      "delete_note_url": url_for("flashcards.delete_note", note_id=card.note_id)
     } | tojson }}
 </script>
 <script id="studyInitialRendererPayload" type="application/json">
@@ -176,19 +181,43 @@
   <div class="modal-dialog modal-dialog-centered modal-lg">
     <div class="modal-content">
       <div class="modal-header py-2">
-        <h5 class="modal-title fs-6 fw-bold text-dark">Sửa thẻ hiện tại</h5>
+        <div>
+          <h5 class="modal-title fs-6 fw-bold text-dark mb-0">Sửa thẻ hiện tại</h5>
+          <div id="study-edit-meta-info" class="small text-muted" style="font-size: 0.78rem;"></div>
+        </div>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Đóng"></button>
       </div>
       <div class="modal-body overflow-auto study-edit-modal-body">
         <div id="study-edit-error" class="alert alert-danger d-none py-2" role="alert"></div>
         <form id="study-edit-form">
+          <div class="row g-2 mb-3">
+            <div class="col-md-6">
+              <label class="form-label study-edit-field-label" for="study-edit-deck">Deck</label>
+              <select id="study-edit-deck" class="form-select form-select-sm">
+                <option value="">Không chọn</option>
+                {% for d in (user_decks or []) %}
+                <option value="{{ d.id }}">{{ d.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label study-edit-field-label" for="study-edit-tags">Tags <small class="text-muted font-normal">(phẩy phân cách)</small></label>
+              <input type="text" id="study-edit-tags" class="form-control form-control-sm" placeholder="JLPT-N1, Kanji...">
+            </div>
+          </div>
+          <hr class="my-2 border-secondary opacity-25">
           <div id="study-edit-markdown-toolbar" class="mb-3 d-none"></div>
           <div id="study-edit-fields" class="row g-3"></div>
         </form>
       </div>
-      <div class="modal-footer py-2">
-        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Đóng</button>
-        <button type="button" class="btn btn-primary btn-sm" id="study-edit-save-btn">Lưu thay đổi</button>
+      <div class="modal-footer py-2 d-flex justify-content-between">
+        <button type="button" class="btn btn-outline-danger btn-sm" id="study-edit-delete-btn">
+          <i class="bi bi-trash3 me-1"></i>Xóa Note
+        </button>
+        <div>
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Đóng</button>
+          <button type="button" class="btn btn-primary btn-sm ms-1" id="study-edit-save-btn">Lưu thay đổi</button>
+        </div>
       </div>
     </div>
   </div>
@@ -1504,6 +1533,11 @@
         });
         studyMarkdownEditors.set(name, editor);
       });
+
+      if (studyMarkdownEditors.size > 0 && studyMarkdownManager) {
+        const firstEditor = studyMarkdownEditors.values().next().value;
+        studyMarkdownManager.setActiveEditor(firstEditor);
+      }
     }
 
     function setEditError(message) {
@@ -1537,6 +1571,109 @@
       }
     }
 
+    function bindStudyMediaHandlers() {
+      if (!editFieldsWrapEl) return;
+
+      editFieldsWrapEl.querySelectorAll(".study-edit-media-remove").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const fieldName = btn.dataset.field;
+          const preview = document.getElementById(`preview-${cssEscape(fieldName)}`);
+          const hidden = editFieldsWrapEl.querySelector(`input[data-edit-field="${cssEscape(fieldName)}"]`);
+          if (preview) preview.remove();
+          if (hidden) hidden.value = "";
+        });
+      });
+
+      editFieldsWrapEl.querySelectorAll(".study-edit-file-input").forEach((input) => {
+        input.addEventListener("change", async () => {
+          const file = input.files[0];
+          if (!file) return;
+          const fieldName = input.dataset.field;
+          const noteId = String(editConfig?.note_id || "").trim();
+          if (!noteId) {
+            setEditError("Không tìm thấy note để tải media lên.");
+            return;
+          }
+          const formData = new FormData();
+          formData.append("field_name", fieldName);
+          formData.append("file", file);
+
+          setEditError("");
+          setEditLoading(true);
+          try {
+            const response = await fetch(`/api/notes/${encodeURIComponent(noteId)}/media`, {
+              method: "POST",
+              body: formData,
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) {
+              throw new Error(payload.message || payload.error || "Upload media thất bại.");
+            }
+            const hidden = editFieldsWrapEl.querySelector(`input[data-edit-field="${cssEscape(fieldName)}"]`);
+            const mediaUrl = payload.url || payload.asset_id;
+            if (hidden) hidden.value = mediaUrl;
+
+            let preview = document.getElementById(`preview-${cssEscape(fieldName)}`);
+            const isAudio = input.accept.includes("audio");
+            const previewInner = isAudio
+              ? `<audio controls src="${escapeHtml(mediaUrl)}" class="flex-grow-1" style="height:36px;"></audio>
+                 <button type="button" class="btn btn-sm btn-outline-danger study-edit-media-remove" data-field="${escapeHtml(fieldName)}" title="Xóa media">
+                   <i class="bi bi-x-circle-fill"></i>
+                 </button>`
+              : `<img src="${escapeHtml(mediaUrl)}" alt="${escapeHtml(fieldName)}" style="max-height: 100px; border-radius: 6px; border: 1px solid var(--flama-border);">
+                 <button type="button" class="btn btn-sm btn-outline-danger study-edit-media-remove" data-field="${escapeHtml(fieldName)}" title="Xóa media">
+                   <i class="bi bi-x-circle-fill"></i>
+                 </button>`;
+
+            if (preview) {
+              preview.innerHTML = previewInner;
+            } else {
+              const newPreview = document.createElement("div");
+              newPreview.id = `preview-${fieldName}`;
+              newPreview.className = "study-edit-media-preview d-flex align-items-center gap-2 mb-2";
+              newPreview.innerHTML = previewInner;
+              input.parentNode.insertBefore(newPreview, input);
+            }
+            bindStudyMediaHandlers();
+          } catch (error) {
+            setEditError(error.message || "Upload media thất bại.");
+          } finally {
+            setEditLoading(false);
+          }
+        });
+      });
+    }
+
+    function bindStudyMarkdownTabs() {
+      if (!editFieldsWrapEl) return;
+
+      editFieldsWrapEl.querySelectorAll(".study-md-tab-edit").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const fieldName = btn.dataset.field;
+          const editor = studyMarkdownEditors.get(fieldName);
+          if (editor && typeof editor.setMode === "function") {
+            editor.setMode("raw");
+          }
+          btn.classList.add("active");
+          const previewBtn = btn.parentNode.querySelector(".study-md-tab-preview");
+          if (previewBtn) previewBtn.classList.remove("active");
+        });
+      });
+
+      editFieldsWrapEl.querySelectorAll(".study-md-tab-preview").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const fieldName = btn.dataset.field;
+          const editor = studyMarkdownEditors.get(fieldName);
+          if (editor && typeof editor.setMode === "function") {
+            editor.setMode("visual");
+          }
+          btn.classList.add("active");
+          const editBtn = btn.parentNode.querySelector(".study-md-tab-edit");
+          if (editBtn) editBtn.classList.remove("active");
+        });
+      });
+    }
+
     function renderEditFields(fieldDefs, values) {
       if (!editFieldsWrapEl) return;
       if (!Array.isArray(fieldDefs) || !fieldDefs.length) {
@@ -1555,25 +1692,77 @@
         const value = String(values && values[name] != null ? values[name] : "");
         const requiredMark = required ? '<span class="study-edit-required">*</span>' : "";
         const typeBadge = fieldType && fieldType !== "markdown" ? `<div class="study-edit-field-type">${escapeHtml(fieldType)}</div>` : "";
-        const isMultiline = fieldType === "richtext" || fieldType === "markdown";
+
+        if (fieldType === "markdown") {
+          return `
+            <div class="col-12">
+              <div class="d-flex align-items-center justify-content-between mb-1">
+                <label class="form-label study-edit-field-label mb-0">${escapeHtml(name)} ${requiredMark}</label>
+                <div class="btn-group btn-group-sm" role="group" aria-label="Markdown Mode">
+                  <button type="button" class="btn btn-outline-secondary btn-sm study-md-tab-edit active" data-field="${escapeHtml(name)}">
+                    <i class="bi bi-code-slash me-1"></i>Soạn thảo (Raw)
+                  </button>
+                  <button type="button" class="btn btn-outline-secondary btn-sm study-md-tab-preview" data-field="${escapeHtml(name)}">
+                    <i class="bi bi-eye me-1"></i>Xem trước (Visual)
+                  </button>
+                </div>
+              </div>
+              <div class="study-edit-markdown-mount" data-study-markdown-mount="${escapeHtml(name)}"></div>
+            </div>
+          `;
+        }
+
+        if (["image", "audio", "diagram"].includes(fieldType)) {
+          const hasValue = Boolean(value.trim());
+          let previewHtml = "";
+          if (hasValue) {
+            if (fieldType === "audio") {
+              previewHtml = `
+                <div class="study-edit-media-preview d-flex align-items-center gap-2 mb-2" id="preview-${escapeHtml(name)}">
+                  <audio controls src="${escapeHtml(value)}" class="flex-grow-1" style="height:36px;"></audio>
+                  <button type="button" class="btn btn-sm btn-outline-danger study-edit-media-remove" data-field="${escapeHtml(name)}" title="Xóa media">
+                    <i class="bi bi-x-circle-fill"></i>
+                  </button>
+                </div>`;
+            } else {
+              previewHtml = `
+                <div class="study-edit-media-preview d-flex align-items-center gap-2 mb-2" id="preview-${escapeHtml(name)}">
+                  <img src="${escapeHtml(value)}" alt="${escapeHtml(name)}" style="max-height: 100px; border-radius: 6px; border: 1px solid var(--flama-border);">
+                  <button type="button" class="btn btn-sm btn-outline-danger study-edit-media-remove" data-field="${escapeHtml(name)}" title="Xóa media">
+                    <i class="bi bi-x-circle-fill"></i>
+                  </button>
+                </div>`;
+            }
+          }
+          const fileAccept = fieldType === "audio" ? "audio/*" : "image/*";
+          return `
+            <div class="col-12">
+              <label class="form-label study-edit-field-label">${escapeHtml(name)} ${requiredMark}</label>
+              ${previewHtml}
+              <input type="file" class="form-control form-control-sm study-edit-file-input" data-field="${escapeHtml(name)}" accept="${fileAccept}">
+              <input type="hidden" data-edit-field="${escapeHtml(name)}" data-edit-type="${escapeHtml(fieldType)}" value="${escapeHtml(value)}">
+              ${typeBadge}
+            </div>
+          `;
+        }
+
+        const isMultiline = fieldType === "richtext";
         const inputControl = isMultiline
-          ? (fieldType === "markdown"
-            ? `<div class="study-edit-markdown-mount" data-study-markdown-mount="${escapeHtml(name)}"></div>`
-            : `<textarea id="${escapeHtml(fieldId)}" class="form-control form-control-sm" rows="3" data-edit-field="${escapeHtml(name)}" data-edit-type="${escapeHtml(fieldType)}" ${required ? "required" : ""}>${escapeHtml(value)}</textarea>`)
+          ? `<textarea id="${escapeHtml(fieldId)}" class="form-control form-control-sm" rows="3" data-edit-field="${escapeHtml(name)}" data-edit-type="${escapeHtml(fieldType)}" ${required ? "required" : ""}>${escapeHtml(value)}</textarea>`
           : `<input id="${escapeHtml(fieldId)}" type="text" class="form-control form-control-sm" data-edit-field="${escapeHtml(name)}" data-edit-type="${escapeHtml(fieldType)}" value="${escapeHtml(value)}" ${required ? "required" : ""}>`;
-        const markdownHint = "";
 
         return `
           <div class="col-12">
             <label class="form-label study-edit-field-label" for="${escapeHtml(fieldId)}">${escapeHtml(name)} ${requiredMark}</label>
             ${inputControl}
-            ${markdownHint}
             ${typeBadge}
           </div>
         `;
       }).join("");
 
       initStudyMarkdownEditors(sortedDefs, values || {});
+      bindStudyMediaHandlers();
+      bindStudyMarkdownTabs();
     }
 
     async function loadLatestEditValues() {
@@ -1593,6 +1782,21 @@
         const latestValues = (payload.field_values && typeof payload.field_values === "object") ? payload.field_values : {};
         editFieldValues = latestValues;
         editOriginalFieldValues = { ...latestValues };
+
+        const deckSelect = document.getElementById("study-edit-deck");
+        if (deckSelect && payload.deck_id !== undefined) {
+          deckSelect.value = payload.deck_id || "";
+        }
+        const tagsInput = document.getElementById("study-edit-tags");
+        if (tagsInput && payload.tags !== undefined) {
+          tagsInput.value = Array.isArray(payload.tags) ? payload.tags.join(", ") : "";
+        }
+
+        const metaEl = document.getElementById("study-edit-meta-info");
+        if (metaEl) {
+          metaEl.textContent = `Note ID: ${payload.id || editConfig.note_id || ""} | Type: ${editConfig.note_type_name || ""}`;
+        }
+
         renderEditFields(editFieldDefs, editFieldValues);
       } catch (error) {
         renderEditFields(editFieldDefs, editFieldValues);
@@ -1600,49 +1804,6 @@
       } finally {
         setEditLoading(false);
       }
-    }
-
-    function collectEditPayload() {
-      if (!Array.isArray(editFieldDefs) || !editFieldDefs.length) {
-        return { ok: false, noChanges: false, error: "Không tìm thấy trường nào có thể chỉnh sửa.", fieldValues: {} };
-      }
-
-      const fieldValues = {};
-      const missingRequired = [];
-      let changedCount = 0;
-      editFieldDefs.forEach((fieldDef) => {
-        const name = String(fieldDef?.name || "").trim();
-        if (!name) return;
-        const input = document.querySelector(`[data-edit-field="${cssEscape(name)}"]`);
-        if (!(input instanceof HTMLInputElement || input instanceof HTMLTextAreaElement)) {
-          return;
-        }
-        const rawValue = String(input.value || "");
-        const originalValue = editOriginalFieldValues[name] == null ? "" : String(editOriginalFieldValues[name]);
-        if (rawValue === originalValue) {
-          return;
-        }
-        changedCount += 1;
-        fieldValues[name] = rawValue;
-        if (fieldDef.required && rawValue.trim().length === 0) {
-          missingRequired.push(name);
-        }
-      });
-
-      if (missingRequired.length) {
-        return {
-          ok: false,
-          noChanges: false,
-          error: `Các trường bắt buộc không được để trống: ${missingRequired.join(", ")}`,
-          fieldValues,
-        };
-      }
-
-      if (changedCount === 0) {
-        return { ok: true, noChanges: true, error: "", fieldValues: {} };
-      }
-
-      return { ok: true, noChanges: false, error: "", fieldValues };
     }
 
     function collectEditPayload() {
@@ -1674,10 +1835,9 @@
         }
 
         const originalValue = editOriginalFieldValues[name] == null ? "" : String(editOriginalFieldValues[name]);
-        if (rawValue === originalValue) {
-          return;
+        if (rawValue !== originalValue) {
+          changedCount += 1;
         }
-        changedCount += 1;
         fieldValues[name] = rawValue;
         if (fieldDef.required && rawValue.trim().length === 0) {
           missingRequired.push(name);
@@ -1693,11 +1853,21 @@
         };
       }
 
-      if (changedCount === 0) {
-        return { ok: true, noChanges: true, error: "", fieldValues: {} };
-      }
+      const deckSelect = document.getElementById("study-edit-deck");
+      const nextDeckId = deckSelect ? (deckSelect.value ? Number(deckSelect.value) : null) : undefined;
+      const tagsInput = document.getElementById("study-edit-tags");
+      const nextTags = tagsInput
+        ? tagsInput.value.split(",").map((t) => t.trim()).filter(Boolean)
+        : undefined;
 
-      return { ok: true, noChanges: false, error: "", fieldValues };
+      return {
+        ok: true,
+        noChanges: false,
+        error: "",
+        fieldValues,
+        deckId: nextDeckId,
+        tags: nextTags,
+      };
     }
 
     async function saveEditedCard() {
@@ -1711,22 +1881,22 @@
         setEditError(payloadState.error || "Dữ liệu chỉnh sửa chưa hợp lệ.");
         return;
       }
-      if (payloadState.noChanges) {
-        setEditError("");
-        if (editModalEl && typeof bootstrap !== "undefined" && bootstrap.Modal) {
-          const instance = bootstrap.Modal.getOrCreateInstance(editModalEl);
-          instance.hide();
-        }
-        return;
-      }
 
       setEditError("");
       setEditSaving(true);
       try {
+        const bodyObj = { field_values: payloadState.fieldValues };
+        if (payloadState.deckId !== undefined) {
+          bodyObj.deck_id = payloadState.deckId;
+        }
+        if (payloadState.tags !== undefined) {
+          bodyObj.tags = payloadState.tags;
+        }
+
         const response = await fetch(String(editConfig.save_card_url), {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ field_values: payloadState.fieldValues }),
+          body: JSON.stringify(bodyObj),
         });
         const payload = await response.json().catch(() => ({}));
         if (!response.ok || !payload.success) {
@@ -1755,6 +1925,46 @@
         setEditError(error.message || "Không lưu được thay đổi của thẻ.");
       } finally {
         setEditSaving(false);
+      }
+    }
+
+    async function deleteStudyNote() {
+      const noteId = String(editConfig?.note_id || "").trim();
+      if (!noteId) {
+        setEditError("Không tìm thấy note để xóa.");
+        return;
+      }
+      if (!window.confirm("Xóa note này và tất cả cards liên quan? Không thể hoàn tác.")) {
+        return;
+      }
+
+      setEditError("");
+      setEditLoading(true);
+      try {
+        const response = await fetch(`/api/notes/${encodeURIComponent(noteId)}`, {
+          method: "DELETE",
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(payload.message || payload.error || "Không thể xóa note.");
+        }
+
+        if (editModalEl && typeof bootstrap !== "undefined" && bootstrap.Modal) {
+          const instance = bootstrap.Modal.getOrCreateInstance(editModalEl);
+          instance.hide();
+        }
+
+        const nextUrl = `/api/study/next?scope=${encodeURIComponent(studyScope)}&scope_id=${encodeURIComponent(scopeId)}`;
+        const nextResp = await fetch(nextUrl, { method: "GET" });
+        const nextPayload = await nextResp.json().catch(() => ({}));
+        if (nextResp.ok && handleStudyPayload(nextPayload, { nextCardUrl: nextUrl })) {
+          return;
+        }
+        window.location.reload();
+      } catch (error) {
+        setEditError(error.message || "Không thể xóa note.");
+      } finally {
+        setEditLoading(false);
       }
     }
 
@@ -2163,6 +2373,10 @@
       });
       editSaveBtn?.addEventListener("click", () => {
         saveEditedCard().catch(() => undefined);
+      });
+      const studyEditDeleteBtn = document.getElementById("study-edit-delete-btn");
+      studyEditDeleteBtn?.addEventListener("click", () => {
+        deleteStudyNote().catch(() => undefined);
       });
     }
     syncStudyEditAvailability();

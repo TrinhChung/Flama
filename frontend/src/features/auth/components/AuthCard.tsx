@@ -4,6 +4,8 @@ import { Link, useLocation } from 'react-router-dom'
 import { Card } from '@/components/ui/card'
 import { Brand } from '@/shared/components/Brand'
 
+import { AmbientBackground } from '@/components/ambient-background'
+
 type AuthCardProps = {
   title: string
   description: string
@@ -28,8 +30,7 @@ export function AuthCard({
   return (
     <div className="relative flex min-h-[calc(100svh-4rem)] items-center justify-center overflow-hidden px-4 py-10 lg:py-16">
       {/* Ambient background glow & grid pattern */}
-      <div className="pointer-events-none absolute inset-0 -z-20 bg-[radial-gradient(circle_at_25%_25%,color-mix(in_oklab,var(--color-primary)_20%,transparent),transparent_55%),radial-gradient(circle_at_75%_75%,color-mix(in_oklab,var(--color-primary)_12%,transparent),transparent_45%)]" />
-      <div className="pointer-events-none absolute inset-0 -z-10 bg-[linear-gradient(to_right,color-mix(in_oklab,var(--color-border)_25%,transparent)_1px,transparent_1px),linear-gradient(to_bottom,color-mix(in_oklab,var(--color-border)_25%,transparent)_1px,transparent_1px)] bg-[size:36px_36px] [mask-image:radial-gradient(ellipse_75%_65%_at_50%_50%,black_70%,transparent_100%)]" />
+      <AmbientBackground intensity="vibrant" />
 
       <div className="grid w-full max-w-md items-center gap-8 animate-in fade-in-50 slide-in-from-bottom-4 duration-500 lg:max-w-5xl lg:grid-cols-12 lg:gap-12">
         {/* Left Column (Brand Hero & Slogan) */}

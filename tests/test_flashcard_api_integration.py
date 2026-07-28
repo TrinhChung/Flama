@@ -2966,6 +2966,56 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         self.assertTrue(payload.get("success"))
         self.assertEqual((payload.get("field_values") or {}).get("Word_Audio"), "voice.wav")
 
+    def test_study_edit_card_updates_deck_and_tags(self):
+        note_type = self._create_note_type()
+        note_type_id = note_type["id"]
+
+        with self.app.app_context():
+            target_deck = Deck(name="Target Study Deck")
+            db.session.add(target_deck)
+            db.session.commit()
+            target_deck_id = target_deck.id
+
+        note_resp = self.client.post(
+            "/api/notes",
+            json={
+                "note_type_id": note_type_id,
+                "deck_id": self.deck_id,
+                "field_values": {
+                    "Word": "\u72ac",
+                    "Reading": "\u3044\u306c",
+                    "Meaning": "dog",
+                },
+                "tags": ["JLPT-N5"],
+            },
+        )
+        self.assertEqual(note_resp.status_code, 201)
+        note_id = note_resp.get_json()["id"]
+
+        with self.app.app_context():
+            card = Card.query.filter_by(note_id=note_id).first()
+            self.assertIsNotNone(card)
+            card_id = card.id
+
+        edit_resp = self.client.patch(
+            f"/api/study/cards/{card_id}/edit",
+            json={
+                "deck_id": target_deck_id,
+                "tags": ["JLPT-N4", "Animals"],
+            },
+        )
+        self.assertEqual(edit_resp.status_code, 200)
+        payload = edit_resp.get_json() or {}
+        self.assertTrue(payload.get("success"))
+        self.assertEqual(payload.get("deck_id"), target_deck_id)
+        self.assertEqual(payload.get("tags"), ["JLPT-N4", "Animals"])
+
+        with self.app.app_context():
+            note = db.session.get(Note, note_id)
+            self.assertIsNotNone(note)
+            self.assertEqual(note.deck_id, target_deck_id)
+            self.assertEqual(note.tags, ["JLPT-N4", "Animals"])
+
     def test_browse_card_update_accepts_partial_field_values_payload(self):
         note_type = self._create_note_type()
         note_type_id = note_type["id"]

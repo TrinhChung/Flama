@@ -97,7 +97,8 @@ export function CardRendererFrame({
 
     if (!controllerRef.current) {
       controllerRef.current = host.createRendererFrameController(iframeEl, {
-        minHeight: 180,
+        minHeight: 240,
+        autoHeight: true,
       })
     }
 
@@ -114,11 +115,11 @@ export function CardRendererFrame({
       : { html: host.createNoticeHtml('Không có nội dung thẻ.') }
 
     controllerRef.current.render(payloadForFrame, {
-      padding: '0px',
+      padding: '12px',
       background: 'transparent',
-      color: 'inherit',
+      color: 'initial',
       config: {
-        mode: 'flashcard_study',
+        mode: 'shared_deck_preview',
         side: activeSide,
         scope,
         scopeId: scopeId || '',
@@ -152,16 +153,16 @@ export function CardRendererFrame({
   const rawFallbackHtml = revealed ? backHtml || '' : frontHtml || ''
 
   return (
-    <div className="study-card-shell w-full h-full flex-1 flex flex-col relative overflow-hidden min-h-0 min-w-0">
+    <div className="study-card-shell w-full relative min-h-[240px]">
       <iframe
         ref={iframeRef}
         title={revealed ? 'Mặt sau thẻ' : 'Mặt trước thẻ'}
         sandbox="allow-scripts"
-        className="card-face study-card-frame w-full h-full flex-1 border-0 bg-transparent p-0 m-0 min-h-0"
+        className="card-face study-card-frame w-full border-0 bg-transparent p-0 m-0 min-h-[240px]"
       />
       {!scriptLoaded && rawFallbackHtml ? (
         <div
-          className="study-card-content absolute inset-0 p-4 overflow-auto text-center flex flex-col justify-center items-center"
+          className="study-card-content p-4 text-center flex flex-col justify-center items-center"
           dangerouslySetInnerHTML={{ __html: rawFallbackHtml }}
         />
       ) : null}

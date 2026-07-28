@@ -223,6 +223,9 @@ def _build_study_next_payload(
             else None
         ),
         "field_values": note_field_values_as_strings(note),
+        "deck_id": note.deck_id if note else None,
+        "tags": note.tags or [] if note else [],
+        "note_type_name": note.note_type.name if note and note.note_type else "",
         "field_defs": [
             {
                 "name": field_def.name,

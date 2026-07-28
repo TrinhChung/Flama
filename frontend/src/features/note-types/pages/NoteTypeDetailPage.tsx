@@ -178,47 +178,18 @@ export function NoteTypeDetailPage() {
     * { box-sizing: border-box; }
     html, body {
       margin: 0;
-      padding: 12px;
-      width: 100%;
-      height: 100%;
-      min-height: 100vh;
-      background-color: #f8fafc;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      color: #0f172a;
-      display: flex;
-      flex-direction: column;
+      padding: 0;
+      background-color: transparent;
+      color: initial;
     }
     .card-container {
       width: 100%;
-      height: 100%;
-      flex: 1;
       min-height: 100%;
-      background: #ffffff;
-      border-radius: 12px;
-      box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
-      border: 1px solid #e2e8f0;
-      padding: 24px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      text-align: center;
-      word-break: break-word;
-      font-size: 1.125rem;
-      line-height: 1.6;
+      padding: 16px;
+      box-sizing: border-box;
     }
     .card-container img, .card-container video, .card-container canvas, .card-container svg, .card-container audio {
       max-width: 100%;
-      border-radius: 8px;
-    }
-    .card-container audio {
-      width: min(100%, 24rem);
-    }
-    .card-container hr {
-      width: 100%;
-      border: 0;
-      border-top: 1px solid #e2e8f0;
-      margin: 16px 0;
     }
     ${sharedCss}
   </style>

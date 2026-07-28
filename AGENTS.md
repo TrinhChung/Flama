@@ -53,7 +53,8 @@
 - Legacy Level/Topic/Lesson routes in `app/routes/vocabulary.py` intentionally return `410`. Do not revive that structure unless the user explicitly wants it back.
 - Due counts and study ordering depend on timezone and day-boundary helpers in `app/services/anki_scheduler.py` and `app/repositories/study_repository.py`. Do not hand-roll new scheduling logic in routes.
 - Flashcard HTML rendering and media safety flow through `app/services/flashcard_renderer.py` plus CSP and `/media/proxy/<asset_id>` constraints. Preserve sanitization and proxy-based media access.
-- For UI work, extend the existing Jinja component structure instead of introducing a new frontend framework or duplicating HTML fragments across pages. Some pages still carry older inline CSS or JS, so preserve local page behavior before trying to componentize it.
+- For UI work, target the React frontend (`frontend/src/`) by default unless the user explicitly requests changes to legacy Jinja templates (`templates/`).
+- Mặc định khi người dùng yêu cầu sửa/nâng cấp giao diện (UI/UX), ưu tiên làm việc và điều chỉnh trên React frontend (`frontend/src/`), chỉ can thiệp vào Jinja templates cũ nếu người dùng yêu cầu đích danh.
 - Large route and service modules already have refactor notes in `docs/FLAMA_*`. Unless the user requests refactoring, land the smallest behavior-preserving change.
 
 ## Testing

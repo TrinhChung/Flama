@@ -12,6 +12,7 @@ import {
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
+import { AmbientBackground } from '@/components/ambient-background'
 import { AppSidebar } from '@/components/app-sidebar'
 import { SiteFooter } from '@/components/site-footer'
 import { SiteMascot } from '@/components/site-mascot'
@@ -48,21 +49,39 @@ const pageTitles: Record<string, string> = {
   '/admin/tts': 'TTS Provider',
 }
 
-function PublicLayout({ bootstrap }: { bootstrap: FrontendBootstrap }) {
+function PublicLayout({
+  bootstrap,
+  onLogout,
+}: {
+  bootstrap: FrontendBootstrap
+  onLogout?: () => void
+}) {
   const location = useLocation()
   const isLogin = location.pathname.startsWith('/login')
   const isSupport = location.pathname.startsWith('/support')
+  const user = bootstrap.user
 
   return (
-    <div className="flex min-h-svh flex-col">
+    <div className="relative flex min-h-svh flex-col overflow-hidden">
+      <AmbientBackground intensity="vibrant" />
       <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 shadow-xs backdrop-blur-md transition-all">
         <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between px-4 md:px-6">
           <Brand compact />
 
-          <nav className="hidden items-center gap-2 sm:flex">
+          <nav className="hidden items-center gap-2.5 sm:flex">
+            {user && (
+              <Link
+                to="/marketplace/decks"
+                className="inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold text-muted-foreground transition-all hover:bg-muted/60 hover:text-foreground"
+              >
+                <Sparkles className="size-3.5 text-primary" />
+                Khám phá Shared Decks
+              </Link>
+            )}
+
             <Link
               to="/support"
-              className={`inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold transition-all ${
+              className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all ${
                 isSupport
                   ? 'bg-muted text-foreground'
                   : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
@@ -72,25 +91,91 @@ function PublicLayout({ bootstrap }: { bootstrap: FrontendBootstrap }) {
               Ủng hộ
             </Link>
 
-            <Link
-              to="/login"
-              className={`inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold transition-all ${
-                isLogin
-                  ? 'bg-muted text-foreground'
-                  : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
-              }`}
-            >
-              <LogIn className="size-3.5" />
-              Đăng nhập
-            </Link>
+            {!user ? (
+              <>
+                <Link
+                  to="/login"
+                  className={`inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold transition-all ${
+                    isLogin
+                      ? 'bg-muted text-foreground'
+                      : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
+                  }`}
+                >
+                  <LogIn className="size-3.5" />
+                  Đăng nhập
+                </Link>
 
-            <Link
-              to="/register"
-              className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-primary via-orange-500 to-amber-500 px-5 py-2 text-xs font-bold text-primary-foreground shadow-sm shadow-primary/25 transition-all hover:opacity-95 hover:shadow-md hover:shadow-primary/30"
-            >
-              <UserPlus className="size-3.5" />
-              Đăng ký ngay
-            </Link>
+                <Link
+                  to="/register"
+                  className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-primary via-orange-500 to-amber-500 px-5 py-2 text-xs font-bold text-primary-foreground shadow-sm shadow-primary/25 transition-all hover:opacity-95 hover:shadow-md hover:shadow-primary/30"
+                >
+                  <UserPlus className="size-3.5" />
+                  Đăng ký ngay
+                </Link>
+              </>
+            ) : (
+              <>
+                <Link
+                  to="/dashboard"
+                  className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-primary via-orange-500 to-amber-500 px-4 py-2 text-xs font-bold text-primary-foreground shadow-sm shadow-primary/25 transition-all hover:opacity-95 hover:shadow-md hover:shadow-primary/30"
+                >
+                  <BookOpen className="size-3.5" />
+                  Vào Dashboard
+                </Link>
+
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      className="flex items-center gap-2 rounded-full border border-border/60 bg-muted/40 p-1 pr-1.5 pl-2.5 text-xs font-semibold transition hover:bg-muted/80"
+                    >
+                      <span className="max-w-[120px] truncate text-foreground">
+                        {user.username}
+                      </span>
+                      {user.is_admin ? (
+                        <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold text-amber-600 dark:text-amber-400">
+                          Admin
+                        </span>
+                      ) : null}
+                      <span className="flex size-7 items-center justify-center rounded-full bg-primary/10 font-bold text-primary">
+                        {user.username[0]?.toUpperCase() || 'U'}
+                      </span>
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-52 space-y-1 p-1.5">
+                    <div className="mb-1 border-b px-2 py-1.5">
+                      <p className="truncate text-xs font-bold text-foreground">
+                        {user.username}
+                      </p>
+                      <p className="truncate text-[11px] text-muted-foreground">
+                        {user.email}
+                      </p>
+                    </div>
+                    <DropdownMenuItem asChild>
+                      <Link to="/dashboard" className="flex items-center gap-2">
+                        <BookOpen className="size-4" />
+                        <span>Tổng quan</span>
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link to="/orders" className="flex items-center gap-2">
+                        <Heart className="size-4 text-rose-500" />
+                        <span>Đơn hàng</span>
+                      </Link>
+                    </DropdownMenuItem>
+                    {onLogout && (
+                      <DropdownMenuItem
+                        className="flex cursor-pointer items-center gap-2 text-destructive focus:text-destructive"
+                        onSelect={onLogout}
+                      >
+                        <LogOut className="size-4" />
+                        <span>Đăng xuất</span>
+                      </DropdownMenuItem>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </>
+            )}
           </nav>
 
           <DropdownMenu>
@@ -104,28 +189,68 @@ function PublicLayout({ bootstrap }: { bootstrap: FrontendBootstrap }) {
                 <Menu className="size-5" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48 space-y-1 p-1.5">
+            <DropdownMenuContent align="end" className="w-52 space-y-1 p-1.5">
+              {user && (
+                <div className="mb-1 border-b px-2 py-1.5">
+                  <p className="truncate text-xs font-bold text-foreground">
+                    {user.username}
+                  </p>
+                  <p className="truncate text-[11px] text-muted-foreground">
+                    {user.email}
+                  </p>
+                </div>
+              )}
+              {user && (
+                <DropdownMenuItem asChild>
+                  <Link to="/marketplace/decks" className="flex items-center gap-2">
+                    <Sparkles className="size-4 text-primary" />
+                    <span>Shared Decks</span>
+                  </Link>
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem asChild>
                 <Link to="/support" className="flex items-center gap-2">
                   <Heart className="size-4 text-rose-500" />
                   <span>Ủng hộ</span>
                 </Link>
               </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link to="/login" className="flex items-center gap-2">
-                  <LogIn className="size-4" />
-                  <span>Đăng nhập</span>
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link
-                  to="/register"
-                  className="flex items-center gap-2 font-semibold text-primary"
-                >
-                  <UserPlus className="size-4" />
-                  <span>Đăng ký</span>
-                </Link>
-              </DropdownMenuItem>
+              {!user ? (
+                <>
+                  <DropdownMenuItem asChild>
+                    <Link to="/login" className="flex items-center gap-2">
+                      <LogIn className="size-4" />
+                      <span>Đăng nhập</span>
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link
+                      to="/register"
+                      className="flex items-center gap-2 font-semibold text-primary"
+                    >
+                      <UserPlus className="size-4" />
+                      <span>Đăng ký</span>
+                    </Link>
+                  </DropdownMenuItem>
+                </>
+              ) : (
+                <>
+                  <DropdownMenuItem asChild>
+                    <Link to="/dashboard" className="flex items-center gap-2 font-semibold text-primary">
+                      <BookOpen className="size-4" />
+                      <span>Vào Dashboard</span>
+                    </Link>
+                  </DropdownMenuItem>
+                  {onLogout && (
+                    <DropdownMenuItem
+                      className="flex cursor-pointer items-center gap-2 text-destructive focus:text-destructive"
+                      onSelect={onLogout}
+                    >
+                      <LogOut className="size-4" />
+                      <span>Đăng xuất</span>
+                    </DropdownMenuItem>
+                  )}
+                </>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -189,8 +314,24 @@ export function AppLayout() {
     )
   }
 
-  if (!bootstrap.user) {
-    return <PublicLayout bootstrap={bootstrap} />
+  const publicPaths = [
+    '/',
+    '/login',
+    '/register',
+    '/support',
+    '/terms',
+    '/privacy',
+    '/cookies',
+  ]
+  const isPublicPage = publicPaths.includes(location.pathname)
+
+  if (!bootstrap.user || isPublicPage) {
+    return (
+      <PublicLayout
+        bootstrap={bootstrap}
+        onLogout={() => logoutMutation.mutate()}
+      />
+    )
   }
 
   if (location.pathname === '/study' || location.pathname === '/browse') {
@@ -210,7 +351,8 @@ export function AppLayout() {
         onLogout={() => logoutMutation.mutate()}
         logoutPending={logoutMutation.isPending}
       />
-      <SidebarInset className="min-w-0">
+      <SidebarInset className="relative min-w-0 overflow-hidden">
+        <AmbientBackground intensity="normal" />
         <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-border/50 bg-background/80 px-4 shadow-xs backdrop-blur-md md:px-6">
           <div className="flex items-center gap-2.5">
             <SidebarTrigger className="-ml-1 text-muted-foreground hover:text-foreground" />

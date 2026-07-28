@@ -151,8 +151,8 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
             const itemTitle = item.title || item.name || 'Không có tiêu đề'
             const detailUrl =
               mode === 'decks'
-                ? `/flashcards/shared-decks/${item.id}`
-                : `/flashcards/shared-note-types/${item.id}`
+                ? `/marketplace/decks/${item.id}`
+                : `/marketplace/note-types/${item.id}`
             return (
               <Card className="flex flex-col" key={item.id}>
                 <CardHeader>
@@ -194,9 +194,9 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
                     </Button>
                   ) : (
                     <Button className="w-full" variant="outline" asChild>
-                      <a href={detailUrl}>
+                      <Link to={detailUrl}>
                         {item.is_installed ? 'Xem học liệu đã cài' : 'Xem chi tiết'}
-                      </a>
+                      </Link>
                     </Button>
                   )}
                 </CardFooter>
@@ -216,3 +216,7 @@ export function SharedDecksPage() {
 export function SharedNoteTypesPage() {
   return <MarketplacePage mode="note-types" />
 }
+
+export { SharedDeckDetailPage } from './SharedDeckDetailPage'
+export { SharedNoteTypeDetailPage } from './SharedNoteTypeDetailPage'
+

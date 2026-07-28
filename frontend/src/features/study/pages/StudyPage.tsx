@@ -338,9 +338,12 @@ export function StudyPage() {
           opened={editOpened}
           onClose={() => setEditOpened(false)}
           cardId={card.card_id}
+          noteId={card.note_id}
           saveUrl={card.save_card_url}
           fieldDefs={card.field_defs}
           initialFieldValues={card.field_values}
+          initialDeckId={deckIdNum}
+          decks={dashboardQuery.data?.decks ? dashboardQuery.data.decks.map((d) => ({ id: d.id, name: d.name })) : []}
           onSaved={() => {
             studyQuery.refetch()
           }}

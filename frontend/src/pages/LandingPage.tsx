@@ -317,7 +317,9 @@ function HeroCard({
 
 function ProductPreview() {
   return (
-    <section className="border-y bg-muted/20 py-16 md:py-24">
+    <section className="relative overflow-hidden border-y bg-muted/20 py-16 md:py-24">
+      <div className="pointer-events-none absolute inset-0 -z-20 bg-[radial-gradient(circle_at_50%_30%,color-mix(in_oklab,var(--color-primary)_12%,transparent),transparent_50%)]" />
+      <div className="pointer-events-none absolute inset-0 -z-10 bg-[linear-gradient(to_right,color-mix(in_oklab,var(--color-border)_22%,transparent)_1px,transparent_1px),linear-gradient(to_bottom,color-mix(in_oklab,var(--color-border)_22%,transparent)_1px,transparent_1px)] bg-[size:36px_36px] [mask-image:radial-gradient(ellipse_85%_75%_at_50%_50%,black_70%,transparent_100%)]" />
       <div className="mx-auto w-full max-w-7xl px-4 md:px-6">
         <SectionHeading
           eyebrow="Product preview"
@@ -442,7 +444,9 @@ function MiniDemo() {
   }
 
   return (
-    <section className="py-16 md:py-24">
+    <section className="relative overflow-hidden py-16 md:py-24">
+      <div className="pointer-events-none absolute inset-0 -z-20 bg-[radial-gradient(circle_at_75%_35%,color-mix(in_oklab,var(--color-primary)_16%,transparent),transparent_50%)]" />
+      <div className="pointer-events-none absolute inset-0 -z-10 bg-[linear-gradient(to_right,color-mix(in_oklab,var(--color-border)_25%,transparent)_1px,transparent_1px),linear-gradient(to_bottom,color-mix(in_oklab,var(--color-border)_25%,transparent)_1px,transparent_1px)] bg-[size:36px_36px] [mask-image:radial-gradient(ellipse_75%_65%_at_50%_50%,black_70%,transparent_100%)]" />
       <div className="mx-auto grid w-full max-w-7xl items-center gap-10 px-4 md:px-6 lg:grid-cols-[0.8fr_1.2fr]">
         <div>
           <Badge variant="secondary">Mini demo</Badge>
@@ -568,9 +572,9 @@ export function LandingPage() {
 
   return (
     <div className="overflow-hidden">
-      <section className="relative border-b">
-        <div className="absolute inset-0 -z-20 bg-[radial-gradient(circle_at_18%_10%,color-mix(in_oklab,var(--color-primary)_16%,transparent),transparent_35%),radial-gradient(circle_at_85%_55%,color-mix(in_oklab,var(--color-primary)_10%,transparent),transparent_38%)]" />
-        <div className="absolute inset-0 -z-10 bg-[linear-gradient(to_right,color-mix(in_oklab,var(--color-border)_35%,transparent)_1px,transparent_1px),linear-gradient(to_bottom,color-mix(in_oklab,var(--color-border)_35%,transparent)_1px,transparent_1px)] bg-[size:42px_42px] [mask-image:linear-gradient(to_bottom,black,transparent_88%)]" />
+      <section className="relative overflow-hidden border-b">
+        <div className="pointer-events-none absolute inset-0 -z-20 bg-[radial-gradient(circle_at_25%_25%,color-mix(in_oklab,var(--color-primary)_20%,transparent),transparent_55%),radial-gradient(circle_at_75%_75%,color-mix(in_oklab,var(--color-primary)_12%,transparent),transparent_45%)]" />
+        <div className="pointer-events-none absolute inset-0 -z-10 bg-[linear-gradient(to_right,color-mix(in_oklab,var(--color-border)_25%,transparent)_1px,transparent_1px),linear-gradient(to_bottom,color-mix(in_oklab,var(--color-border)_25%,transparent)_1px,transparent_1px)] bg-[size:36px_36px] [mask-image:radial-gradient(ellipse_75%_65%_at_50%_50%,black_70%,transparent_100%)]" />
         <div className="mx-auto grid min-h-[calc(100svh-4rem)] w-full max-w-7xl items-center gap-14 px-4 py-16 md:px-6 md:py-24 lg:grid-cols-[1.05fr_0.95fr]">
           <div className="space-y-7">
             <Badge className="border-primary/20 bg-primary/8 text-primary" variant="secondary">
@@ -635,7 +639,8 @@ export function LandingPage() {
         </div>
       </section>
 
-      <section className="bg-muted/25 py-16 md:py-24">
+      <section className="relative overflow-hidden bg-muted/25 py-16 md:py-24">
+        <div className="pointer-events-none absolute inset-0 -z-10 bg-[linear-gradient(to_right,color-mix(in_oklab,var(--color-border)_20%,transparent)_1px,transparent_1px),linear-gradient(to_bottom,color-mix(in_oklab,var(--color-border)_20%,transparent)_1px,transparent_1px)] bg-[size:36px_36px] [mask-image:radial-gradient(ellipse_75%_65%_at_50%_50%,black_60%,transparent_100%)]" />
         <div className="mx-auto w-full max-w-7xl px-4 md:px-6">
           <SectionHeading
             eyebrow="Cách hoạt động"
@@ -705,7 +710,8 @@ export function LandingPage() {
 
       <MiniDemo />
 
-      <section className="border-y bg-muted/25 py-16 md:py-24">
+      <section className="relative overflow-hidden border-y bg-muted/25 py-16 md:py-24">
+        <div className="pointer-events-none absolute inset-0 -z-10 bg-[linear-gradient(to_right,color-mix(in_oklab,var(--color-border)_20%,transparent)_1px,transparent_1px),linear-gradient(to_bottom,color-mix(in_oklab,var(--color-border)_20%,transparent)_1px,transparent_1px)] bg-[size:36px_36px] [mask-image:radial-gradient(ellipse_80%_70%_at_50%_50%,black_60%,transparent_100%)]" />
         <div className="mx-auto w-full max-w-7xl px-4 md:px-6">
           <SectionHeading
             eyebrow="Roadmap"
@@ -830,6 +836,7 @@ export function LandingPage() {
         <div className="mx-auto w-full max-w-7xl px-4 md:px-6">
           <div className="relative overflow-hidden rounded-3xl border bg-foreground px-6 py-14 text-center text-background shadow-2xl md:px-12 md:py-18">
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,color-mix(in_oklab,var(--color-primary)_45%,transparent),transparent_40%)] opacity-70" />
+            <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.06)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.06)_1px,transparent_1px)] bg-[size:36px_36px] [mask-image:radial-gradient(ellipse_85%_85%_at_50%_50%,black_70%,transparent_100%)]" />
             <div className="relative mx-auto max-w-3xl">
               <Rocket className="mx-auto size-8 text-primary" />
               <h2 className="mt-5 text-3xl font-bold tracking-tight text-balance md:text-5xl">

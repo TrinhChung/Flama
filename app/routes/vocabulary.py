@@ -1794,9 +1794,13 @@ def study_deck(deck_id: int):
             except TemplateCompileError:
                 pass
 
+    user_decks = Deck.query.filter(Deck.deleted_at.is_(None)).order_by(Deck.name.asc()).all()
+    user_decks_payload = [{"id": d.id, "name": d.name} for d in user_decks]
     return render_template(
         "vocabulary_study.html",
         selected_deck=root_deck,
+        user_decks=user_decks,
+        user_decks_payload=user_decks_payload,
         card=card_payload,
         rendered_front=rendered_data.get("front"),
         rendered_back=rendered_data.get("back"),
