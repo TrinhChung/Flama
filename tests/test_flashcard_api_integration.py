@@ -142,6 +142,73 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         self.assertEqual(preview["front_renderer_payload"]["html"], preview["front_html"])
         self.assertEqual(preview["back_renderer_payload"]["html"], preview["back_html"])
 
+    def test_v1_content_crud_media_and_legacy_parity(self):
+        create_response = self.client.post(
+            "/api/v1/note-types",
+            json={
+                "name": "V1 Content",
+                "field_defs": [
+                    {
+                        "name": "Word",
+                        "field_type": "text",
+                        "position": 0,
+                        "required": True,
+                    },
+                    {
+                        "name": "Audio",
+                        "field_type": "audio",
+                        "position": 1,
+                        "required": False,
+                    },
+                ],
+                "template": {
+                    "name": "Card 1",
+                    "front_html": "{{Word}}",
+                    "back_html": "{{Word}} {{{Audio}}}",
+                },
+            },
+        )
+        self.assertEqual(create_response.status_code, 201)
+        note_type_id = create_response.get_json()["id"]
+
+        legacy_list = self.client.get("/api/note-types")
+        v1_list = self.client.get("/api/v1/note-types")
+        self.assertEqual(v1_list.status_code, 200)
+        self.assertEqual(v1_list.get_json(), legacy_list.get_json())
+
+        note_response = self.client.post(
+            "/api/v1/notes",
+            json={
+                "note_type_id": note_type_id,
+                "deck_id": self.deck_id,
+                "field_values": {"Word": "犬", "Audio": ""},
+            },
+        )
+        self.assertEqual(note_response.status_code, 201)
+        note_id = note_response.get_json()["id"]
+
+        upload_response = self.client.post(
+            f"/api/v1/notes/{note_id}/media",
+            data={
+                "field_name": "Audio",
+                "file": (io.BytesIO(_MIN_WAV_BYTES), "voice.wav"),
+            },
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(upload_response.status_code, 201)
+        asset_id = upload_response.get_json()["asset_id"]
+
+        detail_response = self.client.get(f"/api/v1/notes/{note_id}")
+        self.assertEqual(detail_response.status_code, 200)
+        self.assertEqual(
+            detail_response.get_json()["field_values"]["Audio"],
+            asset_id,
+        )
+        self.assertEqual(
+            self.client.get("/api/v1/flashcards/import/options").status_code,
+            200,
+        )
+
     def test_preview_sample_mode_uses_field_name_dump_and_image_placeholder(self):
         response = self.client.post(
             "/api/note-types",
@@ -466,7 +533,8 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         response = self.client.get("/api/v1/session")
         self.assertEqual(response.status_code, 200)
         data = response.get_json()
-        self.assertIn("installed_decks", data.get("links", {}))
+        self.assertTrue(data.get("authenticated"))
+        self.assertEqual(data.get("user", {}).get("email"), "admin@example.com")
 
 
     def test_share_note_type_page_updates_taxonomy_and_redirects_to_detail(self):
@@ -1756,11 +1824,20 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         install_resp = viewer_client.post(f"/api/shared/decks/{deck_item_id}/install")
         self.assertEqual(install_resp.status_code, 201)
 
-        dashboard_resp = viewer_client.get("/dashboard")
+        dashboard_resp = viewer_client.get("/api/v1/dashboard")
         self.assertEqual(dashboard_resp.status_code, 200)
-        dashboard_html = dashboard_resp.get_data(as_text=True)
-        self.assertIn("Deck A", dashboard_html)
-        self.assertIn("Visible Child Deck", dashboard_html)
+        dashboard_items = dashboard_resp.get_json().get("items", [])
+
+        def _labels(rows):
+            return [
+                label
+                for row in rows
+                for label in [row.get("label"), *_labels(row.get("children", []))]
+            ]
+
+        labels = _labels(dashboard_items)
+        self.assertIn("Deck A", labels)
+        self.assertIn("Visible Child Deck", labels)
 
     def test_dashboard_counts_include_imported_note_cards(self):
         note_type = self._create_note_type()
@@ -1780,17 +1857,22 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         )
         self.assertEqual(create_note_resp.status_code, 201)
 
-        dashboard_resp = self.client.get("/dashboard")
+        dashboard_resp = self.client.get("/api/v1/dashboard")
         self.assertEqual(dashboard_resp.status_code, 200)
-        dashboard_html = dashboard_resp.get_data(as_text=True)
+        dashboard_items = dashboard_resp.get_json().get("items", [])
 
-        pattern = re.compile(
-            r'data-node-name="Deck A".*?<span class="stat-num stat-new">(\d+)</span>\s*<span class="stat-num stat-learn">(\d+)</span>\s*<span class="stat-num stat-due">(\d+)</span>',
-            re.S,
-        )
-        match = pattern.search(dashboard_html)
+        def _find(rows):
+            for row in rows:
+                if row.get("label") == "Deck A":
+                    return row
+                nested = _find(row.get("children", []))
+                if nested is not None:
+                    return nested
+            return None
+
+        match = _find(dashboard_items)
         self.assertIsNotNone(match)
-        self.assertGreaterEqual(int(match.group(1)), 1)
+        self.assertGreaterEqual(int(match.get("new_count") or 0), 1)
 
     def test_vocabulary_study_deck_renders_note_card_source(self):
         note_type = self._create_note_type()

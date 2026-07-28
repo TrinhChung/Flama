@@ -446,6 +446,17 @@ def flashcard_import_page():
 @flashcards_bp.route("/api/flashcards/import/options")
 @login_required
 def flashcard_import_options():
+    from app.services import flashcard_import_api_service
+
+    return jsonify(
+        flashcard_import_api_service.build_import_options(
+            user_id=current_user.id,
+            admin_mode=is_admin_user(current_user),
+            deck_id_raw=request.args.get("deck_id"),
+            note_type_id_raw=request.args.get("note_type_id"),
+        )
+    )
+
     decks = _collect_accessible_decks_for_import()
     deck_map = {deck.id: deck for deck in decks}
     deck_options = [
@@ -510,6 +521,33 @@ def flashcard_import_options():
 @flashcards_bp.route("/api/flashcards/import/parse", methods=["POST"])
 @login_required
 def flashcard_import_parse():
+    from app.services import flashcard_import_api_service
+
+    upload = request.files.get("file")
+    try:
+        payload = flashcard_import_api_service.parse_import_file(
+            user_id=current_user.id,
+            note_type_id=str(request.form.get("note_type_id") or "").strip(),
+            filename=str(getattr(upload, "filename", "") or ""),
+            file_bytes=upload.read() if upload is not None else b"",
+            delimiter_mode=str(
+                request.form.get("delimiter_mode") or "csv"
+            ).strip().lower(),
+            custom_delimiter=request.form.get("custom_delimiter"),
+            has_header=_parse_bool(
+                request.form.get("has_header"),
+                default=True,
+            ),
+        )
+    except flashcard_import_api_service.ImportApiError as exc:
+        return _api_error(
+            "FIELD_NOT_FOUND" if exc.status == 404 else "VALIDATION_ERROR",
+            str(exc),
+            status=exc.status,
+            field=exc.field,
+        )
+    return jsonify(payload)
+
     note_type_id = (request.form.get("note_type_id") or "").strip()
     note_type = _get_note_type_or_404(note_type_id)
     if note_type is None:
@@ -565,6 +603,24 @@ def flashcard_import_parse():
 @flashcards_bp.route("/api/flashcards/import/estimate", methods=["POST"])
 @login_required
 def flashcard_import_estimate():
+    from app.services import flashcard_import_api_service
+
+    try:
+        payload = flashcard_import_api_service.run_import_request(
+            user_id=current_user.id,
+            admin_mode=is_admin_user(current_user),
+            payload=request.get_json(silent=True) or {},
+            apply_changes=False,
+        )
+    except flashcard_import_api_service.ImportApiError as exc:
+        return _api_error(
+            "VALIDATION_ERROR",
+            str(exc),
+            status=exc.status,
+            field=exc.field,
+        )
+    return jsonify(payload)
+
     payload = request.get_json(silent=True) or {}
     try:
         session_meta, note_type, target_deck_id = _resolve_import_execution_payload(payload)
@@ -589,6 +645,24 @@ def flashcard_import_estimate():
 @flashcards_bp.route("/api/flashcards/import/execute", methods=["POST"])
 @login_required
 def flashcard_import_execute():
+    from app.services import flashcard_import_api_service
+
+    try:
+        payload = flashcard_import_api_service.run_import_request(
+            user_id=current_user.id,
+            admin_mode=is_admin_user(current_user),
+            payload=request.get_json(silent=True) or {},
+            apply_changes=True,
+        )
+    except flashcard_import_api_service.ImportApiError as exc:
+        return _api_error(
+            "VALIDATION_ERROR",
+            str(exc),
+            status=exc.status,
+            field=exc.field,
+        )
+    return jsonify(payload)
+
     payload = request.get_json(silent=True) or {}
     try:
         session_meta, note_type, target_deck_id = _resolve_import_execution_payload(payload)

@@ -35,6 +35,23 @@ from app.validators import (
 @flashcards_bp.route("/api/note-types/<note_type_id>/templates", methods=["GET"])
 @login_required
 def list_templates(note_type_id: str):
+    from app.services import flashcard_content_service
+
+    try:
+        return jsonify(
+            flashcard_content_service.list_templates(
+                user_id=current_user.id,
+                note_type_id=note_type_id,
+            )
+        )
+    except flashcard_content_service.ContentApiError as exc:
+        return _api_error(
+            exc.error,
+            str(exc),
+            status=exc.status,
+            field=exc.field,
+        )
+
     note_type = _get_note_type_or_404(note_type_id)
     if not note_type:
         return _api_error("FIELD_NOT_FOUND", "Note type not found.", status=404)
@@ -44,6 +61,24 @@ def list_templates(note_type_id: str):
 @flashcards_bp.route("/api/note-types/<note_type_id>/templates/<template_id>", methods=["DELETE"])
 @login_required
 def delete_template(note_type_id: str, template_id: str):
+    from app.services import flashcard_content_service
+
+    try:
+        return jsonify(
+            flashcard_content_service.delete_template(
+                user_id=current_user.id,
+                note_type_id=note_type_id,
+                template_id=template_id,
+            )
+        )
+    except flashcard_content_service.ContentApiError as exc:
+        return _api_error(
+            exc.error,
+            str(exc),
+            status=exc.status,
+            field=exc.field,
+        )
+
     note_type = _get_note_type_or_404(note_type_id)
     if not note_type:
         return _api_error("FIELD_NOT_FOUND", "Note type not found.", status=404)
@@ -62,6 +97,23 @@ def delete_template(note_type_id: str, template_id: str):
 @flashcards_bp.route("/api/notes/<note_id>", methods=["GET"])
 @login_required
 def get_note(note_id: str):
+    from app.services import flashcard_content_service
+
+    try:
+        return jsonify(
+            flashcard_content_service.get_note(
+                user_id=current_user.id,
+                note_id=note_id,
+            )
+        )
+    except flashcard_content_service.ContentApiError as exc:
+        return _api_error(
+            exc.error,
+            str(exc),
+            status=exc.status,
+            field=exc.field,
+        )
+
     note = Note.query.filter_by(id=note_id, user_id=current_user.id).first()
     if not note:
         return _api_error("FIELD_NOT_FOUND", "Note not found.", status=404)
@@ -88,6 +140,38 @@ def get_note(note_id: str):
 @flashcards_bp.route("/api/notes/<note_id>/media", methods=["POST"])
 @login_required
 def upload_note_media(note_id: str):
+    from app.services import flashcard_media_api_service
+
+    try:
+        payload, status = flashcard_media_api_service.upload_media(
+            user_id=current_user.id,
+            note_id=note_id,
+            field_name=request.form.get("field_name") or "",
+            uploaded=request.files.get("file"),
+            upload_root=Path(
+                current_app.config["FLASHCARD_MEDIA_UPLOAD_ROOT"]
+            ),
+            max_bytes=int(
+                current_app.config.get(
+                    "FLASHCARD_MEDIA_MAX_BYTES",
+                    10 * 1024 * 1024,
+                )
+            ),
+            scanner=current_app.config.get("FLASHCARD_MEDIA_SCANNER"),
+            scan_enabled=bool(
+                current_app.config.get("FLASHCARD_MEDIA_SCAN_ENABLED", False)
+            ),
+            markdown_inline=False,
+        )
+    except flashcard_media_api_service.MediaApiError as exc:
+        return _api_error(
+            exc.error,
+            str(exc),
+            status=exc.status,
+            field=exc.field,
+        )
+    return jsonify(payload), status
+
     note = Note.query.filter_by(id=note_id, user_id=current_user.id).first()
     if not note:
         return _api_error("FIELD_NOT_FOUND", "Note not found.", status=404)
@@ -162,6 +246,38 @@ def upload_note_media(note_id: str):
 @flashcards_bp.route("/api/notes/<note_id>/markdown-media", methods=["POST"])
 @login_required
 def upload_note_markdown_media(note_id: str):
+    from app.services import flashcard_media_api_service
+
+    try:
+        payload, status = flashcard_media_api_service.upload_media(
+            user_id=current_user.id,
+            note_id=note_id,
+            field_name=request.form.get("field_name") or "",
+            uploaded=request.files.get("file"),
+            upload_root=Path(
+                current_app.config["FLASHCARD_MEDIA_UPLOAD_ROOT"]
+            ),
+            max_bytes=int(
+                current_app.config.get(
+                    "FLASHCARD_MEDIA_MAX_BYTES",
+                    10 * 1024 * 1024,
+                )
+            ),
+            scanner=current_app.config.get("FLASHCARD_MEDIA_SCANNER"),
+            scan_enabled=bool(
+                current_app.config.get("FLASHCARD_MEDIA_SCAN_ENABLED", False)
+            ),
+            markdown_inline=True,
+        )
+    except flashcard_media_api_service.MediaApiError as exc:
+        return _api_error(
+            exc.error,
+            str(exc),
+            status=exc.status,
+            field=exc.field,
+        )
+    return jsonify(payload), status
+
     note = Note.query.filter_by(id=note_id, user_id=current_user.id).first()
     if not note:
         return _api_error("FIELD_NOT_FOUND", "Note not found.", status=404)
@@ -239,6 +355,26 @@ def upload_note_markdown_media(note_id: str):
 @flashcards_bp.route("/api/media/<asset_id>", methods=["DELETE"])
 @login_required
 def delete_media(asset_id: str):
+    from app.services import flashcard_media_api_service
+
+    try:
+        return jsonify(
+            flashcard_media_api_service.delete_media(
+                user_id=current_user.id,
+                asset_id=asset_id,
+                upload_root=Path(
+                    current_app.config["FLASHCARD_MEDIA_UPLOAD_ROOT"]
+                ),
+            )
+        )
+    except flashcard_media_api_service.MediaApiError as exc:
+        return _api_error(
+            exc.error,
+            str(exc),
+            status=exc.status,
+            field=exc.field,
+        )
+
     asset = (
         MediaAsset.query.join(Note, MediaAsset.note_id == Note.id)
         .filter(MediaAsset.id == asset_id, Note.user_id == current_user.id)

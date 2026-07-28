@@ -54,7 +54,7 @@ function formatUpdatedAt(value: string | null) {
 export function NoteTypesPage() {
   const query = useQuery({
     queryKey: ['note-types'],
-    queryFn: () => appApi.get<{ items: NoteTypeItem[] }>('/api/note-types'),
+    queryFn: () => appApi.get<{ items: NoteTypeItem[] }>('/note-types'),
   })
 
   if (query.isPending) return <PageLoading label="Đang tải loại thẻ…" />

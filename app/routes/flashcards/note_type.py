@@ -37,6 +37,16 @@ from app.validators import (
     validate_note_create_request,
     validate_note_patch_request,
 )
+from app.services import flashcard_content_service
+
+
+def _content_error(exc: flashcard_content_service.ContentApiError):
+    return _api_error(
+        exc.error,
+        str(exc),
+        status=exc.status,
+        field=exc.field,
+    )
 
 
 
@@ -171,12 +181,26 @@ def note_edit_page(note_id: str):
 @flashcards_bp.route("/api/note-types", methods=["GET"])
 @login_required
 def list_note_types():
+    return jsonify(
+        flashcard_content_service.list_note_types(user_id=current_user.id)
+    )
+
     note_types = NoteType.query.filter_by(user_id=current_user.id).order_by(NoteType.updated_at.desc()).all()
     return jsonify({"items": [_serialize_note_type(note_type) for note_type in note_types]})
 
 @flashcards_bp.route("/api/note-types/<note_type_id>", methods=["GET"])
 @login_required
 def get_note_type_detail(note_type_id: str):
+    try:
+        return jsonify(
+            flashcard_content_service.get_note_type(
+                user_id=current_user.id,
+                note_type_id=note_type_id,
+            )
+        )
+    except flashcard_content_service.ContentApiError as exc:
+        return _content_error(exc)
+
     note_type = _get_note_type_or_404(note_type_id)
     if not note_type:
         return _api_error("FIELD_NOT_FOUND", "Note type not found.", status=404)
@@ -185,6 +209,18 @@ def get_note_type_detail(note_type_id: str):
 @flashcards_bp.route("/api/note-types/<note_type_id>", methods=["PATCH"])
 @login_required
 def patch_note_type(note_type_id: str):
+    try:
+        return jsonify(
+            flashcard_content_service.update_note_type(
+                user_id=current_user.id,
+                admin_mode=is_admin_user(current_user),
+                note_type_id=note_type_id,
+                payload=request.get_json(silent=True) or {},
+            )
+        )
+    except flashcard_content_service.ContentApiError as exc:
+        return _content_error(exc)
+
     note_type = _get_note_type_or_404(note_type_id)
     if not note_type:
         return _api_error("FIELD_NOT_FOUND", "Note type not found.", status=404)
@@ -199,6 +235,16 @@ def patch_note_type(note_type_id: str):
 @flashcards_bp.route("/api/note-types/<note_type_id>", methods=["DELETE"])
 @login_required
 def delete_note_type(note_type_id: str):
+    try:
+        return jsonify(
+            flashcard_content_service.delete_note_type(
+                user_id=current_user.id,
+                note_type_id=note_type_id,
+            )
+        )
+    except flashcard_content_service.ContentApiError as exc:
+        return _content_error(exc)
+
     note_type = _get_note_type_or_404(note_type_id)
     if not note_type:
         return _api_error("FIELD_NOT_FOUND", "Note type not found.", status=404)
@@ -212,6 +258,16 @@ def delete_note_type(note_type_id: str):
 @flashcards_bp.route("/api/note-types/<note_type_id>/fields", methods=["GET"])
 @login_required
 def list_fields(note_type_id: str):
+    try:
+        return jsonify(
+            flashcard_content_service.list_fields(
+                user_id=current_user.id,
+                note_type_id=note_type_id,
+            )
+        )
+    except flashcard_content_service.ContentApiError as exc:
+        return _content_error(exc)
+
     note_type = _get_note_type_or_404(note_type_id)
     if not note_type:
         return _api_error("FIELD_NOT_FOUND", "Note type not found.", status=404)
@@ -221,6 +277,20 @@ def list_fields(note_type_id: str):
 @flashcards_bp.route("/api/note-types/<note_type_id>/fields", methods=["POST"])
 @login_required
 def create_field(note_type_id: str):
+    try:
+        return (
+            jsonify(
+                flashcard_content_service.create_field(
+                    user_id=current_user.id,
+                    note_type_id=note_type_id,
+                    payload=request.get_json(silent=True) or {},
+                )
+            ),
+            201,
+        )
+    except flashcard_content_service.ContentApiError as exc:
+        return _content_error(exc)
+
     note_type = _get_note_type_or_404(note_type_id)
     if not note_type:
         return _api_error("FIELD_NOT_FOUND", "Note type not found.", status=404)
@@ -250,6 +320,18 @@ def create_field(note_type_id: str):
 @flashcards_bp.route("/api/note-types/<note_type_id>/fields/<field_id>", methods=["PATCH"])
 @login_required
 def patch_field(note_type_id: str, field_id: str):
+    try:
+        return jsonify(
+            flashcard_content_service.update_field(
+                user_id=current_user.id,
+                note_type_id=note_type_id,
+                field_id=field_id,
+                payload=request.get_json(silent=True) or {},
+            )
+        )
+    except flashcard_content_service.ContentApiError as exc:
+        return _content_error(exc)
+
     note_type = _get_note_type_or_404(note_type_id)
     if not note_type:
         return _api_error("FIELD_NOT_FOUND", "Note type not found.", status=404)
@@ -295,6 +377,17 @@ def patch_field(note_type_id: str, field_id: str):
 @flashcards_bp.route("/api/note-types/<note_type_id>/fields/<field_id>", methods=["DELETE"])
 @login_required
 def delete_field(note_type_id: str, field_id: str):
+    try:
+        return jsonify(
+            flashcard_content_service.delete_field(
+                user_id=current_user.id,
+                note_type_id=note_type_id,
+                field_id=field_id,
+            )
+        )
+    except flashcard_content_service.ContentApiError as exc:
+        return _content_error(exc)
+
     note_type = _get_note_type_or_404(note_type_id)
     if not note_type:
         return _api_error("FIELD_NOT_FOUND", "Note type not found.", status=404)
@@ -315,6 +408,17 @@ def delete_field(note_type_id: str, field_id: str):
 @flashcards_bp.route("/api/note-types/<note_type_id>/fields/reorder", methods=["POST"])
 @login_required
 def reorder_fields(note_type_id: str):
+    try:
+        return jsonify(
+            flashcard_content_service.reorder_fields(
+                user_id=current_user.id,
+                note_type_id=note_type_id,
+                payload=request.get_json(silent=True),
+            )
+        )
+    except flashcard_content_service.ContentApiError as exc:
+        return _content_error(exc)
+
     note_type = _get_note_type_or_404(note_type_id)
     if not note_type:
         return _api_error("FIELD_NOT_FOUND", "Note type not found.", status=404)
@@ -331,6 +435,16 @@ def reorder_fields(note_type_id: str):
 @flashcards_bp.route("/api/notes", methods=["GET"])
 @login_required
 def list_notes():
+    try:
+        return jsonify(
+            flashcard_content_service.list_notes(
+                user_id=current_user.id,
+                query_args=request.args,
+            )
+        )
+    except flashcard_content_service.ContentApiError as exc:
+        return _content_error(exc)
+
     note_type_id = (request.args.get("note_type_id") or "").strip()
     deck_id_raw = (request.args.get("deck_id") or "").strip()
     page = max(1, int(request.args.get("page", "1")))
@@ -372,6 +486,19 @@ def list_notes():
 @flashcards_bp.route("/api/notes", methods=["POST"])
 @login_required
 def create_note():
+    try:
+        return (
+            jsonify(
+                flashcard_content_service.create_note(
+                    user_id=current_user.id,
+                    payload=request.get_json(silent=True) or {},
+                )
+            ),
+            201,
+        )
+    except flashcard_content_service.ContentApiError as exc:
+        return _content_error(exc)
+
     payload = request.get_json(silent=True) or {}
     note_type_id = (payload.get("note_type_id") or "").strip()
     note_type = _get_note_type_or_404(note_type_id)
@@ -405,6 +532,17 @@ def create_note():
 @flashcards_bp.route("/api/notes/<note_id>", methods=["PATCH"])
 @login_required
 def patch_note(note_id: str):
+    try:
+        return jsonify(
+            flashcard_content_service.update_note(
+                user_id=current_user.id,
+                note_id=note_id,
+                payload=request.get_json(silent=True) or {},
+            )
+        )
+    except flashcard_content_service.ContentApiError as exc:
+        return _content_error(exc)
+
     note = Note.query.filter_by(id=note_id, user_id=current_user.id).first()
     if not note:
         return _api_error("FIELD_NOT_FOUND", "Note not found.", status=404)
@@ -458,6 +596,16 @@ def patch_note(note_id: str):
 @flashcards_bp.route("/api/notes/<note_id>", methods=["DELETE"])
 @login_required
 def delete_note(note_id: str):
+    try:
+        return jsonify(
+            flashcard_content_service.delete_note(
+                user_id=current_user.id,
+                note_id=note_id,
+            )
+        )
+    except flashcard_content_service.ContentApiError as exc:
+        return _content_error(exc)
+
     note = Note.query.filter_by(id=note_id, user_id=current_user.id).first()
     if not note:
         return _api_error("FIELD_NOT_FOUND", "Note not found.", status=404)

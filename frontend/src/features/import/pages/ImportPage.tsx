@@ -163,7 +163,7 @@ export function ImportPage() {
   // Load import initial options
   const optionsQuery = useQuery({
     queryKey: ['flashcard-import-options', deckIdQueryParam],
-    queryFn: () => appApi.get<ImportOptionsResponse>('/api/flashcards/import/options', { deck_id: deckIdQueryParam }),
+    queryFn: () => appApi.get<ImportOptionsResponse>('/flashcards/import/options', { deck_id: deckIdQueryParam }),
   })
 
   useEffect(() => {
@@ -230,7 +230,7 @@ export function ImportPage() {
       formData.append('custom_delimiter', customDelimiter)
       formData.append('has_header', hasHeader ? '1' : '0')
 
-      return apiRequest<ParseResponse>('/api/flashcards/import/parse', {
+      return apiRequest<ParseResponse>('/api/v1/flashcards/import/parse', {
         method: 'POST',
         body: formData,
       })
@@ -275,7 +275,7 @@ export function ImportPage() {
         dont_overwrite_empty: dontOverwriteEmpty,
         confirm_column_mismatch: confirmColumnMismatch || parseWarnings.length > 0,
       }
-      return appApi.mutate<ImportReport>('/api/flashcards/import/estimate', 'POST', payload)
+      return appApi.mutate<ImportReport>('/flashcards/import/estimate', 'POST', payload)
     },
     onSuccess: (data) => {
       setReport(data)
@@ -306,7 +306,7 @@ export function ImportPage() {
         dont_overwrite_empty: dontOverwriteEmpty,
         confirm_column_mismatch: confirmColumnMismatch || parseWarnings.length > 0,
       }
-      return appApi.mutate<ImportReport>('/api/flashcards/import/execute', 'POST', payload)
+      return appApi.mutate<ImportReport>('/flashcards/import/execute', 'POST', payload)
     },
     onSuccess: (data) => {
       setReport(data)

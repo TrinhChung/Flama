@@ -372,7 +372,7 @@ Tối thiểu phải kiểm tra:
 | Phase 0 - Contract freeze và blocker | Completed |
 | Phase 1 - Chia REST god-file | Completed |
 | Phase 2 - Tách V1 khỏi legacy route | Completed |
-| Phase 3 - Content management | Planned |
+| Phase 3 - Content management | Completed |
 | Phase 4 - Learning runtime | Planned |
 | Phase 5 - Marketplace, billing và admin | Planned |
 | Phase 6 - Consumer cutover và deprecation | Planned |
@@ -433,6 +433,28 @@ Tối thiểu phải kiểm tra:
 - `tests/test_api_v1_route_map.py` khóa snapshot method/path để phát hiện mất hoặc
   trùng V1 route trong các phase sau.
 
+### 2026-07-28 - Phase 3 hoàn tất
+
+- Đã thêm 28 canonical endpoint cho note type, field, template, note, media và
+  flashcard import dưới `app/api/v1/flashcards/`; V1 URL map hiện có 77 rule.
+- HTTP parsing/response mapping nằm trong các module `note_types.py`, `notes.py`,
+  `media.py` và `imports.py`; query, orchestration và transaction ownership nằm
+  trong:
+  - `app/services/flashcard_content_service.py`
+  - `app/services/flashcard_media_api_service.py`
+  - `app/services/flashcard_import_api_service.py`
+- Legacy flashcard endpoint và V1 endpoint gọi cùng application service để giữ
+  behavior parity trong thời gian cutover.
+- React note-type manager/detail/fields, Library note-type list và Import page đã
+  chuyển sang `/api/v1`; không còn gọi `/api/note-types` hoặc
+  `/api/flashcards/import`.
+- Media upload tiếp tục dùng validator chữ ký/kích thước, đường dẫn lưu trữ an toàn
+  và `/media/proxy/<asset_id>`; không thay đổi renderer/CSP contract.
+- Media service có compensating cleanup: rollback DB và xóa file vừa ghi nếu commit
+  thất bại. Test xác nhận không còn `MediaAsset` hoặc file rác sau lỗi.
+- Đã thêm V1 CRUD/media/import integration test, legacy/V1 parity test và mở rộng
+  route-map snapshot lên 77 rule.
+
 ### Verification đã chạy
 
 - `python -m compileall -q app`
@@ -443,10 +465,13 @@ Tối thiểu phải kiểm tra:
 - Phase 2: 46 focused regression test đã pass cho REST V1, route-map snapshot,
   Browse logical-overlay/deck settings, admin user roles và auth security.
 - Browse VoiceVox precheck có parity test giữa legacy và V1 adapter.
+- Phase 3: 106 focused regression test đã pass cho REST V1, flashcard
+  CRUD/import/media security, deck settings và route-map snapshot. Frontend
+  lint/type-check/build đã pass; chỉ còn warning lint/chunk-size đã tồn tại.
 
 ### Công việc còn lại trước khi migration hoàn tất
 
-- Thêm V1 và cut over React cho study, note type/template/note/media/import.
+- Thêm V1 và cut over React cho study/TTS learning runtime.
 - Thêm V1 và cut over marketplace/change-request/payment mutations và phần admin
   còn lại.
 - Chạy một release cycle với legacy usage logging trước khi thêm sunset header và

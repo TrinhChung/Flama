@@ -43,10 +43,38 @@ EXPECTED_V1_RULES = {
     ("DELETE", "/api/v1/decks/<int:deck_id>"),
     ("PATCH", "/api/v1/decks/<int:deck_id>"),
     ("POST", "/api/v1/decks/<int:deck_id>/progress-reset"),
+    ("POST", "/api/v1/flashcards/import/estimate"),
+    ("POST", "/api/v1/flashcards/import/execute"),
+    ("GET", "/api/v1/flashcards/import/options"),
+    ("POST", "/api/v1/flashcards/import/parse"),
     ("GET", "/api/v1/marketplace/installed-decks"),
     ("GET", "/api/v1/mcp-tokens"),
     ("POST", "/api/v1/mcp-tokens"),
     ("DELETE", "/api/v1/mcp-tokens/<int:token_id>"),
+    ("DELETE", "/api/v1/media/<asset_id>"),
+    ("GET", "/api/v1/note-types"),
+    ("POST", "/api/v1/note-types"),
+    ("GET", "/api/v1/note-types/<note_type_id>"),
+    ("PATCH", "/api/v1/note-types/<note_type_id>"),
+    ("DELETE", "/api/v1/note-types/<note_type_id>"),
+    ("GET", "/api/v1/note-types/<note_type_id>/fields"),
+    ("POST", "/api/v1/note-types/<note_type_id>/fields"),
+    ("PATCH", "/api/v1/note-types/<note_type_id>/fields/<field_id>"),
+    ("DELETE", "/api/v1/note-types/<note_type_id>/fields/<field_id>"),
+    ("POST", "/api/v1/note-types/<note_type_id>/fields/reorder"),
+    ("GET", "/api/v1/note-types/<note_type_id>/templates"),
+    ("POST", "/api/v1/note-types/<note_type_id>/templates"),
+    ("PATCH", "/api/v1/note-types/<note_type_id>/templates/<template_id>"),
+    ("DELETE", "/api/v1/note-types/<note_type_id>/templates/<template_id>"),
+    ("POST", "/api/v1/note-types/<note_type_id>/templates/<template_id>/preview"),
+    ("POST", "/api/v1/note-types/<note_type_id>/templates/<template_id>/reset"),
+    ("GET", "/api/v1/notes"),
+    ("POST", "/api/v1/notes"),
+    ("GET", "/api/v1/notes/<note_id>"),
+    ("PATCH", "/api/v1/notes/<note_id>"),
+    ("DELETE", "/api/v1/notes/<note_id>"),
+    ("POST", "/api/v1/notes/<note_id>/markdown-media"),
+    ("POST", "/api/v1/notes/<note_id>/media"),
     ("GET", "/api/v1/orders"),
     ("GET", "/api/v1/orders/<order_id>"),
     ("DELETE", "/api/v1/session"),
@@ -82,7 +110,7 @@ class ApiV1RouteMapTests(unittest.TestCase):
             for method in rule.methods - {"HEAD", "OPTIONS"}
         }
         self.assertEqual(actual, EXPECTED_V1_RULES)
-        self.assertEqual(len(actual), 49)
+        self.assertEqual(len(actual), 77)
 
 
 if __name__ == "__main__":

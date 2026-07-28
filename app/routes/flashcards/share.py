@@ -157,6 +157,23 @@ def save_shared_deck_item(deck_item_id: str):
 @flashcards_bp.route("/api/note-types", methods=["POST"])
 @login_required
 def create_note_type():
+    from app.services import flashcard_content_service
+
+    try:
+        payload = flashcard_content_service.create_note_type(
+            user_id=current_user.id,
+            admin_mode=is_admin_user(current_user),
+            payload=request.get_json(silent=True) or {},
+        )
+    except flashcard_content_service.ContentApiError as exc:
+        return _api_error(
+            exc.error,
+            str(exc),
+            status=exc.status,
+            field=exc.field,
+        )
+    return jsonify(payload), 201
+
     payload = request.get_json(silent=True) or {}
     note_type, error_message, error_field = share_ctrl.create_note_type(
         user_id=current_user.id,
@@ -174,6 +191,23 @@ def create_note_type():
 @flashcards_bp.route("/api/note-types/<note_type_id>/templates", methods=["POST"])
 @login_required
 def create_template(note_type_id: str):
+    from app.services import flashcard_content_service
+
+    try:
+        payload = flashcard_content_service.create_template(
+            user_id=current_user.id,
+            note_type_id=note_type_id,
+            payload=request.get_json(silent=True) or {},
+        )
+    except flashcard_content_service.ContentApiError as exc:
+        return _api_error(
+            exc.error,
+            str(exc),
+            status=exc.status,
+            field=exc.field,
+        )
+    return jsonify(payload), 201
+
     note_type = _get_note_type_or_404(note_type_id)
     if not note_type:
         return _api_error("FIELD_NOT_FOUND", "Note type not found.", status=404)
@@ -190,6 +224,24 @@ def create_template(note_type_id: str):
 @flashcards_bp.route("/api/note-types/<note_type_id>/templates/<template_id>", methods=["PATCH"])
 @login_required
 def patch_template(note_type_id: str, template_id: str):
+    from app.services import flashcard_content_service
+
+    try:
+        payload = flashcard_content_service.update_template(
+            user_id=current_user.id,
+            note_type_id=note_type_id,
+            template_id=template_id,
+            payload=request.get_json(silent=True) or {},
+        )
+    except flashcard_content_service.ContentApiError as exc:
+        return _api_error(
+            exc.error,
+            str(exc),
+            status=exc.status,
+            field=exc.field,
+        )
+    return jsonify(payload)
+
     note_type = _get_note_type_or_404(note_type_id)
     if not note_type:
         return _api_error("FIELD_NOT_FOUND", "Note type not found.", status=404)
@@ -225,6 +277,23 @@ def patch_template(note_type_id: str, template_id: str):
 @flashcards_bp.route("/api/note-types/<note_type_id>/templates/<template_id>/reset", methods=["POST"])
 @login_required
 def reset_template(note_type_id: str, template_id: str):
+    from app.services import flashcard_content_service
+
+    try:
+        payload = flashcard_content_service.reset_template(
+            user_id=current_user.id,
+            note_type_id=note_type_id,
+            template_id=template_id,
+        )
+    except flashcard_content_service.ContentApiError as exc:
+        return _api_error(
+            exc.error,
+            str(exc),
+            status=exc.status,
+            field=exc.field,
+        )
+    return jsonify(payload)
+
     note_type = _get_note_type_or_404(note_type_id)
     if not note_type:
         return _api_error("FIELD_NOT_FOUND", "Note type not found.", status=404)
@@ -240,6 +309,24 @@ def reset_template(note_type_id: str, template_id: str):
 @flashcards_bp.route("/api/note-types/<note_type_id>/templates/<template_id>/preview", methods=["POST"])
 @login_required
 def preview_template(note_type_id: str, template_id: str):
+    from app.services import flashcard_content_service
+
+    try:
+        payload = flashcard_content_service.preview_template(
+            user_id=current_user.id,
+            note_type_id=note_type_id,
+            template_id=template_id,
+            payload=request.get_json(silent=True) or {},
+        )
+    except flashcard_content_service.ContentApiError as exc:
+        return _api_error(
+            exc.error,
+            str(exc),
+            status=exc.status,
+            field=exc.field,
+        )
+    return jsonify(payload)
+
     note_type = _get_note_type_or_404(note_type_id)
     if not note_type:
         return _api_error("FIELD_NOT_FOUND", "Note type not found.", status=404)

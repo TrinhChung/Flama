@@ -65,7 +65,7 @@ export function NoteTypeDetailPage() {
 
   const detailQuery = useQuery({
     queryKey: ['note-type-detail', noteTypeId],
-    queryFn: () => appApi.get<NoteTypeDetail>(`/api/note-types/${noteTypeId}`),
+    queryFn: () => appApi.get<NoteTypeDetail>(`/note-types/${noteTypeId}`),
     enabled: Boolean(noteTypeId),
   })
 
@@ -94,7 +94,7 @@ export function NoteTypeDetailPage() {
   // Save Template Mutation
   const saveMutation = useMutation({
     mutationFn: (payload: { front_html: string; back_html: string; shared_css: string }) =>
-      appApi.mutate(`/api/note-types/${noteTypeId}/templates/${selectedTemplateId}`, 'PATCH', payload),
+      appApi.mutate(`/note-types/${noteTypeId}/templates/${selectedTemplateId}`, 'PATCH', payload),
     onSuccess: () => {
       toast.success('Đã lưu Template.')
       void queryClient.invalidateQueries({ queryKey: ['note-type-detail', noteTypeId] })
@@ -107,7 +107,7 @@ export function NoteTypeDetailPage() {
   // Create New Template Mutation
   const createTemplateMutation = useMutation({
     mutationFn: () =>
-      appApi.mutate<TemplateItem>(`/api/note-types/${noteTypeId}/templates`, 'POST', {
+      appApi.mutate<TemplateItem>(`/note-types/${noteTypeId}/templates`, 'POST', {
         name: `Card ${templates.length + 1}`,
         front_html: '{{Word}}',
         back_html: '{{Word}}',
@@ -126,7 +126,7 @@ export function NoteTypeDetailPage() {
   const resetTemplateMutation = useMutation({
     mutationFn: () =>
       appApi.mutate<TemplateItem>(
-        `/api/note-types/${noteTypeId}/templates/${selectedTemplateId}/reset`,
+        `/note-types/${noteTypeId}/templates/${selectedTemplateId}/reset`,
         'POST',
       ),
     onSuccess: (reset) => {
@@ -149,7 +149,7 @@ export function NoteTypeDetailPage() {
       try {
         const side = activeTab === 'back' ? 'back' : 'front'
         const res = await appApi.mutate<PreviewResponse>(
-          `/api/note-types/${noteTypeId}/templates/${selectedTemplateId}/preview`,
+          `/note-types/${noteTypeId}/templates/${selectedTemplateId}/preview`,
           'POST',
           {
             front_html: frontHtml,

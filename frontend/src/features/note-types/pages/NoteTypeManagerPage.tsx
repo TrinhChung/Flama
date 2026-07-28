@@ -45,12 +45,12 @@ export function NoteTypeManagerPage() {
 
   const query = useQuery({
     queryKey: ['note-types'],
-    queryFn: () => appApi.get<NoteTypesResponse>('/api/note-types'),
+    queryFn: () => appApi.get<NoteTypesResponse>('/note-types'),
   })
 
   const createMutation = useMutation({
     mutationFn: (newTypeName: string) =>
-      appApi.mutate<NoteTypeItem>('/api/note-types', 'POST', { name: newTypeName }),
+      appApi.mutate<NoteTypeItem>('/note-types', 'POST', { name: newTypeName }),
     onSuccess: (data) => {
       toast.success('Đã tạo NoteType mới.')
       void queryClient.invalidateQueries({ queryKey: ['note-types'] })
@@ -62,7 +62,7 @@ export function NoteTypeManagerPage() {
   })
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => appApi.mutate(`/api/note-types/${id}`, 'DELETE'),
+    mutationFn: (id: string) => appApi.mutate(`/note-types/${id}`, 'DELETE'),
     onSuccess: () => {
       toast.success('Đã xóa NoteType.')
       void queryClient.invalidateQueries({ queryKey: ['note-types'] })

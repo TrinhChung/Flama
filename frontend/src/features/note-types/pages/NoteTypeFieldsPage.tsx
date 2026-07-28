@@ -60,13 +60,13 @@ export function NoteTypeFieldsPage() {
 
   const query = useQuery({
     queryKey: ['note-type-fields', noteTypeId],
-    queryFn: () => appApi.get<{ items: FieldDefItem[] }>(`/api/note-types/${noteTypeId}/fields`),
+    queryFn: () => appApi.get<{ items: FieldDefItem[] }>(`/note-types/${noteTypeId}/fields`),
     enabled: Boolean(noteTypeId),
   })
 
   const detailQuery = useQuery({
     queryKey: ['note-type-detail', noteTypeId],
-    queryFn: () => appApi.get<NoteTypeDetail>(`/api/note-types/${noteTypeId}`),
+    queryFn: () => appApi.get<NoteTypeDetail>(`/note-types/${noteTypeId}`),
     enabled: Boolean(noteTypeId),
   })
 
@@ -92,7 +92,7 @@ export function NoteTypeFieldsPage() {
   // Create Field Mutation
   const createMutation = useMutation({
     mutationFn: (payload: { name: string; field_type: string; required: boolean }) =>
-      appApi.mutate<FieldDefItem>(`/api/note-types/${noteTypeId}/fields`, 'POST', payload),
+      appApi.mutate<FieldDefItem>(`/note-types/${noteTypeId}/fields`, 'POST', payload),
     onSuccess: (newField) => {
       toast.success('Đã thêm trường mới.')
       setIsAddingField(false)
@@ -107,7 +107,7 @@ export function NoteTypeFieldsPage() {
   // Patch Field Mutation
   const updateMutation = useMutation({
     mutationFn: (payload: { name: string; field_type: string; required: boolean }) =>
-      appApi.mutate(`/api/note-types/${noteTypeId}/fields/${selectedFieldId}`, 'PATCH', payload),
+      appApi.mutate(`/note-types/${noteTypeId}/fields/${selectedFieldId}`, 'PATCH', payload),
     onSuccess: () => {
       toast.success('Đã cập nhật trường.')
       void queryClient.invalidateQueries({ queryKey: ['note-type-fields', noteTypeId] })
@@ -120,7 +120,7 @@ export function NoteTypeFieldsPage() {
   // Delete Field Mutation
   const deleteMutation = useMutation({
     mutationFn: (fieldId: string) =>
-      appApi.mutate(`/api/note-types/${noteTypeId}/fields/${fieldId}`, 'DELETE'),
+      appApi.mutate(`/note-types/${noteTypeId}/fields/${fieldId}`, 'DELETE'),
     onSuccess: () => {
       toast.success('Đã xóa trường.')
       setSelectedFieldId(null)
@@ -134,7 +134,7 @@ export function NoteTypeFieldsPage() {
   // Reorder Mutation
   const reorderMutation = useMutation({
     mutationFn: (payload: Array<{ id: string; position: number }>) =>
-      appApi.mutate(`/api/note-types/${noteTypeId}/fields/reorder`, 'POST', payload),
+      appApi.mutate(`/note-types/${noteTypeId}/fields/reorder`, 'POST', payload),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['note-type-fields', noteTypeId] })
     },
