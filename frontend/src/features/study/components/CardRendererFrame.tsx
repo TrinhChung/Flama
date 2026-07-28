@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { resolveBackendUrl } from '@/config/env'
 
 declare global {
   interface Window {
@@ -44,7 +45,7 @@ function ensureRendererScript(): Promise<void> {
   }
   scriptLoadPromise = new Promise((resolve, reject) => {
     const script = document.createElement('script')
-    script.src = '/static/js/card_renderer_host.js'
+    script.src = resolveBackendUrl('/static/js/card_renderer_host.js')
     script.async = true
     script.onload = () => resolve()
     script.onerror = (err) => {

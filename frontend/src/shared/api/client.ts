@@ -1,3 +1,5 @@
+import { resolveBackendUrl } from '@/config/env'
+
 type ErrorPayload = {
   error?: string
   message?: string
@@ -57,11 +59,11 @@ async function apiFetch(
   }
 
 
-  const response = await fetch(url, {
+  const response = await fetch(resolveBackendUrl(url), {
     ...init,
     method,
     headers,
-    credentials: 'same-origin',
+    credentials: 'include',
   })
 
   if (response.redirected && new URL(response.url).pathname === '/login') {
@@ -126,11 +128,11 @@ export async function submitLegacyForm(
   if (csrfToken) {
     headers.set('X-CSRF-Token', csrfToken)
   }
-  const response = await fetch(url, {
+  const response = await fetch(resolveBackendUrl(url), {
     method: 'POST',
     body,
     headers,
-    credentials: 'same-origin',
+    credentials: 'include',
     redirect: 'follow',
   })
   if (!response.ok) {

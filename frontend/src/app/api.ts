@@ -4,6 +4,7 @@ import type {
   MoveDeckForm,
   RenameDeckForm,
 } from '../features/dashboard/schemas'
+import { API_BASE_URL, resolveBackendUrl } from '../config/env'
 import type {
   DashboardOverview,
   DashboardPayload,
@@ -21,14 +22,14 @@ import type {
   FrontendUser,
 } from '../shared/types/api'
 
-const API_BASE = String(import.meta.env.VITE_API_BASE_URL || '/api/v1').replace(
-  /\/$/,
-  '',
-)
+const API_BASE = API_BASE_URL
 
 function apiUrl(path: string) {
-  if (/^https?:\/\//i.test(path) || path.startsWith('/api/')) {
+  if (/^https?:\/\//i.test(path)) {
     return path
+  }
+  if (path.startsWith('/api/')) {
+    return resolveBackendUrl(path)
   }
   return `${API_BASE}/${path.replace(/^\/+/, '')}`
 }
