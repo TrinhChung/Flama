@@ -41,12 +41,19 @@ const pageTitles: Record<string, string> = {
   '/study': 'Học flashcard',
   '/note-types': 'Loại thẻ',
   '/installed-decks': 'Deck đã cài',
+  '/import': 'Import thẻ',
   '/marketplace/decks': 'Shared decks',
+  '/marketplace/decks/publish': 'Đăng bộ thẻ',
   '/marketplace/note-types': 'Shared note types',
+  '/marketplace/note-types/publish': 'Đăng loại thẻ',
   '/orders': 'Đơn hàng',
+  '/settings/mcp-tokens': 'MCP Tokens',
   '/admin/users': 'Quản lý người dùng',
+  '/admin/permissions': 'Phân quyền người dùng',
   '/admin/payments': 'Quản lý thanh toán',
   '/admin/tts': 'TTS Provider',
+  '/admin/image-library': 'Thư viện ảnh Admin',
+  '/admin/support': 'Cấu hình Ủng hộ Admin',
 }
 
 function PublicLayout({

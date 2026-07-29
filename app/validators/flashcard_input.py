@@ -163,7 +163,7 @@ MEDIA_KIND_SPECS: dict[str, dict[str, Any]] = {
         "family": "audio",
         "primary_ext": "wav",
         "extensions": {"wav"},
-        "mimes": {"audio/wav"},
+        "mimes": {"audio/wav", "audio/x-wav"},
     },
     "webm": {
         "family": "audio",

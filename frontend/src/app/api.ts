@@ -191,6 +191,17 @@ export const appApi = {
     return apiJson<T>(apiUrl(path), method, body)
   },
 
+  async mutateFormData<T>(
+    path: string,
+    method: 'POST' | 'PUT' | 'PATCH',
+    formData: FormData,
+  ): Promise<T> {
+    return apiRequest<T>(apiUrl(path), {
+      method,
+      body: formData,
+    })
+  },
+
   async getBootstrap(): Promise<FrontendBootstrap> {
     const payload = await apiRequest<SessionResponse>(`${API_BASE}/session`)
     return toBootstrap(payload)

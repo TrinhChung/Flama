@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { CardRendererFrame } from './CardRendererFrame'
+import { CardDisplay } from './CardDisplay'
 import { renderStudySide } from '../renderer/clientRenderer'
 import type {
   StudyContentArtifact,
@@ -48,10 +48,10 @@ export function StudyCardRendererFrame({
   }
 
   return (
-    <CardRendererFrame
+    <CardDisplay
       cardId={cardId}
       noteId={noteId}
-      revealed={revealed}
+      side={revealed ? 'back' : 'front'}
       frontPayload={rendered.front}
       backPayload={rendered.back}
       scope="deck"

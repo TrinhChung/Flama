@@ -15,6 +15,11 @@ export type StudyArtifactRef = {
   visibility: 'public' | 'private'
 }
 
+export type StudyIntervalsRef = {
+  state_version: string
+  url: string
+}
+
 export type StudyManifest = {
   schema_version: 'study-manifest.v1'
   render_contract: 'client_v1'
@@ -25,7 +30,7 @@ export type StudyManifest = {
   template_id?: string | null
   template_ref?: StudyArtifactRef
   content_ref?: StudyArtifactRef
-  intervals_ref?: { url: string }
+  intervals_ref?: StudyIntervalsRef
   review_state_version?: string
   new_count?: number
   learn_count?: number
@@ -87,6 +92,16 @@ export type StudyIntervalsResponse = {
 export type StudyAnswerResponse = {
   success: boolean
   next_manifest: StudyManifest
+}
+
+export type StudyCardEditResponse = {
+  success: boolean
+  card_id: string
+  note_id: string
+  deck_id?: number | null
+  tags?: string[]
+  field_values: Record<string, string>
+  content_ref?: StudyArtifactRef
 }
 
 export type RendererSidePayload = {

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { resolveBackendUrl } from '@/config/env'
+import { cn } from '@/lib/utils'
 
 declare global {
   interface Window {
@@ -9,6 +10,8 @@ declare global {
         options?: Record<string, unknown>,
       ) => {
         render: (payload: unknown, options?: Record<string, unknown>) => void
+        reveal: (payload?: Record<string, unknown>) => void
+        destroy: () => void
       }
       normalizeRendererSidePayload: (payload: unknown) => {
         html: string
@@ -32,9 +35,15 @@ type CardRendererFrameProps = {
   scopeId?: string | null
   fieldDefs?: unknown[]
   fieldValues?: Record<string, string>
+  active?: boolean
+  enableLivePatch?: boolean
+  fillHeight?: boolean
+  className?: string
 }
 
 let scriptLoadPromise: Promise<void> | null = null
+const EMPTY_FIELD_DEFS: unknown[] = []
+const EMPTY_FIELD_VALUES: Record<string, string> = {}
 
 function ensureRendererScript(): Promise<void> {
   if (window.FlamaCardRendererHost) {
@@ -67,8 +76,12 @@ export function CardRendererFrame({
   backHtml,
   scope = 'deck',
   scopeId,
-  fieldDefs = [],
-  fieldValues = {},
+  fieldDefs = EMPTY_FIELD_DEFS,
+  fieldValues = EMPTY_FIELD_VALUES,
+  active = true,
+  enableLivePatch = false,
+  fillHeight = false,
+  className,
 }: CardRendererFrameProps) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
   const controllerRef = useRef<ReturnType<
@@ -76,6 +89,10 @@ export function CardRendererFrame({
   > | null>(null)
   const [scriptLoaded, setScriptLoaded] = useState(Boolean(window.FlamaCardRendererHost))
   const [scriptFailed, setScriptFailed] = useState(false)
+  const activeSide = revealed ? 'back' : 'front'
+  const rawPayload = revealed
+    ? backPayload || backHtml || ''
+    : frontPayload || frontHtml || ''
 
   useEffect(() => {
     let mounted = true
@@ -98,23 +115,33 @@ export function CardRendererFrame({
   }, [])
 
   useEffect(() => {
+    if (!scriptLoaded) return
     const iframeEl = iframeRef.current
     if (!iframeEl) return
     const host = window.FlamaCardRendererHost
     if (!host) return
 
-    if (!controllerRef.current) {
-      controllerRef.current = host.createRendererFrameController(iframeEl, {
-        minHeight: 240,
-        autoHeight: true,
-      })
+    const controller = host.createRendererFrameController(iframeEl, {
+      minHeight: 240,
+      autoHeight: !fillHeight,
+      fillHeight,
+      enableLivePatch,
+    })
+    controllerRef.current = controller
+
+    return () => {
+      if (controllerRef.current === controller) {
+        controllerRef.current = null
+      }
+      controller.destroy()
     }
+  }, [scriptLoaded, enableLivePatch, fillHeight])
 
-    const activeSide = revealed ? 'back' : 'front'
-    const rawPayload = revealed
-      ? backPayload || backHtml || ''
-      : frontPayload || frontHtml || ''
-
+  useEffect(() => {
+    if (!scriptLoaded) return
+    const controller = controllerRef.current
+    const host = window.FlamaCardRendererHost
+    if (!controller || !host) return
     const normalizedPayload = host.normalizeRendererSidePayload(
       rawPayload || { html: '' },
     )
@@ -122,12 +149,12 @@ export function CardRendererFrame({
       ? normalizedPayload
       : { html: host.createNoticeHtml('Không có nội dung thẻ.') }
 
-    controllerRef.current.render(payloadForFrame, {
-      padding: '12px',
+    controller.render(payloadForFrame, {
+      padding: fillHeight ? '0' : '12px',
       background: 'transparent',
       color: 'initial',
       config: {
-        mode: 'shared_deck_preview',
+        mode: scope,
         side: activeSide,
         scope,
         scopeId: scopeId || '',
@@ -138,33 +165,55 @@ export function CardRendererFrame({
         fieldValues,
         fieldDefs,
       },
-      revealOnReady: {
-        side: activeSide,
-        reason: revealed ? 'show_answer' : 'load_card',
-      },
     })
   }, [
     scriptLoaded,
+    activeSide,
+    cardId,
+    noteId,
+    rawPayload,
+    scope,
+    scopeId,
+    fieldDefs,
+    fieldValues,
+    enableLivePatch,
+    fillHeight,
+  ])
+
+  useEffect(() => {
+    if (!active || !scriptLoaded) return
+    controllerRef.current?.reveal({
+      side: activeSide,
+      reason: revealed ? 'show_answer' : 'load_card',
+    })
+  }, [
+    active,
+    scriptLoaded,
+    activeSide,
     revealed,
     cardId,
     noteId,
-    frontPayload,
-    backPayload,
-    frontHtml,
-    backHtml,
-    scope,
-    scopeId,
+    rawPayload,
     fieldDefs,
     fieldValues,
   ])
 
   return (
-    <div className="study-card-shell w-full relative min-h-[240px]">
+    <div
+      className={cn(
+        'study-card-shell w-full relative min-h-[240px]',
+        fillHeight && 'h-full min-h-0',
+        className,
+      )}
+    >
       <iframe
         ref={iframeRef}
         title={revealed ? 'Mặt sau thẻ' : 'Mặt trước thẻ'}
         sandbox="allow-scripts"
-        className="card-face study-card-frame w-full border-0 bg-transparent p-0 m-0 min-h-[240px]"
+        className={cn(
+          'card-face study-card-frame w-full border-0 bg-transparent p-0 m-0 min-h-[240px]',
+          fillHeight && 'h-full min-h-0',
+        )}
       />
       {scriptFailed ? (
         <div className="study-card-content p-4 text-center text-sm text-muted-foreground">

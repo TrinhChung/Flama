@@ -11,14 +11,16 @@ import { StudyHeaderToolbar } from '../components/StudyHeaderToolbar'
 import { StudyCardRendererFrame } from '../components/StudyCardRendererFrame'
 import { StudyBottomBar } from '../components/StudyBottomBar'
 import { EditCardModal } from '../components/EditCardModal'
-import { fetchStudyArtifact } from '../api'
+import {
+  ensureStudyManifestArtifacts,
+  studyContentArtifactQueryOptions,
+  studyTemplateArtifactQueryOptions,
+} from '../queries'
 import type {
   Rating,
   StudyAnswerResponse,
-  StudyContentArtifact,
   StudyIntervalsResponse,
   StudyManifest,
-  StudyTemplateArtifact,
 } from '../types'
 
 function findDeckNode(nodes: DeckNode[], targetId: number | null): DeckNode | null {
@@ -48,12 +50,14 @@ export function StudyPage() {
 
   const studyQuery = useQuery({
     queryKey,
-    queryFn: () =>
-      appApi.get<StudyManifest>('/api/study/next', {
+    queryFn: async () => {
+      const manifest = await appApi.get<StudyManifest>('/api/study/session/next', {
         scope: 'deck',
         scope_id: deckIdRaw,
-        render_contract: 'client_v1',
-      }),
+      })
+      await ensureStudyManifestArtifacts(queryClient, manifest)
+      return manifest
+    },
     enabled: Boolean(deckIdRaw),
   })
   const card = studyQuery.data
@@ -62,43 +66,33 @@ export function StudyPage() {
   const intervalsRef = card?.intervals_ref
 
   const templateQuery = useQuery({
-    queryKey: ['study', 'template', templateRef?.id, templateRef?.version],
-    queryFn: async () => {
-      if (!templateRef) throw new Error('Thiếu template artifact.')
-      const artifact = await fetchStudyArtifact<StudyTemplateArtifact>(templateRef)
-      if (artifact.version !== templateRef.version) {
-        throw new Error('Template artifact version mismatch.')
-      }
-      return artifact
-    },
+    ...studyTemplateArtifactQueryOptions(card),
     enabled: Boolean(card?.card_id && templateRef),
-    staleTime: Number.POSITIVE_INFINITY,
   })
 
   const contentQuery = useQuery({
-    queryKey: ['study', 'content', contentRef?.id, contentRef?.version],
-    queryFn: async () => {
-      if (!contentRef) throw new Error('Thiếu content artifact.')
-      const artifact = await fetchStudyArtifact<StudyContentArtifact>(contentRef)
-      if (artifact.version !== contentRef.version) {
-        throw new Error('Content artifact version mismatch.')
-      }
-      return artifact
-    },
+    ...studyContentArtifactQueryOptions(card),
     enabled: Boolean(card?.card_id && contentRef),
-    staleTime: Number.POSITIVE_INFINITY,
   })
 
   const intervalsQuery = useQuery({
     queryKey: [
       'study',
       'intervals',
+      card?.selection_id,
       card?.card_id,
       card?.review_state_version,
     ],
-    queryFn: () => {
+    queryFn: async () => {
       if (!intervalsRef) throw new Error('Thiếu intervals preview URL.')
-      return appApi.get<StudyIntervalsResponse>(intervalsRef.url)
+      const artifact = await appApi.get<StudyIntervalsResponse>(intervalsRef.url)
+      if (
+        artifact.selection_id !== card?.selection_id
+        || artifact.review_state_version !== intervalsRef.state_version
+      ) {
+        throw new Error('Intervals preview không còn khớp với thẻ hiện tại.')
+      }
+      return artifact
     },
     enabled: Boolean(card?.card_id && intervalsRef),
   })
@@ -117,7 +111,7 @@ export function StudyPage() {
     mutationFn: (rating: Rating) => {
       if (!card?.card_id) throw new Error('Không có thẻ để chấm.')
       return appApi.mutate<StudyAnswerResponse>(
-        `/api/study/${card.card_id}/answer`,
+        `/api/study/cards/${card.card_id}/answer`,
         'POST',
         {
           rating,
@@ -127,11 +121,16 @@ export function StudyPage() {
           duration_ms: Math.max(0, Date.now() - startedAtRef.current),
           selection_id: card.selection_id,
           review_state_version: card.review_state_version,
-          render_contract: 'client_v1',
         },
       )
     },
-    onSuccess: (result) => {
+    onSuccess: async (result) => {
+      try {
+        await ensureStudyManifestArtifacts(queryClient, result.next_manifest)
+      } catch {
+        // The failed artifact query remains cached so the active card can show
+        // its precise loading error after the committed answer.
+      }
       queryClient.setQueryData(queryKey, result.next_manifest)
       setRevealed(false)
     },
@@ -370,8 +369,25 @@ export function StudyPage() {
           initialDeckId={card.deck_id ?? deckIdNum}
           initialTags={card.tags}
           decks={dashboardQuery.data?.decks ? dashboardQuery.data.decks.map((d) => ({ id: d.id, name: d.name })) : []}
-          onSaved={() => {
-            studyQuery.refetch()
+          onSaved={async (result) => {
+            if (!result.content_ref) return
+            const current = queryClient.getQueryData<StudyManifest>(queryKey)
+            if (!current || current.card_id !== result.card_id) return
+            const nextManifest = {
+              ...current,
+              content_ref: result.content_ref,
+              deck_id: result.deck_id ?? current.deck_id,
+              tags: result.tags ?? current.tags,
+            }
+            try {
+              await ensureStudyManifestArtifacts(queryClient, nextManifest)
+            } catch {
+              // Activate the edited manifest so the cached artifact error is
+              // visible instead of silently keeping stale card content.
+            }
+            queryClient.setQueryData<StudyManifest>(queryKey, (active) => (
+              active?.card_id === result.card_id ? nextManifest : active
+            ))
           }}
         />
       ) : null}

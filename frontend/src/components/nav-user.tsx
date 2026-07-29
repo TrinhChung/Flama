@@ -1,4 +1,4 @@
-import { ChevronsUpDown, CreditCard, LogOut, NotebookTabs } from 'lucide-react'
+import { ChevronsUpDown, CreditCard, Key, LogOut, NotebookTabs } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import {
@@ -77,6 +77,12 @@ export function NavUser({
                 <Link to={links.note_types}>
                   <NotebookTabs />
                   Quản lý loại thẻ
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link to="/settings/mcp-tokens">
+                  <Key />
+                  MCP Access Tokens
                 </Link>
               </DropdownMenuItem>
             </DropdownMenuGroup>

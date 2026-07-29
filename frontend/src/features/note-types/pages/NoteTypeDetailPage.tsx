@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { CardDisplay } from '@/features/study/components/CardDisplay'
 import { Page } from '@/shared/components/Page'
 import { PageError, PageLoading } from '@/shared/components/PageState'
 
@@ -43,8 +44,8 @@ type NoteTypeDetail = {
 type PreviewResponse = {
   front_html?: string
   back_html?: string
-  front_renderer_payload?: string
-  back_renderer_payload?: string
+  front_renderer_payload?: unknown
+  back_renderer_payload?: unknown
 }
 
 export function NoteTypeDetailPage() {
@@ -58,7 +59,8 @@ export function NoteTypeDetailPage() {
   const [backHtml, setBackHtml] = useState('')
   const [sharedCss, setSharedCss] = useState('')
 
-  const [previewHtml, setPreviewHtml] = useState<string>('')
+  const [previewResult, setPreviewResult] = useState<PreviewResponse | null>(null)
+  const [previewError, setPreviewError] = useState<string | null>(null)
   const [isPreviewLoading, setIsPreviewLoading] = useState(false)
 
   const activeTextareaRef = useRef<HTMLTextAreaElement | null>(null)
@@ -144,10 +146,11 @@ export function NoteTypeDetailPage() {
   // Live Preview Fetcher
   useEffect(() => {
     if (!noteTypeId || !selectedTemplateId) return
+    let cancelled = false
     const timer = setTimeout(async () => {
       setIsPreviewLoading(true)
+      setPreviewError(null)
       try {
-        const side = activeTab === 'back' ? 'back' : 'front'
         const res = await appApi.mutate<PreviewResponse>(
           `/note-types/${noteTypeId}/templates/${selectedTemplateId}/preview`,
           'POST',
@@ -158,58 +161,26 @@ export function NoteTypeDetailPage() {
             use_sample_data: true,
           },
         )
-        const rawPayload = side === 'back' ? res.back_renderer_payload : res.front_renderer_payload
-        const payloadHtml =
-          typeof rawPayload === 'object' && rawPayload
-            ? (rawPayload as { html?: string }).html
-            : typeof rawPayload === 'string'
-              ? rawPayload
-              : ''
-        const content =
-          side === 'back'
-            ? res.back_html || payloadHtml || ''
-            : res.front_html || payloadHtml || ''
-
-        const fullHtml = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8"/>
-  <style>
-    * { box-sizing: border-box; }
-    html, body {
-      margin: 0;
-      padding: 0;
-      background-color: transparent;
-      color: initial;
-    }
-    .card-container {
-      width: 100%;
-      min-height: 100%;
-      padding: 16px;
-      box-sizing: border-box;
-    }
-    .card-container img, .card-container video, .card-container canvas, .card-container svg, .card-container audio {
-      max-width: 100%;
-    }
-    ${sharedCss}
-  </style>
-</head>
-<body>
-  <div class="card-container">
-    ${content}
-  </div>
-</body>
-</html>`
-        setPreviewHtml(fullHtml)
+        if (!cancelled) {
+          setPreviewResult(res)
+        }
       } catch {
-        setPreviewHtml('<p style="color:red;">Lỗi tải xem trước template.</p>')
+        if (!cancelled) {
+          setPreviewResult(null)
+          setPreviewError('Lỗi tải xem trước template.')
+        }
       } finally {
-        setIsPreviewLoading(false)
+        if (!cancelled) {
+          setIsPreviewLoading(false)
+        }
       }
     }, 500)
 
-    return () => clearTimeout(timer)
-  }, [noteTypeId, selectedTemplateId, frontHtml, backHtml, sharedCss, activeTab])
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [noteTypeId, selectedTemplateId, frontHtml, backHtml, sharedCss])
 
   // Placeholder Toolbar Click Handler
   const insertPlaceholder = (fieldName: string) => {
@@ -419,12 +390,29 @@ export function NoteTypeDetailPage() {
                 </span>
               ) : null}
             </div>
-            <iframe
-              title="Template Live Preview"
-              srcDoc={previewHtml}
-              className="w-full flex-1 rounded-md border border-border bg-[#f8f9fa] min-h-[clamp(24rem,55vh,36rem)] h-[clamp(24rem,55vh,36rem)] overflow-anchor-none"
-              sandbox="allow-scripts"
-            />
+            <div className="h-[clamp(24rem,55vh,36rem)] min-h-[240px] w-full flex-1 overflow-hidden rounded-md border border-border bg-[#f8f9fa]">
+              {previewError ? (
+                <div className="flex h-full items-center justify-center p-6 text-center text-sm text-destructive">
+                  {previewError}
+                </div>
+              ) : previewResult ? (
+                <CardDisplay
+                  cardId={`note-type-live-preview-${noteTypeId}`}
+                  side={activeTab === 'back' ? 'back' : 'front'}
+                  frontPayload={previewResult.front_renderer_payload}
+                  backPayload={previewResult.back_renderer_payload}
+                  frontHtml={previewResult.front_html}
+                  backHtml={previewResult.back_html}
+                  scope="note_type_live_preview"
+                  scopeId={noteTypeId}
+                  fieldDefs={fields}
+                />
+              ) : (
+                <div className="flex h-full items-center justify-center p-6 text-sm text-muted-foreground">
+                  Đang chuẩn bị bản xem trước…
+                </div>
+              )}
+            </div>
           </Card>
         </div>
       </div>
