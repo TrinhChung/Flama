@@ -107,6 +107,36 @@ const AdminTtsPage = lazy(() =>
     default: module.AdminTtsPage,
   })),
 )
+const McpTokensPage = lazy(() =>
+  import('./features/settings/pages/McpTokensPage').then((module) => ({
+    default: module.McpTokensPage,
+  })),
+)
+const AdminImageLibraryPage = lazy(() =>
+  import('./features/admin/pages/AdminImageLibraryPage').then((module) => ({
+    default: module.AdminImageLibraryPage,
+  })),
+)
+const MarketplacePublishDeckPage = lazy(() =>
+  import('./features/marketplace/pages/MarketplacePublishPages').then((module) => ({
+    default: module.MarketplacePublishDeckPage,
+  })),
+)
+const MarketplacePublishNoteTypePage = lazy(() =>
+  import('./features/marketplace/pages/MarketplacePublishPages').then((module) => ({
+    default: module.MarketplacePublishNoteTypePage,
+  })),
+)
+const AdminPermissionsPage = lazy(() =>
+  import('./features/admin/pages/AdminPermissionsPage').then((module) => ({
+    default: module.AdminPermissionsPage,
+  })),
+)
+const AdminSupportConfigPage = lazy(() =>
+  import('./features/admin/pages/AdminSupportConfigPage').then((module) => ({
+    default: module.AdminSupportConfigPage,
+  })),
+)
 const SupportPage = lazy(() =>
   import('./pages/StaticPages').then((module) => ({
     default: module.SupportPage,
@@ -214,10 +244,21 @@ const router = createBrowserRouter([
             path: 'import',
             element: deferred(<ImportPage />),
           },
-
+          {
+            path: 'settings/mcp-tokens',
+            element: deferred(<McpTokensPage />),
+          },
+          {
+            path: 'mcp-tokens',
+            element: <Navigate to="/settings/mcp-tokens" replace />,
+          },
           {
             path: 'marketplace/decks',
             element: deferred(<SharedDecksPage />),
+          },
+          {
+            path: 'marketplace/decks/publish',
+            element: deferred(<MarketplacePublishDeckPage />),
           },
           {
             path: 'marketplace/decks/:id',
@@ -230,6 +271,10 @@ const router = createBrowserRouter([
           {
             path: 'marketplace/note-types',
             element: deferred(<SharedNoteTypesPage />),
+          },
+          {
+            path: 'marketplace/note-types/publish',
+            element: deferred(<MarketplacePublishNoteTypePage />),
           },
           {
             path: 'marketplace/note-types/:id',
@@ -246,6 +291,18 @@ const router = createBrowserRouter([
             element: deferred(<AdminPaymentsPage />),
           },
           { path: 'admin/tts', element: deferred(<AdminTtsPage />) },
+          {
+            path: 'admin/image-library',
+            element: deferred(<AdminImageLibraryPage />),
+          },
+          {
+            path: 'admin/permissions',
+            element: deferred(<AdminPermissionsPage />),
+          },
+          {
+            path: 'admin/support',
+            element: deferred(<AdminSupportConfigPage />),
+          },
         ],
       },
       { path: 'home', element: <Navigate to="/dashboard" replace /> },

@@ -131,10 +131,11 @@ class ImageLibraryTests(unittest.TestCase):
 
         page = self.client.get("/admin/image-library?q=school_bus")
         self.assertEqual(page.status_code, 200)
-        self.assertIn(b"school_bus", page.data)
-        self.assertIn(b"Kho h\xc3\xacnh \xe1\xba\xa3nh", page.data)
-        self.assertIn(b"css/components/image_library.css", page.data)
-        self.assertIn(b"js/pages/image_library_admin.js", page.data)
+        self.assertIn(b"id=\"root\"", page.data)
+
+        api_res = self.client.get("/api/admin/image-library?q=school_bus")
+        self.assertEqual(api_res.status_code, 200)
+        self.assertIn("school_bus", api_res.get_json()["items"][0]["image_key"])
 
     def test_non_admin_cannot_manage_or_preview_assets(self):
         self._login("image-user@example.com")

@@ -259,6 +259,7 @@
     const textColor = escapeHtml(options.color || "#1f1a17");
     const padding = escapeHtml(options.padding || "8px");
     const bodyClass = escapeHtml(options.bodyClass || "");
+    const fillHeight = options.fillHeight === true;
     const rendererCsp = escapeHtml(
       buildRendererCsp({
         allowedMediaUrls: Array.isArray(options.allowedMediaUrls) ? options.allowedMediaUrls : [],
@@ -586,11 +587,11 @@
       "<meta charset=\"utf-8\">",
       "<meta http-equiv=\"Content-Security-Policy\" content=\"" + rendererCsp + "\">",
       "<style>",
-      "html, body { margin: 0; padding: 0; background: " + background + "; color: " + textColor + "; overflow-x: hidden; }",
+      "html, body { margin: 0; padding: 0; background: " + background + "; color: " + textColor + "; overflow-x: hidden; " + (fillHeight ? "height: 100%; min-height: 100%;" : "") + " }",
       "body { padding: " + padding + "; }",
-      "#flama-card-root { min-height: 0; overflow-wrap: anywhere; word-break: break-word; }",
+      "#flama-card-root { min-height: " + (fillHeight ? "100%" : "0") + "; height: " + (fillHeight ? "100%" : "auto") + "; overflow-wrap: anywhere; word-break: break-word; }",
       "#flama-card-root > div:first-child { margin-top: 0 !important; }",
-      "#flama-card-root [style*=\"height:100vh\"], #flama-card-root [style*=\"height: 100vh\"], #flama-card-root [style*=\"height:100%\"], #flama-card-root [style*=\"height: 100%\"], #flama-card-root [style*=\"min-height:100vh\"], #flama-card-root [style*=\"min-height: 100vh\"] { height: auto !important; min-height: 0 !important; }",
+      fillHeight ? "" : "#flama-card-root [style*=\"height:100vh\"], #flama-card-root [style*=\"height: 100vh\"], #flama-card-root [style*=\"height:100%\"], #flama-card-root [style*=\"height: 100%\"], #flama-card-root [style*=\"min-height:100vh\"], #flama-card-root [style*=\"min-height: 100vh\"] { height: auto !important; min-height: 0 !important; }",
       "#flama-card-root img, #flama-card-root video, #flama-card-root canvas, #flama-card-root svg, #flama-card-root audio { max-width: 100%; }",
       "#flama-card-root audio { width: min(100%, 20rem); }",
       "#flama-card-root table { display: block; max-width: 100%; overflow-x: auto; }",
@@ -622,7 +623,8 @@
     let ready = false;
     let pendingRevealPayload = null;
     const minHeight = clampFrameHeight(initialOptions.minHeight || DEFAULT_MIN_HEIGHT, DEFAULT_MIN_HEIGHT);
-    const autoHeight = initialOptions.autoHeight !== false;
+    const fillHeight = initialOptions.fillHeight === true;
+    const autoHeight = !fillHeight && initialOptions.autoHeight !== false;
     const enableLivePatch = initialOptions.enableLivePatch === true;
     const fixedHeight = clampFrameHeight(
       initialOptions.fixedHeight || initialOptions.minHeight || DEFAULT_MIN_HEIGHT,
@@ -680,6 +682,10 @@
     }
 
     function setFrameHeight(nextHeight) {
+      if (fillHeight) {
+        frameEl.style.height = "100%";
+        return;
+      }
       frameEl.style.height = clampFrameHeight(nextHeight, minHeight) + "px";
     }
 
@@ -873,6 +879,7 @@
         padding: optionsObject.padding || "8px",
         bodyClass: optionsObject.bodyClass || "",
         allowedMediaUrls: activePayload.allowed_media_urls,
+        fillHeight,
       });
       frameEl.srcdoc = documentHtml;
     }

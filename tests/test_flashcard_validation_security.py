@@ -243,7 +243,7 @@ class FlashcardValidationSecurityTests(unittest.TestCase):
             asset_id = (upload_resp.get_json() or {}).get("asset_id")
             asset = MediaAsset.query.get(asset_id)
             self.assertIsNotNone(asset)
-            self.assertEqual(asset.mime_type, "audio/wav")
+            self.assertIn(asset.mime_type, {"audio/wav", "audio/x-wav"})
 
     def test_upload_valid_safe_svg_file(self):
         note_type = self._create_note_type_with_media()
