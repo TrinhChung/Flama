@@ -13,6 +13,27 @@ WORKFLOW_PATH = (
 
 
 class DeployWorkflowTests(unittest.TestCase):
+    def test_frontend_only_push_does_not_trigger_vps_deployment(self):
+        workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+
+        self.assertIn(
+            "    paths-ignore:\n"
+            "      - 'frontend/**'\n",
+            workflow,
+        )
+        self.assertIn("  workflow_dispatch:\n", workflow)
+
+    def test_vps_release_does_not_build_or_package_frontend(self):
+        workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+
+        self.assertNotIn("actions/setup-node", workflow)
+        self.assertNotIn("npm run build", workflow)
+        self.assertNotIn(
+            "tar --append --file=\"$release_tar\" frontend/dist",
+            workflow,
+        )
+        self.assertIn("-- . ':(exclude)frontend'", workflow)
+
     def test_database_migration_runs_before_data_bootstrap_and_activation(self):
         workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
 
