@@ -182,6 +182,13 @@ jobs:
 
           "$PROJECT_DIR/venv/bin/pip" install --disable-pip-version-check -r "$release_dir/requirements.txt"
           systemd-run --quiet --wait --collect --pipe \
+            --unit="flama-db-migrate-$RELEASE_ID" \
+            --property=User=flama \
+            --property=Group=flama \
+            --property="WorkingDirectory=$release_dir" \
+            --property="EnvironmentFile=$desired_environment_file" \
+            "$PROJECT_DIR/venv/bin/flask" --app wsgi.py db upgrade
+          systemd-run --quiet --wait --collect --pipe \
             --unit="flama-bootstrap-admin-$RELEASE_ID" \
             --property=User=flama \
             --property=Group=flama \
