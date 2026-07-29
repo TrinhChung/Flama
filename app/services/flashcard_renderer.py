@@ -401,6 +401,33 @@ def sanitize_template_html_fragment(raw_html: str | None) -> str:
     return _restore_inline_scripts(safe_html, scripts)
 
 
+def prepare_client_template_source(
+    raw_html: str | None,
+    field_defs: list[Any],
+) -> dict[str, Any]:
+    """Prepare a template for Mustache rendering inside the React study client.
+
+    Template-authored inline scripts are returned separately so untrusted field
+    content can be sanitized after interpolation without granting it script
+    provenance.
+    """
+    upgraded = _upgrade_html_field_double_brace_tokens(raw_html or "", field_defs)
+    script_free_html, scripts = _extract_inline_scripts(upgraded)
+    for token, _ in scripts:
+        script_free_html = script_free_html.replace(token, "")
+    safe_source = bleach.clean(
+        script_free_html,
+        tags=ALLOWED_HTML_TAGS,
+        attributes=_template_allowed_attr,
+        strip=True,
+        css_sanitizer=_css_sanitizer,
+    )
+    return {
+        "source": safe_source,
+        "inline_scripts": [script_html for _, script_html in scripts],
+    }
+
+
 def sanitize_richtext(raw_html: str | None) -> str:
     return sanitize_html_fragment(raw_html)
 

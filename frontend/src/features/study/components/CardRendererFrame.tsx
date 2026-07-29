@@ -75,15 +75,22 @@ export function CardRendererFrame({
     NonNullable<typeof window.FlamaCardRendererHost>['createRendererFrameController']
   > | null>(null)
   const [scriptLoaded, setScriptLoaded] = useState(Boolean(window.FlamaCardRendererHost))
+  const [scriptFailed, setScriptFailed] = useState(false)
 
   useEffect(() => {
     let mounted = true
     ensureRendererScript()
       .then(() => {
-        if (mounted) setScriptLoaded(true)
+        if (mounted) {
+          setScriptLoaded(true)
+          setScriptFailed(false)
+        }
       })
       .catch(() => {
-        if (mounted) setScriptLoaded(false)
+        if (mounted) {
+          setScriptLoaded(false)
+          setScriptFailed(true)
+        }
       })
     return () => {
       mounted = false
@@ -151,8 +158,6 @@ export function CardRendererFrame({
     fieldValues,
   ])
 
-  const rawFallbackHtml = revealed ? backHtml || '' : frontHtml || ''
-
   return (
     <div className="study-card-shell w-full relative min-h-[240px]">
       <iframe
@@ -161,11 +166,10 @@ export function CardRendererFrame({
         sandbox="allow-scripts"
         className="card-face study-card-frame w-full border-0 bg-transparent p-0 m-0 min-h-[240px]"
       />
-      {!scriptLoaded && rawFallbackHtml ? (
-        <div
-          className="study-card-content p-4 text-center flex flex-col justify-center items-center"
-          dangerouslySetInnerHTML={{ __html: rawFallbackHtml }}
-        />
+      {scriptFailed ? (
+        <div className="study-card-content p-4 text-center text-sm text-muted-foreground">
+          Không thể tải trình hiển thị thẻ.
+        </div>
       ) : null}
     </div>
   )
