@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { CardRendererFrame } from './CardRendererFrame'
+import { CardDisplay } from './CardDisplay'
 import { renderStudySide } from '../renderer/clientRenderer'
 import type {
   StudyContentArtifact,
@@ -48,41 +48,16 @@ export function StudyCardRendererFrame({
   }
 
   return (
-    <div className="study-card-shell w-full h-full relative min-h-[240px]">
-      <div
-        className={revealed ? 'hidden' : 'block'}
-        aria-hidden={revealed}
-      >
-        <CardRendererFrame
-          cardId={cardId}
-          noteId={noteId}
-          revealed={false}
-          active={!revealed}
-          frontPayload={rendered.front}
-          scope="deck"
-          scopeId={scopeId}
-          fieldDefs={template.field_defs}
-          fieldValues={content.field_values}
-          enableLivePatch
-        />
-      </div>
-      <div
-        className={revealed ? 'block' : 'hidden'}
-        aria-hidden={!revealed}
-      >
-        <CardRendererFrame
-          cardId={cardId}
-          noteId={noteId}
-          revealed
-          active={revealed}
-          backPayload={rendered.back}
-          scope="deck"
-          scopeId={scopeId}
-          fieldDefs={template.field_defs}
-          fieldValues={content.field_values}
-          enableLivePatch
-        />
-      </div>
-    </div>
+    <CardDisplay
+      cardId={cardId}
+      noteId={noteId}
+      side={revealed ? 'back' : 'front'}
+      frontPayload={rendered.front}
+      backPayload={rendered.back}
+      scope="deck"
+      scopeId={scopeId}
+      fieldDefs={template.field_defs}
+      fieldValues={content.field_values}
+    />
   )
 }

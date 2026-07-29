@@ -26,7 +26,7 @@ import {
 } from '@/components/ui/card'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { Textarea } from '@/components/ui/textarea'
-import { CardRendererFrame } from '@/features/study/components/CardRendererFrame'
+import { CardDisplay } from '@/features/study/components/CardDisplay'
 import { Page, PageHeader } from '@/shared/components/Page'
 import { EmptyState, PageError, PageLoading } from '@/shared/components/PageState'
 
@@ -356,25 +356,23 @@ export function SharedNoteTypeDetailPage() {
             </CardHeader>
 
             <CardContent className="p-4 bg-muted/30">
-              <div className="rounded-xl border border-border bg-card p-4 min-h-[160px] max-h-[520px] overflow-y-auto w-full flex flex-col justify-start items-center relative shadow-xs">
+              <div className="h-[clamp(20rem,50vh,32rem)] min-h-[240px] w-full overflow-hidden rounded-xl border border-border bg-card shadow-xs">
                 {previewQuery.isPending ? (
-                  <div className="flex flex-col items-center justify-center p-8 space-y-2 text-muted-foreground my-auto">
+                  <div className="flex h-full flex-col items-center justify-center p-8 space-y-2 text-muted-foreground">
                     <Loader2 className="size-6 animate-spin text-primary" />
                     <span className="text-xs">Đang tải bản xem trước template...</span>
                   </div>
                 ) : previewQuery.data ? (
-                  <div className="w-full">
-                    <CardRendererFrame
-                      cardId={`note-type-preview-${id}`}
-                      revealed={previewSide === 'back'}
-                      frontPayload={previewQuery.data.front_renderer_payload}
-                      backPayload={previewQuery.data.back_renderer_payload}
-                      frontHtml={previewQuery.data.front_html}
-                      backHtml={previewQuery.data.back_html}
-                      scope="shared_note_type_preview"
-                      scopeId={id}
-                    />
-                  </div>
+                  <CardDisplay
+                    cardId={`note-type-preview-${id}`}
+                    side={previewSide}
+                    frontPayload={previewQuery.data.front_renderer_payload}
+                    backPayload={previewQuery.data.back_renderer_payload}
+                    frontHtml={previewQuery.data.front_html}
+                    backHtml={previewQuery.data.back_html}
+                    scope="shared_note_type_preview"
+                    scopeId={id}
+                  />
                 ) : (
                   <EmptyState
                     title="Chưa có xem trước"

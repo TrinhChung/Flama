@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { resolveBackendUrl } from '@/config/env'
+import { cn } from '@/lib/utils'
 
 declare global {
   interface Window {
@@ -36,6 +37,8 @@ type CardRendererFrameProps = {
   fieldValues?: Record<string, string>
   active?: boolean
   enableLivePatch?: boolean
+  fillHeight?: boolean
+  className?: string
 }
 
 let scriptLoadPromise: Promise<void> | null = null
@@ -77,6 +80,8 @@ export function CardRendererFrame({
   fieldValues = EMPTY_FIELD_VALUES,
   active = true,
   enableLivePatch = false,
+  fillHeight = false,
+  className,
 }: CardRendererFrameProps) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
   const controllerRef = useRef<ReturnType<
@@ -118,7 +123,8 @@ export function CardRendererFrame({
 
     const controller = host.createRendererFrameController(iframeEl, {
       minHeight: 240,
-      autoHeight: true,
+      autoHeight: !fillHeight,
+      fillHeight,
       enableLivePatch,
     })
     controllerRef.current = controller
@@ -129,7 +135,7 @@ export function CardRendererFrame({
       }
       controller.destroy()
     }
-  }, [scriptLoaded, enableLivePatch])
+  }, [scriptLoaded, enableLivePatch, fillHeight])
 
   useEffect(() => {
     if (!scriptLoaded) return
@@ -144,11 +150,11 @@ export function CardRendererFrame({
       : { html: host.createNoticeHtml('Không có nội dung thẻ.') }
 
     controller.render(payloadForFrame, {
-      padding: '12px',
+      padding: fillHeight ? '0' : '12px',
       background: 'transparent',
       color: 'initial',
       config: {
-        mode: 'shared_deck_preview',
+        mode: scope,
         side: activeSide,
         scope,
         scopeId: scopeId || '',
@@ -171,6 +177,7 @@ export function CardRendererFrame({
     fieldDefs,
     fieldValues,
     enableLivePatch,
+    fillHeight,
   ])
 
   useEffect(() => {
@@ -192,12 +199,21 @@ export function CardRendererFrame({
   ])
 
   return (
-    <div className="study-card-shell w-full relative min-h-[240px]">
+    <div
+      className={cn(
+        'study-card-shell w-full relative min-h-[240px]',
+        fillHeight && 'h-full min-h-0',
+        className,
+      )}
+    >
       <iframe
         ref={iframeRef}
         title={revealed ? 'Mặt sau thẻ' : 'Mặt trước thẻ'}
         sandbox="allow-scripts"
-        className="card-face study-card-frame w-full border-0 bg-transparent p-0 m-0 min-h-[240px]"
+        className={cn(
+          'card-face study-card-frame w-full border-0 bg-transparent p-0 m-0 min-h-[240px]',
+          fillHeight && 'h-full min-h-0',
+        )}
       />
       {scriptFailed ? (
         <div className="study-card-content p-4 text-center text-sm text-muted-foreground">

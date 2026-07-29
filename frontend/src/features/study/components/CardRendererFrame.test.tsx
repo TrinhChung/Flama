@@ -40,6 +40,7 @@ describe('CardRendererFrame', () => {
       frontPayload: { html: '<p>front</p>' },
       active: false,
       enableLivePatch: true,
+      fillHeight: true,
     }
 
     await act(async () => {
@@ -49,7 +50,11 @@ describe('CardRendererFrame', () => {
     expect(createRendererFrameController).toHaveBeenCalledTimes(1)
     expect(createRendererFrameController).toHaveBeenCalledWith(
       expect.any(HTMLIFrameElement),
-      expect.objectContaining({ enableLivePatch: true }),
+      expect.objectContaining({
+        autoHeight: false,
+        enableLivePatch: true,
+        fillHeight: true,
+      }),
     )
     expect(render).toHaveBeenCalledTimes(1)
     expect(reveal).not.toHaveBeenCalled()
