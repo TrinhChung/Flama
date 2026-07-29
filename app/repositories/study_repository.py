@@ -46,12 +46,20 @@ def card_state_from_progress(
     user_id: int | None = None,
     options: DeckOptions | None = None,
 ) -> CardState:
-    runtime = resolve_scheduler_runtime_settings(
-        user_id=user_id if user_id is not None else getattr(progress, "user_id", None)
-    )
-    resolved_options = options or default_deck_options()
-    resolved_options.dayBoundaryHourLocal = int(runtime.day_boundary_hour_local)
-    resolved_options.learnAheadSeconds = int(runtime.learn_ahead_seconds)
+    resolved_options = options
+    if resolved_options is None:
+        runtime = resolve_scheduler_runtime_settings(
+            user_id=(
+                user_id
+                if user_id is not None
+                else getattr(progress, "user_id", None)
+            )
+        )
+        resolved_options = default_deck_options()
+        resolved_options.dayBoundaryHourLocal = int(
+            runtime.day_boundary_hour_local
+        )
+        resolved_options.learnAheadSeconds = int(runtime.learn_ahead_seconds)
     if not progress:
         return CardState(
             type=NEW_QUEUE,
@@ -122,10 +130,16 @@ def apply_card_state_to_progress(
     timezone_name: str = "UTC",
     options: DeckOptions | None = None,
 ) -> CardProgress:
-    runtime = resolve_scheduler_runtime_settings(user_id=getattr(progress, "user_id", None))
-    resolved_options = options or default_deck_options()
-    resolved_options.dayBoundaryHourLocal = int(runtime.day_boundary_hour_local)
-    resolved_options.learnAheadSeconds = int(runtime.learn_ahead_seconds)
+    resolved_options = options
+    if resolved_options is None:
+        runtime = resolve_scheduler_runtime_settings(
+            user_id=getattr(progress, "user_id", None)
+        )
+        resolved_options = default_deck_options()
+        resolved_options.dayBoundaryHourLocal = int(
+            runtime.day_boundary_hour_local
+        )
+        resolved_options.learnAheadSeconds = int(runtime.learn_ahead_seconds)
     queue = normalize_progress_queue(card_state.type)
     due_at = card_state.due
     due_day = card_state.dueDay

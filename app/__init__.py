@@ -44,6 +44,9 @@ def create_app(config: Optional[dict] = None) -> Flask:
     from models.tts_user_provider_profile import TtsUserProviderProfile  # noqa: F401  # register model
     from models.support_donation_config import SupportDonationConfig  # noqa: F401  # register model
     from models.card_progress import CardProgress  # noqa: F401  # register model
+    from models.study_session import StudySession  # noqa: F401  # register model
+    from models.study_session_card import StudySessionCard  # noqa: F401
+    from models.study_session_commit import StudySessionCommit  # noqa: F401
     from models.payment_attempt import PaymentAttempt  # noqa: F401  # register model
     from models.payment_entitlement import PaymentEntitlement  # noqa: F401  # register model
     from models.payment_order import PaymentOrder  # noqa: F401  # register model

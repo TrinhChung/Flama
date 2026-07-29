@@ -24,6 +24,9 @@ from models.note_type import NoteType
 from models.note_type_install import NoteTypeInstall
 from models.note_type_review import NoteTypeReview
 from models.review_event import ReviewEvent
+from models.study_session import StudySession
+from models.study_session_card import StudySessionCard
+from models.study_session_commit import StudySessionCommit
 from models.template import Template
 
 __all__ = [
@@ -51,5 +54,8 @@ __all__ = [
     "NoteTypeInstall",
     "NoteTypeReview",
     "ReviewEvent",
+    "StudySession",
+    "StudySessionCard",
+    "StudySessionCommit",
     "Template",
 ]
