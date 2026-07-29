@@ -7,6 +7,7 @@ import { StudyCardRendererFrame } from '../components/StudyCardRendererFrame'
 import { StudyBottomBar } from '../components/StudyBottomBar'
 import { StudyCompletionCard } from '../components/StudyCompletionCard'
 import { useStudySession } from '../hooks/useStudySession'
+import { isBackgroundRolloverCommit } from '../session/studySessionEngine'
 import type { Rating } from '../types'
 import type { SchedulerDecision } from '../scheduler/types'
 
@@ -183,6 +184,11 @@ export function StudyPage() {
   }
 
   const pendingCommit = study.session?.status === 'pending_commit'
+  const blockingCommit = pendingCommit
+    && (
+      !isBackgroundRolloverCommit(study.session)
+      || Boolean(study.error)
+    )
   const counts = study.view?.counts ?? { new: 0, learning: 0, due: 0 }
 
   if (study.receipt) {
@@ -224,7 +230,7 @@ export function StudyPage() {
         </div>
       ) : null}
 
-      {card && template && content && !pendingCommit ? (
+      {card && template && content && !blockingCommit ? (
         <div className="study-card-shell flex-1 flex flex-col w-full h-full min-h-0 min-w-0 overflow-hidden relative">
           <StudyCardRendererFrame
             cardId={card.card_id}
@@ -251,7 +257,7 @@ export function StudyPage() {
         </div>
       )}
 
-      {card && template && content && !pendingCommit ? (
+      {card && template && content && !blockingCommit ? (
         <StudyBottomBar
           cardId={card.card_id}
           revealed={revealed}

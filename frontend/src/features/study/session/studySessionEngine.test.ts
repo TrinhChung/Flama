@@ -6,6 +6,7 @@ import {
   buildSessionView,
   createPersistedSession,
   decisionForCard,
+  isBackgroundRolloverCommit,
   prepareCommit,
 } from './studySessionEngine'
 
@@ -169,6 +170,15 @@ describe('local study session engine', () => {
       { ...thresholdSession, status: 'pending_commit' },
       { ...view, session_state: 'active' },
     )).toBeNull()
+
+    const rolloverCommit = prepareCommit(thresholdSession, {
+      resumeAfterCommit: true,
+    }).session
+    expect(isBackgroundRolloverCommit(rolloverCommit)).toBe(true)
+    expect(isBackgroundRolloverCommit({
+      ...rolloverCommit,
+      resume_after_commit: false,
+    })).toBe(false)
     vi.unstubAllGlobals()
   })
 })
