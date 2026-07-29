@@ -1,9 +1,11 @@
-name: Deploy Flama to Hostinger VPS
+name: Deploy Flama Backend to Hostinger VPS
 
 on:
   push:
     branches:
       - master
+    paths-ignore:
+      - 'frontend/**'
   workflow_dispatch:
 
 concurrency:
@@ -30,19 +32,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Build React frontend
-        working-directory: frontend
-        run: |
-          npm ci
-          npm run build
 
       - name: Build managed environment payload
         env:
@@ -72,8 +61,8 @@ jobs:
         run: |
           set -Eeuo pipefail
           release_tar="/tmp/flama-${RELEASE_ID}.tar"
-          git archive --format=tar --output="$release_tar" HEAD
-          tar --append --file="$release_tar" frontend/dist
+          git archive --format=tar --output="$release_tar" HEAD \
+            -- . ':(exclude)frontend'
           gzip "$release_tar"
 
       - name: Set up SSH
