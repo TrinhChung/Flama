@@ -1,3 +1,8 @@
+import type {
+  SchedulerCardState,
+  SchedulerOptions,
+} from './scheduler/types'
+
 export type Rating = 'again' | 'hard' | 'good' | 'easy'
 
 export type FieldDef = {
@@ -92,6 +97,79 @@ export type StudyIntervalsResponse = {
 export type StudyAnswerResponse = {
   success: boolean
   next_manifest: StudyManifest
+}
+
+export type StudySessionPolicy = {
+  algorithm_key: string
+  algorithm_version: string
+  config_schema_version: string
+  config_hash: string
+  timezone: string
+  config: SchedulerOptions
+  preset_id: number | null
+}
+
+export type StudySessionCard = {
+  card_id: string
+  note_id: string
+  template_id: string
+  source_deck_id: number | null
+  local_deck_id: number | null
+  note_type_id: string
+  created_at: string
+  policy_key: string
+  template_key: string
+  content_key: string
+  base_revision: number
+  base_state_hash: string
+  state: SchedulerCardState
+  can_edit_card: boolean
+}
+
+export type StudySessionSnapshot = {
+  schema_version: 'study-session.v2'
+  session_id: string
+  user_id: number
+  session_token: string
+  snapshot_hash: string
+  scope: { type: 'deck' | 'note_type'; id: string; name: string }
+  server_now_utc: string
+  expires_at: string
+  timezone: string
+  day_boundary_hour_local: number
+  learn_ahead_seconds: number
+  scheduler_algorithm: string
+  algorithm_version: string
+  queue_contract_version: string
+  policies: Record<string, StudySessionPolicy>
+  cards: StudySessionCard[]
+  templates: Record<string, StudyTemplateArtifact>
+  contents: Record<string, StudyContentArtifact>
+}
+
+export type StudySessionEvent = {
+  event_id: string
+  sequence: number
+  card_id: string
+  rating: Rating
+  policy_key: string
+  scheduler_offset_ms: number
+  duration_ms: number
+}
+
+export type StudySessionCommitReceipt = {
+  schema_version: 'study-commit-receipt.v1'
+  success: boolean
+  session_id: string
+  commit_id: string
+  applied_event_count: number
+  updated_cards: Array<{
+    card_id: string
+    revision: number
+    state: SchedulerCardState
+  }>
+  rating_counts: Record<Rating, number>
+  committed_at: string
 }
 
 export type StudyCardEditResponse = {

@@ -15,7 +15,12 @@ import type {
   StatisticsFilters,
   TodayFutureStats,
 } from '../features/statistics/types'
-import { apiJson, apiRequest, setCsrfToken } from '../shared/api/client'
+import {
+  apiJson,
+  apiJsonKeepalive,
+  apiRequest,
+  setCsrfToken,
+} from '../shared/api/client'
 import type {
   FrontendBootstrap,
   FrontendLinks,
@@ -189,6 +194,14 @@ export const appApi = {
     body?: unknown,
   ): Promise<T> {
     return apiJson<T>(apiUrl(path), method, body)
+  },
+
+  async mutateKeepalive<T>(
+    path: string,
+    method: 'POST' | 'PUT' | 'PATCH' | 'DELETE',
+    body?: unknown,
+  ): Promise<T> {
+    return apiJsonKeepalive<T>(apiUrl(path), method, body)
   },
 
   async mutateFormData<T>(

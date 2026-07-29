@@ -17,6 +17,17 @@ class ReviewEvent(db.Model):
         nullable=True,
         index=True,
     )
+    study_session_id = db.Column(
+        db.String(36),
+        db.ForeignKey("study_sessions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    client_event_id = db.Column(db.String(36), nullable=True)
+    sequence_no = db.Column(db.Integer, nullable=True)
+    scheduler_algorithm = db.Column(db.String(64), nullable=True)
+    algorithm_version = db.Column(db.String(32), nullable=True)
+    scheduler_config_hash = db.Column(db.String(80), nullable=True)
     reviewed_at = db.Column(db.DateTime, nullable=False, index=True)
     duration_ms = db.Column(db.Integer, nullable=True)
     rating = db.Column(db.String(20), nullable=False)
@@ -42,6 +53,16 @@ class ReviewEvent(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     __table_args__ = (
+        db.UniqueConstraint(
+            "user_id",
+            "client_event_id",
+            name="uq_review_events_user_client_event",
+        ),
+        db.UniqueConstraint(
+            "study_session_id",
+            "sequence_no",
+            name="uq_review_events_session_sequence",
+        ),
         db.Index("ix_review_events_user_reviewed_at", "user_id", "reviewed_at"),
         db.Index("ix_review_events_user_card_reviewed_at", "user_id", "card_id", "reviewed_at"),
         db.Index("ix_review_events_user_scheduler_reviewed_at", "user_id", "scheduler_mode", "reviewed_at"),

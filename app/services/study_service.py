@@ -8,6 +8,7 @@ from datetime import datetime
 from models import db
 from models.flashcard import Card
 from models.card_progress import CardProgress
+from models.deck import Deck
 from app.services.anki_scheduler import _day_index, DeckOptions, default_deck_options
 from app.repositories.study_repository import (
     apply_card_state_to_progress as _apply_card_state_to_progress,
@@ -67,13 +68,13 @@ def _resolve_local_deck_id(
     local_deck_id = card.note.deck_id
     if clone_scope is not None:
         local_deck_id = (
-            requested_scope_id
-            if requested_scope_id is not None
-            else _resolve_local_clone_deck_id_for_source_deck(
+            _resolve_local_clone_deck_id_for_source_deck(
                 install_id=clone_scope.install.id,
                 source_deck_id=card.note.deck_id,
             )
-        ) or clone_scope.install.local_deck_id
+            or requested_scope_id
+            or clone_scope.install.local_deck_id
+        )
     return local_deck_id
 
 
@@ -116,7 +117,8 @@ def apply_study_answer_and_commit(
         timezone_name=timezone_name,
         options=deck_options,
     )
-    if getattr(updated_state, "leeched", False):
+    progress.revision = int(getattr(progress, "revision", 0) or 0) + 1
+    if getattr(updated_state, "leeched", False) and card.note.user_id == user.id:
         current_tags = [str(tag).strip() for tag in (card.note.tags or []) if str(tag).strip()]
         normalized_tags = {tag.lower() for tag in current_tags}
         if "leech" not in normalized_tags:
@@ -127,12 +129,23 @@ def apply_study_answer_and_commit(
 
     if local_deck_id_for_usage is not None:
         _touch_deck_install_usage(user_id=user.id, local_deck_id=local_deck_id_for_usage, activity_at=now)
+    local_deck = (
+        db.session.get(Deck, local_deck_id_for_usage)
+        if local_deck_id_for_usage is not None
+        else None
+    )
 
     review_event = record_review_event(
         user_id=user.id,
         card_id=card.id,
         deck_id=local_deck_id_for_usage,
         note_type_id=card.note.note_type_id,
+        scheduler_preset_id=(
+            int(local_deck.scheduler_preset_id)
+            if local_deck is not None
+            and local_deck.scheduler_preset_id is not None
+            else None
+        ),
         reviewed_at=now,
         duration_ms=payload.get("duration_ms"),
         rating=rating,

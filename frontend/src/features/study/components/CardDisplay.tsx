@@ -53,6 +53,7 @@ export function CardDisplay({
         aria-hidden={isBack}
       >
         <CardRendererFrame
+          key={`front:${cardId || ''}`}
           cardId={cardId}
           noteId={noteId}
           revealed={false}
@@ -72,6 +73,7 @@ export function CardDisplay({
         aria-hidden={!isBack}
       >
         <CardRendererFrame
+          key={`back:${cardId || ''}`}
           cardId={cardId}
           noteId={noteId}
           revealed

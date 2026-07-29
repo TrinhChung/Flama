@@ -1,148 +1,97 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useSearchParams } from 'react-router-dom'
-import { appApi } from '@/app/api'
 import { Button } from '@/components/ui/button'
 import { PageError, PageLoading } from '@/shared/components/PageState'
-import { useBootstrap } from '@/shared/api/bootstrap'
-import { useDashboard } from '@/features/dashboard/api'
-import type { DeckNode } from '@/features/dashboard/types'
 import { StudyHeaderToolbar } from '../components/StudyHeaderToolbar'
 import { StudyCardRendererFrame } from '../components/StudyCardRendererFrame'
 import { StudyBottomBar } from '../components/StudyBottomBar'
-import { EditCardModal } from '../components/EditCardModal'
-import {
-  ensureStudyManifestArtifacts,
-  studyContentArtifactQueryOptions,
-  studyTemplateArtifactQueryOptions,
-} from '../queries'
-import type {
-  Rating,
-  StudyAnswerResponse,
-  StudyIntervalsResponse,
-  StudyManifest,
-} from '../types'
-
-function findDeckNode(nodes: DeckNode[], targetId: number | null): DeckNode | null {
-  if (targetId === null) return null
-  for (const node of nodes) {
-    if (node.id === targetId) return node
-    const child = findDeckNode(node.children, targetId)
-    if (child) return child
-  }
-  return null
-}
+import { StudyCompletionCard } from '../components/StudyCompletionCard'
+import { useStudySession } from '../hooks/useStudySession'
+import type { Rating } from '../types'
+import type { SchedulerDecision } from '../scheduler/types'
 
 export function StudyPage() {
   const [searchParams] = useSearchParams()
   const deckIdRaw = searchParams.get('deck_id')
-  const deckIdNum = deckIdRaw ? Number(deckIdRaw) : null
-  const queryClient = useQueryClient()
+  const study = useStudySession(deckIdRaw)
 
-  const bootstrapQuery = useBootstrap()
-  const dashboardQuery = useDashboard()
-
-  const [revealed, setRevealed] = useState(false)
-  const [editOpened, setEditOpened] = useState(false)
+  const [revealedCardKey, setRevealedCardKey] = useState<string | null>(null)
+  const [decisionState, setDecisionState] = useState<{
+    cardKey: string
+    value: SchedulerDecision
+  } | null>(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
-  const startedAtRef = useRef(Date.now())
-  const queryKey = ['study', 'next', deckIdRaw] as const
+  const startedAtRef = useRef(performance.now())
 
-  const studyQuery = useQuery({
-    queryKey,
-    queryFn: async () => {
-      const manifest = await appApi.get<StudyManifest>('/api/study/session/next', {
-        scope: 'deck',
-        scope_id: deckIdRaw,
-      })
-      await ensureStudyManifestArtifacts(queryClient, manifest)
-      return manifest
-    },
-    enabled: Boolean(deckIdRaw),
-  })
-  const card = studyQuery.data
-  const templateRef = card?.template_ref
-  const contentRef = card?.content_ref
-  const intervalsRef = card?.intervals_ref
-
-  const templateQuery = useQuery({
-    ...studyTemplateArtifactQueryOptions(card),
-    enabled: Boolean(card?.card_id && templateRef),
-  })
-
-  const contentQuery = useQuery({
-    ...studyContentArtifactQueryOptions(card),
-    enabled: Boolean(card?.card_id && contentRef),
-  })
-
-  const intervalsQuery = useQuery({
-    queryKey: [
-      'study',
-      'intervals',
-      card?.selection_id,
-      card?.card_id,
-      card?.review_state_version,
-    ],
-    queryFn: async () => {
-      if (!intervalsRef) throw new Error('Thiếu intervals preview URL.')
-      const artifact = await appApi.get<StudyIntervalsResponse>(intervalsRef.url)
-      if (
-        artifact.selection_id !== card?.selection_id
-        || artifact.review_state_version !== intervalsRef.state_version
-      ) {
-        throw new Error('Intervals preview không còn khớp với thẻ hiện tại.')
-      }
-      return artifact
-    },
-    enabled: Boolean(card?.card_id && intervalsRef),
-  })
+  const card = study.view?.card ?? null
+  const template = study.view?.template ?? null
+  const content = study.view?.content ?? null
+  const activeCardKey = card?.card_id && study.session?.snapshot.session_id
+    ? `${study.session.snapshot.session_id}:${card.card_id}`
+    : null
+  const revealed = Boolean(
+    activeCardKey && revealedCardKey === activeCardKey,
+  )
+  const decision = decisionState && decisionState.cardKey === activeCardKey
+    ? decisionState.value
+    : null
 
   useEffect(() => {
-    startedAtRef.current = Date.now()
-    setRevealed(false)
-  }, [card?.card_id])
+    startedAtRef.current = performance.now()
+  }, [activeCardKey])
 
-  const deckNode = dashboardQuery.data?.decks
-    ? findDeckNode(dashboardQuery.data.decks, deckIdNum)
-    : null
-  const deckName = deckNode?.name || (deckIdRaw ? `Deck #${deckIdRaw}` : null)
+  const deckName = study.session?.snapshot.scope.name
+    || (deckIdRaw ? `Deck #${deckIdRaw}` : null)
 
-  const answerMutation = useMutation({
-    mutationFn: (rating: Rating) => {
-      if (!card?.card_id) throw new Error('Không có thẻ để chấm.')
-      return appApi.mutate<StudyAnswerResponse>(
-        `/api/study/cards/${card.card_id}/answer`,
-        'POST',
-        {
-          rating,
-          scope: 'deck',
-          scope_id: deckIdRaw,
-          timezone: bootstrapQuery.data?.user?.timezone,
-          duration_ms: Math.max(0, Date.now() - startedAtRef.current),
-          selection_id: card.selection_id,
-          review_state_version: card.review_state_version,
-        },
-      )
-    },
-    onSuccess: async (result) => {
-      try {
-        await ensureStudyManifestArtifacts(queryClient, result.next_manifest)
-      } catch {
-        // The failed artifact query remains cached so the active card can show
-        // its precise loading error after the committed answer.
-      }
-      queryClient.setQueryData(queryKey, result.next_manifest)
-      setRevealed(false)
-    },
-  })
+  const handleReveal = useCallback(() => {
+    if (!card?.card_id || !activeCardKey || study.isBusy) return
+    try {
+      setDecisionState({
+        cardKey: activeCardKey,
+        value: study.prepareDecision(card.card_id),
+      })
+      setRevealedCardKey(activeCardKey)
+    } catch {
+      // The hook exposes the actionable error after an answer/commit. A reveal
+      // can only fail for a malformed snapshot, which the renderer also shows.
+    }
+  }, [activeCardKey, card?.card_id, study])
 
-  const handleAnswer = useCallback(
-    (rating: Rating) => {
-      if (answerMutation.isPending || !card?.card_id) return
-      answerMutation.mutate(rating)
-    },
-    [answerMutation, card?.card_id],
-  )
+  const handleAnswer = useCallback(async (rating: Rating) => {
+    if (
+      study.isBusy
+      || !card?.card_id
+      || !activeCardKey
+      || !revealed
+      || !decision
+    ) return
+    const answeredCardId = card.card_id
+    const answeredCardKey = activeCardKey
+    const answerPromise = study.answer(
+      answeredCardId,
+      rating,
+      decision,
+      Math.max(0, performance.now() - startedAtRef.current),
+    )
+    setRevealedCardKey((current) => (
+      current === answeredCardKey ? null : current
+    ))
+    setDecisionState((current) => (
+      current?.cardKey === answeredCardKey ? null : current
+    ))
+    try {
+      await answerPromise
+    } catch {
+      // Restore the answer side if local persistence failed so the learner can
+      // retry without having to reveal the card and choose the rating again.
+      setRevealedCardKey(answeredCardKey)
+      setDecisionState({ cardKey: answeredCardKey, value: decision })
+    }
+  }, [activeCardKey, card?.card_id, decision, revealed, study])
+
+  const handleCommit = useCallback(() => {
+    void study.commit().catch(() => {})
+  }, [study])
 
   const handleToggleFullscreen = useCallback(() => {
     if (!document.fullscreenElement) {
@@ -166,55 +115,49 @@ export function StudyPage() {
     }
   }, [])
 
-  // Anki Keyboard Shortcuts (Space/Enter, 1-4, E, F)
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
+    const handleKeyDown = (event: KeyboardEvent) => {
       const activeTag = (document.activeElement?.tagName || '').toLowerCase()
-      if (activeTag === 'input' || activeTag === 'textarea' || editOpened) {
-        return
-      }
+      if (activeTag === 'input' || activeTag === 'textarea') return
 
-      if (e.code === 'Space' || e.code === 'Enter') {
-        e.preventDefault()
+      if (event.code === 'Space' || event.code === 'Enter') {
+        event.preventDefault()
         if (!card?.card_id) return
-        if (!revealed) {
-          setRevealed(true)
-        } else {
-          handleAnswer('good')
-        }
-      } else if (e.key === '1' && revealed) {
-        e.preventDefault()
-        handleAnswer('again')
-      } else if (e.key === '2' && revealed) {
-        e.preventDefault()
-        handleAnswer('hard')
-      } else if (e.key === '3' && revealed) {
-        e.preventDefault()
-        handleAnswer('good')
-      } else if (e.key === '4' && revealed) {
-        e.preventDefault()
-        handleAnswer('easy')
-      } else if ((e.key === 'e' || e.key === 'E') && card?.can_edit_card) {
-        e.preventDefault()
-        setEditOpened(true)
-      } else if (e.key === 'f' || e.key === 'F') {
-        e.preventDefault()
+        if (!revealed) handleReveal()
+        else void handleAnswer('good')
+      } else if (event.key === '1' && revealed) {
+        event.preventDefault()
+        void handleAnswer('again')
+      } else if (event.key === '2' && revealed) {
+        event.preventDefault()
+        void handleAnswer('hard')
+      } else if (event.key === '3' && revealed) {
+        event.preventDefault()
+        void handleAnswer('good')
+      } else if (event.key === '4' && revealed) {
+        event.preventDefault()
+        void handleAnswer('easy')
+      } else if (event.key === 'f' || event.key === 'F') {
+        event.preventDefault()
         handleToggleFullscreen()
       }
     }
-
     window.addEventListener('keydown', handleKeyDown)
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown)
-    }
-  }, [revealed, card?.card_id, card?.can_edit_card, editOpened, handleAnswer, handleToggleFullscreen])
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [
+    card?.card_id,
+    handleAnswer,
+    handleReveal,
+    handleToggleFullscreen,
+    revealed,
+  ])
 
   if (!deckIdRaw) {
     return (
       <div className="h-screen h-[100dvh] w-full flex flex-col items-center justify-center p-6 text-center space-y-4">
         <h2 className="text-2xl font-bold text-foreground">Phiên học</h2>
         <p className="text-muted-foreground max-w-sm">
-          Phiên học cần một deck cụ thể để giữ đúng scope scheduler. Chọn một deck từ dashboard để bắt đầu.
+          Phiên học cần một deck cụ thể. Chọn deck từ dashboard để bắt đầu.
         </p>
         <Button asChild>
           <Link to="/dashboard">Về dashboard</Link>
@@ -223,172 +166,108 @@ export function StudyPage() {
     )
   }
 
-  if (studyQuery.isPending) {
+  if (study.isLoading) {
     return (
       <div className="h-screen h-[100dvh] w-full flex items-center justify-center">
-        <PageLoading label="Đang chuẩn bị phiên học…" />
+        <PageLoading label="Đang tải snapshot phiên học…" />
       </div>
     )
   }
 
-  if (studyQuery.error) {
+  if (study.error && !study.session) {
     return (
       <div className="h-screen h-[100dvh] w-full flex items-center justify-center p-6">
-        <PageError error={studyQuery.error} />
+        <PageError error={study.error} />
+      </div>
+    )
+  }
+
+  const pendingCommit = study.session?.status === 'pending_commit'
+  const counts = study.view?.counts ?? { new: 0, learning: 0, due: 0 }
+
+  if (study.receipt) {
+    return (
+      <div className="h-screen h-[100dvh] w-full flex items-center justify-center p-4 sm:p-6 bg-background text-foreground overflow-y-auto">
+        <StudyCompletionCard
+          deckName={deckName}
+          deckId={deckIdRaw}
+          session={study.session}
+          receipt={study.receipt}
+          counts={counts}
+          sessionState={study.view?.session_state}
+          nextDueAtMs={study.view?.next_due_at_ms}
+          isBusy={study.isBusy}
+          onCommit={handleCommit}
+        />
       </div>
     )
   }
 
   return (
     <div className="study-page h-screen h-[100dvh] max-h-screen max-h-[100dvh] w-full flex flex-col m-0 p-0 pb-[calc(5rem+env(safe-area-inset-bottom,0px))] overflow-hidden bg-background text-foreground">
-      {/* Top Header Toolbar & Deck Context Bar */}
       {!isFullscreen ? (
         <div className="px-3 pt-2 shrink-0">
-          <StudyHeaderToolbar deckName={deckName} deckId={deckIdRaw} cardId={card?.card_id} />
+          <StudyHeaderToolbar
+            deckName={deckName}
+            deckId={deckIdRaw}
+            cardId={card?.card_id}
+          />
+          <div className="px-2 py-1 text-xs text-muted-foreground">
+            {study.session?.events.length || 0} trả lời chưa đồng bộ
+          </div>
         </div>
       ) : null}
 
-      {answerMutation.error ? (
+      {study.error ? (
         <div className="px-4 py-1 shrink-0">
-          <PageError error={answerMutation.error} />
+          <PageError error={study.error} />
         </div>
       ) : null}
 
-      {/* Full-bleed Study Card Shell */}
-      {card?.card_id ? (
+      {card && template && content && !pendingCommit ? (
         <div className="study-card-shell flex-1 flex flex-col w-full h-full min-h-0 min-w-0 overflow-hidden relative">
-          {templateQuery.error || contentQuery.error ? (
-            <div className="p-6">
-              <PageError error={templateQuery.error || contentQuery.error} />
-            </div>
-          ) : templateQuery.data && contentQuery.data ? (
-            <StudyCardRendererFrame
-              cardId={card.card_id}
-              noteId={card.note_id}
-              revealed={revealed}
-              template={templateQuery.data}
-              content={contentQuery.data}
-              scopeId={deckIdRaw}
-            />
-          ) : (
-            <PageLoading label="Đang tải nội dung thẻ…" />
-          )}
+          <StudyCardRendererFrame
+            cardId={card.card_id}
+            noteId={card.note_id}
+            revealed={revealed}
+            template={template}
+            content={content}
+            scopeId={deckIdRaw}
+          />
         </div>
       ) : (
-        <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-card border border-border/80 rounded-2xl m-4 space-y-4 max-w-2xl mx-auto my-auto shadow-sm">
-          <div className="study-counters-line text-xs font-semibold text-muted-foreground flex items-center gap-2">
-            <span className="text-emerald-600 font-bold">
-              Mới <strong>{card?.new_count || 0}</strong>
-            </span>
-            <span className="text-border">&middot;</span>
-            <span className="text-amber-600 font-bold">
-              Đang học <strong>{card?.learn_count || 0}</strong>
-            </span>
-            <span className="text-border">&middot;</span>
-            <span className="text-rose-600 font-bold">
-              Đến hạn <strong>{card?.due_count || 0}</strong>
-            </span>
-          </div>
-
-          {card?.session_state === 'waiting' ? (
-            <>
-              <h3 className="text-xl font-bold text-foreground">
-                Buổi học vẫn đang tiếp tục.
-              </h3>
-              <p className="text-sm text-muted-foreground max-w-md">
-                {card?.message ||
-                  `Bạn vẫn còn ${card?.learn_count || 0} thẻ đang học trong buổi này.`}
-              </p>
-              {card?.next_due_at ? (
-                <p className="text-xs text-orange-600 font-semibold">
-                  Thẻ đang học tiếp theo sẽ sẵn sàng sau ít phút nữa (lúc{' '}
-                  {new Date(card.next_due_at).toLocaleTimeString('vi-VN')}).
-                </p>
-              ) : null}
-            </>
-          ) : (
-            <>
-              <h3 className="text-xl font-bold text-foreground">
-                Deck này hiện không còn thẻ đến hạn.
-              </h3>
-              <p className="text-sm text-muted-foreground max-w-md">
-                Bạn đã hoàn thành lượt học hiện tại của deck này.
-              </p>
-            </>
-          )}
-
-          <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => studyQuery.refetch()}
-            >
-              Tiếp tục / Kiểm tra lại
-            </Button>
-            <Button asChild size="sm" className="bg-primary font-bold text-primary-foreground">
-              <Link to="/dashboard">Về dashboard</Link>
-            </Button>
-          </div>
+        <div className="flex-1 flex flex-col items-center justify-center p-4 sm:p-6 overflow-y-auto min-h-0">
+          <StudyCompletionCard
+            deckName={deckName}
+            deckId={deckIdRaw}
+            session={study.session}
+            receipt={study.receipt}
+            counts={counts}
+            sessionState={study.view?.session_state}
+            nextDueAtMs={study.view?.next_due_at_ms}
+            isBusy={study.isBusy}
+            onCommit={handleCommit}
+          />
         </div>
       )}
 
-      {/* Fixed Bottom Control Bar */}
-      {card?.card_id ? (
+      {card && template && content && !pendingCommit ? (
         <StudyBottomBar
           cardId={card.card_id}
           revealed={revealed}
-          canEdit={Boolean(card.can_edit_card)}
-          newCount={card.new_count || 0}
-          learnCount={card.learn_count || 0}
-          dueCount={card.due_count || 0}
-          intervalsPreview={intervalsQuery.data?.intervals_preview}
+          canEdit={false}
+          newCount={counts.new}
+          learnCount={counts.learning}
+          dueCount={counts.due}
+          intervalsPreview={decision?.previews}
           isFullscreen={isFullscreen}
-          submitting={
-            answerMutation.isPending
-            || templateQuery.isPending
-            || contentQuery.isPending
-          }
-          onReveal={() => setRevealed(true)}
-          onAnswer={handleAnswer}
-          onEdit={() => setEditOpened(true)}
-          onToggleFullscreen={handleToggleFullscreen}
-        />
-      ) : null}
-
-      {/* Edit Card Modal */}
-      {card?.card_id && card.can_edit_card && templateQuery.data && contentQuery.data ? (
-        <EditCardModal
-          opened={editOpened}
-          onClose={() => setEditOpened(false)}
-          cardId={card.card_id}
-          noteId={card.note_id}
-          saveUrl={card.save_card_url}
-          fieldDefs={templateQuery.data.field_defs}
-          initialFieldValues={contentQuery.data.field_values}
-          initialDeckId={card.deck_id ?? deckIdNum}
-          initialTags={card.tags}
-          decks={dashboardQuery.data?.decks ? dashboardQuery.data.decks.map((d) => ({ id: d.id, name: d.name })) : []}
-          onSaved={async (result) => {
-            if (!result.content_ref) return
-            const current = queryClient.getQueryData<StudyManifest>(queryKey)
-            if (!current || current.card_id !== result.card_id) return
-            const nextManifest = {
-              ...current,
-              content_ref: result.content_ref,
-              deck_id: result.deck_id ?? current.deck_id,
-              tags: result.tags ?? current.tags,
-            }
-            try {
-              await ensureStudyManifestArtifacts(queryClient, nextManifest)
-            } catch {
-              // Activate the edited manifest so the cached artifact error is
-              // visible instead of silently keeping stale card content.
-            }
-            queryClient.setQueryData<StudyManifest>(queryKey, (active) => (
-              active?.card_id === result.card_id ? nextManifest : active
-            ))
+          submitting={study.isBusy}
+          onReveal={handleReveal}
+          onAnswer={(rating) => {
+            void handleAnswer(rating)
           }}
+          onEdit={() => {}}
+          onToggleFullscreen={handleToggleFullscreen}
         />
       ) : null}
     </div>

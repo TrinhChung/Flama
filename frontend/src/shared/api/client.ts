@@ -149,6 +149,18 @@ export async function apiJson<T>(
   })
 }
 
+export async function apiJsonKeepalive<T>(
+  url: string,
+  method: 'POST' | 'PUT' | 'PATCH' | 'DELETE',
+  body?: unknown,
+) {
+  return apiRequest<T>(url, {
+    method,
+    body: body === undefined ? undefined : JSON.stringify(body),
+    keepalive: true,
+  })
+}
+
 export async function submitLegacyForm(
   url: string,
   values: Record<string, string>,

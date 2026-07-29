@@ -49,13 +49,29 @@ from app.validators import (
 from app.services.stats_overview import get_effective_timezone_name
 from app.services.scheduler_config_service import resolve_deck_options
 from app.services import study_artifact_service
+from app.services import study_session_service
 from app.presenters.vocabulary_presenter import note_field_values_as_strings
+
+
+def _effective_scheduler_deck_id(
+    card: Card,
+    clone_scope: flashcards_share.CloneDeckScope | None,
+) -> int | None:
+    source_deck_id = getattr(card.note, "deck_id", None)
+    if clone_scope is None:
+        return int(source_deck_id) if source_deck_id is not None else None
+    if source_deck_id is not None:
+        mapped = clone_scope.source_to_local_deck_id.get(int(source_deck_id))
+        if mapped is not None:
+            return int(mapped)
+    return int(clone_scope.local_scope_deck_id)
 
 
 def _build_study_scope_query(
     *,
     scope: str,
     scope_id_raw: str,
+    allow_empty: bool = False,
 ):
     clone_scope: flashcards_share.CloneDeckScope | None = None
     query = None
@@ -93,7 +109,7 @@ def _build_study_scope_query(
 
     if query is None:
         return None, None, {"card_id": None, "message": "No cards found for selected scope."}
-    if not query.with_entities(Card.id).first():
+    if not allow_empty and not query.with_entities(Card.id).first():
         return None, None, {"card_id": None, "message": "No cards found for selected scope."}
     return query, clone_scope, None
 
@@ -165,7 +181,7 @@ def _build_study_next_payload(
     progress = CardProgress.query.filter_by(user_id=current_user.id, card_id=selected_card.id).first()
     deck_options = resolve_deck_options(
         user_id=current_user.id,
-        deck_id=getattr(note, "deck_id", None),
+        deck_id=_effective_scheduler_deck_id(selected_card, clone_scope),
     )
     effective_context = study_artifact_service.build_effective_study_card(
         card=selected_card,
@@ -524,7 +540,10 @@ def study_intervals_preview(card_id: str):
     timezone_name = get_effective_timezone_name(getattr(current_user, "timezone", "UTC"))
     deck_options = resolve_deck_options(
         user_id=current_user.id,
-        deck_id=getattr(context.note, "deck_id", None),
+        deck_id=_effective_scheduler_deck_id(
+            context.card,
+            context.clone_scope,
+        ),
     )
     state_version = study_artifact_service.review_state_version(
         progress=progress,
@@ -563,6 +582,116 @@ def study_intervals_preview(card_id: str):
             "intervals_preview": preview,
         }
     )
+
+
+@flashcards_bp.route("/api/study/sessions", methods=["POST"])
+@login_required
+def study_session_open():
+    payload = request.get_json(silent=True) or {}
+    try:
+        validated_query = validate_study_next_query(
+            {
+                "scope": str(payload.get("scope") or "deck"),
+                "scope_id": str(payload.get("scope_id") or ""),
+            }
+        )
+    except RequestValidationError as exc:
+        return _study_error(
+            exc.code,
+            str(exc),
+            status=exc.status,
+            field=exc.field,
+        )
+
+    query, clone_scope, empty_payload = _build_study_scope_query(
+        scope=validated_query.scope,
+        scope_id_raw=validated_query.scope_id_raw,
+        allow_empty=True,
+    )
+    if (
+        query is not None
+        and validated_query.scope == "deck"
+        and validated_query.scope_id_int is not None
+        and clone_scope is None
+    ):
+        scope_deck = db.session.get(Deck, validated_query.scope_id_int)
+        has_owned_card = bool(query.with_entities(Card.id).first())
+        if (
+            scope_deck is None
+            or scope_deck.deleted_at is not None
+            or (
+                not is_admin_user(current_user)
+                and scope_deck.owner_user_id != current_user.id
+                and not has_owned_card
+            )
+        ):
+            query = None
+            empty_payload = {"message": "No cards found for selected scope."}
+    if empty_payload is not None or query is None:
+        return _no_store_json(
+            {
+                "error": "NO_STUDY_CARDS",
+                "message": (
+                    empty_payload.get("message")
+                    if empty_payload is not None
+                    else "No cards found for selected scope."
+                ),
+            },
+            404,
+        )
+
+    timezone_name = get_effective_timezone_name(
+        getattr(current_user, "timezone", "UTC")
+    )
+    try:
+        result = study_session_service.open_study_session(
+            user=current_user,
+            query=query,
+            clone_scope=clone_scope,
+            scope_type=validated_query.scope,
+            scope_id=validated_query.scope_id_raw,
+            timezone_name=timezone_name,
+        )
+    except study_session_service.StudySessionError as exc:
+        db.session.rollback()
+        error_payload = {"error": exc.code, "message": str(exc)}
+        if exc.details is not None:
+            error_payload["details"] = exc.details
+        return _no_store_json(error_payload, exc.status)
+    return _no_store_json(result, 201)
+
+
+@flashcards_bp.route(
+    "/api/study/sessions/<session_id>/commit",
+    methods=["POST"],
+)
+@login_required
+def study_session_commit(session_id: str):
+    if (
+        request.content_length is not None
+        and request.content_length > study_session_service.MAX_COMMIT_BYTES
+    ):
+        return _no_store_json(
+            {
+                "error": "COMMIT_TOO_LARGE",
+                "message": "Study commit payload exceeds the 5 MiB limit.",
+            },
+            413,
+        )
+    payload = request.get_json(silent=True) or {}
+    try:
+        result = study_session_service.commit_study_session(
+            user=current_user,
+            session_id=session_id,
+            payload=payload,
+        )
+    except study_session_service.StudySessionError as exc:
+        db.session.rollback()
+        error_payload = {"error": exc.code, "message": str(exc)}
+        if exc.details is not None:
+            error_payload["details"] = exc.details
+        return _no_store_json(error_payload, exc.status)
+    return _no_store_json(result)
 
 
 @flashcards_bp.route("/api/study/session/next", methods=["GET"])
@@ -636,7 +765,7 @@ def study_answer(card_id: str):
     progress = CardProgress.query.filter_by(user_id=current_user.id, card_id=card.id).first()
     deck_options = resolve_deck_options(
         user_id=current_user.id,
-        deck_id=getattr(card.note, "deck_id", None),
+        deck_id=_effective_scheduler_deck_id(card, clone_scope),
     )
     now = datetime.utcnow()
     timezone_name = get_effective_timezone_name(getattr(current_user, "timezone", "UTC"))
