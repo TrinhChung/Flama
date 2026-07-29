@@ -30,7 +30,6 @@ from app.repositories.study_repository import (
 )
 
 from app.routes.flashcards import (
-    _api_error,
     _resolve_clone_scope_for_local_deck,
     _query_clone_scope_cards,
     _is_card_visible_in_clone_scope,
@@ -238,6 +237,7 @@ def _build_study_next_payload(
             },
             "review_state_version": state_version,
             "intervals_ref": {
+                "state_version": state_version,
                 "url": url_for(
                     "flashcards.study_intervals_preview",
                     card_id=selected_card.id,
@@ -363,6 +363,19 @@ def _no_store_json(payload: dict, status: int = 200):
     response.headers["Pragma"] = "no-cache"
     response.headers["X-Content-Type-Options"] = "nosniff"
     return response
+
+
+def _study_error(
+    error: str,
+    message: str,
+    *,
+    status: int = 400,
+    field: str | None = None,
+):
+    payload = {"error": error, "message": message}
+    if field is not None:
+        payload["field"] = field
+    return _no_store_json(payload, status)
 
 
 def _load_private_artifact_context(
@@ -552,42 +565,54 @@ def study_intervals_preview(card_id: str):
     )
 
 
+@flashcards_bp.route("/api/study/session/next", methods=["GET"])
 @flashcards_bp.route("/api/study/next", methods=["GET"])
 @login_required
 def study_next():
     try:
         validated_query = validate_study_next_query(request.args)
     except RequestValidationError as exc:
-        return _api_error(exc.code, str(exc), status=exc.status, field=exc.field)
+        return _study_error(exc.code, str(exc), status=exc.status, field=exc.field)
 
     scope = validated_query.scope
     scope_id_raw = validated_query.scope_id_raw
     now = datetime.utcnow()
     timezone_name = get_effective_timezone_name(getattr(current_user, "timezone", "UTC"))
+    client_render = (
+        request.path == "/api/study/session/next"
+        or str(request.args.get("render_contract") or "") == "client_v1"
+    )
     payload = _study_next_payload_for_scope(
         scope=scope,
         scope_id_raw=scope_id_raw,
         now=now,
         timezone_name=timezone_name,
-        client_render=str(request.args.get("render_contract") or "") == "client_v1",
+        client_render=client_render,
     )
-    if str(request.args.get("render_contract") or "") == "client_v1":
+    if client_render:
         payload.setdefault("schema_version", study_artifact_service.MANIFEST_SCHEMA)
         payload.setdefault("render_contract", "client_v1")
         payload.setdefault("renderer_abi", study_artifact_service.RENDERER_ABI)
     if payload.get("error") == "TEMPLATE_COMPILE_ERROR":
-        return _api_error("TEMPLATE_COMPILE_ERROR", payload.get("message") or "Template compile error.")
+        return _study_error(
+            "TEMPLATE_COMPILE_ERROR",
+            payload.get("message") or "Template compile error.",
+        )
     return _no_store_json(payload)
 
+@flashcards_bp.route("/api/study/cards/<card_id>/answer", methods=["POST"])
 @flashcards_bp.route("/api/study/<card_id>/answer", methods=["POST"])
 @login_required
 def study_answer(card_id: str):
     payload = request.get_json(silent=True) or {}
-    client_render = str(payload.get("render_contract") or "") == "client_v1"
+    client_render = (
+        request.path == f"/api/study/cards/{card_id}/answer"
+        or str(payload.get("render_contract") or "") == "client_v1"
+    )
     try:
         validated_answer = validate_study_answer_request(payload)
     except RequestValidationError as exc:
-        return _api_error(exc.code, str(exc), status=exc.status, field=exc.field)
+        return _study_error(exc.code, str(exc), status=exc.status, field=exc.field)
 
     rating = validated_answer.rating
     scope = validated_answer.scope
@@ -599,14 +624,14 @@ def study_answer(card_id: str):
 
     card = Card.query.join(Note, Card.note_id == Note.id).filter(Card.id == card_id).first()
     if not card:
-        return _api_error("FIELD_NOT_FOUND", "Card not found.", status=404)
+        return _study_error("FIELD_NOT_FOUND", "Card not found.", status=404)
     clone_scope: flashcards_share.CloneDeckScope | None = None
     if card.note.user_id != current_user.id:
         clone_scope = _resolve_clone_scope_for_card(user_id=current_user.id, card_obj=card)
         if clone_scope is None:
-            return _api_error("FIELD_NOT_FOUND", "Card not found.", status=404)
+            return _study_error("FIELD_NOT_FOUND", "Card not found.", status=404)
         if not _is_card_visible_in_clone_scope(scope=clone_scope, card_obj=card):
-            return _api_error("FIELD_NOT_FOUND", "Card not found.", status=404)
+            return _study_error("FIELD_NOT_FOUND", "Card not found.", status=404)
 
     progress = CardProgress.query.filter_by(user_id=current_user.id, card_id=card.id).first()
     deck_options = resolve_deck_options(
@@ -646,7 +671,7 @@ def study_answer(card_id: str):
         db.session.add(progress)
         db.session.flush()
     elif _is_progress_suspended(progress):
-        return _api_error("CARD_SUSPENDED", "Card is suspended.", status=409)
+        return _study_error("CARD_SUSPENDED", "Card is suspended.", status=409)
 
     # Capture for optimistic locking (detect concurrent reviews)
     expected_last_reviewed_at = progress.last_reviewed_at
@@ -692,7 +717,7 @@ def study_answer(card_id: str):
             deck_options=deck_options,
         )
     except ConcurrentReviewError as exc:
-        return _api_error("CONCURRENT_REVIEW", str(exc), status=409)
+        return _study_error("CONCURRENT_REVIEW", str(exc), status=409)
 
     next_scope_id = requested_scope_id if requested_scope_id is not None else local_deck_id_for_usage
     next_card_url = None
@@ -753,7 +778,7 @@ def study_edit_card(card_id: str):
             render_result=not client_render,
         )
     except StudyCardEditError as exc:
-        return _api_error(
+        return _study_error(
             exc.code,
             str(exc),
             status=exc.status,
@@ -763,15 +788,28 @@ def study_edit_card(card_id: str):
         context = _load_private_artifact_context(card_id=card_id, install_id=None)
         if context is not None:
             version = study_artifact_service.content_version(context)
-            result["content_ref"] = {
-                "id": str(context.note.id),
-                "version": version,
-                "url": url_for(
+            public_item = study_artifact_service.public_deck_item(context)
+            if public_item is not None:
+                artifact_url = url_for(
+                    "flashcards.study_public_artifact",
+                    deck_item_id=public_item.id,
+                    card_id=card_id,
+                    kind="content",
+                    version=version,
+                )
+                visibility = "public"
+            else:
+                artifact_url = url_for(
                     "flashcards.study_private_artifact",
                     card_id=card_id,
                     kind="content",
                     version=version,
-                ),
-                "visibility": "private",
+                )
+                visibility = "private"
+            result["content_ref"] = {
+                "id": str(context.note.id),
+                "version": version,
+                "url": artifact_url,
+                "visibility": visibility,
             }
     return _no_store_json(result)

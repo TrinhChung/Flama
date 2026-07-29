@@ -2,6 +2,7 @@ import { useEffect, useState, type ChangeEvent } from 'react'
 import { appApi } from '@/app/api'
 import { Button } from '@/components/ui/button'
 import { apiRequest } from '@/shared/api/client'
+import type { StudyCardEditResponse } from '../types'
 
 type FieldDef = {
   name: string
@@ -25,7 +26,7 @@ type EditCardModalProps = {
   initialDeckId?: number | null
   initialTags?: string[]
   decks?: DeckOption[]
-  onSaved?: () => void
+  onSaved?: (result: StudyCardEditResponse) => void
   onDeleted?: () => void
 }
 
@@ -273,13 +274,13 @@ export function EditCardModal({
     try {
       const endpoint = saveUrl || `/api/study/cards/${cardId}/edit`
       const tags = tagsStr.split(',').map((t) => t.trim()).filter(Boolean)
-      await appApi.mutate(endpoint, 'PATCH', {
+      const result = await appApi.mutate<StudyCardEditResponse>(endpoint, 'PATCH', {
         field_values: fieldValues,
         deck_id: deckId,
         tags,
         render_contract: 'client_v1',
       })
-      onSaved?.()
+      onSaved?.(result)
       onClose()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không thể lưu thay đổi.')

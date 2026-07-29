@@ -49,10 +49,9 @@ export function StudyPage() {
   const studyQuery = useQuery({
     queryKey,
     queryFn: () =>
-      appApi.get<StudyManifest>('/api/study/next', {
+      appApi.get<StudyManifest>('/api/study/session/next', {
         scope: 'deck',
         scope_id: deckIdRaw,
-        render_contract: 'client_v1',
       }),
     enabled: Boolean(deckIdRaw),
   })
@@ -62,7 +61,13 @@ export function StudyPage() {
   const intervalsRef = card?.intervals_ref
 
   const templateQuery = useQuery({
-    queryKey: ['study', 'template', templateRef?.id, templateRef?.version],
+    queryKey: [
+      'study',
+      'template',
+      templateRef?.id,
+      templateRef?.version,
+      templateRef?.url,
+    ],
     queryFn: async () => {
       if (!templateRef) throw new Error('Thiếu template artifact.')
       const artifact = await fetchStudyArtifact<StudyTemplateArtifact>(templateRef)
@@ -76,7 +81,13 @@ export function StudyPage() {
   })
 
   const contentQuery = useQuery({
-    queryKey: ['study', 'content', contentRef?.id, contentRef?.version],
+    queryKey: [
+      'study',
+      'content',
+      contentRef?.id,
+      contentRef?.version,
+      contentRef?.url,
+    ],
     queryFn: async () => {
       if (!contentRef) throw new Error('Thiếu content artifact.')
       const artifact = await fetchStudyArtifact<StudyContentArtifact>(contentRef)
@@ -93,12 +104,20 @@ export function StudyPage() {
     queryKey: [
       'study',
       'intervals',
+      card?.selection_id,
       card?.card_id,
       card?.review_state_version,
     ],
-    queryFn: () => {
+    queryFn: async () => {
       if (!intervalsRef) throw new Error('Thiếu intervals preview URL.')
-      return appApi.get<StudyIntervalsResponse>(intervalsRef.url)
+      const artifact = await appApi.get<StudyIntervalsResponse>(intervalsRef.url)
+      if (
+        artifact.selection_id !== card?.selection_id
+        || artifact.review_state_version !== intervalsRef.state_version
+      ) {
+        throw new Error('Intervals preview không còn khớp với thẻ hiện tại.')
+      }
+      return artifact
     },
     enabled: Boolean(card?.card_id && intervalsRef),
   })
@@ -117,7 +136,7 @@ export function StudyPage() {
     mutationFn: (rating: Rating) => {
       if (!card?.card_id) throw new Error('Không có thẻ để chấm.')
       return appApi.mutate<StudyAnswerResponse>(
-        `/api/study/${card.card_id}/answer`,
+        `/api/study/cards/${card.card_id}/answer`,
         'POST',
         {
           rating,
@@ -127,7 +146,6 @@ export function StudyPage() {
           duration_ms: Math.max(0, Date.now() - startedAtRef.current),
           selection_id: card.selection_id,
           review_state_version: card.review_state_version,
-          render_contract: 'client_v1',
         },
       )
     },
@@ -370,8 +388,17 @@ export function StudyPage() {
           initialDeckId={card.deck_id ?? deckIdNum}
           initialTags={card.tags}
           decks={dashboardQuery.data?.decks ? dashboardQuery.data.decks.map((d) => ({ id: d.id, name: d.name })) : []}
-          onSaved={() => {
-            studyQuery.refetch()
+          onSaved={(result) => {
+            if (!result.content_ref) return
+            queryClient.setQueryData<StudyManifest>(queryKey, (current) => {
+              if (!current || current.card_id !== result.card_id) return current
+              return {
+                ...current,
+                content_ref: result.content_ref,
+                deck_id: result.deck_id ?? current.deck_id,
+                tags: result.tags ?? current.tags,
+              }
+            })
           }}
         />
       ) : null}
