@@ -28,6 +28,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.repositories import vocabulary_repository as vocabulary_ctrl
 from app.repositories.deck_tree_query import collect_subtree_ids as _collect_deck_subtree_ids
 from app.repositories.study_repository import (
+    apply_card_state_to_progress as _apply_card_state_to_progress,
     card_state_from_progress as _card_state_from_progress,
     load_card_progress_map as _load_card_progress_map_for_user,
     select_next_due_card_from_loaded as _select_next_due_card_from_loaded,
