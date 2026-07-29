@@ -48,16 +48,41 @@ export function StudyCardRendererFrame({
   }
 
   return (
-    <CardRendererFrame
-      cardId={cardId}
-      noteId={noteId}
-      revealed={revealed}
-      frontPayload={rendered.front}
-      backPayload={rendered.back}
-      scope="deck"
-      scopeId={scopeId}
-      fieldDefs={template.field_defs}
-      fieldValues={content.field_values}
-    />
+    <div className="study-card-shell w-full h-full relative min-h-[240px]">
+      <div
+        className={revealed ? 'hidden' : 'block'}
+        aria-hidden={revealed}
+      >
+        <CardRendererFrame
+          cardId={cardId}
+          noteId={noteId}
+          revealed={false}
+          active={!revealed}
+          frontPayload={rendered.front}
+          scope="deck"
+          scopeId={scopeId}
+          fieldDefs={template.field_defs}
+          fieldValues={content.field_values}
+          enableLivePatch
+        />
+      </div>
+      <div
+        className={revealed ? 'block' : 'hidden'}
+        aria-hidden={!revealed}
+      >
+        <CardRendererFrame
+          cardId={cardId}
+          noteId={noteId}
+          revealed
+          active={revealed}
+          backPayload={rendered.back}
+          scope="deck"
+          scopeId={scopeId}
+          fieldDefs={template.field_defs}
+          fieldValues={content.field_values}
+          enableLivePatch
+        />
+      </div>
+    </div>
   )
 }
