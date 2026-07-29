@@ -184,6 +184,13 @@ export function automaticCommitMode(
   return null
 }
 
+export function isBackgroundRolloverCommit(
+  session: PersistedStudySession | null,
+) {
+  return session?.status === 'pending_commit'
+    && session.resume_after_commit
+}
+
 export function prepareCommit(
   session: PersistedStudySession,
   options: { resumeAfterCommit?: boolean } = {},

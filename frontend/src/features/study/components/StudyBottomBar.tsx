@@ -83,6 +83,7 @@ export function StudyBottomBar({
               {/* Reveal Answer Button (Clean solid primary, no heavy gradient) */}
               <Button
                 type="button"
+                disabled={submitting}
                 onClick={onReveal}
                 className="h-12 w-full max-w-md bg-primary hover:bg-primary/95 text-primary-foreground font-bold text-sm sm:text-base rounded-xl shadow-sm hover:shadow-primary/20 transition-all duration-150 gap-2"
               >
