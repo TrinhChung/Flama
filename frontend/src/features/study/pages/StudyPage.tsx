@@ -8,45 +8,18 @@ import { useBootstrap } from '@/shared/api/bootstrap'
 import { useDashboard } from '@/features/dashboard/api'
 import type { DeckNode } from '@/features/dashboard/types'
 import { StudyHeaderToolbar } from '../components/StudyHeaderToolbar'
-import { CardRendererFrame } from '../components/CardRendererFrame'
+import { StudyCardRendererFrame } from '../components/StudyCardRendererFrame'
 import { StudyBottomBar } from '../components/StudyBottomBar'
 import { EditCardModal } from '../components/EditCardModal'
-
-type Rating = 'again' | 'hard' | 'good' | 'easy'
-
-type FieldDef = {
-  name: string
-  field_type: string
-  required?: boolean
-  position?: number
-}
-
-type StudyPayload = {
-  card_id: string | null
-  note_id?: string | null
-  template_id?: string | null
-  rendered_front_html?: string
-  rendered_back_html?: string
-  rendered_front_payload?: unknown
-  rendered_back_payload?: unknown
-  intervals_preview?: Record<Rating, { label?: string }>
-  new_count?: number
-  learn_count?: number
-  due_count?: number
-  session_state?: string
-  next_due_at?: string | null
-  message?: string
-  can_edit_card?: boolean
-  save_card_url?: string | null
-  load_note_url?: string | null
-  field_values?: Record<string, string>
-  field_defs?: FieldDef[]
-}
-
-type AnswerResponse = {
-  success: boolean
-  next_card_payload: StudyPayload | null
-}
+import { fetchStudyArtifact } from '../api'
+import type {
+  Rating,
+  StudyAnswerResponse,
+  StudyContentArtifact,
+  StudyIntervalsResponse,
+  StudyManifest,
+  StudyTemplateArtifact,
+} from '../types'
 
 function findDeckNode(nodes: DeckNode[], targetId: number | null): DeckNode | null {
   if (targetId === null) return null
@@ -76,13 +49,59 @@ export function StudyPage() {
   const studyQuery = useQuery({
     queryKey,
     queryFn: () =>
-      appApi.get<StudyPayload>('/api/study/next', {
+      appApi.get<StudyManifest>('/api/study/next', {
         scope: 'deck',
         scope_id: deckIdRaw,
+        render_contract: 'client_v1',
       }),
     enabled: Boolean(deckIdRaw),
   })
   const card = studyQuery.data
+  const templateRef = card?.template_ref
+  const contentRef = card?.content_ref
+  const intervalsRef = card?.intervals_ref
+
+  const templateQuery = useQuery({
+    queryKey: ['study', 'template', templateRef?.id, templateRef?.version],
+    queryFn: async () => {
+      if (!templateRef) throw new Error('Thiếu template artifact.')
+      const artifact = await fetchStudyArtifact<StudyTemplateArtifact>(templateRef)
+      if (artifact.version !== templateRef.version) {
+        throw new Error('Template artifact version mismatch.')
+      }
+      return artifact
+    },
+    enabled: Boolean(card?.card_id && templateRef),
+    staleTime: Number.POSITIVE_INFINITY,
+  })
+
+  const contentQuery = useQuery({
+    queryKey: ['study', 'content', contentRef?.id, contentRef?.version],
+    queryFn: async () => {
+      if (!contentRef) throw new Error('Thiếu content artifact.')
+      const artifact = await fetchStudyArtifact<StudyContentArtifact>(contentRef)
+      if (artifact.version !== contentRef.version) {
+        throw new Error('Content artifact version mismatch.')
+      }
+      return artifact
+    },
+    enabled: Boolean(card?.card_id && contentRef),
+    staleTime: Number.POSITIVE_INFINITY,
+  })
+
+  const intervalsQuery = useQuery({
+    queryKey: [
+      'study',
+      'intervals',
+      card?.card_id,
+      card?.review_state_version,
+    ],
+    queryFn: () => {
+      if (!intervalsRef) throw new Error('Thiếu intervals preview URL.')
+      return appApi.get<StudyIntervalsResponse>(intervalsRef.url)
+    },
+    enabled: Boolean(card?.card_id && intervalsRef),
+  })
 
   useEffect(() => {
     startedAtRef.current = Date.now()
@@ -97,7 +116,7 @@ export function StudyPage() {
   const answerMutation = useMutation({
     mutationFn: (rating: Rating) => {
       if (!card?.card_id) throw new Error('Không có thẻ để chấm.')
-      return appApi.mutate<AnswerResponse>(
+      return appApi.mutate<StudyAnswerResponse>(
         `/api/study/${card.card_id}/answer`,
         'POST',
         {
@@ -106,15 +125,14 @@ export function StudyPage() {
           scope_id: deckIdRaw,
           timezone: bootstrapQuery.data?.user?.timezone,
           duration_ms: Math.max(0, Date.now() - startedAtRef.current),
+          selection_id: card.selection_id,
+          review_state_version: card.review_state_version,
+          render_contract: 'client_v1',
         },
       )
     },
     onSuccess: (result) => {
-      if (result.next_card_payload) {
-        queryClient.setQueryData(queryKey, result.next_card_payload)
-      } else {
-        queryClient.invalidateQueries({ queryKey })
-      }
+      queryClient.setQueryData(queryKey, result.next_manifest)
       setRevealed(false)
     },
   })
@@ -240,19 +258,22 @@ export function StudyPage() {
       {/* Full-bleed Study Card Shell */}
       {card?.card_id ? (
         <div className="study-card-shell flex-1 flex flex-col w-full h-full min-h-0 min-w-0 overflow-hidden relative">
-          <CardRendererFrame
-            cardId={card.card_id}
-            noteId={card.note_id}
-            revealed={revealed}
-            frontPayload={card.rendered_front_payload}
-            backPayload={card.rendered_back_payload}
-            frontHtml={card.rendered_front_html}
-            backHtml={card.rendered_back_html}
-            scope="deck"
-            scopeId={deckIdRaw}
-            fieldDefs={card.field_defs}
-            fieldValues={card.field_values}
-          />
+          {templateQuery.error || contentQuery.error ? (
+            <div className="p-6">
+              <PageError error={templateQuery.error || contentQuery.error} />
+            </div>
+          ) : templateQuery.data && contentQuery.data ? (
+            <StudyCardRendererFrame
+              cardId={card.card_id}
+              noteId={card.note_id}
+              revealed={revealed}
+              template={templateQuery.data}
+              content={contentQuery.data}
+              scopeId={deckIdRaw}
+            />
+          ) : (
+            <PageLoading label="Đang tải nội dung thẻ…" />
+          )}
         </div>
       ) : (
         <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-card border border-border/80 rounded-2xl m-4 space-y-4 max-w-2xl mx-auto my-auto shadow-sm">
@@ -322,9 +343,13 @@ export function StudyPage() {
           newCount={card.new_count || 0}
           learnCount={card.learn_count || 0}
           dueCount={card.due_count || 0}
-          intervalsPreview={card.intervals_preview}
+          intervalsPreview={intervalsQuery.data?.intervals_preview}
           isFullscreen={isFullscreen}
-          submitting={answerMutation.isPending}
+          submitting={
+            answerMutation.isPending
+            || templateQuery.isPending
+            || contentQuery.isPending
+          }
           onReveal={() => setRevealed(true)}
           onAnswer={handleAnswer}
           onEdit={() => setEditOpened(true)}
@@ -333,16 +358,17 @@ export function StudyPage() {
       ) : null}
 
       {/* Edit Card Modal */}
-      {card?.card_id && card.can_edit_card ? (
+      {card?.card_id && card.can_edit_card && templateQuery.data && contentQuery.data ? (
         <EditCardModal
           opened={editOpened}
           onClose={() => setEditOpened(false)}
           cardId={card.card_id}
           noteId={card.note_id}
           saveUrl={card.save_card_url}
-          fieldDefs={card.field_defs}
-          initialFieldValues={card.field_values}
-          initialDeckId={deckIdNum}
+          fieldDefs={templateQuery.data.field_defs}
+          initialFieldValues={contentQuery.data.field_values}
+          initialDeckId={card.deck_id ?? deckIdNum}
+          initialTags={card.tags}
           decks={dashboardQuery.data?.decks ? dashboardQuery.data.decks.map((d) => ({ id: d.id, name: d.name })) : []}
           onSaved={() => {
             studyQuery.refetch()

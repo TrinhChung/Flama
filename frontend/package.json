@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint src",
     "typecheck": "tsc -b --pretty",
+    "test": "vitest run",
     "check": "npm run lint && npm run build",
     "preview": "vite preview"
   },
@@ -18,7 +19,9 @@
     "@tanstack/react-query": "^5.101.4",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "dompurify": "^3.4.12",
     "lucide-react": "^1.27.0",
+    "mustache": "^4.2.0",
     "next-themes": "^0.4.6",
     "radix-ui": "^1.6.7",
     "react": "^19.2.7",
@@ -34,13 +37,16 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@types/mustache": "^4.2.6",
     "@types/node": "^24.13.2",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",
+    "jsdom": "^30.0.1",
     "oxlint": "^1.71.0",
     "shadcn": "^4.15.0",
     "typescript": "~6.0.2",
-    "vite": "^8.1.1"
+    "vite": "^8.1.1",
+    "vitest": "^4.1.10"
   }
 }

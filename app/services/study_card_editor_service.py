@@ -35,6 +35,7 @@ def update_study_card_note(
     user_id: int,
     card_id: str,
     payload: dict[str, Any] | None,
+    render_result: bool = True,
 ) -> dict[str, Any]:
     """Validate and persist edited note fields for the active study card."""
     card = study_edit_repo.load_owned_card_for_study_edit(user_id=user_id, card_id=card_id)
@@ -88,7 +89,7 @@ def update_study_card_note(
     rendered_back_html = ""
     rendered_front_payload = None
     rendered_back_payload = None
-    if card.template:
+    if render_result and card.template:
         try:
             rendered = render_template_pair(
                 template=card.template,
@@ -105,7 +106,7 @@ def update_study_card_note(
             rendered_back_html = f"<div class='text-danger'>Error rendering back: {exc}</div>"
 
     display_triplet = note_display_triplet(note)
-    return {
+    result = {
         "success": True,
         "card_id": card.id,
         "note_id": note.id,
@@ -115,9 +116,15 @@ def update_study_card_note(
         "word": display_triplet.get("word", ""),
         "reading": display_triplet.get("reading", ""),
         "meaning": display_triplet.get("meaning", ""),
-        "rendered_front_html": rendered_front_html,
-        "rendered_back_html": rendered_back_html,
-        "rendered_front_payload": rendered_front_payload,
-        "rendered_back_payload": rendered_back_payload,
         "updated_at": note.updated_at.isoformat() if note.updated_at else None,
     }
+    if render_result:
+        result.update(
+            {
+                "rendered_front_html": rendered_front_html,
+                "rendered_back_html": rendered_back_html,
+                "rendered_front_payload": rendered_front_payload,
+                "rendered_back_payload": rendered_back_payload,
+            }
+        )
+    return result

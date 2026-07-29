@@ -277,6 +277,7 @@ export function EditCardModal({
         field_values: fieldValues,
         deck_id: deckId,
         tags,
+        render_contract: 'client_v1',
       })
       onSaved?.()
       onClose()

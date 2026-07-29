@@ -2230,6 +2230,153 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             self.assertIn(progress.queue, {"learning", "review", "relearning", "new"})
             self.assertIsNotNone(progress.reps)
 
+    def test_react_study_uses_versioned_artifacts_and_client_render(self):
+        note_type = self._create_note_type()
+        create_resp = self.client.post(
+            "/api/notes",
+            json={
+                "note_type_id": note_type["id"],
+                "deck_id": self.deck_id,
+                "field_values": {
+                    "Word": "猫",
+                    "Reading": "ねこ",
+                    "Meaning": "cat",
+                },
+            },
+        )
+        self.assertEqual(create_resp.status_code, 201)
+
+        from unittest.mock import patch
+
+        with patch(
+            "app.routes.flashcards.study.render_template_pair",
+            side_effect=AssertionError("React study must not server-render templates"),
+        ):
+            next_resp = self.client.get(
+                f"/api/study/next?scope=deck&scope_id={self.deck_id}"
+                "&render_contract=client_v1"
+            )
+            self.assertEqual(next_resp.status_code, 200)
+            manifest = next_resp.get_json()
+            self.assertEqual(manifest["schema_version"], "study-manifest.v1")
+            self.assertNotIn("rendered_front_html", manifest)
+            self.assertEqual(next_resp.headers.get("Cache-Control"), "private, no-store")
+
+            template_resp = self.client.get(manifest["template_ref"]["url"])
+            content_resp = self.client.get(manifest["content_ref"]["url"])
+            intervals_resp = self.client.get(manifest["intervals_ref"]["url"])
+            self.assertEqual(template_resp.status_code, 200)
+            self.assertEqual(content_resp.status_code, 200)
+            self.assertEqual(intervals_resp.status_code, 200)
+            self.assertIn("{{Word}}", template_resp.get_json()["front_source"])
+            self.assertEqual(content_resp.get_json()["render_context"]["Word"], "猫")
+            self.assertEqual(
+                content_resp.headers.get("Cache-Control"),
+                "private, no-cache, must-revalidate",
+            )
+            self.assertEqual(
+                intervals_resp.headers.get("Cache-Control"),
+                "private, no-store",
+            )
+
+            edit_resp = self.client.patch(
+                f"/api/study/cards/{manifest['card_id']}/edit",
+                json={
+                    "field_values": {"Word": "犬"},
+                    "render_contract": "client_v1",
+                },
+            )
+            self.assertEqual(edit_resp.status_code, 200)
+            edit_payload = edit_resp.get_json()
+            self.assertNotIn("rendered_front_html", edit_payload)
+            self.assertNotEqual(
+                edit_payload["content_ref"]["version"],
+                manifest["content_ref"]["version"],
+            )
+            self.assertEqual(
+                self.client.get(manifest["content_ref"]["url"]).status_code,
+                410,
+            )
+            self.assertEqual(
+                self.client.get(edit_payload["content_ref"]["url"]).status_code,
+                200,
+            )
+
+            answer_resp = self.client.post(
+                f"/api/study/{manifest['card_id']}/answer",
+                json={
+                    "rating": "good",
+                    "scope": "deck",
+                    "scope_id": self.deck_id,
+                    "selection_id": manifest["selection_id"],
+                    "review_state_version": manifest["review_state_version"],
+                    "render_contract": "client_v1",
+                },
+            )
+            self.assertEqual(answer_resp.status_code, 200)
+            answer_payload = answer_resp.get_json()
+            self.assertIn("next_manifest", answer_payload)
+            self.assertNotIn("next_card_payload", answer_payload)
+
+    def test_public_study_artifact_is_immutable_and_anonymous_cacheable(self):
+        note_type = self._create_note_type()
+        note_resp = self.client.post(
+            "/api/notes",
+            json={
+                "note_type_id": note_type["id"],
+                "deck_id": self.deck_id,
+                "field_values": {
+                    "Word": "空",
+                    "Reading": "そら",
+                    "Meaning": "sky",
+                },
+            },
+        )
+        self.assertEqual(note_resp.status_code, 201)
+        share_resp = self.client.post(
+            "/api/shared/decks",
+            json={
+                "title": "Public artifact deck",
+                "source_deck_id": self.deck_id,
+                "source_note_type_id": note_type["id"],
+                "description": "Public cache test",
+                "preview_text": "Preview",
+                "tags": ["test"],
+                "pricing_mode": "free",
+                "taxonomy_domain": "language_learning",
+                "taxonomy_subject": "japanese",
+                "taxonomy_difficulty_band": "beginner",
+                "learning_goals": ["vocabulary"],
+                "primary_topics": ["reading_recall"],
+                "publish_status": "published",
+            },
+        )
+        self.assertEqual(share_resp.status_code, 201)
+
+        next_resp = self.client.get(
+            f"/api/study/next?scope=deck&scope_id={self.deck_id}"
+            "&render_contract=client_v1"
+        )
+        manifest = next_resp.get_json()
+        self.assertEqual(manifest["template_ref"]["visibility"], "public")
+        self.assertEqual(manifest["content_ref"]["visibility"], "public")
+
+        anonymous_client = self.app.test_client()
+        artifact_resp = anonymous_client.get(manifest["content_ref"]["url"])
+        self.assertEqual(artifact_resp.status_code, 200)
+        self.assertEqual(
+            artifact_resp.headers.get("Cache-Control"),
+            "public, max-age=31536000, s-maxage=31536000, immutable",
+        )
+        self.assertIsNone(artifact_resp.headers.get("Set-Cookie"))
+        etag = artifact_resp.headers.get("ETag")
+        self.assertTrue(etag)
+        not_modified = anonymous_client.get(
+            manifest["content_ref"]["url"],
+            headers={"If-None-Match": etag},
+        )
+        self.assertEqual(not_modified.status_code, 304)
+
     def test_study_answer_returns_prefetched_next_card_payload(self):
         note_type = self._create_note_type()
         note_type_id = note_type["id"]

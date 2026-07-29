@@ -591,7 +591,7 @@ def validate_study_card_edit_request(
     note_media_ids: set[str],
 ) -> NoteMutationInput:
     body = _payload_dict(payload)
-    _validate_allowed_keys(body, {"field_values", "deck_id", "tags"})
+    _validate_allowed_keys(body, {"field_values", "deck_id", "tags", "render_contract"})
 
     if "field_values" in body:
         merged_values, field_updates = clean_note_field_values(
