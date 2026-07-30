@@ -64,7 +64,7 @@ export function DashboardPage() {
   return (
     <Page className="anki-home max-w-[1200px] w-full mx-auto px-2 sm:px-4 py-2 sm:py-3 space-y-3 sm:space-y-6">
       {/* Shared Dashboard Toolbar */}
-      <div className="dash-toolbar flex flex-wrap items-center justify-between gap-2 border-b border-border/60 pb-2 sm:pb-3">
+      <div className="dash-toolbar flex items-center justify-between gap-2 border-b border-border/60 pb-2 sm:pb-3">
         {/* Left Navigation Tabs */}
         <div className="dash-toolbar__nav flex items-center gap-1 overflow-x-auto max-w-full py-0.5">
           <Link
@@ -90,26 +90,35 @@ export function DashboardPage() {
 
           <a
             href={importUrl}
-            className="dash-tab inline-flex items-center gap-1.5 rounded-lg px-2.5 sm:px-3.5 py-1.5 sm:py-2 text-[11px] sm:text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground transition shrink-0"
+            className="dash-tab hidden sm:inline-flex items-center gap-1.5 rounded-lg px-2.5 sm:px-3.5 py-1.5 sm:py-2 text-[11px] sm:text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground transition shrink-0"
           >
             <Upload className="size-3.5 sm:size-4" /> Import
           </a>
+
+          <Link
+            to={browseUrl}
+            className="dash-tab inline-flex sm:hidden items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold text-muted-foreground hover:bg-muted hover:text-foreground transition shrink-0"
+          >
+            <Search className="size-3.5" /> Browse
+          </Link>
         </div>
 
         {/* Right Actions */}
-        <div className="dash-toolbar__actions flex items-center gap-1.5 sm:gap-2">
+        <div className="dash-toolbar__actions flex items-center gap-1.5 sm:gap-2 shrink-0">
           <Button
             type="button"
-            className="dash-btn dash-btn--primary text-xs font-bold bg-gradient-to-r from-primary to-orange-500 text-primary-foreground shadow-xs hover:opacity-95 h-8 px-2.5 sm:px-3"
+            className="dash-btn dash-btn--primary text-xs font-bold bg-gradient-to-r from-primary to-orange-500 text-primary-foreground shadow-xs hover:opacity-95 h-8 px-2 sm:px-3"
             size="sm"
             onClick={() => setCreateOpened(true)}
           >
-            <PlusLg className="size-3.5 sm:size-4 mr-1" /> Tạo Deck
+            <PlusLg className="size-3.5 sm:size-4 sm:mr-1" />
+            <span className="hidden sm:inline">Tạo Deck</span>
+            <span className="sm:hidden">Tạo</span>
           </Button>
 
           <Link
             to={browseUrl}
-            className="dash-btn dash-btn--ghost inline-flex items-center gap-1.5 rounded-md border border-border/80 px-2.5 sm:px-3 py-1 sm:py-1.5 text-[11px] sm:text-xs font-semibold hover:bg-muted"
+            className="dash-btn dash-btn--ghost hidden sm:inline-flex items-center gap-1.5 rounded-md border border-border/80 px-2.5 sm:px-3 py-1 sm:py-1.5 text-[11px] sm:text-xs font-semibold hover:bg-muted"
           >
             <Search className="size-3.5 sm:size-4" /> Browse
           </Link>
@@ -139,7 +148,7 @@ export function DashboardPage() {
               nodes={dashboard.decks}
               adminMode={dashboard.admin_mode}
               selectedDeckId={selectedDeckId}
-              onSelect={(deck) => setSelectedDeckId((current) => (current === deck.id ? null : deck.id))}
+              onSelect={(deck) => setSelectedDeckId(deck.id)}
               onAction={setSelection}
             />
           ) : (

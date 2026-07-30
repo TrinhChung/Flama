@@ -24,9 +24,10 @@ import {
   X,
 } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link, useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { appApi } from '@/app/api'
+import { updateCardFieldValuesInSessions } from '@/features/study/session/sessionStore'
 import { apiBlob } from '@/shared/api/client'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -51,7 +52,7 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from '@/components/ui/pagination'
-import { Separator } from '@/components/ui/separator'
+import { cn } from '@/lib/utils'
 import { Brand } from '@/shared/components/Brand'
 import { PageError, PageLoading } from '@/shared/components/PageState'
 
@@ -124,6 +125,7 @@ function statusVariant(status: string) {
 }
 
 export function BrowsePage() {
+  const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const urlDeckId = searchParams.get('deck_id')
   const urlCardId = searchParams.get('card_id')
@@ -168,6 +170,11 @@ export function BrowsePage() {
     urlCardId ? urlCardId : null,
   )
 
+  // Mobile View Switcher Tab State: 'decks' | 'cards' | 'editor'
+  const [mobileTab, setMobileTab] = useState<'decks' | 'cards' | 'editor'>(
+    urlCardId ? 'editor' : 'cards',
+  )
+
   // Sync state if URL search parameters change
   useEffect(() => {
     if (urlDeckId) {
@@ -175,6 +182,7 @@ export function BrowsePage() {
     }
     if (urlCardId) {
       setActiveCardId(urlCardId)
+      setMobileTab('editor')
     }
   }, [urlDeckId, urlCardId])
   const [editFieldValues, setEditFieldValues] = useState<Record<string, string>>({})
@@ -317,6 +325,9 @@ export function BrowsePage() {
       setInitialFieldValues(editFieldValues)
       setInitialDeckId(editDeckId)
       setInitialTags(editTags)
+      if (activeCardId) {
+        void updateCardFieldValuesInSessions(activeCardId, editFieldValues)
+      }
       void queryClient.invalidateQueries({ queryKey: ['browse', 'cards'] })
       void queryClient.invalidateQueries({ queryKey: ['browse', 'card-detail', activeCardId] })
     },
@@ -500,57 +511,114 @@ export function BrowsePage() {
       <audio ref={audioPlayerRef} className="hidden" />
 
       {/* Top Navbar Header for Fullscreen Browse */}
-      <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between border-b border-border/60 bg-background/95 px-4 backdrop-blur-md">
-        <div className="flex items-center gap-3">
-          <Brand compact />
-          <Separator orientation="vertical" className="h-4" />
-          <span className="text-sm font-semibold text-foreground">Duyệt thẻ (Browse Vocabulary)</span>
+      <header className="sticky top-0 z-30 flex h-12 sm:h-14 shrink-0 items-center justify-between border-b border-border/60 bg-background/95 px-2.5 sm:px-4 backdrop-blur-md">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+          <Brand compact size="sm" hideTextOnCollapse />
+          <span className="text-xs sm:text-sm font-semibold text-foreground truncate">Duyệt thẻ</span>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
           <Button
             variant="outline"
             size="sm"
-            className="h-8 rounded-full text-xs"
+            className="h-7 sm:h-8 rounded-full text-[11px] sm:text-xs px-2 sm:px-3"
             onClick={() => setIsTtsModalOpen(true)}
           >
-            <Volume2 className="size-3.5 mr-1.5 text-primary" />
-            Tạo âm thanh
+            <Volume2 className="size-3.5 sm:mr-1.5 text-primary" />
+            <span className="hidden sm:inline">Tạo âm thanh</span>
           </Button>
-          <Button variant="outline" size="sm" asChild className="h-8 rounded-full text-xs">
+          <Button variant="outline" size="sm" asChild className="h-7 sm:h-8 rounded-full text-[11px] sm:text-xs px-2 sm:px-3">
             <a href="/flashcards/import">
-              <FileUp className="size-3.5 mr-1.5" />
-              Nhập CSV
+              <FileUp className="size-3.5 sm:mr-1.5" />
+              <span className="hidden sm:inline">Nhập CSV</span>
             </a>
           </Button>
           <Button
             size="sm"
             asChild
-            className="h-8 rounded-full bg-gradient-to-r from-primary to-orange-500 text-primary-foreground font-bold shadow-sm text-xs"
+            className="h-7 sm:h-8 rounded-full bg-gradient-to-r from-primary to-orange-500 text-primary-foreground font-bold shadow-xs text-[11px] sm:text-xs px-2.5 sm:px-3.5"
           >
             <a href="/flashcards/notes/new">
-              <Plus className="size-3.5 mr-1.5" />
-              Tạo ghi chú
+              <Plus className="size-3.5 sm:mr-1.5" />
+              <span className="hidden sm:inline">Tạo ghi chú</span>
+              <span className="sm:hidden">Tạo thẻ</span>
             </a>
           </Button>
 
-          <Separator orientation="vertical" className="h-4 hidden sm:block" />
-
-          <Button variant="ghost" size="sm" asChild className="h-8 rounded-full text-xs gap-1.5">
-            <Link to="/dashboard">
-              <ArrowLeft className="size-3.5" />
-              <span className="hidden sm:inline">Tổng quan</span>
-            </Link>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 sm:h-8 rounded-full text-[11px] sm:text-xs px-2 sm:px-3 gap-1 text-muted-foreground hover:text-foreground"
+            onClick={() => {
+              if (urlDeckId) {
+                navigate(`/study?deck_id=${urlDeckId}`)
+              } else {
+                navigate('/dashboard')
+              }
+            }}
+          >
+            <ArrowLeft className="size-3.5" />
+            <span className="hidden sm:inline">
+              {urlDeckId ? 'Về bài học' : 'Tổng quan'}
+            </span>
+            <span className="sm:hidden">
+              {urlDeckId ? 'Bài học' : 'Về'}
+            </span>
           </Button>
         </div>
       </header>
 
-      {/* 3-Pane Full Viewport Flex Grid */}
-      <div className="flex-1 min-h-0 grid gap-3 lg:grid-cols-12 p-3 overflow-hidden">
+      {/* Mobile Segmented Tab Bar (Appears on screens < lg) */}
+      <div className="flex lg:hidden items-center justify-between px-2 py-1.5 border-b border-border/30 bg-background shrink-0">
+        <div className="grid grid-cols-3 w-full p-1 bg-muted/70 rounded-xl gap-1">
+          <button
+            type="button"
+            onClick={() => setMobileTab('decks')}
+            className={cn(
+              'flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all duration-200',
+              mobileTab === 'decks'
+                ? 'bg-background text-primary shadow-xs font-bold'
+                : 'text-muted-foreground hover:text-foreground',
+            )}
+          >
+            <FolderOpen className="size-3.5" />
+            <span>Decks</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setMobileTab('cards')}
+            className={cn(
+              'flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all duration-200',
+              mobileTab === 'cards'
+                ? 'bg-background text-primary shadow-xs font-bold'
+                : 'text-muted-foreground hover:text-foreground',
+            )}
+          >
+            <BookOpen className="size-3.5" />
+            <span>Danh sách</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setMobileTab('editor')}
+            className={cn(
+              'flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all duration-200',
+              mobileTab === 'editor'
+                ? 'bg-background text-primary shadow-xs font-bold'
+                : 'text-muted-foreground hover:text-foreground',
+            )}
+          >
+            <FileText className="size-3.5" />
+            <span>Editor</span>
+          </button>
+        </div>
+      </div>
+
+      {/* 3-Pane Responsive Grid */}
+      <div className="flex-1 min-h-0 grid gap-0 sm:gap-3 lg:grid-cols-12 p-0 sm:p-3 overflow-hidden">
         {/* ========================================================================= */}
         {/* LEFT PANE: DECKS SIDEBAR (3 cols on lg) */}
         {/* ========================================================================= */}
-        <Card className="lg:col-span-3 h-full flex flex-col border-border/80 shadow-md rounded-2xl overflow-hidden min-h-0">
+        <Card className={cn('lg:col-span-3 h-full flex flex-col border-0 sm:border border-border/80 shadow-none sm:shadow-md rounded-none sm:rounded-2xl overflow-hidden min-h-0', mobileTab !== 'decks' && 'hidden lg:flex')}>
           <div className="p-3 border-b bg-muted/30 flex items-center justify-between shrink-0">
             <h2 className="font-bold text-sm flex items-center gap-1.5">
               <FolderOpen className="size-4 text-primary" />
@@ -594,10 +662,13 @@ export function BrowsePage() {
               type="button"
               className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold transition-colors ${
                 selectedDeckId === null
-                  ? 'bg-primary/15 text-primary border border-primary/30 shadow-sm'
+                  ? 'bg-primary/15 text-primary border border-primary/30 shadow-xs'
                   : 'hover:bg-muted/60 text-muted-foreground hover:text-foreground'
               }`}
-              onClick={handleResetDeckFilter}
+              onClick={() => {
+                handleResetDeckFilter()
+                setMobileTab('cards')
+              }}
             >
               <span className="flex items-center gap-2">
                 <BookOpen className="size-4 shrink-0 text-primary" />
@@ -629,12 +700,13 @@ export function BrowsePage() {
                   type="button"
                   className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs transition-colors ${
                     isSelected
-                      ? 'bg-primary/15 text-primary font-bold border border-primary/30 shadow-sm'
+                      ? 'bg-primary/15 text-primary font-bold border border-primary/30 shadow-xs'
                       : 'hover:bg-muted/50 text-foreground'
                   }`}
                   onClick={() => {
                     setSelectedDeckId(deck.id)
                     setPage(1)
+                    setMobileTab('cards')
                   }}
                 >
                   <span className="flex items-center gap-2 truncate pr-2">
@@ -665,12 +737,12 @@ export function BrowsePage() {
         {/* ========================================================================= */}
         {/* CENTER PANE: NOTES / CARDS TABLE (5 cols on lg) */}
         {/* ========================================================================= */}
-        <Card className="lg:col-span-5 h-full flex flex-col border-border/80 shadow-md rounded-2xl overflow-hidden min-h-0">
+        <Card className={cn('lg:col-span-5 h-full flex flex-col border-0 sm:border border-border/80 shadow-none sm:shadow-md rounded-none sm:rounded-2xl overflow-hidden min-h-0', mobileTab !== 'cards' && 'hidden lg:flex')}>
           {/* Main Toolbar */}
-          <div className="p-3 border-b bg-muted/30 space-y-2 shrink-0">
-            <div className="grid gap-2 sm:grid-cols-12 items-center">
+          <div className="p-2.5 sm:p-3 border-b bg-muted/30 space-y-2 shrink-0">
+            <div className="flex flex-col sm:grid sm:grid-cols-12 gap-2 items-center">
               {/* Search Box */}
-              <div className="sm:col-span-6 relative">
+              <div className="w-full sm:col-span-6 relative">
                 <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   className="pl-8 pr-7 h-8 text-xs bg-background"
@@ -689,10 +761,10 @@ export function BrowsePage() {
                 ) : null}
               </div>
 
-              {/* Status Filter */}
-              <div className="sm:col-span-3">
+              {/* Filters & Sorting */}
+              <div className="flex items-center gap-1.5 w-full sm:col-span-6">
                 <NativeSelect
-                  className="h-8 text-xs bg-background w-full"
+                  className="h-8 text-xs bg-background flex-1"
                   value={statusFilter}
                   onChange={(e) => {
                     setStatusFilter(e.target.value)
@@ -704,10 +776,7 @@ export function BrowsePage() {
                   <NativeSelectOption value="learn">Đang học (Learn)</NativeSelectOption>
                   <NativeSelectOption value="due">Đến hạn (Due)</NativeSelectOption>
                 </NativeSelect>
-              </div>
 
-              {/* Sort By & Dir */}
-              <div className="sm:col-span-3 flex gap-1">
                 <NativeSelect
                   className="h-8 text-xs bg-background flex-1"
                   value={sortBy}
@@ -717,6 +786,7 @@ export function BrowsePage() {
                   <NativeSelectOption value="deck">Deck</NativeSelectOption>
                   <NativeSelectOption value="word">Từ vựng</NativeSelectOption>
                 </NativeSelect>
+
                 <Button
                   type="button"
                   variant="outline"
@@ -801,8 +871,8 @@ export function BrowsePage() {
             {cardsQuery.error ? <PageError error={cardsQuery.error} /> : null}
 
             {cardsQuery.data ? (
-              <table className="w-full text-xs text-left border-collapse">
-                <thead className="sticky top-0 bg-muted/90 backdrop-blur-sm z-10 border-b shadow-sm">
+              <table className="w-full text-xs text-left border-collapse min-w-[500px]">
+                <thead className="sticky top-0 bg-muted/90 backdrop-blur-sm z-10 border-b shadow-xs">
                   <tr>
                     <th className="p-2.5 w-8">
                       <Checkbox
@@ -827,7 +897,10 @@ export function BrowsePage() {
                     return (
                       <tr
                         key={card.card_id}
-                        onClick={() => setActiveCardId(card.card_id)}
+                        onClick={() => {
+                          setActiveCardId(card.card_id)
+                          setMobileTab('editor')
+                        }}
                         className={`cursor-pointer transition-colors ${
                           isSelected
                             ? 'bg-primary/15 font-semibold text-primary'
@@ -894,12 +967,14 @@ export function BrowsePage() {
                 ) : null}
               </span>
               {cardsQuery.data.pages > 1 ? (
-                <Pagination className="mx-0 w-auto">
-                  <PaginationContent>
+                <Pagination className="mx-0 w-auto shrink-0">
+                  <PaginationContent className="gap-1">
                     <PaginationItem>
                       <PaginationPrevious
                         href="#"
+                        text="Trước"
                         aria-disabled={page <= 1}
+                        className={cn(page <= 1 && 'opacity-40 pointer-events-none')}
                         onClick={(e) => {
                           e.preventDefault()
                           if (page > 1) setPage((p) => p - 1)
@@ -907,14 +982,21 @@ export function BrowsePage() {
                       />
                     </PaginationItem>
                     <PaginationItem>
-                      <PaginationLink href="#" isActive onClick={(e) => e.preventDefault()}>
-                        {page}/{cardsQuery.data.pages}
+                      <PaginationLink
+                        href="#"
+                        isActive
+                        className="px-2.5 min-w-[3rem] font-mono text-xs font-bold"
+                        onClick={(e) => e.preventDefault()}
+                      >
+                        {page} / {cardsQuery.data.pages}
                       </PaginationLink>
                     </PaginationItem>
                     <PaginationItem>
                       <PaginationNext
                         href="#"
+                        text="Sau"
                         aria-disabled={!cardsQuery.data.has_next}
+                        className={cn(!cardsQuery.data.has_next && 'opacity-40 pointer-events-none')}
                         onClick={(e) => {
                           e.preventDefault()
                           if (cardsQuery.data.has_next) setPage((p) => p + 1)
@@ -931,13 +1013,31 @@ export function BrowsePage() {
         {/* ========================================================================= */}
         {/* RIGHT PANE: EDITOR PANEL (4 cols on lg) */}
         {/* ========================================================================= */}
-        <Card className="lg:col-span-4 h-full flex flex-col border-border/80 shadow-md rounded-2xl overflow-hidden min-h-0">
+        <Card className={cn('lg:col-span-4 h-full flex flex-col border-0 sm:border border-border/80 shadow-none sm:shadow-md rounded-none sm:rounded-2xl overflow-hidden min-h-0', mobileTab !== 'editor' && 'hidden lg:flex')}>
           {/* Editor Header Toolbar */}
-          <div className="p-3 border-b bg-muted/30 flex items-center justify-between shrink-0">
-            <h2 className="font-bold text-sm flex items-center gap-1.5">
-              <FileText className="size-4 text-primary" />
-              Editor Ghi chú
-            </h2>
+          <div className="p-2.5 sm:p-3 border-b bg-muted/30 flex items-center justify-between shrink-0">
+            <div className="flex items-center gap-1.5">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="lg:hidden h-7 text-xs px-2 text-muted-foreground hover:text-foreground"
+                onClick={() => {
+                  if (urlDeckId) {
+                    navigate(`/study?deck_id=${urlDeckId}`)
+                  } else {
+                    setMobileTab('cards')
+                  }
+                }}
+              >
+                <ArrowLeft className="size-3.5 mr-1" />
+                {urlDeckId ? 'Bài học' : 'Danh sách'}
+              </Button>
+              <h2 className="font-bold text-sm flex items-center gap-1.5">
+                <FileText className="size-4 text-primary" />
+                Editor Ghi chú
+              </h2>
+            </div>
             {activeCardId && cardDetailQuery.data ? (
               <div className="flex items-center gap-1.5">
                 <Button
@@ -1116,16 +1216,16 @@ export function BrowsePage() {
       {/* FULL VOICEVOX / TTS AUDIO GENERATION DIALOG MODAL (OPTIMIZED UI/UX) */}
       {/* ========================================================================= */}
       <Dialog open={isTtsModalOpen} onOpenChange={setIsTtsModalOpen}>
-        <DialogContent className="sm:max-w-3xl max-h-[92vh] flex flex-col overflow-hidden p-0 rounded-2xl border-border/60 shadow-2xl">
+        <DialogContent className="w-[95vw] sm:max-w-3xl max-h-[92vh] flex flex-col overflow-hidden p-0 rounded-xl sm:rounded-2xl border-border/60 shadow-2xl">
           {/* Modal Header */}
-          <DialogHeader className="px-6 py-4 border-b bg-muted/20 shrink-0">
-            <div className="flex items-center justify-between">
-              <DialogTitle className="flex items-center gap-2.5 text-lg font-bold text-foreground">
-                <Volume2 className="size-5 text-primary" />
-                Thiết lập VoiceVox (TTS)
+          <DialogHeader className="px-3.5 sm:px-6 py-3 sm:py-4 border-b bg-muted/20 shrink-0 text-left">
+            <div className="flex items-center justify-between gap-2">
+              <DialogTitle className="flex items-center gap-2 text-base sm:text-lg font-bold text-foreground">
+                <Volume2 className="size-4 sm:size-5 text-primary shrink-0" />
+                <span>Thiết lập VoiceVox (TTS)</span>
               </DialogTitle>
-              <Badge variant="outline" className="text-xs font-semibold bg-primary/10 text-primary border-primary/20 px-2.5 py-0.5">
-                Note đã chọn: {targetTtsCardIds.length} thẻ
+              <Badge variant="outline" className="text-[11px] sm:text-xs font-semibold bg-primary/10 text-primary border-primary/20 px-2 py-0.5 shrink-0">
+                {targetTtsCardIds.length} thẻ
               </Badge>
             </div>
             <DialogDescription className="text-xs text-muted-foreground mt-1">

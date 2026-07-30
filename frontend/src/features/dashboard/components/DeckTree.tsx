@@ -48,6 +48,14 @@ function DeckRow({
     void navigator.clipboard.writeText(node.move.alias)
   }
 
+  const handleRowClick = () => {
+    if (isSelected) {
+      window.location.assign(node.study_url)
+    } else {
+      onSelect?.(node)
+    }
+  }
+
   return (
     <>
       <div
@@ -55,7 +63,7 @@ function DeckRow({
           'deck-row group flex items-center justify-between py-1.5 sm:py-2 px-1 rounded-md border-b border-transparent cursor-pointer transition-all hover:bg-[#fff8f5]',
           isSelected && 'is-selected bg-[#fff1e6]',
         )}
-        onClick={() => onSelect?.(node)}
+        onClick={handleRowClick}
       >
         {/* Name Column */}
         <div

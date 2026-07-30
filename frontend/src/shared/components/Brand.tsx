@@ -1,13 +1,19 @@
 import { Link } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 
-type BrandProps = {
+export type BrandProps = {
   compact?: boolean
   size?: 'sm' | 'md' | 'lg' | 'xl'
   className?: string
+  hideTextOnCollapse?: boolean
 }
 
-export function Brand({ compact = false, size, className }: BrandProps) {
+export function Brand({
+  compact = false,
+  size,
+  className,
+  hideTextOnCollapse = false,
+}: BrandProps) {
   const resolvedSize = size || (compact ? 'sm' : 'md')
 
   const imgSizeClass = {
@@ -42,6 +48,7 @@ export function Brand({ compact = false, size, className }: BrandProps) {
         className={cn(
           'bg-gradient-to-r from-primary via-orange-500 to-amber-500 bg-clip-text font-black tracking-tight text-transparent drop-shadow-xs',
           textSizeClass,
+          hideTextOnCollapse && 'group-data-[collapsible=icon]:hidden',
         )}
       >
         Flama

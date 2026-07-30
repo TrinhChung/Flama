@@ -559,22 +559,26 @@ export function AdminUsersPage() {
           {/* Pagination Footer */}
           <div className="flex flex-col items-center justify-between gap-3 border-t p-4 sm:flex-row">
             <p className="text-xs text-muted-foreground">
-              Hiển thị <strong className="text-foreground">{users.length}</strong> / {query.data.total || users.length} người dùng | Trang {page}/{totalPages}
+              Hiển thị <strong className="text-foreground">{users.length}</strong> / {query.data.total || users.length} người dùng
             </p>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               <Button
                 variant="outline"
                 size="sm"
+                className="h-8 text-xs px-2.5"
                 disabled={page <= 1}
                 onClick={() => setPage((p) => Math.max(p - 1, 1))}
               >
                 Trước
               </Button>
-              <span className="px-2 text-xs font-semibold">{page}</span>
+              <Badge variant="outline" className="h-8 px-3 text-xs font-mono font-bold bg-primary/10 text-primary border-primary/30">
+                {page} / {totalPages}
+              </Badge>
               <Button
                 variant="outline"
                 size="sm"
+                className="h-8 text-xs px-2.5"
                 disabled={page >= totalPages}
                 onClick={() => setPage((p) => Math.min(p + 1, totalPages))}
               >
