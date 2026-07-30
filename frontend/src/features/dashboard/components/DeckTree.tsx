@@ -52,20 +52,20 @@ function DeckRow({
     <>
       <div
         className={cn(
-          'deck-row group flex items-center justify-between py-2 px-1 rounded-md border-b border-transparent cursor-pointer transition-all hover:bg-[#fff8f5]',
+          'deck-row group flex items-center justify-between py-1.5 sm:py-2 px-1 rounded-md border-b border-transparent cursor-pointer transition-all hover:bg-[#fff8f5]',
           isSelected && 'is-selected bg-[#fff1e6]',
         )}
         onClick={() => onSelect?.(node)}
       >
         {/* Name Column */}
         <div
-          className="deck-name-col flex flex-1 items-center min-w-0 pr-4"
-          style={{ paddingLeft: `${node.depth * 1.5}rem` }}
+          className="deck-name-col flex flex-1 items-center min-w-0 pr-2 sm:pr-4"
+          style={{ paddingLeft: `calc(${node.depth} * 0.85rem)` }}
         >
           {hasChildren ? (
             <button
               type="button"
-              className="tree-toggle inline-flex size-6 shrink-0 items-center justify-center rounded text-muted-foreground transition hover:bg-muted hover:text-orange-600 mr-2"
+              className="tree-toggle inline-flex size-5 sm:size-6 shrink-0 items-center justify-center rounded text-muted-foreground transition hover:bg-muted hover:text-orange-600 mr-1 sm:mr-2"
               data-expanded={expanded}
               aria-expanded={expanded}
               onClick={(e) => {
@@ -74,15 +74,15 @@ function DeckRow({
               }}
             >
               <ChevronRight
-                className={cn('size-4 transition-transform duration-200', expanded && 'rotate-90')}
+                className={cn('size-3.5 sm:size-4 transition-transform duration-200', expanded && 'rotate-90')}
               />
             </button>
           ) : (
-            <span className="tree-spacer inline-block size-6 shrink-0 mr-2" />
+            <span className="tree-spacer inline-block size-5 sm:size-6 shrink-0 mr-1 sm:mr-2" />
           )}
 
           <span
-            className="deck-name text-base font-normal text-foreground truncate group-hover:text-orange-600 transition-colors"
+            className="deck-name text-sm sm:text-base font-normal text-foreground truncate group-hover:text-orange-600 transition-colors"
             onDoubleClick={(e) => {
               e.stopPropagation()
               window.location.assign(node.study_url)
@@ -93,14 +93,14 @@ function DeckRow({
         </div>
 
         {/* Stats Column */}
-        <div className="deck-stats-col grid grid-cols-[repeat(3,64px)_30px] gap-2 items-center text-right">
-          <span className="stat-num stat-new text-base font-normal tabular-nums text-emerald-600">
+        <div className="deck-stats-col grid grid-cols-[repeat(3,38px)_26px] sm:grid-cols-[repeat(3,64px)_30px] gap-1 sm:gap-2 items-center text-right shrink-0">
+          <span className="stat-num stat-new text-xs sm:text-base font-normal tabular-nums text-emerald-600">
             {node.counts.new.toLocaleString('vi-VN')}
           </span>
-          <span className="stat-num stat-learn text-base font-normal tabular-nums text-rose-600">
+          <span className="stat-num stat-learn text-xs sm:text-base font-normal tabular-nums text-rose-600">
             {node.counts.learning.toLocaleString('vi-VN')}
           </span>
-          <span className="stat-num stat-due text-base font-semibold tabular-nums text-orange-600">
+          <span className="stat-num stat-due text-xs sm:text-base font-semibold tabular-nums text-orange-600">
             {node.counts.due.toLocaleString('vi-VN')}
           </span>
 
@@ -111,14 +111,14 @@ function DeckRow({
                 <button
                   type="button"
                   className={cn(
-                    'deck-settings-btn inline-flex opacity-0 group-hover:opacity-75 data-[state=open]:opacity-100 size-7 items-center justify-center rounded-full text-muted-foreground transition-all hover:opacity-100 hover:text-orange-700 hover:bg-orange-50 border border-transparent hover:border-orange-300',
+                    'deck-settings-btn inline-flex opacity-80 sm:opacity-0 sm:group-hover:opacity-75 data-[state=open]:opacity-100 size-6 sm:size-7 items-center justify-center rounded-full text-muted-foreground transition-all hover:opacity-100 hover:text-orange-700 hover:bg-orange-50 border border-transparent hover:border-orange-300',
                     isSelected && 'opacity-100',
                   )}
                   onClick={(e) => e.stopPropagation()}
                   aria-label="Deck Settings"
                   title="Deck Settings"
                 >
-                  <GearFill className="size-4" />
+                  <GearFill className="size-3.5 sm:size-4" />
                 </button>
               </DropdownMenuTrigger>
 
