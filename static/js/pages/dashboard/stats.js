@@ -137,6 +137,9 @@ export function initStats() {
         const maxCards = heatmap.reduce((max, item) => Math.max(max, toInt(item && item.cards)), 0);
         const weeks = buildHeatmapWeeks(heatmap);
         statsHeatmapEl.style.setProperty("--stats-week-count", String(Math.max(1, weeks.length)));
+        const d = new Date();
+        const todayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
         weeks.forEach((week) => {
             const weekEl = document.createElement("div");
             weekEl.className = "stats-week";
@@ -152,11 +155,12 @@ export function initStats() {
                 const cards = toInt(item.cards);
                 const level = heatLevel(cards, maxCards);
                 const day = String(item.day || item.date || "");
+                const isToday = day === todayStr;
                 const source = String(item.source || "reviewed").toLowerCase() === "due" ? "due" : "reviewed";
                 const sourceLabel = source === "due" ? "Due" : "Reviewed";
                 const cell = document.createElement("button");
                 cell.type = "button";
-                cell.className = `stats-day stats-day--${source} stats-day--level-${level}${item.is_future ? " stats-day--future" : ""}`;
+                cell.className = `stats-day stats-day--${source} stats-day--level-${level}${item.is_future ? " stats-day--future" : ""}${isToday ? " stats-day--today" : ""}`;
                 cell.setAttribute("aria-label", `${day} ${sourceLabel.toLowerCase()} ${cards} cards`);
                 cell.title = `${day} · ${sourceLabel}: ${cards} cards`;
                 const showTooltip = () => updateStatsTooltip(item);
@@ -167,6 +171,20 @@ export function initStats() {
             });
             statsHeatmapEl.appendChild(weekEl);
         });
+
+        const todayCell = statsHeatmapEl.querySelector(".stats-day--today");
+        const scrollContainer = statsHeatmapEl.parentElement;
+        if (scrollContainer && todayCell) {
+            setTimeout(() => {
+                const containerRect = scrollContainer.getBoundingClientRect();
+                const todayRect = todayCell.getBoundingClientRect();
+                if (containerRect.width > 0) {
+                    const relativeLeft = todayRect.left - containerRect.left + scrollContainer.scrollLeft;
+                    const targetScrollLeft = relativeLeft - containerRect.width / 2 + todayRect.width / 2;
+                    scrollContainer.scrollLeft = Math.max(0, targetScrollLeft);
+                }
+            }, 50);
+        }
 
         if (statsTooltipEl) {
             const firstDay = heatmap.find((item) => toInt(item.cards) > 0) || heatmap[0];

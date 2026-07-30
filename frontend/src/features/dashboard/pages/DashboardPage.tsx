@@ -107,13 +107,12 @@ export function DashboardPage() {
         <div className="dash-toolbar__actions flex items-center gap-1.5 sm:gap-2 shrink-0">
           <Button
             type="button"
-            className="dash-btn dash-btn--primary text-xs font-bold bg-gradient-to-r from-primary to-orange-500 text-primary-foreground shadow-xs hover:opacity-95 h-8 px-2 sm:px-3"
+            className="dash-btn dash-btn--primary text-xs font-bold bg-gradient-to-r from-primary to-orange-500 text-primary-foreground shadow-xs hover:opacity-95 h-8 px-2 sm:px-3 hidden sm:inline-flex"
             size="sm"
             onClick={() => setCreateOpened(true)}
           >
             <PlusLg className="size-3.5 sm:size-4 sm:mr-1" />
-            <span className="hidden sm:inline">Tạo Deck</span>
-            <span className="sm:hidden">Tạo</span>
+            <span>Tạo Deck</span>
           </Button>
 
           <Link
@@ -128,10 +127,19 @@ export function DashboardPage() {
       {/* Main Deck Board Container */}
       <section className="deck-board w-full rounded-xl sm:rounded-2xl border-0 sm:border border-border bg-card p-2.5 sm:p-6 shadow-none sm:shadow-sm">
         <header className="deck-board-head flex items-center justify-between border-b border-border/60 pb-2 sm:pb-3 mb-2">
-          <div className="head-left">
+          <div className="head-left flex items-center justify-between w-full sm:w-auto">
             <h3 id="anki-decks-title" className="section-title text-lg sm:text-xl font-bold text-foreground">
               Deck
             </h3>
+            <Button
+              type="button"
+              className="dash-btn dash-btn--primary text-xs font-bold bg-gradient-to-r from-primary to-orange-500 text-primary-foreground shadow-xs hover:opacity-95 h-7 px-2.5 sm:hidden"
+              size="sm"
+              onClick={() => setCreateOpened(true)}
+            >
+              <PlusLg className="size-3.5 mr-1" />
+              <span>Tạo Deck</span>
+            </Button>
           </div>
 
           <div className="head-right hidden sm:grid sm:grid-cols-[repeat(3,64px)_30px] gap-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
