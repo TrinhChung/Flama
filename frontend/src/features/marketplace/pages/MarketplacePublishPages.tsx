@@ -73,12 +73,12 @@ export function MarketplacePublishDeckPage() {
   const decks = decksQuery.data?.items || []
 
   return (
-    <Page>
+    <Page className="space-y-6 relative px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
       <PageHeader
         title="Chia sẻ Bộ thẻ vào Marketplace"
         description="Giải thích bộ thẻ dùng để học gì, phù hợp trình độ nào, và thiết lập thông tin hiển thị."
         actions={
-          <Button variant="outline" asChild>
+          <Button variant="outline" asChild className="h-9 px-3.5 text-xs font-semibold rounded-xl">
             <Link to="/marketplace/decks">
               <ArrowLeft className="mr-1.5 size-4" /> Quay lại Marketplace
             </Link>
@@ -93,17 +93,17 @@ export function MarketplacePublishDeckPage() {
         }}
         className="grid gap-6 lg:grid-cols-3"
       >
-        <Card className="lg:col-span-2 shadow-xs">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-lg">
+        <Card className="lg:col-span-2 shadow-xs rounded-2xl">
+          <CardHeader className="p-4 sm:p-5 pb-2 sm:pb-2">
+            <CardTitle className="flex items-center gap-2 text-lg font-bold">
               <Sparkles className="size-5 text-primary" /> Thông tin Niêm yết (Listing Basics)
             </CardTitle>
-            <CardDescription>
+            <CardDescription className="text-xs">
               Thông tin này sẽ hiển thị trực tiếp cho người học xem trên Marketplace.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
+          <CardContent className="p-4 sm:p-5 pt-0 space-y-4">
+            <div className="space-y-1.5">
               <Label htmlFor="source-deck">Chọn Bộ thẻ cần chia sẻ</Label>
               <NativeSelect
                 id="source-deck"
@@ -113,6 +113,7 @@ export function MarketplacePublishDeckPage() {
                   const found = decks.find((d) => String(d.id) === e.target.value)
                   if (found && !title) setTitle(found.name)
                 }}
+                className="h-9 sm:h-10 text-xs sm:text-sm rounded-xl"
                 required
               >
                 <NativeSelectOption value="">-- Chọn bộ thẻ --</NativeSelectOption>
@@ -124,29 +125,31 @@ export function MarketplacePublishDeckPage() {
               </NativeSelect>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <Label htmlFor="title">Tiêu đề Listing</Label>
               <Input
                 id="title"
                 placeholder="Ví dụ: N3 Kanji Luyện đọc chuẩn JLPT"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
+                className="h-9 sm:h-10 text-xs sm:text-sm rounded-xl"
                 required
               />
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <Label htmlFor="preview">Xem trước ngắn (Preview Text)</Label>
               <Input
                 id="preview"
                 placeholder="1 dòng mô tả ngắn để learner scan nhanh"
                 value={previewText}
                 onChange={(e) => setPreviewText(e.target.value)}
+                className="h-9 sm:h-10 text-xs sm:text-sm rounded-xl"
                 maxLength={160}
               />
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <Label htmlFor="description">Mô tả chi tiết</Label>
               <Textarea
                 id="description"
@@ -154,17 +157,19 @@ export function MarketplacePublishDeckPage() {
                 placeholder="Nói rõ mục tiêu học, đối tượng phù hợp, cách dùng deck và điểm đặc biệt…"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
+                className="text-xs sm:text-sm rounded-xl"
                 required
               />
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <Label htmlFor="pricing">Mô hình giá</Label>
                 <NativeSelect
                   id="pricing"
                   value={pricingMode}
                   onChange={(e) => setPricingMode(e.target.value as 'free' | 'paid')}
+                  className="h-9 sm:h-10 text-xs sm:text-sm rounded-xl"
                 >
                   <NativeSelectOption value="free">Miễn phí (Free)</NativeSelectOption>
                   <NativeSelectOption value="paid">Trả phí (Paid)</NativeSelectOption>
@@ -172,7 +177,7 @@ export function MarketplacePublishDeckPage() {
               </div>
 
               {pricingMode === 'paid' && (
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   <Label htmlFor="price">Giá bán (VND)</Label>
                   <Input
                     id="price"
@@ -181,6 +186,7 @@ export function MarketplacePublishDeckPage() {
                     step={1000}
                     value={priceAmountMinor}
                     onChange={(e) => setPriceAmountMinor(Number(e.target.value))}
+                    className="h-9 sm:h-10 text-xs sm:text-sm rounded-xl"
                     required
                   />
                 </div>
@@ -188,26 +194,28 @@ export function MarketplacePublishDeckPage() {
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <Label htmlFor="version">Phiên bản</Label>
                 <Input
                   id="version"
                   value={version}
                   onChange={(e) => setVersion(e.target.value)}
+                  className="h-9 sm:h-10 text-xs sm:text-sm rounded-xl"
                 />
               </div>
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <Label htmlFor="tags">Tags (phân cách bởi dấu phẩy)</Label>
                 <Input
                   id="tags"
                   placeholder="kanji, n3, minna"
                   value={tags}
                   onChange={(e) => setTags(e.target.value)}
+                  className="h-9 sm:h-10 text-xs sm:text-sm rounded-xl"
                 />
               </div>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <Label htmlFor="changelog">Changelog (Nhật ký thay đổi)</Label>
               <Textarea
                 id="changelog"
@@ -215,6 +223,7 @@ export function MarketplacePublishDeckPage() {
                 placeholder="Ghi chú nếu có cập nhật nội dung mới…"
                 value={changelog}
                 onChange={(e) => setChangelog(e.target.value)}
+                className="text-xs sm:text-sm rounded-xl"
               />
             </div>
           </CardContent>
@@ -222,18 +231,19 @@ export function MarketplacePublishDeckPage() {
 
         {/* Taxonomy Metadata Sidebar */}
         <div className="space-y-6">
-          <Card className="shadow-xs">
-            <CardHeader>
-              <CardTitle className="text-base">Phân loại Metadata</CardTitle>
-              <CardDescription>Giúp learner lọc nhanh học liệu</CardDescription>
+          <Card className="shadow-xs rounded-2xl">
+            <CardHeader className="p-4 sm:p-5 pb-2">
+              <CardTitle className="text-base font-bold">Phân loại Metadata</CardTitle>
+              <CardDescription className="text-xs">Giúp learner lọc nhanh học liệu</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
+            <CardContent className="p-4 sm:p-5 pt-0 space-y-4">
+              <div className="space-y-1.5">
                 <Label htmlFor="primary-category">Danh mục chính</Label>
                 <NativeSelect
                   id="primary-category"
                   value={primaryCategory}
                   onChange={(e) => setPrimaryCategory(e.target.value)}
+                  className="h-9 sm:h-10 text-xs sm:text-sm rounded-xl"
                 >
                   <NativeSelectOption value="JLPT">JLPT</NativeSelectOption>
                   <NativeSelectOption value="Kaiwa">Giao tiếp (Kaiwa)</NativeSelectOption>
@@ -243,30 +253,32 @@ export function MarketplacePublishDeckPage() {
                 </NativeSelect>
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <Label htmlFor="subcategory">Danh mục phụ / Trình độ</Label>
                 <Input
                   id="subcategory"
                   placeholder="Ví dụ: N5, N4, N3, N2, N1"
                   value={subcategory}
                   onChange={(e) => setSubcategory(e.target.value)}
+                  className="h-9 sm:h-10 text-xs sm:text-sm rounded-xl"
                 />
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <Label htmlFor="target-audience">Đối tượng phù hợp</Label>
                 <Input
                   id="target-audience"
                   placeholder="Ví dụ: Người mới bắt đầu, Sơ cấp..."
                   value={targetAudience}
                   onChange={(e) => setTargetAudience(e.target.value)}
+                  className="h-9 sm:h-10 text-xs sm:text-sm rounded-xl"
                 />
               </div>
 
-              <div className="pt-4">
+              <div className="pt-3 border-t">
                 <Button
                   type="submit"
-                  className="w-full gap-2"
+                  className="w-full h-10 sm:h-11 font-bold text-xs sm:text-sm gap-2 rounded-xl shadow-xs"
                   disabled={!sourceDeckId || !title.trim() || !description.trim() || publishMutation.isPending}
                 >
                   <Upload className="size-4" />
@@ -324,12 +336,12 @@ export function MarketplacePublishNoteTypePage() {
   const noteTypes = noteTypesQuery.data?.items || []
 
   return (
-    <Page>
+    <Page className="space-y-6 relative px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
       <PageHeader
         title="Chia sẻ Loại thẻ (Note Type) vào Marketplace"
         description="Đóng gói mẫu thiết kế thẻ và cấu hình field để chia sẻ cho cộng đồng."
         actions={
-          <Button variant="outline" asChild>
+          <Button variant="outline" asChild className="h-9 px-3.5 text-xs font-semibold rounded-xl">
             <Link to="/marketplace/note-types">
               <ArrowLeft className="mr-1.5 size-4" /> Quay lại NoteTypes
             </Link>
@@ -344,12 +356,12 @@ export function MarketplacePublishNoteTypePage() {
         }}
         className="grid gap-6 lg:grid-cols-3"
       >
-        <Card className="lg:col-span-2 shadow-xs">
-          <CardHeader>
-            <CardTitle className="text-lg">Thông tin loại thẻ</CardTitle>
+        <Card className="lg:col-span-2 shadow-xs rounded-2xl">
+          <CardHeader className="p-4 sm:p-5 pb-2">
+            <CardTitle className="text-lg font-bold">Thông tin loại thẻ</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
+          <CardContent className="p-4 sm:p-5 pt-0 space-y-4">
+            <div className="space-y-1.5">
               <Label htmlFor="source-nt">Chọn Loại thẻ cần xuất bản</Label>
               <NativeSelect
                 id="source-nt"
@@ -359,6 +371,7 @@ export function MarketplacePublishNoteTypePage() {
                   const found = noteTypes.find((nt) => nt.id === e.target.value)
                   if (found && !title) setTitle(found.name)
                 }}
+                className="h-9 sm:h-10 text-xs sm:text-sm rounded-xl"
                 required
               >
                 <NativeSelectOption value="">-- Chọn loại thẻ --</NativeSelectOption>
@@ -370,18 +383,19 @@ export function MarketplacePublishNoteTypePage() {
               </NativeSelect>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <Label htmlFor="nt-title">Tiêu đề hiển thị</Label>
               <Input
                 id="nt-title"
                 placeholder="Ví dụ: Cloze Deletion Chuẩn Anki"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
+                className="h-9 sm:h-10 text-xs sm:text-sm rounded-xl"
                 required
               />
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <Label htmlFor="nt-desc">Mô tả mẫu thẻ</Label>
               <Textarea
                 id="nt-desc"
@@ -389,27 +403,30 @@ export function MarketplacePublishNoteTypePage() {
                 placeholder="Mô tả cấu trúc field và cách hiển thị của mẫu thẻ…"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
+                className="text-xs sm:text-sm rounded-xl"
                 required
               />
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <Label htmlFor="nt-preview">Xem trước ngắn (Preview Text)</Label>
               <Input
                 id="nt-preview"
                 placeholder="1 dòng mô tả ngắn về mẫu thẻ"
                 value={previewText}
                 onChange={(e) => setPreviewText(e.target.value)}
+                className="h-9 sm:h-10 text-xs sm:text-sm rounded-xl"
               />
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <Label htmlFor="nt-pricing">Mô hình giá</Label>
                 <NativeSelect
                   id="nt-pricing"
                   value={pricingMode}
                   onChange={(e) => setPricingMode(e.target.value as 'free' | 'paid')}
+                  className="h-9 sm:h-10 text-xs sm:text-sm rounded-xl"
                 >
                   <NativeSelectOption value="free">Miễn phí (Free)</NativeSelectOption>
                   <NativeSelectOption value="paid">Trả phí (Paid)</NativeSelectOption>
@@ -417,7 +434,7 @@ export function MarketplacePublishNoteTypePage() {
               </div>
 
               {pricingMode === 'paid' && (
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   <Label htmlFor="nt-price">Giá bán (VND)</Label>
                   <Input
                     id="nt-price"
@@ -426,6 +443,7 @@ export function MarketplacePublishNoteTypePage() {
                     step={1000}
                     value={priceAmountMinor}
                     onChange={(e) => setPriceAmountMinor(Number(e.target.value))}
+                    className="h-9 sm:h-10 text-xs sm:text-sm rounded-xl"
                     required
                   />
                 </div>
@@ -433,35 +451,38 @@ export function MarketplacePublishNoteTypePage() {
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <Label htmlFor="nt-version">Phiên bản</Label>
                 <Input
                   id="nt-version"
                   value={version}
                   onChange={(e) => setVersion(e.target.value)}
+                  className="h-9 sm:h-10 text-xs sm:text-sm rounded-xl"
                 />
               </div>
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <Label htmlFor="nt-category">Danh mục</Label>
                 <Input
                   id="nt-category"
                   value={primaryCategory}
                   onChange={(e) => setPrimaryCategory(e.target.value)}
+                  className="h-9 sm:h-10 text-xs sm:text-sm rounded-xl"
                 />
               </div>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <Label htmlFor="nt-tags">Tags</Label>
               <Input
                 id="nt-tags"
                 placeholder="cloze, grammar, kanji"
                 value={tags}
                 onChange={(e) => setTags(e.target.value)}
+                className="h-9 sm:h-10 text-xs sm:text-sm rounded-xl"
               />
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <Label htmlFor="nt-changelog">Changelog</Label>
               <Textarea
                 id="nt-changelog"
@@ -469,13 +490,14 @@ export function MarketplacePublishNoteTypePage() {
                 placeholder="Ghi chú thay đổi mấu thẻ…"
                 value={changelog}
                 onChange={(e) => setChangelog(e.target.value)}
+                className="text-xs sm:text-sm rounded-xl"
               />
             </div>
 
-            <div className="pt-2">
+            <div className="pt-3 border-t">
               <Button
                 type="submit"
-                className="w-full gap-2"
+                className="w-full h-10 sm:h-11 font-bold text-xs sm:text-sm gap-2 rounded-xl shadow-xs"
                 disabled={!sourceNoteTypeId || !title.trim() || !description.trim() || publishMutation.isPending}
               >
                 <Check className="size-4" /> Xuất bản Loại thẻ

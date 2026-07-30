@@ -21,6 +21,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { appApi } from '@/app/api'
+import { AmbientBackground } from '@/components/ambient-background'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -266,107 +267,121 @@ export function SharedDeckDetailPage() {
   const effectiveStar = hoverScore !== null ? hoverScore : ratingScore
 
   return (
-    <Page>
+    <Page className="space-y-6 relative px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
+      <AmbientBackground intensity="vibrant" />
+
       <PageHeader
         title={deckTitle}
         description={deck.preview_text || deck.description || 'Chi tiết bộ thẻ trên marketplace Flama.'}
         actions={
-          <Button variant="outline" size="sm" asChild className="group">
+          <Button variant="outline" size="sm" asChild className="group h-9 px-3.5 text-xs font-semibold rounded-xl">
             <Link to="/marketplace/decks">
-              <ArrowLeft className="mr-1.5 size-4 group-hover:-translate-x-0.5 transition-transform" />
+              <ArrowLeft className="mr-1.5 size-3.5 group-hover:-translate-x-0.5 transition-transform" />
               Quay lại Marketplace
             </Link>
           </Button>
         }
       />
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
+      <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
         {/* Main Left Content Column */}
-        <div className="space-y-6">
-          {/* Main Card (Strict Theme Token Alignment) */}
-          <Card className="relative overflow-hidden border-border bg-card shadow-xs">
-            <CardHeader className="space-y-3 pb-4">
+        <div className="space-y-5">
+          {/* Main Card */}
+          <Card className="relative overflow-hidden border-border/80 bg-card/90 backdrop-blur-md shadow-sm rounded-2xl">
+            <div className="h-2 w-full bg-gradient-to-r from-primary via-orange-500 to-amber-500" />
+            <CardHeader className="space-y-3 p-5 sm:p-6 pb-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="secondary" className="px-2.5 py-0.5 text-xs font-semibold">
+                  <Badge variant="secondary" className="px-2.5 py-0.5 text-xs font-bold rounded-md">
                     {deck.primary_category || 'Tiếng Nhật'}
                   </Badge>
                   {(deck.badges || []).map((badge) => (
-                    <Badge key={badge} variant="outline" className="text-xs">
+                    <Badge key={badge} variant="outline" className="text-xs font-semibold rounded-md">
                       <Award className="mr-1 size-3 text-primary" />
                       {badge}
                     </Badge>
                   ))}
                 </div>
-                <span className="text-xl font-bold text-primary">
+
+                <span
+                  className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-extrabold border ${
+                    deck.pricing_mode === 'free'
+                      ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30'
+                      : 'bg-primary/10 text-primary border-primary/30'
+                  }`}
+                >
                   {deck.price_display || 'Miễn phí'}
                 </span>
               </div>
 
-              <CardTitle className="text-2xl font-black tracking-tight text-foreground lg:text-3xl leading-tight">
+              <CardTitle className="text-2xl font-black tracking-tight text-foreground sm:text-3xl leading-tight">
                 {deckTitle}
               </CardTitle>
 
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <div className="flex items-center gap-1.5 font-medium text-foreground">
-                  <User className="size-4 text-primary" />
-                  <span>{authorName}</span>
+              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                <div className="flex items-center gap-1.5">
+                  <div className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary font-bold text-[10px]">
+                    {authorName.charAt(0).toUpperCase()}
+                  </div>
+                  <span className="font-semibold text-foreground">{authorName}</span>
                 </div>
                 <span>•</span>
-                <span>Xuất bản trên Flama</span>
+                <span className="flex items-center gap-1 font-medium text-emerald-600 dark:text-emerald-400">
+                  <CheckCircle className="size-3.5" /> Flama Marketplace
+                </span>
               </div>
             </CardHeader>
 
-            <CardContent className="space-y-5">
-              <p className="text-sm leading-relaxed text-muted-foreground font-normal">
+            <CardContent className="p-5 sm:p-6 pt-0 space-y-4">
+              <p className="text-xs sm:text-sm leading-relaxed text-muted-foreground font-normal">
                 {deck.description || 'Chưa có mô tả chi tiết cho bộ thẻ này.'}
               </p>
 
               {tagsList.length > 0 ? (
                 <div className="flex flex-wrap gap-1.5 pt-1">
                   {tagsList.map((tag) => (
-                    <Badge key={tag} variant="outline" className="text-xs text-muted-foreground">
+                    <Badge key={tag} variant="outline" className="text-[11px] text-muted-foreground font-medium px-2.5 py-0.5 rounded-md">
                       #{tag}
                     </Badge>
                   ))}
                 </div>
               ) : null}
 
-              {/* Stat Grid (Theme Token Aligned) */}
-              <div className="grid grid-cols-2 gap-3 pt-2 sm:grid-cols-4">
-                <div className="rounded-xl border border-border/70 bg-muted/20 p-3.5 text-center">
-                  <div className="flex items-center justify-center gap-1 text-xs font-medium text-muted-foreground">
+              {/* Stat Grid */}
+              <div className="grid grid-cols-2 gap-3 pt-1 sm:grid-cols-4">
+                <div className="rounded-xl border border-border/80 bg-muted/30 p-3.5 sm:p-4 text-center transition-all hover:bg-muted/50">
+                  <div className="flex items-center justify-center gap-1 text-xs font-semibold text-muted-foreground">
                     <Star className="size-3.5 fill-amber-400 text-amber-500" />
                     <span>Đánh giá</span>
                   </div>
-                  <div className="mt-1 flex items-center justify-center gap-1 font-bold text-base text-foreground">
+                  <div className="mt-1 flex items-center justify-center gap-1 font-extrabold text-base text-foreground">
                     <span>{deck.rating_avg.toFixed(1)}</span>
                     <span className="text-xs font-normal text-muted-foreground">({deck.rating_count})</span>
                   </div>
                 </div>
 
-                <div className="rounded-xl border border-border/70 bg-muted/20 p-3.5 text-center">
-                  <div className="flex items-center justify-center gap-1 text-xs font-medium text-muted-foreground">
+                <div className="rounded-xl border border-border/80 bg-muted/30 p-3.5 sm:p-4 text-center transition-all hover:bg-muted/50">
+                  <div className="flex items-center justify-center gap-1 text-xs font-semibold text-muted-foreground">
                     <Download className="size-3.5 text-primary" />
-                    <span>Cài đặt</span>
+                    <span>Lượt cài</span>
                   </div>
-                  <div className="mt-1 font-bold text-base text-foreground">
+                  <div className="mt-1 font-extrabold text-base text-foreground">
                     {deck.install_count.toLocaleString('vi-VN')}
                   </div>
                 </div>
 
-                <div className="rounded-xl border border-border/70 bg-muted/20 p-3.5 text-center">
-                  <div className="flex items-center justify-center gap-1 text-xs font-medium text-muted-foreground">
+                <div className="rounded-xl border border-border/80 bg-muted/30 p-3.5 sm:p-4 text-center transition-all hover:bg-muted/50">
+                  <div className="flex items-center justify-center gap-1 text-xs font-semibold text-muted-foreground">
                     <Layers className="size-3.5 text-primary" />
-                    <span>Thẻ mẫu</span>
+                    <span>Xem mẫu</span>
                   </div>
-                  <div className="mt-1 font-bold text-base text-foreground">
+                  <div className="mt-1 font-extrabold text-base text-foreground">
                     {samples.length} từ
                   </div>
                 </div>
 
-                <div className="rounded-xl border border-border/70 bg-muted/20 p-3.5 text-center">
-                  <div className="flex items-center justify-center gap-1 text-xs font-medium text-muted-foreground">
+                <div className="rounded-xl border border-border/80 bg-muted/30 p-3.5 sm:p-4 text-center transition-all hover:bg-muted/50">
+                  <div className="flex items-center justify-center gap-1 text-xs font-semibold text-muted-foreground">
                     <Clock className="size-3.5 text-muted-foreground" />
                     <span>Cập nhật</span>
                   </div>
@@ -378,75 +393,18 @@ export function SharedDeckDetailPage() {
             </CardContent>
           </Card>
 
-          {/* Section 1: Xem nhanh - Interactive Sample Selector */}
-          <Card className="border-border shadow-xs">
-            <CardHeader className="pb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2 rounded-xl bg-primary/10 text-primary">
-                  <Sparkles className="size-5" />
-                </div>
-                <div>
-                  <CardTitle className="text-lg font-bold">Xem nhanh thẻ mẫu</CardTitle>
-                  <CardDescription className="text-xs">
-                    Bấm chọn từ bất kỳ để nạp vào phần xem trước
-                  </CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="text-xs font-medium text-muted-foreground">
-                {samples.length > 0
-                  ? `Đang hiển thị ${samples.length} mẫu ngẫu nhiên từ bộ deck:`
-                  : 'Deck này chưa có thẻ mẫu để chọn.'}
-              </div>
-
-              {samples.length > 0 ? (
-                <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
-                  {samples.map((sample, idx) => {
-                    const isSelected = idx === activeSampleIndex
-                    return (
-                      <button
-                        key={idx}
-                        type="button"
-                        onClick={() => setActiveSampleIndex(idx)}
-                        className={`flex flex-col text-left p-3.5 rounded-xl border transition-all text-sm cursor-pointer ${
-                          isSelected
-                            ? 'bg-primary text-primary-foreground border-primary shadow-xs font-semibold'
-                            : 'bg-card text-card-foreground hover:bg-muted/50 border-border'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-1">
-                          <strong className="font-bold text-base line-clamp-1">
-                            {sample.word || `Từ #${idx + 1}`}
-                          </strong>
-                        </div>
-                        <span
-                          className={`text-xs mt-1 line-clamp-1 ${
-                            isSelected ? 'text-primary-foreground/80 font-normal' : 'text-muted-foreground'
-                          }`}
-                        >
-                          {sample.reading || sample.meaning || 'Chưa có mô tả'}
-                        </span>
-                      </button>
-                    )
-                  })}
-                </div>
-              ) : null}
-            </CardContent>
-          </Card>
-
-          {/* Section 2: Live Anki Card Previewer */}
-          <Card className="border-border shadow-xs overflow-hidden">
-            <CardHeader className="pb-3 border-b bg-muted/20">
+          {/* Section 1: Interactive Sample & Live Previewer */}
+          <Card className="border-border shadow-xs overflow-hidden rounded-2xl">
+            <CardHeader className="p-4 sm:p-5 pb-3 border-b bg-muted/20">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-2.5">
-                  <div className="p-2 rounded-xl bg-primary/10 text-primary">
+                  <div className="p-2.5 rounded-xl bg-primary/10 text-primary">
                     <Eye className="size-5" />
                   </div>
                   <div>
-                    <CardTitle className="text-lg font-bold">Xem trước thẻ (Live Preview)</CardTitle>
+                    <CardTitle className="text-lg font-bold">Xem trước thẻ (Live Previewer)</CardTitle>
                     <CardDescription className="text-xs">
-                      Mô phỏng hiển thị thẻ Anki
+                      Mô phỏng hiển thị Anki Flashcard thực tế
                     </CardDescription>
                   </div>
                 </div>
@@ -454,7 +412,7 @@ export function SharedDeckDetailPage() {
                 {/* Controls */}
                 <div className="flex flex-wrap items-center gap-2">
                   {sourceNoteType ? (
-                    <Button variant="outline" size="sm" asChild className="h-8 text-xs font-semibold">
+                    <Button variant="outline" size="sm" asChild className="h-8 sm:h-9 text-xs font-semibold rounded-lg">
                       <Link to={`/marketplace/note-types/${sourceNoteType.id}`}>
                         <ExternalLink className="mr-1 size-3.5" />
                         {sourceNoteType.title || sourceNoteType.name || 'NoteType nguồn'}
@@ -466,7 +424,7 @@ export function SharedDeckDetailPage() {
                     <NativeSelect
                       value={selectedTemplateId}
                       onChange={(e) => setSelectedTemplateId(e.target.value)}
-                      className="h-8 text-xs w-36"
+                      className="h-8 sm:h-9 text-xs font-medium w-36 rounded-lg"
                     >
                       {templates.map((t) => (
                         <NativeSelectOption key={t.id} value={t.id}>
@@ -481,7 +439,7 @@ export function SharedDeckDetailPage() {
                     <Button
                       size="sm"
                       variant={previewSide === 'front' ? 'default' : 'ghost'}
-                      className="h-7 px-3.5 text-xs font-semibold rounded-md transition-all"
+                      className="h-8 px-3.5 text-xs font-bold rounded-md transition-all"
                       onClick={() => setPreviewSide('front')}
                     >
                       Mặt trước
@@ -489,7 +447,7 @@ export function SharedDeckDetailPage() {
                     <Button
                       size="sm"
                       variant={previewSide === 'back' ? 'default' : 'ghost'}
-                      className="h-7 px-3.5 text-xs font-semibold rounded-md transition-all"
+                      className="h-8 px-3.5 text-xs font-bold rounded-md transition-all"
                       onClick={() => setPreviewSide('back')}
                     >
                       Mặt sau
@@ -500,7 +458,7 @@ export function SharedDeckDetailPage() {
                     <Button
                       size="sm"
                       variant="outline"
-                      className="h-7 px-2.5 text-xs font-medium"
+                      className="h-8 px-3 text-xs font-semibold rounded-lg"
                       onClick={handlePrevSample}
                       disabled={!samples.length}
                       title="Mẫu trước"
@@ -511,7 +469,7 @@ export function SharedDeckDetailPage() {
                     <Button
                       size="sm"
                       variant="outline"
-                      className="h-7 px-2.5 text-xs font-medium"
+                      className="h-8 px-3 text-xs font-semibold rounded-lg"
                       onClick={handleNextSample}
                       disabled={!samples.length}
                       title="Mẫu tiếp theo"
@@ -524,7 +482,7 @@ export function SharedDeckDetailPage() {
               </div>
 
               {/* Status Indicator */}
-              <div className="flex flex-wrap items-center justify-between gap-2 pt-2 text-xs text-muted-foreground border-t border-border/50">
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-2.5 text-xs text-muted-foreground border-t border-border/50">
                 <div className="font-semibold text-foreground flex items-center gap-1.5">
                   <Sparkles className="size-3.5 text-primary" />
                   <span>
@@ -541,12 +499,43 @@ export function SharedDeckDetailPage() {
               </div>
             </CardHeader>
 
-            <CardContent className="p-4 bg-muted/30">
-              <div className="h-[clamp(20rem,50vh,32rem)] min-h-[240px] w-full overflow-hidden rounded-xl border border-border bg-card shadow-xs">
+            {/* Quick Word Select Chips */}
+            {samples.length > 0 ? (
+              <div className="p-3.5 bg-muted/10 border-b border-border/60">
+                <div className="text-xs font-semibold text-muted-foreground mb-2">Chọn nhanh từ mẫu:</div>
+                <div className="flex flex-wrap gap-2">
+                  {samples.map((sample, idx) => {
+                    const isSelected = idx === activeSampleIndex
+                    return (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => setActiveSampleIndex(idx)}
+                        className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                          isSelected
+                            ? 'bg-primary text-primary-foreground border-primary shadow-xs'
+                            : 'bg-card text-foreground hover:bg-muted border-border/80'
+                        }`}
+                      >
+                        <span>{sample.word || `Từ #${idx + 1}`}</span>
+                        {sample.reading ? (
+                          <span className={`text-[10px] ${isSelected ? 'opacity-90' : 'text-muted-foreground'}`}>
+                            ({sample.reading})
+                          </span>
+                        ) : null}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            ) : null}
+
+            <CardContent className="p-4 sm:p-5 bg-muted/30">
+              <div className="h-[clamp(20rem,50vh,32rem)] min-h-[250px] w-full overflow-hidden rounded-2xl border border-border bg-card shadow-xs">
                 {previewQuery.isPending ? (
                   <div className="flex h-full flex-col items-center justify-center p-8 space-y-2 text-muted-foreground">
                     <Loader2 className="size-6 animate-spin text-primary" />
-                    <span className="text-xs">Đang tải bản xem trước...</span>
+                    <span className="text-xs font-medium">Đang tải bản xem trước thẻ...</span>
                   </div>
                 ) : previewQuery.data ? (
                   <CardDisplay
@@ -571,24 +560,24 @@ export function SharedDeckDetailPage() {
           </Card>
 
           {/* Section 3: Community Reviews */}
-          <Card className="border-border shadow-xs">
-            <CardHeader className="pb-3">
+          <Card className="border-border shadow-xs rounded-2xl">
+            <CardHeader className="p-4 sm:p-5 pb-3">
               <div className="flex items-center gap-2.5">
-                <div className="p-2 rounded-xl bg-primary/10 text-primary">
+                <div className="p-2.5 rounded-xl bg-primary/10 text-primary">
                   <MessageSquare className="size-5" />
                 </div>
                 <div>
                   <CardTitle className="text-lg font-bold">Đánh giá & Nhận xét</CardTitle>
                   <CardDescription className="text-xs">
-                    Ý kiến từ học viên đã trải nghiệm bộ deck này
+                    Ý kiến đóng góp từ học viên đã trải nghiệm bộ deck này
                   </CardDescription>
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="space-y-6">
+            <CardContent className="p-4 sm:p-5 pt-0 space-y-6">
               {/* Form */}
               {deck.can_rate ? (
-                <div className="rounded-xl border border-border bg-card p-4 space-y-3 shadow-2xs">
+                <div className="rounded-2xl border border-border/80 bg-card p-4 space-y-3 shadow-2xs">
                   <div className="font-bold text-sm text-foreground">Gửi đánh giá của bạn</div>
                   <div className="flex items-center gap-3">
                     <div className="flex gap-1" onMouseLeave={() => setHoverScore(null)}>
@@ -616,22 +605,23 @@ export function SharedDeckDetailPage() {
                   </div>
 
                   <Textarea
-                    placeholder="Viết nhận xét của bạn..."
+                    placeholder="Viết nhận xét của bạn về chất lượng từ vựng, kanji hoặc bản xem trước..."
                     value={ratingComment}
                     onChange={(e) => setRatingComment(e.target.value)}
                     rows={3}
+                    className="text-xs sm:text-sm leading-relaxed rounded-xl"
                   />
 
                   {submitError ? (
                     <p className="text-xs text-destructive font-medium">{submitError}</p>
                   ) : null}
                   {submitSuccess ? (
-                    <p className="text-xs text-primary font-bold">{submitSuccess}</p>
+                    <p className="text-xs text-emerald-600 dark:text-emerald-400 font-bold">{submitSuccess}</p>
                   ) : null}
 
                   <Button
                     size="sm"
-                    className="font-bold"
+                    className="h-9 px-4 font-bold text-xs sm:text-sm shadow-2xs rounded-xl"
                     onClick={() => rateMutation.mutate()}
                     disabled={rateMutation.isPending}
                   >
@@ -642,43 +632,51 @@ export function SharedDeckDetailPage() {
                   </Button>
                 </div>
               ) : deck.my_review ? (
-                <div className="rounded-xl border bg-muted/30 p-3.5 text-sm space-y-1">
-                  <div className="font-bold text-xs text-muted-foreground uppercase">Đánh giá của bạn:</div>
+                <div className="rounded-2xl border border-border bg-muted/20 p-4 text-sm space-y-1">
+                  <div className="font-bold text-xs text-muted-foreground uppercase tracking-wider">Đánh giá của bạn:</div>
                   <div className="flex items-center gap-1 font-bold text-amber-500">
                     <Star className="size-4 fill-amber-400" />
                     <span>{deck.my_review.rating}/5 sao</span>
                   </div>
                   {deck.my_review.comment ? (
-                    <p className="text-foreground pt-1">{deck.my_review.comment}</p>
+                    <p className="text-foreground pt-1 text-xs leading-relaxed">{deck.my_review.comment}</p>
                   ) : null}
                 </div>
               ) : (
-                <div className="text-xs text-muted-foreground bg-muted/20 p-3 rounded-xl border">
-                  Bạn cần cài đặt học liệu để mở tính năng gửi đánh giá.
+                <div className="text-xs text-muted-foreground bg-muted/20 p-4 rounded-2xl border border-border/80 text-center">
+                  Bạn cần tải xuống & cài đặt học liệu để mở tính năng gửi đánh giá.
                 </div>
               )}
 
               {/* Reviews List */}
               <div className="space-y-3">
-                <div className="font-bold text-sm text-foreground">
-                  Nhận xét từ học viên ({deck.recent_reviews?.length || 0})
+                <div className="font-bold text-sm text-foreground flex items-center justify-between">
+                  <span>Nhận xét từ học viên</span>
+                  <Badge variant="outline" className="text-xs font-semibold rounded-md">
+                    {deck.recent_reviews?.length || 0} nhận xét
+                  </Badge>
                 </div>
 
                 {deck.recent_reviews && deck.recent_reviews.length > 0 ? (
                   <div className="space-y-3">
                     {deck.recent_reviews.map((rev, i) => (
-                      <div key={i} className="rounded-xl border border-border p-3.5 text-sm space-y-2 bg-card">
+                      <div key={i} className="rounded-2xl border border-border/80 p-4 text-sm space-y-2 bg-card shadow-2xs">
                         <div className="flex items-center justify-between">
-                          <span className="font-bold text-xs text-foreground">
-                            {rev.username || 'Học viên'}
-                          </span>
-                          <div className="flex items-center gap-1 font-bold text-xs text-amber-500">
+                          <div className="flex items-center gap-2">
+                            <div className="flex size-6 items-center justify-center rounded-full bg-primary/10 text-primary font-bold text-[10px]">
+                              {(rev.username || 'H').charAt(0).toUpperCase()}
+                            </div>
+                            <span className="font-bold text-xs text-foreground">
+                              {rev.username || 'Học viên'}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1 font-bold text-xs text-amber-500 bg-amber-500/10 px-2.5 py-0.5 rounded-full">
                             <Star className="size-3.5 fill-amber-400" />
                             <span>{rev.rating}/5</span>
                           </div>
                         </div>
-                        <p className="text-xs text-muted-foreground leading-relaxed">
-                          {rev.comment || 'Không để lại lời nhắn.'}
+                        <p className="text-xs text-muted-foreground leading-relaxed pl-8">
+                          {rev.comment || 'Học viên không để lại lời nhắn.'}
                         </p>
                       </div>
                     ))}
@@ -696,27 +694,28 @@ export function SharedDeckDetailPage() {
 
         {/* Right Sidebar Column */}
         <div className="space-y-6">
-          <Card className="sticky top-6 border-border shadow-xs">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base font-bold">Hành động</CardTitle>
+          <Card className="sticky top-6 border-border shadow-xs overflow-hidden rounded-2xl">
+            <div className="h-1.5 w-full bg-primary" />
+            <CardHeader className="p-4 sm:p-5 pb-3">
+              <CardTitle className="text-base font-bold">Hành động & Cài đặt</CardTitle>
               <CardDescription className="text-xs">
-                Đồng bộ bộ thẻ vào thư viện cá nhân để bắt đầu học.
+                Đồng bộ bộ thẻ vào thư viện cá nhân bằng Logical Overlay.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-3">
+            <CardContent className="p-4 sm:p-5 pt-0 space-y-3">
               {deck.is_owner ? (
-                <Button className="w-full font-bold" variant="secondary" disabled>
+                <Button className="w-full h-10 sm:h-11 font-bold text-xs sm:text-sm rounded-xl" variant="secondary" disabled>
                   <CheckCircle className="mr-1.5 size-4 text-primary" />
                   Bạn là tác giả bộ deck này
                 </Button>
               ) : deck.is_installed ? (
                 <div className="space-y-2">
-                  <Button className="w-full font-bold" variant="outline" disabled>
-                    <CheckCircle className="mr-1.5 size-4 text-primary" />
+                  <Button className="w-full h-10 sm:h-11 font-bold text-xs sm:text-sm border-emerald-500/40 text-emerald-600 dark:text-emerald-400 rounded-xl" variant="outline" disabled>
+                    <CheckCircle className="mr-1.5 size-4" />
                     Đã cài đặt vào thư viện
                   </Button>
                   {deck.installed_deck_id ? (
-                    <Button className="w-full font-bold" asChild>
+                    <Button className="w-full h-10 sm:h-11 font-bold text-xs sm:text-sm shadow-md bg-gradient-to-r from-primary to-primary/90 rounded-xl" asChild>
                       <Link to={`/study?deck_id=${deck.installed_deck_id}`}>
                         <Zap className="mr-1.5 size-4 fill-primary-foreground" />
                         Bắt đầu học ngay
@@ -726,7 +725,7 @@ export function SharedDeckDetailPage() {
                 </div>
               ) : (
                 <Button
-                  className="w-full font-bold text-base py-5 shadow-xs"
+                  className="w-full h-11 sm:h-12 font-bold text-sm sm:text-base shadow-md bg-gradient-to-r from-primary to-primary/90 hover:opacity-95 text-primary-foreground rounded-xl"
                   size="lg"
                   onClick={() => installMutation.mutate()}
                   disabled={installMutation.isPending}
@@ -742,7 +741,7 @@ export function SharedDeckDetailPage() {
 
               {!deck.is_owner ? (
                 <Button
-                  className="w-full font-semibold"
+                  className="w-full h-9 sm:h-10 font-semibold text-xs sm:text-sm rounded-xl"
                   variant="outline"
                   size="sm"
                   onClick={() => saveMutation.mutate(deck.is_saved)}
@@ -757,7 +756,7 @@ export function SharedDeckDetailPage() {
                 </Button>
               ) : null}
 
-              <div className="pt-3 border-t text-xs text-muted-foreground space-y-2">
+              <div className="pt-3 border-t border-border/60 text-xs text-muted-foreground space-y-2">
                 <div className="flex items-center gap-2">
                   <User className="size-4 text-primary" />
                   <span>Tác giả: <strong className="text-foreground">{authorName}</strong></span>
@@ -782,7 +781,7 @@ export function SharedDeckDetailPage() {
                   <Link
                     key={item.id}
                     to={`/marketplace/decks/${item.id}`}
-                    className="group block rounded-xl border border-border p-3 hover:bg-muted/40 transition-colors"
+                    className="group block rounded-2xl border border-border p-3 hover:bg-muted/40 hover:border-primary/40 transition-all"
                   >
                     <div className="font-bold text-xs text-foreground group-hover:text-primary transition-colors line-clamp-1">
                       {item.title || item.name || 'Bộ thẻ liên quan'}
