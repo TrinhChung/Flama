@@ -1,4 +1,4 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
 
 {% block title %}Home{% endblock %}
 
@@ -365,7 +365,8 @@
   }
 
   .deck-settings-btn {
-    display: none;
+    display: inline-flex;
+    opacity: 0;
     align-items: center;
     justify-content: center;
     width: 1.9rem;
@@ -376,9 +377,7 @@
     margin: 0 auto;
     cursor: pointer;
     color: var(--flama-text-2);
-    opacity: 0.75;
-    transition: opacity 0.2s ease, color 0.2s ease, background-color 0.2s ease, border-color 0.2s ease,
-      transform 0.2s ease;
+    transition: opacity 0.2s ease, color 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
   }
 
   .deck-settings-btn i {
@@ -387,8 +386,10 @@
   }
 
   .deck-row:hover .deck-settings-btn,
-  .deck-row.is-selected .deck-settings-btn {
-    display: inline-flex;
+  .deck-row.is-selected .deck-settings-btn,
+  .deck-settings-wrapper.show .deck-settings-btn,
+  .deck-settings-btn[aria-expanded="true"] {
+    opacity: 0.75;
   }
 
   .deck-settings-btn:hover {
@@ -396,7 +397,6 @@
     color: var(--flama-orange-700);
     background: var(--flama-orange-50);
     border-color: var(--flama-orange-300);
-    transform: rotate(15deg);
   }
 
   .deck-settings-btn:focus-visible {
@@ -425,6 +425,7 @@
   }
 
   .deck-settings-wrapper {
+    position: relative;
     display: flex;
     justify-content: center;
     align-items: center;
