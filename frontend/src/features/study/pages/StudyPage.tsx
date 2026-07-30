@@ -118,33 +118,58 @@ export function StudyPage() {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      const activeTag = (document.activeElement?.tagName || '').toLowerCase()
-      if (activeTag === 'input' || activeTag === 'textarea') return
+      const activeEl = document.activeElement
+      const activeTag = (activeEl?.tagName || '').toLowerCase()
+      if (activeTag === 'input' || activeTag === 'textarea' || (activeEl as HTMLElement)?.isContentEditable) return
 
-      if (event.code === 'Space' || event.code === 'Enter') {
+      const code = event.code
+      const key = event.key
+
+      const isSpaceOrEnter = code === 'Space' || key === ' ' || key === 'Spacebar' || code === 'Enter' || key === 'Enter'
+      const isOne = key === '1' || code === 'Digit1' || code === 'Numpad1'
+      const isTwo = key === '2' || code === 'Digit2' || code === 'Numpad2'
+      const isThree = key === '3' || code === 'Digit3' || code === 'Numpad3'
+      const isFour = key === '4' || code === 'Digit4' || code === 'Numpad4'
+      const isFullscreenKey = key === 'f' || key === 'F' || code === 'KeyF'
+
+      if (isSpaceOrEnter) {
         event.preventDefault()
         if (!card?.card_id) return
         if (!revealed) handleReveal()
         else void handleAnswer('good')
-      } else if (event.key === '1' && revealed) {
+      } else if (isOne && revealed) {
         event.preventDefault()
         void handleAnswer('again')
-      } else if (event.key === '2' && revealed) {
+      } else if (isTwo && revealed) {
         event.preventDefault()
         void handleAnswer('hard')
-      } else if (event.key === '3' && revealed) {
+      } else if (isThree && revealed) {
         event.preventDefault()
         void handleAnswer('good')
-      } else if (event.key === '4' && revealed) {
+      } else if (isFour && revealed) {
         event.preventDefault()
         void handleAnswer('easy')
-      } else if (event.key === 'f' || event.key === 'F') {
+      } else if (isFullscreenKey) {
         event.preventDefault()
         handleToggleFullscreen()
       }
     }
+
+    const handleFocusBack = () => {
+      // Blur buttons or input elements if returning to screen
+      const activeEl = document.activeElement as HTMLElement | null
+      const activeTag = (activeEl?.tagName || '').toLowerCase()
+      if (activeTag === 'button' || activeTag === 'a') {
+        activeEl?.blur()
+      }
+    }
+
     window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
+    window.addEventListener('focus', handleFocusBack)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('focus', handleFocusBack)
+    }
   }, [
     card?.card_id,
     handleAnswer,

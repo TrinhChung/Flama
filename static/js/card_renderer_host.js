@@ -544,6 +544,20 @@
       "      applyPatchedContent(data.payload || {});",
       "    }",
       "  });",
+      "  window.addEventListener('keydown', function (event) {",
+      "    var tag = (event.target && event.target.tagName || '').toLowerCase();",
+      "    if (tag === 'input' || tag === 'textarea' || (event.target && event.target.isContentEditable)) {",
+      "      return;",
+      "    }",
+      "    post('keydown_event', {",
+      "      key: event.key,",
+      "      code: event.code,",
+      "      shiftKey: event.shiftKey,",
+      "      altKey: event.altKey,",
+      "      ctrlKey: event.ctrlKey,",
+      "      metaKey: event.metaKey",
+      "    });",
+      "  });",
       "  window.addEventListener('error', function (event) {",
       "    post('log_error', { message: String((event && event.message) || 'Sandbox renderer error.') });",
       "  }, true);",
@@ -801,6 +815,24 @@
       }
       if (action === "pause_audio") {
         pauseApprovedAudio(payload.ref);
+        return;
+      }
+      if (action === "keydown_event") {
+        try {
+          const evt = new KeyboardEvent("keydown", {
+            key: payload.key,
+            code: payload.code,
+            shiftKey: payload.shiftKey,
+            altKey: payload.altKey,
+            ctrlKey: payload.ctrlKey,
+            metaKey: payload.metaKey,
+            bubbles: true,
+            cancelable: true,
+          });
+          global.dispatchEvent(evt);
+        } catch (_err) {
+          // Ignore event construction error on old browsers
+        }
         return;
       }
       if (action === "log_error") {

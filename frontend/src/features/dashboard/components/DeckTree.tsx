@@ -111,8 +111,8 @@ function DeckRow({
                 <button
                   type="button"
                   className={cn(
-                    'deck-settings-btn hidden group-hover:inline-flex size-7 items-center justify-center rounded-full text-muted-foreground opacity-75 transition-all hover:opacity-100 hover:text-orange-700 hover:bg-orange-50 border border-transparent hover:border-orange-300 hover:rotate-12',
-                    isSelected && 'inline-flex opacity-100',
+                    'deck-settings-btn inline-flex opacity-0 group-hover:opacity-75 data-[state=open]:opacity-100 size-7 items-center justify-center rounded-full text-muted-foreground transition-all hover:opacity-100 hover:text-orange-700 hover:bg-orange-50 border border-transparent hover:border-orange-300',
+                    isSelected && 'opacity-100',
                   )}
                   onClick={(e) => e.stopPropagation()}
                   aria-label="Deck Settings"
