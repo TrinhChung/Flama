@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { ChevronLeft, ChevronRight } from '@/shared/components/Icons'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
@@ -79,6 +79,35 @@ export function StudyHeatmap({
   const [tooltipText, setTooltipText] = useState<string>('Rê chuột lên các ô để xem chi tiết học tập.')
   const todayStr = getTodayStr()
 
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const todayRef = useRef<HTMLButtonElement>(null)
+
+  const scrollToToday = useCallback(() => {
+    if (scrollContainerRef.current && todayRef.current) {
+      const container = scrollContainerRef.current
+      const todayCell = todayRef.current
+      const containerRect = container.getBoundingClientRect()
+      const todayRect = todayCell.getBoundingClientRect()
+
+      if (containerRect.width > 0) {
+        const relativeLeft = todayRect.left - containerRect.left + container.scrollLeft
+        const targetScrollLeft = relativeLeft - containerRect.width / 2 + todayRect.width / 2
+        container.scrollLeft = Math.max(0, targetScrollLeft)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    if (loading) return
+
+    const timer = setTimeout(scrollToToday, 50)
+    window.addEventListener('resize', scrollToToday)
+    return () => {
+      clearTimeout(timer)
+      window.removeEventListener('resize', scrollToToday)
+    }
+  }, [overview, loading, year, scrollToToday])
+
   const todayData = overview?.today
   const summaryText = todayData
     ? `Hôm nay đã học ${todayData.cards.toLocaleString('vi-VN')} thẻ trong ${todayData.minutes.toFixed(
@@ -149,7 +178,7 @@ export function StudyHeatmap({
           )}
 
           {/* Heatmap Grid */}
-          <div className="stats-heatmap-scroll overflow-x-auto pb-2">
+          <div ref={scrollContainerRef} className="stats-heatmap-scroll overflow-x-auto pb-2">
             <div
               className="stats-heatmap grid gap-[3px] min-w-[720px] p-1"
               style={{
@@ -179,6 +208,7 @@ export function StudyHeatmap({
                     return (
                       <button
                         key={day.date}
+                        ref={isToday ? todayRef : undefined}
                         type="button"
                         className={cn(
                           'stats-day relative aspect-square w-full rounded-[2px] border-0 p-0 transition-transform duration-150 hover:scale-125 focus-visible:outline-2 focus-visible:outline-orange-400 cursor-pointer',

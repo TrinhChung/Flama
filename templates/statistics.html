@@ -960,6 +960,9 @@
       const weeks = buildHeatmapWeeks(heatmap);
       heatmapEl.style.setProperty("--stats-week-count", String(Math.max(1, weeks.length)));
 
+      const d = new Date();
+      const todayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
       weeks.forEach((week) => {
         const weekEl = document.createElement("div");
         weekEl.className = "stats-week";
@@ -975,11 +978,12 @@
           const cards = intVal(item.cards);
           const level = heatLevel(cards, maxCards);
           const day = String(item.day || item.date || "");
+          const isToday = day === todayStr;
           const source = String(item.source || "reviewed").toLowerCase() === "due" ? "due" : "reviewed";
           const sourceLabel = source === "due" ? "Dự báo" : "Đã học";
           const cell = document.createElement("button");
           cell.type = "button";
-          cell.className = `stats-day stats-day--${source} stats-day--level-${level}${item.is_future ? " stats-day--future" : ""}`;
+          cell.className = `stats-day stats-day--${source} stats-day--level-${level}${item.is_future ? " stats-day--future" : ""}${isToday ? " stats-day--today" : ""}`;
           cell.setAttribute("aria-label", `${day} ${sourceLabel.toLowerCase()} ${cards} cards`);
           cell.title = `${day} · ${sourceLabel}: ${cards} thẻ`;
           const showTooltip = () => updateHeatmapTooltip(item);
@@ -990,6 +994,20 @@
         });
         heatmapEl.appendChild(weekEl);
       });
+
+      const todayCell = heatmapEl.querySelector(".stats-day--today");
+      const scrollContainer = heatmapEl.parentElement;
+      if (scrollContainer && todayCell) {
+        setTimeout(() => {
+          const containerRect = scrollContainer.getBoundingClientRect();
+          const todayRect = todayCell.getBoundingClientRect();
+          if (containerRect.width > 0) {
+            const relativeLeft = todayRect.left - containerRect.left + scrollContainer.scrollLeft;
+            const targetScrollLeft = relativeLeft - containerRect.width / 2 + todayRect.width / 2;
+            scrollContainer.scrollLeft = Math.max(0, targetScrollLeft);
+          }
+        }, 50);
+      }
 
       if (tooltipEl) {
         const firstDay = heatmap.find((item) => intVal(item.cards) > 0) || heatmap[0];
