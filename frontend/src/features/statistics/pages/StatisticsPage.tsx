@@ -13,7 +13,7 @@ import { Label } from '@/components/ui/label'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { DashboardHeatmap } from '@/features/dashboard/components/DashboardHeatmap'
+import { StudyHeatmap } from '@/shared/components/StudyHeatmap'
 import { Page, PageHeader, SectionCard } from '@/shared/components/Page'
 import { PageError, PageLoading } from '@/shared/components/PageState'
 import { useStatisticsConfig, useTodayFutureStats } from '../api'
@@ -164,11 +164,11 @@ export function StatisticsPage() {
                 <div className="min-w-0 flex-1">
                   <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Chuỗi Streak</span>
                   <div className="mt-0.5 text-2xl font-bold tracking-tight text-foreground tabular-nums">
-                    {(overview?.metrics.current_streak_days ?? 0).toLocaleString('vi-VN')}{' '}
+                    {(overview?.metrics?.current_streak_days ?? 0).toLocaleString('vi-VN')}{' '}
                     <span className="text-xs font-medium text-muted-foreground">ngày</span>
                   </div>
                   <p className="mt-1 truncate text-xs text-muted-foreground">
-                    Kỷ lục: {overview?.metrics.longest_streak_days ?? 0}d · Học {overview?.metrics.days_learned_percent ?? 0}% ngày
+                    Kỷ lục: {overview?.metrics?.longest_streak_days ?? 0}d · Học {overview?.metrics?.days_learned_percent ?? 0}% ngày
                   </p>
                 </div>
               </div>
@@ -214,7 +214,7 @@ export function StatisticsPage() {
           </div>
 
           {/* Yearly Heatmap Component */}
-          <DashboardHeatmap
+          <StudyHeatmap
             overview={overview}
             loading={overviewQuery.isPending}
             year={currentYear}

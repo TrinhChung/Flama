@@ -40,34 +40,14 @@ export type DashboardPayload = {
   }
 }
 
-export type DashboardHeatmapDay = {
-  day: string
-  date: string
-  cards: number
-  study_time: number
-  minutes: number
-  sec_per_card: number
-  is_future: boolean
-  source: 'reviewed' | 'due'
-}
+import type {
+  HeatmapDay,
+  HeatmapOverviewData,
+} from '@/shared/types/heatmap'
 
-export type DashboardOverview = {
-  year: number
-  timezone: string
-  today: {
-    cards: number
-    minutes: number
-    sec_per_card: number
-  }
-  heatmap: DashboardHeatmapDay[]
-  metrics: {
-    daily_average_cards: number
-    days_learned_percent: number
-    longest_streak_days: number
-    current_streak_days: number
-    days_counted: number
-  }
-}
+export type DashboardHeatmapDay = HeatmapDay
+export type DashboardOverview = HeatmapOverviewData
+
 
 export type DeckAction = 'rename' | 'move' | 'reset' | 'delete'
 
