@@ -212,29 +212,29 @@ export function NoteTypeDetailPage() {
   if (detailQuery.error) return <Page><PageError error={detailQuery.error} /></Page>
 
   return (
-    <Page className="w-full max-w-none px-2 sm:px-4 lg:px-8 py-2 sm:py-3 space-y-2.5 sm:space-y-3">
+    <Page className="w-full max-w-none px-4 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4 sm:space-y-5">
       {/* Top Header Row */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-2 sm:mb-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-2 sm:mb-3">
         <div className="min-w-0">
           <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground truncate">
             {noteType?.name || 'NoteType Detail'}
           </h2>
-          <span className="text-[11px] sm:text-xs text-muted-foreground">Field + template management</span>
+          <span className="text-xs text-muted-foreground">Field + template management</span>
         </div>
-        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-          <Button variant="outline" size="sm" asChild className="h-7 sm:h-8 px-2 sm:px-3 text-[11px] sm:text-xs">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" size="sm" asChild className="h-8 sm:h-9 px-3 text-xs font-semibold rounded-lg">
             <Link to="/flashcards/note-types">
               <ArrowLeft className="size-3.5 mr-1" /> Back
             </Link>
           </Button>
 
-          <Button variant="secondary" size="sm" asChild className="h-7 sm:h-8 px-2 sm:px-3 text-[11px] sm:text-xs bg-slate-900 text-white hover:bg-slate-800">
+          <Button variant="secondary" size="sm" asChild className="h-8 sm:h-9 px-3 text-xs font-semibold bg-slate-900 text-white hover:bg-slate-800 rounded-lg">
             <a href={`/flashcards/share-note-type/${noteTypeId}`}>
               <Share2 className="size-3.5 mr-1 text-orange-400" /> Share Listing
             </a>
           </Button>
 
-          <Button variant="outline" size="sm" asChild className="h-7 sm:h-8 px-2 sm:px-3 text-[11px] sm:text-xs">
+          <Button variant="outline" size="sm" asChild className="h-8 sm:h-9 px-3 text-xs font-semibold rounded-lg">
             <Link to={`/flashcards/note-types/${noteTypeId}/fields`}>
               <SlidersHorizontal className="size-3.5 mr-1" /> Edit Fields
             </Link>
@@ -242,17 +242,17 @@ export function NoteTypeDetailPage() {
         </div>
       </div>
 
-      <div className="grid gap-3 lg:grid-cols-12 items-stretch mb-4">
+      <div className="grid gap-4 lg:grid-cols-12 items-stretch mb-4">
         {/* Left Column: Template Editor */}
         <div className="lg:col-span-6 flex flex-col">
-          <Card className="p-2.5 sm:p-3 border-0 sm:border border-border/80 shadow-none sm:shadow-sm flex-1 flex flex-col rounded-xl">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
-              <h3 className="text-xs sm:text-sm font-semibold text-foreground">Template Editor</h3>
-              <div className="flex items-center gap-1.5 sm:gap-2 w-full sm:w-auto overflow-x-auto pb-0.5">
+          <Card className="p-4 sm:p-5 border-0 sm:border border-border/80 shadow-none sm:shadow-xs flex-1 flex flex-col rounded-2xl">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-3">
+              <h3 className="text-sm font-semibold text-foreground">Template Editor</h3>
+              <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto pb-0.5">
                 <NativeSelect
                   value={selectedTemplateId || ''}
                   onChange={(e) => setSelectedTemplateId(e.target.value)}
-                  className="h-7 sm:h-8 text-xs flex-1 sm:w-36 min-w-[100px]"
+                  className="h-8 sm:h-9 text-xs flex-1 sm:w-40 min-w-[120px] rounded-lg"
                 >
                   {templates.map((tmpl) => (
                     <NativeSelectOption key={tmpl.id} value={tmpl.id}>
@@ -264,7 +264,7 @@ export function NoteTypeDetailPage() {
                 <Button
                   size="sm"
                   variant="outline"
-                  className="h-7 sm:h-8 px-2 text-[11px] sm:text-xs shrink-0"
+                  className="h-8 sm:h-9 px-3 text-xs font-semibold rounded-lg shrink-0"
                   onClick={() => createTemplateMutation.mutate()}
                 >
                   <Plus className="size-3.5 mr-1" /> New
@@ -273,7 +273,7 @@ export function NoteTypeDetailPage() {
                 <Button
                   size="sm"
                   variant="outline"
-                  className="h-7 sm:h-8 px-2 text-[11px] sm:text-xs text-amber-700 hover:bg-amber-50 shrink-0"
+                  className="h-8 sm:h-9 px-3 text-xs font-semibold text-amber-700 hover:bg-amber-50 rounded-lg shrink-0"
                   onClick={() => {
                     if (window.confirm('Khôi phục template về mặc định ban đầu?')) {
                       resetTemplateMutation.mutate()
@@ -286,9 +286,9 @@ export function NoteTypeDetailPage() {
             </div>
 
             {/* Placeholder Toolbar */}
-            <div className="mb-2">
-              <span className="text-[11px] sm:text-xs text-muted-foreground">Insert placeholder:</span>
-              <div className="flex flex-wrap gap-1 mt-1 max-h-24 overflow-y-auto pr-0.5">
+            <div className="mb-3">
+              <span className="text-xs text-muted-foreground">Insert placeholder:</span>
+              <div className="flex flex-wrap gap-1.5 mt-1.5 max-h-28 overflow-y-auto pr-0.5">
                 {fields.map((field) => (
                   <Button
                     key={field.id}
@@ -296,7 +296,7 @@ export function NoteTypeDetailPage() {
                     variant="outline"
                     size="sm"
                     onClick={() => insertPlaceholder(field.name)}
-                    className="h-6 sm:h-7 px-1.5 sm:px-2 text-[11px] sm:text-xs font-mono text-foreground hover:bg-orange-50 hover:border-orange-300 hover:text-orange-700 transition-all cursor-pointer"
+                    className="h-7 sm:h-8 px-2 sm:px-2.5 text-xs font-mono text-foreground hover:bg-orange-50 hover:border-orange-300 hover:text-orange-700 transition-all cursor-pointer rounded-md"
                   >
                     {`{{${field.name}}}`}
                   </Button>
@@ -312,14 +312,14 @@ export function NoteTypeDetailPage() {
               onValueChange={(val) => setActiveTab(val as 'front' | 'back' | 'css')}
               className="flex-1 flex flex-col"
             >
-              <TabsList className="grid grid-cols-3 w-full h-7 sm:h-8 mb-2">
-                <TabsTrigger value="front" className="text-[11px] sm:text-xs font-semibold py-1">
+              <TabsList className="grid grid-cols-3 w-full h-8 sm:h-9 p-1 mb-2 rounded-lg">
+                <TabsTrigger value="front" className="text-xs font-semibold py-1 rounded-md">
                   Front HTML
                 </TabsTrigger>
-                <TabsTrigger value="back" className="text-[11px] sm:text-xs font-semibold py-1">
+                <TabsTrigger value="back" className="text-xs font-semibold py-1 rounded-md">
                   Back HTML
                 </TabsTrigger>
-                <TabsTrigger value="css" className="text-[11px] sm:text-xs font-semibold py-1">
+                <TabsTrigger value="css" className="text-xs font-semibold py-1 rounded-md">
                   Shared CSS
                 </TabsTrigger>
               </TabsList>
@@ -331,7 +331,7 @@ export function NoteTypeDetailPage() {
                   }}
                   value={frontHtml}
                   onChange={(e) => setFrontHtml(e.target.value)}
-                  className="w-full font-mono text-[11px] sm:text-xs p-2.5 sm:p-3 rounded-md border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring min-h-[12rem] sm:min-h-[20rem] h-[clamp(14rem,40vh,30rem)] resize-y overflow-auto overscroll-contain"
+                  className="w-full font-mono text-xs sm:text-sm p-3 rounded-xl border border-input bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 min-h-[12rem] sm:min-h-[20rem] h-[clamp(14rem,40vh,30rem)] resize-y overflow-auto overscroll-contain"
                   placeholder="<h2>{{Word}}</h2>"
                 />
               </TabsContent>
@@ -343,7 +343,7 @@ export function NoteTypeDetailPage() {
                   }}
                   value={backHtml}
                   onChange={(e) => setBackHtml(e.target.value)}
-                  className="w-full font-mono text-[11px] sm:text-xs p-2.5 sm:p-3 rounded-md border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring min-h-[12rem] sm:min-h-[20rem] h-[clamp(14rem,40vh,30rem)] resize-y overflow-auto overscroll-contain"
+                  className="w-full font-mono text-xs sm:text-sm p-3 rounded-xl border border-input bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 min-h-[12rem] sm:min-h-[20rem] h-[clamp(14rem,40vh,30rem)] resize-y overflow-auto overscroll-contain"
                   placeholder="<h2>{{Word}}</h2><hr/><p>{{Meaning}}</p>"
                 />
               </TabsContent>
@@ -355,13 +355,13 @@ export function NoteTypeDetailPage() {
                   }}
                   value={sharedCss}
                   onChange={(e) => setSharedCss(e.target.value)}
-                  className="w-full font-mono text-[11px] sm:text-xs p-2.5 sm:p-3 rounded-md border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring min-h-[12rem] sm:min-h-[20rem] h-[clamp(14rem,40vh,30rem)] resize-y overflow-auto overscroll-contain"
+                  className="w-full font-mono text-xs sm:text-sm p-3 rounded-xl border border-input bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 min-h-[12rem] sm:min-h-[20rem] h-[clamp(14rem,40vh,30rem)] resize-y overflow-auto overscroll-contain"
                   placeholder=".card { text-align: center; color: #333; }"
                 />
               </TabsContent>
             </Tabs>
 
-            <div className="pt-2.5 flex justify-start border-t mt-2.5">
+            <div className="pt-3 flex justify-start border-t mt-3">
               <Button
                 size="sm"
                 disabled={saveMutation.isPending}
@@ -372,7 +372,7 @@ export function NoteTypeDetailPage() {
                     shared_css: sharedCss,
                   })
                 }
-                className="bg-primary text-primary-foreground font-semibold px-4 h-7 sm:h-8 text-xs"
+                className="bg-primary text-primary-foreground font-bold px-5 h-8 sm:h-9 text-xs sm:text-sm rounded-lg shadow-xs"
               >
                 <Check className="size-3.5 mr-1" /> Save
               </Button>
@@ -382,17 +382,17 @@ export function NoteTypeDetailPage() {
 
         {/* Right Column: Live Preview Frame */}
         <div className="lg:col-span-6 flex flex-col">
-          <Card className="p-2.5 sm:p-3 border-0 sm:border border-border/80 shadow-none sm:shadow-sm flex-1 flex flex-col rounded-xl">
-            <div className="flex items-center gap-1.5 sm:gap-2 mb-2 min-h-[28px] sm:h-[31px]">
-              <h3 className="text-xs sm:text-sm font-semibold text-foreground">Live Preview</h3>
-              <span className="text-[11px] sm:text-xs text-muted-foreground">(Uses sample field data)</span>
+          <Card className="p-4 sm:p-5 border-0 sm:border border-border/80 shadow-none sm:shadow-xs flex-1 flex flex-col rounded-2xl">
+            <div className="flex items-center gap-2 mb-3 min-h-[32px] sm:h-[36px]">
+              <h3 className="text-sm font-semibold text-foreground">Live Preview</h3>
+              <span className="text-xs text-muted-foreground">(Uses sample field data)</span>
               {isPreviewLoading ? (
-                <span className="text-[11px] text-orange-600 font-semibold animate-pulse ml-auto">
+                <span className="text-xs text-orange-600 font-semibold animate-pulse ml-auto">
                   Đang cập nhật…
                 </span>
               ) : null}
             </div>
-            <div className="h-[clamp(14rem,40vh,30rem)] min-h-[200px] sm:min-h-[240px] w-full flex-1 overflow-hidden rounded-md border border-border bg-[#f8f9fa]">
+            <div className="h-[clamp(14rem,40vh,30rem)] min-h-[200px] sm:min-h-[240px] w-full flex-1 overflow-hidden rounded-xl border border-border bg-[#f8f9fa]">
               {previewError ? (
                 <div className="flex h-full items-center justify-center p-6 text-center text-sm text-destructive">
                   {previewError}

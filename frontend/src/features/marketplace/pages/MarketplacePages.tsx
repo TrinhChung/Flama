@@ -1,14 +1,27 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Search, Star } from 'lucide-react'
+import {
+  ArrowRight,
+  BookOpen,
+  CheckCircle,
+  Download,
+  Eye,
+  Filter,
+  Layers,
+  Search,
+  Sparkles,
+  Star,
+  X,
+  Zap,
+} from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { appApi } from '@/app/api'
+import { AmbientBackground } from '@/components/ambient-background'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   Card,
   CardContent,
-  CardDescription,
   CardFooter,
   CardHeader,
   CardTitle,
@@ -17,7 +30,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Page, PageHeader } from '@/shared/components/Page'
+import { Page } from '@/shared/components/Page'
 import {
   EmptyState,
   PageError,
@@ -81,121 +94,262 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
     [marketQuery.data?.items],
   )
 
-  const title = mode === 'decks' ? 'Shared Decks' : 'Shared NoteTypes'
+  const isFiltered = Boolean(queryText || category)
 
   return (
-    <Page>
-      <PageHeader
-        title={title}
-        description="Khám phá học liệu từ cộng đồng và cài bằng logical overlay."
-        actions={
-          <Button asChild>
-            <Link to={mode === 'decks' ? '/installed-decks' : '/note-types'}>
-              {mode === 'decks' ? 'Deck đã cài' : 'Loại thẻ của tôi'}
-            </Link>
-          </Button>
-        }
-      />
+    <Page className="space-y-6 relative px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
+      {/* Ambient background glow & grid pattern from Login page */}
+      <AmbientBackground intensity="vibrant" />
 
-      <Card>
-        <CardContent className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_200px_auto] lg:items-end">
-          <div className="space-y-2">
-            <Label htmlFor="marketplace-search">Tìm trong marketplace</Label>
+      {/* Hero Banner Header */}
+      <div className="relative overflow-hidden rounded-2xl border border-primary/20 bg-card/80 p-5 sm:p-7 shadow-md backdrop-blur-xl">
+        <div className="relative z-10 space-y-3.5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <Badge variant="outline" className="border-primary/40 bg-primary/10 text-primary font-bold text-[11px] px-2.5 py-0.5">
+                  <Sparkles className="mr-1 size-3" />
+                  Flama Marketplace
+                </Badge>
+              </div>
+              <h1 className="text-2xl font-black tracking-tight text-foreground sm:text-3xl">
+                {mode === 'decks' ? 'Bộ Thẻ Cộng Đồng' : 'Mẫu Thẻ NoteTypes'}
+              </h1>
+              <p className="max-w-2xl text-xs sm:text-sm leading-relaxed text-muted-foreground">
+                {mode === 'decks'
+                  ? 'Khám phá bộ thẻ từ cộng đồng với cơ chế Logical Overlay thông minh, bảo toàn thẻ tự tùy chỉnh cá nhân.'
+                  : 'Sử dụng các mẫu loại thẻ Anki chuẩn đẹp, tối ưu hiển thị kanji, từ vựng và ngữ pháp cho lộ trình học.'}
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Button
+                variant={mode === 'decks' ? 'default' : 'outline'}
+                size="sm"
+                asChild
+                className="font-bold text-xs sm:text-sm h-9 px-3.5 shadow-2xs rounded-xl"
+              >
+                <Link to="/marketplace/decks">
+                  <BookOpen className="mr-1.5 size-3.5" />
+                  Bộ Thẻ (Decks)
+                </Link>
+              </Button>
+              <Button
+                variant={mode === 'note-types' ? 'default' : 'outline'}
+                size="sm"
+                asChild
+                className="font-bold text-xs sm:text-sm h-9 px-3.5 shadow-2xs rounded-xl"
+              >
+                <Link to="/marketplace/note-types">
+                  <Layers className="mr-1.5 size-3.5" />
+                  Loại Thẻ (NoteTypes)
+                </Link>
+              </Button>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-2.5 border-t border-border/40 text-xs text-muted-foreground">
+            <div className="flex items-center gap-3">
+              <span>
+                Đang hiển thị:{' '}
+                <strong className="text-foreground font-bold">
+                  {marketQuery.data?.items.length || 0}
+                </strong>{' '}
+                {mode === 'decks' ? 'bộ thẻ' : 'loại thẻ'}
+              </span>
+              <span className="hidden sm:inline">•</span>
+              <span className="hidden sm:inline-flex items-center gap-1 font-medium text-emerald-600 dark:text-emerald-400">
+                <CheckCircle className="size-3.5" /> Logical Overlay Cutover Ready
+              </span>
+            </div>
+
+            <Button variant="ghost" size="sm" asChild className="h-8 px-3 text-xs font-semibold text-primary hover:text-primary rounded-lg">
+              <Link to={mode === 'decks' ? '/installed-decks' : '/note-types'}>
+                {mode === 'decks' ? 'Quản lý deck đã cài →' : 'Quản lý loại thẻ của tôi →'}
+              </Link>
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* Filter & Search Toolbar */}
+      <Card className="border-border/80 bg-card/90 backdrop-blur-md shadow-xs rounded-2xl">
+        <CardContent className="grid gap-3.5 p-4 sm:p-5 lg:grid-cols-[minmax(0,1fr)_200px_auto] lg:items-end">
+          <div className="space-y-1.5">
+            <Label htmlFor="marketplace-search" className="text-xs font-bold text-foreground flex items-center gap-1.5">
+              <Search className="size-3.5 text-primary" /> Tìm trong marketplace
+            </Label>
             <div className="relative">
-              <Search className="absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 id="marketplace-search"
-                className="pl-8"
-                placeholder="Tên, tác giả hoặc tag…"
+                className="pl-8 pr-8 text-xs sm:text-sm h-9 sm:h-10 rounded-xl"
+                placeholder="Tên bộ thẻ, tác giả hoặc từ khóa…"
                 value={queryText}
                 onChange={(event) => setQueryText(event.currentTarget.value)}
               />
+              <Search className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+              {queryText ? (
+                <button
+                  type="button"
+                  onClick={() => setQueryText('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded-full hover:bg-muted text-muted-foreground hover:text-foreground"
+                >
+                  <X className="size-3.5" />
+                </button>
+              ) : null}
             </div>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="marketplace-category">Danh mục</Label>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="marketplace-category" className="text-xs font-bold text-foreground flex items-center gap-1.5">
+              <Filter className="size-3.5 text-primary" /> Danh mục
+            </Label>
             <NativeSelect
               id="marketplace-category"
-              className="w-full"
+              className="w-full text-xs sm:text-sm font-medium h-9 sm:h-10 rounded-xl"
               value={category}
               onChange={(event) => setCategory(event.currentTarget.value)}
             >
-              <NativeSelectOption value="">Tất cả</NativeSelectOption>
+              <NativeSelectOption value="">Tất cả danh mục</NativeSelectOption>
               {categories.map((item) => (
-                <NativeSelectOption key={item} value={item}>{item}</NativeSelectOption>
+                <NativeSelectOption key={item} value={item}>
+                  {item}
+                </NativeSelectOption>
               ))}
             </NativeSelect>
           </div>
-          <Tabs value={view} onValueChange={(value) => setView(value as SortView)}>
-            <TabsList className="w-full lg:w-auto">
-              <TabsTrigger value="recommended">Đề xuất</TabsTrigger>
-              <TabsTrigger value="newest">Mới nhất</TabsTrigger>
-              <TabsTrigger value="popular">Phổ biến</TabsTrigger>
-            </TabsList>
-          </Tabs>
+
+          <div className="flex items-center gap-2">
+            <Tabs value={view} onValueChange={(value) => setView(value as SortView)}>
+              <TabsList className="w-full lg:w-auto h-9 sm:h-10 p-1 rounded-xl">
+                <TabsTrigger value="recommended" className="text-xs font-semibold px-3.5 py-1 rounded-lg">Đề xuất</TabsTrigger>
+                <TabsTrigger value="newest" className="text-xs font-semibold px-3.5 py-1 rounded-lg">Mới nhất</TabsTrigger>
+                <TabsTrigger value="popular" className="text-xs font-semibold px-3.5 py-1 rounded-lg">Phổ biến</TabsTrigger>
+              </TabsList>
+            </Tabs>
+
+            {isFiltered ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-9 sm:h-10 px-2.5 text-xs text-muted-foreground hover:text-foreground rounded-xl"
+                onClick={() => {
+                  setQueryText('')
+                  setCategory('')
+                }}
+                title="Xóa bộ lọc"
+              >
+                <X className="size-4" />
+              </Button>
+            ) : null}
+          </div>
         </CardContent>
       </Card>
 
-      {marketQuery.isPending ? <PageLoading label="Đang tải marketplace…" /> : null}
+      {/* States */}
+      {marketQuery.isPending ? <PageLoading label="Đang tải dữ liệu marketplace…" /> : null}
       {marketQuery.error ? <PageError error={marketQuery.error} /> : null}
       {marketQuery.data && !marketQuery.data.items.length ? (
         <EmptyState
-          title="Không có học liệu phù hợp"
-          description="Thử đổi từ khóa, danh mục hoặc cách sắp xếp."
+          title="Không tìm thấy học liệu phù hợp"
+          description="Thử thay đổi từ khóa tìm kiếm, chọn danh mục khác hoặc sắp xếp lại danh sách."
         />
       ) : null}
 
+      {/* Item Card Grid */}
       {marketQuery.data?.items.length ? (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {marketQuery.data.items.map((item) => {
-            const itemTitle = item.title || item.name || 'Không có tiêu đề'
+            const itemTitle = item.title || item.name || 'Học liệu không tên'
             const detailUrl =
               mode === 'decks'
                 ? `/marketplace/decks/${item.id}`
                 : `/marketplace/note-types/${item.id}`
+            const authorName =
+              item.author?.account_name || item.author?.username || 'Cộng đồng'
+            const authorInitial = authorName.charAt(0).toUpperCase()
+
             return (
-              <Card className="flex flex-col" key={item.id}>
-                <CardHeader>
-                  <div className="flex items-center justify-between gap-3">
-                    <Badge variant="secondary">
+              <Card
+                key={item.id}
+                className="group relative flex flex-col overflow-hidden border-border/80 bg-card/95 transition-all duration-200 hover:-translate-y-1 hover:border-primary/50 hover:shadow-lg backdrop-blur-md rounded-2xl"
+              >
+                {/* Header Banner Accent */}
+                <div className="h-1.5 w-full bg-gradient-to-r from-primary via-orange-500 to-amber-500" />
+
+                <CardHeader className="p-4 sm:p-5 pb-2.5 space-y-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <Badge variant="secondary" className="px-2.5 py-0.5 text-[11px] font-semibold rounded-md">
                       {item.primary_category || 'Khác'}
                     </Badge>
-                    <span className={item.pricing_mode === 'free'
-                      ? 'font-semibold text-emerald-700'
-                      : 'font-semibold'}>
+
+                    <span
+                      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-extrabold border ${
+                        item.pricing_mode === 'free'
+                          ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30'
+                          : 'bg-primary/10 text-primary border-primary/30'
+                      }`}
+                    >
                       {item.price_display}
                     </span>
                   </div>
-                  <CardTitle>{itemTitle}</CardTitle>
-                  <CardDescription>
-                    bởi {item.author?.account_name || item.author?.username || 'Cộng đồng'}
-                  </CardDescription>
+
+                  <CardTitle className="text-base font-bold tracking-tight text-foreground line-clamp-1 group-hover:text-primary transition-colors leading-snug">
+                    {itemTitle}
+                  </CardTitle>
+
+                  {/* Author Row */}
+                  <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                    <div className="flex size-4 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary font-bold text-[9px]">
+                      {authorInitial}
+                    </div>
+                    <span className="font-semibold text-foreground/90 line-clamp-1">
+                      {authorName}
+                    </span>
+                  </div>
                 </CardHeader>
-                <CardContent className="flex-1 space-y-4">
-                  <p className="line-clamp-3 text-sm leading-6 text-muted-foreground">
-                    {item.description || 'Chưa có mô tả.'}
+
+                <CardContent className="flex-1 px-4 sm:px-5 py-2 space-y-3">
+                  <p className="line-clamp-2 text-xs leading-relaxed text-muted-foreground font-normal">
+                    {item.description || 'Chưa có mô tả chi tiết cho học liệu này.'}
                   </p>
-                  <div className="flex items-center gap-3 text-sm">
-                    <span className="inline-flex items-center gap-1 font-medium">
-                      <Star className="size-4 fill-amber-400 text-amber-500" />
+
+                  <div className="flex items-center justify-between rounded-xl bg-muted/40 px-3 py-2 text-xs font-semibold border border-border/40">
+                    <span className="inline-flex items-center gap-1 text-foreground">
+                      <Star className="size-3.5 fill-amber-400 text-amber-500" />
                       {item.rating_avg.toFixed(1)}
                     </span>
-                    <span className="text-muted-foreground">
+                    <span className="inline-flex items-center gap-1 text-muted-foreground text-[11px]">
+                      <Download className="size-3.5 text-primary" />
                       {item.install_count.toLocaleString('vi-VN')} lượt cài
                     </span>
                   </div>
                 </CardContent>
-                <CardFooter>
+
+                <CardFooter className="p-4 sm:p-5 pt-1">
                   {mode === 'decks' && item.installed_deck_id ? (
-                    <Button className="w-full" variant="outline" asChild>
-                      <Link to={`/study?deck_id=${item.installed_deck_id}`}>
-                        Bắt đầu học
+                    <Button className="w-full h-9 sm:h-10 font-bold text-xs sm:text-sm shadow-xs bg-gradient-to-r from-primary via-orange-500 to-amber-500 text-primary-foreground hover:opacity-95 rounded-xl" size="sm" asChild>
+                      <Link to={`/study?deck_id=${item.installed_deck_id}`} className="inline-flex items-center justify-center gap-1.5 w-full h-full leading-none">
+                        <Zap className="size-3.5 fill-primary-foreground shrink-0" />
+                        <span>Bắt đầu học ngay</span>
+                      </Link>
+                    </Button>
+                  ) : item.is_installed ? (
+                    <Button className="w-full h-9 sm:h-10 font-bold text-xs sm:text-sm border-emerald-500/30 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 rounded-xl" variant="outline" asChild>
+                      <Link to={detailUrl} className="inline-flex items-center justify-center gap-1.5 w-full h-full leading-none">
+                        <CheckCircle className="size-3.5 shrink-0" />
+                        <span>Đã cài đặt • Xem chi tiết</span>
                       </Link>
                     </Button>
                   ) : (
-                    <Button className="w-full" variant="outline" asChild>
-                      <Link to={detailUrl}>
-                        {item.is_installed ? 'Xem học liệu đã cài' : 'Xem chi tiết'}
+                    <Button
+                      className="w-full h-9 sm:h-10 font-bold text-xs sm:text-sm bg-primary/10 hover:bg-primary text-primary hover:text-primary-foreground border border-primary/25 shadow-xs transition-all duration-200 group-hover:bg-primary group-hover:text-primary-foreground rounded-xl"
+                      asChild
+                    >
+                      <Link to={detailUrl} className="inline-flex items-center justify-center gap-1.5 w-full h-full leading-none">
+                        <Eye className="size-3.5 shrink-0" />
+                        <span>Xem chi tiết</span>
+                        <ArrowRight className="size-3.5 shrink-0 transition-transform group-hover:translate-x-0.5" />
                       </Link>
                     </Button>
                   )}
@@ -219,4 +373,6 @@ export function SharedNoteTypesPage() {
 
 export { SharedDeckDetailPage } from './SharedDeckDetailPage'
 export { SharedNoteTypeDetailPage } from './SharedNoteTypeDetailPage'
+
+
 

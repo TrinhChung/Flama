@@ -42,9 +42,9 @@ const pageTitles: Record<string, string> = {
   '/note-types': 'Loại thẻ',
   '/installed-decks': 'Deck đã cài',
   '/import': 'Import thẻ',
-  '/marketplace/decks': 'Shared decks',
+  '/marketplace/decks': 'Bộ thẻ',
   '/marketplace/decks/publish': 'Đăng bộ thẻ',
-  '/marketplace/note-types': 'Shared note types',
+  '/marketplace/note-types': 'Loại thẻ',
   '/marketplace/note-types/publish': 'Đăng loại thẻ',
   '/orders': 'Đơn hàng',
   '/settings/mcp-tokens': 'MCP Tokens',
@@ -76,16 +76,6 @@ function PublicLayout({
           <Brand compact />
 
           <nav className="hidden items-center gap-2.5 sm:flex">
-            {user && (
-              <Link
-                to="/marketplace/decks"
-                className="inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold text-muted-foreground transition-all hover:bg-muted/60 hover:text-foreground"
-              >
-                <Sparkles className="size-3.5 text-primary" />
-                Khám phá Shared Decks
-              </Link>
-            )}
-
             <Link
               to="/support"
               className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all ${
@@ -211,7 +201,7 @@ function PublicLayout({
                 <DropdownMenuItem asChild>
                   <Link to="/marketplace/decks" className="flex items-center gap-2">
                     <Sparkles className="size-4 text-primary" />
-                    <span>Shared Decks</span>
+                    <span>Marketplace</span>
                   </Link>
                 </DropdownMenuItem>
               )}
@@ -370,25 +360,13 @@ export function AppLayout() {
           </div>
 
           <div className="flex items-center gap-3">
-            <Button
-              variant="ghost"
-              size="sm"
-              asChild
-              className="hidden gap-1.5 rounded-full text-xs sm:inline-flex"
-            >
-              <Link to="/marketplace/decks">
-                <Sparkles className="size-3.5 text-primary" />
-                <span>Khám phá Shared Decks</span>
-              </Link>
-            </Button>
-
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
-                  className="flex items-center gap-2 rounded-full border border-border/60 bg-muted/40 p-1 pr-1.5 pl-2.5 text-xs font-semibold transition hover:bg-muted/80"
+                  className="flex items-center gap-1.5 sm:gap-2 rounded-full border border-border/60 bg-muted/40 p-1 pr-1.5 pl-2 text-xs font-semibold transition hover:bg-muted/80"
                 >
-                  <span className="max-w-[120px] truncate text-foreground">
+                  <span className="max-w-[70px] sm:max-w-[120px] truncate text-foreground font-semibold">
                     {bootstrap.user.username}
                   </span>
                   {bootstrap.user.is_admin ? (

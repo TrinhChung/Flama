@@ -88,18 +88,18 @@ export function NoteTypeManagerPage() {
   const noteTypes = query.data?.items || []
 
   return (
-    <Page className="w-full max-w-none px-4 lg:px-8 py-3 space-y-4">
+    <Page className="w-full max-w-none px-4 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-5 sm:space-y-6">
       <PageHeader
         title="Quản lý Loại thẻ (NoteType Manager)"
         description="Định nghĩa cấu trúc các trường dữ liệu và mẫu hiển thị flashcard của bạn."
       />
 
       {/* Create NoteType Card Form */}
-      <Card className="border-border/80 shadow-sm rounded-2xl">
-        <CardHeader className="pb-3">
+      <Card className="border-border/80 shadow-xs rounded-2xl">
+        <CardHeader className="p-4 sm:p-5 pb-2 sm:pb-2">
           <CardTitle className="text-sm font-semibold">Tạo NoteType mới</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-4 sm:p-5 pt-0">
           <form onSubmit={handleCreate} className="flex flex-col sm:flex-row gap-3">
             <div className="flex-1 space-y-1">
               <Label htmlFor="note-type-name" className="sr-only">
@@ -110,12 +110,13 @@ export function NoteTypeManagerPage() {
                 placeholder="Ví dụ: Từ vựng Tiếng Nhật, Ngữ pháp JLPT N2…"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
+                className="h-9 sm:h-10 text-xs sm:text-sm rounded-xl"
               />
             </div>
             <Button
               type="submit"
               disabled={createMutation.isPending}
-              className="bg-gradient-to-r from-primary to-orange-500 font-bold text-primary-foreground shadow-sm shrink-0"
+              className="h-9 sm:h-10 px-4 bg-gradient-to-r from-primary to-orange-500 font-bold text-xs sm:text-sm text-primary-foreground shadow-xs shrink-0 rounded-xl"
             >
               <Plus className="size-4 mr-1.5" />
               Tạo NoteType
@@ -149,22 +150,22 @@ export function NoteTypeManagerPage() {
                 <TableCell>{item.field_defs?.length ?? 0} trường</TableCell>
                 <TableCell>{item.templates?.length ?? 0} template</TableCell>
                 <TableCell className="text-right">
-                  <div className="flex items-center justify-end gap-1.5">
-                    <Button variant="outline" size="sm" asChild className="h-8 text-xs font-semibold">
+                  <div className="flex items-center justify-end gap-2">
+                    <Button variant="outline" size="sm" asChild className="h-8 sm:h-9 px-3 text-xs font-semibold rounded-lg">
                       <Link to={`/flashcards/note-types/${item.id}/fields`}>
                         <SlidersHorizontal className="size-3.5 mr-1" />
                         Trường
                       </Link>
                     </Button>
 
-                    <Button variant="outline" size="sm" asChild className="h-8 text-xs font-semibold">
+                    <Button variant="outline" size="sm" asChild className="h-8 sm:h-9 px-3 text-xs font-semibold rounded-lg">
                       <Link to={`/flashcards/note-types/${item.id}`}>
                         <Code2 className="size-3.5 mr-1" />
                         Templates
                       </Link>
                     </Button>
 
-                    <Button variant="secondary" size="sm" asChild className="h-8 text-xs font-semibold">
+                    <Button variant="secondary" size="sm" asChild className="h-8 sm:h-9 px-3 text-xs font-semibold rounded-lg">
                       <a href={`/flashcards/share-note-type/${item.id}`}>
                         <Share2 className="size-3.5 mr-1 text-orange-600" />
                         Chia sẻ
@@ -174,7 +175,7 @@ export function NoteTypeManagerPage() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="h-8 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+                      className="h-8 sm:h-9 px-2.5 text-xs text-destructive hover:text-destructive hover:bg-destructive/10 rounded-lg"
                       onClick={() => {
                         if (window.confirm(`Xóa NoteType "${item.name}"?`)) {
                           deleteMutation.mutate(item.id)
