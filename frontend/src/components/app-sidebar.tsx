@@ -76,8 +76,8 @@ export function AppSidebar({
 
   return (
     <Sidebar collapsible="icon" {...props}>
-      <SidebarHeader className="h-14 justify-center border-b">
-        <Brand compact className="px-2 group-data-[collapsible=icon]:justify-center" />
+      <SidebarHeader className="h-14 justify-center border-b px-2 group-data-[collapsible=icon]:px-0">
+        <Brand compact hideTextOnCollapse className="px-2 group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:justify-center" />
       </SidebarHeader>
       <SidebarContent>
         <NavMain label="Học tập" items={primary} />

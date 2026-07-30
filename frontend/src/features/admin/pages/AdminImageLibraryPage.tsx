@@ -283,11 +283,14 @@ export function AdminImageLibraryPage() {
       {/* Pagination */}
       {totalPages > 1 && (
         <div className="flex items-center justify-between border-t pt-4 text-xs">
-          <span>Trang {page} / {totalPages}</span>
-          <div className="flex gap-2">
+          <Badge variant="outline" className="h-8 px-3 text-xs font-mono font-bold bg-primary/10 text-primary border-primary/30">
+            {page} / {totalPages}
+          </Badge>
+          <div className="flex items-center gap-1.5">
             <Button
               size="sm"
               variant="outline"
+              className="h-8 text-xs px-2.5"
               disabled={page <= 1}
               onClick={() => setPage((p) => Math.max(p - 1, 1))}
             >
@@ -296,6 +299,7 @@ export function AdminImageLibraryPage() {
             <Button
               size="sm"
               variant="outline"
+              className="h-8 text-xs px-2.5"
               disabled={page >= totalPages}
               onClick={() => setPage((p) => Math.min(p + 1, totalPages))}
             >

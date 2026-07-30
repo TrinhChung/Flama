@@ -41,7 +41,7 @@ type PaginationLinkProps = {
 function PaginationLink({
   className,
   isActive,
-  size = "icon",
+  size = "sm",
   ...props
 }: PaginationLinkProps) {
   return (
@@ -49,7 +49,7 @@ function PaginationLink({
       asChild
       variant={isActive ? "outline" : "ghost"}
       size={size}
-      className={cn(className)}
+      className={cn("w-auto min-w-8 h-8 px-2.5 shrink-0 text-xs font-medium tabular-nums whitespace-nowrap", isActive && "font-bold border-primary/40 bg-primary/10 text-primary", className)}
     >
       <a
         aria-current={isActive ? "page" : undefined}
@@ -63,36 +63,36 @@ function PaginationLink({
 
 function PaginationPrevious({
   className,
-  text = "Previous",
+  text = "Trước",
   ...props
 }: React.ComponentProps<typeof PaginationLink> & { text?: string }) {
   return (
     <PaginationLink
       aria-label="Go to previous page"
-      size="default"
-      className={cn("pl-1.5!", className)}
+      size="sm"
+      className={cn("pl-2 pr-2.5 h-8 text-xs shrink-0", className)}
       {...props}
     >
-      <ChevronLeftIcon data-icon="inline-start" />
-      <span className="hidden sm:block">{text}</span>
+      <ChevronLeftIcon className="size-3.5 mr-1" />
+      <span className="hidden sm:inline">{text}</span>
     </PaginationLink>
   )
 }
 
 function PaginationNext({
   className,
-  text = "Next",
+  text = "Sau",
   ...props
 }: React.ComponentProps<typeof PaginationLink> & { text?: string }) {
   return (
     <PaginationLink
       aria-label="Go to next page"
-      size="default"
-      className={cn("pr-1.5!", className)}
+      size="sm"
+      className={cn("pl-2.5 pr-2 h-8 text-xs shrink-0", className)}
       {...props}
     >
-      <span className="hidden sm:block">{text}</span>
-      <ChevronRightIcon data-icon="inline-end" />
+      <span className="hidden sm:inline">{text}</span>
+      <ChevronRightIcon className="size-3.5 ml-1" />
     </PaginationLink>
   )
 }

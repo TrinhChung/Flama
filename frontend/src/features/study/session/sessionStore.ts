@@ -111,3 +111,57 @@ export async function removeStudySessionIfMatches(
   if (current?.snapshot.session_id !== sessionId) return
   await removeStudySession(key)
 }
+
+export async function updateCardFieldValuesInSessions(
+  cardId: string,
+  newFieldValues: Record<string, string>,
+) {
+  try {
+    const keys: string[] = []
+    try {
+      const db = await openDatabase()
+      const tx = db.transaction(STORE_NAME, 'readonly')
+      const store = tx.objectStore(STORE_NAME)
+      const allKeys = await new Promise<IDBValidKey[]>((resolve, reject) => {
+        const req = store.getAllKeys()
+        req.onsuccess = () => resolve(req.result)
+        req.onerror = () => reject(req.error)
+      })
+      db.close()
+      for (const k of allKeys) {
+        if (typeof k === 'string') keys.push(k)
+      }
+    } catch {}
+
+    for (const key of memoryFallback.keys()) {
+      if (!keys.includes(key)) keys.push(key)
+    }
+
+    for (const key of keys) {
+      const session = await loadStudySession(key)
+      if (!session) continue
+      let updated = false
+      const snapshot = session.snapshot
+      for (const card of snapshot.cards) {
+        if (card.card_id === cardId) {
+          const contentKey = card.content_key
+          if (snapshot.contents[contentKey]) {
+            snapshot.contents[contentKey] = {
+              ...snapshot.contents[contentKey],
+              field_values: {
+                ...snapshot.contents[contentKey].field_values,
+                ...newFieldValues,
+              },
+            }
+            updated = true
+          }
+        }
+      }
+      if (updated) {
+        await saveStudySession(session)
+      }
+    }
+  } catch {
+    // Ignore errors if storage is temporarily unaccessible
+  }
+}
