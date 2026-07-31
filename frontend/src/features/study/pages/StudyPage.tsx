@@ -195,7 +195,7 @@ export function StudyPage() {
   if (study.isLoading) {
     return (
       <div className="h-screen h-[100dvh] w-full flex items-center justify-center">
-        <PageLoading label="Đang tải snapshot phiên học…" />
+        <PageLoading label="Đang tạo phiên học…" />
       </div>
     )
   }

@@ -3,13 +3,6 @@ import { Clock, Mail } from 'lucide-react'
 import { Brand } from '@/shared/components/Brand'
 import type { FrontendBootstrap } from '@/shared/types/api'
 
-const updates = [
-	{ tag: 'Giao diện', text: 'Màn học được tối ưu lại để gọn hơn và ít gây xao nhãng.' },
-	{ tag: 'Tập trung', text: 'Thêm chế độ toàn màn hình để bạn tập trung trong suốt buổi ôn.' },
-	{ tag: 'Chỉnh sửa', text: 'Cập nhật thẻ an toàn hơn, giảm nguy cơ ghi đè nhầm dữ liệu cũ.' },
-	{ tag: 'VoiceVox', text: 'Thêm tạo âm thanh tiếng Nhật trực tiếp từ từ vựng với VoiceVox.' },
-]
-
 function FooterColumn({ title, children }: { title: string; children: React.ReactNode }) {
 	return (
 		<div>
@@ -163,36 +156,6 @@ export function SiteFooter({ bootstrap }: { bootstrap: FrontendBootstrap }) {
 						</ul>
 					</div>
 				</div>
-
-				{/* ── Recent updates ── */}
-				<section className="border-b border-white/[0.07] py-4" aria-labelledby="footer-updates-title">
-					<div className="mb-3 flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
-						<h4
-							id="footer-updates-title"
-							className="text-[0.7rem] font-bold uppercase tracking-widest text-white/35"
-						>
-							Cập nhật gần đây · 03/2026
-						</h4>
-						<Link
-							to="/#landing-updates"
-							className="text-[0.78rem] font-bold text-orange-300 hover:text-orange-200"
-						>
-							Xem chi tiết
-						</Link>
-					</div>
-					<ul className="grid grid-cols-1 gap-x-5 gap-y-2 sm:grid-cols-2">
-						{updates.map((u) => (
-							<li key={u.tag} className="flex items-start gap-2">
-								<span className="shrink-0 rounded-full border border-orange-500/30 bg-orange-500/[0.14] px-2 py-px text-[0.66rem] font-bold uppercase tracking-wide text-orange-200">
-									{u.tag}
-								</span>
-								<span className="break-all text-[0.8rem] leading-relaxed text-white/[0.54]">
-									{u.text}
-								</span>
-							</li>
-						))}
-					</ul>
-				</section>
 
 				{/* ── Copyright ── */}
 				<div className="py-4 text-center text-[0.78rem] text-white/25">
