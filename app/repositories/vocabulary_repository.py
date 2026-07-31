@@ -434,6 +434,7 @@ def build_browse_card_detail(
         "note": {
             "id": note_obj.id if note_obj else None,
             "note_type_id": note_obj.note_type_id if note_obj else None,
+            "note_type_name": note_type_obj.name if note_type_obj and note_type_obj.name else "NoteType",
             "deck_id": note_obj.deck_id if note_obj else None,
             "deck_name": deck_name_lookup.get((note_obj.deck_id or 0) if note_obj else 0, ""),
             "field_values": field_values,

@@ -94,6 +94,7 @@ function SupportLinks({ bootstrap }: { bootstrap: FrontendBootstrap }) {
 			{!user && (
 				<FooterLink to="/login">Đăng nhập để học</FooterLink>
 			)}
+			<FooterLink to="/guide/tts-key">Hướng dẫn lấy Key TTS</FooterLink>
 			{email ? (
 				<>
 					<MailLink email={email}>Báo lỗi / Góp ý</MailLink>
