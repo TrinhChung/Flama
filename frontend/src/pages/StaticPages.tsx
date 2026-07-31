@@ -4,6 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Page, PageHeader } from '@/shared/components/Page'
 
 export { SupportPage } from '@/features/support/pages/SupportPage'
+export { TtsKeyGuidePage } from '@/features/support/pages/TtsKeyGuidePage'
+
 
 function LegalPage({ title, summary }: { title: string; summary: string }) {
   return (

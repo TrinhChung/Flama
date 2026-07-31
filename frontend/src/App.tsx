@@ -142,6 +142,11 @@ const SupportPage = lazy(() =>
     default: module.SupportPage,
   })),
 )
+const TtsKeyGuidePage = lazy(() =>
+  import('./pages/StaticPages').then((module) => ({
+    default: module.TtsKeyGuidePage,
+  })),
+)
 const TermsPage = lazy(() =>
   import('./pages/StaticPages').then((module) => ({
     default: module.TermsPage,
@@ -188,6 +193,15 @@ const router = createBrowserRouter([
       {
         path: 'support-donation',
         element: <Navigate to="/support" replace />,
+      },
+      { path: 'guide/tts-key', element: deferred(<TtsKeyGuidePage />) },
+      {
+        path: 'guides/tts-key',
+        element: <Navigate to="/guide/tts-key" replace />,
+      },
+      {
+        path: 'help/tts-key',
+        element: <Navigate to="/guide/tts-key" replace />,
       },
       { path: 'terms', element: deferred(<TermsPage />) },
       { path: 'privacy', element: deferred(<PrivacyPage />) },

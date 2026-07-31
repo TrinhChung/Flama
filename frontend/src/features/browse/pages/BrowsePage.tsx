@@ -3,13 +3,17 @@ import {
   ArrowLeft,
   ArrowUpDown,
   BookOpen,
+  Check,
   CheckSquare,
   Eye,
   EyeOff,
+  ExternalLink,
   FileText,
   FileUp,
   Folder,
   FolderOpen,
+  HelpCircle,
+  Layers,
   LoaderCircle,
   Play,
   Plus,
@@ -24,7 +28,7 @@ import {
   X,
 } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { appApi } from '@/app/api'
 import { updateCardFieldValuesInSessions } from '@/features/study/session/sessionStore'
@@ -77,6 +81,35 @@ type BrowseCardsResponse = {
   has_next: boolean
 }
 
+const FALLBACK_VOICEVOX_SPEAKERS = [
+  { id: '3', label: 'Zundamon (ズンダモン - ノーマル)' },
+  { id: '1', label: 'Zundamon (ズンダモン - あまあま)' },
+  { id: '7', label: 'Zundamon (ズンダモン - ツンツン)' },
+  { id: '5', label: 'Zundamon (ズンダモン - セクシー)' },
+  { id: '22', label: 'Zundamon (ズンダモン - ささやき)' },
+  { id: '38', label: 'Zundamon (ズンダモン - ヒソヒソ)' },
+  { id: '2', label: 'Shikikoin Metan (四国めたん - ノーマル)' },
+  { id: '0', label: 'Shikikoin Metan (四国めたん - あまあま)' },
+  { id: '6', label: 'Shikikoin Metan (四国めたん - ツンツン)' },
+  { id: '4', label: 'Shikikoin Metan (四国めたん - セクシー)' },
+  { id: '36', label: 'Shikikoin Metan (四国めたん - ささやき)' },
+  { id: '8', label: 'Kasukabe Tsumugi (春日部つむぎ - ノーマル)' },
+  { id: '10', label: 'Namine Ritsu (波音リツ - ノーマル)' },
+  { id: '9', label: 'Amehare Hare (雨晴はう - ノーマル)' },
+  { id: '11', label: 'Kurono Takehiro (玄野武宏 - ノーマル)' },
+  { id: '12', label: 'Shirakami Torataro (白上虎太郎 - ノーマル)' },
+  { id: '13', label: 'Kyushu Sora (九州そら - ノーマル)' },
+  { id: '14', label: 'Mochi-ko (もち子さん - ノーマル)' },
+  { id: '15', label: 'Kenzaki Mesubuta (剣崎牝豹 - ノーマル)' },
+  { id: '16', label: 'Aoyama Ryuusei (青山龍星 - ノーマル)' },
+  { id: '20', label: 'WhiteCUL (WhiteCUL - ノーマル)' },
+  { id: '21', label: 'WhiteCUL (WhiteCUL - たのしい)' },
+  { id: '29', label: 'No.7 (No.7 - ノーマル)' },
+  { id: '30', label: 'No.7 (No.7 - アナウンス)' },
+  { id: '42', label: 'Chibi Shikijii (ちび式じい - ノーマル)' },
+  { id: '54', label: 'Nurse Robot Type T (ナースロボ＿タイプＴ - ノーマル)' },
+]
+
 type BrowseDeck = {
   id: number
   name: string
@@ -98,6 +131,8 @@ type CardDetailResponse = {
   card: BrowseCardRow
   note: {
     id: string
+    note_type_id?: string | null
+    note_type_name?: string | null
     deck_id: number
     deck_name: string
     field_values: Record<string, string>
@@ -153,7 +188,11 @@ export function BrowsePage() {
   const [ttsSourceField, setTtsSourceField] = useState('Word')
   const [ttsDestinationField, setTtsDestinationField] = useState('Audio')
   const [ttsCharacter, setTtsCharacter] = useState('')
-  const [ttsApiKey, setTtsApiKey] = useState('')
+  const [ttsApiKey, setTtsApiKey] = useState(() => {
+    return localStorage.getItem('flama_voicevox_api_key') || ''
+  })
+  const [isKeySaved, setIsKeySaved] = useState(false)
+  const [isSavingKey, setIsSavingKey] = useState(false)
   const [showApiKey, setShowApiKey] = useState(false)
   const [ttsAppendAudio, setTtsAppendAudio] = useState(false)
   const [ttsUseOpus, setTtsUseOpus] = useState(false)
@@ -284,13 +323,33 @@ export function BrowsePage() {
       setInitialDeckId(deckId)
       setInitialTags(tags)
 
-      // Auto populate source & dest fields from available fields if present
+      // Auto populate source & dest fields from available fields matching NoteType template
       if (cardDetailQuery.data.fields && cardDetailQuery.data.fields.length > 0) {
         const fieldNames = cardDetailQuery.data.fields.map((f) => f.name)
-        if (fieldNames.includes('Word')) setTtsSourceField('Word')
-        else if (fieldNames.includes('Reading')) setTtsSourceField('Reading')
 
-        if (fieldNames.includes('Audio')) setTtsDestinationField('Audio')
+        // Best Source Field matching: Reading > Word > Expression > Kanji
+        if (fieldNames.includes('Reading')) {
+          setTtsSourceField('Reading')
+        } else if (fieldNames.includes('Word')) {
+          setTtsSourceField('Word')
+        } else if (fieldNames.includes('Expression')) {
+          setTtsSourceField('Expression')
+        } else if (fieldNames.includes('Kanji')) {
+          setTtsSourceField('Kanji')
+        } else if (fieldNames.length > 0 && !fieldNames.includes(ttsSourceField)) {
+          setTtsSourceField(fieldNames[0])
+        }
+
+        // Best Destination Field matching: Audio > AudioReading > Sound
+        if (fieldNames.includes('Audio')) {
+          setTtsDestinationField('Audio')
+        } else if (fieldNames.includes('AudioReading')) {
+          setTtsDestinationField('AudioReading')
+        } else if (fieldNames.includes('Sound')) {
+          setTtsDestinationField('Sound')
+        } else if (fieldNames.length > 0 && !fieldNames.includes(ttsDestinationField)) {
+          setTtsDestinationField(fieldNames[fieldNames.length - 1])
+        }
       }
     }
   }, [cardDetailQuery.data])
@@ -395,6 +454,9 @@ export function BrowsePage() {
       settings?: Record<string, number>
     }) => appApi.mutate('/browse/voicevox/generate', 'POST', payload),
     onSuccess: () => {
+      if (ttsApiKey.trim()) {
+        void saveApiKeyIfValid(ttsApiKey, false)
+      }
       toast.success(`Đã tạo âm thanh VoiceVox cho ${targetTtsCardIds.length} thẻ!`)
       setIsTtsModalOpen(false)
       void queryClient.invalidateQueries({ queryKey: ['browse', 'cards'] })
@@ -405,6 +467,62 @@ export function BrowsePage() {
     onError: (error: Error) => {
       toast.error('Không thể tạo âm thanh VoiceVox', { description: error.message })
     },
+  })
+
+  // Fetch user saved TTS profile for VoiceVox
+  const ttsProfileQuery = useQuery({
+    queryKey: ['voicevox-profile'],
+    queryFn: () =>
+      appApi.get<{
+        profile?: {
+          has_api_key: boolean
+          key_status: string
+        }
+      }>('/api/tts/providers/voicevox/profile'),
+    enabled: isTtsModalOpen,
+    staleTime: 5 * 60 * 1000,
+  })
+
+  useEffect(() => {
+    if (ttsProfileQuery.data?.profile?.has_api_key) {
+      setIsKeySaved(true)
+    }
+  }, [ttsProfileQuery.data])
+
+  const saveApiKeyIfValid = async (keyToSave: string, showToast = true) => {
+    const trimmed = keyToSave.trim()
+    if (!trimmed) return
+    setIsSavingKey(true)
+    localStorage.setItem('flama_voicevox_api_key', trimmed)
+    try {
+      await appApi.mutate('/api/tts/providers/voicevox/profile', 'PUT', {
+        api_key: trimmed,
+        validate_key: true,
+      })
+      setIsKeySaved(true)
+      void queryClient.invalidateQueries({ queryKey: ['voicevox-profile'] })
+      if (showToast) {
+        toast.success('Đã tự động lưu VoiceVox API Key cho các lần dùng sau!')
+      }
+    } catch {
+      // LocalStorage is already saved as fallback
+    } finally {
+      setIsSavingKey(false)
+    }
+  }
+
+  // Dynamic fetch VoiceVox voices from backend/API
+  const ttsVoicesQuery = useQuery({
+    queryKey: ['voicevox-voices', ttsApiKey],
+    queryFn: () =>
+      appApi.mutate<{ items: Array<{ id: string; label: string; speaker_name: string; style_name: string }> }>(
+        '/api/tts/providers/voicevox/voices',
+        'POST',
+        { api_key: ttsApiKey || undefined },
+      ),
+    enabled: isTtsModalOpen,
+    staleTime: 5 * 60 * 1000,
+    retry: 1,
   })
 
   // VoiceVox TTS Preview Handler
@@ -434,6 +552,9 @@ export function BrowsePage() {
       if (audioPlayerRef.current) {
         audioPlayerRef.current.src = url
         await audioPlayerRef.current.play()
+      }
+      if (ttsApiKey.trim()) {
+        void saveApiKeyIfValid(ttsApiKey, false)
       }
       toast.success('Đang phát nghe thử audio...')
     } catch (err: unknown) {
@@ -497,13 +618,20 @@ export function BrowsePage() {
     setPage(1)
   }
 
-  // Available Note Fields for Dropdown Selects
-  const availableFieldNames = cardDetailQuery.data?.fields?.map((f) => f.name) || [
-    'Word',
-    'Reading',
-    'Meaning',
-    'Audio',
-  ]
+  // Available Note Fields for Dropdown Selects (Deduplicated & Cleaned)
+  const availableFieldNames = Array.from(
+    new Set(
+      (
+        cardDetailQuery.data?.fields?.map((f) => f.name) || [
+          'Word',
+          'Reading',
+          'Meaning',
+          'Audio',
+          'AudioReading',
+        ]
+      ).filter(Boolean),
+    ),
+  )
 
   return (
     <div className="flex flex-col h-screen h-[100dvh] w-full overflow-hidden bg-background text-foreground">
@@ -1109,11 +1237,31 @@ export function BrowsePage() {
               </div>
             ) : cardDetailQuery.data ? (
               <div className="space-y-4">
-                {/* Deck Select */}
+                {/* Deck Select with NoteType Tag */}
                 <div className="space-y-1.5">
-                  <Label htmlFor="editor-deck-select" className="text-xs font-semibold">
-                    Bộ thẻ (Deck)
-                  </Label>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="editor-deck-select" className="text-xs font-semibold">
+                      Bộ thẻ (Deck)
+                    </Label>
+                    {cardDetailQuery.data.note.note_type_id ? (
+                      <Link
+                        to={`/note-types/${cardDetailQuery.data.note.note_type_id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:text-primary/90 bg-primary/10 hover:bg-primary/15 px-2 py-0.5 rounded-md transition-colors"
+                        title="Bấm để chỉnh sửa Live Template của loại thẻ này"
+                      >
+                        <Layers className="size-3" />
+                        <span>{cardDetailQuery.data.note.note_type_name || 'NoteType'}</span>
+                        <ExternalLink className="size-2.5 opacity-70" />
+                      </Link>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground bg-muted px-2 py-0.5 rounded-md">
+                        <Layers className="size-3" />
+                        <span>{cardDetailQuery.data.note.note_type_name || 'NoteType'}</span>
+                      </span>
+                    )}
+                  </div>
                   <NativeSelect
                     id="editor-deck-select"
                     className="w-full text-xs"
@@ -1260,47 +1408,60 @@ export function BrowsePage() {
             </div>
 
             {/* Source & Destination Fields Row */}
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label htmlFor="voicevox-source" className="text-xs font-semibold text-foreground">
-                  Trường nguồn (Source Field)
-                </Label>
-                <NativeSelect
-                  id="voicevox-source"
-                  className="w-full h-9 text-xs bg-background"
-                  value={ttsSourceField}
-                  onChange={(e) => setTtsSourceField(e.target.value)}
-                >
-                  {availableFieldNames.map((fn) => (
-                    <NativeSelectOption key={fn} value={fn}>
-                      {fn}
-                    </NativeSelectOption>
-                  ))}
-                  <NativeSelectOption value="Word">Word</NativeSelectOption>
-                  <NativeSelectOption value="Reading">Reading</NativeSelectOption>
-                  <NativeSelectOption value="Meaning">Meaning</NativeSelectOption>
-                </NativeSelect>
+            <div className="space-y-2">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="voicevox-source" className="text-xs font-semibold text-foreground">
+                    Trường nguồn đọc (Source Field)
+                  </Label>
+                  <NativeSelect
+                    id="voicevox-source"
+                    className="w-full h-9 text-xs bg-background"
+                    value={ttsSourceField}
+                    onChange={(e) => setTtsSourceField(e.target.value)}
+                  >
+                    {availableFieldNames.map((fn) => (
+                      <NativeSelectOption key={`src-${fn}`} value={fn}>
+                        {fn} {fn === 'Reading' ? '(Khuyên dùng cho JP)' : ''}
+                      </NativeSelectOption>
+                    ))}
+                  </NativeSelect>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="voicevox-dest" className="text-xs font-semibold text-foreground">
+                    Trường đích lưu Audio (Destination Field)
+                  </Label>
+                  <NativeSelect
+                    id="voicevox-dest"
+                    className="w-full h-9 text-xs bg-background"
+                    value={ttsDestinationField}
+                    onChange={(e) => setTtsDestinationField(e.target.value)}
+                  >
+                    {availableFieldNames.map((fn) => (
+                      <NativeSelectOption key={`dst-${fn}`} value={fn}>
+                        {fn} {fn === 'Audio' ? '(Mặc định lưu file)' : ''}
+                      </NativeSelectOption>
+                    ))}
+                  </NativeSelect>
+                </div>
               </div>
 
-              <div className="space-y-1.5">
-                <Label htmlFor="voicevox-dest" className="text-xs font-semibold text-foreground">
-                  Trường đích (Destination Field)
-                </Label>
-                <NativeSelect
-                  id="voicevox-dest"
-                  className="w-full h-9 text-xs bg-background"
-                  value={ttsDestinationField}
-                  onChange={(e) => setTtsDestinationField(e.target.value)}
-                >
-                  {availableFieldNames.map((fn) => (
-                    <NativeSelectOption key={fn} value={fn}>
-                      {fn}
-                    </NativeSelectOption>
-                  ))}
-                  <NativeSelectOption value="Audio">Audio</NativeSelectOption>
-                  <NativeSelectOption value="AudioReading">AudioReading</NativeSelectOption>
-                </NativeSelect>
-              </div>
+              {cardDetailQuery.data?.note?.note_type_name ? (
+                <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-0.5">
+                  <span className="flex items-center gap-1">
+                    <Layers className="size-3 text-primary shrink-0" />
+                    <span>
+                      Đang khớp các trường theo loại thẻ: <strong className="text-foreground">{cardDetailQuery.data.note.note_type_name}</strong>
+                    </span>
+                  </span>
+                  {ttsSourceField === ttsDestinationField ? (
+                    <span className="text-amber-600 dark:text-amber-400 font-semibold">
+                      ⚠️ Trường nguồn và trường đích đang giống nhau
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
 
             {/* Character & API Key Row */}
@@ -1316,34 +1477,93 @@ export function BrowsePage() {
                   onChange={(e) => setTtsCharacter(e.target.value)}
                 >
                   <NativeSelectOption value="">Mặc định (Default Speaker)</NativeSelectOption>
-                  <NativeSelectOption value="3">Zundamon (ズンダモン)</NativeSelectOption>
-                  <NativeSelectOption value="2">Shikikoin (四国めたん)</NativeSelectOption>
-                  <NativeSelectOption value="8">Tsumugi (春日部つむぎ)</NativeSelectOption>
-                  <NativeSelectOption value="10">Ritsu (波音リツ)</NativeSelectOption>
+                  {ttsVoicesQuery.isLoading ? (
+                    <NativeSelectOption value="" disabled>
+                      Đang tải danh sách giọng đọc...
+                    </NativeSelectOption>
+                  ) : ttsVoicesQuery.data?.items && ttsVoicesQuery.data.items.length > 0 ? (
+                    ttsVoicesQuery.data.items.map((voice) => (
+                      <NativeSelectOption key={voice.id} value={voice.id}>
+                        {voice.label}
+                      </NativeSelectOption>
+                    ))
+                  ) : (
+                    FALLBACK_VOICEVOX_SPEAKERS.map((voice) => (
+                      <NativeSelectOption key={voice.id} value={voice.id}>
+                        {voice.label}
+                      </NativeSelectOption>
+                    ))
+                  )}
                 </NativeSelect>
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="voicevox-api-key" className="text-xs font-semibold text-foreground">
-                  VoiceVox API Key (Thủ công)
-                </Label>
-                <div className="relative flex items-center">
-                  <Input
-                    id="voicevox-api-key"
-                    type={showApiKey ? 'text' : 'password'}
-                    className="h-9 text-xs pr-9 bg-background"
-                    placeholder="Mặc định theo hệ thống"
-                    value={ttsApiKey}
-                    onChange={(e) => setTtsApiKey(e.target.value)}
-                  />
-                  <button
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="voicevox-api-key" className="text-xs font-semibold text-foreground">
+                    VoiceVox API Key (Tự động lưu)
+                  </Label>
+                  {isKeySaved ? (
+                    <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] py-0 h-4">
+                      ✓ Đã lưu Key
+                    </Badge>
+                  ) : null}
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="relative flex-1 flex items-center">
+                    <Input
+                      id="voicevox-api-key"
+                      type={showApiKey ? 'text' : 'password'}
+                      className="h-9 text-xs pr-9 bg-background"
+                      placeholder="Mặc định theo hệ thống"
+                      value={ttsApiKey}
+                      onChange={(e) => {
+                        setTtsApiKey(e.target.value)
+                        setIsKeySaved(false)
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowApiKey(!showApiKey)}
+                      className="absolute right-2.5 text-muted-foreground hover:text-foreground transition-colors"
+                      title={showApiKey ? 'Ẩn API key' : 'Hiện API key'}
+                    >
+                      {showApiKey ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                    </button>
+                  </div>
+                  <Button
                     type="button"
-                    onClick={() => setShowApiKey(!showApiKey)}
-                    className="absolute right-2.5 text-muted-foreground hover:text-foreground transition-colors"
-                    title={showApiKey ? 'Ẩn API key' : 'Hiện API key'}
+                    variant="outline"
+                    size="sm"
+                    className="h-9 text-xs px-3 shrink-0"
+                    disabled={isSavingKey || !ttsApiKey.trim()}
+                    onClick={() => saveApiKeyIfValid(ttsApiKey, true)}
                   >
-                    {showApiKey ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-                  </button>
+                    {isSavingKey ? (
+                      <LoaderCircle className="size-3.5 animate-spin" />
+                    ) : isKeySaved ? (
+                      <>
+                        <Check className="size-3.5 text-emerald-500" />
+                        <span>Đã lưu</span>
+                      </>
+                    ) : (
+                      <>
+                        <Save className="size-3.5 text-primary" />
+                        <span>Lưu Key</span>
+                      </>
+                    )}
+                  </Button>
+                </div>
+                <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-0.5">
+                  <span className="flex items-center gap-1">
+                    <HelpCircle className="size-3 text-primary shrink-0" />
+                    <Link to="/guide/tts-key" target="_blank" rel="noopener noreferrer" className="font-medium text-primary underline hover:text-primary/80">
+                      Hướng dẫn lấy Key VoiceVox
+                    </Link>
+                  </span>
+                  <a href="https://su-shiki.com/api/" target="_blank" rel="noopener noreferrer" className="hover:underline flex items-center gap-0.5">
+                    <span>su-shiki.com</span>
+                    <ExternalLink className="size-2.5" />
+                  </a>
                 </div>
               </div>
             </div>

@@ -1,11 +1,13 @@
 import { Link } from 'react-router-dom'
 import { cn } from '@/lib/utils'
+import { useBootstrap } from '@/shared/api/bootstrap'
 
 export type BrandProps = {
   compact?: boolean
   size?: 'sm' | 'md' | 'lg' | 'xl'
   className?: string
   hideTextOnCollapse?: boolean
+  to?: string
 }
 
 export function Brand({
@@ -13,7 +15,11 @@ export function Brand({
   size,
   className,
   hideTextOnCollapse = false,
+  to,
 }: BrandProps) {
+  const { data: bootstrap } = useBootstrap()
+  const destination = to ?? (bootstrap?.user ? (bootstrap.links?.dashboard || '/dashboard') : '/')
+
   const resolvedSize = size || (compact ? 'sm' : 'md')
 
   const imgSizeClass = {
@@ -32,7 +38,7 @@ export function Brand({
 
   return (
     <Link
-      to="/"
+      to={destination}
       className={cn(
         'inline-flex items-center gap-3 font-semibold text-foreground transition-transform hover:scale-[1.02]',
         className,
@@ -56,3 +62,4 @@ export function Brand({
     </Link>
   )
 }
+
