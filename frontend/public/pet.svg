@@ -107,24 +107,24 @@
     <ellipse cx="548" cy="812" rx="156" ry="37" transform="rotate(3 548 812)" fill="url(#shadowCastGrad)" filter="url(#shadowBlur)" opacity="0.45">
       <animate attributeName="rx"
         values="156;184;75;168;140;156;156"
-        keyTimes="0;0.04;0.13;0.20;0.24;0.27;1"
+        keyTimes="0; 0.03; 0.09; 0.14; 0.17; 0.225; 1"
         calcMode="spline"
         keySplines="0.25 0.8 0.3 1; 0.22 0.9 0.3 1; 0.2 0 0.2 1; 0.2 0.7 0.2 1; 0.2 0.7 0.2 1; 0 0 1 1"
-        dur="5.5s"
+        dur="8s"
         repeatCount="indefinite"/>
       <animate attributeName="ry"
         values="37;46;15;41;32;37;37"
-        keyTimes="0;0.04;0.13;0.20;0.24;0.27;1"
+        keyTimes="0; 0.03; 0.09; 0.14; 0.17; 0.225; 1"
         calcMode="spline"
         keySplines="0.25 0.8 0.3 1; 0.22 0.9 0.3 1; 0.2 0 0.2 1; 0.2 0.7 0.2 1; 0.2 0.7 0.2 1; 0 0 1 1"
-        dur="5.5s"
+        dur="8s"
         repeatCount="indefinite"/>
       <animate attributeName="opacity"
         values="0.45;0.65;0.12;0.55;0.35;0.45;0.45"
-        keyTimes="0;0.04;0.13;0.20;0.24;0.27;1"
+        keyTimes="0; 0.03; 0.09; 0.14; 0.17; 0.225; 1"
         calcMode="spline"
         keySplines="0.25 0.8 0.3 1; 0.22 0.9 0.3 1; 0.2 0 0.2 1; 0.2 0.7 0.2 1; 0.2 0.7 0.2 1; 0 0 1 1"
-        dur="5.5s"
+        dur="8s"
         repeatCount="indefinite"/>
     </ellipse>
 
@@ -132,30 +132,30 @@
     <ellipse cx="532" cy="807" rx="100" ry="22" fill="url(#shadowContactGrad)" filter="url(#contactBlur)" opacity="0.50">
       <animate attributeName="rx"
         values="100;124;30;114;88;100;100"
-        keyTimes="0;0.04;0.13;0.20;0.24;0.27;1"
+        keyTimes="0; 0.03; 0.09; 0.14; 0.17; 0.225; 1"
         calcMode="spline"
         keySplines="0.25 0.8 0.3 1; 0.22 0.9 0.3 1; 0.2 0 0.2 1; 0.2 0.7 0.2 1; 0.2 0.7 0.2 1; 0 0 1 1"
-        dur="5.5s"
+        dur="8s"
         repeatCount="indefinite"/>
       <animate attributeName="opacity"
         values="0.50;0.75;0.05;0.68;0.40;0.50;0.50"
-        keyTimes="0;0.04;0.13;0.20;0.24;0.27;1"
+        keyTimes="0; 0.03; 0.09; 0.14; 0.17; 0.225; 1"
         calcMode="spline"
         keySplines="0.25 0.8 0.3 1; 0.22 0.9 0.3 1; 0.2 0 0.2 1; 0.2 0.7 0.2 1; 0.2 0.7 0.2 1; 0 0 1 1"
-        dur="5.5s"
+        dur="8s"
         repeatCount="indefinite"/>
     </ellipse>
   </g>
 
   <!-- FLAME MASCOT BODY & FACE -->
-  <!-- Level 1: Pure Translate Motion (No static transform attribute to prevent SMIL override) -->
+  <!-- Level 1: Pure Translate Motion -->
   <g id="mascot-airborne-translate">
     <animateTransform attributeName="transform" type="translate"
       values="0 0; 0 20; 0 -160; 0 10; 0 -12; 0 0; 0 0"
-      keyTimes="0; 0.04; 0.13; 0.20; 0.24; 0.27; 1"
+      keyTimes="0; 0.03; 0.09; 0.14; 0.17; 0.225; 1"
       calcMode="spline"
       keySplines="0.25 0.8 0.3 1; 0.22 0.9 0.3 1; 0.2 0 0.2 1; 0.2 0.7 0.2 1; 0.2 0.7 0.2 1; 0 0 1 1"
-      dur="5.5s"
+      dur="8s"
       begin="0s"
       repeatCount="indefinite"/>
 
@@ -164,235 +164,244 @@
       <g id="mascot-squish-scale">
         <animateTransform attributeName="transform" type="scale"
           values="1 1; 1.20 0.76; 0.80 1.28; 1.22 0.78; 0.94 1.06; 1 1; 1 1"
-          keyTimes="0; 0.04; 0.13; 0.20; 0.24; 0.27; 1"
+          keyTimes="0; 0.03; 0.09; 0.14; 0.17; 0.225; 1"
           calcMode="spline"
           keySplines="0.25 0.8 0.3 1; 0.22 0.9 0.3 1; 0.2 0 0.2 1; 0.2 0.7 0.2 1; 0.2 0.7 0.2 1; 0 0 1 1"
-          dur="5.5s"
+          dur="8s"
           begin="0s"
           repeatCount="indefinite"/>
 
-        <!-- Level 3: Inner Offset to Restore Base Coordinates -->
-        <g transform="translate(-513 -744)">
-          <!-- 1. BASE 3D VOLUMETRIC FLAME BODY -->
-          <path fill="url(#flame3DGrad)" shape-rendering="geometricPrecision" d="M 513 744 C 484 743, 437 740, 405 733 C 373 726, 342 711, 322 699 C 302 687, 286 672, 274 654 C 262 636, 251 613, 245 589 C 239 565, 240 538, 246 513 C 252 488, 264 464, 279 443 C 294 422, 315 401, 340 381 C 365 361, 395 342, 425 323 C 454 304, 478 288, 490 269 C 502 250, 507 231, 509 217 C 511 203, 500 171, 505 164 C 510 157, 545 189, 561 208 C 577 227, 589 249, 595 269 C 601 289, 603 315, 602 337 C 601 359, 587 388, 585 401 C 583 414, 609 381, 619 363 C 629 345, 630 331, 631 320 C 632 309, 629 295, 633 294 C 637 293, 653 312, 662 323 C 671 334, 678 346, 683 358 C 688 370, 692 384, 692 397 C 692 410, 685 426, 686 439 C 687 452, 714 478, 726 496 C 738 514, 743 538, 745 556 C 747 574, 744 591, 741 606 C 738 621, 731 637, 723 650 C 715 663, 706 675, 694 685 C 682 695, 656 709, 630 721 C 604 733, 584 737, 567 739 C 550 741, 536 744, 513 744 Z"/>
+        <!-- Level 3: Mascot Standing Body Turn Left & Right -->
+        <g id="mascot-body-turn">
+          <animateTransform attributeName="transform" type="rotate" dur="8s" repeatCount="indefinite"
+            keyTimes="0; 0.275; 0.325; 0.4125; 0.45; 0.5375; 0.575; 0.65; 0.90; 1"
+            values="0; 0; -9; -9; 9; 9; 0; 0; 0; 0"
+            calcMode="spline"
+            keySplines="0 0 1 1; 0.25 0.9 0.25 1; 0 0 1 1; 0.25 0.9 0.25 1; 0 0 1 1; 0.25 0.9 0.25 1; 0 0 1 1; 0 0 1 1; 0 0 1 1"/>
 
-          <!-- 2. INTERNAL 3D SHADING LAYERS -->
-          <g clip-path="url(#flameBodyClip)">
-            <!-- Bottom-Right Soft Ambient Occlusion Shadow -->
-            <ellipse cx="660" cy="670" rx="200" ry="160" fill="url(#ambientShadowGrad)" filter="url(#shadowBlur)"/>
+          <!-- Level 4: Inner Offset to Restore Base Coordinates -->
+          <g transform="translate(-513 -744)">
+            <!-- 1. BASE 3D VOLUMETRIC FLAME BODY -->
+            <path fill="url(#flame3DGrad)" shape-rendering="geometricPrecision" d="M 513 744 C 484 743, 437 740, 405 733 C 373 726, 342 711, 322 699 C 302 687, 286 672, 274 654 C 262 636, 251 613, 245 589 C 239 565, 240 538, 246 513 C 252 488, 264 464, 279 443 C 294 422, 315 401, 340 381 C 365 361, 395 342, 425 323 C 454 304, 478 288, 490 269 C 502 250, 507 231, 509 217 C 511 203, 500 171, 505 164 C 510 157, 545 189, 561 208 C 577 227, 589 249, 595 269 C 601 289, 603 315, 602 337 C 601 359, 587 388, 585 401 C 583 414, 609 381, 619 363 C 629 345, 630 331, 631 320 C 632 309, 629 295, 633 294 C 637 293, 653 312, 662 323 C 671 334, 678 346, 683 358 C 688 370, 692 384, 692 397 C 692 410, 685 426, 686 439 C 687 452, 714 478, 726 496 C 738 514, 743 538, 745 556 C 747 574, 744 591, 741 606 C 738 621, 731 637, 723 650 C 715 663, 706 675, 694 685 C 682 695, 656 709, 630 721 C 604 733, 584 737, 567 739 C 550 741, 536 744, 513 744 Z"/>
 
-            <!-- Top-Left Soft Forehead Specular Highlight -->
-            <ellipse cx="380" cy="310" rx="80" ry="100" transform="rotate(-20 380 310)" fill="url(#bodyHighlightGrad)" filter="url(#highlightBlur)"/>
+            <!-- 2. INTERNAL 3D SHADING LAYERS -->
+            <g clip-path="url(#flameBodyClip)">
+              <!-- Bottom-Right Soft Ambient Occlusion Shadow -->
+              <ellipse cx="660" cy="670" rx="200" ry="160" fill="url(#ambientShadowGrad)" filter="url(#shadowBlur)"/>
 
-            <!-- Secondary Ultra-Soft Forehead Gloss Spot -->
-            <ellipse cx="400" cy="320" rx="20" ry="34" transform="rotate(-22 400 320)" fill="#FFFFFF" opacity="0.12" filter="url(#softGlow)"/>
+              <!-- Top-Left Soft Forehead Specular Highlight -->
+              <ellipse cx="380" cy="310" rx="80" ry="100" transform="rotate(-20 380 310)" fill="url(#bodyHighlightGrad)" filter="url(#highlightBlur)"/>
 
-            <!-- Left Studio Rim Light -->
-            <path d="M 322 699 C 302 687 274 654 245 589 C 239 565 246 513 279 443 C 315 401 365 361 425 323" stroke="url(#rimLightGrad)" stroke-width="12" fill="none" opacity="0.50" filter="url(#softGlow)"/>
-          </g>
+              <!-- Secondary Ultra-Soft Forehead Gloss Spot -->
+              <ellipse cx="400" cy="320" rx="20" ry="34" transform="rotate(-22 400 320)" fill="#FFFFFF" opacity="0.12" filter="url(#softGlow)"/>
 
-          <!-- Floating Flame Spark Ember Effect -->
-          <circle cx="505" cy="155" r="3.5" fill="#FFE57F" opacity="0.8" filter="url(#softGlow)">
-            <animate attributeName="cy" values="155;122;155" dur="2.4s" repeatCount="indefinite"/>
-            <animate attributeName="cx" values="505;490;512;505" dur="2.4s" repeatCount="indefinite"/>
-            <animate attributeName="opacity" values="0.85;0.1;0.85" dur="2.4s" repeatCount="indefinite"/>
-            <animate attributeName="r" values="3.5;1.8;3.5" dur="2.4s" repeatCount="indefinite"/>
-          </circle>
+              <!-- Left Studio Rim Light -->
+              <path d="M 322 699 C 302 687 274 654 245 589 C 239 565 246 513 279 443 C 315 401 365 361 425 323" stroke="url(#rimLightGrad)" stroke-width="12" fill="none" opacity="0.50" filter="url(#softGlow)"/>
+            </g>
 
-          <!-- 3. FACE GROUP (Crisp, Harmonious 3D) -->
-          <g id="face">
-            <g id="eyes">
-              <!-- LEFT EYE 3D -->
-              <g id="eye-left">
-                <animateTransform attributeName="transform" type="translate" dur="5.5s" begin="0s" repeatCount="indefinite"
-                  keyTimes="0; 0.27; 0.40; 0.65; 1"
-                  values="0 0; 0 0; 0 -2; 0 -2; 0 0"/>
+            <!-- Floating Flame Spark Ember Effect -->
+            <circle cx="505" cy="155" r="3.5" fill="#FFE57F" opacity="0.8" filter="url(#softGlow)">
+              <animate attributeName="cy" values="155;122;155" dur="2.4s" repeatCount="indefinite"/>
+              <animate attributeName="cx" values="505;490;512;505" dur="2.4s" repeatCount="indefinite"/>
+              <animate attributeName="opacity" values="0.85;0.1;0.85" dur="2.4s" repeatCount="indefinite"/>
+              <animate attributeName="r" values="3.5;1.8;3.5" dur="2.4s" repeatCount="indefinite"/>
+            </circle>
 
-                <!-- Eye socket 3D inset shadow behind eye -->
-                <ellipse cx="422" cy="541" rx="47" ry="50" fill="url(#eyeSocketShadow)" filter="url(#softGlow)"/>
+            <!-- 3. FACE GROUP (Crisp, Harmonious 3D) -->
+            <g id="face">
+              <g id="eyes">
+                <!-- LEFT EYE 3D -->
+                <g id="eye-left">
+                  <animateTransform attributeName="transform" type="translate" dur="8s" begin="0s" repeatCount="indefinite"
+                    keyTimes="0; 0.225; 0.65; 0.90; 1"
+                    values="0 0; 0 0; 0 -2; 0 -2; 0 0"/>
 
-                <!-- Pupil & Glance Group (Gaze moves left and right inside socket) -->
-                <g id="eye-left-pupil-glance">
-                  <animateTransform attributeName="transform" type="translate" dur="5.5s" begin="0s" repeatCount="indefinite"
-                    keyTimes="0; 0.70; 0.74; 0.81; 0.85; 0.92; 0.96; 1"
-                    values="0 0; 0 0; -12 0; -12 0; 12 0; 12 0; 0 0; 0 0"
-                    calcMode="spline"
-                    keySplines="0 0 1 1; 0.25 0.9 0.25 1; 0 0 1 1; 0.25 0.9 0.25 1; 0 0 1 1; 0.25 0.9 0.25 1; 0 0 1 1"/>
+                  <!-- Eye socket 3D inset shadow behind eye -->
+                  <ellipse cx="422" cy="541" rx="47" ry="50" fill="url(#eyeSocketShadow)" filter="url(#softGlow)"/>
 
-                  <!-- 3D Eye socket -->
-                  <ellipse cx="422" cy="537" rx="44" ry="48" fill="url(#eye3DGrad)">
-                    <animate attributeName="ry" dur="5.5s" repeatCount="indefinite"
-                      keyTimes="0; 0.10; 0.12; 0.14; 0.85; 0.87; 1"
-                      values="48; 48; 7; 48; 48; 7; 48"/>
-                  </ellipse>
+                  <!-- Pupil & Glance Group (Gaze moves left and right inside socket) -->
+                  <g id="eye-left-pupil-glance">
+                    <animateTransform attributeName="transform" type="translate" dur="8s" begin="0s" repeatCount="indefinite"
+                      keyTimes="0; 0.275; 0.325; 0.4125; 0.45; 0.5375; 0.575; 1"
+                      values="0 0; 0 0; -12 0; -12 0; 12 0; 12 0; 0 0; 0 0"
+                      calcMode="spline"
+                      keySplines="0 0 1 1; 0.25 0.9 0.25 1; 0 0 1 1; 0.25 0.9 0.25 1; 0 0 1 1; 0.25 0.9 0.25 1; 0 0 1 1"/>
 
-                  <!-- Eye bottom subsurface glass reflection -->
-                  <ellipse cx="422" cy="564" rx="22" ry="11" fill="url(#eyeBottomGlow)"/>
-
-                  <!-- Eye left reflections & sparkles (Ultra glossy & luminous always) -->
-                  <g id="eye-left-shine">
-                    <!-- Primary 3D Specular Highlight Dot (Enlarges & sparkles during wink) -->
-                    <circle cx="428" cy="517" r="16" fill="#FFFFFF" opacity="0.95">
-                      <animate attributeName="opacity" dur="5.5s" repeatCount="indefinite"
-                        keyTimes="0; 0.10; 0.12; 0.14; 0.38; 0.40; 0.65; 0.67; 0.85; 0.87; 1"
-                        values="0.95; 0.95; 0.2; 0.95; 0.95; 1.0; 1.0; 0.95; 0.95; 0.2; 0.95"/>
-                      <animate attributeName="r" dur="5.5s" repeatCount="indefinite"
-                        keyTimes="0; 0.38; 0.40; 0.65; 0.67; 1"
-                        values="16; 16; 18.5; 18.5; 16; 16"/>
-                    </circle>
-
-                    <ellipse cx="407" cy="521" rx="14" ry="17" fill="#FFFFFF" opacity="0.92">
-                      <animate attributeName="opacity" dur="5.5s" repeatCount="indefinite"
-                        keyTimes="0; 0.10; 0.12; 0.14; 0.38; 0.40; 0.65; 0.67; 0.85; 0.87; 1"
-                        values="0.92; 0.92; 0.2; 0.92; 0.92; 0.98; 0.98; 0.92; 0.92; 0.2; 0.92"/>
-                      <animate attributeName="ry" values="17;18.2;16.8;17.4;17" dur="2.6s" repeatCount="indefinite"/>
-                      <animate attributeName="cy" values="521;520;521.5;521;521" dur="2.6s" repeatCount="indefinite"/>
+                    <!-- 3D Eye socket -->
+                    <ellipse cx="422" cy="537" rx="44" ry="48" fill="url(#eye3DGrad)">
+                      <animate attributeName="ry" dur="8s" repeatCount="indefinite"
+                        keyTimes="0; 0.07; 0.085; 0.10; 0.84; 0.855; 0.87; 1"
+                        values="48; 48; 7; 48; 48; 7; 48; 48"/>
                     </ellipse>
 
-                    <ellipse cx="418" cy="515" rx="6" ry="7.5" fill="#FFFFFF" opacity="0.88">
-                      <animate attributeName="rx" values="6;6.8;5.8;6.2;6" dur="2.1s" repeatCount="indefinite"/>
-                      <animate attributeName="ry" values="7.5;8.1;7.1;7.6;7.5" dur="2.1s" repeatCount="indefinite"/>
+                    <!-- Eye bottom subsurface glass reflection -->
+                    <ellipse cx="422" cy="564" rx="22" ry="11" fill="url(#eyeBottomGlow)"/>
+
+                    <!-- Eye left reflections & sparkles -->
+                    <g id="eye-left-shine">
+                      <!-- Primary 3D Specular Highlight Dot -->
+                      <circle cx="428" cy="517" r="16" fill="#FFFFFF" opacity="0.95">
+                        <animate attributeName="opacity" dur="8s" repeatCount="indefinite"
+                          keyTimes="0; 0.07; 0.085; 0.10; 0.6375; 0.65; 0.90; 0.9125; 1"
+                          values="0.95; 0.95; 0.2; 0.95; 0.95; 1.0; 1.0; 0.95; 0.95"/>
+                        <animate attributeName="r" dur="8s" repeatCount="indefinite"
+                          keyTimes="0; 0.6375; 0.65; 0.90; 0.9125; 1"
+                          values="16; 16; 18.5; 18.5; 16; 16"/>
+                      </circle>
+
+                      <ellipse cx="407" cy="521" rx="14" ry="17" fill="#FFFFFF" opacity="0.92">
+                        <animate attributeName="opacity" dur="8s" repeatCount="indefinite"
+                          keyTimes="0; 0.07; 0.085; 0.10; 0.6375; 0.65; 0.90; 0.9125; 1"
+                          values="0.92; 0.92; 0.2; 0.92; 0.92; 0.98; 0.98; 0.92; 0.92"/>
+                        <animate attributeName="ry" values="17;18.2;16.8;17.4;17" dur="2.6s" repeatCount="indefinite"/>
+                        <animate attributeName="cy" values="521;520;521.5;521;521" dur="2.6s" repeatCount="indefinite"/>
+                      </ellipse>
+
+                      <ellipse cx="418" cy="515" rx="6" ry="7.5" fill="#FFFFFF" opacity="0.88">
+                        <animate attributeName="rx" values="6;6.8;5.8;6.2;6" dur="2.1s" repeatCount="indefinite"/>
+                        <animate attributeName="ry" values="7.5;8.1;7.1;7.6;7.5" dur="2.1s" repeatCount="indefinite"/>
+                      </ellipse>
+
+                      <circle cx="437" cy="550" r="5.5" fill="#FFFFFF" opacity="0.30">
+                        <animate attributeName="r" values="4.6;6.2;5;5.7;4.6" dur="1.9s" repeatCount="indefinite"/>
+                      </circle>
+
+                      <ellipse cx="429" cy="557" rx="11" ry="6.5" fill="#FFFFFF" opacity="0.20">
+                        <animate attributeName="rx" values="10;12.2;10.4;11.2;10" dur="2.3s" repeatCount="indefinite"/>
+                      </ellipse>
+
+                      <!-- 4-point Anime Glint Star Sparkle during standing winking smile -->
+                      <g id="eye-left-sparkle" opacity="0">
+                        <path d="M 428 506 L 428 528" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round"/>
+                        <path d="M 417 517 L 439 517" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round"/>
+                        <path d="M 420 509 L 436 525" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"/>
+                        <path d="M 420 525 L 436 509" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"/>
+                        <animate attributeName="opacity" dur="8s" repeatCount="indefinite"
+                          keyTimes="0; 0.6375; 0.65; 0.90; 0.9125; 1"
+                          values="0; 0; 1; 1; 0; 0"/>
+                      </g>
+                    </g>
+                  </g>
+                </g>
+
+                <!-- RIGHT EYE 3D -->
+                <g id="eye-right">
+                  <animateTransform attributeName="transform" type="translate" dur="8s" begin="0s" repeatCount="indefinite"
+                    keyTimes="0; 0.225; 0.65; 0.90; 1"
+                    values="0 0; 0 0; 0 -2; 0 -2; 0 0"/>
+
+                  <!-- Eye socket 3D inset shadow behind eye -->
+                  <ellipse cx="598" cy="541" rx="47" ry="50" fill="url(#eyeSocketShadow)" filter="url(#softGlow)"/>
+
+                  <!-- Pupil & Glance Group (Gaze moves left and right inside socket) -->
+                  <g id="eye-right-pupil-glance">
+                    <animateTransform attributeName="transform" type="translate" dur="8s" begin="0s" repeatCount="indefinite"
+                      keyTimes="0; 0.275; 0.325; 0.4125; 0.45; 0.5375; 0.575; 1"
+                      values="0 0; 0 0; -12 0; -12 0; 12 0; 12 0; 0 0; 0 0"
+                      calcMode="spline"
+                      keySplines="0 0 1 1; 0.25 0.9 0.25 1; 0 0 1 1; 0.25 0.9 0.25 1; 0 0 1 1; 0.25 0.9 0.25 1; 0 0 1 1"/>
+
+                    <!-- 3D Eye socket -->
+                    <ellipse cx="598" cy="537" rx="44" ry="48" fill="url(#eye3DGrad)">
+                      <animate attributeName="ry" dur="8s" repeatCount="indefinite"
+                        keyTimes="0; 0.07; 0.085; 0.10; 0.6375; 0.65; 0.90; 0.9125; 0.95; 1"
+                        values="48; 48; 7; 48; 48; 2; 2; 48; 48; 48"/>
                     </ellipse>
 
-                    <circle cx="437" cy="550" r="5.5" fill="#FFFFFF" opacity="0.30">
-                      <animate attributeName="r" values="4.6;6.2;5;5.7;4.6" dur="1.9s" repeatCount="indefinite"/>
-                    </circle>
-
-                    <ellipse cx="429" cy="557" rx="11" ry="6.5" fill="#FFFFFF" opacity="0.20">
-                      <animate attributeName="rx" values="10;12.2;10.4;11.2;10" dur="2.3s" repeatCount="indefinite"/>
-                    </ellipse>
-
-                    <!-- 4-point Anime Glint Star Sparkle during standing winking smile -->
-                    <g id="eye-left-sparkle" opacity="0">
-                      <path d="M 428 506 L 428 528" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round"/>
-                      <path d="M 417 517 L 439 517" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round"/>
-                      <path d="M 420 509 L 436 525" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"/>
-                      <path d="M 420 525 L 436 509" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"/>
-                      <animate attributeName="opacity" dur="5.5s" repeatCount="indefinite"
-                        keyTimes="0; 0.38; 0.40; 0.65; 0.67; 1"
+                    <!-- 3D Cute Winking Eyelash Arc (Appears strictly when mascot stands still & smiles) -->
+                    <path d="M 562 537 Q 598 565 634 537" stroke="#121722" stroke-width="7" stroke-linecap="round" fill="none" opacity="0">
+                      <animate attributeName="opacity" dur="8s" repeatCount="indefinite"
+                        keyTimes="0; 0.6375; 0.65; 0.90; 0.9125; 1"
                         values="0; 0; 1; 1; 0; 0"/>
+                    </path>
+
+                    <!-- Eye bottom subsurface glass reflection -->
+                    <ellipse cx="598" cy="564" rx="22" ry="11" fill="url(#eyeBottomGlow)"/>
+
+                    <g id="eye-right-shine">
+                      <animate attributeName="opacity" dur="8s" repeatCount="indefinite"
+                        keyTimes="0; 0.6375; 0.65; 0.90; 0.9125; 1"
+                        values="1; 1; 0; 0; 1; 1"/>
+
+                      <circle cx="604" cy="517" r="16" fill="#FFFFFF" opacity="0.92">
+                        <animate attributeName="r" values="16;16.6;16" dur="2.8s" repeatCount="indefinite"/>
+                      </circle>
+
+                      <ellipse cx="583" cy="521" rx="14" ry="17" fill="#FFFFFF" opacity="0.90">
+                        <animate attributeName="ry" values="17;18;16.7;17.6;17" dur="2.8s" repeatCount="indefinite"/>
+                        <animate attributeName="cy" values="521;520.2;521.4;521;521" dur="2.8s" repeatCount="indefinite"/>
+                      </ellipse>
+
+                      <ellipse cx="594" cy="515" rx="6" ry="7.5" fill="#FFFFFF" opacity="0.85">
+                        <animate attributeName="rx" values="6;6.7;5.9;6.4;6" dur="2.0s" repeatCount="indefinite"/>
+                        <animate attributeName="ry" values="7.5;8.1;7.1;7.6;7.5" dur="2.0s" repeatCount="indefinite"/>
+                      </ellipse>
+
+                      <circle cx="613" cy="550" r="5.5" fill="#FFFFFF" opacity="0.22">
+                        <animate attributeName="r" values="4.7;6.1;5.1;5.6;4.7" dur="2.0s" repeatCount="indefinite"/>
+                      </circle>
+
+                      <ellipse cx="605" cy="557" rx="11" ry="6.5" fill="#FFFFFF" opacity="0.16">
+                        <animate attributeName="rx" values="10;12;10.6;11.3;10" dur="2.4s" repeatCount="indefinite"/>
+                      </ellipse>
                     </g>
                   </g>
                 </g>
               </g>
 
-              <!-- RIGHT EYE 3D -->
-              <g id="eye-right">
-                <animateTransform attributeName="transform" type="translate" dur="5.5s" begin="0s" repeatCount="indefinite"
-                  keyTimes="0; 0.27; 0.40; 0.65; 1"
-                  values="0 0; 0 0; 0 -2; 0 -2; 0 0"/>
+              <!-- CHEEKS (Volumetric Spherical Glow Blush) -->
+              <g id="cheeks">
+                <ellipse cx="372" cy="591" rx="30" ry="18" fill="url(#cheek3DGrad)">
+                  <animate attributeName="opacity" dur="8s" begin="0s" repeatCount="indefinite"
+                    keyTimes="0; 0.225; 0.6375; 0.65; 0.90; 0.9125; 1"
+                    values="0.55; 0.55; 0.55; 1.0; 1.0; 0.55; 0.55"/>
+                </ellipse>
 
-                <!-- Eye socket 3D inset shadow behind eye -->
-                <ellipse cx="598" cy="541" rx="47" ry="50" fill="url(#eyeSocketShadow)" filter="url(#softGlow)"/>
-
-                <!-- Pupil & Glance Group (Gaze moves left and right inside socket) -->
-                <g id="eye-right-pupil-glance">
-                  <animateTransform attributeName="transform" type="translate" dur="5.5s" begin="0s" repeatCount="indefinite"
-                    keyTimes="0; 0.70; 0.74; 0.81; 0.85; 0.92; 0.96; 1"
-                    values="0 0; 0 0; -12 0; -12 0; 12 0; 12 0; 0 0; 0 0"
-                    calcMode="spline"
-                    keySplines="0 0 1 1; 0.25 0.9 0.25 1; 0 0 1 1; 0.25 0.9 0.25 1; 0 0 1 1; 0.25 0.9 0.25 1; 0 0 1 1"/>
-
-                  <!-- 3D Eye socket -->
-                  <ellipse cx="598" cy="537" rx="44" ry="48" fill="url(#eye3DGrad)">
-                    <animate attributeName="ry" dur="5.5s" repeatCount="indefinite"
-                      keyTimes="0; 0.10; 0.12; 0.14; 0.38; 0.40; 0.65; 0.67; 0.85; 0.87; 1"
-                      values="48; 48; 7; 48; 48; 2; 2; 48; 48; 7; 48"/>
-                  </ellipse>
-
-                  <!-- 3D Cute Winking Eyelash Arc (Appears strictly when mascot stands still & smiles) -->
-                  <path d="M 562 537 Q 598 565 634 537" stroke="#121722" stroke-width="7" stroke-linecap="round" fill="none" opacity="0">
-                    <animate attributeName="opacity" dur="5.5s" repeatCount="indefinite"
-                      keyTimes="0; 0.38; 0.40; 0.65; 0.67; 1"
-                      values="0; 0; 1; 1; 0; 0"/>
-                  </path>
-
-                  <!-- Eye bottom subsurface glass reflection -->
-                  <ellipse cx="598" cy="564" rx="22" ry="11" fill="url(#eyeBottomGlow)"/>
-
-                  <g id="eye-right-shine">
-                    <animate attributeName="opacity" dur="5.5s" repeatCount="indefinite"
-                      keyTimes="0; 0.38; 0.40; 0.65; 0.67; 1"
-                      values="1; 1; 0; 0; 1; 1"/>
-
-                    <circle cx="604" cy="517" r="16" fill="#FFFFFF" opacity="0.92">
-                      <animate attributeName="r" values="16;16.6;16" dur="2.8s" repeatCount="indefinite"/>
-                    </circle>
-
-                    <ellipse cx="583" cy="521" rx="14" ry="17" fill="#FFFFFF" opacity="0.90">
-                      <animate attributeName="ry" values="17;18;16.7;17.6;17" dur="2.8s" repeatCount="indefinite"/>
-                      <animate attributeName="cy" values="521;520.2;521.4;521;521" dur="2.8s" repeatCount="indefinite"/>
-                    </ellipse>
-
-                    <ellipse cx="594" cy="515" rx="6" ry="7.5" fill="#FFFFFF" opacity="0.85">
-                      <animate attributeName="rx" values="6;6.7;5.9;6.4;6" dur="2.0s" repeatCount="indefinite"/>
-                      <animate attributeName="ry" values="7.5;8;7.2;7.7;7.5" dur="2.0s" repeatCount="indefinite"/>
-                    </ellipse>
-
-                    <circle cx="613" cy="550" r="5.5" fill="#FFFFFF" opacity="0.22">
-                      <animate attributeName="r" values="4.7;6.1;5.1;5.6;4.7" dur="2.0s" repeatCount="indefinite"/>
-                    </circle>
-
-                    <ellipse cx="605" cy="557" rx="11" ry="6.5" fill="#FFFFFF" opacity="0.16">
-                      <animate attributeName="rx" values="10;12;10.6;11.3;10" dur="2.4s" repeatCount="indefinite"/>
-                    </ellipse>
-                  </g>
-                </g>
+                <ellipse cx="650" cy="591" rx="30" ry="18" fill="url(#cheek3DGrad)">
+                  <animate attributeName="opacity" dur="8s" begin="0s" repeatCount="indefinite"
+                    keyTimes="0; 0.225; 0.6375; 0.65; 0.90; 0.9125; 1"
+                    values="0.55; 0.55; 0.55; 1.0; 1.0; 0.55; 0.55"/>
+                </ellipse>
               </g>
-            </g>
 
-            <!-- CHEEKS (Volumetric Spherical Glow Blush) -->
-            <g id="cheeks">
-              <ellipse cx="372" cy="591" rx="30" ry="18" fill="url(#cheek3DGrad)">
-                <animate attributeName="opacity" dur="5.5s" begin="0s" repeatCount="indefinite"
-                  keyTimes="0; 0.27; 0.38; 0.40; 0.65; 0.67; 1"
-                  values="0.55; 0.55; 0.55; 1.0; 1.0; 0.55; 0.55"/>
-              </ellipse>
+              <!-- MOUTHS (Fixed Smile Arches Upwards & Perfect Layering) -->
+              <g id="mouth" transform="translate(0 20)">
+                <!-- Dark Mouth Cavity Path -->
+                <path fill="#230805" d="M 488 600 C 488 584, 499 574, 513 574 C 527 574, 538 584, 538 600 C 538 616, 527 626, 513 626 C 499 626, 488 616, 488 600 Z">
+                  <animate attributeName="d" dur="8s" begin="0s" repeatCount="indefinite"
+                    keyTimes="0; 0.03; 0.09; 0.225; 0.6375; 0.65; 0.90; 0.9125; 1"
+                    calcMode="spline"
+                    keySplines="0.42 0 0.58 1; 0.42 0 0.58 1; 0.42 0 0.58 1; 0.42 0 0.58 1; 0.42 0 0.58 1; 0.42 0 0.58 1; 0.42 0 0.58 1; 0.42 0 0.58 1"
+                    values="
+                      M 488 600 C 488 584, 499 574, 513 574 C 527 574, 538 584, 538 600 C 538 616, 527 626, 513 626 C 499 626, 488 616, 488 600 Z;
+                      M 488 600 C 488 584, 499 574, 513 574 C 527 574, 538 584, 538 600 C 538 616, 527 626, 513 626 C 499 626, 488 616, 488 600 Z;
+                      M 480 600 C 480 584, 495 574, 513 574 C 531 574, 546 584, 546 600 C 546 614, 531 624, 513 624 C 495 624, 480 614, 480 600 Z;
+                      M 488 600 C 488 584, 499 574, 513 574 C 527 574, 538 584, 538 600 C 538 616, 527 626, 513 626 C 499 626, 488 616, 488 600 Z;
+                      M 488 600 C 488 584, 499 574, 513 574 C 527 574, 538 584, 538 600 C 538 616, 527 626, 513 626 C 499 626, 488 616, 488 600 Z;
+                      M 460 598 C 468 620, 490 635, 513 635 C 536 635, 558 620, 566 598 C 548 590, 531 586, 513 586 C 495 586, 478 590, 460 598 Z;
+                      M 460 598 C 468 620, 490 635, 513 635 C 536 635, 558 620, 566 598 C 548 590, 531 586, 513 586 C 495 586, 478 590, 460 598 Z;
+                      M 488 600 C 488 584, 499 574, 513 574 C 527 574, 538 584, 538 600 C 538 616, 527 626, 513 626 C 499 626, 488 616, 488 600 Z;
+                      M 488 600 C 488 584, 499 574, 513 574 C 527 574, 538 584, 538 600 C 538 616, 527 626, 513 626 C 499 626, 488 616, 488 600 Z"/>
+                </path>
 
-              <ellipse cx="650" cy="591" rx="30" ry="18" fill="url(#cheek3DGrad)">
-                <animate attributeName="opacity" dur="5.5s" begin="0s" repeatCount="indefinite"
-                  keyTimes="0; 0.27; 0.38; 0.40; 0.65; 0.67; 1"
-                  values="0.55; 0.55; 0.55; 1.0; 1.0; 0.55; 0.55"/>
-              </ellipse>
-            </g>
-
-            <!-- MOUTHS (Fixed Smile Arches Upwards & Perfect Layering) -->
-            <g id="mouth" transform="translate(0 20)">
-              <!-- Dark Mouth Cavity Path -->
-              <path fill="#230805" d="M 488 600 C 488 584, 499 574, 513 574 C 527 574, 538 584, 538 600 C 538 616, 527 626, 513 626 C 499 626, 488 616, 488 600 Z">
-                <animate attributeName="d" dur="5.5s" begin="0s" repeatCount="indefinite"
-                  keyTimes="0; 0.04; 0.13; 0.27; 0.38; 0.40; 0.65; 0.67; 1"
-                  calcMode="spline"
-                  keySplines="0.42 0 0.58 1; 0.42 0 0.58 1; 0.42 0 0.58 1; 0.42 0 0.58 1; 0.42 0 0.58 1; 0.42 0 0.58 1; 0.42 0 0.58 1; 0.42 0 0.58 1"
-                  values="
-                    M 488 600 C 488 584, 499 574, 513 574 C 527 574, 538 584, 538 600 C 538 616, 527 626, 513 626 C 499 626, 488 616, 488 600 Z;
-                    M 488 600 C 488 584, 499 574, 513 574 C 527 574, 538 584, 538 600 C 538 616, 527 626, 513 626 C 499 626, 488 616, 488 600 Z;
-                    M 480 600 C 480 584, 495 574, 513 574 C 531 574, 546 584, 546 600 C 546 614, 531 624, 513 624 C 495 624, 480 614, 480 600 Z;
-                    M 488 600 C 488 584, 499 574, 513 574 C 527 574, 538 584, 538 600 C 538 616, 527 626, 513 626 C 499 626, 488 616, 488 600 Z;
-                    M 488 600 C 488 584, 499 574, 513 574 C 527 574, 538 584, 538 600 C 538 616, 527 626, 513 626 C 499 626, 488 616, 488 600 Z;
-                    M 460 598 C 468 620, 490 635, 513 635 C 536 635, 558 620, 566 598 C 548 590, 531 586, 513 586 C 495 586, 478 590, 460 598 Z;
-                    M 460 598 C 468 620, 490 635, 513 635 C 536 635, 558 620, 566 598 C 548 590, 531 586, 513 586 C 495 586, 478 590, 460 598 Z;
-                    M 488 600 C 488 584, 499 574, 513 574 C 527 574, 538 584, 538 600 C 538 616, 527 626, 513 626 C 499 626, 488 616, 488 600 Z;
-                    M 488 600 C 488 584, 499 574, 513 574 C 527 574, 538 584, 538 600 C 538 616, 527 626, 513 626 C 499 626, 488 616, 488 600 Z"/>
-              </path>
-
-              <!-- Red Tongue Path -->
-              <path fill="#FF4D26" d="M 497 606 C 497 598, 504 592, 513 592 C 522 592, 529 598, 529 606 C 529 614, 522 620, 513 620 C 504 620, 497 614, 497 606 Z">
-                <animate attributeName="d" dur="5.5s" begin="0s" repeatCount="indefinite"
-                  keyTimes="0; 0.04; 0.13; 0.27; 0.38; 0.40; 0.65; 0.67; 1"
-                  calcMode="spline"
-                  keySplines="0.42 0 0.58 1; 0.42 0 0.58 1; 0.42 0 0.58 1; 0.42 0 0.58 1; 0.42 0 0.58 1; 0.42 0 0.58 1; 0.42 0 0.58 1; 0.42 0 0.58 1"
-                  values="
-                    M 497 606 C 497 598, 504 592, 513 592 C 522 592, 529 598, 529 606 C 529 614, 522 620, 513 620 C 504 620, 497 614, 497 606 Z;
-                    M 497 606 C 497 598, 504 592, 513 592 C 522 592, 529 598, 529 606 C 529 614, 522 620, 513 620 C 504 620, 497 614, 497 606 Z;
-                    M 491 606 C 491 599, 501 594, 513 594 C 525 594, 535 599, 535 606 C 535 613, 525 618, 513 618 C 501 618, 491 613, 491 606 Z;
-                    M 497 606 C 497 598, 504 592, 513 592 C 522 592, 529 598, 529 606 C 529 614, 522 620, 513 620 C 504 620, 497 614, 497 606 Z;
-                    M 497 606 C 497 598, 504 592, 513 592 C 522 592, 529 598, 529 606 C 529 614, 522 620, 513 620 C 504 620, 497 614, 497 606 Z;
-                    M 478 612 C 488 624, 500 631, 513 631 C 526 631, 538 624, 548 612 C 538 603, 526 599, 513 599 C 500 599, 488 603, 478 612 Z;
-                    M 478 612 C 488 624, 500 631, 513 631 C 526 631, 538 624, 548 612 C 538 603, 526 599, 513 599 C 500 599, 488 603, 478 612 Z;
-                    M 497 606 C 497 598, 504 592, 513 592 C 522 592, 529 598, 529 606 C 529 614, 522 620, 513 620 C 504 620, 497 614, 497 606 Z;
-                    M 497 606 C 497 598, 504 592, 513 592 C 522 592, 529 598, 529 606 C 538 616, 527 626, 513 626 C 499 626, 488 616, 488 600 Z"/>
-              </path>
+                <!-- Red Tongue Path -->
+                <path fill="#FF4D26" d="M 497 606 C 497 598, 504 592, 513 592 C 522 592, 529 598, 529 606 C 529 614, 522 620, 513 620 C 504 620, 497 614, 497 606 Z">
+                  <animate attributeName="d" dur="8s" begin="0s" repeatCount="indefinite"
+                    keyTimes="0; 0.03; 0.09; 0.225; 0.6375; 0.65; 0.90; 0.9125; 1"
+                    calcMode="spline"
+                    keySplines="0.42 0 0.58 1; 0.42 0 0.58 1; 0.42 0 0.58 1; 0.42 0 0.58 1; 0.42 0 0.58 1; 0.42 0 0.58 1; 0.42 0 0.58 1; 0.42 0 0.58 1"
+                    values="
+                      M 497 606 C 497 598, 504 592, 513 592 C 522 592, 529 598, 529 606 C 529 614, 522 620, 513 620 C 504 620, 497 614, 497 606 Z;
+                      M 497 606 C 497 598, 504 592, 513 592 C 522 592, 529 598, 529 606 C 529 614, 522 620, 513 620 C 504 620, 497 614, 497 606 Z;
+                      M 491 606 C 491 599, 501 594, 513 594 C 525 594, 535 599, 535 606 C 535 613, 525 618, 513 618 C 501 618, 491 613, 491 606 Z;
+                      M 497 606 C 497 598, 504 592, 513 592 C 522 592, 529 598, 529 606 C 529 614, 522 620, 513 620 C 504 620, 497 614, 497 606 Z;
+                      M 497 606 C 497 598, 504 592, 513 592 C 522 592, 529 598, 529 606 C 529 614, 522 620, 513 620 C 504 620, 497 614, 497 606 Z;
+                      M 478 612 C 488 624, 500 631, 513 631 C 526 631, 538 624, 548 612 C 538 603, 526 599, 513 599 C 500 599, 488 603, 478 612 Z;
+                      M 478 612 C 488 624, 500 631, 513 631 C 526 631, 538 624, 548 612 C 538 603, 526 599, 513 599 C 500 599, 488 603, 478 612 Z;
+                      M 497 606 C 497 598, 504 592, 513 592 C 522 592, 529 598, 529 606 C 529 614, 522 620, 513 620 C 504 620, 497 614, 497 606 Z;
+                      M 497 606 C 497 598, 504 592, 513 592 C 522 592, 529 598, 529 606 C 538 616, 527 626, 513 626 C 499 626, 488 616, 488 600 Z"/>
+                </path>
+              </g>
             </g>
           </g>
         </g>
