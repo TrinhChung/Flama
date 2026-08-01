@@ -11,7 +11,6 @@ import {
   Sparkles,
   Star,
   X,
-  Zap,
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
@@ -19,13 +18,7 @@ import { appApi } from '@/app/api'
 import { AmbientBackground } from '@/components/ambient-background'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import {
-  Card,
-  CardContent,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
@@ -98,8 +91,8 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
 
   return (
     <Page className="space-y-4 sm:space-y-6 relative px-2.5 sm:px-6 lg:px-8 py-3 sm:py-6">
-      {/* Ambient background glow & grid pattern from Login page */}
-      <AmbientBackground intensity="vibrant" />
+      {/* Ambient background glow & grid pattern */}
+      <AmbientBackground intensity="subtle" />
 
       {/* Hero Banner Header */}
       <div className="relative overflow-hidden rounded-xl sm:rounded-2xl border border-primary/20 bg-card/80 p-3.5 sm:p-7 shadow-xs backdrop-blur-xl">
@@ -258,7 +251,7 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
 
       {/* Item Card Grid */}
       {marketQuery.data?.items.length ? (
-        <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-2.5 sm:gap-4 grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {marketQuery.data.items.map((item) => {
             const itemTitle = item.title || item.name || 'Học liệu không tên'
             const detailUrl =
@@ -272,19 +265,41 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
             return (
               <Card
                 key={item.id}
-                className="group relative flex flex-col overflow-hidden border-border/40 sm:border-border/80 bg-card/95 transition-all duration-200 hover:-translate-y-1 hover:border-primary/50 hover:shadow-lg backdrop-blur-md rounded-xl sm:rounded-2xl"
+                className="group relative flex flex-col justify-between overflow-hidden border-border/40 sm:border-border/80 bg-card/95 p-2.5 sm:p-4 transition-all duration-200 hover:-translate-y-1 hover:border-primary/50 hover:shadow-lg backdrop-blur-md rounded-xl sm:rounded-2xl"
               >
                 {/* Header Banner Accent */}
-                <div className="h-1.5 w-full bg-gradient-to-r from-primary via-orange-500 to-amber-500" />
+                <div className="absolute top-0 left-0 right-0 h-1 w-full bg-gradient-to-r from-primary via-orange-500 to-amber-500" />
 
-                <CardHeader className="p-3 sm:p-5 pb-2 space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <Badge variant="secondary" className="px-2 py-0.5 text-[10px] sm:text-[11px] font-semibold rounded-md">
+                {/* Card Main Info Block */}
+                <div className="flex flex-col flex-1 pt-1.5">
+                  {/* Title First */}
+                  <h3 className="text-xs sm:text-sm font-bold tracking-tight text-foreground line-clamp-1 group-hover:text-primary transition-colors leading-snug mb-1">
+                    {itemTitle}
+                  </h3>
+
+                  {/* Author Row */}
+                  <div className="flex items-center gap-1 text-[10px] sm:text-[11px] text-muted-foreground mb-1.5">
+                    <div className="flex size-3.5 sm:size-4 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary font-bold text-[8px] sm:text-[9px]">
+                      {authorInitial}
+                    </div>
+                    <span className="font-semibold text-foreground/80 truncate">
+                      {authorName}
+                    </span>
+                  </div>
+
+                  {/* Description */}
+                  <p className="line-clamp-2 text-[11px] sm:text-xs leading-relaxed text-muted-foreground/90 font-normal mb-2">
+                    {item.description || 'Chưa có mô tả chi tiết cho học liệu này.'}
+                  </p>
+
+                  {/* Category & Price Badge Row */}
+                  <div className="flex items-center justify-between gap-1 mb-2 mt-auto">
+                    <Badge variant="secondary" className="px-1.5 sm:px-2 py-0.5 text-[9px] sm:text-[11px] font-semibold rounded-md truncate max-w-[60%]">
                       {item.primary_category || 'Khác'}
                     </Badge>
 
                     <span
-                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] sm:text-[11px] font-extrabold border ${
+                      className={`inline-flex items-center rounded-full px-1.5 sm:px-2 py-0.5 text-[9px] sm:text-[11px] font-extrabold border shrink-0 ${
                         item.pricing_mode === 'free'
                           ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30'
                           : 'bg-primary/10 text-primary border-primary/30'
@@ -293,67 +308,50 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
                       {item.price_display}
                     </span>
                   </div>
+                </div>
 
-                  <CardTitle className="text-base font-bold tracking-tight text-foreground line-clamp-1 group-hover:text-primary transition-colors leading-snug">
-                    {itemTitle}
-                  </CardTitle>
-
-                  {/* Author Row */}
-                  <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                    <div className="flex size-4 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary font-bold text-[9px]">
-                      {authorInitial}
-                    </div>
-                    <span className="font-semibold text-foreground/90 line-clamp-1">
-                      {authorName}
-                    </span>
-                  </div>
-                </CardHeader>
-
-                <CardContent className="flex-1 px-3 sm:px-5 py-1.5 space-y-2.5">
-                  <p className="line-clamp-2 text-xs leading-relaxed text-muted-foreground font-normal">
-                    {item.description || 'Chưa có mô tả chi tiết cho học liệu này.'}
-                  </p>
-
-                  <div className="flex items-center justify-between rounded-xl bg-muted/40 px-2.5 sm:px-3 py-1.5 sm:py-2 text-xs font-semibold border border-border/40">
-                    <span className="inline-flex items-center gap-1 text-foreground">
-                      <Star className="size-3.5 fill-amber-400 text-amber-500" />
+                {/* Card Bottom Block */}
+                <div className="mt-auto space-y-2">
+                  {/* Rating & Install Stats Bar */}
+                  <div className="flex items-center justify-between rounded-lg sm:rounded-xl bg-muted/40 px-2 sm:px-2.5 py-1 sm:py-1.5 text-[10px] sm:text-xs font-semibold border border-border/40">
+                    <span className="inline-flex items-center gap-0.5 sm:gap-1 text-foreground">
+                      <Star className="size-3 sm:size-3.5 fill-amber-400 text-amber-500" />
                       {item.rating_avg.toFixed(1)}
                     </span>
-                    <span className="inline-flex items-center gap-1 text-muted-foreground text-[11px]">
-                      <Download className="size-3.5 text-primary" />
-                      {item.install_count.toLocaleString('vi-VN')} lượt cài
+                    <span className="inline-flex items-center gap-0.5 sm:gap-1 text-muted-foreground text-[9px] sm:text-[11px]">
+                      <Download className="size-3 sm:size-3.5 text-primary" />
+                      <span>{item.install_count.toLocaleString('vi-VN')}<span className="hidden sm:inline"> lượt</span></span>
                     </span>
                   </div>
-                </CardContent>
 
-                <CardFooter className="p-3 sm:p-4 pt-1 border-t-0 bg-transparent">
+                  {/* Action Button */}
                   {mode === 'decks' && item.installed_deck_id ? (
                     <Link
                       to={`/study?deck_id=${item.installed_deck_id}`}
-                      className="flex items-center justify-center gap-1.5 w-full h-7.5 sm:h-8 py-1 px-2.5 font-semibold text-[11px] sm:text-xs shadow-2xs bg-gradient-to-r from-primary via-orange-500 to-amber-500 text-primary-foreground hover:opacity-95 rounded-lg transition-all"
+                      className="flex items-center justify-center gap-1 w-full h-6.5 sm:h-7.5 py-0.5 px-2 font-semibold text-[10px] sm:text-[11px] shadow-2xs bg-gradient-to-r from-primary via-orange-500 to-amber-500 text-primary-foreground hover:opacity-95 rounded-md sm:rounded-lg transition-all truncate"
                     >
-                      <Zap className="size-3 fill-primary-foreground shrink-0" />
-                      <span>Bắt đầu học ngay</span>
+                      <BookOpen className="size-3 shrink-0" />
+                      <span className="truncate">Học ngay</span>
                     </Link>
                   ) : item.is_installed ? (
                     <Link
                       to={detailUrl}
-                      className="flex items-center justify-center gap-1.5 w-full h-7.5 sm:h-8 py-1 px-2.5 font-semibold text-[11px] sm:text-xs border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 rounded-lg transition-all"
+                      className="flex items-center justify-center gap-1 w-full h-6.5 sm:h-7.5 py-0.5 px-2 font-semibold text-[10px] sm:text-[11px] border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 rounded-md sm:rounded-lg transition-all truncate"
                     >
                       <CheckCircle className="size-3 shrink-0" />
-                      <span>Đã cài đặt • Xem chi tiết</span>
+                      <span className="truncate">Chi tiết</span>
                     </Link>
                   ) : (
                     <Link
                       to={detailUrl}
-                      className="flex items-center justify-center gap-1.5 w-full h-7.5 sm:h-8 py-1 px-2.5 font-semibold text-[11px] sm:text-xs bg-primary/10 hover:bg-primary text-primary hover:text-primary-foreground border border-primary/25 shadow-2xs transition-all duration-200 group-hover:bg-primary group-hover:text-primary-foreground rounded-lg"
+                      className="flex items-center justify-center gap-1 w-full h-6.5 sm:h-7.5 py-0.5 px-2 font-semibold text-[10px] sm:text-[11px] bg-primary/10 hover:bg-primary text-primary hover:text-primary-foreground border border-primary/25 shadow-2xs transition-all duration-200 group-hover:bg-primary group-hover:text-primary-foreground rounded-md sm:rounded-lg truncate"
                     >
                       <Eye className="size-3 shrink-0" />
-                      <span>Xem chi tiết</span>
+                      <span className="truncate">Chi tiết</span>
                       <ArrowRight className="size-3 shrink-0 transition-transform group-hover:translate-x-0.5" />
                     </Link>
                   )}
-                </CardFooter>
+                </div>
               </Card>
             )
           })}

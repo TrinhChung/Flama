@@ -10,6 +10,7 @@ import {
   Upload,
 } from '@/shared/components/Icons'
 import { Link } from 'react-router-dom'
+import { AmbientBackground } from '@/components/ambient-background'
 import { Button } from '@/components/ui/button'
 import { useBootstrap } from '@/shared/api/bootstrap'
 import { Page } from '@/shared/components/Page'
@@ -62,7 +63,8 @@ export function DashboardPage() {
     : '/flashcards/import'
 
   return (
-    <Page className="anki-home max-w-[1200px] w-full mx-auto px-2 sm:px-4 py-2 sm:py-3 space-y-3 sm:space-y-6">
+    <Page className="anki-home relative max-w-[1200px] w-full mx-auto px-2 sm:px-4 py-2 sm:py-3 space-y-3 sm:space-y-6">
+      <AmbientBackground />
       {/* Shared Dashboard Toolbar */}
       <div className="dash-toolbar flex items-center justify-between gap-2 border-b border-border/60 pb-2 sm:pb-3">
         {/* Left Navigation Tabs */}

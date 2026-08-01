@@ -15,8 +15,8 @@ import {
   MessageSquare,
   Sparkles,
   Star,
+  BookOpen,
   User,
-  Zap,
 } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useParams } from 'react-router-dom'
@@ -268,7 +268,7 @@ export function SharedDeckDetailPage() {
 
   return (
     <Page className="space-y-4 sm:space-y-6 relative px-2.5 sm:px-6 lg:px-8 py-3 sm:py-6">
-      <AmbientBackground intensity="vibrant" />
+      <AmbientBackground intensity="subtle" />
 
       <PageHeader
         title={deckTitle}
@@ -717,7 +717,7 @@ export function SharedDeckDetailPage() {
                   {deck.installed_deck_id ? (
                     <Button className="w-full h-10 sm:h-11 font-bold text-xs sm:text-sm shadow-md bg-gradient-to-r from-primary to-primary/90 rounded-xl" asChild>
                       <Link to={`/study?deck_id=${deck.installed_deck_id}`}>
-                        <Zap className="mr-1.5 size-4 fill-primary-foreground" />
+                        <BookOpen className="mr-1.5 size-4" />
                         Bắt đầu học ngay
                       </Link>
                     </Button>

@@ -202,7 +202,7 @@ export function SharedNoteTypeDetailPage() {
 
   return (
     <Page className="space-y-4 sm:space-y-6 relative px-2.5 sm:px-6 lg:px-8 py-3 sm:py-6">
-      <AmbientBackground intensity="vibrant" />
+      <AmbientBackground intensity="subtle" />
 
       <PageHeader
         title={titleName}
