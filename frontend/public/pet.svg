@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-label="Flame mascot 3D">
   <defs>
-    <!-- 3D Volumetric Body Radial Gradient (Soft Golden Warmth, No White Glare) -->
+    <!-- 3D Volumetric Body Radial Gradient (Soft Golden Warmth) -->
     <radialGradient id="flame3DGrad" cx="38%" cy="28%" r="72%" fx="35%" fy="24%">
       <stop offset="0%" stop-color="#FFDA5C"/>
       <stop offset="18%" stop-color="#FFBE1A"/>
@@ -10,14 +10,14 @@
       <stop offset="100%" stop-color="#A31200"/>
     </radialGradient>
 
-    <!-- Glossy Specular Highlight Gradient (Ultra-Subtle Silky Sheen) -->
+    <!-- Glossy Specular Highlight Gradient -->
     <linearGradient id="bodyHighlightGrad" x1="20%" y1="0%" x2="80%" y2="100%">
       <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.08"/>
       <stop offset="50%" stop-color="#FFFFFF" stop-opacity="0.02"/>
       <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
     </linearGradient>
 
-    <!-- Studio Rim Light Gradient (Soft Warm Ambient Edge) -->
+    <!-- Studio Rim Light Gradient -->
     <linearGradient id="rimLightGrad" x1="0%" y1="20%" x2="100%" y2="80%">
       <stop offset="0%" stop-color="#FFF5C2" stop-opacity="0.35"/>
       <stop offset="50%" stop-color="#FFC44D" stop-opacity="0.15"/>
@@ -60,8 +60,7 @@
       <stop offset="100%" stop-color="#FF4400" stop-opacity="0"/>
     </radialGradient>
 
-    <!-- SOFTENED LIGHTWEIGHT GROUND SHADOW GRADIENTS -->
-    <!-- Directional Soft Outer Cast Shadow (Lightened Warm Amber Tone) -->
+    <!-- GROUND SHADOW GRADIENTS -->
     <radialGradient id="shadowCastGrad" cx="45%" cy="42%" r="55%">
       <stop offset="0%" stop-color="#4A1205" stop-opacity="0.32"/>
       <stop offset="50%" stop-color="#73200A" stop-opacity="0.16"/>
@@ -69,14 +68,12 @@
       <stop offset="100%" stop-color="#000000" stop-opacity="0"/>
     </radialGradient>
 
-    <!-- Sharp Contact Occlusion Shadow (Lightened & Soft) -->
     <radialGradient id="shadowContactGrad" cx="50%" cy="50%" r="50%">
       <stop offset="0%" stop-color="#3A0D04" stop-opacity="0.42"/>
       <stop offset="60%" stop-color="#66180A" stop-opacity="0.20"/>
       <stop offset="100%" stop-color="#8C220E" stop-opacity="0"/>
     </radialGradient>
 
-    <!-- Warm Flame Ground Bounce Light (Caustic Glow under flame) -->
     <radialGradient id="groundFlameGlowGrad" cx="45%" cy="45%" r="50%">
       <stop offset="0%" stop-color="#FF7700" stop-opacity="0.30"/>
       <stop offset="50%" stop-color="#FF3300" stop-opacity="0.12"/>
@@ -96,192 +93,113 @@
     <filter id="highlightBlur" x="-20%" y="-20%" width="140%" height="140%">
       <feGaussianBlur stdDeviation="10"/>
     </filter>
+
+    <!-- Global ClipPath for 3D Shading -->
+    <clipPath id="flameBodyClip">
+      <path d="M 513 744 C 484 743, 437 740, 405 733 C 373 726, 342 711, 322 699 C 302 687, 286 672, 274 654 C 262 636, 251 613, 245 589 C 239 565, 240 538, 246 513 C 252 488, 264 464, 279 443 C 294 422, 315 401, 340 381 C 365 361, 395 342, 425 323 C 454 304, 478 288, 490 269 C 502 250, 507 231, 509 217 C 511 203, 500 171, 505 164 C 510 157, 545 189, 561 208 C 577 227, 589 249, 595 269 C 601 289, 603 315, 602 337 C 601 359, 587 388, 585 401 C 583 414, 609 381, 619 363 C 629 345, 630 331, 631 320 C 632 309, 629 295, 633 294 C 637 293, 653 312, 662 323 C 671 334, 678 346, 683 358 C 688 370, 692 384, 692 397 C 692 410, 685 426, 686 439 C 687 452, 714 478, 726 496 C 738 514, 743 538, 745 556 C 747 574, 744 591, 741 606 C 738 621, 731 637, 723 650 C 715 663, 706 675, 694 685 C 682 695, 656 709, 630 721 C 604 733, 584 737, 567 739 C 550 741, 536 744, 513 744 Z"/>
+    </clipPath>
   </defs>
 
-  <!-- GROUND SHADOW & LIGHT REFLECTION (Softened & Lightened) -->
-  <g id="ground-shadow-spawn">
-    <animate attributeName="opacity"
-      values="0;0;1"
-      keyTimes="0;0.34;1"
-      dur="1.65s"
-      begin="0s"
-      repeatCount="1"
-      fill="freeze"/>
-    <g id="ground-shadow">
-      <!-- 1. Warm Flame Ground Light Bounce (Radiates under flame) -->
-      <ellipse cx="513" cy="804" rx="175" ry="44" fill="url(#groundFlameGlowGrad)" filter="url(#shadowBlur)" opacity="0.75"/>
+  <!-- GROUND SHADOW & LIGHT REFLECTION -->
+  <g id="ground-shadow">
+    <!-- 1. Warm Flame Ground Light Bounce -->
+    <ellipse cx="513" cy="804" rx="175" ry="44" fill="url(#groundFlameGlowGrad)" filter="url(#shadowBlur)" opacity="0.75"/>
 
-      <!-- 2. Directional Outer Cast Shadow (Soft & Lightened, Offset to Bottom-Right X=548 Y=812) -->
-      <ellipse cx="548" cy="812" rx="156" ry="37" transform="rotate(3 548 812)" fill="url(#shadowCastGrad)" filter="url(#shadowBlur)" opacity="0.45">
-        <animate attributeName="rx"
-          values="156;168;116;156;150;156;156"
-          keyTimes="0;0.023;0.081;0.138;0.165;0.192;1"
-          calcMode="spline"
-          keySplines="0.25 0.8 0.3 1; 0.22 0.9 0.3 1; 0.2 0 0.2 1; 0.2 0.7 0.2 1; 0.2 0.7 0.2 1; 0 0 1 1"
-          dur="6s"
-          begin="1.65s"
-          repeatCount="indefinite"/>
-        <animate attributeName="ry"
-          values="37;41;25;37;35;37;37"
-          keyTimes="0;0.023;0.081;0.138;0.165;0.192;1"
-          calcMode="spline"
-          keySplines="0.25 0.8 0.3 1; 0.22 0.9 0.3 1; 0.2 0 0.2 1; 0.2 0.7 0.2 1; 0.2 0.7 0.2 1; 0 0 1 1"
-          dur="6s"
-          begin="1.65s"
-          repeatCount="indefinite"/>
-        <animate attributeName="opacity"
-          values="0.45;0.52;0.22;0.45;0.40;0.45;0.45"
-          keyTimes="0;0.023;0.081;0.138;0.165;0.192;1"
-          calcMode="spline"
-          keySplines="0.25 0.8 0.3 1; 0.22 0.9 0.3 1; 0.2 0 0.2 1; 0.2 0.7 0.2 1; 0.2 0.7 0.2 1; 0 0 1 1"
-          dur="6s"
-          begin="1.65s"
-          repeatCount="indefinite"/>
-      </ellipse>
+    <!-- 2. Directional Outer Cast Shadow -->
+    <ellipse cx="548" cy="812" rx="156" ry="37" transform="rotate(3 548 812)" fill="url(#shadowCastGrad)" filter="url(#shadowBlur)" opacity="0.45">
+      <animate attributeName="rx"
+        values="156;184;75;168;140;156;156"
+        keyTimes="0;0.04;0.13;0.20;0.24;0.27;1"
+        calcMode="spline"
+        keySplines="0.25 0.8 0.3 1; 0.22 0.9 0.3 1; 0.2 0 0.2 1; 0.2 0.7 0.2 1; 0.2 0.7 0.2 1; 0 0 1 1"
+        dur="5.5s"
+        repeatCount="indefinite"/>
+      <animate attributeName="ry"
+        values="37;46;15;41;32;37;37"
+        keyTimes="0;0.04;0.13;0.20;0.24;0.27;1"
+        calcMode="spline"
+        keySplines="0.25 0.8 0.3 1; 0.22 0.9 0.3 1; 0.2 0 0.2 1; 0.2 0.7 0.2 1; 0.2 0.7 0.2 1; 0 0 1 1"
+        dur="5.5s"
+        repeatCount="indefinite"/>
+      <animate attributeName="opacity"
+        values="0.45;0.65;0.12;0.55;0.35;0.45;0.45"
+        keyTimes="0;0.04;0.13;0.20;0.24;0.27;1"
+        calcMode="spline"
+        keySplines="0.25 0.8 0.3 1; 0.22 0.9 0.3 1; 0.2 0 0.2 1; 0.2 0.7 0.2 1; 0.2 0.7 0.2 1; 0 0 1 1"
+        dur="5.5s"
+        repeatCount="indefinite"/>
+    </ellipse>
 
-      <!-- 3. Soft Contact Occlusion Shadow (Right under base ground contact) -->
-      <ellipse cx="532" cy="807" rx="100" ry="22" fill="url(#shadowContactGrad)" filter="url(#contactBlur)" opacity="0.50">
-        <animate attributeName="rx"
-          values="100;108;74;100;95;100;100"
-          keyTimes="0;0.023;0.081;0.138;0.165;0.192;1"
-          calcMode="spline"
-          keySplines="0.25 0.8 0.3 1; 0.22 0.9 0.3 1; 0.2 0 0.2 1; 0.2 0.7 0.2 1; 0.2 0.7 0.2 1; 0 0 1 1"
-          dur="6s"
-          begin="1.65s"
-          repeatCount="indefinite"/>
-      </ellipse>
-    </g>
+    <!-- 3. Soft Contact Occlusion Shadow -->
+    <ellipse cx="532" cy="807" rx="100" ry="22" fill="url(#shadowContactGrad)" filter="url(#contactBlur)" opacity="0.50">
+      <animate attributeName="rx"
+        values="100;124;30;114;88;100;100"
+        keyTimes="0;0.04;0.13;0.20;0.24;0.27;1"
+        calcMode="spline"
+        keySplines="0.25 0.8 0.3 1; 0.22 0.9 0.3 1; 0.2 0 0.2 1; 0.2 0.7 0.2 1; 0.2 0.7 0.2 1; 0 0 1 1"
+        dur="5.5s"
+        repeatCount="indefinite"/>
+      <animate attributeName="opacity"
+        values="0.50;0.75;0.05;0.68;0.40;0.50;0.50"
+        keyTimes="0;0.04;0.13;0.20;0.24;0.27;1"
+        calcMode="spline"
+        keySplines="0.25 0.8 0.3 1; 0.22 0.9 0.3 1; 0.2 0 0.2 1; 0.2 0.7 0.2 1; 0.2 0.7 0.2 1; 0 0 1 1"
+        dur="5.5s"
+        repeatCount="indefinite"/>
+    </ellipse>
   </g>
 
-  <!-- flame + face -->
-  <g id="flame-spawn-motion">
+  <!-- FLAME MASCOT BODY & FACE -->
+  <!-- Level 1: Pure Translate Motion (No static transform attribute to prevent SMIL override) -->
+  <g id="mascot-airborne-translate">
     <animateTransform attributeName="transform" type="translate"
-      values="0 780;0 780;0 -190;0 32;0 -10;0 0"
-      keyTimes="0;0.16;0.46;0.72;0.86;1"
-      calcMode="spline"
-      keySplines="0 0 1 1; 0.18 0.92 0.24 1; 0.25 0 0.55 1; 0.2 0.75 0.25 1; 0.2 0.7 0.2 1"
-      dur="1.65s"
-      begin="0s"
-      repeatCount="1"
-      fill="freeze"/>
-    <g transform="translate(513 744)">
-      <g id="flame-spawn-squish">
-        <animateTransform attributeName="transform" type="scale"
-          values="1 1;1.24 0.72;0.82 1.28;0.9 1.12;1.08 0.86;1 1"
-          keyTimes="0;0.16;0.46;0.72;0.86;1"
-          calcMode="spline"
-          keySplines="0 0 1 1; 0.18 0.92 0.24 1; 0.25 0 0.55 1; 0.2 0.75 0.25 1; 0.2 0.7 0.2 1"
-          dur="1.65s"
-          begin="0s"
-          repeatCount="1"
-          fill="freeze"/>
-        <g transform="translate(-513 -744)">
-          <g id="flame-body-motion">
-    <!-- cute jump every ~6s -->
-    <animateTransform attributeName="transform" type="translate"
-      values="0 0; 0 10; 0 -44; 0 4; 0 -8; 0 0; 0 0"
-      keyTimes="0;0.023;0.081;0.138;0.165;0.192;1"
+      values="0 0; 0 20; 0 -160; 0 10; 0 -12; 0 0; 0 0"
+      keyTimes="0; 0.04; 0.13; 0.20; 0.24; 0.27; 1"
       calcMode="spline"
       keySplines="0.25 0.8 0.3 1; 0.22 0.9 0.3 1; 0.2 0 0.2 1; 0.2 0.7 0.2 1; 0.2 0.7 0.2 1; 0 0 1 1"
-      dur="6s"
-      begin="1.65s"
+      dur="5.5s"
+      begin="0s"
       repeatCount="indefinite"/>
 
-    <g transform="translate(513 470)">
-      <g id="flame-body-squish">
-        <!-- squash & stretch every ~6s -->
+    <!-- Level 2: Scale Origin Group (Centering around feet 513, 744) -->
+    <g transform="translate(513 744)">
+      <g id="mascot-squish-scale">
         <animateTransform attributeName="transform" type="scale"
-          values="1 1; 1.04 0.94; 0.96 1.06; 1.02 0.98; 0.99 1.01; 1 1; 1 1"
-          keyTimes="0;0.023;0.081;0.138;0.165;0.192;1"
+          values="1 1; 1.20 0.76; 0.80 1.28; 1.22 0.78; 0.94 1.06; 1 1; 1 1"
+          keyTimes="0; 0.04; 0.13; 0.20; 0.24; 0.27; 1"
           calcMode="spline"
           keySplines="0.25 0.8 0.3 1; 0.22 0.9 0.3 1; 0.2 0 0.2 1; 0.2 0.7 0.2 1; 0.2 0.7 0.2 1; 0 0 1 1"
-          dur="6s"
-          begin="1.65s"
+          dur="5.5s"
+          begin="0s"
           repeatCount="indefinite"/>
 
-        <g transform="translate(-513 -470)">
-          <!-- Clip path matching flame body geometry for internal 3D layers -->
-          <clipPath id="flameBodyClip">
-            <path d="M 513 744
-            C 484 743, 437 740, 405 733
-            C 373 726, 342 711, 322 699
-            C 302 687, 286 672, 274 654
-            C 262 636, 251 613, 245 589
-            C 239 565, 240 538, 246 513
-            C 252 488, 264 464, 279 443
-            C 294 422, 315 401, 340 381
-            C 365 361, 395 342, 425 323
-            C 454 304, 478 288, 490 269
-            C 502 250, 507 231, 509 217
-            C 511 203, 500 171, 505 164
-            C 510 157, 545 189, 561 208
-            C 577 227, 589 249, 595 269
-            C 601 289, 603 315, 602 337
-            C 601 359, 587 388, 585 401
-            C 583 414, 609 381, 619 363
-            C 629 345, 630 331, 631 320
-            C 632 309, 629 295, 633 294
-            C 637 293, 653 312, 662 323
-            C 671 334, 678 346, 683 358
-            C 688 370, 692 384, 692 397
-            C 692 410, 685 426, 686 439
-            C 687 452, 714 478, 726 496
-            C 738 514, 743 538, 745 556
-            C 747 574, 744 591, 741 606
-            C 738 621, 731 637, 723 650
-            C 715 663, 706 675, 694 685
-            C 682 695, 656 709, 630 721
-            C 604 733, 584 737, 567 739
-            C 550 741, 536 744, 513 744 Z"/>
-          </clipPath>
-
+        <!-- Level 3: Inner Offset to Restore Base Coordinates -->
+        <g transform="translate(-513 -744)">
           <!-- 1. BASE 3D VOLUMETRIC FLAME BODY -->
-          <path fill="url(#flame3DGrad)" shape-rendering="geometricPrecision" d="M 513 744
-          C 484 743, 437 740, 405 733
-          C 373 726, 342 711, 322 699
-          C 302 687, 286 672, 274 654
-          C 262 636, 251 613, 245 589
-          C 239 565, 240 538, 246 513
-          C 252 488, 264 464, 279 443
-          C 294 422, 315 401, 340 381
-          C 365 361, 395 342, 425 323
-          C 454 304, 478 288, 490 269
-          C 502 250, 507 231, 509 217
-          C 511 203, 500 171, 505 164
-          C 510 157, 545 189, 561 208
-          C 577 227, 589 249, 595 269
-          C 601 289, 603 315, 602 337
-          C 601 359, 587 388, 585 401
-          C 583 414, 609 381, 619 363
-          C 629 345, 630 331, 631 320
-          C 632 309, 629 295, 633 294
-          C 637 293, 653 312, 662 323
-          C 671 334, 678 346, 683 358
-          C 688 370, 692 384, 692 397
-          C 692 410, 685 426, 686 439
-          C 687 452, 714 478, 726 496
-          C 738 514, 743 538, 745 556
-          C 747 574, 744 591, 741 606
-          C 738 621, 731 637, 723 650
-          C 715 663, 706 675, 694 685
-          C 682 695, 656 709, 630 721
-          C 604 733, 584 737, 567 739
-          C 550 741, 536 744, 513 744 Z"/>
+          <path fill="url(#flame3DGrad)" shape-rendering="geometricPrecision" d="M 513 744 C 484 743, 437 740, 405 733 C 373 726, 342 711, 322 699 C 302 687, 286 672, 274 654 C 262 636, 251 613, 245 589 C 239 565, 240 538, 246 513 C 252 488, 264 464, 279 443 C 294 422, 315 401, 340 381 C 365 361, 395 342, 425 323 C 454 304, 478 288, 490 269 C 502 250, 507 231, 509 217 C 511 203, 500 171, 505 164 C 510 157, 545 189, 561 208 C 577 227, 589 249, 595 269 C 601 289, 603 315, 602 337 C 601 359, 587 388, 585 401 C 583 414, 609 381, 619 363 C 629 345, 630 331, 631 320 C 632 309, 629 295, 633 294 C 637 293, 653 312, 662 323 C 671 334, 678 346, 683 358 C 688 370, 692 384, 692 397 C 692 410, 685 426, 686 439 C 687 452, 714 478, 726 496 C 738 514, 743 538, 745 556 C 747 574, 744 591, 741 606 C 738 621, 731 637, 723 650 C 715 663, 706 675, 694 685 C 682 695, 656 709, 630 721 C 604 733, 584 737, 567 739 C 550 741, 536 744, 513 744 Z"/>
 
-          <!-- 2. INTERNAL 3D SHADING LAYERS (Soft & Harmonious) -->
+          <!-- 2. INTERNAL 3D SHADING LAYERS -->
           <g clip-path="url(#flameBodyClip)">
             <!-- Bottom-Right Soft Ambient Occlusion Shadow -->
             <ellipse cx="660" cy="670" rx="200" ry="160" fill="url(#ambientShadowGrad)" filter="url(#shadowBlur)"/>
 
-            <!-- Top-Left Soft Forehead Specular Highlight (Subtle Sheen) -->
+            <!-- Top-Left Soft Forehead Specular Highlight -->
             <ellipse cx="380" cy="310" rx="80" ry="100" transform="rotate(-20 380 310)" fill="url(#bodyHighlightGrad)" filter="url(#highlightBlur)"/>
 
             <!-- Secondary Ultra-Soft Forehead Gloss Spot -->
             <ellipse cx="400" cy="320" rx="20" ry="34" transform="rotate(-22 400 320)" fill="#FFFFFF" opacity="0.06" filter="url(#softGlow)"/>
 
-            <!-- Left Studio Rim Light (Subtle Ambient Edge) -->
+            <!-- Left Studio Rim Light -->
             <path d="M 322 699 C 302 687 274 654 245 589 C 239 565 246 513 279 443 C 315 401 365 361 425 323" stroke="url(#rimLightGrad)" stroke-width="12" fill="none" opacity="0.4" filter="url(#softGlow)"/>
           </g>
+
+          <!-- Floating Flame Spark Ember Effect -->
+          <circle cx="505" cy="155" r="3.5" fill="#FFE57F" opacity="0.8" filter="url(#softGlow)">
+            <animate attributeName="cy" values="155;122;155" dur="2.4s" repeatCount="indefinite"/>
+            <animate attributeName="cx" values="505;490;512;505" dur="2.4s" repeatCount="indefinite"/>
+            <animate attributeName="opacity" values="0.85;0.1;0.85" dur="2.4s" repeatCount="indefinite"/>
+            <animate attributeName="r" values="3.5;1.8;3.5" dur="2.4s" repeatCount="indefinite"/>
+          </circle>
 
           <!-- 3. FACE GROUP (Crisp, Harmonious 3D) -->
           <g id="face">
@@ -495,7 +413,7 @@
                     M 488 600 C 488 584, 499 574, 513 574 C 527 574, 538 584, 538 600 C 538 616, 527 626, 513 626 C 499 626, 488 616, 488 600 Z"/>
               </path>
 
-              <!-- Red Tongue Path (Controlled to stay below upper mouth arch Y=586) -->
+              <!-- Red Tongue Path -->
               <path fill="#FF4D26" d="M 497 606 C 497 598, 504 592, 513 592 C 522 592, 529 598, 529 606 C 529 614, 522 620, 513 620 C 504 620, 497 614, 497 606 Z">
                 <animate attributeName="d" dur="12s" begin="0s" repeatCount="indefinite"
                   keyTimes="0;0.14;0.20;0.28;0.44;0.50;1"
@@ -508,16 +426,12 @@
                     M 478 612 C 488 624, 500 631, 513 631 C 526 631, 538 624, 548 612 C 538 603, 526 599, 513 599 C 500 599, 488 603, 478 612 Z;
                     M 478 612 C 488 624, 500 631, 513 631 C 526 631, 538 624, 548 612 C 538 603, 526 599, 513 599 C 500 599, 488 603, 478 612 Z;
                     M 497 606 C 497 598, 504 592, 513 592 C 522 592, 529 598, 529 606 C 529 614, 522 620, 513 620 C 504 620, 497 614, 497 606 Z;
-                    M 497 606 C 497 598, 504 592, 513 592 C 522 592, 529 598, 529 606 C 529 614, 522 620, 513 620 C 504 620, 497 614, 497 606 Z"/>
+                    M 497 606 C 497 598, 504 592, 513 592 C 522 592, 529 598, 529 606 C 538 616, 527 626, 513 626 C 499 626, 488 616, 488 600 Z"/>
               </path>
             </g>
           </g>
         </g>
       </g>
     </g>
-    </g>
-      </g>
-    </g>
-  </g>
   </g>
 </svg>
