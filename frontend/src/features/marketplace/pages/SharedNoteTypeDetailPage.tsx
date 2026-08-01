@@ -201,29 +201,29 @@ export function SharedNoteTypeDetailPage() {
   const effectiveStar = hoverScore !== null ? hoverScore : ratingScore
 
   return (
-    <Page className="space-y-6 relative px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
-      <AmbientBackground intensity="vibrant" />
+    <Page className="space-y-4 sm:space-y-6 relative px-2.5 sm:px-6 lg:px-8 py-3 sm:py-6">
+      <AmbientBackground intensity="subtle" />
 
       <PageHeader
         title={titleName}
         description={noteType.preview_text || noteType.description || 'Chi tiết mẫu note type trên marketplace Flama.'}
         actions={
-          <Button variant="outline" size="sm" asChild className="group h-9 px-3.5 text-xs font-semibold rounded-xl">
+          <Button variant="outline" size="sm" asChild className="group h-8 sm:h-9 px-3 sm:px-3.5 text-xs font-semibold rounded-xl">
             <Link to="/marketplace/note-types">
-              <ArrowLeft className="mr-1.5 size-3.5 group-hover:-translate-x-0.5 transition-transform" />
+              <ArrowLeft className="mr-1 sm:mr-1.5 size-3.5 group-hover:-translate-x-0.5 transition-transform" />
               Quay lại Marketplace
             </Link>
           </Button>
         }
       />
 
-      <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
+      <div className="grid gap-4 sm:gap-5 lg:grid-cols-[1fr_340px]">
         {/* Main Left Content */}
-        <div className="space-y-5">
+        <div className="space-y-4 sm:space-y-5">
           {/* Main Card */}
-          <Card className="relative overflow-hidden border-border/80 bg-card/90 backdrop-blur-md shadow-sm rounded-2xl">
+          <Card className="relative overflow-hidden border-border/40 sm:border-border/80 bg-card/90 backdrop-blur-md shadow-xs sm:shadow-sm rounded-xl sm:rounded-2xl">
             <div className="h-2 w-full bg-gradient-to-r from-primary via-orange-500 to-amber-500" />
-            <CardHeader className="space-y-3 p-5 sm:p-6 pb-3">
+            <CardHeader className="space-y-3 p-3.5 sm:p-6 pb-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge variant="secondary" className="px-2.5 py-0.5 text-xs font-bold rounded-md">

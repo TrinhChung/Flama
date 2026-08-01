@@ -380,7 +380,17 @@ export function BrowsePage() {
     mutationFn: (payload: { field_values: Record<string, string>; deck_id?: number; tags?: string[] }) =>
       appApi.mutate(`/browse/cards/${activeCardId}`, 'PATCH', payload),
     onSuccess: () => {
-      toast.success('Đã lưu thay đổi thẻ.')
+      if (urlDeckId) {
+        toast.success('Đã lưu thay đổi thẻ.', {
+          duration: 2000,
+          action: {
+            label: 'Quay lại bài học',
+            onClick: () => navigate(`/study?deck_id=${urlDeckId}`),
+          },
+        })
+      } else {
+        toast.success('Đã lưu thay đổi thẻ.', { duration: 1200 })
+      }
       setInitialFieldValues(editFieldValues)
       setInitialDeckId(editDeckId)
       setInitialTags(editTags)
@@ -641,8 +651,21 @@ export function BrowsePage() {
       {/* Top Navbar Header for Fullscreen Browse */}
       <header className="sticky top-0 z-30 flex h-12 sm:h-14 shrink-0 items-center justify-between border-b border-border/60 bg-background/95 px-2.5 sm:px-4 backdrop-blur-md">
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-          <Brand compact size="sm" hideTextOnCollapse />
-          <span className="text-xs sm:text-sm font-semibold text-foreground truncate">Duyệt thẻ</span>
+          {urlDeckId ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs font-bold text-primary border-primary/30 hover:bg-primary/10 rounded-full gap-1.5 px-3 shrink-0"
+              onClick={() => navigate(`/study?deck_id=${urlDeckId}`)}
+            >
+              <ArrowLeft className="size-3.5" />
+              <span>Quay lại bài học</span>
+            </Button>
+          ) : (
+            <Brand compact size="sm" hideTextOnCollapse />
+          )}
+          <span className="hidden sm:inline text-xs sm:text-sm font-semibold text-foreground truncate">Duyệt thẻ</span>
         </div>
 
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
@@ -1150,16 +1173,10 @@ export function BrowsePage() {
                 variant="ghost"
                 size="sm"
                 className="lg:hidden h-7 text-xs px-2 text-muted-foreground hover:text-foreground"
-                onClick={() => {
-                  if (urlDeckId) {
-                    navigate(`/study?deck_id=${urlDeckId}`)
-                  } else {
-                    setMobileTab('cards')
-                  }
-                }}
+                onClick={() => setMobileTab('cards')}
               >
                 <ArrowLeft className="size-3.5 mr-1" />
-                {urlDeckId ? 'Bài học' : 'Danh sách'}
+                Danh sách
               </Button>
               <h2 className="font-bold text-sm flex items-center gap-1.5">
                 <FileText className="size-4 text-primary" />
