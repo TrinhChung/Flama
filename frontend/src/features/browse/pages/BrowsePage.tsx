@@ -181,7 +181,23 @@ export function BrowsePage() {
   const [sortBy, setSortBy] = useState('due')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const [page, setPage] = useState(1)
+  const [perPage, setPerPage] = useState<number>(() => {
+    const saved = localStorage.getItem('flama_browse_per_page')
+    if (saved) {
+      const parsed = parseInt(saved, 10)
+      if (!isNaN(parsed) && [20, 50, 100, 200, 500].includes(parsed)) {
+        return parsed
+      }
+    }
+    return 100
+  })
   const [selectedCards, setSelectedCards] = useState<string[]>([])
+
+  const handlePerPageChange = (newPerPage: number) => {
+    setPerPage(newPerPage)
+    setPage(1)
+    localStorage.setItem('flama_browse_per_page', String(newPerPage))
+  }
 
   // VoiceVox TTS Audio Generation Modal State (Matching Original Template)
   const [isTtsModalOpen, setIsTtsModalOpen] = useState(false)
@@ -260,6 +276,7 @@ export function BrowsePage() {
       sortBy,
       sortDir,
       page,
+      perPage,
     ],
     queryFn: () =>
       appApi.get<BrowseCardsResponse>('/browse/cards', {
@@ -269,7 +286,7 @@ export function BrowsePage() {
         sort_by: sortBy,
         sort_dir: sortDir,
         page,
-        per_page: 50,
+        per_page: perPage,
       }),
   })
 
@@ -1108,15 +1125,32 @@ export function BrowsePage() {
 
           {/* Table Footer & Pagination */}
           {cardsQuery.data ? (
-            <div className="p-2.5 border-t bg-muted/20 flex items-center justify-between gap-2 text-xs text-muted-foreground shrink-0">
-              <span>
-                Tổng <strong className="text-foreground">{cardsQuery.data.total}</strong> thẻ
-                {selectedCards.length > 0 ? (
-                  <span className="ml-1 text-primary font-bold">
-                    (Đã chọn {selectedCards.length})
-                  </span>
-                ) : null}
-              </span>
+            <div className="p-2.5 border-t bg-muted/20 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground shrink-0">
+              <div className="flex items-center gap-3">
+                <span>
+                  Tổng <strong className="text-foreground">{cardsQuery.data.total}</strong> thẻ
+                  {selectedCards.length > 0 ? (
+                    <span className="ml-1 text-primary font-bold">
+                      (Đã chọn {selectedCards.length})
+                    </span>
+                  ) : null}
+                </span>
+
+                <div className="flex items-center gap-1.5 border-l border-border/60 pl-3">
+                  <span className="text-[11px] text-muted-foreground whitespace-nowrap">Hiển thị:</span>
+                  <NativeSelect
+                    className="h-7 text-xs bg-background w-auto min-w-[85px] px-2 py-0"
+                    value={perPage}
+                    onChange={(e) => handlePerPageChange(Number(e.target.value))}
+                  >
+                    <NativeSelectOption value={20}>20 / trang</NativeSelectOption>
+                    <NativeSelectOption value={50}>50 / trang</NativeSelectOption>
+                    <NativeSelectOption value={100}>100 / trang</NativeSelectOption>
+                    <NativeSelectOption value={200}>200 / trang</NativeSelectOption>
+                    <NativeSelectOption value={500}>500 / trang</NativeSelectOption>
+                  </NativeSelect>
+                </div>
+              </div>
               {cardsQuery.data.pages > 1 ? (
                 <Pagination className="mx-0 w-auto shrink-0">
                   <PaginationContent className="gap-1">

@@ -3,10 +3,11 @@
 
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 describe('card renderer host viewport modes', () => {
   afterEach(() => {
+    vi.restoreAllMocks()
     document.body.replaceChildren()
     delete window.FlamaCardRendererHost
   })
@@ -60,6 +61,83 @@ describe('card renderer host viewport modes', () => {
     expect(iframe.style.height).toBe('180px')
     expect(iframe.srcdoc).toContain(
       '#flama-card-root [style*="height:100vh"]',
+    )
+
+    controller.destroy()
+  })
+
+  it('relays shared audio results and ended events to the originating iframe element', async () => {
+    vi.spyOn(window.HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined)
+    vi.spyOn(window.HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined)
+    const source = readFileSync(
+      resolve(process.cwd(), '../static/js/card_renderer_host.js'),
+      'utf8',
+    )
+    window.eval(source)
+
+    const iframe = document.createElement('iframe')
+    document.body.appendChild(iframe)
+    const controller = window.FlamaCardRendererHost!.createRendererFrameController(iframe)
+    controller.render({
+      html: '<audio id="voice" src="/media/proxy/audio-1"></audio>',
+      allowed_media_urls: ['/media/proxy/audio-1'],
+      allowed_audio_urls: ['/media/proxy/audio-1'],
+    })
+
+    const renderedDocument = new DOMParser().parseFromString(iframe.srcdoc, 'text/html')
+    const sandboxShell = Array.from(renderedDocument.querySelectorAll('script'))
+      .find((script) => script.textContent?.includes('initFlamaCardSandbox'))
+    expect(sandboxShell).toBeTruthy()
+    expect(() => new Function(sandboxShell!.textContent || '')).not.toThrow()
+
+    const instanceId = iframe.srcdoc.match(/"instanceId":"([^"]+)"/)?.[1]
+    expect(instanceId).toBeTruthy()
+    const frameWindow = iframe.contentWindow!
+    const postMessage = vi
+      .spyOn(frameWindow, 'postMessage')
+      .mockImplementation(() => undefined)
+    const dispatchRendererMessage = (action: string, payload: Record<string, unknown>) => {
+      window.dispatchEvent(new MessageEvent('message', {
+        source: frameWindow,
+        data: {
+          channel: 'flama-card-renderer',
+          direction: 'renderer_to_host',
+          instanceId,
+          action,
+          payload,
+        },
+      }))
+    }
+
+    dispatchRendererMessage('renderer_ready', { height: 240 })
+    dispatchRendererMessage('play_audio', {
+      ref: '/media/proxy/audio-1',
+      requestId: `${instanceId}:audio:1`,
+      elementToken: 'flama-audio-1',
+    })
+    await Promise.resolve()
+
+    expect(window.HTMLMediaElement.prototype.play).toHaveBeenCalledTimes(1)
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'audio_result',
+        payload: expect.objectContaining({ ok: true }),
+      }),
+      '*',
+    )
+
+    const sharedAudio = document.querySelector('body > audio[aria-hidden="true"]')
+    expect(sharedAudio).toBeInstanceOf(window.HTMLAudioElement)
+    sharedAudio!.dispatchEvent(new Event('ended'))
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'audio_event',
+        payload: expect.objectContaining({
+          type: 'ended',
+          elementToken: 'flama-audio-1',
+        }),
+      }),
+      '*',
     )
 
     controller.destroy()

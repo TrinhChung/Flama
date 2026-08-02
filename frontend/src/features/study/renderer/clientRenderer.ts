@@ -24,7 +24,7 @@ const ALLOWED_ATTR = [
   'colspan', 'rowspan', 'src', 'href', 'auto-split', 'onclick',
 ]
 
-function sanitizeRenderedMarkup(rawHtml: string): string {
+function sanitizeRenderedMarkup(rawHtml: string, allowedMediaUrls: Set<string>): string {
   DOMPurify.addHook('uponSanitizeAttribute', (node, data) => {
     const attrName = data.attrName.toLowerCase()
     const attrValue = String(data.attrValue || '').trim()
@@ -36,9 +36,9 @@ function sanitizeRenderedMarkup(rawHtml: string): string {
       )
       return
     }
-    if (attrName === 'src' || attrName === 'href') {
+    if (attrName === 'src' || attrName === 'href' || attrName === 'poster') {
       data.keepAttr = (
-        PROXY_MEDIA_RE.test(attrValue)
+        (PROXY_MEDIA_RE.test(attrValue) && allowedMediaUrls.has(attrValue))
         || (attrName === 'href' && attrValue.startsWith('https://'))
       )
       return
@@ -110,11 +110,15 @@ export function renderStudySide(
       : template.back_inline_scripts
   )
   const rendered = Mustache.render(source, content.render_context)
-  const markup = restoreLineBreaks(sanitizeRenderedMarkup(rendered))
+  const allowedMediaUrls = content.media
+    .map((item) => item.proxy_url)
+    .filter((url) => PROXY_MEDIA_RE.test(url))
+  const markup = restoreLineBreaks(
+    sanitizeRenderedMarkup(rendered, new Set(allowedMediaUrls)),
+  )
   const css = safeCss(template.shared_css)
   const scripts = inlineScripts.join('')
   const html = `${css ? `<style>${css}</style>` : ''}${markup}${scripts}`
-  const allowedMediaUrls = content.media.map((item) => item.proxy_url)
   const audio = content.media.filter((item) => item.mime_type.startsWith('audio/'))
   const templateKey = `${template.version}:${side}`
   return {

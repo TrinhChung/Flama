@@ -10,6 +10,7 @@ from app.services.flashcard_renderer import (
     build_renderer_side_payload,
     build_render_context,
     is_field_empty,
+    prepare_client_template_source,
     render_template_pair,
 )
 
@@ -136,6 +137,36 @@ class FlashcardRendererTests(unittest.TestCase):
             media_assets=media_assets,
         )
         self.assertIn("/media/proxy/asset-a", rendered_b["front_html"])
+
+    def test_client_template_preserves_audio_field_url_without_mutating_user_html(self):
+        raw_html = (
+            '<audio id="custom-audio" src="{{word_audio}}"></audio>'
+            '<source src="{{word_audio_url}}">'
+            '<button onclick="document.getElementById(\'custom-audio\').play()">🔊</button>'
+            '<script>document.getElementById("custom-audio").play();</script>'
+        )
+        original_html = str(raw_html)
+        fields = [self._field("word_audio", "audio"), self._field("word", "text")]
+
+        prepared = prepare_client_template_source(raw_html, fields)
+
+        self.assertEqual(raw_html, original_html)
+        self.assertIn('src="{{word_audio}}"', prepared["source"])
+        self.assertIn('src="{{word_audio_url}}"', prepared["source"])
+        self.assertIn('onclick=', prepared["source"])
+        self.assertNotIn("<script", prepared["source"])
+        self.assertEqual(
+            prepared["inline_scripts"],
+            ['<script>document.getElementById("custom-audio").play();</script>'],
+        )
+
+    def test_client_template_does_not_promote_text_field_to_media_url(self):
+        prepared = prepare_client_template_source(
+            '<audio src="{{word}}"></audio>',
+            [self._field("word", "text")],
+        )
+
+        self.assertNotIn("src=", prepared["source"])
 
     def test_preview_media_token_renders_placeholder_box(self):
         template = self._template("{{Word}} {{{image}}}")

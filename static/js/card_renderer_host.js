@@ -9,6 +9,7 @@
   const PROXY_MEDIA_RE = /^\/media\/proxy\/([A-Za-z0-9][A-Za-z0-9_-]{0,127})$/;
 
   let sharedAudioEl = null;
+  let sharedAudioPlayback = null;
 
   function generateInstanceId() {
     if (global.crypto && typeof global.crypto.randomUUID === "function") {
@@ -192,6 +193,22 @@
     audioEl.preload = "none";
     audioEl.className = "d-none";
     audioEl.setAttribute("aria-hidden", "true");
+    ["ended", "error"].forEach(function (eventType) {
+      audioEl.addEventListener(eventType, function () {
+        const playback = sharedAudioPlayback;
+        if (!playback || typeof playback.emit !== "function") {
+          return;
+        }
+        const message = eventType === "error" ? "Audio playback failed." : "";
+        playback.emit(eventType, message);
+        if (eventType === "error" && typeof playback.finish === "function") {
+          playback.finish(false, message);
+        }
+        if (sharedAudioPlayback === playback) {
+          sharedAudioPlayback = null;
+        }
+      });
+    });
     global.document.body.appendChild(audioEl);
     sharedAudioEl = audioEl;
     return audioEl;
@@ -281,6 +298,9 @@
       "  var rendererConfig = bootstrap.config && typeof bootstrap.config === 'object' ? bootstrap.config : {};",
       "  var rendererContext = bootstrap.context && typeof bootstrap.context === 'object' ? bootstrap.context : {};",
       "  var lastHeight = 0;",
+      "  var audioRequestSequence = 0;",
+      "  var audioElementSequence = 0;",
+      "  var pendingAudioRequests = Object.create(null);",
       "  function post(action, payload) {",
       "    parent.postMessage({",
       "      channel: channel,",
@@ -289,6 +309,44 @@
       "      action: action,",
       "      payload: payload && typeof payload === 'object' ? payload : {}",
       "    }, '*');",
+      "  }",
+      "  function getAudioElementToken(element) {",
+      "    var existing = String((element && element.getAttribute && element.getAttribute('data-flama-audio-token')) || '').trim();",
+      "    if (/^flama-audio-[A-Za-z0-9_-]+$/.test(existing)) {",
+      "      return existing;",
+      "    }",
+      "    audioElementSequence += 1;",
+      "    var generated = 'flama-audio-' + audioElementSequence;",
+      "    if (element && typeof element.setAttribute === 'function') {",
+      "      element.setAttribute('data-flama-audio-token', generated);",
+      "    }",
+      "    return generated;",
+      "  }",
+      "  function settleAudioRequest(payload) {",
+      "    var requestId = String((payload && payload.requestId) || '');",
+      "    var pending = pendingAudioRequests[requestId];",
+      "    if (!pending) {",
+      "      return;",
+      "    }",
+      "    delete pendingAudioRequests[requestId];",
+      "    window.clearTimeout(pending.timer);",
+      "    if (payload && payload.ok === true) {",
+      "      pending.resolve();",
+      "      return;",
+      "    }",
+      "    pending.reject(new Error(String((payload && payload.error) || 'Audio playback failed.')));",
+      "  }",
+      "  function dispatchAudioEvent(payload) {",
+      "    var token = String((payload && payload.elementToken) || '');",
+      "    var eventType = String((payload && payload.type) || '');",
+      "    if (!/^flama-audio-[A-Za-z0-9_-]+$/.test(token) || !/^(?:play|pause|ended|error)$/.test(eventType)) {",
+      "      return;",
+      "    }",
+      "    var element = document.querySelector('audio[data-flama-audio-token=\"' + token + '\"]');",
+      "    if (!element) {",
+      "      return;",
+      "    }",
+      "    element.dispatchEvent(new Event(eventType));",
       "  }",
       "  function cloneJson(value) {",
       "    try {",
@@ -469,8 +527,20 @@
       "      if (tagName === 'audio' && !element.controls) {",
       "        var approvedRef = resolveAudioElementRef(element);",
       "        if (approvedRef) {",
-      "          post('play_audio', { ref: approvedRef });",
-      "          return Promise.resolve();",
+      "          audioRequestSequence += 1;",
+      "          var requestId = instanceId + ':audio:' + audioRequestSequence;",
+      "          var elementToken = getAudioElementToken(element);",
+      "          return new Promise(function (resolve, reject) {",
+      "            var timer = window.setTimeout(function () {",
+      "              if (!pendingAudioRequests[requestId]) {",
+      "                return;",
+      "              }",
+      "              delete pendingAudioRequests[requestId];",
+      "              reject(new Error('Audio playback request timed out.'));",
+      "            }, 15000);",
+      "            pendingAudioRequests[requestId] = { resolve: resolve, reject: reject, timer: timer };",
+      "            post('play_audio', { ref: approvedRef, requestId: requestId, elementToken: elementToken });",
+      "          });",
       "        }",
       "      }",
       "      return originalPlay.apply(element, arguments);",
@@ -485,7 +555,7 @@
       "        if (tagName === 'audio' && !element.controls) {",
       "          var approvedRef = resolveAudioElementRef(element);",
       "          if (approvedRef) {",
-      "            post('pause_audio', { ref: approvedRef });",
+      "            post('pause_audio', { ref: approvedRef, elementToken: getAudioElementToken(element) });",
       "            return;",
       "          }",
       "        }",
@@ -534,6 +604,14 @@
       "  window.addEventListener('message', function (event) {",
       "    var data = event && event.data;",
       "    if (!data || data.channel !== channel || data.direction !== '" + HOST_DIRECTION + "' || data.instanceId !== instanceId) {",
+      "      return;",
+      "    }",
+      "    if (data.action === 'audio_result') {",
+      "      settleAudioRequest(data.payload || {});",
+      "      return;",
+      "    }",
+      "    if (data.action === 'audio_event') {",
+      "      dispatchAudioEvent(data.payload || {});",
       "      return;",
       "    }",
       "    if (data.action === 'reveal') {",
@@ -712,8 +790,8 @@
       }
     }
 
-    function postHostMessage(action, payload) {
-      if (!ready || !frameEl.contentWindow || !instanceId) {
+    function postHostMessage(action, payload, allowBeforeReady) {
+      if ((!ready && allowBeforeReady !== true) || !frameEl.contentWindow || !instanceId) {
         return;
       }
       frameEl.contentWindow.postMessage(
@@ -736,12 +814,76 @@
       return allowedAudioUrls.has(normalized) ? normalized : null;
     }
 
-    function playApprovedAudio(rawValue) {
+    const controllerToken = {};
+
+    function normalizeAudioElementToken(rawValue) {
+      const value = typeof rawValue === "string" ? rawValue.trim() : "";
+      return /^flama-audio-[A-Za-z0-9_-]+$/.test(value) ? value : "";
+    }
+
+    function normalizeAudioRequestId(rawValue) {
+      const value = typeof rawValue === "string" ? rawValue.trim() : "";
+      return value && value.length <= 256 ? value : "";
+    }
+
+    function postAudioResult(requestId, ok, errorMessage) {
+      if (!requestId) {
+        return;
+      }
+      postHostMessage("audio_result", {
+        requestId,
+        ok: ok === true,
+        error: ok === true ? "" : String(errorMessage || "Audio playback failed."),
+      }, true);
+    }
+
+    function playApprovedAudio(rawValue, rawRequestId, rawElementToken) {
+      const requestId = normalizeAudioRequestId(rawRequestId);
+      const elementToken = normalizeAudioElementToken(rawElementToken);
       const approvedRef = resolveApprovedAudioRef(rawValue);
       if (!approvedRef) {
+        postAudioResult(requestId, false, "Audio is not attached to this note.");
         return false;
       }
       const audioEl = getSharedAudioElement();
+      const previousPlayback = sharedAudioPlayback;
+      if (previousPlayback) {
+        try {
+          audioEl.pause();
+        } catch (_error) {
+          // Best-effort only when replacing the current shared playback.
+        }
+        previousPlayback.emit("pause", "");
+        previousPlayback.finish(false, "Audio playback was replaced.");
+        if (sharedAudioPlayback === previousPlayback) {
+          sharedAudioPlayback = null;
+        }
+      }
+      const playback = {
+        controllerToken,
+        ref: approvedRef,
+        elementToken,
+        settled: false,
+        emit: function (eventType, errorMessage) {
+          if (!elementToken) {
+            return;
+          }
+          postHostMessage("audio_event", {
+            elementToken,
+            type: eventType,
+            ref: approvedRef,
+            error: String(errorMessage || ""),
+          }, true);
+        },
+        finish: function (ok, errorMessage) {
+          if (playback.settled) {
+            return;
+          }
+          playback.settled = true;
+          postAudioResult(requestId, ok, errorMessage);
+        },
+      };
+      sharedAudioPlayback = playback;
       try {
         audioEl.pause();
       } catch (_error) {
@@ -755,17 +897,45 @@
       } catch (_error) {
         // Some browsers disallow seeking before metadata; best-effort only.
       }
-      const playPromise = audioEl.play();
-      if (playPromise && typeof playPromise.catch === "function") {
-        playPromise.catch(function () {
-          return undefined;
-        });
+      let playPromise;
+      try {
+        playPromise = audioEl.play();
+      } catch (error) {
+        const message = error && error.message ? error.message : "Audio playback failed.";
+        playback.emit("error", message);
+        playback.finish(false, message);
+        if (sharedAudioPlayback === playback) {
+          sharedAudioPlayback = null;
+        }
+        return false;
       }
+      Promise.resolve(playPromise).then(function () {
+        if (sharedAudioPlayback !== playback) {
+          return;
+        }
+        playback.finish(true, "");
+        playback.emit("play", "");
+      }).catch(function (error) {
+        if (sharedAudioPlayback !== playback) {
+          return;
+        }
+        const message = error && error.message ? error.message : "Audio playback failed.";
+        playback.emit("error", message);
+        playback.finish(false, message);
+        if (sharedAudioPlayback === playback) {
+          sharedAudioPlayback = null;
+        }
+      });
       return true;
     }
 
-    function pauseApprovedAudio(rawValue) {
+    function pauseApprovedAudio(rawValue, rawElementToken) {
       const approvedRef = rawValue ? resolveApprovedAudioRef(rawValue) : null;
+      const elementToken = normalizeAudioElementToken(rawElementToken);
+      const playback = sharedAudioPlayback;
+      if (!playback || playback.controllerToken !== controllerToken) {
+        return false;
+      }
       const audioEl = getSharedAudioElement();
       const currentRef = normalizeProxyRef(audioEl.getAttribute("src") || "");
       if (approvedRef && currentRef && approvedRef !== currentRef) {
@@ -775,6 +945,13 @@
         audioEl.pause();
       } catch (_error) {
         return false;
+      }
+      if (!elementToken || elementToken === playback.elementToken) {
+        playback.emit("pause", "");
+      }
+      playback.finish(false, "Audio playback was paused.");
+      if (sharedAudioPlayback === playback) {
+        sharedAudioPlayback = null;
       }
       return true;
     }
@@ -810,11 +987,11 @@
         return;
       }
       if (action === "play_audio") {
-        playApprovedAudio(payload.ref);
+        playApprovedAudio(payload.ref, payload.requestId, payload.elementToken);
         return;
       }
       if (action === "pause_audio") {
-        pauseApprovedAudio(payload.ref);
+        pauseApprovedAudio(payload.ref, payload.elementToken);
         return;
       }
       if (action === "keydown_event") {
@@ -927,6 +1104,19 @@
 
     function destroy() {
       global.removeEventListener("message", handleRendererMessage);
+      const playback = sharedAudioPlayback;
+      if (playback && playback.controllerToken === controllerToken) {
+        try {
+          getSharedAudioElement().pause();
+        } catch (_error) {
+          // Best-effort cleanup while unmounting a renderer frame.
+        }
+        playback.emit("pause", "");
+        playback.finish(false, "Card renderer was destroyed.");
+        if (sharedAudioPlayback === playback) {
+          sharedAudioPlayback = null;
+        }
+      }
       ready = false;
       pendingRevealPayload = null;
       frameEl.removeAttribute("srcdoc");

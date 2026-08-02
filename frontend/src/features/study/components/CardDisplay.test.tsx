@@ -48,7 +48,7 @@ describe('CardDisplay', () => {
 
     expect(createRendererFrameController).toHaveBeenCalledTimes(2)
     expect(controllers[0].render).toHaveBeenCalledTimes(1)
-    expect(controllers[1].render).toHaveBeenCalledTimes(1)
+    expect(controllers[1].render).not.toHaveBeenCalled()
     expect(controllers[0].reveal).toHaveBeenCalledWith({
       side: 'front',
       reason: 'load_card',

@@ -77,6 +77,50 @@ class StudyArtifactServiceTest(unittest.TestCase):
             "<strong>dog</strong>",
         )
 
+    def test_audio_custom_html_compiles_without_changing_template_or_note_fields(self):
+        context = self.make_context()
+        audio_field = SimpleNamespace(
+            id="field-audio",
+            name="word_audio",
+            field_type="audio",
+            required=False,
+            position=2,
+        )
+        context.field_defs.append(audio_field)
+        context.note.note_type.field_defs = context.field_defs
+        context.field_values["word_audio"] = "word.mp3"
+        context.note.field_values["word_audio"] = "word.mp3"
+        context.note.media_assets = [SimpleNamespace(
+            id="audio-1",
+            field_name="word_audio",
+            filename="word.mp3",
+            mime_type="audio/mpeg",
+            sha256="sha-audio",
+        )]
+        context.template.back_html = (
+            '<audio id="voice" src="{{word_audio}}"></audio>'
+            '<button onclick="document.getElementById(\'voice\').play()">🔊</button>'
+            '<script>document.getElementById("voice").play()</script>'
+        )
+        original_template = context.template.back_html
+        original_values = dict(context.note.field_values)
+
+        template_artifact = study_artifact_service.build_template_artifact(context)
+        content_artifact = study_artifact_service.build_content_artifact(context)
+
+        self.assertEqual(context.template.back_html, original_template)
+        self.assertEqual(context.note.field_values, original_values)
+        self.assertEqual(template_artifact["renderer_abi"], "flama-client-mustache.v2")
+        self.assertIn('src="{{word_audio}}"', template_artifact["back_source"])
+        self.assertEqual(
+            content_artifact["render_context"]["word_audio"],
+            "/media/proxy/audio-1",
+        )
+        self.assertEqual(
+            content_artifact["media"][0]["proxy_url"],
+            "/media/proxy/audio-1",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

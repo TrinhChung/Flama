@@ -209,6 +209,40 @@ def _template_allowed_attr(tag: str, name: str, value: str) -> bool:
     return False
 
 
+def _is_media_template_url_attr(
+    tag: str,
+    name: str,
+    value: str,
+    field_defs: list[Any],
+) -> bool:
+    """Allow whole-value Mustache URLs backed by declared media fields only.
+
+    The placeholder is template-authored code, not a trusted URL. Its rendered
+    value is validated again in the client against the note artifact media list.
+    """
+    lowered_name = str(name or "").lower()
+    lowered_tag = str(tag or "").lower()
+    if lowered_name not in {"src", "href"}:
+        return False
+    match = re.fullmatch(r"\s*\{\{\{?\s*([^{}]+?)\s*\}\}\}?\s*", str(value or ""))
+    if not match:
+        return False
+    placeholder = match.group(1).strip()
+    for field_def in field_defs:
+        field_type = str(getattr(field_def, "field_type", "") or "").lower()
+        if field_type not in {"audio", "image", "diagram"}:
+            continue
+        field_name = str(getattr(field_def, "name", "") or "")
+        if placeholder not in {field_name, f"{field_name}_url"}:
+            continue
+        if lowered_name == "href":
+            return lowered_tag == "a"
+        if field_type == "audio":
+            return lowered_tag in {"audio", "source"}
+        return lowered_tag == "img"
+    return False
+
+
 def _extract_proxy_asset_id(media_url: str | None) -> str:
     if not media_url:
         return ""
@@ -310,9 +344,9 @@ def _media_field_used_as_url(field_name: str, template_sources: tuple[str, str] 
     if not template_sources:
         return False
     pattern = re.compile(
-        r"""(?is)\b(?:src|href)\s*=\s*["']\s*\{\{\s*"""
+        r"""(?is)\b(?:src|href)\s*=\s*["']\s*\{\{\{?\s*"""
         + re.escape(field_name)
-        + r"""\s*\}\}\s*["']""",
+        + r"""\s*\}\}\}?\s*["']""",
         flags=re.IGNORECASE,
     )
     return bool(pattern.search(template_sources[0] or "") or pattern.search(template_sources[1] or ""))
@@ -415,10 +449,18 @@ def prepare_client_template_source(
     script_free_html, scripts = _extract_inline_scripts(upgraded)
     for token, _ in scripts:
         script_free_html = script_free_html.replace(token, "")
+
+    def _client_template_allowed_attr(tag: str, name: str, value: str) -> bool:
+        return _is_media_template_url_attr(tag, name, value, field_defs) or _template_allowed_attr(
+            tag,
+            name,
+            value,
+        )
+
     safe_source = bleach.clean(
         script_free_html,
         tags=ALLOWED_HTML_TAGS,
-        attributes=_template_allowed_attr,
+        attributes=_client_template_allowed_attr,
         strip=True,
         css_sanitizer=_css_sanitizer,
     )
