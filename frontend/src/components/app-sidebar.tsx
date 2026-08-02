@@ -3,7 +3,6 @@ import {
   ChartNoAxesColumn,
   CreditCard,
   FileUp,
-  GraduationCap,
   Heart,
   Image as ImageIcon,
   Key,
@@ -44,7 +43,6 @@ export function AppSidebar({
     { title: 'Tổng quan', url: '/dashboard', icon: LayoutDashboard },
     { title: 'Thống kê', url: '/statistics', icon: ChartNoAxesColumn },
     { title: 'Duyệt thẻ', url: bootstrap.links.browse, icon: Search },
-    { title: 'Học flashcard', url: bootstrap.links.study, icon: GraduationCap },
   ]
   const library: AppNavigationItem[] = [
     { title: 'Loại thẻ', url: bootstrap.links.note_types, icon: NotebookTabs },
