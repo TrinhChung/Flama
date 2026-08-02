@@ -24,7 +24,7 @@ export const BACKEND_ORIGIN = apiBaseOrigin(API_BASE_URL)
 
 const DEFAULT_FLAMA_CONNECT_URL = import.meta.env.DEV
   ? 'http://127.0.0.1:4790/v1/flama-connect'
-  : `${window.location.origin}/connect/v1/flama-connect`
+  : 'https://flama-connect.stmtp.com/v1/flama-connect'
 
 export const FLAMA_CONNECT_URL = String(
   import.meta.env.VITE_FLAMA_CONNECT_URL || DEFAULT_FLAMA_CONNECT_URL,
