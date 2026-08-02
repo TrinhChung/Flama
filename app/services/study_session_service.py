@@ -38,6 +38,7 @@ from models.audit_log import AuditLog
 from models.card import Card
 from models.card_progress import CardProgress
 from models.deck import Deck
+from models.deck_clone_added_note import DeckCloneAddedNote
 from models.deck_clone_deck_map import DeckCloneDeckMap
 from models.deck_install import DeckInstall
 from models.review_event import ReviewEvent
@@ -370,6 +371,15 @@ def _local_deck_id_for_card(
     source_deck_id = getattr(card.note, "deck_id", None)
     if clone_scope is None:
         return int(source_deck_id) if source_deck_id is not None else None
+    if (
+        source_deck_id is not None
+        and int(source_deck_id) in set(clone_scope.local_deck_ids)
+        and flashcards_share_service.is_clone_added_note(
+            scope=clone_scope,
+            note_id=card.note.id,
+        )
+    ):
+        return int(source_deck_id)
     if source_deck_id is not None:
         mapped = clone_scope.source_to_local_deck_id.get(int(source_deck_id))
         if mapped is not None:
@@ -1005,6 +1015,26 @@ def commit_study_session(
         }
         for card_id in touched_ids:
             session_card = membership[card_id]
+            card = card_rows.get(card_id)
+            is_local_added = bool(
+                card is not None
+                and DeckCloneAddedNote.query.filter_by(
+                    deck_install_id=install.id,
+                    note_id=card.note_id,
+                ).first()
+            )
+            if is_local_added:
+                if (
+                    card.note.user_id != int(user.id)
+                    or card.note.deck_id != session_card.source_deck_id
+                    or card.note.deck_id != session_card.local_deck_id
+                ):
+                    raise StudySessionError(
+                        "SESSION_SCOPE_CHANGED",
+                        "A locally-added clone card moved outside the session scope.",
+                        status=409,
+                    )
+                continue
             if (
                 session_card.source_deck_id is None
                 or session_card.local_deck_id is None

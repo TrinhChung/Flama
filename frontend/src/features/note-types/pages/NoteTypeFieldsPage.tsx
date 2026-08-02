@@ -29,6 +29,7 @@ type FieldDefItem = {
   field_type: string
   required: boolean
   position: number
+  identity_role: 'primary' | null
 }
 
 type NoteTypeDetail = {
@@ -50,6 +51,7 @@ export function NoteTypeFieldsPage() {
   const [editName, setEditName] = useState('')
   const [editType, setEditType] = useState('text')
   const [editRequired, setEditRequired] = useState(false)
+  const [editIdentity, setEditIdentity] = useState(false)
 
   // New Field State
   const [newName, setNewName] = useState('')
@@ -86,12 +88,13 @@ export function NoteTypeFieldsPage() {
       setEditName(selectedField.name)
       setEditType(selectedField.field_type)
       setEditRequired(selectedField.required)
+      setEditIdentity(selectedField.identity_role === 'primary')
     }
   }, [selectedField])
 
   // Create Field Mutation
   const createMutation = useMutation({
-    mutationFn: (payload: { name: string; field_type: string; required: boolean }) =>
+    mutationFn: (payload: { name: string; field_type: string; required: boolean; identity_role: 'primary' | null }) =>
       appApi.mutate<FieldDefItem>(`/note-types/${noteTypeId}/fields`, 'POST', payload),
     onSuccess: (newField) => {
       toast.success('Đã thêm trường mới.')
@@ -106,7 +109,7 @@ export function NoteTypeFieldsPage() {
 
   // Patch Field Mutation
   const updateMutation = useMutation({
-    mutationFn: (payload: { name: string; field_type: string; required: boolean }) =>
+    mutationFn: (payload: { name: string; field_type: string; required: boolean; identity_role: 'primary' | null }) =>
       appApi.mutate(`/note-types/${noteTypeId}/fields/${selectedFieldId}`, 'PATCH', payload),
     onSuccess: () => {
       toast.success('Đã cập nhật trường.')
@@ -238,6 +241,9 @@ export function NoteTypeFieldsPage() {
                     <Badge variant="outline" className="text-[11px] font-semibold lowercase px-2.5 py-0.5 rounded-md">
                       {field.field_type}
                     </Badge>
+                    {field.identity_role === 'primary' ? (
+                      <Badge className="text-[10px]">identity</Badge>
+                    ) : null}
                   </div>
                 ))}
 
@@ -271,6 +277,7 @@ export function NoteTypeFieldsPage() {
                       name: newName.trim(),
                       field_type: newType,
                       required: false,
+                      identity_role: null,
                     })
                   }}
                   className="space-y-4"
@@ -351,8 +358,9 @@ export function NoteTypeFieldsPage() {
                     }
                     updateMutation.mutate({
                       name: editName.trim(),
-                      field_type: editType,
-                      required: editRequired,
+                      field_type: editIdentity ? 'text' : editType,
+                      required: editIdentity ? true : editRequired,
+                      identity_role: editIdentity ? 'primary' : null,
                     })
                   }}
                   className="space-y-4"
@@ -373,6 +381,7 @@ export function NoteTypeFieldsPage() {
                       id="edit-field-type"
                       value={editType}
                       onChange={(e) => setEditType(e.target.value)}
+                      disabled={editIdentity}
                       className="h-9 sm:h-10 text-xs sm:text-sm rounded-xl"
                     >
                       {FIELD_TYPES.map((t) => (
@@ -387,6 +396,7 @@ export function NoteTypeFieldsPage() {
                     <Checkbox
                       id="edit-field-required"
                       checked={editRequired}
+                      disabled={editIdentity}
                       onCheckedChange={(checked) => setEditRequired(Boolean(checked))}
                     />
                     <Label htmlFor="edit-field-required" className="text-xs font-semibold cursor-pointer">
@@ -394,12 +404,35 @@ export function NoteTypeFieldsPage() {
                     </Label>
                   </div>
 
+                  <div className="flex items-start space-x-2 rounded-xl border border-border/70 bg-muted/20 p-3">
+                    <Checkbox
+                      id="edit-field-identity"
+                      checked={editIdentity}
+                      onCheckedChange={(checked) => {
+                        const enabled = Boolean(checked)
+                        setEditIdentity(enabled)
+                        if (enabled) {
+                          setEditType('text')
+                          setEditRequired(true)
+                        }
+                      }}
+                    />
+                    <div className="space-y-1">
+                      <Label htmlFor="edit-field-identity" className="text-xs font-semibold cursor-pointer">
+                        Trường định danh chính
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        Flama Connect dùng trường này để kiểm tra trùng trong đúng deck đích. Mỗi loại thẻ chỉ có một trường định danh.
+                      </p>
+                    </div>
+                  </div>
+
                   <div className="flex items-center justify-between pt-4 border-t">
                     <Button
                       type="button"
                       variant="destructive"
                       size="sm"
-                      disabled={deleteMutation.isPending}
+                      disabled={deleteMutation.isPending || editIdentity}
                       onClick={() => {
                         if (
                           window.confirm(

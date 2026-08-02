@@ -96,6 +96,18 @@ def build_effective_study_card(
     note = card.note
     field_defs = list(note.note_type.field_defs)
     field_values = dict(note.field_values or {})
+    if clone_scope is not None and flashcards_share_service.is_clone_added_note(
+        scope=clone_scope,
+        note_id=note.id,
+    ):
+        return EffectiveStudyCard(
+            card=card,
+            note=note,
+            template=card.template,
+            field_defs=field_defs,
+            field_values=field_values,
+            clone_scope=None,
+        )
     if clone_scope is not None:
         source_note_type_id = (
             clone_scope.install.source_note_type_id or note.note_type_id or ""

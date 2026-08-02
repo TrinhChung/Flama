@@ -1,0 +1,394 @@
+"""Standalone Flama Connect application factory.
+
+This process intentionally does not register Flask-Login, session/CSRF handlers,
+the main REST blueprints, legacy templates, or startup schema mutation.
+"""
+
+from __future__ import annotations
+
+from collections import defaultdict, deque
+import hmac
+import json
+import logging
+from threading import Lock
+import time
+from typing import Any
+
+from flask import Blueprint, Flask, current_app, jsonify, make_response, request
+from werkzeug.exceptions import RequestEntityTooLarge
+from werkzeug.middleware.proxy_fix import ProxyFix
+
+from app.services import flama_connect_service, user_api_token_service
+from app.settings import build_app_config, comma_separated_env, coerce_bool_env, coerce_int_env
+from models import db
+
+
+logger = logging.getLogger(__name__)
+connect_bp = Blueprint("flama_connect", __name__)
+
+ACTION_PARAMS: dict[str, frozenset[str]] = {
+    "version": frozenset(),
+    "apiReflect": frozenset({"scopes", "actions"}),
+    "deckNames": frozenset(),
+    "modelNames": frozenset(),
+    "modelFieldNames": frozenset({"modelName"}),
+    "canAddNotes": frozenset({"notes"}),
+    "canAddNotesWithErrorDetail": frozenset({"notes"}),
+    "findNotes": frozenset({"query"}),
+    "multi": frozenset({"actions"}),
+    "addNote": frozenset({"note"}),
+    "storeMediaFile": frozenset({"filename", "data", "path", "url", "deleteExisting"}),
+}
+ACTION_SCOPES = {
+    "apiReflect": "note-type:read",
+    "deckNames": "deck:read",
+    "modelNames": "note-type:read",
+    "modelFieldNames": "note-type:read",
+    "canAddNotes": "note:check",
+    "canAddNotesWithErrorDetail": "note:check",
+    "findNotes": "note:check",
+    "multi": "note:check",
+    "addNote": "note:create",
+    "storeMediaFile": "note:create",
+}
+
+
+class SlidingWindowLimiter:
+    def __init__(self) -> None:
+        self._events: dict[str, deque[float]] = defaultdict(deque)
+        self._lock = Lock()
+
+    def allow(self, key: str, *, maximum: int, window_seconds: int) -> bool:
+        now = time.monotonic()
+        cutoff = now - window_seconds
+        with self._lock:
+            if len(self._events) >= 10_000:
+                stale_keys = [
+                    event_key
+                    for event_key, events in self._events.items()
+                    if not events or events[-1] <= cutoff
+                ]
+                for event_key in stale_keys:
+                    self._events.pop(event_key, None)
+            if key not in self._events and len(self._events) >= 20_000:
+                return False
+            bucket = self._events[key]
+            while bucket and bucket[0] <= cutoff:
+                bucket.popleft()
+            if len(bucket) >= maximum:
+                return False
+            bucket.append(now)
+            return True
+
+
+_limiter = SlidingWindowLimiter()
+
+
+class ProtocolError(ValueError):
+    pass
+
+
+def _register_models() -> None:
+    # SQLAlchemy resolves string relationships lazily, so every related model
+    # used by this app must be registered even though Connect exposes only a few.
+    from models.user import User  # noqa: F401
+    from models.user_role import UserRole  # noqa: F401
+    from models.user_scheduler_settings import UserSchedulerSettings  # noqa: F401
+    from models.scheduler_preset import SchedulerPreset  # noqa: F401
+    from models.user_api_token import UserApiToken  # noqa: F401
+    from models.connect_note_ref import ConnectNoteRef  # noqa: F401
+    from models.connect_pending_media import ConnectPendingMedia  # noqa: F401
+    from models.flashcard import (  # noqa: F401
+        AuditLog,
+        Card,
+        CardProgress,
+        Deck,
+        DeckCloneAddedFieldDef,
+        DeckCloneAddedNote,
+        DeckCloneDeckMap,
+        DeckCloneFieldDefOverride,
+        DeckCloneFieldOrderOverride,
+        DeckCloneNoteFieldOverride,
+        DeckChangeRequest,
+        DeckChangeRequestConflict,
+        DeckChangeRequestItem,
+        DeckInstall,
+        DeckMarketplaceItem,
+        DeckReview,
+        FieldDef,
+        FieldRenameJob,
+        MediaAsset,
+        MarketplaceSavedItem,
+        Note,
+        NoteType,
+        NoteTypeInstall,
+        NoteTypeReview,
+        ReviewEvent,
+        StudySession,
+        StudySessionCard,
+        StudySessionCommit,
+        Template,
+    )
+
+
+def _reject_duplicate_json_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ProtocolError("duplicate JSON property")
+        result[key] = value
+    return result
+
+
+def _reject_non_json_constant(value: str):
+    raise ProtocolError(f"invalid JSON number: {value}")
+
+
+def _assert_depth(value: Any, *, depth: int = 0) -> None:
+    if depth > 12:
+        raise ProtocolError("JSON nesting is too deep")
+    if isinstance(value, dict):
+        for child in value.values():
+            _assert_depth(child, depth=depth + 1)
+    elif isinstance(value, list):
+        for child in value:
+            _assert_depth(child, depth=depth + 1)
+
+
+def _parse_request() -> dict[str, Any]:
+    content_type = (request.mimetype or "").lower()
+    if content_type != "application/json":
+        raise ProtocolError("Content-Type must be application/json")
+    encoding = str(request.headers.get("Content-Encoding") or "identity").strip().lower()
+    if encoding not in {"", "identity"}:
+        raise ProtocolError("compressed request bodies are not supported")
+    raw = request.get_data(cache=False)
+    if not raw:
+        raise ProtocolError("request body is required")
+    try:
+        payload = json.loads(
+            raw,
+            object_pairs_hook=_reject_duplicate_json_keys,
+            parse_constant=_reject_non_json_constant,
+        )
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ProtocolError("request body is not valid JSON") from exc
+    if not isinstance(payload, dict):
+        raise ProtocolError("request body must be a JSON object")
+    _assert_depth(payload)
+    unknown = set(payload) - {"action", "params", "version", "key"}
+    missing = {"action", "version"} - set(payload)
+    if unknown or missing:
+        raise ProtocolError("request properties are invalid")
+    action = payload.get("action")
+    version = payload.get("version")
+    if not isinstance(action, str) or not action.isascii() or not 1 <= len(action) <= 64:
+        raise ProtocolError("action is invalid")
+    if action not in ACTION_PARAMS:
+        raise ProtocolError("unsupported action")
+    if isinstance(version, bool) or not isinstance(version, int) or not 2 <= version <= 6:
+        raise ProtocolError("version must be an integer between 2 and 6")
+    params = payload.get("params", {})
+    if not isinstance(params, dict):
+        raise ProtocolError("params must be an object")
+    if set(params) - ACTION_PARAMS[action]:
+        raise ProtocolError("params contains unsupported properties")
+    payload["params"] = params
+    return payload
+
+
+def _protocol_response(*, result: Any = None, error: str | None = None, status: int = 200):
+    # Yomitan currently sends its local protocol version 2. Flama Connect returns
+    # successful values directly and an object containing `error` on failure.
+    payload = result if error is None else {"result": None, "error": error}
+    response = make_response(jsonify(payload), status)
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+def _client_ip() -> str:
+    # ProxyFix or the edge proxy must establish the trusted remote address.
+    # Connect never trusts X-Forwarded-For directly.
+    return str(request.remote_addr or "unknown")
+
+
+def _rate_allowed(key: str, config_name: str, default: int) -> bool:
+    maximum = int(current_app.config.get(config_name, default))
+    window = int(current_app.config.get("CONNECT_RATE_LIMIT_WINDOW_SECONDS", 60))
+    return _limiter.allow(key, maximum=max(1, maximum), window_seconds=max(1, window))
+
+
+def _dispatch_multi(user_id: int, params: dict[str, Any], outer_key: str) -> list[Any]:
+    actions = params.get("actions")
+    if not isinstance(actions, list) or len(actions) > flama_connect_service.MAX_MULTI_ACTIONS:
+        raise ProtocolError("actions must be an array with at most 10 entries")
+    validated_actions: list[dict[str, Any]] = []
+    for item in actions:
+        if not isinstance(item, dict) or set(item) - {"action", "params", "key"}:
+            raise ProtocolError("multi action is invalid")
+        action = item.get("action")
+        nested_params = item.get("params", {})
+        if action != "findNotes" or not isinstance(nested_params, dict):
+            raise ProtocolError("multi only supports findNotes")
+        if set(nested_params) - ACTION_PARAMS["findNotes"]:
+            raise ProtocolError("multi params contains unsupported properties")
+        nested_key = item.get("key")
+        if nested_key is not None and nested_key != outer_key:
+            raise ProtocolError("multi key does not match the request key")
+        validated_actions.append(nested_params)
+    return [
+        flama_connect_service.dispatch(user_id, "findNotes", nested_params)
+        for nested_params in validated_actions
+    ]
+
+
+@connect_bp.get("/healthz")
+def healthz():
+    return jsonify({"status": "ok", "service": "flama-connect"})
+
+
+@connect_bp.route("/v1/flama-connect", methods=["POST", "OPTIONS"])
+@connect_bp.route("/v1/flama-connect/<url_token>", methods=["POST", "OPTIONS"])
+def flama_connect(url_token: str | None = None):
+    if request.method == "OPTIONS":
+        return "", 204
+    ip = _client_ip()
+    if not _rate_allowed(f"ip:{ip}", "CONNECT_IP_RATE_LIMIT", 120):
+        return _protocol_response(error="rate limit exceeded", status=429)
+    try:
+        payload = _parse_request()
+    except ProtocolError as exc:
+        logger.info("Connect rejected malformed request from ip=%s", ip)
+        return _protocol_response(error=str(exc))
+
+    body_key = payload.get("key")
+    if body_key is not None and not isinstance(body_key, str):
+        body_key = None
+    if url_token is not None and body_key is not None and not hmac.compare_digest(url_token, body_key):
+        authenticated = None
+        authentication_key = None
+    else:
+        authentication_key = url_token or body_key
+        authenticated = user_api_token_service.authenticate_token(authentication_key)
+    if authenticated is None:
+        if not _rate_allowed(f"invalid:{ip}", "CONNECT_INVALID_TOKEN_RATE_LIMIT", 10):
+            return _protocol_response(error="rate limit exceeded", status=429)
+        logger.warning("Connect authentication failed from ip=%s", ip)
+        db.session.rollback()
+        return _protocol_response(error="authentication failed")
+    # authenticate_token only succeeds for a validated plaintext token. Keep the
+    # validated value for nested multi-action checks without reading it again.
+    assert isinstance(authentication_key, str)
+    token, user = authenticated
+    action = payload["action"]
+    required_scope = ACTION_SCOPES.get(action)
+    if required_scope and required_scope not in user_api_token_service.parse_scopes(token):
+        db.session.rollback()
+        return _protocol_response(error="permission denied")
+    if not _rate_allowed(f"token:{token.id}", "CONNECT_TOKEN_RATE_LIMIT", 60):
+        db.session.rollback()
+        return _protocol_response(error="rate limit exceeded", status=429)
+    if not _rate_allowed(f"user:{user.id}", "CONNECT_USER_RATE_LIMIT", 120):
+        db.session.rollback()
+        return _protocol_response(error="rate limit exceeded", status=429)
+    if action == "addNote" and not _rate_allowed(f"add:{user.id}", "CONNECT_ADD_NOTE_RATE_LIMIT", 20):
+        db.session.rollback()
+        return _protocol_response(error="rate limit exceeded", status=429)
+    if action == "storeMediaFile" and not _rate_allowed(
+        f"media:{user.id}",
+        "CONNECT_MEDIA_RATE_LIMIT",
+        20,
+    ):
+        db.session.rollback()
+        return _protocol_response(error="rate limit exceeded", status=429)
+
+    try:
+        if action == "multi":
+            result = _dispatch_multi(user.id, payload["params"], authentication_key)
+        else:
+            result = flama_connect_service.dispatch(user.id, action, payload["params"])
+        db.session.commit()
+        logger.info("Connect action succeeded user_id=%s token_id=%s action=%s", user.id, token.id, action)
+        return _protocol_response(result=result)
+    except (ProtocolError, flama_connect_service.ConnectError) as exc:
+        db.session.rollback()
+        logger.info(
+            "Connect action rejected user_id=%s token_id=%s action=%s",
+            user.id,
+            token.id,
+            action,
+        )
+        return _protocol_response(error=str(exc))
+    except Exception:
+        db.session.rollback()
+        logger.exception("Connect action failed user_id=%s token_id=%s action=%s", user.id, token.id, action)
+        return _protocol_response(error="internal error")
+
+
+def _apply_security_headers(response):
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
+    response.headers.setdefault("Cache-Control", "no-store")
+    origin = request.headers.get("Origin")
+    allowed = set(current_app.config.get("CONNECT_CORS_ALLOWED_ORIGINS", ()))
+    if origin and origin in allowed:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Vary"] = "Origin"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+        response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+        response.headers["Access-Control-Max-Age"] = "600"
+    return response
+
+
+def create_connect_app(config: dict[str, Any] | None = None) -> Flask:
+    app = Flask("flama_connect", static_folder=None, template_folder=None)
+    app_config = build_app_config(config)
+    app_config.update(
+        {
+            "MAX_CONTENT_LENGTH": coerce_int_env("CONNECT_MAX_CONTENT_LENGTH", default=2 * 1024 * 1024),
+            "CONNECT_CORS_ALLOWED_ORIGINS": comma_separated_env("CONNECT_CORS_ALLOWED_ORIGINS"),
+            "CONNECT_TRUST_PROXY": coerce_bool_env("CONNECT_TRUST_PROXY", default=False),
+            "CONNECT_RATE_LIMIT_WINDOW_SECONDS": coerce_int_env("CONNECT_RATE_LIMIT_WINDOW_SECONDS", default=60),
+            "CONNECT_IP_RATE_LIMIT": coerce_int_env("CONNECT_IP_RATE_LIMIT", default=120),
+            "CONNECT_INVALID_TOKEN_RATE_LIMIT": coerce_int_env("CONNECT_INVALID_TOKEN_RATE_LIMIT", default=10),
+            "CONNECT_TOKEN_RATE_LIMIT": coerce_int_env("CONNECT_TOKEN_RATE_LIMIT", default=60),
+            "CONNECT_USER_RATE_LIMIT": coerce_int_env("CONNECT_USER_RATE_LIMIT", default=120),
+            "CONNECT_ADD_NOTE_RATE_LIMIT": coerce_int_env("CONNECT_ADD_NOTE_RATE_LIMIT", default=20),
+            "CONNECT_MEDIA_RATE_LIMIT": coerce_int_env("CONNECT_MEDIA_RATE_LIMIT", default=20),
+            "CONNECT_MEDIA_MAX_BYTES": coerce_int_env("CONNECT_MEDIA_MAX_BYTES", default=1024 * 1024),
+            "CONNECT_PENDING_MEDIA_TTL_SECONDS": coerce_int_env(
+                "CONNECT_PENDING_MEDIA_TTL_SECONDS",
+                default=30 * 60,
+            ),
+            "CONNECT_PENDING_MEDIA_MAX_ITEMS": coerce_int_env(
+                "CONNECT_PENDING_MEDIA_MAX_ITEMS",
+                default=20,
+            ),
+            "CONNECT_PENDING_MEDIA_MAX_TOTAL_BYTES": coerce_int_env(
+                "CONNECT_PENDING_MEDIA_MAX_TOTAL_BYTES",
+                default=10 * 1024 * 1024,
+            ),
+        }
+    )
+    if config:
+        app_config.update(config)
+    app.config.update(app_config)
+    if app.config.get("CONNECT_TRUST_PROXY"):
+        # Safe only when Connect is bound behind one trusted reverse proxy.
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1)
+    db.init_app(app)
+    _register_models()
+    app.register_blueprint(connect_bp)
+    app.after_request(_apply_security_headers)
+
+    @app.errorhandler(RequestEntityTooLarge)
+    def request_too_large(_error):
+        db.session.rollback()
+        return _protocol_response(error="request body is too large", status=413)
+
+    @app.errorhandler(404)
+    def not_found(_error):
+        return jsonify({"error": "not found"}), 404
+
+    return app

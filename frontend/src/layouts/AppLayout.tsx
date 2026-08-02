@@ -48,6 +48,7 @@ const pageTitles: Record<string, string> = {
   '/marketplace/note-types/publish': 'Đăng loại thẻ',
   '/orders': 'Đơn hàng',
   '/settings/mcp-tokens': 'MCP Tokens',
+  '/settings/yomitan': 'Kết nối Yomitan',
   '/admin/users': 'Quản lý người dùng',
   '/admin/permissions': 'Phân quyền người dùng',
   '/admin/payments': 'Quản lý thanh toán',

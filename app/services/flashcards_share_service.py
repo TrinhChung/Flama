@@ -11,6 +11,7 @@ from typing import Any, Tuple
 
 UTC = timezone.utc
 
+from sqlalchemy import and_, or_
 from sqlalchemy.exc import OperationalError
 
 from app.repositories import flashcards_share_repository
@@ -21,6 +22,7 @@ from models.flashcard import (
     Card,
     CardProgress,
     DeckCloneAddedFieldDef,
+    DeckCloneAddedNote,
     DeckCloneDeckMap,
     DeckCloneFieldDefOverride,
     DeckCloneFieldOrderOverride,
@@ -95,18 +97,40 @@ def create_note_type(
 
     input_fields = payload.get("field_defs")
     if not isinstance(input_fields, list) or not input_fields:
-        input_fields = [{"name": "Word", "field_type": "text", "position": 0, "required": True}]
+        input_fields = [
+            {
+                "name": "Word",
+                "field_type": "text",
+                "position": 0,
+                "required": True,
+                "identity_role": "primary",
+            }
+        ]
+
+    identity_count = sum(1 for row in input_fields if row.get("identity_role") == "primary")
+    if identity_count > 1:
+        db.session.rollback()
+        return None, "Only one primary identity field is allowed.", "field_defs"
 
     for idx, row in enumerate(input_fields):
         field_name = (row.get("name") or "").strip()
         field_type = (row.get("field_type") or "text").strip()
         required = bool(row.get("required", False))
+        identity_role = row.get("identity_role")
         if not field_name:
             db.session.rollback()
             return None, "Field name is required.", "field_defs"
         if field_type not in FIELD_TYPES:
             db.session.rollback()
             return None, f"Unsupported field_type: {field_type}", "field_defs"
+        if identity_role not in (None, "primary"):
+            db.session.rollback()
+            return None, "identity_role must be null or primary.", "field_defs"
+        if identity_role == "primary" and field_type != "text":
+            db.session.rollback()
+            return None, "The identity field must use the text field type.", "field_defs"
+        if identity_role == "primary":
+            required = True
         db.session.add(
             FieldDef(
                 note_type_id=note_type.id,
@@ -114,6 +138,7 @@ def create_note_type(
                 field_type=field_type,
                 position=int(row.get("position", idx)),
                 required=required,
+                identity_role=identity_role,
             )
         )
 
@@ -1185,6 +1210,17 @@ def is_card_visible_in_clone_scope(
 ) -> bool:
     if card_obj is None or card_obj.note is None:
         return False
+    if (
+        card_obj.note.user_id == scope.install.user_id
+        and card_obj.note.deck_id is not None
+        and int(card_obj.note.deck_id) in set(scope.local_deck_ids)
+        and DeckCloneAddedNote.query.filter_by(
+            deck_install_id=scope.install.id,
+            note_id=card_obj.note.id,
+        ).first()
+        is not None
+    ):
+        return True
     if card_obj.note.deck_id is None or int(card_obj.note.deck_id) not in set(scope.source_deck_ids):
         return False
     if scope.source_owner_user_id is not None and card_obj.note.user_id != scope.source_owner_user_id:
@@ -1691,6 +1727,7 @@ def clone_note_type_for_user(source_note_type: NoteType, user_id: int) -> NoteTy
                 field_type=field_def.field_type,
                 position=field_def.position,
                 required=bool(field_def.required),
+                identity_role=field_def.identity_role,
             )
         )
 
@@ -1864,11 +1901,32 @@ def resolve_clone_scope_for_local_deck(
     )
 
 def query_clone_scope_cards(scope: CloneDeckScope):
-    return flashcards_share_repository.get_clone_scope_cards(
-        scope.source_deck_ids, 
-        scope.source_owner_user_id, 
-        scope.base_snapshot_at
+    source_conditions = [Note.deck_id.in_(scope.source_deck_ids)]
+    if scope.source_owner_user_id is not None:
+        source_conditions.append(Note.user_id == scope.source_owner_user_id)
+    if scope.base_snapshot_at is not None:
+        source_conditions.extend(
+            [Note.created_at <= scope.base_snapshot_at, Card.created_at <= scope.base_snapshot_at]
+        )
+    local_added_exists = db.session.query(DeckCloneAddedNote.id).filter(
+        DeckCloneAddedNote.deck_install_id == scope.install.id,
+        DeckCloneAddedNote.note_id == Note.id,
+    ).exists()
+    local_condition = and_(
+        Note.user_id == scope.install.user_id,
+        Note.deck_id.in_(scope.local_deck_ids),
+        local_added_exists,
     )
+    return Card.query.join(Note, Card.note_id == Note.id).filter(
+        or_(and_(*source_conditions), local_condition)
+    )
+
+
+def is_clone_added_note(*, scope: CloneDeckScope, note_id: str) -> bool:
+    return DeckCloneAddedNote.query.filter_by(
+        deck_install_id=scope.install.id,
+        note_id=note_id,
+    ).first() is not None
 
 def resolve_clone_scope_for_card(
     *,
@@ -1955,6 +2013,7 @@ def build_clone_schema_view(
                 field_type=resolved_field_type,
                 position=resolved_position,
                 required=resolved_required,
+                identity_role=getattr(source_def, "identity_role", None),
             )
         )
 
@@ -1981,6 +2040,7 @@ def build_clone_schema_view(
                 field_type=resolved_field_type,
                 position=resolved_position,
                 required=resolved_required,
+                identity_role=None,
             )
         )
 
@@ -2085,18 +2145,20 @@ def upsert_clone_overlay(
 
     source_note_type_id = (deck_install.source_note_type_id or "").strip()
     source_field_ids: set[str] = set()
+    source_fields_by_id: dict[str, FieldDef] = {}
     if source_note_type_id:
-        source_field_rows = FieldDef.query.with_entities(FieldDef.id).filter(
+        source_field_rows = FieldDef.query.filter(
             FieldDef.note_type_id == source_note_type_id
         )
         snapshot_at = _install_snapshot_at(deck_install)
         if snapshot_at is not None:
             source_field_rows = source_field_rows.filter(FieldDef.created_at <= snapshot_at)
-        source_field_ids = {
-            str(row[0])
+        source_fields_by_id = {
+            str(row.id): row
             for row in source_field_rows.all()
-            if row and row[0]
+            if row and row.id
         }
+        source_field_ids = set(source_fields_by_id)
 
     updated_defs_payload = payload.get("updated_defs")
     if updated_defs_payload is not None:
@@ -2134,11 +2196,20 @@ def upsert_clone_overlay(
             for key in {"name", "field_type", "position", "required"}:
                 if key in item:
                     next_properties[key] = item.get(key)
+            source_field = source_fields_by_id.get(source_field_def_id)
+            if source_field is not None and source_field.identity_role == "primary":
+                if str(next_properties.get("field_type") or source_field.field_type) != "text":
+                    return {}, "The primary identity field must remain text in a clone."
+                if not bool(next_properties.get("required", source_field.required)):
+                    return {}, "The primary identity field must remain required in a clone."
             if next_properties:
                 override.properties = next_properties
                 counters["updated_defs"] += 1
 
             if "disabled" in item:
+                source_field = source_fields_by_id.get(source_field_def_id)
+                if bool(item.get("disabled")) and source_field is not None and source_field.identity_role == "primary":
+                    return {}, "The primary identity field cannot be disabled in a clone."
                 override.is_disabled = bool(item.get("disabled"))
                 if override.is_disabled:
                     counters["disabled_defs"] += 1
@@ -2153,6 +2224,9 @@ def upsert_clone_overlay(
                 continue
             if source_field_ids and source_field_def_id not in source_field_ids:
                 return {}, "disabled_def_ids references field outside pinned snapshot."
+            source_field = source_fields_by_id.get(source_field_def_id)
+            if source_field is not None and source_field.identity_role == "primary":
+                return {}, "The primary identity field cannot be disabled in a clone."
             override = DeckCloneFieldDefOverride.query.filter_by(
                 deck_install_id=deck_install.id,
                 source_field_def_id=source_field_def_id,

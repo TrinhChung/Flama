@@ -536,6 +536,11 @@ class VocabSeedSharingTests(unittest.TestCase):
                 name="Flama Standard Vocabulary",
             ).first()
             self.assertIsNotNone(note_type)
+            identity_fields = [
+                field.name
+                for field in note_type.field_defs  # type: ignore[union-attr]
+                if field.identity_role == "primary"
+            ]
 
             template = Template.query.filter_by(
                 note_type_id=note_type.id,  # type: ignore[union-attr]
@@ -559,6 +564,7 @@ class VocabSeedSharingTests(unittest.TestCase):
         self.assertEqual(template.front_html, LEGACY_FRONT_TEMPLATE.strip())  # type: ignore[union-attr]
         self.assertEqual(template.back_html, LEGACY_BACK_TEMPLATE.strip())  # type: ignore[union-attr]
         self.assertEqual(template.shared_css, LEGACY_SHARED_CSS.strip())  # type: ignore[union-attr]
+        self.assertEqual(identity_fields, ["word"])
         self.assertEqual(
             note_type_names,
             {"Flama Standard Vocabulary", "Trắc nghiệm"},

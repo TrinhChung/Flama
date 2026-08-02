@@ -498,21 +498,27 @@ def seed_template():
             field.name: field
             for field in FieldDef.query.filter_by(note_type_id=note_type.id).all()
         }
+        has_identity_field = any(
+            field.identity_role == "primary" for field in existing_fields.values()
+        )
         created_fields = 0
         updated_fields = 0
 
         for i, (name, f_type, required) in enumerate(fields):
             field_def = existing_fields.get(name)
             if not field_def:
+                identity_role = "primary" if name == "word" and not has_identity_field else None
                 db.session.add(
                     FieldDef(
                         note_type_id=note_type.id,
                         name=name,
                         field_type=f_type,
                         position=i,
-                        required=required
+                        required=required,
+                        identity_role=identity_role,
                     )
                 )
+                has_identity_field = has_identity_field or identity_role == "primary"
                 created_fields += 1
                 continue
 
@@ -525,6 +531,10 @@ def seed_template():
                 changed = True
             if int(field_def.position or 0) != i:
                 field_def.position = i
+                changed = True
+            if name == "word" and not has_identity_field:
+                field_def.identity_role = "primary"
+                has_identity_field = True
                 changed = True
             if changed:
                 updated_fields += 1

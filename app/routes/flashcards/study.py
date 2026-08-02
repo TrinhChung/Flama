@@ -60,6 +60,15 @@ def _effective_scheduler_deck_id(
     source_deck_id = getattr(card.note, "deck_id", None)
     if clone_scope is None:
         return int(source_deck_id) if source_deck_id is not None else None
+    if (
+        source_deck_id is not None
+        and int(source_deck_id) in set(clone_scope.local_deck_ids)
+        and flashcards_share.is_clone_added_note(
+            scope=clone_scope,
+            note_id=card.note.id,
+        )
+    ):
+        return int(source_deck_id)
     if source_deck_id is not None:
         mapped = clone_scope.source_to_local_deck_id.get(int(source_deck_id))
         if mapped is not None:

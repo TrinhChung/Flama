@@ -71,6 +71,7 @@ export function AppSidebar({
   ]
 
   const settings: AppNavigationItem[] = [
+    { title: 'Kết nối Yomitan', url: '/settings/yomitan', icon: Key },
     { title: 'MCP Access Tokens', url: '/settings/mcp-tokens', icon: Key },
   ]
 
@@ -99,4 +100,3 @@ export function AppSidebar({
     </Sidebar>
   )
 }
-

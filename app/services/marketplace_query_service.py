@@ -37,6 +37,7 @@ def serialize_field(field: FieldDef) -> dict[str, Any]:
         "field_type": field.field_type,
         "position": field.position,
         "required": bool(field.required),
+        "identity_role": getattr(field, "identity_role", None),
     }
 
 

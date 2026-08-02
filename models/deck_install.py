@@ -86,6 +86,11 @@ class DeckInstall(db.Model):
         back_populates="deck_install",
         cascade="all, delete-orphan",
     )
+    clone_added_notes = db.relationship(
+        "DeckCloneAddedNote",
+        back_populates="deck_install",
+        cascade="all, delete-orphan",
+    )
     change_requests = db.relationship(
         "DeckChangeRequest",
         back_populates="deck_install",

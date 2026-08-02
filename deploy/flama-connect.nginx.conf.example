@@ -1,0 +1,46 @@
+# Merge these locations into the existing Flama TLS server. Connect remains a
+# separate process, while its public URL uses the same Flama domain. No wildcard
+# CORS headers are added to either backend.
+limit_req_zone $binary_remote_addr zone=flama_connect_ip:10m rate=2r/s;
+
+server {
+    listen 443 ssl http2;
+    server_name flama.example.com;
+
+    client_max_body_size 2m;
+    limit_req_status 429;
+
+    location = /connect/healthz {
+        proxy_pass http://127.0.0.1:4790/healthz;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $remote_addr;
+    }
+
+    location = /connect/v1/flama-connect {
+        limit_except POST OPTIONS { deny all; }
+        limit_req zone=flama_connect_ip burst=60 nodelay;
+        access_log off;
+        proxy_pass http://127.0.0.1:4790/v1/flama-connect;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_request_buffering on;
+        proxy_read_timeout 30s;
+    }
+
+    # The token is intentionally stored in the path because stock Yomitan may
+    # expose only a Server URL field. Access logging is disabled for this route.
+    location ^~ /connect/v1/flama-connect/ {
+        limit_except POST OPTIONS { deny all; }
+        limit_req zone=flama_connect_ip burst=60 nodelay;
+        access_log off;
+        rewrite ^/connect(/v1/flama-connect/.*)$ $1 break;
+        proxy_pass http://127.0.0.1:4790;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_request_buffering on;
+        proxy_read_timeout 30s;
+    }
+}
