@@ -2,7 +2,6 @@ import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import {
   CheckCircle2,
-  Clock,
   LayoutDashboard,
   ArrowRight,
   Trophy,
@@ -22,8 +21,6 @@ type StudyCompletionCardProps = {
   session: PersistedStudySession | null
   receipt: StudySessionCommitReceipt | null
   counts: { new: number; learning: number; due: number }
-  sessionState?: 'active' | 'waiting' | 'complete'
-  nextDueAtMs?: number | null
   isBusy: boolean
   onCommit: () => void
 }
@@ -34,8 +31,6 @@ export function StudyCompletionCard({
   session,
   receipt,
   counts,
-  sessionState,
-  nextDueAtMs,
   isBusy,
   onCommit,
 }: StudyCompletionCardProps) {
@@ -82,7 +77,6 @@ export function StudyCompletionCard({
   }, [events])
 
   const isCommitted = Boolean(receipt)
-  const isWaiting = sessionState === 'waiting' && Boolean(nextDueAtMs)
 
   return (
     <div className="w-full max-w-2xl mx-auto py-6 px-4">
@@ -104,16 +98,12 @@ export function StudyCompletionCard({
             <h2 className="text-2xl font-bold text-foreground tracking-tight">
               {isCommitted
                 ? 'Đã đồng bộ phiên học'
-                : isWaiting
-                  ? 'Chờ mốc ôn lại tiếp theo'
-                  : 'Hoàn thành lượt học'}
+                : 'Hoàn thành lượt học hôm nay'}
             </h2>
             <p className="text-xs sm:text-sm text-muted-foreground max-w-md mx-auto leading-relaxed">
               {isCommitted
                 ? `Hệ thống đã lưu thành công ${appliedCount} lượt trả lời thẻ.`
-                : isWaiting
-                  ? 'Các thẻ đang học chưa đến mốc ôn lại. Bạn có thể chờ hoặc kết thúc ngay.'
-                  : 'Tất cả các thẻ đến hạn trong phiên này đã được ôn tập xong.'}
+                : 'Tất cả các thẻ cần học hôm nay đã được ôn tập xong.'}
             </p>
           </div>
         </div>
@@ -210,17 +200,6 @@ export function StudyCompletionCard({
             </div>
           </div>
         </div>
-
-        {/* Next Due Alert */}
-        {isWaiting && nextDueAtMs ? (
-          <div className="flex items-center justify-center gap-2 text-xs text-amber-600 dark:text-amber-400 font-medium bg-amber-500/10 border border-amber-200 dark:border-amber-900/40 p-3 rounded-xl">
-            <Clock className="size-4 shrink-0" />
-            <span>
-              Thẻ đang học tiếp theo sẽ sẵn sàng lúc{' '}
-              <strong>{new Date(nextDueAtMs).toLocaleTimeString('vi-VN')}</strong>.
-            </span>
-          </div>
-        ) : null}
 
         {/* Centered Actions */}
         <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">

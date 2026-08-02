@@ -6,6 +6,7 @@ import { StudyHeaderToolbar } from '../components/StudyHeaderToolbar'
 import { StudyCardRendererFrame } from '../components/StudyCardRendererFrame'
 import { StudyBottomBar } from '../components/StudyBottomBar'
 import { StudyCompletionCard } from '../components/StudyCompletionCard'
+import { StudyWaitingCard } from '../components/StudyWaitingCard'
 import { useStudySession } from '../hooks/useStudySession'
 import { isBackgroundRolloverCommit } from '../session/studySessionEngine'
 import type { Rating } from '../types'
@@ -91,7 +92,7 @@ export function StudyPage() {
   }, [activeCardKey, card?.card_id, decision, revealed, study])
 
   const handleCommit = useCallback(() => {
-    void study.commit().catch(() => {})
+    void study.commit({ reason: 'manual_exit' }).catch(() => {})
   }, [study])
 
   const handleToggleFullscreen = useCallback(() => {
@@ -225,8 +226,6 @@ export function StudyPage() {
           session={study.session}
           receipt={study.receipt}
           counts={counts}
-          sessionState={study.view?.session_state}
-          nextDueAtMs={study.view?.next_due_at_ms}
           isBusy={study.isBusy}
           onCommit={handleCommit}
         />
@@ -266,6 +265,29 @@ export function StudyPage() {
             scopeId={deckIdRaw}
           />
         </div>
+      ) : blockingCommit ? (
+        <div className="flex-1 flex items-center justify-center p-4 sm:p-6">
+          <PageLoading label="Đang đồng bộ phiên học…" />
+        </div>
+      ) : study.view?.session_state === 'waiting' ? (
+        <div className="flex-1 flex flex-col items-center justify-center p-4 sm:p-6 overflow-y-auto min-h-0">
+          <StudyWaitingCard
+            deckName={deckName}
+            counts={counts}
+            nowMs={study.view.now_ms}
+            pendingLearningCount={study.view.pending_learning_count}
+            nextEligibleAtMs={study.view.next_eligible_at_ms}
+            nextDueAtMs={study.view.next_due_at_ms}
+            isBusy={study.isBusy}
+            onCommit={handleCommit}
+          />
+        </div>
+      ) : study.view?.session_state === 'active' ? (
+        <div className="flex-1 flex items-center justify-center p-4 sm:p-6">
+          <PageError
+            error={new Error('Dữ liệu hiển thị thẻ không đầy đủ. Hãy tải lại phiên học.')}
+          />
+        </div>
       ) : (
         <div className="flex-1 flex flex-col items-center justify-center p-4 sm:p-6 overflow-y-auto min-h-0">
           <StudyCompletionCard
@@ -274,8 +296,6 @@ export function StudyPage() {
             session={study.session}
             receipt={study.receipt}
             counts={counts}
-            sessionState={study.view?.session_state}
-            nextDueAtMs={study.view?.next_due_at_ms}
             isBusy={study.isBusy}
             onCommit={handleCommit}
           />

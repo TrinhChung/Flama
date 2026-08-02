@@ -49,6 +49,8 @@ const pageTitles: Record<string, string> = {
   '/orders': 'Đơn hàng',
   '/settings/mcp-tokens': 'MCP Tokens',
   '/settings/yomitan': 'Kết nối Yomitan',
+  '/feedback': 'Đóng góp ý kiến',
+  '/support/feedback': 'Đóng góp ý kiến',
   '/admin/users': 'Quản lý người dùng',
   '/admin/permissions': 'Phân quyền người dùng',
   '/admin/payments': 'Quản lý thanh toán',

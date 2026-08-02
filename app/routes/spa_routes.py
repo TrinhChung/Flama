@@ -22,7 +22,6 @@ def public_spa_page():
 @spa_routes_bp.get("/study")
 @spa_routes_bp.get("/installed-decks")
 @spa_routes_bp.get("/import")
-@spa_routes_bp.get("/settings/mcp-tokens")
 @spa_routes_bp.get("/marketplace/decks")
 @spa_routes_bp.get("/marketplace/decks/publish")
 @spa_routes_bp.get("/marketplace/decks/<item_id>")
@@ -41,6 +40,7 @@ def authenticated_spa_page(item_id: str | None = None):
 @spa_routes_bp.get("/admin/support")
 @spa_routes_bp.get("/admin/payments/orders/<order_id>")
 @spa_routes_bp.get("/admin/payments/transactions/<attempt_id>")
+@spa_routes_bp.get("/settings/mcp-tokens")
 @login_required
 def admin_spa_page(order_id: str | None = None, attempt_id: str | None = None):
     del order_id, attempt_id

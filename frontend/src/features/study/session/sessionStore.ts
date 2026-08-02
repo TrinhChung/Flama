@@ -8,6 +8,12 @@ const DB_VERSION = 1
 const STORE_NAME = 'sessions'
 const memoryFallback = new Map<string, PersistedStudySession>()
 
+export type StudyCommitReason =
+  | 'auto_finish'
+  | 'manual_exit'
+  | 'page_exit'
+  | 'rollover'
+
 export type PersistedStudySession = {
   scope_key: string
   snapshot: StudySessionSnapshot
@@ -16,8 +22,69 @@ export type PersistedStudySession = {
   opened_client_at_ms: number
   status: 'active' | 'pending_commit'
   commit_id: string | null
+  commit_reason: StudyCommitReason | null
   resume_after_commit: boolean
   updated_at_ms: number
+}
+
+const VALID_CARD_TYPES = new Set([
+  'new',
+  'learning',
+  'review',
+  'relearning',
+])
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function isFiniteTimestamp(value: unknown) {
+  return typeof value === 'string' && Number.isFinite(Date.parse(value))
+}
+
+export function isRestorableStudySession(
+  value: unknown,
+): value is PersistedStudySession {
+  if (!isRecord(value) || !isRecord(value.snapshot)) return false
+  const snapshot = value.snapshot
+  const policies = snapshot.policies
+  const templates = snapshot.templates
+  const contents = snapshot.contents
+  if (
+    snapshot.schema_version !== 'study-session.v2'
+    || !isFiniteTimestamp(snapshot.server_now_utc)
+    || !isFiniteTimestamp(snapshot.expires_at)
+    || typeof snapshot.learn_ahead_seconds !== 'number'
+    || !Number.isFinite(snapshot.learn_ahead_seconds)
+    || snapshot.learn_ahead_seconds < 0
+    || !Array.isArray(snapshot.cards)
+    || !isRecord(policies)
+    || !isRecord(templates)
+    || !isRecord(contents)
+  ) return false
+
+  if (!snapshot.cards.every((card) => {
+    if (!isRecord(card) || !isRecord(card.state)) return false
+    const policyKey = String(card.policy_key || '')
+    const templateKey = String(card.template_key || '')
+    const contentKey = String(card.content_key || '')
+    return (
+      typeof card.card_id === 'string'
+      && VALID_CARD_TYPES.has(String(card.state.type || ''))
+      && isRecord(policies[policyKey])
+      && isRecord(templates[templateKey])
+      && isRecord(contents[contentKey])
+    )
+  })) return false
+
+  return (
+    typeof value.scope_key === 'string'
+    && Array.isArray(value.events)
+    && Array.isArray(value.touched_card_ids)
+    && typeof value.opened_client_at_ms === 'number'
+    && Number.isFinite(value.opened_client_at_ms)
+    && (value.status === 'active' || value.status === 'pending_commit')
+  )
 }
 
 function openDatabase(): Promise<IDBDatabase> {
@@ -73,14 +140,25 @@ export async function loadStudySession(key: string) {
     )
     const restored = row ?? memoryFallback.get(key) ?? null
     if (!restored) return null
+    if (!isRestorableStudySession(restored)) {
+      memoryFallback.delete(key)
+      try {
+        await transact<undefined>('readwrite', (store) => store.delete(key))
+      } catch {
+        // A malformed durable row is already ignored by the current tab.
+      }
+      return null
+    }
     const normalized = {
       ...restored,
+      commit_reason: restored.commit_reason ?? null,
       resume_after_commit: Boolean(restored.resume_after_commit),
     }
     memoryFallback.set(key, normalized)
     return normalized
   } catch {
-    return memoryFallback.get(key) ?? null
+    const fallback = memoryFallback.get(key) ?? null
+    return isRestorableStudySession(fallback) ? fallback : null
   }
 }
 

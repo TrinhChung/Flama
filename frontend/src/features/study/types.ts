@@ -162,6 +162,7 @@ export type StudySessionCommitReceipt = {
   success: boolean
   session_id: string
   commit_id: string
+  commit_reason: 'auto_finish' | 'manual_exit' | 'page_exit' | 'rollover'
   applied_event_count: number
   updated_cards: Array<{
     card_id: string

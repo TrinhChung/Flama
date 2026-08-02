@@ -56,6 +56,12 @@ MAX_COMMIT_EVENTS = 5000
 MAX_COMMIT_BYTES = 5 * 1024 * 1024
 SESSION_TTL = timedelta(hours=24)
 VALID_RATINGS = {"again", "hard", "good", "easy"}
+VALID_COMMIT_REASONS = {
+    "auto_finish",
+    "manual_exit",
+    "page_exit",
+    "rollover",
+}
 
 
 class StudySessionError(ValueError):
@@ -99,6 +105,41 @@ def _parse_utc_iso(value: Any) -> datetime | None:
     if parsed.tzinfo is not None:
         return parsed.astimezone(timezone.utc).replace(tzinfo=None)
     return parsed
+
+
+def _has_actionable_session_card(
+    states: dict[str, CardState],
+    *,
+    now: datetime,
+    timezone_name: str,
+    day_boundary_hour_local: int,
+    learn_ahead_seconds: int,
+) -> bool:
+    today = _day_index(
+        now,
+        day_boundary_hour_local,
+        timezone_name=timezone_name,
+    )
+    learn_ahead_at = now + timedelta(
+        seconds=max(0, int(learn_ahead_seconds)),
+    )
+    for state in states.values():
+        if state.suspended:
+            continue
+        if state.type == "new":
+            return True
+        if state.dueDay is not None:
+            if int(state.dueDay) <= today:
+                return True
+            continue
+        if state.due is None:
+            return True
+        if state.type in {"learning", "relearning"}:
+            if state.due <= learn_ahead_at:
+                return True
+        elif state.type == "review" and state.due <= now:
+            return True
+    return False
 
 
 def _finite_float(value: Any, default: float = 0.0) -> float:
@@ -680,6 +721,15 @@ def commit_study_session(
             "commit_id is required.",
             status=400,
         )
+    commit_reason = str(
+        payload.get("commit_reason") or "manual_exit"
+    ).strip().lower()
+    if commit_reason not in VALID_COMMIT_REASONS:
+        raise StudySessionError(
+            "INVALID_COMMIT_REASON",
+            "commit_reason must be auto_finish, manual_exit, page_exit, or rollover.",
+            status=422,
+        )
     payload_hash = _request_hash(payload)
     committed_at = now or datetime.utcnow()
     session = (
@@ -951,6 +1001,19 @@ def commit_study_session(
                     status=422,
                 )
 
+    if commit_reason == "auto_finish" and _has_actionable_session_card(
+        states,
+        now=committed_at,
+        timezone_name=session.timezone,
+        day_boundary_hour_local=session.day_boundary_hour_local,
+        learn_ahead_seconds=session.learn_ahead_seconds,
+    ):
+        raise StudySessionError(
+            "SESSION_NOT_COMPLETE",
+            "Study session still contains cards eligible for review.",
+            status=409,
+        )
+
     progress_rows = []
     if touched_ids:
         progress_rows = (
@@ -1198,6 +1261,7 @@ def commit_study_session(
         "success": True,
         "session_id": session.id,
         "commit_id": commit_key,
+        "commit_reason": commit_reason,
         "applied_event_count": len(replayed_events),
         "updated_cards": updated_cards,
         "rating_counts": rating_counts,
@@ -1223,6 +1287,7 @@ def commit_study_session(
                 "scope_id": session.scope_id,
                 "event_count": len(replayed_events),
                 "card_count": len(touched_ids),
+                "commit_reason": commit_reason,
             },
         )
     )

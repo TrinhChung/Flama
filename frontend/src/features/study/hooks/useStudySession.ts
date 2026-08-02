@@ -24,7 +24,10 @@ import {
   saveStudySession,
   scopeKey,
 } from '../session/sessionStore'
-import type { PersistedStudySession } from '../session/sessionStore'
+import type {
+  PersistedStudySession,
+  StudyCommitReason,
+} from '../session/sessionStore'
 
 const openingRequests = new Map<string, Promise<StudySessionSnapshot>>()
 
@@ -221,7 +224,10 @@ export function useStudySession(deckId: string | null) {
   }, [activateSession])
 
   const commit = useCallback(async (
-    options: { resumeAfterCommit?: boolean } = {},
+    options: {
+      reason?: StudyCommitReason
+      resumeAfterCommit?: boolean
+    } = {},
   ) => {
     const active = sessionRef.current
     if (
@@ -237,7 +243,10 @@ export function useStudySession(deckId: string | null) {
     try {
       const resumeAfterCommit = options.resumeAfterCommit
         ?? active.resume_after_commit
-      const prepared = prepareCommit(active, { resumeAfterCommit })
+      const prepared = prepareCommit(active, {
+        reason: options.reason,
+        resumeAfterCommit,
+      })
       await saveStudySession(prepared.session)
       activateSession(prepared.session)
       const result = await appApi.mutate<StudySessionCommitReceipt>(
@@ -288,6 +297,7 @@ export function useStudySession(deckId: string | null) {
     const mode = automaticCommitMode(session, view)
     if (!mode) return
     void commit({
+      reason: mode === 'rollover' ? 'rollover' : 'auto_finish',
       resumeAfterCommit: mode === 'rollover',
     }).catch(() => {})
   }, [busy, commit, hasLease, receipt, session, view])
@@ -300,6 +310,9 @@ export function useStudySession(deckId: string | null) {
       || !hasLeaseRef.current
     ) return
     const prepared = prepareCommit(active, {
+      reason: active.status === 'pending_commit'
+        ? active.commit_reason ?? undefined
+        : 'page_exit',
       resumeAfterCommit: active.status === 'pending_commit'
         ? active.resume_after_commit
         : false,
