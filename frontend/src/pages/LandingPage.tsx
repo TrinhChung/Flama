@@ -172,12 +172,12 @@ const faqs = [
   {
     question: 'Điểm khác biệt của Flama là gì?',
     answer:
-      'Flama kết hợp note type linh hoạt, bộ thẻ cộng đồng, audio và spaced repetition trong một luồng học thống nhất. Học liệu được tổ chức để có thể dùng ngay nhưng vẫn chỉnh sửa theo mục tiêu riêng.',
+      'Flama không giới hạn ở một lĩnh vực duy nhất mà là nơi học tập cho mọi ngành học (Ngoại ngữ, IT, Y khoa, Luật, Chứng chỉ...). Đặc biệt, Flama xây dựng một hệ sinh thái mở cho phép mọi người cùng đóng góp và chia sẻ để tạo nên kho dữ liệu bộ thẻ chuyên biệt cho từng chủ đề.',
   },
   {
     question: 'Mục đích của Flama là gì?',
     answer:
-      'Flama giúp bạn tự do tạo bộ thẻ theo cách riêng và duy trì nhịp học mỗi ngày. Xa hơn, Flama hướng tới một cộng đồng chia sẻ tri thức dễ tiếp cận và có cấu trúc.',
+      'Flama giúp bạn tự do tạo bộ thẻ theo cách riêng và duy trì nhịp học mỗi ngày. Xa hơn, Flama là nền tảng cho phép cộng đồng cùng đóng góp và kiến tạo nên kho dữ liệu học tập chuyên biệt, dễ tiếp cận và có cấu trúc.',
   },
   {
     question: 'Flama phù hợp với ai?',
@@ -272,14 +272,17 @@ function SectionHeading({
 
 function ReviewButtons() {
   return (
-    <div className="grid grid-cols-3 gap-2 text-center text-[11px] font-semibold">
-      <span className="rounded-md bg-rose-500/10 px-2 py-1.5 text-rose-700 dark:text-rose-300">
+    <div className="grid grid-cols-4 gap-1.5 text-center text-[11px] font-semibold">
+      <span className="rounded-md bg-rose-500/10 px-1.5 py-1.5 text-rose-700 dark:text-rose-300">
+        Học lại
+      </span>
+      <span className="rounded-md bg-amber-500/10 px-1.5 py-1.5 text-amber-700 dark:text-amber-300">
         Khó
       </span>
-      <span className="rounded-md bg-emerald-500/10 px-2 py-1.5 text-emerald-700 dark:text-emerald-300">
+      <span className="rounded-md bg-emerald-500/10 px-1.5 py-1.5 text-emerald-700 dark:text-emerald-300">
         Tốt
       </span>
-      <span className="rounded-md bg-sky-500/10 px-2 py-1.5 text-sky-700 dark:text-sky-300">
+      <span className="rounded-md bg-sky-500/10 px-1.5 py-1.5 text-sky-700 dark:text-sky-300">
         Dễ
       </span>
     </div>
@@ -586,8 +589,7 @@ export function LandingPage() {
                 Giữ <span className="text-primary">lửa</span> học tập cho mọi kiến thức.
               </h1>
               <p className="max-w-2xl text-lg leading-8 text-muted-foreground md:text-xl">
-                Tự do sáng tạo bộ thẻ theo cách riêng và dùng spaced repetition để ghi
-                nhớ ngoại ngữ, IT, Y khoa, Luật hay bất kỳ chủ đề nào bạn theo đuổi.
+                Nền tảng học tập đa lĩnh vực giúp bạn ghi nhớ ngoại ngữ, IT, Y khoa, Luật hay bất kỳ kiến thức nào. Cùng cộng đồng đóng góp và kiến tạo kho dữ liệu bộ thẻ chuyên biệt cho mọi chủ đề.
               </p>
             </div>
             <div className="flex flex-wrap gap-3">
@@ -604,7 +606,7 @@ export function LandingPage() {
               </Button>
             </div>
             <div className="flex flex-wrap gap-x-6 gap-y-3 pt-2 text-sm text-muted-foreground">
-              {['Tạo tài khoản nhanh', 'Import CSV/TSV', 'Responsive trên mobile'].map((item) => (
+              {['Học mọi lĩnh vực', 'Kho dữ liệu cộng đồng đóng góp', 'Spaced Repetition thông minh'].map((item) => (
                 <span key={item} className="inline-flex items-center gap-2">
                   <Check className="size-4 text-emerald-600" />
                   {item}

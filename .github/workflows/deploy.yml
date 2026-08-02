@@ -65,6 +65,54 @@ jobs:
             -- . ':(exclude)frontend'
           gzip "$release_tar"
 
+      - name: Record runner network diagnostics
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+
+          diagnostic_time="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          runner_ip="$(
+            curl --fail --silent --show-error --max-time 10 \
+              https://api.ipify.org 2>/dev/null || true
+          )"
+          if python - "$runner_ip" <<'PY'
+          import ipaddress
+          import sys
+
+          try:
+              ipaddress.ip_address(sys.argv[1])
+          except ValueError:
+              raise SystemExit(1)
+          PY
+          then
+            echo "GitHub runner egress IP: $runner_ip"
+          else
+            runner_ip="unavailable"
+            echo "::warning::Could not determine the GitHub runner egress IP."
+          fi
+
+          tcp_status="reachable"
+          if timeout 10 bash -c \
+            'exec 3<>/dev/tcp/"${SSH_HOST}"/"${SSH_PORT}"'; then
+            echo "TCP probe to the configured SSH endpoint succeeded."
+          else
+            probe_exit=$?
+            if [ "$probe_exit" -eq 124 ]; then
+              tcp_status="timeout"
+            else
+              tcp_status="failed (exit $probe_exit)"
+            fi
+            echo "::warning::TCP probe to the configured SSH endpoint returned: $tcp_status."
+          fi
+
+          echo "::notice title=Runner network diagnostics::egress_ip=$runner_ip tcp=$tcp_status recorded_at=$diagnostic_time"
+          {
+            echo "### Deployment network diagnostics"
+            echo "- Recorded at: \`$diagnostic_time\`"
+            echo "- Runner egress IP: \`$runner_ip\`"
+            echo "- TCP probe to SSH endpoint: \`$tcp_status\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Set up SSH
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
