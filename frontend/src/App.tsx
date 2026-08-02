@@ -112,6 +112,11 @@ const McpTokensPage = lazy(() =>
     default: module.McpTokensPage,
   })),
 )
+const YomitanTokensPage = lazy(() =>
+  import('./features/settings/pages/YomitanTokensPage').then((module) => ({
+    default: module.YomitanTokensPage,
+  })),
+)
 const AdminImageLibraryPage = lazy(() =>
   import('./features/admin/pages/AdminImageLibraryPage').then((module) => ({
     default: module.AdminImageLibraryPage,
@@ -261,6 +266,10 @@ const router = createBrowserRouter([
           {
             path: 'settings/mcp-tokens',
             element: deferred(<McpTokensPage />),
+          },
+          {
+            path: 'settings/yomitan',
+            element: deferred(<YomitanTokensPage />),
           },
           {
             path: 'mcp-tokens',

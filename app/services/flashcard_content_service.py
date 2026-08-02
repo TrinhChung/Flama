@@ -153,6 +153,13 @@ def create_field(
     note_type = _owned_note_type(user_id=user_id, note_type_id=note_type_id)
     name = str(payload.get("name") or "").strip()
     field_type = str(payload.get("field_type") or "text").strip()
+    identity_role = payload.get("identity_role")
+    if identity_role not in (None, "primary"):
+        raise ContentApiError(
+            "VALIDATION_ERROR",
+            "identity_role must be null or primary.",
+            field="identity_role",
+        )
     if not name:
         raise ContentApiError(
             "VALIDATION_ERROR",
@@ -171,6 +178,19 @@ def create_field(
             "Field name already exists in this note type.",
             field="name",
         )
+    if identity_role == "primary":
+        if field_type != "text":
+            raise ContentApiError(
+                "VALIDATION_ERROR",
+                "The identity field must use the text field type.",
+                field="field_type",
+            )
+        if FieldDef.query.filter_by(note_type_id=note_type.id, identity_role="primary").first():
+            raise ContentApiError(
+                "VALIDATION_ERROR",
+                "This note type already has a primary identity field.",
+                field="identity_role",
+            )
     max_position = (
         db.session.query(db.func.max(FieldDef.position))
         .filter_by(note_type_id=note_type.id)
@@ -180,7 +200,8 @@ def create_field(
         note_type_id=note_type.id,
         name=name,
         field_type=field_type,
-        required=bool(payload.get("required", False)),
+        required=True if identity_role == "primary" else bool(payload.get("required", False)),
+        identity_role=identity_role,
         position=(int(max_position) if max_position is not None else -1) + 1,
     )
     db.session.add(field)
@@ -205,6 +226,14 @@ def update_field(
     old_name = field.name
     new_name = str(payload.get("name") or field.name).strip()
     new_type = str(payload.get("field_type") or field.field_type).strip()
+    new_identity_role = payload.get("identity_role", field.identity_role)
+    new_required = bool(payload.get("required")) if "required" in payload else bool(field.required)
+    if new_identity_role not in (None, "primary"):
+        raise ContentApiError(
+            "VALIDATION_ERROR",
+            "identity_role must be null or primary.",
+            field="identity_role",
+        )
     if not new_name:
         raise ContentApiError(
             "VALIDATION_ERROR",
@@ -228,9 +257,33 @@ def update_field(
             "Field name already exists.",
             field="name",
         )
+    if new_identity_role == "primary":
+        if new_type != "text":
+            raise ContentApiError(
+                "VALIDATION_ERROR",
+                "The identity field must use the text field type.",
+                field="field_type",
+            )
+        if not new_required:
+            raise ContentApiError(
+                "VALIDATION_ERROR",
+                "The identity field must be required.",
+                field="required",
+            )
+        identity_conflict = FieldDef.query.filter(
+            FieldDef.note_type_id == note_type.id,
+            FieldDef.identity_role == "primary",
+            FieldDef.id != field.id,
+        ).first()
+        if identity_conflict:
+            raise ContentApiError(
+                "VALIDATION_ERROR",
+                "This note type already has a primary identity field.",
+                field="identity_role",
+            )
     field.field_type = new_type
-    if "required" in payload:
-        field.required = bool(payload.get("required"))
+    field.required = new_required
+    field.identity_role = new_identity_role
 
     job_payload = None
     if old_name != new_name:
@@ -274,6 +327,12 @@ def delete_field(
 ) -> dict[str, bool]:
     note_type = _owned_note_type(user_id=user_id, note_type_id=note_type_id)
     field = _field(note_type_id=note_type.id, field_id=field_id)
+    if field.identity_role == "primary":
+        raise ContentApiError(
+            "IDENTITY_FIELD_REQUIRED",
+            "Clear or reassign the primary identity field before deleting it.",
+            status=409,
+        )
     for note in Note.query.filter_by(
         note_type_id=note_type.id,
         user_id=user_id,

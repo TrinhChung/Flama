@@ -22,7 +22,7 @@ RUN pip install --no-cache-dir gunicorn
 COPY . .
 COPY --from=frontend-build /frontend/dist ./frontend/dist
 
-EXPOSE 4789
+EXPOSE 4789 4790
 
 # Chạy ứng dụng bằng gunicorn
 CMD ["gunicorn", "--bind", "0.0.0.0:4789", "wsgi:app"]

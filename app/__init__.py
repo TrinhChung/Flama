@@ -35,6 +35,9 @@ def create_app(config: Optional[dict] = None) -> Flask:
 
     from models.user import User
     from models.mcp_access_token import McpAccessToken  # noqa: F401  # register model
+    from models.user_api_token import UserApiToken  # noqa: F401
+    from models.connect_note_ref import ConnectNoteRef  # noqa: F401
+    from models.connect_pending_media import ConnectPendingMedia  # noqa: F401
     from models.user_scheduler_settings import UserSchedulerSettings  # noqa: F401  # register model
     from models.user_role import UserRole  # noqa: F401  # register model
     from models.user_permission_audit_log import UserPermissionAuditLog  # noqa: F401
@@ -66,6 +69,7 @@ def create_app(config: Optional[dict] = None) -> Flask:
         AuditLog,
         Card,
         DeckCloneAddedFieldDef,
+        DeckCloneAddedNote,
         DeckCloneDeckMap,
         DeckCloneFieldDefOverride,
         DeckCloneFieldOrderOverride,

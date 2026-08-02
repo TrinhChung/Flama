@@ -3,7 +3,9 @@
 from flask import Blueprint
 
 from .mcp_tokens import mcp_tokens_bp
+from .integration_tokens import integration_tokens_bp
 
 
 settings_bp = Blueprint("api_v1_settings", __name__)
 settings_bp.register_blueprint(mcp_tokens_bp, url_prefix="/mcp-tokens")
+settings_bp.register_blueprint(integration_tokens_bp, url_prefix="/integration-tokens")

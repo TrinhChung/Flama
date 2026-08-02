@@ -518,7 +518,12 @@ def clean_note_field_values(
     return merged, updates
 
 
-def validate_note_create_request(*, note_type: Any, payload: dict[str, Any] | None) -> NoteMutationInput:
+def validate_note_create_request(
+    *,
+    note_type: Any,
+    payload: dict[str, Any] | None,
+    note_media_ids: set[str] | None = None,
+) -> NoteMutationInput:
     body = _payload_dict(payload)
     _reject_forbidden_keys(body, {"id", "user_id", "created_at", "updated_at"})
     _validate_allowed_keys(body, {"note_type_id", "deck_id", "field_values", "tags"})
@@ -528,7 +533,7 @@ def validate_note_create_request(*, note_type: Any, payload: dict[str, Any] | No
         raw_field_values=body.get("field_values"),
         partial=False,
         current_values=None,
-        note_media_ids=set(),
+        note_media_ids=set() if note_media_ids is None else note_media_ids,
     )
 
     return NoteMutationInput(

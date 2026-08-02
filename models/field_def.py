@@ -28,6 +28,7 @@ class FieldDef(db.Model):
     )
     position = db.Column(db.Integer, nullable=False, default=0)
     required = db.Column(db.Boolean, nullable=False, default=False)
+    identity_role = db.Column(db.String(32), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
@@ -35,4 +36,5 @@ class FieldDef(db.Model):
 
     __table_args__ = (
         UniqueConstraint("note_type_id", "name", name="uq_field_defs_note_type_name"),
+        UniqueConstraint("note_type_id", "identity_role", name="uq_field_defs_note_type_identity_role"),
     )

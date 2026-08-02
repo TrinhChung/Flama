@@ -178,18 +178,33 @@ jobs:
             fi
 
             if [ -n "$previous_release" ] && [ -d "$previous_release" ]; then
+              previous_connect_available=0
               if [ -f "$previous_release/deploy/flama.service" ]; then
                 install -m 0644 \
                   "$previous_release/deploy/flama.service" \
                   /etc/systemd/system/flama.service
               fi
+              if [ -f "$previous_release/deploy/flama-connect.service" ]; then
+                install -m 0644 \
+                  "$previous_release/deploy/flama-connect.service" \
+                  /etc/systemd/system/flama-connect.service
+                previous_connect_available=1
+              fi
               ln -sfn "$previous_release" "$PROJECT_DIR/current"
               systemctl daemon-reload || true
               systemctl restart flama.service || true
+              if [ "$previous_connect_available" -eq 1 ]; then
+                systemctl restart flama-connect.service || true
+              else
+                systemctl stop flama-connect.service || true
+              fi
 
               for attempt in $(seq 1 10); do
                 if curl --silent --show-error --max-time 5 \
-                  http://127.0.0.1:4789/ >/dev/null; then
+                  http://127.0.0.1:4789/ >/dev/null \
+                  && { [ "$previous_connect_available" -eq 0 ] \
+                    || curl --silent --show-error --max-time 5 \
+                      http://127.0.0.1:4790/healthz >/dev/null; }; then
                   echo "Previous release restored: $previous_release" >&2
                   return
                 fi
@@ -201,6 +216,7 @@ jobs:
             fi
 
             systemctl stop flama.service || true
+            systemctl stop flama-connect.service || true
             echo "No previous release was available; stopped flama.service." >&2
           }
 
@@ -258,6 +274,7 @@ jobs:
             "$PROJECT_DIR/venv/bin/flask" --app wsgi.py seed-data-ensure \
               --path static/seed_data
           install -m 0644 "$release_dir/deploy/flama.service" /etc/systemd/system/flama.service
+          install -m 0644 "$release_dir/deploy/flama-connect.service" /etc/systemd/system/flama-connect.service
 
           previous_release="$(readlink -f "$PROJECT_DIR/current" 2>/dev/null || true)"
           case "$previous_release" in
@@ -279,11 +296,15 @@ jobs:
 
           systemctl daemon-reload
           systemctl enable flama.service
+          systemctl enable flama-connect.service
           systemctl restart flama.service
+          systemctl restart flama-connect.service
 
           for attempt in $(seq 1 20); do
             if curl --fail --silent --show-error --max-time 5 \
-              http://127.0.0.1:4789/api/health >/dev/null; then
+              http://127.0.0.1:4789/api/health >/dev/null \
+              && curl --fail --silent --show-error --max-time 5 \
+              http://127.0.0.1:4790/healthz >/dev/null; then
               touch "$release_dir/.deployment_succeeded"
               deployment_succeeded=1
               python3 "$release_dir/deploy/prune_releases.py" \
@@ -291,13 +312,16 @@ jobs:
                 --current-release "$release_dir" \
                 --keep 2 || echo "Warning: failed to prune old releases." >&2
               systemctl --no-pager --full status flama.service || true
+              systemctl --no-pager --full status flama-connect.service || true
               exit 0
             fi
             sleep 3
           done
 
           systemctl --no-pager --full status flama.service || true
+          systemctl --no-pager --full status flama-connect.service || true
           journalctl -u flama.service -n 100 --no-pager || true
+          journalctl -u flama-connect.service -n 100 --no-pager || true
           exit 1
           REMOTE_SCRIPT
 

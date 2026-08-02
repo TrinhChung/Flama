@@ -325,21 +325,30 @@ def ensure_legacy_note_type(db_session, user_id: int) -> tuple[NoteType, Templat
         db_session.flush()
 
     existing_fields = {field.name: field for field in note_type.field_defs}
+    has_identity_field = any(
+        field.identity_role == "primary" for field in existing_fields.values()
+    )
     for position, (name, field_type, required) in enumerate(LEGACY_FIELD_DEFS):
         field = existing_fields.get(name)
         if field is None:
+            identity_role = "primary" if name == "word" and not has_identity_field else None
             field = FieldDef(
                 note_type_id=note_type.id,
                 name=name,
                 field_type=field_type,
                 required=required,
                 position=position,
+                identity_role=identity_role,
             )
             db_session.add(field)
+            has_identity_field = has_identity_field or identity_role == "primary"
         else:
             field.field_type = field_type
             field.required = required
             field.position = position
+            if name == "word" and not has_identity_field:
+                field.identity_role = "primary"
+                has_identity_field = True
 
     template = (
         db_session.query(Template)
