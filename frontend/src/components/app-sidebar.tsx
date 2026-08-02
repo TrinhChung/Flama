@@ -8,6 +8,7 @@ import {
   Image as ImageIcon,
   Key,
   LayoutDashboard,
+  MessageSquareHeart,
   NotebookTabs,
   PackageCheck,
   Search,
@@ -72,7 +73,10 @@ export function AppSidebar({
 
   const settings: AppNavigationItem[] = [
     { title: 'Kết nối Yomitan', url: '/settings/yomitan', icon: Key },
-    { title: 'MCP Access Tokens', url: '/settings/mcp-tokens', icon: Key },
+    { title: 'Đóng góp ý kiến', url: '/feedback', icon: MessageSquareHeart },
+    ...(bootstrap.user?.is_admin
+      ? [{ title: 'MCP Access Tokens', url: '/settings/mcp-tokens', icon: Key }]
+      : []),
   ]
 
   return (

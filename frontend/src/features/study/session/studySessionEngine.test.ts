@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from 'vitest'
-import type { StudySessionSnapshot } from '../types'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { Rating, StudySessionSnapshot } from '../types'
 import {
   applyLocalAnswer,
   automaticCommitMode,
@@ -120,7 +120,42 @@ function snapshot(): StudySessionSnapshot {
   }
 }
 
+function snapshotWithCards(cardCount: number): StudySessionSnapshot {
+  const base = snapshot()
+  const baseCard = base.cards[0]
+  const baseContent = base.contents.content
+  const cards = Array.from({ length: cardCount }, (_, index) => {
+    const ordinal = index + 1
+    return {
+      ...baseCard,
+      card_id: `card-${ordinal}`,
+      note_id: `note-${ordinal}`,
+      created_at: `2026-02-${ordinal.toString().padStart(2, '0')}T00:00:00.000Z`,
+      content_key: `content-${ordinal}`,
+      state: { ...baseCard.state },
+    }
+  })
+  return {
+    ...base,
+    cards,
+    contents: Object.fromEntries(cards.map((card) => [
+      card.content_key,
+      {
+        ...baseContent,
+        id: card.note_id,
+        note_id: card.note_id,
+        field_values: { Word: card.card_id },
+        render_context: { Word: card.card_id },
+      },
+    ])),
+  }
+}
+
 describe('local study session engine', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
   it('answers locally and builds a delta batch', () => {
     vi.stubGlobal('crypto', {
       randomUUID: () => '00000000-0000-4000-8000-000000000001',
@@ -151,7 +186,7 @@ describe('local study session engine', () => {
 
     expect(automaticCommitMode(
       answered,
-      { ...view, session_state: 'complete' },
+      { ...view, session_state: 'complete_today' },
     )).toBe('finish')
 
     const thresholdSession = {
@@ -172,13 +207,110 @@ describe('local study session engine', () => {
     )).toBeNull()
 
     const rolloverCommit = prepareCommit(thresholdSession, {
+      reason: 'rollover',
       resumeAfterCommit: true,
     }).session
     expect(isBackgroundRolloverCommit(rolloverCommit)).toBe(true)
+    expect(rolloverCommit.commit_reason).toBe('rollover')
     expect(isBackgroundRolloverCommit({
       ...rolloverCommit,
       resume_after_commit: false,
     })).toBe(false)
-    vi.unstubAllGlobals()
+  })
+
+  it.each<Rating>(['again', 'hard', 'good'])(
+    'keeps repeating %s learning cards inside the learn-ahead window',
+    (rating) => {
+      vi.stubGlobal('crypto', {
+        randomUUID: () => '00000000-0000-4000-8000-000000000001',
+      })
+      let local = createPersistedSession(snapshotWithCards(3))
+      const now = Date.parse(local.snapshot.server_now_utc)
+
+      for (let index = 1; index <= 3; index += 1) {
+        const cardId = `card-${index}`
+        const answerAt = now + index * 1000
+        local = applyLocalAnswer(
+          local,
+          cardId,
+          rating,
+          decisionForCard(local, cardId, answerAt),
+          250,
+        )
+      }
+
+      const view = buildSessionView(local, now + 4000)
+      expect(view.session_state).toBe('active')
+      expect(view.card?.card_id).toBe('card-1')
+      expect(view.counts).toEqual({ new: 0, learning: 3, due: 0 })
+      expect(automaticCommitMode(local, view)).toBeNull()
+    },
+  )
+
+  it('waits only until a learning card enters learn-ahead, then resumes', () => {
+    vi.stubGlobal('crypto', {
+      randomUUID: () => '00000000-0000-4000-8000-000000000001',
+    })
+    const waitingSnapshot = snapshot()
+    waitingSnapshot.learn_ahead_seconds = 300
+    let local = createPersistedSession(waitingSnapshot)
+    const now = Date.parse(local.snapshot.server_now_utc)
+    local = applyLocalAnswer(
+      local,
+      'card-1',
+      'good',
+      decisionForCard(local, 'card-1', now),
+      250,
+    )
+
+    const waiting = buildSessionView(local, now + 1000)
+    expect(waiting.session_state).toBe('waiting')
+    expect(waiting.pending_learning_count).toBe(1)
+    expect(waiting.next_due_at_ms).toBe(now + 600_000)
+    expect(waiting.next_eligible_at_ms).toBe(now + 300_000)
+    expect(automaticCommitMode(local, waiting)).toBeNull()
+
+    const resumed = buildSessionView(local, now + 300_000)
+    expect(resumed.session_state).toBe('active')
+    expect(resumed.card?.card_id).toBe('card-1')
+  })
+
+  it('finishes only after the final learning step graduates to review', () => {
+    vi.stubGlobal('crypto', {
+      randomUUID: () => '00000000-0000-4000-8000-000000000001',
+    })
+    let local = createPersistedSession(snapshot())
+    const now = Date.parse(local.snapshot.server_now_utc)
+    local = applyLocalAnswer(
+      local,
+      'card-1',
+      'good',
+      decisionForCard(local, 'card-1', now),
+      250,
+    )
+    expect(buildSessionView(local, now + 500).session_state).toBe('active')
+
+    local = applyLocalAnswer(
+      local,
+      'card-1',
+      'good',
+      decisionForCard(local, 'card-1', now + 1000),
+      250,
+    )
+    const completed = buildSessionView(local, now + 1500)
+    expect(local.snapshot.cards[0].state.type).toBe('review')
+    expect(completed.session_state).toBe('complete_today')
+    expect(automaticCommitMode(local, completed)).toBe('finish')
+  })
+
+  it('uses the Anki default learn-ahead for a malformed restored value', () => {
+    const malformed = snapshot()
+    malformed.learn_ahead_seconds = Number.NaN
+    const local = createPersistedSession(malformed)
+    const now = Date.parse(local.snapshot.server_now_utc)
+    const decision = decisionForCard(local, 'card-1', now)
+    const answered = applyLocalAnswer(local, 'card-1', 'good', decision, 250)
+
+    expect(buildSessionView(answered, now + 1000).session_state).toBe('active')
   })
 })

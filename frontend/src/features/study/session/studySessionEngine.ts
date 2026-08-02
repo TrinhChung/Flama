@@ -9,20 +9,26 @@ import type {
 } from '../types'
 import { computeDecision } from '../scheduler/legacyEngine'
 import {
-  nextPendingLearningAt,
   queueCounts,
   selectNextCard,
+  summarizePendingIntradayLearning,
 } from '../scheduler/queue'
 import type { SchedulerDecision } from '../scheduler/types'
-import type { PersistedStudySession } from './sessionStore'
+import type {
+  PersistedStudySession,
+  StudyCommitReason,
+} from './sessionStore'
 
 export type StudySessionView = {
   card: StudySessionCard | null
   template: StudyTemplateArtifact | null
   content: StudyContentArtifact | null
   counts: { new: number; learning: number; due: number }
+  now_ms: number
+  pending_learning_count: number
   next_due_at_ms: number | null
-  session_state: 'active' | 'waiting' | 'complete'
+  next_eligible_at_ms: number | null
+  session_state: 'active' | 'waiting' | 'complete_today'
 }
 
 export type AutomaticCommitMode = 'finish' | 'rollover'
@@ -55,6 +61,7 @@ export function createPersistedSession(
     opened_client_at_ms: Date.now(),
     status: 'active',
     commit_id: null,
+    commit_reason: null,
     resume_after_commit: false,
     updated_at_ms: Date.now(),
   }
@@ -90,7 +97,11 @@ export function buildSessionView(
   const card = selected
     ? snapshot.cards.find((row) => row.card_id === selected.card_id) ?? null
     : null
-  const nextDueAt = nextPendingLearningAt(cards, nowMs)
+  const pendingLearning = summarizePendingIntradayLearning(
+    cards,
+    nowMs,
+    snapshot.learn_ahead_seconds,
+  )
   return {
     card,
     template: card
@@ -100,12 +111,15 @@ export function buildSessionView(
       ? snapshot.contents[card.content_key] ?? null
       : null,
     counts,
-    next_due_at_ms: nextDueAt,
+    now_ms: nowMs,
+    pending_learning_count: pendingLearning.count,
+    next_due_at_ms: pendingLearning.next_due_at_ms,
+    next_eligible_at_ms: pendingLearning.next_eligible_at_ms,
     session_state: card
       ? 'active'
-      : nextDueAt !== null
+      : pendingLearning.count > 0
         ? 'waiting'
-        : 'complete',
+        : 'complete_today',
   }
 }
 
@@ -179,7 +193,7 @@ export function automaticCommitMode(
   eventLimit = DEFAULT_STUDY_BATCH_EVENT_LIMIT,
 ): AutomaticCommitMode | null {
   if (session.status !== 'active' || session.events.length === 0) return null
-  if (view.session_state === 'complete') return 'finish'
+  if (view.session_state === 'complete_today') return 'finish'
   if (session.events.length >= Math.max(1, eventLimit)) return 'rollover'
   return null
 }
@@ -193,15 +207,22 @@ export function isBackgroundRolloverCommit(
 
 export function prepareCommit(
   session: PersistedStudySession,
-  options: { resumeAfterCommit?: boolean } = {},
+  options: {
+    reason?: StudyCommitReason
+    resumeAfterCommit?: boolean
+  } = {},
 ) {
   const commitId = session.commit_id ?? crypto.randomUUID()
   const resumeAfterCommit = options.resumeAfterCommit
     ?? session.resume_after_commit
+  const commitReason = options.reason
+    ?? session.commit_reason
+    ?? (resumeAfterCommit ? 'rollover' : 'manual_exit')
   const prepared = {
     ...session,
     status: 'pending_commit' as const,
     commit_id: commitId,
+    commit_reason: commitReason,
     resume_after_commit: Boolean(resumeAfterCommit),
     updated_at_ms: Date.now(),
   }
@@ -219,6 +240,7 @@ export function prepareCommit(
     payload: {
       schema_version: 'study-commit.v1',
       commit_id: commitId,
+      commit_reason: commitReason,
       session_token: prepared.snapshot.session_token,
       snapshot_hash: prepared.snapshot.snapshot_hash,
       events: prepared.events,

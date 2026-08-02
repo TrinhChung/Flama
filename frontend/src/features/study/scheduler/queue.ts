@@ -13,6 +13,19 @@ export type QueueCounts = {
   due: number
 }
 
+export type PendingLearningSummary = {
+  count: number
+  next_due_at_ms: number | null
+  next_eligible_at_ms: number | null
+}
+
+export const DEFAULT_LEARN_AHEAD_SECONDS = 20 * 60
+
+export function normalizeLearnAheadSeconds(value: number) {
+  if (!Number.isFinite(value)) return DEFAULT_LEARN_AHEAD_SECONDS
+  return Math.max(0, Math.trunc(value))
+}
+
 function isLearningDue(
   state: SchedulerCardState,
   nowMs: number,
@@ -66,7 +79,10 @@ export function selectNextCard(
   const dueNew: QueueCard[] = []
   const aheadRelearning: QueueCard[] = []
   const aheadLearning: QueueCard[] = []
-  const aheadLimit = nowMs + learnAheadSeconds * 1000
+  const effectiveLearnAheadSeconds = normalizeLearnAheadSeconds(
+    learnAheadSeconds,
+  )
+  const aheadLimit = nowMs + effectiveLearnAheadSeconds * 1000
 
   for (const card of cards) {
     const state = card.state
@@ -131,8 +147,15 @@ export function queueCounts(
   return counts
 }
 
-export function nextPendingLearningAt(cards: QueueCard[], nowMs: number) {
-  let next: number | null = null
+export function summarizePendingIntradayLearning(
+  cards: QueueCard[],
+  nowMs: number,
+  learnAheadSeconds: number,
+): PendingLearningSummary {
+  const aheadMs = normalizeLearnAheadSeconds(learnAheadSeconds) * 1000
+  let count = 0
+  let nextDueAt: number | null = null
+  let nextEligibleAt: number | null = null
   for (const card of cards) {
     const state = card.state
     if (
@@ -141,9 +164,17 @@ export function nextPendingLearningAt(cards: QueueCard[], nowMs: number) {
       || state.due_day !== null
     ) continue
     const due = epochMsFromIso(state.due_at)
-    if (due !== null && due > nowMs && (next === null || due < next)) {
-      next = due
+    if (due === null || due <= nowMs) continue
+    count += 1
+    const eligibleAt = Math.max(nowMs, due - aheadMs)
+    if (nextDueAt === null || due < nextDueAt) nextDueAt = due
+    if (nextEligibleAt === null || eligibleAt < nextEligibleAt) {
+      nextEligibleAt = eligibleAt
     }
   }
-  return next
+  return {
+    count,
+    next_due_at_ms: nextDueAt,
+    next_eligible_at_ms: nextEligibleAt,
+  }
 }

@@ -25,6 +25,7 @@ import {
 } from '@/components/ui/table'
 import { Page, PageHeader, StatCard } from '@/shared/components/Page'
 import { EmptyState, PageError, PageLoading } from '@/shared/components/PageState'
+import { useBootstrap } from '@/shared/api/bootstrap'
 
 type McpTokenItem = {
   id: number
@@ -55,15 +56,19 @@ type IssuedMcpToken = {
 }
 
 export function McpTokensPage() {
+  const bootstrapQuery = useBootstrap()
   const queryClient = useQueryClient()
   const [issuedToken, setIssuedToken] = useState<IssuedMcpToken | null>(null)
   const [copied, setCopied] = useState(false)
   const [revokeTargetId, setRevokeTargetId] = useState<number | null>(null)
 
+  const isAdmin = Boolean(bootstrapQuery.data?.user?.is_admin)
+
   const queryKey = ['mcp-tokens'] as const
   const query = useQuery({
     queryKey,
     queryFn: () => appApi.get<McpTokensResponse>('/mcp-tokens'),
+    enabled: isAdmin,
   })
 
   const generateMutation = useMutation({
@@ -96,8 +101,19 @@ export function McpTokensPage() {
     })
   }
 
-  if (query.isPending) return <PageLoading label="Đang tải danh sách MCP Token…" />
+  if (bootstrapQuery.data && !isAdmin) {
+    return (
+      <Page>
+        <PageError error={new Error('Chỉ quản trị viên (Admin) mới có quyền truy cập MCP Access Tokens.')} />
+      </Page>
+    )
+  }
+
+  if (query.isPending || bootstrapQuery.isPending) {
+    return <PageLoading label="Đang tải danh sách MCP Token…" />
+  }
   if (query.error) return <Page><PageError error={query.error} /></Page>
+  if (!query.data) return <Page><PageError error={new Error('Không có dữ liệu MCP Token.')} /></Page>
 
   const { items, policy } = query.data
   const activeCount = items.filter((i) => i.status === 'active').length

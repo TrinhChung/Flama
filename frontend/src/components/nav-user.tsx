@@ -79,12 +79,14 @@ export function NavUser({
                   Quản lý loại thẻ
                 </Link>
               </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link to="/settings/mcp-tokens">
-                  <Key />
-                  MCP Access Tokens
-                </Link>
-              </DropdownMenuItem>
+              {user.is_admin ? (
+                <DropdownMenuItem asChild>
+                  <Link to="/settings/mcp-tokens">
+                    <Key />
+                    MCP Access Tokens
+                  </Link>
+                </DropdownMenuItem>
+              ) : null}
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuItem

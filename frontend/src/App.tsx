@@ -117,6 +117,11 @@ const YomitanTokensPage = lazy(() =>
     default: module.YomitanTokensPage,
   })),
 )
+const FeedbackPage = lazy(() =>
+  import('./features/support/pages/FeedbackPage').then((module) => ({
+    default: module.FeedbackPage,
+  })),
+)
 const AdminImageLibraryPage = lazy(() =>
   import('./features/admin/pages/AdminImageLibraryPage').then((module) => ({
     default: module.AdminImageLibraryPage,
@@ -270,6 +275,14 @@ const router = createBrowserRouter([
           {
             path: 'settings/yomitan',
             element: deferred(<YomitanTokensPage />),
+          },
+          {
+            path: 'feedback',
+            element: deferred(<FeedbackPage />),
+          },
+          {
+            path: 'support/feedback',
+            element: deferred(<FeedbackPage />),
           },
           {
             path: 'mcp-tokens',

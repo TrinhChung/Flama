@@ -138,6 +138,52 @@ class StudySessionApiTests(unittest.TestCase):
             self.assertIsNotNone(session)
             self.assertEqual(session.status, "open")
 
+    def test_auto_finish_rejects_actionable_learning_card(self):
+        snapshot = self._open_session()
+        payload = self._commit_payload(snapshot)
+        payload["commit_reason"] = "auto_finish"
+
+        response = self.client.post(
+            f"/api/study/sessions/{snapshot['session_id']}/commit",
+            json=payload,
+        )
+
+        self.assertEqual(response.status_code, 409, response.get_json())
+        self.assertEqual(response.get_json()["error"], "SESSION_NOT_COMPLETE")
+        with self.app.app_context():
+            session = db.session.get(StudySession, snapshot["session_id"])
+            self.assertEqual(session.status, "open")
+            self.assertEqual(
+                ReviewEvent.query.filter_by(
+                    study_session_id=snapshot["session_id"],
+                ).count(),
+                0,
+            )
+
+    def test_auto_finish_accepts_card_graduated_from_final_learning_step(self):
+        snapshot = self._open_session()
+        payload = self._commit_payload(snapshot)
+        payload["commit_reason"] = "auto_finish"
+        second_event = dict(payload["events"][0])
+        second_event.update(
+            {
+                "event_id": str(uuid4()),
+                "sequence": 2,
+                "scheduler_offset_ms": 2000,
+            }
+        )
+        payload["events"].append(second_event)
+
+        response = self.client.post(
+            f"/api/study/sessions/{snapshot['session_id']}/commit",
+            json=payload,
+        )
+
+        self.assertEqual(response.status_code, 200, response.get_json())
+        result = response.get_json()
+        self.assertEqual(result["commit_reason"], "auto_finish")
+        self.assertEqual(result["updated_cards"][0]["state"]["type"], "review")
+
     def test_empty_owned_deck_can_open_and_commit(self):
         with self.app.app_context():
             empty_deck = Deck(
@@ -167,6 +213,7 @@ class StudySessionApiTests(unittest.TestCase):
         )
         self.assertEqual(commit.status_code, 200, commit.get_json())
         self.assertEqual(commit.get_json()["applied_event_count"], 0)
+        self.assertEqual(commit.get_json()["commit_reason"], "manual_exit")
 
     def test_commit_replays_events_and_is_idempotent(self):
         snapshot = self._open_session()

@@ -5,6 +5,7 @@ import {
   BookOpen,
   Check,
   CheckSquare,
+  ChevronDown,
   Eye,
   EyeOff,
   ExternalLink,
@@ -45,6 +46,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
@@ -686,15 +696,46 @@ export function BrowsePage() {
         </div>
 
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-7 sm:h-8 rounded-full text-[11px] sm:text-xs px-2 sm:px-3"
-            onClick={() => setIsTtsModalOpen(true)}
-          >
-            <Volume2 className="size-3.5 sm:mr-1.5 text-primary" />
-            <span className="hidden sm:inline">Tạo âm thanh</span>
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 sm:h-8 rounded-full text-[11px] sm:text-xs px-2 sm:px-3 gap-1"
+              >
+                <Volume2 className="size-3.5 text-primary" />
+                <span className="hidden sm:inline">Tạo âm thanh</span>
+                <ChevronDown className="size-3 opacity-60 ml-0.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-52">
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>
+                  <span className="font-medium">Tiếng Nhật</span>
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent className="w-48">
+                  <DropdownMenuItem onClick={() => setIsTtsModalOpen(true)}>
+                    <span className="font-medium text-foreground">Web VoiceVox</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem disabled className="flex items-center justify-between opacity-60">
+                    <span>VoiceVox Local</span>
+                    <Badge variant="outline" className="text-[10px] py-0 px-1 font-normal">Sắp có</Badge>
+                  </DropdownMenuItem>
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>
+                  <span className="font-medium">Tiếng Anh</span>
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent className="w-48">
+                  <DropdownMenuItem disabled className="flex items-center justify-between opacity-60">
+                    <span>Tiếng Anh Local</span>
+                    <Badge variant="outline" className="text-[10px] py-0 px-1 font-normal">Sắp có</Badge>
+                  </DropdownMenuItem>
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button variant="outline" size="sm" asChild className="h-7 sm:h-8 rounded-full text-[11px] sm:text-xs px-2 sm:px-3">
             <a href="/flashcards/import">
               <FileUp className="size-3.5 sm:mr-1.5" />
@@ -995,16 +1036,47 @@ export function BrowsePage() {
                 </div>
 
                 <div className="flex items-center gap-1.5">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-6 text-[11px] px-2"
-                    onClick={() => setIsTtsModalOpen(true)}
-                  >
-                    <Volume2 className="size-3 mr-1 text-primary" />
-                    Tạo âm thanh ({selectedCards.length})
-                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-6 text-[11px] px-2 gap-1"
+                      >
+                        <Volume2 className="size-3 text-primary" />
+                        <span>Tạo âm thanh ({selectedCards.length})</span>
+                        <ChevronDown className="size-3 opacity-60 ml-0.5" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className="w-52">
+                      <DropdownMenuSub>
+                        <DropdownMenuSubTrigger>
+                          <span className="font-medium">Tiếng Nhật</span>
+                        </DropdownMenuSubTrigger>
+                        <DropdownMenuSubContent className="w-48">
+                          <DropdownMenuItem onClick={() => setIsTtsModalOpen(true)}>
+                            <span className="font-medium text-foreground">Web VoiceVox</span>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem disabled className="flex items-center justify-between opacity-60">
+                            <span>VoiceVox Local</span>
+                            <Badge variant="outline" className="text-[10px] py-0 px-1 font-normal">Sắp có</Badge>
+                          </DropdownMenuItem>
+                        </DropdownMenuSubContent>
+                      </DropdownMenuSub>
+                      <DropdownMenuSub>
+                        <DropdownMenuSubTrigger>
+                          <span className="font-medium">Tiếng Anh</span>
+                        </DropdownMenuSubTrigger>
+                        <DropdownMenuSubContent className="w-48">
+                          <DropdownMenuItem disabled className="flex items-center justify-between opacity-60">
+                            <span>Tiếng Anh Local</span>
+                            <Badge variant="outline" className="text-[10px] py-0 px-1 font-normal">Sắp có</Badge>
+                          </DropdownMenuItem>
+                        </DropdownMenuSubContent>
+                      </DropdownMenuSub>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                   <Button
                     type="button"
                     variant="destructive"
@@ -1421,7 +1493,7 @@ export function BrowsePage() {
             <div className="flex items-center justify-between gap-2">
               <DialogTitle className="flex items-center gap-2 text-base sm:text-lg font-bold text-foreground">
                 <Volume2 className="size-4 sm:size-5 text-primary shrink-0" />
-                <span>Thiết lập VoiceVox (TTS)</span>
+                <span>Tạo âm thanh &gt; Tiếng Nhật &gt; Web VoiceVox</span>
               </DialogTitle>
               <Badge variant="outline" className="text-[11px] sm:text-xs font-semibold bg-primary/10 text-primary border-primary/20 px-2 py-0.5 shrink-0">
                 {targetTtsCardIds.length} thẻ
