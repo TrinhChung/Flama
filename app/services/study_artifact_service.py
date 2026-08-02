@@ -18,7 +18,7 @@ from app.services.flashcard_renderer import (
 from models.deck_marketplace_item import DeckMarketplaceItem
 
 
-RENDERER_ABI = "flama-client-mustache.v1"
+RENDERER_ABI = "flama-client-mustache.v2"
 TEMPLATE_SCHEMA = "study-template.v1"
 CONTENT_SCHEMA = "study-content.v1"
 MANIFEST_SCHEMA = "study-manifest.v1"

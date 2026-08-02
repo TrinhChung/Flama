@@ -56,7 +56,7 @@ describe('CardRendererFrame', () => {
         fillHeight: true,
       }),
     )
-    expect(render).toHaveBeenCalledTimes(1)
+    expect(render).not.toHaveBeenCalled()
     expect(reveal).not.toHaveBeenCalled()
 
     await act(async () => {

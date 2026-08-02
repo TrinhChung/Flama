@@ -98,4 +98,44 @@ describe('renderStudySide', () => {
     expect(result.html).toContain('a<br>b')
     expect(result.allowed_audio_urls).toEqual(['/media/proxy/asset-1'])
   })
+
+  it('renders custom audio HTML only with media attached to the content artifact', () => {
+    const result = renderStudySide(
+      template({
+        back_source: (
+          '<audio id="custom-audio" src="{{word_audio}}"></audio>'
+          + '<button onclick="document.getElementById(\'custom-audio\').play()">🔊</button>'
+        ),
+      }),
+      content({
+        render_context: { word_audio: '/media/proxy/audio-1' },
+        media: [{
+          id: 'audio-1',
+          field_name: 'word_audio',
+          filename: 'word.mp3',
+          mime_type: 'audio/mpeg',
+          sha256: 'abc',
+          proxy_url: '/media/proxy/audio-1',
+        }],
+      }),
+      'back',
+    )
+
+    expect(result.html).toContain('id="custom-audio"')
+    expect(result.html).toContain('src="/media/proxy/audio-1"')
+    expect(result.html).toContain('>🔊</button>')
+  })
+
+  it('rejects a proxy-looking URL that is absent from the content media allowlist', () => {
+    const result = renderStudySide(
+      template({ front_source: '<audio src="{{audio_url}}"></audio>' }),
+      content({
+        render_context: { audio_url: '/media/proxy/not-attached' },
+        media: [],
+      }),
+      'front',
+    )
+
+    expect(result.html).not.toContain('src=')
+  })
 })

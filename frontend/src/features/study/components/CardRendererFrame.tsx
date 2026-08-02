@@ -138,7 +138,7 @@ export function CardRendererFrame({
   }, [scriptLoaded, enableLivePatch, fillHeight])
 
   useEffect(() => {
-    if (!scriptLoaded) return
+    if (!active || !scriptLoaded) return
     const controller = controllerRef.current
     const host = window.FlamaCardRendererHost
     if (!controller || !host) return
@@ -167,6 +167,7 @@ export function CardRendererFrame({
       },
     })
   }, [
+    active,
     scriptLoaded,
     activeSide,
     cardId,
@@ -210,6 +211,7 @@ export function CardRendererFrame({
         ref={iframeRef}
         title={revealed ? 'Mặt sau thẻ' : 'Mặt trước thẻ'}
         sandbox="allow-scripts"
+        allow="autoplay"
         className={cn(
           'card-face study-card-frame w-full border-0 bg-transparent p-0 m-0 min-h-[240px]',
           fillHeight && 'h-full min-h-0',

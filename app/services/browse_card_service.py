@@ -224,7 +224,7 @@ def list_browse_cards(
 
     try:
         page = max(1, int(query_args.get("page") or "1"))
-        per_page = max(20, min(200, int(query_args.get("per_page") or "100")))
+        per_page = max(1, min(500, int(query_args.get("per_page") or "100")))
     except (TypeError, ValueError) as exc:
         raise BrowseApiError("Invalid page/per_page") from exc
 
