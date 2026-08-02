@@ -114,22 +114,30 @@ jobs:
           known_hosts_tmp="$HOME/.ssh/known_hosts.tmp"
           trap 'rm -f -- "$known_hosts_tmp"' EXIT
           for attempt in 1 2 3; do
-            echo "Scanning SSH host key (attempt $attempt/3, timeout 15s)..."
-            if ssh-keyscan -T 15 -p "$SSH_PORT" -H "$SSH_HOST" > "$known_hosts_tmp" \
-              && [ -s "$known_hosts_tmp" ]; then
+            echo "Testing authenticated SSH connection (attempt $attempt/3, timeout 15s)..."
+            if ssh \
+              -p "$SSH_PORT" \
+              -i ~/.ssh/id_ed25519 \
+              -o BatchMode=yes \
+              -o ConnectTimeout=15 \
+              -o ConnectionAttempts=1 \
+              -o IdentitiesOnly=yes \
+              -o StrictHostKeyChecking=accept-new \
+              -o UserKnownHostsFile="$known_hosts_tmp" \
+              "$SSH_USER@$SSH_HOST" true; then
               mv "$known_hosts_tmp" ~/.ssh/known_hosts
               chmod 600 ~/.ssh/known_hosts
-              echo "SSH host key collected successfully:"
+              echo "Authenticated SSH connection succeeded. Host key fingerprint:"
               ssh-keygen -lf ~/.ssh/known_hosts
               exit 0
             fi
-            echo "::warning::Could not collect an SSH host key on attempt $attempt."
+            echo "::warning::Authenticated SSH connection failed on attempt $attempt. See the SSH error above."
             if [ "$attempt" -lt 3 ]; then
               sleep 5
             fi
           done
 
-          echo "::error::Cannot reach the SSH service at SSH_HOST:SSH_PORT. Check the host, port, sshd service, and VPS firewall."
+          echo "::error::Unable to establish an authenticated SSH connection. Check the SSH error above to distinguish network, host-key, and authentication failures."
           exit 1
 
       - name: Upload release and managed environment payload
