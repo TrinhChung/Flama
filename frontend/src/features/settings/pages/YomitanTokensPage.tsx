@@ -788,11 +788,11 @@ export function YomitanTokensPage() {
         </TabsContent>
 
         {/* TAB 3: FIELD MARKERS REFERENCE */}
-        <TabsContent value="markers" className="space-y-6">
-          <Card className="shadow-2xs">
-            <CardHeader className="p-4 sm:p-6 space-y-4">
+        <TabsContent value="markers" className="space-y-6 w-full min-w-0">
+          <Card className="shadow-2xs min-w-0 overflow-hidden">
+            <CardHeader className="p-3.5 sm:p-6 space-y-4 min-w-0">
               <div>
-                <CardTitle className="text-lg sm:text-xl font-bold flex items-center gap-2">
+                <CardTitle className="text-base sm:text-xl font-bold flex items-center gap-2">
                   <Code className="size-5 text-purple-500 shrink-0" /> Tra cứu Field Markers Yomitan & Flama
                 </CardTitle>
                 <CardDescription className="text-xs md:text-sm">
@@ -801,17 +801,17 @@ export function YomitanTokensPage() {
               </div>
 
               {/* Search bar & Category Filters */}
-              <div className="flex flex-col md:flex-row gap-3 pt-2">
-                <div className="relative flex-1">
+              <div className="flex flex-col md:flex-row gap-3 pt-2 w-full min-w-0">
+                <div className="relative flex-1 min-w-0">
                   <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
                   <Input
                     placeholder="Tìm kiếm marker ({expression}, furigana, audio...)"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10 h-10 rounded-xl text-xs sm:text-sm"
+                    className="pl-10 h-10 rounded-xl text-xs sm:text-sm w-full"
                   />
                 </div>
-                <div className="flex gap-1.5 overflow-x-auto pb-1 md:pb-0 no-scrollbar">
+                <div className="flex gap-1.5 overflow-x-auto pb-1 md:pb-0 no-scrollbar max-w-full shrink-0">
                   <Button
                     size="sm"
                     variant={selectedCategory === 'all' ? 'default' : 'outline'}
@@ -848,28 +848,30 @@ export function YomitanTokensPage() {
               </div>
             </CardHeader>
 
-            <CardContent className="p-4 sm:p-6 pt-0">
+            <CardContent className="p-3.5 sm:p-6 pt-0 min-w-0">
               {!filteredMarkers.length ? (
                 <EmptyState
                   title="Không tìm thấy marker phù hợp"
                   description="Hãy thử thay đổi từ khóa tìm kiếm hoặc chọn danh mục khác."
                 />
               ) : (
-                <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+                <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 min-w-0">
                   {filteredMarkers.map((marker) => (
                     <div
                       key={marker.name}
                       onClick={() => copy(marker.name, marker.name)}
-                      className="group relative flex flex-col justify-between gap-3 rounded-2xl border bg-card p-3.5 sm:p-4 transition-all hover:border-purple-500/50 hover:shadow-md cursor-pointer active:scale-[0.99]"
+                      className="group relative flex flex-col justify-between gap-3 rounded-2xl border bg-card p-3.5 sm:p-4 transition-all hover:border-purple-500/50 hover:shadow-md cursor-pointer active:scale-[0.99] min-w-0 overflow-hidden"
                     >
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between gap-2">
-                          <code className="font-mono text-xs sm:text-sm font-bold text-purple-600 dark:text-purple-400 bg-purple-500/10 px-2.5 py-1 rounded-lg group-hover:bg-purple-600 group-hover:text-white transition-colors break-all">
-                            {marker.name}
-                          </code>
+                      <div className="space-y-2.5 min-w-0">
+                        <div className="flex flex-wrap items-start justify-between gap-2 min-w-0">
+                          <div className="min-w-0 flex-1">
+                            <code className="font-mono text-xs sm:text-sm font-bold text-purple-600 dark:text-purple-400 bg-purple-500/10 px-2 sm:px-2.5 py-1 rounded-lg group-hover:bg-purple-600 group-hover:text-white transition-colors break-all inline-block max-w-full">
+                              {marker.name}
+                            </code>
+                          </div>
                           <Badge
                             variant="outline"
-                            className="text-[10px] uppercase font-semibold tracking-wide shrink-0"
+                            className="text-[10px] uppercase font-semibold tracking-wide shrink-0 self-start mt-0.5"
                           >
                             {marker.category === 'term'
                               ? 'Từ vựng'
@@ -878,12 +880,12 @@ export function YomitanTokensPage() {
                               : 'Dùng chung'}
                           </Badge>
                         </div>
-                        <p className="text-xs text-muted-foreground leading-relaxed">{marker.description}</p>
+                        <p className="text-xs text-muted-foreground leading-relaxed break-words">{marker.description}</p>
                       </div>
 
                       {marker.example ? (
-                        <div className="pt-2 border-t flex items-center justify-between text-[11px] text-muted-foreground">
-                          <span className="truncate mr-2">Ví dụ: <code className="text-foreground bg-muted px-1.5 py-0.5 rounded font-mono">{marker.example}</code></span>
+                        <div className="pt-2 border-t flex items-center justify-between text-[11px] text-muted-foreground min-w-0 gap-2">
+                          <span className="truncate min-w-0 flex-1">Ví dụ: <code className="text-foreground bg-muted px-1.5 py-0.5 rounded font-mono break-all">{marker.example}</code></span>
                           <span className="text-xs opacity-80 group-hover:opacity-100 transition-opacity text-purple-600 dark:text-purple-400 font-semibold flex items-center gap-1 shrink-0">
                             {copied === marker.name ? <Check className="size-3 text-green-600" /> : <Copy className="size-3" />}
                             {copied === marker.name ? 'Đã chép' : 'Sao chép'}
