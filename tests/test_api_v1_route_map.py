@@ -48,6 +48,10 @@ EXPECTED_API_RULES = {
     ("GET", "/api/flashcards/import/options"),
     ("POST", "/api/flashcards/import/parse"),
     ("GET", "/api/health"),
+    ("GET", "/api/integration-tokens"),
+    ("POST", "/api/integration-tokens"),
+    ("DELETE", "/api/integration-tokens/<int:token_id>"),
+    ("POST", "/api/integration-tokens/<int:token_id>/rotate"),
     ("GET", "/api/marketplace/installed-decks"),
     ("GET", "/api/mcp-tokens"),
     ("POST", "/api/mcp-tokens"),
@@ -111,7 +115,7 @@ class ApiRouteMapTests(unittest.TestCase):
             for method in rule.methods - {"HEAD", "OPTIONS"}
         }
         self.assertEqual(actual, EXPECTED_API_RULES)
-        self.assertEqual(len(actual), 78)
+        self.assertEqual(len(actual), 82)
         self.assertFalse(
             any(rule.rule.startswith("/api/v1") for rule in self.app.url_map.iter_rules())
         )

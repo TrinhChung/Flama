@@ -1,4 +1,4 @@
-import { resolveBackendUrl } from '@/config/env'
+import { API_BASE_URL, resolveBackendUrl } from '@/config/env'
 import {
   isBackendUnavailableStatus,
   reportBackendUnavailable,
@@ -22,6 +22,7 @@ export class ApiError extends Error {
 }
 
 let csrfToken = ''
+let csrfRefreshRequest: Promise<void> | null = null
 
 export function setCsrfToken(token: string) {
   csrfToken = token
@@ -39,10 +40,42 @@ function isUnsafeMethod(method: string) {
   return !['GET', 'HEAD', 'OPTIONS', 'TRACE'].includes(method.toUpperCase())
 }
 
+async function refreshCsrfToken(): Promise<void> {
+  if (csrfRefreshRequest) return csrfRefreshRequest
+
+  csrfRefreshRequest = (async () => {
+    const response = await fetch(resolveBackendUrl(`${API_BASE_URL}/session`), {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      credentials: 'include',
+    })
+    const contentType = response.headers.get('content-type') || ''
+    const payload = contentType.includes('application/json')
+      ? ((await response.json()) as { csrf_token?: unknown; message?: string })
+      : null
+    const token = typeof payload?.csrf_token === 'string'
+      ? payload.csrf_token.trim()
+      : ''
+    if (!response.ok || !token) {
+      throw new ApiError(
+        payload?.message || 'Không thể làm mới CSRF token.',
+        response.status,
+        'CSRF_REFRESH_FAILED',
+      )
+    }
+    setCsrfToken(token)
+  })().finally(() => {
+    csrfRefreshRequest = null
+  })
+
+  return csrfRefreshRequest
+}
+
 async function apiFetch(
   url: string,
   init: RequestInit = {},
   accept = 'application/json',
+  retryCsrf = true,
 ): Promise<Response> {
   const method = String(init.method || 'GET').toUpperCase()
   const headers = new Headers(init.headers)
@@ -98,6 +131,17 @@ async function apiFetch(
 
   if (response.redirected && new URL(response.url).pathname === '/login') {
     throw new ApiError('Phiên đăng nhập đã hết hạn.', 401, 'AUTH_REQUIRED')
+  }
+
+  if (retryCsrf && isUnsafeMethod(method) && response.status === 400) {
+    const contentType = response.headers.get('content-type') || ''
+    const payload = contentType.includes('application/json')
+      ? ((await response.clone().json()) as ErrorPayload)
+      : null
+    if (payload?.error === 'CSRF_FAILED') {
+      await refreshCsrfToken()
+      return apiFetch(url, init, accept, false)
+    }
   }
 
   if (!response.ok) {
