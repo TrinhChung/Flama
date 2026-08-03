@@ -53,6 +53,16 @@ EXPECTED_API_RULES = {
     ("DELETE", "/api/integration-tokens/<int:token_id>"),
     ("POST", "/api/integration-tokens/<int:token_id>/rotate"),
     ("GET", "/api/marketplace/installed-decks"),
+    ("GET", "/api/marketplace/note-types"),
+    ("GET", "/api/marketplace/note-types/hub"),
+    ("GET", "/api/marketplace/note-types/recommendations"),
+    ("GET", "/api/marketplace/note-types/<note_type_id>"),
+    ("POST", "/api/marketplace/note-types/<note_type_id>/install"),
+    ("POST", "/api/marketplace/note-types/<note_type_id>/publish"),
+    ("POST", "/api/marketplace/note-types/<note_type_id>/rate"),
+    ("DELETE", "/api/marketplace/note-types/<note_type_id>/save"),
+    ("POST", "/api/marketplace/note-types/<note_type_id>/save"),
+    ("POST", "/api/marketplace/note-types/<note_type_id>/templates/<template_id>/preview"),
     ("GET", "/api/mcp-tokens"),
     ("POST", "/api/mcp-tokens"),
     ("DELETE", "/api/mcp-tokens/<int:token_id>"),
@@ -62,7 +72,9 @@ EXPECTED_API_RULES = {
     ("GET", "/api/note-types/<note_type_id>"),
     ("PATCH", "/api/note-types/<note_type_id>"),
     ("DELETE", "/api/note-types/<note_type_id>"),
+    ("POST", "/api/note-types/<note_type_id>/publish"),
     ("GET", "/api/note-types/<note_type_id>/fields"),
+
     ("POST", "/api/note-types/<note_type_id>/fields"),
     ("PATCH", "/api/note-types/<note_type_id>/fields/<field_id>"),
     ("DELETE", "/api/note-types/<note_type_id>/fields/<field_id>"),
@@ -84,6 +96,15 @@ EXPECTED_API_RULES = {
     ("GET", "/api/orders/<order_id>"),
     ("DELETE", "/api/session"),
     ("GET", "/api/session"),
+    ("GET", "/api/shared/note-types"),
+    ("GET", "/api/shared/note-types/hub"),
+    ("GET", "/api/shared/note-types/recommendations"),
+    ("GET", "/api/shared/note-types/<note_type_id>"),
+    ("POST", "/api/shared/note-types/<note_type_id>/install"),
+    ("POST", "/api/shared/note-types/<note_type_id>/rate"),
+    ("DELETE", "/api/shared/note-types/<note_type_id>/save"),
+    ("POST", "/api/shared/note-types/<note_type_id>/save"),
+    ("POST", "/api/shared/note-types/<note_type_id>/templates/<template_id>/preview"),
     ("GET", "/api/statistics"),
     ("GET", "/api/statistics/overview"),
     ("GET", "/api/statistics/today-future"),
@@ -115,7 +136,10 @@ class ApiRouteMapTests(unittest.TestCase):
             for method in rule.methods - {"HEAD", "OPTIONS"}
         }
         self.assertEqual(actual, EXPECTED_API_RULES)
-        self.assertEqual(len(actual), 82)
+        self.assertEqual(len(actual), 102)
+
+
+
         self.assertFalse(
             any(rule.rule.startswith("/api/v1") for rule in self.app.url_map.iter_rules())
         )

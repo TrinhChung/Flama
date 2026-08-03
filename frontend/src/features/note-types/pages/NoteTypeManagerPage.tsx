@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import {
+  CheckCircle,
   Code2,
   Plus,
   Share2,
@@ -30,6 +31,7 @@ type NoteTypeItem = {
   name: string
   field_defs?: Array<{ id: string; name: string }>
   templates?: Array<{ id: string; name: string }>
+  publish_status?: string
   created_at?: string
   updated_at?: string
 }
@@ -165,12 +167,21 @@ export function NoteTypeManagerPage() {
                       </Link>
                     </Button>
 
-                    <Button variant="secondary" size="sm" asChild className="h-8 sm:h-9 px-3 text-xs font-semibold rounded-lg">
-                      <a href={`/flashcards/share-note-type/${item.id}`}>
-                        <Share2 className="size-3.5 mr-1 text-orange-600" />
-                        Chia sẻ
-                      </a>
-                    </Button>
+                    {item.publish_status === 'published' || item.publish_status === 'unlisted' ? (
+                      <Button variant="outline" size="sm" asChild className="h-8 sm:h-9 px-3 text-xs font-semibold rounded-lg border-emerald-500/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10">
+                        <Link to={`/marketplace/note-types/${item.id}`}>
+                          <CheckCircle className="size-3.5 mr-1 text-emerald-500" />
+                          Đã chia sẻ
+                        </Link>
+                      </Button>
+                    ) : (
+                      <Button variant="secondary" size="sm" asChild className="h-8 sm:h-9 px-3 text-xs font-semibold rounded-lg">
+                        <Link to={`/marketplace/note-types/publish?id=${item.id}`}>
+                          <Share2 className="size-3.5 mr-1 text-orange-600" />
+                          Chia sẻ
+                        </Link>
+                      </Button>
+                    )}
 
                     <Button
                       variant="ghost"

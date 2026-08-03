@@ -50,7 +50,6 @@ def _marketplace_payment_redirect_url(endpoint: str, **values: object) -> str:
     return url_for(endpoint, _external=True, **values)
 
 
-
 @flashcards_bp.route("/flashcards/shared-note-types")
 @login_required
 def shared_note_types_page():
@@ -84,10 +83,10 @@ def shared_deck_detail_page(deck_item_id: str):
 @flashcards_bp.route("/api/shared/note-types/hub", methods=["GET"])
 @login_required
 def shared_note_types_hub():
-    filters = marketplace_hub_service.parse_marketplace_filters(request.args)
-    payload = marketplace_hub_service.build_note_type_marketplace_hub(
+    from app.services import marketplace_note_type_service
+    payload = marketplace_note_type_service.get_note_types_hub(
         user_id=current_user.id,
-        filters=filters,
+        args=request.args,
         compact=request.args.get("compact") == "1",
     )
     return jsonify(payload)
@@ -107,26 +106,16 @@ def shared_decks_hub():
 @flashcards_bp.route("/api/shared/note-types/<note_type_id>/save", methods=["POST", "DELETE"])
 @login_required
 def save_shared_note_type(note_type_id: str):
-    note_type = _get_shared_note_type_for_view(note_type_id)
-    if not note_type:
-        return _api_error("FIELD_NOT_FOUND", "Note type not found.", status=404)
-    if note_type.user_id == current_user.id:
-        return _api_error("VALIDATION_ERROR", "Owner cannot save own note type.", status=409)
-    if request.method == "POST":
-        marketplace_hub_service.save_item_for_user(
+    from app.services import marketplace_note_type_service
+    try:
+        payload = marketplace_note_type_service.save_shared_note_type(
             user_id=current_user.id,
-            product_type="note_type",
-            product_ref_id=note_type.id,
+            note_type_id=note_type_id,
+            is_save=(request.method == "POST"),
         )
-        db.session.commit()
-        return jsonify({"saved": True, "note_type_id": note_type.id})
-    marketplace_hub_service.remove_saved_item_for_user(
-        user_id=current_user.id,
-        product_type="note_type",
-        product_ref_id=note_type.id,
-    )
-    db.session.commit()
-    return jsonify({"saved": False, "note_type_id": note_type.id})
+    except marketplace_note_type_service.MarketplaceNoteTypeError as exc:
+        return _api_error(exc.error, exc.message, status=exc.status, field=exc.field)
+    return jsonify(payload)
 
 
 @flashcards_bp.route("/api/shared/decks/<deck_item_id>/save", methods=["POST", "DELETE"])
@@ -255,302 +244,119 @@ def preview_template(note_type_id: str, template_id: str):
         )
     return jsonify(payload)
 
+
 @flashcards_bp.route("/api/note-types/<note_type_id>/publish", methods=["POST"])
 @login_required
 def publish_note_type(note_type_id: str):
-    note_type = _get_note_type_or_404(note_type_id)
-    if not note_type:
-        return _api_error("FIELD_NOT_FOUND", "Note type not found.", status=404)
-    payload = request.get_json(silent=True) or {}
-    payload.setdefault("publish_status", "published")
-    validation_error = _apply_note_type_marketplace_payload(note_type, payload)
-    if validation_error:
-        return _api_error("VALIDATION_ERROR", validation_error)
-    _recompute_note_type_market_stats(note_type)
-    _audit("note_type.publish", {"note_type_id": note_type.id, "publish_status": note_type.publish_status})
-    db.session.commit()
-    return jsonify(_serialize_note_type(note_type))
+    from app.services import marketplace_note_type_service
+    try:
+        payload = marketplace_note_type_service.publish_note_type(
+            user_id=current_user.id,
+            is_admin=is_admin_user(current_user),
+            note_type_id=note_type_id,
+            payload=request.get_json(silent=True) or {},
+        )
+    except marketplace_note_type_service.MarketplaceNoteTypeError as exc:
+        return _api_error(exc.error, exc.message, status=exc.status, field=exc.field)
+    return jsonify(payload)
+
 
 @flashcards_bp.route("/api/shared/note-types", methods=["GET"])
 @login_required
 def list_shared_note_types():
-    query_text = (request.args.get("q") or "").strip()
-    category = (request.args.get("category") or "").strip()
-    tags = {item.lower() for item in _normalize_marketplace_tags(request.args.get("tags"))}
-    pricing_mode = (request.args.get("pricing_mode") or request.args.get("pricing") or "").strip().lower()
-    sort_key = (request.args.get("sort") or "popular").strip().lower()
-    min_price_amount_minor = _parse_query_price_amount_minor("min_price")
-    max_price_amount_minor = _parse_query_price_amount_minor("max_price")
-
-    visible_note_types = [
-        item for item in NoteType.query.order_by(NoteType.updated_at.desc()).all()
-        if _is_note_type_visible_for_shared(item)
-    ]
-    filtered = _filter_note_type_items(
-        visible_note_types,
-        query_text=query_text,
-        category=category,
-        tags=tags,
-        pricing_mode=pricing_mode,
-        min_price_amount_minor=min_price_amount_minor,
-        max_price_amount_minor=max_price_amount_minor,
+    from app.services import marketplace_note_type_service
+    payload = marketplace_note_type_service.list_shared_note_types(
+        user_id=current_user.id,
+        args=request.args,
     )
-    sorted_items = _sort_note_type_items(filtered, sort_key)
+    return jsonify(payload)
 
-    installs = NoteTypeInstall.query.filter_by(user_id=current_user.id).all()
-    install_map = {row.source_note_type_id: row for row in installs}
-    payload_items = []
-    for note_type in sorted_items:
-        row = _serialize_note_type_marketplace_card(note_type)
-        install = install_map.get(note_type.id)
-        row["is_installed"] = install is not None
-        row["installed_note_type_id"] = install.installed_note_type_id if install else None
-        row["is_owner"] = note_type.user_id == current_user.id
-        payload_items.append(row)
-    return jsonify({"items": payload_items})
 
 @flashcards_bp.route("/api/shared/note-types/<note_type_id>", methods=["GET"])
 @login_required
 def get_shared_note_type_detail(note_type_id: str):
-    note_type = _get_shared_note_type_for_view(note_type_id)
-    if not note_type:
-        return _api_error("FIELD_NOT_FOUND", "Note type not found.", status=404)
-
-    install = NoteTypeInstall.query.filter_by(
-        source_note_type_id=note_type.id,
-        user_id=current_user.id,
-    ).first()
-    review = NoteTypeReview.query.filter_by(note_type_id=note_type.id, user_id=current_user.id).first()
-    review_submission_count = _count_user_market_review_submissions(
-        user_id=current_user.id,
-        action="market.note_type.rate",
-        payload_item_key="note_type_id",
-        payload_item_value=note_type.id,
-    )
-    review_submissions_remaining = max(
-        0, MAX_MARKET_REVIEW_SUBMISSIONS_PER_USER - int(review_submission_count or 0)
-    )
-    payload = _serialize_note_type_marketplace_card(note_type)
-    payload["is_installed"] = install is not None
-    payload["installed_note_type_id"] = install.installed_note_type_id if install else None
-    payload["is_owner"] = note_type.user_id == current_user.id
-    payload["can_rate"] = _can_user_rate_note_type(note_type, user_id=current_user.id) and review_submissions_remaining > 0
-    payload["review_submission_count"] = review_submission_count
-    payload["review_submissions_remaining"] = review_submissions_remaining
-    payload["my_review"] = (
-        {
-            "rating": review.rating,
-            "comment": review.comment,
-            "updated_at": review.updated_at.isoformat() if review.updated_at else None,
-        }
-        if review
-        else None
-    )
-    payload.update(
-        marketplace_hub_service.build_note_type_detail_extras(
-            note_type=note_type,
+    from app.services import marketplace_note_type_service
+    try:
+        payload = marketplace_note_type_service.get_shared_note_type_detail(
             user_id=current_user.id,
+            note_type_id=note_type_id,
         )
-    )
+    except marketplace_note_type_service.MarketplaceNoteTypeError as exc:
+        return _api_error(exc.error, exc.message, status=exc.status, field=exc.field)
     return jsonify(payload)
+
 
 @flashcards_bp.route("/api/shared/note-types/<note_type_id>/templates/<template_id>/preview", methods=["POST"])
 @login_required
 def preview_shared_note_type_template(note_type_id: str, template_id: str):
-    note_type = _get_shared_note_type_for_view(note_type_id)
-    if not note_type:
-        return _api_error("FIELD_NOT_FOUND", "Note type not found.", status=404)
-
-    template = Template.query.filter_by(id=template_id, note_type_id=note_type.id).first()
-    if not template:
-        return _api_error("FIELD_NOT_FOUND", "Template not found.", status=404)
-
-    sample_field_values = _build_preview_sample_values(note_type.field_defs)
-
+    from app.services import marketplace_note_type_service
     try:
-        rendered = render_template_pair(
-            template=template,
-            field_defs=note_type.field_defs,
-            field_values=sample_field_values,
-            media_assets=[],
-            preview_note_key=f"shared-preview:{note_type.id}",
+        payload = marketplace_note_type_service.preview_shared_note_type_template(
+            user_id=current_user.id,
+            note_type_id=note_type_id,
+            template_id=template_id,
         )
-    except TemplateCompileError as exc:
-        return _api_error("TEMPLATE_COMPILE_ERROR", str(exc), field="front_html")
+    except marketplace_note_type_service.MarketplaceNoteTypeError as exc:
+        return _api_error(exc.error, exc.message, status=exc.status, field=exc.field)
+    return jsonify(payload)
 
-    return jsonify(rendered)
 
 @flashcards_bp.route("/api/shared/note-types/<note_type_id>/install", methods=["POST"])
 @login_required
 def install_shared_note_type(note_type_id: str):
-    source_note_type = db.session.get(NoteType, note_type_id)
-    if not source_note_type:
-        return _api_error("FIELD_NOT_FOUND", "Note type not found.", status=404)
-    status = str(source_note_type.publish_status or "").strip().lower()
-    if status not in PUBLISH_STATUSES_VISIBLE:
-        return _api_error("VALIDATION_ERROR", "This note type is not available for install.", status=409)
-    if source_note_type.user_id == current_user.id:
-        return _api_error("VALIDATION_ERROR", "Owner cannot install own note type.", status=409)
-
-    existing = NoteTypeInstall.query.filter_by(
-        source_note_type_id=source_note_type.id,
-        user_id=current_user.id,
-    ).first()
-    if existing:
-        return jsonify(
-            {
-                "installed_note_type_id": existing.installed_note_type_id,
-                "source_note_type_id": source_note_type.id,
-                "already_installed": True,
-            }
+    from app.services import marketplace_note_type_service
+    try:
+        payload, status_code = marketplace_note_type_service.install_shared_note_type(
+            user_id=current_user.id,
+            note_type_id=note_type_id,
+            return_url=_marketplace_payment_redirect_url(
+                "payments.marketplace_payment_result_page",
+            ),
+            cancel_url=_marketplace_payment_redirect_url(
+                "payments.marketplace_payment_result_page",
+            ),
         )
-    if source_note_type.pricing_mode == "paid":
-        from app.services import payment_service
+    except marketplace_note_type_service.MarketplaceNoteTypeError as exc:
+        return _api_error(exc.error, exc.message, status=exc.status, field=exc.field)
+    return jsonify(payload), status_code
 
-        if not payment_service.paid_install_interception_enabled():
-            return _api_error(
-                "PAYMENT_UNAVAILABLE",
-                "Thanh toán cho nội dung trả phí chưa được bật trong môi trường này. Vui lòng thử lại sau.",
-                status=503,
-            )
-        try:
-            checkout = payment_service.prepare_checkout_for_product(
-                user_id=current_user.id,
-                product_type="note_type",
-                product_ref_id=source_note_type.id,
-                return_url=_marketplace_payment_redirect_url(
-                    "payments.marketplace_payment_result_page",
-                ),
-                cancel_url=_marketplace_payment_redirect_url(
-                    "payments.marketplace_payment_result_page",
-                ),
-            )
-        except payment_service.PaymentServiceError as exc:
-            return _api_error(
-                exc.error,
-                exc.message,
-                status=exc.status,
-                field=exc.field,
-            )
-        return jsonify(checkout), 202 if checkout.get("payment_required") else 200
-
-    installed_copy, purchase_amount_minor = flashcards_share.install_shared_note_type(
-        source_note_type=source_note_type,
-        user_id=current_user.id,
-    )
-    if installed_copy is None:
-        return _api_error("VALIDATION_ERROR", "Unable to install note type.", status=500)
-    return jsonify(
-        {
-            "installed_note_type_id": installed_copy.id,
-            "source_note_type_id": source_note_type.id,
-            "purchase_amount_minor": purchase_amount_minor,
-            "purchase_price_cents": purchase_amount_minor,
-        }
-    ), 201
 
 @flashcards_bp.route("/api/shared/note-types/<note_type_id>/rate", methods=["POST"])
 @login_required
 def rate_shared_note_type(note_type_id: str):
-    note_type = db.session.get(NoteType, note_type_id)
-    if not note_type:
-        return _api_error("FIELD_NOT_FOUND", "Note type not found.", status=404)
-    if not _can_user_rate_note_type(note_type, user_id=current_user.id):
-        return _api_error("VALIDATION_ERROR", "You can only rate after real usage.", status=403)
-    review_submission_count = _count_user_market_review_submissions(
-        user_id=current_user.id,
-        action="market.note_type.rate",
-        payload_item_key="note_type_id",
-        payload_item_value=note_type.id,
-    )
-    if review_submission_count >= MAX_MARKET_REVIEW_SUBMISSIONS_PER_USER:
-        return _api_error(
-            "VALIDATION_ERROR",
-            "You can submit at most 2 ratings for this item.",
-            status=403,
-        )
-
-    payload = request.get_json(silent=True) or {}
+    from app.services import marketplace_note_type_service
+    req_json = request.get_json(silent=True) or {}
     try:
-        rating = int(payload.get("rating"))
+        rating = int(req_json.get("rating"))
     except (TypeError, ValueError):
         return _api_error("VALIDATION_ERROR", "rating must be an integer 1-5.", field="rating")
-    if rating < 1 or rating > 5:
-        return _api_error("VALIDATION_ERROR", "rating must be between 1 and 5.", field="rating")
-    comment = (payload.get("comment") or "").strip() or None
 
-    flashcards_share.rate_shared_note_type(
-        note_type=note_type,
-        user_id=current_user.id,
-        rating=rating,
-        comment=comment,
-    )
-    return jsonify(
-        {
-            "note_type_id": note_type.id,
-            "rating_avg": note_type.rating_avg,
-            "rating_count": note_type.rating_count,
-            "my_rating": rating,
-        }
-    )
+    try:
+        payload = marketplace_note_type_service.rate_shared_note_type(
+            user_id=current_user.id,
+            note_type_id=note_type_id,
+            rating=rating,
+            comment=req_json.get("comment"),
+        )
+    except marketplace_note_type_service.MarketplaceNoteTypeError as exc:
+        return _api_error(exc.error, exc.message, status=exc.status, field=exc.field)
+    return jsonify(payload)
+
 
 @flashcards_bp.route("/api/shared/note-types/recommendations", methods=["GET"])
 @login_required
 def shared_note_type_recommendations():
-    visible_items = [item for item in NoteType.query.all() if _is_note_type_visible_for_shared(item)]
-    interests_categories, interests_tags = _collect_user_market_interests(current_user.id)
-    cold_start = not interests_categories and not interests_tags
-
-    scored: list[tuple[float, NoteType]] = []
-    for item in visible_items:
-        if item.user_id == current_user.id:
-            continue
-        score = _score_market_item(
-            item_category=item.primary_category,
-            item_tags=item.tags or [],
-            rating_avg=float(item.rating_avg or 0.0),
-            rating_count=int(item.rating_count or 0),
-            active_usage_count=int(item.active_usage_count or 0),
-            install_count=int(item.install_count or 0),
-            updated_at=item.updated_at,
-            interests_categories=interests_categories,
-            interests_tags=interests_tags,
-            is_official=bool(item.is_official),
-            cold_start=cold_start,
-        )
-        scored.append((score, item))
-
-    recommended = [
-        _serialize_note_type_marketplace_card(item)
-        for _, item in sorted(scored, key=lambda row: row[0], reverse=True)[:12]
-    ]
-
-    trending_cutoff = _utcnow() - timedelta(days=TRENDING_WINDOW_DAYS)
-    trending_counts_raw = (
-        db.session.query(NoteTypeInstall.source_note_type_id, db.func.count(NoteTypeInstall.id))
-        .filter(NoteTypeInstall.installed_at >= trending_cutoff)
-        .group_by(NoteTypeInstall.source_note_type_id)
-        .all()
+    from app.services import marketplace_note_type_service
+    payload = marketplace_note_type_service.get_recommendations(
+        user_id=current_user.id
     )
-    trending_counts = {row[0]: int(row[1] or 0) for row in trending_counts_raw}
-    trending = sorted(
-        visible_items,
-        key=lambda item: (trending_counts.get(item.id, 0), int(item.active_usage_count or 0), int(item.install_count or 0)),
-        reverse=True,
-    )[:12]
-    new_and_updated = _sort_note_type_items(visible_items, "recently_updated")[:12]
-    return jsonify(
-        {
-            "recommended_for_you": recommended,
-            "top_by_category": _top_items_by_category_note_types(visible_items),
-            "trending": [_serialize_note_type_marketplace_card(item) for item in trending],
-            "new_and_updated": [_serialize_note_type_marketplace_card(item) for item in new_and_updated],
-        }
-    )
+    return jsonify(payload)
+
 
 @flashcards_bp.route("/api/shared/decks", methods=["GET"])
 @login_required
 def list_shared_decks():
+
     query_text = (request.args.get("q") or "").strip()
     category = (request.args.get("category") or "").strip()
     tags = {item.lower() for item in _normalize_marketplace_tags(request.args.get("tags"))}

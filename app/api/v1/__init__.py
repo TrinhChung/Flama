@@ -16,7 +16,10 @@ from .flashcards import flashcards_v1_bp
 from .health import health_bp
 from .identity import identity_bp
 from .learning import learning_bp
-from .marketplace import marketplace_installations_bp
+from .marketplace import (
+    marketplace_installations_bp,
+    marketplace_note_types_bp,
+)
 from .settings import settings_bp
 
 api_v1_bp = Blueprint("api_v1", __name__, url_prefix="/api")
@@ -32,4 +35,6 @@ api_v1_bp.register_blueprint(
     marketplace_installations_bp,
     url_prefix="/marketplace",
 )
+api_v1_bp.register_blueprint(marketplace_note_types_bp)
 api_v1_bp.register_blueprint(settings_bp)
+

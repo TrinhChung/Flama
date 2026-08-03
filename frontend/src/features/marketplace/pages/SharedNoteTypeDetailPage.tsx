@@ -2,18 +2,22 @@ import { useEffect, useState } from 'react'
 import {
   ArrowLeft,
   Award,
+  Check,
   CheckCircle,
+  Copy,
   Download,
   Eye,
   Heart,
   Layers,
   Loader2,
   MessageSquare,
+  Share2,
   Star,
   User,
 } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useParams } from 'react-router-dom'
+import { toast } from 'sonner'
 import { appApi } from '@/app/api'
 import { AmbientBackground } from '@/components/ambient-background'
 import { Badge } from '@/components/ui/badge'
@@ -100,6 +104,14 @@ export function SharedNoteTypeDetailPage() {
   // State
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('')
   const [previewSide, setPreviewSide] = useState<'front' | 'back'>('front')
+  const [isCopied, setIsCopied] = useState(false)
+
+  const handleCopyLink = () => {
+    navigator.clipboard.writeText(window.location.href)
+    setIsCopied(true)
+    toast.success('Đã sao chép liên kết chia sẻ!')
+    setTimeout(() => setIsCopied(false), 2000)
+  }
 
   const [ratingScore, setRatingScore] = useState<number>(5)
   const [hoverScore, setHoverScore] = useState<number | null>(null)
@@ -208,12 +220,23 @@ export function SharedNoteTypeDetailPage() {
         title={titleName}
         description={noteType.preview_text || noteType.description || 'Chi tiết mẫu note type trên marketplace Flama.'}
         actions={
-          <Button variant="outline" size="sm" asChild className="group h-8 sm:h-9 px-3 sm:px-3.5 text-xs font-semibold rounded-xl">
-            <Link to="/marketplace/note-types">
-              <ArrowLeft className="mr-1 sm:mr-1.5 size-3.5 group-hover:-translate-x-0.5 transition-transform" />
-              Quay lại Marketplace
-            </Link>
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 sm:h-9 px-3 sm:px-3.5 text-xs font-semibold rounded-xl"
+              onClick={handleCopyLink}
+            >
+              {isCopied ? <Check className="mr-1.5 size-3.5 text-emerald-500" /> : <Share2 className="mr-1.5 size-3.5 text-primary" />}
+              {isCopied ? 'Đã chép link' : 'Chia sẻ'}
+            </Button>
+            <Button variant="outline" size="sm" asChild className="group h-8 sm:h-9 px-3 sm:px-3.5 text-xs font-semibold rounded-xl">
+              <Link to="/marketplace/note-types">
+                <ArrowLeft className="mr-1 sm:mr-1.5 size-3.5 group-hover:-translate-x-0.5 transition-transform" />
+                Quay lại
+              </Link>
+            </Button>
+          </div>
         }
       />
 
@@ -571,6 +594,16 @@ export function SharedNoteTypeDetailPage() {
                   {noteType.is_saved ? 'Đã lưu' : 'Lưu loại thẻ'}
                 </Button>
               ) : null}
+
+              <Button
+                className="w-full h-9 sm:h-10 font-semibold text-xs sm:text-sm rounded-xl"
+                variant="ghost"
+                size="sm"
+                onClick={handleCopyLink}
+              >
+                {isCopied ? <Check className="mr-1.5 size-4 text-emerald-500" /> : <Copy className="mr-1.5 size-4 text-muted-foreground" />}
+                {isCopied ? 'Đã sao chép liên kết' : 'Sao chép link chia sẻ'}
+              </Button>
 
               <div className="pt-3 border-t border-border/60 text-xs text-muted-foreground space-y-1.5">
                 <div className="flex items-center gap-2">
