@@ -28,10 +28,13 @@ def public_spa_page():
 @spa_routes_bp.get("/marketplace/note-types")
 @spa_routes_bp.get("/marketplace/note-types/publish")
 @spa_routes_bp.get("/marketplace/note-types/<item_id>")
+@spa_routes_bp.get("/flashcards/shared-note-types")
+@spa_routes_bp.get("/flashcards/shared-note-types/<item_id>")
 @login_required
 def authenticated_spa_page(item_id: str | None = None):
     del item_id
     return serve_react_spa()
+
 
 
 @spa_routes_bp.get("/admin/tts")

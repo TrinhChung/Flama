@@ -700,7 +700,7 @@ def get_note_type_recommendations(user_id: int, visible_items: list[NoteType]) -
         for _, item in sorted(scored, key=lambda row: row[0], reverse=True)[:12]
     ]
 
-    trending_cutoff = _utcnow() - timedelta(days=flashcards_share.TRENDING_WINDOW_DAYS)
+    trending_cutoff = _utcnow() - timedelta(days=7)
     trending_counts_raw = (
         db.session.query(NoteTypeInstall.source_note_type_id, db.func.count(NoteTypeInstall.id))
         .filter(NoteTypeInstall.installed_at >= trending_cutoff)
@@ -758,7 +758,7 @@ def get_deck_recommendations(user_id: int, visible_items: list[DeckMarketplaceIt
         for _, item in sorted(scored, key=lambda row: row[0], reverse=True)[:12]
     ]
 
-    trending_cutoff = _utcnow() - timedelta(days=flashcards_share.TRENDING_WINDOW_DAYS)
+    trending_cutoff = _utcnow() - timedelta(days=7)
     trending_counts_raw = (
         db.session.query(DeckInstall.deck_item_id, db.func.count(DeckInstall.id))
         .filter(DeckInstall.installed_at >= trending_cutoff)

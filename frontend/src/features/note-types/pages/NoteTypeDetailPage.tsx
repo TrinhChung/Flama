@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import {
   ArrowLeft,
   Check,
+  CheckCircle,
   Plus,
   RotateCcw,
   Share2,
@@ -37,6 +38,7 @@ type TemplateItem = {
 type NoteTypeDetail = {
   id: string
   name: string
+  publish_status?: string
   field_defs?: FieldDefItem[]
   templates?: TemplateItem[]
 }
@@ -228,11 +230,19 @@ export function NoteTypeDetailPage() {
             </Link>
           </Button>
 
-          <Button variant="secondary" size="sm" asChild className="h-8 sm:h-9 px-3 text-xs font-semibold bg-slate-900 text-white hover:bg-slate-800 rounded-lg">
-            <a href={`/flashcards/share-note-type/${noteTypeId}`}>
-              <Share2 className="size-3.5 mr-1 text-orange-400" /> Share Listing
-            </a>
-          </Button>
+          {noteType?.publish_status === 'published' || noteType?.publish_status === 'unlisted' ? (
+            <Button variant="outline" size="sm" asChild className="h-8 sm:h-9 px-3 text-xs font-semibold border-emerald-500/40 text-emerald-600 dark:text-emerald-400 rounded-lg">
+              <Link to={`/marketplace/note-types/${noteTypeId}`}>
+                <CheckCircle className="size-3.5 mr-1 text-emerald-500" /> View on Marketplace
+              </Link>
+            </Button>
+          ) : (
+            <Button variant="secondary" size="sm" asChild className="h-8 sm:h-9 px-3 text-xs font-semibold bg-slate-900 text-white hover:bg-slate-800 rounded-lg">
+              <Link to={`/marketplace/note-types/publish?id=${noteTypeId}`}>
+                <Share2 className="size-3.5 mr-1 text-orange-400" /> Share Listing
+              </Link>
+            </Button>
+          )}
 
           <Button variant="outline" size="sm" asChild className="h-8 sm:h-9 px-3 text-xs font-semibold rounded-lg">
             <Link to={`/flashcards/note-types/${noteTypeId}/fields`}>
