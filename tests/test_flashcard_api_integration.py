@@ -595,15 +595,13 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             self.assertEqual((saved.taxonomy_metadata or {}).get("subject"), "japanese")
             self.assertEqual((saved.taxonomy_metadata or {}).get("best_used_for"), "vocabulary")
 
-    def test_shared_note_type_marketplace_uses_compact_catalog_shell(self):
+    def test_shared_note_type_marketplace_uses_react_shell(self):
         note_type_response = self.client.get("/flashcards/shared-note-types")
         self.assertEqual(note_type_response.status_code, 200)
         note_type_html = note_type_response.get_data(as_text=True)
-        self.assertIn("market-hub-page--compact-catalog", note_type_html)
-        self.assertIn('data-card-layout="compact"', note_type_html)
-        self.assertIn("Tìm mẫu thẻ phù hợp", note_type_html)
-        self.assertNotIn('id="marketplace-featured-stage"', note_type_html)
-        self.assertNotIn('id="marketplace-hero-summary"', note_type_html)
+        self.assertIn('<div id="root"></div>', note_type_html)
+        self.assertIn('type="module"', note_type_html)
+        self.assertNotIn("market-hub-page--compact-catalog", note_type_html)
 
         deck_response = self.client.get("/flashcards/shared-decks")
         self.assertEqual(deck_response.status_code, 200)
@@ -3752,7 +3750,11 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             follow_redirects=True,
         )
 
-        with patch("app.routes.flashcards.share._can_user_rate_note_type", return_value=True):
+        with patch(
+            "app.services.marketplace_note_type_service."
+            "flashcards_share_service.can_user_rate_note_type",
+            return_value=True,
+        ):
             first_resp = learner_client.post(
                 f"/api/shared/note-types/{note_type_id}/rate",
                 json={"rating": 5, "comment": "first"},
