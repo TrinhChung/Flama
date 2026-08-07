@@ -19,7 +19,9 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          # jsdom 30 (used by Vitest) requires Node >= 22.22.2. Pin the
+          # compatible patch instead of relying on the runner's cached 22.x.
+          node-version: '22.22.2'
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
 
