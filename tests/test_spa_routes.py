@@ -80,7 +80,6 @@ class SpaRouteTests(unittest.TestCase):
                 "/browse",
                 "/study",
                 "/installed-decks",
-                "/import",
                 "/marketplace/decks",
                 "/marketplace/decks/deck-1",
                 "/marketplace/note-types",
@@ -90,6 +89,12 @@ class SpaRouteTests(unittest.TestCase):
                     response = self.client.get(path)
                     self.assertEqual(response.status_code, 200)
                     self.assertEqual(response.data, b"react-shell")
+
+    def test_non_admin_cannot_open_admin_import_deep_link(self):
+        self._login()
+        response = self.client.get("/import")
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/dashboard", response.headers["Location"])
 
     def test_non_admin_cannot_open_admin_tts_deep_link(self):
         self._login()

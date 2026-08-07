@@ -182,6 +182,11 @@ export interface SyncProgressUpdate {
   currentMessage: string
 }
 
+export interface AnkiSyncOptions {
+  syncMedia?: boolean // Default false (Bulk Vocab Only - Ultra Fast)
+  targetDeckName?: string // Custom target Flama deck name/path (e.g. "Tiếng Nhật::N3")
+}
+
 export async function executeAnkiSync(
   deckName: string,
   modelName: string,
@@ -189,8 +194,11 @@ export async function executeAnkiSync(
   syncMode: 'new_and_changed' | 'only_new' | 'resync_all',
   flamaConnectKey: string,
   _accountInfo: FlamaAccountInfo,
-  onProgress?: (progress: SyncProgressUpdate) => void
-): Promise<{ success: boolean; totalSynced: number; errors: string[] }> {
+  onProgress?: (progress: SyncProgressUpdate) => void,
+  options: AnkiSyncOptions = {}
+): Promise<{ success: boolean; totalSynced: number; totalMediaDetected: number; errors: string[] }> {
+  const syncMedia = options.syncMedia ?? false
+  const destDeckName = (options.targetDeckName && options.targetDeckName.trim()) || deckName
   const errors: string[] = []
 
   // 1. Fetch note IDs for selected deck
@@ -205,7 +213,7 @@ export async function executeAnkiSync(
 
   const noteIds = await ankiConnectClient.findNotes(`deck:"${deckName}"`)
   if (!noteIds || noteIds.length === 0) {
-    return { success: true, totalSynced: 0, errors: [] }
+    return { success: true, totalSynced: 0, totalMediaDetected: 0, errors: [] }
   }
 
   // Fetch full note information
@@ -285,70 +293,72 @@ export async function executeAnkiSync(
     })
   }
 
-  // 2. Fetch & Upload Media via Flama Connect
-  onProgress?.({
-    phase: 'media',
-    totalNotes: eligibleNotes.length,
-    processedNotes: 0,
-    totalMedia: totalMediaCount,
-    processedMedia: 0,
-    currentMessage: `Đang xử lý & upload media (${totalMediaCount} file)...`,
-  })
-
   let processedMediaCount = 0
 
-  for (const noteItem of eligibleNotes) {
-    const allMediaFiles = [...noteItem.images, ...noteItem.audios]
-    for (const filename of allMediaFiles) {
-      if (allMediaMap[filename]) continue
+  // 2. Fetch & Upload Media via Flama Connect (Only if syncMedia is enabled)
+  if (syncMedia && totalMediaCount > 0) {
+    onProgress?.({
+      phase: 'media',
+      totalNotes: eligibleNotes.length,
+      processedNotes: 0,
+      totalMedia: totalMediaCount,
+      processedMedia: 0,
+      currentMessage: `Đang xử lý & upload media (${totalMediaCount} file)...`,
+    })
 
-      // Check local media sync cache by filename
-      const cachedMedia = await getMediaSyncState(filename)
-      if (cachedMedia) {
-        allMediaMap[filename] = { mediaId: cachedMedia.flamaMediaId, url: `${flamaConnectClient['baseUrl']}/media/${cachedMedia.flamaMediaId}` }
-        continue
-      }
+    for (const noteItem of eligibleNotes) {
+      const allMediaFiles = [...noteItem.images, ...noteItem.audios]
+      for (const filename of allMediaFiles) {
+        if (allMediaMap[filename]) continue
 
-      // Retrieve binary file from AnkiConnect
-      const base64Data = await ankiConnectClient.retrieveMediaFile(filename)
-      if (!base64Data) {
-        errors.push(`Không thể đọc file media "${filename}" từ AnkiDesktop.`)
-        continue
-      }
-
-      try {
-        const byteCharacters = atob(base64Data)
-        const byteNumbers = new Array(byteCharacters.length)
-        for (let j = 0; j < byteCharacters.length; j++) {
-          byteNumbers[j] = byteCharacters.charCodeAt(j)
+        // Check local media sync cache by filename
+        const cachedMedia = await getMediaSyncState(filename)
+        if (cachedMedia) {
+          allMediaMap[filename] = { mediaId: cachedMedia.flamaMediaId, url: `${flamaConnectClient['baseUrl']}/media/${cachedMedia.flamaMediaId}` }
+          continue
         }
-        const byteArray = new Uint8Array(byteNumbers)
-        const fileBlob = new Blob([byteArray], { type: filename.endsWith('.mp3') ? 'audio/mpeg' : 'image/png' })
-        const fileObj = new File([fileBlob], filename, { type: fileBlob.type })
 
-        const uploadRes = await flamaConnectClient.uploadMediaAsync(fileObj, flamaConnectKey)
-        allMediaMap[filename] = { mediaId: uploadRes.mediaId, url: uploadRes.url }
+        // Retrieve binary file from AnkiConnect
+        const base64Data = await ankiConnectClient.retrieveMediaFile(filename)
+        if (!base64Data) {
+          errors.push(`Không thể đọc file media "${filename}" từ AnkiDesktop.`)
+          continue
+        }
 
-        await saveMediaSyncState({
-          fileName: filename,
-          contentHash: uploadRes.contentHash,
-          flamaMediaId: uploadRes.mediaId,
-          mimeType: uploadRes.mimeType,
-          fileSize: uploadRes.size,
-          lastSyncedAt: new Date().toISOString(),
-        })
+        try {
+          const byteCharacters = atob(base64Data)
+          const byteNumbers = new Array(byteCharacters.length)
+          for (let j = 0; j < byteCharacters.length; j++) {
+            byteNumbers[j] = byteCharacters.charCodeAt(j)
+          }
+          const byteArray = new Uint8Array(byteNumbers)
+          const fileBlob = new Blob([byteArray], { type: filename.endsWith('.mp3') ? 'audio/mpeg' : 'image/png' })
+          const fileObj = new File([fileBlob], filename, { type: fileBlob.type })
 
-        processedMediaCount++
-        onProgress?.({
-          phase: 'media',
-          totalNotes: eligibleNotes.length,
-          processedNotes: 0,
-          totalMedia: totalMediaCount,
-          processedMedia: processedMediaCount,
-          currentMessage: `Đã upload media ${filename}...`,
-        })
-      } catch (err: any) {
-        errors.push(`Lỗi upload media ${filename}: ${err?.message || err}`)
+          const uploadRes = await flamaConnectClient.uploadMediaAsync(fileObj, flamaConnectKey)
+          allMediaMap[filename] = { mediaId: uploadRes.mediaId, url: uploadRes.url }
+
+          await saveMediaSyncState({
+            fileName: filename,
+            contentHash: uploadRes.contentHash,
+            flamaMediaId: uploadRes.mediaId,
+            mimeType: uploadRes.mimeType,
+            fileSize: uploadRes.size,
+            lastSyncedAt: new Date().toISOString(),
+          })
+
+          processedMediaCount++
+          onProgress?.({
+            phase: 'media',
+            totalNotes: eligibleNotes.length,
+            processedNotes: 0,
+            totalMedia: totalMediaCount,
+            processedMedia: processedMediaCount,
+            currentMessage: `Đã upload media ${filename}...`,
+          })
+        } catch (err: any) {
+          errors.push(`Lỗi upload media ${filename}: ${err?.message || err}`)
+        }
       }
     }
   }
@@ -357,32 +367,32 @@ export async function executeAnkiSync(
   const importSession = await flamaConnectClient.createImportSessionAsync(
     {
       source: 'AnkiDesktop',
-      selectedDecks: [deckName],
+      selectedDecks: [destDeckName],
       totalNotes: eligibleNotes.length,
       totalMedia: totalMediaCount,
     },
     flamaConnectKey
   )
 
-  // 4. Batch Import Cards to Flama
-  const BATCH_SIZE = 20
+  // 4. Batch Import Cards to Flama (Higher BATCH_SIZE 50 for Bulk Vocab Sync)
+  const BATCH_SIZE = syncMedia ? 20 : 50
   let syncedNotesCount = 0
 
   for (let i = 0; i < eligibleNotes.length; i += BATCH_SIZE) {
     const batch = eligibleNotes.slice(i, i + BATCH_SIZE)
 
     const payloadCards = batch.map((item) => {
-      // Replace media references in fields
+      // Replace media references in fields if media map exists
       const finalFields: Record<string, string> = {}
       for (const [k, v] of Object.entries(item.mappedFields)) {
-        finalFields[k] = replaceMediaReferences(v, allMediaMap)
+        finalFields[k] = Object.keys(allMediaMap).length > 0 ? replaceMediaReferences(v, allMediaMap) : v
       }
 
       return {
         ankiNoteId: item.info.noteId,
         contentHash: item.contentHash,
         note: {
-          deckName,
+          deckName: destDeckName,
           modelName,
           fields: finalFields,
           tags: item.info.tags,
@@ -395,7 +405,7 @@ export async function executeAnkiSync(
         {
           importSessionId: importSession.importSessionId,
           cards: payloadCards,
-          deckName,
+          deckName: destDeckName,
         },
         flamaConnectKey
       )
@@ -403,7 +413,7 @@ export async function executeAnkiSync(
       for (const item of batch) {
         await saveNoteSyncState({
           ankiNoteId: item.info.noteId,
-          ankiDeckName: deckName,
+          ankiDeckName: destDeckName,
           ankiNoteType: modelName,
           contentHash: item.contentHash,
           lastSyncedAt: new Date().toISOString(),
@@ -418,7 +428,7 @@ export async function executeAnkiSync(
         processedNotes: syncedNotesCount,
         totalMedia: totalMediaCount,
         processedMedia: processedMediaCount,
-        currentMessage: `Đồng bộ batch (${syncedNotesCount}/${eligibleNotes.length} thẻ)...`,
+        currentMessage: `Bulk đồng bộ từ vựng (${syncedNotesCount}/${eligibleNotes.length} thẻ)...`,
       })
     } catch (err: any) {
       errors.push(`Lỗi nạp batch thẻ: ${err?.message || err}`)
@@ -431,8 +441,104 @@ export async function executeAnkiSync(
     processedNotes: syncedNotesCount,
     totalMedia: totalMediaCount,
     processedMedia: processedMediaCount,
-    currentMessage: `Đã hoàn tất đồng bộ ${syncedNotesCount} thẻ!`,
+    currentMessage: `Đã hoàn tất đồng bộ bulk ${syncedNotesCount} thẻ từ vựng!`,
   })
 
-  return { success: errors.length === 0, totalSynced: syncedNotesCount, errors }
+  return { success: errors.length === 0, totalSynced: syncedNotesCount, totalMediaDetected: totalMediaCount, errors }
+}
+
+export async function executeAnkiMediaSync(
+  deckName: string,
+  flamaConnectKey: string,
+  onProgress?: (progress: SyncProgressUpdate) => void
+): Promise<{ success: boolean; syncedMediaCount: number; errors: string[] }> {
+  const errors: string[] = []
+  const noteIds = await ankiConnectClient.findNotes(`deck:"${deckName}"`)
+  if (!noteIds || noteIds.length === 0) {
+    return { success: true, syncedMediaCount: 0, errors: [] }
+  }
+
+  const notesInfo = await ankiConnectClient.notesInfo(noteIds)
+  const mediaFilesSet = new Set<string>()
+
+  for (const note of notesInfo) {
+    for (const fieldData of Object.values(note.fields)) {
+      const val = fieldData.value || ''
+      extractImageReferences(val).forEach((img) => mediaFilesSet.add(img))
+      extractAudioReferences(val).forEach((aud) => mediaFilesSet.add(aud))
+    }
+  }
+
+  const mediaFiles = Array.from(mediaFilesSet)
+  if (mediaFiles.length === 0) {
+    return { success: true, syncedMediaCount: 0, errors: [] }
+  }
+
+  let processedCount = 0
+  onProgress?.({
+    phase: 'media',
+    totalNotes: notesInfo.length,
+    processedNotes: notesInfo.length,
+    totalMedia: mediaFiles.length,
+    processedMedia: 0,
+    currentMessage: `Đang tải & đồng bộ ${mediaFiles.length} file media (ảnh & âm thanh)...`,
+  })
+
+  for (const filename of mediaFiles) {
+    const cachedMedia = await getMediaSyncState(filename)
+    if (cachedMedia) {
+      processedCount++
+      continue
+    }
+
+    const base64Data = await ankiConnectClient.retrieveMediaFile(filename)
+    if (!base64Data) {
+      errors.push(`Không thể đọc media "${filename}" từ AnkiDesktop.`)
+      continue
+    }
+
+    try {
+      const byteCharacters = atob(base64Data)
+      const byteNumbers = new Array(byteCharacters.length)
+      for (let j = 0; j < byteCharacters.length; j++) {
+        byteNumbers[j] = byteCharacters.charCodeAt(j)
+      }
+      const byteArray = new Uint8Array(byteNumbers)
+      const fileBlob = new Blob([byteArray], { type: filename.endsWith('.mp3') ? 'audio/mpeg' : 'image/png' })
+      const fileObj = new File([fileBlob], filename, { type: fileBlob.type })
+
+      const uploadRes = await flamaConnectClient.uploadMediaAsync(fileObj, flamaConnectKey)
+      await saveMediaSyncState({
+        fileName: filename,
+        contentHash: uploadRes.contentHash,
+        flamaMediaId: uploadRes.mediaId,
+        mimeType: uploadRes.mimeType,
+        fileSize: uploadRes.size,
+        lastSyncedAt: new Date().toISOString(),
+      })
+
+      processedCount++
+      onProgress?.({
+        phase: 'media',
+        totalNotes: notesInfo.length,
+        processedNotes: notesInfo.length,
+        totalMedia: mediaFiles.length,
+        processedMedia: processedCount,
+        currentMessage: `Đã upload media (${processedCount}/${mediaFiles.length}): ${filename}`,
+      })
+    } catch (err: any) {
+      errors.push(`Lỗi upload media ${filename}: ${err?.message || err}`)
+    }
+  }
+
+  onProgress?.({
+    phase: 'completed',
+    totalNotes: notesInfo.length,
+    processedNotes: notesInfo.length,
+    totalMedia: mediaFiles.length,
+    processedMedia: processedCount,
+    currentMessage: `Đã hoàn thành đồng bộ ${processedCount} file media!`,
+  })
+
+  return { success: errors.length === 0, syncedMediaCount: processedCount, errors }
 }

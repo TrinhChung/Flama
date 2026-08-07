@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   BookOpen,
   Check,
@@ -148,6 +148,7 @@ export function YomitanTokensPage() {
   const [activeTab, setActiveTab] = useState('about')
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<'all' | 'term' | 'kanji' | 'both'>('all')
+  const hasAutoProcessedRef = useRef(false)
 
   const issuedConnectUrl = issued?.token
     ? `${FLAMA_CONNECT_URL.replace(/\/+$/, '')}/${encodeURIComponent(issued.token)}`
@@ -191,10 +192,35 @@ export function YomitanTokensPage() {
     onSuccess: async ({ item }) => {
       setIssued(item)
       await refresh()
-      toast.success('Đã thu hồi token cũ và tạo token mới.')
+      toast.success('Đã thu hồi token cũ và tạo token mới thành công.')
     },
     onError: (error: Error) => toast.error(error.message),
   })
+
+  useEffect(() => {
+    if (!query.data || hasAutoProcessedRef.current || createMutation.isPending || rotateMutation.isPending) return
+
+    const items = query.data.items || []
+    const now = Date.now()
+    const activeTokens = items.filter(
+      (t) => t.status === 'active' && (!t.expires_at || new Date(t.expires_at).getTime() > now)
+    )
+
+    if (activeTokens.length === 0) {
+      hasAutoProcessedRef.current = true
+      const expiredToken = items.find(
+        (t) => t.status === 'expired' || (t.expires_at && new Date(t.expires_at).getTime() <= now && t.status !== 'revoked')
+      )
+
+      if (expiredToken) {
+        toast.info('Phát hiện token đã hết hạn. Đang tự động làm mới (renew) token cho bạn...')
+        rotateMutation.mutate(expiredToken.id)
+      } else {
+        toast.info('Chưa có token kết nối. Đang tự động tạo key Flama Connect mới...')
+        createMutation.mutate()
+      }
+    }
+  }, [query.data, createMutation, rotateMutation])
 
   const copy = async (label: string, value: string) => {
     await navigator.clipboard.writeText(value)

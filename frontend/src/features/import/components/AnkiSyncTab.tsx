@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useId } from 'react'
 import {
-  RefreshCw,
   Search,
   CheckCircle2,
   AlertTriangle,
@@ -9,9 +8,8 @@ import {
   ArrowRightLeft,
   Eye,
   Zap,
-  Wifi,
-  WifiOff,
 } from 'lucide-react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useFlamaConnect } from '@/context/FlamaConnectContext'
 import type {
   AnkiConnectStatus,
@@ -23,7 +21,9 @@ import {
 import {
   autoSuggestFieldMapping,
   executeAnkiSync,
+  executeAnkiMediaSync,
 } from '@/lib/ankiSyncEngine'
+import { ensureFlamaConnectKey } from '@/lib/ensureFlamaConnectKey'
 import {
   sanitizeAnkiHtml,
 } from '@/lib/ankiHtmlSanitizer'
@@ -52,17 +52,18 @@ interface FlamaNoteTypeOption {
 
 interface AnkiSyncTabProps {
   noteTypeOptions: FlamaNoteTypeOption[]
+  endpoint: string
+  connectionStatus: AnkiConnectStatus
+  ankiVersion: number | null
 }
 
-export const AnkiSyncTab: React.FC<AnkiSyncTabProps> = ({ noteTypeOptions }) => {
+export const AnkiSyncTab: React.FC<AnkiSyncTabProps> = ({
+  noteTypeOptions,
+  endpoint,
+  connectionStatus,
+}) => {
+  const queryClient = useQueryClient()
   const flamaConnect = useFlamaConnect()
-
-  // Connection State
-  const [endpoint, setEndpoint] = useState('http://127.0.0.1:8765')
-  const [connectionStatus, setConnectionStatus] = useState<AnkiConnectStatus>('Anki is not running')
-  const [ankiVersion, setAnkiVersion] = useState<number | null>(null)
-  const [connectionError, setConnectionError] = useState<string | null>(null)
-  const [isCheckingConn, setIsCheckingConn] = useState(false)
 
   // Step 1: Deck Selection State
   const [decks, setDecks] = useState<string[]>([])
@@ -72,6 +73,7 @@ export const AnkiSyncTab: React.FC<AnkiSyncTabProps> = ({ noteTypeOptions }) => 
 
   // Step 2: Mapping State
   const [selectedDeckName, setSelectedDeckName] = useState<string>('')
+  const [targetFlamaDeckName, setTargetFlamaDeckName] = useState<string>('')
   const [selectedAnkiModel, setSelectedAnkiModel] = useState<string>('')
   const [ankiFields, setAnkiFields] = useState<string[]>([])
   const [selectedFlamaModelId, setSelectedFlamaModelId] = useState<string>('')
@@ -80,10 +82,13 @@ export const AnkiSyncTab: React.FC<AnkiSyncTabProps> = ({ noteTypeOptions }) => 
   // Step 3: Preview State
   const [previewNotes, setPreviewNotes] = useState<AnkiNoteInfo[]>([])
   const [isLoadingPreview, setIsLoadingPreview] = useState(false)
+  const [showPreviewSection, setShowPreviewSection] = useState(false)
 
   // Step 4: Sync Execution State
   const [syncMode, setSyncMode] = useState<'new_and_changed' | 'only_new' | 'resync_all'>('new_and_changed')
+  const [syncMediaOption, setSyncMediaOption] = useState<'vocab_only' | 'vocab_and_media'>('vocab_only')
   const [isSyncing, setIsSyncing] = useState(false)
+  const [isSyncingMedia, setIsSyncingMedia] = useState(false)
   const [syncProgress, setSyncProgress] = useState<{
     phase: string
     totalNotes: number
@@ -92,43 +97,41 @@ export const AnkiSyncTab: React.FC<AnkiSyncTabProps> = ({ noteTypeOptions }) => 
     processedMedia: number
     message: string
   } | null>(null)
-  const [syncReport, setSyncReport] = useState<{ totalSynced: number; errors: string[] } | null>(null)
+  const [syncReport, setSyncReport] = useState<{
+    totalSynced: number
+    totalMediaDetected?: number
+    mediaSyncedCount?: number
+    errors: string[]
+  } | null>(null)
 
-  const endpointInputId = useId()
   const syncModeSelectId = useId()
+  const syncMediaSelectId = useId()
+  const targetDeckInputId = useId()
 
-  // 1. Connection Health Check
-  const checkAnkiConnection = async () => {
-    setIsCheckingConn(true)
-    setConnectionError(null)
-    const result = await ankiConnectClient.checkConnection(endpoint)
-    setConnectionStatus(result.status)
-    if (result.version) setAnkiVersion(result.version)
-    if (result.error) setConnectionError(result.error)
-
-    if (result.status === 'Connected') {
-      try {
-        const deckList = await ankiConnectClient.getDeckNames(endpoint)
-        setDecks(deckList)
-      } catch (err: any) {
-        setConnectionError(err.message || 'Không thể lấy danh sách deck từ Anki.')
+  // Auto fetch decks when connected
+  useEffect(() => {
+    async function fetchDecks() {
+      if (connectionStatus === 'Connected') {
+        try {
+          const deckList = await ankiConnectClient.getDeckNames(endpoint)
+          setDecks(deckList)
+        } catch (err: any) {
+          console.warn('Lỗi lấy danh sách deck:', err)
+        }
       }
     }
-    setIsCheckingConn(false)
-  }
-
-  useEffect(() => {
-    checkAnkiConnection()
-  }, [])
+    fetchDecks()
+  }, [connectionStatus, endpoint])
 
   const [isDeckLoading, setIsDeckLoading] = useState(false)
 
-  // 2. Lazy load note count and NoteType details ONLY when a deck is selected
+  // Lazy load note count and NoteType details ONLY when a deck is selected
   useEffect(() => {
     async function loadDeckDetails() {
       if (selectedDecks.length === 0) return
       const targetDeck = selectedDecks[0]
       setSelectedDeckName(targetDeck)
+      setTargetFlamaDeckName(targetDeck)
       setIsDeckLoading(true)
 
       try {
@@ -147,7 +150,7 @@ export const AnkiSyncTab: React.FC<AnkiSyncTabProps> = ({ noteTypeOptions }) => 
             // Auto suggest mapping for matched/custom Flama NoteType
             let targetFlamaModel = null
 
-            // 1. Check saved custom mapping from LocalStorage
+            // Check saved custom mapping from LocalStorage
             const savedMappingStr = localStorage.getItem(`anki_nt_map_${modelName}`)
             if (savedMappingStr) {
               try {
@@ -158,7 +161,7 @@ export const AnkiSyncTab: React.FC<AnkiSyncTabProps> = ({ noteTypeOptions }) => 
               } catch {}
             }
 
-            // 2. Fall back to exact name match or default NoteType
+            // Fall back to exact name match or default NoteType
             if (!targetFlamaModel) {
               targetFlamaModel = noteTypeOptions.find((m) => m.name.toLowerCase() === modelName.toLowerCase()) || noteTypeOptions[0]
             }
@@ -176,7 +179,7 @@ export const AnkiSyncTab: React.FC<AnkiSyncTabProps> = ({ noteTypeOptions }) => 
       setIsDeckLoading(false)
     }
     loadDeckDetails()
-  }, [selectedDecks])
+  }, [selectedDecks, endpoint, noteTypeOptions])
 
   // Handle Flama Model Change in Step 2
   const handleFlamaModelChange = (flamaModelId: string) => {
@@ -192,6 +195,7 @@ export const AnkiSyncTab: React.FC<AnkiSyncTabProps> = ({ noteTypeOptions }) => 
   const loadPreview = async () => {
     if (!selectedDeckName) return
     setIsLoadingPreview(true)
+    setShowPreviewSection(true)
     try {
       const notes = await ankiConnectClient.findNotes(`deck:"${selectedDeckName}"`, endpoint)
       if (notes.length > 0) {
@@ -218,17 +222,17 @@ export const AnkiSyncTab: React.FC<AnkiSyncTabProps> = ({ noteTypeOptions }) => 
     setShowSyncModal(true)
     setSyncReport(null)
 
-    const key = flamaConnect.getValidKey() || 'web_session'
-    const account = flamaConnect.account || {
-      userId: 1,
-      username: 'web_user',
-      displayName: 'Web User',
-      workspace: 'default',
-      importPermission: true,
-      uploadLimit: 10000,
-    }
-
     try {
+      const key = await ensureFlamaConnectKey(flamaConnect)
+      const account = flamaConnect.account || {
+        userId: 1,
+        username: 'web_user',
+        displayName: 'Web User',
+        workspace: 'default',
+        importPermission: true,
+        uploadLimit: 10000,
+      }
+
       const result = await executeAnkiSync(
         selectedDeckName,
         selectedAnkiModel,
@@ -245,13 +249,26 @@ export const AnkiSyncTab: React.FC<AnkiSyncTabProps> = ({ noteTypeOptions }) => 
             processedMedia: progress.processedMedia,
             message: progress.currentMessage,
           })
+        },
+        {
+          syncMedia: syncMediaOption === 'vocab_and_media',
+          targetDeckName: targetFlamaDeckName.trim() || selectedDeckName,
         }
       )
 
       setSyncReport({
         totalSynced: result.totalSynced,
+        totalMediaDetected: result.totalMediaDetected,
         errors: result.errors,
       })
+
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['bootstrap'] }),
+        queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
+        queryClient.invalidateQueries({ queryKey: ['decks'] }),
+        queryClient.invalidateQueries({ queryKey: ['import-options'] }),
+        queryClient.invalidateQueries({ queryKey: ['stats-overview'] }),
+      ])
     } catch (err: any) {
       setSyncReport({
         totalSynced: 0,
@@ -261,66 +278,63 @@ export const AnkiSyncTab: React.FC<AnkiSyncTabProps> = ({ noteTypeOptions }) => 
     setIsSyncing(false)
   }
 
+  // Execute Deferred Media Sync
+  const handleSyncMediaOnly = async () => {
+    if (!selectedDeckName) return
+
+    setIsSyncingMedia(true)
+    setIsSyncing(true)
+    setShowSyncModal(true)
+
+    try {
+      const key = await ensureFlamaConnectKey(flamaConnect)
+      const mediaResult = await executeAnkiMediaSync(
+        selectedDeckName,
+        key,
+        (progress) => {
+          setSyncProgress({
+            phase: progress.phase,
+            totalNotes: progress.totalNotes,
+            processedNotes: progress.processedNotes,
+            totalMedia: progress.totalMedia,
+            processedMedia: progress.processedMedia,
+            message: progress.currentMessage,
+          })
+        }
+      )
+
+      setSyncReport((prev) => ({
+        totalSynced: prev?.totalSynced || 0,
+        totalMediaDetected: prev?.totalMediaDetected,
+        mediaSyncedCount: mediaResult.syncedMediaCount,
+        errors: [...(prev?.errors || []), ...mediaResult.errors],
+      }))
+    } catch (err: any) {
+      setSyncReport((prev) => ({
+        totalSynced: prev?.totalSynced || 0,
+        errors: [...(prev?.errors || []), err?.message || 'Lỗi tải media.'],
+      }))
+    }
+    setIsSyncing(false)
+    setIsSyncingMedia(false)
+  }
+
   return (
-    <div className="space-y-6">
-      {/* Connection Header Bar */}
-      <Card className="border-border/80 shadow-sm rounded-2xl overflow-hidden bg-card/60">
-        <CardContent className="p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className={`size-10 rounded-xl flex items-center justify-center shrink-0 ${
-              connectionStatus === 'Connected' ? 'bg-emerald-500/15 text-emerald-600' : 'bg-destructive/15 text-destructive'
-            }`}>
-              {connectionStatus === 'Connected' ? <Wifi className="size-5" /> : <WifiOff className="size-5" />}
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-bold text-foreground">AnkiConnect Endpoint</span>
-                {connectionStatus === 'Connected' ? (
-                  <Badge className="bg-emerald-500/15 text-emerald-600 border-emerald-500/30 text-[11px]">
-                    Connected (v{ankiVersion})
-                  </Badge>
-                ) : (
-                  <Badge variant="destructive" className="text-[11px]">
-                    {connectionStatus}
-                  </Badge>
-                )}
-              </div>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {connectionError || 'Ứng dụng sẽ đọc trực tiếp dữ liệu thẻ từ Anki Desktop qua giao thức AnkiConnect local.'}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 w-full md:w-auto">
-            <div className="w-48">
-              <Input
-                id={endpointInputId}
-                value={endpoint}
-                onChange={(e) => setEndpoint(e.target.value)}
-                placeholder="http://127.0.0.1:8765"
-                className="h-8 text-xs font-mono"
-              />
-            </div>
-            <Button size="sm" variant="outline" onClick={checkAnkiConnection} disabled={isCheckingConn}>
-              {isCheckingConn ? <Loader2 className="size-3.5 animate-spin mr-1" /> : <RefreshCw className="size-3.5 mr-1" />}
-              Kiểm tra
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
+    <div className="space-y-4 sm:space-y-6">
       {/* Step 1: Select Deck */}
-      <Card className="border-border/80 shadow-sm rounded-2xl overflow-hidden">
-        <CardHeader className="pb-3 border-b bg-card/50">
-          <CardTitle className="text-sm font-semibold flex items-center justify-between">
-            <span className="flex items-center gap-2"><Layers className="size-4 text-primary" /> 1. Chọn Deck Anki đồng bộ</span>
+      <Card className="border-border/80 shadow-xs rounded-2xl overflow-hidden">
+        <CardHeader className="p-4 sm:p-5 pb-3 border-b bg-card/40">
+          <CardTitle className="text-sm font-semibold flex items-center justify-between flex-wrap gap-2">
+            <span className="flex items-center gap-2">
+              <Layers className="size-4 text-primary shrink-0" /> 1. Chọn Deck Anki đồng bộ
+            </span>
             <span className="text-xs text-muted-foreground font-normal">Đã chọn {selectedDecks.length} deck</span>
           </CardTitle>
           <CardDescription className="text-xs">
             Chọn danh mục bộ thẻ Anki bạn muốn nhập hoặc đồng bộ lên Flama.
           </CardDescription>
         </CardHeader>
-        <CardContent className="pt-4 space-y-3">
+        <CardContent className="p-4 sm:p-5 pt-4 space-y-3">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
             <Input
@@ -347,114 +361,155 @@ export const AnkiSyncTab: React.FC<AnkiSyncTabProps> = ({ noteTypeOptions }) => 
         </CardContent>
       </Card>
 
-      {/* Step 2: Field Mapping */}
+      {/* Step 2: Field & Deck Mapping */}
       {selectedDeckName && (
-        <Card className="border-border/80 shadow-sm rounded-2xl overflow-hidden">
-          <CardHeader className="pb-3 border-b bg-card/50">
-            <CardTitle className="text-sm font-semibold flex items-center justify-between">
+        <Card className="border-border/80 shadow-xs rounded-2xl overflow-hidden">
+          <CardHeader className="p-4 sm:p-5 pb-3 border-b bg-card/40">
+            <CardTitle className="text-sm font-semibold flex items-center justify-between flex-wrap gap-2">
               <span className="flex items-center gap-2">
-                <ArrowRightLeft className="size-4 text-primary" /> 2. Ánh xạ trường dữ liệu (Anki → Flama)
+                <ArrowRightLeft className="size-4 text-primary shrink-0" /> 2. Cấu hình Deck &amp; Ánh xạ Trường
               </span>
               {isDeckLoading && (
                 <span className="text-xs text-muted-foreground font-normal flex items-center gap-1.5">
-                  <Loader2 className="size-3.5 animate-spin" /> Đang đọc thông tin deck...
+                  <Loader2 className="size-3.5 animate-spin" /> Đang đọc thông tin...
                 </span>
               )}
             </CardTitle>
             <CardDescription className="text-xs">
-              Ghép các trường của NoteType trong Anki tương ứng với cấu trúc thẻ trên Flama.
+              Tùy chỉnh tên Deck đích trên Flama (dùng <code className="font-mono text-primary font-bold">::</code> tạo phân cấp) và ghép các trường.
             </CardDescription>
           </CardHeader>
-          <CardContent className="pt-4 space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <CardContent className="p-4 sm:p-5 pt-4 space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
               <div className="space-y-1">
-                <Label className="text-xs font-semibold text-muted-foreground">Anki NoteType</Label>
+                <Label className="text-xs font-semibold text-muted-foreground">NoteType Anki gốc</Label>
                 <Input value={selectedAnkiModel || 'Basic'} disabled className="h-8 text-xs font-semibold bg-muted/40" />
               </div>
+
               <div className="space-y-1">
                 <Label className="text-xs font-semibold text-muted-foreground">Flama NoteType đích</Label>
                 <NativeSelect
                   value={selectedFlamaModelId}
                   onChange={(e) => handleFlamaModelChange(e.target.value)}
-                  className="h-8 text-xs"
+                  className="h-8 text-xs font-semibold text-primary"
                 >
                   {noteTypeOptions.map((nt) => (
                     <option key={nt.id} value={nt.id}>
-                      {nt.name}
+                      {nt.name} ({nt.fields?.length || 0} trường)
                     </option>
                   ))}
                 </NativeSelect>
               </div>
+
+              <div className="space-y-1">
+                <Label htmlFor={targetDeckInputId} className="text-xs font-semibold text-muted-foreground">
+                  Tên Deck Flama đích
+                </Label>
+                <Input
+                  id={targetDeckInputId}
+                  value={targetFlamaDeckName}
+                  onChange={(e) => setTargetFlamaDeckName(e.target.value)}
+                  placeholder="Ví dụ: Tiếng Nhật::JLPT N3::Từ vựng"
+                  className="h-8 text-xs font-semibold"
+                />
+              </div>
             </div>
 
-            <div className="border rounded-xl p-3 bg-card/40 space-y-2">
-              <div className="flex items-center justify-between text-xs font-semibold border-b pb-2 text-muted-foreground">
+            {/* Field Mapping Container */}
+            <div className="border rounded-xl p-3 bg-card/30 space-y-2">
+              <div className="hidden sm:flex items-center justify-between text-xs font-semibold border-b pb-2 text-muted-foreground">
                 <span>Trường dữ liệu Anki</span>
                 <span>Trường Flama tương ứng</span>
               </div>
-              {ankiFields.map((ankiField) => {
-                const currentFlamaField = fieldMapping[ankiField] || 'ignore'
-                const targetFlamaModel = noteTypeOptions.find((m) => m.id === selectedFlamaModelId)
+              <div className="divide-y divide-border/40">
+                {ankiFields.map((ankiField) => {
+                  const currentFlamaField = fieldMapping[ankiField] || 'ignore'
+                  const targetFlamaModel = noteTypeOptions.find((m) => m.id === selectedFlamaModelId)
 
-                return (
-                  <div key={ankiField} className="flex items-center justify-between gap-4 py-1">
-                    <span className="text-xs font-bold text-foreground">{ankiField}</span>
-                    <div className="w-56">
-                      <NativeSelect
-                        value={currentFlamaField}
-                        onChange={(e) => setFieldMapping({ ...fieldMapping, [ankiField]: e.target.value })}
-                        className="h-7 text-xs"
-                      >
-                        <option value="ignore">-- Bỏ qua trường này --</option>
-                        {targetFlamaModel?.fields.map((ff) => (
-                          <option key={ff.id} value={ff.name}>
-                            {ff.name} ({ff.field_type})
-                          </option>
-                        ))}
-                      </NativeSelect>
+                  return (
+                    <div
+                      key={ankiField}
+                      className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-4 py-2 border-b border-border/40 last:border-0"
+                    >
+                      <span className="text-xs font-bold text-foreground truncate max-w-full sm:max-w-xs">
+                        {ankiField}
+                      </span>
+                      <div className="w-full sm:w-64 shrink-0">
+                        <NativeSelect
+                          value={currentFlamaField}
+                          onChange={(e) => setFieldMapping({ ...fieldMapping, [ankiField]: e.target.value })}
+                          className="h-8 text-xs font-medium"
+                        >
+                          <option value="ignore">-- Bỏ qua trường này --</option>
+                          {targetFlamaModel?.fields.map((ff) => (
+                            <option key={ff.id} value={ff.name}>
+                              {ff.name} ({ff.field_type})
+                            </option>
+                          ))}
+                        </NativeSelect>
+                      </div>
                     </div>
-                  </div>
-                )
-              })}
+                  )
+                })}
+              </div>
             </div>
           </CardContent>
         </Card>
       )}
 
-      {/* Step 3: Preview */}
-      {selectedDeckName && (
-        <Card className="border-border/80 shadow-sm rounded-2xl overflow-hidden">
-          <CardHeader className="pb-3 border-b bg-card/50 flex flex-row items-center justify-between">
-            <div>
-              <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                <Eye className="size-4 text-primary" /> 3. Xem trước nội dung mẫu (Preview)
-              </CardTitle>
-              <CardDescription className="text-xs">
-                Rà soát thẻ mẫu sau khi đã chuyển đổi HTML, định dạng Ruby và media.
-              </CardDescription>
-            </div>
-            <Button size="sm" variant="outline" onClick={loadPreview} disabled={isLoadingPreview}>
-              {isLoadingPreview ? <Loader2 className="size-3.5 animate-spin mr-1" /> : <Eye className="size-3.5 mr-1" />}
-              Tải xem trước
-            </Button>
-          </CardHeader>
-          <CardContent className="pt-4 space-y-3">
-            {previewNotes.length === 0 ? (
-              <p className="text-xs text-muted-foreground text-center py-4">Nhấn "Tải xem trước" để hiển thị mẫu thẻ.</p>
-            ) : (
-              <div className="grid grid-cols-1 gap-3">
+      {/* Step 3: Consolidated Execution Panel */}
+      <Card className="border-border/80 shadow-xs rounded-2xl overflow-hidden">
+        <CardHeader className="p-4 sm:p-5 pb-3 border-b bg-card/40">
+          <CardTitle className="text-sm font-semibold flex items-center justify-between flex-wrap gap-2">
+            <span className="flex items-center gap-2">
+              <Zap className="size-4 text-primary shrink-0" /> 3. Thực thi đồng bộ (Anki → Flama)
+            </span>
+            {selectedDeckName && (
+              <Button
+                size="xs"
+                variant="outline"
+                onClick={loadPreview}
+                disabled={isLoadingPreview}
+                className="h-7 text-xs font-medium"
+              >
+                {isLoadingPreview ? (
+                  <Loader2 className="size-3 animate-spin mr-1" />
+                ) : (
+                  <Eye className="size-3 mr-1 text-primary" />
+                )}
+                {showPreviewSection ? 'Tải lại Xem trước' : 'Xem trước thẻ mẫu'}
+              </Button>
+            )}
+          </CardTitle>
+          <CardDescription className="text-xs">
+            Chọn chế độ lọc và hình thức tải media để tiến hành nhập thẻ lên hệ thống.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="p-4 sm:p-5 pt-4 space-y-4">
+          {/* Optional Preview Collapsible Container */}
+          {showPreviewSection && previewNotes.length > 0 && (
+            <div className="p-3 border rounded-xl bg-card/40 space-y-2 mb-4">
+              <div className="flex items-center justify-between text-xs font-bold border-b pb-1.5">
+                <span>Mẫu thẻ xem trước ({previewNotes.length} thẻ)</span>
+                <Button size="xs" variant="ghost" onClick={() => setShowPreviewSection(false)} className="h-6 text-[11px]">
+                  Ẩn
+                </Button>
+              </div>
+              <div className="grid grid-cols-1 gap-2.5 max-h-60 overflow-y-auto pr-1">
                 {previewNotes.map((note) => (
-                  <div key={note.noteId} className="p-3 border rounded-xl bg-card/40 space-y-2">
-                    <div className="flex items-center justify-between border-b pb-1.5 text-xs">
+                  <div key={note.noteId} className="p-2.5 border rounded-lg bg-background/60 space-y-1.5">
+                    <div className="flex items-center justify-between text-[11px]">
                       <span className="font-mono text-muted-foreground">ID Thẻ: #{note.noteId}</span>
-                      <Badge variant="outline" className="bg-primary/5 text-primary text-[10px]">Mới (New)</Badge>
+                      <Badge variant="outline" className="text-[9px] py-0 px-1 font-normal">
+                        New
+                      </Badge>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                       {Object.entries(note.fields).map(([fieldName, fieldObj]) => (
-                        <div key={fieldName} className="p-2 border rounded bg-background/50 space-y-1">
-                          <span className="font-bold text-[11px] text-muted-foreground block">{fieldName}</span>
+                        <div key={fieldName} className="p-1.5 border rounded bg-muted/20">
+                          <span className="font-bold text-[10px] text-muted-foreground block">{fieldName}</span>
                           <div
-                            className="text-foreground prose prose-sm max-w-none text-xs"
+                            className="text-foreground prose prose-sm max-w-none text-xs truncate"
                             dangerouslySetInnerHTML={{ __html: sanitizeAnkiHtml(fieldObj.value) }}
                           />
                         </div>
@@ -463,30 +518,19 @@ export const AnkiSyncTab: React.FC<AnkiSyncTabProps> = ({ noteTypeOptions }) => 
                   </div>
                 ))}
               </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
+            </div>
+          )}
 
-      {/* Step 4: Sync Execution */}
-      <Card className="border-border/80 shadow-sm rounded-2xl overflow-hidden">
-        <CardHeader className="pb-3 border-b bg-card/50">
-          <CardTitle className="text-sm font-semibold flex items-center gap-2">
-            <Zap className="size-4 text-primary" /> 4. Thực thi đồng bộ (Anki → Flama)
-          </CardTitle>
-          <CardDescription className="text-xs">
-            Chọn chế độ và tiến hành upload thẻ &amp; media thông qua phiên Flama Connect đã xác thực.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="pt-4 space-y-4">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 items-end">
             <div className="space-y-1">
-              <Label htmlFor={syncModeSelectId} className="text-xs font-semibold">Chế độ đồng bộ</Label>
+              <Label htmlFor={syncModeSelectId} className="text-xs font-semibold text-muted-foreground">
+                Chế độ lọc thẻ
+              </Label>
               <NativeSelect
                 id={syncModeSelectId}
                 value={syncMode}
                 onChange={(e) => setSyncMode(e.target.value as any)}
-                className="h-8 text-xs w-64"
+                className="h-8 text-xs w-full font-medium"
               >
                 <option value="new_and_changed">Thẻ mới + Thẻ đã thay đổi (Mặc định)</option>
                 <option value="only_new">Chỉ thẻ mới chưa có trên Flama</option>
@@ -494,13 +538,43 @@ export const AnkiSyncTab: React.FC<AnkiSyncTabProps> = ({ noteTypeOptions }) => 
               </NativeSelect>
             </div>
 
+            <div className="space-y-1">
+              <Label htmlFor={syncMediaSelectId} className="text-xs font-semibold text-muted-foreground">
+                Cơ chế nạp Media (Ảnh/Âm thanh)
+              </Label>
+              <NativeSelect
+                id={syncMediaSelectId}
+                value={syncMediaOption}
+                onChange={(e) => setSyncMediaOption(e.target.value as any)}
+                className="h-8 text-xs w-full font-semibold text-primary"
+              >
+                <option value="vocab_only">⚡ Bulk Tốc độ cao: Chỉ Từ vựng (Media tải sau)</option>
+                <option value="vocab_and_media">📦 Đầy đủ: Từ vựng + Tải luôn Ảnh &amp; Âm thanh</option>
+              </NativeSelect>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2.5 pt-2">
+            {selectedDeckName && (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={isSyncing || isSyncingMedia}
+                onClick={handleSyncMediaOnly}
+                className="font-semibold text-xs text-amber-700 dark:text-amber-300 border-amber-500/30 hover:bg-amber-500/10 h-9 rounded-xl w-full sm:w-auto px-4"
+              >
+                {isSyncingMedia ? <Loader2 className="size-3.5 animate-spin mr-1.5" /> : <Zap className="size-3.5 mr-1.5 text-amber-500" />}
+                Tải lại riêng Media (Ảnh &amp; Âm thanh)
+              </Button>
+            )}
+
             <Button
               disabled={isSyncing || !selectedDeckName}
               onClick={handleExecuteSync}
-              className="font-semibold shadow-sm w-full sm:w-auto"
+              className="font-bold text-xs shadow-sm w-full sm:w-auto px-6 h-9 rounded-xl"
             >
               {isSyncing ? <Loader2 className="size-4 animate-spin mr-2" /> : <Zap className="size-4 mr-2" />}
-              Bắt đầu đồng bộ Anki → Flama
+              {syncMediaOption === 'vocab_only' ? 'Bắt đầu Bulk Sync Từ Vựng' : 'Bắt đầu Đồng bộ Đầy đủ'}
             </Button>
           </div>
 
@@ -525,8 +599,29 @@ export const AnkiSyncTab: React.FC<AnkiSyncTabProps> = ({ noteTypeOptions }) => 
               <AlertTitle className="font-bold text-xs">
                 {syncReport.errors.length === 0 ? 'Hoàn tất đồng bộ thành công!' : 'Đồng bộ có lỗi xảy ra'}
               </AlertTitle>
-              <AlertDescription className="mt-1 text-xs space-y-1">
-                <div>Đã nạp thành công {syncReport.totalSynced} thẻ lên Flama Cloud.</div>
+              <AlertDescription className="mt-1.5 text-xs space-y-2">
+                <div>Đã nạp thành công {syncReport.totalSynced} thẻ từ vựng lên Flama Cloud.</div>
+
+                {syncReport.totalMediaDetected !== undefined && syncReport.totalMediaDetected > 0 && (
+                  <div className="pt-1 flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-t border-border/60">
+                    <span className="text-muted-foreground text-[11px]">
+                      Phát hiện <strong>{syncReport.totalMediaDetected}</strong> file Media liên kết.
+                    </span>
+                    <Button
+                      size="xs"
+                      variant="outline"
+                      disabled={isSyncingMedia}
+                      onClick={handleSyncMediaOnly}
+                      className="h-7 text-xs font-semibold text-amber-700 border-amber-500/40 hover:bg-amber-50 dark:text-amber-300 rounded-lg shrink-0"
+                    >
+                      {isSyncingMedia ? <Loader2 className="size-3 animate-spin mr-1" /> : <Zap className="size-3 mr-1 text-amber-500" />}
+                      {syncReport.mediaSyncedCount !== undefined
+                        ? `Đã đồng bộ (${syncReport.mediaSyncedCount}/${syncReport.totalMediaDetected}) Media`
+                        : `Đồng bộ tiếp ${syncReport.totalMediaDetected} Media`}
+                    </Button>
+                  </div>
+                )}
+
                 {syncReport.errors.map((err, idx) => (
                   <div key={idx} className="text-destructive font-mono text-[11px]">• {err}</div>
                 ))}
@@ -545,15 +640,19 @@ export const AnkiSyncTab: React.FC<AnkiSyncTabProps> = ({ noteTypeOptions }) => 
       >
         <DialogContent className="sm:max-w-md border-border/80 shadow-2xl rounded-2xl p-6">
           <DialogHeader className="items-center text-center space-y-3">
-            <div className={`size-16 rounded-full flex items-center justify-center ${isSyncing ? 'bg-primary/10 text-primary animate-pulse' : 'bg-emerald-500/10 text-emerald-600'}`}>
-              {isSyncing ? <Loader2 className="size-8 animate-spin text-primary" /> : <CheckCircle2 className="size-8 text-emerald-500" />}
+            <div className={`size-14 rounded-full flex items-center justify-center ${isSyncing ? 'bg-primary/10 text-primary animate-pulse' : 'bg-emerald-500/10 text-emerald-600'}`}>
+              {isSyncing ? <Loader2 className="size-7 animate-spin text-primary" /> : <CheckCircle2 className="size-7 text-emerald-500" />}
             </div>
             <DialogTitle className="text-base font-bold text-foreground">
-              {isSyncing ? 'Đang tiến hành đồng bộ Anki → Flama...' : 'Hoàn tất đồng bộ!'}
+              {isSyncing
+                ? isSyncingMedia
+                  ? 'Đang nạp file Ảnh & Âm thanh (Media)...'
+                  : 'Đang tiến hành Bulk Sync thẻ từ vựng...'
+                : 'Hoàn tất đồng bộ!'}
             </DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground">
               {isSyncing
-                ? 'Vui lòng giữ trình duyệt mở trong khi dữ liệu thẻ và file media đang được nạp lên hệ thống.'
+                ? 'Vui lòng giữ trình duyệt mở trong khi dữ liệu đang được nạp lên hệ thống.'
                 : `Đã xử lý xong dữ liệu cho bộ thẻ "${selectedDeckName}".`}
             </DialogDescription>
           </DialogHeader>
@@ -562,7 +661,7 @@ export const AnkiSyncTab: React.FC<AnkiSyncTabProps> = ({ noteTypeOptions }) => 
             {syncProgress && (
               <div className="space-y-2">
                 <div className="flex justify-between text-xs font-semibold text-foreground">
-                  <span className="truncate max-w-[220px]">{syncProgress.message}</span>
+                  <span className="truncate max-w-[200px]">{syncProgress.message}</span>
                   <span className="shrink-0 font-mono">
                     {syncProgress.processedNotes}/{syncProgress.totalNotes} Thẻ
                   </span>
@@ -585,8 +684,29 @@ export const AnkiSyncTab: React.FC<AnkiSyncTabProps> = ({ noteTypeOptions }) => 
                 <AlertTitle className="font-bold text-xs">
                   {syncReport.errors.length === 0 ? 'Thành công!' : 'Có lỗi phát sinh'}
                 </AlertTitle>
-                <AlertDescription className="mt-1 text-xs space-y-1">
-                  <div>Đã đồng bộ {syncReport.totalSynced} thẻ lên Flama.</div>
+                <AlertDescription className="mt-1 text-xs space-y-2">
+                  <div>Đã đồng bộ {syncReport.totalSynced} thẻ từ vựng lên Flama.</div>
+
+                  {syncReport.totalMediaDetected !== undefined && syncReport.totalMediaDetected > 0 && (
+                    <div className="pt-1.5 flex flex-col items-start gap-2 border-t border-emerald-500/20">
+                      <span className="text-muted-foreground text-[11px]">
+                        Phát hiện {syncReport.totalMediaDetected} file Ảnh &amp; Âm thanh.
+                      </span>
+                      <Button
+                        size="xs"
+                        variant="secondary"
+                        disabled={isSyncingMedia}
+                        onClick={handleSyncMediaOnly}
+                        className="w-full h-8 text-xs font-bold bg-amber-500 text-slate-950 hover:bg-amber-400 rounded-lg shadow-xs"
+                      >
+                        {isSyncingMedia ? <Loader2 className="size-3.5 animate-spin mr-1.5" /> : <Zap className="size-3.5 mr-1.5" />}
+                        {syncReport.mediaSyncedCount !== undefined
+                          ? `Đã nạp ${syncReport.mediaSyncedCount}/${syncReport.totalMediaDetected} file Media`
+                          : `Đồng bộ tiếp ${syncReport.totalMediaDetected} file Media`}
+                      </Button>
+                    </div>
+                  )}
+
                   {syncReport.errors.map((err, idx) => (
                     <div key={idx} className="text-destructive font-mono text-[11px]">• {err}</div>
                   ))}

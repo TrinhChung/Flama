@@ -24,6 +24,7 @@ from models.deck_install import DeckInstall
 from models.field_def import FieldDef
 from models.note import Note
 from models.note_type import NoteType
+from models.note_type_install import NoteTypeInstall
 from models.template import Template
 from models.user import User
 
@@ -97,41 +98,106 @@ def deck_names(user_id: int) -> list[str]:
     return sorted({_deck_path(deck) for deck in _owned_decks(user_id)}, key=str.casefold)
 
 
-def _resolve_deck(user_id: int, deck_name: object, *, lock: bool = False) -> Deck:
+def _resolve_deck(user_id: int, deck_name: object, *, lock: bool = False, allow_create: bool = False) -> Deck:
     if not isinstance(deck_name, str) or not deck_name.strip() or len(deck_name) > 2048:
         raise ConnectError("Thiếu deckName. Vui lòng chọn deck đích trong Yomitan.")
     target = deck_name.strip()
-    matches = [deck for deck in _owned_decks(user_id) if _deck_path(deck) == target]
-    if len(matches) != 1:
-        raise ConnectError("Không tìm thấy deck đích hoặc bạn không có quyền ghi vào deck này.")
+
+    # 1. Search by exact full path match (e.g. "Japanese::N3")
+    owned = _owned_decks(user_id)
+    matches = [deck for deck in owned if _deck_path(deck) == target]
+    if len(matches) >= 1:
+        target_deck = matches[0]
+    else:
+        # 2. Case-insensitive path match or single name match
+        lower_target = target.lower()
+        matches = [deck for deck in owned if _deck_path(deck).lower() == lower_target or deck.name.lower() == lower_target]
+        if len(matches) >= 1:
+            target_deck = matches[0]
+        elif allow_create:
+            tokens = [t.strip() for t in target.split("::") if t.strip()]
+            if not tokens:
+                raise ConnectError("Không tìm thấy deck đích hoặc bạn không có quyền ghi vào deck này.")
+            current_parent_id = None
+            final_deck = None
+            for token in tokens:
+                existing = Deck.query.filter(
+                    Deck.owner_user_id == user_id,
+                    Deck.parent_id == current_parent_id if current_parent_id is not None else Deck.parent_id.is_(None),
+                    Deck.name == token,
+                    Deck.deleted_at.is_(None),
+                ).first()
+                if existing:
+                    final_deck = existing
+                    current_parent_id = existing.id
+                else:
+                    max_pos = db.session.query(db.func.max(Deck.position)).filter(
+                        Deck.parent_id == current_parent_id if current_parent_id is not None else Deck.parent_id.is_(None)
+                    ).scalar()
+                    pos = int(max_pos or 0) + 1
+                    node = Deck(
+                        owner_user_id=user_id,
+                        parent_id=current_parent_id,
+                        name=token,
+                        position=pos,
+                    )
+                    db.session.add(node)
+                    db.session.flush()
+                    final_deck = node
+                    current_parent_id = node.id
+            db.session.commit()
+            target_deck = final_deck
+        else:
+            raise ConnectError("Không tìm thấy deck đích hoặc bạn không có quyền ghi vào deck này.")
+
     if not lock:
-        return matches[0]
+        return target_deck
+
     deck = (
-        Deck.query.filter(Deck.id == matches[0].id, Deck.owner_user_id == user_id, Deck.deleted_at.is_(None))
+        Deck.query.filter(Deck.id == target_deck.id, Deck.owner_user_id == user_id, Deck.deleted_at.is_(None))
         .with_for_update()
         .first()
     )
     if deck is None:
-        raise ConnectError("Deck đích không còn tồn tại hoặc bạn không có quyền ghi vào deck này.")
+        return target_deck
     return deck
 
 
-def model_names(user_id: int) -> list[str]:
-    return [
-        row.name
-        for row in NoteType.query.filter_by(user_id=user_id)
+def _accessible_note_types(user_id: int) -> list[NoteType]:
+    installed_ids = [
+        r[0]
+        for r in db.session.query(NoteTypeInstall.installed_note_type_id)
+        .filter_by(user_id=user_id)
+        .all()
+        if r[0]
+    ]
+    return (
+        NoteType.query.filter(
+            (NoteType.user_id == user_id)
+            | (NoteType.id.in_(installed_ids))
+        )
         .order_by(NoteType.name.asc(), NoteType.id.asc())
         .all()
-    ]
+    )
+
+
+def model_names(user_id: int) -> list[str]:
+    return [row.name for row in _accessible_note_types(user_id)]
 
 
 def _resolve_note_type(user_id: int, model_name: object) -> NoteType:
     if not isinstance(model_name, str) or not model_name.strip() or len(model_name) > 255:
         raise ConnectError("modelName is required")
-    rows = NoteType.query.filter_by(user_id=user_id, name=model_name.strip()).all()
-    if len(rows) != 1:
+    target = model_name.strip()
+    note_types = _accessible_note_types(user_id)
+    matches = [nt for nt in note_types if nt.name == target or nt.id == target]
+    if not matches:
+        matches = [nt for nt in note_types if nt.name.lower() == target.lower()]
+    if not matches:
+        matches = NoteType.query.filter((NoteType.id == target) | (db.func.lower(NoteType.name) == target.lower())).all()
+    if not matches:
         raise ConnectError("model was not found or is ambiguous")
-    return rows[0]
+    return matches[0]
 
 
 def _identity_field(note_type: NoteType) -> FieldDef:
@@ -327,9 +393,30 @@ def check_note(user_id: int, raw_note: object) -> tuple[bool, str | None]:
         return False, str(exc)
 
 
+def _find_existing_note(user_id: int, prepared: PreparedNote) -> Note | None:
+    local_notes = Note.query.filter_by(user_id=user_id, deck_id=prepared.deck.id).all()
+    for note in local_notes:
+        if _normalized_identity((note.field_values or {}).get(prepared.identity_field.name)) == prepared.identity_value:
+            return note
+    return None
+
+
 def add_note(user_id: int, raw_note: object) -> int:
     prepared = _parse_note(user_id, raw_note, lock_deck=True)
     if not prepared.allow_duplicate and _is_duplicate(user_id, prepared):
+        existing_note = _find_existing_note(user_id, prepared)
+        if existing_note:
+            # Update fields if new content is present
+            updated = False
+            field_vals = dict(existing_note.field_values or {})
+            for k, v in prepared.fields.items():
+                if v and field_vals.get(k) != v:
+                    field_vals[k] = v
+                    updated = True
+            if updated:
+                existing_note.field_values = field_vals
+                db.session.commit()
+            return existing_note.id
         raise ConnectError("cannot create note because it is a duplicate in the target deck")
     if prepared.deck.note_type_id is None:
         prepared.deck.note_type_id = prepared.note_type.id
@@ -346,6 +433,17 @@ def add_note(user_id: int, raw_note: object) -> int:
         db.session.add(note)
         db.session.flush()
         templates = Template.query.filter_by(note_type_id=prepared.note_type.id).order_by(Template.position.asc()).all()
+        if not templates:
+            tmpl = Template(
+                note_type_id=prepared.note_type.id,
+                name="Card 1",
+                position=0,
+                front_format="{{Front}}",
+                back_format="{{Back}}",
+            )
+            db.session.add(tmpl)
+            db.session.flush()
+            templates = [tmpl]
         for template in templates:
             db.session.add(Card(note_id=note.id, template_id=template.id))
 
@@ -474,12 +572,20 @@ def get_user_info(user_id: int) -> dict[str, Any]:
 
 def create_import_session(user_id: int, params: dict[str, Any]) -> dict[str, Any]:
     session_id = f"import_session_{uuid.uuid4().hex}"
+    selected_decks = params.get("selectedDecks", [])
+    if isinstance(selected_decks, list):
+        for deck_name in selected_decks:
+            if isinstance(deck_name, str) and deck_name.strip():
+                try:
+                    _resolve_deck(user_id, deck_name.strip(), allow_create=True)
+                except Exception:
+                    pass
     return {
         "importSessionId": session_id,
         "flamaUserId": user_id,
         "source": params.get("source", "Anki"),
         "startedAt": datetime.utcnow().isoformat() + "Z",
-        "selectedDecks": params.get("selectedDecks", []),
+        "selectedDecks": selected_decks,
         "totalNotes": params.get("totalNotes", 0),
         "totalMedia": params.get("totalMedia", 0),
         "appVersion": params.get("appVersion", "1.0.0"),

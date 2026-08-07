@@ -178,6 +178,12 @@ export function BrowsePage() {
   const queryClient = useQueryClient()
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null)
 
+  const bootstrapQuery = useQuery({
+    queryKey: ['bootstrap'],
+    queryFn: () => appApi.getBootstrap(),
+  })
+  const isAdmin = Boolean(bootstrapQuery.data?.user?.is_admin)
+
   // Left Pane: Deck Selection & Search
   const [selectedDeckId, setSelectedDeckId] = useState<number | null>(
     urlDeckId ? Number(urlDeckId) : null,
@@ -736,12 +742,14 @@ export function BrowsePage() {
               </DropdownMenuSub>
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button variant="outline" size="sm" asChild className="h-7 sm:h-8 rounded-full text-[11px] sm:text-xs px-2 sm:px-3">
-            <a href="/flashcards/import">
-              <FileUp className="size-3.5 sm:mr-1.5" />
-              <span className="hidden sm:inline">Nhập CSV</span>
-            </a>
-          </Button>
+          {isAdmin ? (
+            <Button variant="outline" size="sm" asChild className="h-7 sm:h-8 rounded-full text-[11px] sm:text-xs px-2 sm:px-3">
+              <a href="/flashcards/import">
+                <FileUp className="size-3.5 sm:mr-1.5" />
+                <span className="hidden sm:inline">Nhập CSV</span>
+              </a>
+            </Button>
+          ) : null}
           <Button
             size="sm"
             asChild

@@ -65,8 +65,18 @@ def build_import_options(
     if selected_deck_id is None and deck_options:
         selected_deck_id = int(deck_options[0]["id"])
 
+    installed_ids = [
+        r[0]
+        for r in db.session.query(NoteTypeInstall.installed_note_type_id)
+        .filter_by(user_id=user_id)
+        .all()
+        if r[0]
+    ]
     note_types = (
-        NoteType.query.filter_by(user_id=user_id)
+        NoteType.query.filter(
+            (NoteType.user_id == user_id)
+            | (NoteType.id.in_(installed_ids))
+        )
         .order_by(NoteType.name.asc(), NoteType.updated_at.desc())
         .all()
     )
@@ -89,7 +99,9 @@ def build_import_options(
         selected_note_type_id = note_type_options[0]["id"]
     return {
         "deck_options": deck_options,
+        "decks": deck_options,
         "note_type_options": note_type_options,
+        "note_types": note_type_options,
         "initial_deck_id": selected_deck_id,
         "initial_note_type_id": selected_note_type_id,
         "uniqueness_defaults": {

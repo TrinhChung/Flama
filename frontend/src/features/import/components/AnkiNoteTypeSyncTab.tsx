@@ -1,13 +1,10 @@
-import React, { useState, useEffect, useId, useMemo } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import {
-  RefreshCw,
   NotebookTabs,
   CheckCircle2,
   AlertTriangle,
   Loader2,
   Zap,
-  Wifi,
-  WifiOff,
   Search,
   Code2,
   Copy,
@@ -57,6 +54,9 @@ interface AnkiModelDetail {
 
 interface AnkiNoteTypeSyncTabProps {
   noteTypeOptions: FlamaNoteTypeOption[]
+  endpoint: string
+  connectionStatus: AnkiConnectStatus
+  ankiVersion: number | null
 }
 
 function inferFieldType(fieldName: string): 'text' | 'image' | 'audio' | 'richtext' {
@@ -80,16 +80,12 @@ type PreviewResponse = {
   back_renderer_payload?: unknown
 }
 
-
-export const AnkiNoteTypeSyncTab: React.FC<AnkiNoteTypeSyncTabProps> = ({ noteTypeOptions }) => {
+export const AnkiNoteTypeSyncTab: React.FC<AnkiNoteTypeSyncTabProps> = ({
+  noteTypeOptions,
+  endpoint,
+  connectionStatus,
+}) => {
   const queryClient = useQueryClient()
-
-  // Connection state
-  const [endpoint, setEndpoint] = useState('http://127.0.0.1:8765')
-  const [connectionStatus, setConnectionStatus] = useState<AnkiConnectStatus>('Anki is not running')
-  const [ankiVersion, setAnkiVersion] = useState<number | null>(null)
-  const [connectionError, setConnectionError] = useState<string | null>(null)
-  const [isCheckingConn, setIsCheckingConn] = useState(false)
 
   // Models State
   const [ankiModels, setAnkiModels] = useState<AnkiModelDetail[]>([])
@@ -110,57 +106,43 @@ export const AnkiNoteTypeSyncTab: React.FC<AnkiNoteTypeSyncTabProps> = ({ noteTy
   const [previewError, setPreviewError] = useState<string | null>(null)
   const [isPreviewLoading, setIsPreviewLoading] = useState(false)
 
-
   // Execution state
   const [isSyncing, setIsSyncing] = useState(false)
   const [showSyncModal, setShowSyncModal] = useState(false)
   const [syncLog, setSyncLog] = useState<string[]>([])
   const [syncReport, setSyncReport] = useState<{ successCount: number; errors: string[] } | null>(null)
 
-  const endpointInputId = useId()
-
-  const checkAnkiConnection = async () => {
-    setIsCheckingConn(true)
-    setConnectionError(null)
-    const result = await ankiConnectClient.checkConnection(endpoint)
-    setConnectionStatus(result.status)
-    if (result.version) setAnkiVersion(result.version)
-    if (result.error) setConnectionError(result.error)
-
-    if (result.status === 'Connected') {
-      await loadAnkiModels()
-    }
-    setIsCheckingConn(false)
-  }
-
   const loadAnkiModels = async () => {
     setIsLoadingModels(true)
     try {
       const modelNames = await ankiConnectClient.getModelNames(endpoint)
-      const details: AnkiModelDetail[] = []
       const initialActions: Record<string, string> = {}
       const initialCustomNames: Record<string, string> = {}
 
-      for (const name of modelNames) {
-        const fields = await ankiConnectClient.getModelFieldNames(name, endpoint)
-        const styling = await ankiConnectClient.getModelStyling(name, endpoint)
-        const templates = await ankiConnectClient.getModelTemplates(name, endpoint)
+      const details: AnkiModelDetail[] = await Promise.all(
+        modelNames.map(async (name) => {
+          const [fields, styling, templates] = await Promise.all([
+            ankiConnectClient.getModelFieldNames(name, endpoint),
+            ankiConnectClient.getModelStyling(name, endpoint),
+            ankiConnectClient.getModelTemplates(name, endpoint),
+          ])
 
-        const matchedFlama = noteTypeOptions.find(
-          (nt) => nt.name.toLowerCase() === name.toLowerCase()
-        )
+          const matchedFlama = noteTypeOptions.find(
+            (nt) => nt.name.toLowerCase() === name.toLowerCase()
+          )
 
-        details.push({
-          name,
-          fields,
-          css: styling.css || '',
-          templates: templates || [{ name: 'Card 1', front: '{{Front}}', back: '{{FrontSide}}<hr>{{Back}}' }],
-          existingFlamaId: matchedFlama?.id,
+          initialActions[name] = matchedFlama ? matchedFlama.id : 'create_new'
+          initialCustomNames[name] = name
+
+          return {
+            name,
+            fields,
+            css: styling.css || '',
+            templates: templates || [{ name: 'Card 1', front: '{{Front}}', back: '{{FrontSide}}<hr>{{Back}}' }],
+            existingFlamaId: matchedFlama?.id,
+          }
         })
-
-        initialActions[name] = matchedFlama ? matchedFlama.id : 'create_new'
-        initialCustomNames[name] = name
-      }
+      )
 
       setAnkiModels(details)
       setTargetActions(initialActions)
@@ -171,14 +153,16 @@ export const AnkiNoteTypeSyncTab: React.FC<AnkiNoteTypeSyncTabProps> = ({ noteTy
       }
       setSelectedModelNames([])
     } catch (err: any) {
-      setConnectionError(err.message || 'Không thể tải danh sách NoteType từ Anki.')
+      console.warn('Lỗi tải danh sách NoteType:', err)
     }
     setIsLoadingModels(false)
   }
 
   useEffect(() => {
-    checkAnkiConnection()
-  }, [])
+    if (connectionStatus === 'Connected') {
+      loadAnkiModels()
+    }
+  }, [connectionStatus, endpoint])
 
   const activeModelDetail = useMemo(
     () => ankiModels.find((m) => m.name === activeModelName) || null,
@@ -231,7 +215,6 @@ export const AnkiNoteTypeSyncTab: React.FC<AnkiNoteTypeSyncTabProps> = ({ noteTy
       clearTimeout(timer)
     }
   }, [activeModelDetail, activeTemplate, selectedTemplateIndex])
-
 
   const handleCopyCode = (text: string, tabName: string) => {
     void navigator.clipboard.writeText(text)
@@ -403,71 +386,21 @@ export const AnkiNoteTypeSyncTab: React.FC<AnkiNoteTypeSyncTabProps> = ({ noteTy
   )
 
   return (
-    <div className="space-y-6">
-      {/* 1. Connection Header */}
-      <Card className="border-border/80 shadow-sm rounded-2xl overflow-hidden bg-card/60">
-        <CardContent className="p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div
-              className={`size-10 rounded-xl flex items-center justify-center shrink-0 ${
-                connectionStatus === 'Connected'
-                  ? 'bg-emerald-500/15 text-emerald-600'
-                  : 'bg-destructive/15 text-destructive'
-              }`}
-            >
-              {connectionStatus === 'Connected' ? <Wifi className="size-5" /> : <WifiOff className="size-5" />}
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-bold text-foreground">AnkiConnect Endpoint</span>
-                {connectionStatus === 'Connected' ? (
-                  <Badge className="bg-emerald-500/15 text-emerald-600 border-emerald-500/30 text-[11px]">
-                    Connected (v{ankiVersion})
-                  </Badge>
-                ) : (
-                  <Badge variant="destructive" className="text-[11px]">
-                    {connectionStatus}
-                  </Badge>
-                )}
-              </div>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {connectionError || 'Danh sách NoteTypes từ Anki và Live View + Mã nguồn HTML/CSS phía dưới.'}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 w-full md:w-auto">
-            <div className="w-48">
-              <Input
-                id={endpointInputId}
-                value={endpoint}
-                onChange={(e) => setEndpoint(e.target.value)}
-                placeholder="http://127.0.0.1:8765"
-                className="h-8 text-xs font-mono"
-              />
-            </div>
-            <Button size="sm" variant="outline" onClick={checkAnkiConnection} disabled={isCheckingConn}>
-              {isCheckingConn ? <Loader2 className="size-3.5 animate-spin mr-1" /> : <RefreshCw className="size-3.5 mr-1" />}
-              Tải lại
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* 2. Top Frame: Anki NoteTypes List & Renaming Table (Full Width) */}
-      <Card className="border-border/80 shadow-sm rounded-2xl overflow-hidden">
-        <CardHeader className="pb-3 border-b bg-card/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+    <div className="space-y-4 sm:space-y-6">
+      {/* 1. Anki NoteTypes List & Renaming Table */}
+      <Card className="border-border/80 shadow-xs rounded-2xl overflow-hidden">
+        <CardHeader className="p-4 sm:p-5 pb-3 border-b bg-card/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div>
             <CardTitle className="text-sm font-semibold flex items-center gap-2">
-              <NotebookTabs className="size-4 text-primary" /> Danh sách NoteTypes Anki ({ankiModels.length})
+              <NotebookTabs className="size-4 text-primary shrink-0" /> Danh sách NoteTypes Anki ({ankiModels.length})
             </CardTitle>
             <CardDescription className="text-xs">
               Đổi tên NoteType hiển thị trên Flama và xem Live Preview + Mã nguồn ở khung phía dưới.
             </CardDescription>
           </div>
 
-          <div className="flex items-center gap-3 w-full sm:w-auto">
-            <div className="relative w-48">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full sm:w-auto">
+            <div className="relative w-full sm:w-44">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
               <Input
                 value={modelSearch}
@@ -481,30 +414,30 @@ export const AnkiNoteTypeSyncTab: React.FC<AnkiNoteTypeSyncTabProps> = ({ noteTy
               size="sm"
               disabled={isSyncing || selectedModelNames.length === 0 || connectionStatus !== 'Connected'}
               onClick={() => handleSyncSelectedModels(selectedModelNames)}
-              className="font-semibold shadow-sm shrink-0"
+              className="font-semibold text-xs shadow-sm shrink-0 h-8"
             >
-              {isSyncing ? <Loader2 className="size-4 animate-spin mr-2" /> : <Zap className="size-4 mr-2" />}
+              {isSyncing ? <Loader2 className="size-3.5 animate-spin mr-1.5" /> : <Zap className="size-3.5 mr-1.5" />}
               Đồng bộ {selectedModelNames.length} NoteType chọn
             </Button>
           </div>
         </CardHeader>
-        <CardContent className="pt-4 space-y-3">
+        <CardContent className="p-3 sm:p-5 pt-3 space-y-3">
           {isLoadingModels ? (
             <div className="text-center text-xs text-muted-foreground py-8 flex items-center justify-center gap-2">
               <Loader2 className="size-4 animate-spin text-primary" /> Đang tải NoteTypes từ Anki...
             </div>
           ) : filteredModels.length === 0 ? (
             <div className="text-center text-xs text-muted-foreground py-8">
-              {connectionStatus === 'Connected' ? 'Không tìm thấy NoteType phù hợp.' : 'Chưa kết nối AnkiConnect.'}
+              {connectionStatus === 'Connected' ? 'Không tìm thấy NoteType phù hợp.' : 'Chưa kết nối AnkiConnect local.'}
             </div>
           ) : (
-            <div className="border rounded-xl overflow-hidden max-h-64 overflow-y-auto">
-              <Table>
+            <div className="border rounded-xl overflow-x-auto max-h-64 overflow-y-auto">
+              <Table className="min-w-[650px]">
                 <TableHeader>
                   <TableRow className="bg-muted/30">
                     <TableHead className="w-10">
                       <Checkbox
-                        checked={selectedModelNames.length === ankiModels.length}
+                        checked={selectedModelNames.length === ankiModels.length && ankiModels.length > 0}
                         onCheckedChange={(chk) => {
                           if (chk) {
                             setSelectedModelNames(ankiModels.map((m) => m.name))
@@ -517,7 +450,7 @@ export const AnkiNoteTypeSyncTab: React.FC<AnkiNoteTypeSyncTabProps> = ({ noteTy
                     <TableHead className="text-xs font-semibold">Tên Anki gốc</TableHead>
                     <TableHead className="text-xs font-semibold">Tên NoteType trên Flama (Rename)</TableHead>
                     <TableHead className="text-xs font-semibold">Cấu trúc</TableHead>
-                    <TableHead className="text-xs font-semibold">Trạng thái Flama</TableHead>
+                    <TableHead className="text-xs font-semibold">Trạng thái</TableHead>
                     <TableHead className="text-xs font-semibold">Hành động đồng bộ</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -556,7 +489,7 @@ export const AnkiNoteTypeSyncTab: React.FC<AnkiNoteTypeSyncTabProps> = ({ noteTy
                           {model.name}
                         </TableCell>
                         <TableCell onClick={(e) => e.stopPropagation()}>
-                          <div className="w-56">
+                          <div className="w-48 sm:w-56">
                             <Input
                               value={customNames[model.name] ?? model.name}
                               onChange={(e) =>
@@ -567,22 +500,22 @@ export const AnkiNoteTypeSyncTab: React.FC<AnkiNoteTypeSyncTabProps> = ({ noteTy
                             />
                           </div>
                         </TableCell>
-                        <TableCell className="text-xs text-muted-foreground">
+                        <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
                           {model.fields.length} trường • {model.templates.length} card
                         </TableCell>
                         <TableCell>
                           {model.existingFlamaId ? (
-                            <Badge className="bg-emerald-500/15 text-emerald-600 border-emerald-500/30 text-[10px]">
+                            <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-[10px]">
                               Đã có
                             </Badge>
                           ) : (
-                            <Badge variant="outline" className="text-amber-600 border-amber-500/30 text-[10px]">
+                            <Badge variant="outline" className="text-amber-600 dark:text-amber-400 border-amber-500/30 text-[10px]">
                               Mới
                             </Badge>
                           )}
                         </TableCell>
                         <TableCell onClick={(e) => e.stopPropagation()}>
-                          <div className="w-48">
+                          <div className="w-44 sm:w-48">
                             <NativeSelect
                               value={action}
                               onChange={(e) =>
@@ -590,7 +523,7 @@ export const AnkiNoteTypeSyncTab: React.FC<AnkiNoteTypeSyncTabProps> = ({ noteTy
                               }
                               className="h-7 text-xs"
                             >
-                              <option value="create_new">+ Tạo mới NoteType tên "{customNames[model.name] || model.name}"</option>
+                              <option value="create_new">+ Tạo mới NoteType</option>
                               <option value="ignore">-- Bỏ qua --</option>
                               {noteTypeOptions.map((opt) => (
                                 <option key={opt.id} value={opt.id}>
@@ -610,17 +543,17 @@ export const AnkiNoteTypeSyncTab: React.FC<AnkiNoteTypeSyncTabProps> = ({ noteTy
         </CardContent>
       </Card>
 
-      {/* 3. Bottom Frame: Full Width Read-only Code Display & Live Preview CardDisplay matching NoteTypeDetailPage */}
+      {/* 2. Live Preview & Code Display Frame */}
       {activeModelDetail ? (
-        <Card className="border-border/80 shadow-sm rounded-2xl overflow-hidden">
-          <CardHeader className="pb-3 border-b bg-card/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <Card className="border-border/80 shadow-xs rounded-2xl overflow-hidden">
+          <CardHeader className="p-4 sm:p-5 pb-3 border-b bg-card/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <CardTitle className="text-base font-bold text-foreground">
-                  Bản Xem Trực Tiếp &amp; Mã Nguồn (Live View &amp; Code Viewer)
+              <div className="flex items-center gap-2 flex-wrap">
+                <CardTitle className="text-sm sm:text-base font-bold text-foreground">
+                  Xem Trực Tiếp &amp; Mã Nguồn (Live View &amp; Code Viewer)
                 </CardTitle>
                 <Badge variant="outline" className="text-[10px] font-mono">
-                  Gốc từ Anki: "{activeModelDetail.name}"
+                  "{activeModelDetail.name}"
                 </Badge>
               </div>
               <CardDescription className="text-xs">
@@ -632,17 +565,16 @@ export const AnkiNoteTypeSyncTab: React.FC<AnkiNoteTypeSyncTabProps> = ({ noteTy
               size="sm"
               disabled={isSyncing || connectionStatus !== 'Connected'}
               onClick={() => handleSyncSelectedModels([activeModelDetail.name])}
-              className="font-semibold text-xs shrink-0 shadow-sm"
+              className="font-semibold text-xs shrink-0 shadow-sm h-8"
             >
               {isSyncing ? <Loader2 className="size-3.5 animate-spin mr-1.5" /> : <Zap className="size-3.5 mr-1.5" />}
               Đồng bộ NoteType "{customNames[activeModelDetail.name] || activeModelDetail.name}"
             </Button>
           </CardHeader>
 
-          <CardContent className="pt-4 space-y-4">
-            {/* 2-Column Grid: Left = Live Preview CardDisplay Frame, Right = Read-only Code Display */}
+          <CardContent className="p-3 sm:p-5 pt-4 space-y-4">
             <div className="grid gap-4 lg:grid-cols-12 items-stretch">
-              {/* Left Column: Live Card Previewer (Reusing NoteTypeLivePreview) */}
+              {/* Left Column: Live Card Previewer */}
               <div className="lg:col-span-6 flex flex-col">
                 <NoteTypeLivePreview
                   cardId={`anki-live-preview-${activeModelDetail.name}`}
@@ -669,20 +601,20 @@ export const AnkiNoteTypeSyncTab: React.FC<AnkiNoteTypeSyncTabProps> = ({ noteTy
                   isLoading={isPreviewLoading}
                   error={previewError}
                   title="Live Card Preview"
-                  subtitle="(Hiển thị mẫu thẻ với dữ liệu xem trước từ Flama)"
+                  subtitle="(Hiển thị mẫu thẻ với dữ liệu xem trước)"
                 />
               </div>
 
-              {/* Right Column: Read-only Code Display (Front Code / Back Code / CSS / Fields) */}
+              {/* Right Column: Read-only Code Display */}
               <div className="lg:col-span-6 flex flex-col">
-                <Card className="p-4 sm:p-5 border border-border/80 shadow-xs flex-1 flex flex-col rounded-2xl">
+                <Card className="p-3.5 sm:p-5 border border-border/80 shadow-xs flex-1 flex flex-col rounded-2xl">
                   <div className="flex items-center justify-between mb-3 min-h-[32px]">
                     <div className="flex items-center gap-2">
-                      <div className="p-2 rounded-xl bg-amber-500/10 text-amber-600">
+                      <div className="p-1.5 sm:p-2 rounded-xl bg-amber-500/10 text-amber-600">
                         <Code2 className="size-4" />
                       </div>
                       <div>
-                        <h4 className="text-sm font-bold text-foreground">Mã Nguồn Template &amp; CSS</h4>
+                        <h4 className="text-xs sm:text-sm font-bold text-foreground">Mã Nguồn Template &amp; CSS</h4>
                         <span className="text-[10px] text-muted-foreground block">(Đọc từ AnkiConnect)</span>
                       </div>
                     </div>
@@ -694,33 +626,33 @@ export const AnkiNoteTypeSyncTab: React.FC<AnkiNoteTypeSyncTabProps> = ({ noteTy
                     className="flex-1 flex flex-col"
                   >
                     <TabsList className="grid grid-cols-4 w-full h-8 p-1 mb-2 rounded-lg">
-                      <TabsTrigger value="front" className="text-xs font-semibold py-1 rounded-md">
-                        Front HTML
+                      <TabsTrigger value="front" className="text-[11px] sm:text-xs font-semibold py-1 rounded-md">
+                        Front
                       </TabsTrigger>
-                      <TabsTrigger value="back" className="text-xs font-semibold py-1 rounded-md">
-                        Back HTML
+                      <TabsTrigger value="back" className="text-[11px] sm:text-xs font-semibold py-1 rounded-md">
+                        Back
                       </TabsTrigger>
-                      <TabsTrigger value="css" className="text-xs font-semibold py-1 rounded-md">
-                        Shared CSS
+                      <TabsTrigger value="css" className="text-[11px] sm:text-xs font-semibold py-1 rounded-md">
+                        CSS
                       </TabsTrigger>
-                      <TabsTrigger value="fields" className="text-xs font-semibold py-1 rounded-md">
+                      <TabsTrigger value="fields" className="text-[11px] sm:text-xs font-semibold py-1 rounded-md">
                         Trường ({activeModelDetail.fields.length})
                       </TabsTrigger>
                     </TabsList>
 
                     {/* Code Container: Front HTML */}
                     <TabsContent value="front" className="flex-1 mt-0 relative">
-                      <div className="relative border rounded-xl overflow-hidden bg-slate-950 text-slate-100 p-3 h-[clamp(14rem,35vh,25rem)] min-h-[14rem]">
+                      <div className="relative border rounded-xl overflow-hidden bg-slate-950 text-slate-100 p-3 max-h-64 sm:max-h-96 min-h-[12rem]">
                         <Button
                           size="xs"
                           variant="ghost"
                           onClick={() => handleCopyCode(activeTemplate?.front || '', 'front')}
-                          className="absolute right-2 top-2 h-7 px-2 text-[11px] font-semibold text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-800"
+                          className="absolute right-2 top-2 h-6 px-2 text-[10px] font-semibold text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-800"
                         >
                           {copiedTab === 'front' ? <Check className="size-3 mr-1 text-emerald-400" /> : <Copy className="size-3 mr-1" />}
                           {copiedTab === 'front' ? 'Đã chép' : 'Sao chép'}
                         </Button>
-                        <pre className="font-mono text-xs whitespace-pre-wrap overflow-auto h-full pr-12">
+                        <pre className="font-mono text-[11px] sm:text-xs whitespace-pre-wrap overflow-auto max-h-56 sm:max-h-80 pr-12">
                           {activeTemplate?.front || '/* Không có mã Front HTML */'}
                         </pre>
                       </div>
@@ -728,17 +660,17 @@ export const AnkiNoteTypeSyncTab: React.FC<AnkiNoteTypeSyncTabProps> = ({ noteTy
 
                     {/* Code Container: Back HTML */}
                     <TabsContent value="back" className="flex-1 mt-0 relative">
-                      <div className="relative border rounded-xl overflow-hidden bg-slate-950 text-slate-100 p-3 h-[clamp(14rem,35vh,25rem)] min-h-[14rem]">
+                      <div className="relative border rounded-xl overflow-hidden bg-slate-950 text-slate-100 p-3 max-h-64 sm:max-h-96 min-h-[12rem]">
                         <Button
                           size="xs"
                           variant="ghost"
                           onClick={() => handleCopyCode(activeTemplate?.back || '', 'back')}
-                          className="absolute right-2 top-2 h-7 px-2 text-[11px] font-semibold text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-800"
+                          className="absolute right-2 top-2 h-6 px-2 text-[10px] font-semibold text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-800"
                         >
                           {copiedTab === 'back' ? <Check className="size-3 mr-1 text-emerald-400" /> : <Copy className="size-3 mr-1" />}
                           {copiedTab === 'back' ? 'Đã chép' : 'Sao chép'}
                         </Button>
-                        <pre className="font-mono text-xs whitespace-pre-wrap overflow-auto h-full pr-12">
+                        <pre className="font-mono text-[11px] sm:text-xs whitespace-pre-wrap overflow-auto max-h-56 sm:max-h-80 pr-12">
                           {activeTemplate?.back || '/* Không có mã Back HTML */'}
                         </pre>
                       </div>
@@ -746,17 +678,17 @@ export const AnkiNoteTypeSyncTab: React.FC<AnkiNoteTypeSyncTabProps> = ({ noteTy
 
                     {/* Code Container: Shared CSS */}
                     <TabsContent value="css" className="flex-1 mt-0 relative">
-                      <div className="relative border rounded-xl overflow-hidden bg-slate-950 text-slate-100 p-3 h-[clamp(14rem,35vh,25rem)] min-h-[14rem]">
+                      <div className="relative border rounded-xl overflow-hidden bg-slate-950 text-slate-100 p-3 max-h-64 sm:max-h-96 min-h-[12rem]">
                         <Button
                           size="xs"
                           variant="ghost"
                           onClick={() => handleCopyCode(activeModelDetail.css || '', 'css')}
-                          className="absolute right-2 top-2 h-7 px-2 text-[11px] font-semibold text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-800"
+                          className="absolute right-2 top-2 h-6 px-2 text-[10px] font-semibold text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-800"
                         >
                           {copiedTab === 'css' ? <Check className="size-3 mr-1 text-emerald-400" /> : <Copy className="size-3 mr-1" />}
                           {copiedTab === 'css' ? 'Đã chép' : 'Sao chép'}
                         </Button>
-                        <pre className="font-mono text-xs whitespace-pre-wrap overflow-auto h-full pr-12">
+                        <pre className="font-mono text-[11px] sm:text-xs whitespace-pre-wrap overflow-auto max-h-56 sm:max-h-80 pr-12">
                           {activeModelDetail.css || '/* Không có quy tắc CSS tùy chỉnh */'}
                         </pre>
                       </div>
@@ -764,17 +696,17 @@ export const AnkiNoteTypeSyncTab: React.FC<AnkiNoteTypeSyncTabProps> = ({ noteTy
 
                     {/* Fields List Tab */}
                     <TabsContent value="fields" className="flex-1 mt-0">
-                      <div className="border rounded-xl overflow-hidden bg-card/40 min-h-[14rem] max-h-[25rem] overflow-y-auto">
-                        <div className="grid grid-cols-12 text-xs font-semibold p-2.5 bg-muted/40 border-b text-muted-foreground">
+                      <div className="border rounded-xl overflow-hidden bg-card/40 min-h-[12rem] max-h-64 sm:max-h-96 overflow-y-auto">
+                        <div className="grid grid-cols-12 text-xs font-semibold p-2 bg-muted/40 border-b text-muted-foreground">
                           <span className="col-span-1">#</span>
                           <span className="col-span-6">Tên trường Anki</span>
                           <span className="col-span-5 text-right">Kiểu suy luận</span>
                         </div>
-                        <div className="divide-y">
+                        <div className="divide-y divide-border/40">
                           {activeModelDetail.fields.map((f, idx) => (
                             <div key={f} className="grid grid-cols-12 items-center p-2 text-xs hover:bg-muted/30">
                               <span className="col-span-1 font-mono text-muted-foreground">{idx + 1}</span>
-                              <span className="col-span-6 font-bold text-foreground flex items-center gap-1.5">
+                              <span className="col-span-6 font-bold text-foreground flex items-center gap-1.5 truncate">
                                 {f}
                                 {idx === 0 && (
                                   <Badge variant="secondary" className="text-[9px] py-0 px-1 font-normal">
@@ -800,17 +732,17 @@ export const AnkiNoteTypeSyncTab: React.FC<AnkiNoteTypeSyncTabProps> = ({ noteTy
         </Card>
       ) : null}
 
-      {/* 4. Sync Log & Summary Report */}
+      {/* 3. Sync Log & Summary Report */}
       {syncLog.length > 0 && (
-        <Card className="border-border/80 shadow-sm rounded-2xl overflow-hidden">
-          <CardHeader className="pb-2 bg-card/50 border-b">
+        <Card className="border-border/80 shadow-xs rounded-2xl overflow-hidden">
+          <CardHeader className="pb-2 bg-card/40 border-b">
             <CardTitle className="text-xs font-semibold flex items-center gap-2">
               {isSyncing && <Loader2 className="size-3.5 animate-spin text-primary" />}
               Nhật ký đồng bộ NoteType
             </CardTitle>
           </CardHeader>
-          <CardContent className="pt-3 space-y-3">
-            <div className="font-mono text-[11px] bg-muted/40 p-3 rounded-xl max-h-48 overflow-y-auto space-y-1">
+          <CardContent className="p-3 sm:p-4 pt-3 space-y-3">
+            <div className="font-mono text-[11px] bg-muted/40 p-3 rounded-xl max-h-48 overflow-y-auto space-y-1 border">
               {syncLog.map((logLine, idx) => (
                 <div
                   key={idx}
@@ -868,8 +800,8 @@ export const AnkiNoteTypeSyncTab: React.FC<AnkiNoteTypeSyncTabProps> = ({ noteTy
       >
         <DialogContent className="sm:max-w-md border-border/80 shadow-2xl rounded-2xl p-6">
           <DialogHeader className="items-center text-center space-y-3">
-            <div className={`size-16 rounded-full flex items-center justify-center ${isSyncing ? 'bg-primary/10 text-primary animate-pulse' : 'bg-emerald-500/10 text-emerald-600'}`}>
-              {isSyncing ? <Loader2 className="size-8 animate-spin text-primary" /> : <CheckCircle2 className="size-8 text-emerald-500" />}
+            <div className={`size-14 rounded-full flex items-center justify-center ${isSyncing ? 'bg-primary/10 text-primary animate-pulse' : 'bg-emerald-500/10 text-emerald-600'}`}>
+              {isSyncing ? <Loader2 className="size-7 animate-spin text-primary" /> : <CheckCircle2 className="size-7 text-emerald-500" />}
             </div>
             <DialogTitle className="text-base font-bold text-foreground">
               {isSyncing ? 'Đang tiến hành đồng bộ NoteType...' : 'Hoàn tất đồng bộ!'}

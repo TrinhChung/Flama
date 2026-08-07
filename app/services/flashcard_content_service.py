@@ -56,10 +56,28 @@ class ContentApiError(ValueError):
         self.field = field
 
 
+from sqlalchemy.orm import selectinload
+
+
 def list_note_types(*, user_id: int) -> dict[str, Any]:
+    installed_ids = [
+        r[0]
+        for r in db.session.query(NoteTypeInstall.installed_note_type_id)
+        .filter_by(user_id=user_id)
+        .all()
+        if r[0]
+    ]
     rows = (
-        NoteType.query.filter_by(user_id=user_id)
-        .order_by(NoteType.updated_at.desc())
+        NoteType.query.filter(
+            (NoteType.user_id == user_id)
+            | (NoteType.id.in_(installed_ids))
+        )
+        .options(
+            selectinload(NoteType.field_defs),
+            selectinload(NoteType.templates),
+            selectinload(NoteType.owner),
+        )
+        .order_by(NoteType.name.asc(), NoteType.updated_at.desc())
         .all()
     )
     return {
@@ -631,21 +649,12 @@ def preview_raw_template(
         f_def = SimpleNamespace(id=f"f_{idx}", name=name, field_type=field_type, position=idx)
         field_defs.append(f_def)
 
-        lower = name.lower()
         if field_type == "image":
             sample_values[name] = PREVIEW_MEDIA_IMAGE_TOKEN
         elif field_type == "audio":
             sample_values[name] = PREVIEW_MEDIA_AUDIO_TOKEN
-        elif any(k in lower for k in ["expression", "word", "front", "kanji"]):
-            sample_values[name] = "日本語[にほんご]"
-        elif any(k in lower for k in ["meaning", "back", "definition"]):
-            sample_values[name] = "Tiếng Nhật / Nhất Bản Ngữ"
-        elif any(k in lower for k in ["reading", "kana"]):
-            sample_values[name] = "にほんご"
-        elif any(k in lower for k in ["example", "sentence"]):
-            sample_values[name] = "毎日日本語を勉強しています。[まいにちにほんごをべんきょうしています。]"
         else:
-            sample_values[name] = f"[{name} sample data]"
+            sample_values[name] = f"{{{{{name}}}}}"
 
     preview_template_obj = SimpleNamespace(
         id="raw_preview",
