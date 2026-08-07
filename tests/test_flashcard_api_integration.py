@@ -5,6 +5,7 @@ import re
 import unittest
 from datetime import datetime, timedelta
 from unittest.mock import patch
+from pathlib import Path
 
 from app import create_app
 from app.services import flashcards_share as share_ctrl
@@ -240,6 +241,23 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         self.assertIn("fc-preview-media-box", preview["front_html"])
         self.assertIn("[Image: Illustration]", preview["front_html"])
         self.assertEqual(preview["front_renderer_payload"]["html"], preview["front_html"])
+
+    def test_preview_raw_template_endpoint(self):
+        with self.client.session_transaction() as sess:
+            sess["_user_id"] = str(self.user_id)
+        res = self.client.post(
+            "/api/note-types/preview",
+            json={
+                "front_html": "{{Front}}",
+                "back_html": "{{Front}}<hr>{{Back}}",
+                "shared_css": "card { color: red; }",
+                "fields": ["Front", "Back"],
+            },
+        )
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertIn("front_html", data)
+        self.assertIn("back_html", data)
 
     def test_shared_deck_preview_uses_first_note_from_source_deck(self):
         note_type = self._create_note_type()

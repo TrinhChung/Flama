@@ -6,7 +6,6 @@ import {
   CheckCircle,
   Copy,
   Download,
-  Eye,
   Heart,
   Layers,
   Loader2,
@@ -25,13 +24,11 @@ import { Button } from '@/components/ui/button'
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { Textarea } from '@/components/ui/textarea'
-import { CardDisplay } from '@/features/study/components/CardDisplay'
+import { NoteTypeLivePreview } from '@/features/note-types/components/NoteTypeLivePreview'
 import { Page, PageHeader } from '@/shared/components/Page'
 import { EmptyState, PageError, PageLoading } from '@/shared/components/PageState'
 
@@ -340,86 +337,25 @@ export function SharedNoteTypeDetailPage() {
             </CardContent>
           </Card>
 
-          {/* Live Preview Section */}
-          <Card className="border-border shadow-xs overflow-hidden rounded-2xl">
-            <CardHeader className="p-4 sm:p-5 pb-3 border-b bg-muted/20">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="p-2.5 rounded-xl bg-primary/10 text-primary">
-                    <Eye className="size-5" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-lg font-bold">Xem trước Template (Live Previewer)</CardTitle>
-                    <CardDescription className="text-xs">
-                      Mô phỏng hiển thị mặt trước và mặt sau dựa trên mẫu loại thẻ
-                    </CardDescription>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2">
-                  {templates.length > 1 ? (
-                    <NativeSelect
-                      value={selectedTemplateId}
-                      onChange={(e) => setSelectedTemplateId(e.target.value)}
-                      className="h-8 sm:h-9 text-xs font-medium w-36 rounded-lg"
-                    >
-                      {templates.map((t) => (
-                        <NativeSelectOption key={t.id} value={t.id}>
-                          {t.name}
-                        </NativeSelectOption>
-                      ))}
-                    </NativeSelect>
-                  ) : null}
-
-                  <div className="inline-flex rounded-lg border bg-card p-0.5 shadow-2xs">
-                    <Button
-                      size="sm"
-                      variant={previewSide === 'front' ? 'default' : 'ghost'}
-                      className="h-8 px-3.5 text-xs font-bold rounded-md transition-all"
-                      onClick={() => setPreviewSide('front')}
-                    >
-                      Mặt trước
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant={previewSide === 'back' ? 'default' : 'ghost'}
-                      className="h-8 px-3.5 text-xs font-bold rounded-md transition-all"
-                      onClick={() => setPreviewSide('back')}
-                    >
-                      Mặt sau
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </CardHeader>
-
-            <CardContent className="p-4 sm:p-5 bg-muted/30">
-              <div className="h-[clamp(20rem,50vh,32rem)] min-h-[250px] w-full overflow-hidden rounded-2xl border border-border bg-card shadow-xs">
-                {previewQuery.isPending ? (
-                  <div className="flex h-full flex-col items-center justify-center p-8 space-y-2 text-muted-foreground">
-                    <Loader2 className="size-6 animate-spin text-primary" />
-                    <span className="text-xs font-medium">Đang tải bản xem trước template...</span>
-                  </div>
-                ) : previewQuery.data ? (
-                  <CardDisplay
-                    cardId={`note-type-preview-${id}`}
-                    side={previewSide}
-                    frontPayload={previewQuery.data.front_renderer_payload}
-                    backPayload={previewQuery.data.back_renderer_payload}
-                    frontHtml={previewQuery.data.front_html}
-                    backHtml={previewQuery.data.back_html}
-                    scope="shared_note_type_preview"
-                    scopeId={id}
-                  />
-                ) : (
-                  <EmptyState
-                    title="Chưa có xem trước"
-                    description="Loại thẻ này chưa có template."
-                  />
-                )}
-              </div>
-            </CardContent>
-          </Card>
+          {/* Live Preview Section (Reusing NoteTypeLivePreview) */}
+          <NoteTypeLivePreview
+            cardId={`note-type-preview-${id}`}
+            side={previewSide}
+            onSideChange={setPreviewSide}
+            templates={templates.map((t) => ({ id: t.id, name: t.name }))}
+            selectedTemplateId={selectedTemplateId || undefined}
+            onSelectTemplate={setSelectedTemplateId}
+            frontPayload={previewQuery.data?.front_renderer_payload}
+            backPayload={previewQuery.data?.back_renderer_payload}
+            frontHtml={previewQuery.data?.front_html}
+            backHtml={previewQuery.data?.back_html}
+            scope="shared_note_type_preview"
+            scopeId={id}
+            isLoading={previewQuery.isPending}
+            title="Xem trước Template (Live Previewer)"
+            subtitle="Mô phỏng hiển thị mặt trước và mặt sau dựa trên mẫu loại thẻ"
+            containerHeightClass="h-[clamp(20rem,50vh,32rem)] min-h-[250px]"
+          />
 
           {/* Fields Structure Card */}
           <Card className="border-border shadow-xs rounded-2xl">

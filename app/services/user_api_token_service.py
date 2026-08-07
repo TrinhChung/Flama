@@ -151,23 +151,35 @@ def rotate_token(
 
 
 def authenticate_token(plaintext: object, *, required_scope: str | None = None) -> tuple[UserApiToken, User] | None:
+    status, result = authenticate_token_detailed(plaintext, required_scope=required_scope)
+    return result if status == "valid" else None
+
+
+def authenticate_token_detailed(
+    plaintext: object,
+    *,
+    required_scope: str | None = None,
+) -> tuple[str, tuple[UserApiToken, User] | None]:
     if not isinstance(plaintext, str) or not TOKEN_RE.fullmatch(plaintext):
-        return None
+        return "invalid_format", None
     digest = _hash_token(plaintext)
     record = UserApiToken.query.filter_by(token_hash=digest).first()
     if record is None or not hmac.compare_digest(record.token_hash, digest):
-        return None
+        return "not_found", None
     now = _utcnow()
-    if record.revoked_at is not None or (record.expires_at is not None and record.expires_at <= now):
-        return None
+    if record.revoked_at is not None:
+        return "revoked", None
+    if record.expires_at is not None and record.expires_at <= now:
+        return "expired", None
     if required_scope and required_scope not in parse_scopes(record):
-        return None
+        return "permission_denied", None
     user = db.session.get(User, record.user_id)
     if user is None or not user.is_active:
-        return None
+        return "user_disabled", None
     if record.last_used_at is None or (now - record.last_used_at) >= timedelta(minutes=1):
         record.last_used_at = now
-    return record, user
+    return "valid", (record, user)
+
 
 
 def serialize_token(record: UserApiToken) -> dict:

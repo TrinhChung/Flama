@@ -2,7 +2,6 @@ import {
   AudioLines,
   ChartNoAxesColumn,
   CreditCard,
-  FileUp,
   Heart,
   Image as ImageIcon,
   Key,
@@ -16,6 +15,7 @@ import {
   Store,
   Upload,
   Users,
+  Zap,
 } from 'lucide-react'
 import { NavMain, type AppNavigationItem } from '@/components/nav-main'
 import { NavUser } from '@/components/nav-user'
@@ -47,11 +47,16 @@ export function AppSidebar({
   const library: AppNavigationItem[] = [
     { title: 'Loại thẻ', url: bootstrap.links.note_types, icon: NotebookTabs },
     { title: 'Deck đã cài', url: bootstrap.links.installed_decks, icon: PackageCheck },
-    { title: 'Import thẻ', url: '/import', icon: FileUp },
     { title: 'Kho shared deck', url: bootstrap.links.shared_decks, icon: Store },
     { title: 'Kho note type', url: bootstrap.links.shared_note_types, icon: Shapes },
     { title: 'Đăng học liệu', url: '/marketplace/decks/publish', icon: Upload },
   ]
+
+  const extensions: AppNavigationItem[] = [
+    { title: 'Đồng bộ Anki Desktop', url: '/import', icon: Zap },
+    { title: 'Kết nối Yomitan', url: '/settings/yomitan', icon: Key },
+  ]
+
   const admin: AppNavigationItem[] = [
     ...(bootstrap.links.admin_users
       ? [
@@ -70,7 +75,6 @@ export function AppSidebar({
   ]
 
   const settings: AppNavigationItem[] = [
-    { title: 'Kết nối Yomitan', url: '/settings/yomitan', icon: Key },
     { title: 'Đóng góp ý kiến', url: '/feedback', icon: MessageSquareHeart },
     ...(bootstrap.user?.is_admin
       ? [{ title: 'MCP Access Tokens', url: '/settings/mcp-tokens', icon: Key }]
@@ -85,6 +89,7 @@ export function AppSidebar({
       <SidebarContent>
         <NavMain label="Học tập" items={primary} />
         <NavMain label="Học liệu" items={library} />
+        <NavMain label="Phần mở rộng" items={extensions} />
         {bootstrap.user?.is_admin ? <NavMain label="Quản trị Admin" items={admin} /> : null}
         <NavMain label="Cài đặt" items={settings} />
       </SidebarContent>

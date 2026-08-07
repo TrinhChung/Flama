@@ -146,12 +146,14 @@ class FlamaConnectTests(unittest.TestCase):
         response = self._call("deckNames", key="not-a-token")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json()["error"], "authentication failed")
+        # Header authentication is supported when valid
         response = self.client.post(
             "/v1/flama-connect",
             json={"action": "deckNames", "params": {}, "version": 2},
             headers={"Authorization": f"Bearer {self.token}"},
         )
-        self.assertEqual(response.get_json()["error"], "authentication failed")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json(), ["Inbox", "Second"])
 
     def test_tokenized_server_url_works_without_body_key(self):
         self.assertEqual(self._call_token_url("version").get_json(), 6)

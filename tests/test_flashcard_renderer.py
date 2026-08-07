@@ -497,5 +497,25 @@ class FlashcardSecurityTests(unittest.TestCase):
                     self.assertNotIn("onmouseover", attrs[0])
 
 
+    def test_preview_raw_template(self):
+        from app.services.flashcard_content_service import preview_raw_template
+
+        res = preview_raw_template(
+            payload={
+                "front_html": "<h2>{{Expression}}</h2><p>{{Reading}}</p>",
+                "back_html": "{{FrontSide}}<hr><p>{{Meaning}}</p>",
+                "shared_css": ".card { text-align: center; }",
+                "fields": ["Expression", "Reading", "Meaning"],
+            }
+        )
+        self.assertIn("front_html", res)
+        self.assertIn("back_html", res)
+        self.assertIn("front_renderer_payload", res)
+        self.assertIn("back_renderer_payload", res)
+        self.assertIn("日本語", res["front_html"])
+        self.assertIn("Tiếng Nhật", res["back_html"])
+        self.assertIn(".card { text-align: center; }", res["front_html"])
+
+
 if __name__ == "__main__":
     unittest.main()

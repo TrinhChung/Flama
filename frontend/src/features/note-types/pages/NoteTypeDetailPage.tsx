@@ -16,7 +16,7 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { CardDisplay } from '@/features/study/components/CardDisplay'
+import { NoteTypeLivePreview } from '../components/NoteTypeLivePreview'
 import { Page } from '@/shared/components/Page'
 import { PageError, PageLoading } from '@/shared/components/PageState'
 
@@ -390,42 +390,24 @@ export function NoteTypeDetailPage() {
           </Card>
         </div>
 
-        {/* Right Column: Live Preview Frame */}
+        {/* Right Column: Live Preview Frame (Reusing NoteTypeLivePreview) */}
         <div className="lg:col-span-6 flex flex-col">
-          <Card className="p-4 sm:p-5 border-0 sm:border border-border/80 shadow-none sm:shadow-xs flex-1 flex flex-col rounded-2xl">
-            <div className="flex items-center gap-2 mb-3 min-h-[32px] sm:h-[36px]">
-              <h3 className="text-sm font-semibold text-foreground">Live Preview</h3>
-              <span className="text-xs text-muted-foreground">(Uses sample field data)</span>
-              {isPreviewLoading ? (
-                <span className="text-xs text-orange-600 font-semibold animate-pulse ml-auto">
-                  Đang cập nhật…
-                </span>
-              ) : null}
-            </div>
-            <div className="h-[clamp(14rem,40vh,30rem)] min-h-[200px] sm:min-h-[240px] w-full flex-1 overflow-hidden rounded-xl border border-border bg-[#f8f9fa]">
-              {previewError ? (
-                <div className="flex h-full items-center justify-center p-6 text-center text-sm text-destructive">
-                  {previewError}
-                </div>
-              ) : previewResult ? (
-                <CardDisplay
-                  cardId={`note-type-live-preview-${noteTypeId}`}
-                  side={activeTab === 'back' ? 'back' : 'front'}
-                  frontPayload={previewResult.front_renderer_payload}
-                  backPayload={previewResult.back_renderer_payload}
-                  frontHtml={previewResult.front_html}
-                  backHtml={previewResult.back_html}
-                  scope="note_type_live_preview"
-                  scopeId={noteTypeId}
-                  fieldDefs={fields}
-                />
-              ) : (
-                <div className="flex h-full items-center justify-center p-6 text-sm text-muted-foreground">
-                  Đang chuẩn bị bản xem trước…
-                </div>
-              )}
-            </div>
-          </Card>
+          <NoteTypeLivePreview
+            cardId={`note-type-live-preview-${noteTypeId}`}
+            side={activeTab === 'back' ? 'back' : 'front'}
+            onSideChange={(s) => setActiveTab(s === 'back' ? 'back' : 'front')}
+            frontPayload={previewResult?.front_renderer_payload}
+            backPayload={previewResult?.back_renderer_payload}
+            frontHtml={previewResult?.front_html}
+            backHtml={previewResult?.back_html}
+            scope="note_type_live_preview"
+            scopeId={noteTypeId}
+            fieldDefs={fields}
+            isLoading={isPreviewLoading}
+            error={previewError}
+            title="Live Preview"
+            subtitle="(Uses sample field data)"
+          />
         </div>
       </div>
     </Page>

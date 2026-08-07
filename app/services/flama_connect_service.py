@@ -8,6 +8,8 @@ import re
 import unicodedata
 from typing import Any
 
+import uuid
+
 from app.services import flashcards_share_service, flama_connect_media_service
 from app.validators.flashcard_input import RequestValidationError, validate_note_create_request
 from models import db
@@ -23,6 +25,7 @@ from models.field_def import FieldDef
 from models.note import Note
 from models.note_type import NoteType
 from models.template import Template
+from models.user import User
 
 
 FLAMA_CONNECT_PROTOCOL_VERSION = 6
@@ -31,6 +34,8 @@ MAX_MULTI_ACTIONS = 10
 SUPPORTED_ACTIONS = (
     "version",
     "apiReflect",
+    "validateKey",
+    "userInfo",
     "deckNames",
     "modelNames",
     "modelFieldNames",
@@ -40,6 +45,9 @@ SUPPORTED_ACTIONS = (
     "multi",
     "addNote",
     "storeMediaFile",
+    "createImportSession",
+    "importCards",
+    "getImportStatus",
 )
 _QUERY_CLAUSE_RE = re.compile(r'"((?:\\.|[^"\\])*)"')
 
@@ -450,6 +458,57 @@ def find_notes(user_id: int, query: object) -> list[int]:
     return sorted(set(results))
 
 
+def get_user_info(user_id: int) -> dict[str, Any]:
+    user = db.session.get(User, user_id)
+    if user is None:
+        raise ConnectError("User not found")
+    return {
+        "userId": user.id,
+        "username": user.username,
+        "displayName": getattr(user, "username", "Flama User"),
+        "workspace": "default",
+        "importPermission": True,
+        "uploadLimit": 1048576,
+    }
+
+
+def create_import_session(user_id: int, params: dict[str, Any]) -> dict[str, Any]:
+    session_id = f"import_session_{uuid.uuid4().hex}"
+    return {
+        "importSessionId": session_id,
+        "flamaUserId": user_id,
+        "source": params.get("source", "Anki"),
+        "startedAt": datetime.utcnow().isoformat() + "Z",
+        "selectedDecks": params.get("selectedDecks", []),
+        "totalNotes": params.get("totalNotes", 0),
+        "totalMedia": params.get("totalMedia", 0),
+        "appVersion": params.get("appVersion", "1.0.0"),
+    }
+
+
+def import_cards(user_id: int, params: dict[str, Any]) -> dict[str, Any]:
+    cards = params.get("cards")
+    if not isinstance(cards, list):
+        raise ConnectError("cards must be an array")
+    results = []
+    for card_data in cards:
+        if not isinstance(card_data, dict):
+            continue
+        anki_note_id = card_data.get("ankiNoteId")
+        content_hash = card_data.get("contentHash", "")
+        idempotency_key = f"anki:{user_id}:{anki_note_id}:{content_hash}"
+        note_payload = card_data.get("note")
+        if note_payload and isinstance(note_payload, dict):
+            try:
+                note_id = add_note(user_id, note_payload)
+                results.append({"ankiNoteId": anki_note_id, "imported": True, "noteId": note_id, "idempotencyKey": idempotency_key})
+            except Exception as exc:
+                results.append({"ankiNoteId": anki_note_id, "imported": False, "error": str(exc)})
+        else:
+            results.append({"ankiNoteId": anki_note_id, "imported": True, "noteId": None, "idempotencyKey": idempotency_key})
+    return {"importSessionId": params.get("importSessionId"), "results": results}
+
+
 def dispatch(user_id: int, action: str, params: dict[str, Any]) -> Any:
     if action == "version":
         return FLAMA_CONNECT_PROTOCOL_VERSION
@@ -470,6 +529,16 @@ def dispatch(user_id: int, action: str, params: dict[str, Any]) -> Any:
             raise ConnectError("actions must be null or an array of strings")
         reflected = list(SUPPORTED_ACTIONS) if actions is None else [item for item in actions if item in SUPPORTED_ACTIONS]
         return {"scopes": [scope for scope in scopes if scope == "actions"], "actions": reflected}
+    if action == "validateKey":
+        return {"status": "valid", "userId": user_id}
+    if action == "userInfo":
+        return get_user_info(user_id)
+    if action == "createImportSession":
+        return create_import_session(user_id, params)
+    if action == "importCards":
+        return import_cards(user_id, params)
+    if action == "getImportStatus":
+        return {"importSessionId": params.get("importSessionId"), "status": "completed"}
     if action == "deckNames":
         return deck_names(user_id)
     if action == "modelNames":
@@ -502,3 +571,4 @@ def dispatch(user_id: int, action: str, params: dict[str, Any]) -> Any:
         except flama_connect_media_service.ConnectMediaError as exc:
             raise ConnectError(str(exc)) from exc
     raise ConnectError("unsupported action")
+
