@@ -10,6 +10,7 @@ export {
   Copy,
   Download,
   Settings as GearFill,
+  GripVertical,
   Pencil as PencilSquare,
   PlayCircle,
   Plus as PlusLg,
@@ -18,3 +19,4 @@ export {
   Trash2 as TrashFill,
   Upload,
 } from 'lucide-react'
+
