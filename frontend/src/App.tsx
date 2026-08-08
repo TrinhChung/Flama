@@ -148,6 +148,21 @@ const AdminSupportConfigPage = lazy(() =>
     default: module.AdminSupportConfigPage,
   })),
 )
+const AdminTicketsPage = lazy(() =>
+  import('./features/admin/pages/AdminTicketsPage').then((module) => ({
+    default: module.AdminTicketsPage,
+  })),
+)
+const AdminTicketDetailPage = lazy(() =>
+  import('./features/admin/pages/AdminTicketDetailPage').then((module) => ({
+    default: module.AdminTicketDetailPage,
+  })),
+)
+const UserTicketDetailPage = lazy(() =>
+  import('./features/support/pages/UserTicketDetailPage').then((module) => ({
+    default: module.UserTicketDetailPage,
+  })),
+)
 const SupportPage = lazy(() =>
   import('./pages/StaticPages').then((module) => ({
     default: module.SupportPage,
@@ -282,6 +297,14 @@ const router = createBrowserRouter([
             element: deferred(<FeedbackPage />),
           },
           {
+            path: 'tickets',
+            element: deferred(<FeedbackPage />),
+          },
+          {
+            path: 'tickets/:id',
+            element: deferred(<UserTicketDetailPage />),
+          },
+          {
             path: 'support/feedback',
             element: deferred(<FeedbackPage />),
           },
@@ -339,6 +362,14 @@ const router = createBrowserRouter([
           {
             path: 'admin/support',
             element: deferred(<AdminSupportConfigPage />),
+          },
+          {
+            path: 'admin/tickets',
+            element: deferred(<AdminTicketsPage />),
+          },
+          {
+            path: 'admin/tickets/:id',
+            element: deferred(<AdminTicketDetailPage />),
           },
         ],
       },
