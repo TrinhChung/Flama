@@ -1309,3 +1309,6 @@ export function AdminTtsPage() {
     </Page>
   )
 }
+
+export { AdminTicketsPage } from './AdminTicketsPage'
+export { AdminTicketDetailPage } from './AdminTicketDetailPage'

@@ -1,30 +1,42 @@
 import { useState } from 'react'
 import {
   Bug,
-  Check,
-  Code2,
-  Copy,
-  Globe,
+  CheckCircle2,
+  Clock,
+  ExternalLink,
+  Eye,
   Heart,
+  Image as ImageIcon,
   Lightbulb,
   Link as LinkIcon,
-  Mail,
+  Loader2,
+  MessageSquare,
   MessageSquareHeart,
+  Plus,
   RefreshCw,
   Send,
   Sparkles,
+  Ticket,
+  Upload,
+  X,
+  XCircle,
 } from 'lucide-react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
+import { appApi } from '@/app/api'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
+import type { TicketItem } from '@/features/admin/pages/AdminTicketsPage'
 import { Page } from '@/shared/components/Page'
+import { EmptyState } from '@/shared/components/PageState'
 
 type FeedbackCategory = 'bug' | 'feature' | 'ui' | 'other'
-
-const CONTACT_EMAIL = 'chungtrinh2k2@gmail.com'
 
 const ROUTE_NAME_MAP: Record<string, string> = {
   '/dashboard': 'Trang chủ / Tổng quan',
@@ -65,7 +77,6 @@ function resolveScreenName(urlInput: string): string {
     pathname = trimmed
   }
 
-  // Exact or prefix match in ROUTE_NAME_MAP
   const lowerPath = pathname.toLowerCase()
   for (const [route, title] of Object.entries(ROUTE_NAME_MAP)) {
     if (lowerPath === route.toLowerCase() || lowerPath.startsWith(route.toLowerCase())) {
@@ -73,7 +84,6 @@ function resolveScreenName(urlInput: string): string {
     }
   }
 
-  // Clean fallback formatter: /settings/yomitan -> Settings > Yomitan
   const segments = pathname.replace(/^\/+|\/+$/g, '').split('/')
   if (!segments[0]) return 'Trang chủ (Dashboard)'
 
@@ -82,21 +92,107 @@ function resolveScreenName(urlInput: string): string {
     .join(' > ')
 }
 
+const STATUS_MAP: Record<string, { label: string; badge: string; icon: any }> = {
+  open: { label: 'Chờ xử lý', badge: 'bg-amber-500 text-white', icon: Clock },
+  in_progress: { label: 'Đang xử lý', badge: 'bg-blue-600 text-white', icon: RefreshCw },
+  resolved: { label: 'Đã giải quyết', badge: 'bg-emerald-600 text-white', icon: CheckCircle2 },
+  rejected: { label: 'Từ chối', badge: 'bg-rose-600 text-white', icon: XCircle },
+  closed: { label: 'Đã đóng', badge: 'bg-gray-500 text-white', icon: XCircle },
+}
+
 export function FeedbackPage() {
-  const [copied, setCopied] = useState<string | null>(null)
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const [activeTab, setActiveTab] = useState<'create' | 'my-tickets'>('create')
   const [category, setCategory] = useState<FeedbackCategory>('bug')
   const [urlPath, setUrlPath] = useState(window.location.href)
+  const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [reproduceSteps, setReproduceSteps] = useState('')
-  const [senderInfo, setSenderInfo] = useState('')
+  const [attachedUrls, setAttachedUrls] = useState<string[]>([])
+  const [isUploading, setIsUploading] = useState(false)
 
   const resolvedScreenName = resolveScreenName(urlPath)
 
-  const copyEmail = async () => {
-    await navigator.clipboard.writeText(CONTACT_EMAIL)
-    setCopied('email')
-    window.setTimeout(() => setCopied(null), 1800)
-    toast.success('Đã sao chép email chungtrinh2k2@gmail.com!')
+  // My tickets query
+  const myTicketsQuery = useQuery({
+    queryKey: ['user', 'my-tickets'],
+    queryFn: () => appApi.get<{ items: TicketItem[] }>('/tickets/my'),
+    enabled: activeTab === 'my-tickets',
+  })
+
+  // Upload image mutation
+  const uploadImage = async (file: File) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    setIsUploading(true)
+    try {
+      const res = await appApi.mutateFormData<{ url: string }>('/tickets/upload-image', 'POST', formData)
+      if (res.url) {
+        setAttachedUrls((prev) => [...prev, res.url])
+        toast.success('Đã tải lên ảnh chụp màn hình!')
+      }
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Không thể tải ảnh lên.')
+    } finally {
+      setIsUploading(false)
+    }
+  }
+
+  // Create Ticket mutation
+  const createTicketMutation = useMutation({
+    mutationFn: (payload: {
+      category: string
+      title: string
+      description: string
+      reproduce_steps?: string
+      screen_url?: string
+      screen_name?: string
+      attachment_urls?: string[]
+    }) => appApi.mutate<{ item: TicketItem }>('/tickets', 'POST', payload),
+    onSuccess: (data) => {
+      const ticketCode = data.item?.ticket_code || 'Mới'
+      toast.success(`Đã gửi ticket báo lỗi [${ticketCode}] thành công! Đội ngũ sẽ hỗ trợ bạn sớm nhất.`)
+      // Reset form
+      setTitle('')
+      setDescription('')
+      setReproduceSteps('')
+      setAttachedUrls([])
+      setActiveTab('my-tickets')
+      void queryClient.invalidateQueries({ queryKey: ['user', 'my-tickets'] })
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.message || 'Gửi báo cáo lỗi thất bại.')
+    },
+  })
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (!files || files.length === 0) return
+    Array.from(files).forEach((file) => {
+      void uploadImage(file)
+    })
+    e.target.value = ''
+  }
+
+  const handleSubmitTicket = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!description.trim()) {
+      toast.error('Vui lòng nhập nội dung mô tả chi tiết lỗi!')
+      return
+    }
+
+    const autoTitle = title.trim() || `[Báo lỗi] ${resolvedScreenName !== '(Vui lòng nhập URL để tự động nhận diện)' ? resolvedScreenName : 'Ứng dụng Flama'}`
+
+    createTicketMutation.mutate({
+      category,
+      title: autoTitle,
+      description: description.trim(),
+      reproduce_steps: reproduceSteps.trim() || undefined,
+      screen_url: urlPath.trim() || undefined,
+      screen_name: resolvedScreenName !== '(Vui lòng nhập URL để tự động nhận diện)' ? resolvedScreenName : undefined,
+      attachment_urls: attachedUrls,
+    })
   }
 
   const fillCurrentUrl = () => {
@@ -104,277 +200,294 @@ export function FeedbackPage() {
     toast.success('Đã lấy đường dẫn URL hiện tại!')
   }
 
-  const categoryLabel = {
-    bug: 'Báo lỗi hệ thống (Bug Report)',
-    feature: 'Đề xuất Ý tưởng mới',
-    ui: 'Góp ý Giao diện & Trải nghiệm',
-    other: 'Ý kiến đóng góp khác',
-  }[category]
-
-  // Live generated formatted template text
-  const generatedTemplateText = `=== PHẢN HỒI / BÁO LỖI ỨNG DỤNG FLAMA ===
-• Chủ đề: ${categoryLabel}
-• Tên màn hình (Tự động nhận diện): ${resolvedScreenName}
-• Đường dẫn URL: ${urlPath.trim() || '(Chưa nhập)'}
-• Người gửi: ${senderInfo.trim() || '(Khách vô danh)'}
-
-[MÔ TẢ CHI TIẾT]
-${description.trim() || '(Chưa nhập nội dung mô tả)'}
-
-${reproduceSteps.trim() ? `[CÁC BƯỚC TÁI HIỆN LỖI]\n${reproduceSteps.trim()}\n` : ''}=========================================
-Gửi tới: ${CONTACT_EMAIL}`
-
-  const mailSubject = encodeURIComponent(
-    `[Flama ${category.toUpperCase()}] ${resolvedScreenName !== '(Vui lòng nhập URL để tự động nhận diện)' ? `${resolvedScreenName} - ` : ''}${description.trim().slice(0, 40) || 'Góp ý ứng dụng'}`
-  )
-  const mailBody = encodeURIComponent(generatedTemplateText)
-  const mailtoUrl = `mailto:${CONTACT_EMAIL}?subject=${mailSubject}&body=${mailBody}`
-
-  const copyGeneratedContent = async () => {
-    if (!description.trim() && !urlPath.trim()) {
-      toast.error('Vui lòng nhập URL hoặc nội dung mô tả trước khi sao chép!')
-      return
-    }
-    await navigator.clipboard.writeText(generatedTemplateText)
-    setCopied('generated')
-    window.setTimeout(() => setCopied(null), 1800)
-    toast.success('Đã sao chép nội dung đã tạo vào bộ nhớ tạm!')
-  }
-
-  const resetForm = () => {
-    setUrlPath(window.location.href)
-    setDescription('')
-    setReproduceSteps('')
-    setSenderInfo('')
-    toast.info('Đã xóa form về mặc định.')
-  }
-
   return (
-    <Page className="max-w-4xl mx-auto space-y-10 py-4 pb-16">
-      {/* Seamless Hero Header */}
+    <Page className="max-w-4xl mx-auto space-y-8 py-4 pb-16">
+      {/* Hero Header */}
       <div className="space-y-4">
         <div className="flex items-center gap-2">
           <Badge variant="secondary" className="px-3 py-1 text-xs gap-1.5 font-medium rounded-full bg-primary/10 text-primary border-none">
-            <Heart className="size-3.5 fill-current text-primary" /> Lắng nghe & Đồng hành
+            <Heart className="size-3.5 fill-current text-primary" /> Lắng nghe & Hỗ trợ trực tiếp
           </Badge>
         </div>
 
         <div className="space-y-2">
           <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-foreground flex items-center gap-3">
             <MessageSquareHeart className="size-9 text-primary shrink-0" />
-            <span>Góp ý & Báo lỗi</span>
+            <span>Góp ý & Báo lỗi System</span>
           </h1>
           <p className="text-base text-muted-foreground leading-relaxed max-w-2xl">
-            Chỉ cần dán đường dẫn URL, hệ thống sẽ tự động nhận diện tên màn hình và tạo nội dung báo cáo chuẩn để bạn gửi về{' '}
-            <button
-              onClick={copyEmail}
-              className="inline-flex items-center gap-1 font-semibold font-mono text-primary hover:underline cursor-pointer"
-              title="Nhấp để sao chép email"
-            >
-              <Mail className="size-3.5" />
-              {CONTACT_EMAIL}
-            </button>.
+            Tạo ticket hỗ trợ trực tiếp trong ứng dụng để gửi ảnh chụp màn hình, đường dẫn lỗi và theo dõi phản hồi từ Quản trị viên mà không cần mở Email!
           </p>
         </div>
-
-        {/* Quick Email Action Bar */}
-        <div className="flex flex-wrap items-center gap-3 pt-2">
-          <div className="flex items-center gap-2 px-4 py-2 rounded-full border bg-muted/40 text-sm font-mono font-medium">
-            <Mail className="size-4 text-muted-foreground" />
-            <span>{CONTACT_EMAIL}</span>
-          </div>
-          <Button size="sm" variant="outline" className="rounded-full px-4" onClick={copyEmail}>
-            {copied === 'email' ? <Check className="mr-1.5 size-3.5 text-green-600" /> : <Copy className="mr-1.5 size-3.5" />}
-            {copied === 'email' ? 'Đã chép' : 'Sao chép Email'}
-          </Button>
-          <a href={mailtoUrl} target="_blank" rel="noreferrer">
-            <Button size="sm" className="rounded-full px-4 font-semibold shadow-xs">
-              <Send className="mr-1.5 size-3.5" /> Mở Mail gửi ngay
-            </Button>
-          </a>
-        </div>
       </div>
 
-      <hr className="border-border/60" />
+      {/* Tabs Navigation */}
+      <div className="flex items-center justify-between border-b pb-2">
+        <Tabs value={activeTab} onValueChange={(val) => setActiveTab(val as any)}>
+          <TabsList className="bg-muted/50 p-1 rounded-full">
+            <TabsTrigger value="create" className="rounded-full text-xs font-semibold gap-1.5 px-4">
+              <Plus className="size-3.5" /> Gửi báo cáo lỗi mới
+            </TabsTrigger>
 
-      {/* Seamless Box-Free Form */}
-      <div className="space-y-6">
-        {/* Category Pills */}
-        <div className="space-y-3">
-          <Label className="text-sm font-semibold text-foreground">1. Chọn chủ đề</Label>
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => setCategory('bug')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
-                category === 'bug'
-                  ? 'bg-red-500 text-white shadow-xs'
-                  : 'bg-muted/60 hover:bg-muted text-muted-foreground'
-              }`}
-            >
-              <Bug className="size-4" /> Báo lỗi (Bug)
-            </button>
+            <TabsTrigger value="my-tickets" className="rounded-full text-xs font-semibold gap-1.5 px-4">
+              <Ticket className="size-3.5" /> Ticket của tôi
+              {myTicketsQuery.data?.items && myTicketsQuery.data.items.length > 0 && (
+                <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-[10px] rounded-full">
+                  {myTicketsQuery.data.items.length}
+                </Badge>
+              )}
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </div>
 
-            <button
-              type="button"
-              onClick={() => setCategory('feature')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
-                category === 'feature'
-                  ? 'bg-amber-500 text-white shadow-xs'
-                  : 'bg-muted/60 hover:bg-muted text-muted-foreground'
-              }`}
-            >
-              <Lightbulb className="size-4" /> Ý tưởng mới
-            </button>
+      {/* Tab Content 1: Create Ticket */}
+      {activeTab === 'create' && (
+        <form onSubmit={handleSubmitTicket} className="space-y-6">
+          {/* Category Pills */}
+          <div className="space-y-3">
+            <Label className="text-sm font-semibold text-foreground">1. Chọn chủ đề báo cáo</Label>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setCategory('bug')}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
+                  category === 'bug'
+                    ? 'bg-red-500 text-white shadow-xs'
+                    : 'bg-muted/60 hover:bg-muted text-muted-foreground'
+                }`}
+              >
+                <Bug className="size-4" /> Báo lỗi (Bug)
+              </button>
 
-            <button
-              type="button"
-              onClick={() => setCategory('ui')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
-                category === 'ui'
-                  ? 'bg-sky-500 text-white shadow-xs'
-                  : 'bg-muted/60 hover:bg-muted text-muted-foreground'
-              }`}
-            >
-              <Sparkles className="size-4" /> Giao diện (UI/UX)
-            </button>
+              <button
+                type="button"
+                onClick={() => setCategory('feature')}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
+                  category === 'feature'
+                    ? 'bg-amber-500 text-white shadow-xs'
+                    : 'bg-muted/60 hover:bg-muted text-muted-foreground'
+                }`}
+              >
+                <Lightbulb className="size-4" /> Ý tưởng mới
+              </button>
 
-            <button
-              type="button"
-              onClick={() => setCategory('other')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
-                category === 'other'
-                  ? 'bg-purple-500 text-white shadow-xs'
-                  : 'bg-muted/60 hover:bg-muted text-muted-foreground'
-              }`}
-            >
-              <Heart className="size-4" /> Khác
-            </button>
+              <button
+                type="button"
+                onClick={() => setCategory('ui')}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
+                  category === 'ui'
+                    ? 'bg-sky-500 text-white shadow-xs'
+                    : 'bg-muted/60 hover:bg-muted text-muted-foreground'
+                }`}
+              >
+                <Sparkles className="size-4" /> Giao diện (UI/UX)
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setCategory('other')}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
+                  category === 'other'
+                    ? 'bg-purple-500 text-white shadow-xs'
+                    : 'bg-muted/60 hover:bg-muted text-muted-foreground'
+                }`}
+              >
+                <MessageSquare className="size-4" /> Khác
+              </button>
+            </div>
           </div>
-        </div>
 
-        {/* URL Input with Auto-Detected Screen Name Badge */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label htmlFor="url-path" className="text-sm font-semibold flex items-center gap-1.5">
-              <Globe className="size-4 text-primary" /> 2. Đường dẫn URL
+          {/* Screen URL Auto Detect */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <LinkIcon className="size-4 text-primary" /> 2. Đường dẫn màn hình xảy ra lỗi
+              </Label>
+              <Button type="button" variant="outline" size="sm" onClick={fillCurrentUrl} className="rounded-full text-xs h-7">
+                <RefreshCw className="mr-1 size-3" /> Lấy URL hiện tại
+              </Button>
+            </div>
+            <Input
+              placeholder="Dán URL màn hình (Ví dụ: http://localhost:5173/study)"
+              value={urlPath}
+              onChange={(e) => setUrlPath(e.target.value)}
+              className="rounded-xl font-mono text-xs"
+            />
+            <div className="text-xs text-muted-foreground flex items-center gap-1.5 bg-muted/30 p-2.5 rounded-xl border">
+              <Sparkles className="size-3.5 text-primary shrink-0" />
+              <span>Tên màn hình nhận diện: <strong className="text-foreground font-semibold">{resolvedScreenName}</strong></span>
+            </div>
+          </div>
+
+          {/* Title & Description */}
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold text-foreground">3. Tiêu đề tóm tắt lỗi (Không bắt buộc)</Label>
+              <Input
+                placeholder="Ví dụ: Nút Bắt đầu học trên màn hình /study bị đơ"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                className="rounded-xl text-xs"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold text-foreground">4. Mô tả chi tiết vấn đề (*)</Label>
+              <Textarea
+                placeholder="Vui lòng mô tả những gì xảy ra, thông báo lỗi nếu có..."
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                className="min-h-28 rounded-xl text-xs"
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold text-foreground">5. Các bước tái hiện lỗi (Tùy chọn)</Label>
+              <Textarea
+                placeholder="1. Mở trang Duyệt từ vựng&#10;2. Bấm vào bộ thẻ N3&#10;3. Nút học không phản hồi..."
+                value={reproduceSteps}
+                onChange={(e) => setReproduceSteps(e.target.value)}
+                className="min-h-20 rounded-xl text-xs font-mono"
+              />
+            </div>
+          </div>
+
+          {/* Screenshots Uploader */}
+          <div className="space-y-3">
+            <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <ImageIcon className="size-4 text-primary" /> 6. Đính kèm ảnh chụp màn hình (Screenshots)
             </Label>
-            <button
-              type="button"
-              onClick={fillCurrentUrl}
-              className="text-xs text-primary hover:underline font-medium flex items-center gap-1 cursor-pointer"
+
+            <div className="flex flex-wrap items-center gap-3">
+              {attachedUrls.map((url, idx) => (
+                <div key={idx} className="relative group border rounded-xl overflow-hidden shadow-xs bg-muted/40">
+                  <img src={url} alt={`Screenshot ${idx + 1}`} className="size-20 object-cover" />
+                  <button
+                    type="button"
+                    onClick={() => setAttachedUrls((prev) => prev.filter((_, i) => i !== idx))}
+                    className="absolute top-1 right-1 p-1 bg-black/70 hover:bg-red-600 text-white rounded-full transition-colors"
+                    title="Xóa ảnh"
+                  >
+                    <X className="size-3" />
+                  </button>
+                </div>
+              ))}
+
+              <label className="flex flex-col items-center justify-center size-20 rounded-xl border-2 border-dashed border-border/80 hover:border-primary bg-muted/20 hover:bg-muted/40 cursor-pointer transition-all">
+                {isUploading ? (
+                  <Loader2 className="size-5 animate-spin text-primary" />
+                ) : (
+                  <>
+                    <Upload className="size-5 text-muted-foreground" />
+                    <span className="text-[10px] text-muted-foreground font-medium pt-1">Thêm ảnh</span>
+                  </>
+                )}
+                <input type="file" accept="image/*" multiple onChange={handleFileChange} className="hidden" disabled={isUploading} />
+              </label>
+            </div>
+          </div>
+
+          {/* Submit Action */}
+          <div className="pt-4 flex items-center justify-end gap-3">
+            <Button
+              type="submit"
+              size="lg"
+              className="rounded-full px-8 font-bold shadow-md gap-2 text-sm"
+              disabled={createTicketMutation.isPending || isUploading}
             >
-              <LinkIcon className="size-3.5" /> Lấy URL hiện tại
-            </button>
-          </div>
-          <Input
-            id="url-path"
-            placeholder="Dán URL trang bị lỗi (ví dụ: http://localhost:4789/settings/yomitan)..."
-            value={urlPath}
-            onChange={(e) => setUrlPath(e.target.value)}
-            className="h-11 rounded-xl bg-background border-border/80 font-mono text-xs"
-          />
-
-          {/* Display Auto-Resolved Screen Name Badge */}
-          <div className="flex items-center gap-2 pt-1 text-xs text-muted-foreground">
-            <span>Tên màn hình tự động nhận diện:</span>
-            <Badge variant="outline" className="text-xs font-semibold text-primary border-primary/30 bg-primary/5">
-              {resolvedScreenName}
-            </Badge>
-          </div>
-        </div>
-
-        {/* Description */}
-        <div className="space-y-2">
-          <Label htmlFor="bug-description" className="text-sm font-semibold text-foreground">
-            3. Mô tả chi tiết lỗi / ý tưởng
-          </Label>
-          <Textarea
-            id="bug-description"
-            rows={4}
-            placeholder="Chia sẻ suy nghĩ, mô tả lỗi hoặc chi tiết ý tưởng của bạn tại đây..."
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            className="rounded-xl bg-background border-border/80 leading-relaxed resize-y"
-          />
-        </div>
-
-        {/* Reproduce Steps */}
-        <div className="space-y-2">
-          <Label htmlFor="reproduce-steps" className="text-sm font-semibold text-muted-foreground">
-            4. Các bước tái hiện lỗi (Tùy chọn)
-          </Label>
-          <Textarea
-            id="reproduce-steps"
-            rows={2}
-            placeholder="Bước 1: Mở trang x... Bước 2: Bấm vào nút y..."
-            value={reproduceSteps}
-            onChange={(e) => setReproduceSteps(e.target.value)}
-            className="rounded-xl bg-background border-border/80 leading-relaxed text-xs"
-          />
-        </div>
-
-        {/* Sender Info */}
-        <div className="space-y-2">
-          <Label htmlFor="sender-info" className="text-sm font-semibold text-muted-foreground">
-            5. Tên hoặc email của bạn (Tùy chọn)
-          </Label>
-          <Input
-            id="sender-info"
-            placeholder="Tên của bạn hoặc thông tin liên hệ..."
-            value={senderInfo}
-            onChange={(e) => setSenderInfo(e.target.value)}
-            className="h-11 rounded-xl bg-background border-border/80"
-          />
-        </div>
-
-        <div className="flex justify-end pt-1">
-          <Button type="button" variant="ghost" size="sm" onClick={resetForm} className="text-xs text-muted-foreground">
-            <RefreshCw className="mr-1.5 size-3.5" /> Làm mới form
-          </Button>
-        </div>
-      </div>
-
-      <hr className="border-border/60" />
-
-      {/* Live Generated Content Area */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <Label className="text-base font-bold flex items-center gap-2">
-            <Code2 className="size-5 text-primary" /> Nội dung tạo tự động để sao chép
-          </Label>
-          <Badge variant="outline" className="text-xs text-muted-foreground">
-            Tự động cập nhật
-          </Badge>
-        </div>
-
-        <pre className="text-xs sm:text-sm font-mono whitespace-pre-wrap leading-relaxed break-all bg-muted/40 p-4 sm:p-5 rounded-2xl border border-border/80 max-h-[320px] overflow-y-auto text-foreground select-all">
-          {generatedTemplateText}
-        </pre>
-
-        <div className="flex flex-wrap items-center justify-end gap-3 pt-2">
-          <Button type="button" variant="outline" className="rounded-full px-5 font-medium" onClick={copyGeneratedContent}>
-            {copied === 'generated' ? <Check className="mr-2 size-4 text-green-600" /> : <Copy className="mr-2 size-4" />}
-            {copied === 'generated' ? 'Đã sao chép nội dung!' : 'Sao chép nội dung này'}
-          </Button>
-
-          <a href={mailtoUrl} target="_blank" rel="noreferrer">
-            <Button type="button" size="lg" className="rounded-full px-6 font-bold shadow-xs">
-              <Send className="mr-2 size-4" /> Mở Mail gửi ngay
+              {createTicketMutation.isPending ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" /> Đang gửi Ticket...
+                </>
+              ) : (
+                <>
+                  <Send className="size-4" /> Gửi báo cáo lỗi ngay
+                </>
+              )}
             </Button>
-          </a>
+          </div>
+        </form>
+      )}
+
+      {/* Tab Content 2: My Tickets */}
+      {activeTab === 'my-tickets' && (
+        <div className="space-y-4">
+          {myTicketsQuery.isLoading ? (
+            <div className="py-12 text-center text-muted-foreground">Đang tải các ticket của bạn...</div>
+          ) : !myTicketsQuery.data?.items || myTicketsQuery.data.items.length === 0 ? (
+            <EmptyState
+              title="Bạn chưa gửi ticket báo lỗi nào"
+              description="Hãy dùng form 'Gửi báo cáo lỗi mới' để phản hồi với đội ngũ phát triển khi gặp sự cố."
+              action={
+                <Button size="sm" onClick={() => setActiveTab('create')} className="rounded-full">
+                  <Plus className="mr-1 size-3.5" /> Tạo ticket đầu tiên
+                </Button>
+              }
+            />
+          ) : (
+            <div className="space-y-3">
+              {myTicketsQuery.data.items.map((t) => {
+                const statusInfo = STATUS_MAP[t.status] || STATUS_MAP.open
+                const StatusIcon = statusInfo.icon
+
+                return (
+                  <Card
+                    key={t.id}
+                    className="shadow-xs hover:shadow-md hover:border-primary/50 transition-all cursor-pointer border-border/60"
+                    onClick={() => navigate(`/tickets/${t.id}`)}
+                  >
+                    <CardContent className="p-5 flex flex-wrap items-center justify-between gap-4">
+                      <div className="space-y-1.5 max-w-xl">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-bold text-xs px-2.5 py-0.5 bg-primary/10 text-primary rounded-full">
+                            {t.ticket_code}
+                          </span>
+                          <h3 className="font-bold text-base text-foreground hover:text-primary transition-colors">
+                            {t.title}
+                          </h3>
+                        </div>
+
+                        <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
+                          {t.description}
+                        </p>
+
+                        <div className="flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground pt-1">
+                          {t.screen_name && (
+                            <span className="flex items-center gap-1 font-medium text-foreground">
+                              <ExternalLink className="size-3 text-primary" /> {t.screen_name}
+                            </span>
+                          )}
+                          <span>•</span>
+                          <span>Ngày gửi: {new Date(t.created_at).toLocaleString('vi-VN')}</span>
+                          {t.attachment_urls && t.attachment_urls.length > 0 && (
+                            <>
+                              <span>•</span>
+                              <span className="flex items-center gap-1 text-blue-600 font-medium">
+                                <ImageIcon className="size-3" /> {t.attachment_urls.length} ảnh
+                              </span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <Badge className={`px-3 py-1 text-xs gap-1.5 rounded-full ${statusInfo.badge}`}>
+                          <StatusIcon className="size-3.5" /> {statusInfo.label}
+                        </Badge>
+                        <Button size="sm" variant="ghost" className="rounded-full px-3 text-xs gap-1">
+                          <Eye className="size-3.5" /> Xem chi tiết
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )
+              })}
+            </div>
+          )}
         </div>
-      </div>
-
-      <hr className="border-border/60" />
-
-      {/* Appreciation Footer Note */}
-      <div className="flex items-center gap-3 text-xs text-muted-foreground leading-relaxed">
-        <Heart className="size-4 text-rose-500 shrink-0 fill-rose-500/20" />
-        <span>
-          Mọi đóng góp và phản hồi từ bạn gửi về <strong className="text-foreground font-mono">{CONTACT_EMAIL}</strong> đều được tác giả trân trọng sâu sắc. Chân thành cảm ơn sự đóng góp của bạn!
-        </span>
-      </div>
+      )}
     </Page>
   )
 }

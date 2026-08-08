@@ -50,12 +50,14 @@ const pageTitles: Record<string, string> = {
   '/settings/mcp-tokens': 'MCP Tokens',
   '/settings/yomitan': 'Kết nối Yomitan',
   '/feedback': 'Đóng góp ý kiến',
+  '/tickets': 'Báo lỗi & Góp ý',
   '/support/feedback': 'Đóng góp ý kiến',
   '/admin/users': 'Quản lý người dùng',
   '/admin/permissions': 'Phân quyền người dùng',
   '/admin/payments': 'Quản lý thanh toán',
   '/admin/tts': 'TTS Provider',
   '/admin/image-library': 'Thư viện ảnh Admin',
+  '/admin/tickets': 'Quản lý Ticket & Báo lỗi',
   '/admin/support': 'Cấu hình Ủng hộ Admin',
 }
 
