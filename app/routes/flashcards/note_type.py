@@ -168,6 +168,19 @@ def list_note_types():
         flashcard_content_service.list_note_types(user_id=current_user.id)
     )
 
+
+@flashcards_bp.route("/api/note-types/preview", methods=["POST"])
+@login_required
+def preview_raw_template():
+    try:
+        payload = flashcard_content_service.preview_raw_template(
+            payload=request.get_json(silent=True) or {},
+        )
+    except flashcard_content_service.ContentApiError as exc:
+        return _content_error(exc)
+    return jsonify(payload)
+
+
 @flashcards_bp.route("/api/note-types/<note_type_id>", methods=["GET"])
 @login_required
 def get_note_type_detail(note_type_id: str):

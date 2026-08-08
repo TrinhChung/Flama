@@ -29,6 +29,8 @@ connect_bp = Blueprint("flama_connect", __name__)
 ACTION_PARAMS: dict[str, frozenset[str]] = {
     "version": frozenset(),
     "apiReflect": frozenset({"scopes", "actions"}),
+    "validateKey": frozenset(),
+    "userInfo": frozenset(),
     "deckNames": frozenset(),
     "modelNames": frozenset(),
     "modelFieldNames": frozenset({"modelName"}),
@@ -38,9 +40,14 @@ ACTION_PARAMS: dict[str, frozenset[str]] = {
     "multi": frozenset({"actions"}),
     "addNote": frozenset({"note"}),
     "storeMediaFile": frozenset({"filename", "data", "path", "url", "deleteExisting"}),
+    "createImportSession": frozenset({"source", "selectedDecks", "totalNotes", "totalMedia", "appVersion"}),
+    "importCards": frozenset({"importSessionId", "cards", "deckName"}),
+    "getImportStatus": frozenset({"importSessionId"}),
 }
 ACTION_SCOPES = {
     "apiReflect": "note-type:read",
+    "validateKey": None,
+    "userInfo": None,
     "deckNames": "deck:read",
     "modelNames": "note-type:read",
     "modelFieldNames": "note-type:read",
@@ -50,6 +57,9 @@ ACTION_SCOPES = {
     "multi": "note:check",
     "addNote": "note:create",
     "storeMediaFile": "note:create",
+    "createImportSession": "note:create",
+    "importCards": "note:create",
+    "getImportStatus": "note:read",
 }
 
 
@@ -261,21 +271,40 @@ def flama_connect(url_token: str | None = None):
         logger.info("Connect rejected malformed request from ip=%s", ip)
         return _protocol_response(error=str(exc))
 
+    auth_header = request.headers.get("Authorization", "")
+    header_key = None
+    if auth_header.startswith("Bearer "):
+        header_key = auth_header[7:].strip()
+    elif request.headers.get("X-Flama-Connect-Key"):
+        header_key = request.headers.get("X-Flama-Connect-Key", "").strip()
+
     body_key = payload.get("key")
     if body_key is not None and not isinstance(body_key, str):
         body_key = None
     if url_token is not None and body_key is not None and not hmac.compare_digest(url_token, body_key):
         authenticated = None
         authentication_key = None
+        auth_status = "mismatch"
     else:
-        authentication_key = url_token or body_key
-        authenticated = user_api_token_service.authenticate_token(authentication_key)
+        authentication_key = header_key or url_token or body_key
+        auth_status, authenticated = user_api_token_service.authenticate_token_detailed(authentication_key)
     if authenticated is None:
         if not _rate_allowed(f"invalid:{ip}", "CONNECT_INVALID_TOKEN_RATE_LIMIT", 10):
             return _protocol_response(error="rate limit exceeded", status=429)
-        logger.warning("Connect authentication failed from ip=%s", ip)
+        logger.warning("Connect authentication failed status=%s from ip=%s", auth_status, ip)
         db.session.rollback()
-        return _protocol_response(error="authentication failed")
+        error_msg = "authentication failed"
+        if auth_status == "revoked":
+            error_msg = "revoked key"
+        elif auth_status == "expired":
+            error_msg = "expired key"
+        elif auth_status == "user_disabled":
+            error_msg = "account disabled"
+        elif auth_status == "permission_denied":
+            error_msg = "permission denied"
+        elif auth_status in {"invalid_format", "not_found", "mismatch"}:
+            error_msg = "authentication failed"
+        return _protocol_response(error=error_msg)
     # authenticate_token only succeeds for a validated plaintext token. Keep the
     # validated value for nested multi-action checks without reading it again.
     assert isinstance(authentication_key, str)

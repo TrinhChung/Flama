@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 from types import SimpleNamespace
 from typing import Any, Mapping
@@ -597,6 +599,81 @@ def preview_template(
             str(exc),
             field="front_html",
         ) from exc
+
+
+def preview_raw_template(
+    *,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    front_html = str(payload.get("front_html") or "")
+    back_html = str(payload.get("back_html") or "")
+    shared_css = str(payload.get("shared_css") or "")
+    raw_fields = payload.get("fields") or []
+
+    field_defs = []
+    sample_values: dict[str, Any] = {}
+
+    for idx, f in enumerate(raw_fields):
+        name = str(f if isinstance(f, str) else (f.get("name", "") if isinstance(f, dict) else "")).strip()
+        if not name:
+            continue
+        field_type = str(f.get("field_type", "text")) if isinstance(f, dict) else "text"
+
+        if isinstance(f, str):
+            lower = name.lower()
+            if any(k in lower for k in ["audio", "sound", "voice"]):
+                field_type = "audio"
+            elif any(k in lower for k in ["image", "pic", "photo", "img"]):
+                field_type = "image"
+            elif any(k in lower for k in ["back", "meaning", "example", "definition"]):
+                field_type = "richtext"
+
+        f_def = SimpleNamespace(id=f"f_{idx}", name=name, field_type=field_type, position=idx)
+        field_defs.append(f_def)
+
+        lower = name.lower()
+        if field_type == "image":
+            sample_values[name] = PREVIEW_MEDIA_IMAGE_TOKEN
+        elif field_type == "audio":
+            sample_values[name] = PREVIEW_MEDIA_AUDIO_TOKEN
+        elif any(k in lower for k in ["expression", "word", "front", "kanji"]):
+            sample_values[name] = "日本語[にほんご]"
+        elif any(k in lower for k in ["meaning", "back", "definition"]):
+            sample_values[name] = "Tiếng Nhật / Nhất Bản Ngữ"
+        elif any(k in lower for k in ["reading", "kana"]):
+            sample_values[name] = "にほんご"
+        elif any(k in lower for k in ["example", "sentence"]):
+            sample_values[name] = "毎日日本語を勉強しています。[まいにちにほんごをべんきょうしています。]"
+        else:
+            sample_values[name] = f"[{name} sample data]"
+
+    preview_template_obj = SimpleNamespace(
+        id="raw_preview",
+        front_html=front_html,
+        back_html=back_html,
+        shared_css=shared_css,
+        updated_at="",
+    )
+
+    preview_hash = hashlib.sha256(
+        (front_html + back_html + shared_css + json.dumps(sample_values)).encode("utf-8")
+    ).hexdigest()[:16]
+
+    try:
+        return render_template_pair(
+            template=preview_template_obj,
+            field_defs=field_defs,
+            field_values=sample_values,
+            media_assets=[],
+            preview_note_key=f"raw_preview:{preview_hash}",
+        )
+    except TemplateCompileError as exc:
+        raise ContentApiError(
+            "TEMPLATE_COMPILE_ERROR",
+            str(exc),
+            field="front_html",
+        ) from exc
+
 
 
 def list_notes(
