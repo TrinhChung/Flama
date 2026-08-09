@@ -6,7 +6,7 @@ from flask import Blueprint, flash, redirect, url_for
 from flask_login import current_user, login_required
 
 from app.spa import serve_react_spa
-from app.utils.permissions import is_admin_user
+from app.utils.permissions import is_admin_user, is_creator_user
 
 
 spa_routes_bp = Blueprint("spa_routes", __name__)
@@ -21,7 +21,6 @@ def public_spa_page():
 @spa_routes_bp.get("/browse")
 @spa_routes_bp.get("/study")
 @spa_routes_bp.get("/installed-decks")
-@spa_routes_bp.get("/import")
 @spa_routes_bp.get("/marketplace/decks")
 @spa_routes_bp.get("/marketplace/decks/publish")
 @spa_routes_bp.get("/marketplace/decks/<item_id>")
@@ -35,6 +34,14 @@ def authenticated_spa_page(item_id: str | None = None):
     del item_id
     return serve_react_spa()
 
+
+@spa_routes_bp.get("/import")
+@login_required
+def creator_spa_page():
+    if not is_creator_user(current_user):
+        flash("Tính năng Đồng bộ Anki chỉ dành cho Nhà sáng tạo.", "warning")
+        return redirect(url_for("main.dashboard"))
+    return serve_react_spa()
 
 
 @spa_routes_bp.get("/admin/tts")

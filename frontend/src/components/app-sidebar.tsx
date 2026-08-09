@@ -54,9 +54,15 @@ export function AppSidebar({
   ]
 
   const extensions: AppNavigationItem[] = [
-    { title: 'Đồng bộ Anki Desktop', url: '/import', icon: Zap },
     { title: 'Kết nối Yomitan', url: '/settings/yomitan', icon: Key },
   ]
+
+  const creator: AppNavigationItem[] = [
+    { title: 'Đồng bộ Anki Desktop', url: '/import', icon: Zap },
+  ]
+
+  const hasCreatorAccess =
+    bootstrap.user?.is_admin || bootstrap.user?.role?.code === 'creator'
 
   const admin: AppNavigationItem[] = [
     ...(bootstrap.links.admin_users
@@ -91,6 +97,7 @@ export function AppSidebar({
       <SidebarContent>
         <NavMain label="Học tập" items={primary} />
         <NavMain label="Học liệu" items={library} />
+        {hasCreatorAccess ? <NavMain label="Nhà sáng tạo" items={creator} /> : null}
         <NavMain label="Phần mở rộng" items={extensions} />
         {bootstrap.user?.is_admin ? <NavMain label="Quản trị Admin" items={admin} /> : null}
         <NavMain label="Cài đặt" items={settings} />
