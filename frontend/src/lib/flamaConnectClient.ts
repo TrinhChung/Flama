@@ -26,7 +26,58 @@ export type FlamaConnectErrorCategory =
   | 'TIMEOUT'
   | 'RATE_LIMITED'
   | 'INVALID_SERVER_RESPONSE'
+  | 'REQUEST_REJECTED'
   | 'UNSUPPORTED_VERSION'
+
+export interface FlamaImportNoteTypePlan {
+  sourceModelId: string
+  sourceModelName: string
+  targetNoteTypeId?: string
+  fields: Array<{ name: string; fieldType: string }>
+  templates: Array<{ name: string; frontHtml: string; backHtml: string; sharedCss: string }>
+  fieldMapping: Record<string, string>
+}
+
+export interface FlamaImportSessionPayload {
+  source?: string
+  sourceKey: string
+  sourceRootPath: string
+  targetRootPath: string
+  selectedDecks: string[]
+  decks: Array<{ sourceDeckId: string; sourcePath: string; targetPath: string }>
+  totalNotes: number
+  totalMedia: number
+  appVersion?: string
+  mode: 'strict' | 'auto_sync_missing'
+  noteTypes: FlamaImportNoteTypePlan[]
+  planHash: string
+}
+
+export interface FlamaImportSessionResult {
+  importSessionId: string
+  status: string
+  noteTypeBindings: Record<
+    string,
+    {
+      sourceModelName: string
+      targetNoteTypeId: string
+      fieldMapping: Record<string, string>
+      schemaHash: string
+    }
+  >
+  blockers: Array<{ sourceModelId: string; sourceModelName: string; code: string; message: string }>
+  selectedDecks: string[]
+}
+
+export interface FlamaImportCapabilities {
+  formatVersion: number
+  mediaPackageMaxBytes: number
+  mediaPackageMaxEntries: number
+  mediaPackageMaxUncompressedBytes: number
+  mediaFileMaxBytes: number
+  cardBatchMaxItems: number
+  supportedMediaExtensions: string[]
+}
 
 export class FlamaConnectClientError extends Error {
   category: FlamaConnectErrorCategory
@@ -46,13 +97,13 @@ export interface IFlamaConnectClient {
   uploadMediaAsync(
     file: File,
     key: string,
-    options?: { signal?: AbortSignal }
+    options?: { signal?: AbortSignal; importSessionId?: string }
   ): Promise<{ mediaId: string; url: string; contentHash: string; mimeType: string; size: number }>
   createImportSessionAsync(
-    payload: { source?: string; selectedDecks?: string[]; totalNotes?: number; totalMedia?: number; appVersion?: string },
+    payload: FlamaImportSessionPayload,
     key: string,
     options?: { signal?: AbortSignal }
-  ): Promise<{ importSessionId: string }>
+  ): Promise<FlamaImportSessionResult>
   importCardsAsync(
     payload: { importSessionId: string; cards: any[]; deckName?: string },
     key: string,
@@ -63,6 +114,29 @@ export interface IFlamaConnectClient {
     key: string,
     options?: { signal?: AbortSignal }
   ): Promise<{ importSessionId: string; status: string }>
+  completeImportSessionAsync(
+    sessionId: string,
+    key: string,
+    options?: { signal?: AbortSignal }
+  ): Promise<{ importSessionId: string; status: string }>
+  getImportCapabilitiesAsync(key: string, options?: { signal?: AbortSignal }): Promise<FlamaImportCapabilities>
+  uploadMediaPackageAsync(
+    sessionId: string,
+    sequence: number,
+    packageBlob: Blob,
+    sha256: string,
+    key: string,
+    options?: { signal?: AbortSignal }
+  ): Promise<{ packageId: string; sequence: number; sha256: string; itemCount: number; replayed: boolean }>
+  uploadCardPackageAsync(
+    sessionId: string,
+    sequence: number,
+    packageBlob: Blob,
+    sha256: string,
+    contentEncoding: 'gzip' | 'identity',
+    key: string,
+    options?: { signal?: AbortSignal }
+  ): Promise<{ packageId: string; sequence: number; sha256: string; itemCount: number; replayed: boolean; results: any[] }>
 }
 
 export class FlamaConnectClient implements IFlamaConnectClient {
@@ -72,6 +146,45 @@ export class FlamaConnectClient implements IFlamaConnectClient {
   constructor(baseUrl: string = FLAMA_CONNECT_URL, timeoutMs = 15000) {
     this.baseUrl = baseUrl.replace(/\/+$/, '')
     this.timeoutMs = timeoutMs
+  }
+
+  private importApiUrl(path: string): string {
+    const root = this.baseUrl.replace(/\/v1\/flama-connect(?:\/.*)?$/, '')
+    return `${root}${path}`
+  }
+
+  private async importApiFetch<T>(
+    path: string,
+    key: string,
+    init: RequestInit,
+    options?: { signal?: AbortSignal }
+  ): Promise<T> {
+    const sanitizedKey = this.sanitizeKey(key)
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), Math.max(this.timeoutMs, 60_000))
+    if (options?.signal) options.signal.addEventListener('abort', () => controller.abort())
+    try {
+      const response = await fetch(this.importApiUrl(path), {
+        ...init,
+        headers: { Authorization: `Bearer ${sanitizedKey}`, ...(init.headers || {}) },
+        signal: controller.signal,
+      })
+      const payload = await response.json().catch(() => null)
+      if (!response.ok) {
+        throw new FlamaConnectClientError(
+          String(payload?.message || payload?.error || `HTTP ${response.status}`),
+          response.status === 429 ? 'RATE_LIMITED' : 'REQUEST_REJECTED',
+          response.status
+        )
+      }
+      return payload as T
+    } catch (error: any) {
+      if (error instanceof FlamaConnectClientError) throw error
+      if (error?.name === 'AbortError') throw new FlamaConnectClientError('Upload package bị quá thời gian.', 'TIMEOUT')
+      throw new FlamaConnectClientError('Không thể upload package lên Flama Connect.', 'NETWORK_ERROR')
+    } finally {
+      clearTimeout(timeoutId)
+    }
   }
 
   private sanitizeKey(rawKey: string): string {
@@ -124,7 +237,7 @@ export class FlamaConnectClient implements IFlamaConnectClient {
       let payload: any
       try {
         payload = await res.json()
-      } catch (e) {
+      } catch {
         throw new FlamaConnectClientError('Phản hồi từ máy chủ không đúng định dạng JSON.', 'INVALID_SERVER_RESPONSE', res.status)
       }
 
@@ -145,7 +258,7 @@ export class FlamaConnectClient implements IFlamaConnectClient {
         if (errorMsg.includes('version')) {
           throw new FlamaConnectClientError('Phiên bản API Flama Connect không còn được hỗ trợ.', 'UNSUPPORTED_VERSION', res.status)
         }
-        throw new FlamaConnectClientError('Flama Connect Key không hợp lệ hoặc xác thực thất bại.', 'INVALID_KEY', res.status)
+        throw new FlamaConnectClientError(String(payload.error), 'REQUEST_REJECTED', res.status)
       }
 
       return (payload?.result !== undefined ? payload.result : payload) as T
@@ -180,39 +293,46 @@ export class FlamaConnectClient implements IFlamaConnectClient {
   async uploadMediaAsync(
     file: File,
     key: string,
-    options?: { signal?: AbortSignal }
+    options?: { signal?: AbortSignal; importSessionId?: string }
   ): Promise<{ mediaId: string; url: string; contentHash: string; mimeType: string; size: number }> {
     const arrayBuffer = await file.arrayBuffer()
     const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer)
     const hashArray = Array.from(new Uint8Array(hashBuffer))
     const contentHash = hashArray.map((b) => b.toString(16).padStart(2, '0')).join('')
 
-    const base64Data = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)))
-    const resFilename = await this.postAction<string>(
+    const bytes = new Uint8Array(arrayBuffer)
+    const chunks: string[] = []
+    for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+      chunks.push(String.fromCharCode(...bytes.subarray(offset, offset + 0x8000)))
+    }
+    const base64Data = btoa(chunks.join(''))
+    const stored = await this.postAction<string | { filename: string; sha256: string; mimeType: string; size: number }>(
       'storeMediaFile',
       {
         filename: file.name,
         data: base64Data,
+        importSessionId: options?.importSessionId,
+        mediaKind: file.type.startsWith('image/') ? 'image' : 'audio',
       },
       key,
       options
     )
 
     return {
-      mediaId: resFilename,
-      url: `${this.baseUrl}/media/${resFilename}`,
-      contentHash,
-      mimeType: file.type || 'audio/mpeg',
-      size: file.size,
+      mediaId: typeof stored === 'string' ? stored : stored.filename,
+      url: '',
+      contentHash: typeof stored === 'string' ? contentHash : stored.sha256,
+      mimeType: typeof stored === 'string' ? file.type || 'audio/mpeg' : stored.mimeType,
+      size: typeof stored === 'string' ? file.size : stored.size,
     }
   }
 
   async createImportSessionAsync(
-    payload: { source?: string; selectedDecks?: string[]; totalNotes?: number; totalMedia?: number; appVersion?: string },
+    payload: FlamaImportSessionPayload,
     key: string,
     options?: { signal?: AbortSignal }
-  ): Promise<{ importSessionId: string }> {
-    return this.postAction<{ importSessionId: string }>('createImportSession', payload, key, options)
+  ): Promise<FlamaImportSessionResult> {
+    return this.postAction<FlamaImportSessionResult>('createImportSession', payload, key, options)
   }
 
   async importCardsAsync(
@@ -229,6 +349,71 @@ export class FlamaConnectClient implements IFlamaConnectClient {
     options?: { signal?: AbortSignal }
   ): Promise<{ importSessionId: string; status: string }> {
     return this.postAction<{ importSessionId: string; status: string }>('getImportStatus', { importSessionId: sessionId }, key, options)
+  }
+
+  async completeImportSessionAsync(
+    sessionId: string,
+    key: string,
+    options?: { signal?: AbortSignal }
+  ): Promise<{ importSessionId: string; status: string }> {
+    return this.postAction<{ importSessionId: string; status: string }>('completeImportSession', { importSessionId: sessionId }, key, options)
+  }
+
+  async getImportCapabilitiesAsync(
+    key: string,
+    options?: { signal?: AbortSignal }
+  ): Promise<FlamaImportCapabilities> {
+    return this.importApiFetch<FlamaImportCapabilities>(
+      '/v1/import-sessions/capabilities',
+      key,
+      { method: 'GET' },
+      options
+    )
+  }
+
+  async uploadMediaPackageAsync(
+    sessionId: string,
+    sequence: number,
+    packageBlob: Blob,
+    sha256: string,
+    key: string,
+    options?: { signal?: AbortSignal }
+  ): Promise<{ packageId: string; sequence: number; sha256: string; itemCount: number; replayed: boolean }> {
+    return this.importApiFetch(
+      `/v1/import-sessions/${encodeURIComponent(sessionId)}/packages/media/${sequence}`,
+      key,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/zip', 'X-Package-SHA256': sha256 },
+        body: packageBlob,
+      },
+      options
+    )
+  }
+
+  async uploadCardPackageAsync(
+    sessionId: string,
+    sequence: number,
+    packageBlob: Blob,
+    sha256: string,
+    contentEncoding: 'gzip' | 'identity',
+    key: string,
+    options?: { signal?: AbortSignal }
+  ): Promise<{ packageId: string; sequence: number; sha256: string; itemCount: number; replayed: boolean; results: any[] }> {
+    return this.importApiFetch(
+      `/v1/import-sessions/${encodeURIComponent(sessionId)}/packages/cards/${sequence}`,
+      key,
+      {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/x-ndjson',
+          'Content-Encoding': contentEncoding,
+          'X-Package-SHA256': sha256,
+        },
+        body: packageBlob,
+      },
+      options
+    )
   }
 }
 

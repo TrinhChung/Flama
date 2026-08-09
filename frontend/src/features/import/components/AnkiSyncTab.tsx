@@ -32,6 +32,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { NativeSelect } from '@/components/ui/native-select'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Progress } from '@/components/ui/progress'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
@@ -115,6 +116,7 @@ export const AnkiSyncTab: React.FC<AnkiSyncTabProps> = ({
 
   // Step 4: Sync Execution State
   const [syncMode, setSyncMode] = useState<'new_and_changed' | 'only_new' | 'resync_all'>('new_and_changed')
+  const [autoSyncMissingNoteTypes, setAutoSyncMissingNoteTypes] = useState(false)
   const [isSyncing, setIsSyncing] = useState(false)
   const [syncProgress, setSyncProgress] = useState<{
     phase: string
@@ -213,13 +215,16 @@ export const AnkiSyncTab: React.FC<AnkiSyncTabProps> = ({
 
             // Fall back to exact name match or default NoteType
             if (!targetFlamaModel) {
-              targetFlamaModel = noteTypeOptions.find((m) => m.name.toLowerCase() === modelName.toLowerCase()) || noteTypeOptions[0]
+              targetFlamaModel = noteTypeOptions.find((m) => m.name.toLowerCase() === modelName.toLowerCase())
             }
 
             if (targetFlamaModel) {
               setSelectedFlamaModelId(targetFlamaModel.id)
               const suggested = autoSuggestFieldMapping(fields, targetFlamaModel.fields)
               setFieldMapping(suggested)
+            } else {
+              setSelectedFlamaModelId('')
+              setFieldMapping(Object.fromEntries(fields.map((fieldName) => [fieldName, fieldName])))
             }
           }
         }
@@ -274,7 +279,7 @@ export const AnkiSyncTab: React.FC<AnkiSyncTabProps> = ({
       const fields = await ankiConnectClient.getModelFieldNames(modelName, endpoint)
       setAnkiFields(fields)
       const savedMappingStr = localStorage.getItem(`anki_nt_map_${modelName}`)
-      let targetModel = noteTypeOptions.find((item) => item.name.toLowerCase() === modelName.toLowerCase()) || noteTypeOptions[0]
+      let targetModel = noteTypeOptions.find((item) => item.name.toLowerCase() === modelName.toLowerCase())
       if (savedMappingStr) {
         try {
           const saved = JSON.parse(savedMappingStr)
@@ -286,6 +291,9 @@ export const AnkiSyncTab: React.FC<AnkiSyncTabProps> = ({
       if (targetModel) {
         setSelectedFlamaModelId(targetModel.id)
         setFieldMapping(autoSuggestFieldMapping(fields, targetModel.fields))
+      } else {
+        setSelectedFlamaModelId('')
+        setFieldMapping(Object.fromEntries(fields.map((fieldName) => [fieldName, fieldName])))
       }
       setPreviewNotes([])
       setShowPreviewSection(false)
@@ -349,7 +357,12 @@ export const AnkiSyncTab: React.FC<AnkiSyncTabProps> = ({
 
   // Execute Sync
   const handleExecuteSync = async () => {
-    if (connectionStatus !== 'Connected' || !selectedDeckName || !selectedAnkiModel || !selectedFlamaModelId) {
+    if (
+      connectionStatus !== 'Connected' ||
+      !selectedDeckName ||
+      !selectedAnkiModel ||
+      (!selectedFlamaModelId && !autoSyncMissingNoteTypes)
+    ) {
       alert('Vui lòng chọn Deck và cấu hình ánh xạ trường trước khi thực thi.')
       return
     }
@@ -368,23 +381,10 @@ export const AnkiSyncTab: React.FC<AnkiSyncTabProps> = ({
         importPermission: true,
         uploadLimit: 10000,
       }
-      const targetNoteType = noteTypeOptions.find((item) => item.id === selectedFlamaModelId)
-      const mediaFieldNames = new Set(
-        (targetNoteType?.fields || [])
-          .filter((field) => ['audio', 'image', 'diagram'].includes(field.field_type))
-          .map((field) => field.name)
-      )
-      const contentOnlyFieldMapping = Object.fromEntries(
-        Object.entries(fieldMapping).map(([ankiFieldName, flamaFieldName]) => [
-          ankiFieldName,
-          mediaFieldNames.has(flamaFieldName) ? 'ignore' : flamaFieldName,
-        ])
-      )
-
       const result = await executeAnkiSync(
         selectedDeckName,
         selectedAnkiModel,
-        contentOnlyFieldMapping,
+        fieldMapping,
         syncMode,
         key,
         account,
@@ -399,10 +399,12 @@ export const AnkiSyncTab: React.FC<AnkiSyncTabProps> = ({
           })
         },
         {
-          syncMedia: false,
+          syncMedia: true,
           targetDeckName: targetFlamaDeckName.trim() || selectedDeckName,
           targetNoteTypeId: selectedFlamaModelId,
           endpoint,
+          noteTypeOptions,
+          autoSyncMissingNoteTypes,
         }
       )
 
@@ -510,6 +512,7 @@ export const AnkiSyncTab: React.FC<AnkiSyncTabProps> = ({
                   onChange={(e) => handleFlamaModelChange(e.target.value)}
                   className="h-8 text-xs font-semibold text-primary"
                 >
+                  <option value="">-- Chưa có NoteType tương thích --</option>
                   {noteTypeOptions.map((nt) => (
                     <option key={nt.id} value={nt.id}>
                       {nt.name} ({nt.fields?.length || 0} trường)
@@ -556,7 +559,9 @@ export const AnkiSyncTab: React.FC<AnkiSyncTabProps> = ({
                           value={currentFlamaField}
                           onChange={(e) => setFieldMapping({ ...fieldMapping, [ankiField]: e.target.value })}
                           className="h-8 text-xs font-medium"
+                          disabled={!targetFlamaModel}
                         >
+                          {!targetFlamaModel && <option value={ankiField}>{ankiField} (sẽ tự tạo)</option>}
                           <option value="ignore">-- Bỏ qua trường này --</option>
                           {targetFlamaModel?.fields.map((ff) => (
                             <option key={ff.id} value={ff.name}>
@@ -665,23 +670,44 @@ export const AnkiSyncTab: React.FC<AnkiSyncTabProps> = ({
               </NativeSelect>
             </div>
 
+            <label className="flex items-start gap-2.5 rounded-xl border border-border/70 bg-card/40 p-3 cursor-pointer">
+              <Checkbox
+                checked={autoSyncMissingNoteTypes}
+                onCheckedChange={(checked) => setAutoSyncMissingNoteTypes(Boolean(checked))}
+                className="mt-0.5"
+              />
+              <span className="space-y-0.5">
+                <span className="block text-xs font-semibold text-foreground">
+                  Tự tạo NoteType còn thiếu trước khi đồng bộ deck
+                </span>
+                <span className="block text-[11px] leading-relaxed text-muted-foreground">
+                  Nếu tắt, chỉ cần một NoteType thiếu hoặc không tương thích thì toàn bộ phiên sẽ bị chặn và không tạo deck/card/media.
+                </span>
+              </span>
+            </label>
+
           </div>
 
-          <Alert className="border-amber-500/30 bg-amber-500/5">
-            <AlertTriangle className="size-4 text-amber-600" />
+          <Alert className="border-primary/30 bg-primary/5">
+            <CheckCircle2 className="size-4 text-primary" />
             <AlertDescription className="text-xs text-muted-foreground">
-              Bản đồng bộ này chỉ nhập nội dung trường. Media Anki chưa được đính lại vào card nên tạm thời không bật tùy chọn upload media.
+              Cấu trúc deck con được giữ theo đường dẫn tương đối. Audio và hình ảnh được kiểm tra, upload theo hash rồi đính vào card qua MediaAsset.
             </AlertDescription>
           </Alert>
 
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2.5 pt-2">
             <Button
-              disabled={isSyncing || connectionStatus !== 'Connected' || !selectedDeckName || !selectedFlamaModelId}
+              disabled={
+                isSyncing ||
+                connectionStatus !== 'Connected' ||
+                !selectedDeckName ||
+                (!selectedFlamaModelId && !autoSyncMissingNoteTypes)
+              }
               onClick={handleExecuteSync}
               className="font-bold text-xs shadow-sm w-full sm:w-auto px-6 h-9 rounded-xl"
             >
               {isSyncing ? <Loader2 className="size-4 animate-spin mr-2" /> : <Zap className="size-4 mr-2" />}
-              Bắt đầu đồng bộ nội dung
+              Bắt đầu đồng bộ deck + media
             </Button>
           </div>
 

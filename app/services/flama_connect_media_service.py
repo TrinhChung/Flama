@@ -25,6 +25,8 @@ from app.validators.flashcard_input import (
 from models import db
 from models.audit_log import AuditLog
 from models.connect_pending_media import ConnectPendingMedia
+from models.connect_import_media import ConnectImportMedia
+from models.connect_import_session import ConnectImportSession
 from models.media_asset import MediaAsset
 from models.note import Note
 from models.note_type import NoteType
@@ -38,6 +40,20 @@ SOUND_REFERENCE_RE = re.compile(
     r"^\[sound:(yomitan_audio_[A-Za-z0-9_-]{8,96}\.mp3)\]$",
     flags=re.IGNORECASE,
 )
+IMPORT_MEDIA_FILENAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,254}$")
+IMPORT_SOUND_REFERENCE_RE = re.compile(r"^\[sound:([A-Za-z0-9][A-Za-z0-9_.-]{0,254})\]$")
+IMPORT_MEDIA_MIME_BY_EXTENSION = {
+    "jpg": "image/jpeg",
+    "jpeg": "image/jpeg",
+    "png": "image/png",
+    "gif": "image/gif",
+    "webp": "image/webp",
+    "svg": "image/svg+xml",
+    "mp3": "audio/mpeg",
+    "ogg": "audio/ogg",
+    "wav": "audio/wav",
+    "webm": "audio/webm",
+}
 
 
 class ConnectMediaError(ValueError):
@@ -113,6 +129,119 @@ def _decode_base64_audio(raw_data: object, *, max_bytes: int) -> bytes:
     if len(content) > max_bytes:
         raise ConnectMediaError(f"Audio vượt quá giới hạn {max_bytes} byte.")
     return content
+
+
+def _decode_base64_media(raw_data: object, *, max_bytes: int) -> bytes:
+    if not isinstance(raw_data, str) or not raw_data:
+        raise ConnectMediaError("Dữ liệu media base64 là bắt buộc.")
+    max_encoded_length = ((max_bytes + 2) // 3) * 4
+    if len(raw_data) > max_encoded_length + 4:
+        raise ConnectMediaError(f"Media vượt quá giới hạn {max_bytes} byte.")
+    try:
+        content = base64.b64decode(raw_data, validate=True)
+    except (ValueError, binascii.Error) as exc:
+        raise ConnectMediaError("Dữ liệu media không phải base64 hợp lệ.") from exc
+    if len(content) > max_bytes:
+        raise ConnectMediaError(f"Media vượt quá giới hạn {max_bytes} byte.")
+    return content
+
+
+def stage_import_media(
+    *,
+    user_id: int,
+    session_id: object,
+    filename: object,
+    data: object,
+    media_kind: object,
+) -> dict[str, object]:
+    session = ConnectImportSession.query.filter_by(id=session_id, user_id=user_id).first()
+    if session is None or session.status not in {"note_types_ready", "importing"}:
+        raise ConnectMediaError("Phiên đồng bộ chưa sẵn sàng để nhận media.")
+    if session.expires_at <= _utcnow():
+        raise ConnectMediaError("Phiên đồng bộ đã hết hạn.")
+    normalized_kind = str(media_kind or "").strip().lower()
+    if normalized_kind not in {"audio", "image"}:
+        raise ConnectMediaError("mediaKind phải là audio hoặc image.")
+    if not isinstance(filename, str) or not IMPORT_MEDIA_FILENAME_RE.fullmatch(filename):
+        raise ConnectMediaError("Tên media không an toàn hoặc không hợp lệ.")
+    extension = Path(filename).suffix.lower().lstrip(".")
+    mime_type = IMPORT_MEDIA_MIME_BY_EXTENSION.get(extension)
+    if not mime_type or (normalized_kind == "audio") != mime_type.startswith("audio/"):
+        raise ConnectMediaError("Phần mở rộng media không khớp với mediaKind.")
+
+    max_bytes = _config_int(
+        "CONNECT_IMPORT_MEDIA_MAX_BYTES",
+        int(current_app.config.get("FLASHCARD_MEDIA_MAX_BYTES", 10 * 1024 * 1024)),
+    )
+    content = _decode_base64_media(data, max_bytes=max_bytes)
+    uploaded = FileStorage(stream=io.BytesIO(content), filename=filename, content_type=mime_type)
+    try:
+        validated = validate_media_upload_request(
+            field_name_raw="anki_import_media",
+            field_type=normalized_kind,
+            uploaded=uploaded,
+            max_bytes=max_bytes,
+            scanner=current_app.config.get("FLASHCARD_MEDIA_SCANNER"),
+            scan_enabled=bool(current_app.config.get("FLASHCARD_MEDIA_SCAN_ENABLED", False)),
+        )
+    except RequestValidationError as exc:
+        raise ConnectMediaError(f"Media không hợp lệ: {exc}") from exc
+
+    existing = ConnectImportMedia.query.filter_by(session_id=session.id, filename=filename).first()
+    if existing is not None:
+        if existing.sha256 != validated.sha256:
+            raise ConnectMediaError("Tên media đã tồn tại trong phiên với nội dung khác.")
+        return {
+            "filename": existing.filename,
+            "sha256": existing.sha256,
+            "mimeType": existing.mime_type,
+            "size": existing.size_bytes,
+        }
+
+    active_count = ConnectImportMedia.query.filter_by(session_id=session.id).count()
+    max_items = _config_int("CONNECT_IMPORT_MEDIA_MAX_ITEMS", 20_000)
+    if active_count >= max_items:
+        raise ConnectMediaError("Phiên đồng bộ đã vượt quá số lượng media cho phép.")
+    relative_path = Path("connect_import") / str(user_id) / session.id / validated.storage_filename
+    full_path = _safe_path(relative_path)
+    full_path.parent.mkdir(parents=True, exist_ok=True)
+    full_path.write_bytes(validated.content)
+    row = ConnectImportMedia(
+        session_id=session.id,
+        user_id=user_id,
+        filename=filename,
+        media_kind=normalized_kind,
+        mime_type=validated.mime_type,
+        storage_path=str(relative_path).replace("\\", "/"),
+        sha256=validated.sha256,
+        size_bytes=validated.size_bytes,
+    )
+    try:
+        db.session.add(row)
+        db.session.flush()
+        db.session.add(
+            AuditLog(
+                user_id=user_id,
+                action="connect.import_media.stage",
+                payload={
+                    "session_id": session.id,
+                    "media_id": row.id,
+                    "sha256": row.sha256,
+                    "size_bytes": row.size_bytes,
+                    "mime_type": row.mime_type,
+                },
+            )
+        )
+    except SQLAlchemyError:
+        _unlink_quietly(full_path)
+        raise
+    session.processed_media = ConnectImportMedia.query.filter_by(session_id=session.id).count()
+    return {
+        "filename": row.filename,
+        "sha256": row.sha256,
+        "mimeType": row.mime_type,
+        "size": row.size_bytes,
+    }
 
 
 def stage_mp3(*, user_id: int, filename: object, data: object) -> str:
@@ -272,6 +401,120 @@ def resolve_pending_audio(
         allowed_references.add(filename)
         allowed_references.add(f"[sound:{filename}]")
     return attachments, allowed_references
+
+
+def resolve_import_media(
+    *,
+    user_id: int,
+    session_id: str,
+    note_type: NoteType,
+    raw_fields: object,
+    lock: bool,
+) -> tuple[dict[str, ConnectImportMedia], set[str]]:
+    if not isinstance(raw_fields, dict):
+        return {}, set()
+    media_fields = {
+        field.name: field.field_type
+        for field in note_type.field_defs
+        if field.field_type in {"audio", "image", "diagram"}
+    }
+    requested: dict[str, str] = {}
+    for field_name, field_type in media_fields.items():
+        raw = str(raw_fields.get(field_name) or "").strip()
+        if not raw:
+            continue
+        if field_type == "audio":
+            match = IMPORT_SOUND_REFERENCE_RE.fullmatch(raw)
+            filename = match.group(1) if match else raw
+        else:
+            filename = raw
+        if not IMPORT_MEDIA_FILENAME_RE.fullmatch(filename):
+            raise ConnectMediaError(f'Trường media "{field_name}" chứa tham chiếu không hợp lệ.')
+        requested[field_name] = filename
+    if not requested:
+        return {}, set()
+
+    filenames = sorted(set(requested.values()))
+    query = ConnectImportMedia.query.filter(
+        ConnectImportMedia.user_id == user_id,
+        ConnectImportMedia.session_id == session_id,
+        ConnectImportMedia.filename.in_(filenames),
+    )
+    if lock:
+        query = query.with_for_update()
+    rows = {row.filename: row for row in query.all()}
+    missing = [filename for filename in filenames if filename not in rows]
+    if missing:
+        raise ConnectMediaError(f"Chưa upload media: {', '.join(missing[:5])}")
+    for field_name, filename in requested.items():
+        expected = media_fields[field_name]
+        row_kind = rows[filename].media_kind
+        if (expected == "audio") != (row_kind == "audio"):
+            raise ConnectMediaError(f'Media "{filename}" không đúng loại trường "{field_name}".')
+    allowed: set[str] = set()
+    for filename in filenames:
+        allowed.add(filename)
+        allowed.add(f"[sound:{filename}]")
+    return {field: rows[filename] for field, filename in requested.items()}, allowed
+
+
+def materialize_import_media(
+    *,
+    user_id: int,
+    note: Note,
+    attachments: dict[str, ConnectImportMedia],
+) -> MaterializedMedia:
+    if not attachments:
+        return MaterializedMedia((), ())
+    values = dict(note.field_values or {})
+    final_paths: list[Path] = []
+    try:
+        for field_name, staged in attachments.items():
+            staged_path = _safe_path(staged.storage_path)
+            try:
+                content = staged_path.read_bytes()
+            except OSError as exc:
+                raise ConnectMediaError("Media staging không còn tồn tại.") from exc
+            if len(content) != staged.size_bytes or hashlib.sha256(content).hexdigest() != staged.sha256:
+                raise ConnectMediaError("Media staging không còn toàn vẹn.")
+            extension = Path(staged.filename).suffix.lower().lstrip(".")
+            storage_filename = f"{uuid4().hex}_{staged.sha256[:12]}.{extension}"
+            relative_path = Path(str(user_id)) / note.id / storage_filename
+            final_path = _safe_path(relative_path)
+            final_path.parent.mkdir(parents=True, exist_ok=True)
+
+            existing = MediaAsset.query.filter_by(
+                note_id=note.id,
+                field_name=field_name,
+                sha256=staged.sha256,
+            ).first()
+            if existing is None:
+                final_path.write_bytes(content)
+                final_paths.append(final_path)
+                existing = MediaAsset(
+                    note_id=note.id,
+                    field_name=field_name,
+                    filename=staged.filename,
+                    mime_type=staged.mime_type,
+                    storage_path=str(relative_path).replace("\\", "/"),
+                    sha256=staged.sha256,
+                    size_bytes=staged.size_bytes,
+                )
+                db.session.add(existing)
+            values[field_name] = staged.filename
+        note.field_values = values
+        db.session.add(
+            AuditLog(
+                user_id=user_id,
+                action="connect.import_media.attach",
+                payload={"note_id": note.id, "media_count": len(attachments)},
+            )
+        )
+    except Exception:
+        for path in final_paths:
+            _unlink_quietly(path)
+        raise
+    return MaterializedMedia(tuple(final_paths), ())
 
 
 def materialize_audio(

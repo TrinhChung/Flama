@@ -385,7 +385,8 @@ export function DeckTree({
 
     const handlePointerUp = () => {
       const pending = pendingRef.current
-      if (pending && pending.active && draggedDeck) {
+      if (pending?.active) {
+        const deckBeingDragged = draggedDeck ?? pending.deck
         isJustDraggedRef.current = true
         if (justDraggedTimerRef.current) {
           clearTimeout(justDraggedTimerRef.current)
@@ -394,14 +395,14 @@ export function DeckTree({
           isJustDraggedRef.current = false
         }, 300)
 
-        if (dragOverId === 'root' && draggedDeck.parent_id !== null) {
-          void onMoveDeck?.(draggedDeck.id, null)
+        if (dragOverId === 'root' && deckBeingDragged.parent_id !== null) {
+          void onMoveDeck?.(deckBeingDragged.id, null)
         } else if (
           typeof dragOverId === 'number' &&
           !isInvalidDrop &&
-          draggedDeck.parent_id !== dragOverId
+          deckBeingDragged.parent_id !== dragOverId
         ) {
-          void onMoveDeck?.(draggedDeck.id, dragOverId)
+          void onMoveDeck?.(deckBeingDragged.id, dragOverId)
         }
       }
       pendingRef.current = null

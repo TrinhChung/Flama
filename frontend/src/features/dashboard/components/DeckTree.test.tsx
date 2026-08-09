@@ -86,4 +86,42 @@ describe('DeckTree interactions', () => {
 
     expect(onActivate).toHaveBeenCalledWith(deck)
   })
+
+  it('does not permanently suppress activation when pointer-up races drag state', () => {
+    vi.useFakeTimers()
+    const onActivate = vi.fn()
+    const elementFromPointDescriptor = Object.getOwnPropertyDescriptor(document, 'elementFromPoint')
+
+    act(() => {
+      root.render(
+        <DeckTree
+          nodes={[deck]}
+          adminMode={false}
+          onActivate={onActivate}
+          onAction={vi.fn()}
+        />,
+      )
+    })
+
+    const row = container.querySelector<HTMLElement>('[data-node-id="42"]')
+    Object.defineProperty(document, 'elementFromPoint', {
+      configurable: true,
+      value: () => row,
+    })
+    act(() => {
+      row?.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0, clientX: 10, clientY: 10 }))
+      window.dispatchEvent(new MouseEvent('pointermove', { bubbles: true, clientX: 20, clientY: 10 }))
+      window.dispatchEvent(new MouseEvent('pointerup', { bubbles: true, clientX: 20, clientY: 10 }))
+      vi.advanceTimersByTime(301)
+      row?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))
+    })
+
+    expect(onActivate).toHaveBeenCalledWith(deck)
+    if (elementFromPointDescriptor) {
+      Object.defineProperty(document, 'elementFromPoint', elementFromPointDescriptor)
+    } else {
+      delete (document as Partial<Document>).elementFromPoint
+    }
+    vi.useRealTimers()
+  })
 })

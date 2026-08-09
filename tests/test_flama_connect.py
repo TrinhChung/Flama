@@ -1,16 +1,25 @@
 from __future__ import annotations
 
 import base64
+import hashlib
+import gzip
+import io
+import json
 from pathlib import Path
 import tempfile
 import unittest
+import zipfile
 from datetime import datetime, timedelta
 
 from app.connect import create_connect_app
+from app.services.anki_content_normalizer import backfill_anki_note_entities
 from app.services import user_api_token_service
 from models import db
 from models.card import Card
 from models.connect_pending_media import ConnectPendingMedia
+from models.connect_import_session import ConnectImportSession
+from models.connect_import_media import ConnectImportMedia
+from models.connect_source_note_ref import ConnectSourceNoteRef
 from models.deck import Deck
 from models.deck_clone_added_note import DeckCloneAddedNote
 from models.deck_clone_deck_map import DeckCloneDeckMap
@@ -25,6 +34,12 @@ from models.user import User
 
 
 _MIN_MP3_BYTES = b"ID3\x04\x00\x00\x00\x00\x00\x15" + (b"\x00" * 64)
+_MIN_PNG_BYTES = (
+    b"\x89PNG\r\n\x1a\n"
+    b"\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde"
+    b"\x00\x00\x00\nIDATx\x9cc`\x00\x00\x00\x02\x00\x01\xe2!\xbc3"
+    b"\x00\x00\x00\x00IEND\xaeB`\x82"
+)
 
 
 class FlamaConnectTests(unittest.TestCase):
@@ -116,6 +131,13 @@ class FlamaConnectTests(unittest.TestCase):
             payload["key"] = body_key
         return self.client.post(f"/v1/flama-connect/{self.token}", json=payload)
 
+    def _media_zip(self, files: dict[str, bytes]) -> bytes:
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_STORED) as archive:
+            for filename, content in files.items():
+                archive.writestr(filename, content)
+        return buffer.getvalue()
+
     def _note(self, deck_name: str = "Inbox", word: str = "猫") -> dict:
         return {
             "deckName": deck_name,
@@ -132,6 +154,51 @@ class FlamaConnectTests(unittest.TestCase):
                 },
             },
         }
+
+    def _create_import_session(
+        self,
+        *,
+        selected_decks: list[str] | None = None,
+        mode: str = "strict",
+        target_note_type_id: str | None = None,
+        source_model_id: str = "1001",
+        source_model_name: str = "Yomitan Vocabulary",
+    ):
+        target_id = self.note_type_id if target_note_type_id is None else target_note_type_id
+        plan = {
+            "sourceModelId": source_model_id,
+            "sourceModelName": source_model_name,
+            "fields": [
+                {"name": "Word", "fieldType": "text"},
+                {"name": "Meaning", "fieldType": "richtext"},
+            ],
+            "templates": [
+                {
+                    "name": "Card 1",
+                    "frontHtml": "{{Word}}",
+                    "backHtml": "{{Meaning}}",
+                    "sharedCss": "",
+                }
+            ],
+            "fieldMapping": {"Word": "Word", "Meaning": "Meaning"},
+        }
+        if target_id:
+            plan["targetNoteTypeId"] = target_id
+        return self._call(
+            "createImportSession",
+            {
+                "source": "anki",
+                "sourceKey": "test-profile",
+                "sourceRootPath": "Inbox",
+                "targetRootPath": "Inbox",
+                "selectedDecks": selected_decks or ["Inbox"],
+                "totalNotes": 2,
+                "totalMedia": 0,
+                "mode": mode,
+                "noteTypes": [plan],
+                "planHash": "a" * 64,
+            },
+        )
 
     def test_yomitan_v2_success_values_are_returned_directly(self):
         self.assertEqual(self._call("version").get_json(), 6)
@@ -161,13 +228,29 @@ class FlamaConnectTests(unittest.TestCase):
         invalid_note = self._note(word="")
         invalid_note["modelName"] = self.note_type_id
 
+        session = self._create_import_session().get_json()
+        self.assertEqual(session["status"], "note_types_ready")
         response = self._call(
             "importCards",
             {
-                "importSessionId": "test-session",
+                "importSessionId": session["importSessionId"],
                 "cards": [
-                    {"ankiNoteId": 101, "contentHash": "hash-101", "note": valid_note},
-                    {"ankiNoteId": 102, "contentHash": "hash-102", "note": invalid_note},
+                    {
+                        "ankiNoteId": 101,
+                        "sourceModelId": "1001",
+                        "sourceDeckId": "1",
+                        "sourceDeckPath": "Inbox",
+                        "contentHash": "1" * 64,
+                        "note": valid_note,
+                    },
+                    {
+                        "ankiNoteId": 102,
+                        "sourceModelId": "1001",
+                        "sourceDeckId": "1",
+                        "sourceDeckPath": "Inbox",
+                        "contentHash": "2" * 64,
+                        "note": invalid_note,
+                    },
                 ],
             },
         )
@@ -177,6 +260,302 @@ class FlamaConnectTests(unittest.TestCase):
         self.assertEqual(results[1]["ankiNoteId"], 102)
         self.assertFalse(results[1]["imported"])
         self.assertTrue(results[1]["error"])
+
+    def test_strict_preflight_blocks_missing_note_type_without_domain_writes(self):
+        with self.app.app_context():
+            before = (NoteType.query.count(), Deck.query.count(), Note.query.count(), Card.query.count())
+        response = self._create_import_session(
+            mode="strict",
+            target_note_type_id="",
+            source_model_id="missing-model",
+            source_model_name="Missing Anki Model",
+        )
+        payload = response.get_json()
+        self.assertEqual(payload["status"], "blocked_note_types")
+        self.assertEqual(payload["blockers"][0]["code"], "NOTE_TYPE_MISSING")
+        blocked_import = self._call(
+            "importCards",
+            {"importSessionId": payload["importSessionId"], "cards": []},
+        )
+        self.assertIn("NoteTypes must be ready", blocked_import.get_json()["error"])
+        with self.app.app_context():
+            self.assertEqual(
+                (NoteType.query.count(), Deck.query.count(), Note.query.count(), Card.query.count()),
+                before,
+            )
+            self.assertEqual(ConnectImportSession.query.count(), 1)
+
+    def test_auto_preflight_creates_missing_note_type_before_any_deck_or_card(self):
+        with self.app.app_context():
+            before_decks = Deck.query.count()
+        response = self._create_import_session(
+            mode="auto_sync_missing",
+            target_note_type_id="",
+            source_model_id="new-model",
+            source_model_name="New Anki Model",
+        )
+        payload = response.get_json()
+        self.assertEqual(payload["status"], "note_types_ready")
+        target_id = payload["noteTypeBindings"]["new-model"]["targetNoteTypeId"]
+        with self.app.app_context():
+            target = db.session.get(NoteType, target_id)
+            self.assertIsNotNone(target)
+            self.assertEqual([field.name for field in target.field_defs], ["Word", "Meaning"])
+            self.assertEqual(len(target.templates), 1)
+            self.assertEqual(Deck.query.count(), before_decks)
+            self.assertEqual(Note.query.count(), 0)
+            self.assertEqual(Card.query.count(), 0)
+
+    def test_one_anki_deck_can_import_multiple_ready_note_types_without_flattening(self):
+        with self.app.app_context():
+            second_type = NoteType(user_id=self.user_id, name="Second Anki Model")
+            db.session.add(second_type)
+            db.session.flush()
+            db.session.add_all(
+                [
+                    FieldDef(
+                        note_type_id=second_type.id,
+                        name="Word",
+                        field_type="text",
+                        position=0,
+                        required=True,
+                        identity_role="primary",
+                    ),
+                    FieldDef(note_type_id=second_type.id, name="Meaning", field_type="richtext", position=1),
+                    Template(
+                        note_type_id=second_type.id,
+                        name="Card 1",
+                        front_html="{{Word}}",
+                        back_html="{{Meaning}}",
+                    ),
+                ]
+            )
+            db.session.commit()
+            second_type_id = second_type.id
+
+        def plan(model_id: str, model_name: str, target_id: str):
+            return {
+                "sourceModelId": model_id,
+                "sourceModelName": model_name,
+                "targetNoteTypeId": target_id,
+                "fields": [
+                    {"name": "Word", "fieldType": "text"},
+                    {"name": "Meaning", "fieldType": "richtext"},
+                ],
+                "templates": [
+                    {"name": "Card 1", "frontHtml": "{{Word}}", "backHtml": "{{Meaning}}", "sharedCss": ""}
+                ],
+                "fieldMapping": {"Word": "Word", "Meaning": "Meaning"},
+            }
+
+        session = self._call(
+            "createImportSession",
+            {
+                "source": "anki",
+                "sourceKey": "mixed-model-profile",
+                "sourceRootPath": "Inbox",
+                "targetRootPath": "Inbox",
+                "selectedDecks": ["Inbox"],
+                "totalNotes": 2,
+                "totalMedia": 0,
+                "mode": "strict",
+                "noteTypes": [
+                    plan("model-one", "Yomitan Vocabulary", self.note_type_id),
+                    plan("model-two", "Second Anki Model", second_type_id),
+                ],
+                "planHash": "e" * 64,
+            },
+        ).get_json()
+        self.assertEqual(session["status"], "note_types_ready")
+
+        first_note = self._note(word="first-model")
+        first_note["modelName"] = self.note_type_id
+        second_note = self._note(word="second-model")
+        second_note["modelName"] = second_type_id
+        result = self._call(
+            "importCards",
+            {
+                "importSessionId": session["importSessionId"],
+                "cards": [
+                    {
+                        "ankiNoteId": 701,
+                        "sourceModelId": "model-one",
+                        "sourceDeckId": "inbox",
+                        "sourceDeckPath": "Inbox",
+                        "contentHash": "1" * 64,
+                        "note": first_note,
+                    },
+                    {
+                        "ankiNoteId": 702,
+                        "sourceModelId": "model-two",
+                        "sourceDeckId": "inbox",
+                        "sourceDeckPath": "Inbox",
+                        "contentHash": "2" * 64,
+                        "note": second_note,
+                    },
+                ],
+            },
+        ).get_json()
+        self.assertTrue(all(item["imported"] for item in result["results"]), result)
+        with self.app.app_context():
+            deck = db.session.get(Deck, self.inbox_id)
+            self.assertIsNone(deck.note_type_id)
+            self.assertEqual(Note.query.filter_by(user_id=self.user_id, deck_id=self.inbox_id).count(), 2)
+
+    def test_import_preserves_nested_deck_path_and_attaches_audio_and_image(self):
+        with self.app.app_context():
+            db.session.add_all(
+                [
+                    FieldDef(note_type_id=self.note_type_id, name="Image", field_type="image", position=2),
+                    FieldDef(note_type_id=self.note_type_id, name="Sound", field_type="audio", position=3),
+                ]
+            )
+            db.session.commit()
+        plan = {
+            "sourceModelId": "media-model",
+            "sourceModelName": "Yomitan Vocabulary",
+            "targetNoteTypeId": self.note_type_id,
+            "fields": [
+                {"name": "Word", "fieldType": "text"},
+                {"name": "Meaning", "fieldType": "richtext"},
+                {"name": "Image", "fieldType": "image"},
+                {"name": "Sound", "fieldType": "audio"},
+            ],
+            "templates": [{"name": "Card 1", "frontHtml": "{{Word}}", "backHtml": "{{Meaning}}", "sharedCss": ""}],
+            "fieldMapping": {"Word": "Word", "Meaning": "Meaning", "Image": "Image", "Sound": "Sound"},
+        }
+        session = self._call(
+            "createImportSession",
+            {
+                "source": "anki",
+                "sourceKey": "media-profile",
+                "sourceRootPath": "Source",
+                "targetRootPath": "Imported",
+                "selectedDecks": ["Imported", "Imported::Child"],
+                "totalNotes": 1,
+                "totalMedia": 2,
+                "mode": "strict",
+                "noteTypes": [plan],
+                "planHash": "b" * 64,
+            },
+        ).get_json()
+        self.assertEqual(session["status"], "note_types_ready")
+        image_name = f"{'1' * 64}.png"
+        audio_name = f"{'2' * 64}.mp3"
+        image_upload = self._call(
+            "storeMediaFile",
+            {
+                "importSessionId": session["importSessionId"],
+                "mediaKind": "image",
+                "filename": image_name,
+                "data": base64.b64encode(_MIN_PNG_BYTES).decode("ascii"),
+            },
+        )
+        audio_upload = self._call(
+            "storeMediaFile",
+            {
+                "importSessionId": session["importSessionId"],
+                "mediaKind": "audio",
+                "filename": audio_name,
+                "data": base64.b64encode(_MIN_MP3_BYTES).decode("ascii"),
+            },
+        )
+        self.assertEqual(image_upload.get_json()["filename"], image_name)
+        self.assertEqual(audio_upload.get_json()["filename"], audio_name)
+
+        note = self._note("Imported::Child", "media-note")
+        note["modelName"] = self.note_type_id
+        note["fields"].update({"Image": image_name, "Sound": f"[sound:{audio_name}]"})
+        imported = self._call(
+            "importCards",
+            {
+                "importSessionId": session["importSessionId"],
+                "cards": [
+                    {
+                        "ankiNoteId": 501,
+                        "sourceModelId": "media-model",
+                        "sourceDeckId": "source-child-id",
+                        "sourceDeckPath": "Source::Child",
+                        "contentHash": "c" * 64,
+                        "note": note,
+                    }
+                ],
+            },
+        ).get_json()
+        self.assertTrue(imported["results"][0]["imported"], imported)
+        with self.app.app_context():
+            child = Deck.query.filter_by(owner_user_id=self.user_id, name="Child").one()
+            self.assertEqual(child.parent.name, "Imported")
+            created = Note.query.filter_by(user_id=self.user_id, deck_id=child.id).one()
+            self.assertEqual(created.field_values["Image"], image_name)
+            self.assertEqual(created.field_values["Sound"], audio_name)
+            self.assertEqual(MediaAsset.query.filter_by(note_id=created.id).count(), 2)
+            self.assertEqual(ConnectImportMedia.query.count(), 2)
+
+    def test_media_zip_package_is_checksum_verified_and_idempotent(self):
+        session = self._create_import_session().get_json()
+        package = self._media_zip({f"{'a' * 64}.mp3": _MIN_MP3_BYTES})
+        digest = hashlib.sha256(package).hexdigest()
+        url = f"/v1/import-sessions/{session['importSessionId']}/packages/media/0"
+        first = self.client.put(
+            url,
+            data=package,
+            content_type="application/zip",
+            headers={"Authorization": f"Bearer {self.token}", "X-Package-SHA256": digest},
+        )
+        self.assertEqual(first.status_code, 200, first.get_json())
+        self.assertEqual(first.get_json()["itemCount"], 1)
+        self.assertFalse(first.get_json()["replayed"])
+        replay = self.client.put(
+            url,
+            data=package,
+            content_type="application/zip",
+            headers={"Authorization": f"Bearer {self.token}", "X-Package-SHA256": digest},
+        )
+        self.assertEqual(replay.status_code, 200)
+        self.assertTrue(replay.get_json()["replayed"])
+
+        changed = self._media_zip({f"{'b' * 64}.mp3": _MIN_MP3_BYTES})
+        conflict = self.client.put(
+            url,
+            data=changed,
+            content_type="application/zip",
+            headers={
+                "Authorization": f"Bearer {self.token}",
+                "X-Package-SHA256": hashlib.sha256(changed).hexdigest(),
+            },
+        )
+        self.assertEqual(conflict.status_code, 409)
+
+    def test_card_ndjson_package_replays_without_duplicate_notes(self):
+        session = self._create_import_session().get_json()
+        note = self._note()
+        note["modelName"] = self.note_type_id
+        record = {
+            "ankiNoteId": 601,
+            "sourceModelId": "1001",
+            "sourceDeckId": "inbox-source",
+            "sourceDeckPath": "Inbox",
+            "contentHash": "d" * 64,
+            "note": note,
+        }
+        package = gzip.compress((json.dumps(record) + "\n").encode("utf-8"), mtime=0)
+        digest = hashlib.sha256(package).hexdigest()
+        url = f"/v1/import-sessions/{session['importSessionId']}/packages/cards/0"
+        headers = {
+            "Authorization": f"Bearer {self.token}",
+            "X-Package-SHA256": digest,
+            "Content-Encoding": "gzip",
+        }
+        first = self.client.put(url, data=package, content_type="application/x-ndjson", headers=headers)
+        self.assertEqual(first.status_code, 200, first.get_json())
+        self.assertTrue(first.get_json()["results"][0]["imported"])
+        replay = self.client.put(url, data=package, content_type="application/x-ndjson", headers=headers)
+        self.assertEqual(replay.status_code, 200, replay.get_json())
+        self.assertTrue(replay.get_json()["replayed"])
+        self.assertTrue(replay.get_json()["results"][0]["imported"])
+        with self.app.app_context():
+            self.assertEqual(Note.query.filter_by(user_id=self.user_id, deck_id=self.inbox_id).count(), 1)
 
     def test_invalid_token_is_generic_and_does_not_accept_session_or_bearer(self):
         response = self._call("deckNames", key="not-a-token")
@@ -217,6 +596,61 @@ class FlamaConnectTests(unittest.TestCase):
             self.assertEqual(db.session.get(Deck, self.inbox_id).note_type_id, self.note_type_id)
             self.assertEqual(Note.query.filter_by(user_id=self.user_id, deck_id=self.inbox_id).count(), 1)
             self.assertEqual(Card.query.count(), 1)
+
+    def test_add_note_normalizes_anki_apostrophe_entities_only(self):
+        note = self._note(word="entity-normalization")
+        note["fields"]["Meaning"] = (
+            "Open: &#x27;from...to...&#x27;; &#39;position&#39;; "
+            "&apos;vacancy&apos; &lt;script&gt;"
+        )
+
+        response = self._call("addNote", {"note": note})
+        self.assertIsInstance(response.get_json(), int)
+
+        with self.app.app_context():
+            created = Note.query.filter_by(user_id=self.user_id, deck_id=self.inbox_id).one()
+            self.assertEqual(
+                created.field_values["Meaning"],
+                "Open: 'from...to...'; 'position'; 'vacancy' &lt;script&gt;",
+            )
+
+    def test_anki_entity_backfill_only_updates_tracked_anki_notes(self):
+        with self.app.app_context():
+            tracked = Note(
+                note_type_id=self.note_type_id,
+                user_id=self.user_id,
+                deck_id=self.inbox_id,
+                field_values={"Word": "tracked", "Meaning": "It&#x27;s tracked"},
+                tags=[],
+            )
+            untracked = Note(
+                note_type_id=self.note_type_id,
+                user_id=self.user_id,
+                deck_id=self.inbox_id,
+                field_values={"Word": "untracked", "Meaning": "It&#x27;s local"},
+                tags=[],
+            )
+            db.session.add_all([tracked, untracked])
+            db.session.flush()
+            db.session.add(
+                ConnectSourceNoteRef(
+                    user_id=self.user_id,
+                    source_key="test-profile",
+                    external_note_id="entity-note",
+                    source_model_id="1001",
+                    source_deck_path="Inbox",
+                    note_id=tracked.id,
+                    content_hash="f" * 64,
+                )
+            )
+            db.session.commit()
+
+            result = backfill_anki_note_entities(deck_id=self.inbox_id)
+            db.session.commit()
+
+            self.assertEqual((result.scanned, result.changed), (1, 1))
+            self.assertEqual(db.session.get(Note, tracked.id).field_values["Meaning"], "It's tracked")
+            self.assertEqual(db.session.get(Note, untracked.id).field_values["Meaning"], "It&#x27;s local")
 
     def test_duplicate_scope_deck_name_rejects_non_null_non_string_values(self):
         note = self._note()

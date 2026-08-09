@@ -23,6 +23,7 @@ from app.services.flashcard_legacy import (
     ensure_quiz_note_type,
 )
 from app.services.bootstrap_admin_service import sync_bootstrap_admin
+from app.services.anki_content_normalizer import backfill_anki_note_entities
 from app.services.user_roles import ensure_default_user_roles
 from app.services.tts_provider_service import (
     VOICEVOX_AUDIO_BASE_URL,
@@ -183,6 +184,22 @@ def register_cli_commands(app: Flask) -> None:
             config_overrides=config_overrides,
         )
         click.echo("Startup maintenance completed.")
+
+    @app.cli.command("anki-normalize-entities")
+    @click.option("--user-id", type=int, default=None, help="Limit the backfill to one user ID.")
+    @click.option("--deck-id", type=int, default=None, help="Limit the backfill to one deck ID.")
+    @click.option("--apply", is_flag=True, default=False, help="Commit changes; otherwise run as a dry run.")
+    def anki_normalize_entities(user_id: int | None, deck_id: int | None, apply: bool) -> None:
+        """Normalize safe apostrophe entities in notes imported from Anki."""
+        result = backfill_anki_note_entities(user_id=user_id, deck_id=deck_id)
+        if apply:
+            db.session.commit()
+        else:
+            db.session.rollback()
+        click.echo(
+            f"Anki entity normalization {'applied' if apply else 'dry run'}. "
+            f"scanned={result.scanned}, changed={result.changed}"
+        )
 
     @app.cli.command("clone-cutover-overlay")
     @click.option(

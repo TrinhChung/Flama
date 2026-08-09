@@ -113,15 +113,41 @@ class FlamaConnectAuthTests(unittest.TestCase):
                 "version": 6,
                 "params": {
                     "source": "Anki",
+                    "sourceKey": "auth-test-profile",
+                    "sourceRootPath": "Root",
+                    "targetRootPath": "Imported",
+                    "selectedDecks": ["Imported"],
                     "totalNotes": 42,
                     "totalMedia": 5,
+                    "mode": "auto_sync_missing",
+                    "planHash": "a" * 64,
+                    "noteTypes": [
+                        {
+                            "sourceModelId": "basic-model",
+                            "sourceModelName": "Basic",
+                            "fields": [
+                                {"name": "Front", "fieldType": "text"},
+                                {"name": "Back", "fieldType": "richtext"},
+                            ],
+                            "templates": [
+                                {
+                                    "name": "Card 1",
+                                    "frontHtml": "{{Front}}",
+                                    "backHtml": "{{Back}}",
+                                    "sharedCss": "",
+                                }
+                            ],
+                            "fieldMapping": {"Front": "Front", "Back": "Back"},
+                        }
+                    ],
                 },
             },
         )
         self.assertEqual(res.status_code, 200)
         data = res.get_json()
-        self.assertTrue(data.get("importSessionId").startswith("import_session_"))
-        self.assertEqual(data.get("totalNotes"), 42)
+        self.assertTrue(data.get("importSessionId"))
+        self.assertEqual(data.get("status"), "note_types_ready")
+        self.assertIn("basic-model", data.get("noteTypeBindings"))
 
 
 if __name__ == "__main__":
