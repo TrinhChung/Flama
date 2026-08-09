@@ -71,7 +71,7 @@ export function SiteFooter({ bootstrap }: { bootstrap: FrontendBootstrap }) {
 								<FooterLink to={bootstrap.links.study || '/study'}>Học flashcard</FooterLink>
 								<FooterLink to="/browse">Kho từ vựng &amp; Thẻ</FooterLink>
 								<FooterLink to="/statistics">Thống kê &amp; Lịch học</FooterLink>
-								<FooterLink to="/import">Nhập dữ liệu CSV/TSV</FooterLink>
+								{user.is_admin ? <FooterLink to="/import">Nhập dữ liệu CSV/TSV</FooterLink> : null}
 								<FooterLink to={bootstrap.links.note_types || '/note-types'}>Quản lý NoteTypes</FooterLink>
 							</>
 						) : (

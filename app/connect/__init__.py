@@ -18,13 +18,24 @@ from flask import Blueprint, Flask, current_app, jsonify, make_response, request
 from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from app.services import flama_connect_service, user_api_token_service
+from app.services import flama_connect_package_service, flama_connect_service, user_api_token_service
 from app.settings import build_app_config, comma_separated_env, coerce_bool_env, coerce_int_env
 from models import db
 
 
 logger = logging.getLogger(__name__)
 connect_bp = Blueprint("flama_connect", __name__)
+
+_LEGACY_WEB_ACTIONS = frozenset(
+    {
+        "validateKey",
+        "userInfo",
+        "createImportSession",
+        "importCards",
+        "getImportStatus",
+        "completeImportSession",
+    }
+)
 
 ACTION_PARAMS: dict[str, frozenset[str]] = {
     "version": frozenset(),
@@ -39,10 +50,24 @@ ACTION_PARAMS: dict[str, frozenset[str]] = {
     "findNotes": frozenset({"query"}),
     "multi": frozenset({"actions"}),
     "addNote": frozenset({"note"}),
-    "storeMediaFile": frozenset({"filename", "data", "path", "url", "deleteExisting"}),
-    "createImportSession": frozenset({"source", "selectedDecks", "totalNotes", "totalMedia", "appVersion"}),
+    "storeMediaFile": frozenset({"filename", "data", "path", "url", "deleteExisting", "importSessionId", "mediaKind"}),
+    "createImportSession": frozenset({
+        "source",
+        "sourceKey",
+        "sourceRootPath",
+        "targetRootPath",
+        "selectedDecks",
+        "decks",
+        "totalNotes",
+        "totalMedia",
+        "appVersion",
+        "mode",
+        "noteTypes",
+        "planHash",
+    }),
     "importCards": frozenset({"importSessionId", "cards", "deckName"}),
     "getImportStatus": frozenset({"importSessionId"}),
+    "completeImportSession": frozenset({"importSessionId"}),
 }
 ACTION_SCOPES = {
     "apiReflect": "note-type:read",
@@ -59,7 +84,8 @@ ACTION_SCOPES = {
     "storeMediaFile": "note:create",
     "createImportSession": "note:create",
     "importCards": "note:create",
-    "getImportStatus": "note:read",
+    "getImportStatus": "note:create",
+    "completeImportSession": "note:create",
 }
 
 
@@ -108,6 +134,12 @@ def _register_models() -> None:
     from models.user_api_token import UserApiToken  # noqa: F401
     from models.connect_note_ref import ConnectNoteRef  # noqa: F401
     from models.connect_pending_media import ConnectPendingMedia  # noqa: F401
+    from models.connect_import_session import ConnectImportSession  # noqa: F401
+    from models.connect_import_package import ConnectImportPackage  # noqa: F401
+    from models.connect_import_media import ConnectImportMedia  # noqa: F401
+    from models.connect_note_type_ref import ConnectNoteTypeRef  # noqa: F401
+    from models.connect_source_deck_ref import ConnectSourceDeckRef  # noqa: F401
+    from models.connect_source_note_ref import ConnectSourceNoteRef  # noqa: F401
     from models.flashcard import (  # noqa: F401
         AuditLog,
         Card,
@@ -173,6 +205,9 @@ def _parse_request() -> dict[str, Any]:
     if encoding not in {"", "identity"}:
         raise ProtocolError("compressed request bodies are not supported")
     raw = request.get_data(cache=False)
+    json_limit = int(current_app.config.get("CONNECT_JSON_MAX_CONTENT_LENGTH", 2 * 1024 * 1024))
+    if len(raw) > json_limit:
+        raise ProtocolError("request body is too large")
     if not raw:
         raise ProtocolError("request body is required")
     try:
@@ -196,12 +231,20 @@ def _parse_request() -> dict[str, Any]:
         raise ProtocolError("action is invalid")
     if action not in ACTION_PARAMS:
         raise ProtocolError("unsupported action")
+    legacy_web_enabled = bool(
+        current_app.config.get("CONNECT_LEGACY_WEB_ACTIONS_ENABLED", False)
+    )
+    if action in _LEGACY_WEB_ACTIONS and not legacy_web_enabled:
+        raise ProtocolError("unsupported action")
     if isinstance(version, bool) or not isinstance(version, int) or not 2 <= version <= 6:
         raise ProtocolError("version must be an integer between 2 and 6")
     params = payload.get("params", {})
     if not isinstance(params, dict):
         raise ProtocolError("params must be an object")
-    if set(params) - ACTION_PARAMS[action]:
+    allowed_params = ACTION_PARAMS[action]
+    if action == "storeMediaFile" and not legacy_web_enabled:
+        allowed_params = frozenset({"filename", "data"})
+    if set(params) - allowed_params:
         raise ProtocolError("params contains unsupported properties")
     payload["params"] = params
     return payload
@@ -255,6 +298,120 @@ def _dispatch_multi(user_id: int, params: dict[str, Any], outer_key: str) -> lis
 @connect_bp.get("/healthz")
 def healthz():
     return jsonify({"status": "ok", "service": "flama-connect"})
+
+
+def _authenticate_direct_request(required_scope: str):
+    auth_header = request.headers.get("Authorization", "")
+    plaintext = auth_header[7:].strip() if auth_header.startswith("Bearer ") else ""
+    status, authenticated = user_api_token_service.authenticate_token_detailed(
+        plaintext,
+        required_scope=required_scope,
+    )
+    if authenticated is None:
+        logger.info("Connect package authentication rejected status=%s", status)
+        db.session.rollback()
+        return None, (jsonify({"error": "AUTHENTICATION_FAILED", "message": "authentication failed"}), 401)
+    return authenticated, None
+
+
+@connect_bp.route("/v1/import-sessions/capabilities", methods=["GET", "OPTIONS"])
+def import_capabilities():
+    if not current_app.config.get("CONNECT_LEGACY_WEB_ACTIONS_ENABLED", False):
+        return jsonify({"error": "not found"}), 404
+    if request.method == "OPTIONS":
+        return "", 204
+    authenticated, error = _authenticate_direct_request("note:create")
+    if error is not None:
+        return error
+    _token, _user = authenticated
+    return jsonify(flama_connect_package_service.capabilities())
+
+
+@connect_bp.route(
+    "/v1/import-sessions/<session_id>/packages/media/<int:sequence>",
+    methods=["PUT", "OPTIONS"],
+)
+def upload_import_media_package(session_id: str, sequence: int):
+    if not current_app.config.get("CONNECT_LEGACY_WEB_ACTIONS_ENABLED", False):
+        return jsonify({"error": "not found"}), 404
+    if request.method == "OPTIONS":
+        return "", 204
+    authenticated, error = _authenticate_direct_request("note:create")
+    if error is not None:
+        return error
+    token, user = authenticated
+    if not _rate_allowed(f"package:{user.id}", "CONNECT_PACKAGE_RATE_LIMIT", 30):
+        db.session.rollback()
+        return jsonify({"error": "RATE_LIMITED", "message": "rate limit exceeded"}), 429
+    try:
+        result = flama_connect_package_service.receive_media_package(
+            user_id=user.id,
+            session_id=session_id,
+            sequence=sequence,
+            expected_sha256=request.headers.get("X-Package-SHA256", ""),
+            content=request.get_data(cache=False),
+        )
+        db.session.commit()
+        logger.info(
+            "Connect media package accepted user_id=%s token_id=%s session_id=%s sequence=%s",
+            user.id,
+            token.id,
+            session_id,
+            sequence,
+        )
+        return jsonify(result)
+    except flama_connect_package_service.ConnectPackageError as exc:
+        db.session.rollback()
+        status = 409 if "different checksum" in str(exc) else 400
+        return jsonify({"error": "PACKAGE_REJECTED", "message": str(exc)}), status
+    except Exception:
+        db.session.rollback()
+        logger.exception("Connect media package failed user_id=%s session_id=%s", user.id, session_id)
+        return jsonify({"error": "INTERNAL_ERROR", "message": "internal error"}), 500
+
+
+@connect_bp.route(
+    "/v1/import-sessions/<session_id>/packages/cards/<int:sequence>",
+    methods=["PUT", "OPTIONS"],
+)
+def upload_import_card_package(session_id: str, sequence: int):
+    if not current_app.config.get("CONNECT_LEGACY_WEB_ACTIONS_ENABLED", False):
+        return jsonify({"error": "not found"}), 404
+    if request.method == "OPTIONS":
+        return "", 204
+    authenticated, error = _authenticate_direct_request("note:create")
+    if error is not None:
+        return error
+    token, user = authenticated
+    if not _rate_allowed(f"package:{user.id}", "CONNECT_PACKAGE_RATE_LIMIT", 30):
+        db.session.rollback()
+        return jsonify({"error": "RATE_LIMITED", "message": "rate limit exceeded"}), 429
+    try:
+        result = flama_connect_package_service.receive_card_package(
+            user_id=user.id,
+            session_id=session_id,
+            sequence=sequence,
+            expected_sha256=request.headers.get("X-Package-SHA256", ""),
+            content=request.get_data(cache=False),
+            content_encoding=request.headers.get("Content-Encoding", "identity"),
+        )
+        db.session.commit()
+        logger.info(
+            "Connect card package accepted user_id=%s token_id=%s session_id=%s sequence=%s",
+            user.id,
+            token.id,
+            session_id,
+            sequence,
+        )
+        return jsonify(result)
+    except flama_connect_package_service.ConnectPackageError as exc:
+        db.session.rollback()
+        status = 409 if "different checksum" in str(exc) else 400
+        return jsonify({"error": "PACKAGE_REJECTED", "message": str(exc)}), status
+    except Exception:
+        db.session.rollback()
+        logger.exception("Connect card package failed user_id=%s session_id=%s", user.id, session_id)
+        return jsonify({"error": "INTERNAL_ERROR", "message": "internal error"}), 500
 
 
 @connect_bp.route("/v1/flama-connect", methods=["POST", "OPTIONS"])
@@ -361,11 +518,11 @@ def _apply_security_headers(response):
     response.headers.setdefault("Cache-Control", "no-store")
     origin = request.headers.get("Origin")
     allowed = set(current_app.config.get("CONNECT_CORS_ALLOWED_ORIGINS", ()))
-    if origin and origin in allowed:
+    if origin and ("*" in allowed or origin in allowed):
         response.headers["Access-Control-Allow-Origin"] = origin
         response.headers["Vary"] = "Origin"
-        response.headers["Access-Control-Allow-Headers"] = "Content-Type"
-        response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Content-Encoding, Authorization, X-Flama-Connect-Key, X-Package-SHA256"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
         response.headers["Access-Control-Max-Age"] = "600"
     return response
 
@@ -375,9 +532,14 @@ def create_connect_app(config: dict[str, Any] | None = None) -> Flask:
     app_config = build_app_config(config)
     app_config.update(
         {
-            "MAX_CONTENT_LENGTH": coerce_int_env("CONNECT_MAX_CONTENT_LENGTH", default=2 * 1024 * 1024),
+            "MAX_CONTENT_LENGTH": coerce_int_env("CONNECT_PACKAGE_MAX_BYTES", default=16 * 1024 * 1024),
+            "CONNECT_JSON_MAX_CONTENT_LENGTH": coerce_int_env("CONNECT_MAX_CONTENT_LENGTH", default=2 * 1024 * 1024),
             "CONNECT_CORS_ALLOWED_ORIGINS": comma_separated_env("CONNECT_CORS_ALLOWED_ORIGINS"),
             "CONNECT_TRUST_PROXY": coerce_bool_env("CONNECT_TRUST_PROXY", default=False),
+            "CONNECT_LEGACY_WEB_ACTIONS_ENABLED": coerce_bool_env(
+                "CONNECT_LEGACY_WEB_ACTIONS_ENABLED",
+                default=False,
+            ),
             "CONNECT_RATE_LIMIT_WINDOW_SECONDS": coerce_int_env("CONNECT_RATE_LIMIT_WINDOW_SECONDS", default=60),
             "CONNECT_IP_RATE_LIMIT": coerce_int_env("CONNECT_IP_RATE_LIMIT", default=120),
             "CONNECT_INVALID_TOKEN_RATE_LIMIT": coerce_int_env("CONNECT_INVALID_TOKEN_RATE_LIMIT", default=10),
@@ -386,6 +548,19 @@ def create_connect_app(config: dict[str, Any] | None = None) -> Flask:
             "CONNECT_ADD_NOTE_RATE_LIMIT": coerce_int_env("CONNECT_ADD_NOTE_RATE_LIMIT", default=20),
             "CONNECT_MEDIA_RATE_LIMIT": coerce_int_env("CONNECT_MEDIA_RATE_LIMIT", default=20),
             "CONNECT_MEDIA_MAX_BYTES": coerce_int_env("CONNECT_MEDIA_MAX_BYTES", default=1024 * 1024),
+            "CONNECT_IMPORT_MEDIA_MAX_BYTES": coerce_int_env("CONNECT_IMPORT_MEDIA_MAX_BYTES", default=10 * 1024 * 1024),
+            "CONNECT_IMPORT_MEDIA_MAX_ITEMS": coerce_int_env("CONNECT_IMPORT_MEDIA_MAX_ITEMS", default=20_000),
+            "CONNECT_PACKAGE_MAX_BYTES": coerce_int_env("CONNECT_PACKAGE_MAX_BYTES", default=16 * 1024 * 1024),
+            "CONNECT_PACKAGE_MAX_ENTRIES": coerce_int_env("CONNECT_PACKAGE_MAX_ENTRIES", default=500),
+            "CONNECT_PACKAGE_MAX_UNCOMPRESSED_BYTES": coerce_int_env(
+                "CONNECT_PACKAGE_MAX_UNCOMPRESSED_BYTES",
+                default=64 * 1024 * 1024,
+            ),
+            "CONNECT_PACKAGE_MAX_COMPRESSION_RATIO": coerce_int_env(
+                "CONNECT_PACKAGE_MAX_COMPRESSION_RATIO",
+                default=100,
+            ),
+            "CONNECT_PACKAGE_RATE_LIMIT": coerce_int_env("CONNECT_PACKAGE_RATE_LIMIT", default=30),
             "CONNECT_PENDING_MEDIA_TTL_SECONDS": coerce_int_env(
                 "CONNECT_PENDING_MEDIA_TTL_SECONDS",
                 default=30 * 60,

@@ -16,6 +16,7 @@ export interface AnkiNoteInfo {
   modelName: string
   tags: string[]
   fields: Record<string, { value: string; order: number }>
+  cards?: number[]
 }
 
 export interface AnkiCardInfo {
@@ -40,11 +41,13 @@ export interface IAnkiConnectClient {
   checkConnection(endpoint?: string): Promise<{ status: AnkiConnectStatus; version?: number; error?: string }>
   getVersion(endpoint?: string): Promise<number>
   getDeckNames(endpoint?: string): Promise<string[]>
+  getDeckNamesAndIds(endpoint?: string): Promise<Record<string, number>>
   findNotes(query: string, endpoint?: string): Promise<number[]>
   notesInfo(notes: number[], endpoint?: string): Promise<AnkiNoteInfo[]>
   findCards(query: string, endpoint?: string): Promise<number[]>
   cardsInfo(cards: number[], endpoint?: string): Promise<AnkiCardInfo[]>
   getModelNames(endpoint?: string): Promise<string[]>
+  getModelNamesAndIds(endpoint?: string): Promise<Record<string, number>>
   getModelFieldNames(modelName: string, endpoint?: string): Promise<string[]>
   getModelStyling(modelName: string, endpoint?: string): Promise<AnkiModelStylingInfo>
   getModelTemplates(modelName: string, endpoint?: string): Promise<AnkiTemplateInfo[]>
@@ -131,6 +134,15 @@ export class AnkiConnectClient implements IAnkiConnectClient {
     return this.request<string[]>('deckNames', {}, endpoint)
   }
 
+  async getDeckNamesAndIds(endpoint?: string): Promise<Record<string, number>> {
+    try {
+      return await this.request<Record<string, number>>('deckNamesAndIds', {}, endpoint)
+    } catch {
+      const names = await this.getDeckNames(endpoint)
+      return Object.fromEntries(names.map((name) => [name, 0]))
+    }
+  }
+
   async findNotes(query: string, endpoint?: string): Promise<number[]> {
     return this.request<number[]>('findNotes', { query }, endpoint)
   }
@@ -151,6 +163,15 @@ export class AnkiConnectClient implements IAnkiConnectClient {
 
   async getModelNames(endpoint?: string): Promise<string[]> {
     return this.request<string[]>('modelNames', {}, endpoint)
+  }
+
+  async getModelNamesAndIds(endpoint?: string): Promise<Record<string, number>> {
+    try {
+      return await this.request<Record<string, number>>('modelNamesAndIds', {}, endpoint)
+    } catch {
+      const names = await this.getModelNames(endpoint)
+      return Object.fromEntries(names.map((name) => [name, 0]))
+    }
   }
 
   async getModelFieldNames(modelName: string, endpoint?: string): Promise<string[]> {

@@ -3616,18 +3616,12 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             self.assertEqual(deck_a_count, 1)
             self.assertEqual(deck_b_count, 1)
 
-    def test_flashcard_import_execute_allows_non_admin_owned_deck_without_install(self):
+    def test_flashcard_import_forbids_non_admin(self):
         with self.app.app_context():
             learner = User(username="import-learner", email="import-learner@example.com", is_admin=False)
             learner.set_password("password")
             db.session.add(learner)
-            db.session.flush()
-            learner_id = learner.id
-
-            owned_deck = Deck(name="Owned Import Deck", owner_user_id=learner_id)
-            db.session.add(owned_deck)
             db.session.commit()
-            owned_deck_id = owned_deck.id
 
         learner_client = self.app.test_client()
         learner_client.post(
@@ -3636,78 +3630,19 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             follow_redirects=True,
         )
 
-        note_type_resp = learner_client.post(
-            "/api/note-types",
-            json={
-                "name": "Owned Import Type",
-                "field_defs": [
-                    {"name": "Word", "field_type": "text", "position": 0, "required": True},
-                    {"name": "Reading", "field_type": "text", "position": 1, "required": False},
-                    {"name": "Meaning", "field_type": "text", "position": 2, "required": False},
-                ],
-                "template": {
-                    "name": "Card 1",
-                    "front_html": "{{Word}}",
-                    "back_html": "{{Word}} - {{Meaning}}",
-                    "shared_css": "",
-                },
-            },
-        )
-        self.assertEqual(note_type_resp.status_code, 201)
-        note_type_id = (note_type_resp.get_json() or {}).get("id")
-        self.assertTrue(note_type_id)
-
         parse_resp = learner_client.post(
             "/api/flashcards/import/parse",
             data={
-                "note_type_id": note_type_id,
                 "delimiter_mode": "csv",
-                "has_header": "1",
-                "file": (
-                    io.BytesIO("Word,Reading,Meaning\n犬,いぬ,dog\n".encode("utf-8")),
-                    "owned-import.csv",
-                ),
+                "file": (io.BytesIO(b"Word,Meaning\n"), "test.csv"),
             },
             content_type="multipart/form-data",
         )
-        self.assertEqual(parse_resp.status_code, 200)
-        parse_payload = parse_resp.get_json() or {}
-        self.assertTrue(parse_payload.get("token"))
-
-        execute_resp = learner_client.post(
-            "/api/flashcards/import/execute",
-            json={
-                "token": parse_payload["token"],
-                "note_type_id": note_type_id,
-                "target_deck_id": owned_deck_id,
-                "import_mode": "upsert",
-                "uniqueness_fields": ["Word"],
-                "mapping": parse_payload.get("suggested_mapping", {}),
-                "dont_overwrite_empty": True,
-                "confirm_column_mismatch": False,
-            },
-        )
-        self.assertEqual(execute_resp.status_code, 200)
-        summary = (execute_resp.get_json() or {}).get("summary") or {}
-        self.assertEqual(int(summary.get("inserted") or 0), 1)
-        self.assertEqual(int(summary.get("errors") or 0), 0)
-
-        with self.app.app_context():
-            imported_note = Note.query.filter_by(
-                user_id=learner_id,
-                note_type_id=note_type_id,
-                deck_id=owned_deck_id,
-            ).first()
-            self.assertIsNotNone(imported_note)
-            self.assertEqual((imported_note.field_values or {}).get("Word"), "犬")
+        self.assertEqual(parse_resp.status_code, 403)
 
     def test_flashcard_import_page_renders(self):
         response = self.client.get("/flashcards/import")
         self.assertEqual(response.status_code, 200)
-        html = response.get_data(as_text=True)
-        self.assertIn("Bước A - Tải file & Parse", html)
-        self.assertIn("Bước D - Rà soát & thực thi", html)
-        self.assertIn("previewSelectAllInput", html)
 
     def test_flashcard_import_options_returns_options_json(self):
         response = self.client.get("/api/flashcards/import/options")

@@ -36,6 +36,7 @@ def authenticated_spa_page(item_id: str | None = None):
 
 
 @spa_routes_bp.get("/import")
+@spa_routes_bp.get("/flashcards/import")
 @login_required
 def creator_spa_page():
     if not is_creator_user(current_user):

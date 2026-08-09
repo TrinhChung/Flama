@@ -3,6 +3,7 @@ import {
   convertFuriganaToRuby,
   extractAudioReferences,
   extractImageReferences,
+  normalizeAnkiTextEntities,
   replaceMediaReferences,
   sanitizeAnkiHtml,
 } from './ankiHtmlSanitizer'
@@ -22,6 +23,16 @@ describe('ankiHtmlSanitizer', () => {
     expect(clean).not.toContain('onerror=')
     expect(clean).not.toContain('onclick=')
     expect(clean).toContain('<div>Hello ')
+  })
+
+  it('normalizes Anki apostrophe entities without decoding arbitrary markup', () => {
+    const raw = 'Open: &#x27;from...to...&#x27;; &#39;position&#39;; &apos;vacancy&apos; &lt;script&gt;'
+
+    expect(normalizeAnkiTextEntities(raw)).toBe(
+      "Open: 'from...to...'; 'position'; 'vacancy' &lt;script&gt;"
+    )
+    expect(sanitizeAnkiHtml(raw)).toContain("'from...to...'")
+    expect(sanitizeAnkiHtml(raw)).toContain('&lt;script&gt;')
   })
 
   it('extracts image references without path traversal', () => {

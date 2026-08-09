@@ -13,18 +13,31 @@ bash scripts/reseed_db.sh
 # 2) Setup workspace/codespaces
 bash scripts/setup_github_workspace.sh
 
-# 3) Chay app
+# 3) Chay app web (Port 4789)
 flask --app wsgi.py run --host=0.0.0.0 --port=4789
+
+# 4) Chay Flama Connect service (Yomitan / Anki Connect protocol - Port 4790)
+python connect_wsgi.py
+# Hoac:
+flask --app connect_wsgi.py run --host=0.0.0.0 --port=4790
 ```
-.venv\Scripts\activate
+
 ### Windows PowerShell
 
 ```powershell
-# 1) Reset + reseed DB
+# 1) Kich hoat virtual environment
+.\.venv\Scripts\Activate.ps1
+
+# 2) Reset + reseed DB
 powershell -ExecutionPolicy Bypass -File .\scripts\reseed_db.ps1
 
-# 2) Chay app
+# 3) Chay app web (Port 4789)
 flask --app wsgi.py run --host=0.0.0.0 --port=4789
+
+# 4) Chay Flama Connect service (Yomitan / Anki Connect protocol - Port 4790)
+python connect_wsgi.py
+# Hoac:
+flask --app connect_wsgi.py run --host=0.0.0.0 --port=4790
 ```
 
 ### Windows Command Prompt
@@ -33,8 +46,13 @@ flask --app wsgi.py run --host=0.0.0.0 --port=4789
 REM 1) Reset + reseed DB
 scripts\reseed_db.bat
 
-REM 2) Chay app
+REM 2) Chay app web (Port 4789)
 flask --app wsgi.py run --host=0.0.0.0 --port=4789
+
+REM 3) Chay Flama Connect service (Yomitan / Anki Connect protocol - Port 4790)
+python connect_wsgi.py
+REM Hoac:
+flask --app connect_wsgi.py run --host=0.0.0.0 --port=4790
 ```
 
 ## Prerequisites
@@ -298,8 +316,11 @@ Tai lieu payment canonical:
 # Chay migration
 flask --app wsgi.py db upgrade
 
-# Chay app
+# Chay app web (Port 4789)
 flask --app wsgi.py run --host=0.0.0.0 --port=4789
+
+# Chay Flama Connect service (Yomitan / Anki Connect protocol - Port 4790)
+python connect_wsgi.py
 ```
 
 ### Reseed DB

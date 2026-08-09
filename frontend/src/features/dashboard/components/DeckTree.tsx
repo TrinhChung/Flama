@@ -24,6 +24,7 @@ type DeckTreeProps = {
   adminMode: boolean
   selectedDeckId?: number | null
   onSelect?: (deck: DeckNode) => void
+  onActivate?: (deck: DeckNode) => void
   onAction: (action: SelectedDeckAction) => void
   onMoveDeck?: (deckId: number, targetParentId: number | null) => Promise<void>
 }
@@ -41,6 +42,7 @@ function DeckRow({
   adminMode,
   selectedDeckId,
   onSelect,
+  onActivate,
   onAction,
   draggedDeck,
   dragOverId,
@@ -57,6 +59,7 @@ function DeckRow({
   adminMode: boolean
   selectedDeckId?: number | null
   onSelect?: (deck: DeckNode) => void
+  onActivate?: (deck: DeckNode) => void
   onAction: (action: SelectedDeckAction) => void
   draggedDeck: DeckNode | null
   dragOverId: number | 'root' | null
@@ -89,10 +92,35 @@ function DeckRow({
     onSelect?.(node)
   }
 
+  const handleRowDoubleClick = (e: React.MouseEvent) => {
+    if (isDragJustEnded() || draggedDeck !== null) {
+      e.preventDefault()
+      e.stopPropagation()
+      return
+    }
+    onSelect?.(node)
+    onActivate?.(node)
+  }
+
+  const handleRowKeyDown = (e: React.KeyboardEvent) => {
+    if (e.target !== e.currentTarget) return
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      onSelect?.(node)
+      onActivate?.(node)
+    } else if (e.key === ' ') {
+      e.preventDefault()
+      onSelect?.(node)
+    }
+  }
+
   return (
     <>
       <div
         data-node-id={node.id}
+        role="button"
+        tabIndex={0}
+        aria-selected={isSelected}
         onPointerDown={(e) => onPointerDownRow(e, node)}
         className={cn(
           'deck-row group relative flex items-center justify-between py-1.5 sm:py-2 px-1 rounded-md border border-transparent cursor-grab active:cursor-grabbing select-none touch-manipulation transition-all duration-150',
@@ -103,6 +131,8 @@ function DeckRow({
           isTargetHover && isInvalidDrop && 'bg-rose-50 border-2 border-dashed border-rose-400 ring-2 ring-rose-200/50 cursor-not-allowed',
         )}
         onClick={handleRowClick}
+        onDoubleClick={handleRowDoubleClick}
+        onKeyDown={handleRowKeyDown}
       >
         {/* Name Column */}
         <div
@@ -116,6 +146,7 @@ function DeckRow({
               data-expanded={expanded}
               aria-expanded={expanded}
               onPointerDown={(e) => e.stopPropagation()}
+              onDoubleClick={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.stopPropagation()
                 setExpanded((prev) => !prev)
@@ -174,6 +205,7 @@ function DeckRow({
                   )}
                   onPointerDown={(e) => e.stopPropagation()}
                   onClick={(e) => e.stopPropagation()}
+                  onDoubleClick={(e) => e.stopPropagation()}
                   aria-label="Deck Settings"
                   title="Deck Settings"
                 >
@@ -251,6 +283,7 @@ function DeckRow({
               adminMode={adminMode}
               selectedDeckId={selectedDeckId}
               onSelect={onSelect}
+              onActivate={onActivate}
               onAction={onAction}
               draggedDeck={draggedDeck}
               dragOverId={dragOverId}
@@ -274,6 +307,7 @@ export function DeckTree({
   adminMode,
   selectedDeckId = null,
   onSelect,
+  onActivate,
   onAction,
   onMoveDeck,
 }: DeckTreeProps) {
@@ -312,7 +346,7 @@ export function DeckTree({
       const dx = Math.abs(e.clientX - pending.startX)
       const dy = Math.abs(e.clientY - pending.startY)
 
-      if (!pending.active && (dx > 1 || dy > 1)) {
+      if (!pending.active && (dx > 6 || dy > 6)) {
         pending.active = true
         isJustDraggedRef.current = true
         if (justDraggedTimerRef.current) {
@@ -351,7 +385,8 @@ export function DeckTree({
 
     const handlePointerUp = () => {
       const pending = pendingRef.current
-      if (pending && pending.active && draggedDeck) {
+      if (pending?.active) {
+        const deckBeingDragged = draggedDeck ?? pending.deck
         isJustDraggedRef.current = true
         if (justDraggedTimerRef.current) {
           clearTimeout(justDraggedTimerRef.current)
@@ -360,14 +395,14 @@ export function DeckTree({
           isJustDraggedRef.current = false
         }, 300)
 
-        if (dragOverId === 'root' && draggedDeck.parent_id !== null) {
-          void onMoveDeck?.(draggedDeck.id, null)
+        if (dragOverId === 'root' && deckBeingDragged.parent_id !== null) {
+          void onMoveDeck?.(deckBeingDragged.id, null)
         } else if (
           typeof dragOverId === 'number' &&
           !isInvalidDrop &&
-          draggedDeck.parent_id !== dragOverId
+          deckBeingDragged.parent_id !== dragOverId
         ) {
-          void onMoveDeck?.(draggedDeck.id, dragOverId)
+          void onMoveDeck?.(deckBeingDragged.id, dragOverId)
         }
       }
       pendingRef.current = null
@@ -524,6 +559,7 @@ export function DeckTree({
           adminMode={adminMode}
           selectedDeckId={selectedDeckId}
           onSelect={onSelect}
+          onActivate={onActivate}
           onAction={onAction}
           draggedDeck={draggedDeck}
           dragOverId={dragOverId}

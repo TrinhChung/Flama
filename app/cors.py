@@ -7,7 +7,8 @@ from collections.abc import Iterable
 from flask import request
 
 _ALLOWED_HEADERS = (
-    "Authorization, Content-Type, X-CSRF-Token, X-CSRFToken"
+    "Authorization, Content-Type, Content-Encoding, X-CSRF-Token, "
+    "X-CSRFToken, X-Package-SHA256"
 )
 _ALLOWED_METHODS = "GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS"
 _EXPOSED_HEADERS = "Content-Disposition, X-VoiceVox-Warnings"

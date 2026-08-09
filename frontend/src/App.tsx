@@ -2,7 +2,6 @@ import { lazy, Suspense, useEffect, type ReactNode } from 'react'
 import { LoaderCircle } from 'lucide-react'
 import { Navigate, RouterProvider, createBrowserRouter } from 'react-router-dom'
 import { AppLayout } from './layouts/AppLayout'
-import { FlamaConnectProvider } from './context/FlamaConnectContext'
 import { RequireAuth } from './features/auth/components/RequireAuth'
 import { RequireCreator } from './features/auth/components/RequireCreator'
 import { LandingPage } from './pages/LandingPage'
@@ -396,9 +395,5 @@ export default function App() {
     [],
   )
 
-  return (
-    <FlamaConnectProvider>
-      <RouterProvider router={router} />
-    </FlamaConnectProvider>
-  )
+  return <RouterProvider router={router} />
 }

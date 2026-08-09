@@ -104,6 +104,37 @@ def build_app_config(overrides: Mapping[str, Any] | None = None) -> dict[str, An
             "pool_recycle": 1800,
         },
         "CORS_ALLOWED_ORIGINS": comma_separated_env("CORS_ALLOWED_ORIGINS"),
+        # Browser-driven Anki imports now terminate on the canonical Flask API.
+        # Keep the established package-service keys during the transport
+        # migration so deployments retain the same bounded upload behavior.
+        "ANKI_IMPORT_PACKAGE_MAX_BYTES": coerce_int_env(
+            "ANKI_IMPORT_PACKAGE_MAX_BYTES",
+            default=16 * 1024 * 1024,
+        ),
+        "CONNECT_PACKAGE_MAX_BYTES": coerce_int_env(
+            "CONNECT_PACKAGE_MAX_BYTES",
+            default=16 * 1024 * 1024,
+        ),
+        "CONNECT_PACKAGE_MAX_ENTRIES": coerce_int_env(
+            "CONNECT_PACKAGE_MAX_ENTRIES",
+            default=500,
+        ),
+        "CONNECT_PACKAGE_MAX_UNCOMPRESSED_BYTES": coerce_int_env(
+            "CONNECT_PACKAGE_MAX_UNCOMPRESSED_BYTES",
+            default=64 * 1024 * 1024,
+        ),
+        "CONNECT_PACKAGE_MAX_COMPRESSION_RATIO": coerce_int_env(
+            "CONNECT_PACKAGE_MAX_COMPRESSION_RATIO",
+            default=100,
+        ),
+        "CONNECT_IMPORT_MEDIA_MAX_BYTES": coerce_int_env(
+            "CONNECT_IMPORT_MEDIA_MAX_BYTES",
+            default=10 * 1024 * 1024,
+        ),
+        "CONNECT_CARD_PACKAGE_MAX_ITEMS": coerce_int_env(
+            "CONNECT_CARD_PACKAGE_MAX_ITEMS",
+            default=1000,
+        ),
         "FLASHCARD_MEDIA_UPLOAD_ROOT": str(resolve_media_upload_root()),
         "FLASHCARD_MEDIA_MAX_BYTES": int(os.getenv("FLASHCARD_MEDIA_MAX_BYTES", str(10 * 1024 * 1024))),
         "IMAGE_LIBRARY_MAX_BYTES": int(os.getenv("IMAGE_LIBRARY_MAX_BYTES", str(5 * 1024 * 1024))),

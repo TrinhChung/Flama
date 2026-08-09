@@ -3,6 +3,17 @@
  */
 
 const PATH_TRAVERSAL = /(\.\.|\/|\\|:)/
+const ANKI_APOSTROPHE_ENTITY = /&(?:apos|#0*39|#x0*27);/gi
+
+/**
+ * Decode only apostrophe entities that can leak from imported Anki text.
+ * Avoid a general HTML entity decoder here: it could turn inert encoded text
+ * into markup before sanitization.
+ */
+export function normalizeAnkiTextEntities(text: string): string {
+  if (!text || typeof text !== 'string' || !text.includes('&')) return text || ''
+  return text.replace(ANKI_APOSTROPHE_ENTITY, "'")
+}
 
 export function convertFuriganaToRuby(text: string): string {
   if (!text || typeof text !== 'string') return ''
@@ -23,7 +34,7 @@ export function convertFuriganaToRuby(text: string): string {
 export function sanitizeAnkiHtml(html: string): string {
   if (!html || typeof html !== 'string') return ''
 
-  let clean = html
+  let clean = normalizeAnkiTextEntities(html)
 
   // Remove script tags and content
   clean = clean.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
