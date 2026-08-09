@@ -142,4 +142,54 @@ describe('card renderer host viewport modes', () => {
 
     controller.destroy()
   })
+
+  it('resolves opaque media proxy ids against the configured backend origin', async () => {
+    vi.spyOn(window.HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined)
+    vi.spyOn(window.HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined)
+    const source = readFileSync(
+      resolve(process.cwd(), '../static/js/card_renderer_host.js'),
+      'utf8',
+    )
+    window.eval(source)
+
+    const iframe = document.createElement('iframe')
+    document.body.appendChild(iframe)
+    const controller = window.FlamaCardRendererHost!.createRendererFrameController(
+      iframe,
+      { mediaBaseUrl: 'https://be-flama.stmtp.com/' },
+    )
+    controller.render({
+      html: '<img src="/media/proxy/image-1"><audio src="/media/proxy/audio-1"></audio>',
+      allowed_media_urls: ['/media/proxy/image-1', '/media/proxy/audio-1'],
+      allowed_audio_urls: ['/media/proxy/audio-1'],
+    })
+
+    expect(iframe.srcdoc).toContain('<base href="https://be-flama.stmtp.com/">')
+    expect(iframe.srcdoc).toContain('base-uri https://be-flama.stmtp.com')
+    expect(iframe.srcdoc).toContain('https://be-flama.stmtp.com/media/proxy/image-1')
+
+    const instanceId = iframe.srcdoc.match(/"instanceId":"([^"]+)"/)?.[1]
+    const frameWindow = iframe.contentWindow!
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frameWindow,
+      data: {
+        channel: 'flama-card-renderer',
+        direction: 'renderer_to_host',
+        instanceId,
+        action: 'play_audio',
+        payload: {
+          ref: '/media/proxy/audio-1',
+          requestId: `${instanceId}:audio:1`,
+          elementToken: 'flama-audio-1',
+        },
+      },
+    }))
+    await Promise.resolve()
+
+    const sharedAudio = document.querySelector('body > audio[aria-hidden="true"]')
+    expect(sharedAudio?.getAttribute('src')).toBe(
+      'https://be-flama.stmtp.com/media/proxy/audio-1',
+    )
+    controller.destroy()
+  })
 })

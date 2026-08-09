@@ -57,12 +57,12 @@
     }
     try {
       const parsed = new URL(trimmed, global.location.href);
-      if (parsed.origin === global.location.origin) {
-        const normalizedPath = String(parsed.pathname || "").trim();
-        const absoluteMatch = normalizedPath.match(PROXY_MEDIA_RE);
-        if (absoluteMatch) {
-          return "/media/proxy/" + absoluteMatch[1];
-        }
+      const normalizedPath = String(parsed.pathname || "").trim();
+      const absoluteMatch = normalizedPath.match(PROXY_MEDIA_RE);
+      if (absoluteMatch) {
+        // The origin is discarded deliberately.  A controller resolves the
+        // approved opaque asset id against its trusted mediaBaseUrl below.
+        return "/media/proxy/" + absoluteMatch[1];
       }
     } catch (_error) {
       // Ignore URL parsing failures and keep checking other formats.
@@ -72,6 +72,30 @@
       return "/media/proxy/" + assetOnlyMatch[1];
     }
     return null;
+  }
+
+  function normalizeMediaBaseUrl(rawValue) {
+    try {
+      const parsed = new URL(String(rawValue || "/"), global.location.href);
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+        throw new Error("Unsupported media origin.");
+      }
+      return parsed.origin + "/";
+    } catch (_error) {
+      return global.location.origin + "/";
+    }
+  }
+
+  function absoluteProxyRef(rawValue, mediaBaseUrl) {
+    const normalized = normalizeProxyRef(rawValue);
+    if (!normalized) {
+      return null;
+    }
+    try {
+      return new URL(normalized, normalizeMediaBaseUrl(mediaBaseUrl)).href;
+    } catch (_error) {
+      return null;
+    }
   }
 
   function assetIdFromProxyRef(proxyRef) {
@@ -214,7 +238,7 @@
     return audioEl;
   }
 
-  function buildCspSourceList(values) {
+  function buildCspSourceList(values, mediaBaseUrl) {
     const sources = [];
     const seen = new Set();
     normalizeStringList(values).forEach((value) => {
@@ -223,7 +247,7 @@
         return;
       }
       try {
-        const absoluteUrl = new URL(normalized, global.location.href);
+        const absoluteUrl = new URL(normalized, normalizeMediaBaseUrl(mediaBaseUrl));
         const source = absoluteUrl.origin + absoluteUrl.pathname;
         if (!source || seen.has(source)) {
           return;
@@ -238,12 +262,14 @@
   }
 
   function buildRendererCsp(options) {
-    const allowedMediaSources = buildCspSourceList(options.allowedMediaUrls);
+    const mediaBaseUrl = normalizeMediaBaseUrl(options.mediaBaseUrl);
+    const mediaOrigin = new URL(mediaBaseUrl).origin;
+    const allowedMediaSources = buildCspSourceList(options.allowedMediaUrls, mediaBaseUrl);
     const imgSrc = allowedMediaSources.length ? allowedMediaSources.join(" ") : "'none'";
     const mediaSrc = allowedMediaSources.length ? allowedMediaSources.join(" ") : "'none'";
     return [
       "default-src 'none'",
-      "base-uri 'none'",
+      "base-uri " + mediaOrigin,
       "form-action 'none'",
       "frame-ancestors 'none'",
       "connect-src 'none'",
@@ -277,9 +303,12 @@
     const padding = escapeHtml(options.padding || "8px");
     const bodyClass = escapeHtml(options.bodyClass || "");
     const fillHeight = options.fillHeight === true;
+    const mediaBaseUrl = normalizeMediaBaseUrl(options.mediaBaseUrl);
+    const escapedMediaBaseUrl = escapeHtml(mediaBaseUrl);
     const rendererCsp = escapeHtml(
       buildRendererCsp({
         allowedMediaUrls: Array.isArray(options.allowedMediaUrls) ? options.allowedMediaUrls : [],
+        mediaBaseUrl,
       })
     );
     const shellScript = [
@@ -678,6 +707,7 @@
       "<head>",
       "<meta charset=\"utf-8\">",
       "<meta http-equiv=\"Content-Security-Policy\" content=\"" + rendererCsp + "\">",
+      "<base href=\"" + escapedMediaBaseUrl + "\">",
       "<style>",
       "html, body { margin: 0; padding: 0; background: " + background + "; color: " + textColor + "; overflow-x: hidden; " + (fillHeight ? "height: 100%; min-height: 100%;" : "") + " }",
       "body { padding: " + padding + "; }",
@@ -718,6 +748,7 @@
     const fillHeight = initialOptions.fillHeight === true;
     const autoHeight = !fillHeight && initialOptions.autoHeight !== false;
     const enableLivePatch = initialOptions.enableLivePatch === true;
+    const mediaBaseUrl = normalizeMediaBaseUrl(initialOptions.mediaBaseUrl);
     const fixedHeight = clampFrameHeight(
       initialOptions.fixedHeight || initialOptions.minHeight || DEFAULT_MIN_HEIGHT,
       DEFAULT_MIN_HEIGHT
@@ -845,6 +876,11 @@
         postAudioResult(requestId, false, "Audio is not attached to this note.");
         return false;
       }
+      const approvedUrl = absoluteProxyRef(approvedRef, mediaBaseUrl);
+      if (!approvedUrl) {
+        postAudioResult(requestId, false, "Audio URL is invalid.");
+        return false;
+      }
       const audioEl = getSharedAudioElement();
       const previousPlayback = sharedAudioPlayback;
       if (previousPlayback) {
@@ -889,8 +925,8 @@
       } catch (_error) {
         // Ignore pause failures and continue attempting playback.
       }
-      if (audioEl.getAttribute("src") !== approvedRef) {
-        audioEl.setAttribute("src", approvedRef);
+      if (audioEl.getAttribute("src") !== approvedUrl) {
+        audioEl.setAttribute("src", approvedUrl);
       }
       try {
         audioEl.currentTime = 0;
@@ -1088,6 +1124,7 @@
         padding: optionsObject.padding || "8px",
         bodyClass: optionsObject.bodyClass || "",
         allowedMediaUrls: activePayload.allowed_media_urls,
+        mediaBaseUrl,
         fillHeight,
       });
       frameEl.srcdoc = documentHtml;

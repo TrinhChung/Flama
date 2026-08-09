@@ -42,6 +42,7 @@ type CardRendererFrameProps = {
 }
 
 let scriptLoadPromise: Promise<void> | null = null
+const RENDERER_HOST_VERSION = 'media-origin-v1'
 const EMPTY_FIELD_DEFS: unknown[] = []
 const EMPTY_FIELD_VALUES: Record<string, string> = {}
 
@@ -54,7 +55,9 @@ function ensureRendererScript(): Promise<void> {
   }
   scriptLoadPromise = new Promise((resolve, reject) => {
     const script = document.createElement('script')
-    script.src = resolveBackendUrl('/static/js/card_renderer_host.js')
+    script.src = resolveBackendUrl(
+      `/static/js/card_renderer_host.js?v=${RENDERER_HOST_VERSION}`,
+    )
     script.async = true
     script.onload = () => resolve()
     script.onerror = (err) => {
@@ -126,6 +129,7 @@ export function CardRendererFrame({
       autoHeight: !fillHeight,
       fillHeight,
       enableLivePatch,
+      mediaBaseUrl: resolveBackendUrl('/'),
     })
     controllerRef.current = controller
 
