@@ -50,6 +50,7 @@ class FlamaConnectTests(unittest.TestCase):
                 "TESTING": True,
                 "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
                 "CONNECT_CORS_ALLOWED_ORIGINS": (),
+                "CONNECT_LEGACY_WEB_ACTIONS_ENABLED": True,
                 "CONNECT_IP_RATE_LIMIT": 1000,
                 "CONNECT_TOKEN_RATE_LIMIT": 1000,
                 "CONNECT_USER_RATE_LIMIT": 1000,

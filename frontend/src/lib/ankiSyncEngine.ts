@@ -5,11 +5,8 @@
  * for deck placement; a single destination deck must never flatten children.
  */
 
-import type {
-  FlamaAccountInfo,
-  FlamaImportNoteTypePlan,
-} from '@/lib/flamaConnectClient'
-import { flamaConnectClient } from '@/lib/flamaConnectClient'
+import type { AnkiImportNoteTypePlan } from '@/features/import/api'
+import { ankiImportApi } from '@/features/import/api'
 import type { AnkiCardInfo, AnkiNoteInfo } from '@/lib/ankiConnectClient'
 import { ankiConnectClient } from '@/lib/ankiConnectClient'
 import {
@@ -310,15 +307,14 @@ export async function executeAnkiSync(
   modelName: string,
   fieldMapping: Record<string, string>,
   syncMode: 'new_and_changed' | 'only_new' | 'resync_all',
-  flamaConnectKey: string,
-  accountInfo: FlamaAccountInfo,
+  flamaUserId: number,
   onProgress?: (progress: SyncProgressUpdate) => void,
   options: AnkiSyncOptions = {}
 ): Promise<{ success: boolean; totalSynced: number; totalMediaDetected: number; errors: string[] }> {
   const endpoint = options.endpoint || ''
   const syncMedia = options.syncMedia !== false
   const targetRoot = options.targetDeckName?.trim() || deckName
-  const sourceKey = JSON.stringify([accountInfo.userId, endpoint || 'default-anki'])
+  const sourceKey = JSON.stringify([flamaUserId, endpoint || 'default-anki'])
   const errors: string[] = []
 
   onProgress?.({
@@ -345,7 +341,7 @@ export async function executeAnkiSync(
   const usedModelNames = [...new Set(notesInfo.map((note) => note.modelName))]
   const targetOptions = options.noteTypeOptions || []
 
-  const plans: FlamaImportNoteTypePlan[] = await Promise.all(
+  const plans: AnkiImportNoteTypePlan[] = await Promise.all(
     usedModelNames.map(async (sourceModelName) => {
       const [fields, styling, templates] = await Promise.all([
         ankiConnectClient.getModelFieldNames(sourceModelName, endpoint),
@@ -437,7 +433,7 @@ export async function executeAnkiSync(
     totalMedia: uniqueMedia.size, processedMedia: 0,
     currentMessage: `Đang kiểm tra ${plans.length} NoteType trước khi đồng bộ...`,
   })
-  const session = await flamaConnectClient.createImportSessionAsync(
+  const session = await ankiImportApi.createSession(
     {
       source: 'anki', sourceKey, sourceRootPath: deckName, targetRootPath: targetRoot,
       selectedDecks: targetDeckPaths, decks: deckManifest, totalNotes: candidateNotes.length,
@@ -445,7 +441,6 @@ export async function executeAnkiSync(
       mode: options.autoSyncMissingNoteTypes ? 'auto_sync_missing' : 'strict',
       noteTypes: plans, planHash,
     },
-    flamaConnectKey
   )
   if (session.status !== 'note_types_ready') {
     const detail = session.blockers.map((item) => `${item.sourceModelName}: ${item.message}`).join('; ')
@@ -487,7 +482,7 @@ export async function executeAnkiSync(
   let processedMedia = 0
   const mediaRename = new Map<string, string>()
   if (syncMedia) {
-    const capabilities = await flamaConnectClient.getImportCapabilitiesAsync(flamaConnectKey)
+    const capabilities = await ankiImportApi.capabilities()
     let packageEntries: MediaPackageEntry[] = []
     let packageRenames: Array<[string, string]> = []
     let packageSafeNames = new Set<string>()
@@ -505,12 +500,11 @@ export async function executeAnkiSync(
       }
       const packageHash = await calculateBinaryHash(await zipBlob.arrayBuffer())
       await uploadPackageWithRetry(
-        () => flamaConnectClient.uploadMediaPackageAsync(
+        () => ankiImportApi.uploadMediaPackage(
             session.importSessionId,
             packageSequence,
             zipBlob,
             packageHash,
-            flamaConnectKey
           ),
         (delayMs) => new Promise((resolve) => window.setTimeout(resolve, delayMs))
       )
@@ -606,13 +600,12 @@ export async function executeAnkiSync(
       const cardPackage = await buildCardNdjsonPackage(cards)
       const cardPackageHash = await calculateBinaryHash(await cardPackage.blob.arrayBuffer())
       const result = await uploadPackageWithRetry(
-        () => flamaConnectClient.uploadCardPackageAsync(
+        () => ankiImportApi.uploadCardPackage(
             session.importSessionId,
             cardPackageSequence,
             cardPackage.blob,
             cardPackageHash,
             cardPackage.contentEncoding,
-            flamaConnectKey
           ),
         (delayMs) => new Promise((resolve) => window.setTimeout(resolve, delayMs))
       )
@@ -642,7 +635,7 @@ export async function executeAnkiSync(
     })
   }
 
-  await flamaConnectClient.completeImportSessionAsync(session.importSessionId, flamaConnectKey)
+  await ankiImportApi.completeSession(session.importSessionId)
 
   onProgress?.({
     phase: 'completed', totalNotes: eligible.length, processedNotes: totalSynced,

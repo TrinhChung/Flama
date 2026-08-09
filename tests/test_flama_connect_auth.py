@@ -18,6 +18,7 @@ class FlamaConnectAuthTests(unittest.TestCase):
                 "TESTING": True,
                 "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
                 "CONNECT_IP_RATE_LIMIT": 1000,
+                "CONNECT_LEGACY_WEB_ACTIONS_ENABLED": True,
                 "CONNECT_TOKEN_RATE_LIMIT": 1000,
                 "CONNECT_USER_RATE_LIMIT": 1000,
                 "FLASHCARD_MEDIA_UPLOAD_ROOT": self.upload_tmp.name,
@@ -148,6 +149,34 @@ class FlamaConnectAuthTests(unittest.TestCase):
         self.assertTrue(data.get("importSessionId"))
         self.assertEqual(data.get("status"), "note_types_ready")
         self.assertIn("basic-model", data.get("noteTypeBindings"))
+
+    def test_default_surface_rejects_browser_import_protocol(self):
+        restricted_app = create_connect_app(
+            {
+                "TESTING": True,
+                "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
+                "CONNECT_LEGACY_WEB_ACTIONS_ENABLED": False,
+                "CONNECT_CORS_ALLOWED_ORIGINS": (),
+                "FLASHCARD_MEDIA_UPLOAD_ROOT": self.upload_tmp.name,
+            }
+        )
+        restricted_client = restricted_app.test_client()
+        legacy_action = restricted_client.post(
+            "/v1/flama-connect",
+            json={"action": "createImportSession", "version": 6, "params": {}},
+        )
+        self.assertEqual(legacy_action.status_code, 200)
+        self.assertEqual(legacy_action.get_json()["error"], "unsupported action")
+
+        for method, path in (
+            ("get", "/v1/import-sessions/capabilities"),
+            ("options", "/v1/import-sessions/capabilities"),
+            ("put", "/v1/import-sessions/session/packages/cards/0"),
+            ("put", "/v1/import-sessions/session/packages/media/0"),
+        ):
+            with self.subTest(method=method, path=path):
+                response = getattr(restricted_client, method)(path)
+                self.assertEqual(response.status_code, 404)
 
 
 if __name__ == "__main__":
