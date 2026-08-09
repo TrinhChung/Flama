@@ -5,7 +5,9 @@ Lightweight Flask + MySQL application for vocabulary learning, flashcards, marke
 ## Documentation
 
 - Setup and basic commands: `README_SETUP.md`
+- Flama Audio Local TTS setup: [`flama-audio/README.md`](file:///d:/Project/nihongo/flama-audio/README.md)
 - Payment architecture and operations: `docs/FLAMA_PAYMENT_ARCHITECTURE.md`
+- Flama Audio MVP design plan: [`docs/FLAMA_AUDIO_MVP_IMPLEMENTATION_PLAN.md`](file:///d:/Project/nihongo/docs/FLAMA_AUDIO_MVP_IMPLEMENTATION_PLAN.md)
 - System architecture overview: `docs/SYSTEM_ARCHITECTURE.md`
 - Flashcard V2 migration runbook: `docs/FLASHCARD_V2_RUNBOOK.md`
 - One-command DB reseed script: `scripts/reseed_db.sh`

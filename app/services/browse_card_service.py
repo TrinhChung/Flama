@@ -912,4 +912,6 @@ def _apply_clone_overlay_to_browse_payload(
     fields_payload.sort(key=lambda item: (int(item["position"]), item["name"].lower()))
     payload["fields"] = fields_payload
     payload["note_type_fields"] = note_type_fields_payload
+    payload["can_upload_media"] = False
+    payload["media_disabled_reason"] = "media_upload_not_supported_for_clone"
     return payload
