@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
+import { AlertCircle, Check } from 'lucide-react'
 import { appApi } from '@/app/api'
 import { AmbientBackground } from '@/components/ambient-background'
 import { Badge } from '@/components/ui/badge'
@@ -49,9 +50,87 @@ const NOTE_TYPE_CATEGORY_PRESETS = [
   { id: 'Custom', label: 'Tùy chỉnh', sub: 'Nhập tên danh mục riêng' },
 ]
 
+const TAXONOMY_DOMAINS = [
+  { id: 'language_learning', label: 'Ngôn ngữ (Language Learning)' },
+  { id: 'certification', label: 'Chứng chỉ (Certification)' },
+  { id: 'professional_skills', label: 'Kỹ năng nghề nghiệp' },
+  { id: 'academic', label: 'Học thuật' },
+  { id: 'other', label: 'Khác' },
+]
+
+const TAXONOMY_SUBJECTS: Record<string, Array<{ id: string; label: string }>> = {
+  language_learning: [
+    { id: 'japanese', label: 'Tiếng Nhật' },
+    { id: 'english', label: 'Tiếng Anh' },
+    { id: 'chinese', label: 'Tiếng Trung' },
+    { id: 'korean', label: 'Tiếng Hàn' },
+  ],
+  certification: [
+    { id: 'aws', label: 'AWS Certification' },
+    { id: 'other', label: 'Chứng chỉ khác' },
+  ],
+  professional_skills: [
+    { id: 'it_coding', label: 'CNTT & Lập trình' },
+    { id: 'business', label: 'Kinh doanh & Quản lý' },
+  ],
+  academic: [
+    { id: 'science', label: 'Khoa học tự nhiên' },
+    { id: 'medical', label: 'Y dược' },
+    { id: 'law', label: 'Luật' },
+  ],
+  other: [
+    { id: 'other', label: 'Chủ đề khác' },
+  ],
+}
+
+const TAXONOMY_DIFFICULTIES = [
+  { id: 'beginner', label: 'Sơ cấp (Beginner)' },
+  { id: 'intermediate', label: 'Trung cấp (Intermediate)' },
+  { id: 'advanced', label: 'Nâng cao (Advanced)' },
+]
+
+const TAXONOMY_LEARNING_GOALS = [
+  { id: 'vocabulary', label: 'Từ vựng' },
+  { id: 'kanji', label: 'Kanji' },
+  { id: 'grammar', label: 'Ngữ pháp' },
+  { id: 'reading', label: 'Luyện đọc' },
+  { id: 'listening', label: 'Luyện nghe' },
+  { id: 'speaking', label: 'Luyện nói' },
+  { id: 'writing', label: 'Luyện viết' },
+  { id: 'exam_prep', label: 'Luyện thi' },
+  { id: 'daily_communication', label: 'Giao tiếp hàng ngày' },
+  { id: 'drill', label: 'Ôn tập nhanh' },
+]
+
+const TAXONOMY_TOPICS = [
+  { id: 'meaning_recall', label: 'Nhớ nghĩa' },
+  { id: 'reading_recall', label: 'Nhớ cách đọc' },
+  { id: 'sentence_patterns', label: 'Mẫu câu' },
+  { id: 'audio_recognition', label: 'Nghe nhận diện' },
+  { id: 'daily_life', label: 'Đời sống hàng ngày' },
+  { id: 'conversation', label: 'Hội thoại' },
+  { id: 'travel', label: 'Du lịch' },
+  { id: 'business', label: 'Công việc' },
+  { id: 'kanji', label: 'Kanji' },
+]
+
+// Helper component to render inline error message below fields
+function FieldErrorMessage({ error }: { error?: string }) {
+  if (!error) return null
+  return (
+    <p className="text-xs font-semibold text-destructive mt-1.5 flex items-center gap-1.5 animate-in fade-in">
+      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+      <span>{error}</span>
+    </p>
+  )
+}
+
 export function MarketplacePublishDeckPage() {
   const navigate = useNavigate()
-  const [sourceDeckId, setSourceDeckId] = useState<string>('')
+  const [searchParams] = useSearchParams()
+  const queryParamDeckId = searchParams.get('deck_id') || searchParams.get('id') || searchParams.get('source_deck_id') || ''
+
+  const [sourceDeckId, setSourceDeckId] = useState<string>(queryParamDeckId)
   const [title, setTitle] = useState('')
   const [previewText, setPreviewText] = useState('')
   const [description, setDescription] = useState('')
@@ -65,6 +144,26 @@ export function MarketplacePublishDeckPage() {
   const [subcategory, setSubcategory] = useState('')
   const [targetAudience, setTargetAudience] = useState('')
 
+  // Taxonomy states
+  const [taxonomyDomain, setTaxonomyDomain] = useState('language_learning')
+  const [taxonomySubject, setTaxonomySubject] = useState('japanese')
+  const [taxonomyDifficulty, setTaxonomyDifficulty] = useState('beginner')
+  const [taxonomyGoals, setTaxonomyGoals] = useState<string[]>(['vocabulary'])
+  const [taxonomyTopics, setTaxonomyTopics] = useState<string[]>(['meaning_recall'])
+
+  // Field validation errors
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+
+  const clearFieldError = (name: string) => {
+    if (fieldErrors[name]) {
+      setFieldErrors((prev) => {
+        const next = { ...prev }
+        delete next[name]
+        return next
+      })
+    }
+  }
+
   const decksQuery = useQuery({
     queryKey: ['my-decks-for-publish'],
     queryFn: () => appApi.get<{ items: SimpleDeck[] }>('/decks'),
@@ -76,29 +175,136 @@ export function MarketplacePublishDeckPage() {
     mutationFn: () =>
       appApi.mutate('/api/shared/decks', 'POST', {
         source_deck_id: Number(sourceDeckId),
-        title,
-        preview_text: previewText,
-        description,
+        title: title.trim(),
+        preview_text: previewText.trim(),
+        description: description.trim(),
         pricing_mode: pricingMode,
         price_amount_minor: pricingMode === 'paid' ? priceAmountMinor : 0,
-        version,
+        version: version.trim() || '1.0.0',
         tags: tags ? tags.split(',').map((t) => t.trim()).filter(Boolean) : [],
-        changelog,
+        changelog: changelog.trim(),
         primary_category: effectiveCategory,
-        subcategory,
-        target_audience: targetAudience,
+        subcategory: subcategory.trim(),
+        target_audience: targetAudience.trim(),
+        taxonomy_domain: taxonomyDomain,
+        taxonomy_subject: taxonomySubject,
+        taxonomy_difficulty_band: taxonomyDifficulty,
+        taxonomy_learning_goals: taxonomyGoals,
+        taxonomy_primary_topics: taxonomyTopics,
       }),
     onSuccess: (data: any) => {
       toast.success('Đã xuất bản bộ thẻ lên Marketplace thành công!')
       navigate(`/marketplace/decks/${data.id || ''}`)
     },
-    onError: (error: Error) => toast.error(error.message),
+    onError: (error: any) => {
+      const msg = error?.message || ''
+      const field = error?.field || ''
+      const serverErrs: Record<string, string> = {}
+
+      if (field === 'source_deck_id' || msg.includes('source_deck_id')) {
+        serverErrs.sourceDeckId = 'Vui lòng chọn bộ thẻ từ tài khoản của bạn.'
+      }
+      if (field === 'title' || msg.includes('Title')) {
+        serverErrs.title = 'Vui lòng nhập tiêu đề xuất bản.'
+      }
+      if (field === 'description' || msg.includes('Description')) {
+        serverErrs.description = 'Vui lòng nhập mô tả chi tiết học liệu.'
+      }
+      if (field === 'preview_text' || msg.includes('Preview text')) {
+        serverErrs.previewText = 'Vui lòng nhập tóm tắt xem trước ngắn (Preview Text).'
+      }
+      if (field === 'taxonomy_domain' || msg.includes('taxonomy_domain')) {
+        serverErrs.taxonomyDomain = 'Vui lòng chọn Lĩnh vực học tập.'
+      }
+      if (field === 'taxonomy_subject' || msg.includes('taxonomy_subject')) {
+        serverErrs.taxonomySubject = 'Vui lòng chọn Ngôn ngữ / Môn học.'
+      }
+      if (field === 'taxonomy_difficulty_band' || msg.includes('taxonomy_difficulty_band')) {
+        serverErrs.taxonomyDifficulty = 'Vui lòng chọn Trình độ / Mức độ khó.'
+      }
+      if (field === 'taxonomy_learning_goals' || msg.includes('learning goal')) {
+        serverErrs.taxonomyGoals = 'Vui lòng chọn ít nhất 1 Mục tiêu học tập.'
+      }
+      if (field === 'taxonomy_primary_topics' || msg.includes('primary topic')) {
+        serverErrs.taxonomyTopics = 'Vui lòng chọn ít nhất 1 Chủ đề chính.'
+      }
+
+      if (Object.keys(serverErrs).length > 0) {
+        setFieldErrors((prev) => ({ ...prev, ...serverErrs }))
+        toast.error('Có thông tin bị thiếu hoặc không hợp lệ. Vui lòng kiểm tra các vị trí báo đỏ bên dưới.')
+      } else {
+        toast.error(msg || 'Không thể xuất bản. Vui lòng kiểm tra lại thông tin.')
+      }
+    },
   })
+
+  const validateForm = (): boolean => {
+    const errs: Record<string, string> = {}
+    if (!sourceDeckId) {
+      errs.sourceDeckId = 'Vui lòng chọn bộ thẻ cần chia sẻ từ tài khoản của bạn.'
+    }
+    if (!title.trim()) {
+      errs.title = 'Vui lòng nhập tiêu đề xuất bản.'
+    }
+    if (!previewText.trim()) {
+      errs.previewText = 'Vui lòng nhập tóm tắt xem trước ngắn (Preview Text) để người học xem nhanh.'
+    }
+    if (!description.trim()) {
+      errs.description = 'Vui lòng nhập mô tả chi tiết giới thiệu học liệu.'
+    }
+    if (primaryCategory === 'Custom' && !customCategory.trim()) {
+      errs.customCategory = 'Vui lòng nhập tên danh mục tùy chỉnh.'
+    }
+    if (!taxonomyDomain) {
+      errs.taxonomyDomain = 'Vui lòng chọn Lĩnh vực học tập.'
+    }
+    if (!taxonomySubject) {
+      errs.taxonomySubject = 'Vui lòng chọn Ngôn ngữ / Môn học.'
+    }
+    if (!taxonomyDifficulty) {
+      errs.taxonomyDifficulty = 'Vui lòng chọn Trình độ / Mức độ khó.'
+    }
+    if (taxonomyGoals.length === 0) {
+      errs.taxonomyGoals = 'Vui lòng chọn ít nhất 1 Mục tiêu học tập (bấm vào các ô màu bên dưới).'
+    }
+    if (taxonomyTopics.length === 0) {
+      errs.taxonomyTopics = 'Vui lòng chọn ít nhất 1 Chủ đề chính (bấm vào các ô màu bên dưới).'
+    }
+    if (pricingMode === 'paid' && (!priceAmountMinor || priceAmountMinor <= 0)) {
+      errs.priceAmountMinor = 'Vui lòng nhập giá bán hợp lệ (> 0 VND).'
+    }
+
+    setFieldErrors(errs)
+    if (Object.keys(errs).length > 0) {
+      toast.error('Thông tin chưa đầy đủ! Vui lòng điền các trường màu đỏ bên dưới.')
+      return false
+    }
+    return true
+  }
+
+  const decks = decksQuery.data?.items || []
+
+  // Sync search param ID if passed in URL
+  useEffect(() => {
+    if (queryParamDeckId && !sourceDeckId) {
+      setSourceDeckId(queryParamDeckId)
+    }
+  }, [queryParamDeckId, sourceDeckId])
+
+  // Auto set title if title is empty when selected deck changes
+  useEffect(() => {
+    if (sourceDeckId && decks.length > 0 && !title) {
+      const found = decks.find((d) => String(d.id) === sourceDeckId)
+      if (found) {
+        setTitle(found.name)
+      }
+    }
+  }, [decks, sourceDeckId, title])
 
   if (decksQuery.isPending) return <PageLoading label="Đang tải danh sách bộ thẻ của bạn…" />
 
-  const decks = decksQuery.data?.items || []
   const selectedDeck = decks.find((d) => String(d.id) === sourceDeckId)
+  const availableSubjects = TAXONOMY_SUBJECTS[taxonomyDomain] || TAXONOMY_SUBJECTS.other
 
   return (
     <Page className="space-y-6 relative px-3 sm:px-6 lg:px-8 py-4 sm:py-6 max-w-7xl mx-auto">
@@ -132,10 +338,27 @@ export function MarketplacePublishDeckPage() {
         </div>
       </div>
 
+      {/* Global Form Validation Warning Alert */}
+      {Object.keys(fieldErrors).length > 0 && (
+        <div className="rounded-2xl border border-destructive/40 bg-destructive/10 p-4 sm:p-5 flex items-start gap-3.5 animate-in fade-in duration-200">
+          <AlertCircle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
+          <div className="space-y-1 text-xs sm:text-sm">
+            <div className="font-bold text-destructive">
+              Thông tin đăng tải chưa hoàn thiện ({Object.keys(fieldErrors).length} vị trí bị thiếu)
+            </div>
+            <div className="text-destructive/90 font-medium leading-relaxed">
+              Vui lòng xem các dòng báo lỗi đỏ dưới từng ô nhập liệu bên dưới để bổ sung trước khi bấm Xuất bản.
+            </div>
+          </div>
+        </div>
+      )}
+
       <form
         onSubmit={(e) => {
           e.preventDefault()
-          publishMutation.mutate()
+          if (validateForm()) {
+            publishMutation.mutate()
+          }
         }}
         className="grid gap-6 lg:grid-cols-3 items-start"
       >
@@ -154,19 +377,21 @@ export function MarketplacePublishDeckPage() {
             <CardContent className="p-4 sm:p-6 space-y-5">
               {/* Select Source Deck */}
               <div className="space-y-2">
-                <Label htmlFor="source-deck" className="text-xs font-semibold">
-                  Chọn Bộ thẻ cần chia sẻ <span className="text-destructive">*</span>
+                <Label htmlFor="source-deck" className="text-xs font-semibold flex items-center justify-between">
+                  <span>Chọn Bộ thẻ cần chia sẻ <span className="text-destructive">*</span></span>
                 </Label>
                 <NativeSelect
                   id="source-deck"
                   value={sourceDeckId}
                   onChange={(e) => {
                     setSourceDeckId(e.target.value)
+                    clearFieldError('sourceDeckId')
                     const found = decks.find((d) => String(d.id) === e.target.value)
                     if (found && !title) setTitle(found.name)
                   }}
-                  className="h-10 text-xs sm:text-sm rounded-xl font-medium"
-                  required
+                  className={`h-10 text-xs sm:text-sm rounded-xl font-medium ${
+                    fieldErrors.sourceDeckId ? 'border-destructive focus-visible:ring-destructive bg-destructive/5' : ''
+                  }`}
                 >
                   <NativeSelectOption value="">-- Chọn bộ thẻ từ tài khoản của bạn --</NativeSelectOption>
                   {decks.map((d) => (
@@ -175,66 +400,83 @@ export function MarketplacePublishDeckPage() {
                     </NativeSelectOption>
                   ))}
                 </NativeSelect>
+                <FieldErrorMessage error={fieldErrors.sourceDeckId} />
               </div>
 
               {/* Listing Title */}
               <div className="space-y-2">
-                <Label htmlFor="title" className="text-xs font-semibold">
-                  Tiêu đề xuất bản (Listing Title) <span className="text-destructive">*</span>
+                <Label htmlFor="title" className="text-xs font-semibold flex items-center justify-between">
+                  <span>Tiêu đề xuất bản (Listing Title) <span className="text-destructive">*</span></span>
                 </Label>
                 <Input
                   id="title"
                   placeholder="Ví dụ: 1000 Từ vựng IELTS 7.0+, N3 Kanji Luyện đọc, hay ReactJS Essentials"
                   value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  className="h-10 text-xs sm:text-sm rounded-xl font-medium"
-                  required
+                  onChange={(e) => {
+                    setTitle(e.target.value)
+                    clearFieldError('title')
+                  }}
+                  className={`h-10 text-xs sm:text-sm rounded-xl font-medium ${
+                    fieldErrors.title ? 'border-destructive focus-visible:ring-destructive bg-destructive/5' : ''
+                  }`}
                 />
+                <FieldErrorMessage error={fieldErrors.title} />
               </div>
 
               {/* Short Preview */}
               <div className="space-y-2">
-                <Label htmlFor="preview" className="text-xs font-semibold">
-                  Mô tả ngắn xem trước (Preview Text)
+                <Label htmlFor="preview" className="text-xs font-semibold flex items-center justify-between">
+                  <span>Mô tả ngắn xem trước (Preview Text) <span className="text-destructive">*</span></span>
                 </Label>
                 <Input
                   id="preview"
                   placeholder="1 dòng mô tả tóm tắt điểm nổi bật để người học xem nhanh trên danh sách"
                   value={previewText}
-                  onChange={(e) => setPreviewText(e.target.value)}
-                  className="h-10 text-xs sm:text-sm rounded-xl"
+                  onChange={(e) => {
+                    setPreviewText(e.target.value)
+                    clearFieldError('previewText')
+                  }}
+                  className={`h-10 text-xs sm:text-sm rounded-xl ${
+                    fieldErrors.previewText ? 'border-destructive focus-visible:ring-destructive bg-destructive/5' : ''
+                  }`}
                   maxLength={160}
                 />
-                <div className="flex justify-end text-[11px] text-muted-foreground">
-                  {previewText.length}/160 ký tự
+                <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                  <div><FieldErrorMessage error={fieldErrors.previewText} /></div>
+                  <div>{previewText.length}/160 ký tự</div>
                 </div>
               </div>
 
               {/* Detailed Description */}
               <div className="space-y-2">
-                <Label htmlFor="description" className="text-xs font-semibold">
-                  Mô tả chi tiết học liệu <span className="text-destructive">*</span>
+                <Label htmlFor="description" className="text-xs font-semibold flex items-center justify-between">
+                  <span>Mô tả chi tiết học liệu <span className="text-destructive">*</span></span>
                 </Label>
                 <Textarea
                   id="description"
                   rows={6}
                   placeholder="Giới thiệu mục tiêu bài học, đối tượng phù hợp, cấu trúc thẻ, hướng dẫn ôn tập và lý do nên sử dụng bộ thẻ này…"
                   value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  className="text-xs sm:text-sm rounded-xl leading-relaxed"
-                  required
+                  onChange={(e) => {
+                    setDescription(e.target.value)
+                    clearFieldError('description')
+                  }}
+                  className={`text-xs sm:text-sm rounded-xl leading-relaxed ${
+                    fieldErrors.description ? 'border-destructive focus-visible:ring-destructive bg-destructive/5' : ''
+                  }`}
                 />
+                <FieldErrorMessage error={fieldErrors.description} />
               </div>
 
               {/* Pricing Selector Cards */}
-              <div className="space-y-2 pt-2 border-t">
+              <div className="space-y-2 pt-2 border-t border-border/40">
                 <Label className="text-xs font-semibold">Mô hình phân phối & Giá bán</Label>
                 <div className="grid grid-cols-2 gap-3">
                   <div
                     onClick={() => setPricingMode('free')}
                     className={`p-3.5 rounded-xl border cursor-pointer transition-all ${
                       pricingMode === 'free'
-                        ? 'border-emerald-500 bg-emerald-500/10 shadow-xs'
+                        ? 'border-emerald-500 bg-emerald-500/10 shadow-xs font-bold'
                         : 'border-border bg-card hover:bg-muted/40'
                     }`}
                   >
@@ -246,7 +488,7 @@ export function MarketplacePublishDeckPage() {
                     onClick={() => setPricingMode('paid')}
                     className={`p-3.5 rounded-xl border cursor-pointer transition-all ${
                       pricingMode === 'paid'
-                        ? 'border-amber-500 bg-amber-500/10 shadow-xs'
+                        ? 'border-amber-500 bg-amber-500/10 shadow-xs font-bold'
                         : 'border-border bg-card hover:bg-muted/40'
                     }`}
                   >
@@ -256,7 +498,7 @@ export function MarketplacePublishDeckPage() {
                 </div>
 
                 {pricingMode === 'paid' && (
-                  <div className="pt-2 space-y-1.5 animate-in fade-in slide-in-from-top-1 duration-200">
+                  <div className="pt-2 space-y-1.5 animate-in fade-in duration-200">
                     <Label htmlFor="price" className="text-xs font-semibold">Giá bán niêm yết (VND)</Label>
                     <div className="relative">
                       <Input
@@ -265,18 +507,23 @@ export function MarketplacePublishDeckPage() {
                         min={1000}
                         step={1000}
                         value={priceAmountMinor}
-                        onChange={(e) => setPriceAmountMinor(Number(e.target.value))}
-                        className="h-10 text-xs sm:text-sm rounded-xl font-bold pr-16"
-                        required
+                        onChange={(e) => {
+                          setPriceAmountMinor(Number(e.target.value))
+                          clearFieldError('priceAmountMinor')
+                        }}
+                        className={`h-10 text-xs sm:text-sm rounded-xl font-bold pr-16 ${
+                          fieldErrors.priceAmountMinor ? 'border-destructive bg-destructive/5' : ''
+                        }`}
                       />
                       <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">VND</span>
                     </div>
+                    <FieldErrorMessage error={fieldErrors.priceAmountMinor} />
                   </div>
                 )}
               </div>
 
               {/* Version & Tags */}
-              <div className="grid gap-4 sm:grid-cols-2 pt-2 border-t">
+              <div className="grid gap-4 sm:grid-cols-2 pt-2 border-t border-border/40">
                 <div className="space-y-1.5">
                   <Label htmlFor="version" className="text-xs font-semibold">Phiên bản (Version)</Label>
                   <Input
@@ -319,17 +566,17 @@ export function MarketplacePublishDeckPage() {
           <Card className="shadow-xs rounded-2xl border-border/80 bg-card/90 backdrop-blur-sm overflow-hidden">
             <CardHeader className="p-4 sm:p-5 pb-3 border-b border-border/40 bg-muted/20">
               <CardTitle className="text-base font-bold">
-                2. Phân loại Môn học & Metadata
+                2. Phân loại Môn học & Taxonomy
               </CardTitle>
               <CardDescription className="text-xs">
-                Giúp hệ thống phân loại chính xác tài liệu cho người học.
+                Giúp hệ thống phân loại chính xác tài liệu để người học dễ dàng tìm kiếm.
               </CardDescription>
             </CardHeader>
 
             <CardContent className="p-4 sm:p-5 space-y-4">
               {/* Category Quick Presets */}
               <div className="space-y-2">
-                <Label htmlFor="primary-category" className="text-xs font-semibold">Danh mục môn học chính</Label>
+                <Label htmlFor="primary-category" className="text-xs font-semibold">Danh mục chính</Label>
                 <NativeSelect
                   id="primary-category"
                   value={primaryCategory}
@@ -346,23 +593,174 @@ export function MarketplacePublishDeckPage() {
 
               {primaryCategory === 'Custom' && (
                 <div className="space-y-1.5 animate-in fade-in duration-200">
-                  <Label htmlFor="custom-category" className="text-xs font-semibold">Tên danh mục tùy chỉnh</Label>
+                  <Label htmlFor="custom-category" className="text-xs font-semibold">Tên danh mục tùy chỉnh <span className="text-destructive">*</span></Label>
                   <Input
                     id="custom-category"
                     placeholder="Ví dụ: Âm nhạc, Đố vui, Lịch sử..."
                     value={customCategory}
-                    onChange={(e) => setCustomCategory(e.target.value)}
-                    className="h-10 text-xs sm:text-sm rounded-xl"
-                    required
+                    onChange={(e) => {
+                      setCustomCategory(e.target.value)
+                      clearFieldError('customCategory')
+                    }}
+                    className={`h-10 text-xs sm:text-sm rounded-xl ${
+                      fieldErrors.customCategory ? 'border-destructive bg-destructive/5' : ''
+                    }`}
                   />
+                  <FieldErrorMessage error={fieldErrors.customCategory} />
                 </div>
               )}
 
-              <div className="space-y-1.5">
-                <Label htmlFor="subcategory" className="text-xs font-semibold">Trình độ / Danh mục phụ</Label>
+              {/* Taxonomy Domain Selection */}
+              <div className="space-y-2 pt-2 border-t border-border/40">
+                <Label htmlFor="tax-domain" className="text-xs font-semibold flex items-center justify-between">
+                  <span>Lĩnh vực học tập (Domain) <span className="text-destructive">*</span></span>
+                </Label>
+                <NativeSelect
+                  id="tax-domain"
+                  value={taxonomyDomain}
+                  onChange={(e) => {
+                    const newDomain = e.target.value
+                    setTaxonomyDomain(newDomain)
+                    clearFieldError('taxonomyDomain')
+                    const subs = TAXONOMY_SUBJECTS[newDomain] || TAXONOMY_SUBJECTS.other
+                    if (subs.length > 0) setTaxonomySubject(subs[0].id)
+                  }}
+                  className={`h-10 text-xs sm:text-sm rounded-xl font-medium ${
+                    fieldErrors.taxonomyDomain ? 'border-destructive bg-destructive/5' : ''
+                  }`}
+                >
+                  {TAXONOMY_DOMAINS.map((d) => (
+                    <NativeSelectOption key={d.id} value={d.id}>
+                      {d.label}
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelect>
+                <FieldErrorMessage error={fieldErrors.taxonomyDomain} />
+              </div>
+
+              {/* Taxonomy Subject Selection */}
+              <div className="space-y-2">
+                <Label htmlFor="tax-subject" className="text-xs font-semibold flex items-center justify-between">
+                  <span>Ngôn ngữ / Môn học (Subject) <span className="text-destructive">*</span></span>
+                </Label>
+                <NativeSelect
+                  id="tax-subject"
+                  value={taxonomySubject}
+                  onChange={(e) => {
+                    setTaxonomySubject(e.target.value)
+                    clearFieldError('taxonomySubject')
+                  }}
+                  className={`h-10 text-xs sm:text-sm rounded-xl font-medium ${
+                    fieldErrors.taxonomySubject ? 'border-destructive bg-destructive/5' : ''
+                  }`}
+                >
+                  {availableSubjects.map((s) => (
+                    <NativeSelectOption key={s.id} value={s.id}>
+                      {s.label}
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelect>
+                <FieldErrorMessage error={fieldErrors.taxonomySubject} />
+              </div>
+
+              {/* Taxonomy Difficulty Selection */}
+              <div className="space-y-2">
+                <Label htmlFor="tax-diff" className="text-xs font-semibold flex items-center justify-between">
+                  <span>Trình độ / Mức độ khó (Difficulty) <span className="text-destructive">*</span></span>
+                </Label>
+                <NativeSelect
+                  id="tax-diff"
+                  value={taxonomyDifficulty}
+                  onChange={(e) => {
+                    setTaxonomyDifficulty(e.target.value)
+                    clearFieldError('taxonomyDifficulty')
+                  }}
+                  className={`h-10 text-xs sm:text-sm rounded-xl font-medium ${
+                    fieldErrors.taxonomyDifficulty ? 'border-destructive bg-destructive/5' : ''
+                  }`}
+                >
+                  {TAXONOMY_DIFFICULTIES.map((d) => (
+                    <NativeSelectOption key={d.id} value={d.id}>
+                      {d.label}
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelect>
+                <FieldErrorMessage error={fieldErrors.taxonomyDifficulty} />
+              </div>
+
+              {/* Taxonomy Learning Goals Multi-select Chips */}
+              <div className="space-y-2 pt-2 border-t border-border/40">
+                <Label className="text-xs font-semibold flex items-center justify-between">
+                  <span>Mục tiêu học tập (Learning Goals) <span className="text-destructive">*</span></span>
+                  <span className="text-[11px] text-muted-foreground font-normal">Chọn ít nhất 1</span>
+                </Label>
+                <div className="flex flex-wrap gap-1.5 pt-0.5">
+                  {TAXONOMY_LEARNING_GOALS.map((g) => {
+                    const isSelected = taxonomyGoals.includes(g.id)
+                    return (
+                      <Badge
+                        key={g.id}
+                        variant={isSelected ? 'default' : 'outline'}
+                        className={`cursor-pointer text-[11px] py-1 px-2.5 rounded-lg transition-all ${
+                          isSelected
+                            ? 'bg-primary text-primary-foreground font-bold shadow-2xs'
+                            : 'hover:bg-muted font-medium'
+                        }`}
+                        onClick={() => {
+                          clearFieldError('taxonomyGoals')
+                          setTaxonomyGoals((prev) =>
+                            isSelected ? prev.filter((id) => id !== g.id) : [...prev, g.id]
+                          )
+                        }}
+                      >
+                        {isSelected && <Check className="w-3 h-3 mr-1 inline shrink-0" />}
+                        {g.label}
+                      </Badge>
+                    )
+                  })}
+                </div>
+                <FieldErrorMessage error={fieldErrors.taxonomyGoals} />
+              </div>
+
+              {/* Taxonomy Primary Topics Multi-select Chips */}
+              <div className="space-y-2 pt-2 border-t border-border/40">
+                <Label className="text-xs font-semibold flex items-center justify-between">
+                  <span>Chủ đề chính (Primary Topics) <span className="text-destructive">*</span></span>
+                  <span className="text-[11px] text-muted-foreground font-normal">Chọn ít nhất 1</span>
+                </Label>
+                <div className="flex flex-wrap gap-1.5 pt-0.5">
+                  {TAXONOMY_TOPICS.map((t) => {
+                    const isSelected = taxonomyTopics.includes(t.id)
+                    return (
+                      <Badge
+                        key={t.id}
+                        variant={isSelected ? 'default' : 'outline'}
+                        className={`cursor-pointer text-[11px] py-1 px-2.5 rounded-lg transition-all ${
+                          isSelected
+                            ? 'bg-primary text-primary-foreground font-bold shadow-2xs'
+                            : 'hover:bg-muted font-medium'
+                        }`}
+                        onClick={() => {
+                          clearFieldError('taxonomyTopics')
+                          setTaxonomyTopics((prev) =>
+                            isSelected ? prev.filter((id) => id !== t.id) : [...prev, t.id]
+                          )
+                        }}
+                      >
+                        {isSelected && <Check className="w-3 h-3 mr-1 inline shrink-0" />}
+                        {t.label}
+                      </Badge>
+                    )
+                  })}
+                </div>
+                <FieldErrorMessage error={fieldErrors.taxonomyTopics} />
+              </div>
+
+              <div className="space-y-1.5 pt-2 border-t border-border/40">
+                <Label htmlFor="subcategory" className="text-xs font-semibold">Trình độ chi tiết (Ví dụ: N3, IELTS 6.5)</Label>
                 <Input
                   id="subcategory"
-                  placeholder="Ví dụ: N3, IELTS 6.5, HSK4, ReactJS, Sơ cấp..."
+                  placeholder="Ví dụ: N3, IELTS 6.5, HSK4, ReactJS..."
                   value={subcategory}
                   onChange={(e) => setSubcategory(e.target.value)}
                   className="h-10 text-xs sm:text-sm rounded-xl"
@@ -370,10 +768,10 @@ export function MarketplacePublishDeckPage() {
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="target-audience" className="text-xs font-semibold">Đối tượng học phù hợp</Label>
+                <Label htmlFor="target-audience" className="text-xs font-semibold">Đối tượng phù hợp</Label>
                 <Input
                   id="target-audience"
-                  placeholder="Ví dụ: Người mới bắt đầu, Học sinh, Sinh viên IT, Người đi làm..."
+                  placeholder="Ví dụ: Người mới bắt đầu, Sinh viên IT, Người đi làm..."
                   value={targetAudience}
                   onChange={(e) => setTargetAudience(e.target.value)}
                   className="h-10 text-xs sm:text-sm rounded-xl"
@@ -430,9 +828,9 @@ export function MarketplacePublishDeckPage() {
                   type="submit"
                   size="lg"
                   className="w-full h-11 font-bold text-sm rounded-xl shadow-md bg-primary hover:bg-primary/90 text-primary-foreground"
-                  disabled={!sourceDeckId || !title.trim() || !description.trim() || publishMutation.isPending}
+                  disabled={publishMutation.isPending}
                 >
-                  Xuất bản Bộ thẻ ngay
+                  {publishMutation.isPending ? 'Đang xuất bản…' : 'Xuất bản Bộ thẻ ngay'}
                 </Button>
               </div>
             </CardContent>
@@ -446,7 +844,7 @@ export function MarketplacePublishDeckPage() {
 export function MarketplacePublishNoteTypePage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const queryParamId = searchParams.get('id') || searchParams.get('note_type_id') || ''
+  const queryParamId = searchParams.get('id') || ''
 
   const [sourceNoteTypeId, setSourceNoteTypeId] = useState<string>(queryParamId)
   const [title, setTitle] = useState('')
@@ -459,6 +857,26 @@ export function MarketplacePublishNoteTypePage() {
   const [changelog, setChangelog] = useState('')
   const [primaryCategory, setPrimaryCategory] = useState('Templates')
   const [customCategory, setCustomCategory] = useState('')
+
+  // Taxonomy states
+  const [taxonomyDomain, setTaxonomyDomain] = useState('language_learning')
+  const [taxonomySubject, setTaxonomySubject] = useState('japanese')
+  const [taxonomyDifficulty, setTaxonomyDifficulty] = useState('beginner')
+  const [taxonomyGoals, setTaxonomyGoals] = useState<string[]>(['vocabulary'])
+  const [taxonomyTopics, setTaxonomyTopics] = useState<string[]>(['meaning_recall'])
+
+  // Field validation errors
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+
+  const clearFieldError = (name: string) => {
+    if (fieldErrors[name]) {
+      setFieldErrors((prev) => {
+        const next = { ...prev }
+        delete next[name]
+        return next
+      })
+    }
+  }
 
   const noteTypesQuery = useQuery({
     queryKey: ['my-note-types-for-publish'],
@@ -498,27 +916,116 @@ export function MarketplacePublishNoteTypePage() {
   const publishMutation = useMutation({
     mutationFn: () =>
       appApi.mutate(`/api/note-types/${sourceNoteTypeId}/publish`, 'POST', {
-        title,
-        preview_text: previewText,
-        description,
+        title: title.trim(),
+        preview_text: previewText.trim(),
+        description: description.trim(),
         pricing_mode: pricingMode,
         price_amount_minor: pricingMode === 'paid' ? priceAmountMinor : 0,
-        version,
+        version: version.trim() || '1.0.0',
         tags: tags ? tags.split(',').map((t) => t.trim()).filter(Boolean) : [],
-        changelog,
+        changelog: changelog.trim(),
         primary_category: effectiveCategory,
+        taxonomy_domain: taxonomyDomain,
+        taxonomy_subject: taxonomySubject,
+        taxonomy_difficulty_band: taxonomyDifficulty,
+        taxonomy_learning_goals: taxonomyGoals,
+        taxonomy_primary_topics: taxonomyTopics,
       }),
     onSuccess: () => {
       toast.success('Đã xuất bản Loại thẻ lên Marketplace thành công!')
       navigate('/marketplace/note-types')
     },
-    onError: (error: Error) => toast.error(error.message),
+    onError: (error: any) => {
+      const msg = error?.message || ''
+      const field = error?.field || ''
+      const serverErrs: Record<string, string> = {}
+
+      if (field === 'source_note_type_id' || msg.includes('source_note_type_id')) {
+        serverErrs.sourceNoteTypeId = 'Vui lòng chọn loại thẻ cần xuất bản.'
+      }
+      if (field === 'title' || msg.includes('Title')) {
+        serverErrs.title = 'Vui lòng nhập tiêu đề hiển thị.'
+      }
+      if (field === 'description' || msg.includes('Description')) {
+        serverErrs.description = 'Vui lòng nhập mô tả chi tiết mẫu thẻ.'
+      }
+      if (field === 'preview_text' || msg.includes('Preview text')) {
+        serverErrs.previewText = 'Vui lòng nhập xem trước ngắn (Preview Text).'
+      }
+      if (field === 'taxonomy_domain' || msg.includes('taxonomy_domain')) {
+        serverErrs.taxonomyDomain = 'Vui lòng chọn Lĩnh vực học tập.'
+      }
+      if (field === 'taxonomy_subject' || msg.includes('taxonomy_subject')) {
+        serverErrs.taxonomySubject = 'Vui lòng chọn Ngôn ngữ / Môn học.'
+      }
+      if (field === 'taxonomy_difficulty_band' || msg.includes('taxonomy_difficulty_band')) {
+        serverErrs.taxonomyDifficulty = 'Vui lòng chọn Trình độ / Mức độ khó.'
+      }
+      if (field === 'taxonomy_learning_goals' || msg.includes('learning goal')) {
+        serverErrs.taxonomyGoals = 'Vui lòng chọn ít nhất 1 Mục tiêu học tập.'
+      }
+      if (field === 'taxonomy_primary_topics' || msg.includes('primary topic')) {
+        serverErrs.taxonomyTopics = 'Vui lòng chọn ít nhất 1 Chủ đề chính.'
+      }
+
+      if (Object.keys(serverErrs).length > 0) {
+        setFieldErrors((prev) => ({ ...prev, ...serverErrs }))
+        toast.error('Có thông tin bị thiếu hoặc không hợp lệ. Vui lòng kiểm tra các vị trí báo đỏ bên dưới.')
+      } else {
+        toast.error(msg || 'Không thể xuất bản. Vui lòng kiểm tra lại thông tin.')
+      }
+    },
   })
+
+  const validateForm = (): boolean => {
+    const errs: Record<string, string> = {}
+    if (!sourceNoteTypeId) {
+      errs.sourceNoteTypeId = 'Vui lòng chọn Loại thẻ cần xuất bản.'
+    }
+    if (!title.trim()) {
+      errs.title = 'Vui lòng nhập tiêu đề hiển thị.'
+    }
+    if (!previewText.trim()) {
+      errs.previewText = 'Vui lòng nhập xem trước ngắn (Preview Text) để hiển thị danh sách.'
+    }
+    if (!description.trim()) {
+      errs.description = 'Vui lòng nhập mô tả chi tiết mẫu thẻ.'
+    }
+    if (primaryCategory === 'Custom' && !customCategory.trim()) {
+      errs.customCategory = 'Vui lòng nhập tên danh mục tùy chỉnh.'
+    }
+    if (!taxonomyDomain) {
+      errs.taxonomyDomain = 'Vui lòng chọn Lĩnh vực học tập.'
+    }
+    if (!taxonomySubject) {
+      errs.taxonomySubject = 'Vui lòng chọn Ngôn ngữ / Môn học.'
+    }
+    if (!taxonomyDifficulty) {
+      errs.taxonomyDifficulty = 'Vui lòng chọn Trình độ / Mức độ khó.'
+    }
+    if (taxonomyGoals.length === 0) {
+      errs.taxonomyGoals = 'Vui lòng chọn ít nhất 1 Mục tiêu học tập (bấm chọn các ô màu).'
+    }
+    if (taxonomyTopics.length === 0) {
+      errs.taxonomyTopics = 'Vui lòng chọn ít nhất 1 Chủ đề chính (bấm chọn các ô màu).'
+    }
+    if (pricingMode === 'paid' && (!priceAmountMinor || priceAmountMinor <= 0)) {
+      errs.priceAmountMinor = 'Vui lòng nhập giá bán hợp lệ (> 0 VND).'
+    }
+
+    setFieldErrors(errs)
+    if (Object.keys(errs).length > 0) {
+      toast.error('Thông tin chưa đầy đủ! Vui lòng điền các trường màu đỏ bên dưới.')
+      return false
+    }
+    return true
+  }
 
   if (noteTypesQuery.isPending) return <PageLoading label="Đang tải loại thẻ của bạn…" />
 
   const fieldDefs: Array<{ name: string; label?: string }> = detailData?.field_defs || []
   const templates: Array<{ name: string }> = detailData?.templates || []
+  const availableSubjects = TAXONOMY_SUBJECTS[taxonomyDomain] || TAXONOMY_SUBJECTS.other
 
   return (
     <Page className="space-y-6 relative px-3 sm:px-6 lg:px-8 py-4 sm:py-6 max-w-7xl mx-auto">
@@ -570,11 +1077,28 @@ export function MarketplacePublishNoteTypePage() {
         </div>
       ) : null}
 
+      {/* Global Form Validation Warning Alert */}
+      {Object.keys(fieldErrors).length > 0 && (
+        <div className="rounded-2xl border border-destructive/40 bg-destructive/10 p-4 sm:p-5 flex items-start gap-3.5 animate-in fade-in duration-200">
+          <AlertCircle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
+          <div className="space-y-1 text-xs sm:text-sm">
+            <div className="font-bold text-destructive">
+              Thông tin xuất bản chưa hoàn thiện ({Object.keys(fieldErrors).length} vị trí bị thiếu)
+            </div>
+            <div className="text-destructive/90 font-medium leading-relaxed">
+              Vui lòng xem các dòng báo lỗi đỏ dưới từng ô nhập liệu bên dưới để bổ sung trước khi bấm Xuất bản.
+            </div>
+          </div>
+        </div>
+      )}
+
       <form
         onSubmit={(e) => {
           e.preventDefault()
           if (isSelectedAlreadyPublished) return
-          publishMutation.mutate()
+          if (validateForm()) {
+            publishMutation.mutate()
+          }
         }}
         className="grid gap-6 lg:grid-cols-3 items-start"
       >
@@ -593,18 +1117,21 @@ export function MarketplacePublishNoteTypePage() {
             <CardContent className="p-4 sm:p-6 space-y-5">
               {/* Select Source NoteType */}
               <div className="space-y-2">
-                <Label htmlFor="source-nt" className="text-xs font-semibold">
-                  Chọn Loại thẻ cần xuất bản <span className="text-destructive">*</span>
+                <Label htmlFor="source-nt" className="text-xs font-semibold flex items-center justify-between">
+                  <span>Chọn Loại thẻ cần xuất bản <span className="text-destructive">*</span></span>
                 </Label>
                 <NativeSelect
                   id="source-nt"
                   value={sourceNoteTypeId}
                   onChange={(e) => {
                     setSourceNoteTypeId(e.target.value)
+                    clearFieldError('sourceNoteTypeId')
                     const found = noteTypes.find((nt) => nt.id === e.target.value)
                     if (found && !title) setTitle(found.name)
                   }}
-                  className="h-10 text-xs sm:text-sm rounded-xl font-medium"
+                  className={`h-10 text-xs sm:text-sm rounded-xl font-medium ${
+                    fieldErrors.sourceNoteTypeId ? 'border-destructive focus-visible:ring-destructive bg-destructive/5' : ''
+                  }`}
                   required
                 >
                   <NativeSelectOption value="">-- Chọn loại thẻ chưa xuất bản --</NativeSelectOption>
@@ -617,6 +1144,7 @@ export function MarketplacePublishNoteTypePage() {
                     )
                   })}
                 </NativeSelect>
+                <FieldErrorMessage error={fieldErrors.sourceNoteTypeId} />
               </div>
 
               {/* NoteType Field & Template Badge Summary */}
@@ -647,51 +1175,67 @@ export function MarketplacePublishNoteTypePage() {
 
               {/* Title */}
               <div className="space-y-2">
-                <Label htmlFor="nt-title" className="text-xs font-semibold">
-                  Tiêu đề hiển thị (Listing Title) <span className="text-destructive">*</span>
+                <Label htmlFor="nt-title" className="text-xs font-semibold flex items-center justify-between">
+                  <span>Tiêu đề hiển thị (Listing Title) <span className="text-destructive">*</span></span>
                 </Label>
                 <Input
                   id="nt-title"
                   placeholder="Ví dụ: Cloze Deletion Chuẩn Anki, Mẫu Từ vựng Đa ngữ, Code Snippets..."
                   value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  className="h-10 text-xs sm:text-sm rounded-xl font-medium"
-                  required
+                  onChange={(e) => {
+                    setTitle(e.target.value)
+                    clearFieldError('title')
+                  }}
+                  className={`h-10 text-xs sm:text-sm rounded-xl font-medium ${
+                    fieldErrors.title ? 'border-destructive focus-visible:ring-destructive bg-destructive/5' : ''
+                  }`}
                 />
+                <FieldErrorMessage error={fieldErrors.title} />
               </div>
 
               {/* Short Preview */}
               <div className="space-y-2">
-                <Label htmlFor="nt-preview" className="text-xs font-semibold">
-                  Xem trước ngắn (Preview Text)
+                <Label htmlFor="nt-preview" className="text-xs font-semibold flex items-center justify-between">
+                  <span>Xem trước ngắn (Preview Text) <span className="text-destructive">*</span></span>
                 </Label>
                 <Input
                   id="nt-preview"
                   placeholder="1 dòng tóm tắt thiết kế mẫu thẻ để người học xem nhanh trên danh sách"
                   value={previewText}
-                  onChange={(e) => setPreviewText(e.target.value)}
-                  className="h-10 text-xs sm:text-sm rounded-xl"
+                  onChange={(e) => {
+                    setPreviewText(e.target.value)
+                    clearFieldError('previewText')
+                  }}
+                  className={`h-10 text-xs sm:text-sm rounded-xl ${
+                    fieldErrors.previewText ? 'border-destructive focus-visible:ring-destructive bg-destructive/5' : ''
+                  }`}
                   maxLength={160}
                 />
-                <div className="flex justify-end text-[11px] text-muted-foreground">
-                  {previewText.length}/160 ký tự
+                <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                  <div><FieldErrorMessage error={fieldErrors.previewText} /></div>
+                  <div>{previewText.length}/160 ký tự</div>
                 </div>
               </div>
 
               {/* Description */}
               <div className="space-y-2">
-                <Label htmlFor="nt-desc" className="text-xs font-semibold">
-                  Mô tả chi tiết mẫu thẻ <span className="text-destructive">*</span>
+                <Label htmlFor="nt-desc" className="text-xs font-semibold flex items-center justify-between">
+                  <span>Mô tả chi tiết mẫu thẻ <span className="text-destructive">*</span></span>
                 </Label>
                 <Textarea
                   id="nt-desc"
                   rows={5}
                   placeholder="Mô tả chi tiết cấu trúc field, thiết kế CSS, cách trình bày và trường hợp sử dụng phù hợp…"
                   value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  className="text-xs sm:text-sm rounded-xl leading-relaxed"
-                  required
+                  onChange={(e) => {
+                    setDescription(e.target.value)
+                    clearFieldError('description')
+                  }}
+                  className={`text-xs sm:text-sm rounded-xl leading-relaxed ${
+                    fieldErrors.description ? 'border-destructive focus-visible:ring-destructive bg-destructive/5' : ''
+                  }`}
                 />
+                <FieldErrorMessage error={fieldErrors.description} />
               </div>
 
               {/* Changelog */}
@@ -743,20 +1287,171 @@ export function MarketplacePublishNoteTypePage() {
 
               {primaryCategory === 'Custom' && (
                 <div className="space-y-1.5 animate-in fade-in duration-200">
-                  <Label htmlFor="custom-category" className="text-xs font-semibold">Tên danh mục tùy chỉnh</Label>
+                  <Label htmlFor="custom-category" className="text-xs font-semibold">Tên danh mục tùy chỉnh <span className="text-destructive">*</span></Label>
                   <Input
                     id="custom-category"
                     placeholder="Ví dụ: Lập trình Python, Kanji nâng cao..."
                     value={customCategory}
-                    onChange={(e) => setCustomCategory(e.target.value)}
-                    className="h-10 text-xs sm:text-sm rounded-xl"
-                    required
+                    onChange={(e) => {
+                      setCustomCategory(e.target.value)
+                      clearFieldError('customCategory')
+                    }}
+                    className={`h-10 text-xs sm:text-sm rounded-xl ${
+                      fieldErrors.customCategory ? 'border-destructive bg-destructive/5' : ''
+                    }`}
                   />
+                  <FieldErrorMessage error={fieldErrors.customCategory} />
                 </div>
               )}
 
+              {/* Taxonomy Domain Selection */}
+              <div className="space-y-2 pt-2 border-t border-border/40">
+                <Label htmlFor="nt-tax-domain" className="text-xs font-semibold flex items-center justify-between">
+                  <span>Lĩnh vực học tập (Domain) <span className="text-destructive">*</span></span>
+                </Label>
+                <NativeSelect
+                  id="nt-tax-domain"
+                  value={taxonomyDomain}
+                  onChange={(e) => {
+                    const newDomain = e.target.value
+                    setTaxonomyDomain(newDomain)
+                    clearFieldError('taxonomyDomain')
+                    const subs = TAXONOMY_SUBJECTS[newDomain] || TAXONOMY_SUBJECTS.other
+                    if (subs.length > 0) setTaxonomySubject(subs[0].id)
+                  }}
+                  className={`h-10 text-xs sm:text-sm rounded-xl font-medium ${
+                    fieldErrors.taxonomyDomain ? 'border-destructive bg-destructive/5' : ''
+                  }`}
+                >
+                  {TAXONOMY_DOMAINS.map((d) => (
+                    <NativeSelectOption key={d.id} value={d.id}>
+                      {d.label}
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelect>
+                <FieldErrorMessage error={fieldErrors.taxonomyDomain} />
+              </div>
+
+              {/* Taxonomy Subject Selection */}
+              <div className="space-y-2">
+                <Label htmlFor="nt-tax-subject" className="text-xs font-semibold flex items-center justify-between">
+                  <span>Ngôn ngữ / Môn học (Subject) <span className="text-destructive">*</span></span>
+                </Label>
+                <NativeSelect
+                  id="nt-tax-subject"
+                  value={taxonomySubject}
+                  onChange={(e) => {
+                    setTaxonomySubject(e.target.value)
+                    clearFieldError('taxonomySubject')
+                  }}
+                  className={`h-10 text-xs sm:text-sm rounded-xl font-medium ${
+                    fieldErrors.taxonomySubject ? 'border-destructive bg-destructive/5' : ''
+                  }`}
+                >
+                  {availableSubjects.map((s) => (
+                    <NativeSelectOption key={s.id} value={s.id}>
+                      {s.label}
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelect>
+                <FieldErrorMessage error={fieldErrors.taxonomySubject} />
+              </div>
+
+              {/* Taxonomy Difficulty Selection */}
+              <div className="space-y-2">
+                <Label htmlFor="nt-tax-diff" className="text-xs font-semibold flex items-center justify-between">
+                  <span>Trình độ / Mức độ khó (Difficulty) <span className="text-destructive">*</span></span>
+                </Label>
+                <NativeSelect
+                  id="nt-tax-diff"
+                  value={taxonomyDifficulty}
+                  onChange={(e) => {
+                    setTaxonomyDifficulty(e.target.value)
+                    clearFieldError('taxonomyDifficulty')
+                  }}
+                  className={`h-10 text-xs sm:text-sm rounded-xl font-medium ${
+                    fieldErrors.taxonomyDifficulty ? 'border-destructive bg-destructive/5' : ''
+                  }`}
+                >
+                  {TAXONOMY_DIFFICULTIES.map((d) => (
+                    <NativeSelectOption key={d.id} value={d.id}>
+                      {d.label}
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelect>
+                <FieldErrorMessage error={fieldErrors.taxonomyDifficulty} />
+              </div>
+
+              {/* Taxonomy Learning Goals Multi-select Chips */}
+              <div className="space-y-2 pt-2 border-t border-border/40">
+                <Label className="text-xs font-semibold flex items-center justify-between">
+                  <span>Mục tiêu học tập (Learning Goals) <span className="text-destructive">*</span></span>
+                  <span className="text-[11px] text-muted-foreground font-normal">Chọn ít nhất 1</span>
+                </Label>
+                <div className="flex flex-wrap gap-1.5 pt-0.5">
+                  {TAXONOMY_LEARNING_GOALS.map((g) => {
+                    const isSelected = taxonomyGoals.includes(g.id)
+                    return (
+                      <Badge
+                        key={g.id}
+                        variant={isSelected ? 'default' : 'outline'}
+                        className={`cursor-pointer text-[11px] py-1 px-2.5 rounded-lg transition-all ${
+                          isSelected
+                            ? 'bg-primary text-primary-foreground font-bold shadow-2xs'
+                            : 'hover:bg-muted font-medium'
+                        }`}
+                        onClick={() => {
+                          clearFieldError('taxonomyGoals')
+                          setTaxonomyGoals((prev) =>
+                            isSelected ? prev.filter((id) => id !== g.id) : [...prev, g.id]
+                          )
+                        }}
+                      >
+                        {isSelected && <Check className="w-3 h-3 mr-1 inline shrink-0" />}
+                        {g.label}
+                      </Badge>
+                    )
+                  })}
+                </div>
+                <FieldErrorMessage error={fieldErrors.taxonomyGoals} />
+              </div>
+
+              {/* Taxonomy Primary Topics Multi-select Chips */}
+              <div className="space-y-2 pt-2 border-t border-border/40">
+                <Label className="text-xs font-semibold flex items-center justify-between">
+                  <span>Chủ đề chính (Primary Topics) <span className="text-destructive">*</span></span>
+                  <span className="text-[11px] text-muted-foreground font-normal">Chọn ít nhất 1</span>
+                </Label>
+                <div className="flex flex-wrap gap-1.5 pt-0.5">
+                  {TAXONOMY_TOPICS.map((t) => {
+                    const isSelected = taxonomyTopics.includes(t.id)
+                    return (
+                      <Badge
+                        key={t.id}
+                        variant={isSelected ? 'default' : 'outline'}
+                        className={`cursor-pointer text-[11px] py-1 px-2.5 rounded-lg transition-all ${
+                          isSelected
+                            ? 'bg-primary text-primary-foreground font-bold shadow-2xs'
+                            : 'hover:bg-muted font-medium'
+                        }`}
+                        onClick={() => {
+                          clearFieldError('taxonomyTopics')
+                          setTaxonomyTopics((prev) =>
+                            isSelected ? prev.filter((id) => id !== t.id) : [...prev, t.id]
+                          )
+                        }}
+                      >
+                        {isSelected && <Check className="w-3 h-3 mr-1 inline shrink-0" />}
+                        {t.label}
+                      </Badge>
+                    )
+                  })}
+                </div>
+                <FieldErrorMessage error={fieldErrors.taxonomyTopics} />
+              </div>
+
               {/* Pricing Segment Toggle */}
-              <div className="space-y-2 pt-1">
+              <div className="space-y-2 pt-2 border-t border-border/40">
                 <Label className="text-xs font-semibold">Mô hình phân phối</Label>
                 <div className="grid grid-cols-2 gap-2">
                   <Button
@@ -787,14 +1482,19 @@ export function MarketplacePublishNoteTypePage() {
                     min={1000}
                     step={1000}
                     value={priceAmountMinor}
-                    onChange={(e) => setPriceAmountMinor(Number(e.target.value))}
-                    className="h-10 text-xs sm:text-sm rounded-xl font-bold text-primary"
-                    required
+                    onChange={(e) => {
+                      setPriceAmountMinor(Number(e.target.value))
+                      clearFieldError('priceAmountMinor')
+                    }}
+                    className={`h-10 text-xs sm:text-sm rounded-xl font-bold text-primary ${
+                      fieldErrors.priceAmountMinor ? 'border-destructive bg-destructive/5' : ''
+                    }`}
                   />
+                  <FieldErrorMessage error={fieldErrors.priceAmountMinor} />
                 </div>
               )}
 
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-3 sm:grid-cols-2 pt-2 border-t border-border/40">
                 <div className="space-y-1.5">
                   <Label htmlFor="nt-version" className="text-xs font-semibold">Phiên bản</Label>
                   <Input
@@ -862,9 +1562,9 @@ export function MarketplacePublishNoteTypePage() {
                   type="submit"
                   size="lg"
                   className="w-full h-11 font-bold text-sm rounded-xl shadow-md bg-primary hover:bg-primary/90 text-primary-foreground"
-                  disabled={!sourceNoteTypeId || isSelectedAlreadyPublished || !title.trim() || !description.trim() || publishMutation.isPending}
+                  disabled={isSelectedAlreadyPublished || publishMutation.isPending}
                 >
-                  {isSelectedAlreadyPublished ? 'Đã xuất bản (Không thể xuất bản lại)' : 'Xuất bản Loại thẻ ngay'}
+                  {isSelectedAlreadyPublished ? 'Đã xuất bản (Không thể xuất bản lại)' : publishMutation.isPending ? 'Đang xuất bản…' : 'Xuất bản Loại thẻ ngay'}
                 </Button>
               </div>
             </CardContent>
@@ -874,4 +1574,3 @@ export function MarketplacePublishNoteTypePage() {
     </Page>
   )
 }
-

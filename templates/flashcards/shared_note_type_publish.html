@@ -43,12 +43,13 @@
               </div>
 
               <div class="mb-3">
-                <label class="form-label fw-semibold" for="preview_text">Preview text</label>
+                <label class="form-label fw-semibold" for="preview_text">Preview text <span class="text-danger">*</span></label>
                 <input
                   class="form-control"
                   id="preview_text"
                   name="preview_text"
                   maxlength="160"
+                  required
                   value="{{ form_state.preview_text }}"
                   placeholder="1 dòng để người học hiểu nhanh dùng để học gì."
                 >
