@@ -13,7 +13,7 @@ import {
   Search,
   Upload,
 } from '@/shared/components/Icons'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { AmbientBackground } from '@/components/ambient-background'
 import { Button } from '@/components/ui/button'
 import { useBootstrap } from '@/shared/api/bootstrap'
@@ -36,6 +36,7 @@ function findDeck(nodes: DeckNode[], deckId: number | null): DeckNode | null {
 }
 
 export function DashboardPage() {
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const bootstrapQuery = useBootstrap()
   const dashboardQuery = useDashboard()
@@ -241,6 +242,7 @@ export function DashboardPage() {
               adminMode={dashboard.admin_mode}
               selectedDeckId={selectedDeckId}
               onSelect={(deck) => setSelectedDeckId(deck.id)}
+              onActivate={(deck) => navigate(deck.study_url)}
               onAction={setSelection}
               onMoveDeck={handleMoveDeck}
             />

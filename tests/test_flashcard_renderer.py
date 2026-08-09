@@ -506,14 +506,19 @@ class FlashcardSecurityTests(unittest.TestCase):
                 "back_html": "{{FrontSide}}<hr><p>{{Meaning}}</p>",
                 "shared_css": ".card { text-align: center; }",
                 "fields": ["Expression", "Reading", "Meaning"],
+                "field_values": {
+                    "Expression": "同期",
+                    "Reading": "どうき",
+                    "Meaning": "synchronization",
+                },
             }
         )
         self.assertIn("front_html", res)
         self.assertIn("back_html", res)
         self.assertIn("front_renderer_payload", res)
         self.assertIn("back_renderer_payload", res)
-        self.assertIn("日本語", res["front_html"])
-        self.assertIn("Tiếng Nhật", res["back_html"])
+        self.assertIn("同期", res["front_html"])
+        self.assertIn("synchronization", res["back_html"])
         self.assertIn(".card { text-align: center; }", res["front_html"])
 
 

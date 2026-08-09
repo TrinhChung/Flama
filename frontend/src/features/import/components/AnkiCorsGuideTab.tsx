@@ -13,25 +13,15 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
-const RECOMMENDED_ANKI_CONNECT_CONFIG = `{
-    "apiKey": null,
-    "apiLogPath": null,
-    "webBindAddress": "127.0.0.1",
-    "webBindPort": 8765,
-    "webCorsOriginList": [
-        "http://localhost",
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://127.0.0.1:4789",
-        "*"
-    ]
-}`
-
 export function AnkiCorsGuideTab() {
   const [copied, setCopied] = useState(false)
+  const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'http://127.0.0.1:5173'
+  const recommendedCorsSetting = `"webCorsOriginList": [
+    "${currentOrigin}"
+]`
 
   const handleCopyConfig = async () => {
-    await navigator.clipboard.writeText(RECOMMENDED_ANKI_CONNECT_CONFIG)
+    await navigator.clipboard.writeText(recommendedCorsSetting)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
     toast.success('Đã sao chép cấu hình JSON của AnkiConnect vào bộ nhớ tạm!')
@@ -97,7 +87,7 @@ export function AnkiCorsGuideTab() {
             <CardDescription className="text-xs leading-relaxed">
               Chọn add-on <strong>AnkiConnect</strong> và bấm nút <strong className="text-foreground">Config (Cấu hình)</strong> ở góc dưới bên phải.
               <br />
-              Thêm các domain local vào mục <code className="font-mono text-primary font-bold">webCorsOriginList</code>.
+              Hợp nhất origin bên dưới vào mục <code className="font-mono text-primary font-bold">webCorsOriginList</code>. Giữ nguyên các khóa khác, đặc biệt là <code className="font-mono">apiKey</code>.
             </CardDescription>
           </CardHeader>
           <CardContent className="p-5 pt-0 space-y-2">
@@ -141,10 +131,10 @@ export function AnkiCorsGuideTab() {
           <div className="space-y-1">
             <CardTitle className="text-sm font-bold flex items-center gap-2">
               <Code className="size-4 text-primary" />
-              Mẫu cấu hình JSON chuẩn cho AnkiConnect Config
+              Thuộc tính CORS cần hợp nhất vào AnkiConnect Config
             </CardTitle>
             <CardDescription className="text-xs">
-              Dán đoạn JSON này vào ô Config của AnkiConnect trong Anki Desktop.
+              Không thay toàn bộ config. Chỉ cập nhật thuộc tính này và không dùng wildcard <code className="font-mono">*</code>.
             </CardDescription>
           </div>
           <Button
@@ -158,7 +148,7 @@ export function AnkiCorsGuideTab() {
         </CardHeader>
         <CardContent className="p-0">
           <pre className="p-4 bg-slate-950 text-slate-100 text-xs font-mono overflow-x-auto leading-relaxed select-all">
-            {RECOMMENDED_ANKI_CONNECT_CONFIG}
+            {recommendedCorsSetting}
           </pre>
         </CardContent>
       </Card>

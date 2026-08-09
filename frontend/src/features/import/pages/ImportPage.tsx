@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { HelpCircle, Layers, NotebookTabs } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { appApi } from '@/app/api'
@@ -39,20 +39,35 @@ export function ImportPage() {
   const [ankiVersion, setAnkiVersion] = useState<number | null>(null)
   const [connectionError, setConnectionError] = useState<string | null>(null)
   const [isCheckingConn, setIsCheckingConn] = useState(false)
+  const connectionRequestId = useRef(0)
 
-  const checkAnkiConnection = async () => {
+  const checkAnkiConnection = useCallback(async () => {
+    const requestId = ++connectionRequestId.current
     setIsCheckingConn(true)
     setConnectionError(null)
     const result = await ankiConnectClient.checkConnection(endpoint)
+    if (requestId !== connectionRequestId.current) return
     setConnectionStatus(result.status)
-    if (result.version) setAnkiVersion(result.version)
-    if (result.error) setConnectionError(result.error)
+    setAnkiVersion(result.version || null)
+    setConnectionError(result.error || null)
+    setIsCheckingConn(false)
+  }, [endpoint])
+
+  const handleEndpointChange = (nextEndpoint: string) => {
+    connectionRequestId.current++
+    setEndpoint(nextEndpoint)
+    setConnectionStatus('Anki is not running')
+    setAnkiVersion(null)
+    setConnectionError(null)
     setIsCheckingConn(false)
   }
 
   useEffect(() => {
-    checkAnkiConnection()
-  }, [endpoint])
+    const timer = window.setTimeout(() => {
+      void checkAnkiConnection()
+    }, 400)
+    return () => window.clearTimeout(timer)
+  }, [checkAnkiConnection])
 
   const bootstrapQuery = useQuery({
     queryKey: ['bootstrap'],
@@ -104,7 +119,7 @@ export function ImportPage() {
       {/* Shared Connection Status Header Bar */}
       <AnkiConnectionBar
         endpoint={endpoint}
-        onEndpointChange={setEndpoint}
+        onEndpointChange={handleEndpointChange}
         connectionStatus={connectionStatus}
         ankiVersion={ankiVersion}
         connectionError={connectionError}

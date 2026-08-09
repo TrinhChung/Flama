@@ -627,9 +627,24 @@ def preview_raw_template(
     back_html = str(payload.get("back_html") or "")
     shared_css = str(payload.get("shared_css") or "")
     raw_fields = payload.get("fields") or []
+    raw_field_values = payload.get("field_values") or {}
+
+    if not isinstance(raw_fields, list) or len(raw_fields) > 100:
+        raise ContentApiError(
+            "VALIDATION_ERROR",
+            "fields must be a list with at most 100 entries.",
+            field="fields",
+        )
+    if not isinstance(raw_field_values, dict):
+        raise ContentApiError(
+            "VALIDATION_ERROR",
+            "field_values must be an object.",
+            field="field_values",
+        )
 
     field_defs = []
     sample_values: dict[str, Any] = {}
+    total_supplied_chars = 0
 
     for idx, f in enumerate(raw_fields):
         name = str(f if isinstance(f, str) else (f.get("name", "") if isinstance(f, dict) else "")).strip()
@@ -649,7 +664,23 @@ def preview_raw_template(
         f_def = SimpleNamespace(id=f"f_{idx}", name=name, field_type=field_type, position=idx)
         field_defs.append(f_def)
 
-        if field_type == "image":
+        supplied_value = raw_field_values.get(name)
+        if supplied_value is not None:
+            if not isinstance(supplied_value, str) or len(supplied_value) > 100_000:
+                raise ContentApiError(
+                    "VALIDATION_ERROR",
+                    f"field_values.{name} must be a string no longer than 100000 characters.",
+                    field=f"field_values.{name}",
+                )
+            total_supplied_chars += len(supplied_value)
+            if total_supplied_chars > 250_000:
+                raise ContentApiError(
+                    "VALIDATION_ERROR",
+                    "field_values is too large for preview.",
+                    field="field_values",
+                )
+            sample_values[name] = supplied_value
+        elif field_type == "image":
             sample_values[name] = PREVIEW_MEDIA_IMAGE_TOKEN
         elif field_type == "audio":
             sample_values[name] = PREVIEW_MEDIA_AUDIO_TOKEN

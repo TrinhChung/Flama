@@ -60,6 +60,10 @@ class FlamaConnectTests(unittest.TestCase):
             db.session.add(note_type)
             db.session.flush()
             self.note_type_id = note_type.id
+            other_note_type = NoteType(user_id=other.id, name="Other private model")
+            db.session.add(other_note_type)
+            db.session.flush()
+            self.other_note_type_id = other_note_type.id
             db.session.add_all(
                 [
                     FieldDef(note_type_id=note_type.id, name="Meaning", field_type="text", position=0),
@@ -141,6 +145,38 @@ class FlamaConnectTests(unittest.TestCase):
             reflected,
             {"scopes": ["actions"], "actions": ["addNote", "storeMediaFile"]},
         )
+
+    def test_note_type_resolution_never_falls_back_to_another_user(self):
+        for model_name in (self.other_note_type_id, "Other private model"):
+            with self.subTest(model_name=model_name):
+                response = self._call("modelFieldNames", {"modelName": model_name})
+                self.assertEqual(
+                    response.get_json(),
+                    {"result": None, "error": "model was not found or is ambiguous"},
+                )
+
+    def test_import_cards_uses_owned_note_type_id_and_reports_each_card(self):
+        valid_note = self._note()
+        valid_note["modelName"] = self.note_type_id
+        invalid_note = self._note(word="")
+        invalid_note["modelName"] = self.note_type_id
+
+        response = self._call(
+            "importCards",
+            {
+                "importSessionId": "test-session",
+                "cards": [
+                    {"ankiNoteId": 101, "contentHash": "hash-101", "note": valid_note},
+                    {"ankiNoteId": 102, "contentHash": "hash-102", "note": invalid_note},
+                ],
+            },
+        )
+        results = response.get_json()["results"]
+        self.assertEqual(results[0]["ankiNoteId"], 101)
+        self.assertTrue(results[0]["imported"])
+        self.assertEqual(results[1]["ankiNoteId"], 102)
+        self.assertFalse(results[1]["imported"])
+        self.assertTrue(results[1]["error"])
 
     def test_invalid_token_is_generic_and_does_not_accept_session_or_bearer(self):
         response = self._call("deckNames", key="not-a-token")

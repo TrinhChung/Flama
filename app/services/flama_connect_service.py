@@ -190,12 +190,14 @@ def _resolve_note_type(user_id: int, model_name: object) -> NoteType:
         raise ConnectError("modelName is required")
     target = model_name.strip()
     note_types = _accessible_note_types(user_id)
-    matches = [nt for nt in note_types if nt.name == target or nt.id == target]
+    id_matches = [nt for nt in note_types if nt.id == target]
+    if id_matches:
+        return id_matches[0]
+
+    matches = [nt for nt in note_types if nt.name == target]
     if not matches:
         matches = [nt for nt in note_types if nt.name.lower() == target.lower()]
-    if not matches:
-        matches = NoteType.query.filter((NoteType.id == target) | (db.func.lower(NoteType.name) == target.lower())).all()
-    if not matches:
+    if len(matches) != 1:
         raise ConnectError("model was not found or is ambiguous")
     return matches[0]
 

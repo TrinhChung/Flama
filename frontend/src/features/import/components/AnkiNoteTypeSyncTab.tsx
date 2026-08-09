@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import {
   NotebookTabs,
   CheckCircle2,
@@ -112,7 +112,7 @@ export const AnkiNoteTypeSyncTab: React.FC<AnkiNoteTypeSyncTabProps> = ({
   const [syncLog, setSyncLog] = useState<string[]>([])
   const [syncReport, setSyncReport] = useState<{ successCount: number; errors: string[] } | null>(null)
 
-  const loadAnkiModels = async () => {
+  const loadAnkiModels = useCallback(async () => {
     setIsLoadingModels(true)
     try {
       const modelNames = await ankiConnectClient.getModelNames(endpoint)
@@ -156,13 +156,13 @@ export const AnkiNoteTypeSyncTab: React.FC<AnkiNoteTypeSyncTabProps> = ({
       console.warn('Lỗi tải danh sách NoteType:', err)
     }
     setIsLoadingModels(false)
-  }
+  }, [endpoint, noteTypeOptions])
 
   useEffect(() => {
     if (connectionStatus === 'Connected') {
       loadAnkiModels()
     }
-  }, [connectionStatus, endpoint])
+  }, [connectionStatus, loadAnkiModels])
 
   const activeModelDetail = useMemo(
     () => ankiModels.find((m) => m.name === activeModelName) || null,
@@ -276,6 +276,7 @@ export const AnkiNoteTypeSyncTab: React.FC<AnkiNoteTypeSyncTabProps> = ({
             template: templatePayload,
           })
           flamaNoteTypeId = newTypeRes.id
+          setTargetActions((current) => ({ ...current, [originalAnkiName]: flamaNoteTypeId }))
           logs.push(`✓ Đã tạo NoteType trên Flama: "${customName}" với ${modelDetail.fields.length} trường (ID: ${flamaNoteTypeId})`)
           setSyncLog([...logs])
 
@@ -290,18 +291,14 @@ export const AnkiNoteTypeSyncTab: React.FC<AnkiNoteTypeSyncTabProps> = ({
           if (modelDetail.templates.length > 1) {
             for (let tIdx = 1; tIdx < modelDetail.templates.length; tIdx++) {
               const tmpl = modelDetail.templates[tIdx]
-              try {
-                await appApi.mutate(`/note-types/${flamaNoteTypeId}/templates`, 'POST', {
-                  name: tmpl.name || `Card ${tIdx + 1}`,
-                  front_html: tmpl.front,
-                  back_html: tmpl.back,
-                  shared_css: modelDetail.css || '',
-                })
-                logs.push(`  + Template bổ sung: "${tmpl.name || `Card ${tIdx + 1}`}"`)
-                setSyncLog([...logs])
-              } catch (tmplErr) {
-                console.warn('Lưu template bổ sung thất bại, tiếp tục...', tmplErr)
-              }
+              await appApi.mutate(`/note-types/${flamaNoteTypeId}/templates`, 'POST', {
+                name: tmpl.name || `Card ${tIdx + 1}`,
+                front_html: tmpl.front,
+                back_html: tmpl.back,
+                shared_css: modelDetail.css || '',
+              })
+              logs.push(`  + Template bổ sung: "${tmpl.name || `Card ${tIdx + 1}`}"`)
+              setSyncLog([...logs])
             }
           }
         } else {
@@ -309,6 +306,7 @@ export const AnkiNoteTypeSyncTab: React.FC<AnkiNoteTypeSyncTabProps> = ({
           const existingNT = await appApi.get<{
             id: string
             field_defs?: Array<{ name: string; identity_role?: string | null }>
+            templates?: Array<{ id: string; name: string }>
           }>(`/note-types/${flamaNoteTypeId}`)
           const existingFields = existingNT.field_defs || []
           const existingNames = new Set(existingFields.map((f) => f.name.toLowerCase()))
@@ -337,19 +335,35 @@ export const AnkiNoteTypeSyncTab: React.FC<AnkiNoteTypeSyncTabProps> = ({
           }
 
           if (modelDetail.templates.length > 0) {
-            for (const tmpl of modelDetail.templates) {
-              try {
-                await appApi.mutate(`/note-types/${flamaNoteTypeId}/templates`, 'POST', {
-                  name: tmpl.name || 'Card 1',
-                  front_html: tmpl.front,
-                  back_html: tmpl.back,
-                  shared_css: modelDetail.css || '',
-                })
-                logs.push(`  + Template Mặt trước & Mặt sau: "${tmpl.name || 'Card 1'}"`)
-                setSyncLog([...logs])
-              } catch (tmplErr) {
-                console.warn('Lưu template thất bại, tiếp tục...', tmplErr)
+            const existingTemplates = existingNT.templates || []
+            const usedTemplateIds = new Set<string>()
+            for (let tmplIndex = 0; tmplIndex < modelDetail.templates.length; tmplIndex++) {
+              const tmpl = modelDetail.templates[tmplIndex]
+              const templateName = tmpl.name || `Card ${tmplIndex + 1}`
+              const matchedTemplate =
+                existingTemplates.find(
+                  (item) => !usedTemplateIds.has(item.id) && item.name.toLowerCase() === templateName.toLowerCase()
+                ) || existingTemplates.find((item) => !usedTemplateIds.has(item.id))
+              const templatePayload = {
+                name: templateName,
+                front_html: tmpl.front,
+                back_html: tmpl.back,
+                shared_css: modelDetail.css || '',
               }
+
+              if (matchedTemplate) {
+                await appApi.mutate(
+                  `/note-types/${flamaNoteTypeId}/templates/${matchedTemplate.id}`,
+                  'PATCH',
+                  templatePayload
+                )
+                usedTemplateIds.add(matchedTemplate.id)
+                logs.push(`  ↻ Đã cập nhật template: "${templateName}"`)
+              } else {
+                await appApi.mutate(`/note-types/${flamaNoteTypeId}/templates`, 'POST', templatePayload)
+                logs.push(`  + Template mới: "${templateName}"`)
+              }
+              setSyncLog([...logs])
             }
           }
         }
@@ -527,7 +541,7 @@ export const AnkiNoteTypeSyncTab: React.FC<AnkiNoteTypeSyncTabProps> = ({
                               <option value="ignore">-- Bỏ qua --</option>
                               {noteTypeOptions.map((opt) => (
                                 <option key={opt.id} value={opt.id}>
-                                  Ghi đè: {opt.name}
+                                  Hợp nhất &amp; cập nhật: {opt.name}
                                 </option>
                               ))}
                             </NativeSelect>
