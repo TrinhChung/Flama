@@ -13,7 +13,7 @@ import {
   Search,
   Upload,
 } from '@/shared/components/Icons'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { AmbientBackground } from '@/components/ambient-background'
 import { Button } from '@/components/ui/button'
 import { useBootstrap } from '@/shared/api/bootstrap'
@@ -36,6 +36,7 @@ function findDeck(nodes: DeckNode[], deckId: number | null): DeckNode | null {
 }
 
 export function DashboardPage() {
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const bootstrapQuery = useBootstrap()
   const dashboardQuery = useDashboard()
@@ -170,12 +171,14 @@ export function DashboardPage() {
             <BarChartLine className="size-3.5 sm:size-4" /> Stats
           </Link>
 
-          <a
-            href={importUrl}
-            className="dash-tab hidden sm:inline-flex items-center gap-1.5 rounded-lg px-2.5 sm:px-3.5 py-1.5 sm:py-2 text-[11px] sm:text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground transition shrink-0"
-          >
-            <Upload className="size-3.5 sm:size-4" /> Import
-          </a>
+          {bootstrap?.user?.is_admin ? (
+            <a
+              href={importUrl}
+              className="dash-tab hidden sm:inline-flex items-center gap-1.5 rounded-lg px-2.5 sm:px-3.5 py-1.5 sm:py-2 text-[11px] sm:text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground transition shrink-0"
+            >
+              <Upload className="size-3.5 sm:size-4" /> Import
+            </a>
+          ) : null}
 
           <Link
             to={browseUrl}
@@ -239,6 +242,7 @@ export function DashboardPage() {
               adminMode={dashboard.admin_mode}
               selectedDeckId={selectedDeckId}
               onSelect={(deck) => setSelectedDeckId(deck.id)}
+              onActivate={(deck) => navigate(deck.study_url)}
               onAction={setSelection}
               onMoveDeck={handleMoveDeck}
             />

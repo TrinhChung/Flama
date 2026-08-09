@@ -83,10 +83,10 @@ const TreeNodeItem = React.memo<TreeNodeItemProps>(({
         className={`flex items-center justify-between py-1.5 px-2 rounded-lg cursor-pointer transition-colors text-xs hover:bg-muted/50 ${
           isSelected ? 'bg-primary/15 font-semibold text-primary' : 'text-foreground'
         }`}
-        style={{ paddingLeft: `${Math.max(node.level * 1.25, 0.5)}rem` }}
+        style={{ paddingLeft: `${Math.max(node.level * 0.85, 0.35)}rem` }}
         onClick={() => onSelectDeck(node.fullName)}
       >
-        <div className="flex items-center gap-2 min-w-0">
+        <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1">
           {hasChildren ? (
             <button
               type="button"
@@ -107,10 +107,11 @@ const TreeNodeItem = React.memo<TreeNodeItemProps>(({
             checked={isSelected}
             onCheckedChange={() => onSelectDeck(node.fullName)}
             onClick={(e) => e.stopPropagation()}
+            className="shrink-0"
           />
 
           <div
-            className="flex items-center gap-1.5 min-w-0 cursor-pointer"
+            className="flex items-center gap-1.5 min-w-0 cursor-pointer flex-1"
             onClick={(e) => {
               if (hasChildren) {
                 e.stopPropagation()
@@ -127,20 +128,20 @@ const TreeNodeItem = React.memo<TreeNodeItemProps>(({
             ) : (
               <Layers className="size-3.5 text-primary/70 shrink-0" />
             )}
-            <span className="truncate">{node.displayName}</span>
+            <span className="truncate text-xs">{node.displayName}</span>
             {node.level > 0 && (
-              <span className="text-[10px] text-muted-foreground font-mono truncate hidden md:inline">
+              <span className="text-[10px] text-muted-foreground font-mono truncate hidden lg:inline">
                 ({node.fullName})
               </span>
             )}
           </div>
         </div>
 
-        <div className="flex items-center gap-3 shrink-0">
-          <span className="text-[11px] font-mono text-muted-foreground">
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0 ml-2">
+          <span className="text-[11px] font-mono text-muted-foreground whitespace-nowrap">
             {noteCount !== undefined ? `${noteCount} thẻ` : '-'}
           </span>
-          <Badge variant="outline" className="text-[10px] py-0 px-1.5 font-normal">
+          <Badge variant="outline" className="text-[10px] py-0 px-1.5 font-normal hidden sm:inline-flex">
             Chưa từng đồng bộ
           </Badge>
         </div>

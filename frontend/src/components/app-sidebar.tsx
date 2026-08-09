@@ -54,7 +54,9 @@ export function AppSidebar({
   ]
 
   const extensions: AppNavigationItem[] = [
-    { title: 'Đồng bộ Anki Desktop', url: '/import', icon: Zap },
+    ...(bootstrap.user?.is_admin
+      ? [{ title: 'Đồng bộ Anki Desktop', url: '/import', icon: Zap }]
+      : []),
     { title: 'Kết nối Yomitan', url: '/settings/yomitan', icon: Key },
   ]
 

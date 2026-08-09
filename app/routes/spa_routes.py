@@ -21,7 +21,6 @@ def public_spa_page():
 @spa_routes_bp.get("/browse")
 @spa_routes_bp.get("/study")
 @spa_routes_bp.get("/installed-decks")
-@spa_routes_bp.get("/import")
 @spa_routes_bp.get("/marketplace/decks")
 @spa_routes_bp.get("/marketplace/decks/publish")
 @spa_routes_bp.get("/marketplace/decks/<item_id>")
@@ -37,6 +36,8 @@ def authenticated_spa_page(item_id: str | None = None):
 
 
 
+@spa_routes_bp.get("/import")
+@spa_routes_bp.get("/flashcards/import")
 @spa_routes_bp.get("/admin/tts")
 @spa_routes_bp.get("/admin/image-library")
 @spa_routes_bp.get("/admin/permissions")
