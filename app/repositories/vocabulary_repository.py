@@ -444,6 +444,8 @@ def build_browse_card_detail(
         "fields": fields,
         "note_type_fields": note_type_fields,
         "media_assets": media_assets,
+        "can_upload_media": True,
+        "media_disabled_reason": None,
     }
 
 

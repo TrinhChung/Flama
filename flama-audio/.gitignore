@@ -1,0 +1,36 @@
+## .NET / Visual Studio build outputs
+bin/
+obj/
+out/
+publish/
+[Bb]in/
+[Oo]bj/
+[Pp]ublish/
+[Ll]og/
+[Ll]ogs/
+
+## User-specific files & IDEs
+*.rsuser
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+.vs/
+.idea/
+.vscode/
+
+## Packaging and publish artifacts
+*.nupkg
+*.snupkg
+*.appx
+*.msix
+*.appxbundle
+*.msixbundle
+
+## Local runtime data & downloaded engine models
+state/
+engines/
+cache/
+staging/
+logs/
+config/settings.json

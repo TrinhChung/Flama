@@ -13,6 +13,8 @@ env/
 static/tmp/
 /static/uploads/*
 !/static/uploads/.gitignore
+/static/downloads/*
+!/static/downloads/.gitignore
 /flama_media_storage/
 /output/
 /.playwright-cli/

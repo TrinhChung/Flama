@@ -1,0 +1,64 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{018BD557-017F-4AE6-A13D-18D5E9F4B293}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Flama.Audio.Core", "src\Flama.Audio.Core\Flama.Audio.Core.csproj", "{F1BAA7FC-43F0-4307-B531-E744680696D9}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Flama.Audio.Infrastructure", "src\Flama.Audio.Infrastructure\Flama.Audio.Infrastructure.csproj", "{7B486AF7-F731-4BA9-B5DB-02B2F1BC5502}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Flama.Audio.Engine.Voicevox", "src\Flama.Audio.Engine.Voicevox\Flama.Audio.Engine.Voicevox.csproj", "{ED49261E-DC8D-4590-8320-D4F7319BE79F}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Flama.Audio.Api", "src\Flama.Audio.Api\Flama.Audio.Api.csproj", "{21AACC9D-28CB-4E03-B59D-51BB0412F810}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Flama.Audio.App", "src\Flama.Audio.App\Flama.Audio.App.csproj", "{6042EC33-7823-46B7-943B-81B1B7163141}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{A2F4749C-BD61-41E1-BECA-F7FD8A0DAEAA}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Flama.Audio.Tests", "tests\Flama.Audio.Tests\Flama.Audio.Tests.csproj", "{C3C00579-A12E-466E-A17D-850487A5655B}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{F1BAA7FC-43F0-4307-B531-E744680696D9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F1BAA7FC-43F0-4307-B531-E744680696D9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F1BAA7FC-43F0-4307-B531-E744680696D9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F1BAA7FC-43F0-4307-B531-E744680696D9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7B486AF7-F731-4BA9-B5DB-02B2F1BC5502}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7B486AF7-F731-4BA9-B5DB-02B2F1BC5502}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7B486AF7-F731-4BA9-B5DB-02B2F1BC5502}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7B486AF7-F731-4BA9-B5DB-02B2F1BC5502}.Release|Any CPU.Build.0 = Release|Any CPU
+		{ED49261E-DC8D-4590-8320-D4F7319BE79F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{ED49261E-DC8D-4590-8320-D4F7319BE79F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{ED49261E-DC8D-4590-8320-D4F7319BE79F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{ED49261E-DC8D-4590-8320-D4F7319BE79F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{21AACC9D-28CB-4E03-B59D-51BB0412F810}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{21AACC9D-28CB-4E03-B59D-51BB0412F810}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{21AACC9D-28CB-4E03-B59D-51BB0412F810}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{21AACC9D-28CB-4E03-B59D-51BB0412F810}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6042EC33-7823-46B7-943B-81B1B7163141}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6042EC33-7823-46B7-943B-81B1B7163141}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6042EC33-7823-46B7-943B-81B1B7163141}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6042EC33-7823-46B7-943B-81B1B7163141}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C3C00579-A12E-466E-A17D-850487A5655B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C3C00579-A12E-466E-A17D-850487A5655B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C3C00579-A12E-466E-A17D-850487A5655B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C3C00579-A12E-466E-A17D-850487A5655B}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{F1BAA7FC-43F0-4307-B531-E744680696D9} = {018BD557-017F-4AE6-A13D-18D5E9F4B293}
+		{7B486AF7-F731-4BA9-B5DB-02B2F1BC5502} = {018BD557-017F-4AE6-A13D-18D5E9F4B293}
+		{ED49261E-DC8D-4590-8320-D4F7319BE79F} = {018BD557-017F-4AE6-A13D-18D5E9F4B293}
+		{21AACC9D-28CB-4E03-B59D-51BB0412F810} = {018BD557-017F-4AE6-A13D-18D5E9F4B293}
+		{6042EC33-7823-46B7-943B-81B1B7163141} = {018BD557-017F-4AE6-A13D-18D5E9F4B293}
+		{C3C00579-A12E-466E-A17D-850487A5655B} = {A2F4749C-BD61-41E1-BECA-F7FD8A0DAEAA}
+	EndGlobalSection
+EndGlobal

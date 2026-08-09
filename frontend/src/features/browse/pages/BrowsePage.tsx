@@ -32,6 +32,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { appApi } from '@/app/api'
+import { LocalAudioDialog } from '@/features/audio/components/LocalAudioDialog'
 import { updateCardFieldValuesInSessions } from '@/features/study/session/sessionStore'
 import { apiBlob } from '@/shared/api/client'
 import { Badge } from '@/components/ui/badge'
@@ -217,6 +218,8 @@ export function BrowsePage() {
 
   // VoiceVox TTS Audio Generation Modal State (Matching Original Template)
   const [isTtsModalOpen, setIsTtsModalOpen] = useState(false)
+  const [isLocalAudioModalOpen, setIsLocalAudioModalOpen] = useState(false)
+  const [localAudioTargetCardIds, setLocalAudioTargetCardIds] = useState<string[]>([])
   const [ttsSourceField, setTtsSourceField] = useState('Word')
   const [ttsDestinationField, setTtsDestinationField] = useState('Audio')
   const [ttsCharacter, setTtsCharacter] = useState('')
@@ -723,9 +726,17 @@ export function BrowsePage() {
                   <DropdownMenuItem onClick={() => setIsTtsModalOpen(true)}>
                     <span className="font-medium text-foreground">Web VoiceVox</span>
                   </DropdownMenuItem>
-                  <DropdownMenuItem disabled className="flex items-center justify-between opacity-60">
+                  <DropdownMenuItem
+                    onClick={() => {
+                      setLocalAudioTargetCardIds(selectedCards)
+                      setIsLocalAudioModalOpen(true)
+                    }}
+                    className="flex items-center justify-between font-medium cursor-pointer"
+                  >
                     <span>VoiceVox Local</span>
-                    <Badge variant="outline" className="text-[10px] py-0 px-1 font-normal">Sắp có</Badge>
+                    <Badge variant="outline" className="text-[10px] py-0 px-1 font-normal bg-emerald-50 text-emerald-700 border-emerald-300">
+                      Local
+                    </Badge>
                   </DropdownMenuItem>
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
@@ -1066,9 +1077,17 @@ export function BrowsePage() {
                           <DropdownMenuItem onClick={() => setIsTtsModalOpen(true)}>
                             <span className="font-medium text-foreground">Web VoiceVox</span>
                           </DropdownMenuItem>
-                          <DropdownMenuItem disabled className="flex items-center justify-between opacity-60">
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setLocalAudioTargetCardIds(selectedCards)
+                              setIsLocalAudioModalOpen(true)
+                            }}
+                            className="flex items-center justify-between font-medium cursor-pointer"
+                          >
                             <span>VoiceVox Local</span>
-                            <Badge variant="outline" className="text-[10px] py-0 px-1 font-normal">Sắp có</Badge>
+                            <Badge variant="outline" className="text-[10px] py-0 px-1 font-normal bg-emerald-50 text-emerald-700 border-emerald-300">
+                              Local
+                            </Badge>
                           </DropdownMenuItem>
                         </DropdownMenuSubContent>
                       </DropdownMenuSub>
@@ -1861,7 +1880,7 @@ export function BrowsePage() {
           </div>
 
           {/* Modal Footer Actions */}
-          <DialogFooter className="px-6 pt-5 pb-6 sm:pb-7 border-t bg-muted/20 gap-3 sm:justify-between items-center shrink-0">
+          <DialogFooter className="px-6 pt-5 pb-6 sm:pb-7 mb-0 border-t bg-muted/20 gap-3 sm:justify-between items-center shrink-0">
             <Button
               type="button"
               variant="outline"
@@ -1924,6 +1943,18 @@ export function BrowsePage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <LocalAudioDialog
+        isOpen={isLocalAudioModalOpen}
+        onClose={() => setIsLocalAudioModalOpen(false)}
+        selectedCardIds={localAudioTargetCardIds}
+        activeCardId={activeCardId}
+        availableFieldNames={availableFieldNames}
+        noteTypeName={cardDetailQuery.data?.note?.note_type_name || undefined}
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ['browse-cards'] })
+        }}
+      />
     </div>
   )
 }

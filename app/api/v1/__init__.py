@@ -20,6 +20,7 @@ from .marketplace import (
     marketplace_installations_bp,
     marketplace_note_types_bp,
 )
+from .download import download_bp
 from .settings import settings_bp
 from .tickets import tickets_bp
 
@@ -31,6 +32,7 @@ api_v1_bp.register_blueprint(flashcards_v1_bp)
 api_v1_bp.register_blueprint(analytics_bp)
 api_v1_bp.register_blueprint(admin_bp, url_prefix="/admin")
 api_v1_bp.register_blueprint(billing_bp)
+api_v1_bp.register_blueprint(download_bp)
 api_v1_bp.register_blueprint(learning_bp)
 api_v1_bp.register_blueprint(
     marketplace_installations_bp,

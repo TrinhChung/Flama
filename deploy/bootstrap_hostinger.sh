@@ -19,7 +19,7 @@ fi
 
 install -d -m 0755 /opt/flama /opt/flama/releases
 install -d -m 0750 -o root -g flama /etc/flama
-install -d -m 0750 -o flama -g flama /var/lib/flama /var/lib/flama/media
+install -d -m 0755 -o flama -g flama /var/lib/flama /var/lib/flama/media /var/lib/flama/downloads
 
 environment_file="${FLAMA_ENVIRONMENT_FILE:-/etc/flama/flama.env}"
 if [ ! -f "$environment_file" ]; then

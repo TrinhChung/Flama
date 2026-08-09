@@ -173,6 +173,11 @@ const TtsKeyGuidePage = lazy(() =>
     default: module.TtsKeyGuidePage,
   })),
 )
+const FlamaAudioGuidePage = lazy(() =>
+  import('./pages/StaticPages').then((module) => ({
+    default: module.FlamaAudioGuidePage,
+  })),
+)
 const TermsPage = lazy(() =>
   import('./pages/StaticPages').then((module) => ({
     default: module.TermsPage,
@@ -228,6 +233,15 @@ const router = createBrowserRouter([
       {
         path: 'help/tts-key',
         element: <Navigate to="/guide/tts-key" replace />,
+      },
+      { path: 'guide/flama-audio', element: deferred(<FlamaAudioGuidePage />) },
+      {
+        path: 'guides/flama-audio',
+        element: <Navigate to="/guide/flama-audio" replace />,
+      },
+      {
+        path: 'help/flama-audio',
+        element: <Navigate to="/guide/flama-audio" replace />,
       },
       { path: 'terms', element: deferred(<TermsPage />) },
       { path: 'privacy', element: deferred(<PrivacyPage />) },
