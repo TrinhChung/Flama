@@ -294,6 +294,11 @@ jobs:
           FLAMA_ENVIRONMENT_FILE="$desired_environment_file" \
             bash "$release_dir/deploy/bootstrap_hostinger.sh"
 
+          mkdir -p /var/lib/flama/downloads
+          mkdir -p "$release_dir/static"
+          ln -sfn /var/lib/flama/downloads "$release_dir/static/downloads"
+          chown -R flama:flama /var/lib/flama/downloads
+
           if [ ! -x "$PROJECT_DIR/venv/bin/python" ]; then
             python3 -m venv "$PROJECT_DIR/venv"
           fi

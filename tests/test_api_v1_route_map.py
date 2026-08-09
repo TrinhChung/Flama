@@ -41,6 +41,7 @@ EXPECTED_API_RULES = {
     ("POST", "/api/browse/voicevox/precheck"),
     ("POST", "/api/browse/voicevox/preview"),
     ("GET", "/api/dashboard"),
+    ("GET", "/api/download/flama-audio"),
     ("POST", "/api/decks"),
     ("DELETE", "/api/decks/<int:deck_id>"),
     ("PATCH", "/api/decks/<int:deck_id>"),
@@ -151,7 +152,7 @@ class ApiRouteMapTests(unittest.TestCase):
             for method in rule.methods - {"HEAD", "OPTIONS"}
         }
         self.assertEqual(actual, EXPECTED_API_RULES)
-        self.assertEqual(len(actual), 117)
+        self.assertEqual(len(actual), 118)
 
 
 

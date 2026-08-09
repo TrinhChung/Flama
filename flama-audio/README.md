@@ -24,18 +24,25 @@ Mở Terminal tại thư mục gốc dự án `nihongo/`:
 dotnet run --project flama-audio/src/Flama.Audio.App/Flama.Audio.App.csproj
 ```
 
-### 2. Build & Publish ra file thực thi (.exe)
+### 2. Build Single-File Executable & Bộ cài Windows Installer (`FlamaAudio-Setup.exe`)
 
-Nếu bạn muốn build ra bản phát hành đóng gói:
+Để build ứng dụng thành file chạy đơn duy nhất (Single-File Self-Contained) hoặc bộ cài đặt Windows:
 
 ```bash
-dotnet publish flama-audio/src/Flama.Audio.App/Flama.Audio.App.csproj -c Release -o flama-audio/publish
+# Build Single-File Executable (nén gọn trong 1 file .exe duy nhất, loại bỏ file debug PDB & DLL phụ)
+dotnet publish flama-audio/src/Flama.Audio.App/Flama.Audio.App.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=none -p:DebugSymbols=false -o flama-audio/publish/singlefile
+
+# Đóng gói Windows Installer bằng Inno Setup Compiler (iscc)
+iscc flama-audio/installer/FlamaAudioSetup.iss
 ```
 
-Sau khi publish hoàn tất, file chạy thực thi nằm tại:
-`flama-audio/publish/Flama.Audio.App.exe`
+Sau khi hoàn tất:
+- File bộ cài đặt Windows Installer nằm tại: `flama-audio/publish/installer/FlamaAudio-Setup.exe`
+- File thực thi Portable đơn lẻ nằm tại: `flama-audio/publish/installer/FlamaAudio-Portable.exe`
 
----
+### 3. Tự động hóa Continuous Delivery (CD)
+
+Mỗi khi có commit đẩy lên nhánh `master` thuộc thư mục `flama-audio/` hoặc tạo Git Release Tag (`v*`), workflow GitHub Actions `.github/workflows/flama-audio-release.yml` sẽ tự động build, kiểm thử và phát hành bộ cài `FlamaAudio-Setup.exe` lên GitHub Releases để người dùng tải trực tiếp từ Web UI.
 
 ## 🔐 Hướng dẫn Kết nối & Ghép nối (Pairing Flow)
 

@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
   AlertCircle,
   CheckCircle2,
   Cpu,
+  Download,
   Layers,
   LoaderCircle,
   Play,
@@ -20,7 +22,6 @@ import { uploadNoteMediaBlob } from '@/shared/api/noteMedia'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
   DialogContent,
@@ -238,7 +239,6 @@ export function LocalAudioDialog({
   // Source & Destination Fields Sync
   const [sourceField, setSourceField] = useState<string>('Reading')
   const [destinationField, setDestinationField] = useState<string>('Audio')
-  const [appendAudio, setAppendAudio] = useState<boolean>(false)
 
   // Synchronize Source and Destination fields whenever dynamicFields or isOpen changes
   useEffect(() => {
@@ -646,12 +646,25 @@ export function LocalAudioDialog({
               <Volume2 className="size-4 sm:size-5 text-primary shrink-0" />
               <span>Tạo âm thanh &gt; Tiếng Nhật &gt; VoiceVox Local</span>
             </DialogTitle>
-            <Badge
-              variant="outline"
-              className="text-[11px] sm:text-xs font-semibold bg-emerald-500/10 text-emerald-600 border-emerald-500/30 px-2 py-0.5 shrink-0"
-            >
-              {targetCardIds.length} thẻ
-            </Badge>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs gap-1.5 border-primary/30 text-primary hover:bg-primary/10 font-semibold"
+                asChild
+              >
+                <Link to="/guide/flama-audio" target="_blank">
+                  <Download className="size-3.5" />
+                  <span>Hướng dẫn &amp; Tải App</span>
+                </Link>
+              </Button>
+              <Badge
+                variant="outline"
+                className="text-[11px] sm:text-xs font-semibold bg-emerald-500/10 text-emerald-600 border-emerald-500/30 px-2 py-0.5 shrink-0"
+              >
+                {targetCardIds.length} thẻ
+              </Badge>
+            </div>
           </div>
           <DialogDescription className="text-xs text-muted-foreground mt-1">
             Tổng hợp giọng đọc VOICEVOX local trực tiếp không giới hạn thông qua Flama Audio Desktop.
@@ -693,8 +706,18 @@ export function LocalAudioDialog({
               <AlertCircle className="size-4" />
               <AlertTitle className="font-bold">Không thể kết nối Flama Audio Service</AlertTitle>
               <AlertDescription className="text-xs">
-                Vui lòng mở ứng dụng <strong>Flama Audio Desktop</strong> (đang chạy tại port 4791) rồi bấm nút thử lại.
-                <div className="mt-2.5">
+                Vui lòng tải và cài đặt ứng dụng <strong>Flama Audio Desktop</strong> (đang chạy tại port 4791) rồi bấm nút thử lại.
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <Button size="sm" variant="default" className="h-7 text-xs bg-primary text-primary-foreground font-medium" asChild>
+                    <a href="/api/download/flama-audio" target="_blank" rel="noopener noreferrer" download>
+                      <Download className="size-3 mr-1.5" /> Tải Bộ Cài Đặt Flama Audio (Windows)
+                    </a>
+                  </Button>
+                  <Button size="sm" variant="outline" className="h-7 text-xs" asChild>
+                    <Link to="/guide/flama-audio" target="_blank">
+                      Xem hướng dẫn chi tiết
+                    </Link>
+                  </Button>
                   <Button size="sm" variant="outline" className="h-7 text-xs" onClick={checkHealthAndInit}>
                     <RefreshCw className="size-3 mr-1" /> Thử lại kết nối
                   </Button>

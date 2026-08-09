@@ -1,0 +1,106 @@
+name: Build & Release Flama Audio
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - 'flama-audio/**'
+      - '.github/workflows/flama-audio-release.yml'
+    tags:
+      - 'flama-audio-v*'
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Install Inno Setup
+        run: choco install innosetup -y
+
+      - name: Restore Dependencies
+        run: dotnet restore flama-audio/Flama.Audio.sln
+
+      - name: Run Tests
+        run: dotnet test flama-audio/Flama.Audio.sln -c Release --no-restore
+
+      - name: Clean Publish Directory
+        run: |
+          if (Test-Path flama-audio/publish) { Remove-Item -Recurse -Force flama-audio/publish }
+
+      - name: Publish Single-File Executable
+        run: |
+          dotnet publish flama-audio/src/Flama.Audio.App/Flama.Audio.App.csproj `
+            -c Release `
+            -r win-x64 `
+            --self-contained true `
+            -p:PublishSingleFile=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:EnableCompressionInSingleFile=true `
+            -p:DebugType=none `
+            -p:DebugSymbols=false `
+            -o flama-audio/publish/singlefile
+
+      - name: Compile Windows Installer (Inno Setup)
+        run: |
+          $env:PATH = "$env:PATH;C:\Program Files (x86)\Inno Setup 6;C:\ProgramData\chocolatey\bin"
+          iscc flama-audio/installer/FlamaAudioSetup.iss
+
+      - name: Prepare Release Binaries
+        run: |
+          if (-not (Test-Path flama-audio\publish\installer)) { New-Item -ItemType Directory -Force -Path flama-audio\publish\installer }
+          Copy-Item flama-audio\publish\singlefile\Flama.Audio.App.exe flama-audio\publish\installer\FlamaAudio-Portable.exe
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: flama-audio-win-x64
+          path: flama-audio/publish/installer/
+          retention-days: 7
+
+      - name: Deploy Installer to Hostinger VPS Server
+        if: github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/')
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          if (-not $env:SSH_HOST -or -not $env:SSH_PRIVATE_KEY) {
+            Write-Host "SSH secrets not set, skipping server upload step."
+            return
+          }
+
+          $sshDir = "$env:USERPROFILE\.ssh"
+          if (-not (Test-Path $sshDir)) { New-Item -ItemType Directory -Force -Path $sshDir }
+          $keyFile = "$sshDir\id_ed25519"
+          [System.IO.File]::WriteAllText($keyFile, $env:SSH_PRIVATE_KEY)
+
+          scp -P $env:SSH_PORT -o StrictHostKeyChecking=no -i $keyFile flama-audio/publish/installer/FlamaAudio-Setup.exe "${env:SSH_USER}@${env:SSH_HOST}:/tmp/FlamaAudio-Setup.exe"
+
+          $remoteCmd = "mkdir -p /var/lib/flama/downloads && cp -f /tmp/FlamaAudio-Setup.exe /var/lib/flama/downloads/FlamaAudio-Setup.exe && chown -R flama:flama /var/lib/flama/downloads && if [ -d /opt/flama/current/static ]; then mkdir -p /opt/flama/current/static/downloads && cp -f /tmp/FlamaAudio-Setup.exe /opt/flama/current/static/downloads/FlamaAudio-Setup.exe; fi && rm -f /tmp/FlamaAudio-Setup.exe"
+          ssh -p $env:SSH_PORT -o StrictHostKeyChecking=no -i $keyFile "${env:SSH_USER}@${env:SSH_HOST}" $remoteCmd
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/')
+        with:
+          name: Flama Audio Desktop Release
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'flama-audio-latest' }}
+          prerelease: false
+          files: |
+            flama-audio/publish/installer/FlamaAudio-Setup.exe
+            flama-audio/publish/installer/FlamaAudio-Portable.exe
