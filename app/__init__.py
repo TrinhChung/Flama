@@ -39,6 +39,7 @@ def create_app(config: Optional[dict] = None) -> Flask:
     from models.connect_note_ref import ConnectNoteRef  # noqa: F401
     from models.connect_pending_media import ConnectPendingMedia  # noqa: F401
     from models.user_scheduler_settings import UserSchedulerSettings  # noqa: F401  # register model
+    from models.user_scheduler_settings import UserSchedulerSettings  # noqa: F401  # register model
     from models.user_role import UserRole  # noqa: F401  # register model
     from models.user_permission_audit_log import UserPermissionAuditLog  # noqa: F401
     from models.deck import Deck  # noqa: F401  # register model
@@ -46,12 +47,12 @@ def create_app(config: Optional[dict] = None) -> Flask:
     from models.tts_provider_config import TtsProviderConfig  # noqa: F401  # register model
     from models.tts_user_provider_profile import TtsUserProviderProfile  # noqa: F401  # register model
     from models.support_donation_config import SupportDonationConfig  # noqa: F401  # register model
+    from models.support_ticket import SupportTicket  # noqa: F401  # register model
+    from models.support_ticket_reply import SupportTicketReply  # noqa: F401  # register model
     from models.card_progress import CardProgress  # noqa: F401  # register model
     from models.study_session import StudySession  # noqa: F401  # register model
     from models.study_session_card import StudySessionCard  # noqa: F401
     from models.study_session_commit import StudySessionCommit  # noqa: F401
-    from models.payment_attempt import PaymentAttempt  # noqa: F401  # register model
-    from models.payment_entitlement import PaymentEntitlement  # noqa: F401  # register model
     from models.payment_order import PaymentOrder  # noqa: F401  # register model
     from models.payment_order_item import PaymentOrderItem  # noqa: F401  # register model
     from models.payment_webhook_event import PaymentWebhookEvent  # noqa: F401  # register model

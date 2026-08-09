@@ -17,6 +17,8 @@ EXPECTED_API_RULES = {
     ("GET", "/api/admin/payments/transactions/<attempt_id>"),
     ("GET", "/api/admin/support-donation"),
     ("PUT", "/api/admin/support-donation"),
+    ("GET", "/api/admin/tickets"),
+    ("PATCH", "/api/admin/tickets/<ticket_id>"),
     ("GET", "/api/admin/tts-providers"),
     ("POST", "/api/admin/tts-providers"),
     ("DELETE", "/api/admin/tts-providers/<int:provider_id>"),
@@ -110,6 +112,12 @@ EXPECTED_API_RULES = {
     ("GET", "/api/statistics/today-future"),
     ("GET", "/api/support-donation"),
     ("POST", "/api/support-donation/checkout"),
+    ("POST", "/api/tickets"),
+    ("GET", "/api/tickets/<ticket_id_or_code>"),
+    ("POST", "/api/tickets/<ticket_id_or_code>/replies"),
+    ("GET", "/api/tickets/attachments/<filename>"),
+    ("GET", "/api/tickets/my"),
+    ("POST", "/api/tickets/upload-image"),
 }
 
 
@@ -136,7 +144,7 @@ class ApiRouteMapTests(unittest.TestCase):
             for method in rule.methods - {"HEAD", "OPTIONS"}
         }
         self.assertEqual(actual, EXPECTED_API_RULES)
-        self.assertEqual(len(actual), 102)
+        self.assertEqual(len(actual), 110)
 
 
 

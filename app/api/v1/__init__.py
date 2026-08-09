@@ -21,6 +21,7 @@ from .marketplace import (
     marketplace_note_types_bp,
 )
 from .settings import settings_bp
+from .tickets import tickets_bp
 
 api_v1_bp = Blueprint("api_v1", __name__, url_prefix="/api")
 api_v1_bp.register_blueprint(health_bp)
@@ -37,4 +38,6 @@ api_v1_bp.register_blueprint(
 )
 api_v1_bp.register_blueprint(marketplace_note_types_bp)
 api_v1_bp.register_blueprint(settings_bp)
+api_v1_bp.register_blueprint(tickets_bp)
+
 

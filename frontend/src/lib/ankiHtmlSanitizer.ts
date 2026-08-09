@@ -6,10 +6,18 @@ const PATH_TRAVERSAL = /(\.\.|\/|\\|:)/
 
 export function convertFuriganaToRuby(text: string): string {
   if (!text || typeof text !== 'string') return ''
-  // Replaces Kanji[Furigana] format e.g. 漢字[かんじ] -> <ruby>漢字<rt>かんじ</rt></ruby>
-  return text.replace(/([^\s[\]]+)\[([^\]]+)\]/g, (_match, kanji, furigana) => {
+
+  // 1. Convert space-prefixed furigana (e.g., ' kanji[furigana]')
+  let result = text.replace(/(^|\s)([^[\s<>]+)\[(?!sound:)([^\]]+)\]/g, (_match, space, kanji, furigana) => {
+    return `${space}<ruby>${kanji}<rt>${furigana}</rt></ruby>`
+  })
+
+  // 2. Convert Kanji characters without leading space (e.g. は漢字[かんじ] -> は<ruby>漢字<rt>かんじ</rt></ruby>)
+  result = result.replace(/([\u4e00-\u9faf\u3400-\u4dbf\uF900-\uFAFF\u3005]+)\[(?!sound:)([^\]]+)\]/g, (_match, kanji, furigana) => {
     return `<ruby>${kanji}<rt>${furigana}</rt></ruby>`
   })
+
+  return result
 }
 
 export function sanitizeAnkiHtml(html: string): string {
@@ -42,9 +50,11 @@ export function extractImageReferences(html: string): string[] {
   while ((match = imgRegex.exec(html)) !== null) {
     const src = match[1]?.trim()
     if (src && !src.startsWith('http://') && !src.startsWith('https://') && !src.startsWith('data:')) {
-      const filename = decodeURIComponent(src.split(/[/\\]/).pop() || '')
-      if (filename && !PATH_TRAVERSAL.test(filename) && !images.includes(filename)) {
-        images.push(filename)
+      if (!PATH_TRAVERSAL.test(src)) {
+        const filename = decodeURIComponent(src)
+        if (filename && !images.includes(filename)) {
+          images.push(filename)
+        }
       }
     }
   }
@@ -60,9 +70,12 @@ export function extractAudioReferences(html: string): string[] {
   let match: RegExpExecArray | null
 
   while ((match = soundBracketRegex.exec(html)) !== null) {
-    const filename = decodeURIComponent(match[1]?.trim() || '')
-    if (filename && !PATH_TRAVERSAL.test(filename) && !audioFiles.includes(filename)) {
-      audioFiles.push(filename)
+    const raw = match[1]?.trim() || ''
+    if (raw && !PATH_TRAVERSAL.test(raw)) {
+      const filename = decodeURIComponent(raw)
+      if (filename && !audioFiles.includes(filename)) {
+        audioFiles.push(filename)
+      }
     }
   }
 
@@ -71,9 +84,11 @@ export function extractAudioReferences(html: string): string[] {
   while ((match = audioTagRegex.exec(html)) !== null) {
     const src = match[1]?.trim()
     if (src && !src.startsWith('http://') && !src.startsWith('https://') && !src.startsWith('data:')) {
-      const filename = decodeURIComponent(src.split(/[/\\]/).pop() || '')
-      if (filename && !PATH_TRAVERSAL.test(filename) && !audioFiles.includes(filename)) {
-        audioFiles.push(filename)
+      if (!PATH_TRAVERSAL.test(src)) {
+        const filename = decodeURIComponent(src)
+        if (filename && !audioFiles.includes(filename)) {
+          audioFiles.push(filename)
+        }
       }
     }
   }
