@@ -202,12 +202,99 @@ function initTaxonomyForm(root) {
     const checkboxWrap = target.closest("[data-taxonomy-checkbox-group]");
     if (checkboxWrap) {
       limitChecked(checkboxWrap);
+      const groupName = checkboxWrap.getAttribute("data-taxonomy-checkbox-group");
+      if (groupName) clearError(checkboxWrap);
       return;
     }
     if (target.matches("[data-taxonomy-select]")) {
+      clearError(target);
       render();
     }
   });
+
+  function clearError(element) {
+    if (!element) return;
+    element.classList.remove("is-invalid");
+    const parent = element.closest(".col-md-6, .col-md-4, .market-taxonomy-group, .mb-3");
+    if (parent) {
+      const err = parent.querySelector(".taxonomy-inline-error");
+      if (err) err.remove();
+    }
+  }
+
+  function showError(element, message) {
+    if (!element) return;
+    element.classList.add("is-invalid");
+    const parent = element.closest(".col-md-6, .col-md-4, .market-taxonomy-group, .mb-3");
+    if (parent) {
+      const existing = parent.querySelector(".taxonomy-inline-error");
+      if (existing) existing.remove();
+      const errDiv = document.createElement("div");
+      errDiv.className = "taxonomy-inline-error text-danger small font-semibold mt-1.5 d-flex align-items-center gap-1 animate-in fade-in";
+      errDiv.innerHTML = `<span style="color:#dc3545; font-weight:600;">⚠️ ${escapeHtml(message)}</span>`;
+      parent.appendChild(errDiv);
+    }
+  }
+
+  const form = root.closest("form");
+  if (form) {
+    form.addEventListener("submit", (e) => {
+      let hasError = false;
+
+      // Validate required text fields in form
+      const titleInput = form.querySelector('#title');
+      if (titleInput && !titleInput.value.trim()) {
+        showError(titleInput, "Vui lòng nhập tiêu đề (Title).");
+        hasError = true;
+      }
+      const previewInput = form.querySelector('#preview_text');
+      if (previewInput && !previewInput.value.trim()) {
+        showError(previewInput, "Vui lòng nhập xem trước ngắn (Preview text).");
+        hasError = true;
+      }
+      const descInput = form.querySelector('#description');
+      if (descInput && !descInput.value.trim()) {
+        showError(descInput, "Vui lòng nhập mô tả chi tiết (Description).");
+        hasError = true;
+      }
+
+      // Validate taxonomy fields
+      if (domainSelect && !domainSelect.value) {
+        showError(domainSelect, "Vui lòng chọn Lĩnh vực học tập (Domain).");
+        hasError = true;
+      }
+      if (subjectSelect && !subjectSelect.value) {
+        showError(subjectSelect, "Vui lòng chọn Ngôn ngữ / Môn học (Subject).");
+        hasError = true;
+      }
+      if (difficultySelect && !difficultySelect.value) {
+        showError(difficultySelect, "Vui lòng chọn Trình độ / Mức độ khó (Difficulty).");
+        hasError = true;
+      }
+
+      // Validate learning goals
+      const goalsChecked = learningGoalsEl ? learningGoalsEl.querySelectorAll("input:checked").length : 0;
+      if (learningGoalsEl && goalsChecked === 0) {
+        showError(learningGoalsEl, "Vui lòng chọn ít nhất 1 Mục tiêu học tập (Learning goals).");
+        hasError = true;
+      }
+
+      // Validate primary topics
+      const topicsChecked = primaryTopicsEl ? primaryTopicsEl.querySelectorAll("input:checked").length : 0;
+      if (primaryTopicsEl && topicsChecked === 0) {
+        showError(primaryTopicsEl, "Vui lòng chọn ít nhất 1 Chủ đề chính (Primary topics).");
+        hasError = true;
+      }
+
+      if (hasError) {
+        e.preventDefault();
+        const firstErr = form.querySelector(".is-invalid, .taxonomy-inline-error");
+        if (firstErr) {
+          firstErr.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+      }
+    });
+  }
 
   render();
 }

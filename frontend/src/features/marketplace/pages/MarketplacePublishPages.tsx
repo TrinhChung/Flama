@@ -127,7 +127,10 @@ function FieldErrorMessage({ error }: { error?: string }) {
 
 export function MarketplacePublishDeckPage() {
   const navigate = useNavigate()
-  const [sourceDeckId, setSourceDeckId] = useState<string>('')
+  const [searchParams] = useSearchParams()
+  const queryParamDeckId = searchParams.get('deck_id') || searchParams.get('id') || searchParams.get('source_deck_id') || ''
+
+  const [sourceDeckId, setSourceDeckId] = useState<string>(queryParamDeckId)
   const [title, setTitle] = useState('')
   const [previewText, setPreviewText] = useState('')
   const [description, setDescription] = useState('')
@@ -279,9 +282,27 @@ export function MarketplacePublishDeckPage() {
     return true
   }
 
+  const decks = decksQuery.data?.items || []
+
+  // Sync search param ID if passed in URL
+  useEffect(() => {
+    if (queryParamDeckId && !sourceDeckId) {
+      setSourceDeckId(queryParamDeckId)
+    }
+  }, [queryParamDeckId, sourceDeckId])
+
+  // Auto set title if title is empty when selected deck changes
+  useEffect(() => {
+    if (sourceDeckId && decks.length > 0 && !title) {
+      const found = decks.find((d) => String(d.id) === sourceDeckId)
+      if (found) {
+        setTitle(found.name)
+      }
+    }
+  }, [decks, sourceDeckId, title])
+
   if (decksQuery.isPending) return <PageLoading label="Đang tải danh sách bộ thẻ của bạn…" />
 
-  const decks = decksQuery.data?.items || []
   const selectedDeck = decks.find((d) => String(d.id) === sourceDeckId)
   const availableSubjects = TAXONOMY_SUBJECTS[taxonomyDomain] || TAXONOMY_SUBJECTS.other
 

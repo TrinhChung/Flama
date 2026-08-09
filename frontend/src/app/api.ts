@@ -150,7 +150,7 @@ function toDeckNode(row: DashboardRow): DeckNode {
       move: `${API_BASE}/decks/${row.deck_id}`,
       delete: `${API_BASE}/decks/${row.deck_id}`,
       reset: `${API_BASE}/decks/${row.deck_id}/progress-reset`,
-      share: '/marketplace/decks',
+      share: `/marketplace/decks/publish?deck_id=${row.deck_id}`,
     },
     children: row.children.map(toDeckNode),
   }
