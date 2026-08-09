@@ -47,6 +47,13 @@ EXPECTED_API_RULES = {
     ("POST", "/api/decks/<int:deck_id>/progress-reset"),
     ("POST", "/api/flashcards/import/estimate"),
     ("POST", "/api/flashcards/import/execute"),
+    ("GET", "/api/flashcards/import/anki/capabilities"),
+    ("POST", "/api/flashcards/import/anki/sessions"),
+    ("DELETE", "/api/flashcards/import/anki/sessions/<session_id>"),
+    ("GET", "/api/flashcards/import/anki/sessions/<session_id>"),
+    ("POST", "/api/flashcards/import/anki/sessions/<session_id>/complete"),
+    ("PUT", "/api/flashcards/import/anki/sessions/<session_id>/packages/cards/<int:sequence>"),
+    ("PUT", "/api/flashcards/import/anki/sessions/<session_id>/packages/media/<int:sequence>"),
     ("GET", "/api/flashcards/import/options"),
     ("POST", "/api/flashcards/import/parse"),
     ("GET", "/api/health"),
@@ -144,7 +151,7 @@ class ApiRouteMapTests(unittest.TestCase):
             for method in rule.methods - {"HEAD", "OPTIONS"}
         }
         self.assertEqual(actual, EXPECTED_API_RULES)
-        self.assertEqual(len(actual), 110)
+        self.assertEqual(len(actual), 117)
 
 
 

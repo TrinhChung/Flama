@@ -26,6 +26,17 @@ from models import db
 logger = logging.getLogger(__name__)
 connect_bp = Blueprint("flama_connect", __name__)
 
+_LEGACY_WEB_ACTIONS = frozenset(
+    {
+        "validateKey",
+        "userInfo",
+        "createImportSession",
+        "importCards",
+        "getImportStatus",
+        "completeImportSession",
+    }
+)
+
 ACTION_PARAMS: dict[str, frozenset[str]] = {
     "version": frozenset(),
     "apiReflect": frozenset({"scopes", "actions"}),
@@ -220,12 +231,20 @@ def _parse_request() -> dict[str, Any]:
         raise ProtocolError("action is invalid")
     if action not in ACTION_PARAMS:
         raise ProtocolError("unsupported action")
+    legacy_web_enabled = bool(
+        current_app.config.get("CONNECT_LEGACY_WEB_ACTIONS_ENABLED", False)
+    )
+    if action in _LEGACY_WEB_ACTIONS and not legacy_web_enabled:
+        raise ProtocolError("unsupported action")
     if isinstance(version, bool) or not isinstance(version, int) or not 2 <= version <= 6:
         raise ProtocolError("version must be an integer between 2 and 6")
     params = payload.get("params", {})
     if not isinstance(params, dict):
         raise ProtocolError("params must be an object")
-    if set(params) - ACTION_PARAMS[action]:
+    allowed_params = ACTION_PARAMS[action]
+    if action == "storeMediaFile" and not legacy_web_enabled:
+        allowed_params = frozenset({"filename", "data"})
+    if set(params) - allowed_params:
         raise ProtocolError("params contains unsupported properties")
     payload["params"] = params
     return payload
@@ -297,6 +316,8 @@ def _authenticate_direct_request(required_scope: str):
 
 @connect_bp.route("/v1/import-sessions/capabilities", methods=["GET", "OPTIONS"])
 def import_capabilities():
+    if not current_app.config.get("CONNECT_LEGACY_WEB_ACTIONS_ENABLED", False):
+        return jsonify({"error": "not found"}), 404
     if request.method == "OPTIONS":
         return "", 204
     authenticated, error = _authenticate_direct_request("note:create")
@@ -311,6 +332,8 @@ def import_capabilities():
     methods=["PUT", "OPTIONS"],
 )
 def upload_import_media_package(session_id: str, sequence: int):
+    if not current_app.config.get("CONNECT_LEGACY_WEB_ACTIONS_ENABLED", False):
+        return jsonify({"error": "not found"}), 404
     if request.method == "OPTIONS":
         return "", 204
     authenticated, error = _authenticate_direct_request("note:create")
@@ -352,6 +375,8 @@ def upload_import_media_package(session_id: str, sequence: int):
     methods=["PUT", "OPTIONS"],
 )
 def upload_import_card_package(session_id: str, sequence: int):
+    if not current_app.config.get("CONNECT_LEGACY_WEB_ACTIONS_ENABLED", False):
+        return jsonify({"error": "not found"}), 404
     if request.method == "OPTIONS":
         return "", 204
     authenticated, error = _authenticate_direct_request("note:create")
@@ -511,6 +536,10 @@ def create_connect_app(config: dict[str, Any] | None = None) -> Flask:
             "CONNECT_JSON_MAX_CONTENT_LENGTH": coerce_int_env("CONNECT_MAX_CONTENT_LENGTH", default=2 * 1024 * 1024),
             "CONNECT_CORS_ALLOWED_ORIGINS": comma_separated_env("CONNECT_CORS_ALLOWED_ORIGINS"),
             "CONNECT_TRUST_PROXY": coerce_bool_env("CONNECT_TRUST_PROXY", default=False),
+            "CONNECT_LEGACY_WEB_ACTIONS_ENABLED": coerce_bool_env(
+                "CONNECT_LEGACY_WEB_ACTIONS_ENABLED",
+                default=False,
+            ),
             "CONNECT_RATE_LIMIT_WINDOW_SECONDS": coerce_int_env("CONNECT_RATE_LIMIT_WINDOW_SECONDS", default=60),
             "CONNECT_IP_RATE_LIMIT": coerce_int_env("CONNECT_IP_RATE_LIMIT", default=120),
             "CONNECT_INVALID_TOKEN_RATE_LIMIT": coerce_int_env("CONNECT_INVALID_TOKEN_RATE_LIMIT", default=10),

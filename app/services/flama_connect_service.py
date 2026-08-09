@@ -40,8 +40,6 @@ MAX_MULTI_ACTIONS = 10
 SUPPORTED_ACTIONS = (
     "version",
     "apiReflect",
-    "validateKey",
-    "userInfo",
     "deckNames",
     "modelNames",
     "modelFieldNames",
@@ -51,10 +49,6 @@ SUPPORTED_ACTIONS = (
     "multi",
     "addNote",
     "storeMediaFile",
-    "createImportSession",
-    "importCards",
-    "getImportStatus",
-    "completeImportSession",
 )
 IMPORT_SESSION_MODES = {"strict", "auto_sync_missing"}
 IMPORT_SESSION_READY = "note_types_ready"
@@ -1153,6 +1147,19 @@ def _upsert_import_card(
         note.deck_id = prepared.deck.id
         note.field_values = prepared.fields
         note.tags = prepared.tags
+
+    if prepared.clone_map is not None:
+        install = prepared.clone_map.deck_install
+        added_note = DeckCloneAddedNote.query.filter_by(
+            deck_install_id=install.id,
+            note_id=note.id,
+        ).first()
+        if added_note is None:
+            db.session.add(
+                DeckCloneAddedNote(deck_install_id=install.id, note_id=note.id)
+            )
+        install.last_sync_status = "needs_sync"
+        install.last_activity_at = datetime.utcnow()
 
     has_other_note_type = Note.query.filter(
         Note.user_id == user_id,

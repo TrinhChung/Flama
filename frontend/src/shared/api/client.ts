@@ -86,7 +86,12 @@ async function apiFetch(
     headers.set('X-CSRF-Token', effectiveCsrfToken)
     headers.set('X-CSRFToken', effectiveCsrfToken)
   }
-  if (init.body && !(init.body instanceof FormData) && !(init.body instanceof URLSearchParams)) {
+  if (
+    init.body &&
+    !headers.has('Content-Type') &&
+    !(init.body instanceof FormData) &&
+    !(init.body instanceof URLSearchParams)
+  ) {
     headers.set('Content-Type', 'application/json')
   }
   if (init.body instanceof FormData && effectiveCsrfToken) {

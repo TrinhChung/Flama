@@ -10,7 +10,6 @@ import {
   Zap,
 } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
-import { useFlamaConnect } from '@/context/FlamaConnectContext'
 import type {
   AnkiConnectStatus,
   AnkiNoteInfo,
@@ -24,7 +23,6 @@ import {
   buildExactAnkiModelQuery,
   executeAnkiSync,
 } from '@/lib/ankiSyncEngine'
-import { ensureFlamaConnectKey } from '@/lib/ensureFlamaConnectKey'
 import { sanitizeAnkiHtml } from '@/lib/ankiHtmlSanitizer'
 import { appApi } from '@/app/api'
 import { Button } from '@/components/ui/button'
@@ -75,6 +73,7 @@ interface PreviewResponse {
 
 interface AnkiSyncTabProps {
   noteTypeOptions: FlamaNoteTypeOption[]
+  flamaUserId: number
   endpoint: string
   connectionStatus: AnkiConnectStatus
   ankiVersion: number | null
@@ -82,11 +81,11 @@ interface AnkiSyncTabProps {
 
 export const AnkiSyncTab: React.FC<AnkiSyncTabProps> = ({
   noteTypeOptions,
+  flamaUserId,
   endpoint,
   connectionStatus,
 }) => {
   const queryClient = useQueryClient()
-  const flamaConnect = useFlamaConnect()
 
   // Step 1: Deck Selection State
   const [decks, setDecks] = useState<string[]>([])
@@ -372,22 +371,12 @@ export const AnkiSyncTab: React.FC<AnkiSyncTabProps> = ({
     setSyncReport(null)
 
     try {
-      const key = await ensureFlamaConnectKey(flamaConnect)
-      const account = flamaConnect.account || {
-        userId: 1,
-        username: 'web_user',
-        displayName: 'Web User',
-        workspace: 'default',
-        importPermission: true,
-        uploadLimit: 10000,
-      }
       const result = await executeAnkiSync(
         selectedDeckName,
         selectedAnkiModel,
         fieldMapping,
         syncMode,
-        key,
-        account,
+        flamaUserId,
         (progress) => {
           setSyncProgress({
             phase: progress.phase,

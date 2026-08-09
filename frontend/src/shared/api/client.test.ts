@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { apiJson, apiJsonKeepalive, setCsrfToken } from './client'
+import { apiJson, apiJsonKeepalive, apiRequest, setCsrfToken } from './client'
 
 describe('apiJsonKeepalive', () => {
   afterEach(() => {
@@ -116,5 +116,35 @@ describe('apiJsonKeepalive', () => {
     )).rejects.toMatchObject({ code: 'CSRF_FAILED', status: 400 })
 
     expect(fetchMock).toHaveBeenCalledTimes(3)
+  })
+
+  it('preserves binary package headers and authenticates with the web session', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({ accepted: true }),
+      {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      },
+    ))
+    vi.stubGlobal('fetch', fetchMock)
+    setCsrfToken('csrf-token')
+    const body = new Blob(['package'], { type: 'application/zip' })
+
+    await apiRequest('/api/flashcards/import/anki/sessions/test/packages/media/0', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/zip',
+        'X-Package-SHA256': 'a'.repeat(64),
+      },
+      body,
+    })
+
+    const request = fetchMock.mock.calls[0][1] as RequestInit
+    const headers = request.headers as Headers
+    expect(request.credentials).toBe('include')
+    expect(headers.get('Content-Type')).toBe('application/zip')
+    expect(headers.get('X-Package-SHA256')).toBe('a'.repeat(64))
+    expect(headers.get('X-CSRF-Token')).toBe('csrf-token')
+    expect(headers.has('Authorization')).toBe(false)
   })
 })
