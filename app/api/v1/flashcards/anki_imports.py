@@ -5,7 +5,7 @@ from __future__ import annotations
 from flask import Blueprint, current_app, jsonify, request
 from flask_login import current_user
 
-from app.api.common import admin_required, error_response
+from app.api.common import creator_required, error_response
 from app.services import anki_import_service
 from models import db
 
@@ -50,13 +50,13 @@ def _error(exc: Exception):
 
 
 @anki_imports_bp.get("/flashcards/import/anki/capabilities")
-@admin_required
+@creator_required
 def capabilities():
     return jsonify(anki_import_service.capabilities())
 
 
 @anki_imports_bp.post("/flashcards/import/anki/sessions")
-@admin_required
+@creator_required
 def create_session():
     payload = request.get_json(silent=True)
     if not isinstance(payload, dict):
@@ -77,7 +77,7 @@ def create_session():
 
 
 @anki_imports_bp.get("/flashcards/import/anki/sessions/<session_id>")
-@admin_required
+@creator_required
 def get_session(session_id: str):
     try:
         return jsonify(
@@ -94,7 +94,7 @@ def get_session(session_id: str):
 @anki_imports_bp.put(
     "/flashcards/import/anki/sessions/<session_id>/packages/media/<int:sequence>"
 )
-@admin_required
+@creator_required
 def upload_media_package(session_id: str, sequence: int):
     try:
         result = anki_import_service.receive_media_package(
@@ -120,7 +120,7 @@ def upload_media_package(session_id: str, sequence: int):
 @anki_imports_bp.put(
     "/flashcards/import/anki/sessions/<session_id>/packages/cards/<int:sequence>"
 )
-@admin_required
+@creator_required
 def upload_card_package(session_id: str, sequence: int):
     try:
         result = anki_import_service.receive_card_package(
@@ -145,7 +145,7 @@ def upload_card_package(session_id: str, sequence: int):
 
 
 @anki_imports_bp.post("/flashcards/import/anki/sessions/<session_id>/complete")
-@admin_required
+@creator_required
 def complete_session(session_id: str):
     try:
         result = anki_import_service.complete_session(
@@ -163,7 +163,7 @@ def complete_session(session_id: str):
 
 
 @anki_imports_bp.delete("/flashcards/import/anki/sessions/<session_id>")
-@admin_required
+@creator_required
 def cancel_session(session_id: str):
     try:
         result = anki_import_service.cancel_session(

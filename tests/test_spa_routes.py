@@ -8,6 +8,7 @@ from flask import Response
 from app import create_app
 from models import db
 from models.user import User
+from models.user_role import UserRole
 
 
 class SpaRouteTests(unittest.TestCase):
@@ -45,6 +46,13 @@ class SpaRouteTests(unittest.TestCase):
             json={"email": "spa@example.com", "password": "password"},
         )
         self.assertEqual(response.status_code, 200)
+
+    def _assign_creator_role(self):
+        with self.app.app_context():
+            user = User.query.filter_by(email="spa@example.com").one()
+            creator_role = UserRole.query.filter_by(code="creator").one()
+            user.role_id = creator_role.id
+            db.session.commit()
 
     def test_public_deep_links_serve_spa(self):
         with patch(
@@ -90,11 +98,20 @@ class SpaRouteTests(unittest.TestCase):
                     self.assertEqual(response.status_code, 200)
                     self.assertEqual(response.data, b"react-shell")
 
-    def test_non_admin_cannot_open_admin_import_deep_link(self):
+    def test_anki_sync_deep_link_requires_creator_role(self):
         self._login()
         response = self.client.get("/import")
         self.assertEqual(response.status_code, 302)
         self.assertIn("/dashboard", response.headers["Location"])
+
+        self._assign_creator_role()
+        with patch(
+            "app.routes.spa_routes.serve_react_spa",
+            side_effect=self._shell,
+        ):
+            response = self.client.get("/import")
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.data, b"react-shell")
 
     def test_non_admin_cannot_open_admin_tts_deep_link(self):
         self._login()

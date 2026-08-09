@@ -10,7 +10,7 @@ from models import db
 from models.flashcard import *
 from models.deck import Deck
 from app.services import marketplace_taxonomy_service
-from app.utils.permissions import is_admin_user
+from app.utils.permissions import is_admin_user, is_creator_user
 
 # Import everything from core module so routes can use helpers
 from . import *
@@ -297,7 +297,7 @@ def share_note_type_page(note_type_id: str):
 @flashcards_bp.route("/flashcards/import")
 @login_required
 def flashcard_import_page():
-    if not is_admin_user(current_user):
+    if not is_creator_user(current_user):
         flash("Bạn không có quyền truy cập trang đồng bộ Anki.", "warning")
         return redirect(url_for("main.dashboard"))
     decks = _collect_accessible_decks_for_import()
@@ -363,7 +363,7 @@ def flashcard_import_page():
 @flashcards_bp.route("/api/flashcards/import/options")
 @login_required
 def flashcard_import_options():
-    if not is_admin_user(current_user):
+    if not is_creator_user(current_user):
         return _api_error("FORBIDDEN", "Chỉ quản trị viên mới có quyền sử dụng tính năng đồng bộ Anki.", status=403)
     from app.services import flashcard_import_api_service
 
@@ -380,7 +380,7 @@ def flashcard_import_options():
 @flashcards_bp.route("/api/flashcards/import/parse", methods=["POST"])
 @login_required
 def flashcard_import_parse():
-    if not is_admin_user(current_user):
+    if not is_creator_user(current_user):
         return _api_error("FORBIDDEN", "Chỉ quản trị viên mới có quyền sử dụng tính năng đồng bộ Anki.", status=403)
     from app.services import flashcard_import_api_service
 
@@ -412,7 +412,7 @@ def flashcard_import_parse():
 @flashcards_bp.route("/api/flashcards/import/estimate", methods=["POST"])
 @login_required
 def flashcard_import_estimate():
-    if not is_admin_user(current_user):
+    if not is_creator_user(current_user):
         return _api_error("FORBIDDEN", "Chỉ quản trị viên mới có quyền sử dụng tính năng đồng bộ Anki.", status=403)
     from app.services import flashcard_import_api_service
 
@@ -435,7 +435,7 @@ def flashcard_import_estimate():
 @flashcards_bp.route("/api/flashcards/import/execute", methods=["POST"])
 @login_required
 def flashcard_import_execute():
-    if not is_admin_user(current_user):
+    if not is_creator_user(current_user):
         return _api_error("FORBIDDEN", "Chỉ quản trị viên mới có quyền sử dụng tính năng đồng bộ Anki.", status=403)
     from app.services import flashcard_import_api_service
 

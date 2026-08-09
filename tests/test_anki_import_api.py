@@ -15,6 +15,7 @@ from models.note import Note
 from models.note_type import NoteType
 from models.template import Template
 from models.user import User
+from models.user_role import UserRole
 
 
 class AnkiImportApiTests(unittest.TestCase):
@@ -43,7 +44,15 @@ class AnkiImportApiTests(unittest.TestCase):
                 is_admin=False,
             )
             regular.set_password("password")
-            db.session.add_all([admin, regular])
+            creator_role = UserRole.query.filter_by(code="creator").one()
+            creator = User(
+                username="anki-import-creator",
+                email="anki-import-creator@example.com",
+                role_id=creator_role.id,
+                is_admin=False,
+            )
+            creator.set_password("password")
+            db.session.add_all([admin, regular, creator])
             db.session.flush()
             self.admin_id = admin.id
 
@@ -133,6 +142,11 @@ class AnkiImportApiTests(unittest.TestCase):
             ],
             "planHash": "a" * 64,
         }
+
+    def test_creator_can_read_capabilities(self):
+        self._login("anki-import-creator@example.com")
+        response = self.client.get("/api/flashcards/import/anki/capabilities")
+        self.assertEqual(response.status_code, 200, response.get_json())
 
     def _create_session(self) -> dict:
         response = self.client.post(

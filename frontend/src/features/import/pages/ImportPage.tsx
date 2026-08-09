@@ -73,12 +73,15 @@ export function ImportPage() {
     queryKey: ['bootstrap'],
     queryFn: () => appApi.getBootstrap(),
   })
-  const isAdmin = Boolean(bootstrapQuery.data?.user?.is_admin)
+  const hasCreatorAccess = Boolean(
+    bootstrapQuery.data?.user?.is_admin ||
+      bootstrapQuery.data?.user?.role?.code === 'creator',
+  )
 
   const optionsQuery = useQuery<ImportOptionsResponse>({
     queryKey: ['import-options'],
     queryFn: () => appApi.get<ImportOptionsResponse>('/flashcards/import/options'),
-    enabled: isAdmin,
+    enabled: hasCreatorAccess,
   })
 
   const noteTypeOptions: NoteTypeOption[] =
@@ -98,10 +101,10 @@ export function ImportPage() {
       },
     ]
 
-  if (bootstrapQuery.data && !isAdmin) {
+  if (bootstrapQuery.data && !hasCreatorAccess) {
     return (
       <Page>
-        <PageError error={new Error('Chỉ quản trị viên (Admin) mới có quyền truy cập chức năng đồng bộ Anki.')} />
+        <PageError error={new Error('Chức năng đồng bộ Anki chỉ dành cho Nhà sáng tạo.')} />
       </Page>
     )
   }

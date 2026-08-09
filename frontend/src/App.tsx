@@ -3,6 +3,7 @@ import { LoaderCircle } from 'lucide-react'
 import { Navigate, RouterProvider, createBrowserRouter } from 'react-router-dom'
 import { AppLayout } from './layouts/AppLayout'
 import { RequireAuth } from './features/auth/components/RequireAuth'
+import { RequireCreator } from './features/auth/components/RequireCreator'
 import { LandingPage } from './pages/LandingPage'
 import { MaintenancePage } from './pages/MaintenancePage'
 import { NotFoundPage } from './pages/NotFoundPage'
@@ -276,12 +277,17 @@ const router = createBrowserRouter([
             element: <Navigate to="/installed-decks" replace />,
           },
           {
-            path: 'flashcards/import',
-            element: deferred(<ImportPage />),
-          },
-          {
-            path: 'import',
-            element: deferred(<ImportPage />),
+            element: <RequireCreator />,
+            children: [
+              {
+                path: 'flashcards/import',
+                element: deferred(<ImportPage />),
+              },
+              {
+                path: 'import',
+                element: deferred(<ImportPage />),
+              },
+            ],
           },
           {
             path: 'settings/mcp-tokens',

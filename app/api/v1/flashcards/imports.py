@@ -3,7 +3,7 @@
 from flask import Blueprint, jsonify, request
 from flask_login import current_user
 
-from app.api.common import admin_required
+from app.api.common import creator_required
 from app.services import flashcard_import_api_service
 from app.utils.permissions import is_admin_user
 
@@ -21,7 +21,7 @@ def _error(exc: flashcard_import_api_service.ImportApiError):
 
 
 @imports_bp.get("/flashcards/import/options")
-@admin_required
+@creator_required
 def import_options():
     return jsonify(
         flashcard_import_api_service.build_import_options(
@@ -34,7 +34,7 @@ def import_options():
 
 
 @imports_bp.post("/flashcards/import/parse")
-@admin_required
+@creator_required
 def parse_import():
     upload = request.files.get("file")
     try:
@@ -55,7 +55,7 @@ def parse_import():
 
 
 @imports_bp.post("/flashcards/import/estimate")
-@admin_required
+@creator_required
 def estimate_import():
     try:
         payload = flashcard_import_api_service.run_import_request(
@@ -70,7 +70,7 @@ def estimate_import():
 
 
 @imports_bp.post("/flashcards/import/execute")
-@admin_required
+@creator_required
 def execute_import():
     try:
         payload = flashcard_import_api_service.run_import_request(
