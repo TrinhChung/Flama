@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
@@ -7,10 +8,12 @@ using Flama.Audio.Api;
 using Flama.Audio.Api.Middlewares;
 using Flama.Audio.Core.Interfaces;
 using Flama.Audio.Engine.Voicevox;
+using Flama.Audio.Engine.Kokoro;
 using Flama.Audio.Infrastructure.Services;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace Flama.Audio.App;
 
@@ -37,11 +40,29 @@ public partial class App : Application
             return;
         }
 
+        // Global Unhandled Exception Handling for easy debugging
+        AppDomain.CurrentDomain.UnhandledException += (s, ev) =>
+        {
+            if (ev.ExceptionObject is Exception ex)
+            {
+                AppLogStore.Instance.AddLog(LogSeverity.Error, "AppDomain", "Unhandled Exception", ex);
+            }
+        };
+
+        DispatcherUnhandledException += (s, ev) =>
+        {
+            AppLogStore.Instance.AddLog(LogSeverity.Error, "WPFDispatcher", "Unhandled UI Exception", ev.Exception);
+            ev.Handled = true; // Prevent crash, log for easy copying
+        };
+
         base.OnStartup(e);
 
         try
         {
             var builder = WebApplication.CreateBuilder();
+
+            builder.Logging.ClearProviders();
+            builder.Logging.AddProvider(new FlamaLoggerProvider());
 
             builder.WebHost.ConfigureKestrel(options =>
             {
@@ -51,27 +72,29 @@ public partial class App : Application
             builder.Services.AddHttpClient();
             builder.Services.AddSingleton<IPairingManager, PairingManager>();
             builder.Services.AddSingleton<ITtsEngineAdapter, VoicevoxEngineAdapter>();
+            builder.Services.AddSingleton<ITtsEngineAdapter, KokoroEngineAdapter>();
             builder.Services.AddSingleton<IEngineRouter, EngineRouter>();
             builder.Services.AddSingleton<VoicevoxEngineInstaller>();
+            builder.Services.AddSingleton<KokoroEngineInstaller>();
 
             _webApp = builder.Build();
             _pairingManager = _webApp.Services.GetService<IPairingManager>();
-            var installer = _webApp.Services.GetService<VoicevoxEngineInstaller>();
-            var voicevoxAdapter = _webApp.Services.GetService<ITtsEngineAdapter>();
-
+            var engineRouter = _webApp.Services.GetRequiredService<IEngineRouter>();
+            var voicevoxInstaller = _webApp.Services.GetRequiredService<VoicevoxEngineInstaller>();
+            var kokoroInstaller = _webApp.Services.GetRequiredService<KokoroEngineInstaller>();
             _webApp.UseMiddleware<CorsAndPnaMiddleware>();
             _webApp.UseMiddleware<PairingAuthMiddleware>();
             _webApp.MapFlamaAudioEndpoints();
 
             _ = _webApp.RunAsync();
 
-            var mainWindow = new MainWindow(_pairingManager!, installer!, voicevoxAdapter!);
+            var mainWindow = new MainWindow(_pairingManager!, engineRouter, voicevoxInstaller, kokoroInstaller);
 
             _ = Task.Run(async () =>
             {
-                if (installer != null)
+                if (voicevoxInstaller != null)
                 {
-                    await installer.TryAutoLaunchEngineAsync();
+                    await voicevoxInstaller.TryAutoLaunchEngineAsync();
                     Dispatcher.Invoke(() => mainWindow.RefreshData());
                 }
             });

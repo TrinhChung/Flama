@@ -219,6 +219,8 @@ export function BrowsePage() {
   // VoiceVox TTS Audio Generation Modal State (Matching Original Template)
   const [isTtsModalOpen, setIsTtsModalOpen] = useState(false)
   const [isLocalAudioModalOpen, setIsLocalAudioModalOpen] = useState(false)
+  const [localAudioEngineId, setLocalAudioEngineId] = useState<'voicevox' | 'kokoro'>('voicevox')
+  const [localAudioDefaultVoiceId, setLocalAudioDefaultVoiceId] = useState<string | undefined>(undefined)
   const [localAudioTargetCardIds, setLocalAudioTargetCardIds] = useState<string[]>([])
   const [ttsSourceField, setTtsSourceField] = useState('Word')
   const [ttsDestinationField, setTtsDestinationField] = useState('Audio')
@@ -717,10 +719,10 @@ export function BrowsePage() {
                 <ChevronDown className="size-3 opacity-60 ml-0.5" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-52">
+            <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuSub>
                 <DropdownMenuSubTrigger>
-                  <span className="font-medium">Tiếng Nhật</span>
+                  <span className="font-medium">🇯🇵 Tiếng Nhật</span>
                 </DropdownMenuSubTrigger>
                 <DropdownMenuSubContent className="w-48">
                   <DropdownMenuItem onClick={() => setIsTtsModalOpen(true)}>
@@ -728,6 +730,8 @@ export function BrowsePage() {
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={() => {
+                      setLocalAudioEngineId('voicevox')
+                      setLocalAudioDefaultVoiceId('3')
                       setLocalAudioTargetCardIds(selectedCards)
                       setIsLocalAudioModalOpen(true)
                     }}
@@ -740,17 +744,96 @@ export function BrowsePage() {
                   </DropdownMenuItem>
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
-              <DropdownMenuSub>
-                <DropdownMenuSubTrigger>
-                  <span className="font-medium">Tiếng Anh</span>
-                </DropdownMenuSubTrigger>
-                <DropdownMenuSubContent className="w-48">
-                  <DropdownMenuItem disabled className="flex items-center justify-between opacity-60">
-                    <span>Tiếng Anh Local</span>
-                    <Badge variant="outline" className="text-[10px] py-0 px-1 font-normal">Sắp có</Badge>
-                  </DropdownMenuItem>
-                </DropdownMenuSubContent>
-              </DropdownMenuSub>
+
+              <DropdownMenuItem
+                onClick={() => {
+                  setLocalAudioEngineId('kokoro')
+                  setLocalAudioDefaultVoiceId('af_bella')
+                  setLocalAudioTargetCardIds(selectedCards)
+                  setIsLocalAudioModalOpen(true)
+                }}
+                className="flex items-center justify-between font-medium cursor-pointer"
+              >
+                <span>🇺🇸/🇬🇧 Tiếng Anh Local</span>
+                <Badge variant="outline" className="text-[10px] py-0 px-1 font-normal bg-blue-55 text-blue-700 border-blue-300">
+                  Kokoro
+                </Badge>
+              </DropdownMenuItem>
+
+              <DropdownMenuItem
+                onClick={() => {
+                  setLocalAudioEngineId('kokoro')
+                  setLocalAudioDefaultVoiceId('zf_xiaobei')
+                  setLocalAudioTargetCardIds(selectedCards)
+                  setIsLocalAudioModalOpen(true)
+                }}
+                className="flex items-center justify-between font-medium cursor-pointer"
+              >
+                <span>🇨🇳 Tiếng Trung Local</span>
+                <Badge variant="outline" className="text-[10px] py-0 px-1 font-normal bg-blue-55 text-blue-700 border-blue-300">
+                  Kokoro
+                </Badge>
+              </DropdownMenuItem>
+
+              <DropdownMenuItem
+                onClick={() => {
+                  setLocalAudioEngineId('kokoro')
+                  setLocalAudioDefaultVoiceId('ef_dora')
+                  setLocalAudioTargetCardIds(selectedCards)
+                  setIsLocalAudioModalOpen(true)
+                }}
+                className="flex items-center justify-between font-medium cursor-pointer"
+              >
+                <span>🇪🇸 Tiếng Tây Ban Nha</span>
+                <Badge variant="outline" className="text-[10px] py-0 px-1 font-normal bg-blue-55 text-blue-700 border-blue-300">
+                  Kokoro
+                </Badge>
+              </DropdownMenuItem>
+
+              <DropdownMenuItem
+                onClick={() => {
+                  setLocalAudioEngineId('kokoro')
+                  setLocalAudioDefaultVoiceId('ff_siwis')
+                  setLocalAudioTargetCardIds(selectedCards)
+                  setIsLocalAudioModalOpen(true)
+                }}
+                className="flex items-center justify-between font-medium cursor-pointer"
+              >
+                <span>🇫🇷 Tiếng Pháp Local</span>
+                <Badge variant="outline" className="text-[10px] py-0 px-1 font-normal bg-blue-55 text-blue-700 border-blue-300">
+                  Kokoro
+                </Badge>
+              </DropdownMenuItem>
+
+              <DropdownMenuItem
+                onClick={() => {
+                  setLocalAudioEngineId('kokoro')
+                  setLocalAudioDefaultVoiceId('if_sara')
+                  setLocalAudioTargetCardIds(selectedCards)
+                  setIsLocalAudioModalOpen(true)
+                }}
+                className="flex items-center justify-between font-medium cursor-pointer"
+              >
+                <span>🇮🇹 Tiếng Ý Local</span>
+                <Badge variant="outline" className="text-[10px] py-0 px-1 font-normal bg-blue-55 text-blue-700 border-blue-300">
+                  Kokoro
+                </Badge>
+              </DropdownMenuItem>
+
+              <DropdownMenuItem
+                onClick={() => {
+                  setLocalAudioEngineId('kokoro')
+                  setLocalAudioDefaultVoiceId('pf_dora')
+                  setLocalAudioTargetCardIds(selectedCards)
+                  setIsLocalAudioModalOpen(true)
+                }}
+                className="flex items-center justify-between font-medium cursor-pointer"
+              >
+                <span>🇧🇷 Tiếng Bồ Đào Nha</span>
+                <Badge variant="outline" className="text-[10px] py-0 px-1 font-normal bg-blue-55 text-blue-700 border-blue-300">
+                  Kokoro
+                </Badge>
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
           {isAdmin ? (
@@ -1068,10 +1151,10 @@ export function BrowsePage() {
                         <ChevronDown className="size-3 opacity-60 ml-0.5" />
                       </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="start" className="w-52">
+                    <DropdownMenuContent align="start" className="w-56">
                       <DropdownMenuSub>
                         <DropdownMenuSubTrigger>
-                          <span className="font-medium">Tiếng Nhật</span>
+                          <span className="font-medium">🇯🇵 Tiếng Nhật</span>
                         </DropdownMenuSubTrigger>
                         <DropdownMenuSubContent className="w-48">
                           <DropdownMenuItem onClick={() => setIsTtsModalOpen(true)}>
@@ -1079,6 +1162,8 @@ export function BrowsePage() {
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             onClick={() => {
+                              setLocalAudioEngineId('voicevox')
+                              setLocalAudioDefaultVoiceId('3')
                               setLocalAudioTargetCardIds(selectedCards)
                               setIsLocalAudioModalOpen(true)
                             }}
@@ -1091,17 +1176,96 @@ export function BrowsePage() {
                           </DropdownMenuItem>
                         </DropdownMenuSubContent>
                       </DropdownMenuSub>
-                      <DropdownMenuSub>
-                        <DropdownMenuSubTrigger>
-                          <span className="font-medium">Tiếng Anh</span>
-                        </DropdownMenuSubTrigger>
-                        <DropdownMenuSubContent className="w-48">
-                          <DropdownMenuItem disabled className="flex items-center justify-between opacity-60">
-                            <span>Tiếng Anh Local</span>
-                            <Badge variant="outline" className="text-[10px] py-0 px-1 font-normal">Sắp có</Badge>
-                          </DropdownMenuItem>
-                        </DropdownMenuSubContent>
-                      </DropdownMenuSub>
+
+                      <DropdownMenuItem
+                        onClick={() => {
+                          setLocalAudioEngineId('kokoro')
+                          setLocalAudioDefaultVoiceId('af_bella')
+                          setLocalAudioTargetCardIds(selectedCards)
+                          setIsLocalAudioModalOpen(true)
+                        }}
+                        className="flex items-center justify-between font-medium cursor-pointer"
+                      >
+                        <span>🇺🇸/🇬🇧 Tiếng Anh Local</span>
+                        <Badge variant="outline" className="text-[10px] py-0 px-1 font-normal bg-blue-55 text-blue-700 border-blue-300">
+                          Kokoro
+                        </Badge>
+                      </DropdownMenuItem>
+
+                      <DropdownMenuItem
+                        onClick={() => {
+                          setLocalAudioEngineId('kokoro')
+                          setLocalAudioDefaultVoiceId('zf_xiaobei')
+                          setLocalAudioTargetCardIds(selectedCards)
+                          setIsLocalAudioModalOpen(true)
+                        }}
+                        className="flex items-center justify-between font-medium cursor-pointer"
+                      >
+                        <span>🇨🇳 Tiếng Trung Local</span>
+                        <Badge variant="outline" className="text-[10px] py-0 px-1 font-normal bg-blue-55 text-blue-700 border-blue-300">
+                          Kokoro
+                        </Badge>
+                      </DropdownMenuItem>
+
+                      <DropdownMenuItem
+                        onClick={() => {
+                          setLocalAudioEngineId('kokoro')
+                          setLocalAudioDefaultVoiceId('ef_dora')
+                          setLocalAudioTargetCardIds(selectedCards)
+                          setIsLocalAudioModalOpen(true)
+                        }}
+                        className="flex items-center justify-between font-medium cursor-pointer"
+                      >
+                        <span>🇪🇸 Tiếng Tây Ban Nha</span>
+                        <Badge variant="outline" className="text-[10px] py-0 px-1 font-normal bg-blue-55 text-blue-700 border-blue-300">
+                          Kokoro
+                        </Badge>
+                      </DropdownMenuItem>
+
+                      <DropdownMenuItem
+                        onClick={() => {
+                          setLocalAudioEngineId('kokoro')
+                          setLocalAudioDefaultVoiceId('ff_siwis')
+                          setLocalAudioTargetCardIds(selectedCards)
+                          setIsLocalAudioModalOpen(true)
+                        }}
+                        className="flex items-center justify-between font-medium cursor-pointer"
+                      >
+                        <span>🇫🇷 Tiếng Pháp Local</span>
+                        <Badge variant="outline" className="text-[10px] py-0 px-1 font-normal bg-blue-55 text-blue-700 border-blue-300">
+                          Kokoro
+                        </Badge>
+                      </DropdownMenuItem>
+
+                      <DropdownMenuItem
+                        onClick={() => {
+                          setLocalAudioEngineId('kokoro')
+                          setLocalAudioDefaultVoiceId('if_sara')
+                          setLocalAudioTargetCardIds(selectedCards)
+                          setIsLocalAudioModalOpen(true)
+                        }}
+                        className="flex items-center justify-between font-medium cursor-pointer"
+                      >
+                        <span>🇮🇹 Tiếng Ý Local</span>
+                        <Badge variant="outline" className="text-[10px] py-0 px-1 font-normal bg-blue-55 text-blue-700 border-blue-300">
+                          Kokoro
+                        </Badge>
+                      </DropdownMenuItem>
+
+                      <DropdownMenuItem
+                        onClick={() => {
+                          setLocalAudioEngineId('kokoro')
+                          setLocalAudioDefaultVoiceId('pf_dora')
+                          setLocalAudioTargetCardIds(selectedCards)
+                          setIsLocalAudioModalOpen(true)
+                        }}
+                        className="flex items-center justify-between font-medium cursor-pointer"
+                      >
+                        <span>🇧🇷 Tiếng Bồ Đào Nha</span>
+                        <Badge variant="outline" className="text-[10px] py-0 px-1 font-normal bg-blue-55 text-blue-700 border-blue-300">
+                          Kokoro
+                        </Badge>
+                      </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
                   <Button
@@ -1951,6 +2115,8 @@ export function BrowsePage() {
         activeCardId={activeCardId}
         availableFieldNames={availableFieldNames}
         noteTypeName={cardDetailQuery.data?.note?.note_type_name || undefined}
+        engineId={localAudioEngineId}
+        defaultVoiceId={localAudioDefaultVoiceId}
         onSuccess={() => {
           queryClient.invalidateQueries({ queryKey: ['browse-cards'] })
         }}
