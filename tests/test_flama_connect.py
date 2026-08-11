@@ -493,6 +493,86 @@ class FlamaConnectTests(unittest.TestCase):
             self.assertEqual(MediaAsset.query.filter_by(note_id=created.id).count(), 2)
             self.assertEqual(ConnectImportMedia.query.count(), 2)
 
+    def test_import_ignores_missing_media_and_imports_successfully(self):
+        with self.app.app_context():
+            db.session.add_all(
+                [
+                    FieldDef(note_type_id=self.note_type_id, name="Image", field_type="image", position=2),
+                    FieldDef(note_type_id=self.note_type_id, name="Sound", field_type="audio", position=3),
+                ]
+            )
+            db.session.commit()
+        plan = {
+            "sourceModelId": "media-model",
+            "sourceModelName": "Yomitan Vocabulary",
+            "targetNoteTypeId": self.note_type_id,
+            "fields": [
+                {"name": "Word", "fieldType": "text"},
+                {"name": "Meaning", "fieldType": "richtext"},
+                {"name": "Image", "fieldType": "image"},
+                {"name": "Sound", "fieldType": "audio"},
+            ],
+            "templates": [{"name": "Card 1", "frontHtml": "{{Word}}", "backHtml": "{{Meaning}}", "sharedCss": ""}],
+            "fieldMapping": {"Word": "Word", "Meaning": "Meaning", "Image": "Image", "Sound": "Sound"},
+        }
+        session = self._call(
+            "createImportSession",
+            {
+                "source": "anki",
+                "sourceKey": "media-profile",
+                "sourceRootPath": "Source",
+                "targetRootPath": "Imported",
+                "selectedDecks": ["Imported", "Imported::Child"],
+                "totalNotes": 1,
+                "totalMedia": 2,
+                "mode": "strict",
+                "noteTypes": [plan],
+                "planHash": "b" * 64,
+            },
+        ).get_json()
+        self.assertEqual(session["status"], "note_types_ready")
+        image_name = f"{'1' * 64}.png"
+        audio_name = f"{'2' * 64}.mp3"
+        image_upload = self._call(
+            "storeMediaFile",
+            {
+                "importSessionId": session["importSessionId"],
+                "mediaKind": "image",
+                "filename": image_name,
+                "data": base64.b64encode(_MIN_PNG_BYTES).decode("ascii"),
+            },
+        )
+        self.assertEqual(image_upload.get_json()["filename"], image_name)
+
+        note = self._note("Imported::Child", "media-note")
+        note["modelName"] = self.note_type_id
+        note["fields"].update({"Image": image_name, "Sound": f"[sound:{audio_name}]"})
+        imported = self._call(
+            "importCards",
+            {
+                "importSessionId": session["importSessionId"],
+                "cards": [
+                    {
+                        "ankiNoteId": 501,
+                        "sourceModelId": "media-model",
+                        "sourceDeckId": "source-child-id",
+                        "sourceDeckPath": "Source::Child",
+                        "contentHash": "c" * 64,
+                        "note": note,
+                    }
+                ],
+            },
+        ).get_json()
+        self.assertTrue(imported["results"][0]["imported"], imported)
+        with self.app.app_context():
+            child = Deck.query.filter_by(owner_user_id=self.user_id, name="Child").one()
+            self.assertEqual(child.parent.name, "Imported")
+            created = Note.query.filter_by(user_id=self.user_id, deck_id=child.id).one()
+            self.assertEqual(created.field_values["Image"], image_name)
+            self.assertEqual(created.field_values["Sound"], f"[sound:{audio_name}]")
+            self.assertEqual(MediaAsset.query.filter_by(note_id=created.id).count(), 1)
+            self.assertEqual(ConnectImportMedia.query.count(), 1)
+
     def test_media_zip_package_is_checksum_verified_and_idempotent(self):
         session = self._create_import_session().get_json()
         package = self._media_zip({f"{'a' * 64}.mp3": _MIN_MP3_BYTES})

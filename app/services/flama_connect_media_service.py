@@ -443,19 +443,23 @@ def resolve_import_media(
     if lock:
         query = query.with_for_update()
     rows = {row.filename: row for row in query.all()}
-    missing = [filename for filename in filenames if filename not in rows]
-    if missing:
-        raise ConnectMediaError(f"Chưa upload media: {', '.join(missing[:5])}")
+
+    valid_attachments = {}
     for field_name, filename in requested.items():
+        if filename not in rows:
+            # Skip missing media entries instead of raising ConnectMediaError
+            continue
         expected = media_fields[field_name]
         row_kind = rows[filename].media_kind
         if (expected == "audio") != (row_kind == "audio"):
             raise ConnectMediaError(f'Media "{filename}" không đúng loại trường "{field_name}".')
+        valid_attachments[field_name] = rows[filename]
+
     allowed: set[str] = set()
     for filename in filenames:
         allowed.add(filename)
         allowed.add(f"[sound:{filename}]")
-    return {field: rows[filename] for field, filename in requested.items()}, allowed
+    return valid_attachments, allowed
 
 
 def materialize_import_media(
@@ -470,38 +474,44 @@ def materialize_import_media(
     final_paths: list[Path] = []
     try:
         for field_name, staged in attachments.items():
-            staged_path = _safe_path(staged.storage_path)
             try:
-                content = staged_path.read_bytes()
-            except OSError as exc:
-                raise ConnectMediaError("Media staging không còn tồn tại.") from exc
-            if len(content) != staged.size_bytes or hashlib.sha256(content).hexdigest() != staged.sha256:
-                raise ConnectMediaError("Media staging không còn toàn vẹn.")
-            extension = Path(staged.filename).suffix.lower().lstrip(".")
-            storage_filename = f"{uuid4().hex}_{staged.sha256[:12]}.{extension}"
-            relative_path = Path(str(user_id)) / note.id / storage_filename
-            final_path = _safe_path(relative_path)
-            final_path.parent.mkdir(parents=True, exist_ok=True)
+                staged_path = _safe_path(staged.storage_path)
+                try:
+                    content = staged_path.read_bytes()
+                except OSError as exc:
+                    current_app.logger.warning("Media staging không còn tồn tại cho %s: %s", staged.filename, exc)
+                    continue
+                if len(content) != staged.size_bytes or hashlib.sha256(content).hexdigest() != staged.sha256:
+                    current_app.logger.warning("Media staging không còn toàn vẹn cho %s", staged.filename)
+                    continue
+                extension = Path(staged.filename).suffix.lower().lstrip(".")
+                storage_filename = f"{uuid4().hex}_{staged.sha256[:12]}.{extension}"
+                relative_path = Path(str(user_id)) / note.id / storage_filename
+                final_path = _safe_path(relative_path)
+                final_path.parent.mkdir(parents=True, exist_ok=True)
 
-            existing = MediaAsset.query.filter_by(
-                note_id=note.id,
-                field_name=field_name,
-                sha256=staged.sha256,
-            ).first()
-            if existing is None:
-                final_path.write_bytes(content)
-                final_paths.append(final_path)
-                existing = MediaAsset(
+                existing = MediaAsset.query.filter_by(
                     note_id=note.id,
                     field_name=field_name,
-                    filename=staged.filename,
-                    mime_type=staged.mime_type,
-                    storage_path=str(relative_path).replace("\\", "/"),
                     sha256=staged.sha256,
-                    size_bytes=staged.size_bytes,
-                )
-                db.session.add(existing)
-            values[field_name] = staged.filename
+                ).first()
+                if existing is None:
+                    final_path.write_bytes(content)
+                    final_paths.append(final_path)
+                    existing = MediaAsset(
+                        note_id=note.id,
+                        field_name=field_name,
+                        filename=staged.filename,
+                        mime_type=staged.mime_type,
+                        storage_path=str(relative_path).replace("\\", "/"),
+                        sha256=staged.sha256,
+                        size_bytes=staged.size_bytes,
+                    )
+                    db.session.add(existing)
+                values[field_name] = staged.filename
+            except Exception as exc:
+                current_app.logger.error("Lỗi khi xử lý import media %s: %s", staged.filename, exc)
+                continue
         note.field_values = values
         db.session.add(
             AuditLog(

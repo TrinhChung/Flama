@@ -366,83 +366,92 @@ export async function executeAnkiSync(
       if (packageEntries.length === 0) return
       const entries = [...packageEntries]
       const renames = [...packageRenames]
-      const zipBlob = await buildMediaZip(entries)
-      if (zipBlob.size > capabilities.mediaPackageMaxBytes) {
-        throw new Error(`Package media ${packageSequence} vượt giới hạn ${capabilities.mediaPackageMaxBytes} byte.`)
+      try {
+        const zipBlob = await buildMediaZip(entries)
+        if (zipBlob.size > capabilities.mediaPackageMaxBytes) {
+          throw new Error(`Package media ${packageSequence} vượt giới hạn ${capabilities.mediaPackageMaxBytes} byte.`)
+        }
+        const packageHash = await calculateBinaryHash(await zipBlob.arrayBuffer())
+        await uploadPackageWithRetry(
+          () => ankiImportApi.uploadMediaPackage(
+              session.importSessionId,
+              packageSequence,
+              zipBlob,
+              packageHash,
+            ),
+          (delayMs) => new Promise((resolve) => window.setTimeout(resolve, delayMs))
+        )
+        for (const entry of entries) uploadedSafeNames.add(entry.filename)
+        for (const [original, safe] of renames) mediaRename.set(original, safe)
+      } catch (uploadError: any) {
+        errors.push(`Lỗi upload package media ${packageSequence}: ${uploadError?.message || String(uploadError)}`)
+      } finally {
+        packageEntries = []
+        packageRenames = []
+        packageSafeNames = new Set<string>()
+        packageBytes = 0
+        packageSequence++
+        processedMedia = mediaRename.size
+        onProgress?.({
+          phase: 'media', totalNotes: eligible.length, processedNotes: 0,
+          totalMedia: uniqueMedia.size, processedMedia,
+          currentMessage: `Đã upload package media ${packageSequence} (${processedMedia}/${uniqueMedia.size} file)`,
+        })
       }
-      const packageHash = await calculateBinaryHash(await zipBlob.arrayBuffer())
-      await uploadPackageWithRetry(
-        () => ankiImportApi.uploadMediaPackage(
-            session.importSessionId,
-            packageSequence,
-            zipBlob,
-            packageHash,
-          ),
-        (delayMs) => new Promise((resolve) => window.setTimeout(resolve, delayMs))
-      )
-      for (const entry of entries) uploadedSafeNames.add(entry.filename)
-      for (const [original, safe] of renames) mediaRename.set(original, safe)
-      packageEntries = []
-      packageRenames = []
-      packageSafeNames = new Set<string>()
-      packageBytes = 0
-      packageSequence++
-      processedMedia = mediaRename.size
-      onProgress?.({
-        phase: 'media', totalNotes: eligible.length, processedNotes: 0,
-        totalMedia: uniqueMedia.size, processedMedia,
-        currentMessage: `Đã upload package media ${packageSequence} (${processedMedia}/${uniqueMedia.size} file)`,
-      })
     }
 
     for (const filename of uniqueMedia) {
-      const base64 = await ankiConnectClient.retrieveMediaFile(filename, endpoint)
-      if (!base64) {
-        throw new Error(`Không đọc được media "${filename}" từ Anki. Chưa import card để tránh mất media.`)
-      }
-      const prepared = await (async () => {
-        try {
-          const binary = atob(base64)
-          const bytes = new Uint8Array(binary.length)
-          for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index)
-          const mediaType = detectMediaType(bytes, filename)
-          const mediaHash = await calculateBinaryHash(bytes.buffer)
-          const safeFilename = `${mediaHash}.${mediaType.extension}`
-          const mediaBlob = new Blob([bytes], { type: mediaType.mimeType })
-          return { safeFilename, mediaBlob }
-        } catch (error) {
-          throw new Error(`Lỗi xử lý media "${filename}": ${error instanceof Error ? error.message : String(error)} Chưa import card để tránh mất media.`)
+      try {
+        const base64 = await ankiConnectClient.retrieveMediaFile(filename, endpoint)
+        if (!base64) {
+          throw new Error(`Không đọc được từ Anki.`)
         }
-      })()
-      const { safeFilename, mediaBlob } = prepared
-      if (mediaBlob.size > capabilities.mediaFileMaxBytes) {
-        throw new Error(`Media "${filename}" vượt giới hạn ${capabilities.mediaFileMaxBytes} byte. Chưa import card để tránh mất media.`)
+        const prepared = await (async () => {
+          try {
+            const binary = atob(base64)
+            const bytes = new Uint8Array(binary.length)
+            for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index)
+            const mediaType = detectMediaType(bytes, filename)
+            const mediaHash = await calculateBinaryHash(bytes.buffer)
+            const safeFilename = `${mediaHash}.${mediaType.extension}`
+            const mediaBlob = new Blob([bytes], { type: mediaType.mimeType })
+            return { safeFilename, mediaBlob }
+          } catch (error) {
+            throw new Error(`Lỗi xử lý file: ${error instanceof Error ? error.message : String(error)}`)
+          }
+        })()
+        const { safeFilename, mediaBlob } = prepared
+        if (mediaBlob.size > capabilities.mediaFileMaxBytes) {
+          throw new Error(`Vượt giới hạn kích thước file (${capabilities.mediaFileMaxBytes} byte).`)
+        }
+        if (uploadedSafeNames.has(safeFilename)) {
+          mediaRename.set(filename, safeFilename)
+          processedMedia = mediaRename.size
+          continue
+        }
+        if (shouldFlushMediaPackage(
+          packageBytes,
+          packageEntries.length,
+          mediaBlob.size,
+          capabilities.mediaPackageMaxBytes,
+          capabilities.mediaPackageMaxEntries
+        )) {
+          await flushPackage()
+        }
+        if (uploadedSafeNames.has(safeFilename)) {
+          mediaRename.set(filename, safeFilename)
+          processedMedia = mediaRename.size
+          continue
+        }
+        if (!packageSafeNames.has(safeFilename)) {
+          packageEntries.push({ filename: safeFilename, blob: mediaBlob })
+          packageBytes += mediaBlob.size
+          packageSafeNames.add(safeFilename)
+        }
+        packageRenames.push([filename, safeFilename])
+      } catch (mediaError: any) {
+        errors.push(`Lỗi media "${filename}": ${mediaError?.message || String(mediaError)}`)
       }
-      if (uploadedSafeNames.has(safeFilename)) {
-        mediaRename.set(filename, safeFilename)
-        processedMedia = mediaRename.size
-        continue
-      }
-      if (shouldFlushMediaPackage(
-        packageBytes,
-        packageEntries.length,
-        mediaBlob.size,
-        capabilities.mediaPackageMaxBytes,
-        capabilities.mediaPackageMaxEntries
-      )) {
-        await flushPackage()
-      }
-      if (uploadedSafeNames.has(safeFilename)) {
-        mediaRename.set(filename, safeFilename)
-        processedMedia = mediaRename.size
-        continue
-      }
-      if (!packageSafeNames.has(safeFilename)) {
-        packageEntries.push({ filename: safeFilename, blob: mediaBlob })
-        packageBytes += mediaBlob.size
-        packageSafeNames.add(safeFilename)
-      }
-      packageRenames.push([filename, safeFilename])
     }
     await flushPackage()
     for (const entry of eligible) {
