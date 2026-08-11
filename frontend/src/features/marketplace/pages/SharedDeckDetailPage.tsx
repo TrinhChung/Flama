@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import {
   ArrowLeft,
   Award,
@@ -153,7 +153,7 @@ export function SharedDeckDetailPage() {
   const samples = deck?.test_samples || []
   const currentSample = samples[activeSampleIndex] || null
   const sourceNoteType = deck?.source_note_type || null
-  const templates = sourceNoteType?.templates || []
+  const templates = useMemo(() => sourceNoteType?.templates || [], [sourceNoteType?.templates])
 
   // Auto select default template
   useEffect(() => {

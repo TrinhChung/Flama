@@ -63,6 +63,27 @@ export function FlamaAudioGuidePage() {
         }
       />
 
+      {/* Download Warning Alert */}
+      <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50/50 p-4 dark:border-amber-900/30 dark:bg-amber-950/10">
+        <AlertCircle className="size-5 text-amber-600 dark:text-amber-500 shrink-0 mt-0.5" />
+        <div className="space-y-1">
+          <h4 className="font-bold text-sm text-amber-800 dark:text-amber-400">
+            ⚠️ Lưu ý khi tải xuống trên Windows (Bỏ qua cảnh báo trình duyệt / Microsoft SmartScreen)
+          </h4>
+          <p className="text-xs text-amber-700/90 dark:text-amber-500/80 leading-relaxed">
+            Do tệp <code className="font-mono bg-amber-100 dark:bg-amber-900/40 px-1 rounded">FlamaAudio-Portable.exe</code> tự biên dịch chưa đăng ký chứng chỉ thương mại đắt tiền với Microsoft, trình duyệt hoặc Windows SmartScreen sẽ hiện cảnh báo bảo mật. Bạn hoàn toàn an tâm tải xuống bằng cách:
+            <br />
+            1. Bấm vào nút <strong>dấu ba chấm (...)</strong> bên cạnh tệp tải xuống bị cảnh báo.
+            <br />
+            2. Chọn <strong>Giữ lại (Keep)</strong>.
+            <br />
+            3. Bấm vào biểu tượng <strong>mũi tên tam giác mở rộng</strong> (hiển thị cạnh nút Xóa / Delete).
+            <br />
+            4. Chọn <strong>Vẫn giữ (Keep anyway)</strong> để hoàn tất tải xuống.
+          </p>
+        </div>
+      </div>
+
       {/* Connection Test Banner */}
       <Card className="border-2 border-primary/20 bg-muted/20">
         <CardContent className="flex flex-wrap items-center justify-between gap-4 p-5">
@@ -257,6 +278,16 @@ export function FlamaAudioGuidePage() {
             </h5>
             <p className="pl-5">
               Bạn có thể nhấn nút <strong>"Tải &amp; Tự động cài VOICEVOX Engine"</strong> ngay trên cửa sổ ghép nối của Web. Flama Audio Desktop sẽ tự động tải gói Engine VOICEVOX chuẩn về máy của bạn mà không cần cài thủ công.
+            </p>
+          </div>
+
+          <div className="space-y-1">
+            <h5 className="font-semibold text-foreground text-sm flex items-center gap-1.5 text-amber-600">
+              <AlertCircle className="size-4 shrink-0 text-amber-500" />
+              <span>Trình duyệt / SmartScreen cảnh báo tệp tin không an toàn khi tải về?</span>
+            </h5>
+            <p className="pl-5">
+              Để tải xuống thành công, bạn chỉ cần thực hiện: Bấm vào dấu <strong>ba chấm (...)</strong> ở file tải xuống bị chặn &gt; Chọn <strong>Giữ lại (Keep)</strong> &gt; Nhấp chọn <strong>mũi tên tam giác mở rộng</strong> bên cạnh nút Xóa (Delete) &gt; Chọn <strong>Vẫn giữ lại (Keep anyway)</strong>.
             </p>
           </div>
         </CardContent>

@@ -23,145 +23,63 @@ import {
   sanitizeAnkiHtml,
 } from '@/lib/ankiHtmlSanitizer'
 
-export interface AnkiSyncProfile {
-  id: string
-  flamaUserId: number
-  ankiEndpoint: string
-  deckName: string
-  noteType: string
-  mappingJson: Record<string, string>
-  updatedAt: string
+import {
+  openSyncDB,
+  saveSyncProfile,
+  getSyncProfile,
+  getNoteSyncState,
+  saveNoteSyncState,
+  DB_NAME,
+  DB_VERSION,
+} from './ankiIndexedDB'
+export {
+  openSyncDB,
+  saveSyncProfile,
+  getSyncProfile,
+  getNoteSyncState,
+  saveNoteSyncState,
+  DB_NAME,
+  DB_VERSION,
 }
+export type {
+  AnkiSyncProfile,
+  SyncNoteStatus,
+  AnkiNoteSyncState,
+  AnkiMediaSyncState,
+} from './ankiIndexedDB'
 
-export type SyncNoteStatus = 'New' | 'Changed' | 'Unchanged' | 'Invalid' | 'Syncing' | 'Synced' | 'Error'
-
-export interface AnkiNoteSyncState {
-  key: string
-  sourceKey: string
-  ankiNoteId: number
-  ankiDeckName: string
-  ankiNoteType: string
-  flamaCardId?: string | number | null
-  contentHash: string
-  lastSyncedAt?: string
-  syncStatus: SyncNoteStatus
-  lastError?: string
-  syncProfileId?: string
+import {
+  calculateStringHash,
+  calculateBinaryHash,
+  autoSuggestFieldMapping,
+  buildExactAnkiDeckQuery,
+  buildExactAnkiModelQuery,
+  isDeckInSubtree,
+  mapAnkiDeckPath,
+  indexCardDecksByNote,
+  indexImportCardResults,
+  classifyNoteSyncStatus,
+  COMMON_MAPPING_RULES,
+} from './ankiSyncHelpers'
+export {
+  calculateStringHash,
+  calculateBinaryHash,
+  autoSuggestFieldMapping,
+  buildExactAnkiDeckQuery,
+  buildExactAnkiModelQuery,
+  isDeckInSubtree,
+  mapAnkiDeckPath,
+  indexCardDecksByNote,
+  indexImportCardResults,
+  classifyNoteSyncStatus,
+  COMMON_MAPPING_RULES,
 }
-
-export interface AnkiMediaSyncState {
-  key: string
-  sourceKey: string
-  fileName: string
-  contentHash: string
-  flamaMediaId: string
-  mimeType: string
-  fileSize: number
-  lastSyncedAt: string
-}
+export type { ImportCardResult } from './ankiSyncHelpers'
 
 export interface SyncTargetNoteType {
   id: string
   name: string
   fields: Array<{ id: string; name: string; field_type: string }>
-}
-
-const DB_NAME = 'FlamaAnkiSyncDB_v2'
-const DB_VERSION = 1
-const ANKI_CARD_BATCH_SIZE = 500
-const ANKI_NOTE_BATCH_SIZE = 250
-
-function openSyncDB(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION)
-    req.onupgradeneeded = () => {
-      const db = req.result
-      if (!db.objectStoreNames.contains('profiles')) db.createObjectStore('profiles', { keyPath: 'id' })
-      if (!db.objectStoreNames.contains('noteStates')) db.createObjectStore('noteStates', { keyPath: 'key' })
-      if (!db.objectStoreNames.contains('mediaStates')) db.createObjectStore('mediaStates', { keyPath: 'key' })
-    }
-    req.onsuccess = () => resolve(req.result)
-    req.onerror = () => reject(req.error)
-  })
-}
-
-export async function calculateStringHash(text: string): Promise<string> {
-  const buffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text))
-  return Array.from(new Uint8Array(buffer)).map((value) => value.toString(16).padStart(2, '0')).join('')
-}
-
-export async function calculateBinaryHash(buffer: ArrayBuffer): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', buffer)
-  return Array.from(new Uint8Array(digest)).map((value) => value.toString(16).padStart(2, '0')).join('')
-}
-
-export async function saveSyncProfile(profile: AnkiSyncProfile): Promise<void> {
-  const db = await openSyncDB()
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction('profiles', 'readwrite')
-    tx.objectStore('profiles').put(profile)
-    tx.oncomplete = () => resolve()
-    tx.onerror = () => reject(tx.error)
-  })
-}
-
-export async function getSyncProfile(id: string): Promise<AnkiSyncProfile | null> {
-  const db = await openSyncDB()
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction('profiles', 'readonly')
-    const req = tx.objectStore('profiles').get(id)
-    req.onsuccess = () => resolve(req.result || null)
-    req.onerror = () => reject(req.error)
-  })
-}
-
-function noteStateKey(sourceKey: string, ankiNoteId: number): string {
-  return JSON.stringify([sourceKey, ankiNoteId])
-}
-
-export async function getNoteSyncState(sourceKey: string, ankiNoteId: number): Promise<AnkiNoteSyncState | null> {
-  const db = await openSyncDB()
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction('noteStates', 'readonly')
-    const req = tx.objectStore('noteStates').get(noteStateKey(sourceKey, ankiNoteId))
-    req.onsuccess = () => resolve(req.result || null)
-    req.onerror = () => reject(req.error)
-  })
-}
-
-export async function saveNoteSyncState(state: Omit<AnkiNoteSyncState, 'key'> & { key?: string }): Promise<void> {
-  const db = await openSyncDB()
-  const persisted = { ...state, key: state.key || noteStateKey(state.sourceKey, state.ankiNoteId) }
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction('noteStates', 'readwrite')
-    tx.objectStore('noteStates').put(persisted)
-    tx.oncomplete = () => resolve()
-    tx.onerror = () => reject(tx.error)
-  })
-}
-
-const COMMON_MAPPING_RULES: Record<string, string[]> = {
-  Word: ['Word', 'Expression', 'Term', 'Front', 'Kanji', 'Vocab'],
-  Meaning: ['Meaning', 'Definition', 'Back', 'Translation', 'Glossary'],
-  Reading: ['Reading', 'Furigana', 'Kana', 'Pronunciation'],
-  Example: ['Example', 'Sentence', 'Context', 'Example Sentence'],
-  Audio: ['Audio', 'Sound', 'Pronunciation Audio'],
-  Image: ['Image', 'Picture', 'Photo', 'Illustration'],
-}
-
-export function autoSuggestFieldMapping(
-  ankiFields: string[],
-  flamaFields: Array<{ id: string; name: string }>
-): Record<string, string> {
-  const mapping: Record<string, string> = {}
-  for (const flamaField of flamaFields) {
-    const rules = COMMON_MAPPING_RULES[flamaField.name] || [flamaField.name]
-    const matched = ankiFields.find((field) =>
-      rules.some((rule) => field.toLowerCase() === rule.toLowerCase() || field.toLowerCase().includes(rule.toLowerCase()))
-    )
-    if (matched) mapping[matched] = flamaField.name
-  }
-  return mapping
 }
 
 export interface SyncProgressUpdate {
@@ -180,63 +98,11 @@ export interface AnkiSyncOptions {
   endpoint?: string
   noteTypeOptions?: SyncTargetNoteType[]
   autoSyncMissingNoteTypes?: boolean
+  noteTypeMap?: Record<string, string>
 }
 
-export function buildExactAnkiDeckQuery(deckName: string): string {
-  return `deck:${JSON.stringify(deckName)}`
-}
-
-export function buildExactAnkiModelQuery(deckName: string, modelName: string): string {
-  return `${buildExactAnkiDeckQuery(deckName)} note:${JSON.stringify(modelName)}`
-}
-
-export function isDeckInSubtree(rootDeck: string, candidate: string): boolean {
-  return candidate === rootDeck || candidate.startsWith(`${rootDeck}::`)
-}
-
-export function mapAnkiDeckPath(sourceRoot: string, sourcePath: string, targetRoot: string): string {
-  if (!isDeckInSubtree(sourceRoot, sourcePath)) {
-    throw new Error(`Deck "${sourcePath}" không thuộc cây "${sourceRoot}".`)
-  }
-  const normalizedTarget = targetRoot.trim() || sourceRoot
-  return sourcePath === sourceRoot ? normalizedTarget : `${normalizedTarget}${sourcePath.slice(sourceRoot.length)}`
-}
-
-export function indexCardDecksByNote(cards: AnkiCardInfo[]): Map<number, Set<string>> {
-  const result = new Map<number, Set<string>>()
-  for (const card of cards) {
-    const decks = result.get(card.note) || new Set<string>()
-    decks.add(card.deckName)
-    result.set(card.note, decks)
-  }
-  return result
-}
-
-export interface ImportCardResult {
-  ankiNoteId?: number
-  imported?: boolean
-  noteId?: string | number | null
-  error?: string
-}
-
-export function indexImportCardResults(results: ImportCardResult[] | undefined): Map<number, ImportCardResult> {
-  const indexed = new Map<number, ImportCardResult>()
-  for (const result of results || []) {
-    if (typeof result.ankiNoteId === 'number') indexed.set(result.ankiNoteId, result)
-  }
-  return indexed
-}
-
-export function classifyNoteSyncStatus(
-  existing: AnkiNoteSyncState | null,
-  profileId: string,
-  contentHash: string,
-  syncMode: 'new_and_changed' | 'only_new' | 'resync_all'
-): SyncNoteStatus {
-  if (!existing || existing.syncProfileId !== profileId) return 'New'
-  if (existing.syncStatus !== 'Synced') return 'New'
-  return existing.contentHash === contentHash && syncMode !== 'resync_all' ? 'Unchanged' : 'Changed'
-}
+const ANKI_CARD_BATCH_SIZE = 500
+const ANKI_NOTE_BATCH_SIZE = 250
 
 function inferAnkiFieldType(name: string): string {
   const lower = name.toLowerCase()
@@ -268,14 +134,20 @@ async function fetchNotesInfo(noteIds: number[], endpoint?: string): Promise<Ank
   return result
 }
 
-function savedTargetId(modelName: string): string {
-  try {
-    const raw = localStorage.getItem(`anki_nt_map_${modelName}`)
-    if (!raw) return ''
-    return String(JSON.parse(raw)?.flamaNoteTypeId || '')
-  } catch {
-    return ''
+function savedTargetId(modelName: string, noteTypeMap?: Record<string, string>): string {
+  if (noteTypeMap && modelName in noteTypeMap) {
+    return noteTypeMap[modelName]
   }
+  if (typeof window !== 'undefined' && window.localStorage) {
+    try {
+      const raw = localStorage.getItem(`anki_nt_map_${modelName}`)
+      if (!raw) return ''
+      return String(JSON.parse(raw)?.flamaNoteTypeId || '')
+    } catch {
+      return ''
+    }
+  }
+  return ''
 }
 
 function normalizeMediaFieldValue(value: string, targetFieldType: string): string {
@@ -349,7 +221,7 @@ export async function executeAnkiSync(
         ankiConnectClient.getModelTemplates(sourceModelName, endpoint),
       ])
       const overrideId = sourceModelName === modelName ? options.targetNoteTypeId || '' : ''
-      const persistedId = savedTargetId(sourceModelName)
+      const persistedId = savedTargetId(sourceModelName, options.noteTypeMap)
       const exactTarget = targetOptions.find((item) => item.name.toLowerCase() === sourceModelName.toLowerCase())
       const target = targetOptions.find((item) => item.id === (overrideId || persistedId)) || exactTarget
       const mapping = sourceModelName === modelName && target?.id === options.targetNoteTypeId

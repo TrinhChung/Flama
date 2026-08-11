@@ -29,14 +29,19 @@ let csrfRefreshRequest: Promise<void> | null = null
 
 export function setCsrfToken(token: string) {
   csrfToken = token
-  const meta = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')
-  meta?.setAttribute('content', token)
+  if (typeof document !== 'undefined') {
+    const meta = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')
+    meta?.setAttribute('content', token)
+  }
 }
 
 export function getCsrfToken(): string {
   if (csrfToken) return csrfToken
-  const meta = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')
-  return meta?.getAttribute('content') || ''
+  if (typeof document !== 'undefined') {
+    const meta = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')
+    return meta?.getAttribute('content') || ''
+  }
+  return ''
 }
 
 function isUnsafeMethod(method: string) {

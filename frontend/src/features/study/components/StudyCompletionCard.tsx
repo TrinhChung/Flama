@@ -34,7 +34,7 @@ export function StudyCompletionCard({
   isBusy,
   onCommit,
 }: StudyCompletionCardProps) {
-  const events = session?.events ?? []
+  const events = useMemo(() => session?.events ?? [], [session?.events])
   const appliedCount = receipt?.applied_event_count ?? events.length
 
   const stats = useMemo(() => {

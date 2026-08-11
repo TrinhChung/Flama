@@ -10,7 +10,7 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   --background:
-    oklch(0.985 0.012 70);
+    oklch(1 0 0);
   --foreground:
     oklch(0.19 0.02 50);
   --card:

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useMemo } from 'react'
 import {
   ArrowLeft,
   Check,
@@ -74,10 +74,12 @@ export function NoteTypeDetailPage() {
   })
 
   const noteType = detailQuery.data
-  const templates = noteType?.templates || []
+  const templates = useMemo(() => noteType?.templates || [], [noteType?.templates])
   const fields = (noteType?.field_defs || []).slice().sort((a, b) => a.position - b.position)
 
-  const selectedTemplate = templates.find((t) => t.id === selectedTemplateId) || templates[0] || null
+  const selectedTemplate = useMemo(() => {
+    return templates.find((t) => t.id === selectedTemplateId) || templates[0] || null
+  }, [templates, selectedTemplateId])
 
   // Auto select initial template
   useEffect(() => {
@@ -87,13 +89,16 @@ export function NoteTypeDetailPage() {
   }, [templates, selectedTemplateId])
 
   // Sync editor values when selected template changes
+  const frontHtmlVal = selectedTemplate?.front_html
+  const backHtmlVal = selectedTemplate?.back_html
+  const sharedCssVal = selectedTemplate?.shared_css
   useEffect(() => {
     if (selectedTemplate) {
-      setFrontHtml(selectedTemplate.front_html || '')
-      setBackHtml(selectedTemplate.back_html || '')
-      setSharedCss(selectedTemplate.shared_css || '')
+      setFrontHtml(frontHtmlVal || '')
+      setBackHtml(backHtmlVal || '')
+      setSharedCss(sharedCssVal || '')
     }
-  }, [selectedTemplate?.id])
+  }, [selectedTemplate, frontHtmlVal, backHtmlVal, sharedCssVal])
 
   // Save Template Mutation
   const saveMutation = useMutation({
