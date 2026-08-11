@@ -1,7 +1,15 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <DefaultItemExcludes>$(DefaultItemExcludes);G2P\**</DefaultItemExcludes>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\Flama.Audio.Core\Flama.Audio.Core.csproj" />
+    <ProjectReference Include="G2P\src\Flama.G2P\Flama.G2P.csproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -9,15 +17,5 @@
     <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.18.0" />
     <PackageReference Include="System.Speech" Version="8.0.0" />
   </ItemGroup>
-
-  <ItemGroup>
-    <EmbeddedResource Include="G2P\pinyin_dict.txt" />
-  </ItemGroup>
-
-  <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-  </PropertyGroup>
 
 </Project>

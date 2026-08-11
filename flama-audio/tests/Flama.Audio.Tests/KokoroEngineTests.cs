@@ -1,7 +1,9 @@
 using System;
 using System.IO;
 using Flama.Audio.Engine.Kokoro;
-using Flama.Audio.Engine.Kokoro.G2P;
+using Flama.G2P;
+using Flama.G2P.English;
+using Flama.G2P.Chinese;
 using Flama.Audio.Engine.Kokoro.IO;
 using Xunit;
 

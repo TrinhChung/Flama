@@ -165,7 +165,12 @@ public partial class MainWindow : Window
             "Flama Audio Local Service v1.1.0\n\n" +
             "Trợ lý tổng hợp phát âm đa ngôn ngữ cho hệ sinh thái Flama.\n" +
             "• Tiếng Nhật: VOICEVOX Engine (Port 50021)\n" +
-            "• Tiếng Anh: Kokoro-82M Neural Engine (C# Native + ONNX Runtime CPU)\n\n" +
+            "• Tiếng Anh & Trung: Kokoro-82M Neural Engine (C# Native + ONNX Runtime CPU)\n\n" +
+            "Flama G2P\n" +
+            "Source Available\n" +
+            "Free for non-commercial use under PolyForm Noncommercial 1.0.0.\n" +
+            "Commercial use requires a separate Flama license.\n\n" +
+            "See the licenses directory for license and third-party notices.\n\n" +
             "Phát triển bởi đội ngũ Flama.",
             "Về Flama Audio",
             MessageBoxButton.OK,

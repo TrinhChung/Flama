@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
-using Flama.Audio.Engine.Kokoro.G2P;
+using Flama.G2P;
+using Flama.G2P.English;
+using Flama.G2P.Chinese;
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
 
