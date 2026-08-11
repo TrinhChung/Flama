@@ -486,6 +486,67 @@ class FlashcardValidationSecurityTests(unittest.TestCase):
         payload = response.get_json() or {}
         self.assertEqual(payload.get("field"), "q")
 
+    def test_proxy_media_accessible_without_login(self):
+        note_type = self._create_note_type_with_media()
+        note_id = self._create_note(note_type["id"])
+
+        upload_resp = self.client.post(
+            f"/api/notes/{note_id}/media",
+            data={
+                "field_name": "Picture",
+                "file": (io.BytesIO(_MIN_PNG_BYTES), "normal.png", "image/png"),
+            },
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(upload_resp.status_code, 201)
+        asset_id = (upload_resp.get_json() or {}).get("asset_id")
+        self.assertTrue(asset_id)
+
+        # Log out current user
+        self.client.post("/logout")
+
+        # Request media as anonymous/guest
+        proxy_resp = self.client.get(f"/media/proxy/{asset_id}")
+        self.assertEqual(proxy_resp.status_code, 200)
+        proxy_resp.close()
+
+    def test_proxy_media_accessible_by_other_user(self):
+        note_type = self._create_note_type_with_media()
+        note_id = self._create_note(note_type["id"])
+
+        upload_resp = self.client.post(
+            f"/api/notes/{note_id}/media",
+            data={
+                "field_name": "Picture",
+                "file": (io.BytesIO(_MIN_PNG_BYTES), "normal.png", "image/png"),
+            },
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(upload_resp.status_code, 201)
+        asset_id = (upload_resp.get_json() or {}).get("asset_id")
+        self.assertTrue(asset_id)
+
+        # Create other user
+        with self.app.app_context():
+            other_user = User(username="other", email="other-security@example.com", is_admin=False)
+            other_user.set_password("otherpassword")
+            db.session.add(other_user)
+            db.session.commit()
+
+        # Log in as other user
+        self.client.post("/logout")
+        login_resp = self.client.post(
+            "/login",
+            data={"email": "other-security@example.com", "password": "otherpassword"},
+            follow_redirects=True,
+        )
+        self.assertEqual(login_resp.status_code, 200)
+
+        # Request media as the other user
+        proxy_resp = self.client.get(f"/media/proxy/{asset_id}")
+        self.assertEqual(proxy_resp.status_code, 200)
+        proxy_resp.close()
+
 
 if __name__ == "__main__":
     unittest.main()
