@@ -1,3 +1,4 @@
+import React, { useState, useRef, useCallback, useEffect } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -44,9 +45,71 @@ export function BrowseCardEditor({ browse }: BrowseCardEditorProps) {
     setMobileTab,
   } = browse
 
+  const [editorWidth, setEditWidth] = useState(() => {
+    try {
+      const saved = localStorage.getItem('flama:browse:editor-width')
+      if (saved) return Number(saved)
+    } catch {}
+    return 320 // default width
+  })
+  const isResizing = useRef(false)
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return window.innerWidth < 768
+    }
+    return false
+  })
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const media = window.matchMedia('(max-width: 767px)')
+    const listener = () => setIsMobile(media.matches)
+    media.addEventListener('change', listener)
+    return () => media.removeEventListener('change', listener)
+  }, [])
+
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    isResizing.current = true
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      if (!isResizing.current) return
+      const newWidth = window.innerWidth - moveEvent.clientX
+      const minWidth = 280
+      const maxWidth = Math.min(800, window.innerWidth * 0.6)
+      if (newWidth >= minWidth && newWidth <= maxWidth) {
+        setEditWidth(newWidth)
+        try {
+          localStorage.setItem('flama:browse:editor-width', String(newWidth))
+        } catch {}
+      }
+    }
+
+    const handleMouseUp = () => {
+      isResizing.current = false
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', handleMouseUp)
+    }
+
+    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('mouseup', handleMouseUp)
+  }, [])
+
   if (!activeCardId) {
     return (
-      <div className="hidden lg:flex w-80 border-l border-border/60 flex-col items-center justify-center p-8 bg-muted/5 shrink-0 text-center">
+      <div
+        style={{ width: `${editorWidth}px` }}
+        className="hidden lg:flex border-l border-border/60 flex-col items-center justify-center p-8 bg-card shrink-0 text-center relative"
+      >
+        {/* Resize Handle */}
+        <div
+          className="absolute left-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-primary/60 hover:w-1.5 transition-all bg-border/20 z-50"
+          onMouseDown={handleMouseDown}
+        />
         <Layers className="size-10 text-muted-foreground opacity-60 mb-2.5" />
         <h3 className="font-bold text-sm text-foreground">Chưa chọn thẻ</h3>
         <p className="text-xs text-muted-foreground max-w-44 mt-1 leading-relaxed">
@@ -58,7 +121,17 @@ export function BrowseCardEditor({ browse }: BrowseCardEditorProps) {
 
   if (cardDetailQuery.isPending) {
     return (
-      <div className="w-full lg:w-80 border-l border-border/60 p-4 space-y-4 shrink-0 bg-muted/10">
+      <div
+        style={{ width: isMobile ? '100%' : `${editorWidth}px` }}
+        className={`border-l border-border/60 p-4 space-y-4 shrink-0 bg-card relative flex flex-col h-full ${
+          mobileTab === 'editor' ? 'flex' : 'hidden lg:flex'
+        }`}
+      >
+        {/* Resize Handle */}
+        <div
+          className="hidden lg:block absolute left-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-primary/60 hover:w-1.5 transition-all bg-border/20 z-50"
+          onMouseDown={handleMouseDown}
+        />
         <div className="animate-pulse space-y-3">
           <div className="h-6 bg-muted rounded w-2/3" />
           <div className="h-4 bg-muted rounded w-1/3" />
@@ -81,7 +154,17 @@ export function BrowseCardEditor({ browse }: BrowseCardEditorProps) {
   const deckList = detail.decks || decksQuery.data?.decks || []
 
   return (
-    <div className={`w-full lg:w-80 border-l border-border/60 flex flex-col bg-muted/5 shrink-0 h-full overflow-hidden ${mobileTab === 'editor' ? 'flex' : 'hidden lg:flex'}`}>
+    <div
+      style={{ width: isMobile ? '100%' : `${editorWidth}px` }}
+      className={`relative border-l border-border/60 flex flex-col bg-card shrink-0 h-full overflow-hidden ${
+        mobileTab === 'editor' ? 'flex' : 'hidden lg:flex'
+      }`}
+    >
+      {/* Resize Handle */}
+      <div
+        className="hidden lg:block absolute left-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-primary/60 hover:w-1.5 transition-all bg-border/20 z-50"
+        onMouseDown={handleMouseDown}
+      />
       {/* Editor Header */}
       <div className="px-4 py-3 border-b border-border/60 flex items-center justify-between bg-background shrink-0">
         <div className="flex items-center gap-2">
@@ -106,7 +189,7 @@ export function BrowseCardEditor({ browse }: BrowseCardEditorProps) {
           <NativeSelect
             value={editDeckId !== null ? String(editDeckId) : ''}
             onChange={(e) => setEditDeckId(Number(e.target.value))}
-            className="h-9 text-xs sm:text-sm rounded-lg"
+            className="h-9 text-xs sm:text-sm rounded-lg bg-muted/50"
           >
             {deckList.map((d) => (
               <option key={d.id} value={d.id}>
@@ -132,7 +215,7 @@ export function BrowseCardEditor({ browse }: BrowseCardEditorProps) {
                   onChange={(e) =>
                     setEditFieldValues((prev) => ({ ...prev, [field.name]: e.target.value }))
                   }
-                  className="min-h-20 text-xs sm:text-sm rounded-xl leading-relaxed resize-y"
+                  className="min-h-20 text-xs sm:text-sm rounded-xl leading-relaxed resize-y bg-muted/50"
                 />
               ) : (
                 <Input
@@ -140,7 +223,7 @@ export function BrowseCardEditor({ browse }: BrowseCardEditorProps) {
                   onChange={(e) =>
                     setEditFieldValues((prev) => ({ ...prev, [field.name]: e.target.value }))
                   }
-                  className="h-9 text-xs sm:text-sm rounded-lg"
+                  className="h-9 text-xs sm:text-sm rounded-lg bg-muted/50"
                 />
               )}
             </div>
@@ -156,9 +239,9 @@ export function BrowseCardEditor({ browse }: BrowseCardEditorProps) {
               value={newTagInput}
               onChange={(e) => setNewTagInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleAddTag()}
-              className="h-8 rounded-lg text-xs"
+              className="h-8 rounded-lg text-xs bg-muted/50"
             />
-            <Button size="sm" variant="outline" className="h-8 px-2.5 rounded-lg text-xs" onClick={handleAddTag}>
+            <Button size="sm" variant="outline" className="h-8 px-2.5 rounded-lg text-xs bg-muted/50 hover:bg-muted border-border" onClick={handleAddTag}>
               <Plus className="size-3.5" />
             </Button>
           </div>
@@ -196,7 +279,7 @@ export function BrowseCardEditor({ browse }: BrowseCardEditorProps) {
             <Button
               variant="outline"
               size="sm"
-              className="flex-1 h-9 text-xs font-semibold rounded-lg"
+              className="flex-1 h-9 text-xs font-semibold rounded-lg bg-background hover:bg-muted border-border"
               onClick={handleRevert}
               disabled={updateMutation.isPending}
             >
@@ -206,7 +289,7 @@ export function BrowseCardEditor({ browse }: BrowseCardEditorProps) {
 
           <Button
             size="sm"
-            className="flex-1 h-9 text-xs font-bold rounded-lg shadow-sm"
+            className="flex-1 h-9 text-xs font-bold rounded-lg shadow-sm disabled:bg-muted disabled:text-muted-foreground disabled:border disabled:border-border/50 disabled:shadow-none disabled:opacity-100"
             onClick={() => {
               void updateMutation.mutate({
                 field_values: editFieldValues,
@@ -228,7 +311,7 @@ export function BrowseCardEditor({ browse }: BrowseCardEditorProps) {
         <Button
           variant="outline"
           size="sm"
-          className="w-full h-8 text-[11px] text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/25 rounded-lg"
+          className="w-full h-8 text-[11px] text-destructive hover:text-white hover:bg-destructive border-destructive/40 hover:border-destructive bg-background rounded-lg transition-all"
           onClick={() => {
             if (window.confirm('Bạn có chắc chắn muốn xóa vĩnh viễn thẻ này? Thao tác này không thể hoàn tác.')) {
               void deleteMutation.mutate(detail.card.card_id)

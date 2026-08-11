@@ -98,6 +98,7 @@ export interface AnkiSyncOptions {
   endpoint?: string
   noteTypeOptions?: SyncTargetNoteType[]
   autoSyncMissingNoteTypes?: boolean
+  noteTypeMap?: Record<string, string>
 }
 
 const ANKI_CARD_BATCH_SIZE = 500
@@ -133,14 +134,20 @@ async function fetchNotesInfo(noteIds: number[], endpoint?: string): Promise<Ank
   return result
 }
 
-function savedTargetId(modelName: string): string {
-  try {
-    const raw = localStorage.getItem(`anki_nt_map_${modelName}`)
-    if (!raw) return ''
-    return String(JSON.parse(raw)?.flamaNoteTypeId || '')
-  } catch {
-    return ''
+function savedTargetId(modelName: string, noteTypeMap?: Record<string, string>): string {
+  if (noteTypeMap && modelName in noteTypeMap) {
+    return noteTypeMap[modelName]
   }
+  if (typeof window !== 'undefined' && window.localStorage) {
+    try {
+      const raw = localStorage.getItem(`anki_nt_map_${modelName}`)
+      if (!raw) return ''
+      return String(JSON.parse(raw)?.flamaNoteTypeId || '')
+    } catch {
+      return ''
+    }
+  }
+  return ''
 }
 
 function normalizeMediaFieldValue(value: string, targetFieldType: string): string {
@@ -214,7 +221,7 @@ export async function executeAnkiSync(
         ankiConnectClient.getModelTemplates(sourceModelName, endpoint),
       ])
       const overrideId = sourceModelName === modelName ? options.targetNoteTypeId || '' : ''
-      const persistedId = savedTargetId(sourceModelName)
+      const persistedId = savedTargetId(sourceModelName, options.noteTypeMap)
       const exactTarget = targetOptions.find((item) => item.name.toLowerCase() === sourceModelName.toLowerCase())
       const target = targetOptions.find((item) => item.id === (overrideId || persistedId)) || exactTarget
       const mapping = sourceModelName === modelName && target?.id === options.targetNoteTypeId

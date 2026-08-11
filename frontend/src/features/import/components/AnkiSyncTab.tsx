@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useId, useMemo } from 'react'
+import React, { useState, useEffect, useId, useMemo, useRef } from 'react'
 import {
   Search,
   CheckCircle2,
@@ -21,8 +21,8 @@ import {
   autoSuggestFieldMapping,
   buildExactAnkiDeckQuery,
   buildExactAnkiModelQuery,
-  executeAnkiSync,
 } from '@/lib/ankiSyncEngine'
+import { getCsrfToken } from '@/shared/api/client'
 import { sanitizeAnkiHtml } from '@/lib/ankiHtmlSanitizer'
 import { appApi } from '@/app/api'
 import { Button } from '@/components/ui/button'
@@ -86,6 +86,15 @@ export const AnkiSyncTab: React.FC<AnkiSyncTabProps> = ({
   connectionStatus,
 }) => {
   const queryClient = useQueryClient()
+  const workerRef = useRef<Worker | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (workerRef.current) {
+        workerRef.current.terminate()
+      }
+    }
+  }, [])
 
   // Step 1: Deck Selection State
   const [decks, setDecks] = useState<string[]>([])
@@ -370,32 +379,84 @@ export const AnkiSyncTab: React.FC<AnkiSyncTabProps> = ({
     setShowSyncModal(true)
     setSyncReport(null)
 
+    // Load Note Type mapping from localStorage to bypass localStorage restriction in Worker
+    const noteTypeMap: Record<string, string> = {}
     try {
-      const result = await executeAnkiSync(
-        selectedDeckName,
-        selectedAnkiModel,
-        fieldMapping,
-        syncMode,
-        flamaUserId,
-        (progress) => {
-          setSyncProgress({
-            phase: progress.phase,
-            totalNotes: progress.totalNotes,
-            processedNotes: progress.processedNotes,
-            totalMedia: progress.totalMedia,
-            processedMedia: progress.processedMedia,
-            message: progress.currentMessage,
-          })
-        },
-        {
-          syncMedia: true,
-          targetDeckName: targetFlamaDeckName.trim() || selectedDeckName,
-          targetNoteTypeId: selectedFlamaModelId,
-          endpoint,
-          noteTypeOptions,
-          autoSyncMissingNoteTypes,
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i)
+        if (key && key.startsWith('anki_nt_map_')) {
+          const modelName = key.substring('anki_nt_map_'.length)
+          const raw = localStorage.getItem(key)
+          if (raw) {
+            noteTypeMap[modelName] = JSON.parse(raw)?.flamaNoteTypeId || ''
+          }
         }
+      }
+    } catch {
+      // LocalStorage error fallback
+    }
+
+    try {
+      if (workerRef.current) {
+        workerRef.current.terminate()
+      }
+
+      workerRef.current = new Worker(
+        new URL('../../../lib/sync.worker.ts', import.meta.url),
+        { type: 'module' }
       )
+
+      const csrfToken = getCsrfToken()
+
+      const syncResultPromise = new Promise<{
+        success: boolean
+        totalSynced: number
+        totalMediaDetected: number
+        errors: string[]
+      }>((resolve, reject) => {
+        if (!workerRef.current) return reject(new Error('Không thể khởi tạo Worker.'))
+
+        workerRef.current.onmessage = (e) => {
+          const { type, payload } = e.data
+          if (type === 'PROGRESS') {
+            setSyncProgress({
+              phase: payload.phase,
+              totalNotes: payload.totalNotes,
+              processedNotes: payload.processedNotes,
+              totalMedia: payload.totalMedia,
+              processedMedia: payload.processedMedia,
+              message: payload.currentMessage,
+            })
+          } else if (type === 'COMPLETED') {
+            resolve(payload)
+          } else if (type === 'ERROR') {
+            reject(new Error(payload.message || 'Lỗi đồng bộ dữ liệu.'))
+          }
+        }
+
+        workerRef.current.postMessage({
+          type: 'START_SYNC',
+          payload: {
+            deckName: selectedDeckName,
+            modelName: selectedAnkiModel,
+            fieldMapping,
+            syncMode,
+            flamaUserId,
+            csrfToken,
+            options: {
+              syncMedia: true,
+              targetDeckName: targetFlamaDeckName.trim() || selectedDeckName,
+              targetNoteTypeId: selectedFlamaModelId,
+              endpoint,
+              noteTypeOptions,
+              autoSyncMissingNoteTypes,
+              noteTypeMap,
+            },
+          },
+        })
+      })
+
+      const result = await syncResultPromise
 
       setSyncReport({
         totalSynced: result.totalSynced,
@@ -415,8 +476,13 @@ export const AnkiSyncTab: React.FC<AnkiSyncTabProps> = ({
         totalSynced: 0,
         errors: [err?.message || 'Lỗi đồng bộ dữ liệu.'],
       })
+    } finally {
+      if (workerRef.current) {
+        workerRef.current.terminate()
+        workerRef.current = null
+      }
+      setIsSyncing(false)
     }
-    setIsSyncing(false)
   }
 
   return (

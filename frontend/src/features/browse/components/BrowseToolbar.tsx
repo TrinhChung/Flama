@@ -31,7 +31,7 @@ export function BrowseToolbar({ browse }: BrowseToolbarProps) {
   } = browse
 
   return (
-    <div className="flex flex-col sm:flex-row gap-2.5 p-3 border-b border-border/60 bg-muted/5 shrink-0">
+    <div className="flex flex-col sm:flex-row gap-2.5 p-3 border-b border-border/60 bg-background shrink-0">
       {/* Search Bar Input */}
       <div className="relative flex-1">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
@@ -39,7 +39,7 @@ export function BrowseToolbar({ browse }: BrowseToolbarProps) {
           placeholder="Tìm từ vựng, cách đọc, ý nghĩa..."
           value={queryText}
           onChange={(e) => setQueryText(e.target.value)}
-          className="pl-9 h-9 rounded-xl text-xs sm:text-sm"
+          className="pl-9 h-9 rounded-xl text-xs sm:text-sm bg-muted/50"
         />
       </div>
 
@@ -50,7 +50,7 @@ export function BrowseToolbar({ browse }: BrowseToolbarProps) {
           <NativeSelect
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="h-8 py-0 pl-2 pr-6 text-xs rounded-lg"
+            className="h-8 py-0 pl-2 pr-6 text-xs rounded-lg bg-muted/50"
           >
             <option value="all">Tất cả trạng thái</option>
             <option value="new">Mới (New)</option>
@@ -68,7 +68,7 @@ export function BrowseToolbar({ browse }: BrowseToolbarProps) {
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="h-8 rounded-lg text-xs gap-1">
+                <Button variant="outline" size="sm" className="h-8 rounded-lg text-xs gap-1 bg-muted/50">
                   <span>Thao tác hàng loạt</span>
                   <ChevronDown className="size-3 opacity-60" />
                 </Button>

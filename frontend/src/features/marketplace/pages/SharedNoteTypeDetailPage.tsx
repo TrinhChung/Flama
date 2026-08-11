@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import {
   ArrowLeft,
   Award,
@@ -123,7 +123,7 @@ export function SharedNoteTypeDetailPage() {
   })
 
   const noteType = noteTypeQuery.data
-  const templates = noteType?.templates || []
+  const templates = useMemo(() => noteType?.templates || [], [noteType?.templates])
 
   // Auto select initial template
   useEffect(() => {

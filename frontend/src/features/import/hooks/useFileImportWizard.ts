@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useId } from 'react'
+import { useState, useEffect, useRef, useId, useMemo } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -156,7 +156,7 @@ export function useFileImportWizard() {
   const deckOptions = optionsQuery.data?.deck_options || []
   const noteTypeOptions = optionsQuery.data?.note_type_options || []
   const currentNoteType = noteTypeOptions.find((nt) => nt.id === selectedNoteTypeId) || null
-  const fields = currentNoteType?.fields || []
+  const fields = useMemo(() => currentNoteType?.fields || [], [currentNoteType?.fields])
 
   // Initialize uniqueness fields defaults when note type changes
   useEffect(() => {
@@ -169,7 +169,7 @@ export function useFileImportWizard() {
     } else {
       setUniquenessFields([])
     }
-  }, [selectedNoteTypeId, optionsQuery.data])
+  }, [selectedNoteTypeId, optionsQuery.data, fields])
 
   // Infer note type from sibling decks
   const handleDeckChange = (newDeckId: string) => {

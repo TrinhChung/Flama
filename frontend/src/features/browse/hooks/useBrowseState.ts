@@ -205,6 +205,11 @@ export function useBrowseState() {
   const cards = cardsQuery.data?.items || []
 
   // Keyboard shortcuts
+  const cardsRef = useRef(cards)
+  cardsRef.current = cards
+  const selectedCardsCountRef = useRef(selectedCards.length)
+  selectedCardsCountRef.current = selectedCards.length
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const activeEl = document.activeElement
@@ -214,12 +219,12 @@ export function useBrowseState() {
         Boolean((activeEl as HTMLElement | null)?.isContentEditable)
 
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
-        if (!isEditingText && cards.length > 0) {
+        if (!isEditingText && cardsRef.current.length > 0) {
           e.preventDefault()
-          setSelectedCards(cards.map((c) => c.card_id))
+          setSelectedCards(cardsRef.current.map((c) => c.card_id))
         }
       } else if (e.key === 'Escape') {
-        if (!isEditingText && selectedCards.length > 0) {
+        if (!isEditingText && selectedCardsCountRef.current > 0) {
           e.preventDefault()
           setSelectedCards([])
         }
@@ -228,7 +233,7 @@ export function useBrowseState() {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [cards, selectedCards.length])
+  }, [])
 
   // Selected Card Detail Query
   const cardDetailQuery = useQuery({
@@ -238,6 +243,11 @@ export function useBrowseState() {
   })
 
   // Populate editor state
+  const ttsSourceFieldRef = useRef(ttsSourceField)
+  ttsSourceFieldRef.current = ttsSourceField
+  const ttsDestinationFieldRef = useRef(ttsDestinationField)
+  ttsDestinationFieldRef.current = ttsDestinationField
+
   useEffect(() => {
     if (cardDetailQuery.data) {
       const fieldValues = cardDetailQuery.data.note.field_values || {}
@@ -263,7 +273,7 @@ export function useBrowseState() {
           setTtsSourceField('Expression')
         } else if (fieldNames.includes('Kanji')) {
           setTtsSourceField('Kanji')
-        } else if (fieldNames.length > 0 && !fieldNames.includes(ttsSourceField)) {
+        } else if (fieldNames.length > 0 && !fieldNames.includes(ttsSourceFieldRef.current)) {
           setTtsSourceField(fieldNames[0])
         }
 
@@ -273,7 +283,7 @@ export function useBrowseState() {
           setTtsDestinationField('AudioReading')
         } else if (fieldNames.includes('Sound')) {
           setTtsDestinationField('Sound')
-        } else if (fieldNames.length > 0 && !fieldNames.includes(ttsDestinationField)) {
+        } else if (fieldNames.length > 0 && !fieldNames.includes(ttsDestinationFieldRef.current)) {
           setTtsDestinationField(fieldNames[fieldNames.length - 1])
         }
       }

@@ -63,7 +63,7 @@ export function BrowsePage() {
               type="button"
               variant="outline"
               size="sm"
-              className="h-8 text-xs font-bold text-primary border-primary/30 hover:bg-primary/10 rounded-full gap-1.5 px-3 shrink-0"
+              className="h-8 text-xs font-bold text-primary border-primary/30 hover:bg-primary/10 bg-background rounded-full gap-1.5 px-3 shrink-0"
               onClick={() => navigate(`/study?deck_id=${urlDeckId}`)}
             >
               <ArrowLeft className="size-3.5" />
@@ -81,7 +81,7 @@ export function BrowsePage() {
               <Button
                 variant="outline"
                 size="sm"
-                className="h-7 sm:h-8 rounded-full text-[11px] sm:text-xs px-2 sm:px-3 gap-1"
+                className="h-7 sm:h-8 rounded-full text-[11px] sm:text-xs px-2 sm:px-3 gap-1 bg-background hover:bg-muted border-border"
               >
                 <Volume2 className="size-3.5 text-primary" />
                 <span className="hidden sm:inline">Tạo âm thanh</span>
@@ -123,9 +123,82 @@ export function BrowsePage() {
                 }}
                 className="flex items-center justify-between font-medium cursor-pointer"
               >
-                <div className="flex items-center gap-2">
-                  <span>🇬🇧 Đa ngôn ngữ Offline</span>
-                </div>
+                <span>🇺🇸/🇬🇧 Tiếng Anh Local</span>
+                <Badge variant="outline" className="text-[10px] py-0 px-1 font-normal bg-emerald-50 text-emerald-700 border-emerald-300">
+                  Local
+                </Badge>
+              </DropdownMenuItem>
+
+              <DropdownMenuItem
+                onClick={() => {
+                  setLocalAudioEngineId('kokoro')
+                  setLocalAudioDefaultVoiceId('zf_xiaobei')
+                  setLocalAudioTargetCardIds(selectedCards)
+                  setIsLocalAudioModalOpen(true)
+                }}
+                className="flex items-center justify-between font-medium cursor-pointer"
+              >
+                <span>🇨🇳 Tiếng Trung Local</span>
+                <Badge variant="outline" className="text-[10px] py-0 px-1 font-normal bg-emerald-50 text-emerald-700 border-emerald-300">
+                  Local
+                </Badge>
+              </DropdownMenuItem>
+
+              <DropdownMenuItem
+                onClick={() => {
+                  setLocalAudioEngineId('kokoro')
+                  setLocalAudioDefaultVoiceId('ef_dora')
+                  setLocalAudioTargetCardIds(selectedCards)
+                  setIsLocalAudioModalOpen(true)
+                }}
+                className="flex items-center justify-between font-medium cursor-pointer"
+              >
+                <span>🇪🇸 Tiếng Tây Ban Nha</span>
+                <Badge variant="outline" className="text-[10px] py-0 px-1 font-normal bg-emerald-50 text-emerald-700 border-emerald-300">
+                  Local
+                </Badge>
+              </DropdownMenuItem>
+
+              <DropdownMenuItem
+                onClick={() => {
+                  setLocalAudioEngineId('kokoro')
+                  setLocalAudioDefaultVoiceId('ff_siwis')
+                  setLocalAudioTargetCardIds(selectedCards)
+                  setIsLocalAudioModalOpen(true)
+                }}
+                className="flex items-center justify-between font-medium cursor-pointer"
+              >
+                <span>🇫🇷 Tiếng Pháp Local</span>
+                <Badge variant="outline" className="text-[10px] py-0 px-1 font-normal bg-emerald-50 text-emerald-700 border-emerald-300">
+                  Local
+                </Badge>
+              </DropdownMenuItem>
+
+              <DropdownMenuItem
+                onClick={() => {
+                  setLocalAudioEngineId('kokoro')
+                  setLocalAudioDefaultVoiceId('if_sara')
+                  setLocalAudioTargetCardIds(selectedCards)
+                  setIsLocalAudioModalOpen(true)
+                }}
+                className="flex items-center justify-between font-medium cursor-pointer"
+              >
+                <span>🇮🇹 Tiếng Ý Local</span>
+                <Badge variant="outline" className="text-[10px] py-0 px-1 font-normal bg-emerald-50 text-emerald-700 border-emerald-300">
+                  Local
+                </Badge>
+              </DropdownMenuItem>
+
+              <DropdownMenuItem
+                onClick={() => {
+                  setLocalAudioEngineId('kokoro')
+                  setLocalAudioDefaultVoiceId('pf_dora')
+                  setLocalAudioTargetCardIds(selectedCards)
+                  setIsLocalAudioModalOpen(true)
+                }}
+                className="flex items-center justify-between font-medium cursor-pointer"
+              >
+                <span>🇧🇷 Tiếng Bồ Đào Nha</span>
                 <Badge variant="outline" className="text-[10px] py-0 px-1 font-normal bg-emerald-50 text-emerald-700 border-emerald-300">
                   Local
                 </Badge>

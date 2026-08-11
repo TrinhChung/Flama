@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { toast } from 'sonner'
 import { updateCardFieldValuesInSessions } from '@/features/study/session/sessionStore'
 import { flamaAudioClient } from '@/lib/flamaAudioClient'
@@ -194,7 +194,9 @@ export function useLocalAudioEngine(options: {
 
   const isKokoro = engineId === 'kokoro'
 
-  const targetCardIds = selectedCardIds.length > 0 ? selectedCardIds : activeCardId ? [activeCardId] : []
+  const targetCardIds = useMemo(() => {
+    return selectedCardIds.length > 0 ? selectedCardIds : activeCardId ? [activeCardId] : []
+  }, [selectedCardIds, activeCardId])
 
   // Service & Pairing State
   const [serviceStatus, setServiceStatus] = useState<'checking' | 'offline' | 'online'>('checking')
@@ -425,41 +427,7 @@ export function useLocalAudioEngine(options: {
     toast.info('Đã khôi phục thông số âm thanh mặc định.')
   }
 
-  const checkHealthAndInit = async () => {
-    setServiceStatus('checking')
-    try {
-      await flamaAudioClient.getHealth()
-      setServiceStatus('online')
-
-      const token = flamaAudioClient.getToken()
-      if (!token) {
-        setIsPairingApproved(false)
-        handleStartPairing()
-        return
-      }
-
-      try {
-        const voiceList = await flamaAudioClient.getVoices(engineId)
-        if (voiceList.length > 0) {
-          setVoices(voiceList)
-        }
-        setIsPairingApproved(true)
-      } catch {
-        setIsPairingApproved(false)
-        handleStartPairing()
-      }
-    } catch {
-      setServiceStatus('offline')
-    }
-  }
-
-  useEffect(() => {
-    if (isOpen) {
-      checkHealthAndInit()
-    }
-  }, [isOpen, engineId])
-
-  const handleStartPairing = async () => {
+  const handleStartPairing = useCallback(async () => {
     try {
       const challenge = await flamaAudioClient.startPairing(window.location.origin)
       setPairingChallengeId(challenge.pairing_id)
@@ -502,7 +470,41 @@ export function useLocalAudioEngine(options: {
     } catch {
       toast.error('Không thể gửi yêu cầu ghép nối tới local service.')
     }
-  }
+  }, [engineId])
+
+  const checkHealthAndInit = useCallback(async () => {
+    setServiceStatus('checking')
+    try {
+      await flamaAudioClient.getHealth()
+      setServiceStatus('online')
+
+      const token = flamaAudioClient.getToken()
+      if (!token) {
+        setIsPairingApproved(false)
+        handleStartPairing()
+        return
+      }
+
+      try {
+        const voiceList = await flamaAudioClient.getVoices(engineId)
+        if (voiceList.length > 0) {
+          setVoices(voiceList)
+        }
+        setIsPairingApproved(true)
+      } catch {
+        setIsPairingApproved(false)
+        handleStartPairing()
+      }
+    } catch {
+      setServiceStatus('offline')
+    }
+  }, [engineId, handleStartPairing])
+
+  useEffect(() => {
+    if (isOpen) {
+      checkHealthAndInit()
+    }
+  }, [isOpen, checkHealthAndInit])
 
   const handlePreviewAudio = async () => {
     setIsPreviewing(true)
