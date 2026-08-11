@@ -38,22 +38,34 @@ public class VoicevoxEngineInstaller
         {
             var e1 = Path.Combine(flamaDir, "run.exe");
             var e2 = Path.Combine(flamaDir, "voicevox_engine.exe");
+            var e3 = Path.Combine(flamaDir, "voicevox_engine", "run.exe");
+            var e4 = Path.Combine(flamaDir, "vv-engine", "run.exe");
             if (File.Exists(e1)) return e1;
             if (File.Exists(e2)) return e2;
+            if (File.Exists(e3)) return e3;
+            if (File.Exists(e4)) return e4;
         }
 
         // 2. Check Standard Windows Standalone VOICEVOX installation paths
+        // NOTE: Must prioritize 'run.exe' inside 'vv-engine' or 'voicevox_engine' subfolders.
+        // DO NOT launch 'voicevox.exe' directly as that is the Electron GUI Desktop app!
         var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
         var programFilesX86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
 
         var candidatePaths = new[]
         {
+            // Headless Engine Runner paths (Pure HTTP API Backend - NO GUI Window)
+            Path.Combine(localAppData, "Programs", "VOICEVOX", "vv-engine", "run.exe"),
+            Path.Combine(localAppData, "Programs", "VOICEVOX", "voicevox_engine", "run.exe"),
             Path.Combine(localAppData, "Programs", "VOICEVOX", "run.exe"),
-            Path.Combine(localAppData, "Programs", "VOICEVOX", "voicevox.exe"),
+            Path.Combine(localAppData, "VOICEVOX", "vv-engine", "run.exe"),
+            Path.Combine(localAppData, "VOICEVOX", "voicevox_engine", "run.exe"),
             Path.Combine(localAppData, "VOICEVOX", "run.exe"),
+            Path.Combine(programFiles, "VOICEVOX", "vv-engine", "run.exe"),
+            Path.Combine(programFiles, "VOICEVOX", "voicevox_engine", "run.exe"),
             Path.Combine(programFiles, "VOICEVOX", "run.exe"),
-            Path.Combine(programFiles, "VOICEVOX", "voicevox.exe"),
+            Path.Combine(programFilesX86, "VOICEVOX", "vv-engine", "run.exe"),
             Path.Combine(programFilesX86, "VOICEVOX", "run.exe")
         };
 
@@ -109,7 +121,8 @@ public class VoicevoxEngineInstaller
                 Arguments = "--host 127.0.0.1 --port 50021",
                 WorkingDirectory = workDir,
                 UseShellExecute = false,
-                CreateNoWindow = true
+                CreateNoWindow = true,
+                WindowStyle = ProcessWindowStyle.Hidden
             };
 
             _engineProcess = Process.Start(startInfo);
@@ -194,7 +207,8 @@ public class VoicevoxEngineInstaller
                 Arguments = "--host 127.0.0.1 --port 50021",
                 WorkingDirectory = workDir,
                 UseShellExecute = false,
-                CreateNoWindow = true
+                CreateNoWindow = true,
+                WindowStyle = ProcessWindowStyle.Hidden
             };
 
             _engineProcess = Process.Start(startInfo);

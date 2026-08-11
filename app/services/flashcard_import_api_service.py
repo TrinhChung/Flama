@@ -44,6 +44,13 @@ def build_import_options(
         admin_mode=admin_mode,
     )
     deck_map = {deck.id: deck for deck in decks}
+    from models.note import Note
+    notes_count_by_deck = dict(
+        db.session.query(Note.deck_id, db.func.count(Note.id))
+        .filter(Note.deck_id.in_([d.id for d in decks]))
+        .group_by(Note.deck_id)
+        .all()
+    )
     deck_options = [
         {
             "id": deck.id,
@@ -51,6 +58,7 @@ def build_import_options(
             "path": flashcards_import_repository.deck_path_label(deck, deck_map),
             "note_type_id": deck.note_type_id,
             "parent_id": deck.parent_id,
+            "notes_count": notes_count_by_deck.get(deck.id, 0),
         }
         for deck in decks
     ]

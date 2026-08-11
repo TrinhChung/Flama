@@ -8,74 +8,14 @@ from app.services import flashcards_share
 from app.services.flashcard_import import ImportValidationError, load_import_session
 from models import db
 from models.deck import Deck
-from models.flashcard import DeckInstall, Note, NoteType
+from models.flashcard import Note, NoteType
 
 
 def collect_accessible_decks_for_import(*, user_id: int, admin_mode: bool) -> list[Deck]:
-    if admin_mode:
-        return (
-            Deck.query.filter(
-                Deck.deleted_at.is_(None),
-                db.or_(
-                    Deck.owner_user_id == user_id,
-                    Deck.owner_user_id.is_(None),
-                )
-            )
-            .order_by(
-                Deck.parent_id.isnot(None),
-                Deck.position.asc(),
-                Deck.created_at.asc(),
-                Deck.id.asc(),
-            )
-            .all()
-        )
+    """Thin wrapper – delegates to the canonical deck visibility query."""
+    from app.repositories.deck_tree_query import collect_accessible_decks
+    return collect_accessible_decks(user_id=user_id, admin_mode=admin_mode)
 
-    installs = DeckInstall.query.filter_by(user_id=user_id).all()
-    installed_root_ids = {int(row.local_deck_id) for row in installs if row.local_deck_id}
-    owned_deck_ids = {
-        int(row[0])
-        for row in db.session.query(Deck.id)
-        .filter(
-            Deck.owner_user_id == user_id,
-            Deck.deleted_at.is_(None),
-        )
-        .all()
-        if row and row[0] is not None
-    }
-    initial_visible_ids = installed_root_ids | owned_deck_ids
-    if not initial_visible_ids:
-        return []
-
-    visible_ids: set[int] = set()
-    frontier: set[int] = set(initial_visible_ids)
-    while frontier:
-        current_ids = {deck_id for deck_id in frontier if deck_id not in visible_ids}
-        if not current_ids:
-            break
-        visible_ids.update(current_ids)
-        child_rows = (
-            db.session.query(Deck.id)
-            .filter(
-                Deck.parent_id.in_(current_ids),
-                Deck.deleted_at.is_(None),
-            )
-            .all()
-        )
-        frontier = {int(row[0]) for row in child_rows if row and row[0] is not None}
-
-    return (
-        Deck.query.filter(
-            Deck.id.in_(visible_ids),
-            Deck.deleted_at.is_(None),
-        )
-        .order_by(
-            Deck.parent_id.isnot(None),
-            Deck.position.asc(),
-            Deck.created_at.asc(),
-            Deck.id.asc(),
-        )
-        .all()
-    )
 
 
 def deck_path_label(deck_obj: Deck, deck_map: dict[int, Deck]) -> str:

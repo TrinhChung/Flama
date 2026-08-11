@@ -15,6 +15,7 @@ import {
   XCircle,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { resolveBackendUrl } from '@/config/env'
 import { updateCardFieldValuesInSessions } from '@/features/study/session/sessionStore'
 import { flamaAudioClient } from '@/lib/flamaAudioClient'
 import { apiRequest } from '@/shared/api/client'
@@ -42,6 +43,8 @@ type LocalAudioDialogProps = {
   activeCardId?: string | null
   availableFieldNames?: string[]
   noteTypeName?: string
+  engineId?: 'voicevox' | 'kokoro'
+  defaultVoiceId?: string
   onSuccess?: () => void
 }
 
@@ -86,6 +89,35 @@ const FALLBACK_VOICEVOX_SPEAKERS: VoiceOption[] = [
   { id: '20', speakerName: 'もち子さん (Mochiko-san)', styleName: 'ノーマル', label: 'もち子さん (Mochiko) - ノーマル' },
   { id: '21', speakerName: '剣崎雌雄 (Kenzaki Shiu)', styleName: 'ノーマル', label: '剣崎雌雄 (Shiu) - ノーマル' },
 ]
+
+const FALLBACK_KOKORO_SPEAKERS: VoiceOption[] = [
+  { id: 'af_bella', speakerName: 'Bella', styleName: 'English (US) Female', label: 'Bella [English (US)] - Female' },
+  { id: 'af_sarah', speakerName: 'Sarah', styleName: 'English (US) Female', label: 'Sarah [English (US)] - Female' },
+  { id: 'am_adam', speakerName: 'Adam', styleName: 'English (US) Male', label: 'Adam [English (US)] - Male' },
+  { id: 'am_michael', speakerName: 'Michael', styleName: 'English (US) Male', label: 'Michael [English (US)] - Male' },
+  { id: 'bf_emma', speakerName: 'Emma', styleName: 'English (UK) Female', label: 'Emma [English (UK)] - Female' },
+  { id: 'bm_george', speakerName: 'George', styleName: 'English (UK) Male', label: 'George [English (UK)] - Male' },
+  { id: 'zf_xiaobei', speakerName: 'Xiaobei', styleName: 'Mandarin Chinese Female', label: 'Xiaobei [Mandarin Chinese] - Female' },
+  { id: 'zm_yunjian', speakerName: 'Yunjian', styleName: 'Mandarin Chinese Male', label: 'Yunjian [Mandarin Chinese] - Male' },
+  { id: 'ef_dora', speakerName: 'Dora', styleName: 'Spanish Female', label: 'Dora [Spanish] - Female' },
+  { id: 'ff_siwis', speakerName: 'Siwis', styleName: 'French Female', label: 'Siwis [French] - Female' },
+]
+
+function resolveLocaleFromVoiceId(voiceId: string): string {
+  if (!voiceId) return 'en-US'
+  const prefix = voiceId[0].toLowerCase()
+  switch (prefix) {
+    case 'a': return 'en-US'
+    case 'b': return 'en-GB'
+    case 'z': return 'zh-CN'
+    case 'e': return 'es-ES'
+    case 'f': return 'fr-FR'
+    case 'h': return 'hi-IN'
+    case 'i': return 'it-IT'
+    case 'p': return 'pt-BR'
+    default: return 'en-US'
+  }
+}
 
 function formatVoiceOption(v: Partial<VoiceDescriptor> & { id?: string; label?: string }): VoiceOption {
   const id = String(v.voice_id || v.id || '')
@@ -190,8 +222,12 @@ export function LocalAudioDialog({
   activeCardId,
   availableFieldNames = ['Reading', 'Word', 'Meaning', 'Audio'],
   noteTypeName,
+  engineId = 'voicevox',
+  defaultVoiceId,
   onSuccess,
 }: LocalAudioDialogProps) {
+  const isKokoro = engineId === 'kokoro'
+
   // Target Card Resolution
   const targetCardIds =
     selectedCardIds.length > 0 ? selectedCardIds : activeCardId ? [activeCardId] : []
@@ -203,7 +239,12 @@ export function LocalAudioDialog({
 
   // Voice Selection State
   const [voices, setVoices] = useState<VoiceDescriptor[]>([])
-  const [selectedVoiceId, setSelectedVoiceId] = useState<string>('3')
+  const [selectedVoiceId, setSelectedVoiceId] = useState<string>(defaultVoiceId || (isKokoro ? 'af_bella' : '3'))
+
+  useEffect(() => {
+    setSelectedVoiceId(defaultVoiceId || (isKokoro ? 'af_bella' : '3'))
+    setVoices([])
+  }, [engineId, isKokoro, defaultVoiceId])
 
   // Dynamic Fields Resolution State
   const [dynamicFields, setDynamicFields] = useState<string[]>(availableFieldNames)
@@ -293,21 +334,69 @@ export function LocalAudioDialog({
 
   // Formatted Voice Options List & Grouped Mapping
   const voiceOptions = useMemo<VoiceOption[]>(() => {
+    let rawOptions: VoiceOption[] = []
     if (voices.length > 0) {
-      return voices.map((v) => formatVoiceOption(v))
+      rawOptions = voices.map((v) => formatVoiceOption(v))
+    } else {
+      rawOptions = isKokoro ? FALLBACK_KOKORO_SPEAKERS : FALLBACK_VOICEVOX_SPEAKERS
     }
-    return FALLBACK_VOICEVOX_SPEAKERS
-  }, [voices])
+
+    // Filter Kokoro voice options to only show the selected language group from the dropdown
+    if (isKokoro && defaultVoiceId) {
+      const targetPrefix = defaultVoiceId[0].toLowerCase()
+      rawOptions = rawOptions.filter((opt) => {
+        const prefix = opt.id ? opt.id[0].toLowerCase() : 'a'
+        if (targetPrefix === 'a' || targetPrefix === 'b') {
+          return prefix === 'a' || prefix === 'b'
+        }
+        return prefix === targetPrefix
+      })
+    }
+
+    return rawOptions
+  }, [voices, isKokoro, defaultVoiceId])
 
   const groupedVoiceOptions = useMemo<Record<string, VoiceOption[]>>(() => {
     const groups: Record<string, VoiceOption[]> = {}
     for (const opt of voiceOptions) {
-      const key = opt.speakerName || 'VOICEVOX'
+      let key = opt.speakerName || 'VOICEVOX'
+      if (isKokoro) {
+        // Group Kokoro voices by language category with flag icons
+        const prefix = opt.id ? opt.id[0].toLowerCase() : 'a'
+        switch (prefix) {
+          case 'a':
+            key = '🇺🇸 English (US)'
+            break
+          case 'b':
+            key = '🇬🇧 English (UK)'
+            break
+          case 'z':
+            key = '🇨🇳 Mandarin Chinese (中文)'
+            break
+          case 'e':
+            key = '🇪🇸 Spanish (Español)'
+            break
+          case 'f':
+            key = '🇫🇷 French (Français)'
+            break
+          case 'h':
+            key = '🇮🇳 Hindi (हिन्दी)'
+            break
+          case 'i':
+            key = '🇮🇹 Italian (Italiano)'
+            break
+          case 'p':
+            key = '🇧🇷 Portuguese (Português)'
+            break
+          default:
+            key = '🌐 Other Languages'
+        }
+      }
       if (!groups[key]) groups[key] = []
       groups[key].push(opt)
     }
     return groups
-  }, [voiceOptions])
+  }, [voiceOptions, isKokoro])
 
   // Ensure selectedVoiceId is valid
   useEffect(() => {
@@ -318,22 +407,24 @@ export function LocalAudioDialog({
 
   const handleInstallEngine = async () => {
     setEngineActionState('installing')
+    const targetEngine = engineId || 'voicevox'
+    const engineLabel = isKokoro ? 'Kokoro-82M' : 'VOICEVOX'
     try {
-      toast.info('Đang gửi yêu cầu tải & cài đặt VOICEVOX Engine... Vui lòng chờ trong giây lát.')
-      const res = await flamaAudioClient.installEngine('voicevox')
-      toast.success(res.message || 'Đã gửi lệnh cài đặt thành công. Đang chờ Engine khởi động...')
+      toast.info(`Đang gửi yêu cầu tải & cài đặt ${engineLabel} Engine... Vui lòng chờ trong giây lát.`)
+      const res = await flamaAudioClient.installEngine(targetEngine)
+      toast.success(res.message || `Đã gửi lệnh cài đặt ${engineLabel} thành công. Đang chờ Engine khởi động...`)
 
       let count = 0
       const timer = setInterval(async () => {
         count++
         try {
-          const voiceList = await flamaAudioClient.getVoices('voicevox')
+          const voiceList = await flamaAudioClient.getVoices(targetEngine)
           if (voiceList.length > 0) {
             clearInterval(timer)
             setVoices(voiceList)
             setEngineOffline(false)
             setEngineActionState('idle')
-            toast.success('VOICEVOX Engine đã sẵn sàng!')
+            toast.success(`${engineLabel} Engine đã sẵn sàng!`)
           }
         } catch {
           if (count >= 15) {
@@ -351,22 +442,24 @@ export function LocalAudioDialog({
 
   const handleLaunchEngine = async () => {
     setEngineActionState('launching')
+    const targetEngine = engineId || 'voicevox'
+    const engineLabel = isKokoro ? 'Kokoro-82M' : 'VOICEVOX'
     try {
-      toast.info('Đang kích hoạt VOICEVOX Engine local...')
-      const res = await flamaAudioClient.launchEngine('voicevox')
+      toast.info(`Đang kích hoạt ${engineLabel} Engine local...`)
+      const res = await flamaAudioClient.launchEngine(targetEngine)
       toast.success(res.message || 'Đã phát lệnh mở Engine.')
 
       let count = 0
       const timer = setInterval(async () => {
         count++
         try {
-          const voiceList = await flamaAudioClient.getVoices('voicevox')
+          const voiceList = await flamaAudioClient.getVoices(targetEngine)
           if (voiceList.length > 0) {
             clearInterval(timer)
             setVoices(voiceList)
             setEngineOffline(false)
             setEngineActionState('idle')
-            toast.success('VOICEVOX Engine đã kết nối!')
+            toast.success(`${engineLabel} Engine đã kết nối!`)
           }
         } catch {
           if (count >= 8) {
@@ -405,7 +498,7 @@ export function LocalAudioDialog({
       }
 
       try {
-        const voiceList = await flamaAudioClient.getVoices('voicevox')
+        const voiceList = await flamaAudioClient.getVoices(engineId)
         if (voiceList.length > 0) {
           setVoices(voiceList)
         }
@@ -423,7 +516,7 @@ export function LocalAudioDialog({
     if (isOpen) {
       checkHealthAndInit()
     }
-  }, [isOpen])
+  }, [isOpen, engineId])
 
   // Start Pairing Request
   const handleStartPairing = async () => {
@@ -436,7 +529,7 @@ export function LocalAudioDialog({
         setIsPairingApproved(true)
         toast.success('Ghép nối với Flama Audio thành công!')
         try {
-          const voiceList = await flamaAudioClient.getVoices('voicevox')
+          const voiceList = await flamaAudioClient.getVoices(engineId)
           if (voiceList.length > 0) setVoices(voiceList)
         } catch {}
         return
@@ -460,7 +553,7 @@ export function LocalAudioDialog({
             setPairingChallengeId(null)
             toast.success('Đã phê duyệt ghép nối Flama Audio!')
             try {
-              const voiceList = await flamaAudioClient.getVoices('voicevox')
+              const voiceList = await flamaAudioClient.getVoices(engineId)
               if (voiceList.length > 0) setVoices(voiceList)
             } catch {}
           }
@@ -477,7 +570,7 @@ export function LocalAudioDialog({
   const handlePreviewAudio = async () => {
     setIsPreviewing(true)
     try {
-      let sampleText = 'こんにちは'
+      let sampleText = isKokoro ? 'Hello, welcome to Flama Audio!' : 'こんにちは'
       if (targetCardIds.length > 0) {
         try {
           const detail = await apiRequest<{
@@ -491,8 +584,8 @@ export function LocalAudioDialog({
 
       const wavBlob = await flamaAudioClient.synthesize({
         request_id: `preview_${Date.now()}`,
-        engine_id: 'voicevox',
-        language: 'ja-JP',
+        engine_id: engineId,
+        language: isKokoro ? resolveLocaleFromVoiceId(selectedVoiceId) : 'ja-JP',
         voice_id: selectedVoiceId,
         text: sampleText,
         options: { speed, pitch, intonation: intonationScale, volume: volumeScale },
@@ -600,8 +693,8 @@ export function LocalAudioDialog({
       try {
         const wavBlob = await flamaAudioClient.synthesize({
           request_id: `req_${Date.now()}_${i}`,
-          engine_id: 'voicevox',
-          language: 'ja-JP',
+          engine_id: engineId,
+          language: isKokoro ? resolveLocaleFromVoiceId(selectedVoiceId) : 'ja-JP',
           voice_id: selectedVoiceId,
           text: item.sourceText,
           options: { speed, pitch, intonation: intonationScale, volume: volumeScale },
@@ -614,7 +707,7 @@ export function LocalAudioDialog({
           item.noteId,
           destinationField,
           wavBlob,
-          `voicevox_${item.cardId}.wav`,
+          `${engineId}_${item.cardId}.wav`,
         )
 
         item.status = 'done'
@@ -632,7 +725,7 @@ export function LocalAudioDialog({
     }
 
     setIsProcessing(false)
-    toast.success('Đã hoàn tất quá trình tạo audio VOICEVOX Local!')
+    toast.success(`Đã hoàn tất quá trình tạo audio ${isKokoro ? 'Kokoro Local' : 'VOICEVOX'}!`)
     if (onSuccess) onSuccess()
   }
 
@@ -644,7 +737,7 @@ export function LocalAudioDialog({
           <div className="flex items-center justify-between gap-2">
             <DialogTitle className="flex items-center gap-2 text-base sm:text-lg font-bold text-foreground">
               <Volume2 className="size-4 sm:size-5 text-primary shrink-0" />
-              <span>Tạo âm thanh &gt; Tiếng Nhật &gt; VoiceVox Local</span>
+              <span>Tạo âm thanh &gt; {isKokoro ? 'Đa ngôn ngữ Offline' : 'Tiếng Nhật Offline'}</span>
             </DialogTitle>
             <div className="flex items-center gap-2">
               <Button
@@ -667,7 +760,7 @@ export function LocalAudioDialog({
             </div>
           </div>
           <DialogDescription className="text-xs text-muted-foreground mt-1">
-            Tổng hợp giọng đọc VOICEVOX local trực tiếp không giới hạn thông qua Flama Audio Desktop.
+            Tổng hợp giọng phát âm tự nhiên trực tiếp không cần mạng Internet thông qua ứng dụng Flama Audio Desktop.
           </DialogDescription>
         </DialogHeader>
 
@@ -697,20 +790,20 @@ export function LocalAudioDialog({
           {serviceStatus === 'checking' && (
             <div className="flex items-center gap-2 p-3.5 bg-muted/50 rounded-xl text-xs">
               <LoaderCircle className="size-4 animate-spin text-primary" />
-              Đang kiểm tra kết nối Flama Audio Service tại http://127.0.0.1:4791...
+              Đang kết nối tới ứng dụng phát âm Flama Audio Desktop...
             </div>
           )}
 
           {serviceStatus === 'offline' && (
             <Alert variant="destructive" className="rounded-xl">
               <AlertCircle className="size-4" />
-              <AlertTitle className="font-bold">Không thể kết nối Flama Audio Service</AlertTitle>
+              <AlertTitle className="font-bold">Chưa mở ứng dụng phát âm Flama Audio</AlertTitle>
               <AlertDescription className="text-xs">
-                Vui lòng tải và cài đặt ứng dụng <strong>Flama Audio Desktop</strong> (đang chạy tại port 4791) rồi bấm nút thử lại.
+                Vui lòng khởi động <strong>Flama Audio Desktop</strong> trên máy tính của bạn, hoặc tải bản portable nếu chưa có.
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   <Button size="sm" variant="default" className="h-7 text-xs bg-primary text-primary-foreground font-medium" asChild>
-                    <a href="/api/download/flama-audio" target="_blank" rel="noopener noreferrer" download>
-                      <Download className="size-3 mr-1.5" /> Tải Bộ Cài Đặt Flama Audio (Windows)
+                    <a href={resolveBackendUrl('/api/download/flama-audio')} target="_blank" rel="noopener noreferrer" download>
+                      <Download className="size-3 mr-1.5" /> Tải Flama Audio Portable (.exe)
                     </a>
                   </Button>
                   <Button size="sm" variant="outline" className="h-7 text-xs" asChild>
@@ -729,17 +822,17 @@ export function LocalAudioDialog({
           {serviceStatus === 'online' && !isPairingApproved && (
             <Alert variant="default" className="rounded-xl border-amber-500/30 bg-amber-500/10 text-amber-900 dark:text-amber-200">
               <Cpu className="size-4 text-amber-600" />
-              <AlertTitle className="font-bold">Cần phê duyệt ghép nối Flama Audio</AlertTitle>
+              <AlertTitle className="font-bold">Chờ xác nhận kết nối</AlertTitle>
               <AlertDescription className="text-xs text-amber-800 dark:text-amber-300">
-                Bấm nút dưới đây để gửi yêu cầu ghép nối, sau đó bấm <strong>Phê duyệt</strong> trên cửa sổ Flama Audio Desktop.
+                Bấm nút bên dưới để gửi yêu cầu kết nối, sau chọn <strong>Phê duyệt (Approve)</strong> trên phần mềm Flama Audio Desktop.
                 <div className="mt-2.5">
                   <Button size="sm" className="h-7 text-xs" onClick={handleStartPairing} disabled={Boolean(pairingChallengeId)}>
                     {pairingChallengeId ? (
                       <>
-                        <LoaderCircle className="size-3 mr-1 animate-spin" /> Đang chờ duyệt...
+                        <LoaderCircle className="size-3 mr-1 animate-spin" /> Đang chờ xác nhận...
                       </>
                     ) : (
-                      'Yêu cầu ghép nối'
+                      'Kết nối ngay'
                     )}
                   </Button>
                 </div>
@@ -750,32 +843,32 @@ export function LocalAudioDialog({
           {engineOffline && (
             <Alert variant="default" className="rounded-xl border-amber-500/30 bg-amber-500/10 text-amber-900 dark:text-amber-200">
               <Cpu className="size-4 text-amber-600" />
-              <AlertTitle className="font-bold">VOICEVOX Engine chưa được bật trên máy tính</AlertTitle>
+              <AlertTitle className="font-bold">Giọng đọc Tiếng Nhật chưa sẵn sàng</AlertTitle>
               <AlertDescription className="text-xs text-amber-800 dark:text-amber-300">
-                Để tạo giọng đọc tiếng Nhật local, bạn cần bật VOICEVOX Engine (port 50021). Nếu máy bạn chưa có phần mềm VOICEVOX, hãy chọn tự động tải &amp; cài đặt bên dưới.
+                Bộ giọng đọc tiếng Nhật offline chưa sẵn sàng trên máy của bạn. Vui lòng bấm nút bên dưới để tự động tải về và thiết lập.
                 
                 {engineActionState === 'installing' && (
                   <div className="flex items-center gap-2 mt-3 p-2.5 bg-amber-500/15 rounded-lg font-medium text-amber-950 dark:text-amber-100">
                     <LoaderCircle className="size-4 animate-spin text-amber-600" />
-                    Đang tải &amp; cài đặt VOICEVOX Engine (vui lòng chờ trong giây lát)...
+                    Đang tải bộ giọng đọc tiếng Nhật (vui lòng chờ trong giây lát)...
                   </div>
                 )}
 
                 {engineActionState === 'launching' && (
                   <div className="flex items-center gap-2 mt-3 p-2.5 bg-amber-500/15 rounded-lg font-medium text-amber-950 dark:text-amber-100">
                     <LoaderCircle className="size-4 animate-spin text-amber-600" />
-                    Đang quét &amp; kích hoạt VOICEVOX Engine local (port 50021)...
+                    Đang khởi động giọng đọc tiếng Nhật...
                   </div>
                 )}
 
                 <div className="flex flex-wrap gap-2 mt-2.5">
                   <Button size="sm" className="h-7 text-xs bg-amber-600 hover:bg-amber-700 text-white" onClick={handleInstallEngine} disabled={engineActionState !== 'idle'}>
                     {engineActionState === 'installing' ? <LoaderCircle className="size-3 mr-1 animate-spin" /> : null}
-                    Tải &amp; Tự động cài VOICEVOX Engine
+                    Tải &amp; Tự động cài đặt giọng đọc
                   </Button>
                   <Button size="sm" variant="outline" className="h-7 text-xs border-amber-300 text-amber-800 dark:text-amber-200" onClick={handleLaunchEngine} disabled={engineActionState !== 'idle'}>
                     {engineActionState === 'launching' ? <LoaderCircle className="size-3 mr-1 animate-spin" /> : null}
-                    Mở VOICEVOX Engine đã có
+                    Khởi động giọng đọc đã cài
                   </Button>
                 </div>
               </AlertDescription>
@@ -845,7 +938,7 @@ export function LocalAudioDialog({
           <div className="grid gap-4 sm:grid-cols-2 pt-4 border-t border-border/40">
             <div className="space-y-1.5 sm:col-span-2">
               <Label htmlFor="local-character" className="text-xs font-semibold text-foreground">
-                Nhân vật / Giọng đọc (VOICEVOX Local Engine)
+                Nhân vật / Giọng đọc ({isKokoro ? 'Kokoro Engine - Đa Ngôn Ngữ' : 'VOICEVOX Engine - Tiếng Nhật'})
               </Label>
               <NativeSelect
                 id="local-character"

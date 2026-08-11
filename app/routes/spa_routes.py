@@ -37,6 +37,8 @@ def authenticated_spa_page(item_id: str | None = None):
 
 @spa_routes_bp.get("/import")
 @spa_routes_bp.get("/flashcards/import")
+@spa_routes_bp.get("/sync")
+@spa_routes_bp.get("/flashcards/sync")
 @login_required
 def creator_spa_page():
     if not is_creator_user(current_user):
@@ -59,4 +61,3 @@ def admin_spa_page(order_id: str | None = None, attempt_id: str | None = None):
         flash("Bạn không có quyền truy cập khu vực quản trị.", "warning")
         return redirect(url_for("main.dashboard"))
     return serve_react_spa()
-

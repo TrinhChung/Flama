@@ -100,6 +100,28 @@ public static class ApiEndpoints
             return Results.Problem("Không thể tìm thấy file chạy VOICEVOX Engine.");
         });
 
+        // POST /v1/engines/kokoro/install
+        endpoints.MapPost("/v1/engines/kokoro/install", async (Flama.Audio.Infrastructure.Services.KokoroEngineInstaller installer) =>
+        {
+            var success = await installer.InstallEngineAsync();
+            if (success)
+            {
+                return Results.Ok(new { status = "installed", message = "Tải và cấu hình Kokoro-82M Engine thành công!" });
+            }
+            return Results.Problem("Không thể tải hoặc cài đặt Kokoro-82M Engine.");
+        });
+
+        // POST /v1/engines/kokoro/launch
+        endpoints.MapPost("/v1/engines/kokoro/launch", (Flama.Audio.Infrastructure.Services.KokoroEngineInstaller installer) =>
+        {
+            if (installer.IsEngineInstalled())
+            {
+                return Results.Ok(new { status = "ready", message = "Kokoro-82M Engine sẵn sàng." });
+            }
+            return Results.Problem("Kokoro-82M Engine chưa được cài đặt.");
+        });
+
+
         // GET /v1/voices
         endpoints.MapGet("/v1/voices", async (string? engine_id, IEngineRouter router) =>
         {
