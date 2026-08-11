@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 from flask_login import current_user, login_required
 
 from app.api.common import admin_required, error_response, json_object
@@ -83,11 +83,19 @@ def update_deck(deck_id: int):
 @decks_bp.delete("/<int:deck_id>")
 @login_required
 def delete_deck(deck_id: int):
+    purge = request.args.get("purge") == "true"
+    if purge and not is_admin_user(current_user):
+        return error_response(
+            "FORBIDDEN",
+            "Only administrators can purge decks.",
+            status=403,
+        )
     try:
         mode = deck_api_service.delete_deck(
             deck_id=deck_id,
             user_id=current_user.id,
             admin_mode=is_admin_user(current_user),
+            purge=purge,
         )
     except deck_api_service.DeckApiError as exc:
         return _service_error(exc)

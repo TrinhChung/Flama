@@ -214,10 +214,13 @@ def patch_note_type(note_type_id: str):
 @login_required
 def delete_note_type(note_type_id: str):
     try:
+        purge = request.args.get("purge") == "true"
         return jsonify(
             flashcard_content_service.delete_note_type(
                 user_id=current_user.id,
                 note_type_id=note_type_id,
+                purge=purge,
+                is_admin=is_admin_user(current_user),
             )
         )
     except flashcard_content_service.ContentApiError as exc:
