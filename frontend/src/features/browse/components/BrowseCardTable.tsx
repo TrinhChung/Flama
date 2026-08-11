@@ -1,0 +1,230 @@
+import { Checkbox } from '@/components/ui/checkbox'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from '@/components/ui/pagination'
+import { NativeSelect } from '@/components/ui/native-select'
+import { ArrowUpDown } from 'lucide-react'
+import type { useBrowseState } from '../hooks/useBrowseState'
+import { statusLabel, statusVariant } from '../utils/formatter'
+
+interface BrowseCardTableProps {
+  browse: ReturnType<typeof useBrowseState>
+}
+
+export function BrowseCardTable({ browse }: BrowseCardTableProps) {
+  const {
+    cardsQuery,
+    cards,
+    selectedCards,
+    setSelectedCards,
+    activeCardId,
+    setActiveCardId,
+    page,
+    setPage,
+    perPage,
+    handlePerPageChange,
+    allSelected,
+    handleToggleSelectAllCards,
+    setMobileTab,
+    sortBy,
+    setSortBy,
+    sortDir,
+    setSortDir,
+  } = browse
+
+  if (cardsQuery.isPending) {
+    return (
+      <div className="flex-1 flex items-center justify-center p-8 bg-background">
+        <div className="flex flex-col items-center gap-2">
+          <svg className="animate-spin h-8 w-8 text-primary" viewBox="0 0 24 24" fill="none">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+          </svg>
+          <span className="text-xs text-muted-foreground font-semibold">Đang tìm thẻ...</span>
+        </div>
+      </div>
+    )
+  }
+
+  const toggleSort = (field: string) => {
+    if (sortBy === field) {
+      setSortDir(sortDir === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortBy(field)
+      setSortDir('asc')
+    }
+    setPage(1)
+  }
+
+  const renderSortIcon = (field: string) => {
+    if (sortBy !== field) return <ArrowUpDown className="size-3 opacity-40 shrink-0" />
+    return (
+      <span className="text-primary font-bold text-xs shrink-0">
+        {sortDir === 'asc' ? '▲' : '▼'}
+      </span>
+    )
+  }
+
+  const total = cardsQuery.data?.total || 0
+  const pages = cardsQuery.data?.pages || 1
+
+  return (
+    <div className="flex-1 flex flex-col min-h-0 bg-background overflow-hidden relative">
+      {/* Scrollable cards list table */}
+      <div className="flex-1 overflow-auto">
+        <Table className="text-xs border-collapse">
+          <TableHeader className="sticky top-0 bg-muted/65 z-10 backdrop-blur-sm border-b">
+            <TableRow>
+              <TableHead className="w-10 text-center px-2">
+                <Checkbox checked={allSelected} onCheckedChange={handleToggleSelectAllCards} />
+              </TableHead>
+              <TableHead className="w-48 cursor-pointer select-none" onClick={() => toggleSort('word')}>
+                <div className="flex items-center gap-1">Từ vựng {renderSortIcon('word')}</div>
+              </TableHead>
+              <TableHead className="w-48 cursor-pointer select-none" onClick={() => toggleSort('reading')}>
+                <div className="flex items-center gap-1">Đọc {renderSortIcon('reading')}</div>
+              </TableHead>
+              <TableHead className="min-w-64 cursor-pointer select-none" onClick={() => toggleSort('meaning')}>
+                <div className="flex items-center gap-1">Ý nghĩa {renderSortIcon('meaning')}</div>
+              </TableHead>
+              <TableHead className="w-24 text-center cursor-pointer select-none" onClick={() => toggleSort('status')}>
+                <div className="flex items-center justify-center gap-1">Trạng thái {renderSortIcon('status')}</div>
+              </TableHead>
+              <TableHead className="w-32 cursor-pointer select-none" onClick={() => toggleSort('due')}>
+                <div className="flex items-center gap-1">Đến hạn {renderSortIcon('due')}</div>
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {cards.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={6} className="text-center py-10 text-xs text-muted-foreground italic">
+                  Không tìm thấy thẻ nào
+                </TableCell>
+              </TableRow>
+            ) : (
+              cards.map((card) => {
+                const isSelected = selectedCards.includes(card.card_id)
+                const isActive = activeCardId === card.card_id
+
+                return (
+                  <TableRow
+                    key={card.card_id}
+                    className={`hover:bg-muted/40 cursor-pointer transition-all border-b ${
+                      isActive ? 'bg-primary/5 hover:bg-primary/10 border-l-2 border-l-primary' : ''
+                    }`}
+                    onClick={() => {
+                      setActiveCardId(card.card_id)
+                      setMobileTab('editor')
+                    }}
+                  >
+                    <TableCell className="text-center px-2" onClick={(e) => e.stopPropagation()}>
+                      <Checkbox
+                        checked={isSelected}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            setSelectedCards((prev) => [...prev, card.card_id])
+                          } else {
+                            setSelectedCards((prev) => prev.filter((id) => id !== card.card_id))
+                          }
+                        }}
+                      />
+                    </TableCell>
+                    <TableCell className="font-semibold text-foreground truncate max-w-48">{card.word}</TableCell>
+                    <TableCell className="text-muted-foreground truncate max-w-48">{card.reading}</TableCell>
+                    <TableCell className="text-muted-foreground truncate max-w-72 leading-relaxed">{card.meaning}</TableCell>
+                    <TableCell className="text-center">
+                      <Badge variant={statusVariant(card.status)} className="text-[10px] px-1.5 py-0 font-medium">
+                        {statusLabel(card.status)}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{card.due_label}</TableCell>
+                  </TableRow>
+                )
+              })
+            )}
+          </TableBody>
+        </Table>
+      </div>
+
+      {/* Pagination Footer */}
+      {total > 0 && (
+        <div className="shrink-0 flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-border/60 bg-muted/10 p-3 mt-auto">
+          <div className="flex items-center gap-4 text-[11px] sm:text-xs text-muted-foreground font-semibold">
+            <span>
+              Tổng số: <strong>{total}</strong> thẻ
+            </span>
+            <div className="flex items-center gap-1.5">
+              <span>Hiển thị:</span>
+              <NativeSelect
+                value={perPage}
+                onChange={(e) => handlePerPageChange(Number(e.target.value))}
+                className="h-7 py-0 pl-1.5 pr-5 text-[11px] rounded-md font-semibold border-muted/80 bg-background"
+              >
+                <option value={20}>20 thẻ</option>
+                <option value={50}>50 thẻ</option>
+                <option value={100}>100 thẻ</option>
+                <option value={200}>200 thẻ</option>
+                <option value={500}>500 thẻ</option>
+              </NativeSelect>
+            </div>
+          </div>
+
+          {pages > 1 && (
+            <Pagination className="w-auto select-none mx-0">
+              <PaginationContent className="gap-1 sm:gap-1.5">
+                <PaginationItem>
+                  <PaginationPrevious
+                    className={`h-8 px-2 sm:px-3 text-xs rounded-xl ${page === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}`}
+                    onClick={() => setPage(Math.max(1, page - 1))}
+                  />
+                </PaginationItem>
+
+                {Array.from({ length: Math.min(5, pages) }, (_, i) => {
+                  let pageNum = page
+                  if (page <= 3) {
+                    pageNum = i + 1
+                  } else if (page >= pages - 2) {
+                    pageNum = pages - 4 + i
+                  } else {
+                    pageNum = page - 2 + i
+                  }
+
+                  if (pageNum <= 0 || pageNum > pages) return null
+
+                  return (
+                    <PaginationItem key={pageNum}>
+                      <PaginationLink
+                        isActive={page === pageNum}
+                        onClick={() => setPage(pageNum)}
+                        className={`h-8 w-8 text-xs rounded-xl cursor-pointer ${
+                          page === pageNum ? 'bg-primary text-primary-foreground font-bold shadow-xs' : 'hover:bg-muted/50'
+                        }`}
+                      >
+                        {pageNum}
+                      </PaginationLink>
+                    </PaginationItem>
+                  )
+                })}
+
+                <PaginationItem>
+                  <PaginationNext
+                    className={`h-8 px-2 sm:px-3 text-xs rounded-xl ${page === pages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}`}
+                    onClick={() => setPage(Math.min(pages, page + 1))}
+                  />
+                </PaginationItem>
+              </PaginationContent>
+            </Pagination>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}

@@ -6,7 +6,7 @@ import {
   indexCardDecksByNote,
   indexImportCardResults,
   mapAnkiDeckPath,
-} from './ankiSyncEngine'
+} from './ankiSyncHelpers'
 
 describe('ankiSyncEngine helpers', () => {
   it('quotes deck and note type values for exact Anki searches', () => {

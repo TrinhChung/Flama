@@ -99,17 +99,17 @@ const OrdersPage = lazy(() =>
   })),
 )
 const AdminUsersPage = lazy(() =>
-  import('./features/admin/pages/AdminPages').then((module) => ({
+  import('./features/admin/pages/AdminUsersPage').then((module) => ({
     default: module.AdminUsersPage,
   })),
 )
 const AdminPaymentsPage = lazy(() =>
-  import('./features/admin/pages/AdminPages').then((module) => ({
+  import('./features/admin/pages/AdminPaymentsPage').then((module) => ({
     default: module.AdminPaymentsPage,
   })),
 )
 const AdminTtsPage = lazy(() =>
-  import('./features/admin/pages/AdminPages').then((module) => ({
+  import('./features/admin/pages/AdminTtsPage').then((module) => ({
     default: module.AdminTtsPage,
   })),
 )
@@ -134,12 +134,12 @@ const AdminImageLibraryPage = lazy(() =>
   })),
 )
 const MarketplacePublishDeckPage = lazy(() =>
-  import('./features/marketplace/pages/MarketplacePublishPages').then((module) => ({
+  import('./features/marketplace/pages/MarketplacePublishDeckPage').then((module) => ({
     default: module.MarketplacePublishDeckPage,
   })),
 )
 const MarketplacePublishNoteTypePage = lazy(() =>
-  import('./features/marketplace/pages/MarketplacePublishPages').then((module) => ({
+  import('./features/marketplace/pages/MarketplacePublishNoteTypePage').then((module) => ({
     default: module.MarketplacePublishNoteTypePage,
   })),
 )
