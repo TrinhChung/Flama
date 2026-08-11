@@ -7,7 +7,8 @@
 ## 📋 Yêu cầu hệ thống (Prerequisites)
 
 - **Hệ điều hành:** Windows 10 / Windows 11 (x64)
-- **Runtime / SDK:** [.NET 8.0 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) hoặc `.NET 8 Desktop Runtime`
+- **Người dùng:** không cần cài .NET Runtime vì bản portable là self-contained.
+- **Máy build/development:** cần [.NET 8.0 SDK](https://dotnet.microsoft.com/download/dotnet/8.0).
 - **VOICEVOX Engine (Tùy chọn):** 
   - Đã cài đặt và chạy VOICEVOX Engine tại `http://127.0.0.1:50021`.
   - Nếu chưa bật VOICEVOX Engine local, ứng dụng sẽ tự động sử dụng danh sách nhân vật mặc định (Zundamon, Shikikoin Metan, Kasukabe Tsumugi...) để đáp ứng kết nối.
@@ -24,29 +25,27 @@ Mở Terminal tại thư mục gốc dự án `nihongo/`:
 dotnet run --project flama-audio/src/Flama.Audio.App/Flama.Audio.App.csproj
 ```
 
-### 2. Build Single-File Executable & Bộ cài Windows Installer (`FlamaAudio-Setup.exe`)
+### 2. Build Single-File Portable Executable
 
-Để build ứng dụng thành file chạy đơn duy nhất (Single-File Self-Contained) hoặc bộ cài đặt Windows:
+Để build ứng dụng thành một file chạy portable duy nhất (Single-File Self-Contained):
 
 ```bash
 # Build Single-File Executable (nén gọn trong 1 file .exe duy nhất, loại bỏ file debug PDB & DLL phụ)
 dotnet publish flama-audio/src/Flama.Audio.App/Flama.Audio.App.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=none -p:DebugSymbols=false -o flama-audio/publish/singlefile
-
-# Đóng gói Windows Installer bằng Inno Setup Compiler (iscc)
-iscc flama-audio/installer/FlamaAudioSetup.iss
 ```
 
 Sau khi hoàn tất:
-- File bộ cài đặt Windows Installer nằm tại: `flama-audio/publish/installer/FlamaAudio-Setup.exe`
-- File thực thi Portable đơn lẻ nằm tại: `flama-audio/publish/installer/FlamaAudio-Portable.exe`
+- File build gốc nằm tại: `flama-audio/publish/singlefile/Flama.Audio.App.exe`.
+- Workflow CD đổi tên bản phát hành thành `FlamaAudio-Portable.exe`.
+- Installer tạm thời không được build hoặc phát hành.
 
 ### 3. Tự động hóa Continuous Delivery (CD)
 
-Mỗi khi có commit đẩy lên nhánh `master` thuộc thư mục `flama-audio/` hoặc tạo Git Release Tag (`v*`), workflow GitHub Actions `.github/workflows/flama-audio-release.yml` sẽ tự động build, kiểm thử và phát hành bộ cài `FlamaAudio-Setup.exe` lên GitHub Releases để người dùng tải trực tiếp từ Web UI.
+Mỗi khi có commit đẩy lên nhánh `master` thuộc thư mục `flama-audio/`, workflow GitHub Actions `.github/workflows/flama-audio-release.yml` sẽ tự động checkout submodule, build, kiểm thử và copy duy nhất `FlamaAudio-Portable.exe` vào `/var/lib/flama/downloads/` trên server. Web UI tải file qua `/api/download/flama-audio`.
 
 ## 🔐 Hướng dẫn Kết nối & Ghép nối (Pairing Flow)
 
-1. Khởi chạy ứng dụng **Flama Audio Desktop** (`Flama.Audio.App.exe`).
+1. Tải và khởi chạy ứng dụng **Flama Audio Desktop** (`FlamaAudio-Portable.exe`).
    - Cửa sổ ứng dụng sẽ hiển thị trạng thái `Local Endpoint: http://127.0.0.1:4791`.
 2. Khởi chạy **Flama Web** (`http://localhost:5173` hoặc server Flask).
 3. Mở trang **Browse (Từ vựng)** trên Flama Web, chọn một hoặc nhiều thẻ từ vựng.
@@ -79,7 +78,7 @@ flama-audio/
 ├── Flama.Audio.sln                  # Visual Studio Solution File
 ├── .gitignore                        # Cấu hình bỏ qua bin, obj, publish, state local
 ├── README.md                         # Tài liệu hướng dẫn setup & kiến trúc
-├── publish/                          # Thư mục chứa bản build thực thi Flama.Audio.App.exe
+├── publish/                          # Thư mục build; release chỉ chứa FlamaAudio-Portable.exe
 ├── src/
 │   ├── Flama.Audio.Core/             # Interfaces (ITtsEngineAdapter, IPairingManager), Models (TtsRequest, VoiceDescriptor)
 │   ├── Flama.Audio.Infrastructure/   # Lưu trữ state local (%LOCALAPPDATA%\Flama\Audio\), PairingManager, EngineRouter

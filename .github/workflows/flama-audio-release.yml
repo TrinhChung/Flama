@@ -1,35 +1,36 @@
-name: Build & Release Flama Audio
+name: Build & Deploy Flama Audio
 
 on:
   push:
     branches:
       - master
     paths:
-      - 'flama-audio/**'
-      - '.github/workflows/flama-audio-release.yml'
-    tags:
-      - 'flama-audio-v*'
-      - 'v*'
+      - "flama-audio/**"
+      - ".github/workflows/flama-audio-release.yml"
   workflow_dispatch:
 
+concurrency:
+  group: flama-audio-production
+  cancel-in-progress: true
+
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  build-and-release:
+  build-and-deploy:
     runs-on: windows-latest
+    environment: Flama
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '8.0.x'
-
-      - name: Install Inno Setup
-        run: choco install innosetup -y
+          dotnet-version: "8.0.x"
 
       - name: Restore Dependencies
         run: dotnet restore flama-audio/Flama.Audio.sln
@@ -54,53 +55,74 @@ jobs:
             -p:DebugSymbols=false `
             -o flama-audio/publish/singlefile
 
-      - name: Compile Windows Installer (Inno Setup)
+      - name: Prepare Portable Release
         run: |
-          $env:PATH = "$env:PATH;C:\Program Files (x86)\Inno Setup 6;C:\ProgramData\chocolatey\bin"
-          iscc flama-audio/installer/FlamaAudioSetup.iss
+          $sourcePath = "flama-audio/publish/singlefile/Flama.Audio.App.exe"
+          $releaseDirectory = "flama-audio/publish/release"
+          $releasePath = Join-Path $releaseDirectory "FlamaAudio-Portable.exe"
 
-      - name: Prepare Release Binaries
-        run: |
-          if (-not (Test-Path flama-audio\publish\installer)) { New-Item -ItemType Directory -Force -Path flama-audio\publish\installer }
-          Copy-Item flama-audio\publish\singlefile\Flama.Audio.App.exe flama-audio\publish\installer\FlamaAudio-Portable.exe
+          if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) {
+            throw "Published executable was not found at $sourcePath"
+          }
 
-      - name: Upload Build Artifacts
+          New-Item -ItemType Directory -Force -Path $releaseDirectory | Out-Null
+          Copy-Item -LiteralPath $sourcePath -Destination $releasePath -Force
+
+          $releaseFiles = @(Get-ChildItem -LiteralPath $releaseDirectory -File)
+          if ($releaseFiles.Count -ne 1 -or $releaseFiles[0].Name -ne "FlamaAudio-Portable.exe") {
+            throw "Release directory must contain exactly FlamaAudio-Portable.exe"
+          }
+
+      - name: Upload Portable Artifact
         uses: actions/upload-artifact@v4
         with:
           name: flama-audio-win-x64
-          path: flama-audio/publish/installer/
+          path: flama-audio/publish/release/FlamaAudio-Portable.exe
+          if-no-files-found: error
           retention-days: 7
 
-      - name: Deploy Installer to Hostinger VPS Server
-        if: github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/')
+      - name: Deploy Portable EXE to Hostinger VPS
+        if: github.ref == 'refs/heads/master'
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_PORT: ${{ secrets.SSH_PORT }}
           SSH_USER: ${{ secrets.SSH_USER }}
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          REMOTE_TMP_PATH: /tmp/FlamaAudio-Portable-${{ github.run_id }}-${{ github.run_attempt }}.exe
         run: |
-          if (-not $env:SSH_HOST -or -not $env:SSH_PRIVATE_KEY) {
-            Write-Host "SSH secrets not set, skipping server upload step."
-            return
+          $requiredSecrets = @{
+            SSH_HOST = $env:SSH_HOST
+            SSH_PORT = $env:SSH_PORT
+            SSH_USER = $env:SSH_USER
+            SSH_PRIVATE_KEY = $env:SSH_PRIVATE_KEY
+          }
+          $missingSecrets = @(
+            $requiredSecrets.GetEnumerator() |
+              Where-Object { [string]::IsNullOrWhiteSpace([string]$_.Value) } |
+              ForEach-Object { $_.Key }
+          )
+          if ($missingSecrets.Count -gt 0) {
+            throw "Missing required Flama environment secrets: $($missingSecrets -join ', ')"
           }
 
-          $sshDir = "$env:USERPROFILE\.ssh"
-          if (-not (Test-Path $sshDir)) { New-Item -ItemType Directory -Force -Path $sshDir }
-          $keyFile = "$sshDir\id_ed25519"
-          [System.IO.File]::WriteAllText($keyFile, $env:SSH_PRIVATE_KEY)
+          $sshDirectory = Join-Path $env:USERPROFILE ".ssh"
+          New-Item -ItemType Directory -Force -Path $sshDirectory | Out-Null
+          $keyFile = Join-Path $sshDirectory "flama_audio_deploy_key"
+          $privateKey = $env:SSH_PRIVATE_KEY -replace "`r", ""
+          if (-not $privateKey.EndsWith("`n")) { $privateKey += "`n" }
+          [System.IO.File]::WriteAllText($keyFile, $privateKey)
 
-          scp -P $env:SSH_PORT -o StrictHostKeyChecking=no -i $keyFile flama-audio/publish/installer/FlamaAudio-Setup.exe "${env:SSH_USER}@${env:SSH_HOST}:/tmp/FlamaAudio-Setup.exe"
+          try {
+            scp -P $env:SSH_PORT -o BatchMode=yes -o StrictHostKeyChecking=accept-new -i $keyFile `
+              flama-audio/publish/release/FlamaAudio-Portable.exe `
+              "${env:SSH_USER}@${env:SSH_HOST}:$env:REMOTE_TMP_PATH"
+            if ($LASTEXITCODE -ne 0) { throw "Failed to upload FlamaAudio-Portable.exe" }
 
-          $remoteCmd = "mkdir -p /var/lib/flama/downloads && cp -f /tmp/FlamaAudio-Setup.exe /var/lib/flama/downloads/FlamaAudio-Setup.exe && chown -R flama:flama /var/lib/flama/downloads && if [ -d /opt/flama/current/static ]; then mkdir -p /opt/flama/current/static/downloads && cp -f /tmp/FlamaAudio-Setup.exe /opt/flama/current/static/downloads/FlamaAudio-Setup.exe; fi && rm -f /tmp/FlamaAudio-Setup.exe"
-          ssh -p $env:SSH_PORT -o StrictHostKeyChecking=no -i $keyFile "${env:SSH_USER}@${env:SSH_HOST}" $remoteCmd
-
-      - name: Publish GitHub Release
-        uses: softprops/action-gh-release@v2
-        if: github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/')
-        with:
-          name: Flama Audio Desktop Release
-          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'flama-audio-latest' }}
-          prerelease: false
-          files: |
-            flama-audio/publish/installer/FlamaAudio-Setup.exe
-            flama-audio/publish/installer/FlamaAudio-Portable.exe
+            $remoteCommand = "set -e; install -d -m 755 -o flama -g flama /var/lib/flama/downloads; install -m 644 -o flama -g flama '$env:REMOTE_TMP_PATH' /var/lib/flama/downloads/FlamaAudio-Portable.exe.new; mv -f /var/lib/flama/downloads/FlamaAudio-Portable.exe.new /var/lib/flama/downloads/FlamaAudio-Portable.exe; rm -f '$env:REMOTE_TMP_PATH'"
+            ssh -p $env:SSH_PORT -o BatchMode=yes -o StrictHostKeyChecking=accept-new -i $keyFile `
+              "${env:SSH_USER}@${env:SSH_HOST}" $remoteCommand
+            if ($LASTEXITCODE -ne 0) { throw "Failed to activate FlamaAudio-Portable.exe on the server" }
+          }
+          finally {
+            Remove-Item -LiteralPath $keyFile -Force -ErrorAction SilentlyContinue
+          }

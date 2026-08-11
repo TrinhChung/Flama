@@ -62,9 +62,14 @@ const InstalledDecksPage = lazy(() =>
     default: module.InstalledDecksPage,
   })),
 )
-const ImportPage = lazy(() =>
-  import('./features/import/pages/ImportPage').then((module) => ({
-    default: module.ImportPage,
+const AnkiSyncPage = lazy(() =>
+  import('./features/import/pages/AnkiSyncPage').then((module) => ({
+    default: module.AnkiSyncPage,
+  })),
+)
+const FileImportPage = lazy(() =>
+  import('./features/import/pages/FileImportPage').then((module) => ({
+    default: module.FileImportPage,
   })),
 )
 
@@ -294,12 +299,20 @@ const router = createBrowserRouter([
             element: <RequireCreator />,
             children: [
               {
+                path: 'flashcards/sync',
+                element: deferred(<AnkiSyncPage />),
+              },
+              {
+                path: 'sync',
+                element: deferred(<AnkiSyncPage />),
+              },
+              {
                 path: 'flashcards/import',
-                element: deferred(<ImportPage />),
+                element: deferred(<FileImportPage />),
               },
               {
                 path: 'import',
-                element: deferred(<ImportPage />),
+                element: deferred(<FileImportPage />),
               },
             ],
           },

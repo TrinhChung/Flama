@@ -15,6 +15,7 @@ import {
   XCircle,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { resolveBackendUrl } from '@/config/env'
 import { updateCardFieldValuesInSessions } from '@/features/study/session/sessionStore'
 import { flamaAudioClient } from '@/lib/flamaAudioClient'
 import { apiRequest } from '@/shared/api/client'
@@ -798,11 +799,11 @@ export function LocalAudioDialog({
               <AlertCircle className="size-4" />
               <AlertTitle className="font-bold">Chưa mở ứng dụng phát âm Flama Audio</AlertTitle>
               <AlertDescription className="text-xs">
-                Vui lòng khởi động phần mềm <strong>Flama Audio Desktop</strong> trên máy tính của bạn, hoặc tải về cài đặt nếu chưa có.
+                Vui lòng khởi động <strong>Flama Audio Desktop</strong> trên máy tính của bạn, hoặc tải bản portable nếu chưa có.
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   <Button size="sm" variant="default" className="h-7 text-xs bg-primary text-primary-foreground font-medium" asChild>
-                    <a href="/api/download/flama-audio" target="_blank" rel="noopener noreferrer" download>
-                      <Download className="size-3 mr-1.5" /> Tải Bộ Cài Đặt Flama Audio (Windows)
+                    <a href={resolveBackendUrl('/api/download/flama-audio')} target="_blank" rel="noopener noreferrer" download>
+                      <Download className="size-3 mr-1.5" /> Tải Flama Audio Portable (.exe)
                     </a>
                   </Button>
                   <Button size="sm" variant="outline" className="h-7 text-xs" asChild>

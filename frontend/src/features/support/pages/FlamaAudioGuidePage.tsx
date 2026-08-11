@@ -7,7 +7,6 @@ import {
   Download,
   ExternalLink,
   HelpCircle,
-  Laptop,
   RefreshCw,
   ShieldCheck,
   Sliders,
@@ -21,10 +20,12 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Page, PageHeader } from '@/shared/components/Page'
+import { resolveBackendUrl } from '@/config/env'
 import { flamaAudioClient } from '@/lib/flamaAudioClient'
 
 export function FlamaAudioGuidePage() {
   const [serviceStatus, setServiceStatus] = useState<'unchecked' | 'checking' | 'online' | 'offline'>('unchecked')
+  const downloadUrl = resolveBackendUrl('/api/download/flama-audio')
 
   const handleCheckConnection = async () => {
     setServiceStatus('checking')
@@ -46,20 +47,9 @@ export function FlamaAudioGuidePage() {
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Button asChild variant="default" size="sm" className="gap-2 font-semibold">
-              <a href="/api/download/flama-audio" target="_blank" rel="noopener noreferrer" download>
+              <a href={downloadUrl} target="_blank" rel="noopener noreferrer" download>
                 <Download className="size-4" />
-                <span>Tải Bộ Cài Đặt (FlamaAudio-Setup.exe)</span>
-              </a>
-            </Button>
-            <Button asChild variant="outline" size="sm" className="gap-1.5">
-              <a
-                href="https://github.com/TrinhChung/Flama/releases/latest/download/FlamaAudio-Portable.exe"
-                target="_blank"
-                rel="noopener noreferrer"
-                download
-              >
-                <Laptop className="size-3.5" />
-                <span>Bản Portable (.exe)</span>
+                <span>Tải Flama Audio (FlamaAudio-Portable.exe)</span>
               </a>
             </Button>
           </div>
@@ -170,7 +160,7 @@ export function FlamaAudioGuidePage() {
                 <h4 className="font-semibold text-sm">Tải &amp; Khởi chạy</h4>
               </div>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                Tải file cài đặt <code className="text-foreground font-mono">FlamaAudio-Setup.exe</code> và cài đặt hoặc chạy trực tiếp bản Portable. Cửa sổ ứng dụng sẽ hiển thị trạng thái endpoint <code className="text-primary font-mono">127.0.0.1:4791</code>.
+                Tải <code className="text-foreground font-mono">FlamaAudio-Portable.exe</code> và chạy trực tiếp, không cần cài đặt. Cửa sổ ứng dụng sẽ hiển thị trạng thái endpoint <code className="text-primary font-mono">127.0.0.1:4791</code>.
               </p>
             </div>
 

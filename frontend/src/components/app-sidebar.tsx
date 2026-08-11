@@ -58,7 +58,8 @@ export function AppSidebar({
   ]
 
   const creator: AppNavigationItem[] = [
-    { title: 'Đồng bộ Anki Desktop', url: '/import', icon: Zap },
+    { title: 'Đồng bộ Anki Desktop', url: '/sync', icon: Zap },
+    { title: 'Nhập file (CSV/TSV)', url: '/import', icon: Upload },
   ]
 
   const hasCreatorAccess =

@@ -30,7 +30,7 @@ type ImportOptionsResponse = {
   note_types?: NoteTypeOption[]
 }
 
-export function ImportPage() {
+export function AnkiSyncPage() {
   const [activeTab, setActiveTab] = useState<'decks' | 'note_types' | 'guide'>('decks')
 
   // Shared Anki Connection State
