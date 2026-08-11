@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from flask import jsonify, request, redirect, url_for, flash, render_template
+from flask import jsonify, request, redirect, url_for, flash
 from flask_login import current_user, login_required
+from app.spa import serve_react_spa
 from models import db
 from models.flashcard import *
 from models.deck import Deck
@@ -62,7 +63,7 @@ def note_editor_page():
         return redirect(url_for("main.dashboard"))
     note_types = NoteType.query.filter_by(user_id=current_user.id).order_by(NoteType.name.asc()).all()
     decks = Deck.query.filter(Deck.deleted_at.is_(None)).order_by(Deck.name.asc()).all()
-    return render_template("flashcards/note_editor.html", note_types=note_types, decks=decks)
+    return serve_react_spa()
 
 @flashcards_bp.route("/flashcards/notes")
 @login_required
@@ -131,7 +132,7 @@ def notes_list_page():
             }
         )
 
-    return render_template(
+    return serve_react_spa(
         "flashcards/notes_list.html",
         rows=rows,
         pagination=pagination,
@@ -154,7 +155,7 @@ def note_edit_page(note_id: str):
         return redirect(url_for("flashcards.notes_list_page"))
     note_type = NoteType.query.get(note.note_type_id)
     decks = Deck.query.filter(Deck.deleted_at.is_(None)).order_by(Deck.name.asc()).all()
-    return render_template(
+    return serve_react_spa(
         "flashcards/note_edit.html",
         note=note,
         note_type=note_type,

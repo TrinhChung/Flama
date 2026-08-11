@@ -4,14 +4,72 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from flask import Response, send_from_directory
+from flask import Response, current_app, jsonify, request, send_from_directory
 
 from app.settings import BASE_DIR
 
 _FRONTEND_DIST = BASE_DIR / "frontend" / "dist"
 
+_BINARY_PATH_PREFIXES = (
+    "/assets/",
+    "/static/",
+    "/media/",
+)
 
-def serve_react_spa() -> Response:
+
+def init_spa_delivery(app) -> None:
+    """Make React the only HTML surface while API adapters remain transitional."""
+
+    @app.before_request
+    def route_frontend_navigation():
+        path = request.path
+        if path == "/api" or path.startswith("/api/"):
+            return None
+
+        legacy_adapters_enabled = bool(
+            current_app.config.get("LEGACY_HTTP_ADAPTERS_ENABLED", False)
+        )
+        if "/api/" in path:
+            if legacy_adapters_enabled:
+                return None
+            return _legacy_adapter_removed()
+
+        if request.method == "GET":
+            if path.startswith(_BINARY_PATH_PREFIXES):
+                return None
+            if path == "/support-donation/qr":
+                return None
+            if path.startswith("/admin/image-library/") and path.endswith("/preview"):
+                return None
+            if path.startswith(
+                (
+                    "/vocabulary/topic/",
+                    "/vocabulary/study/topic/",
+                    "/vocabulary/study/lesson/",
+                    "/vocabulary/lesson/",
+                )
+            ):
+                return None
+            return serve_react_spa()
+
+        if legacy_adapters_enabled:
+            return None
+        return _legacy_adapter_removed()
+
+
+def _legacy_adapter_removed():
+    return (
+        jsonify(
+            {
+                "error": "LEGACY_ENDPOINT_REMOVED",
+                "message": "Use the canonical REST API under /api.",
+            }
+        ),
+        410,
+    )
+
+
+def serve_react_spa(*_args, **_kwargs) -> Response:
     """Return the React SPA ``index.html``.
 
     During development the Vite dev-server proxies API calls back to Flask,

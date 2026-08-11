@@ -11,12 +11,12 @@ from flask import (
     flash,
     jsonify,
     redirect,
-    render_template,
     request,
     send_file,
     url_for,
 )
 from flask_login import current_user, login_required
+from app.spa import serve_react_spa
 
 from app.repositories import image_library_repository
 from app.services import image_library_service
@@ -234,7 +234,7 @@ def admin_page():
         if edit_row is None:
             flash("Không tìm thấy image key cần chỉnh sửa.", "warning")
 
-    return render_template(
+    return serve_react_spa(
         "admin/image_library.html",
         page=assets_page,
         summary=image_library_repository.count_summary(),

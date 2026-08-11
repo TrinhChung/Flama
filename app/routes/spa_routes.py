@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from flask import Blueprint, flash, redirect, url_for
+from flask import Blueprint, redirect
 from flask_login import current_user, login_required
 
 from app.spa import serve_react_spa
@@ -14,6 +14,13 @@ spa_routes_bp = Blueprint("spa_routes", __name__)
 
 @spa_routes_bp.get("/support")
 @spa_routes_bp.get("/maintenance")
+@spa_routes_bp.get("/login")
+@spa_routes_bp.get("/register")
+@spa_routes_bp.get("/terms")
+@spa_routes_bp.get("/privacy")
+@spa_routes_bp.get("/cookies")
+@spa_routes_bp.get("/guide/tts-key")
+@spa_routes_bp.get("/guide/flama-audio")
 def public_spa_page():
     return serve_react_spa()
 
@@ -42,8 +49,7 @@ def authenticated_spa_page(item_id: str | None = None):
 @login_required
 def creator_spa_page():
     if not is_creator_user(current_user):
-        flash("Tính năng Đồng bộ Anki chỉ dành cho Nhà sáng tạo.", "warning")
-        return redirect(url_for("main.dashboard"))
+        return redirect("/dashboard")
     return serve_react_spa()
 
 
@@ -58,6 +64,5 @@ def creator_spa_page():
 def admin_spa_page(order_id: str | None = None, attempt_id: str | None = None):
     del order_id, attempt_id
     if not is_admin_user(current_user):
-        flash("Bạn không có quyền truy cập khu vực quản trị.", "warning")
-        return redirect(url_for("main.dashboard"))
+        return redirect("/dashboard")
     return serve_react_spa()

@@ -56,7 +56,7 @@ class SpaRouteTests(unittest.TestCase):
 
     def test_public_deep_links_serve_spa(self):
         with patch(
-            "app.routes.spa_routes.serve_react_spa",
+            "app.spa.serve_react_spa",
             side_effect=self._shell,
         ):
             for path in ("/support", "/maintenance"):
@@ -65,7 +65,7 @@ class SpaRouteTests(unittest.TestCase):
                     self.assertEqual(response.status_code, 200)
                     self.assertEqual(response.data, b"react-shell")
 
-    def test_private_canonical_deep_links_require_login_then_serve_spa(self):
+    def test_canonical_deep_links_serve_spa_before_api_auth(self):
         for path in (
             "/browse",
             "/study",
@@ -78,40 +78,15 @@ class SpaRouteTests(unittest.TestCase):
             "/marketplace/note-types",
         ):
             with self.subTest(path=path):
-                response = self.client.get(path)
-                self.assertEqual(response.status_code, 302)
-                self.assertIn("/login", response.headers["Location"])
-
-        self._login()
-        with patch(
-            "app.routes.spa_routes.serve_react_spa",
-            side_effect=self._shell,
-        ):
-            for path in (
-                "/browse",
-                "/study",
-                "/installed-decks",
-                "/marketplace/decks",
-                "/marketplace/decks/deck-1",
-                "/marketplace/note-types",
-                "/marketplace/note-types/type-1",
-            ):
-                with self.subTest(path=path):
+                with patch("app.spa.serve_react_spa", side_effect=self._shell):
                     response = self.client.get(path)
                     self.assertEqual(response.status_code, 200)
                     self.assertEqual(response.data, b"react-shell")
 
-    def test_creator_deep_links_require_creator_role(self):
+    def test_creator_deep_links_leave_permission_to_rest_api(self):
         self._login()
-        for path in ("/sync", "/flashcards/sync", "/import", "/flashcards/import"):
-            with self.subTest(path=path):
-                response = self.client.get(path)
-                self.assertEqual(response.status_code, 302)
-                self.assertIn("/dashboard", response.headers["Location"])
-
-        self._assign_creator_role()
         with patch(
-            "app.routes.spa_routes.serve_react_spa",
+            "app.spa.serve_react_spa",
             side_effect=self._shell,
         ):
             for path in ("/sync", "/flashcards/sync", "/import", "/flashcards/import"):
@@ -120,11 +95,12 @@ class SpaRouteTests(unittest.TestCase):
                     self.assertEqual(response.status_code, 200)
                     self.assertEqual(response.data, b"react-shell")
 
-    def test_non_admin_cannot_open_admin_tts_deep_link(self):
+    def test_admin_deep_link_serves_shell_and_api_enforces_permission(self):
         self._login()
-        response = self.client.get("/admin/tts")
-        self.assertEqual(response.status_code, 302)
-        self.assertIn("/dashboard", response.headers["Location"])
+        with patch("app.spa.serve_react_spa", side_effect=self._shell):
+            response = self.client.get("/admin/tts")
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.data, b"react-shell")
 
 
 if __name__ == "__main__":

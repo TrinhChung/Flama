@@ -1,7 +1,8 @@
 """Authentication related routes."""
 
-from flask import Blueprint, flash, redirect, render_template, request, url_for
+from flask import Blueprint, flash, redirect, request, url_for
 from flask_login import current_user, login_required, login_user, logout_user
+from app.spa import serve_react_spa
 
 from app.services import login_rate_limit_service
 from app.services.user_roles import ensure_default_user_roles
@@ -18,7 +19,6 @@ def register():
         return redirect(url_for("main.dashboard"))
 
     if request.method == "GET":
-        from app.spa import serve_react_spa
         return serve_react_spa()
 
     if request.method == "POST":
@@ -29,22 +29,22 @@ def register():
 
         if not email or not username or not password:
             flash("Vui lòng điền đầy đủ thông tin.", "warning")
-            return render_template("register.html")
+            return serve_react_spa()
 
         if password != confirm_password:
             flash("Mật khẩu xác nhận không trùng khớp.", "danger")
-            return render_template("register.html")
+            return serve_react_spa()
 
         if username.lower() == email:
             flash("Tên đăng nhập không được trùng với email.", "danger")
-            return render_template("register.html")
+            return serve_react_spa()
 
         existing_user = User.query.filter(
             (User.email == email) | (User.username == username)
         ).first()
         if existing_user:
             flash("Email hoặc tên đăng nhập đã tồn tại.", "danger")
-            return render_template("register.html")
+            return serve_react_spa()
 
         from app.services.auth_service import register_user_and_commit
         register_user_and_commit(email, username, password)
@@ -52,7 +52,7 @@ def register():
         flash("Đăng ký thành công! Vui lòng đăng nhập.", "success")
         return redirect(url_for("auth.login"))
 
-    return render_template("register.html")
+    return serve_react_spa()
 
 
 @auth_bp.route("/login", methods=["GET", "POST"])
@@ -61,7 +61,6 @@ def login():
         return redirect(url_for("main.dashboard"))
 
     if request.method == "GET":
-        from app.spa import serve_react_spa
         return serve_react_spa()
 
     if request.method == "POST":
@@ -71,7 +70,7 @@ def login():
 
         if not email or not password:
             flash("Vui lòng nhập email và mật khẩu.", "warning")
-            return render_template("login.html")
+            return serve_react_spa()
 
         lockout_remaining = login_rate_limit_service.get_lockout_remaining(
             email=email,
@@ -82,19 +81,19 @@ def login():
                 f"Bạn đã thử đăng nhập quá nhiều lần. Vui lòng thử lại sau khoảng {lockout_remaining} giây.",
                 "danger",
             )
-            return render_template("login.html"), 429
+            return serve_react_spa(), 429
 
         user = User.query.filter_by(email=email).first()
 
         if not user or not user.check_password(password):
             login_rate_limit_service.register_failure(email=email, remote_addr=remote_addr)
             flash("Thông tin đăng nhập không chính xác.", "danger")
-            return render_template("login.html")
+            return serve_react_spa()
 
         if not login_user(user):
             login_rate_limit_service.register_failure(email=email, remote_addr=remote_addr)
             flash("Tài khoản của bạn đã bị vô hiệu hóa.", "danger")
-            return render_template("login.html")
+            return serve_react_spa()
         login_rate_limit_service.register_success(email=email, remote_addr=remote_addr)
         flash("Đăng nhập thành công!", "success")
         next_url = resolve_safe_next_url(
@@ -103,7 +102,7 @@ def login():
         )
         return redirect(next_url)
 
-    return render_template("login.html")
+    return serve_react_spa()
 
 
 @auth_bp.route("/logout", methods=["POST"])

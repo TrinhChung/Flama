@@ -6,8 +6,9 @@ from pathlib import Path
 
 UTC = timezone.utc
 
-from flask import Blueprint, abort, current_app, flash, jsonify, redirect, render_template, request, send_file, url_for
+from flask import Blueprint, abort, current_app, flash, jsonify, redirect, request, send_file, url_for
 from flask_login import current_user, login_required
+from app.spa import serve_react_spa
 
 from app.services.anki_scheduler import (
     _day_index as scheduler_day_index,
@@ -53,7 +54,7 @@ def serve_react_assets(filename: str):
 
 
 def _render_mcp_tokens_page(*, generated_mcp_token: dict | None = None):
-    return render_template(
+    return serve_react_spa(
         "mcp_tokens.html",
         mcp_generated_token=generated_mcp_token,
         mcp_access_tokens=mcp_access_token_service.list_token_summaries(user_id=current_user.id),
@@ -102,7 +103,7 @@ def support_donation_page():
 
 @main_bp.route("/support-donation/result")
 def support_donation_result_page():
-    return render_template("support_donation_result.html")
+    return serve_react_spa()
 
 
 @main_bp.route("/support-donation/qr")

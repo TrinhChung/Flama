@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
-import re
 import unittest
 
 from app import create_app
@@ -83,16 +82,11 @@ class McpAccessTokenTests(unittest.TestCase):
             follow_redirects=True,
         )
 
-    def _extract_token(self, html: str) -> str:
-        match = re.search(r"flama_mcp_[A-Za-z0-9_-]+", html)
-        self.assertIsNotNone(match)
-        return str(match.group(0))
-
     def _generate_token(self) -> str:
         self._login()
-        response = self.client.post("/settings/mcp-tokens/generate")
-        self.assertEqual(response.status_code, 200)
-        return self._extract_token(response.get_data(as_text=True))
+        response = self.client.post("/api/mcp-tokens")
+        self.assertEqual(response.status_code, 201)
+        return str((response.get_json() or {}).get("item", {}).get("token") or "")
 
     def _mcp_payload(self) -> dict:
         return {
@@ -114,20 +108,14 @@ class McpAccessTokenTests(unittest.TestCase):
     def test_generate_token_shows_plaintext_once(self):
         self._login()
 
-        response = self.client.post("/settings/mcp-tokens/generate")
-        self.assertEqual(response.status_code, 200)
-        html = response.get_data(as_text=True)
-        token = self._extract_token(html)
+        response = self.client.post("/api/mcp-tokens")
+        self.assertEqual(response.status_code, 201)
+        token = str((response.get_json() or {}).get("item", {}).get("token") or "")
+        self.assertTrue(token.startswith("flama_mcp_"))
 
-        self.assertIn("Copy token này ngay bây giờ", html)
-        self.assertIn("Generate MCP token", html)
-        self.assertIn("MCP Access Tokens", html)
-
-        dashboard_response = self.client.get("/dashboard")
-        self.assertEqual(dashboard_response.status_code, 200)
-        dashboard_html = dashboard_response.get_data(as_text=True)
-        self.assertNotIn(token, dashboard_html)
-        self.assertNotIn("MCP Access Token", dashboard_html)
+        list_response = self.client.get("/api/mcp-tokens")
+        self.assertEqual(list_response.status_code, 200)
+        self.assertNotIn(token, list_response.get_data(as_text=True))
 
     def test_non_admin_dashboard_hides_mcp_link(self):
         self._login_regular()
@@ -144,25 +132,21 @@ class McpAccessTokenTests(unittest.TestCase):
         response = self.client.get("/settings/mcp-tokens")
 
         self.assertEqual(response.status_code, 200)
-        html = response.get_data(as_text=True)
-        self.assertIn("MCP Access Tokens", html)
-        self.assertIn("Generate MCP token", html)
+        self.assertIn(b'<div id="root"></div>', response.data)
 
     def test_non_admin_cannot_open_mcp_token_page(self):
         self._login_regular()
 
         response = self.client.get("/settings/mcp-tokens", follow_redirects=False)
-
-        self.assertEqual(response.status_code, 302)
-        self.assertIn("/dashboard", response.headers.get("Location", ""))
+        self.assertEqual(response.status_code, 200)
+        api_response = self.client.get("/api/mcp-tokens")
+        self.assertEqual(api_response.status_code, 403)
 
     def test_non_admin_cannot_generate_mcp_token(self):
         self._login_regular()
 
-        response = self.client.post("/settings/mcp-tokens/generate", follow_redirects=False)
-
-        self.assertEqual(response.status_code, 302)
-        self.assertIn("/dashboard", response.headers.get("Location", ""))
+        response = self.client.post("/api/mcp-tokens")
+        self.assertEqual(response.status_code, 403)
         with self.app.app_context():
             rows = McpAccessToken.query.filter_by(user_id=self.other_user_id).all()
             self.assertEqual(rows, [])
@@ -295,8 +279,8 @@ class McpAccessTokenTests(unittest.TestCase):
             self.assertIsNotNone(row)
             token_id = int(row.id)
 
-        revoke_response = self.client.post(f"/settings/mcp-tokens/{token_id}/revoke", follow_redirects=True)
-        self.assertEqual(revoke_response.status_code, 200)
+        revoke_response = self.client.delete(f"/api/mcp-tokens/{token_id}")
+        self.assertEqual(revoke_response.status_code, 204)
 
         response = self.app.test_client().post(
             "/api/mcp",

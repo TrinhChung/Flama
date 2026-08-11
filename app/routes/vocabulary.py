@@ -17,12 +17,12 @@ from flask import (
     flash,
     jsonify,
     redirect,
-    render_template,
     send_file,
     request,
     url_for,
 )
 from flask_login import current_user, login_required
+from app.spa import serve_react_spa
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.repositories import vocabulary_repository as vocabulary_ctrl
@@ -860,7 +860,7 @@ def study_deck(deck_id: int):
 
     user_decks = Deck.query.filter(Deck.deleted_at.is_(None)).order_by(Deck.name.asc()).all()
     user_decks_payload = [{"id": d.id, "name": d.name} for d in user_decks]
-    return render_template(
+    return serve_react_spa(
         "vocabulary_study.html",
         selected_deck=root_deck,
         user_decks=user_decks,

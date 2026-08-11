@@ -1,5 +1,5 @@
 from typing import Optional
-from flask import Flask, flash, jsonify, redirect, request, url_for
+from flask import Flask, jsonify, redirect, request
 
 from models import db
 
@@ -9,29 +9,30 @@ from .cli import register_cli_commands
 from .extensions import login_manager, migrate
 from .routes import register_blueprints
 from .settings import BASE_DIR, build_app_config
+from .spa import init_spa_delivery
 from .startup import run_startup_maintenance
 from .startup_schema import ensure_backward_compatible_schema
-from .template_formatters import format_number, format_price_display, format_vnd
 
 
 def create_app(config: Optional[dict] = None) -> Flask:
     """Application factory that sets up Flask, database, and authentication."""
     app = Flask(
         __name__,
-        template_folder=str(BASE_DIR / "templates"),
+        template_folder=None,
         static_folder=str(BASE_DIR / "static"),
     )
     app.config.update(build_app_config(config))
+    app.config.setdefault(
+        "LEGACY_HTTP_ADAPTERS_ENABLED",
+        bool(app.config.get("TESTING")),
+    )
 
     db.init_app(app)
     migrate.init_app(app, db)
     login_manager.init_app(app)
+    init_spa_delivery(app)
     init_csrf_protection(app)
     init_cors(app)
-    app.jinja_env.filters["format_number"] = format_number
-    app.jinja_env.filters["format_vnd"] = format_vnd
-    app.jinja_env.filters["format_price_display"] = format_price_display
-    app.jinja_env.globals["support_contact_email"] = app.config.get("SUPPORT_CONTACT_EMAIL", "")
 
     from models.user import User
     from models.mcp_access_token import McpAccessToken  # noqa: F401  # register model
@@ -103,18 +104,18 @@ def create_app(config: Optional[dict] = None) -> Flask:
 
     @login_manager.unauthorized_handler
     def handle_unauthorized():
-        if request.path.startswith("/api/"):
-            return (
-                jsonify(
-                    {
-                        "error": "AUTHENTICATION_REQUIRED",
-                        "message": "Authentication is required.",
-                    }
-                ),
-                401,
-            )
-        flash(login_manager.login_message, login_manager.login_message_category)
-        return redirect(url_for(login_manager.login_view, next=request.url))
+        if not request.path.startswith("/api/"):
+            next_url = request.full_path.rstrip("?")
+            return redirect(f"/login?next={next_url}")
+        return (
+            jsonify(
+                {
+                    "error": "AUTHENTICATION_REQUIRED",
+                    "message": "Authentication is required.",
+                }
+            ),
+            401,
+        )
 
     register_blueprints(app)
     register_cli_commands(app)
@@ -131,50 +132,37 @@ def create_app(config: Optional[dict] = None) -> Flask:
         """Handle 404 errors."""
         if request.path.startswith("/api/"):
             return jsonify({"error": "NOT_FOUND", "message": "Resource not found."}), 404
-        from flask import render_template
-        return render_template('error.html', error_code=404, error_message='Trang không tìm thấy'), 404
+        from app.spa import serve_react_spa
+
+        return serve_react_spa()
 
     @app.errorhandler(500)
     def internal_server_error(error):
         """Handle 500 errors."""
-        if request.path.startswith("/api/"):
-            _rollback_failed_session()
-            return jsonify({"error": "INTERNAL_ERROR", "message": "Internal server error."}), 500
-        from flask import render_template
         _rollback_failed_session()
-        return render_template('error.html', error_code=500, error_message='Lỗi máy chủ'), 500
+        return jsonify({"error": "INTERNAL_ERROR", "message": "Internal server error."}), 500
 
     @app.errorhandler(403)
     def forbidden(error):
         """Handle 403 errors."""
-        if request.path.startswith("/api/"):
-            return jsonify({"error": "FORBIDDEN", "message": "Access is forbidden."}), 403
-        from flask import render_template
-        return render_template('error.html', error_code=403, error_message='Truy cập bị từ chối'), 403
+        return jsonify({"error": "FORBIDDEN", "message": "Access is forbidden."}), 403
 
     @app.errorhandler(Exception)
     def handle_exception(error):
         """Handle unexpected exceptions."""
-        if request.path.startswith("/api/"):
-            from werkzeug.exceptions import HTTPException
-            if isinstance(error, HTTPException):
-                status = int(error.code or 500)
-                code = str(error.name or "HTTP_ERROR").upper().replace(" ", "_")
-                return jsonify({"error": code, "message": str(error.description)}), status
-            import logging
-            _rollback_failed_session()
-            logging.getLogger(__name__).error(
-                "Unhandled API exception: %s",
-                error,
-                exc_info=True,
-            )
-            return jsonify({"error": "INTERNAL_ERROR", "message": "Internal server error."}), 500
-        from flask import render_template
+        from werkzeug.exceptions import HTTPException
+        if isinstance(error, HTTPException):
+            status = int(error.code or 500)
+            code = str(error.name or "HTTP_ERROR").upper().replace(" ", "_")
+            return jsonify({"error": code, "message": str(error.description)}), status
         import logging
         _rollback_failed_session()
-        logger = logging.getLogger(__name__)
-        logger.error(f"Unhandled exception: {error}", exc_info=True)
-        return render_template('error.html', error_code=500, error_message='Lỗi máy chủ'), 500
+        logging.getLogger(__name__).error(
+            "Unhandled request exception: %s",
+            error,
+            exc_info=True,
+        )
+        return jsonify({"error": "INTERNAL_ERROR", "message": "Internal server error."}), 500
 
     run_startup_maintenance(
         app,

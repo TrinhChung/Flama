@@ -536,7 +536,7 @@ class PaymentOrderFlowTests(unittest.TestCase):
             },
         )
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"marketplace-payment-result-root", response.data)
+        self.assertIn(b'<div id="root"></div>', response.data)
 
 
 if __name__ == "__main__":

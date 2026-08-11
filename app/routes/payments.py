@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from flask import Blueprint, jsonify, render_template, request
+from flask import Blueprint, jsonify, request
 from flask_login import current_user, login_required
+from app.spa import serve_react_spa
 
 from app.validators.payment_input import (
     normalize_order_create_payload,
@@ -29,7 +30,7 @@ def _api_error(
 @payments_bp.route("/payments/marketplace-result", methods=["GET"])
 @login_required
 def marketplace_payment_result_page():
-    return render_template(
+    return serve_react_spa(
         "payments/marketplace_result.html",
         payment_order_id=(request.args.get("payment_order_id") or "").strip(),
         payment_product_type=(request.args.get("payment_product_type") or "").strip(),

@@ -378,9 +378,9 @@ Tối thiểu phải kiểm tra:
 | Phase 1 - Chia REST god-file | Completed |
 | Phase 2 - Tách V1 khỏi legacy route | Completed |
 | Phase 3 - Content management | Completed |
-| Phase 4 - Learning runtime | Planned |
-| Phase 5 - Marketplace, billing và admin | Planned |
-| Phase 6 - Consumer cutover và deprecation | Planned |
+| Phase 4 - Learning runtime | Completed |
+| Phase 5 - Marketplace, billing và admin | Completed |
+| Phase 6 - Consumer cutover và deprecation | Completed (test-only compatibility adapters retained) |
 
 ## 11. Implementation log
 
@@ -493,10 +493,12 @@ Tối thiểu phải kiểm tra:
   regression test đã pass; AST scan không còn statement trực tiếp nằm sau terminal
   statement trong cùng block.
 
-### Công việc còn lại trước khi migration hoàn tất
+### 2026-08-11 - Hoàn tất REST-only production cutover
 
-- Thêm V1 và cut over React cho study/TTS learning runtime.
-- Thêm V1 và cut over marketplace/change-request/payment mutations và phần admin
-  còn lại.
-- Chạy một release cycle với legacy usage logging trước khi thêm sunset header và
-  xóa endpoint cũ.
+- Flask không còn cấu hình Jinja template; mọi route giao diện GET được phục vụ bởi
+  React SPA.
+- Toàn bộ template Jinja cùng CSS/JavaScript trang legacy đã được xóa. Chỉ giữ static
+  asset còn được React hoặc flashcard renderer sử dụng.
+- Canonical API tiếp tục nằm dưới `/api`; form mutation và nested legacy API trả `410`
+  trong production. Compatibility adapter chỉ còn được bật tự động trong test suite.
+- Lỗi HTTP, lỗi CSRF và yêu cầu API chưa đăng nhập đều trả JSON nhất quán.

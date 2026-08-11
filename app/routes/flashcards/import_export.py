@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from datetime import datetime
-from flask import jsonify, request, redirect, url_for, flash, render_template
+from flask import jsonify, request, redirect, url_for, flash
 from flask_login import current_user, login_required
+from app.spa import serve_react_spa
 from typing import Any
 from models import db
 from models.flashcard import *
@@ -129,7 +130,7 @@ def _render_share_deck_publish_page(
     form_state: dict[str, Any] | None = None,
 ):
     resolved_form_state = form_state or _build_deck_share_form_state(deck, existing_item)
-    return render_template(
+    return serve_react_spa(
         "flashcards/shared_deck_publish.html",
         deck=deck,
         existing_item=existing_item,
@@ -149,7 +150,7 @@ def _render_share_note_type_publish_page(
     form_state: dict[str, Any] | None = None,
 ):
     resolved_form_state = form_state or _build_note_type_share_form_state(note_type)
-    return render_template(
+    return serve_react_spa(
         "flashcards/shared_note_type_publish.html",
         note_type=note_type,
         form_state=resolved_form_state,
@@ -351,7 +352,7 @@ def flashcard_import_page():
         for note_type in note_types
     }
 
-    return render_template(
+    return serve_react_spa(
         "flashcards/import.html",
         deck_options=deck_options,
         note_type_options=note_type_options,

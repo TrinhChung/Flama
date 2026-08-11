@@ -5,8 +5,9 @@ from __future__ import annotations
 import logging
 from datetime import datetime
 from uuid import uuid4
-from flask import jsonify, request, redirect, url_for, flash, render_template, send_file, current_app, make_response
+from flask import jsonify, request, redirect, url_for, flash, send_file, current_app, make_response
 from flask_login import current_user, login_required
+from app.spa import serve_react_spa
 from sqlalchemy.exc import OperationalError
 from models import db
 from models.flashcard import *
@@ -379,7 +380,7 @@ def _study_next_payload_for_scope(
 @login_required
 def flashcard_study_page():
     decks = Deck.query.filter(Deck.deleted_at.is_(None)).order_by(Deck.name.asc()).all()
-    return render_template("flashcards/study.html", decks=decks)
+    return serve_react_spa()
 
 
 def _no_store_json(payload: dict, status: int = 200):

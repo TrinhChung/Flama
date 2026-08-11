@@ -230,6 +230,10 @@ const router = createBrowserRouter([
         path: 'support-donation',
         element: <Navigate to="/support" replace />,
       },
+      {
+        path: 'support-donation/result',
+        element: <Navigate to="/support" replace />,
+      },
       { path: 'guide/tts-key', element: deferred(<TtsKeyGuidePage />) },
       {
         path: 'guides/tts-key',

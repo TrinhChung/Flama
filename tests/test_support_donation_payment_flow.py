@@ -113,8 +113,7 @@ class SupportDonationPaymentFlowTests(unittest.TestCase):
         response = self.client.get("/support-donation/result")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"support-donation-result-root", response.data)
-        self.assertIn(b"supportDonationHistoryBtn", response.data)
+        self.assertIn(b'<div id="root"></div>', response.data)
 
     def test_anonymous_support_donation_does_not_require_login_or_create_order(self):
         with patch(

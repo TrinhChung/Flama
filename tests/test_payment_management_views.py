@@ -288,33 +288,37 @@ class PaymentManagementViewTests(unittest.TestCase):
 
     def test_user_cannot_open_other_user_order_detail(self):
         self._login(self.buyer_email)
-        response = self.client.get(f"/orders/{self.other_buyer_failed_order_id}", follow_redirects=False)
+        response = self.client.get(f"/api/orders/{self.other_buyer_failed_order_id}")
         self.assertEqual(response.status_code, 404)
 
     def test_admin_payment_pages_require_admin_access(self):
         self._login(self.buyer_email)
-        response = self.client.get("/admin/payments/orders", follow_redirects=False)
-        self.assertEqual(response.status_code, 302)
-        self.assertIn("/dashboard", response.headers.get("Location", ""))
+        response = self.client.get("/api/admin/payments/orders")
+        self.assertEqual(response.status_code, 403)
 
     def test_admin_orders_page_supports_status_and_seller_filters(self):
         self._login(self.admin_email)
         response = self.client.get(
-            "/admin/payments/orders?order_status=pending_payment&seller=creator-one",
-            follow_redirects=False,
+            "/api/admin/payments/orders?order_status=pending_payment&seller=creator-one",
         )
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"ORD-PENDING-001", response.data)
-        self.assertNotIn(b"ORD-PAID-001", response.data)
-        self.assertNotIn(b"ORD-FAILED-001", response.data)
+        order_codes = {
+            row.get("merchant_order_code")
+            for row in (response.get_json() or {}).get("items", [])
+        }
+        self.assertIn("ORD-PENDING-001", order_codes)
+        self.assertNotIn("ORD-PAID-001", order_codes)
+        self.assertNotIn("ORD-FAILED-001", order_codes)
 
     def test_admin_transaction_detail_renders_provider_refs_and_webhook_section(self):
         self._login(self.admin_email)
-        response = self.client.get(f"/admin/payments/transactions/{self.failed_attempt_id}", follow_redirects=False)
+        response = self.client.get(f"/api/admin/payments/transactions/{self.failed_attempt_id}")
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"plink-failed-001", response.data)
-        self.assertIn(b"payment.failed", response.data)
-        self.assertIn(b"Signature invalid.", response.data)
+        payload = response.get_json() or {}
+        self.assertEqual(payload.get("provider_payment_id"), "plink-failed-001")
+        serialized = str(payload)
+        self.assertIn("payment.failed", serialized)
+        self.assertIn("Signature invalid.", serialized)
 
     def test_admin_dashboard_renders_operational_sections(self):
         self._login(self.admin_email)

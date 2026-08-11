@@ -212,9 +212,12 @@ class AdminUserRoleTests(unittest.TestCase):
             user.is_disabled = True
             db.session.commit()
 
-        response = self._login("normal@example.com")
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("Tài khoản của bạn đã bị vô hiệu hóa.", response.get_data(as_text=True))
+        response = self.client.post(
+            "/api/auth/login",
+            json={"email": "normal@example.com", "password": "password"},
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.get_json()["error"], "USER_DISABLED")
 
     def test_list_users_api_supports_filters(self):
         self._login("admin@example.com")
@@ -233,8 +236,8 @@ class AdminUserRoleTests(unittest.TestCase):
     def test_non_admin_cannot_open_management_page(self):
         self._login("normal@example.com")
         response = self.client.get("/admin/users", follow_redirects=False)
-        self.assertEqual(response.status_code, 302)
-        self.assertIn("/dashboard", response.headers.get("Location", ""))
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("text/html", response.content_type)
 
 
 if __name__ == "__main__":

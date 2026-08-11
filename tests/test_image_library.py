@@ -140,7 +140,9 @@ class ImageLibraryTests(unittest.TestCase):
     def test_non_admin_cannot_manage_or_preview_assets(self):
         self._login("image-user@example.com")
         page = self.client.get("/admin/image-library", follow_redirects=False)
-        self.assertEqual(page.status_code, 302)
+        self.assertEqual(page.status_code, 200)
+        api_page = self.client.get("/api/admin/image-library")
+        self.assertEqual(api_page.status_code, 403)
 
         create = self._create_asset()
         self.assertEqual(create.status_code, 302)
