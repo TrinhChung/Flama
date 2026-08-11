@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
-import { AlertCircle, Check } from 'lucide-react'
+import { AlertCircle, Check, Loader2 } from 'lucide-react'
 import { appApi } from '@/app/api'
 import { AmbientBackground } from '@/components/ambient-background'
 import { Badge } from '@/components/ui/badge'
@@ -47,6 +47,7 @@ export function MarketplacePublishNoteTypePage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const queryParamId = searchParams.get('id') || ''
+  const isEditMode = searchParams.get('edit') === '1'
 
   const [sourceNoteTypeId, setSourceNoteTypeId] = useState<string>(queryParamId)
   const [title, setTitle] = useState('')
@@ -101,11 +102,12 @@ export function MarketplacePublishNoteTypePage() {
 
   const noteTypes = noteTypesQuery.data?.items || []
   const selectedNoteType = noteTypes.find((nt) => nt.id === sourceNoteTypeId)
+  const isSelectedInstalledCopy = Boolean(selectedNoteType?.is_marketplace_install)
   const isSelectedAlreadyPublished = Boolean(
+    !isEditMode &&
     selectedNoteType && (
       selectedNoteType.publish_status === 'published'
       || selectedNoteType.publish_status === 'unlisted'
-      || selectedNoteType.is_marketplace_install
     )
   )
   const detailData = selectedNoteTypeDetailQuery.data
@@ -114,10 +116,40 @@ export function MarketplacePublishNoteTypePage() {
 
   // Auto set title if title is empty when selectedNoteType changes
   useEffect(() => {
-    if (selectedNoteType && !title) {
+    if (!isEditMode && selectedNoteType && !title) {
       setTitle(selectedNoteType.name)
     }
-  }, [selectedNoteType, title])
+  }, [selectedNoteType, title, isEditMode])
+
+  // Populate form states from edit data
+  useEffect(() => {
+    if (isEditMode && detailData) {
+      setTitle(detailData.title || detailData.name || '')
+      setPreviewText(detailData.preview_text || '')
+      setDescription(detailData.description || '')
+      setPricingMode(detailData.pricing_mode || 'free')
+      setPriceAmountMinor(detailData.price_amount_minor || 10000)
+      setVersion(detailData.version || '1.0.0')
+      setTags(detailData.tags ? detailData.tags.join(', ') : '')
+      setChangelog(detailData.changelog || '')
+      
+      const cat = detailData.primary_category || 'Templates'
+      const noteTypeCategoryPresetsValues = NOTE_TYPE_CATEGORY_PRESETS.map(p => p.id)
+      if (noteTypeCategoryPresetsValues.includes(cat)) {
+        setPrimaryCategory(cat)
+        setCustomCategory('')
+      } else {
+        setPrimaryCategory('Custom')
+        setCustomCategory(cat)
+      }
+
+      setTaxonomyDomain(detailData.taxonomy_metadata?.domain || 'language_learning')
+      setTaxonomySubject(detailData.taxonomy_metadata?.subject || 'japanese')
+      setTaxonomyDifficulty(detailData.taxonomy_metadata?.difficulty_band || 'beginner')
+      setTaxonomyGoals(detailData.taxonomy_metadata?.learning_goals || ['vocabulary'])
+      setTaxonomyTopics(detailData.taxonomy_metadata?.primary_topics || ['meaning_recall'])
+    }
+  }, [isEditMode, detailData])
 
   const publishMutation = useMutation({
     mutationFn: () =>
@@ -138,8 +170,12 @@ export function MarketplacePublishNoteTypePage() {
         taxonomy_primary_topics: taxonomyTopics,
       }),
     onSuccess: () => {
-      toast.success('Đã xuất bản Loại thẻ lên Marketplace thành công!')
-      navigate('/marketplace/note-types')
+      toast.success(
+        isEditMode
+          ? 'Đã cập nhật cấu hình chia sẻ Loại thẻ thành công!'
+          : 'Đã xuất bản Loại thẻ lên Marketplace thành công!'
+      )
+      navigate(`/marketplace/note-types/${sourceNoteTypeId}`)
     },
     onError: (error: any) => {
       const msg = error?.message || ''
@@ -185,7 +221,7 @@ export function MarketplacePublishNoteTypePage() {
 
   const validateForm = (): boolean => {
     const errs: Record<string, string> = {}
-    if (!sourceNoteTypeId) {
+    if (!isEditMode && !sourceNoteTypeId) {
       errs.sourceNoteTypeId = 'Vui lòng chọn Loại thẻ cần xuất bản.'
     }
     if (!title.trim()) {
@@ -227,7 +263,7 @@ export function MarketplacePublishNoteTypePage() {
     return true
   }
 
-  if (noteTypesQuery.isPending) return <PageLoading label="Đang tải loại thẻ của bạn…" />
+  if (noteTypesQuery.isPending || (isEditMode && selectedNoteTypeDetailQuery.isPending)) return <PageLoading label="Đang tải dữ liệu..." />
   if (noteTypesQuery.error) return <Page><PageError error={noteTypesQuery.error} /></Page>
   if (sourceNoteTypeId && selectedNoteTypeDetailQuery.error) {
     return <Page><PageError error={selectedNoteTypeDetailQuery.error} /></Page>
@@ -254,38 +290,56 @@ export function MarketplacePublishNoteTypePage() {
               </Badge>
             </div>
             <h1 className="text-xl sm:text-2xl md:text-3xl font-black tracking-tight text-foreground">
-              Chia sẻ Loại thẻ (Note Type) vào Marketplace
+              {isEditMode ? 'Chỉnh sửa thông tin chia sẻ Loại thẻ' : 'Chia sẻ Loại thẻ (Note Type) vào Marketplace'}
             </h1>
             <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed max-w-3xl">
-              Đóng gói thiết kế mẫu thẻ (Cloze, Từ vựng song ngữ, Code Snippets, Q&A...) và cấu hình trường dữ liệu để chia sẻ cho cộng đồng.
+              {isEditMode
+                ? 'Cập nhật lại các thông tin mô tả chi tiết, phân loại học tập và giá bán của loại thẻ đã xuất bản.'
+                : 'Đóng gói thiết kế mẫu thẻ (Cloze, Từ vựng song ngữ, Code Snippets, Q&A...) và cấu hình trường dữ liệu để chia sẻ cho cộng đồng.'}
             </p>
           </div>
 
           <Button variant="outline" asChild className="h-9 px-3.5 text-xs font-semibold rounded-xl shrink-0 self-start sm:self-center">
-            <Link to="/marketplace/note-types">
-              Quay lại NoteTypes
+            <Link to={isEditMode ? `/marketplace/note-types/${sourceNoteTypeId}` : "/marketplace/note-types"}>
+              {isEditMode ? 'Quay lại chi tiết' : 'Quay lại NoteTypes'}
             </Link>
           </Button>
         </div>
       </div>
 
-      {isSelectedAlreadyPublished ? (
+      {isSelectedInstalledCopy ? (
+        <div className="rounded-2xl border border-destructive/30 bg-destructive/10 p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-in fade-in duration-200">
+          <div className="space-y-1">
+            <div className="font-bold text-sm text-destructive">
+              Note Type cài từ Marketplace không thể chia sẻ lại
+            </div>
+            <div className="text-xs text-muted-foreground">
+              Mẫu NoteType &ldquo;{selectedNoteType?.name}&rdquo; được tải về từ Marketplace nên không thể xuất bản.
+            </div>
+          </div>
+        </div>
+      ) : isSelectedAlreadyPublished ? (
         <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-in fade-in duration-200">
           <div className="space-y-1">
             <div className="font-bold text-sm text-amber-700 dark:text-amber-400">
-              {selectedNoteType?.is_marketplace_install
-                ? 'Note Type cài từ Marketplace không thể xuất bản lại'
-                : 'NoteType này đã được xuất bản trên Marketplace'}
+              NoteType này đã được xuất bản trên Marketplace
             </div>
             <div className="text-xs text-muted-foreground">
-              Mẫu NoteType &ldquo;{selectedNoteType?.name}&rdquo; đã có sẵn trên Marketplace. Mỗi mẫu NoteType chỉ xuất bản 1 lần.
+              Mẫu NoteType &ldquo;{selectedNoteType?.name}&rdquo; đã có sẵn trên Marketplace.
             </div>
           </div>
-          <Button variant="outline" size="sm" asChild className="h-9 text-xs font-bold rounded-xl shrink-0 border-amber-500/40 text-amber-600 dark:text-amber-400">
-            <Link to={`/marketplace/note-types/${selectedNoteType?.id}`}>
-              Xem mẫu thẻ trên Marketplace
-            </Link>
-          </Button>
+          <div className="flex items-center gap-2 shrink-0">
+            <Button variant="outline" size="sm" asChild className="h-9 text-xs font-bold rounded-xl border-amber-500/40 text-amber-600 dark:text-amber-400">
+              <Link to={`/marketplace/note-types/${selectedNoteType?.id}`}>
+                Xem mẫu thẻ trên Marketplace
+              </Link>
+            </Button>
+            <Button variant="default" size="sm" asChild className="h-9 text-xs font-bold rounded-xl">
+              <Link to={`/marketplace/note-types/publish?id=${selectedNoteType?.id}&edit=1`}>
+                Chỉnh sửa thông tin
+              </Link>
+            </Button>
+          </div>
         </div>
       ) : null}
 
@@ -307,7 +361,7 @@ export function MarketplacePublishNoteTypePage() {
       <form
         onSubmit={(e) => {
           e.preventDefault()
-          if (isSelectedAlreadyPublished) return
+          if (isSelectedInstalledCopy || isSelectedAlreadyPublished) return
           if (validateForm()) {
             publishMutation.mutate()
           }
@@ -327,36 +381,42 @@ export function MarketplacePublishNoteTypePage() {
             </CardHeader>
 
             <CardContent className="p-4 sm:p-6 space-y-5">
-              {/* Select Source NoteType */}
               <div className="space-y-2">
                 <Label htmlFor="source-nt" className="text-xs font-semibold flex items-center justify-between">
-                  <span>Chọn Loại thẻ cần xuất bản <span className="text-destructive">*</span></span>
+                  <span>Loại thẻ chia sẻ nguồn <span className="text-destructive">*</span></span>
                 </Label>
-                <NativeSelect
-                  id="source-nt"
-                  value={sourceNoteTypeId}
-                  onChange={(e) => {
-                    setSourceNoteTypeId(e.target.value)
-                    clearFieldError('sourceNoteTypeId')
-                    const found = noteTypes.find((nt) => nt.id === e.target.value)
-                    if (found && !title) setTitle(found.name)
-                  }}
-                  className={`h-10 text-xs sm:text-sm rounded-xl font-medium ${
-                    fieldErrors.sourceNoteTypeId ? 'border-destructive focus-visible:ring-destructive bg-destructive/5' : ''
-                  }`}
-                  required
-                >
-                  <NativeSelectOption value="">-- Chọn loại thẻ chưa xuất bản --</NativeSelectOption>
-                  {noteTypes.map((nt) => {
-                    const isPublished = nt.publish_status === 'published' || nt.publish_status === 'unlisted'
-                    const isBlocked = isPublished || Boolean(nt.is_marketplace_install)
-                    return (
-                      <NativeSelectOption key={nt.id} value={nt.id} disabled={isBlocked}>
-                        {nt.name} {nt.is_marketplace_install ? '(Từ Marketplace)' : isPublished ? '(Đã xuất bản)' : ''}
-                      </NativeSelectOption>
-                    )
-                  })}
-                </NativeSelect>
+                {isEditMode ? (
+                  <div className="p-3.5 rounded-xl border border-primary/20 bg-primary/5 text-xs font-semibold text-foreground flex items-center justify-between">
+                    <span>{title || 'Loại thẻ nguồn'}</span>
+                    <span className="text-[10px] text-muted-foreground font-mono">ID: {sourceNoteTypeId}</span>
+                  </div>
+                ) : (
+                  <NativeSelect
+                    id="source-nt"
+                    value={sourceNoteTypeId}
+                    onChange={(e) => {
+                      setSourceNoteTypeId(e.target.value)
+                      clearFieldError('sourceNoteTypeId')
+                      const found = noteTypes.find((nt) => nt.id === e.target.value)
+                      if (found && !title) setTitle(found.name)
+                    }}
+                    className={`h-10 text-xs sm:text-sm rounded-xl font-medium ${
+                      fieldErrors.sourceNoteTypeId ? 'border-destructive focus-visible:ring-destructive bg-destructive/5' : ''
+                    }`}
+                    required
+                  >
+                    <NativeSelectOption value="">-- Chọn loại thẻ chưa xuất bản --</NativeSelectOption>
+                    {noteTypes.map((nt) => {
+                      const isPublished = nt.publish_status === 'published' || nt.publish_status === 'unlisted'
+                      const isBlocked = isPublished || Boolean(nt.is_marketplace_install)
+                      return (
+                        <NativeSelectOption key={nt.id} value={nt.id} disabled={isBlocked}>
+                          {nt.name} {nt.is_marketplace_install ? '(Từ Marketplace)' : isPublished ? '(Đã xuất bản)' : ''}
+                        </NativeSelectOption>
+                      )
+                    })}
+                  </NativeSelect>
+                )}
                 <FieldErrorMessage error={fieldErrors.sourceNoteTypeId} />
               </div>
 
@@ -775,9 +835,17 @@ export function MarketplacePublishNoteTypePage() {
                   type="submit"
                   size="lg"
                   className="w-full h-11 font-bold text-sm rounded-xl shadow-md bg-primary hover:bg-primary/90 text-primary-foreground"
-                  disabled={isSelectedAlreadyPublished || publishMutation.isPending}
+                  disabled={isSelectedInstalledCopy || isSelectedAlreadyPublished || publishMutation.isPending}
                 >
-                  {isSelectedAlreadyPublished ? 'Đã xuất bản (Không thể xuất bản lại)' : publishMutation.isPending ? 'Đang xuất bản…' : 'Xuất bản Loại thẻ ngay'}
+                  {isSelectedInstalledCopy 
+                    ? 'Bản cài Marketplace (Không thể xuất bản)' 
+                    : isSelectedAlreadyPublished 
+                      ? 'Đã xuất bản (Bấm Chỉnh sửa ở trên)' 
+                      : publishMutation.isPending 
+                        ? 'Đang lưu…' 
+                        : isEditMode 
+                          ? 'Cập nhật cấu hình chia sẻ' 
+                          : 'Xuất bản Loại thẻ ngay'}
                 </Button>
               </div>
             </CardContent>

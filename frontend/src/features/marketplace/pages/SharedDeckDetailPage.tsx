@@ -17,7 +17,12 @@ import {
   Star,
   BookOpen,
   User,
+  EyeOff,
+  Edit3,
+  Globe,
+  Lock,
 } from 'lucide-react'
+import { toast } from 'sonner'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { appApi } from '@/app/api'
@@ -226,6 +231,25 @@ export function SharedDeckDetailPage() {
     },
     onError: (error: Error) => {
       setSubmitError(error.message || 'Không thể gửi đánh giá.')
+    },
+  })
+  const publishStatusMutation = useMutation({
+    mutationFn: async (newStatus: 'private' | 'published' | 'unlisted' | 'archived') => {
+      return appApi.mutate<SharedDeckDetail>(`/api/shared/decks/${id}`, 'PATCH', {
+        publish_status: newStatus,
+      })
+    },
+    onSuccess: (data) => {
+      toast.success(
+        data.publish_status === 'private'
+          ? 'Đã thu hồi bộ deck khỏi Marketplace!'
+          : 'Đã cập nhật trạng thái xuất bản bộ deck!'
+      )
+      queryClient.invalidateQueries({ queryKey: ['shared-deck-detail', id] })
+      queryClient.invalidateQueries({ queryKey: ['marketplace'] })
+    },
+    onError: (error: Error) => {
+      toast.error('Không thể cập nhật trạng thái', { description: error.message })
     },
   })
 
@@ -704,10 +728,92 @@ export function SharedDeckDetailPage() {
             </CardHeader>
             <CardContent className="p-4 sm:p-5 pt-0 space-y-3">
               {deck.is_owner ? (
-                <Button className="w-full h-10 sm:h-11 font-bold text-xs sm:text-sm rounded-xl" variant="secondary" disabled>
-                  <CheckCircle className="mr-1.5 size-4 text-primary" />
-                  Bạn là tác giả bộ deck này
-                </Button>
+                <div className="space-y-3 p-3 rounded-xl border border-primary/20 bg-primary/5 shadow-2xs">
+                  <div className="flex items-center justify-between border-b border-primary/10 pb-1.5 mb-1.5">
+                    <span className="text-[10px] font-black tracking-wider text-muted-foreground uppercase">Bảng điều khiển Tác giả</span>
+                    <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-[9px] font-extrabold text-primary">
+                      Tác giả
+                    </span>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground font-medium">Trạng thái chia sẻ:</span>
+                      {deck.publish_status === 'published' && (
+                        <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold px-2 py-0.5 rounded-md text-[10px]">
+                          <Globe className="mr-1 size-3 text-emerald-500" />
+                          Đang hiển thị
+                        </Badge>
+                      )}
+                      {deck.publish_status === 'unlisted' && (
+                        <Badge variant="outline" className="border-blue-500/30 bg-blue-500/10 text-blue-600 dark:text-blue-400 font-bold px-2 py-0.5 rounded-md text-[10px]">
+                          <Globe className="mr-1 size-3 text-blue-500" />
+                          Không công khai
+                        </Badge>
+                      )}
+                      {deck.publish_status === 'private' && (
+                        <Badge variant="outline" className="border-destructive/30 bg-destructive/10 text-destructive font-bold px-2 py-0.5 rounded-md text-[10px]">
+                          <Lock className="mr-1 size-3 text-destructive" />
+                          Đã thu hồi (Riêng tư)
+                        </Badge>
+                      )}
+                      {deck.publish_status === 'archived' && (
+                        <Badge variant="outline" className="border-slate-500/30 bg-slate-500/10 text-slate-500 font-bold px-2 py-0.5 rounded-md text-[10px]">
+                          <Lock className="mr-1 size-3 text-slate-500" />
+                          Đã lưu trữ
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid gap-2 pt-1">
+                    {deck.publish_status === 'published' || deck.publish_status === 'unlisted' ? (
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        className="w-full font-bold text-xs h-9 rounded-xl flex items-center justify-center gap-1.5"
+                        onClick={() => {
+                          if (
+                            window.confirm(
+                              'Bạn có chắc chắn muốn thu hồi bộ thẻ này khỏi Marketplace?\n\nNgười dùng khác sẽ không thể tìm thấy hoặc cài đặt bộ thẻ này nữa. Những người đã cài đặt trước đó vẫn có thể tiếp tục sử dụng.'
+                            )
+                          ) {
+                            publishStatusMutation.mutate('private')
+                          }
+                        }}
+                        disabled={publishStatusMutation.isPending}
+                      >
+                        <EyeOff className="size-3.5" />
+                        Thu hồi bộ deck
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="default"
+                        size="sm"
+                        className="w-full font-bold text-xs h-9 rounded-xl flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+                        onClick={() => {
+                          publishStatusMutation.mutate('published')
+                        }}
+                        disabled={publishStatusMutation.isPending}
+                      >
+                        <Globe className="size-3.5" />
+                        Xuất bản lại bộ deck
+                      </Button>
+                    )}
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full font-bold text-xs h-9 rounded-xl flex items-center justify-center gap-1.5"
+                      asChild
+                    >
+                      <Link to={`/marketplace/decks/publish?deck_id=${deck.source_deck_id}&deck_item_id=${deck.id}&edit=1`}>
+                        <Edit3 className="size-3.5 text-primary" />
+                        Chỉnh sửa thông tin
+                      </Link>
+                    </Button>
+                  </div>
+                </div>
               ) : deck.is_installed ? (
                 <div className="space-y-2">
                   <Button className="w-full h-10 sm:h-11 font-bold text-xs sm:text-sm border-emerald-500/40 text-emerald-600 dark:text-emerald-400 rounded-xl" variant="outline" disabled>

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
-import { AlertCircle, Check } from 'lucide-react'
+import { AlertCircle, Check, Loader2 } from 'lucide-react'
 import { appApi } from '@/app/api'
 import { AmbientBackground } from '@/components/ambient-background'
 import { Badge } from '@/components/ui/badge'
@@ -43,6 +43,8 @@ export function MarketplacePublishDeckPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const queryParamDeckId = searchParams.get('deck_id') || searchParams.get('id') || searchParams.get('source_deck_id') || ''
+  const deckItemId = searchParams.get('deck_item_id') || ''
+  const isEditMode = searchParams.get('edit') === '1' && Boolean(deckItemId)
 
   const [sourceDeckId, setSourceDeckId] = useState<string>(queryParamDeckId)
   const [title, setTitle] = useState('')
@@ -83,11 +85,55 @@ export function MarketplacePublishDeckPage() {
     queryFn: loadDeckOptionsForPublish,
   })
 
+  // Load existing details for edit mode
+  const deckItemQuery = useQuery({
+    queryKey: ['shared-deck-detail-edit', deckItemId],
+    queryFn: () => appApi.get<any>(`/api/shared/decks/${deckItemId}`),
+    enabled: isEditMode && Boolean(deckItemId),
+  })
+
+  const deckItem = deckItemQuery.data
+
+  // Populate form states from edit data
+  useEffect(() => {
+    if (isEditMode && deckItem) {
+      if (deckItem.source_deck_id) setSourceDeckId(String(deckItem.source_deck_id))
+      setTitle(deckItem.title || '')
+      setPreviewText(deckItem.preview_text || '')
+      setDescription(deckItem.description || '')
+      setPricingMode(deckItem.pricing_mode || 'free')
+      setPriceAmountMinor(deckItem.price_amount_minor || 10000)
+      setVersion(deckItem.version || '1.0.0')
+      setTags(deckItem.tags ? deckItem.tags.join(', ') : '')
+      setChangelog(deckItem.changelog || '')
+      
+      const cat = deckItem.primary_category || 'General'
+      const categoryPresetsValues = CATEGORY_PRESETS.map(p => p.id)
+      if (categoryPresetsValues.includes(cat)) {
+        setPrimaryCategory(cat)
+        setCustomCategory('')
+      } else {
+        setPrimaryCategory('Custom')
+        setCustomCategory(cat)
+      }
+
+      setSubcategory(deckItem.taxonomy_metadata?.subcategory || '')
+      setTargetAudience(deckItem.taxonomy_metadata?.target_audience || '')
+      setTaxonomyDomain(deckItem.taxonomy_metadata?.domain || 'language_learning')
+      setTaxonomySubject(deckItem.taxonomy_metadata?.subject || 'japanese')
+      setTaxonomyDifficulty(deckItem.taxonomy_metadata?.difficulty_band || 'beginner')
+      setTaxonomyGoals(deckItem.taxonomy_metadata?.learning_goals || ['vocabulary'])
+      setTaxonomyTopics(deckItem.taxonomy_metadata?.primary_topics || ['meaning_recall'])
+    }
+  }, [isEditMode, deckItem])
+
   const effectiveCategory = primaryCategory === 'Custom' ? customCategory.trim() || 'Khác' : primaryCategory
 
   const publishMutation = useMutation({
-    mutationFn: () =>
-      appApi.mutate('/api/shared/decks', 'POST', {
+    mutationFn: () => {
+      const endpoint = isEditMode ? `/api/shared/decks/${deckItemId}` : '/api/shared/decks'
+      const method = isEditMode ? 'PATCH' : 'POST'
+      return appApi.mutate(endpoint, method, {
         source_deck_id: Number(sourceDeckId),
         title: title.trim(),
         preview_text: previewText.trim(),
@@ -105,11 +151,16 @@ export function MarketplacePublishDeckPage() {
         taxonomy_difficulty_band: taxonomyDifficulty,
         taxonomy_learning_goals: taxonomyGoals,
         taxonomy_primary_topics: taxonomyTopics,
-        publish_status: 'published',
-      }),
+        publish_status: isEditMode ? undefined : 'published',
+      })
+    },
     onSuccess: (data: any) => {
-      toast.success('Đã xuất bản bộ thẻ lên Marketplace thành công!')
-      navigate(`/marketplace/decks/${data.id || ''}`)
+      toast.success(
+        isEditMode
+          ? 'Đã cập nhật thông tin chia sẻ thành công!'
+          : 'Đã xuất bản bộ thẻ lên Marketplace thành công!'
+      )
+      navigate(`/marketplace/decks/${data.id || deckItemId || ''}`)
     },
     onError: (error: any) => {
       const msg = error?.message || ''
@@ -156,9 +207,9 @@ export function MarketplacePublishDeckPage() {
   const validateForm = (): boolean => {
     const errs: Record<string, string> = {}
     const selectedSourceDeck = decks.find((deck) => String(deck.id) === sourceDeckId)
-    if (!sourceDeckId || !selectedSourceDeck) {
+    if (!isEditMode && (!sourceDeckId || !selectedSourceDeck)) {
       errs.sourceDeckId = 'Vui lòng chọn bộ thẻ cần chia sẻ từ tài khoản của bạn.'
-    } else if (!selectedSourceDeck.is_selectable) {
+    } else if (!isEditMode && selectedSourceDeck && !selectedSourceDeck.is_selectable) {
       errs.sourceDeckId = selectedSourceDeck.block_reason || 'Bộ thẻ này không thể chia sẻ.'
     }
     if (!title.trim()) {
@@ -239,8 +290,9 @@ export function MarketplacePublishDeckPage() {
     }
   }, [decks, sourceDeckId, title])
 
-  if (decksQuery.isPending) return <PageLoading label="Đang tải danh sách bộ thẻ của bạn…" />
+  if (decksQuery.isPending || (isEditMode && deckItemQuery.isPending)) return <PageLoading label="Đang tải dữ liệu..." />
   if (decksQuery.error) return <Page><PageError error={decksQuery.error} /></Page>
+  if (isEditMode && deckItemQuery.error) return <Page><PageError error={deckItemQuery.error} /></Page>
 
   const selectedDeck = decks.find((d) => String(d.id) === sourceDeckId)
   const availableSubjects = TAXONOMY_SUBJECTS[taxonomyDomain] || TAXONOMY_SUBJECTS.other
@@ -262,16 +314,18 @@ export function MarketplacePublishDeckPage() {
               </Badge>
             </div>
             <h1 className="text-xl sm:text-2xl md:text-3xl font-black tracking-tight text-foreground">
-              Chia sẻ Bộ thẻ vào Marketplace
+              {isEditMode ? 'Chỉnh sửa thông tin chia sẻ Bộ thẻ' : 'Chia sẻ Bộ thẻ vào Marketplace'}
             </h1>
             <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed max-w-3xl">
-              Đóng gói và phát hành học liệu Flashcard của bạn tới cộng đồng người học toàn quốc. Hỗ trợ mọi môn học từ Ngoại ngữ, CNTT, Y dược tới Thường thức.
+              {isEditMode 
+                ? 'Cập nhật lại các thông tin mô tả chi tiết, phân loại học tập và giá bán của bộ thẻ đã xuất bản.'
+                : 'Đóng gói và phát hành học liệu Flashcard của bạn tới cộng đồng người học toàn quốc. Hỗ trợ mọi môn học từ Ngoại ngữ, CNTT, Y dược tới Thường thức.'}
             </p>
           </div>
 
           <Button variant="outline" asChild className="h-9 px-3.5 text-xs font-semibold rounded-xl shrink-0 self-start sm:self-center">
-            <Link to="/marketplace/decks">
-              Quay lại Marketplace
+            <Link to={isEditMode ? `/marketplace/decks/${deckItemId}` : "/marketplace/decks"}>
+              {isEditMode ? 'Quay lại chi tiết' : 'Quay lại Marketplace'}
             </Link>
           </Button>
         </div>
@@ -314,24 +368,32 @@ export function MarketplacePublishDeckPage() {
             </CardHeader>
 
             <CardContent className="p-4 sm:p-6 space-y-5">
-              {/* Select Source Deck */}
               <div className="space-y-2">
                 <Label className="text-xs font-semibold flex items-center justify-between">
-                  <span>Chọn Bộ thẻ cần chia sẻ <span className="text-destructive">*</span></span>
+                  <span>Bộ thẻ nguồn chia sẻ <span className="text-destructive">*</span></span>
                 </Label>
-                <PublishDeckTree
-                  decks={decks}
-                  selectedDeckId={sourceDeckId}
-                  onSelectDeck={(deck: PublishDeckOption) => {
-                    setSourceDeckId(String(deck.id))
-                    clearFieldError('sourceDeckId')
-                    if (!title) setTitle(deck.name)
-                  }}
-                />
-                <p className="text-[11px] leading-relaxed text-muted-foreground">
-                  Chỉ bộ thẻ do bạn tự tạo hoặc đồng bộ từ Anki mới có thể chia sẻ. Bộ thẻ cài từ Marketplace,
-                  bộ đã chia sẻ và bộ con nằm trong một bộ cha đã chia sẻ sẽ bị khóa.
-                </p>
+                {isEditMode ? (
+                  <div className="p-3.5 rounded-xl border border-primary/20 bg-primary/5 text-xs font-semibold text-foreground flex items-center justify-between">
+                    <span>{title || 'Bộ thẻ nguồn'}</span>
+                    <span className="text-[10px] text-muted-foreground font-mono">ID: {sourceDeckId}</span>
+                  </div>
+                ) : (
+                  <>
+                    <PublishDeckTree
+                      decks={decks}
+                      selectedDeckId={sourceDeckId}
+                      onSelectDeck={(deck: PublishDeckOption) => {
+                        setSourceDeckId(String(deck.id))
+                        clearFieldError('sourceDeckId')
+                        if (!title) setTitle(deck.name)
+                      }}
+                    />
+                    <p className="text-[11px] leading-relaxed text-muted-foreground">
+                      Chỉ bộ thẻ do bạn tự tạo hoặc đồng bộ từ Anki mới có thể chia sẻ. Bộ thẻ cài từ Marketplace,
+                      bộ đã chia sẻ và bộ con nằm trong một bộ cha đã chia sẻ sẽ bị khóa.
+                    </p>
+                  </>
+                )}
                 <FieldErrorMessage error={fieldErrors.sourceDeckId} />
               </div>
 
@@ -762,7 +824,7 @@ export function MarketplacePublishDeckPage() {
                   className="w-full h-11 font-bold text-sm rounded-xl shadow-md bg-primary hover:bg-primary/90 text-primary-foreground"
                   disabled={publishMutation.isPending}
                 >
-                  {publishMutation.isPending ? 'Đang xuất bản…' : 'Xuất bản Bộ thẻ ngay'}
+                  {publishMutation.isPending ? 'Đang lưu…' : isEditMode ? 'Cập nhật thông tin' : 'Xuất bản Bộ thẻ ngay'}
                 </Button>
               </div>
             </CardContent>
