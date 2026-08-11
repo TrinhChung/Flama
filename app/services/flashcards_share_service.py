@@ -238,6 +238,164 @@ def publish_note_type(note_type: NoteType, user_id: int, payload: dict, is_admin
     return True, None
 
 
+def _installed_local_deck_ids(*, user_id: int) -> set[int]:
+    installs = DeckInstall.query.filter_by(user_id=user_id).all()
+    if not installs:
+        return set()
+
+    install_ids = [row.id for row in installs if row.id]
+    root_ids = {
+        int(row.local_deck_id)
+        for row in installs
+        if row.local_deck_id is not None
+    }
+    mapped_ids = {
+        int(row[0])
+        for row in (
+            db.session.query(DeckCloneDeckMap.local_deck_id)
+            .filter(DeckCloneDeckMap.deck_install_id.in_(install_ids))
+            .all()
+        )
+        if row and row[0] is not None
+    } if install_ids else set()
+
+    # Clone maps precisely distinguish copied Marketplace nodes from decks the
+    # user later creates themselves (including Anki-synced decks).
+    return root_ids | mapped_ids
+
+
+def _deck_publish_context(*, user_id: int) -> tuple[dict[int, Deck], set[int], dict[int, DeckMarketplaceItem]]:
+    owned_decks = (
+        Deck.query.filter(
+            Deck.owner_user_id == user_id,
+            Deck.deleted_at.is_(None),
+        )
+        .order_by(
+            Deck.parent_id.isnot(None),
+            Deck.position.asc(),
+            Deck.created_at.asc(),
+            Deck.id.asc(),
+        )
+        .all()
+    )
+    deck_by_id = {int(deck.id): deck for deck in owned_decks}
+    deck_ids = list(deck_by_id)
+    shared_by_source = {
+        int(item.source_deck_id): item
+        for item in (
+            DeckMarketplaceItem.query.filter(
+                DeckMarketplaceItem.source_deck_id.in_(deck_ids)
+            ).all()
+            if deck_ids
+            else []
+        )
+        if item.source_deck_id is not None
+    }
+    return deck_by_id, _installed_local_deck_ids(user_id=user_id), shared_by_source
+
+
+def get_deck_publish_eligibility(
+    *,
+    user_id: int,
+    deck: Deck,
+    allow_existing: bool = False,
+    context: tuple[dict[int, Deck], set[int], dict[int, DeckMarketplaceItem]] | None = None,
+) -> dict[str, Any]:
+    if deck.deleted_at is not None or deck.owner_user_id != user_id:
+        return {
+            "is_selectable": False,
+            "block_code": "not_owned",
+            "block_reason": "Chỉ có thể chia sẻ bộ thẻ do bạn tự tạo hoặc đồng bộ từ Anki.",
+            "shared_item_id": None,
+        }
+
+    deck_by_id, installed_scope_ids, shared_by_source = context or _deck_publish_context(
+        user_id=user_id
+    )
+    deck_id = int(deck.id)
+
+    if deck_id in installed_scope_ids:
+        return {
+            "is_selectable": False,
+            "block_code": "marketplace_clone",
+            "block_reason": "Bộ thẻ được cài từ Marketplace không thể chia sẻ lại.",
+            "shared_item_id": None,
+        }
+
+    existing_item = shared_by_source.get(deck_id)
+    if existing_item is not None and not allow_existing:
+        return {
+            "is_selectable": False,
+            "block_code": "already_shared",
+            "block_reason": "Bộ thẻ này đã được chia sẻ và không thể chia sẻ lại.",
+            "shared_item_id": existing_item.id,
+        }
+
+    seen: set[int] = set()
+    parent_id = deck.parent_id
+    while parent_id is not None and int(parent_id) not in seen:
+        current_parent_id = int(parent_id)
+        seen.add(current_parent_id)
+        parent_item = shared_by_source.get(current_parent_id)
+        if parent_item is not None:
+            parent_deck = deck_by_id.get(current_parent_id)
+            parent_name = parent_deck.name if parent_deck is not None else str(current_parent_id)
+            return {
+                "is_selectable": False,
+                "block_code": "ancestor_shared",
+                "block_reason": f"Không thể chia sẻ bộ con vì bộ cha '{parent_name}' đã được chia sẻ.",
+                "shared_item_id": parent_item.id,
+            }
+        parent_deck = deck_by_id.get(current_parent_id)
+        if parent_deck is None:
+            break
+        parent_id = parent_deck.parent_id
+
+    return {
+        "is_selectable": True,
+        "block_code": None,
+        "block_reason": None,
+        "shared_item_id": existing_item.id if existing_item is not None else None,
+    }
+
+
+def build_deck_publish_options(*, user_id: int) -> dict[str, Any]:
+    from app.services import browse_card_service
+
+    context = _deck_publish_context(user_id=user_id)
+    deck_by_id, _installed_scope_ids, _shared_by_source = context
+    browse_payload = browse_card_service.build_browse_decks(
+        user_id=user_id,
+        admin_mode=False,
+        timezone_name="UTC",
+    )
+    browse_by_id = {
+        int(row["id"]): row
+        for row in browse_payload.get("decks", [])
+        if row.get("id") is not None
+    }
+
+    items = []
+    for deck_id, deck in deck_by_id.items():
+        browse_row = browse_by_id.get(deck_id, {})
+        counts = browse_row.get("counts") if isinstance(browse_row.get("counts"), dict) else {}
+        eligibility = get_deck_publish_eligibility(
+            user_id=user_id,
+            deck=deck,
+            context=context,
+        )
+        items.append(
+            {
+                "id": deck_id,
+                "name": deck.name,
+                "parent_id": int(deck.parent_id) if deck.parent_id is not None else None,
+                "card_count": int((counts or {}).get("total") or 0),
+                **eligibility,
+            }
+        )
+    return {"items": items}
+
+
 def create_shared_deck_item(
     user_id: int,
     payload: dict,
@@ -247,6 +405,21 @@ def create_shared_deck_item(
     title = (payload.get("title") or "").strip()
     if not title:
         return None, "title is required.", "title"
+
+    source_deck_id_raw = payload.get("source_deck_id")
+    try:
+        source_deck_id = int(source_deck_id_raw)
+    except (TypeError, ValueError):
+        return None, "source_deck_id must be an integer.", "source_deck_id"
+    source_deck = db.session.get(Deck, source_deck_id)
+    if source_deck is None or source_deck.deleted_at is not None:
+        return None, "source_deck_id not found.", "source_deck_id"
+    eligibility = get_deck_publish_eligibility(
+        user_id=user_id,
+        deck=source_deck,
+    )
+    if not eligibility["is_selectable"]:
+        return None, str(eligibility["block_reason"]), "source_deck_id"
 
     deck_item = DeckMarketplaceItem(
         owner_user_id=user_id,

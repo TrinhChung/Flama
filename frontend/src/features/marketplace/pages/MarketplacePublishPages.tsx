@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -14,12 +14,8 @@ import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { Textarea } from '@/components/ui/textarea'
 import { Page } from '@/shared/components/Page'
 import { PageLoading } from '@/shared/components/PageState'
-
-type SimpleDeck = {
-  id: number
-  name: string
-  card_count?: number
-}
+import { PublishDeckTree } from '../components/PublishDeckTree'
+import { loadDeckOptionsForPublish, type PublishDeckOption } from '../publishApi'
 
 type SimpleNoteType = {
   id: string
@@ -166,7 +162,7 @@ export function MarketplacePublishDeckPage() {
 
   const decksQuery = useQuery({
     queryKey: ['my-decks-for-publish'],
-    queryFn: () => appApi.get<{ items: SimpleDeck[] }>('/decks'),
+    queryFn: loadDeckOptionsForPublish,
   })
 
   const effectiveCategory = primaryCategory === 'Custom' ? customCategory.trim() || 'Khác' : primaryCategory
@@ -202,7 +198,7 @@ export function MarketplacePublishDeckPage() {
       const serverErrs: Record<string, string> = {}
 
       if (field === 'source_deck_id' || msg.includes('source_deck_id')) {
-        serverErrs.sourceDeckId = 'Vui lòng chọn bộ thẻ từ tài khoản của bạn.'
+        serverErrs.sourceDeckId = msg || 'Vui lòng chọn bộ thẻ từ tài khoản của bạn.'
       }
       if (field === 'title' || msg.includes('Title')) {
         serverErrs.title = 'Vui lòng nhập tiêu đề xuất bản.'
@@ -240,8 +236,11 @@ export function MarketplacePublishDeckPage() {
 
   const validateForm = (): boolean => {
     const errs: Record<string, string> = {}
-    if (!sourceDeckId) {
+    const selectedSourceDeck = decks.find((deck) => String(deck.id) === sourceDeckId)
+    if (!sourceDeckId || !selectedSourceDeck) {
       errs.sourceDeckId = 'Vui lòng chọn bộ thẻ cần chia sẻ từ tài khoản của bạn.'
+    } else if (!selectedSourceDeck.is_selectable) {
+      errs.sourceDeckId = selectedSourceDeck.block_reason || 'Bộ thẻ này không thể chia sẻ.'
     }
     if (!title.trim()) {
       errs.title = 'Vui lòng nhập tiêu đề xuất bản.'
@@ -282,20 +281,40 @@ export function MarketplacePublishDeckPage() {
     return true
   }
 
-  const decks = decksQuery.data?.items || []
+  const decks = useMemo(() => decksQuery.data?.items || [], [decksQuery.data?.items])
 
   // Sync search param ID if passed in URL
   useEffect(() => {
-    if (queryParamDeckId && !sourceDeckId) {
+    if (!queryParamDeckId || sourceDeckId || decks.length === 0) return
+    const queryDeck = decks.find((deck) => String(deck.id) === queryParamDeckId)
+    if (queryDeck?.is_selectable) {
       setSourceDeckId(queryParamDeckId)
+      return
     }
-  }, [queryParamDeckId, sourceDeckId])
+    if (queryDeck) {
+      setFieldErrors((current) => ({
+        ...current,
+        sourceDeckId: queryDeck.block_reason || 'Bộ thẻ này không thể chia sẻ.',
+      }))
+    }
+  }, [decks, queryParamDeckId, sourceDeckId])
+
+  useEffect(() => {
+    if (!sourceDeckId || decks.length === 0) return
+    const found = decks.find((deck) => String(deck.id) === sourceDeckId)
+    if (!found || found.is_selectable) return
+    setSourceDeckId('')
+    setFieldErrors((current) => ({
+      ...current,
+      sourceDeckId: found.block_reason || 'Bộ thẻ này không thể chia sẻ.',
+    }))
+  }, [decks, sourceDeckId])
 
   // Auto set title if title is empty when selected deck changes
   useEffect(() => {
     if (sourceDeckId && decks.length > 0 && !title) {
       const found = decks.find((d) => String(d.id) === sourceDeckId)
-      if (found) {
+      if (found?.is_selectable) {
         setTitle(found.name)
       }
     }
@@ -377,29 +396,22 @@ export function MarketplacePublishDeckPage() {
             <CardContent className="p-4 sm:p-6 space-y-5">
               {/* Select Source Deck */}
               <div className="space-y-2">
-                <Label htmlFor="source-deck" className="text-xs font-semibold flex items-center justify-between">
+                <Label className="text-xs font-semibold flex items-center justify-between">
                   <span>Chọn Bộ thẻ cần chia sẻ <span className="text-destructive">*</span></span>
                 </Label>
-                <NativeSelect
-                  id="source-deck"
-                  value={sourceDeckId}
-                  onChange={(e) => {
-                    setSourceDeckId(e.target.value)
+                <PublishDeckTree
+                  decks={decks}
+                  selectedDeckId={sourceDeckId}
+                  onSelectDeck={(deck: PublishDeckOption) => {
+                    setSourceDeckId(String(deck.id))
                     clearFieldError('sourceDeckId')
-                    const found = decks.find((d) => String(d.id) === e.target.value)
-                    if (found && !title) setTitle(found.name)
+                    if (!title) setTitle(deck.name)
                   }}
-                  className={`h-10 text-xs sm:text-sm rounded-xl font-medium ${
-                    fieldErrors.sourceDeckId ? 'border-destructive focus-visible:ring-destructive bg-destructive/5' : ''
-                  }`}
-                >
-                  <NativeSelectOption value="">-- Chọn bộ thẻ từ tài khoản của bạn --</NativeSelectOption>
-                  {decks.map((d) => (
-                    <NativeSelectOption key={d.id} value={String(d.id)}>
-                      {d.name} {d.card_count ? `(${d.card_count} thẻ)` : ''}
-                    </NativeSelectOption>
-                  ))}
-                </NativeSelect>
+                />
+                <p className="text-[11px] leading-relaxed text-muted-foreground">
+                  Chỉ bộ thẻ do bạn tự tạo hoặc đồng bộ từ Anki mới có thể chia sẻ. Bộ thẻ cài từ Marketplace,
+                  bộ đã chia sẻ và bộ con nằm trong một bộ cha đã chia sẻ sẽ bị khóa.
+                </p>
                 <FieldErrorMessage error={fieldErrors.sourceDeckId} />
               </div>
 

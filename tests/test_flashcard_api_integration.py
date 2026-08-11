@@ -57,7 +57,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             db.session.flush()
             self.user_id = user.id
 
-            deck = Deck(name="Deck A")
+            deck = Deck(name="Deck A", owner_user_id=self.user_id)
             db.session.add(deck)
             db.session.flush()
             self.deck_id = deck.id
@@ -110,6 +110,74 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             )
             frontier = {int(row[0]) for row in child_rows if row and row[0] is not None}
         return sorted(seen)
+
+    def _create_installed_clone_decks(self) -> tuple[int, int]:
+        with self.app.app_context():
+            source_owner = User(
+                username="market-source-owner",
+                email="market-source-owner@example.com",
+            )
+            source_owner.set_password("password")
+            db.session.add(source_owner)
+            db.session.flush()
+
+            source_root = Deck(
+                name="Marketplace Source",
+                owner_user_id=source_owner.id,
+            )
+            db.session.add(source_root)
+            db.session.flush()
+            source_child = Deck(
+                name="Marketplace Source Child",
+                owner_user_id=source_owner.id,
+                parent_id=source_root.id,
+            )
+            local_root = Deck(
+                name="Installed Marketplace Deck",
+                owner_user_id=self.user_id,
+            )
+            db.session.add_all([source_child, local_root])
+            db.session.flush()
+            local_child = Deck(
+                name="Installed Marketplace Child",
+                owner_user_id=self.user_id,
+                parent_id=local_root.id,
+            )
+            deck_item = DeckMarketplaceItem(
+                owner_user_id=source_owner.id,
+                source_deck_id=source_root.id,
+                title="Marketplace Source Listing",
+                publish_status="published",
+            )
+            db.session.add_all([local_child, deck_item])
+            db.session.flush()
+            install = DeckInstall(
+                deck_item_id=deck_item.id,
+                user_id=self.user_id,
+                local_deck_id=local_root.id,
+                clone_mode="logical_overlay",
+                source_deck_id=source_root.id,
+                source_owner_user_id=source_owner.id,
+                base_snapshot_at=datetime.utcnow(),
+            )
+            db.session.add(install)
+            db.session.flush()
+            db.session.add_all(
+                [
+                    DeckCloneDeckMap(
+                        deck_install_id=install.id,
+                        local_deck_id=local_root.id,
+                        source_deck_id=source_root.id,
+                    ),
+                    DeckCloneDeckMap(
+                        deck_install_id=install.id,
+                        local_deck_id=local_child.id,
+                        source_deck_id=source_child.id,
+                    ),
+                ]
+            )
+            db.session.commit()
+            return local_root.id, local_child.id
 
     def test_crud_preview_flow(self):
         note_type = self._create_note_type()
@@ -479,6 +547,110 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             self.assertIsNotNone(deck_item)
             self.assertEqual(deck_item.source_deck_id, self.deck_id)
             self.assertEqual(deck_item.source_note_type_id, note_type_id)
+
+    def test_shared_deck_api_rejects_duplicate_and_child_of_shared_parent(self):
+        with self.app.app_context():
+            child_deck = Deck(
+                name="Child of Shared Parent",
+                owner_user_id=self.user_id,
+                parent_id=self.deck_id,
+            )
+            existing_item = DeckMarketplaceItem(
+                owner_user_id=self.user_id,
+                source_deck_id=self.deck_id,
+                title="Existing Shared Parent",
+                publish_status="published",
+            )
+            db.session.add_all([child_deck, existing_item])
+            db.session.commit()
+            child_deck_id = child_deck.id
+
+        duplicate_response = self.client.post(
+            "/api/shared/decks",
+            json={"title": "Duplicate listing", "source_deck_id": self.deck_id},
+        )
+        self.assertEqual(duplicate_response.status_code, 409)
+        self.assertEqual(duplicate_response.get_json().get("error"), "CONFLICT")
+        self.assertEqual(duplicate_response.get_json().get("field"), "source_deck_id")
+
+        child_response = self.client.post(
+            "/api/shared/decks",
+            json={"title": "Child listing", "source_deck_id": child_deck_id},
+        )
+        self.assertEqual(child_response.status_code, 409)
+        child_payload = child_response.get_json() or {}
+        self.assertEqual(child_payload.get("error"), "CONFLICT")
+        self.assertIn("bộ cha", child_payload.get("message", "").lower())
+
+    def test_shared_deck_api_rejects_marketplace_clone_subtree(self):
+        _local_root_id, local_child_id = self._create_installed_clone_decks()
+
+        response = self.client.post(
+            "/api/shared/decks",
+            json={
+                "title": "Re-shared Marketplace clone",
+                "source_deck_id": local_child_id,
+            },
+        )
+
+        self.assertEqual(response.status_code, 409)
+        payload = response.get_json() or {}
+        self.assertEqual(payload.get("error"), "CONFLICT")
+        self.assertEqual(payload.get("field"), "source_deck_id")
+        self.assertIn("Marketplace", payload.get("message", ""))
+
+        legacy_response = self.client.get(
+            f"/flashcards/decks/{local_child_id}/share",
+            follow_redirects=False,
+        )
+        self.assertEqual(legacy_response.status_code, 302)
+        self.assertIn("/dashboard", legacy_response.headers.get("Location", ""))
+
+    def test_shared_deck_publish_options_mark_tree_eligibility(self):
+        local_root_id, local_child_id = self._create_installed_clone_decks()
+        with self.app.app_context():
+            shared_child = Deck(
+                name="Blocked Shared Child",
+                owner_user_id=self.user_id,
+                parent_id=self.deck_id,
+            )
+            anki_deck = Deck(
+                name="Anki Synced Deck",
+                owner_user_id=self.user_id,
+            )
+            nested_anki_deck = Deck(
+                name="Anki Deck Under Installed Folder",
+                owner_user_id=self.user_id,
+                parent_id=local_root_id,
+            )
+            existing_item = DeckMarketplaceItem(
+                owner_user_id=self.user_id,
+                source_deck_id=self.deck_id,
+                title="Published Root",
+                publish_status="published",
+            )
+            db.session.add_all([shared_child, anki_deck, nested_anki_deck, existing_item])
+            db.session.commit()
+            shared_child_id = shared_child.id
+            anki_deck_id = anki_deck.id
+            nested_anki_deck_id = nested_anki_deck.id
+
+        response = self.client.get("/api/shared/decks/publish-options")
+        self.assertEqual(response.status_code, 200)
+        rows = {
+            int(row["id"]): row
+            for row in (response.get_json() or {}).get("items", [])
+        }
+
+        self.assertEqual(rows[self.deck_id]["block_code"], "already_shared")
+        self.assertFalse(rows[self.deck_id]["is_selectable"])
+        self.assertEqual(rows[shared_child_id]["parent_id"], self.deck_id)
+        self.assertEqual(rows[shared_child_id]["block_code"], "ancestor_shared")
+        self.assertEqual(rows[local_child_id]["block_code"], "marketplace_clone")
+        self.assertTrue(rows[anki_deck_id]["is_selectable"])
+        self.assertIsNone(rows[anki_deck_id]["block_code"])
+        self.assertTrue(rows[nested_anki_deck_id]["is_selectable"])
+        self.assertIsNone(rows[nested_anki_deck_id]["block_code"])
 
     def test_shared_deck_api_patch_updates_item_for_owner(self):
         note_type = self._create_note_type()
