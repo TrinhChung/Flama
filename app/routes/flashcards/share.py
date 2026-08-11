@@ -13,7 +13,7 @@ from models import db
 from models.flashcard import *
 from app.services import flashcards_share
 from app.services import marketplace_hub_service
-from app.utils.permissions import is_admin_user, is_creator_user
+from app.utils.permissions import is_admin_user
 
 # Import everything from core module so routes can use helpers
 from . import *
@@ -367,7 +367,7 @@ def list_shared_decks():
 
     visible_items = [
         item for item in DeckMarketplaceItem.query.order_by(DeckMarketplaceItem.updated_at.desc()).all()
-        if _is_deck_item_visible_for_shared(item)
+        if _is_deck_item_visible_for_shared(item, current_user.id)
     ]
     filtered = _filter_deck_items(
         visible_items,
@@ -395,12 +395,6 @@ def list_shared_decks():
 @flashcards_bp.route("/api/shared/decks/publish-options", methods=["GET"])
 @login_required
 def shared_deck_publish_options():
-    if not is_creator_user(current_user):
-        return _api_error(
-            "FORBIDDEN",
-            "Bạn không có quyền chia sẻ bộ thẻ.",
-            status=403,
-        )
     return jsonify(
         flashcards_share.build_deck_publish_options(user_id=current_user.id)
     )
@@ -416,6 +410,10 @@ def create_shared_deck_item():
         require_source_note_type=True,
     )
     if validation_error:
+        if error_field == "source_note_type_id" and validation_error == "source_note_type_id not found.":
+            return _api_error("FIELD_NOT_FOUND", validation_error, field=error_field, status=404)
+        if error_field == "source_note_type_id" and "Marketplace" in validation_error:
+            return _api_error("CONFLICT", validation_error, field=error_field, status=409)
         if error_field == "source_deck_id":
             source_not_found = validation_error == "source_deck_id not found."
             invalid_source_id = validation_error == "source_deck_id must be an integer."
@@ -554,7 +552,11 @@ def patch_shared_deck_item(deck_item_id: str):
         require_source_note_type=True,
     )
     if validation_error:
-        if error_field == "source_deck_id":
+        if error_field in {"source_deck_id", "source_note_type_id"} and "cannot be changed" in validation_error:
+            return _api_error("CONFLICT", validation_error, field=error_field, status=409)
+        if error_field == "source_deck_id" and validation_error == "source_deck_id not found.":
+            return _api_error("FIELD_NOT_FOUND", validation_error, field=error_field, status=404)
+        if error_field == "source_note_type_id" and validation_error == "source_note_type_id not found.":
             return _api_error("FIELD_NOT_FOUND", validation_error, field=error_field, status=404)
         return _api_error("VALIDATION_ERROR", validation_error, field=error_field)
     return jsonify(_serialize_deck_marketplace_item(deck_item))

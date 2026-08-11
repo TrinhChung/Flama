@@ -13,7 +13,7 @@ import { Label } from '@/components/ui/label'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { Textarea } from '@/components/ui/textarea'
 import { Page } from '@/shared/components/Page'
-import { PageLoading } from '@/shared/components/PageState'
+import { PageError, PageLoading } from '@/shared/components/PageState'
 import { PublishDeckTree } from '../components/PublishDeckTree'
 import { loadDeckOptionsForPublish, type PublishDeckOption } from '../publishApi'
 
@@ -22,6 +22,7 @@ type SimpleNoteType = {
   name: string
   field_count?: number
   publish_status?: string
+  is_marketplace_install?: boolean
 }
 
 const CATEGORY_PRESETS = [
@@ -63,7 +64,7 @@ const TAXONOMY_SUBJECTS: Record<string, Array<{ id: string; label: string }>> = 
   ],
   certification: [
     { id: 'aws', label: 'AWS Certification' },
-    { id: 'other', label: 'Chứng chỉ khác' },
+    { id: 'other_certification', label: 'Chứng chỉ khác' },
   ],
   professional_skills: [
     { id: 'it_coding', label: 'CNTT & Lập trình' },
@@ -187,6 +188,7 @@ export function MarketplacePublishDeckPage() {
         taxonomy_difficulty_band: taxonomyDifficulty,
         taxonomy_learning_goals: taxonomyGoals,
         taxonomy_primary_topics: taxonomyTopics,
+        publish_status: 'published',
       }),
     onSuccess: (data: any) => {
       toast.success('Đã xuất bản bộ thẻ lên Marketplace thành công!')
@@ -321,6 +323,7 @@ export function MarketplacePublishDeckPage() {
   }, [decks, sourceDeckId, title])
 
   if (decksQuery.isPending) return <PageLoading label="Đang tải danh sách bộ thẻ của bạn…" />
+  if (decksQuery.error) return <Page><PageError error={decksQuery.error} /></Page>
 
   const selectedDeck = decks.find((d) => String(d.id) === sourceDeckId)
   const availableSubjects = TAXONOMY_SUBJECTS[taxonomyDomain] || TAXONOMY_SUBJECTS.other
@@ -912,7 +915,11 @@ export function MarketplacePublishNoteTypePage() {
   const noteTypes = noteTypesQuery.data?.items || []
   const selectedNoteType = noteTypes.find((nt) => nt.id === sourceNoteTypeId)
   const isSelectedAlreadyPublished = Boolean(
-    selectedNoteType && (selectedNoteType.publish_status === 'published' || selectedNoteType.publish_status === 'unlisted')
+    selectedNoteType && (
+      selectedNoteType.publish_status === 'published'
+      || selectedNoteType.publish_status === 'unlisted'
+      || selectedNoteType.is_marketplace_install
+    )
   )
   const detailData = selectedNoteTypeDetailQuery.data
 
@@ -1034,6 +1041,10 @@ export function MarketplacePublishNoteTypePage() {
   }
 
   if (noteTypesQuery.isPending) return <PageLoading label="Đang tải loại thẻ của bạn…" />
+  if (noteTypesQuery.error) return <Page><PageError error={noteTypesQuery.error} /></Page>
+  if (sourceNoteTypeId && selectedNoteTypeDetailQuery.error) {
+    return <Page><PageError error={selectedNoteTypeDetailQuery.error} /></Page>
+  }
 
   const fieldDefs: Array<{ name: string; label?: string }> = detailData?.field_defs || []
   const templates: Array<{ name: string }> = detailData?.templates || []
@@ -1075,7 +1086,9 @@ export function MarketplacePublishNoteTypePage() {
         <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-in fade-in duration-200">
           <div className="space-y-1">
             <div className="font-bold text-sm text-amber-700 dark:text-amber-400">
-              NoteType này đã được xuất bản trên Marketplace
+              {selectedNoteType?.is_marketplace_install
+                ? 'Note Type cài từ Marketplace không thể xuất bản lại'
+                : 'NoteType này đã được xuất bản trên Marketplace'}
             </div>
             <div className="text-xs text-muted-foreground">
               Mẫu NoteType &ldquo;{selectedNoteType?.name}&rdquo; đã có sẵn trên Marketplace. Mỗi mẫu NoteType chỉ xuất bản 1 lần.
@@ -1149,9 +1162,10 @@ export function MarketplacePublishNoteTypePage() {
                   <NativeSelectOption value="">-- Chọn loại thẻ chưa xuất bản --</NativeSelectOption>
                   {noteTypes.map((nt) => {
                     const isPublished = nt.publish_status === 'published' || nt.publish_status === 'unlisted'
+                    const isBlocked = isPublished || Boolean(nt.is_marketplace_install)
                     return (
-                      <NativeSelectOption key={nt.id} value={nt.id} disabled={isPublished}>
-                        {nt.name} {isPublished ? '(Đã xuất bản)' : ''}
+                      <NativeSelectOption key={nt.id} value={nt.id} disabled={isBlocked}>
+                        {nt.name} {nt.is_marketplace_install ? '(Từ Marketplace)' : isPublished ? '(Đã xuất bản)' : ''}
                       </NativeSelectOption>
                     )
                   })}

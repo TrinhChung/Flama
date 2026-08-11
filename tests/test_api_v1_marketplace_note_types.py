@@ -6,8 +6,11 @@ from app import create_app
 from models import db
 from models.field_def import FieldDef
 from models.note_type import NoteType
+from models.note_type_install import NoteTypeInstall
+from models.note import Note
 from models.template import Template
 from models.user import User
+from models.deck import Deck
 
 
 
@@ -159,6 +162,94 @@ class MarketplaceNoteTypesApiV1Tests(unittest.TestCase):
         self.assertEqual(install_data["source_note_type_id"], self.note_type_id)
         self.assertIn("installed_note_type_id", install_data)
 
+    def test_installed_note_type_cannot_be_redistributed(self):
+        self._login("learner@example.com")
+        install_response = self.client.post(
+            f"/api/marketplace/note-types/{self.note_type_id}/install"
+        )
+        self.assertEqual(install_response.status_code, 201)
+        installed_note_type_id = install_response.get_json()["installed_note_type_id"]
+
+        library_response = self.client.get("/api/note-types")
+        installed_row = next(
+            row
+            for row in library_response.get_json()["items"]
+            if row["id"] == installed_note_type_id
+        )
+        self.assertTrue(installed_row["is_marketplace_install"])
+
+        republish_response = self.client.post(
+            f"/api/note-types/{installed_note_type_id}/publish",
+            json={},
+        )
+        self.assertEqual(republish_response.status_code, 409)
+        self.assertEqual(republish_response.get_json()["error"], "CONFLICT")
+
+        patch_publish_response = self.client.patch(
+            f"/api/note-types/{installed_note_type_id}",
+            json={"publish_status": "published"},
+        )
+        self.assertEqual(patch_publish_response.status_code, 409)
+        self.assertEqual(patch_publish_response.get_json()["error"], "CONFLICT")
+
+        with self.app.app_context():
+            learner_deck = Deck(name="Learner installed template deck", owner_user_id=self.learner_id)
+            db.session.add(learner_deck)
+            db.session.flush()
+            db.session.add(
+                Note(
+                    note_type_id=installed_note_type_id,
+                    user_id=self.learner_id,
+                    deck_id=learner_deck.id,
+                    field_values={"Word": "private copy", "Meaning": "must not redistribute"},
+                )
+            )
+            db.session.commit()
+            learner_deck_id = learner_deck.id
+
+        publish_options_response = self.client.get("/api/shared/decks/publish-options")
+        learner_deck_option = next(
+            row
+            for row in publish_options_response.get_json()["items"]
+            if row["id"] == learner_deck_id
+        )
+        self.assertFalse(learner_deck_option["is_selectable"])
+        self.assertEqual(learner_deck_option["block_code"], "marketplace_note_type")
+
+        deck_republish_response = self.client.post(
+            "/api/shared/decks",
+            json={
+                "title": "Installed template redistribution",
+                "source_deck_id": learner_deck_id,
+                "source_note_type_id": installed_note_type_id,
+            },
+        )
+        self.assertEqual(deck_republish_response.status_code, 409)
+        self.assertEqual(deck_republish_response.get_json()["field"], "source_deck_id")
+
+        author_client = self.app.test_client()
+        login_response = author_client.post(
+            "/api/auth/login",
+            json={"email": "author@example.com", "password": "password123"},
+        )
+        self.assertEqual(login_response.status_code, 200)
+        delete_source_response = author_client.delete(
+            f"/api/note-types/{self.note_type_id}"
+        )
+        self.assertEqual(delete_source_response.status_code, 200)
+        self.assertTrue(delete_source_response.get_json()["archived"])
+        with self.app.app_context():
+            source_note_type = db.session.get(NoteType, self.note_type_id)
+            self.assertIsNotNone(source_note_type)
+            self.assertEqual(source_note_type.publish_status, "archived")
+            self.assertEqual(
+                NoteTypeInstall.query.filter_by(
+                    source_note_type_id=self.note_type_id,
+                    user_id=self.learner_id,
+                ).count(),
+                1,
+            )
+
     def test_owner_cannot_install_own_note_type(self):
         self._login("author@example.com")
 
@@ -185,6 +276,26 @@ class MarketplaceNoteTypesApiV1Tests(unittest.TestCase):
         )
         self.assertEqual(res.status_code, 200)
         self.assertEqual(res.get_json()["publish_status"], "unlisted")
+
+    def test_publish_note_type_accepts_react_professional_taxonomy(self):
+        self._login("author@example.com")
+        res = self.client.post(
+            f"/api/marketplace/note-types/{self.note_type_id}/publish",
+            json={
+                "publish_status": "published",
+                "description": "Professional coding template",
+                "primary_category": "Custom Technology",
+                "domain": "professional_skills",
+                "subject": "it_coding",
+                "difficulty_band": "intermediate",
+                "learning_goals": ["concept_recall"],
+                "primary_topics": ["business"],
+            },
+        )
+        self.assertEqual(res.status_code, 200)
+        payload = res.get_json()
+        self.assertEqual(payload["primary_category"], "Custom Technology")
+        self.assertEqual(payload["taxonomy_metadata"]["subject"], "it_coding")
 
     def test_recommendations_endpoint(self):
         self._login("learner@example.com")

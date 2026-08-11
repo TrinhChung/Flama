@@ -28,6 +28,7 @@ from models.flashcard import (
 )
 from models.user import User
 from models.deck import Deck
+from models.template import Template
 from models.card_progress import CardProgress
 from sqlalchemy import event
 from sqlalchemy.exc import OperationalError
@@ -524,6 +525,8 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
                 "title": "Shared Deck API Create",
                 "source_deck_id": self.deck_id,
                 "source_note_type_id": note_type_id,
+                "subcategory": "JLPT vocabulary",
+                "target_audience": "Self-study beginners",
                 "description": "Deck description",
                 "preview_text": "Preview",
                 "tags": ["jlpt", "n5"],
@@ -539,6 +542,8 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         self.assertEqual(create_resp.status_code, 201)
         payload = create_resp.get_json() or {}
         self.assertEqual(payload.get("title"), "Shared Deck API Create")
+        self.assertEqual(payload.get("taxonomy_metadata", {}).get("subcategory"), "JLPT vocabulary")
+        self.assertEqual(payload.get("taxonomy_metadata", {}).get("target_audience"), "Self-study beginners")
         self.assertEqual(payload.get("source_deck_id"), self.deck_id)
         self.assertEqual(payload.get("source_note_type_id"), note_type_id)
 
@@ -605,6 +610,166 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         )
         self.assertEqual(legacy_response.status_code, 302)
         self.assertIn("/dashboard", legacy_response.headers.get("Location", ""))
+
+    def test_shared_deck_api_rejects_foreign_note_type_and_source_mutation(self):
+        with self.app.app_context():
+            victim = User(username="victim", email="victim@example.com")
+            victim.set_password("password")
+            db.session.add(victim)
+            db.session.flush()
+            victim_note_type = NoteType(
+                user_id=victim.id,
+                name="Private Victim Template",
+                publish_status="private",
+            )
+            db.session.add(victim_note_type)
+            db.session.flush()
+            db.session.add(
+                Template(
+                    note_type_id=victim_note_type.id,
+                    name="Private Card",
+                    front_html="TOP SECRET",
+                    back_html="PRIVATE BACK",
+                    position=0,
+                )
+            )
+            other_deck = Deck(name="Other owned deck", owner_user_id=self.user_id)
+            db.session.add(other_deck)
+            db.session.commit()
+            victim_note_type_id = victim_note_type.id
+            other_deck_id = other_deck.id
+
+        create_response = self.client.post(
+            "/api/shared/decks",
+            json={
+                "title": "Foreign template leak",
+                "source_deck_id": self.deck_id,
+                "source_note_type_id": victim_note_type_id,
+                "description": "Must not publish",
+                "preview_text": "Private preview",
+                "taxonomy_domain": "language_learning",
+                "taxonomy_subject": "japanese",
+                "taxonomy_difficulty_band": "beginner",
+                "learning_goals": ["vocabulary"],
+                "primary_topics": ["meaning_recall"],
+                "publish_status": "published",
+            },
+        )
+        self.assertEqual(create_response.status_code, 404)
+        self.assertEqual((create_response.get_json() or {}).get("field"), "source_note_type_id")
+
+        note_type = self._create_note_type()
+        with self.app.app_context():
+            item = DeckMarketplaceItem(
+                owner_user_id=self.user_id,
+                source_deck_id=self.deck_id,
+                source_note_type_id=note_type["id"],
+                title="Immutable source listing",
+                publish_status="private",
+            )
+            db.session.add(item)
+            db.session.commit()
+            item_id = item.id
+
+        patch_response = self.client.patch(
+            f"/api/shared/decks/{item_id}",
+            json={"source_deck_id": other_deck_id},
+        )
+        self.assertEqual(patch_response.status_code, 409)
+        self.assertEqual((patch_response.get_json() or {}).get("error"), "CONFLICT")
+
+    def test_shared_deck_api_rejects_parent_when_descendant_is_shared(self):
+        with self.app.app_context():
+            child = Deck(
+                name="Already shared descendant",
+                owner_user_id=self.user_id,
+                parent_id=self.deck_id,
+            )
+            db.session.add(child)
+            db.session.flush()
+            db.session.add(
+                DeckMarketplaceItem(
+                    owner_user_id=self.user_id,
+                    source_deck_id=child.id,
+                    title="Shared descendant",
+                    publish_status="published",
+                )
+            )
+            db.session.commit()
+
+        response = self.client.post(
+            "/api/shared/decks",
+            json={"title": "Overlapping parent", "source_deck_id": self.deck_id},
+        )
+        self.assertEqual(response.status_code, 409)
+        payload = response.get_json() or {}
+        self.assertEqual(payload.get("field"), "source_deck_id")
+        self.assertIn("bộ con", payload.get("message", "").lower())
+
+    def test_standard_user_can_load_deck_publish_options(self):
+        with self.app.app_context():
+            user = User(username="standard", email="standard@example.com", is_admin=False)
+            user.set_password("password")
+            db.session.add(user)
+            db.session.flush()
+            db.session.add(Deck(name="Standard user deck", owner_user_id=user.id))
+            db.session.commit()
+
+        client = self.app.test_client()
+        client.post(
+            "/login",
+            data={"email": "standard@example.com", "password": "password"},
+            follow_redirects=True,
+        )
+        response = client.get("/api/shared/decks/publish-options")
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue((response.get_json() or {}).get("items"))
+
+    def test_archived_deck_listing_remains_visible_to_owner_only(self):
+        with self.app.app_context():
+            viewer = User(username="archived-viewer", email="archived-viewer@example.com")
+            viewer.set_password("password")
+            archived_item = DeckMarketplaceItem(
+                owner_user_id=self.user_id,
+                source_deck_id=self.deck_id,
+                title="Archived owner listing",
+                publish_status="archived",
+                archived_at=datetime.utcnow(),
+            )
+            db.session.add_all([viewer, archived_item])
+            db.session.commit()
+            archived_item_id = archived_item.id
+
+        owner_list = self.client.get("/api/shared/decks")
+        self.assertEqual(owner_list.status_code, 200)
+        self.assertTrue(
+            any(
+                row.get("id") == archived_item_id
+                for row in (owner_list.get_json() or {}).get("items", [])
+            )
+        )
+        self.assertEqual(
+            self.client.get(f"/api/shared/decks/{archived_item_id}").status_code,
+            200,
+        )
+
+        viewer_client = self.app.test_client()
+        viewer_client.post(
+            "/login",
+            data={"email": "archived-viewer@example.com", "password": "password"},
+            follow_redirects=True,
+        )
+        viewer_list = viewer_client.get("/api/shared/decks")
+        self.assertFalse(
+            any(
+                row.get("id") == archived_item_id
+                for row in (viewer_list.get_json() or {}).get("items", [])
+            )
+        )
+        self.assertEqual(
+            viewer_client.get(f"/api/shared/decks/{archived_item_id}").status_code,
+            404,
+        )
 
     def test_shared_deck_publish_options_mark_tree_eligibility(self):
         local_root_id, local_child_id = self._create_installed_clone_decks()
@@ -943,9 +1108,14 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             db.session.add(source_note_type)
             db.session.flush()
 
+            source_deck = Deck(name="Shared Deck Hub Source", owner_user_id=seller.id)
+            sibling_source_deck = Deck(name="Shared Deck Hub Sibling Source", owner_user_id=seller.id)
+            db.session.add_all([source_deck, sibling_source_deck])
+            db.session.flush()
+
             deck_item = DeckMarketplaceItem(
                 owner_user_id=seller.id,
-                source_deck_id=self.deck_id,
+                source_deck_id=source_deck.id,
                 source_note_type_id=source_note_type.id,
                 title="Shared Deck Hub",
                 description="Deck description",
@@ -959,7 +1129,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             )
             sibling = DeckMarketplaceItem(
                 owner_user_id=seller.id,
-                source_deck_id=self.deck_id,
+                source_deck_id=sibling_source_deck.id,
                 source_note_type_id=source_note_type.id,
                 title="Shared Deck Hub 2",
                 description="Sibling deck",

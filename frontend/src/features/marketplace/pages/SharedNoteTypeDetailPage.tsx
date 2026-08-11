@@ -149,11 +149,25 @@ export function SharedNoteTypeDetailPage() {
       return appApi.mutate<{
         installed_note_type_id?: string
         already_installed?: boolean
+        payment_required?: boolean
+        order?: { id: string; active_attempt?: { checkout_url?: string } }
       }>(`/api/shared/note-types/${id}/install`, 'POST')
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      if (data.payment_required && data.order) {
+        const checkoutUrl = data.order.active_attempt?.checkout_url
+        if (checkoutUrl) {
+          window.location.href = checkoutUrl
+          return
+        }
+        window.location.assign('/orders')
+        return
+      }
       queryClient.invalidateQueries({ queryKey: ['shared-note-type-detail', id] })
       queryClient.invalidateQueries({ queryKey: ['marketplace'] })
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || 'Không thể cài đặt Note Type.')
     },
   })
 
@@ -510,7 +524,7 @@ export function SharedNoteTypeDetailPage() {
                   ) : (
                     <Download className="mr-2 size-5" />
                   )}
-                  Tải xuống & Cài đặt
+                  {noteType.pricing_mode === 'paid' ? 'Mua Note Type' : 'Tải xuống & Cài đặt'}
                 </Button>
               )}
 

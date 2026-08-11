@@ -8,6 +8,13 @@ from models.model_uuid import uuid_str
 
 class DeckMarketplaceItem(db.Model):
     __tablename__ = "deck_marketplace_items"
+    __table_args__ = (
+        db.Index(
+            "uq_deck_marketplace_items_source_deck",
+            "source_deck_id",
+            unique=True,
+        ),
+    )
 
     id = db.Column(db.String(36), primary_key=True, default=uuid_str)
     owner_user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
