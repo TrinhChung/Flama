@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from flask import Blueprint, current_app, flash, jsonify, redirect, render_template, request, url_for
+from flask import Blueprint, current_app, flash, jsonify, redirect, request, url_for
 from flask_login import current_user, login_required
+from app.spa import serve_react_spa
 from sqlalchemy import func, or_
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import selectinload
@@ -146,7 +147,7 @@ def support_donation_management_page():
         flash("Đã cập nhật thông tin tài trợ.", "success")
         return redirect(url_for("admin.support_donation_management_page"))
 
-    return render_template(
+    return serve_react_spa(
         "admin/support_donation.html",
         config=row,
         default_support_title=support_donation_service.DEFAULT_TITLE,
@@ -344,7 +345,7 @@ def tts_provider_management_page():
         provider_type=provider_type_filter or None,
     )
 
-    return render_template(
+    return serve_react_spa(
         "admin/tts_provider_config.html",
         rows=rows,
         pretty_json=tts_provider_service.pretty_json,
@@ -393,7 +394,7 @@ def permission_assignment_page():
         flash("Khong tim thay user hop le de chinh quyen.", "warning")
         return redirect(url_for("admin.user_management_page"))
 
-    return render_template(
+    return serve_react_spa(
         "admin/permission_assignment.html",
         users=users,
         selected_ids=[user.id for user in users],

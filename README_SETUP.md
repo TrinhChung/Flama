@@ -411,7 +411,7 @@ Luu y:
 ## CSV Import (UI)
 
 1. Dang nhap vao he thong.
-2. Truy cap `http://127.0.0.1:4789/vocabulary`.
+2. Truy cập `http://127.0.0.1:4789/import` hoặc dùng mục **Import** trong React app.
 3. Bam **Nhap CSV** va dan du lieu voi header:
 
 ```text

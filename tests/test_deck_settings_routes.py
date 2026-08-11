@@ -655,12 +655,13 @@ class DeckSettingsRoutesTests(unittest.TestCase):
         dashboard_response = self.client.get("/dashboard")
         self.assertNotIn('data-node-name="Protected Source"', dashboard_response.get_data(as_text=True))
         author_detail = self.client.get(f"/api/shared/decks/{shared_item_id}")
-        self.assertEqual(author_detail.status_code, 404)
+        self.assertEqual(author_detail.status_code, 200)
+        self.assertEqual(author_detail.get_json().get("publish_status"), "archived")
         market_response = self.client.get("/api/shared/decks")
         market_item_ids = {
             item.get("id") for item in (market_response.get_json() or {}).get("items", [])
         }
-        self.assertNotIn(shared_item_id, market_item_ids)
+        self.assertIn(shared_item_id, market_item_ids)
 
         self.client.post("/logout")
         self._login_other()

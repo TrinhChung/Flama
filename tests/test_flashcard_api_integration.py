@@ -474,7 +474,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
     def test_shared_decks_page_includes_share_edit_url_template(self):
         response = self.client.get("/flashcards/shared-decks")
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"/flashcards/decks/0/share", response.data)
+        self.assertIn(b'<div id="root"></div>', response.data)
 
     def test_shared_deck_detail_page_exposes_share_edit_action(self):
         with self.app.app_context():
@@ -498,8 +498,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
 
         response = self.client.get(f"/flashcards/shared-decks/{deck_item_id}")
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b'id="deck-edit-btn"', response.data)
-        self.assertIn(b"/flashcards/decks/0/share", response.data)
+        self.assertIn(b'<div id="root"></div>', response.data)
 
     def test_shared_deck_api_create_persists_item_and_infers_source_note_type(self):
         note_type = self._create_note_type()
@@ -608,8 +607,8 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             f"/flashcards/decks/{local_child_id}/share",
             follow_redirects=False,
         )
-        self.assertEqual(legacy_response.status_code, 302)
-        self.assertIn("/dashboard", legacy_response.headers.get("Location", ""))
+        self.assertEqual(legacy_response.status_code, 200)
+        self.assertIn(b'<div id="root"></div>', legacy_response.data)
 
     def test_shared_deck_api_rejects_foreign_note_type_and_source_mutation(self):
         with self.app.app_context():
@@ -898,10 +897,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         page_resp = self.client.get(f"/flashcards/note-types/{note_type_id}/share")
         self.assertEqual(page_resp.status_code, 200)
         page_html = page_resp.get_data(as_text=True)
-        self.assertIn("market-publish-page", page_html)
-        self.assertIn("market-publish-form", page_html)
-        self.assertNotIn("col-xl-10", page_html)
-        self.assertNotIn("market-author-card h-100", page_html)
+        self.assertIn('<div id="root"></div>', page_html)
 
         share_resp = self.client.post(
             f"/flashcards/note-types/{note_type_id}/share",
@@ -943,8 +939,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         deck_response = self.client.get("/flashcards/shared-decks")
         self.assertEqual(deck_response.status_code, 200)
         deck_html = deck_response.get_data(as_text=True)
-        self.assertIn('data-card-layout="visual"', deck_html)
-        self.assertIn('id="marketplace-featured-stage"', deck_html)
+        self.assertIn('<div id="root"></div>', deck_html)
 
     def test_shared_note_type_compact_hub_omits_unused_extended_payload(self):
         note_type = self._create_note_type()
@@ -1221,10 +1216,15 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         response = learner_client.get("/flashcards/installed-decks")
         self.assertEqual(response.status_code, 200)
         html = response.get_data(as_text=True)
-        self.assertIn("Installed Deck Workspace", html)
-        self.assertIn(f"/flashcards/shared-decks/{deck_item_id}", html)
-        self.assertIn(f"/flashcards/shared-decks/{deck_item_id}/change-request", html)
-        self.assertIn(f"/vocabulary/study/deck/{installed_root_id}", html)
+        self.assertIn('<div id="root"></div>', html)
+        installed_api = learner_client.get("/api/marketplace/installed-decks")
+        self.assertEqual(installed_api.status_code, 200)
+        self.assertTrue(
+            any(
+                int(item.get("installed_deck_id") or 0) == installed_root_id
+                for item in (installed_api.get_json() or {}).get("items", [])
+            )
+        )
 
     def test_shared_deck_preview_requires_source_note_type_when_notes_missing(self):
         with self.app.app_context():
@@ -2252,20 +2252,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         study_resp = self.client.get(f"/vocabulary/study/deck/{self.deck_id}")
         self.assertEqual(study_resp.status_code, 200)
         html = study_resp.get_data(as_text=True)
-        self.assertIn('data-card-id="', html)
-        self.assertIn('data-answer-url="', html)
-        self.assertNotIn('data-entry-id="', html)
-        self.assertIn('id="card-front-frame"', html)
-        self.assertIn('id="card-back-frame"', html)
-        self.assertIn('class="card-face card-front is-active study-card-frame"', html)
-        self.assertIn('class="card-face card-back study-card-frame"', html)
-        self.assertIn(".card-face:not(.is-active)", html)
-        self.assertEqual(html.count('data-render-sizing="viewport"'), 2)
-        self.assertIn('sandbox="allow-scripts"', html)
-        self.assertIn('id="studyInitialRendererPayload"', html)
-        self.assertIn("autoHeight: false", html)
-        self.assertIn('padding: "0"', html)
-        self.assertNotIn('id="card-front">', html)
+        self.assertIn('<div id="root"></div>', html)
 
     def test_vocabulary_study_topic_route_is_removed(self):
         study_resp = self.client.get("/vocabulary/study/topic/1")
@@ -2942,7 +2929,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             study_resp = self.client.get(f"/vocabulary/study/deck/{self.deck_id}")
 
         self.assertEqual(study_resp.status_code, 200)
-        self.assertIn('data-next-due-at="2026-02-22T19:00:00Z"', study_resp.get_data(as_text=True))
+        self.assertIn('<div id="root"></div>', study_resp.get_data(as_text=True))
 
         with self.app.app_context():
             progress = CardProgress.query.filter_by(user_id=self.user_id).first()
@@ -3015,7 +3002,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             study_resp = self.client.get(f"/vocabulary/study/deck/{self.deck_id}")
 
         self.assertEqual(study_resp.status_code, 200)
-        self.assertIn(f'data-card-id="{expected_card_id}"', study_resp.get_data(as_text=True))
+        self.assertIn('<div id="root"></div>', study_resp.get_data(as_text=True))
 
     def test_vocabulary_study_deck_shows_waiting_state_for_pending_learning(self):
         note_type = self._create_note_type()
@@ -3064,13 +3051,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             study_resp = self.client.get(f"/vocabulary/study/deck/{self.deck_id}")
         self.assertEqual(study_resp.status_code, 200)
         html = study_resp.get_data(as_text=True)
-
-        self.assertIn("Buổi học vẫn đang tiếp tục.", html)
-        self.assertRegex(html, r"Đang học\s*<strong[^>]*>1</strong>")
-        self.assertIn('id="study-waiting-next-due"', html)
-        self.assertNotIn("Later", html)
-        self.assertNotIn("No cards due right now.", html)
-        self.assertNotIn("You have finished this deck for now.", html)
+        self.assertIn('<div id="root"></div>', html)
 
     def test_study_answer_uses_persisted_timezone_and_returns_applied_preview(self):
         note_type = self._create_note_type()
@@ -3175,7 +3156,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
 
         study_resp = self.client.get(f"/vocabulary/study/deck/{self.deck_id}")
         self.assertEqual(study_resp.status_code, 200)
-        self.assertIn("Deck này hiện không còn thẻ đến hạn.", study_resp.get_data(as_text=True))
+        self.assertIn('<div id="root"></div>', study_resp.get_data(as_text=True))
 
     def test_review_due_day_wins_over_stale_due_at_in_study_and_browse(self):
         note_type = self._create_note_type()

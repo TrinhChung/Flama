@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from flask import jsonify, redirect, render_template, request, url_for
+from flask import jsonify, redirect, request, url_for
 from flask_login import current_user, login_required
+from app.spa import serve_react_spa
 
 from app.services import deck_change_request_service
 from app.validators import (
@@ -48,7 +49,7 @@ def shared_deck_change_request_page(deck_item_id: str):
     deck_item = _get_shared_deck_item_for_view(deck_item_id)
     if deck_item is None:
         return redirect(url_for("flashcards.shared_decks_page"))
-    return render_template(
+    return serve_react_spa(
         "flashcards/shared_deck_change_request.html",
         deck_item_id=deck_item_id,
     )
@@ -57,7 +58,7 @@ def shared_deck_change_request_page(deck_item_id: str):
 @flashcards_bp.route("/flashcards/change-requests/incoming")
 @login_required
 def deck_change_request_inbox_page():
-    return render_template(
+    return serve_react_spa(
         "flashcards/deck_change_request_inbox.html",
         deck_item_id=(request.args.get("deck_item_id") or "").strip(),
     )
@@ -66,7 +67,7 @@ def deck_change_request_inbox_page():
 @flashcards_bp.route("/flashcards/change-requests/<request_id>")
 @login_required
 def deck_change_request_detail_page(request_id: str):
-    return render_template(
+    return serve_react_spa(
         "flashcards/deck_change_request_detail.html",
         request_id=request_id,
     )

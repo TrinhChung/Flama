@@ -6,8 +6,9 @@ import logging
 from datetime import datetime, timezone
 
 UTC = timezone.utc
-from flask import jsonify, request, url_for, render_template
+from flask import jsonify, request, url_for
 from flask_login import current_user, login_required
+from app.spa import serve_react_spa
 from sqlalchemy.exc import OperationalError
 from models import db
 from models.flashcard import *
@@ -53,23 +54,23 @@ def _marketplace_payment_redirect_url(endpoint: str, **values: object) -> str:
 @flashcards_bp.route("/flashcards/shared-note-types")
 @login_required
 def shared_note_types_page():
-    return render_template("flashcards/shared_note_types.html")
+    return serve_react_spa()
 
 @flashcards_bp.route("/flashcards/shared-note-types/<note_type_id>")
 @login_required
 def shared_note_type_detail_page(note_type_id: str):
-    return render_template("flashcards/shared_note_type_detail.html", note_type_id=note_type_id)
+    return serve_react_spa()
 
 @flashcards_bp.route("/flashcards/shared-decks")
 @login_required
 def shared_decks_page():
-    return render_template("flashcards/shared_decks.html")
+    return serve_react_spa()
 
 @flashcards_bp.route("/flashcards/installed-decks")
 @login_required
 def installed_decks_page():
     workspace = marketplace_hub_service.build_installed_deck_workspace(user_id=current_user.id)
-    return render_template(
+    return serve_react_spa(
         "flashcards/installed_decks.html",
         installed_workspace=workspace,
     )
@@ -77,7 +78,7 @@ def installed_decks_page():
 @flashcards_bp.route("/flashcards/shared-decks/<deck_item_id>")
 @login_required
 def shared_deck_detail_page(deck_item_id: str):
-    return render_template("flashcards/shared_deck_detail.html", deck_item_id=deck_item_id)
+    return serve_react_spa()
 
 
 @flashcards_bp.route("/api/shared/note-types/hub", methods=["GET"])

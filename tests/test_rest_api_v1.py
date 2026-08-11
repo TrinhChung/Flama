@@ -84,8 +84,8 @@ class RestApiV1Tests(unittest.TestCase):
         )
 
         page_response = self.client.get("/dashboard")
-        self.assertEqual(page_response.status_code, 302)
-        self.assertIn("/login", page_response.headers["Location"])
+        self.assertEqual(page_response.status_code, 200)
+        self.assertIn("text/html", page_response.content_type)
 
     def test_register_login_and_logout_flow(self):
         register_response = self.client.post(
@@ -374,7 +374,7 @@ class RestApiV1Tests(unittest.TestCase):
         self.assertIn("items", cards_data)
         self.assertIn("total", cards_data)
 
-    def test_browse_voicevox_precheck_matches_legacy_adapter(self):
+    def test_browse_voicevox_precheck_matches_transition_adapter(self):
         self._login_admin()
         payload = {
             "card_ids": [],

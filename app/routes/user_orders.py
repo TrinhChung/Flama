@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from flask import Blueprint, abort, render_template
+from flask import Blueprint, abort
 from flask_login import current_user, login_required
+from app.spa import serve_react_spa
 
 from app.services.payment import order_query_service
 
@@ -22,7 +23,7 @@ def order_detail_page(order_id: str):
     payload = order_query_service.get_user_order_detail(order_id=order_id, user_id=current_user.id)
     if payload is None:
         abort(404)
-    return render_template(
+    return serve_react_spa(
         "user/orders/detail.html",
         order=payload,
     )

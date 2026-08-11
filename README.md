@@ -1,6 +1,6 @@
-# Nihongo Flask Starter
+# Flama
 
-Lightweight Flask + MySQL application for vocabulary learning, flashcards, marketplace installs, and payOS-based payment flows.
+React + Flask REST application for vocabulary learning, flashcards, marketplace installs, and payOS-based payment flows.
 
 ## Documentation
 
@@ -15,6 +15,7 @@ Lightweight Flask + MySQL application for vocabulary learning, flashcards, marke
 ## Core Features
 
 - Flask application factory pattern with SQLAlchemy models.
+- React SPA owns all user-facing HTML; Flask serves REST and binary resources.
 - Environment-based configuration via `.env` and `python-dotenv`.
 - Secure password hashing and session management handled by Flask-Login.
 - Vocabulary management and flashcard study flows.
@@ -35,14 +36,15 @@ Lightweight Flask + MySQL application for vocabulary learning, flashcards, marke
 wsgi.py                 # Flask entry point
 app/
 |-- __init__.py         # Application factory and configuration
+|-- api/                # Canonical REST resources under /api
 |-- extensions.py       # Shared Flask extensions
-|-- routes/             # Blueprints and HTTP entrypoints
+|-- routes/             # Protocol, binary and transition adapters
 |-- services/           # Business logic and orchestration
 |-- repositories/       # Query and persistence helpers
 |-- validators/         # Request validation and normalization
 models/                 # SQLAlchemy model definitions
-templates/              # Jinja2 templates
-static/                 # Static assets
+frontend/               # React/Vite application
+static/                 # Seed data, uploads and card-renderer host
 docs/                   # Technical documentation
 ```
 

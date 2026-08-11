@@ -120,11 +120,11 @@ class AuthSecurityTests(unittest.TestCase):
         self.assertEqual(login_response.status_code, 302)
 
         response = self.client.get("/logout", follow_redirects=False)
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.headers.get("Location"), "/dashboard")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("text/html", response.content_type)
 
-        dashboard = self.client.get("/dashboard", follow_redirects=False)
-        self.assertEqual(dashboard.status_code, 200)
+        session_response = self.client.get("/api/session")
+        self.assertTrue(session_response.get_json()["authenticated"])
 
     def test_login_rate_limit_locks_after_repeated_failures(self):
         token = self._csrf_token("/login")
@@ -150,7 +150,6 @@ class AuthSecurityTests(unittest.TestCase):
             follow_redirects=False,
         )
         self.assertEqual(locked.status_code, 429)
-        self.assertIn("quá nhiều lần", locked.get_data(as_text=True))
 
 
 if __name__ == "__main__":

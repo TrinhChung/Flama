@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
+from flask import Blueprint, abort, flash, redirect, request, url_for
 from flask_login import current_user, login_required
+from app.spa import serve_react_spa
 
 from app.services import admin_service
 from app.services.payment import order_query_service, transaction_query_service
@@ -45,7 +46,7 @@ def orders_page():
     page = admin_service.coerce_int(request.args.get("page"), default=1, minimum=1)
     per_page = admin_service.coerce_int(request.args.get("per_page"), default=DEFAULT_PAGE_SIZE, minimum=1, maximum=MAX_PAGE_SIZE)
     payload = order_query_service.list_admin_orders(filters=filters, page=page, per_page=per_page)
-    return render_template(
+    return serve_react_spa(
         "admin/payment/orders.html",
         items=payload["items"],
         page=payload["page"],
@@ -69,7 +70,7 @@ def order_detail_page(order_id: str):
     payload = order_query_service.get_admin_order_detail(order_id)
     if payload is None:
         abort(404)
-    return render_template(
+    return serve_react_spa(
         "admin/payment/order_detail.html",
         order=payload,
     )
@@ -85,7 +86,7 @@ def transactions_page():
     page = admin_service.coerce_int(request.args.get("page"), default=1, minimum=1)
     per_page = admin_service.coerce_int(request.args.get("per_page"), default=DEFAULT_PAGE_SIZE, minimum=1, maximum=MAX_PAGE_SIZE)
     payload = transaction_query_service.list_admin_transactions(filters=filters, page=page, per_page=per_page)
-    return render_template(
+    return serve_react_spa(
         "admin/payment/transactions.html",
         items=payload["items"],
         page=payload["page"],
@@ -109,7 +110,7 @@ def transaction_detail_page(attempt_id: str):
     payload = transaction_query_service.get_admin_transaction_detail(attempt_id)
     if payload is None:
         abort(404)
-    return render_template(
+    return serve_react_spa(
         "admin/payment/transaction_detail.html",
         attempt=payload,
     )

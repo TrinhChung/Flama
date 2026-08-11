@@ -5,7 +5,7 @@ from __future__ import annotations
 import hmac
 import secrets
 
-from flask import current_app, jsonify, render_template, request, session
+from flask import current_app, jsonify, request, session
 
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS", "TRACE"}
 SESSION_TOKEN_KEY = "_csrf_token"
@@ -14,13 +14,6 @@ SESSION_TOKEN_KEY = "_csrf_token"
 def init_csrf_protection(app) -> None:
     """Register CSRF helpers on the Flask app."""
 
-    @app.context_processor
-    def inject_csrf_helpers():
-        return {
-            "csrf_token": generate_csrf_token,
-        }
-
-    app.jinja_env.globals["csrf_token"] = generate_csrf_token
     app.before_request(protect_from_csrf)
 
 
@@ -87,6 +80,4 @@ def _extract_request_token() -> str:
 
 def _csrf_error_response():
     message = "CSRF validation failed."
-    if request.is_json or "/api/" in request.path:
-        return jsonify({"error": "CSRF_FAILED", "message": message}), 400
-    return render_template("error.html", error_code=400, error_message=message), 400
+    return jsonify({"error": "CSRF_FAILED", "message": message}), 400

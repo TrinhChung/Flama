@@ -325,10 +325,12 @@ class VocabSeedSharingTests(unittest.TestCase):
         response = client.get("/flashcards/installed-decks")
         self.assertEqual(response.status_code, 200)
         html = response.get_data(as_text=True)
-        self.assertIn("Unit 1", html)
-        self.assertIn("Deck của bạn", html)
-        self.assertIn(f"/flashcards/change-requests/incoming?deck_item_id={item_id}", html)
-        self.assertIn(f"/vocabulary/study/deck/{source_deck_id}", html)
+        self.assertIn('<div id="root"></div>', html)
+
+        api_response = client.get("/api/marketplace/installed-decks")
+        self.assertEqual(api_response.status_code, 200)
+        items = (api_response.get_json() or {}).get("items", [])
+        self.assertTrue(any(item.get("title") == "Unit 1" for item in items))
 
     def test_vocab_seed_can_disable_auto_share(self):
         result = self.runner.invoke(
