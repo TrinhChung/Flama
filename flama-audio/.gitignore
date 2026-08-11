@@ -27,6 +27,15 @@ publish/
 *.appxbundle
 *.msixbundle
 
+## Signing credentials (production credentials belong in the GitHub environment)
+*.pfx
+*.p12
+*.pvk
+*.key
+*.pem
+*.cer
+*.crt
+
 ## Local runtime data & downloaded engine models
 state/
 engines/

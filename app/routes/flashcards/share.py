@@ -13,7 +13,7 @@ from models import db
 from models.flashcard import *
 from app.services import flashcards_share
 from app.services import marketplace_hub_service
-from app.utils.permissions import is_admin_user
+from app.utils.permissions import is_admin_user, is_creator_user
 
 # Import everything from core module so routes can use helpers
 from . import *
@@ -391,6 +391,20 @@ def list_shared_decks():
         payload_items.append(row)
     return jsonify({"items": payload_items})
 
+
+@flashcards_bp.route("/api/shared/decks/publish-options", methods=["GET"])
+@login_required
+def shared_deck_publish_options():
+    if not is_creator_user(current_user):
+        return _api_error(
+            "FORBIDDEN",
+            "Bạn không có quyền chia sẻ bộ thẻ.",
+            status=403,
+        )
+    return jsonify(
+        flashcards_share.build_deck_publish_options(user_id=current_user.id)
+    )
+
 @flashcards_bp.route("/api/shared/decks", methods=["POST"])
 @login_required
 def create_shared_deck_item():
@@ -403,7 +417,20 @@ def create_shared_deck_item():
     )
     if validation_error:
         if error_field == "source_deck_id":
-            return _api_error("FIELD_NOT_FOUND", validation_error, field=error_field, status=404)
+            source_not_found = validation_error == "source_deck_id not found."
+            invalid_source_id = validation_error == "source_deck_id must be an integer."
+            return _api_error(
+                (
+                    "FIELD_NOT_FOUND"
+                    if source_not_found
+                    else "VALIDATION_ERROR"
+                    if invalid_source_id
+                    else "CONFLICT"
+                ),
+                validation_error,
+                field=error_field,
+                status=404 if source_not_found else 400 if invalid_source_id else 409,
+            )
         return _api_error("VALIDATION_ERROR", validation_error, field=error_field)
     if deck_item is None:
         return _api_error("VALIDATION_ERROR", "Failed to create deck item.")

@@ -169,24 +169,16 @@ def _share_deck_page_impl(deck: Deck):
         flash("You do not have permission to share this deck.", "danger")
         return redirect(url_for("main.dashboard"))
 
-    if deck.owner_user_id == current_user.id:
-        from models.flashcard import DeckInstall
-
-        if DeckInstall.query.filter_by(user_id=current_user.id, local_deck_id=deck.id).first():
-            flash("Installed marketplace decks cannot be re-shared.", "danger")
-            return redirect(url_for("main.dashboard"))
-
     from models.flashcard import DeckMarketplaceItem
 
-    current_parent = deck.parent_id
-    while current_parent is not None:
-        parent_deck = Deck.query.get(current_parent)
-        if not parent_deck:
-            break
-        if DeckMarketplaceItem.query.filter_by(source_deck_id=parent_deck.id).first():
-            flash(f"Parent deck '{parent_deck.name}' is already shared.", "warning")
-            return redirect(url_for("main.dashboard"))
-        current_parent = parent_deck.parent_id
+    eligibility = flashcards_share.get_deck_publish_eligibility(
+        user_id=current_user.id,
+        deck=deck,
+        allow_existing=True,
+    )
+    if not eligibility["is_selectable"]:
+        flash(str(eligibility["block_reason"]), "warning")
+        return redirect(url_for("main.dashboard"))
 
     existing_item = DeckMarketplaceItem.query.filter_by(source_deck_id=deck.id).first()
     existing_item_was_found = existing_item is not None

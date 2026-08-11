@@ -26,6 +26,7 @@ import { flamaAudioClient } from '@/lib/flamaAudioClient'
 export function FlamaAudioGuidePage() {
   const [serviceStatus, setServiceStatus] = useState<'unchecked' | 'checking' | 'online' | 'offline'>('unchecked')
   const downloadUrl = resolveBackendUrl('/api/download/flama-audio')
+  const checksumUrl = resolveBackendUrl('/api/download/flama-audio.sha256')
 
   const handleCheckConnection = async () => {
     setServiceStatus('checking')
@@ -50,6 +51,12 @@ export function FlamaAudioGuidePage() {
               <a href={downloadUrl} target="_blank" rel="noopener noreferrer" download>
                 <Download className="size-4" />
                 <span>Tải Flama Audio (FlamaAudio-Portable.exe)</span>
+              </a>
+            </Button>
+            <Button asChild variant="outline" size="sm" className="gap-2 font-semibold">
+              <a href={checksumUrl} target="_blank" rel="noopener noreferrer" download>
+                <ShieldCheck className="size-4" />
+                <span>SHA-256</span>
               </a>
             </Button>
           </div>

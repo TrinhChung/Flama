@@ -1,4 +1,8 @@
+using System;
+using System.IO;
 using System.Net.Http;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading.Tasks;
 using Flama.Audio.Core.Interfaces;
 using Flama.Audio.Core.Models;
@@ -11,6 +15,45 @@ namespace Flama.Audio.Tests;
 
 public class FlamaAudioTests
 {
+    [Fact]
+    public async Task VoicevoxPackageVerification_AcceptsMatchingSha256()
+    {
+        var tempFile = Path.GetTempFileName();
+        try
+        {
+            var content = Encoding.UTF8.GetBytes("official-voicevox-package-bytes");
+            await File.WriteAllBytesAsync(tempFile, content);
+            var expected = Convert.ToHexString(SHA256.HashData(content));
+
+            await VoicevoxEngineInstaller.VerifySha256Async(tempFile, expected);
+        }
+        finally
+        {
+            File.Delete(tempFile);
+        }
+    }
+
+    [Fact]
+    public async Task VoicevoxPackageVerification_RejectsMismatchedSha256()
+    {
+        var tempFile = Path.GetTempFileName();
+        try
+        {
+            await File.WriteAllTextAsync(tempFile, "unexpected-package-bytes");
+
+            await Assert.ThrowsAsync<InvalidDataException>(
+                () => VoicevoxEngineInstaller.VerifySha256Async(
+                    tempFile,
+                    new string('0', 64)
+                )
+            );
+        }
+        finally
+        {
+            File.Delete(tempFile);
+        }
+    }
+
     [Fact]
     public async Task PairingManager_Flow_Succeeds()
     {
@@ -109,4 +152,3 @@ public class FlamaAudioTests
         Assert.Contains(voices, v => v.SpeakerName == "Zundamon");
     }
 }
-
