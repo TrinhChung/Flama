@@ -317,6 +317,12 @@ class RestApiV1Tests(unittest.TestCase):
         )
         self.assertEqual(rename_response.status_code, 403)
 
+        purge_response = self.client.delete(
+            f"/api/decks/{regular_deck_id}?purge=true"
+        )
+        self.assertEqual(purge_response.status_code, 403)
+        self.assertEqual(purge_response.get_json()["error"], "FORBIDDEN")
+
     def test_admin_user_resource_lists_roles_and_updates_status(self):
         self._login_admin()
         register_response = self.client.post(
@@ -393,6 +399,147 @@ class RestApiV1Tests(unittest.TestCase):
         self.assertEqual(legacy_response.status_code, 200)
         self.assertEqual(v1_response.status_code, 200)
         self.assertEqual(v1_response.get_json(), legacy_response.get_json())
+
+    def test_deck_and_note_type_purge(self):
+        self._login_admin()
+
+        from models.note_type import NoteType
+        from models.note import Note
+        from models.card import Card
+        from models.card_progress import CardProgress
+        from models.deck_install import DeckInstall
+        from models.deck_marketplace_item import DeckMarketplaceItem
+        from models.review_event import ReviewEvent
+
+        # 1. Create a NoteType and Deck
+        with self.app.app_context():
+            nt = NoteType(user_id=self.admin_id, name="Test NT")
+            db.session.add(nt)
+            db.session.flush()
+            nt_id = nt.id
+
+            deck = Deck(name="Test Purge Deck", owner_user_id=self.admin_id)
+            db.session.add(deck)
+            db.session.flush()
+            deck_id = deck.id
+
+            # Create a Note, Card, CardProgress
+            note = Note(note_type_id=nt_id, user_id=self.admin_id, deck_id=deck_id)
+            db.session.add(note)
+            db.session.flush()
+            note_id = note.id
+
+            card = Card(note_id=note_id, template_id="some-template")
+            db.session.add(card)
+            db.session.flush()
+            card_id = card.id
+
+            prog = CardProgress(user_id=self.admin_id, card_id=card_id, queue="new")
+            db.session.add(prog)
+
+            # Create some dependent objects
+            mitem = DeckMarketplaceItem(owner_user_id=self.admin_id, source_deck_id=deck_id, title="MItem")
+            db.session.add(mitem)
+            db.session.flush()
+            mitem_id = mitem.id
+
+            dinstall = DeckInstall(deck_item_id=mitem_id, user_id=self.admin_id, local_deck_id=deck_id, source_deck_id=deck_id)
+            db.session.add(dinstall)
+
+            from models.deck_change_request import DeckChangeRequest
+            dcr = DeckChangeRequest(
+                requester_user_id=self.admin_id,
+                owner_user_id=self.admin_id,
+                local_deck_id=deck_id,
+                source_deck_id=deck_id,
+                overlay_fingerprint="fingerprint_test"
+            )
+            db.session.add(dcr)
+
+            from models.note_type_install import NoteTypeInstall
+            nti = NoteTypeInstall(
+                source_note_type_id=nt_id,
+                installed_note_type_id=nt_id,
+                user_id=self.admin_id
+            )
+            db.session.add(nti)
+
+            from datetime import datetime, timezone
+            rev = ReviewEvent(
+                user_id=self.admin_id,
+                card_id=card_id,
+                deck_id=deck_id,
+                note_type_id=nt_id,
+                rating="good",
+                mode="review",
+                reviewed_at=datetime.now(timezone.utc).replace(tzinfo=None)
+            )
+            db.session.add(rev)
+
+            db.session.commit()
+
+        # Verify they exist
+        with self.app.app_context():
+            self.assertIsNotNone(db.session.get(Deck, deck_id))
+            self.assertIsNotNone(db.session.get(NoteType, nt_id))
+            self.assertEqual(ReviewEvent.query.filter_by(deck_id=deck_id).count(), 1)
+            self.assertEqual(DeckInstall.query.filter_by(source_deck_id=deck_id).count(), 1)
+            self.assertEqual(DeckChangeRequest.query.filter_by(source_deck_id=deck_id).count(), 1)
+            self.assertEqual(NoteTypeInstall.query.filter_by(source_note_type_id=nt_id).count(), 1)
+
+        # Try to purge note type as regular user
+        self.client.delete("/api/session")
+        register_response = self.client.post(
+            "/api/auth/register",
+            json={
+                "email": "purgeuser@example.com",
+                "username": "purgeuser",
+                "password": "secret-password",
+                "confirm_password": "secret-password",
+            },
+        )
+        self.assertEqual(register_response.status_code, 201)
+        self.client.post(
+            "/api/auth/login",
+            json={"email": "purgeuser@example.com", "password": "secret-password"},
+        )
+
+        # Non-admin purge note type -> should fail
+        response = self.client.delete(f"/api/note-types/{nt_id}?purge=true")
+        self.assertEqual(response.status_code, 403)
+
+        # Login admin back
+        self.client.delete("/api/session")
+        self._login_admin()
+
+        # Admin purge deck
+        delete_deck_res = self.client.delete(f"/api/decks/{deck_id}?purge=true")
+        if delete_deck_res.status_code != 200:
+            print("PURGE_DECK_ERROR:", delete_deck_res.get_data(as_text=True))
+        self.assertEqual(delete_deck_res.status_code, 200)
+        self.assertEqual(delete_deck_res.get_json()["mode"], "purged")
+
+        # Verify deck and its dependencies are deleted
+        with self.app.app_context():
+            from models.deck_change_request import DeckChangeRequest
+            self.assertIsNone(db.session.get(Deck, deck_id))
+            self.assertEqual(ReviewEvent.query.filter_by(deck_id=deck_id).count(), 0)
+            self.assertEqual(DeckInstall.query.filter_by(source_deck_id=deck_id).count(), 0)
+            self.assertEqual(DeckMarketplaceItem.query.filter_by(source_deck_id=deck_id).count(), 0)
+            self.assertEqual(DeckChangeRequest.query.filter_by(source_deck_id=deck_id).count(), 0)
+            self.assertIsNone(db.session.get(Note, note_id))
+            self.assertIsNone(db.session.get(Card, card_id))
+
+        # Admin purge note type
+        delete_nt_res = self.client.delete(f"/api/note-types/{nt_id}?purge=true")
+        self.assertEqual(delete_nt_res.status_code, 200)
+        self.assertTrue(delete_nt_res.get_json()["purged"])
+
+        # Verify note type and its dependencies are deleted
+        with self.app.app_context():
+            from models.note_type_install import NoteTypeInstall
+            self.assertIsNone(db.session.get(NoteType, nt_id))
+            self.assertEqual(NoteTypeInstall.query.filter_by(source_note_type_id=nt_id).count(), 0)
 
 
 if __name__ == "__main__":

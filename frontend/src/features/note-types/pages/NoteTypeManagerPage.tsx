@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import {
+  AlertCircle,
   CheckCircle,
   Code2,
+  LoaderCircle,
   Plus,
   Share2,
   SlidersHorizontal,
@@ -11,8 +13,18 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { appApi } from '@/app/api'
+import { useBootstrap } from '@/shared/api/bootstrap'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -43,7 +55,11 @@ type NoteTypesResponse = {
 export function NoteTypeManagerPage() {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
+  const bootstrapQuery = useBootstrap()
+  const isAdmin = Boolean(bootstrapQuery.data?.user?.is_admin)
   const [name, setName] = useState('')
+  const [noteTypeToDelete, setNoteTypeToDelete] = useState<NoteTypeItem | null>(null)
+  const [purgeNoteType, setPurgeNoteType] = useState(false)
 
   const query = useQuery({
     queryKey: ['note-types'],
@@ -63,11 +79,16 @@ export function NoteTypeManagerPage() {
     },
   })
 
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => appApi.mutate(`/note-types/${id}`, 'DELETE'),
+  const deleteMutation = useMutation<unknown, Error, { id: string; purge?: boolean }>({
+    mutationFn: ({ id, purge }) => {
+      const suffix = purge ? '?purge=true' : ''
+      return appApi.mutate(`/note-types/${id}${suffix}`, 'DELETE')
+    },
     onSuccess: () => {
-      toast.success('Đã xóa NoteType.')
+      toast.success('Thao tác xóa NoteType đã hoàn tất.')
       void queryClient.invalidateQueries({ queryKey: ['note-types'] })
+      setNoteTypeToDelete(null)
+      setPurgeNoteType(false)
     },
     onError: (error: Error) => {
       toast.error('Không thể xóa NoteType', { description: error.message })
@@ -188,9 +209,8 @@ export function NoteTypeManagerPage() {
                       size="sm"
                       className="h-8 sm:h-9 px-2.5 text-xs text-destructive hover:text-destructive hover:bg-destructive/10 rounded-lg"
                       onClick={() => {
-                        if (window.confirm(`Xóa NoteType "${item.name}"?`)) {
-                          deleteMutation.mutate(item.id)
-                        }
+                        setPurgeNoteType(false)
+                        setNoteTypeToDelete(item)
                       }}
                     >
                       <Trash2 className="size-3.5" />
@@ -210,6 +230,58 @@ export function NoteTypeManagerPage() {
           </TableBody>
         </Table>
       </Card>
+
+      {noteTypeToDelete && (
+        <Dialog open onOpenChange={(open) => !open && setNoteTypeToDelete(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Xác nhận xóa NoteType</DialogTitle>
+              <DialogDescription>
+                Xóa NoteType “{noteTypeToDelete.name}”? Hành động này có thể không hoàn tác được.
+              </DialogDescription>
+            </DialogHeader>
+
+            {isAdmin && (
+              <div className="space-y-3 p-3 rounded-lg border border-destructive/20 bg-destructive/5 dark:bg-destructive/10">
+                <div className="flex items-center gap-2">
+                  <input
+                    id="purge-notetype-checkbox"
+                    type="checkbox"
+                    checked={purgeNoteType}
+                    onChange={(e) => setPurgeNoteType(e.target.checked)}
+                    className="size-4 rounded border-input text-destructive focus:ring-destructive accent-destructive cursor-pointer"
+                  />
+                  <Label htmlFor="purge-notetype-checkbox" className="font-bold text-destructive cursor-pointer select-none">
+                    Xóa sạch hoàn toàn dữ liệu (Purge)
+                  </Label>
+                </div>
+                {purgeNoteType && (
+                  <Alert variant="destructive" className="border-none bg-transparent p-0 flex items-start">
+                    <AlertCircle className="size-4 mt-0.5 text-destructive shrink-0" />
+                    <AlertDescription className="text-xs text-destructive/90 font-medium ml-2 leading-relaxed">
+                      Cảnh báo: Chức năng này chỉ dùng để xóa các bộ note type lỗi trong quá trình phát triển. Nó sẽ xóa sạch toàn bộ note type cùng với các trường (fields), templates, note/card, tiến trình học và các thay đổi liên quan khỏi hệ thống và không thể hoàn tác.
+                    </AlertDescription>
+                  </Alert>
+                )}
+              </div>
+            )}
+
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setNoteTypeToDelete(null)}>
+                Hủy
+              </Button>
+              <Button
+                variant="destructive"
+                disabled={deleteMutation.isPending}
+                onClick={() => deleteMutation.mutate({ id: noteTypeToDelete.id, purge: purgeNoteType })}
+              >
+                {deleteMutation.isPending ? <LoaderCircle className="animate-spin mr-1.5 size-4" /> : null}
+                {purgeNoteType ? 'Xóa sạch dữ liệu' : 'Xóa NoteType'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </Page>
   )
 }

@@ -1,10 +1,11 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { AlertCircle, LoaderCircle } from 'lucide-react'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { toast } from 'sonner'
 import { appApi } from '@/app/api'
+import { useBootstrap } from '@/shared/api/bootstrap'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
@@ -152,6 +153,10 @@ export function DeckActionModal({ selection, onClose, dashboard }: {
   dashboard: DashboardPayload
 }) {
   const queryClient = useQueryClient()
+  const bootstrapQuery = useBootstrap()
+  const isAdmin = Boolean(bootstrapQuery.data?.user?.is_admin)
+  const [purge, setPurge] = useState(false)
+
   const renameForm = useForm<RenameDeckForm>({
     resolver: zodResolver(renameDeckSchema),
     defaultValues: { name: '' },
@@ -164,11 +169,12 @@ export function DeckActionModal({ selection, onClose, dashboard }: {
     type: SelectedDeckAction['type']
     deckId: number
     values: Record<string, string>
+    purge?: boolean
   }>({
-    mutationFn: ({ type, deckId, values }) => {
+    mutationFn: ({ type, deckId, values, purge }) => {
       if (type === 'rename') return appApi.renameDeck(deckId, { name: values.name || '' })
       if (type === 'move') return appApi.moveDeck(deckId, { parent_id: values.parent_id || '' })
-      if (type === 'delete') return appApi.deleteDeck(deckId)
+      if (type === 'delete') return appApi.deleteDeck(deckId, { purge })
       return appApi.resetDeck(deckId)
     },
     onSuccess: async () => {
@@ -183,6 +189,7 @@ export function DeckActionModal({ selection, onClose, dashboard }: {
     moveForm.reset({
       parent_id: selection?.deck.parent_id === null ? '' : String(selection?.deck.parent_id || ''),
     })
+    setPurge(false)
   }, [selection, renameForm, moveForm])
 
   if (!selection) return null
@@ -237,15 +244,39 @@ export function DeckActionModal({ selection, onClose, dashboard }: {
         ) : (
           <div className="space-y-4">
             <MutationError error={mutation.error} />
+            {destructive && isAdmin && (
+              <div className="space-y-3 p-3 rounded-lg border border-destructive/20 bg-destructive/5 dark:bg-destructive/10">
+                <div className="flex items-center gap-2">
+                  <input
+                    id="purge-deck-checkbox"
+                    type="checkbox"
+                    checked={purge}
+                    onChange={(e) => setPurge(e.target.checked)}
+                    className="size-4 rounded border-input text-destructive focus:ring-destructive accent-destructive cursor-pointer"
+                  />
+                  <Label htmlFor="purge-deck-checkbox" className="font-bold text-destructive cursor-pointer select-none">
+                    Xóa sạch hoàn toàn dữ liệu (Purge)
+                  </Label>
+                </div>
+                {purge && (
+                  <Alert variant="destructive" className="border-none bg-transparent p-0 flex items-start">
+                    <AlertCircle className="size-4 mt-0.5 text-destructive shrink-0" />
+                    <AlertDescription className="text-xs text-destructive/90 font-medium ml-2 leading-relaxed">
+                      Cảnh báo: Chức năng này chỉ dùng để xóa các bộ deck lỗi trong quá trình phát triển. Hành động này sẽ xóa sạch hoàn toàn các bản cài đặt, bản sao, đánh giá, lịch sử học tập và các thay đổi liên quan đến bộ deck này từ tất cả người dùng và không thể hoàn tác.
+                    </AlertDescription>
+                  </Alert>
+                )}
+              </div>
+            )}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={onClose}>Hủy</Button>
               <Button
                 variant={destructive ? 'destructive' : 'default'}
                 disabled={mutation.isPending}
-                onClick={() => mutation.mutate({ type, deckId: deck.id, values: {} })}
+                onClick={() => mutation.mutate({ type, deckId: deck.id, values: {}, purge })}
               >
                 {mutation.isPending ? <LoaderCircle className="animate-spin" /> : null}
-                {destructive ? 'Xóa deck' : 'Đặt lại'}
+                {destructive ? (purge ? 'Xóa sạch dữ liệu' : 'Xóa deck') : 'Đặt lại'}
               </Button>
             </DialogFooter>
           </div>

@@ -201,6 +201,7 @@ def delete_deck(
     deck_id: int,
     user_id: int,
     admin_mode: bool,
+    purge: bool = False,
 ) -> str:
     deck = _owned_deck_or_error(
         deck_id=deck_id,
@@ -213,6 +214,7 @@ def delete_deck(
             deck_obj=deck,
             user_id=user_id,
             is_admin=admin_mode,
+            purge=purge,
         )
     except SQLAlchemyError as exc:
         db.session.rollback()

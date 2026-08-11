@@ -284,8 +284,9 @@ export const appApi = {
     })
   },
 
-  async deleteDeck(deckId: number) {
-    return apiJson(`${API_BASE}/decks/${deckId}`, 'DELETE')
+  async deleteDeck(deckId: number, params?: { purge?: boolean }) {
+    const suffix = params?.purge ? '?purge=true' : ''
+    return apiJson(`${API_BASE}/decks/${deckId}${suffix}`, 'DELETE')
   },
 
   async resetDeck(deckId: number) {
