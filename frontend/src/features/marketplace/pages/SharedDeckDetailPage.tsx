@@ -121,6 +121,7 @@ type SharedDeckDetail = {
   source_deck_id?: number | null
   source_note_type_id?: string | null
   source_note_type?: SourceNoteType | null
+  publish_status?: 'private' | 'published' | 'unlisted' | 'archived'
 }
 
 type PreviewResponse = {
