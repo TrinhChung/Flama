@@ -21,6 +21,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+    <AssemblyTitle>FlamaAudio</AssemblyTitle>
+    <Product>FlamaAudio</Product>
+    <Description>FlamaAudio</Description>
+    <Company>Flama</Company>
+    <Copyright>Copyright © Flama</Copyright>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)' == 'Release'">
@@ -29,6 +34,8 @@
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <PublishReadyToRun>false</PublishReadyToRun>
+    <PublishTrimmed>false</PublishTrimmed>
   </PropertyGroup>
 
   <ItemGroup>

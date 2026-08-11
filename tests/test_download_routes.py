@@ -8,7 +8,7 @@ import unittest
 from unittest.mock import patch
 
 from app import create_app
-from app.api.v1.download import FLAMA_AUDIO_FILENAME
+from app.api.v1.download import FLAMA_AUDIO_CHECKSUM_FILENAME, FLAMA_AUDIO_FILENAME
 from models import db
 
 
@@ -48,6 +48,18 @@ class TestDownloadRoutes(unittest.TestCase):
             self.assertEqual(response.status_code, 302)
             self.assertEqual(response.headers["Location"], custom_url)
 
+    def test_download_flama_audio_rejects_non_https_fallback(self):
+        with (
+            patch.dict(
+                os.environ,
+                {"FLAMA_AUDIO_DOWNLOAD_URL": f"http://cdn.example.com/{FLAMA_AUDIO_FILENAME}"},
+                clear=True,
+            ),
+            patch("app.api.v1.download.os.path.isfile", return_value=False),
+        ):
+            response = self.client.get("/api/download/flama-audio")
+            self.assertEqual(response.status_code, 503)
+
     def test_download_flama_audio_serves_local_file_if_present(self):
         """Test serving local static executable when present in static/downloads."""
         original_static = self.app.static_folder
@@ -63,6 +75,8 @@ class TestDownloadRoutes(unittest.TestCase):
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.data, b"MZ-MOCK-EXE-CONTENT")
             self.assertIn(FLAMA_AUDIO_FILENAME, response.headers.get("Content-Disposition", ""))
+            self.assertEqual(response.mimetype, "application/x-msdownload")
+            self.assertIn("no-transform", response.headers.get("Cache-Control", ""))
             response.close()
             self.app.static_folder = original_static
 
@@ -86,6 +100,30 @@ class TestDownloadRoutes(unittest.TestCase):
             self.assertIn(FLAMA_AUDIO_FILENAME, response.headers.get("Content-Disposition", ""))
             response.close()
             self.app.static_folder = original_static
+
+    def test_download_flama_audio_serves_matching_checksum_sidecar(self):
+        original_static = self.app.static_folder
+        with tempfile.TemporaryDirectory() as temp_static:
+            downloads_dir = os.path.join(temp_static, "downloads")
+            os.makedirs(downloads_dir, exist_ok=True)
+            checksum_path = os.path.join(downloads_dir, FLAMA_AUDIO_CHECKSUM_FILENAME)
+            checksum = f"{'A' * 64} *{FLAMA_AUDIO_FILENAME}\n"
+            with open(checksum_path, "wb") as checksum_file:
+                checksum_file.write(checksum.encode("ascii"))
+
+            self.app.static_folder = temp_static
+            response = self.client.get("/api/download/flama-audio.sha256")
+            try:
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.get_data(as_text=True), checksum)
+                self.assertEqual(response.mimetype, "text/plain")
+                self.assertIn(
+                    FLAMA_AUDIO_CHECKSUM_FILENAME,
+                    response.headers.get("Content-Disposition", ""),
+                )
+            finally:
+                response.close()
+                self.app.static_folder = original_static
 
 
 if __name__ == "__main__":

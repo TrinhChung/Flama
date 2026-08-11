@@ -19,6 +19,15 @@ static/tmp/
 /output/
 /.playwright-cli/
 
+# Production signing credentials and certificate material
+*.pfx
+*.p12
+*.pvk
+*.key
+*.pem
+*.cer
+*.crt
+
 
 /migrations/*
 !/migrations/README

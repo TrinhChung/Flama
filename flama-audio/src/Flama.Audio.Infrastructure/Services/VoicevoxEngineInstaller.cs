@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Net.Http;
+using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
@@ -15,8 +16,10 @@ public class VoicevoxEngineInstaller
     private readonly ILogger<VoicevoxEngineInstaller>? _logger;
     private Process? _engineProcess;
 
-    // Official VOICEVOX Engine Windows CPU direct zip package link
-    private const string DOWNLOAD_URL = "https://github.com/VOICEVOX/voicevox_engine/releases/download/0.14.4/voicevox_engine-windows-cpu-0.14.4.zip";
+    // Official VOICEVOX Engine Windows CPU package. This third-party package is
+    // verified before extraction and is never re-signed by Flama.
+    private const string DOWNLOAD_URL = "https://github.com/VOICEVOX/voicevox_engine/releases/download/0.14.4/voicevox_engine-windows-cpu-0.14.4.vvpp";
+    internal const string DOWNLOAD_SHA256 = "E425A8F6A7A3B36C7A2646242E23D7E748F23A202FC3D36A07FF7F8E81BD8E50";
 
     public VoicevoxEngineInstaller(HttpClient httpClient, ILogger<VoicevoxEngineInstaller>? logger = null)
     {
@@ -141,7 +144,10 @@ public class VoicevoxEngineInstaller
         var targetDir = GetInstalledEnginePath();
         Directory.CreateDirectory(targetDir);
 
-        var tempZip = Path.Combine(Path.GetTempPath(), "flama_voicevox_engine.zip");
+        var tempPackage = Path.Combine(
+            Path.GetTempPath(),
+            $"flama_voicevox_engine_{Guid.NewGuid():N}.vvpp"
+        );
 
         try
         {
@@ -153,7 +159,7 @@ public class VoicevoxEngineInstaller
                 var totalBytes = response.Content.Headers.ContentLength ?? -1L;
 
                 using (var contentStream = await response.Content.ReadAsStreamAsync(ct))
-                using (var fileStream = new FileStream(tempZip, FileMode.Create, FileAccess.Write, FileShare.None, 8192, true))
+                using (var fileStream = new FileStream(tempPackage, FileMode.CreateNew, FileAccess.Write, FileShare.None, 8192, true))
                 {
                     var buffer = new byte[8192];
                     var totalRead = 0L;
@@ -171,13 +177,9 @@ public class VoicevoxEngineInstaller
                 }
             }
 
+            await VerifySha256Async(tempPackage, DOWNLOAD_SHA256, ct);
             _logger?.LogInformation("Extracting VOICEVOX Engine to {TargetDir}", targetDir);
-            ZipFile.ExtractToDirectory(tempZip, targetDir, overwriteFiles: true);
-
-            if (File.Exists(tempZip))
-            {
-                File.Delete(tempZip);
-            }
+            ZipFile.ExtractToDirectory(tempPackage, targetDir, overwriteFiles: true);
 
             return true;
         }
@@ -185,6 +187,36 @@ public class VoicevoxEngineInstaller
         {
             _logger?.LogError(ex, "Failed to download and install VOICEVOX Engine");
             return false;
+        }
+        finally
+        {
+            if (File.Exists(tempPackage))
+            {
+                File.Delete(tempPackage);
+            }
+        }
+    }
+
+    internal static async Task VerifySha256Async(
+        string filePath,
+        string expectedSha256,
+        CancellationToken ct = default
+    )
+    {
+        await using var stream = new FileStream(
+            filePath,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.Read,
+            8192,
+            true
+        );
+        var actualSha256 = Convert.ToHexString(await SHA256.HashDataAsync(stream, ct));
+        if (!string.Equals(actualSha256, expectedSha256, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidDataException(
+                $"VOICEVOX package SHA-256 mismatch. Expected {expectedSha256}, got {actualSha256}."
+            );
         }
     }
 

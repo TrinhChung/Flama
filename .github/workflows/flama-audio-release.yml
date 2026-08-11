@@ -1,94 +1,286 @@
-name: Build & Deploy Flama Audio
+name: Release Signed FlamaAudio
 
 on:
   push:
-    branches:
-      - master
-    paths:
-      - "flama-audio/**"
-      - ".github/workflows/flama-audio-release.yml"
+    tags:
+      - "flama-audio-v*"
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Existing flama-audio-v* tag to release"
+        required: true
+        type: string
 
 concurrency:
-  group: flama-audio-production
-  cancel-in-progress: true
+  group: flama-audio-production-${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+  cancel-in-progress: false
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  build-and-deploy:
+  release:
     runs-on: windows-latest
     environment: Flama
+    timeout-minutes: 30
+
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+      PRODUCTION_DOWNLOAD_URL: ${{ vars.FLAMA_AUDIO_PRODUCTION_DOWNLOAD_URL || 'https://be-flama.stmtp.com/api/download/flama-audio' }}
+      WINDOWS_SIGNING_TIMESTAMP_URL: ${{ vars.WINDOWS_SIGNING_TIMESTAMP_URL || 'http://timestamp.digicert.com' }}
 
     steps:
-      - name: Checkout Code
+      - name: Checkout release tag
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref }}
           submodules: recursive
+          fetch-depth: 0
+
+      - name: Validate immutable release tag
+        shell: pwsh
+        run: |
+          if ($env:RELEASE_TAG -notmatch '^flama-audio-v[0-9]+\.[0-9]+\.[0-9]+(?:[-.][0-9A-Za-z.-]+)?$') {
+            throw "Release tag must match flama-audio-v<semver>."
+          }
+
+          git show-ref --verify --quiet "refs/tags/$env:RELEASE_TAG"
+          if ($LASTEXITCODE -ne 0) {
+            throw "Release tag does not exist: $env:RELEASE_TAG"
+          }
+
+          $tagCommit = (git rev-list -n 1 $env:RELEASE_TAG).Trim()
+          $checkoutCommit = (git rev-parse HEAD).Trim()
+          if ($tagCommit -ne $checkoutCommit) {
+            throw "Checked-out commit does not match $env:RELEASE_TAG."
+          }
 
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.0.x"
 
-      - name: Restore Dependencies
+      - name: Restore dependencies
         run: dotnet restore flama-audio/Flama.Audio.sln
 
-      - name: Run Tests
+      - name: Run tests
         run: dotnet test flama-audio/Flama.Audio.sln -c Release --no-restore
 
-      - name: Clean Publish Directory
+      - name: Clean publish directory
+        shell: pwsh
         run: |
-          if (Test-Path flama-audio/publish) { Remove-Item -Recurse -Force flama-audio/publish }
+          if (Test-Path -LiteralPath "flama-audio/publish") {
+            Remove-Item -LiteralPath "flama-audio/publish" -Recurse -Force
+          }
 
-      - name: Publish Single-File Executable
+      - name: Publish single-file executable
+        shell: pwsh
         run: |
           dotnet publish flama-audio/src/Flama.Audio.App/Flama.Audio.App.csproj `
             -c Release `
             -r win-x64 `
             --self-contained true `
             -p:PublishSingleFile=true `
+            -p:SelfContained=true `
             -p:IncludeNativeLibrariesForSelfExtract=true `
             -p:EnableCompressionInSingleFile=true `
+            -p:PublishReadyToRun=false `
+            -p:PublishTrimmed=false `
             -p:DebugType=none `
             -p:DebugSymbols=false `
             -o flama-audio/publish/singlefile
 
-      - name: Prepare Portable Release
+      - name: Prepare final portable binary
+        shell: pwsh
         run: |
           $sourcePath = "flama-audio/publish/singlefile/Flama.Audio.App.exe"
           $releaseDirectory = "flama-audio/publish/release"
           $releasePath = Join-Path $releaseDirectory "FlamaAudio-Portable.exe"
 
           if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) {
-            throw "Published executable was not found at $sourcePath"
+            throw "Published executable was not found at $sourcePath."
           }
 
           New-Item -ItemType Directory -Force -Path $releaseDirectory | Out-Null
           Copy-Item -LiteralPath $sourcePath -Destination $releasePath -Force
 
-          $releaseFiles = @(Get-ChildItem -LiteralPath $releaseDirectory -File)
-          if ($releaseFiles.Count -ne 1 -or $releaseFiles[0].Name -ne "FlamaAudio-Portable.exe") {
-            throw "Release directory must contain exactly FlamaAudio-Portable.exe"
+          $versionInfo = (Get-Item -LiteralPath $releasePath).VersionInfo
+          if ($versionInfo.ProductName -ne "FlamaAudio") {
+            throw "Unexpected ProductName: $($versionInfo.ProductName)"
+          }
+          if ($versionInfo.FileDescription -ne "FlamaAudio") {
+            throw "Unexpected FileDescription: $($versionInfo.FileDescription)"
+          }
+          if ($versionInfo.CompanyName -ne "Flama") {
+            throw "Unexpected CompanyName: $($versionInfo.CompanyName)"
+          }
+          if ($versionInfo.LegalCopyright -ne "Copyright © Flama") {
+            throw "Unexpected LegalCopyright: $($versionInfo.LegalCopyright)"
           }
 
-      - name: Upload Portable Artifact
+      - name: Sign final EXE with Authenticode
+        shell: pwsh
+        env:
+          WINDOWS_SIGNING_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_SIGNING_CERTIFICATE_BASE64 }}
+          WINDOWS_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_SIGNING_CERTIFICATE_PASSWORD }}
+          WINDOWS_SIGNING_CERTIFICATE_THUMBPRINT: ${{ vars.WINDOWS_SIGNING_CERTIFICATE_THUMBPRINT }}
+        run: |
+          & "flama-audio/scripts/Sign-WindowsRelease.ps1" `
+            -FilePath "flama-audio/publish/release/FlamaAudio-Portable.exe" `
+            -TimestampUrl $env:WINDOWS_SIGNING_TIMESTAMP_URL
+
+      - name: Verify signed EXE and record identity
+        shell: pwsh
+        env:
+          WINDOWS_SIGNING_CERTIFICATE_THUMBPRINT: ${{ vars.WINDOWS_SIGNING_CERTIFICATE_THUMBPRINT }}
+        run: |
+          $releasePath = "flama-audio/publish/release/FlamaAudio-Portable.exe"
+          & "flama-audio/scripts/Test-WindowsRelease.ps1" `
+            -FilePath $releasePath `
+            -ExpectedThumbprint $env:WINDOWS_SIGNING_CERTIFICATE_THUMBPRINT
+
+          $signature = Get-AuthenticodeSignature -LiteralPath $releasePath
+          if ([string]$signature.Status -ne "Valid") {
+            throw "Release signature is not Valid."
+          }
+
+          $signedHash = (Get-FileHash -LiteralPath $releasePath -Algorithm SHA256).Hash
+          "SIGNED_EXE_SHA256=$signedHash" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          @"
+          ### FlamaAudio Authenticode identity
+          - Status: ``$($signature.Status)``
+          - Subject: ``$($signature.SignerCertificate.Subject)``
+          - Issuer: ``$($signature.SignerCertificate.Issuer)``
+          - Thumbprint: ``$($signature.SignerCertificate.Thumbprint)``
+          - Signed EXE SHA-256: ``$signedHash``
+          "@ | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+
+      - name: Package signed EXE and create SHA256 metadata
+        shell: pwsh
+        run: |
+          $releaseDirectory = "flama-audio/publish/release"
+          $exePath = Join-Path $releaseDirectory "FlamaAudio-Portable.exe"
+          $zipPath = Join-Path $releaseDirectory "FlamaAudio-Portable-win-x64.zip"
+          $exeChecksumPath = "$exePath.sha256"
+          $zipChecksumPath = "$zipPath.sha256"
+
+          $currentExeHash = (Get-FileHash -LiteralPath $exePath -Algorithm SHA256).Hash
+          if ($currentExeHash -ne $env:SIGNED_EXE_SHA256) {
+            throw "The EXE changed after Authenticode signing."
+          }
+
+          Compress-Archive -LiteralPath $exePath -DestinationPath $zipPath -CompressionLevel Optimal
+          $zipHash = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash
+          Set-Content -LiteralPath $exeChecksumPath -Encoding ascii -Value "$currentExeHash *FlamaAudio-Portable.exe"
+          Set-Content -LiteralPath $zipChecksumPath -Encoding ascii -Value "$zipHash *FlamaAudio-Portable-win-x64.zip"
+
+          @"
+          FlamaAudio portable Windows x64 release.
+
+          ## SHA-256
+
+          - ``FlamaAudio-Portable.exe``: ``$currentExeHash``
+          - ``FlamaAudio-Portable-win-x64.zip``: ``$zipHash``
+
+          The EXE is Authenticode-signed and RFC 3161 timestamped. A newly signed
+          binary can still show a SmartScreen reputation warning while publisher
+          and file-hash reputation accumulate.
+          "@ | Set-Content -LiteralPath (Join-Path $releaseDirectory "RELEASE_NOTES.md") -Encoding utf8
+
+      - name: Extract package and verify embedded signed EXE
+        shell: pwsh
+        env:
+          WINDOWS_SIGNING_CERTIFICATE_THUMBPRINT: ${{ vars.WINDOWS_SIGNING_CERTIFICATE_THUMBPRINT }}
+        run: |
+          $verifyDirectory = Join-Path $env:RUNNER_TEMP "flama-audio-package-verify"
+          if (Test-Path -LiteralPath $verifyDirectory) {
+            Remove-Item -LiteralPath $verifyDirectory -Recurse -Force
+          }
+          New-Item -ItemType Directory -Path $verifyDirectory | Out-Null
+
+          Expand-Archive `
+            -LiteralPath "flama-audio/publish/release/FlamaAudio-Portable-win-x64.zip" `
+            -DestinationPath $verifyDirectory
+          $extractedExe = Join-Path $verifyDirectory "FlamaAudio-Portable.exe"
+          $extractedHash = (Get-FileHash -LiteralPath $extractedExe -Algorithm SHA256).Hash
+          if ($extractedHash -ne $env:SIGNED_EXE_SHA256) {
+            throw "Packaged EXE hash does not match the signed EXE."
+          }
+
+          & "flama-audio/scripts/Test-WindowsRelease.ps1" `
+            -FilePath $extractedExe `
+            -ExpectedThumbprint $env:WINDOWS_SIGNING_CERTIFICATE_THUMBPRINT
+
+      - name: Upload verified workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: flama-audio-win-x64
-          path: flama-audio/publish/release/FlamaAudio-Portable.exe
+          name: flama-audio-${{ env.RELEASE_TAG }}-win-x64
+          path: |
+            flama-audio/publish/release/FlamaAudio-Portable.exe
+            flama-audio/publish/release/FlamaAudio-Portable.exe.sha256
+            flama-audio/publish/release/FlamaAudio-Portable-win-x64.zip
+            flama-audio/publish/release/FlamaAudio-Portable-win-x64.zip.sha256
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 30
 
-      - name: Deploy Portable EXE to Hostinger VPS
-        if: github.ref == 'refs/heads/master'
+      - name: Publish GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $releaseDirectory = "flama-audio/publish/release"
+          $assets = @(
+            (Join-Path $releaseDirectory "FlamaAudio-Portable.exe"),
+            (Join-Path $releaseDirectory "FlamaAudio-Portable.exe.sha256"),
+            (Join-Path $releaseDirectory "FlamaAudio-Portable-win-x64.zip"),
+            (Join-Path $releaseDirectory "FlamaAudio-Portable-win-x64.zip.sha256")
+          )
+          $notesPath = Join-Path $releaseDirectory "RELEASE_NOTES.md"
+
+          gh release view $env:RELEASE_TAG *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $env:RELEASE_TAG @assets --clobber
+            if ($LASTEXITCODE -ne 0) { throw "Failed to upload GitHub Release assets." }
+            gh release edit $env:RELEASE_TAG --title "FlamaAudio $env:RELEASE_TAG" --notes-file $notesPath
+          }
+          else {
+            gh release create $env:RELEASE_TAG @assets `
+              --verify-tag `
+              --title "FlamaAudio $env:RELEASE_TAG" `
+              --notes-file $notesPath
+          }
+          if ($LASTEXITCODE -ne 0) { throw "Failed to publish the GitHub Release." }
+
+      - name: Verify GitHub Release artifact bytes
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WINDOWS_SIGNING_CERTIFICATE_THUMBPRINT: ${{ vars.WINDOWS_SIGNING_CERTIFICATE_THUMBPRINT }}
+        run: |
+          $downloadDirectory = Join-Path $env:RUNNER_TEMP "flama-audio-github-release-verify"
+          New-Item -ItemType Directory -Force -Path $downloadDirectory | Out-Null
+          gh release download $env:RELEASE_TAG `
+            --pattern "FlamaAudio-Portable.exe" `
+            --dir $downloadDirectory
+          if ($LASTEXITCODE -ne 0) { throw "Failed to download the GitHub Release EXE." }
+
+          $downloadedExe = Join-Path $downloadDirectory "FlamaAudio-Portable.exe"
+          $downloadedHash = (Get-FileHash -LiteralPath $downloadedExe -Algorithm SHA256).Hash
+          if ($downloadedHash -ne $env:SIGNED_EXE_SHA256) {
+            throw "GitHub Release EXE differs from the signed release artifact."
+          }
+          & "flama-audio/scripts/Test-WindowsRelease.ps1" `
+            -FilePath $downloadedExe `
+            -ExpectedThumbprint $env:WINDOWS_SIGNING_CERTIFICATE_THUMBPRINT
+
+      - name: Deploy signed EXE and checksum to Flama download server
+        shell: pwsh
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_PORT: ${{ secrets.SSH_PORT }}
           SSH_USER: ${{ secrets.SSH_USER }}
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-          REMOTE_TMP_PATH: /tmp/FlamaAudio-Portable-${{ github.run_id }}-${{ github.run_attempt }}.exe
+          REMOTE_STAGE_DIRECTORY: /tmp/flama-audio-${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           $requiredSecrets = @{
             SSH_HOST = $env:SSH_HOST
@@ -110,19 +302,100 @@ jobs:
           $keyFile = Join-Path $sshDirectory "flama_audio_deploy_key"
           $privateKey = $env:SSH_PRIVATE_KEY -replace "`r", ""
           if (-not $privateKey.EndsWith("`n")) { $privateKey += "`n" }
-          [System.IO.File]::WriteAllText($keyFile, $privateKey)
+          [IO.File]::WriteAllText($keyFile, $privateKey)
 
           try {
-            scp -P $env:SSH_PORT -o BatchMode=yes -o StrictHostKeyChecking=accept-new -i $keyFile `
-              flama-audio/publish/release/FlamaAudio-Portable.exe `
-              "${env:SSH_USER}@${env:SSH_HOST}:$env:REMOTE_TMP_PATH"
-            if ($LASTEXITCODE -ne 0) { throw "Failed to upload FlamaAudio-Portable.exe" }
+            $sshOptions = @(
+              "-p", $env:SSH_PORT,
+              "-o", "BatchMode=yes",
+              "-o", "StrictHostKeyChecking=accept-new",
+              "-i", $keyFile
+            )
+            $remote = "$env:SSH_USER@$env:SSH_HOST"
 
-            $remoteCommand = "set -e; install -d -m 755 -o flama -g flama /var/lib/flama/downloads; install -m 644 -o flama -g flama '$env:REMOTE_TMP_PATH' /var/lib/flama/downloads/FlamaAudio-Portable.exe.new; mv -f /var/lib/flama/downloads/FlamaAudio-Portable.exe.new /var/lib/flama/downloads/FlamaAudio-Portable.exe; rm -f '$env:REMOTE_TMP_PATH'"
-            ssh -p $env:SSH_PORT -o BatchMode=yes -o StrictHostKeyChecking=accept-new -i $keyFile `
-              "${env:SSH_USER}@${env:SSH_HOST}" $remoteCommand
-            if ($LASTEXITCODE -ne 0) { throw "Failed to activate FlamaAudio-Portable.exe on the server" }
+            & ssh @sshOptions $remote "install -d -m 700 '$env:REMOTE_STAGE_DIRECTORY'"
+            if ($LASTEXITCODE -ne 0) { throw "Failed to create the remote staging directory." }
+
+            scp -P $env:SSH_PORT -o BatchMode=yes -o StrictHostKeyChecking=accept-new -i $keyFile `
+              "flama-audio/publish/release/FlamaAudio-Portable.exe" `
+              "flama-audio/publish/release/FlamaAudio-Portable.exe.sha256" `
+              "${remote}:$env:REMOTE_STAGE_DIRECTORY/"
+            if ($LASTEXITCODE -ne 0) { throw "Failed to upload signed FlamaAudio artifacts." }
+
+            $remoteCommand = @(
+              'set -eu',
+              "stage_directory='$env:REMOTE_STAGE_DIRECTORY'",
+              "expected_hash='$env:SIGNED_EXE_SHA256'",
+              'cleanup() { rm -rf -- "$stage_directory"; }',
+              'trap cleanup EXIT',
+              'cd "$stage_directory"',
+              'sha256sum -c FlamaAudio-Portable.exe.sha256',
+              'install -d -m 755 -o flama -g flama /var/lib/flama/downloads',
+              'install -m 644 -o flama -g flama FlamaAudio-Portable.exe /var/lib/flama/downloads/FlamaAudio-Portable.exe.new',
+              'install -m 644 -o flama -g flama FlamaAudio-Portable.exe.sha256 /var/lib/flama/downloads/FlamaAudio-Portable.exe.sha256.new',
+              'actual_hash="$(sha256sum /var/lib/flama/downloads/FlamaAudio-Portable.exe.new | awk ''{print toupper($1)}'')"',
+              'test "$actual_hash" = "$expected_hash"',
+              'mv -f /var/lib/flama/downloads/FlamaAudio-Portable.exe.new /var/lib/flama/downloads/FlamaAudio-Portable.exe',
+              'mv -f /var/lib/flama/downloads/FlamaAudio-Portable.exe.sha256.new /var/lib/flama/downloads/FlamaAudio-Portable.exe.sha256',
+              'final_hash="$(sha256sum /var/lib/flama/downloads/FlamaAudio-Portable.exe | awk ''{print toupper($1)}'')"',
+              'test "$final_hash" = "$expected_hash"'
+            ) -join "`n"
+            & ssh @sshOptions $remote $remoteCommand
+            if ($LASTEXITCODE -ne 0) { throw "Failed to activate the signed FlamaAudio release on the server." }
           }
           finally {
             Remove-Item -LiteralPath $keyFile -Force -ErrorAction SilentlyContinue
+          }
+
+      - name: Verify production download bytes and Authenticode
+        shell: pwsh
+        env:
+          WINDOWS_SIGNING_CERTIFICATE_THUMBPRINT: ${{ vars.WINDOWS_SIGNING_CERTIFICATE_THUMBPRINT }}
+        run: |
+          $downloadUri = [Uri]$env:PRODUCTION_DOWNLOAD_URL
+          if ($downloadUri.Scheme -ne "https") {
+            throw "Production FlamaAudio downloads must use HTTPS."
+          }
+
+          $downloadedExe = Join-Path $env:RUNNER_TEMP "FlamaAudio-Production-Verify.exe"
+          $headersPath = Join-Path $env:RUNNER_TEMP "flama-audio-production-headers.txt"
+          $downloadSucceeded = $false
+          foreach ($attempt in 1..10) {
+            curl.exe --fail --silent --show-error --location --max-redirs 0 `
+              --dump-header $headersPath `
+              --output $downloadedExe `
+              $env:PRODUCTION_DOWNLOAD_URL
+            if ($LASTEXITCODE -eq 0) {
+              $downloadedHash = (Get-FileHash -LiteralPath $downloadedExe -Algorithm SHA256).Hash
+              if ($downloadedHash -eq $env:SIGNED_EXE_SHA256) {
+                $downloadSucceeded = $true
+                break
+              }
+            }
+            Start-Sleep -Seconds 5
+          }
+          if (-not $downloadSucceeded) {
+            throw "Production download did not match the signed release after 10 attempts."
+          }
+
+          $headers = Get-Content -LiteralPath $headersPath -Raw
+          if ($headers -notmatch '(?im)^Content-Type:\s*application/x-msdownload\s*$') {
+            throw "Production download has an unexpected Content-Type."
+          }
+          if ($headers -notmatch '(?im)^Content-Disposition:.*filename=\"?FlamaAudio-Portable\.exe\"?') {
+            throw "Production download has an unexpected Content-Disposition filename."
+          }
+
+          & "flama-audio/scripts/Test-WindowsRelease.ps1" `
+            -FilePath $downloadedExe `
+            -ExpectedThumbprint $env:WINDOWS_SIGNING_CERTIFICATE_THUMBPRINT
+
+          $downloadedChecksumPath = Join-Path $env:RUNNER_TEMP "FlamaAudio-Production-Verify.exe.sha256"
+          curl.exe --fail --silent --show-error --location --max-redirs 0 `
+            --output $downloadedChecksumPath `
+            "$($env:PRODUCTION_DOWNLOAD_URL).sha256"
+          if ($LASTEXITCODE -ne 0) { throw "Failed to download the production SHA-256 sidecar." }
+          $publishedHash = ((Get-Content -LiteralPath $downloadedChecksumPath -Raw).Trim() -split '\s+')[0].ToUpperInvariant()
+          if ($publishedHash -ne $env:SIGNED_EXE_SHA256) {
+            throw "Production SHA-256 metadata does not match the signed release."
           }
