@@ -253,19 +253,31 @@ def build_deck_marketplace_hub(*, user_id: int, filters: dict[str, Any]) -> dict
 
 
 def build_installed_deck_workspace(*, user_id: int) -> dict[str, Any]:
-    installs = DeckInstall.query.filter_by(user_id=user_id).all()
+    installs = (
+        DeckInstall.query.options(joinedload(DeckInstall.applied_release))
+        .filter_by(user_id=user_id)
+        .all()
+    )
     install_map = {row.deck_item_id: row for row in installs}
     saved_ids = get_saved_item_ids(user_id=user_id, product_type="deck_marketplace_item")
     source_ids = list(install_map.keys()) or [""]
     deck_items = {
         item.id: item
-        for item in DeckMarketplaceItem.query.filter(DeckMarketplaceItem.id.in_(source_ids)).all()
+        for item in (
+            DeckMarketplaceItem.query.options(
+                joinedload(DeckMarketplaceItem.current_release)
+            )
+            .filter(DeckMarketplaceItem.id.in_(source_ids))
+            .all()
+        )
     }
 
     items: list[dict[str, Any]] = []
     using_count = 0
     available_count = 0
     owned_count = 0
+    update_count = 0
+    unread_update_count = 0
 
     for install in sorted(installs, key=_deck_install_sort_key, reverse=True):
         deck_item = deck_items.get(install.deck_item_id)
@@ -281,6 +293,8 @@ def build_installed_deck_workspace(*, user_id: int) -> dict[str, Any]:
         is_active = flashcards_share_service.is_deck_install_active(install)
         payload["install_bucket"] = "using_now" if is_active else "installed"
         items.append(payload)
+        update_count += int(bool(payload.get("update_available")))
+        unread_update_count += int(bool(payload.get("unread_update")))
         if is_active:
             using_count += 1
         else:
@@ -335,6 +349,8 @@ def build_installed_deck_workspace(*, user_id: int) -> dict[str, Any]:
             "using_count": using_count,
             "available_count": available_count,
             "owned_count": owned_count,
+            "update_count": update_count,
+            "unread_update_count": unread_update_count,
         },
         "items": items,
     }
@@ -735,7 +751,48 @@ def _serialize_deck_install_library_row(
         saved_ids=saved_ids,
         pending_owned_ids=set(),
     )
-    payload["last_sync_status"] = str(install.last_sync_status or "").strip().lower() or None
+    applied_release = install.applied_release
+    available_release = deck_item.current_release
+    applied_sequence = int(applied_release.sequence_no or 0) if applied_release else 0
+    available_sequence = int(available_release.sequence_no or 0) if available_release else 0
+    update_available = available_sequence > applied_sequence
+    payload.update(
+        {
+            "deck_install_id": install.id,
+            "last_sync_status": str(install.last_sync_status or "").strip().lower() or None,
+            "version_mode": install.version_mode,
+            "overlay_revision": int(install.overlay_revision or 0),
+            "applied_release": (
+                {
+                    "id": applied_release.id,
+                    "sequence_no": applied_sequence,
+                    "version_label": applied_release.version_label,
+                }
+                if applied_release
+                else None
+            ),
+            "available_release": (
+                {
+                    "id": available_release.id,
+                    "sequence_no": available_sequence,
+                    "version_label": available_release.version_label,
+                    "published_at": (
+                        available_release.published_at.isoformat()
+                        if available_release.published_at
+                        else None
+                    ),
+                }
+                if available_release
+                else None
+            ),
+            "update_available": update_available,
+            "unread_update": bool(
+                update_available
+                and str(install.seen_release_id or "")
+                != str(available_release.id if available_release else "")
+            ),
+        }
+    )
     return payload
 
 
@@ -845,7 +902,13 @@ def _build_deck_library(
     source_ids = list(install_map.keys()) or [""]
     deck_items = {
         item.id: item
-        for item in DeckMarketplaceItem.query.filter(DeckMarketplaceItem.id.in_(source_ids)).all()
+        for item in (
+            DeckMarketplaceItem.query.options(
+                joinedload(DeckMarketplaceItem.current_release)
+            )
+            .filter(DeckMarketplaceItem.id.in_(source_ids))
+            .all()
+        )
     }
     using_now: list[dict[str, Any]] = []
     installed: list[dict[str, Any]] = []

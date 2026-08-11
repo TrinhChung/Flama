@@ -44,6 +44,33 @@ class DeckInstall(db.Model):
         index=True,
     )
     base_snapshot_at = db.Column(db.DateTime, nullable=True, index=True)
+    applied_release_id = db.Column(
+        db.String(36),
+        db.ForeignKey(
+            "deck_releases.id",
+            name="fk_deck_installs_applied_release",
+            ondelete="SET NULL",
+        ),
+        nullable=True,
+        index=True,
+    )
+    seen_release_id = db.Column(
+        db.String(36),
+        db.ForeignKey(
+            "deck_releases.id",
+            name="fk_deck_installs_seen_release",
+            ondelete="SET NULL",
+        ),
+        nullable=True,
+        index=True,
+    )
+    overlay_revision = db.Column(db.BigInteger, nullable=False, default=0)
+    version_mode = db.Column(
+        db.String(32),
+        nullable=False,
+        default="legacy_snapshot",
+        index=True,
+    )
     last_synced_at = db.Column(db.DateTime, nullable=True, index=True)
     last_sync_status = db.Column(db.String(32), nullable=True, index=True)
     purchase_amount_minor = db.Column(db.Integer, nullable=False, default=0)
@@ -61,6 +88,8 @@ class DeckInstall(db.Model):
     source_deck = db.relationship("Deck", foreign_keys=[source_deck_id])
     source_note_type = db.relationship("NoteType", foreign_keys=[source_note_type_id])
     source_owner = db.relationship("User", foreign_keys=[source_owner_user_id])
+    applied_release = db.relationship("DeckRelease", foreign_keys=[applied_release_id])
+    seen_release = db.relationship("DeckRelease", foreign_keys=[seen_release_id])
     clone_deck_maps = db.relationship(
         "DeckCloneDeckMap",
         back_populates="deck_install",
@@ -95,6 +124,12 @@ class DeckInstall(db.Model):
         "DeckChangeRequest",
         back_populates="deck_install",
         cascade="all, delete-orphan",
+    )
+    rebases = db.relationship(
+        "DeckInstallRebase",
+        back_populates="deck_install",
+        cascade="all, delete-orphan",
+        order_by="DeckInstallRebase.created_at",
     )
 
     __table_args__ = (

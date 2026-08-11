@@ -6,6 +6,7 @@ import hashlib
 import json
 from collections import Counter
 from datetime import datetime
+from types import SimpleNamespace
 from typing import Any
 
 from app.repositories import deck_change_request_repository, flashcards_share_repository
@@ -409,12 +410,41 @@ def _build_local_change_payloads(
         install=install,
         source_note_type_id=source_note_type_id,
     )
+    base_field_defs: dict[str, dict[str, Any]] = {}
+    uses_release_base = bool(
+        install.version_mode == "release"
+        and install.applied_release_id
+        and install.applied_release is not None
+    )
+    if uses_release_base:
+        from app.services import deck_release_service
+
+        base_field_defs = deck_release_service.get_field_defs_at_release(
+            install.applied_release
+        )
     removed_field_names = set(schema_view.removed_field_names or set())
     renamed_field_names = dict(schema_view.renamed_field_names or {})
-    visible_source_order = _build_visible_source_order_tokens(
-        source_note_type_id=source_note_type_id,
-        snapshot_at=snapshot_at,
-    )
+    if uses_release_base:
+        visible_source_order = [
+            _order_token(
+                kind="source",
+                ref_id=field_id,
+                name=str(payload.get("name") or ""),
+            )
+            for field_id, payload in sorted(
+                base_field_defs.items(),
+                key=lambda item: (
+                    int(item[1].get("position") or 0),
+                    str(item[1].get("name") or "").lower(),
+                    item[0],
+                ),
+            )
+        ]
+    else:
+        visible_source_order = _build_visible_source_order_tokens(
+            source_note_type_id=source_note_type_id,
+            snapshot_at=snapshot_at,
+        )
     added_rows = (
         DeckCloneAddedFieldDef.query.filter_by(deck_install_id=install.id)
         .order_by(
@@ -441,10 +471,20 @@ def _build_local_change_payloads(
 
     for override in override_rows:
         source_field = FieldDef.query.get(override.source_field_def_id)
+        base_payload = base_field_defs.get(str(override.source_field_def_id))
+        if source_field is None and base_payload is not None:
+            source_field = SimpleNamespace(
+                id=str(override.source_field_def_id),
+                **base_payload,
+            )
         if source_field is None:
             continue
 
-        current_snapshot = _source_field_snapshot(source_field)
+        current_snapshot = (
+            {"id": str(source_field.id), **dict(base_payload)}
+            if base_payload is not None
+            else _source_field_snapshot(source_field)
+        )
         metadata = {
             "source_field_def_id": source_field.id,
             "field_name": source_field.name,
@@ -550,15 +590,42 @@ def _build_local_change_payloads(
         )
         .all()
     )
+    base_note_values: dict[str, dict[str, Any]] = {}
+    if uses_release_base and note_override_rows:
+        from app.services import deck_release_service
+
+        base_note_values = deck_release_service.get_note_values_for_ids_at_release(
+            install.applied_release,
+            {str(row.source_note_id) for row in note_override_rows},
+        )
     for row in note_override_rows:
         source_note = Note.query.get(row.source_note_id)
         if source_note is None:
             continue
-        effective_field_name = renamed_field_names.get(row.field_name, row.field_name)
+        release_field_name = str(
+            (
+                base_field_defs.get(str(row.source_field_def_id or ""), {})
+                or {}
+            ).get("name")
+            or row.field_name
+        )
+        effective_field_name = renamed_field_names.get(
+            release_field_name,
+            release_field_name,
+        )
         if effective_field_name in removed_field_names:
             continue
+        if uses_release_base and str(source_note.id) not in base_note_values:
+            continue
+        base_note_proxy = SimpleNamespace(
+            field_values=(
+                base_note_values.get(str(source_note.id), {})
+                if uses_release_base
+                else source_note.field_values
+            )
+        )
         current_values = _apply_schema_only_values(
-            source_note,
+            base_note_proxy,
             removed_field_names=removed_field_names,
             renamed_field_names=renamed_field_names,
         )
@@ -585,6 +652,7 @@ def _build_local_change_payloads(
                 "after_value": after_value,
                 "metadata_json": {
                     "source_note_id": source_note.id,
+                    "source_field_def_id": row.source_field_def_id,
                     "field_name": effective_field_name,
                     "source_note_label": _note_label(source_note),
                 },
@@ -680,6 +748,7 @@ def build_or_refresh_draft_request(
             requester_user_id=requester_user_id,
             owner_user_id=owner_user_id,
             overlay_fingerprint=fingerprint,
+            base_release_id=install.applied_release_id,
         )
         db.session.add(request_obj)
         db.session.flush()
@@ -702,6 +771,8 @@ def build_or_refresh_draft_request(
     request_obj.description = description or None
     request_obj.status = REQUEST_STATUS_NEEDS_SYNC
     request_obj.install_snapshot_at = _install_snapshot_at(install)
+    request_obj.base_release_id = install.applied_release_id
+    request_obj.revision = int(request_obj.revision or 0) + 1
     request_obj.overlay_fingerprint = fingerprint
     request_obj.last_synced_overlay_fingerprint = None
     request_obj.last_sync_status = REQUEST_STATUS_NEEDS_SYNC
@@ -757,7 +828,15 @@ def _current_state_for_item(
 
     if change_type in {CHANGE_TYPE_NOTE_FIELD_SET, CHANGE_TYPE_NOTE_FIELD_REMOVE}:
         source_note_id = str(metadata.get("source_note_id") or item.source_ref_id or "").strip()
-        field_name = str(metadata.get("field_name") or item.path_key or "").strip()
+        source_field_id = str(metadata.get("source_field_def_id") or "").strip()
+        source_field = db.session.get(FieldDef, source_field_id) if source_field_id else None
+        field_name = str(
+            (source_field.name if source_field is not None else None)
+            or metadata.get("field_name")
+            or item.path_key
+            or ""
+        ).strip()
+        field_name = dict(context.get("rename_map") or {}).get(field_name, field_name)
         source_note = Note.query.get(source_note_id)
         if source_note is None:
             return dict(MISSING_MARKER)
@@ -848,7 +927,12 @@ def sync_request(
     enforce_overlay_fingerprint: bool = True,
     status_on_clean: str | None = REQUEST_STATUS_DRAFT,
     audit_action: str = "market.deck_change_request.sync",
+    allow_owner_actor: bool = False,
 ) -> DeckChangeRequest:
+    if allow_owner_actor:
+        _ensure_owner_access(request_obj, user_id=actor_user_id)
+    else:
+        _ensure_requester_access(request_obj, user_id=actor_user_id)
     install = _get_request_install(request_obj)
     if install is None:
         raise ChangeRequestError(
@@ -861,6 +945,7 @@ def sync_request(
         current_fingerprint = compute_overlay_fingerprint(install)
         if current_fingerprint != str(request_obj.overlay_fingerprint or "").strip():
             request_obj.status = REQUEST_STATUS_NEEDS_SYNC
+            request_obj.revision = int(request_obj.revision or 0) + 1
             request_obj.last_sync_status = REQUEST_STATUS_NEEDS_SYNC
             install.last_sync_status = REQUEST_STATUS_NEEDS_SYNC
             db.session.flush()
@@ -930,6 +1015,7 @@ def sync_request(
         request_obj.status = REQUEST_STATUS_HAS_CONFLICT
     elif status_on_clean:
         request_obj.status = status_on_clean
+    request_obj.revision = int(request_obj.revision or 0) + 1
 
     _audit(
         actor_user_id,
@@ -999,6 +1085,7 @@ def resolve_request_conflict(
         install = _get_request_install(request_obj)
         if install is not None:
             install.last_sync_status = "clean"
+    request_obj.revision = int(request_obj.revision or 0) + 1
 
     _audit(
         actor_user_id,
@@ -1076,6 +1163,7 @@ def submit_request_for_review(
         )
 
     request_obj.status = REQUEST_STATUS_PENDING_REVIEW
+    request_obj.revision = int(request_obj.revision or 0) + 1
     request_obj.submitted_at = _utcnow()
     _audit(
         actor_user_id,
@@ -1253,6 +1341,7 @@ def approve_and_merge_request(
         enforce_overlay_fingerprint=False,
         status_on_clean=REQUEST_STATUS_PENDING_REVIEW,
         audit_action="market.deck_change_request.sync_before_merge",
+        allow_owner_actor=True,
     )
     if request_obj.status == REQUEST_STATUS_HAS_CONFLICT:
         raise ChangeRequestError(
@@ -1357,7 +1446,14 @@ def approve_and_merge_request(
         source_note = Note.query.get(str(metadata.get("source_note_id") or item.source_ref_id or "").strip())
         if source_note is None:
             continue
-        field_name = str(metadata.get("field_name") or item.path_key or "").strip()
+        source_field_id = str(metadata.get("source_field_def_id") or "").strip()
+        source_field = db.session.get(FieldDef, source_field_id) if source_field_id else None
+        field_name = str(
+            (source_field.name if source_field is not None else None)
+            or metadata.get("field_name")
+            or item.path_key
+            or ""
+        ).strip()
         field_name = rename_map.get(field_name, field_name)
         desired_value = _effective_after_value(item)
         values = dict(source_note.field_values or {})
@@ -1423,13 +1519,16 @@ def approve_and_merge_request(
     if source_note_type_id:
         _normalize_field_positions(source_note_type_id)
 
-    _cleanup_install_overlay_rows(install, request_obj)
     merged_at = _utcnow()
-    install.base_snapshot_at = merged_at
     install.last_synced_at = merged_at
-    install.last_sync_status = "clean"
+    # A contribution merge updates the owner's working tree only. The
+    # contributor keeps the local overlay and remains pinned to the release
+    # they explicitly applied; publishing is the only operation that advances
+    # the shared release head.
+    install.last_sync_status = REQUEST_STATUS_NEEDS_SYNC
 
     request_obj.status = REQUEST_STATUS_MERGED
+    request_obj.revision = int(request_obj.revision or 0) + 1
     request_obj.reviewed_by_user_id = actor_user_id
     request_obj.reviewed_at = merged_at
     request_obj.merged_at = merged_at
@@ -1437,6 +1536,9 @@ def approve_and_merge_request(
     request_obj.last_sync_status = "clean"
     if request_obj.deck_item is not None:
         request_obj.deck_item.updated_at = merged_at
+        request_obj.deck_item.working_revision = int(
+            request_obj.deck_item.working_revision or 0
+        ) + 1
 
     _audit(
         actor_user_id,
@@ -1465,6 +1567,7 @@ def reject_request(
             status=409,
         )
     request_obj.status = REQUEST_STATUS_REJECTED
+    request_obj.revision = int(request_obj.revision or 0) + 1
     request_obj.reviewed_by_user_id = actor_user_id
     request_obj.reviewed_at = _utcnow()
     request_obj.review_comment = review_comment or None
@@ -1532,6 +1635,8 @@ def serialize_request(request_obj: DeckChangeRequest, *, viewer_user_id: int) ->
         "source_deck_id": request_obj.source_deck_id,
         "source_note_type_id": request_obj.source_note_type_id,
         "status": request_obj.status,
+        "base_release_id": request_obj.base_release_id,
+        "revision": int(request_obj.revision or 0),
         "title": request_obj.title,
         "description": request_obj.description,
         "overlay_fingerprint": request_obj.overlay_fingerprint,
@@ -1613,6 +1718,8 @@ def serialize_request_summary(request_obj: DeckChangeRequest) -> dict[str, Any]:
         "deck_item_id": request_obj.deck_item_id,
         "title": request_obj.title,
         "status": request_obj.status,
+        "base_release_id": request_obj.base_release_id,
+        "revision": int(request_obj.revision or 0),
         "requester": {
             "id": request_obj.requester.id if request_obj.requester else request_obj.requester_user_id,
             "username": request_obj.requester.username if request_obj.requester else "Unknown",

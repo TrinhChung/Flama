@@ -47,6 +47,18 @@ class DeckMarketplaceItem(db.Model):
     price_cents = synonym("price_amount_minor")
     version = db.Column(db.String(50), nullable=False, default="1.0.0")
     changelog = db.Column(db.Text, nullable=True)
+    current_release_id = db.Column(
+        db.String(36),
+        db.ForeignKey(
+            "deck_releases.id",
+            name="fk_deck_marketplace_items_current_release",
+            ondelete="SET NULL",
+            use_alter=True,
+        ),
+        nullable=True,
+        index=True,
+    )
+    working_revision = db.Column(db.BigInteger, nullable=False, default=0)
     publish_status = db.Column(
         db.Enum("private", "published", "unlisted", "archived", name="deck_marketplace_publish_status_enum", native_enum=False),
         nullable=False,
@@ -66,6 +78,28 @@ class DeckMarketplaceItem(db.Model):
     owner = db.relationship("User", foreign_keys=[owner_user_id])
     source_deck = db.relationship("Deck", foreign_keys=[source_deck_id])
     source_note_type = db.relationship("NoteType", foreign_keys=[source_note_type_id])
+    current_release = db.relationship(
+        "DeckRelease",
+        foreign_keys=[current_release_id],
+        post_update=True,
+    )
+    releases = db.relationship(
+        "DeckRelease",
+        back_populates="deck_item",
+        cascade="all, delete-orphan",
+        foreign_keys="DeckRelease.deck_item_id",
+        order_by="DeckRelease.sequence_no",
+    )
+    release_memberships = db.relationship(
+        "DeckReleaseEntityMembership",
+        back_populates="deck_item",
+        cascade="all, delete-orphan",
+    )
+    working_dirty_entities = db.relationship(
+        "DeckWorkingDirtyEntity",
+        back_populates="deck_item",
+        cascade="all, delete-orphan",
+    )
     installs = db.relationship("DeckInstall", back_populates="deck_item", cascade="all, delete-orphan")
     change_requests = db.relationship("DeckChangeRequest", back_populates="deck_item")
     reviews = db.relationship("DeckReview", back_populates="deck_item", cascade="all, delete-orphan")

@@ -17,6 +17,7 @@ from .health import health_bp
 from .identity import identity_bp
 from .learning import learning_bp
 from .marketplace import (
+    marketplace_deck_releases_bp,
     marketplace_installations_bp,
     marketplace_note_types_bp,
 )
@@ -38,6 +39,7 @@ api_v1_bp.register_blueprint(
     marketplace_installations_bp,
     url_prefix="/marketplace",
 )
+api_v1_bp.register_blueprint(marketplace_deck_releases_bp)
 api_v1_bp.register_blueprint(marketplace_note_types_bp)
 api_v1_bp.register_blueprint(settings_bp)
 api_v1_bp.register_blueprint(tickets_bp)

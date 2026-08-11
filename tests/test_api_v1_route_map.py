@@ -64,6 +64,18 @@ EXPECTED_API_RULES = {
     ("DELETE", "/api/integration-tokens/<int:token_id>"),
     ("POST", "/api/integration-tokens/<int:token_id>/rotate"),
     ("GET", "/api/marketplace/installed-decks"),
+    ("GET", "/api/marketplace/installations/<install_id>/updates"),
+    ("GET", "/api/marketplace/installations/<install_id>/updates/<release_id>/diff"),
+    ("POST", "/api/marketplace/installations/<install_id>/updates/<release_id>/prepare"),
+    ("POST", "/api/marketplace/installations/<install_id>/updates/<release_id>/apply"),
+    ("POST", "/api/marketplace/installations/<install_id>/updates/<release_id>/mark-seen"),
+    ("POST", "/api/marketplace/rebases/<rebase_id>/conflicts/<int:conflict_id>/resolve"),
+    ("POST", "/api/marketplace/rebases/<rebase_id>/apply"),
+    ("GET", "/api/marketplace/decks/<deck_item_id>/releases"),
+    ("POST", "/api/marketplace/decks/<deck_item_id>/releases"),
+    ("GET", "/api/marketplace/decks/<deck_item_id>/releases/preview"),
+    ("GET", "/api/marketplace/decks/<deck_item_id>/releases/<release_id>"),
+    ("GET", "/api/marketplace/decks/<deck_item_id>/releases/<release_id>/changes"),
     ("GET", "/api/marketplace/note-types"),
     ("GET", "/api/marketplace/note-types/hub"),
     ("GET", "/api/marketplace/note-types/recommendations"),
@@ -153,7 +165,7 @@ class ApiRouteMapTests(unittest.TestCase):
             for method in rule.methods - {"HEAD", "OPTIONS"}
         }
         self.assertEqual(actual, EXPECTED_API_RULES)
-        self.assertEqual(len(actual), 119)
+        self.assertEqual(len(actual), 131)
 
 
 

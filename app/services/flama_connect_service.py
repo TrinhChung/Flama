@@ -454,13 +454,22 @@ def add_note(user_id: int, raw_note: object) -> int:
         if existing_note:
             # Update fields if new content is present
             updated = False
+            changed_field_names: set[str] = set()
             field_vals = dict(existing_note.field_values or {})
             for k, v in prepared.fields.items():
                 if v and field_vals.get(k) != v:
                     field_vals[k] = v
                     updated = True
+                    changed_field_names.add(k)
             if updated:
                 existing_note.field_values = field_vals
+                if prepared.clone_map is None:
+                    from app.services import deck_working_tree_service
+
+                    deck_working_tree_service.mark_note_fields_changed(
+                        note=existing_note,
+                        field_names=changed_field_names,
+                    )
                 db.session.commit()
             return existing_note.id
         raise ConnectError("cannot create note because it is a duplicate in the target deck")
@@ -504,6 +513,14 @@ def add_note(user_id: int, raw_note: object) -> int:
             db.session.add(DeckCloneAddedNote(deck_install_id=install.id, note_id=note.id))
             install.last_sync_status = "needs_sync"
             install.last_activity_at = datetime.utcnow()
+        else:
+            from app.services import deck_working_tree_service
+
+            deck_working_tree_service.mark_note_fields_changed(
+                note=note,
+                field_names=(note.field_values or {}).keys(),
+                operation="add",
+            )
 
         ref = _ensure_note_ref(note, user_id)
         db.session.add(
@@ -1129,6 +1146,7 @@ def _upsert_import_card(
     )
     note = source_ref.note if source_ref is not None else None
     created = False
+    changed_field_names: set[str] = set()
     if note is None:
         note = _find_existing_note(user_id, prepared)
     if note is None:
@@ -1143,10 +1161,16 @@ def _upsert_import_card(
         db.session.flush()
         created = True
     else:
+        previous_values = dict(note.field_values or {})
         note.note_type_id = prepared.note_type.id
         note.deck_id = prepared.deck.id
         note.field_values = prepared.fields
         note.tags = prepared.tags
+        changed_field_names = {
+            key
+            for key in set(previous_values) | set(prepared.fields)
+            if previous_values.get(key) != prepared.fields.get(key)
+        }
 
     if prepared.clone_map is not None:
         install = prepared.clone_map.deck_install
@@ -1160,6 +1184,14 @@ def _upsert_import_card(
             )
         install.last_sync_status = "needs_sync"
         install.last_activity_at = datetime.utcnow()
+    else:
+        from app.services import deck_working_tree_service
+
+        deck_working_tree_service.mark_note_fields_changed(
+            note=note,
+            field_names=(note.field_values or {}).keys() if created else changed_field_names,
+            operation="add" if created else "set",
+        )
 
     has_other_note_type = Note.query.filter(
         Note.user_id == user_id,

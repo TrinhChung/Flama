@@ -1,4 +1,4 @@
-import { ArrowRight, BookOpen, Eye, Layers, Sparkles } from 'lucide-react'
+import { ArrowRight, BookOpen, Eye, FileDiff, Layers, RefreshCcw, Sparkles } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { appApi } from '@/app/api'
@@ -29,12 +29,17 @@ type MarketplaceAuthor = {
 
 type InstalledDeckItem = {
   id: string
+  deck_install_id?: string | null
   title: string
   description: string | null
   author: MarketplaceAuthor | null
   installed_deck_id: number | null
   install_bucket: 'using_now' | 'installed' | 'owned'
   last_sync_status: string | null
+  applied_release?: { id: string; version_label: string } | null
+  available_release?: { id: string; version_label: string } | null
+  update_available?: boolean
+  unread_update?: boolean
 }
 
 function formatUpdatedAt(value: string | null) {
@@ -191,12 +196,36 @@ export function InstalledDecksPage() {
                       <span className="text-[9px] sm:text-[10px] text-muted-foreground truncate">
                         {item.last_sync_status}
                       </span>
+                    ) : item.update_available ? (
+                      <span className="text-[9px] sm:text-[10px] font-semibold text-primary truncate">
+                        Có bản {item.available_release?.version_label || 'mới'}
+                      </span>
                     ) : null}
                   </div>
                 </div>
 
                 {/* Bottom Action */}
-                <div className="mt-auto pt-1">
+                <div className="mt-auto space-y-1.5 pt-1">
+                  {item.update_available && item.deck_install_id && item.available_release ? (
+                    <Link
+                      to={`/installed-decks/${item.deck_install_id}/updates/${item.available_release.id}`}
+                      className="flex h-7 w-full items-center justify-center gap-1 truncate rounded-lg bg-primary px-2 py-1 text-[11px] font-semibold text-primary-foreground shadow-2xs transition-opacity hover:opacity-90 sm:h-8 sm:rounded-xl sm:text-xs"
+                    >
+                      <RefreshCcw className="size-3 shrink-0 sm:size-3.5" />
+                      <span className="truncate">
+                        {item.unread_update ? 'Xem cập nhật mới' : 'Xem cập nhật'}
+                      </span>
+                    </Link>
+                  ) : null}
+                  {item.deck_install_id && item.install_bucket !== 'owned' ? (
+                    <Link
+                      to={`/flashcards/shared-decks/${item.id}/change-request`}
+                      className="flex h-7 w-full items-center justify-center gap-1 truncate rounded-lg border border-border/70 px-2 py-1 text-[11px] font-semibold text-foreground transition-colors hover:border-primary/50 hover:bg-muted sm:h-8 sm:rounded-xl sm:text-xs"
+                    >
+                      <FileDiff className="size-3 shrink-0 sm:size-3.5" />
+                      <span className="truncate">Đóng góp chỉnh sửa</span>
+                    </Link>
+                  ) : null}
                   {item.installed_deck_id ? (
                     <Link
                       to={`/study?deck_id=${item.installed_deck_id}`}

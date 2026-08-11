@@ -273,6 +273,7 @@ def list_browse_cards(
             selectinload(Card.template),
         )
     )
+    clone_scopes = []
     if admin_mode:
         if selected_ids:
             query = query.filter(Note.deck_id.in_(selected_ids))
@@ -282,7 +283,6 @@ def list_browse_cards(
             return _empty_result()
     else:
         local_scope_ids = set(selected_ids or scoped_ids)
-        clone_scopes = []
         source_to_local_deck_id: dict[int, int] = {}
 
         if selected_ids is not None:
@@ -345,7 +345,13 @@ def list_browse_cards(
             scope_filters = [Note.deck_id.in_(clone_scope.source_deck_ids)]
             if clone_scope.source_owner_user_id is not None:
                 scope_filters.append(Note.user_id == clone_scope.source_owner_user_id)
-            if clone_scope.base_snapshot_at is not None:
+            release_membership = share_ctrl.release_note_membership_filter(
+                clone_scope.install,
+                Note.id,
+            )
+            if release_membership is not None:
+                scope_filters.append(release_membership)
+            elif clone_scope.base_snapshot_at is not None:
                 scope_filters.extend(
                     [
                         Note.created_at <= clone_scope.base_snapshot_at,
@@ -437,6 +443,46 @@ def list_browse_cards(
         user_id=user_id,
         card_ids=[card_obj.id for card_obj in pagination.items],
     )
+    clone_scope_by_card_id: dict[str, Any] = {}
+    release_note_ids: dict[str, set[str]] = {}
+    release_install_by_id: dict[str, Any] = {}
+    if not admin_mode and clone_scopes:
+        for card_obj in pagination.items:
+            note_obj = card_obj.note
+            if note_obj is None or note_obj.user_id == user_id or note_obj.deck_id is None:
+                continue
+            matching_scope = next(
+                (
+                    scope
+                    for scope in clone_scopes
+                    if int(note_obj.deck_id) in set(scope.source_deck_ids)
+                    and (
+                        scope.source_owner_user_id is None
+                        or int(note_obj.user_id) == int(scope.source_owner_user_id)
+                    )
+                ),
+                None,
+            )
+            if matching_scope is None:
+                continue
+            clone_scope_by_card_id[str(card_obj.id)] = matching_scope
+            release_id = str(matching_scope.install.applied_release_id or "")
+            if matching_scope.install.version_mode == "release" and release_id:
+                release_note_ids.setdefault(release_id, set()).add(str(note_obj.id))
+                release_install_by_id[release_id] = matching_scope.install
+
+    release_values_by_note: dict[tuple[str, str], dict[str, Any]] = {}
+    if release_note_ids:
+        from app.services import deck_release_service
+
+        for release_id, note_ids in release_note_ids.items():
+            resolved_values = deck_release_service.get_note_values_for_ids_at_release(
+                release_install_by_id[release_id].applied_release,
+                note_ids,
+            )
+            for note_id, values in resolved_values.items():
+                release_values_by_note[(release_id, str(note_id))] = values
+
     rows = []
     for card_obj in pagination.items:
         row_payload = vocabulary_ctrl.build_browse_row(
@@ -447,19 +493,17 @@ def list_browse_cards(
             timezone_name=timezone_name,
         )
         if not admin_mode and card_obj.note and card_obj.note.user_id != user_id:
-            clone_scope = share_ctrl.resolve_clone_scope_for_card(
-                user_id=user_id,
-                card_obj=card_obj,
-            )
-            if clone_scope is not None and share_ctrl.is_card_visible_in_clone_scope(
-                scope=clone_scope,
-                card_obj=card_obj,
-            ):
+            clone_scope = clone_scope_by_card_id.get(str(card_obj.id))
+            if clone_scope is not None:
+                release_id = str(clone_scope.install.applied_release_id or "")
                 adjusted_payload = _apply_clone_overlay_to_browse_payload(
                     payload={"card": row_payload, "note": {}, "fields": []},
                     card_obj=card_obj,
                     clone_scope=clone_scope,
                     deck_lookup=deck_lookup,
+                    base_field_values=release_values_by_note.get(
+                        (release_id, str(card_obj.note.id))
+                    ),
                 )
                 row_payload = adjusted_payload.get("card") or row_payload
         rows.append(row_payload)
@@ -542,6 +586,17 @@ def delete_browse_card(
     if not card_obj:
         raise BrowseApiError("Card not found", status=404)
 
+    from app.services import deck_working_tree_service
+
+    if card_obj.note is not None and deck_working_tree_service.note_has_shared_release_dependents(
+        card_obj.note
+    ):
+        raise BrowseApiError(
+            "Published shared cards cannot be hard-deleted because learner history must be preserved.",
+            status=409,
+            code="SHARED_ENTITY_RETIRE_REQUIRED",
+        )
+
     note_id = card_obj.note_id
     db.session.delete(card_obj)
     db.session.flush()
@@ -604,7 +659,19 @@ def update_legacy_browse_note(
             code=exc.code,
         ) from exc
 
+    changed_field_names = {
+        key
+        for key in set(note_obj.field_values or {}) | set(merged_values)
+        if (note_obj.field_values or {}).get(key) != merged_values.get(key)
+    }
     note_obj.field_values = merged_values
+    if changed_field_names:
+        from app.services import deck_working_tree_service
+
+        deck_working_tree_service.mark_note_fields_changed(
+            note=note_obj,
+            field_names=changed_field_names,
+        )
     db.session.commit()
     return {
         "success": True,
@@ -694,6 +761,9 @@ def _update_owned_browse_card(
     note_obj,
     validated,
 ) -> dict[str, Any]:
+    from app.services import deck_working_tree_service
+
+    original_deck_id = note_obj.deck_id
     accessible_deck_ids: set[int] | None = None
     if validated.update_deck:
         selected_deck_id = validated.deck_id
@@ -719,6 +789,26 @@ def _update_owned_browse_card(
         for key_name, value in validated.field_updates.items():
             next_values[key_name] = value
         note_obj.field_values = next_values
+
+    if validated.field_updates:
+        deck_working_tree_service.mark_note_fields_changed(
+            note=note_obj,
+            field_names=validated.field_updates.keys(),
+        )
+    if validated.update_deck and original_deck_id != note_obj.deck_id:
+        all_field_names = list((note_obj.field_values or {}).keys())
+        deck_working_tree_service.mark_note_fields_changed(
+            note=note_obj,
+            field_names=all_field_names,
+            operation="remove",
+            deck_id=original_deck_id,
+        )
+        deck_working_tree_service.mark_note_fields_changed(
+            note=note_obj,
+            field_names=all_field_names,
+            operation="add",
+            deck_id=note_obj.deck_id,
+        )
 
     browse_card_repository.commit_changes()
 
@@ -817,6 +907,7 @@ def _apply_clone_overlay_to_browse_payload(
     card_obj,
     clone_scope,
     deck_lookup: dict[int, str],
+    base_field_values: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     from app.services import flashcards_share as share_ctrl
 
@@ -835,6 +926,7 @@ def _apply_clone_overlay_to_browse_payload(
             install=clone_scope.install,
             source_note=note_obj,
             schema_view=schema_view,
+            base_field_values=base_field_values,
         )
     else:
         overlay_field_defs = note_obj.note_type.field_defs if note_obj.note_type else []

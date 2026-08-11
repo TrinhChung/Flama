@@ -8,7 +8,11 @@ import logging
 from types import SimpleNamespace
 from typing import Any, Mapping
 
-from app.services import flashcards_share_service, marketplace_query_service
+from app.services import (
+    deck_working_tree_service,
+    flashcards_share_service,
+    marketplace_query_service,
+)
 from app.services.flashcard_legacy import (
     LEGACY_BACK_TEMPLATE,
     LEGACY_FRONT_TEMPLATE,
@@ -264,6 +268,13 @@ def create_field(
         position=(int(max_position) if max_position is not None else -1) + 1,
     )
     db.session.add(field)
+    db.session.flush()
+    deck_working_tree_service.mark_field_def_changed(
+        field_def=field,
+        owner_user_id=user_id,
+        property_keys={"name", "field_type", "position", "required", "identity_role"},
+        operation="add",
+    )
     _audit(
         user_id,
         "field.create",
@@ -282,6 +293,12 @@ def update_field(
 ) -> dict[str, Any]:
     note_type = _owned_note_type(user_id=user_id, note_type_id=note_type_id)
     field = _field(note_type_id=note_type.id, field_id=field_id)
+    previous_properties = {
+        "name": field.name,
+        "field_type": field.field_type,
+        "required": bool(field.required),
+        "identity_role": field.identity_role,
+    }
     old_name = field.name
     new_name = str(payload.get("name") or field.name).strip()
     new_type = str(payload.get("field_type") or field.field_type).strip()
@@ -359,6 +376,23 @@ def update_field(
             "status": job.status,
             "processed_notes": job.processed_notes,
         }
+    current_properties = {
+        "name": field.name,
+        "field_type": field.field_type,
+        "required": bool(field.required),
+        "identity_role": field.identity_role,
+    }
+    changed_properties = {
+        key
+        for key, value in current_properties.items()
+        if previous_properties.get(key) != value
+    }
+    if changed_properties:
+        deck_working_tree_service.mark_field_def_changed(
+            field_def=field,
+            owner_user_id=user_id,
+            property_keys=changed_properties,
+        )
     _audit(
         user_id,
         "field.update",
@@ -390,6 +424,15 @@ def delete_field(
         raise ContentApiError(
             "IDENTITY_FIELD_REQUIRED",
             "Clear or reassign the primary identity field before deleting it.",
+            status=409,
+        )
+    if deck_working_tree_service.note_type_has_shared_release_dependents(
+        note_type_id=note_type.id,
+        owner_user_id=user_id,
+    ):
+        raise ContentApiError(
+            "SHARED_ENTITY_RETIRE_REQUIRED",
+            "Published shared fields must be retired through a release-safe operation.",
             status=409,
         )
     for note in Note.query.filter_by(
@@ -464,6 +507,12 @@ def reorder_fields(
                 f"Invalid position for field {field_id}",
                 field="body",
             ) from exc
+    for field in fields:
+        deck_working_tree_service.mark_field_def_changed(
+            field_def=field,
+            owner_user_id=user_id,
+            property_keys={"position"},
+        )
     _audit(user_id, "field.reorder", {"note_type_id": note_type.id})
     db.session.commit()
     return {"success": True}
@@ -847,6 +896,11 @@ def create_note(
     db.session.add(note)
     db.session.flush()
     _create_cards(note)
+    deck_working_tree_service.mark_note_fields_changed(
+        note=note,
+        field_names=(note.field_values or {}).keys(),
+        operation="add",
+    )
     flashcards_share_service.touch_note_type_install_usage(
         user_id=user_id,
         installed_note_type_id=note.note_type_id,
@@ -875,6 +929,7 @@ def update_note(
     payload: dict[str, Any],
 ) -> dict[str, Any]:
     note = _owned_note(user_id=user_id, note_id=note_id)
+    original_deck_id = note.deck_id
     note_type = _owned_note_type(
         user_id=user_id,
         note_type_id=note.note_type_id,
@@ -909,6 +964,25 @@ def update_note(
             consistency_error,
             field="deck_id",
         )
+    if validated.field_updates:
+        deck_working_tree_service.mark_note_fields_changed(
+            note=note,
+            field_names=validated.field_updates.keys(),
+        )
+    if validated.update_deck and original_deck_id != note.deck_id:
+        all_field_names = list((note.field_values or {}).keys())
+        deck_working_tree_service.mark_note_fields_changed(
+            note=note,
+            field_names=all_field_names,
+            operation="remove",
+            deck_id=original_deck_id,
+        )
+        deck_working_tree_service.mark_note_fields_changed(
+            note=note,
+            field_names=all_field_names,
+            operation="add",
+            deck_id=note.deck_id,
+        )
     _audit(user_id, "note.update", {"note_id": note.id})
     db.session.commit()
     return {
@@ -920,6 +994,12 @@ def update_note(
 
 def delete_note(*, user_id: int, note_id: str) -> dict[str, bool]:
     note = _owned_note(user_id=user_id, note_id=note_id)
+    if deck_working_tree_service.note_has_shared_release_dependents(note):
+        raise ContentApiError(
+            "SHARED_ENTITY_RETIRE_REQUIRED",
+            "Published shared notes cannot be hard-deleted because learner history must be preserved.",
+            status=409,
+        )
     db.session.delete(note)
     _audit(user_id, "note.delete", {"note_id": note.id})
     db.session.commit()

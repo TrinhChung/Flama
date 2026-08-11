@@ -360,10 +360,12 @@ class DeckChangeRequestFlowTests(unittest.TestCase):
             )
 
             install_row = DeckInstall.query.get(ctx["install_id"])
-            self.assertEqual(install_row.last_sync_status, "clean")
+            # Merge only updates the owner's working tree. The contributor's
+            # overlay remains intact and no clone release pointer advances.
+            self.assertEqual(install_row.last_sync_status, "needs_sync")
             self.assertEqual(
                 DeckCloneFieldDefOverride.query.filter_by(deck_install_id=ctx["install_id"]).count(),
-                0,
+                1,
             )
             self.assertEqual(
                 DeckCloneAddedFieldDef.query.filter_by(deck_install_id=ctx["install_id"]).count(),
@@ -375,8 +377,11 @@ class DeckChangeRequestFlowTests(unittest.TestCase):
             )
             self.assertEqual(
                 DeckCloneNoteFieldOverride.query.filter_by(deck_install_id=ctx["install_id"]).count(),
-                0,
+                1,
             )
+            deck_item = DeckMarketplaceItem.query.get(deck_item_id)
+            self.assertIsNone(deck_item.current_release_id)
+            self.assertEqual(int(deck_item.working_revision or 0), 1)
 
     def test_change_request_owner_reject_keeps_source_unchanged(self):
         ctx = self._create_shared_clone_context()
