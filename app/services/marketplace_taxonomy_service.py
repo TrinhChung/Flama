@@ -17,6 +17,12 @@ SUBJECT_OPTIONS = (
     {"id": "chinese", "label": "Tiếng Trung", "domain": "language_learning"},
     {"id": "korean", "label": "Tiếng Hàn", "domain": "language_learning"},
     {"id": "aws", "label": "AWS", "domain": "certification"},
+    {"id": "other_certification", "label": "Chứng chỉ khác", "domain": "certification"},
+    {"id": "it_coding", "label": "CNTT & Lập trình", "domain": "professional_skills"},
+    {"id": "business", "label": "Kinh doanh & Quản lý", "domain": "professional_skills"},
+    {"id": "science", "label": "Khoa học tự nhiên", "domain": "academic"},
+    {"id": "medical", "label": "Y dược", "domain": "academic"},
+    {"id": "law", "label": "Luật", "domain": "academic"},
     {"id": "other", "label": "Khác", "domain": "other"},
 )
 
@@ -299,6 +305,8 @@ def empty_taxonomy_metadata() -> dict[str, Any]:
         "format_features": [],
         "audience": None,
         "best_used_for": None,
+        "subcategory": None,
+        "target_audience": None,
     }
 
 
@@ -336,6 +344,8 @@ def normalize_taxonomy_payload(payload: dict[str, Any] | None, *, content_type: 
         {row["id"] for row in DIFFICULTY_OPTIONS},
     )
     audience = _normalize_choice(_get_value(source, "taxonomy_audience", "audience"), {row["id"] for row in AUDIENCE_OPTIONS})
+    subcategory = _normalize_free_text(_get_value(source, "subcategory"), max_length=120)
+    target_audience = _normalize_free_text(_get_value(source, "target_audience"), max_length=255)
 
     if subject:
         expected_domain = _SUBJECT_MAP.get(subject, {}).get("domain")
@@ -389,6 +399,8 @@ def normalize_taxonomy_payload(payload: dict[str, Any] | None, *, content_type: 
             "format_features": format_features,
             "audience": audience,
             "best_used_for": best_used_for,
+            "subcategory": subcategory,
+            "target_audience": target_audience,
         }
     )
     return normalized, None
@@ -449,6 +461,8 @@ def build_taxonomy_display(metadata: dict[str, Any] | None, *, content_type: str
     format_features = normalized.get("format_features") or []
     audience = normalized.get("audience")
     best_used_for = normalized.get("best_used_for")
+    subcategory = normalized.get("subcategory")
+    target_audience = normalized.get("target_audience")
 
     chips: list[str] = []
     for value in (
@@ -469,6 +483,7 @@ def build_taxonomy_display(metadata: dict[str, Any] | None, *, content_type: str
     detail_tags.extend(feature_labels(format_features))
     if audience_label(audience):
         detail_tags.append(audience_label(audience))
+    detail_tags.extend(filter(None, (subcategory, target_audience)))
     if content_type == "note_type" and best_used_for_label(best_used_for):
         detail_tags.append(best_used_for_label(best_used_for))
 
@@ -495,6 +510,8 @@ def build_taxonomy_display(metadata: dict[str, Any] | None, *, content_type: str
         "audience_label": audience_label(audience),
         "best_used_for": best_used_for,
         "best_used_for_label": best_used_for_label(best_used_for),
+        "subcategory": subcategory,
+        "target_audience": target_audience,
         "catalog_chips": _dedupe_list(chips),
         "catalog_tags": _dedupe_list(detail_tags),
     }
@@ -511,6 +528,8 @@ def build_searchable_taxonomy_text(metadata: dict[str, Any] | None, *, content_t
         display.get("framework_track_label"),
         display.get("audience_label"),
         display.get("best_used_for_label"),
+        display.get("subcategory"),
+        display.get("target_audience"),
         " ".join(display.get("learning_goal_labels") or []),
         " ".join(display.get("primary_topic_labels") or []),
         " ".join(display.get("format_feature_labels") or []),
@@ -733,6 +752,11 @@ def _normalize_choice(raw_value: Any, allowed: set[str]) -> str | None:
     if not token:
         return None
     return token if token in allowed else None
+
+
+def _normalize_free_text(raw_value: Any, *, max_length: int) -> str | None:
+    text = str(raw_value or "").strip()
+    return text[:max_length] or None
 
 
 def _normalize_multi_values(raw_value: Any, allowed: set[str], *, max_items: int) -> list[str]:

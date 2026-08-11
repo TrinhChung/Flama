@@ -47,6 +47,16 @@ const decks: PublishDeckOption[] = [
     block_reason: null,
     shared_item_id: null,
   },
+  {
+    id: 5,
+    name: 'Bộ cha có bộ con đã chia sẻ',
+    parent_id: null,
+    card_count: 80,
+    is_selectable: false,
+    block_code: 'descendant_shared',
+    block_reason: 'Không thể chia sẻ bộ cha vì một bộ con đã được chia sẻ.',
+    shared_item_id: 'shared-child',
+  },
 ]
 
 describe('PublishDeckTree', () => {
@@ -76,13 +86,15 @@ describe('PublishDeckTree', () => {
     act(() => expandParent?.click())
 
     const blockedRows = container.querySelectorAll<HTMLElement>('[aria-disabled="true"]')
-    expect(blockedRows).toHaveLength(3)
+    expect(blockedRows).toHaveLength(4)
     act(() => blockedRows[0]?.click())
     act(() => blockedRows[1]?.click())
     act(() => blockedRows[2]?.click())
+    act(() => blockedRows[3]?.click())
     expect(onSelect).not.toHaveBeenCalled()
     expect(container.textContent).toContain('Bộ con')
     expect(container.textContent).toContain('Từ Marketplace')
+    expect(container.textContent).toContain('Bộ con đã chia sẻ')
   })
 
   it('allows selecting a self-created or Anki-synced deck', () => {

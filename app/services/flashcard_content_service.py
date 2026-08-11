@@ -80,9 +80,13 @@ def list_note_types(*, user_id: int) -> dict[str, Any]:
         .order_by(NoteType.name.asc(), NoteType.updated_at.desc())
         .all()
     )
+    installed_id_set = {str(note_type_id) for note_type_id in installed_ids}
     return {
         "items": [
-            marketplace_query_service.serialize_note_type(row)
+            {
+                **marketplace_query_service.serialize_note_type(row),
+                "is_marketplace_install": str(row.id) in installed_id_set,
+            }
             for row in rows
         ]
     }
@@ -122,6 +126,20 @@ def update_note_type(
     payload: dict[str, Any],
 ) -> dict[str, Any]:
     note_type = _owned_note_type(user_id=user_id, note_type_id=note_type_id)
+    requested_status = str(payload.get("publish_status") or "").strip().lower()
+    if requested_status in flashcards_share_service.PUBLISH_STATUSES_VISIBLE:
+        eligibility = flashcards_share_service.get_note_type_publish_eligibility(
+            note_type=note_type,
+            user_id=user_id,
+            is_admin=admin_mode,
+        )
+        if not eligibility["is_selectable"]:
+            raise ContentApiError(
+                "CONFLICT",
+                str(eligibility["block_reason"]),
+                status=409,
+                field="publish_status",
+            )
     validation_error = flashcards_share_service.apply_note_type_marketplace_payload(
         note_type,
         payload,
@@ -143,6 +161,27 @@ def delete_note_type(*, user_id: int, note_type_id: str) -> dict[str, bool]:
             "Cannot delete note type with existing notes.",
             status=409,
         )
+    source_install_count = NoteTypeInstall.query.filter_by(
+        source_note_type_id=note_type.id
+    ).count()
+    has_marketplace_history = (
+        str(note_type.publish_status or "").strip().lower() != "private"
+        or source_install_count > 0
+        or bool(note_type.reviews)
+    )
+    if has_marketplace_history:
+        from datetime import datetime, timezone
+
+        note_type.publish_status = "archived"
+        note_type.archived_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        _audit(
+            user_id,
+            "note_type.archive",
+            {"note_type_id": note_type.id, "reason": "marketplace_lineage"},
+        )
+        db.session.commit()
+        return {"success": True, "archived": True}
+
     db.session.delete(note_type)
     _audit(user_id, "note_type.delete", {"note_type_id": note_type.id})
     db.session.commit()

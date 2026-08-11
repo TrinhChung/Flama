@@ -318,11 +318,11 @@ def _can_user_rate_deck(deck_item: DeckMarketplaceItem, *, user_id: int) -> bool
         deck_active_review_threshold=DECK_ACTIVE_REVIEW_THRESHOLD,
     )
 
-def _is_note_type_visible_for_shared(note_type: NoteType) -> bool:
-    return flashcards_share.is_note_type_visible_for_shared(note_type)
+def _is_note_type_visible_for_shared(note_type: NoteType, user_id: int | None = None) -> bool:
+    return flashcards_share.is_note_type_visible_for_shared(note_type, user_id=user_id)
 
-def _is_deck_item_visible_for_shared(deck_item: DeckMarketplaceItem) -> bool:
-    return flashcards_share.is_deck_item_visible_for_shared(deck_item)
+def _is_deck_item_visible_for_shared(deck_item: DeckMarketplaceItem, user_id: int | None = None) -> bool:
+    return flashcards_share.is_deck_item_visible_for_shared(deck_item, user_id=user_id)
 
 
 def _filter_note_type_items(
@@ -466,14 +466,13 @@ def _get_shared_deck_item_for_view(deck_item_id: str) -> DeckMarketplaceItem | N
     if status == "private" and not is_owner:
         return None
     if status == "archived":
-        if is_owner:
-            return None
-        installed = DeckInstall.query.filter_by(
-            deck_item_id=deck_item.id,
-            user_id=current_user.id,
-        ).first()
-        if installed is None:
-            return None
+        if not is_owner:
+            installed = DeckInstall.query.filter_by(
+                deck_item_id=deck_item.id,
+                user_id=current_user.id,
+            ).first()
+            if installed is None:
+                return None
     return deck_item
 
 

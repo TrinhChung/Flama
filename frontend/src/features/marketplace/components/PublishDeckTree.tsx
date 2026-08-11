@@ -63,8 +63,10 @@ function filteredDeckIds(decks: PublishDeckOption[], search: string): Set<number
 
 function blockLabel(code: PublishDeckOption['block_code']): string | null {
   if (code === 'marketplace_clone') return 'Từ Marketplace'
+  if (code === 'marketplace_note_type') return 'Dùng Note Type Marketplace'
   if (code === 'already_shared') return 'Đã chia sẻ'
   if (code === 'ancestor_shared') return 'Bộ cha đã chia sẻ'
+  if (code === 'descendant_shared') return 'Bộ con đã chia sẻ'
   if (code === 'not_owned') return 'Không thuộc sở hữu'
   return null
 }

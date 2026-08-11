@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
+from sqlalchemy.exc import IntegrityError
+
 from models import db
 from models.flashcard import AuditLog
 from models.note_type import NoteType
@@ -295,6 +297,19 @@ def publish_note_type(
             "FIELD_NOT_FOUND", "Note type not found.", status=404
         )
 
+    eligibility = flashcards_share_service.get_note_type_publish_eligibility(
+        note_type=note_type,
+        user_id=user_id,
+        is_admin=is_admin,
+    )
+    if not eligibility["is_selectable"]:
+        raise MarketplaceNoteTypeError(
+            "CONFLICT",
+            str(eligibility["block_reason"]),
+            status=409,
+            field="source_note_type_id",
+        )
+
     payload.setdefault("publish_status", "published")
     validation_error = flashcards_share_service.apply_note_type_marketplace_payload(
         note_type,
@@ -421,12 +436,29 @@ def install_shared_note_type(
         status_code = 202 if checkout.get("payment_required") else 200
         return checkout, status_code
 
-    installed_copy, purchase_amount_minor = (
-        flashcards_share_service.install_shared_note_type(
-            source_note_type=source_note_type,
-            user_id=user_id,
+    try:
+        installed_copy, purchase_amount_minor = (
+            flashcards_share_service.install_shared_note_type(
+                source_note_type=source_note_type,
+                user_id=user_id,
+            )
         )
-    )
+    except IntegrityError:
+        db.session.rollback()
+        concurrent_install = NoteTypeInstall.query.filter_by(
+            source_note_type_id=note_type_id,
+            user_id=user_id,
+        ).first()
+        if concurrent_install is None:
+            raise
+        return (
+            {
+                "installed_note_type_id": concurrent_install.installed_note_type_id,
+                "source_note_type_id": note_type_id,
+                "already_installed": True,
+            },
+            200,
+        )
     if installed_copy is None:
         raise MarketplaceNoteTypeError(
             "VALIDATION_ERROR", "Unable to install note type.", status=500

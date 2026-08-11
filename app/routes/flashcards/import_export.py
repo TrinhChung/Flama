@@ -246,6 +246,15 @@ def _share_deck_page_impl(deck: Deck):
 
 
 def _share_note_type_page_impl(note_type: NoteType):
+    eligibility = flashcards_share.get_note_type_publish_eligibility(
+        note_type=note_type,
+        user_id=current_user.id,
+        is_admin=is_admin_user(current_user),
+    )
+    if not eligibility["is_selectable"]:
+        flash(str(eligibility["block_reason"]), "warning")
+        return redirect(url_for("flashcards.note_type_manager"))
+
     if request.method == "POST":
         form_state = _share_form_payload_from_request()
         form_state["version"] = (request.form.get("version") or note_type.version or "1.0.0").strip()

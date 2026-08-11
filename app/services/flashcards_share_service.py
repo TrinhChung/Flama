@@ -12,7 +12,7 @@ from typing import Any, Tuple
 UTC = timezone.utc
 
 from sqlalchemy import and_, or_
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import IntegrityError, OperationalError
 
 from app.repositories import flashcards_share_repository
 from app.repositories.deck_tree_query import collect_ancestor_ids, collect_subtree_ids
@@ -264,6 +264,54 @@ def _installed_local_deck_ids(*, user_id: int) -> set[int]:
     return root_ids | mapped_ids
 
 
+def is_installed_note_type_copy(note_type_id: str | None) -> bool:
+    """Return whether a note type is a Marketplace-installed local copy."""
+    normalized_id = str(note_type_id or "").strip()
+    if not normalized_id:
+        return False
+    return (
+        NoteTypeInstall.query.filter_by(installed_note_type_id=normalized_id).first()
+        is not None
+    )
+
+
+def get_note_type_publish_eligibility(
+    *,
+    note_type: NoteType,
+    user_id: int,
+    is_admin: bool = False,
+) -> dict[str, Any]:
+    if note_type.user_id != user_id and not is_admin:
+        return {
+            "is_selectable": False,
+            "block_code": "not_owned",
+            "block_reason": "Note Type không thuộc quyền sở hữu của bạn.",
+        }
+    if is_installed_note_type_copy(note_type.id):
+        return {
+            "is_selectable": False,
+            "block_code": "marketplace_install",
+            "block_reason": "Note Type được cài từ Marketplace không thể chia sẻ lại.",
+        }
+    return {
+        "is_selectable": True,
+        "block_code": None,
+        "block_reason": None,
+    }
+
+
+def validate_deck_source_note_type_provenance(
+    *,
+    deck_item: DeckMarketplaceItem,
+    source_note_type: NoteType,
+) -> str | None:
+    if source_note_type.user_id != deck_item.owner_user_id:
+        return "source_note_type_id not found."
+    if is_installed_note_type_copy(source_note_type.id):
+        return "Note Type được cài từ Marketplace không thể được đóng gói để chia sẻ lại."
+    return None
+
+
 def _deck_publish_context(*, user_id: int) -> tuple[dict[int, Deck], set[int], dict[int, DeckMarketplaceItem]]:
     owned_decks = (
         Deck.query.filter(
@@ -322,6 +370,18 @@ def get_deck_publish_eligibility(
             "shared_item_id": None,
         }
 
+    inferred_note_type_id, _ = resolve_single_note_type_for_deck(
+        deck_id=deck_id,
+        owner_user_id=user_id,
+    )
+    if inferred_note_type_id and is_installed_note_type_copy(inferred_note_type_id):
+        return {
+            "is_selectable": False,
+            "block_code": "marketplace_note_type",
+            "block_reason": "Bộ thẻ dùng Note Type cài từ Marketplace nên không thể chia sẻ lại.",
+            "shared_item_id": None,
+        }
+
     existing_item = shared_by_source.get(deck_id)
     if existing_item is not None and not allow_existing:
         return {
@@ -329,6 +389,27 @@ def get_deck_publish_eligibility(
             "block_code": "already_shared",
             "block_reason": "Bộ thẻ này đã được chia sẻ và không thể chia sẻ lại.",
             "shared_item_id": existing_item.id,
+        }
+
+    descendant_ids = set(collect_subtree_ids(deck_id)) - {deck_id}
+    descendant_items = [
+        (descendant_id, shared_by_source[descendant_id])
+        for descendant_id in sorted(descendant_ids)
+        if descendant_id in shared_by_source
+    ]
+    if descendant_items:
+        descendant_id, descendant_item = descendant_items[0]
+        descendant_deck = deck_by_id.get(descendant_id)
+        descendant_name = (
+            descendant_deck.name if descendant_deck is not None else str(descendant_id)
+        )
+        return {
+            "is_selectable": False,
+            "block_code": "descendant_shared",
+            "block_reason": (
+                f"Không thể chia sẻ bộ cha vì bộ con '{descendant_name}' đã được chia sẻ."
+            ),
+            "shared_item_id": descendant_item.id,
         }
 
     seen: set[int] = set()
@@ -437,9 +518,12 @@ def create_shared_deck_item(
     )
     db.session.add(deck_item)
     
+    deferred_status = payload.get("publish_status") if "publish_status" in payload else None
+    initial_payload = dict(payload)
+    initial_payload.pop("publish_status", None)
     validation_error = flashcards_share.apply_deck_marketplace_payload(
         deck_item,
-        payload,
+        initial_payload,
         allow_set_official=is_admin,
         publish_statuses_visible=PUBLISH_STATUSES_VISIBLE,
     )
@@ -458,13 +542,33 @@ def create_shared_deck_item(
     if bind_error:
         db.session.rollback()
         return None, bind_error, "source_note_type_id"
+
+    if deferred_status is not None:
+        validation_error = flashcards_share.apply_deck_marketplace_payload(
+            deck_item,
+            {"publish_status": deferred_status},
+            allow_set_official=is_admin,
+            publish_statuses_visible=PUBLISH_STATUSES_VISIBLE,
+        )
+        if validation_error:
+            db.session.rollback()
+            return None, validation_error, None
         
     flashcards_share.recompute_deck_item_market_stats(
         deck_item,
         deck_active_review_threshold=DECK_ACTIVE_REVIEW_THRESHOLD,
     )
     _audit(user_id, "market.deck_item.create", {"deck_item_id": deck_item.id})
-    db.session.commit()
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        duplicate = DeckMarketplaceItem.query.filter_by(
+            source_deck_id=source_deck_id
+        ).first()
+        if duplicate is not None:
+            return None, "Bộ thẻ này đã được chia sẻ và không thể chia sẻ lại.", "source_deck_id"
+        raise
     return deck_item, None, None
 
 
@@ -475,6 +579,21 @@ def update_shared_deck_item(
     is_admin: bool,
     require_source_note_type: bool
 ) -> tuple[bool, str | None, str | None]:
+    if "source_deck_id" in payload:
+        raw_source_deck_id = payload.get("source_deck_id")
+        try:
+            requested_source_deck_id = int(raw_source_deck_id)
+        except (TypeError, ValueError):
+            return False, "source_deck_id must be an integer.", "source_deck_id"
+        if requested_source_deck_id != deck_item.source_deck_id:
+            return False, "source_deck_id cannot be changed after listing creation.", "source_deck_id"
+
+    if "source_note_type_id" in payload:
+        requested_note_type_id = str(payload.get("source_note_type_id") or "").strip() or None
+        current_note_type_id = str(deck_item.source_note_type_id or "").strip() or None
+        if requested_note_type_id != current_note_type_id:
+            return False, "source_note_type_id cannot be changed after listing creation.", "source_note_type_id"
+
     validation_error = flashcards_share.apply_deck_marketplace_payload(
         deck_item,
         payload,
@@ -652,6 +771,21 @@ def install_shared_deck_item(deck_item_id: str, user_id: int, publish_statuses_v
         except flashcards_share.ShareControllerError as exc:
             db.session.rollback()
             return None, exc.message, exc.field, exc.status
+        except IntegrityError:
+            db.session.rollback()
+            concurrent_install = DeckInstall.query.filter_by(
+                deck_item_id=deck_item_id,
+                user_id=user_id,
+            ).first()
+            if concurrent_install is not None:
+                return {
+                    "deck_item_id": deck_item_id,
+                    "installed_deck_id": concurrent_install.local_deck_id,
+                    "already_installed": True,
+                }, None, None, 200
+            if attempt < SHARED_DECK_INSTALL_MAX_RETRIES:
+                continue
+            raise
         except OperationalError as exc:
             db.session.rollback()
             if flashcards_share._is_mysql_deadlock(exc) and attempt < SHARED_DECK_INSTALL_MAX_RETRIES:
@@ -675,6 +809,21 @@ def install_shared_deck_item(deck_item_id: str, user_id: int, publish_statuses_v
         _audit(user_id, "market.deck_item.install", install_result.get("audit") or {})
         try:
             db.session.commit()
+        except IntegrityError:
+            db.session.rollback()
+            concurrent_install = DeckInstall.query.filter_by(
+                deck_item_id=deck_item_id,
+                user_id=user_id,
+            ).first()
+            if concurrent_install is not None:
+                return {
+                    "deck_item_id": deck_item_id,
+                    "installed_deck_id": concurrent_install.local_deck_id,
+                    "already_installed": True,
+                }, None, None, 200
+            if attempt < SHARED_DECK_INSTALL_MAX_RETRIES:
+                continue
+            raise
         except OperationalError as exc:
             db.session.rollback()
             if flashcards_share._is_mysql_deadlock(exc) and attempt < SHARED_DECK_INSTALL_MAX_RETRIES:
@@ -780,6 +929,12 @@ def bind_deck_item_source_note_type(
     source_note_type = db.session.get(NoteType, source_note_type_id)
     if not source_note_type:
         return "source_note_type_id not found."
+    provenance_error = validate_deck_source_note_type_provenance(
+        deck_item=deck_item,
+        source_note_type=source_note_type,
+    )
+    if provenance_error:
+        return provenance_error
     if not source_note_type.templates:
         return "source_note_type_id must reference a note type with at least one template."
     return None
@@ -1190,7 +1345,7 @@ def apply_note_type_marketplace_payload(
             return taxonomy_error
         note_type.taxonomy_metadata = taxonomy_metadata
         suggested_category = marketplace_taxonomy_service.suggest_primary_category(taxonomy_metadata)
-        if suggested_category:
+        if suggested_category and "primary_category" not in payload:
             note_type.primary_category = suggested_category
     if "preview_text" in payload:
         note_type.preview_text = (payload.get("preview_text") or "").strip() or None
@@ -1231,6 +1386,8 @@ def apply_note_type_marketplace_payload(
             note_type.archived_at = _utcnow()
         note_type.publish_status = candidate_status
 
+    if str(note_type.publish_status or "").strip().lower() in visible_statuses:
+        return validate_note_type_publish_requirements(note_type)
     return None
 
 def validate_deck_publish_requirements(deck_item: DeckMarketplaceItem) -> str | None:
@@ -1254,6 +1411,12 @@ def validate_deck_publish_requirements(deck_item: DeckMarketplaceItem) -> str | 
     source_note_type = flashcards_share_repository.get_note_type_by_id(source_note_type_id)
     if not source_note_type:
         return "source_note_type_id not found for publish."
+    provenance_error = validate_deck_source_note_type_provenance(
+        deck_item=deck_item,
+        source_note_type=source_note_type,
+    )
+    if provenance_error:
+        return provenance_error
     if not source_note_type.templates:
         return "source_note_type_id must reference a note type that has at least one template."
     taxonomy_error = marketplace_taxonomy_service.validate_required_taxonomy(
@@ -1294,6 +1457,8 @@ def apply_deck_marketplace_payload(
         "format_features",
         "taxonomy_audience",
         "audience",
+        "subcategory",
+        "target_audience",
     }
 
     if "title" in payload:
@@ -1319,7 +1484,7 @@ def apply_deck_marketplace_payload(
             return taxonomy_error
         deck_item.taxonomy_metadata = taxonomy_metadata
         suggested_category = marketplace_taxonomy_service.suggest_primary_category(taxonomy_metadata)
-        if suggested_category:
+        if suggested_category and "primary_category" not in payload:
             deck_item.primary_category = suggested_category
     if "preview_text" in payload:
         deck_item.preview_text = (payload.get("preview_text") or "").strip() or None
@@ -1374,6 +1539,8 @@ def apply_deck_marketplace_payload(
             deck_item.archived_at = _utcnow()
         deck_item.publish_status = candidate_status
 
+    if str(deck_item.publish_status or "").strip().lower() in visible_statuses:
+        return validate_deck_publish_requirements(deck_item)
     return None
 
 def is_card_visible_in_clone_scope(
@@ -1413,7 +1580,7 @@ def is_note_type_visible_for_shared(
     visible_statuses = publish_statuses_visible or PUBLISH_STATUSES_VISIBLE
     status = str(note_type.publish_status or "").strip().lower()
     if user_id is not None and note_type.user_id == user_id:
-        return status != "archived"
+        return True
     return status in visible_statuses
 
 
@@ -1425,7 +1592,7 @@ def is_deck_item_visible_for_shared(
     visible_statuses = publish_statuses_visible or PUBLISH_STATUSES_VISIBLE
     status = str(deck_item.publish_status or "").strip().lower()
     if user_id is not None and deck_item.owner_user_id == user_id:
-        return status != "archived"
+        return True
     return status in visible_statuses
 
 
@@ -2811,6 +2978,17 @@ def install_shared_deck_item_for_user(
                 "source_note_type_id not found.",
                 status=409,
                 field="source_note_type_id",
+            )
+        provenance_error = validate_deck_source_note_type_provenance(
+            deck_item=deck_item,
+            source_note_type=source_note_type,
+        )
+        if provenance_error:
+            raise ShareControllerError(
+                provenance_error,
+                status=404 if provenance_error == "source_note_type_id not found." else 409,
+                field="source_note_type_id",
+                error="FIELD_NOT_FOUND" if provenance_error == "source_note_type_id not found." else "CONFLICT",
             )
         note_type_install = ensure_note_type_install_for_user(
             source_note_type=source_note_type,

@@ -6,7 +6,7 @@ export type PublishDeckOption = {
   parent_id: number | null
   card_count: number
   is_selectable: boolean
-  block_code: 'marketplace_clone' | 'already_shared' | 'ancestor_shared' | 'not_owned' | null
+  block_code: 'marketplace_clone' | 'marketplace_note_type' | 'already_shared' | 'ancestor_shared' | 'descendant_shared' | 'not_owned' | null
   block_reason: string | null
   shared_item_id: string | null
 }
