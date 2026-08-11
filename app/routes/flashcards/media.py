@@ -177,13 +177,8 @@ def delete_media(asset_id: str):
         )
 
 @flashcards_bp.route("/media/proxy/<asset_id>", methods=["GET"])
-@login_required
 def proxy_media(asset_id: str):
-    asset = (
-        MediaAsset.query.join(Note, MediaAsset.note_id == Note.id)
-        .filter(MediaAsset.id == asset_id, Note.user_id == current_user.id)
-        .first()
-    )
+    asset = MediaAsset.query.filter(MediaAsset.id == asset_id).first()
     if not asset:
         return _api_error("FIELD_NOT_FOUND", "Media asset not found.", status=404)
     upload_root = Path(current_app.config["FLASHCARD_MEDIA_UPLOAD_ROOT"]).resolve()
