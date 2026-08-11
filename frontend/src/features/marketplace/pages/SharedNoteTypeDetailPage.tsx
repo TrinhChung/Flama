@@ -89,6 +89,7 @@ type SharedNoteTypeDetail = {
   field_defs?: FieldDef[]
   templates?: TemplateItem[]
   recent_reviews?: ReviewItem[]
+  publish_status?: 'private' | 'published' | 'unlisted' | 'archived'
 }
 
 type PreviewResponse = {
