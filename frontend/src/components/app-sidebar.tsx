@@ -2,6 +2,7 @@ import {
   AudioLines,
   ChartNoAxesColumn,
   CreditCard,
+  Download,
   Heart,
   Image as ImageIcon,
   Key,
@@ -54,6 +55,7 @@ export function AppSidebar({
   ]
 
   const extensions: AppNavigationItem[] = [
+    { title: 'Tải Flama Audio', url: '/guide/flama-audio', icon: Download },
     { title: 'Kết nối Yomitan', url: '/settings/yomitan', icon: Key },
   ]
 
