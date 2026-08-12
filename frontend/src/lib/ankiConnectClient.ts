@@ -117,7 +117,7 @@ export class AnkiConnectClient implements IAnkiConnectClient {
     } catch (err: any) {
       const msg = String(err?.message || '')
       if (msg.includes('Connection refused') || msg.includes('Failed to fetch')) {
-        return { status: 'Connection refused', error: 'Không thể kết nối tới 127.0.0.1:8765. Hãy đảm bảo Anki Desktop đang chạy và AnkiConnect plugin đã được cài đặt.' }
+        return { status: 'Connection refused', error: 'Không thể kết nối tới Anki Desktop (127.0.0.1:8765). Có thể phần mềm Anki chưa bật, thiếu add-on AnkiConnect, hoặc trình duyệt chặn kết nối (lỗi CORS).' }
       }
       if (msg.includes('timed out')) {
         return { status: 'Timeout', error: 'Kết nối AnkiConnect bị quá thời gian (Timeout).' }

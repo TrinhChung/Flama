@@ -17,6 +17,16 @@ interface AnkiConnectionBarProps {
   onOpenGuide?: () => void
 }
 
+const statusLabels: Record<AnkiConnectStatus, string> = {
+  Connected: 'Đã kết nối',
+  'Anki is not running': 'Anki chưa chạy',
+  'AnkiConnect is not installed': 'Chưa cài AnkiConnect',
+  'Connection refused': 'Lỗi kết nối',
+  'Unsupported AnkiConnect version': 'Phiên bản không hỗ trợ',
+  'Invalid response': 'Phản hồi không hợp lệ',
+  Timeout: 'Quá thời gian kết nối',
+}
+
 export const AnkiConnectionBar: React.FC<AnkiConnectionBarProps> = ({
   endpoint,
   onEndpointChange,
@@ -58,17 +68,34 @@ export const AnkiConnectionBar: React.FC<AnkiConnectionBarProps> = ({
               </span>
               {isConnected ? (
                 <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-[10px] sm:text-[11px] font-semibold py-0.5 px-2">
-                  Connected {ankiVersion ? `(v${ankiVersion})` : ''}
+                  Đã kết nối {ankiVersion ? `(v${ankiVersion})` : ''}
                 </Badge>
               ) : (
                 <Badge variant="destructive" className="text-[10px] sm:text-[11px] font-medium py-0.5 px-2">
-                  {connectionStatus}
+                  {statusLabels[connectionStatus] || connectionStatus}
                 </Badge>
               )}
             </div>
-            <p className="text-[11px] sm:text-xs text-muted-foreground mt-0.5 truncate max-w-xl">
-              {connectionError || 'Kết nối trực tiếp Anki Desktop qua AnkiConnect (Port 8765 local).'}
-            </p>
+            {!isConnected ? (
+              <div className="text-[11px] sm:text-xs mt-1 leading-relaxed">
+                <span className="text-destructive font-medium">
+                  {connectionError || 'Không thể kết nối đến Anki Desktop.'}
+                </span>{' '}
+                {onOpenGuide && (
+                  <button
+                    type="button"
+                    onClick={onOpenGuide}
+                    className="font-bold text-primary hover:underline inline-flex items-center gap-0.5 cursor-pointer ml-1"
+                  >
+                    Xem hướng dẫn sửa lỗi kết nối / CORS &rarr;
+                  </button>
+                )}
+              </div>
+            ) : (
+              <p className="text-[11px] sm:text-xs text-muted-foreground mt-0.5 truncate max-w-xl">
+                Kết nối trực tiếp Anki Desktop qua AnkiConnect (Port 8765 local).
+              </p>
+            )}
           </div>
         </div>
 
