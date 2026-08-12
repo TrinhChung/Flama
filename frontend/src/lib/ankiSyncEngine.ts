@@ -150,13 +150,27 @@ function savedTargetId(modelName: string, noteTypeMap?: Record<string, string>):
   return ''
 }
 
+const MEDIA_FILENAME_RE = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,254}$/;
+const MEDIA_EXTENSION_RE = /\.(png|jpg|jpeg|gif|webp|svg|mp3|wav|ogg|webm)$/i;
+
+function isValidMediaFilename(filename: string): boolean {
+  return MEDIA_FILENAME_RE.test(filename) && MEDIA_EXTENSION_RE.test(filename);
+}
+
 function normalizeMediaFieldValue(value: string, targetFieldType: string): string {
   if (targetFieldType === 'audio') {
     const filename = extractAudioReferences(value)[0]
-    return filename ? `[sound:${filename}]` : value.trim()
+    if (filename) return `[sound:${filename}]`
+    const trimmed = value.trim()
+    if (isValidMediaFilename(trimmed)) return `[sound:${trimmed}]`
+    return sanitizeAnkiHtml(value)
   }
   if (targetFieldType === 'image' || targetFieldType === 'diagram') {
-    return extractImageReferences(value)[0] || value.trim()
+    const filename = extractImageReferences(value)[0]
+    if (filename) return filename
+    const trimmed = value.trim()
+    if (isValidMediaFilename(trimmed)) return trimmed
+    return sanitizeAnkiHtml(value)
   }
   return sanitizeAnkiHtml(value)
 }
@@ -164,12 +178,21 @@ function normalizeMediaFieldValue(value: string, targetFieldType: string): strin
 function mediaReferencesForValue(value: string, fieldType: string): { images: string[]; audios: string[] } {
   if (fieldType === 'audio') {
     const audios = extractAudioReferences(value)
+    if (audios.length > 0) return { images: [], audios }
     const direct = value.replace(/^\[sound:|\]$/g, '').trim()
-    return { images: [], audios: audios.length > 0 ? audios : direct ? [direct] : [] }
+    if (direct && isValidMediaFilename(direct)) {
+      return { images: [], audios: [direct] }
+    }
+    return { images: [], audios: [] }
   }
   if (fieldType === 'image' || fieldType === 'diagram') {
     const images = extractImageReferences(value)
-    return { images: images.length > 0 ? images : value.trim() ? [value.trim()] : [], audios: [] }
+    if (images.length > 0) return { images, audios: [] }
+    const direct = value.trim()
+    if (direct && isValidMediaFilename(direct)) {
+      return { images: [direct], audios: [] }
+    }
+    return { images: [], audios: [] }
   }
   return { images: extractImageReferences(value), audios: extractAudioReferences(value) }
 }

@@ -49,6 +49,7 @@ const pageTitles: Record<string, string> = {
   '/orders': 'Đơn hàng',
   '/settings/mcp-tokens': 'MCP Tokens',
   '/settings/yomitan': 'Kết nối Yomitan',
+  '/guide/flama-audio': 'Tải Flama Audio',
   '/feedback': 'Đóng góp ý kiến',
   '/tickets': 'Báo lỗi & Góp ý',
   '/support/feedback': 'Đóng góp ý kiến',

@@ -796,9 +796,13 @@ export const AnkiSyncTab: React.FC<AnkiSyncTabProps> = ({
                   </div>
                 )}
 
-                {syncReport.errors.map((err, idx) => (
-                  <div key={idx} className="text-destructive font-mono text-[11px]">• {err}</div>
-                ))}
+                {syncReport.errors.length > 0 && (
+                  <div className="max-h-[160px] overflow-y-auto pr-1 mt-1.5 space-y-1 border-t border-destructive/20 pt-1.5">
+                    {syncReport.errors.map((err, idx) => (
+                      <div key={idx} className="text-destructive font-mono text-[11px] break-words">• {err}</div>
+                    ))}
+                  </div>
+                )}
               </AlertDescription>
             </Alert>
           )}
@@ -865,9 +869,13 @@ export const AnkiSyncTab: React.FC<AnkiSyncTabProps> = ({
                     </div>
                   )}
 
-                  {syncReport.errors.map((err, idx) => (
-                    <div key={idx} className="text-destructive font-mono text-[11px]">• {err}</div>
-                  ))}
+                  {syncReport.errors.length > 0 && (
+                    <div className="max-h-[160px] overflow-y-auto pr-1 mt-1.5 space-y-1 border-t border-destructive/20 pt-1.5">
+                      {syncReport.errors.map((err, idx) => (
+                        <div key={idx} className="text-destructive font-mono text-[11px] break-words">• {err}</div>
+                      ))}
+                    </div>
+                  )}
                 </AlertDescription>
               </Alert>
             )}
