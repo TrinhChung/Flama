@@ -8,19 +8,28 @@ type ErrorPayload = {
   error?: string
   message?: string
   field?: string
+  details?: unknown
 }
 
 export class ApiError extends Error {
   readonly status: number
   readonly code: string
   readonly field?: string
+  readonly details?: unknown
 
-  constructor(message: string, status: number, code = 'REQUEST_FAILED', field?: string) {
+  constructor(
+    message: string,
+    status: number,
+    code = 'REQUEST_FAILED',
+    field?: string,
+    details?: unknown,
+  ) {
     super(message)
     this.name = 'ApiError'
     this.status = status
     this.code = code
     this.field = field
+    this.details = details
   }
 }
 
@@ -169,6 +178,7 @@ async function apiFetch(
       response.status,
       payload?.error,
       payload?.field,
+      payload?.details,
     )
   }
 

@@ -672,6 +672,26 @@ def study_session_open():
 
 
 @flashcards_bp.route(
+    "/api/study/sessions/<session_id>",
+    methods=["GET"],
+)
+@login_required
+def study_session_status(session_id: str):
+    try:
+        result = study_session_service.get_study_session_status(
+            user=current_user,
+            session_id=session_id,
+        )
+    except study_session_service.StudySessionError as exc:
+        db.session.rollback()
+        error_payload = {"error": exc.code, "message": str(exc)}
+        if exc.details is not None:
+            error_payload["details"] = exc.details
+        return _no_store_json(error_payload, exc.status)
+    return _no_store_json(result)
+
+
+@flashcards_bp.route(
     "/api/study/sessions/<session_id>/commit",
     methods=["POST"],
 )

@@ -138,6 +138,37 @@ class StudySessionApiTests(unittest.TestCase):
             self.assertIsNotNone(session)
             self.assertEqual(session.status, "open")
 
+    def test_status_reports_open_committed_and_expired_sessions(self):
+        committed_snapshot = self._open_session()
+        open_status = self.client.get(
+            f"/api/study/sessions/{committed_snapshot['session_id']}"
+        )
+        self.assertEqual(open_status.status_code, 200, open_status.get_json())
+        self.assertEqual(open_status.get_json()["status"], "open")
+
+        commit = self.client.post(
+            f"/api/study/sessions/{committed_snapshot['session_id']}/commit",
+            json=self._commit_payload(committed_snapshot),
+        )
+        self.assertEqual(commit.status_code, 200, commit.get_json())
+        committed_status = self.client.get(
+            f"/api/study/sessions/{committed_snapshot['session_id']}"
+        )
+        self.assertEqual(committed_status.status_code, 200)
+        self.assertEqual(committed_status.get_json()["status"], "committed")
+        self.assertIsNotNone(committed_status.get_json()["committed_at"])
+
+        expired_snapshot = self._open_session()
+        with self.app.app_context():
+            expired = db.session.get(StudySession, expired_snapshot["session_id"])
+            expired.expires_at = datetime.utcnow() - timedelta(seconds=1)
+            db.session.commit()
+        expired_status = self.client.get(
+            f"/api/study/sessions/{expired_snapshot['session_id']}"
+        )
+        self.assertEqual(expired_status.status_code, 200)
+        self.assertEqual(expired_status.get_json()["status"], "expired")
+
     def test_auto_finish_rejects_actionable_learning_card(self):
         snapshot = self._open_session()
         payload = self._commit_payload(snapshot)
@@ -232,6 +263,19 @@ class StudySessionApiTests(unittest.TestCase):
         )
         self.assertEqual(retry.status_code, 200, retry.get_json())
         self.assertEqual(retry.get_json(), receipt)
+
+        different_commit = dict(payload)
+        different_commit["commit_id"] = str(uuid4())
+        already_committed = self.client.post(
+            f"/api/study/sessions/{snapshot['session_id']}/commit",
+            json=different_commit,
+        )
+        self.assertEqual(already_committed.status_code, 409)
+        self.assertEqual(
+            already_committed.get_json()["error"],
+            "SESSION_ALREADY_COMMITTED",
+        )
+        self.assertEqual(already_committed.get_json()["details"], receipt)
 
         card_id = snapshot["cards"][0]["card_id"]
         with self.app.app_context():

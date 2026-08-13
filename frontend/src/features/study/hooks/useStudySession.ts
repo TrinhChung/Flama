@@ -2,10 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { appApi } from '@/app/api'
 import { useBootstrap } from '@/shared/api/bootstrap'
+import { ApiError } from '@/shared/api/client'
 import type { Rating } from '../types'
 import type {
   StudySessionCommitReceipt,
   StudySessionSnapshot,
+  StudySessionStatus,
 } from '../types'
 import type { SchedulerDecision } from '../scheduler/types'
 import {
@@ -28,8 +30,25 @@ import type {
   PersistedStudySession,
   StudyCommitReason,
 } from '../session/sessionStore'
+import { holdStudyScopeLease } from '../session/studySessionLease'
 
 const openingRequests = new Map<string, Promise<StudySessionSnapshot>>()
+
+type LeaseState = {
+  key: string | null
+  status: 'checking' | 'blocked' | 'held'
+  error: unknown
+}
+
+function isCommitReceipt(value: unknown): value is StudySessionCommitReceipt {
+  if (!value || typeof value !== 'object') return false
+  const receipt = value as Partial<StudySessionCommitReceipt>
+  return receipt.schema_version === 'study-commit-receipt.v1'
+    && receipt.success === true
+    && typeof receipt.session_id === 'string'
+    && typeof receipt.commit_id === 'string'
+    && Array.isArray(receipt.updated_cards)
+}
 
 function openSnapshot(userId: number, deckId: string) {
   const key = scopeKey(userId, 'deck', deckId)
@@ -54,7 +73,11 @@ export function useStudySession(deckId: string | null) {
   const [error, setError] = useState<unknown>(null)
   const [loading, setLoading] = useState(Boolean(deckId))
   const [busy, setBusy] = useState(false)
-  const [hasLease, setHasLease] = useState(true)
+  const [leaseState, setLeaseState] = useState<LeaseState>({
+    key: null,
+    status: 'checking',
+    error: null,
+  })
   const [receipt, setReceipt] = useState<StudySessionCommitReceipt | null>(null)
   const [tick, setTick] = useState(0)
   const clockRef = useRef<{
@@ -63,9 +86,12 @@ export function useStudySession(deckId: string | null) {
   } | null>(null)
   const operationRef = useRef(false)
   const sessionRef = useRef<PersistedStudySession | null>(null)
-  const hasLeaseRef = useRef(true)
+  const hasLeaseRef = useRef(false)
   const exitFlushRef = useRef<string | null>(null)
   const recoveryAttemptRef = useRef<string | null>(null)
+  const currentScopeKey = useMemo(() => (
+    deckId && userId !== null ? scopeKey(userId, 'deck', deckId) : null
+  ), [deckId, userId])
 
   const activateSession = useCallback((next: PersistedStudySession | null) => {
     sessionRef.current = next
@@ -91,13 +117,74 @@ export function useStudySession(deckId: string | null) {
   }, [])
 
   useEffect(() => {
+    if (!currentScopeKey) {
+      hasLeaseRef.current = true
+      setLeaseState({ key: null, status: 'held', error: null })
+      return
+    }
+    let disposed = false
+    const controller = new AbortController()
+    hasLeaseRef.current = false
+    activateSession(null)
+    setLoading(true)
+    setLeaseState({
+      key: currentScopeKey,
+      status: 'checking',
+      error: null,
+    })
+    void holdStudyScopeLease(
+      navigator.locks,
+      `flama-study:${currentScopeKey}`,
+      controller.signal,
+      {
+        onBlocked: () => {
+          if (disposed) return
+          setLoading(false)
+          setLeaseState({
+            key: currentScopeKey,
+            status: 'blocked',
+            error: null,
+          })
+        },
+        onAcquired: () => {
+          if (disposed) return
+          hasLeaseRef.current = true
+          setLoading(true)
+          setLeaseState({
+            key: currentScopeKey,
+            status: 'held',
+            error: null,
+          })
+        },
+      },
+    ).catch((caught) => {
+      if (disposed || controller.signal.aborted) return
+      setLoading(false)
+      setLeaseState({
+        key: currentScopeKey,
+        status: 'blocked',
+        error: caught,
+      })
+    })
+    return () => {
+      disposed = true
+      controller.abort()
+    }
+  }, [activateSession, currentScopeKey])
+
+  useEffect(() => {
     if (!deckId || userId === null) {
       activateSession(null)
       setLoading(Boolean(deckId))
       return
     }
+    if (
+      !currentScopeKey
+      || leaseState.key !== currentScopeKey
+      || leaseState.status !== 'held'
+    ) return
     let cancelled = false
-    const key = scopeKey(userId, 'deck', deckId)
+    const key = currentScopeKey
     setLoading(true)
     setError(null)
     setReceipt(null)
@@ -111,6 +198,27 @@ export function useStudySession(deckId: string | null) {
         if (active && expiresAt <= Date.now()) {
           await removeStudySession(key)
           active = null
+        }
+        if (active) {
+          try {
+            const serverSession = await appApi.get<StudySessionStatus>(
+              `/api/study/sessions/${active.snapshot.session_id}`,
+            )
+            if (serverSession.status !== 'open') {
+              await removeStudySession(key)
+              active = null
+            }
+          } catch (caught) {
+            if (caught instanceof ApiError && caught.code === 'SESSION_NOT_FOUND') {
+              await removeStudySession(key)
+              active = null
+            } else if (
+              !(caught instanceof ApiError)
+              || caught.code !== 'BACKEND_UNAVAILABLE'
+            ) {
+              throw caught
+            }
+          }
         }
         if (!active) {
           active = createPersistedSession(await openSnapshot(userId, deckId))
@@ -127,53 +235,20 @@ export function useStudySession(deckId: string | null) {
     return () => {
       cancelled = true
     }
-  }, [activateSession, deckId, userId])
+  }, [
+    activateSession,
+    currentScopeKey,
+    deckId,
+    leaseState.key,
+    leaseState.status,
+    userId,
+  ])
 
   useEffect(() => {
     if (!session) return
     const timer = window.setInterval(() => setTick((value) => value + 1), 1000)
     return () => window.clearInterval(timer)
   }, [session])
-
-  useEffect(() => {
-    const sessionId = session?.snapshot.session_id
-    if (!sessionId || !navigator.locks) {
-      hasLeaseRef.current = true
-      setHasLease(true)
-      return
-    }
-    let release: (() => void) | null = null
-    let disposed = false
-    void navigator.locks.request(
-      `flama-study:${sessionId}`,
-      { mode: 'exclusive', ifAvailable: true },
-      async (lock) => {
-        if (!lock) {
-          if (!disposed) {
-            hasLeaseRef.current = false
-            setHasLease(false)
-          }
-          return
-        }
-        if (!disposed) {
-          hasLeaseRef.current = true
-          setHasLease(true)
-        }
-        await new Promise<void>((resolve) => {
-          release = resolve
-        })
-      },
-    ).catch(() => {
-      if (!disposed) {
-        hasLeaseRef.current = true
-        setHasLease(true)
-      }
-    })
-    return () => {
-      disposed = true
-      release?.()
-    }
-  }, [session?.snapshot.session_id])
 
   const view = useMemo(() => {
     // `tick` advances waiting learning cards without a network request.
@@ -274,6 +349,35 @@ export function useStudySession(deckId: string | null) {
       }
       return result
     } catch (caught) {
+      if (
+        caught instanceof ApiError
+        && caught.code === 'SESSION_ALREADY_COMMITTED'
+        && isCommitReceipt(caught.details)
+      ) {
+        const pending = sessionRef.current
+        if (pending) {
+          const result = caught.details
+          const reconciled = applyCommitReceipt(pending, result)
+          await Promise.all([
+            queryClient.invalidateQueries({ queryKey: ['frontend', 'dashboard'] }),
+            queryClient.invalidateQueries({ queryKey: ['frontend', 'statistics'] }),
+            queryClient.invalidateQueries({ queryKey: ['stats'] }),
+          ])
+          if (pending.resume_after_commit) {
+            const next = createPersistedSession(
+              await openSnapshot(userId, deckId),
+            )
+            await saveStudySession(next)
+            activateSession(next)
+            setReceipt(null)
+          } else {
+            activateSession(reconciled)
+            setReceipt(result)
+            await removeStudySession(pending.scope_key)
+          }
+          return result
+        }
+      }
       setError(caught)
       throw caught
     } finally {
@@ -281,6 +385,12 @@ export function useStudySession(deckId: string | null) {
       setBusy(false)
     }
   }, [activateSession, deckId, queryClient, userId])
+
+  const hasLease = Boolean(
+    currentScopeKey
+    && leaseState.key === currentScopeKey
+    && leaseState.status === 'held',
+  )
 
   useEffect(() => {
     if (!session || !view || busy || receipt || !hasLease) return
@@ -362,9 +472,14 @@ export function useStudySession(deckId: string | null) {
     session,
     view,
     receipt,
-    error: !hasLease
-      ? new Error('Phiên học đang được mở trong một tab khác.')
-      : error,
+    error: leaseState.error
+      || (
+        currentScopeKey
+        && leaseState.key === currentScopeKey
+        && leaseState.status === 'blocked'
+          ? new Error('Phiên học đang được mở trong một tab khác. Tab này sẽ tự tiếp tục khi tab kia đóng.')
+          : error
+      ),
     isLoading: loading,
     isBusy: busy,
     prepareDecision,
