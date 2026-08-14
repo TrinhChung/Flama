@@ -213,10 +213,10 @@ def _apply_startup_defaults(config: dict[str, Any]) -> None:
     config.setdefault("STARTUP_RUN_DB_CREATE_ALL", True)
     config.setdefault("STARTUP_RUN_USER_MANAGEMENT_SCHEMA", True)
     config.setdefault("STARTUP_RUN_BACKWARD_COMPAT_SCHEMA", True)
-    config.setdefault("STARTUP_RUN_DEFAULT_USER_ROLE_SEED", True)
-    config.setdefault("STARTUP_RUN_DEFAULT_TTS_PROVIDER_SEED", True)
-    # Clone cutover is a one-time corrective task and usually unnecessary in tests.
-    config.setdefault("STARTUP_RUN_CLONE_CUTOVER", not testing)
+    # Seed operations are decoupled from normal app startup
+    config.setdefault("STARTUP_RUN_DEFAULT_USER_ROLE_SEED", testing)
+    config.setdefault("STARTUP_RUN_DEFAULT_TTS_PROVIDER_SEED", testing)
+    config.setdefault("STARTUP_RUN_CLONE_CUTOVER", False)
     config.setdefault(
         "STARTUP_CUTOVER_FAIL_ON_MISMATCH",
         _startup_cutover_fail_on_mismatch_default(default_cutover_fail_on_mismatch),

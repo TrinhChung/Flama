@@ -44,15 +44,15 @@ def run_startup_maintenance(
                 ensure_backward_compatible_schema()
                 completed_tasks.append("ensure_backward_compatible_schema")
 
-            if bool(runtime_config.get("STARTUP_RUN_DEFAULT_USER_ROLE_SEED", True)):
+            if bool(runtime_config.get("STARTUP_RUN_DEFAULT_USER_ROLE_SEED", bool(app.config.get("TESTING")))):
                 ensure_default_user_roles(db.session)
                 completed_tasks.append("ensure_default_user_roles")
 
-            if bool(runtime_config.get("STARTUP_RUN_DEFAULT_TTS_PROVIDER_SEED", True)):
+            if bool(runtime_config.get("STARTUP_RUN_DEFAULT_TTS_PROVIDER_SEED", False)):
                 ensure_default_tts_providers(db.session)
                 completed_tasks.append("ensure_default_tts_providers")
 
-            if bool(runtime_config.get("STARTUP_RUN_CLONE_CUTOVER", True)):
+            if bool(runtime_config.get("STARTUP_RUN_CLONE_CUTOVER", False)):
                 cutover_summary = flashcards_share.cutover_clone_model_to_overlay_only(
                     fail_on_mismatch=bool(runtime_config.get("STARTUP_CUTOVER_FAIL_ON_MISMATCH", True)),
                 )
