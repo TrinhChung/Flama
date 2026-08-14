@@ -488,17 +488,75 @@ class FlamaConnectTests(unittest.TestCase):
             child = Deck.query.filter_by(owner_user_id=self.user_id, name="Child").one()
             self.assertEqual(child.parent.name, "Imported")
             created = Note.query.filter_by(user_id=self.user_id, deck_id=child.id).one()
+            self.assertEqual(created.field_values["Word"], "media-note")
+            self.assertEqual(created.field_values["Meaning"], "cat")
             self.assertEqual(created.field_values["Image"], image_name)
             self.assertEqual(created.field_values["Sound"], audio_name)
             self.assertEqual(MediaAsset.query.filter_by(note_id=created.id).count(), 2)
             self.assertEqual(ConnectImportMedia.query.count(), 2)
+
+        second_session = self._call(
+            "createImportSession",
+            {
+                "source": "anki",
+                "sourceKey": "media-profile",
+                "sourceRootPath": "Source",
+                "targetRootPath": "Imported",
+                "selectedDecks": ["Imported", "Imported::Child"],
+                "totalNotes": 1,
+                "totalMedia": 2,
+                "mode": "strict",
+                "noteTypes": [plan],
+                "planHash": "c" * 64,
+            },
+        ).get_json()
+        updated_note = self._note("Imported::Child", "media-note")
+        updated_note["modelName"] = self.note_type_id
+        updated_note["fields"].update(
+            {
+                "Meaning": "updated meaning",
+                "Image": image_name,
+                "Sound": f"[sound:{audio_name}]",
+            }
+        )
+        updated = self._call(
+            "importCards",
+            {
+                "importSessionId": second_session["importSessionId"],
+                "cards": [
+                    {
+                        "ankiNoteId": 501,
+                        "sourceModelId": "media-model",
+                        "sourceDeckId": "source-child-id",
+                        "sourceDeckPath": "Source::Child",
+                        "contentHash": "d" * 64,
+                        "note": updated_note,
+                    }
+                ],
+            },
+        ).get_json()
+        self.assertTrue(updated["results"][0]["imported"], updated)
+        with self.app.app_context():
+            child = Deck.query.filter_by(owner_user_id=self.user_id, name="Child").one()
+            existing = Note.query.filter_by(user_id=self.user_id, deck_id=child.id).one()
+            self.assertEqual(existing.field_values["Meaning"], "updated meaning")
+            self.assertEqual(existing.field_values["Image"], image_name)
+            self.assertEqual(existing.field_values["Sound"], f"[sound:{audio_name}]")
+            self.assertEqual(MediaAsset.query.filter_by(note_id=existing.id).count(), 2)
 
     def test_import_ignores_missing_media_and_imports_successfully(self):
         with self.app.app_context():
             db.session.add_all(
                 [
                     FieldDef(note_type_id=self.note_type_id, name="Image", field_type="image", position=2),
-                    FieldDef(note_type_id=self.note_type_id, name="Sound", field_type="audio", position=3),
+                    FieldDef(
+                        note_type_id=self.note_type_id,
+                        name="Sound",
+                        field_type="audio",
+                        position=3,
+                        required=True,
+                    ),
+                    FieldDef(note_type_id=self.note_type_id, name="Diagram", field_type="diagram", position=4),
                 ]
             )
             db.session.commit()
@@ -511,9 +569,16 @@ class FlamaConnectTests(unittest.TestCase):
                 {"name": "Meaning", "fieldType": "richtext"},
                 {"name": "Image", "fieldType": "image"},
                 {"name": "Sound", "fieldType": "audio"},
+                {"name": "Diagram", "fieldType": "diagram"},
             ],
             "templates": [{"name": "Card 1", "frontHtml": "{{Word}}", "backHtml": "{{Meaning}}", "sharedCss": ""}],
-            "fieldMapping": {"Word": "Word", "Meaning": "Meaning", "Image": "Image", "Sound": "Sound"},
+            "fieldMapping": {
+                "Word": "Word",
+                "Meaning": "Meaning",
+                "Image": "Image",
+                "Sound": "Sound",
+                "Diagram": "Diagram",
+            },
         }
         session = self._call(
             "createImportSession",
@@ -546,7 +611,13 @@ class FlamaConnectTests(unittest.TestCase):
 
         note = self._note("Imported::Child", "media-note")
         note["modelName"] = self.note_type_id
-        note["fields"].update({"Image": image_name, "Sound": f"[sound:{audio_name}]"})
+        note["fields"].update(
+            {
+                "Image": image_name,
+                "Sound": f"[sound:{audio_name}]",
+                "Diagram": "not a valid media reference <>",
+            }
+        )
         imported = self._call(
             "importCards",
             {
@@ -568,9 +639,53 @@ class FlamaConnectTests(unittest.TestCase):
             child = Deck.query.filter_by(owner_user_id=self.user_id, name="Child").one()
             self.assertEqual(child.parent.name, "Imported")
             created = Note.query.filter_by(user_id=self.user_id, deck_id=child.id).one()
+            self.assertEqual(created.field_values["Word"], "media-note")
+            self.assertEqual(created.field_values["Meaning"], "cat")
             self.assertEqual(created.field_values["Image"], image_name)
-            self.assertEqual(created.field_values["Sound"], f"[sound:{audio_name}]")
+            self.assertEqual(created.field_values["Sound"], "")
+            self.assertEqual(created.field_values["Diagram"], "")
             self.assertEqual(MediaAsset.query.filter_by(note_id=created.id).count(), 1)
+            self.assertEqual(ConnectImportMedia.query.count(), 1)
+
+    def test_media_zip_skips_invalid_entry_and_keeps_valid_entry(self):
+        session = self._create_import_session().get_json()
+        valid_name = f"{'a' * 64}.mp3"
+        invalid_name = f"{'b' * 64}.png"
+        package = self._media_zip(
+            {
+                valid_name: _MIN_MP3_BYTES,
+                invalid_name: b"not-a-png",
+            }
+        )
+        digest = hashlib.sha256(package).hexdigest()
+        url = f"/v1/import-sessions/{session['importSessionId']}/packages/media/0"
+        headers = {
+            "Authorization": f"Bearer {self.token}",
+            "X-Package-SHA256": digest,
+        }
+
+        first = self.client.put(
+            url,
+            data=package,
+            content_type="application/zip",
+            headers=headers,
+        )
+        self.assertEqual(first.status_code, 200, first.get_json())
+        self.assertEqual(first.get_json()["itemCount"], 1)
+        self.assertEqual(first.get_json()["acceptedFilenames"], [valid_name])
+        self.assertEqual(first.get_json()["rejectedFilenames"], [invalid_name])
+
+        replay = self.client.put(
+            url,
+            data=package,
+            content_type="application/zip",
+            headers=headers,
+        )
+        self.assertEqual(replay.status_code, 200, replay.get_json())
+        self.assertTrue(replay.get_json()["replayed"])
+        self.assertEqual(replay.get_json()["acceptedFilenames"], [valid_name])
+        self.assertEqual(replay.get_json()["rejectedFilenames"], [invalid_name])
+        with self.app.app_context():
             self.assertEqual(ConnectImportMedia.query.count(), 1)
 
     def test_media_zip_package_is_checksum_verified_and_idempotent(self):

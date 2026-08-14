@@ -1,6 +1,7 @@
 export type StudyLeaseHandlers = {
   onBlocked: () => void
   onAcquired: () => void
+  onLost?: (error: unknown) => void
 }
 
 function waitForAbort(signal: AbortSignal) {
@@ -17,30 +18,49 @@ export async function holdStudyScopeLease(
   handlers: StudyLeaseHandlers,
 ) {
   if (!lockManager) {
-    handlers.onAcquired()
-    await waitForAbort(signal)
-    return
+    throw new Error(
+      'Trình duyệt không hỗ trợ khóa phiên học an toàn. Hãy mở ứng dụng bằng HTTPS trên một trình duyệt hiện đại rồi thử lại.',
+    )
   }
 
-  const acquiredImmediately = await lockManager.request(
-    lockName,
-    { mode: 'exclusive', ifAvailable: true, signal },
-    async (lock) => {
-      if (!lock) return false
-      handlers.onAcquired()
-      await waitForAbort(signal)
-      return true
-    },
-  )
-  if (acquiredImmediately || signal.aborted) return
+  type RequestResult = 'acquired' | 'cancelled' | 'lost' | 'unavailable'
+
+  const requestAndHold = async (
+    requestOptions: LockOptions,
+  ): Promise<RequestResult> => {
+    let acquired = false
+    try {
+      return await lockManager.request(
+        lockName,
+        requestOptions,
+        async (lock) => {
+          if (!lock) return 'unavailable'
+          if (signal.aborted) return 'cancelled'
+          acquired = true
+          handlers.onAcquired()
+          await waitForAbort(signal)
+          return 'acquired'
+        },
+      )
+    } catch (caught) {
+      if (acquired && !signal.aborted) {
+        handlers.onLost?.(caught)
+        return 'lost'
+      }
+      if (signal.aborted) return 'cancelled'
+      throw caught
+    }
+  }
+
+  if (signal.aborted) return
+  // Web Locks also forbids combining `ifAvailable` with `signal`. Probe first
+  // without a signal, then use an abortable queued request only when blocked.
+  const immediateResult = await requestAndHold({
+    mode: 'exclusive',
+    ifAvailable: true,
+  })
+  if (immediateResult !== 'unavailable' || signal.aborted) return
 
   handlers.onBlocked()
-  await lockManager.request(
-    lockName,
-    { mode: 'exclusive', signal },
-    async () => {
-      handlers.onAcquired()
-      await waitForAbort(signal)
-    },
-  )
+  await requestAndHold({ mode: 'exclusive', signal })
 }

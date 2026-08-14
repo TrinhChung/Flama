@@ -52,6 +52,41 @@ export function sanitizeAnkiHtml(html: string): string {
   return clean
 }
 
+/** Convert Anki HTML into a deterministic value accepted by plain-text fields. */
+export function ankiHtmlToPlainText(html: string): string {
+  if (!html || typeof html !== 'string') return ''
+  if (!/[<&]/.test(html)) return html
+  const withBreaks = html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(?:div|p|li|tr|h[1-6])\s*>/gi, '\n')
+    .replace(/<li\b[^>]*>/gi, '- ')
+    .replace(/<[^>]*>/g, '')
+  const decoded = normalizeAnkiTextEntities(withBreaks)
+    .replace(/&nbsp;|&#0*160;|&#x0*a0;/gi, ' ')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&amp;/gi, '&')
+    .replace(/&#(\d+);/g, (_match, decimal) => {
+      const codePoint = Number(decimal)
+      return Number.isInteger(codePoint) && codePoint >= 0 && codePoint <= 0x10ffff
+        ? String.fromCodePoint(codePoint)
+        : ''
+    })
+    .replace(/&#x([0-9a-f]+);/gi, (_match, hexadecimal) => {
+      const codePoint = Number.parseInt(hexadecimal, 16)
+      return Number.isInteger(codePoint) && codePoint >= 0 && codePoint <= 0x10ffff
+        ? String.fromCodePoint(codePoint)
+        : ''
+    })
+  return decoded
+    .split(/\r?\n/)
+    .map((line) => line.replace(/[\t\f\v ]+/g, ' ').trim())
+    .filter(Boolean)
+    .join('\n')
+    .trim()
+}
+
 export function extractImageReferences(html: string): string[] {
   if (!html || typeof html !== 'string') return []
   const imgRegex = /<img[^>]+src=["']?([^"'>\s]+)["']?[^>]*>/gi

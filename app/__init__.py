@@ -45,6 +45,8 @@ def create_app(config: Optional[dict] = None) -> Flask:
     from models.connect_note_type_ref import ConnectNoteTypeRef  # noqa: F401
     from models.connect_source_deck_ref import ConnectSourceDeckRef  # noqa: F401
     from models.connect_source_note_ref import ConnectSourceNoteRef  # noqa: F401
+    from models.connect_source_card_ref import ConnectSourceCardRef  # noqa: F401
+    from models.connect_review_event_ref import ConnectReviewEventRef  # noqa: F401
     from models.user_scheduler_settings import UserSchedulerSettings  # noqa: F401  # register model
     from models.user_scheduler_settings import UserSchedulerSettings  # noqa: F401  # register model
     from models.user_role import UserRole  # noqa: F401  # register model

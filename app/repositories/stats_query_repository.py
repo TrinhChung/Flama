@@ -12,6 +12,20 @@ from app.services.anki_scheduler import _day_index
 from app.repositories.study_repository import REVIEW_QUEUE, normalize_progress_queue
 
 UTC = timezone.utc
+MYSQL_FIXED_OFFSET_MINUTES = {
+    "UTC": 0,
+    "ETC/UTC": 0,
+    "GMT": 0,
+    "ASIA/HO_CHI_MINH": 7 * 60,
+    "ASIA/BANGKOK": 7 * 60,
+    "ASIA/JAKARTA": 7 * 60,
+    "ASIA/TOKYO": 9 * 60,
+    "ASIA/SEOUL": 9 * 60,
+    "ASIA/SHANGHAI": 8 * 60,
+    "ASIA/HONG_KONG": 8 * 60,
+    "ASIA/SINGAPORE": 8 * 60,
+    "ASIA/TAIPEI": 8 * 60,
+}
 
 
 def _session_dialect_name() -> str:
@@ -20,10 +34,21 @@ def _session_dialect_name() -> str:
 
 
 def can_use_mysql_local_day_sql(*, timezone_name: str) -> bool:
-    """Only UTC is safe in local MySQL setups without timezone tables."""
-    if _session_dialect_name() != "mysql":
+    """Use SQL for fixed-offset zones without requiring MySQL timezone tables."""
+    bind = db.session.get_bind()
+    if bind is None or bind.dialect.name != "mysql":
         return False
-    return str(timezone_name or "").strip().upper() in {"UTC", "ETC/UTC", "GMT"}
+    return str(timezone_name or "").strip().upper() in MYSQL_FIXED_OFFSET_MINUTES
+
+
+def _mysql_local_timestamp(timezone_name: str):
+    offset = MYSQL_FIXED_OFFSET_MINUTES[str(timezone_name or "").strip().upper()]
+    if offset == 0:
+        return ReviewEvent.reviewed_at
+    return db.func.date_add(
+        ReviewEvent.reviewed_at,
+        db.text(f"INTERVAL {int(offset)} MINUTE"),
+    )
 
 
 def _safe_int(value: Any) -> int:
@@ -96,14 +121,14 @@ def _progress_due_local_day(
 def _query_daily_review_aggregates_mysql(
     *,
     user_id: int,
-    mysql_timezone: str,
+    timezone_name: str,
     start_utc: datetime,
     end_utc: datetime,
     day_boundary_hour_local: int,
 ) -> dict[date, dict[str, int]]:
     local_day_expr = db.func.date(
         db.func.date_sub(
-            ReviewEvent.reviewed_at,
+            _mysql_local_timestamp(timezone_name),
             db.text(f"INTERVAL {int(day_boundary_hour_local)} HOUR"),
         )
     )
@@ -197,7 +222,7 @@ def query_daily_review_aggregates(
     if can_use_mysql_local_day_sql(timezone_name=timezone_name):
         return _query_daily_review_aggregates_mysql(
             user_id=user_id,
-            mysql_timezone="+00:00",
+            timezone_name=timezone_name,
             start_utc=start_utc,
             end_utc=end_utc,
             day_boundary_hour_local=day_boundary_hour_local,
@@ -214,13 +239,13 @@ def query_daily_review_aggregates(
 def _query_active_review_days_mysql(
     *,
     user_id: int,
-    mysql_timezone: str,
+    timezone_name: str,
     end_utc: datetime,
     day_boundary_hour_local: int,
 ) -> set[date]:
     local_day_expr = db.func.date(
         db.func.date_sub(
-            ReviewEvent.reviewed_at,
+            _mysql_local_timestamp(timezone_name),
             db.text(f"INTERVAL {int(day_boundary_hour_local)} HOUR"),
         )
     )
@@ -283,7 +308,7 @@ def query_active_review_days(
     if can_use_mysql_local_day_sql(timezone_name=timezone_name):
         return _query_active_review_days_mysql(
             user_id=user_id,
-            mysql_timezone="+00:00",
+            timezone_name=timezone_name,
             end_utc=end_utc,
             day_boundary_hour_local=day_boundary_hour_local,
         )

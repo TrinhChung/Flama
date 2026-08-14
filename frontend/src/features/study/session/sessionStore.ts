@@ -132,14 +132,21 @@ export function scopeKey(userId: number, scope: string, scopeId: string) {
   return `user:${userId}:${scope}:${scopeId}`
 }
 
-export async function loadStudySession(key: string) {
+export type LoadedStudySession = {
+  session: PersistedStudySession | null
+  durable: boolean
+}
+
+export async function loadStudySessionWithDurability(
+  key: string,
+): Promise<LoadedStudySession> {
   try {
     const row = await transact<PersistedStudySession | undefined>(
       'readonly',
       (store) => store.get(key),
     )
     const restored = row ?? memoryFallback.get(key) ?? null
-    if (!restored) return null
+    if (!restored) return { session: null, durable: true }
     if (!isRestorableStudySession(restored)) {
       memoryFallback.delete(key)
       try {
@@ -147,7 +154,7 @@ export async function loadStudySession(key: string) {
       } catch {
         // A malformed durable row is already ignored by the current tab.
       }
-      return null
+      return { session: null, durable: true }
     }
     const normalized = {
       ...restored,
@@ -155,20 +162,29 @@ export async function loadStudySession(key: string) {
       resume_after_commit: Boolean(restored.resume_after_commit),
     }
     memoryFallback.set(key, normalized)
-    return normalized
+    return { session: normalized, durable: Boolean(row) }
   } catch {
     const fallback = memoryFallback.get(key) ?? null
-    return isRestorableStudySession(fallback) ? fallback : null
+    return {
+      session: isRestorableStudySession(fallback) ? fallback : null,
+      durable: false,
+    }
   }
+}
+
+export async function loadStudySession(key: string) {
+  return (await loadStudySessionWithDurability(key)).session
 }
 
 export async function saveStudySession(session: PersistedStudySession) {
   memoryFallback.set(session.scope_key, session)
   try {
     await transact<IDBValidKey>('readwrite', (store) => store.put(session))
+    return true
   } catch {
     // In private or quota-constrained contexts the in-memory copy still keeps
     // the current tab functional. The UI can continue and commit normally.
+    return false
   }
 }
 

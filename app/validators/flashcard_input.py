@@ -440,8 +440,16 @@ def _clean_media_reference(
     )
 
 
-def _assert_required_fields(note_type: Any, field_values: dict[str, str]) -> None:
+def _assert_required_fields(
+    note_type: Any,
+    field_values: dict[str, str],
+    *,
+    allow_missing_media: bool = False,
+) -> None:
     for field_def in note_type.field_defs:
+        field_type = str(field_def.field_type or "text").strip().lower()
+        if allow_missing_media and field_type in FIELD_TYPE_TO_MEDIA_FAMILY:
+            continue
         if field_def.required and is_field_empty(field_values.get(field_def.name)):
             raise RequestValidationError(
                 f"Field '{field_def.name}' is required.",
@@ -456,6 +464,7 @@ def clean_note_field_values(
     partial: bool,
     current_values: dict[str, Any] | None = None,
     note_media_ids: set[str] | None = None,
+    allow_missing_media: bool = False,
 ) -> tuple[dict[str, str], dict[str, str]]:
     if raw_field_values is None:
         if partial:
@@ -464,7 +473,11 @@ def clean_note_field_values(
                 for key, value in dict(current_values or {}).items()
                 if str(key).strip()
             }
-            _assert_required_fields(note_type, merged)
+            _assert_required_fields(
+                note_type,
+                merged,
+                allow_missing_media=allow_missing_media,
+            )
             return merged, {}
         raw_field_values = {}
 
@@ -514,7 +527,11 @@ def clean_note_field_values(
             if field_name not in merged:
                 merged[field_name] = ""
 
-    _assert_required_fields(note_type, merged)
+    _assert_required_fields(
+        note_type,
+        merged,
+        allow_missing_media=allow_missing_media,
+    )
     return merged, updates
 
 
@@ -523,6 +540,7 @@ def validate_note_create_request(
     note_type: Any,
     payload: dict[str, Any] | None,
     note_media_ids: set[str] | None = None,
+    allow_missing_media: bool = False,
 ) -> NoteMutationInput:
     body = _payload_dict(payload)
     _reject_forbidden_keys(body, {"id", "user_id", "created_at", "updated_at"})
@@ -534,6 +552,7 @@ def validate_note_create_request(
         partial=False,
         current_values=None,
         note_media_ids=set() if note_media_ids is None else note_media_ids,
+        allow_missing_media=allow_missing_media,
     )
 
     return NoteMutationInput(

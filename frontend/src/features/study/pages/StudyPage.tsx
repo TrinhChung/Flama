@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { PageError, PageLoading } from '@/shared/components/PageState'
 import { StudyHeaderToolbar } from '../components/StudyHeaderToolbar'
 import { StudyCardRendererFrame } from '../components/StudyCardRendererFrame'
 import { StudyBottomBar } from '../components/StudyBottomBar'
 import { StudyCompletionCard } from '../components/StudyCompletionCard'
+import { StudySessionConflict } from '../components/StudySessionConflict'
 import { StudyWaitingCard } from '../components/StudyWaitingCard'
 import { useStudySession } from '../hooks/useStudySession'
 import { isBackgroundRolloverCommit } from '../session/studySessionEngine'
@@ -14,6 +15,7 @@ import type { SchedulerDecision } from '../scheduler/types'
 
 export function StudyPage() {
   const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
   const deckIdRaw = searchParams.get('deck_id')
   const study = useStudySession(deckIdRaw)
 
@@ -118,10 +120,24 @@ export function StudyPage() {
   }, [])
 
   useEffect(() => {
+    if (study.leaseConflict) return
+
     const handleKeyDown = (event: KeyboardEvent) => {
       const activeEl = document.activeElement
       const activeTag = (activeEl?.tagName || '').toLowerCase()
-      if (activeTag === 'input' || activeTag === 'textarea' || (activeEl as HTMLElement)?.isContentEditable) return
+      if (
+        event.defaultPrevented
+        || event.isComposing
+        || event.altKey
+        || event.ctrlKey
+        || event.metaKey
+        || activeTag === 'input'
+        || activeTag === 'textarea'
+        || activeTag === 'select'
+        || activeTag === 'button'
+        || activeTag === 'a'
+        || (activeEl as HTMLElement)?.isContentEditable
+      ) return
 
       const code = event.code
       const key = event.key
@@ -177,6 +193,7 @@ export function StudyPage() {
     handleReveal,
     handleToggleFullscreen,
     revealed,
+    study.leaseConflict,
   ])
 
   if (!deckIdRaw) {
@@ -197,6 +214,19 @@ export function StudyPage() {
     return (
       <div className="h-screen h-[100dvh] w-full flex items-center justify-center">
         <PageLoading label="Đang tạo phiên học…" />
+      </div>
+    )
+  }
+
+  if (study.leaseConflict) {
+    return (
+      <div className="flex h-screen h-[100dvh] w-full items-center justify-center overflow-y-auto bg-background p-4 text-foreground sm:p-6">
+        <StudySessionConflict
+          deckName={deckName}
+          takeoverState={study.takeoverState}
+          onTakeover={study.requestTakeover}
+          onLeave={() => navigate('/dashboard', { replace: true })}
+        />
       </div>
     )
   }
