@@ -79,7 +79,7 @@ export const NoteTypeLivePreview: React.FC<NoteTypeLivePreviewProps> = ({
             {subtitle && <span className="text-[10px] text-muted-foreground block">{subtitle}</span>}
           </div>
           {isLoading && (
-            <span className="text-xs text-orange-600 font-semibold animate-pulse ml-2 flex items-center gap-1">
+            <span className="text-xs text-primary font-semibold animate-pulse ml-2 flex items-center gap-1">
               <Loader2 className="size-3 animate-spin" /> Đang cập nhật…
             </span>
           )}
@@ -90,7 +90,7 @@ export const NoteTypeLivePreview: React.FC<NoteTypeLivePreviewProps> = ({
             <NativeSelect
               value={selectedTemplateId || templates[0]?.id}
               onChange={(e) => onSelectTemplate(e.target.value)}
-              className="h-7 text-xs font-semibold w-32 rounded-lg"
+              className="h-8 text-xs font-medium w-36 rounded-xl bg-background"
             >
               {templates.map((tmpl) => (
                 <NativeSelectOption key={tmpl.id} value={tmpl.id}>
@@ -101,20 +101,20 @@ export const NoteTypeLivePreview: React.FC<NoteTypeLivePreviewProps> = ({
           )}
 
           {showSideSelector && (
-            <div className="inline-flex rounded-lg border bg-card p-0.5 shadow-2xs">
+            <div className="inline-flex rounded-xl border border-border/80 bg-muted/30 p-0.5 shadow-2xs">
               <Button
-                size="xs"
+                size="sm"
                 variant={activeSide === 'front' ? 'default' : 'ghost'}
                 onClick={() => handleSideToggle('front')}
-                className="h-7 px-3 text-xs font-semibold rounded-md transition-all"
+                className="h-7 px-3 text-xs font-bold rounded-lg transition-all"
               >
                 Mặt trước
               </Button>
               <Button
-                size="xs"
+                size="sm"
                 variant={activeSide === 'back' ? 'default' : 'ghost'}
                 onClick={() => handleSideToggle('back')}
-                className="h-7 px-3 text-xs font-semibold rounded-md transition-all"
+                className="h-7 px-3 text-xs font-bold rounded-lg transition-all"
               >
                 <RotateCcw className="size-3 mr-1" /> Mặt sau
               </Button>
@@ -124,7 +124,7 @@ export const NoteTypeLivePreview: React.FC<NoteTypeLivePreviewProps> = ({
       </div>
 
       {/* Rendered Viewport using CardDisplay */}
-      <div className={`${containerHeightClass} w-full flex-1 overflow-hidden rounded-xl border border-border bg-[#f8f9fa] relative p-3`}>
+      <div className={`${containerHeightClass} w-full flex-1 overflow-hidden rounded-xl border border-border/80 bg-muted/30 dark:bg-muted/10 relative p-3`}>
         {error ? (
           <div className="flex h-full items-center justify-center p-6 text-center text-sm text-destructive">
             {error}

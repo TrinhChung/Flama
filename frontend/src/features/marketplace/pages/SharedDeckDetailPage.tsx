@@ -312,9 +312,8 @@ export function SharedDeckDetailPage() {
         {/* Main Left Content Column */}
         <div className="space-y-4 sm:space-y-5">
           {/* Main Card */}
-          <Card className="relative overflow-hidden border-border/40 sm:border-border/80 bg-card/90 backdrop-blur-md shadow-xs sm:shadow-sm rounded-xl sm:rounded-2xl">
-            <div className="h-2 w-full bg-gradient-to-r from-primary via-orange-500 to-amber-500" />
-            <CardHeader className="space-y-3 p-3.5 sm:p-6 pb-3">
+          <Card className="border-border/80 bg-card shadow-xs rounded-2xl">
+            <CardHeader className="space-y-3 p-4 sm:p-6 pb-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge variant="secondary" className="px-2.5 py-0.5 text-xs font-bold rounded-md">
