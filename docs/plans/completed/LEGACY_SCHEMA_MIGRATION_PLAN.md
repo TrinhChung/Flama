@@ -1,4 +1,8 @@
-# Legacy Schema Audit + Migration Plan
+# Legacy Schema Audit + Migration Plan [COMPLETED]
+
+> **Trạng thái:** HOÀN THÀNH (COMPLETED)  
+> **Ngày hoàn tất:** 2026-03-30  
+> **Kết quả:** Toàn bộ bảng legacy (`vocabulary_entries`, `vocabulary_levels`, `vocabulary_topics`, `vocabulary_lessons`, `vocabulary_progress`, `legacy_migration_maps`) đã được loại bỏ hoàn toàn khỏi schema và codebase. Hệ thống đã chuyển đổi 100% sang mô hình `Deck -> NoteType -> FieldDef -> Template -> Note -> Card`.
 
 Ngay audit: 2026-02-26
 

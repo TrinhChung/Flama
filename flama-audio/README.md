@@ -43,7 +43,7 @@ Sau khi hoàn tất:
 
 Release production chỉ chạy từ tag `flama-audio-v*` (hoặc manual dispatch trỏ tới một tag cùng định dạng đã tồn tại). Workflow `.github/workflows/flama-audio-release.yml` build, ký Authenticode, verify, đóng ZIP, tạo SHA-256, publish GitHub Release rồi deploy nguyên artifact đã ký vào `/var/lib/flama/downloads/`. Web UI tải EXE qua `/api/download/flama-audio` và checksum qua `/api/download/flama-audio.sha256`.
 
-Xem runbook cấu hình certificate, GitHub Environment và kiểm tra release tại [`docs/FLAMA_AUDIO_WINDOWS_RELEASE.md`](../docs/FLAMA_AUDIO_WINDOWS_RELEASE.md).
+Xem runbook cấu hình certificate, GitHub Environment và kiểm tra release tại [`docs/runbooks/FLAMA_AUDIO_WINDOWS_RELEASE.md`](../docs/runbooks/FLAMA_AUDIO_WINDOWS_RELEASE.md).
 
 ## 🔐 Hướng dẫn Kết nối & Ghép nối (Pairing Flow)
 

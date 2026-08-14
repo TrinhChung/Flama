@@ -17,16 +17,16 @@ Read only what the task needs, but start with these files:
 - `README.md`
 - `README_SETUP.md`
 - `app/__init__.py`
-- `app/routes/__init__.py`
+- `app/api/__init__.py`
 - `wsgi.py`
-- `docs/SYSTEM_ARCHITECTURE.md`
+- `docs/architecture/SYSTEM_ARCHITECTURE.md`
 
 Then load task-specific context:
 
-- Flashcards, clone overlay, share, study: `docs/FLASHCARD_V2_RUNBOOK.md`, `docs/CLONE_CUTOVER_REPORT.md`, `app/routes/flashcards/`, `app/services/flashcards_share_service.py`
-- Vocabulary browse and study: `app/routes/vocabulary.py`, `app/repositories/vocabulary_repository.py`, `app/repositories/study_repository.py`, `app/services/anki_scheduler.py`
-- Admin, TTS, stats, dashboard: `app/routes/main.py`, `app/routes/admin.py`, related service and test files
-- UI and component work: `frontend/docs/COMPONENT_ARCHITECTURE.md`, `templates/base.html`, `templates/components/`, `static/css/components/`, `static/js/`
+- Flashcards, clone overlay, share, study: `docs/runbooks/FLASHCARD_V2_RUNBOOK.md`, `docs/plans/completed/CLONE_CUTOVER_REPORT.md`, `app/api/flashcards/`, `app/services/flashcards_share_service.py`
+- Vocabulary browse and study: `app/api/learning/browse.py`, `app/api/learning/study.py`, `app/repositories/vocabulary_repository.py`, `app/repositories/study_repository.py`, `app/services/anki_scheduler.py`
+- Admin, TTS, stats, dashboard: `app/api/admin/`, `app/api/analytics/`, related service and test files
+- UI and component work: `frontend/docs/COMPONENT_ARCHITECTURE.md`, `frontend/src/`
 
 ## Workflow
 

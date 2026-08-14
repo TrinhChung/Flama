@@ -18,8 +18,8 @@ Use this file only as historical context when you need to understand earlier des
 
 For current work, use:
 
-- `docs/FLAMA_PAYMENT_ARCHITECTURE.md`
-- `docs/SYSTEM_ARCHITECTURE.md`
+- `docs/architecture/FLAMA_PAYMENT_ARCHITECTURE.md`
+- `docs/architecture/SYSTEM_ARCHITECTURE.md`
 - `.env_example`
 - `app/routes/payments.py`
 - `app/services/payment_service.py`

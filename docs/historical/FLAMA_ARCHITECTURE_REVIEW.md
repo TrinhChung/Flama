@@ -1,4 +1,7 @@
-# Flama Architecture Review
+# Flama Architecture Review [HISTORICAL BASELINE]
+
+> **Trạng thái:** TÀI LIỆU LỊCH SỬ (HISTORICAL BASELINE - 2026-03-01)  
+> **Ghi chú:** Đây là bản đánh giá kiến trúc ban đầu làm tiền đề cho chuỗi kế hoạch tái cấu trúc ([`FLAMA_REFACTOR_PLAN.md`](../historical/FLAMA_REFACTOR_PLAN.md)), chuẩn hóa REST API ([`REST_API_MIGRATION_PLAN.md`](../plans/completed/REST_API_MIGRATION_PLAN.md)) và chuyển đổi sang React SPA. Kiến trúc hiện tại xem tại [`SYSTEM_ARCHITECTURE.md`](../architecture/SYSTEM_ARCHITECTURE.md).
 
 ## 1. Tổng quan hiện trạng
 

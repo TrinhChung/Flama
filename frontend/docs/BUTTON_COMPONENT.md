@@ -1,161 +1,71 @@
-# Button Component - Flama Design System
+# Button Component - Flama UI
 
-## Overview
-Unified button component sử dụng Flama Design System colors. Thay thế tất cả Bootstrap button classes mặc định.
+## 1. Overview
 
-## Button Types
+The `Button` component (`frontend/src/components/ui/button.tsx`) is a foundational UI primitive built with Radix UI Slot and Tailwind CSS using `class-variance-authority` (cva). It adheres to the Flama Design System, supporting multiple semantic variants, sizes, and slot composition.
 
-### Primary (Orange)
-```jinja2
-{% set button_label = 'Create' %}
-{% set button_type = 'primary' %}
-{% include 'components/button.html' with context %}
-```
-**Use case:** Hành động chính, CTA (Call-To-Action)
-**Color:** `--flama-orange-600` (#E05C07)
+---
 
-### Secondary (Amber)
-```jinja2
-{% set button_type = 'secondary' %}
-{% include 'components/button.html' with context %}
-```
-**Use case:** Hành động phụ
-**Color:** `--flama-amber-600` (#E08D0C)
+## 2. Component Import & Usage
 
-### Outline (Stroked Orange)
-```jinja2
-{% set button_type = 'outline' %}
-{% include 'components/button.html' with context %}
-```
-**Use case:** Hành động tùy chọn
-**Color:** Border only
+```tsx
+import { Button } from "@/components/ui/button"
+import { Plus, Trash2 } from "lucide-react"
 
-### Outline Secondary (Stroked Gray)
-```jinja2
-{% set button_type = 'outline-secondary' %}
-{% include 'components/button.html' with context %}
-```
-**Use case:** Hành động phụ, Cancel buttons
-
-### Danger (Red)
-```jinja2
-{% set button_type = 'danger' %}
-{% include 'components/button.html' with context %}
-```
-**Use case:** Xóa, hành động nguy hiểm
-**Color:** #dc3545
-
-### Outline Danger (Stroked Red)
-```jinja2
-{% set button_type = 'outline-danger' %}
-{% include 'components/button.html' with context %}
+export function Example() {
+  return (
+    <div className="flex items-center gap-2">
+      <Button variant="default">Primary Action</Button>
+      <Button variant="secondary">Secondary</Button>
+      <Button variant="outline">Outline</Button>
+      <Button variant="destructive" size="sm">
+        <Trash2 className="size-4" />
+        Delete
+      </Button>
+    </div>
+  )
+}
 ```
 
-### Light (Surface)
-```jinja2
-{% set button_type = 'light' %}
-{% include 'components/button.html' with context %}
+---
+
+## 3. Variants
+
+| Variant | Visual Style | Primary Use Case |
+|---|---|---|
+| `default` | Primary solid (`bg-primary text-primary-foreground`) | Main Call-To-Action (CTA), Submit, Primary actions |
+| `secondary` | Muted solid (`bg-secondary text-secondary-foreground`) | Supporting actions, Secondary modals |
+| `outline` | Bordered (`border-border bg-background`) | Neutral actions, Cancel, Filters |
+| `ghost` | Transparent with hover highlight | Toolbar buttons, Table row actions |
+| `destructive` | Alert tint (`bg-destructive/10 text-destructive`) | Delete, Discard, Revoke actions |
+| `link` | Underlined text | Inline navigation links styled as buttons |
+
+---
+
+## 4. Sizes
+
+| Size | Height | Best For |
+|---|---|---|
+| `default` | `h-8` (32px) | Standard form buttons, header actions |
+| `sm` | `h-7` (28px) | Compact cards, inline table controls |
+| `xs` | `h-6` (24px) | Badges with actions, tight spaces |
+| `lg` | `h-9` (36px) | Prominent landing/study action buttons |
+| `icon` | `size-8` | Square icon button |
+| `icon-sm` | `size-7` | Small square icon button |
+| `icon-xs` | `size-6` | Extra small icon button |
+| `icon-lg` | `size-9` | Large icon button |
+
+---
+
+## 5. Composition with `asChild`
+
+When you need a link (e.g. React Router `<Link>`) that looks and behaves like a button, use the `asChild` prop:
+
+```tsx
+import { Link } from "react-router-dom"
+import { Button } from "@/components/ui/button"
+
+<Button asChild variant="default">
+  <Link to="/study">Start Studying</Link>
+</Button>
 ```
-**Use case:** Surface buttons, secondary actions
-
-### Link
-```jinja2
-{% set button_type = 'link' %}
-{% include 'components/button.html' with context %}
-```
-**Use case:** Text links chứng chỉ button behavior
-**Color:** Orange
-
-## Button Sizes
-
-### Small
-```jinja2
-{% set button_size = 'sm' %}
-```
-
-### Medium (Default)
-```jinja2
-{% set button_size = 'md' %}
-```
-
-### Large
-```jinja2
-{% set button_size = 'lg' %}
-```
-
-## Full Width Button
-```jinja2
-{% set button_full_width = true %}
-```
-
-## Icons
-Sử dụng Bootstrap Icons:
-```jinja2
-{% set icon_class = 'bi bi-plus' %}
-```
-
-## Link vs Button
-- **Link buttons:** Đặt `button_href`, component sẽ render `<a>` tag
-- **Submit buttons:** Default, render `<button type="submit">`
-
-## Examples
-
-### Login Button
-```jinja2
-{% set button_label = 'Đăng nhập' %}
-{% set button_href = url_for('auth.login') %}
-{% set button_type = 'primary' %}
-{% include 'components/button.html' with context %}
-```
-
-### Cancel Button (Modal)
-```jinja2
-{% set button_label = 'Hủy' %}
-{% set button_type = 'outline-secondary' %}
-{% set button_disabled = false %}
-{% include 'components/button.html' with context %}
-```
-
-### Delete Button
-```jinja2
-{% set button_label = 'Xóa' %}
-{% set button_type = 'outline-danger' %}
-{% set button_size = 'sm' %}
-{% set button_id = 'delete-btn' %}
-{% include 'components/button.html' with context %}
-```
-
-### Full Width Form Submit
-```jinja2
-{% set button_label = 'Đăng ký' %}
-{% set button_type = 'primary' %}
-{% set button_full_width = true %}
-{% include 'components/button.html' with context %}
-```
-
-## All Available Parameters
-
-| Parameter | Values | Default | Required |
-|-----------|--------|---------|----------|
-| button_label | string | "Button" | No |
-| button_type | primary, secondary, outline, outline-secondary, danger, outline-danger, light, link | primary | No |
-| button_size | sm, md, lg | md | No |
-| button_href | string (URL) | - | No* |
-| button_id | string | - | No |
-| button_class | string | - | No |
-| button_disabled | true/false | false | No |
-| button_full_width | true/false | false | No |
-| icon_class | Bootstrap icon class | - | No |
-
-*If `button_href` is provided, renders `<a>` tag. Without it, renders `<button type="submit">`.
-
-## CSS Variables Used
-All colors come from Flama Design System (`static/css/variables.css`):
-- `--flama-orange-500` - Primary action
-- `--flama-orange-600` - Primary hover
-- `--flama-orange-700` - Primary active
-- `--flama-orange-800` - Primary dark
-- `--flama-amber-600` - Secondary
-- `--flama-text` - Text color
-- `--flama-border` - Border color
-- `--flama-surface` - Light backgrounds

@@ -40,32 +40,16 @@
 
 ## Current Execution Map
 
-### Former execution points that were patched
-- Local note type live preview:
-  - `templates/flashcards/note_type_detail.html`
-  - `app/routes/flashcards/share.py::preview_template`
-- Flashcard study preview page:
-  - `templates/flashcards/study.html`
-  - `app/routes/flashcards/study.py`
-- Shared note type preview:
-  - `templates/flashcards/shared_note_type_detail.html`
-  - `static/js/pages/shared_note_type_detail/main.js`
-  - `app/routes/flashcards/share.py::preview_shared_note_type_template`
-- Shared deck preview:
-  - `templates/flashcards/shared_deck_detail.html`
-  - `static/js/pages/shared_deck_detail/main.js`
-  - `app/routes/flashcards/share.py::preview_shared_deck_template`
-- Vocabulary study:
-  - `templates/vocabulary_study.html`
-  - `app/routes/vocabulary.py`
-  - `app/repositories/vocabulary_repository.py`
-  - `app/services/study_card_editor_service.py`
+### Execution points in React SPA
+- Flashcard study: `frontend/src/features/study/renderer/` & `frontend/src/features/study/pages/`
+- Note type template preview & editor: `frontend/src/features/note-types/`
+- Shared deck preview: `frontend/src/features/marketplace/`
+- Sandboxed iframe host asset: `static/js/card_renderer_host.js`
 
-### Renderer data producers
-- `app/services/flashcard_renderer.py`
-- `app/routes/flashcards/study.py`
-- `app/services/study_card_editor_service.py`
-- `app/routes/vocabulary.py`
+### Renderer data producers (Backend)
+- Compiler & sanitizer: `app/services/flashcard_renderer.py`
+- Study & preview endpoints: `app/api/flashcards/` & `app/api/learning/study.py`
+- Media asset proxy: `/media/proxy/<asset_id>`
 
 ## Renderer Design
 

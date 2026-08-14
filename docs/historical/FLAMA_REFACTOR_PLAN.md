@@ -1,4 +1,7 @@
-# Flama Refactor Planning
+# Flama Refactor Planning [COMPLETED]
+
+> **Trạng thái:** HOÀN THÀNH (COMPLETED / HISTORICAL BASELINE)  
+> **Ghi chú:** Các phase refactor cấu trúc (Phase 1, 2, 3A, 3B, 3C) đã hoàn tất. Sau đó dự án đã tiếp tục hoàn tất quá trình chuyển đổi toàn diện sang REST API V1 và React SPA (đã xóa bỏ toàn bộ Jinja templates).
 
 ## 1. Baseline
 - **Kết luận baseline vẫn còn đúng:** Các vấn đề nêu trong `FLAMA_ARCHITECTURE_REVIEW.md` vẫn phản ánh đúng hiện trạng: `app/routes/flashcards.py` là god-file, `app/controllers/flashcards_share_controller.py` là domain monolith, `templates/dashboard.html` quá nặng, và layer stats còn phụ thuộc ngược về controller query.

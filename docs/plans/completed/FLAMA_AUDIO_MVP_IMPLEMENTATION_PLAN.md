@@ -1,7 +1,7 @@
-# Kế hoạch điều tra và triển khai Flama Audio MVP
+# Kế hoạch điều tra và triển khai Flama Audio MVP [COMPLETED]
 
 Date: 2026-08-09  
-Status: ready for implementation  
+Status: COMPLETED (Đã triển khai hoàn tất ứng dụng Windows .NET WPF và tích hợp frontend)  
 Target đầu tiên: Windows 10/11 x64, CPU-only
 
 ## 1. Kết luận
@@ -436,7 +436,7 @@ English đạt cùng Definition of Done chỉ sau khi Kokoro runtime, G2P, model
 - [`frontend/src/features/browse/pages/BrowsePage.tsx`](../frontend/src/features/browse/pages/BrowsePage.tsx)
 - [`frontend/src/lib/ankiConnectClient.ts`](../frontend/src/lib/ankiConnectClient.ts)
 - [`frontend/src/shared/api/client.ts`](../frontend/src/shared/api/client.ts)
-- [`docs/CLONE_CUTOVER_REPORT.md`](CLONE_CUTOVER_REPORT.md)
+- [`docs/plans/completed/CLONE_CUTOVER_REPORT.md`](CLONE_CUTOVER_REPORT.md)
 
 ### Official/upstream
 
