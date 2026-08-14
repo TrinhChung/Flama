@@ -39,6 +39,15 @@ def get_status(*, user_id: int, session_id: str) -> dict[str, Any]:
     return flama_connect_service.get_import_status(user_id, session_id)
 
 
+def get_note_statuses(
+    *,
+    user_id: int,
+    session_id: str,
+    notes: object,
+) -> dict[str, Any]:
+    return flama_connect_service.get_import_note_statuses(user_id, session_id, notes)
+
+
 def receive_media_package(
     *,
     user_id: int,
@@ -75,8 +84,38 @@ def receive_card_package(
     )
 
 
-def complete_session(*, user_id: int, session_id: str) -> dict[str, Any]:
-    return flama_connect_service.complete_import_session(user_id, session_id)
+def complete_session(
+    *,
+    user_id: int,
+    session_id: str,
+    expected_notes: object,
+) -> dict[str, Any]:
+    return flama_connect_service.complete_import_session(
+        user_id,
+        session_id,
+        expected_notes=expected_notes,
+    )
+
+
+def receive_sync_package(
+    *,
+    user_id: int,
+    session_id: str,
+    sequence: int,
+    kind: str,
+    expected_sha256: str,
+    content: bytes,
+    content_encoding: str,
+) -> dict[str, object]:
+    return flama_connect_package_service.receive_sync_package(
+        user_id=user_id,
+        session_id=session_id,
+        sequence=sequence,
+        kind=kind,
+        expected_sha256=expected_sha256,
+        content=content,
+        content_encoding=content_encoding,
+    )
 
 
 def cancel_session(*, user_id: int, session_id: str) -> dict[str, Any]:

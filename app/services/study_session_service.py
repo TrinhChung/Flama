@@ -629,6 +629,35 @@ def open_study_session(
     }
 
 
+def get_study_session_status(
+    *,
+    user: Any,
+    session_id: str,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    session = StudySession.query.filter_by(
+        id=session_id,
+        user_id=int(user.id),
+    ).first()
+    if session is None:
+        raise StudySessionError(
+            "SESSION_NOT_FOUND",
+            "Study session was not found.",
+            status=404,
+        )
+
+    status = str(session.status or "open")
+    if status == "open" and (now or datetime.utcnow()) > session.expires_at:
+        status = "expired"
+    return {
+        "schema_version": "study-session-status.v1",
+        "session_id": session.id,
+        "status": status,
+        "expires_at": _utc_iso(session.expires_at),
+        "committed_at": _utc_iso(session.committed_at),
+    }
+
+
 def _validate_session_token(session: StudySession, raw_token: Any) -> None:
     candidate = str(raw_token or "")
     if not candidate or not hmac.compare_digest(

@@ -23,6 +23,7 @@ class ConnectImportPackage(db.Model):
     storage_path = db.Column(db.String(1024), nullable=False)
     status = db.Column(db.String(32), nullable=False, default="received", index=True)
     item_count = db.Column(db.Integer, nullable=False, default=0)
+    result_json = db.Column(db.JSON, nullable=False, default=dict)
     error = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(

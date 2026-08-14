@@ -42,6 +42,7 @@ const pageTitles: Record<string, string> = {
   '/note-types': 'Loại thẻ',
   '/installed-decks': 'Deck đã cài',
   '/import': 'Import thẻ',
+  '/sync': 'Đồng bộ Anki Desktop',
   '/marketplace/decks': 'Bộ thẻ',
   '/marketplace/decks/publish': 'Đăng bộ thẻ',
   '/marketplace/note-types': 'Loại thẻ',

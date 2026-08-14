@@ -336,10 +336,20 @@ def study_bucket_for_progress_values(
     due_day: int | None,
     is_suspended: bool | None,
     now: datetime,
+    is_buried: bool | None = None,
+    buried_until_day: int | None = None,
     timezone_name: str = "UTC",
     day_boundary_hour_local: int | None = None,
 ) -> str | None:
-    if _is_suspended_value(is_suspended):
+    today_day_index = _today_day_index(
+        now=now,
+        timezone_name=timezone_name,
+        day_boundary_hour_local=day_boundary_hour_local,
+    )
+    if _is_suspended_value(is_suspended) or (
+        bool(is_buried)
+        and (buried_until_day is None or int(buried_until_day) >= today_day_index)
+    ):
         return None
 
     queue_norm = normalize_progress_queue(queue)
@@ -378,8 +388,10 @@ def counter_bucket_for_progress_values(
     queue: str | None,
     due_at: datetime | None,
     due_day: int | None,
-    is_suspended: bool | None = None,
     now: datetime,
+    is_suspended: bool | None = None,
+    is_buried: bool | None = None,
+    buried_until_day: int | None = None,
     timezone_name: str = "UTC",
     day_boundary_hour_local: int | None = None,
 ) -> str | None:
@@ -388,6 +400,8 @@ def counter_bucket_for_progress_values(
         due_at=due_at,
         due_day=due_day,
         is_suspended=is_suspended,
+        is_buried=is_buried,
+        buried_until_day=buried_until_day,
         now=now,
         timezone_name=timezone_name,
         day_boundary_hour_local=day_boundary_hour_local,
@@ -412,6 +426,8 @@ def is_due(
             due_at=progress.due_at,
             due_day=progress.due_day,
             is_suspended=progress.is_suspended,
+            is_buried=progress.is_buried,
+            buried_until_day=progress.buried_until_day,
             now=now,
             timezone_name=timezone_name,
             day_boundary_hour_local=day_boundary_hour_local,
@@ -428,12 +444,21 @@ def normalized_queue_expr(progress_alias):
     )
 
 
-def active_progress_expr(progress_alias):
-    return db.or_(
+def active_progress_expr(progress_alias, *, today_day_index: int | None = None):
+    active = db.or_(
         progress_alias.id.is_(None),
         progress_alias.is_suspended.is_(False),
         progress_alias.is_suspended.is_(None),
     )
+    if today_day_index is None:
+        return active
+    not_buried = db.or_(
+        progress_alias.id.is_(None),
+        progress_alias.is_buried.is_(False),
+        progress_alias.is_buried.is_(None),
+        progress_alias.buried_until_day < today_day_index,
+    )
+    return db.and_(active, not_buried)
 
 
 def review_due_expr(
@@ -530,7 +555,7 @@ def query_next_due_card_id(
     )
     row = (
         query.outerjoin(progress_alias, progress_join)
-        .filter(active_progress_expr(progress_alias), is_due_expr)
+        .filter(active_progress_expr(progress_alias, today_day_index=today_day_index), is_due_expr)
         .order_by(
             queue_priority.asc(),
             review_due_sort_key.is_(None).asc(),
@@ -551,7 +576,7 @@ def query_next_due_card_id(
         row = (
             query.outerjoin(progress_alias, progress_join)
             .filter(
-                active_progress_expr(progress_alias),
+                active_progress_expr(progress_alias, today_day_index=today_day_index),
                 normalized_queue.in_([LEARNING_QUEUE, RELEARNING_QUEUE]),
                 progress_alias.due_day.is_(None),
                 progress_alias.due_at.isnot(None),
@@ -743,6 +768,8 @@ def query_study_queue_counts(
             progress_alias.due_at,
             progress_alias.due_day,
             progress_alias.is_suspended,
+            progress_alias.is_buried,
+            progress_alias.buried_until_day,
         )
         .all()
     )
@@ -751,7 +778,7 @@ def query_study_queue_counts(
     learn_count = 0
     due_count = 0
     seen_card_ids: set[str] = set()
-    for card_id, queue, due_at, due_day, is_suspended in rows:
+    for card_id, queue, due_at, due_day, is_suspended, is_buried, buried_until_day in rows:
         card_id_str = str(card_id or "").strip()
         if not card_id_str or card_id_str in seen_card_ids:
             continue
@@ -761,6 +788,8 @@ def query_study_queue_counts(
             due_at=due_at,
             due_day=due_day,
             is_suspended=is_suspended,
+            is_buried=is_buried,
+            buried_until_day=buried_until_day,
             now=now,
             timezone_name=timezone_name,
             day_boundary_hour_local=day_boundary_hour,
@@ -803,7 +832,7 @@ def query_pending_learning_summary(
     row = (
         query.outerjoin(progress_alias, progress_join)
         .filter(
-            active_progress_expr(progress_alias),
+            active_progress_expr(progress_alias, today_day_index=today_day_index),
             normalized_queue.in_([LEARNING_QUEUE, RELEARNING_QUEUE]),
             db.or_(
                 db.and_(

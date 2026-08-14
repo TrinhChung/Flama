@@ -1,7 +1,13 @@
 // @vitest-environment jsdom
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { apiJson, apiJsonKeepalive, apiRequest, setCsrfToken } from './client'
+import {
+  ApiError,
+  apiJson,
+  apiJsonKeepalive,
+  apiRequest,
+  setCsrfToken,
+} from './client'
 
 describe('apiJsonKeepalive', () => {
   afterEach(() => {
@@ -116,6 +122,38 @@ describe('apiJsonKeepalive', () => {
     )).rejects.toMatchObject({ code: 'CSRF_FAILED', status: 400 })
 
     expect(fetchMock).toHaveBeenCalledTimes(3)
+  })
+
+  it('preserves structured error details for idempotent recovery', async () => {
+    const receipt = {
+      schema_version: 'study-commit-receipt.v1',
+      success: true,
+      session_id: 'session-1',
+      commit_id: 'commit-1',
+      updated_cards: [],
+    }
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({
+        error: 'SESSION_ALREADY_COMMITTED',
+        message: 'Study session was already committed.',
+        details: receipt,
+      }),
+      {
+        status: 409,
+        headers: { 'Content-Type': 'application/json' },
+      },
+    )))
+
+    const request = apiJson(
+      '/api/study/sessions/session-1/commit',
+      'POST',
+      { commit_id: 'commit-2' },
+    )
+    await expect(request).rejects.toBeInstanceOf(ApiError)
+    await expect(request).rejects.toMatchObject({
+      code: 'SESSION_ALREADY_COMMITTED',
+      details: receipt,
+    })
   })
 
   it('preserves binary package headers and authenticates with the web session', async () => {

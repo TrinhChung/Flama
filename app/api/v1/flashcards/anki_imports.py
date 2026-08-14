@@ -91,6 +91,25 @@ def get_session(session_id: str):
         return _error(exc)
 
 
+@anki_imports_bp.post("/flashcards/import/anki/sessions/<session_id>/note-status")
+@creator_required
+def get_note_statuses(session_id: str):
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        return error_response("INVALID_JSON", "A JSON object is required.", status=400)
+    try:
+        return jsonify(
+            anki_import_service.get_note_statuses(
+                user_id=current_user.id,
+                session_id=session_id,
+                notes=payload.get("notes"),
+            )
+        )
+    except anki_import_service.AnkiImportError as exc:
+        db.session.rollback()
+        return _error(exc)
+
+
 @anki_imports_bp.put(
     "/flashcards/import/anki/sessions/<session_id>/packages/media/<int:sequence>"
 )
@@ -144,13 +163,57 @@ def upload_card_package(session_id: str, sequence: int):
     return jsonify(result)
 
 
+def _upload_sync_package(session_id: str, sequence: int, kind: str):
+    try:
+        result = anki_import_service.receive_sync_package(
+            user_id=current_user.id,
+            session_id=session_id,
+            sequence=sequence,
+            kind=kind,
+            expected_sha256=request.headers.get("X-Package-SHA256", ""),
+            content=_read_package(),
+            content_encoding=request.headers.get("Content-Encoding", "identity"),
+        )
+        db.session.commit()
+    except (
+        anki_import_service.AnkiImportError,
+        anki_import_service.AnkiImportPackageError,
+    ) as exc:
+        db.session.rollback()
+        return _error(exc)
+    except Exception:
+        db.session.rollback()
+        raise
+    return jsonify(result)
+
+
+@anki_imports_bp.put(
+    "/flashcards/import/anki/sessions/<session_id>/packages/progress/<int:sequence>"
+)
+@creator_required
+def upload_progress_package(session_id: str, sequence: int):
+    return _upload_sync_package(session_id, sequence, "progress")
+
+
+@anki_imports_bp.put(
+    "/flashcards/import/anki/sessions/<session_id>/packages/reviews/<int:sequence>"
+)
+@creator_required
+def upload_review_package(session_id: str, sequence: int):
+    return _upload_sync_package(session_id, sequence, "reviews")
+
+
 @anki_imports_bp.post("/flashcards/import/anki/sessions/<session_id>/complete")
 @creator_required
 def complete_session(session_id: str):
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        return error_response("INVALID_JSON", "A JSON object is required.", status=400)
     try:
         result = anki_import_service.complete_session(
             user_id=current_user.id,
             session_id=session_id,
+            expected_notes=payload.get("expectedNotes"),
         )
         db.session.commit()
     except anki_import_service.AnkiImportError as exc:

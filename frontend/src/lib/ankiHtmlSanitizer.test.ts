@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
+  ankiHtmlToPlainText,
   convertFuriganaToRuby,
   extractAudioReferences,
   extractImageReferences,
@@ -33,6 +34,15 @@ describe('ankiHtmlSanitizer', () => {
     )
     expect(sanitizeAnkiHtml(raw)).toContain("'from...to...'")
     expect(sanitizeAnkiHtml(raw)).toContain('&lt;script&gt;')
+  })
+
+  it('converts Anki line breaks and entities for a plain-text target field', () => {
+    expect(ankiHtmlToPlainText('Vた + 甲斐がある<br>Vた + 甲斐があった')).toBe(
+      'Vた + 甲斐がある\nVた + 甲斐があった',
+    )
+    expect(ankiHtmlToPlainText('せっかく + Vた<br>&nbsp; &nbsp;Vてきた + のに')).toBe(
+      'せっかく + Vた\nVてきた + のに',
+    )
   })
 
   it('extracts image references without path traversal', () => {

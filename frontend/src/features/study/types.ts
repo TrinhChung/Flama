@@ -173,6 +173,14 @@ export type StudySessionCommitReceipt = {
   committed_at: string
 }
 
+export type StudySessionStatus = {
+  schema_version: 'study-session-status.v1'
+  session_id: string
+  status: 'open' | 'committed' | 'expired'
+  expires_at: string
+  committed_at: string | null
+}
+
 export type StudyCardEditResponse = {
   success: boolean
   card_id: string

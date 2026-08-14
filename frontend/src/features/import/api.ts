@@ -17,6 +17,7 @@ export interface AnkiImportNoteTypePlan {
 export interface AnkiImportSessionPayload {
   source?: string
   sourceKey: string
+  sourceAliases?: string[]
   sourceRootPath: string
   targetRootPath: string
   selectedDecks: string[]
@@ -52,11 +53,19 @@ export interface AnkiImportSessionResult {
 
 export interface AnkiImportCapabilities {
   formatVersion: number
+  syncFormatVersion?: number
   mediaPackageMaxBytes: number
   mediaPackageMaxEntries: number
   mediaPackageMaxUncompressedBytes: number
   mediaFileMaxBytes: number
   cardBatchMaxItems: number
+  cardPackageTargetItems: number
+  cardPackageMaxItems: number
+  cardPackageMaxBytes: number
+  cardPackageMaxUncompressedBytes: number
+  progressBatchMaxItems: number
+  reviewBatchMaxItems: number
+  reviewSessionMaxItems: number
   supportedMediaExtensions: string[]
 }
 
@@ -74,6 +83,52 @@ export const ankiImportApi = {
     return apiRequest<AnkiImportCapabilities>(`${API_ROOT}/capabilities`)
   },
 
+  getSession(sessionId: string) {
+    return apiRequest<{
+      importSessionId: string
+      status: string
+      totalNotes: number
+      processedNotes: number
+      attemptedNotes: number
+      totalMedia: number
+      processedMedia: number
+      errors: Array<Record<string, unknown>>
+    }>(`${API_ROOT}/sessions/${encodeURIComponent(sessionId)}`)
+  },
+
+  cancelSession(sessionId: string) {
+    return apiRequest<{ importSessionId: string; status: string }>(
+      `${API_ROOT}/sessions/${encodeURIComponent(sessionId)}`,
+      { method: 'DELETE' },
+    )
+  },
+
+  getNoteStatuses(
+    sessionId: string,
+    notes: Array<{
+      ankiNoteId: number
+      contentHash: string
+      cards: Array<{ sourceCardId: number; snapshotHash: string }>
+    }>,
+  ) {
+    return apiRequest<{
+      importSessionId: string
+      notes: Array<{
+        ankiNoteId: number
+        state: 'new' | 'changed' | 'unchanged'
+        mediaHashes: string[]
+        cards: Array<{
+          sourceCardId: number
+          progressState: 'new' | 'changed' | 'unchanged' | 'local_changed'
+          reviewCursor: string | null
+        }>
+      }>
+    }>(`${API_ROOT}/sessions/${encodeURIComponent(sessionId)}/note-status`, {
+      method: 'POST',
+      body: JSON.stringify({ notes }),
+    })
+  },
+
   uploadMediaPackage(
     sessionId: string,
     sequence: number,
@@ -86,6 +141,8 @@ export const ankiImportApi = {
       sha256: string
       itemCount: number
       replayed: boolean
+      acceptedFilenames: string[]
+      rejectedFilenames: string[]
     }>(
       `${API_ROOT}/sessions/${encodeURIComponent(sessionId)}/packages/media/${sequence}`,
       {
@@ -132,10 +189,44 @@ export const ankiImportApi = {
     )
   },
 
-  completeSession(sessionId: string) {
+  uploadSyncPackage(
+    sessionId: string,
+    kind: 'progress' | 'reviews',
+    sequence: number,
+    packageBlob: Blob,
+    sha256: string,
+    contentEncoding: 'gzip' | 'identity',
+  ) {
+    return apiRequest<{
+      packageId: string
+      sequence: number
+      sha256: string
+      itemCount: number
+      replayed: boolean
+      status: string
+      results: Array<{
+        sourceCardId?: number | string
+        sourceReviewId?: number | string
+        applied?: boolean
+        imported?: boolean
+        state: string
+        error?: string
+      }>
+    }>(`${API_ROOT}/sessions/${encodeURIComponent(sessionId)}/packages/${kind}/${sequence}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/x-ndjson',
+        'Content-Encoding': contentEncoding,
+        'X-Package-SHA256': sha256,
+      },
+      body: packageBlob,
+    })
+  },
+
+  completeSession(sessionId: string, expectedNotes: number) {
     return apiRequest<{ importSessionId: string; status: string }>(
       `${API_ROOT}/sessions/${encodeURIComponent(sessionId)}/complete`,
-      { method: 'POST', body: JSON.stringify({}) },
+      { method: 'POST', body: JSON.stringify({ expectedNotes }) },
     )
   },
 }
