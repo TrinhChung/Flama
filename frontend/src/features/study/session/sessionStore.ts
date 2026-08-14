@@ -1,3 +1,4 @@
+import type { SchedulerCardState } from '../scheduler/types'
 import type {
   StudySessionEvent,
   StudySessionSnapshot,
@@ -14,11 +15,17 @@ export type StudyCommitReason =
   | 'page_exit'
   | 'rollover'
 
+export type StudySessionUndoItem = {
+  card_id: string
+  previous_state: SchedulerCardState
+}
+
 export type PersistedStudySession = {
   scope_key: string
   snapshot: StudySessionSnapshot
   events: StudySessionEvent[]
   touched_card_ids: string[]
+  undo_history?: StudySessionUndoItem[]
   opened_client_at_ms: number
   status: 'active' | 'pending_commit'
   commit_id: string | null
@@ -158,6 +165,7 @@ export async function loadStudySessionWithDurability(
     }
     const normalized = {
       ...restored,
+      undo_history: Array.isArray(restored.undo_history) ? restored.undo_history : [],
       commit_reason: restored.commit_reason ?? null,
       resume_after_commit: Boolean(restored.resume_after_commit),
     }

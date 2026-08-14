@@ -1,6 +1,9 @@
-# Flama Post-Refactor Architecture Review
+# Flama Post-Refactor Architecture Review [HISTORICAL AUDIT - RESOLVED]
 
-**Baseline dùng để so sánh:** `docs/FLAMA_ARCHITECTURE_REVIEW.md`, `docs/FLAMA_REFACTOR_PLAN.md`  
+> **Trạng thái:** TÀI LIỆU LỊCH SỬ - ĐÃ GIẢI QUYẾT (HISTORICAL / RESOLVED)  
+> **Ghi chú:** Các vấn đề import, boundary và regression được chỉ ra trong đợt audit 2026-03-01 đã được xử lý triệt để trong các phase sau (Phase N1, N2, N3 và REST API Migration 2026-07/2026-08). Hệ thống hiện tại vận hành hoàn toàn trên React SPA + Flask REST API canonical.
+
+**Baseline dùng để so sánh:** [`FLAMA_ARCHITECTURE_REVIEW.md`](../historical/FLAMA_ARCHITECTURE_REVIEW.md), [`FLAMA_REFACTOR_PLAN.md`](../historical/FLAMA_REFACTOR_PLAN.md)  
 **Snapshot code được review:** working tree ngày **2026-03-01**  
 **Nguyên tắc đánh giá:** bám code hiện tại, không đoán; có gì chưa đủ bằng chứng sẽ ghi rõ.
 

@@ -1,7 +1,7 @@
 # Clone Cutover Report (Logical Overlay Only)
 
 > Follow-up implementation plan cho clone edit -> request -> review/merge:
-> `docs/DECK_CHANGE_REQUEST_SIMPLE_PLAN.md`
+> `docs/plans/completed/DECK_CHANGE_REQUEST_SIMPLE_PLAN.md`
 
 Tai lieu nay mo ta TRANG THAI HIEN TAI cua code, khong giu cac tham chieu controller cu nua.
 
@@ -118,21 +118,18 @@ Integration tests da cover cac proof point quan trong:
 5. `test_cutover_migrates_legacy_full_copy_install_to_overlay`
    - install cu duoc cutover sang overlay va remap progress
 
-## 5) Follow-up Gap Sau Cutover
+## 5) Follow-up Sau Cutover (Da Hoan Thanh)
 
-Cutover da xong phan "clone local overlay edit". Repo hien tai VAN CHUA co:
+Các follow-up gaps sau cutover overlay đã được giải quyết hoàn toàn thông qua Deck Change Request subsystem:
 
-1. draft diff request
-2. sync/conflict state machine
-3. owner review inbox
-4. approve/reject/merge vao source
+1. [x] Draft diff request: Tạo và xem trước diff thay đổi local so với snapshot
+2. [x] Sync/conflict state machine: Tự động phát hiện xung đột và hỗ trợ resolve (`keep_mine`, `keep_upstream`, `manual`)
+3. [x] Owner review inbox: Hộp thư tiếp nhận change request cho deck owner
+4. [x] Approve/reject/merge: Quy trình duyệt/hợp nhất vào source deck an toàn
 
-Follow-up plan hien tai nam o:
-
-1. `docs/DECK_CHANGE_REQUEST_SIMPLE_PLAN.md`
+Chi tiết xem tại: [`docs/plans/completed/DECK_CHANGE_REQUEST_SIMPLE_PLAN.md`](file:///d:/Project/nihongo/docs/plans/completed/DECK_CHANGE_REQUEST_SIMPLE_PLAN.md)
 
 ## 6) Residual Risks
 
-1. Legacy installs co lich su mo ho hoac deck tree/note pairing khong khop se fail loudly de tranh silent corruption.
-2. Source notes/cards/field defs tao sau snapshot van invisible voi install cu cho toi khi co chien luoc sync/request phu hop.
-3. Merge-back flow request/review/merge chua ton tai, nen current model dung o local overlay edit.
+1. Legacy installs có lịch sử mờ hồ hoặc deck tree/note pairing không khớp sẽ fail loudly để tránh silent corruption.
+2. Source notes/cards/field defs tạo sau snapshot cần chạy qua Change Request sync để cập nhật đồng bộ.

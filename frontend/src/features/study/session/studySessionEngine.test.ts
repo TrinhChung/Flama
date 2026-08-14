@@ -8,6 +8,7 @@ import {
   decisionForCard,
   isBackgroundRolloverCommit,
   prepareCommit,
+  undoLocalAnswer,
 } from './studySessionEngine'
 
 function snapshot(): StudySessionSnapshot {
@@ -312,5 +313,78 @@ describe('local study session engine', () => {
     const answered = applyLocalAnswer(local, 'card-1', 'good', decision, 250)
 
     expect(buildSessionView(answered, now + 1000).session_state).toBe('active')
+  })
+
+  it('undoes a local answer and restores previous card state and events', () => {
+    vi.stubGlobal('crypto', {
+      randomUUID: () => '00000000-0000-4000-8000-000000000001',
+    })
+    const initial = createPersistedSession(snapshot())
+    const now = Date.parse(initial.snapshot.server_now_utc)
+    const originalState = { ...initial.snapshot.cards[0].state }
+
+    const decision = decisionForCard(initial, 'card-1', now + 1000)
+    const answered = applyLocalAnswer(
+      initial,
+      'card-1',
+      'good',
+      decision,
+      500,
+    )
+    expect(answered.events).toHaveLength(1)
+    expect(answered.snapshot.cards[0].state.type).toBe('learning')
+    expect(answered.touched_card_ids).toEqual(['card-1'])
+
+    const undone = undoLocalAnswer(answered)
+    expect(undone).not.toBeNull()
+    expect(undone?.undoneCardId).toBe('card-1')
+    expect(undone?.session.events).toHaveLength(0)
+    expect(undone?.session.touched_card_ids).toHaveLength(0)
+    expect(undone?.session.snapshot.cards[0].state).toEqual(originalState)
+
+    const view = buildSessionView(undone!.session, now)
+    expect(view.card?.card_id).toBe('card-1')
+  })
+
+  it('handles multiple sequential undos correctly across different cards', () => {
+    vi.stubGlobal('crypto', {
+      randomUUID: () => '00000000-0000-4000-8000-000000000001',
+    })
+    let current = createPersistedSession(snapshotWithCards(3))
+    const now = Date.parse(current.snapshot.server_now_utc)
+    const initialStates = current.snapshot.cards.map((c) => ({ ...c.state }))
+
+    // Answer card-1, card-2, card-3
+    for (let i = 1; i <= 3; i++) {
+      const cardId = `card-${i}`
+      const decision = decisionForCard(current, cardId, now + i * 1000)
+      current = applyLocalAnswer(current, cardId, 'easy', decision, 200)
+    }
+    expect(current.events).toHaveLength(3)
+    expect(current.touched_card_ids).toEqual(['card-1', 'card-2', 'card-3'])
+
+    // Undo card-3
+    const undo3 = undoLocalAnswer(current)
+    expect(undo3?.undoneCardId).toBe('card-3')
+    expect(undo3?.session.events).toHaveLength(2)
+    expect(undo3?.session.touched_card_ids).toEqual(['card-1', 'card-2'])
+    expect(undo3?.session.snapshot.cards[2].state).toEqual(initialStates[2])
+
+    // Undo card-2
+    const undo2 = undoLocalAnswer(undo3!.session)
+    expect(undo2?.undoneCardId).toBe('card-2')
+    expect(undo2?.session.events).toHaveLength(1)
+    expect(undo2?.session.touched_card_ids).toEqual(['card-1'])
+    expect(undo2?.session.snapshot.cards[1].state).toEqual(initialStates[1])
+
+    // Undo card-1
+    const undo1 = undoLocalAnswer(undo2!.session)
+    expect(undo1?.undoneCardId).toBe('card-1')
+    expect(undo1?.session.events).toHaveLength(0)
+    expect(undo1?.session.touched_card_ids).toHaveLength(0)
+    expect(undo1?.session.snapshot.cards[0].state).toEqual(initialStates[0])
+
+    // Undoing when empty returns null
+    expect(undoLocalAnswer(undo1!.session)).toBeNull()
   })
 })

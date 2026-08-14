@@ -12,7 +12,7 @@ FLAMA is payOS-first.
 - VietQR is not a parallel or co-equal architecture in this repository.
 - Do not add new VietQR-first branching, env vars, route names, or flow documents unless there is a new explicit product decision.
 
-If you need older context, see `docs/FLAMA_PAYMENT_DOMAIN_EXPANSION_PLAN.md`, which is now a legacy note and must not be used as the implementation source of truth.
+If you need older context, see `docs/historical/FLAMA_PAYMENT_DOMAIN_EXPANSION_PLAN.md`, which is now a legacy note and must not be used as the implementation source of truth.
 
 ## 2. Canonical domain model
 
@@ -326,8 +326,8 @@ The current payment documentation does not treat these as active architecture go
 
 For payment work, use these files first:
 
-- `docs/FLAMA_PAYMENT_ARCHITECTURE.md`
-- `docs/SYSTEM_ARCHITECTURE.md`
+- `docs/architecture/FLAMA_PAYMENT_ARCHITECTURE.md`
+- `docs/architecture/SYSTEM_ARCHITECTURE.md`
 - `.env_example`
 - `app/routes/payments.py`
 - `app/routes/admin_payments.py`

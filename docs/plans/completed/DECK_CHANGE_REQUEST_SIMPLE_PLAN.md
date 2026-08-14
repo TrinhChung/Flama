@@ -1,4 +1,11 @@
-# Shared Deck Collaboration, Release, and Update Plan
+# Shared Deck Collaboration, Release, and Update Plan [COMPLETED]
+
+> **Trạng thái:** HOÀN THÀNH (COMPLETED)  
+> **Các thành phần đã triển khai:**
+> - Models: `deck_change_request`, `deck_change_request_item`, `deck_change_request_conflict` (`migrations/versions/20260330_000006_add_deck_change_request_tables.py`).
+> - Business logic & conflict engine: `app/services/deck_change_request_service.py`, `app/repositories/deck_change_request_repository.py`.
+> - REST APIs: preview local changes, build/sync draft, resolve conflicts, submit request, owner inbox, approve/merge, reject (`app/routes/flashcards/change_requests.py` & canonical `/api`).
+> - Frontend UI: Change request management, conflict resolution modal và review views trong React SPA.
 
 ## 1. Mục đích tài liệu
 

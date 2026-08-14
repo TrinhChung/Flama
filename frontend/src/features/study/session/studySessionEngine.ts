@@ -58,6 +58,7 @@ export function createPersistedSession(
     snapshot: cloneSnapshot(snapshot),
     events: [],
     touched_card_ids: [],
+    undo_history: [],
     opened_client_at_ms: Date.now(),
     status: 'active',
     commit_id: null,
@@ -171,6 +172,18 @@ export function applyLocalAnswer(
   const touched = session.touched_card_ids.includes(cardId)
     ? session.touched_card_ids
     : [...session.touched_card_ids, cardId]
+
+  const previousState = {
+    ...card.state,
+    memory_state: card.state.memory_state
+      ? { ...card.state.memory_state }
+      : null,
+  }
+  const undoHistory = [
+    ...(session.undo_history ?? []),
+    { card_id: cardId, previous_state: previousState },
+  ]
+
   return {
     ...session,
     snapshot: {
@@ -183,8 +196,54 @@ export function applyLocalAnswer(
     },
     events: [...session.events, event],
     touched_card_ids: touched,
+    undo_history: undoHistory,
     updated_at_ms: Date.now(),
   } satisfies PersistedStudySession
+}
+
+export type UndoResult = {
+  session: PersistedStudySession
+  undoneCardId: string
+}
+
+export function undoLocalAnswer(
+  session: PersistedStudySession,
+): UndoResult | null {
+  if (session.status !== 'active') return null
+  if (session.events.length === 0) return null
+  const undoHistory = session.undo_history ?? []
+  if (undoHistory.length === 0) return null
+
+  const lastUndo = undoHistory[undoHistory.length - 1]
+  const remainingUndoHistory = undoHistory.slice(0, -1)
+  const remainingEvents = session.events.slice(0, -1)
+  const cardId = lastUndo.card_id
+
+  const restoredCards = session.snapshot.cards.map((row) => (
+    row.card_id === cardId
+      ? { ...row, state: lastUndo.previous_state }
+      : row
+  ))
+
+  const touchedSet = new Set(remainingEvents.map((e) => e.card_id))
+  const touchedCardIds = session.touched_card_ids.filter((id) => touchedSet.has(id))
+
+  const nextSession: PersistedStudySession = {
+    ...session,
+    snapshot: {
+      ...session.snapshot,
+      cards: restoredCards,
+    },
+    events: remainingEvents,
+    touched_card_ids: touchedCardIds,
+    undo_history: remainingUndoHistory,
+    updated_at_ms: Date.now(),
+  }
+
+  return {
+    session: nextSession,
+    undoneCardId: cardId,
+  }
 }
 
 export function automaticCommitMode(

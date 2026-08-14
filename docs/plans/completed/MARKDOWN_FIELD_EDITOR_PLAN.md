@@ -1,6 +1,9 @@
-# Markdown Field Editor Plan
+# Markdown Field Editor Plan [COMPLETED]
 
-## 0) Tinh trang trien khai (2026-03-05)
+> **Trạng thái:** HOÀN THÀNH (COMPLETED)  
+> **Ghi chú:** Đã hỗ trợ đầy đủ `field_type = markdown`, upload inline image qua `/api/notes/<note_id>/markdown-media`, parse và render markdown an toàn qua proxy `/media/proxy/<asset_id>` trên tất cả các modal editor và study screen.
+
+## 0) Tinh trang trien khai
 
 Da implement:
 
