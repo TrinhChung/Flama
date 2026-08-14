@@ -13,6 +13,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { appApi } from '@/app/api'
+import { AmbientBackground } from '@/components/ambient-background'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -171,20 +172,22 @@ export function NoteTypeFieldsPage() {
   const noteTypeName = detailQuery.data?.name || 'NoteType'
 
   return (
-    <Page className="w-full max-w-none px-4 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-5 sm:space-y-6">
+    <Page className="w-full max-w-7xl px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-6">
+      <AmbientBackground intensity="subtle" />
+
       <PageHeader
         title={noteTypeName}
-        description="Quản lý và sắp xếp các trường thông tin trong NoteType."
+        description="Quản lý và sắp xếp thứ tự các trường thông tin trong NoteType."
         actions={
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" asChild className="h-9 px-3.5 text-xs font-semibold rounded-full">
+            <Button variant="outline" size="sm" asChild className="h-8 sm:h-9 px-3 text-xs font-semibold rounded-xl">
               <Link to="/flashcards/note-types">
-                <ArrowLeft className="size-4 mr-1.5" /> Quay lại
+                <ArrowLeft className="size-3.5 mr-1.5" /> Quay lại
               </Link>
             </Button>
-            <Button variant="outline" size="sm" asChild className="h-9 px-3.5 text-xs font-semibold rounded-full">
+            <Button variant="outline" size="sm" asChild className="h-8 sm:h-9 px-3 text-xs font-semibold rounded-xl">
               <Link to={`/flashcards/note-types/${noteTypeId}`}>
-                <Code2 className="size-4 mr-1.5" /> Sửa template
+                <Code2 className="size-3.5 mr-1.5" /> Sửa template
               </Link>
             </Button>
           </div>
@@ -194,13 +197,13 @@ export function NoteTypeFieldsPage() {
       <div className="grid gap-6 md:grid-cols-12">
         {/* Left Column: Drag-and-drop Field List */}
         <div className="md:col-span-5">
-          <Card className="border-border/80 shadow-md rounded-2xl h-full flex flex-col overflow-hidden">
+          <Card className="border-border/80 shadow-xs rounded-2xl h-full flex flex-col overflow-hidden bg-card">
             <CardHeader className="p-4 sm:p-5 flex flex-row items-center justify-between pb-2 sm:pb-2">
-              <CardTitle className="text-sm font-semibold">Danh sách trường</CardTitle>
+              <CardTitle className="text-sm font-bold text-foreground">Danh sách trường</CardTitle>
               <Button
                 size="sm"
                 variant="outline"
-                className="h-8 sm:h-9 px-3 text-xs font-semibold rounded-lg"
+                className="h-8 px-2.5 text-xs font-semibold rounded-xl"
                 onClick={() => {
                   setIsAddingField(true)
                   setSelectedFieldId(null)
@@ -208,7 +211,7 @@ export function NoteTypeFieldsPage() {
                   setNewType('text')
                 }}
               >
-                <Plus className="size-4 mr-1" /> Thêm
+                <Plus className="size-3.5 mr-1" /> Thêm
               </Button>
             </CardHeader>
             <CardContent className="p-4 sm:p-5 pt-0 flex-1 space-y-3">
@@ -230,8 +233,8 @@ export function NoteTypeFieldsPage() {
                     }}
                     className={`flex items-center gap-3 p-3.5 rounded-xl border transition-all cursor-grab active:cursor-grabbing ${
                       selectedFieldId === field.id && !isAddingField
-                        ? 'border-orange-400 bg-orange-50/70 shadow-xs'
-                        : 'border-border/60 bg-card hover:bg-muted/40 hover:border-orange-200'
+                        ? 'border-primary bg-primary/10 shadow-xs'
+                        : 'border-border/60 bg-card hover:bg-muted/40 hover:border-primary/40'
                     }`}
                   >
                     <GripVertical className="size-4 text-muted-foreground/60 shrink-0" />
@@ -327,10 +330,10 @@ export function NoteTypeFieldsPage() {
                       type="submit"
                       size="sm"
                       disabled={createMutation.isPending}
-                      className="h-9 sm:h-10 px-4 bg-gradient-to-r from-primary to-orange-500 font-bold text-xs sm:text-sm text-primary-foreground rounded-xl shadow-xs"
+                      className="h-9 sm:h-10 px-4 font-bold text-xs sm:text-sm rounded-xl shadow-xs"
                     >
                       {createMutation.isPending ? (
-                        <LoaderCircle className="size-4 animate-spin" />
+                        <LoaderCircle className="size-4 animate-spin mr-1" />
                       ) : (
                         <>
                           <Plus className="size-4 mr-1" />
@@ -344,7 +347,7 @@ export function NoteTypeFieldsPage() {
             </Card>
           ) : selectedField ? (
             /* Edit Field Property Card */
-            <Card className="border-border/80 bg-card shadow-md rounded-2xl">
+            <Card className="border-border/80 bg-card shadow-xs rounded-2xl">
               <CardHeader className="p-4 sm:p-5 pb-2">
                 <CardTitle className="text-sm font-bold">Thuộc tính trường</CardTitle>
               </CardHeader>
@@ -371,7 +374,7 @@ export function NoteTypeFieldsPage() {
                       id="edit-field-name"
                       value={editName}
                       onChange={(e) => setEditName(e.target.value)}
-                      className="h-9 sm:h-10 text-xs sm:text-sm rounded-xl"
+                      className="h-9 sm:h-10 text-xs sm:text-sm rounded-xl bg-background"
                     />
                   </div>
 
@@ -382,7 +385,7 @@ export function NoteTypeFieldsPage() {
                       value={editType}
                       onChange={(e) => setEditType(e.target.value)}
                       disabled={editIdentity}
-                      className="h-9 sm:h-10 text-xs sm:text-sm rounded-xl"
+                      className="h-9 sm:h-10 text-xs sm:text-sm rounded-xl bg-background"
                     >
                       {FIELD_TYPES.map((t) => (
                         <NativeSelectOption key={t} value={t}>
@@ -458,10 +461,10 @@ export function NoteTypeFieldsPage() {
                       type="submit"
                       size="sm"
                       disabled={updateMutation.isPending}
-                      className="h-9 sm:h-10 px-4 bg-gradient-to-r from-primary to-orange-500 font-bold text-xs sm:text-sm text-primary-foreground rounded-xl shadow-xs"
+                      className="h-9 sm:h-10 px-4 font-bold text-xs sm:text-sm rounded-xl shadow-xs"
                     >
                       {updateMutation.isPending ? (
-                        <LoaderCircle className="size-4 animate-spin" />
+                        <LoaderCircle className="size-4 animate-spin mr-1" />
                       ) : (
                         <>
                           <Check className="size-4 mr-1" />

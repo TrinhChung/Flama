@@ -100,16 +100,16 @@ const pastLevelClasses = [
   'stats-day--level-7 bg-[#C93200]',
 ]
 
-// Future days: 8 levels (0..7) pastel orange progression
+// Future days: 8 levels (0..7) soft, gentle slate-gray progression maintaining Flama's bright theme
 const futureLevelClasses = [
-  'stats-day--future-level-0 bg-[#F5EFE9]/60',
-  'stats-day--future-level-1 bg-[#FFF3EC]',
-  'stats-day--future-level-2 bg-[#FFE5D6]',
-  'stats-day--future-level-3 bg-[#FFCFB7]',
-  'stats-day--future-level-4 bg-[#FFB594]',
-  'stats-day--future-level-5 bg-[#FF956B]',
-  'stats-day--future-level-6 bg-[#FF723F]',
-  'stats-day--future-level-7 bg-[#E8551A]',
+  'stats-day--future-level-0 bg-[#F5EFEA] dark:bg-[#272320]',
+  'stats-day--future-level-1 bg-[#E5E9EC] dark:bg-[#2F343B]',
+  'stats-day--future-level-2 bg-[#D6DCDE] dark:bg-[#3D444E]',
+  'stats-day--future-level-3 bg-[#C4CCD0] dark:bg-[#4C5562]',
+  'stats-day--future-level-4 bg-[#B0BBC0] dark:bg-[#5C6675]',
+  'stats-day--future-level-5 bg-[#9CA8AF] dark:bg-[#6D7888]',
+  'stats-day--future-level-6 bg-[#88969F] dark:bg-[#7F8B9B]',
+  'stats-day--future-level-7 bg-[#74838D] dark:bg-[#929EAE]',
 ]
 
 export function StudyHeatmap({
@@ -164,7 +164,6 @@ export function StudyHeatmap({
   // Group heatmap into 53 weeks x 7 days
   const heatmap = overview?.heatmap || []
   const pastStats = useMemo(() => calculateMaxAndPeak(heatmap, false), [heatmap])
-  const futureStats = useMemo(() => calculateMaxAndPeak(heatmap, true), [heatmap])
 
   const firstDay = heatmap[0]
   const leadingCount = firstDay
@@ -250,9 +249,9 @@ export function StudyHeatmap({
                     }
                     const isFuture = Boolean(day.is_future)
                     const isToday = day.date === todayStr
-                    const stats = isFuture ? futureStats : pastStats
                     const isPeak = !isFuture && day.cards > 0 && day.cards === pastStats.peakCards && pastStats.peakCards >= 10
-                    const level = getDayLevelPower(day.cards, stats.effectiveMax)
+                    // Unified intensity baseline: compare future cards against past historical study scale
+                    const level = getDayLevelPower(day.cards, pastStats.effectiveMax)
                     const title = getDayTitle(day, isToday, isPeak)
                     const bgClass = isFuture ? futureLevelClasses[level] : pastLevelClasses[level]
 
@@ -284,17 +283,33 @@ export function StudyHeatmap({
               {tooltipText}
             </div>
 
-            <div className="stats-legend flex items-center gap-1 text-[11px] text-muted-foreground select-none shrink-0" aria-hidden="true">
-              <span className="text-[10px] mr-0.5">Ít</span>
-              <span className="size-2.5 sm:size-3 rounded-[2px] bg-[#EAE0D8]" title="0 thẻ" />
-              <span className="size-2.5 sm:size-3 rounded-[2px] bg-[#FFE8D9]" title="Mức 1" />
-              <span className="size-2.5 sm:size-3 rounded-[2px] bg-[#FFD2B8]" title="Mức 2" />
-              <span className="size-2.5 sm:size-3 rounded-[2px] bg-[#FFB488]" title="Mức 3" />
-              <span className="size-2.5 sm:size-3 rounded-[2px] bg-[#FF9354]" title="Mức 4" />
-              <span className="size-2.5 sm:size-3 rounded-[2px] bg-[#FF7020]" title="Mức 5" />
-              <span className="size-2.5 sm:size-3 rounded-[2px] bg-[#EE4D00]" title="Mức 6" />
-              <span className="size-2.5 sm:size-3 rounded-[2px] bg-[#C93200] ring-1 ring-[#EE4D00] shadow-[0_0_4px_rgba(238,77,0,0.5)]" title="Mức 7 (Đạt đỉnh)" />
-              <span className="text-[10px] ml-0.5">Nhiều 🔥</span>
+            <div className="stats-legend flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground select-none shrink-0" aria-hidden="true">
+              <div className="flex items-center gap-1">
+                <span className="text-[10px] font-medium text-foreground/80">Đã học:</span>
+                <span className="text-[10px] mr-0.5">Ít</span>
+                <span className="size-2.5 sm:size-3 rounded-[2px] bg-[#EAE0D8]" title="0 thẻ" />
+                <span className="size-2.5 sm:size-3 rounded-[2px] bg-[#FFE8D9]" title="Mức 1" />
+                <span className="size-2.5 sm:size-3 rounded-[2px] bg-[#FFD2B8]" title="Mức 2" />
+                <span className="size-2.5 sm:size-3 rounded-[2px] bg-[#FFB488]" title="Mức 3" />
+                <span className="size-2.5 sm:size-3 rounded-[2px] bg-[#FF9354]" title="Mức 4" />
+                <span className="size-2.5 sm:size-3 rounded-[2px] bg-[#FF7020]" title="Mức 5" />
+                <span className="size-2.5 sm:size-3 rounded-[2px] bg-[#EE4D00]" title="Mức 6" />
+                <span className="size-2.5 sm:size-3 rounded-[2px] bg-[#C93200] ring-1 ring-[#EE4D00] shadow-[0_0_4px_rgba(238,77,0,0.5)]" title="Mức 7 (Đạt đỉnh)" />
+                <span className="text-[10px] ml-0.5">Nhiều 🔥</span>
+              </div>
+
+              <span className="text-border mx-0.5 hidden sm:inline">•</span>
+
+              <div className="flex items-center gap-1">
+                <span className="text-[10px] font-medium text-foreground/80">Tới hạn:</span>
+                <span className="text-[10px] mr-0.5">Ít</span>
+                <span className="size-2.5 sm:size-3 rounded-[2px] bg-[#F5EFEA] dark:bg-[#272320]" title="0 thẻ" />
+                <span className="size-2.5 sm:size-3 rounded-[2px] bg-[#E5E9EC] dark:bg-[#2F343B]" title="Tới hạn mức 1" />
+                <span className="size-2.5 sm:size-3 rounded-[2px] bg-[#C4CCD0] dark:bg-[#4C5562]" title="Tới hạn mức 3" />
+                <span className="size-2.5 sm:size-3 rounded-[2px] bg-[#9CA8AF] dark:bg-[#6D7888]" title="Tới hạn mức 5" />
+                <span className="size-2.5 sm:size-3 rounded-[2px] bg-[#74838D] dark:bg-[#929EAE]" title="Tới hạn mức 7" />
+                <span className="text-[10px] ml-0.5">Nhiều ⏳</span>
+              </div>
             </div>
           </div>
 

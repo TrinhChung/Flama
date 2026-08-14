@@ -148,4 +148,26 @@ describe('ankiSyncEngine helpers', () => {
       progressUploadFailed: true,
     })).toBe(false)
   })
+
+  it('rewrites Unicode audio filenames correctly during package preparation', async () => {
+    const { rewriteMediaFieldValue } = await import('./ankiSyncPackages')
+    const originalFilename = 'VOICEVOX_後鬼_人間ver._c85ed505-0083-4621-8fba-e2d8ad61677c.mp3'
+    const safeFilename = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.mp3'
+    const mediaRename = new Map([[originalFilename, safeFilename]])
+
+    // Standalone [sound:...]
+    expect(
+      rewriteMediaFieldValue(`[sound:${originalFilename}]`, [originalFilename], mediaRename)
+    ).toBe(`[sound:${safeFilename}]`)
+
+    // Plain filename
+    expect(
+      rewriteMediaFieldValue(originalFilename, [originalFilename], mediaRename)
+    ).toBe(safeFilename)
+
+    // Unmapped/missing media should be cleared
+    expect(
+      rewriteMediaFieldValue(`[sound:${originalFilename}]`, [originalFilename], new Map())
+    ).toBe('')
+  })
 })

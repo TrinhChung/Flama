@@ -3,10 +3,12 @@ import {
   AlertCircle,
   CheckCircle,
   Code2,
+  Layers,
   LoaderCircle,
   Plus,
   Share2,
   SlidersHorizontal,
+  Sparkles,
   Trash2,
 } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -14,7 +16,9 @@ import { Link, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { appApi } from '@/app/api'
 import { useBootstrap } from '@/shared/api/bootstrap'
+import { AmbientBackground } from '@/components/ambient-background'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -27,16 +31,8 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
 import { Page, PageHeader } from '@/shared/components/Page'
-import { PageError, PageLoading } from '@/shared/components/PageState'
+import { EmptyState, PageError, PageLoading } from '@/shared/components/PageState'
 
 type NoteTypeItem = {
   id: string
@@ -71,6 +67,7 @@ export function NoteTypeManagerPage() {
       appApi.mutate<NoteTypeItem>('/note-types', 'POST', { name: newTypeName }),
     onSuccess: (data) => {
       toast.success('Đã tạo NoteType mới.')
+      setName('')
       void queryClient.invalidateQueries({ queryKey: ['note-types'] })
       navigate(`/flashcards/note-types/${data.id}/fields`)
     },
@@ -111,18 +108,28 @@ export function NoteTypeManagerPage() {
   const noteTypes = query.data?.items || []
 
   return (
-    <Page className="w-full max-w-none px-4 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-5 sm:space-y-6">
+    <Page className="w-full max-w-7xl px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-6">
+      <AmbientBackground intensity="subtle" />
+
       <PageHeader
-        title="Quản lý Loại thẻ (NoteType Manager)"
-        description="Định nghĩa cấu trúc các trường dữ liệu và mẫu hiển thị flashcard của bạn."
+        title="Quản lý Loại Thẻ (Note Types)"
+        description="Định nghĩa cấu trúc các trường dữ liệu và tùy chỉnh mẫu hiển thị Flashcard."
+        actions={
+          <Button variant="outline" size="sm" asChild className="h-8 sm:h-9 px-3 text-xs font-semibold rounded-xl">
+            <Link to="/marketplace/note-types">
+              <Sparkles className="size-3.5 mr-1.5 text-primary" />
+              Khám phá Kho NoteType
+            </Link>
+          </Button>
+        }
       />
 
       {/* Create NoteType Card Form */}
-      <Card className="border-border/80 shadow-xs rounded-2xl">
+      <Card className="border-border/80 shadow-xs rounded-2xl bg-card">
         <CardHeader className="p-4 sm:p-5 pb-2 sm:pb-2">
-          <CardTitle className="text-sm font-semibold">Tạo NoteType mới</CardTitle>
+          <CardTitle className="text-sm font-bold text-foreground">Tạo Loại Thẻ Mới</CardTitle>
         </CardHeader>
-        <CardContent className="p-4 sm:p-5 pt-0">
+        <CardContent className="p-4 sm:p-5 pt-1">
           <form onSubmit={handleCreate} className="flex flex-col sm:flex-row gap-3">
             <div className="flex-1 space-y-1">
               <Label htmlFor="note-type-name" className="sr-only">
@@ -130,106 +137,120 @@ export function NoteTypeManagerPage() {
               </Label>
               <Input
                 id="note-type-name"
-                placeholder="Ví dụ: Từ vựng Tiếng Nhật, Ngữ pháp JLPT N2…"
+                placeholder="Ví dụ: Từ vựng Tiếng Nhật, Ngữ pháp JLPT N2, Kanji Hán Tự…"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="h-9 sm:h-10 text-xs sm:text-sm rounded-xl"
+                className="h-9 sm:h-10 text-xs sm:text-sm rounded-xl bg-background"
               />
             </div>
             <Button
               type="submit"
               disabled={createMutation.isPending}
-              className="h-9 sm:h-10 px-4 bg-gradient-to-r from-primary to-orange-500 font-bold text-xs sm:text-sm text-primary-foreground shadow-xs shrink-0 rounded-xl"
+              className="h-9 sm:h-10 px-4 font-bold text-xs sm:text-sm shadow-xs shrink-0 rounded-xl"
             >
-              <Plus className="size-4 mr-1.5" />
+              {createMutation.isPending ? <LoaderCircle className="animate-spin mr-1.5 size-4" /> : <Plus className="size-4 mr-1.5" />}
               Tạo NoteType
             </Button>
           </form>
         </CardContent>
       </Card>
 
-      {/* NoteTypes Table */}
-      <Card className="overflow-hidden border-border/80 shadow-md rounded-2xl">
-        <Table>
-          <TableHeader>
-            <TableRow className="bg-muted/30">
-              <TableHead className="font-bold">Tên NoteType</TableHead>
-              <TableHead className="font-bold">Trường dữ liệu</TableHead>
-              <TableHead className="font-bold">Templates</TableHead>
-              <TableHead className="text-right font-bold">Thao tác</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {noteTypes.map((item) => (
-              <TableRow key={item.id} className="hover:bg-muted/40 transition-colors">
-                <TableCell className="font-bold text-foreground">
-                  <Link
-                    to={`/flashcards/note-types/${item.id}/fields`}
-                    className="hover:text-primary transition-colors"
-                  >
-                    {item.name}
-                  </Link>
-                </TableCell>
-                <TableCell>{item.field_defs?.length ?? 0} trường</TableCell>
-                <TableCell>{item.templates?.length ?? 0} template</TableCell>
-                <TableCell className="text-right">
-                  <div className="flex items-center justify-end gap-2">
-                    <Button variant="outline" size="sm" asChild className="h-8 sm:h-9 px-3 text-xs font-semibold rounded-lg">
-                      <Link to={`/flashcards/note-types/${item.id}/fields`}>
-                        <SlidersHorizontal className="size-3.5 mr-1" />
-                        Trường
-                      </Link>
-                    </Button>
-
-                    <Button variant="outline" size="sm" asChild className="h-8 sm:h-9 px-3 text-xs font-semibold rounded-lg">
-                      <Link to={`/flashcards/note-types/${item.id}`}>
-                        <Code2 className="size-3.5 mr-1" />
-                        Templates
-                      </Link>
-                    </Button>
-
-                    {item.publish_status === 'published' || item.publish_status === 'unlisted' ? (
-                      <Button variant="outline" size="sm" asChild className="h-8 sm:h-9 px-3 text-xs font-semibold rounded-lg border-emerald-500/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10">
-                        <Link to={`/marketplace/note-types/${item.id}`}>
-                          <CheckCircle className="size-3.5 mr-1 text-emerald-500" />
-                          Đã chia sẻ
-                        </Link>
-                      </Button>
-                    ) : (
-                      <Button variant="secondary" size="sm" asChild className="h-8 sm:h-9 px-3 text-xs font-semibold rounded-lg">
-                        <Link to={`/marketplace/note-types/publish?id=${item.id}`}>
-                          <Share2 className="size-3.5 mr-1 text-orange-600" />
-                          Chia sẻ
-                        </Link>
-                      </Button>
-                    )}
-
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 sm:h-9 px-2.5 text-xs text-destructive hover:text-destructive hover:bg-destructive/10 rounded-lg"
-                      onClick={() => {
-                        setPurgeNoteType(false)
-                        setNoteTypeToDelete(item)
-                      }}
-                    >
-                      <Trash2 className="size-3.5" />
-                    </Button>
+      {/* NoteTypes Card Grid */}
+      {!noteTypes.length ? (
+        <EmptyState
+          title="Chưa có Loại thẻ nào"
+          description="Nhập tên ở biểu mẫu trên để tạo NoteType mới hoặc cài đặt mẫu từ Marketplace."
+        />
+      ) : (
+        <div className="grid gap-4 sm:gap-5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+          {noteTypes.map((item) => (
+            <Card
+              key={item.id}
+              className="group relative flex flex-col justify-between overflow-hidden border-border/80 bg-card p-4 sm:p-5 transition-all duration-200 hover:-translate-y-1 hover:border-primary/50 hover:shadow-md rounded-2xl"
+            >
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5">
+                    <Badge variant="secondary" className="px-2 py-0.5 text-xs font-semibold rounded-md">
+                      <Layers className="mr-1 size-3 text-primary" />
+                      {item.templates?.length ?? 0} template
+                    </Badge>
+                    <Badge variant="outline" className="px-2 py-0.5 text-xs font-semibold rounded-md">
+                      <SlidersHorizontal className="mr-1 size-3 text-muted-foreground" />
+                      {item.field_defs?.length ?? 0} trường
+                    </Badge>
                   </div>
-                </TableCell>
-              </TableRow>
-            ))}
 
-            {!noteTypes.length ? (
-              <TableRow>
-                <TableCell colSpan={4} className="h-32 text-center text-muted-foreground">
-                  Chưa có NoteType nào. Hãy nhập tên ở trên để tạo NoteType đầu tiên.
-                </TableCell>
-              </TableRow>
-            ) : null}
-          </TableBody>
-        </Table>
-      </Card>
+                  {item.publish_status === 'published' || item.publish_status === 'unlisted' ? (
+                    <Badge variant="outline" className="text-xs font-semibold rounded-md border-emerald-500/40 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10">
+                      <CheckCircle className="size-3 mr-1 text-emerald-500" />
+                      Đã chia sẻ
+                    </Badge>
+                  ) : null}
+                </div>
+
+                <div>
+                  <h3 className="text-base font-bold text-foreground group-hover:text-primary transition-colors">
+                    <Link to={`/flashcards/note-types/${item.id}/fields`} className="hover:underline">
+                      {item.name}
+                    </Link>
+                  </h3>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    ID: <span className="font-mono text-[11px]">{item.id}</span>
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-4 pt-3 border-t border-border/60 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5">
+                  <Button variant="outline" size="sm" asChild className="h-8 px-2.5 text-xs font-semibold rounded-xl">
+                    <Link to={`/flashcards/note-types/${item.id}/fields`}>
+                      <SlidersHorizontal className="size-3.5 mr-1" />
+                      Trường
+                    </Link>
+                  </Button>
+
+                  <Button variant="outline" size="sm" asChild className="h-8 px-2.5 text-xs font-semibold rounded-xl">
+                    <Link to={`/flashcards/note-types/${item.id}`}>
+                      <Code2 className="size-3.5 mr-1" />
+                      Templates
+                    </Link>
+                  </Button>
+
+                  {item.publish_status === 'published' || item.publish_status === 'unlisted' ? (
+                    <Button variant="ghost" size="sm" asChild className="h-8 px-2.5 text-xs font-semibold rounded-xl text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10">
+                      <Link to={`/marketplace/note-types/${item.id}`}>
+                        <Share2 className="size-3.5 mr-1" />
+                        Xem
+                      </Link>
+                    </Button>
+                  ) : (
+                    <Button variant="ghost" size="sm" asChild className="h-8 px-2.5 text-xs font-semibold rounded-xl text-primary hover:text-primary hover:bg-primary/10">
+                      <Link to={`/marketplace/note-types/publish?id=${item.id}`}>
+                        <Share2 className="size-3.5 mr-1" />
+                        Chia sẻ
+                      </Link>
+                    </Button>
+                  )}
+                </div>
+
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 px-2 text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-xl"
+                  onClick={() => {
+                    setPurgeNoteType(false)
+                    setNoteTypeToDelete(item)
+                  }}
+                  title="Xóa NoteType"
+                >
+                  <Trash2 className="size-3.5" />
+                </Button>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
 
       {noteTypeToDelete && (
         <Dialog open onOpenChange={(open) => !open && setNoteTypeToDelete(null)}>

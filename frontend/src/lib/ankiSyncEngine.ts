@@ -154,7 +154,7 @@ function savedTargetId(modelName: string, noteTypeMap?: Record<string, string>):
   return ''
 }
 
-const MEDIA_FILENAME_RE = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,254}$/;
+const MEDIA_FILENAME_RE = /^[\p{L}\p{N}_][\p{L}\p{N}_.-]{0,254}$/u;
 const MEDIA_EXTENSION_RE = /\.(png|jpg|jpeg|gif|webp|svg|mp3|wav|ogg|webm)$/i;
 
 function isValidMediaFilename(filename: string): boolean {

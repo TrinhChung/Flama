@@ -8,7 +8,6 @@ import {
   Filter,
   Layers,
   Search,
-  Sparkles,
   Star,
   X,
 } from 'lucide-react'
@@ -23,7 +22,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Page } from '@/shared/components/Page'
+import { Page, PageHeader } from '@/shared/components/Page'
 import {
   EmptyState,
   PageError,
@@ -90,102 +89,74 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
   const isFiltered = Boolean(queryText || category)
 
   return (
-    <Page className="space-y-4 sm:space-y-6 relative px-2.5 sm:px-6 lg:px-8 py-3 sm:py-6">
-      {/* Ambient background glow & grid pattern */}
+    <Page className="space-y-6 relative px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
       <AmbientBackground intensity="subtle" />
 
-      {/* Hero Banner Header */}
-      <div className="relative overflow-hidden rounded-xl sm:rounded-2xl border border-primary/20 bg-card/80 p-3.5 sm:p-7 shadow-xs backdrop-blur-xl">
-        <div className="relative z-10 space-y-3 sm:space-y-3.5">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <Badge variant="outline" className="border-primary/40 bg-primary/10 text-primary font-bold text-[11px] px-2 py-0.5">
-                  <Sparkles className="mr-1 size-3" />
-                  Flama Marketplace
-                </Badge>
-              </div>
-              <h1 className="text-xl font-black tracking-tight text-foreground sm:text-3xl">
-                {mode === 'decks' ? 'Bộ Thẻ Cộng Đồng' : 'Mẫu Thẻ NoteTypes'}
-              </h1>
-              <p className="max-w-2xl text-xs sm:text-sm leading-relaxed text-muted-foreground">
-                {mode === 'decks'
-                  ? 'Khám phá bộ thẻ từ cộng đồng với cơ chế Logical Overlay thông minh, bảo toàn thẻ tự tùy chỉnh cá nhân.'
-                  : 'Sử dụng các mẫu loại thẻ Anki chuẩn đẹp, tối ưu hiển thị kanji, từ vựng và ngữ pháp cho lộ trình học.'}
-              </p>
-            </div>
-
-            <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 w-full sm:w-auto">
+      {/* Standardized Flama PageHeader */}
+      <PageHeader
+        title={mode === 'decks' ? 'Kho Bộ Thẻ (Shared Decks)' : 'Kho Loại Thẻ (Note Types)'}
+        description={
+          mode === 'decks'
+            ? 'Khám phá và cài đặt các bộ thẻ được chia sẻ từ cộng đồng học tiếng Nhật.'
+            : 'Các mẫu hiển thị Flashcard chuẩn đẹp, tối ưu hóa giao diện học Kanji, Từ vựng và Ngữ pháp.'
+        }
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="inline-flex rounded-xl border border-border/80 bg-muted/30 p-1 shadow-2xs">
               <Button
-                variant={mode === 'decks' ? 'default' : 'outline'}
+                variant={mode === 'decks' ? 'default' : 'ghost'}
                 size="sm"
                 asChild
-                className="font-bold text-xs sm:text-sm h-8 sm:h-9 px-2.5 sm:px-3.5 shadow-2xs rounded-xl justify-center"
+                className="h-8 px-3 text-xs font-bold rounded-lg transition-all"
               >
                 <Link to="/marketplace/decks">
-                  <BookOpen className="mr-1 sm:mr-1.5 size-3.5" />
-                  Bộ Thẻ (Decks)
+                  <BookOpen className="mr-1.5 size-3.5" />
+                  Bộ Thẻ
                 </Link>
               </Button>
               <Button
-                variant={mode === 'note-types' ? 'default' : 'outline'}
+                variant={mode === 'note-types' ? 'default' : 'ghost'}
                 size="sm"
                 asChild
-                className="font-bold text-xs sm:text-sm h-8 sm:h-9 px-2.5 sm:px-3.5 shadow-2xs rounded-xl justify-center"
+                className="h-8 px-3 text-xs font-bold rounded-lg transition-all"
               >
                 <Link to="/marketplace/note-types">
-                  <Layers className="mr-1 sm:mr-1.5 size-3.5" />
-                  Loại Thẻ (NoteTypes)
+                  <Layers className="mr-1.5 size-3.5" />
+                  Loại Thẻ
                 </Link>
               </Button>
             </div>
-          </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-border/40 text-xs text-muted-foreground">
-            <div className="flex items-center gap-2 sm:gap-3 text-[11px] sm:text-xs">
-              <span>
-                Đang hiển thị:{' '}
-                <strong className="text-foreground font-bold">
-                  {marketQuery.data?.items.length || 0}
-                </strong>{' '}
-                {mode === 'decks' ? 'bộ thẻ' : 'loại thẻ'}
-              </span>
-              <span className="hidden sm:inline">•</span>
-              <span className="hidden sm:inline-flex items-center gap-1 font-medium text-emerald-600 dark:text-emerald-400">
-                <CheckCircle className="size-3.5" /> Logical Overlay Cutover Ready
-              </span>
-            </div>
-
-            <Button variant="ghost" size="sm" asChild className="h-7 sm:h-8 px-2 sm:px-3 text-[11px] sm:text-xs font-semibold text-primary hover:text-primary rounded-lg">
+            <Button variant="outline" size="sm" asChild className="h-8 sm:h-9 px-3 text-xs font-semibold rounded-xl">
               <Link to={mode === 'decks' ? '/installed-decks' : '/note-types'}>
-                {mode === 'decks' ? 'Quản lý deck đã cài →' : 'Quản lý loại thẻ của tôi →'}
+                {mode === 'decks' ? 'Deck đã cài' : 'Loại thẻ của tôi'}
               </Link>
             </Button>
           </div>
-        </div>
-      </div>
+        }
+      />
 
       {/* Filter & Search Toolbar */}
-      <Card className="border-border/40 sm:border-border/80 bg-card/90 backdrop-blur-md shadow-xs rounded-xl sm:rounded-2xl">
-        <CardContent className="grid gap-3 p-3 sm:p-5 lg:grid-cols-[minmax(0,1fr)_200px_auto] lg:items-end">
-          <div className="space-y-1">
-            <Label htmlFor="marketplace-search" className="text-xs font-bold text-foreground flex items-center gap-1.5">
-              <Search className="size-3.5 text-primary" /> Tìm trong marketplace
+      <Card className="border-border/80 bg-card shadow-xs rounded-2xl">
+        <CardContent className="grid gap-3 p-3.5 sm:p-5 lg:grid-cols-[minmax(0,1fr)_220px_auto] lg:items-end">
+          <div className="space-y-1.5">
+            <Label htmlFor="marketplace-search" className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+              <Search className="size-3.5 text-primary" /> Tìm kiếm học liệu
             </Label>
             <div className="relative">
               <Input
                 id="marketplace-search"
-                className="pl-8 pr-8 text-xs sm:text-sm h-9 sm:h-10 rounded-xl"
+                className="pl-9 pr-9 text-xs sm:text-sm h-9 sm:h-10 rounded-xl bg-background"
                 placeholder="Tên bộ thẻ, tác giả hoặc từ khóa…"
                 value={queryText}
                 onChange={(event) => setQueryText(event.currentTarget.value)}
               />
-              <Search className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               {queryText ? (
                 <button
                   type="button"
                   onClick={() => setQueryText('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded-full hover:bg-muted text-muted-foreground hover:text-foreground"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-muted text-muted-foreground hover:text-foreground"
                 >
                   <X className="size-3.5" />
                 </button>
@@ -193,13 +164,13 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
             </div>
           </div>
 
-          <div className="space-y-1">
-            <Label htmlFor="marketplace-category" className="text-xs font-bold text-foreground flex items-center gap-1.5">
+          <div className="space-y-1.5">
+            <Label htmlFor="marketplace-category" className="text-xs font-semibold text-foreground flex items-center gap-1.5">
               <Filter className="size-3.5 text-primary" /> Danh mục
             </Label>
             <NativeSelect
               id="marketplace-category"
-              className="w-full text-xs sm:text-sm font-medium h-9 sm:h-10 rounded-xl"
+              className="w-full text-xs sm:text-sm font-medium h-9 sm:h-10 rounded-xl bg-background"
               value={category}
               onChange={(event) => setCategory(event.currentTarget.value)}
             >
@@ -215,9 +186,9 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
           <div className="flex items-center gap-2 w-full sm:w-auto">
             <Tabs value={view} onValueChange={(value) => setView(value as SortView)} className="w-full sm:w-auto">
               <TabsList className="grid grid-cols-3 w-full sm:w-auto h-9 sm:h-10 p-1 rounded-xl">
-                <TabsTrigger value="recommended" className="text-xs font-semibold px-1.5 sm:px-3.5 py-1 rounded-lg">Đề xuất</TabsTrigger>
-                <TabsTrigger value="newest" className="text-xs font-semibold px-1.5 sm:px-3.5 py-1 rounded-lg">Mới nhất</TabsTrigger>
-                <TabsTrigger value="popular" className="text-xs font-semibold px-1.5 sm:px-3.5 py-1 rounded-lg">Phổ biến</TabsTrigger>
+                <TabsTrigger value="recommended" className="text-xs font-semibold px-2 sm:px-3 py-1 rounded-lg">Đề xuất</TabsTrigger>
+                <TabsTrigger value="newest" className="text-xs font-semibold px-2 sm:px-3 py-1 rounded-lg">Mới nhất</TabsTrigger>
+                <TabsTrigger value="popular" className="text-xs font-semibold px-2 sm:px-3 py-1 rounded-lg">Phổ biến</TabsTrigger>
               </TabsList>
             </Tabs>
 
@@ -225,7 +196,7 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-9 sm:h-10 px-2 text-xs text-muted-foreground hover:text-foreground rounded-xl shrink-0"
+                className="h-9 sm:h-10 px-2.5 text-xs text-muted-foreground hover:text-foreground rounded-xl shrink-0"
                 onClick={() => {
                   setQueryText('')
                   setCategory('')
@@ -251,7 +222,7 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
 
       {/* Item Card Grid */}
       {marketQuery.data?.items.length ? (
-        <div className="grid gap-2.5 sm:gap-4 grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="grid gap-3 sm:gap-5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {marketQuery.data.items.map((item) => {
             const itemTitle = item.title || item.name || 'Học liệu không tên'
             const detailUrl =
@@ -265,91 +236,101 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
             return (
               <Card
                 key={item.id}
-                className="group relative flex flex-col justify-between overflow-hidden border-border/40 sm:border-border/80 bg-card/95 p-2.5 sm:p-4 transition-all duration-200 hover:-translate-y-1 hover:border-primary/50 hover:shadow-lg backdrop-blur-md rounded-xl sm:rounded-2xl"
+                className="group relative flex flex-col justify-between overflow-hidden border-border/80 bg-card p-4 sm:p-5 transition-all duration-200 hover:-translate-y-1 hover:border-primary/50 hover:shadow-md rounded-2xl"
               >
-                {/* Header Banner Accent */}
-                <div className="absolute top-0 left-0 right-0 h-1 w-full bg-gradient-to-r from-primary via-orange-500 to-amber-500" />
-
                 {/* Card Main Info Block */}
-                <div className="flex flex-col flex-1 pt-1.5">
-                  {/* Title First */}
-                  <h3 className="text-xs sm:text-sm font-bold tracking-tight text-foreground line-clamp-1 group-hover:text-primary transition-colors leading-snug mb-1">
-                    {itemTitle}
-                  </h3>
-
-                  {/* Author Row */}
-                  <div className="flex items-center gap-1 text-[10px] sm:text-[11px] text-muted-foreground mb-1.5">
-                    <div className="flex size-3.5 sm:size-4 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary font-bold text-[8px] sm:text-[9px]">
-                      {authorInitial}
-                    </div>
-                    <span className="font-semibold text-foreground/80 truncate">
-                      {authorName}
-                    </span>
-                  </div>
-
-                  {/* Description */}
-                  <p className="line-clamp-2 text-[11px] sm:text-xs leading-relaxed text-muted-foreground/90 font-normal mb-2">
-                    {item.description || 'Chưa có mô tả chi tiết cho học liệu này.'}
-                  </p>
-
+                <div className="flex flex-col flex-1 space-y-2.5">
                   {/* Category & Price Badge Row */}
-                  <div className="flex items-center justify-between gap-1 mb-2 mt-auto">
-                    <Badge variant="secondary" className="px-1.5 sm:px-2 py-0.5 text-[9px] sm:text-[11px] font-semibold rounded-md truncate max-w-[60%]">
-                      {item.primary_category || 'Khác'}
+                  <div className="flex items-center justify-between gap-1.5">
+                    <Badge variant="secondary" className="px-2 py-0.5 text-xs font-medium rounded-md truncate max-w-[65%]">
+                      {item.primary_category || 'Chung'}
                     </Badge>
 
                     <span
-                      className={`inline-flex items-center rounded-full px-1.5 sm:px-2 py-0.5 text-[9px] sm:text-[11px] font-extrabold border shrink-0 ${
+                      className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-bold ${
                         item.pricing_mode === 'free'
-                          ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30'
-                          : 'bg-primary/10 text-primary border-primary/30'
+                          ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
+                          : 'bg-primary/10 text-primary'
                       }`}
                     >
                       {item.price_display}
                     </span>
                   </div>
+
+                  {/* Title */}
+                  <h3 className="text-sm sm:text-base font-bold tracking-tight text-foreground line-clamp-1 group-hover:text-primary transition-colors leading-snug">
+                    <Link to={detailUrl} className="hover:underline">
+                      {itemTitle}
+                    </Link>
+                  </h3>
+
+                  {/* Author Row */}
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <div className="flex size-4 sm:size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary font-bold text-[10px]">
+                      {authorInitial}
+                    </div>
+                    <span className="font-medium text-foreground/80 truncate">
+                      {authorName}
+                    </span>
+                  </div>
+
+                  {/* Description */}
+                  <p className="line-clamp-2 text-xs leading-relaxed text-muted-foreground font-normal">
+                    {item.description || 'Chưa có mô tả chi tiết cho học liệu này.'}
+                  </p>
                 </div>
 
                 {/* Card Bottom Block */}
-                <div className="mt-auto space-y-2">
-                  {/* Rating & Install Stats Bar */}
-                  <div className="flex items-center justify-between rounded-lg sm:rounded-xl bg-muted/40 px-2 sm:px-2.5 py-1 sm:py-1.5 text-[10px] sm:text-xs font-semibold border border-border/40">
-                    <span className="inline-flex items-center gap-0.5 sm:gap-1 text-foreground">
-                      <Star className="size-3 sm:size-3.5 fill-amber-400 text-amber-500" />
+                <div className="mt-4 pt-3 border-t border-border/60 space-y-3">
+                  {/* Rating & Install Stats */}
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span className="inline-flex items-center gap-1 font-semibold text-foreground">
+                      <Star className="size-3.5 fill-amber-400 text-amber-500" />
                       {item.rating_avg.toFixed(1)}
                     </span>
-                    <span className="inline-flex items-center gap-0.5 sm:gap-1 text-muted-foreground text-[9px] sm:text-[11px]">
-                      <Download className="size-3 sm:size-3.5 text-primary" />
-                      <span>{item.install_count.toLocaleString('vi-VN')}<span className="hidden sm:inline"> lượt</span></span>
+                    <span className="inline-flex items-center gap-1 font-medium">
+                      <Download className="size-3.5 text-primary" />
+                      <span>{item.install_count.toLocaleString('vi-VN')} lượt</span>
                     </span>
                   </div>
 
                   {/* Action Button */}
                   {mode === 'decks' && item.installed_deck_id ? (
-                    <Link
-                      to={`/study?deck_id=${item.installed_deck_id}`}
-                      className="flex items-center justify-center gap-1 w-full h-6.5 sm:h-7.5 py-0.5 px-2 font-semibold text-[10px] sm:text-[11px] shadow-2xs bg-gradient-to-r from-primary via-orange-500 to-amber-500 text-primary-foreground hover:opacity-95 rounded-md sm:rounded-lg transition-all truncate"
+                    <Button
+                      size="sm"
+                      asChild
+                      className="w-full h-8 sm:h-9 text-xs font-bold rounded-xl shadow-xs"
                     >
-                      <BookOpen className="size-3 shrink-0" />
-                      <span className="truncate">Học ngay</span>
-                    </Link>
+                      <Link to={`/study?deck_id=${item.installed_deck_id}`}>
+                        <BookOpen className="mr-1.5 size-3.5" />
+                        Học ngay
+                      </Link>
+                    </Button>
                   ) : item.is_installed ? (
-                    <Link
-                      to={detailUrl}
-                      className="flex items-center justify-center gap-1 w-full h-6.5 sm:h-7.5 py-0.5 px-2 font-semibold text-[10px] sm:text-[11px] border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 rounded-md sm:rounded-lg transition-all truncate"
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      asChild
+                      className="w-full h-8 sm:h-9 text-xs font-semibold rounded-xl border-emerald-500/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10"
                     >
-                      <CheckCircle className="size-3 shrink-0" />
-                      <span className="truncate">Chi tiết</span>
-                    </Link>
+                      <Link to={detailUrl}>
+                        <CheckCircle className="mr-1.5 size-3.5 text-emerald-500" />
+                        Đã cài đặt
+                      </Link>
+                    </Button>
                   ) : (
-                    <Link
-                      to={detailUrl}
-                      className="flex items-center justify-center gap-1 w-full h-6.5 sm:h-7.5 py-0.5 px-2 font-semibold text-[10px] sm:text-[11px] bg-primary/10 hover:bg-primary text-primary hover:text-primary-foreground border border-primary/25 shadow-2xs transition-all duration-200 group-hover:bg-primary group-hover:text-primary-foreground rounded-md sm:rounded-lg truncate"
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      asChild
+                      className="w-full h-8 sm:h-9 text-xs font-semibold rounded-xl hover:bg-primary hover:text-primary-foreground hover:border-primary transition-all"
                     >
-                      <Eye className="size-3 shrink-0" />
-                      <span className="truncate">Chi tiết</span>
-                      <ArrowRight className="size-3 shrink-0 transition-transform group-hover:translate-x-0.5" />
-                    </Link>
+                      <Link to={detailUrl}>
+                        <Eye className="mr-1.5 size-3.5" />
+                        Xem chi tiết
+                        <ArrowRight className="ml-1 size-3.5 transition-transform group-hover:translate-x-0.5" />
+                      </Link>
+                    </Button>
                   )}
                 </div>
               </Card>

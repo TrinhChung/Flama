@@ -67,9 +67,21 @@ export function rewriteMediaFieldValue(
   let updated = value
   for (const original of referencedMedia) {
     const safe = mediaRename.get(original)
-    if (updated === original) updated = safe || ''
+    if (updated === original) {
+      updated = safe || ''
+      continue
+    }
     if (updated === `[sound:${original}]`) {
       updated = safe ? `[sound:${safe}]` : ''
+      continue
+    }
+    if (updated.includes(`[sound:${original}]`)) {
+      updated = updated.replaceAll(`[sound:${original}]`, safe ? `[sound:${safe}]` : '')
+    }
+    if (safe && updated.includes(original)) {
+      updated = updated
+        .replaceAll(`src="${original}"`, `src="${safe}"`)
+        .replaceAll(`src='${original}'`, `src='${safe}'`)
     }
   }
   return updated
