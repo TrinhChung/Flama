@@ -40,8 +40,8 @@ SOUND_REFERENCE_RE = re.compile(
     r"^\[sound:(yomitan_audio_[A-Za-z0-9_-]{8,96}\.mp3)\]$",
     flags=re.IGNORECASE,
 )
-IMPORT_MEDIA_FILENAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,254}$")
-IMPORT_SOUND_REFERENCE_RE = re.compile(r"^\[sound:([A-Za-z0-9][A-Za-z0-9_.-]{0,254})\]$")
+IMPORT_MEDIA_FILENAME_RE = re.compile(r"^[\w][\w_.-]{0,254}$")
+IMPORT_SOUND_REFERENCE_RE = re.compile(r"^\[sound:([\w][\w_.-]{0,254})\]$")
 IMPORT_MEDIA_MIME_BY_EXTENSION = {
     "jpg": "image/jpeg",
     "jpeg": "image/jpeg",

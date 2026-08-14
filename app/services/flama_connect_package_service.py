@@ -23,7 +23,7 @@ from models.connect_import_session import ConnectImportSession
 
 
 PACKAGE_HASH_RE = re.compile(r"^[0-9a-f]{64}$")
-SAFE_ENTRY_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,254}$")
+SAFE_ENTRY_RE = re.compile(r"^[\w][\w_.-]{0,254}$")
 AUDIO_EXTENSIONS = {"mp3", "ogg", "wav", "webm"}
 IMAGE_EXTENSIONS = {"jpg", "jpeg", "png", "gif", "webp", "svg"}
 
