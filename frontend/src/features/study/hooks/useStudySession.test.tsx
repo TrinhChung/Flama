@@ -605,4 +605,28 @@ describe('useStudySession cross-tab ownership', () => {
     expect(latest.receipt).toBeNull()
     expect(mocks.removeSessionIfMatches).not.toHaveBeenCalled()
   })
+
+  it('allows undoing an answered card and persists the restored session', async () => {
+    await openReadySession()
+    expect(latest.canUndo).toBe(false)
+
+    const decision = latest.prepareDecision('card-1')
+    await act(async () => {
+      await latest.answer('card-1', 'good', decision, 250)
+    })
+
+    expect(latest.session?.events).toHaveLength(1)
+    expect(latest.canUndo).toBe(true)
+
+    let undoneCardId: string | null = null
+    await act(async () => {
+      undoneCardId = await latest.undo()
+    })
+
+    expect(undoneCardId).toBe('card-1')
+    expect(latest.session?.events).toHaveLength(0)
+    expect(latest.canUndo).toBe(false)
+    expect(latest.view?.card?.card_id).toBe('card-1')
+    expect(mocks.saveSession).toHaveBeenCalled()
+  })
 })

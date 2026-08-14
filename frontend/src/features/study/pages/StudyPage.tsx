@@ -93,6 +93,23 @@ export function StudyPage() {
     }
   }, [activeCardKey, card?.card_id, decision, revealed, study])
 
+  const handleUndo = useCallback(async () => {
+    if (study.isBusy || !study.canUndo) return
+    try {
+      const undoneCardId = await study.undo()
+      if (undoneCardId && study.session?.snapshot.session_id) {
+        const restoredCardKey = `${study.session.snapshot.session_id}:${undoneCardId}`
+        setDecisionState({
+          cardKey: restoredCardKey,
+          value: study.prepareDecision(undoneCardId),
+        })
+        setRevealedCardKey(restoredCardKey)
+      }
+    } catch {
+      // Any error will be exposed via study.error
+    }
+  }, [study])
+
   const handleCommit = useCallback(() => {
     void study.commit({ reason: 'manual_exit' }).catch(() => {})
   }, [study])
@@ -128,19 +145,34 @@ export function StudyPage() {
       if (
         event.defaultPrevented
         || event.isComposing
-        || event.altKey
-        || event.ctrlKey
-        || event.metaKey
         || activeTag === 'input'
         || activeTag === 'textarea'
         || activeTag === 'select'
-        || activeTag === 'button'
-        || activeTag === 'a'
         || (activeEl as HTMLElement)?.isContentEditable
       ) return
 
       const code = event.code
       const key = event.key
+
+      const isUndo = (
+        (event.ctrlKey || event.metaKey) && (key === 'z' || key === 'Z' || code === 'KeyZ')
+      ) || (
+        !event.ctrlKey && !event.metaKey && !event.altKey && (key === 'z' || key === 'Z' || code === 'KeyZ')
+      )
+
+      if (isUndo) {
+        event.preventDefault()
+        void handleUndo()
+        return
+      }
+
+      if (
+        event.altKey
+        || event.ctrlKey
+        || event.metaKey
+        || activeTag === 'button'
+        || activeTag === 'a'
+      ) return
 
       const isSpaceOrEnter = code === 'Space' || key === ' ' || key === 'Spacebar' || code === 'Enter' || key === 'Enter'
       const isOne = key === '1' || code === 'Digit1' || code === 'Numpad1'
@@ -192,6 +224,7 @@ export function StudyPage() {
     handleAnswer,
     handleReveal,
     handleToggleFullscreen,
+    handleUndo,
     revealed,
     study.leaseConflict,
   ])
@@ -337,6 +370,7 @@ export function StudyPage() {
           cardId={card.card_id}
           revealed={revealed}
           canEdit={false}
+          canUndo={study.canUndo}
           newCount={counts.new}
           learnCount={counts.learning}
           dueCount={counts.due}
@@ -346,6 +380,9 @@ export function StudyPage() {
           onReveal={handleReveal}
           onAnswer={(rating) => {
             void handleAnswer(rating)
+          }}
+          onUndo={() => {
+            void handleUndo()
           }}
           onEdit={() => {}}
           onToggleFullscreen={handleToggleFullscreen}

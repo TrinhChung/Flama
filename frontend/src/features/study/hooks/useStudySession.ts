@@ -18,6 +18,7 @@ import {
   createPersistedSession,
   decisionForCard,
   prepareCommit,
+  undoLocalAnswer,
 } from '../session/studySessionEngine'
 import {
   loadStudySessionWithDurability,
@@ -670,6 +671,45 @@ export function useStudySession(deckId: string | null) {
     }
   }, [activateSession, beginLeaseWork, endLeaseWork])
 
+  const undo = useCallback(async (): Promise<string | null> => {
+    const active = sessionRef.current
+    const controller = leaseControllerRef.current
+    if (
+      !active
+      || !controller
+      || controller.signal.aborted
+      || !hasLeaseRef.current
+      || operationRef.current
+    ) return null
+    const isCurrentLease = () => (
+      leaseControllerRef.current === controller
+      && !controller.signal.aborted
+    )
+    const result = undoLocalAnswer(active)
+    if (!result) return null
+
+    operationRef.current = true
+    beginLeaseWork(controller)
+    setBusy(true)
+    setError(null)
+    const { session: undoneSession, undoneCardId } = result
+    try {
+      activateSession(undoneSession)
+      sessionDurableRef.current = await saveStudySession(undoneSession)
+      return undoneCardId
+    } catch (caught) {
+      if (isCurrentLease() && sessionRef.current === undoneSession) {
+        activateSession(active)
+      }
+      if (isCurrentLease() && hasLeaseRef.current) setError(caught)
+      throw caught
+    } finally {
+      operationRef.current = false
+      endLeaseWork(controller)
+      setBusy(false)
+    }
+  }, [activateSession, beginLeaseWork, endLeaseWork])
+
   const commit = useCallback(async (
     options: {
       reason?: StudyCommitReason
@@ -935,6 +975,14 @@ export function useStudySession(deckId: string | null) {
     }
   }, [deckId, flushOnExit, releaseLeaseWhenIdle, userId])
 
+  const canUndo = Boolean(
+    hasLease
+    && session
+    && session.status === 'active'
+    && session.events.length > 0
+    && (session.undo_history?.length ?? 0) > 0,
+  )
+
   return {
     session,
     view,
@@ -951,6 +999,8 @@ export function useStudySession(deckId: string | null) {
     takeoverState,
     isLoading: loading,
     isBusy: busy,
+    canUndo,
+    undo,
     prepareDecision,
     answer,
     commit,
