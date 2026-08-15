@@ -147,7 +147,7 @@ export function StatisticsPage() {
                   <div className="mt-0.5 text-2xl font-bold tracking-tight text-foreground tabular-nums">
                     {stats.today.cards.toLocaleString('vi-VN')} <span className="text-xs font-medium text-muted-foreground">thẻ</span>
                   </div>
-                  <p className="mt-1 truncate text-xs text-muted-foreground">
+                  <p className="mt-1 truncate text-xs text-muted-foreground tabular-nums">
                     {stats.today.minutes.toFixed(1)} phút ({stats.today.sec_per_card.toFixed(2)}s/thẻ)
                   </p>
                 </div>
@@ -167,7 +167,7 @@ export function StatisticsPage() {
                     {(overview?.metrics?.current_streak_days ?? 0).toLocaleString('vi-VN')}{' '}
                     <span className="text-xs font-medium text-muted-foreground">ngày</span>
                   </div>
-                  <p className="mt-1 truncate text-xs text-muted-foreground">
+                  <p className="mt-1 truncate text-xs text-muted-foreground tabular-nums">
                     Kỷ lục: {overview?.metrics?.longest_streak_days ?? 0}d · Học {overview?.metrics?.days_learned_percent ?? 0}% ngày
                   </p>
                 </div>
@@ -176,9 +176,9 @@ export function StatisticsPage() {
 
             {/* Card 3: Forecast */}
             <div className="relative overflow-hidden rounded-xl border border-border bg-card p-4 shadow-xs transition-all hover:shadow-md">
-              <div className="absolute top-0 left-0 h-full w-1 bg-gradient-to-b from-indigo-500 to-violet-500" />
+              <div className="absolute top-0 left-0 h-full w-1 bg-gradient-to-b from-sky-500 to-blue-500" />
               <div className="flex items-start gap-3">
-                <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-600 dark:bg-indigo-500/20">
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-sky-500/10 text-sky-600 dark:bg-sky-500/20">
                   <BarChart3 className="size-5" />
                 </div>
                 <div className="min-w-0 flex-1">
@@ -187,7 +187,7 @@ export function StatisticsPage() {
                     {stats.totals.total_reviews.toLocaleString('vi-VN')}{' '}
                     <span className="text-xs font-medium text-muted-foreground">lượt</span>
                   </div>
-                  <p className="mt-1 truncate text-xs text-muted-foreground">
+                  <p className="mt-1 truncate text-xs text-muted-foreground tabular-nums">
                     Ngày mai: {stats.totals.due_tomorrow} · TB: {stats.totals.avg_reviews_per_day.toFixed(1)}/ngày
                   </p>
                 </div>
@@ -196,9 +196,9 @@ export function StatisticsPage() {
 
             {/* Card 4: Daily Workload */}
             <div className="relative overflow-hidden rounded-xl border border-border bg-card p-4 shadow-xs transition-all hover:shadow-md">
-              <div className="absolute top-0 left-0 h-full w-1 bg-gradient-to-b from-cyan-500 to-blue-500" />
+              <div className="absolute top-0 left-0 h-full w-1 bg-gradient-to-b from-teal-500 to-emerald-600" />
               <div className="flex items-start gap-3">
-                <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-cyan-500/10 text-cyan-600 dark:bg-cyan-500/20">
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-teal-500/10 text-teal-600 dark:bg-teal-500/20">
                   <Gauge className="size-5" />
                 </div>
                 <div className="min-w-0 flex-1">

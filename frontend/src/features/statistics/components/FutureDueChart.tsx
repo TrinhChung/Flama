@@ -37,9 +37,9 @@ function CustomTooltip({ active, payload }: { active?: boolean; payload?: any[] 
           <span className="font-semibold">Tổng đến hạn:</span>
           <span className="font-bold font-mono text-orange-400">{data.due_count.toLocaleString('vi-VN')}</span>
         </div>
-        <div className="flex items-center justify-between gap-3 text-violet-300">
+        <div className="flex items-center justify-between gap-3 text-amber-300">
           <span className="font-semibold flex items-center gap-1.5">
-            <span className="size-2 rounded-full bg-violet-500" /> Tích lũy:
+            <span className="size-2 rounded-full bg-amber-500" /> Tích lũy:
           </span>
           <span className="font-bold font-mono">{data.cumulative.toLocaleString('vi-VN')}</span>
         </div>
@@ -83,7 +83,7 @@ export function FutureDueChart({ series }: { series: FutureDuePoint[] }) {
               tickLine={false}
               axisLine={false}
               allowDecimals={false}
-              tick={{ fontSize: 11, fill: '#8b5cf6' }}
+              tick={{ fontSize: 11, fill: '#f59e0b' }}
             />
             <Tooltip content={<CustomTooltip />} />
 
@@ -98,10 +98,10 @@ export function FutureDueChart({ series }: { series: FutureDuePoint[] }) {
               type="monotone"
               dataKey="cumulative"
               name="Tích lũy"
-              stroke="#8b5cf6"
+              stroke="#f59e0b"
               strokeWidth={2.5}
-              dot={series.length > 60 ? false : { r: 2, fill: '#8b5cf6' }}
-              activeDot={{ r: 5, fill: '#8b5cf6' }}
+              dot={series.length > 60 ? false : { r: 2, fill: '#f59e0b' }}
+              activeDot={{ r: 5, fill: '#f59e0b' }}
             />
           </ComposedChart>
         </ResponsiveContainer>
@@ -122,7 +122,7 @@ export function FutureDueChart({ series }: { series: FutureDuePoint[] }) {
           <span>Ôn tập (Review)</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <span className="h-0.5 w-4 rounded-full bg-violet-500" />
+          <span className="h-0.5 w-4 rounded-full bg-amber-500" />
           <span>Tích lũy (Cumulative)</span>
         </div>
       </div>

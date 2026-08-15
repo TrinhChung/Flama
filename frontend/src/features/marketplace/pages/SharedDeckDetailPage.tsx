@@ -379,8 +379,8 @@ export function SharedDeckDetailPage() {
                     <span>Đánh giá</span>
                   </div>
                   <div className="mt-1 flex items-center justify-center gap-1 font-extrabold text-base text-foreground">
-                    <span>{deck.rating_avg.toFixed(1)}</span>
-                    <span className="text-xs font-normal text-muted-foreground">({deck.rating_count})</span>
+                    <span className="tabular-nums">{deck.rating_avg.toFixed(1)}</span>
+                    <span className="text-xs font-normal text-muted-foreground tabular-nums">({deck.rating_count})</span>
                   </div>
                 </div>
 
@@ -389,7 +389,7 @@ export function SharedDeckDetailPage() {
                     <Download className="size-3.5 text-primary" />
                     <span>Lượt cài</span>
                   </div>
-                  <div className="mt-1 font-extrabold text-base text-foreground">
+                  <div className="mt-1 font-extrabold text-base text-foreground tabular-nums">
                     {deck.install_count.toLocaleString('vi-VN')}
                   </div>
                 </div>
@@ -399,7 +399,7 @@ export function SharedDeckDetailPage() {
                     <Layers className="size-3.5 text-primary" />
                     <span>Xem mẫu</span>
                   </div>
-                  <div className="mt-1 font-extrabold text-base text-foreground">
+                  <div className="mt-1 font-extrabold text-base text-foreground tabular-nums">
                     {samples.length} từ
                   </div>
                 </div>
@@ -821,7 +821,7 @@ export function SharedDeckDetailPage() {
                     Đã cài đặt vào thư viện
                   </Button>
                   {deck.installed_deck_id ? (
-                    <Button className="w-full h-10 sm:h-11 font-bold text-xs sm:text-sm shadow-md bg-gradient-to-r from-primary to-primary/90 rounded-xl" asChild>
+                    <Button className="w-full h-10 sm:h-11 font-bold text-xs sm:text-sm shadow-xs bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl transition-all" asChild>
                       <Link to={`/study?deck_id=${deck.installed_deck_id}`}>
                         <BookOpen className="mr-1.5 size-4" />
                         Bắt đầu học ngay
@@ -831,7 +831,7 @@ export function SharedDeckDetailPage() {
                 </div>
               ) : (
                 <Button
-                  className="w-full h-11 sm:h-12 font-bold text-sm sm:text-base shadow-md bg-gradient-to-r from-primary to-primary/90 hover:opacity-95 text-primary-foreground rounded-xl"
+                  className="w-full h-11 sm:h-12 font-bold text-sm sm:text-base shadow-xs bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl transition-all"
                   size="lg"
                   onClick={() => installMutation.mutate()}
                   disabled={installMutation.isPending}
