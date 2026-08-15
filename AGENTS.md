@@ -72,4 +72,5 @@
 ## Agent Files
 - Use `$docs-architect` when the task is to create or update repository documentation such as `README.md`, `README_SETUP.md`, `docs/*.md`, troubleshooting notes, or operational runbooks.
 - Use `$nihongo-agent-architect` when the task is to create or update repo-local agent guidance such as `AGENTS.md`, skill folders under `skills/`, or `agents/openai.yaml`.
+- Use `$impeccable` when designing, reviewing, auditing, critiquing, styling, or polishing frontend UI/UX in `frontend/src/`.
 - Keep agent guidance short, repo-specific, and workflow-oriented. Avoid generic Flask or prompt-engineering tutorials.
