@@ -347,8 +347,8 @@ export function SharedNoteTypeDetailPage() {
                     <span>Đánh giá</span>
                   </div>
                   <div className="mt-1 flex items-center justify-center gap-1 font-extrabold text-base text-foreground">
-                    <span>{noteType.rating_avg.toFixed(1)}</span>
-                    <span className="text-xs font-normal text-muted-foreground">({noteType.rating_count})</span>
+                    <span className="tabular-nums">{noteType.rating_avg.toFixed(1)}</span>
+                    <span className="text-xs font-normal text-muted-foreground tabular-nums">({noteType.rating_count})</span>
                   </div>
                 </div>
 
@@ -357,7 +357,7 @@ export function SharedNoteTypeDetailPage() {
                     <Download className="size-3.5 text-primary" />
                     <span>Lượt cài</span>
                   </div>
-                  <div className="mt-1 font-extrabold text-base text-foreground">
+                  <div className="mt-1 font-extrabold text-base text-foreground tabular-nums">
                     {noteType.install_count.toLocaleString('vi-VN')}
                   </div>
                 </div>
@@ -367,7 +367,7 @@ export function SharedNoteTypeDetailPage() {
                     <Layers className="size-3.5 text-primary" />
                     <span>Trường</span>
                   </div>
-                  <div className="mt-1 font-extrabold text-base text-foreground">
+                  <div className="mt-1 font-extrabold text-base text-foreground tabular-nums">
                     {fields.length} trường
                   </div>
                 </div>
@@ -620,7 +620,7 @@ export function SharedNoteTypeDetailPage() {
                 </Button>
               ) : (
                 <Button
-                  className="w-full h-11 sm:h-12 font-bold text-sm sm:text-base shadow-md bg-gradient-to-r from-primary to-primary/90 hover:opacity-95 text-primary-foreground rounded-xl"
+                  className="w-full h-11 sm:h-12 font-bold text-sm sm:text-base shadow-xs bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl transition-all"
                   size="lg"
                   onClick={() => installMutation.mutate()}
                   disabled={installMutation.isPending}

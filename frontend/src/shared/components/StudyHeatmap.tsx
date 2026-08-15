@@ -90,14 +90,14 @@ export type StudyHeatmapProps = {
 
 // Past days: 8 levels (0..7) pure vibrant Flama palette
 const pastLevelClasses = [
-  'stats-day--level-0 bg-[#EAE0D8]',
-  'stats-day--level-1 bg-[#FFE8D9]',
-  'stats-day--level-2 bg-[#FFD2B8]',
-  'stats-day--level-3 bg-[#FFB488]',
-  'stats-day--level-4 bg-[#FF9354]',
-  'stats-day--level-5 bg-[#FF7020]',
-  'stats-day--level-6 bg-[#EE4D00]',
-  'stats-day--level-7 bg-[#C93200]',
+  'stats-day--level-0 bg-[#EAE0D8] dark:bg-[#272320]',
+  'stats-day--level-1 bg-[#FFE8D9] dark:bg-[#3D2517]',
+  'stats-day--level-2 bg-[#FFD2B8] dark:bg-[#5C2E17]',
+  'stats-day--level-3 bg-[#FFB488] dark:bg-[#7D3A16]',
+  'stats-day--level-4 bg-[#FF9354] dark:bg-[#A34714]',
+  'stats-day--level-5 bg-[#FF7020] dark:bg-[#CC5510]',
+  'stats-day--level-6 bg-[#EE4D00] dark:bg-[#EE4D00]',
+  'stats-day--level-7 bg-[#C93200] dark:bg-[#FF5D17]',
 ]
 
 // Future days: 8 levels (0..7) soft, gentle slate-gray progression maintaining Flama's bright theme
@@ -191,7 +191,7 @@ export function StudyHeatmap({
         <>
           {/* Summary Text */}
           {showSummary && (
-            <p className="stats-summary text-center text-sm sm:text-xl font-semibold text-[#E05C07] tabular-nums mb-2 sm:mb-3 leading-tight">
+            <p className="stats-summary text-center text-sm sm:text-xl font-semibold text-primary tabular-nums mb-2 sm:mb-3 leading-tight">
               {summaryText}
             </p>
           )}
@@ -201,7 +201,7 @@ export function StudyHeatmap({
             <div className="stats-nav flex items-center justify-center gap-2 mb-3 sm:mb-4">
               <button
                 type="button"
-                className="stats-year-btn size-7 sm:size-9 inline-flex items-center justify-center rounded-lg border border-border bg-white text-gray-600 shadow-xs hover:border-orange-300 hover:text-orange-700 hover:bg-orange-50 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                className="stats-year-btn size-7 sm:size-9 inline-flex items-center justify-center rounded-lg border border-border bg-card text-foreground shadow-xs hover:border-primary/50 hover:text-primary hover:bg-primary/10 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 aria-label="Previous year"
                 disabled={year <= 1970}
                 onClick={() => onYearChange(year - 1)}
@@ -209,13 +209,13 @@ export function StudyHeatmap({
                 <ChevronLeft className="size-3.5 sm:size-4" />
               </button>
 
-              <div className="stats-year-label min-w-12 sm:min-w-16 text-center text-sm sm:text-base font-semibold text-gray-600 tabular-nums">
+              <div className="stats-year-label min-w-12 sm:min-w-16 text-center text-sm sm:text-base font-semibold text-foreground tabular-nums">
                 {year}
               </div>
 
               <button
                 type="button"
-                className="stats-year-btn size-7 sm:size-9 inline-flex items-center justify-center rounded-lg border border-border bg-white text-gray-600 shadow-xs hover:border-orange-300 hover:text-orange-700 hover:bg-orange-50 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                className="stats-year-btn size-7 sm:size-9 inline-flex items-center justify-center rounded-lg border border-border bg-card text-foreground shadow-xs hover:border-primary/50 hover:text-primary hover:bg-primary/10 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 aria-label="Next year"
                 disabled={year >= 2100}
                 onClick={() => onYearChange(year + 1)}

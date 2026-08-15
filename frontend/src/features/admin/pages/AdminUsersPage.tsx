@@ -85,10 +85,10 @@ type AdminUsersResponse = {
 }
 const AVATAR_GRADIENTS = [
   'from-amber-500 to-orange-600',
-  'from-purple-500 to-indigo-600',
-  'from-cyan-500 to-blue-600',
+  'from-orange-500 to-rose-600',
+  'from-sky-500 to-blue-600',
   'from-emerald-500 to-teal-600',
-  'from-rose-500 to-pink-600',
+  'from-stone-500 to-zinc-600',
   'from-yellow-500 to-amber-600',
 ]
 function AdminHeader({
@@ -118,7 +118,7 @@ function RoleBadge({ roleName, isAdmin }: { roleName?: string | null; isAdmin?: 
   }
   if (roleName?.toLowerCase() === 'creator') {
     return (
-      <Badge className="bg-purple-500/15 text-purple-700 hover:bg-purple-500/25 dark:text-purple-300 gap-1 border-purple-500/30">
+      <Badge className="bg-amber-500/15 text-amber-800 dark:text-amber-300 hover:bg-amber-500/25 gap-1 border-amber-500/30">
         <Sparkles className="size-3.5" />
         Creator
       </Badge>
@@ -126,7 +126,7 @@ function RoleBadge({ roleName, isAdmin }: { roleName?: string | null; isAdmin?: 
   }
   if (roleName?.toLowerCase() === 'enterprise') {
     return (
-      <Badge className="bg-blue-500/15 text-blue-700 hover:bg-blue-500/25 dark:text-blue-300 gap-1 border-blue-500/30">
+      <Badge className="bg-sky-500/15 text-sky-800 dark:text-sky-300 hover:bg-sky-500/25 gap-1 border-sky-500/30">
         <Shield className="size-3.5" />
         Enterprise
       </Badge>

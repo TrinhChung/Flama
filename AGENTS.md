@@ -61,6 +61,7 @@
 - Flashcard HTML rendering and media safety flow through `app/services/flashcard_renderer.py` plus CSP and `/media/proxy/<asset_id>` constraints. Preserve sanitization and proxy-based media access.
 - For UI work, target the React frontend (`frontend/src/`). Jinja templates have been completely deleted; all user-facing UI is in React.
 - Mặc định khi người dùng yêu cầu sửa/nâng cấp giao diện (UI/UX), làm việc và điều chỉnh trên React frontend (`frontend/src/`).
+- **Zero Visual Regression**: Khi refactor kiến trúc frontend (tách hook, bẻ nhỏ component, thay thẻ HTML thô bằng UI Primitives), BẮT BUỘC bảo toàn 100% màu sắc, dải gradient thương hiệu, padding, font size, icon, đổ bóng và layout vị trí gốc trừ khi người dùng yêu cầu redesign.
 
 ## Testing
 - Prefer the narrowest relevant test module first; most feature areas already have focused tests in `tests/`.
@@ -72,4 +73,8 @@
 ## Agent Files
 - Use `$docs-architect` when the task is to create or update repository documentation such as `README.md`, `README_SETUP.md`, `docs/*.md`, troubleshooting notes, or operational runbooks.
 - Use `$nihongo-agent-architect` when the task is to create or update repo-local agent guidance such as `AGENTS.md`, skill folders under `skills/`, or `agents/openai.yaml`.
+- Use `$impeccable` when designing, reviewing, auditing, critiquing, styling, or polishing frontend UI/UX in `frontend/src/`.
+- Use `$frontend-architecture` when refactoring, decomposing, or building React components, enforcing Feature-Sliced Design, extracting custom hooks, consolidating reusable components, and eliminating UI duplication.
+- Use `$stitch-skills` (bao gồm `$generate-design`, `$react-components`, `$shadcn-ui`, `$manage-design-system`, `$extract-design-md`, `$code-to-design`) khi cần tương tác với Google Stitch MCP để sinh màn hình, quản lý design system, trích xuất HTML sang Stitch, hoặc tạo React component từ thiết kế Stitch.
 - Keep agent guidance short, repo-specific, and workflow-oriented. Avoid generic Flask or prompt-engineering tutorials.
+
