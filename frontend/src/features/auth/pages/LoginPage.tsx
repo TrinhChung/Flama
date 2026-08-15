@@ -1,52 +1,17 @@
-import { useState } from 'react'
 import { AlertCircle, ArrowRight, Eye, EyeOff, Lock, Mail, LoaderCircle } from 'lucide-react'
-import { zodResolver } from '@hookform/resolvers/zod'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { useForm } from 'react-hook-form'
-import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
-import { toast } from 'sonner'
+import { Navigate } from 'react-router-dom'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { bootstrapQueryKey, useBootstrap } from '@/shared/api/bootstrap'
-import type { FrontendBootstrap } from '@/shared/types/api'
-import { login } from '../api'
-import { loginSchema, type LoginFormValues } from '../schemas'
+import { useBootstrap } from '@/shared/api/bootstrap'
 import { AuthCard } from '../components/AuthCard'
+import { useLoginForm } from '../hooks/useLoginForm'
 
 export function LoginPage() {
   const bootstrapQuery = useBootstrap()
   const bootstrap = bootstrapQuery.data
-  const queryClient = useQueryClient()
-  const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
-  const next = searchParams.get('next') || ''
-  const [showPassword, setShowPassword] = useState(false)
-
-  const form = useForm<LoginFormValues>({
-    resolver: zodResolver(loginSchema),
-    defaultValues: { email: '', password: '' },
-  })
-
-  const mutation = useMutation({
-    mutationFn: login,
-    onSuccess: (result) => {
-      queryClient.setQueryData<FrontendBootstrap>(
-        bootstrapQueryKey,
-        (current) => (current ? { ...current, user: result.user, messages: [] } : current),
-      )
-      void queryClient.invalidateQueries({ queryKey: bootstrapQueryKey })
-      toast.success('Đăng nhập thành công.')
-      if (next.startsWith('/') && !next.startsWith('//')) {
-        navigate(next, { replace: true })
-      } else if (result.redirect_to.startsWith('/app/')) {
-        navigate(result.redirect_to.slice('/app'.length), { replace: true })
-      } else {
-        navigate('/dashboard', { replace: true })
-      }
-    },
-  })
+  const { form, showPassword, toggleShowPassword, isPending, error, onSubmit } = useLoginForm()
 
   if (bootstrapQuery.isPending) {
     return (
@@ -55,7 +20,10 @@ export function LoginPage() {
       </div>
     )
   }
-  if (bootstrap?.user) return <Navigate to="/dashboard" replace />
+
+  if (bootstrap?.user) {
+    return <Navigate to="/dashboard" replace />
+  }
 
   return (
     <AuthCard
@@ -65,15 +33,12 @@ export function LoginPage() {
       alternateLabel="Tạo tài khoản ngay"
       alternateTo="/register"
     >
-      <form
-        className="space-y-4"
-        onSubmit={form.handleSubmit((values) => mutation.mutate({ ...values, next }))}
-      >
-        {mutation.error ? (
+      <form className="space-y-4" onSubmit={onSubmit}>
+        {error ? (
           <Alert variant="destructive" className="animate-in fade-in-50 duration-200">
             <AlertCircle className="size-4" />
             <AlertTitle>Đăng nhập không thành công</AlertTitle>
-            <AlertDescription>{mutation.error.message}</AlertDescription>
+            <AlertDescription>{error.message}</AlertDescription>
           </Alert>
         ) : null}
 
@@ -81,7 +46,7 @@ export function LoginPage() {
         <div className="space-y-2">
           <Label htmlFor="email">Email</Label>
           <div className="relative">
-            <Mail className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Mail className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
             <Input
               id="email"
               type="email"
@@ -94,7 +59,7 @@ export function LoginPage() {
             />
           </div>
           {form.formState.errors.email?.message ? (
-            <p className="text-xs text-destructive">{form.formState.errors.email.message}</p>
+            <p className="text-xs font-medium text-destructive">{form.formState.errors.email.message}</p>
           ) : null}
         </div>
 
@@ -104,7 +69,7 @@ export function LoginPage() {
             <Label htmlFor="password">Mật khẩu</Label>
           </div>
           <div className="relative">
-            <Lock className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Lock className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
             <Input
               id="password"
               type={showPassword ? 'text' : 'password'}
@@ -117,25 +82,25 @@ export function LoginPage() {
             <button
               type="button"
               tabIndex={-1}
-              onClick={() => setShowPassword((prev) => !prev)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+              onClick={toggleShowPassword}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
               aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
             >
               {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
             </button>
           </div>
           {form.formState.errors.password?.message ? (
-            <p className="text-xs text-destructive">{form.formState.errors.password.message}</p>
+            <p className="text-xs font-medium text-destructive">{form.formState.errors.password.message}</p>
           ) : null}
         </div>
 
         <Button
-          className="w-full font-bold bg-gradient-to-r from-primary via-orange-500 to-amber-500 hover:opacity-95 text-primary-foreground shadow-md shadow-primary/20 transition-all hover:shadow-lg hover:shadow-primary/30"
+          className="w-full font-bold bg-gradient-to-r from-primary via-orange-500 to-amber-500 hover:opacity-95 text-primary-foreground shadow-md shadow-primary/20 transition-all hover:shadow-lg hover:shadow-primary/30 active:scale-[0.98]"
           size="lg"
           type="submit"
-          disabled={mutation.isPending}
+          disabled={isPending}
         >
-          {mutation.isPending ? (
+          {isPending ? (
             <LoaderCircle className="size-4 animate-spin" />
           ) : (
             <>

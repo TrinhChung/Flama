@@ -150,10 +150,11 @@ export function ImportFileStep({ wizard }: ImportFileStepProps) {
                 <p className="text-[11px] text-muted-foreground">Hiển thị các dòng mẫu đã phân tách cột.</p>
               </div>
               <div className="flex items-center gap-4 text-xs font-medium">
-                <label className="flex items-center gap-1.5 cursor-pointer">
+                <label className="flex items-center gap-1.5 cursor-pointer select-none">
                   <input
                     type="radio"
                     name="headerMode"
+                    className="accent-primary size-3.5 cursor-pointer"
                     checked={hasHeader}
                     onChange={() => {
                       setHasHeader(true)
@@ -162,10 +163,11 @@ export function ImportFileStep({ wizard }: ImportFileStepProps) {
                   />
                   <span>Có tiêu đề</span>
                 </label>
-                <label className="flex items-center gap-1.5 cursor-pointer">
+                <label className="flex items-center gap-1.5 cursor-pointer select-none">
                   <input
                     type="radio"
                     name="headerMode"
+                    className="accent-primary size-3.5 cursor-pointer"
                     checked={!hasHeader}
                     onChange={() => {
                       setHasHeader(false)

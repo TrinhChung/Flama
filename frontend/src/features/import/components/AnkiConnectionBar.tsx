@@ -82,13 +82,14 @@ export const AnkiConnectionBar: React.FC<AnkiConnectionBarProps> = ({
                   {connectionError || 'Không thể kết nối đến Anki Desktop.'}
                 </span>{' '}
                 {onOpenGuide && (
-                  <button
+                  <Button
                     type="button"
+                    variant="link"
                     onClick={onOpenGuide}
-                    className="font-bold text-primary hover:underline inline-flex items-center gap-0.5 cursor-pointer ml-1"
+                    className="p-0 h-auto font-bold text-primary hover:underline inline-flex items-center gap-0.5 cursor-pointer ml-1 text-[11px] sm:text-xs"
                   >
                     Xem hướng dẫn sửa lỗi kết nối / CORS &rarr;
-                  </button>
+                  </Button>
                 )}
               </div>
             ) : (

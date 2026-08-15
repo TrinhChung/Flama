@@ -8,6 +8,7 @@ import { appApi } from '@/app/api'
 import { useBootstrap } from '@/shared/api/bootstrap'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
   DialogContent,
@@ -247,12 +248,11 @@ export function DeckActionModal({ selection, onClose, dashboard }: {
             {destructive && isAdmin && (
               <div className="space-y-3 p-3 rounded-lg border border-destructive/20 bg-destructive/5 dark:bg-destructive/10">
                 <div className="flex items-center gap-2">
-                  <input
+                  <Checkbox
                     id="purge-deck-checkbox"
-                    type="checkbox"
                     checked={purge}
-                    onChange={(e) => setPurge(e.target.checked)}
-                    className="size-4 rounded border-input text-destructive focus:ring-destructive accent-destructive cursor-pointer"
+                    onCheckedChange={(checked) => setPurge(Boolean(checked))}
+                    className="border-destructive/60 data-checked:bg-destructive data-checked:border-destructive data-checked:text-destructive-foreground cursor-pointer"
                   />
                   <Label htmlFor="purge-deck-checkbox" className="font-bold text-destructive cursor-pointer select-none">
                     Xóa sạch hoàn toàn dữ liệu (Purge)

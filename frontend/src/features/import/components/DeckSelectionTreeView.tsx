@@ -269,14 +269,14 @@ export const DeckSelectionTreeView: React.FC<DeckSelectionTreeViewProps> = ({
           <button
             type="button"
             onClick={expandAll}
-            className="hover:text-primary hover:bg-muted text-[10px] font-semibold px-2 py-1 rounded-lg transition-colors border"
+            className="hover:text-primary hover:bg-muted text-[10px] font-semibold px-2 py-1 rounded-lg transition-colors border cursor-pointer"
           >
             Mở rộng tất cả
           </button>
           <button
             type="button"
             onClick={collapseAll}
-            className="hover:text-primary hover:bg-muted text-[10px] font-semibold px-2 py-1 rounded-lg transition-colors border"
+            className="hover:text-primary hover:bg-muted text-[10px] font-semibold px-2 py-1 rounded-lg transition-colors border cursor-pointer"
           >
             Thu gọn tất cả
           </button>
