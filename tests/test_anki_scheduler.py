@@ -8,6 +8,7 @@ from app.services.anki_scheduler import (
     applyAnswer,
     computeAnswerPreview,
     default_deck_options,
+    format_interval_days,
 )
 
 
@@ -15,6 +16,23 @@ class AnkiSchedulerTests(unittest.TestCase):
     def setUp(self):
         self.options = default_deck_options()
         self.now = datetime(2026, 2, 22, 9, 0, 0)
+
+    def test_format_interval_days_scales_to_months_and_years(self):
+        self.assertEqual(format_interval_days(1), "1d")
+        self.assertEqual(format_interval_days(15), "15d")
+        self.assertEqual(format_interval_days(29), "29d")
+        self.assertEqual(format_interval_days(30), "1m")
+        self.assertEqual(format_interval_days(45), "1.5m")
+        self.assertEqual(format_interval_days(50), "1.7m")
+        self.assertEqual(format_interval_days(60), "2m")
+        self.assertEqual(format_interval_days(90), "3m")
+        self.assertEqual(format_interval_days(180), "6m")
+        self.assertEqual(format_interval_days(360), "12m")
+        self.assertEqual(format_interval_days(365), "1y")
+        self.assertEqual(format_interval_days(500), "1.4y")
+        self.assertEqual(format_interval_days(600), "1.6y")
+        self.assertEqual(format_interval_days(730), "2y")
+        self.assertEqual(format_interval_days(36500), "100y")
 
     def test_case1_learning_hard_preview_is_6m(self):
         card = CardState(
