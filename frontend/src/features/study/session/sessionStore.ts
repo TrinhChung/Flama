@@ -26,6 +26,7 @@ export type PersistedStudySession = {
   events: StudySessionEvent[]
   touched_card_ids: string[]
   undo_history?: StudySessionUndoItem[]
+  active_card_id?: string | null
   opened_client_at_ms: number
   status: 'active' | 'pending_commit'
   commit_id: string | null
@@ -84,6 +85,12 @@ export function isRestorableStudySession(
     )
   })) return false
 
+  const activeCardIdValid = (
+    value.active_card_id === undefined
+    || value.active_card_id === null
+    || typeof value.active_card_id === 'string'
+  )
+
   return (
     typeof value.scope_key === 'string'
     && Array.isArray(value.events)
@@ -91,6 +98,7 @@ export function isRestorableStudySession(
     && typeof value.opened_client_at_ms === 'number'
     && Number.isFinite(value.opened_client_at_ms)
     && (value.status === 'active' || value.status === 'pending_commit')
+    && activeCardIdValid
   )
 }
 
