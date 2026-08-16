@@ -616,6 +616,19 @@ export function useStudySession(deckId: string | null) {
     return session ? buildSessionView(session, now()) : null
   }, [now, session, tick])
 
+  useEffect(() => {
+    if (!session || !view?.card?.card_id) return
+    if (session.active_card_id !== view.card.card_id) {
+      const nextSession: PersistedStudySession = {
+        ...session,
+        active_card_id: view.card.card_id,
+        updated_at_ms: Date.now(),
+      }
+      activateSession(nextSession)
+      void saveStudySession(nextSession)
+    }
+  }, [activateSession, session, view?.card?.card_id])
+
   const prepareDecision = useCallback((cardId: string) => {
     const active = sessionRef.current
     if (!active) throw new Error('Study session is not ready.')

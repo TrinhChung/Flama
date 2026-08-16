@@ -387,4 +387,49 @@ describe('local study session engine', () => {
     // Undoing when empty returns null
     expect(undoLocalAnswer(undo1!.session)).toBeNull()
   })
+
+  it('locks the active card and does not auto-switch when another learning card becomes due on tick', () => {
+    vi.stubGlobal('crypto', {
+      randomUUID: () => '00000000-0000-4000-8000-000000000001',
+    })
+    const snap = snapshotWithCards(2)
+    const now = Date.parse(snap.server_now_utc)
+
+    // Card 1: Review card due today
+    snap.cards[0].state = {
+      ...snap.cards[0].state,
+      type: 'review',
+      due_day: 0,
+      due_at: null,
+    }
+    // Card 2: Learning card due in 60s
+    snap.cards[1].state = {
+      ...snap.cards[1].state,
+      type: 'learning',
+      due_day: null,
+      due_at: new Date(now + 60_000).toISOString(),
+    }
+
+    const session = createPersistedSession(snap)
+    expect(session.active_card_id).toBe('card-1')
+
+    // At t = now, card-1 is on screen
+    const viewAtStart = buildSessionView(session, now)
+    expect(viewAtStart.card?.card_id).toBe('card-1')
+
+    // At t = now + 70s, card-2 becomes due in learning queue (normally higher priority than review)
+    // But card-1 is locked as active_card_id, so buildSessionView must NOT switch to card-2
+    const viewAfterTick = buildSessionView(session, now + 70_000)
+    expect(viewAfterTick.card?.card_id).toBe('card-1')
+    expect(viewAfterTick.counts.learning).toBe(1)
+    expect(viewAfterTick.counts.due).toBe(1)
+
+    // Only after answering card-1 does the session transition to card-2
+    const decision = decisionForCard(session, 'card-1', now + 70_000)
+    const answered = applyLocalAnswer(session, 'card-1', 'good', decision, 1000)
+    expect(answered.active_card_id).toBe('card-2')
+
+    const viewAfterAnswer = buildSessionView(answered, now + 70_000)
+    expect(viewAfterAnswer.card?.card_id).toBe('card-2')
+  })
 })

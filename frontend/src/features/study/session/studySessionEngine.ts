@@ -53,12 +53,27 @@ function cloneSnapshot(snapshot: StudySessionSnapshot): StudySessionSnapshot {
 export function createPersistedSession(
   snapshot: StudySessionSnapshot,
 ): PersistedStudySession {
+  const cloned = cloneSnapshot(snapshot)
+  const cards = cloned.cards.map((card) => ({
+    card_id: card.card_id,
+    created_at: card.created_at,
+    state: card.state,
+  }))
+  const nowMs = Date.parse(snapshot.server_now_utc) || Date.now()
+  const initialSelected = selectNextCard(
+    cards,
+    nowMs,
+    snapshot.timezone,
+    snapshot.day_boundary_hour_local,
+    snapshot.learn_ahead_seconds,
+  )
   return {
     scope_key: `user:${snapshot.user_id}:${snapshot.scope.type}:${snapshot.scope.id}`,
-    snapshot: cloneSnapshot(snapshot),
+    snapshot: cloned,
     events: [],
     touched_card_ids: [],
     undo_history: [],
+    active_card_id: initialSelected?.card_id ?? null,
     opened_client_at_ms: Date.now(),
     status: 'active',
     commit_id: null,
@@ -82,13 +97,22 @@ export function buildSessionView(
 ): StudySessionView {
   const snapshot = session.snapshot
   const cards = queueCards(session)
-  const selected = selectNextCard(
-    cards,
-    nowMs,
-    snapshot.timezone,
-    snapshot.day_boundary_hour_local,
-    snapshot.learn_ahead_seconds,
-  )
+  const activeCard = session.active_card_id
+    ? snapshot.cards.find(
+        (row) => row.card_id === session.active_card_id && !row.state.suspended,
+      ) ?? null
+    : null
+
+  const selected = activeCard
+    ? { card_id: activeCard.card_id }
+    : selectNextCard(
+        cards,
+        nowMs,
+        snapshot.timezone,
+        snapshot.day_boundary_hour_local,
+        snapshot.learn_ahead_seconds,
+      )
+
   const counts = queueCounts(
     cards,
     nowMs,
@@ -184,19 +208,34 @@ export function applyLocalAnswer(
     { card_id: cardId, previous_state: previousState },
   ]
 
+  const nextSnapshotCards = session.snapshot.cards.map((row) => (
+    row.card_id === cardId
+      ? { ...row, state: decision.outcomes[rating] }
+      : row
+  ))
+  const nextQueue = nextSnapshotCards.map((c) => ({
+    card_id: c.card_id,
+    created_at: c.created_at,
+    state: c.state,
+  }))
+  const nextSelected = selectNextCard(
+    nextQueue,
+    decision.scheduler_at_ms,
+    session.snapshot.timezone,
+    session.snapshot.day_boundary_hour_local,
+    session.snapshot.learn_ahead_seconds,
+  )
+
   return {
     ...session,
     snapshot: {
       ...session.snapshot,
-      cards: session.snapshot.cards.map((row) => (
-        row.card_id === cardId
-          ? { ...row, state: decision.outcomes[rating] }
-          : row
-      )),
+      cards: nextSnapshotCards,
     },
     events: [...session.events, event],
     touched_card_ids: touched,
     undo_history: undoHistory,
+    active_card_id: nextSelected?.card_id ?? null,
     updated_at_ms: Date.now(),
   } satisfies PersistedStudySession
 }
@@ -237,6 +276,7 @@ export function undoLocalAnswer(
     events: remainingEvents,
     touched_card_ids: touchedCardIds,
     undo_history: remainingUndoHistory,
+    active_card_id: cardId,
     updated_at_ms: Date.now(),
   }
 
