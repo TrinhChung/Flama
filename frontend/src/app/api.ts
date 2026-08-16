@@ -261,8 +261,9 @@ export const appApi = {
   },
 
   async getDashboardOverview(year: number): Promise<DashboardOverview> {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
     return apiRequest<DashboardOverview>(
-      `${API_BASE}/statistics/overview?year=${encodeURIComponent(year)}`,
+      `${API_BASE}/statistics/overview?year=${encodeURIComponent(year)}&timezone=${encodeURIComponent(tz)}`,
     )
   },
 
@@ -306,11 +307,13 @@ export const appApi = {
   async getTodayFutureStats(
     filters: StatisticsFilters,
   ): Promise<TodayFutureStats> {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
     const params = new URLSearchParams({
       scope: filters.scope,
       history_range: filters.historyRange,
       future_range: filters.futureRange,
       backlog: String(filters.backlog),
+      timezone: tz,
     })
     if (filters.deckId !== null) {
       params.set('deck_id', String(filters.deckId))

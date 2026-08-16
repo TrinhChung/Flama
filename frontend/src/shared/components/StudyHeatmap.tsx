@@ -68,6 +68,7 @@ function getTodayStr(): string {
 function getDayTitle(day: HeatmapDay, isToday: boolean, isPeak: boolean): string {
   const todayLabel = isToday ? ' (Hôm nay)' : ''
   if (day.is_future) {
+    if (!day.cards) return `${day.date}${todayLabel}: Chưa học`
     return `${day.date}${todayLabel}: ${day.cards.toLocaleString('vi-VN')} thẻ đến hạn`
   }
   if (!day.cards) return `${day.date}${todayLabel}: Chưa học`
@@ -123,7 +124,7 @@ export function StudyHeatmap({
   className,
 }: StudyHeatmapProps) {
   const [tooltipText, setTooltipText] = useState<string>('Rê chuột lên các ô để xem chi tiết học tập.')
-  const todayStr = getTodayStr()
+  const todayStr = overview?.today?.date || getTodayStr()
 
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const todayRef = useRef<HTMLButtonElement>(null)

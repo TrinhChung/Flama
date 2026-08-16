@@ -302,7 +302,7 @@ def build_stats_overview(
 
     due_day_map: dict[date, int] = {}
     if selected_year == today_local.year:
-        future_start_local = today_local + timedelta(days=1)
+        future_start_local = today_local
         if future_start_local <= year_end:
             future_start_utc = _day_index_to_datetime(
                 future_start_local.toordinal(),
@@ -395,12 +395,39 @@ def build_stats_overview(
             minutes = 0.0
             sec_per_card = 0.0
             source = "due"
+        elif selected_year == today_local.year and day_value == today_local:
+            day_bucket = day_map.get(day_value) or {"cards": 0, "duration_ms": 0}
+            reviewed_cards = _safe_int(day_bucket.get("cards"))
+            if reviewed_cards > 0:
+                cards = reviewed_cards
+                duration_ms = max(0, _safe_int(day_bucket.get("duration_ms")))
+                minutes = _round2(duration_ms / 60000.0)
+                sec_per_card = _round2((duration_ms / 1000.0) / cards)
+                is_future = False
+                source = "reviewed"
+            else:
+                today_due = _safe_int(due_day_map.get(day_value))
+                if today_due > 0:
+                    cards = today_due
+                    duration_ms = 0
+                    minutes = 0.0
+                    sec_per_card = 0.0
+                    is_future = True
+                    source = "due"
+                else:
+                    cards = 0
+                    duration_ms = 0
+                    minutes = 0.0
+                    sec_per_card = 0.0
+                    is_future = False
+                    source = "reviewed"
         else:
             day_bucket = day_map.get(day_value) or {"cards": 0, "duration_ms": 0}
             cards = _safe_int(day_bucket.get("cards"))
             duration_ms = max(0, _safe_int(day_bucket.get("duration_ms")))
             minutes = _round2(duration_ms / 60000.0)
             sec_per_card = _round2((duration_ms / 1000.0) / cards) if cards > 0 else 0.0
+            is_future = False
             source = "reviewed"
         heatmap.append(
             {
@@ -419,6 +446,7 @@ def build_stats_overview(
         "year": selected_year,
         "timezone": effective_timezone_name,
         "today": {
+            "date": today_local.isoformat(),
             "cards": today_cards,
             "minutes": today_minutes,
             "sec_per_card": today_sec_per_card,

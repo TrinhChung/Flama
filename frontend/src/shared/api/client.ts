@@ -98,6 +98,15 @@ async function apiFetch(
   const headers = new Headers(init.headers)
   headers.set('Accept', accept)
 
+  if (!headers.has('X-Timezone')) {
+    try {
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
+      if (tz) headers.set('X-Timezone', tz)
+    } catch {
+      // ignore
+    }
+  }
+
   const effectiveCsrfToken = getCsrfToken()
   if (isUnsafeMethod(method) && effectiveCsrfToken) {
     headers.set('X-CSRF-Token', effectiveCsrfToken)
