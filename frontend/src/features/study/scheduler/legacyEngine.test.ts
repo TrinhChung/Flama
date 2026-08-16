@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyAnswer, computeDecision } from './legacyEngine'
+import { applyAnswer, computeDecision, formatIntervalDays } from './legacyEngine'
 import { dayIndex } from './time'
 import type { SchedulerCardState, SchedulerOptions } from './types'
 
@@ -122,5 +122,44 @@ describe('legacy frontend scheduler parity', () => {
     expect(updated.lapses).toBe(2)
     expect(updated.leeched).toBe(true)
     expect(updated.suspended).toBe(true)
+  })
+
+  it('formats interval days into days, months, and years', () => {
+    expect(formatIntervalDays(1)).toBe('1d')
+    expect(formatIntervalDays(15)).toBe('15d')
+    expect(formatIntervalDays(29)).toBe('29d')
+    expect(formatIntervalDays(30)).toBe('1m')
+    expect(formatIntervalDays(45)).toBe('1.5m')
+    expect(formatIntervalDays(50)).toBe('1.7m')
+    expect(formatIntervalDays(60)).toBe('2m')
+    expect(formatIntervalDays(90)).toBe('3m')
+    expect(formatIntervalDays(180)).toBe('6m')
+    expect(formatIntervalDays(360)).toBe('12m')
+    expect(formatIntervalDays(365)).toBe('1y')
+    expect(formatIntervalDays(500)).toBe('1.4y')
+    expect(formatIntervalDays(600)).toBe('1.6y')
+    expect(formatIntervalDays(730)).toBe('2y')
+    expect(formatIntervalDays(36500)).toBe('100y')
+  })
+
+  it('previews long review intervals using months or years labels', () => {
+    const monthCard = state({
+      type: 'review',
+      interval_days: 50,
+      due_day: dayIndex(now, 4, 'UTC'),
+      due_at: new Date(now).toISOString(),
+    })
+    const monthDecision = computeDecision(monthCard, options, now, 'UTC')
+    expect(monthDecision.previews.hard.label).toBe('2m') // 50 * 1.2 = 60d -> 2m
+
+    const yearCard = state({
+      type: 'review',
+      interval_days: 300,
+      due_day: dayIndex(now, 4, 'UTC'),
+      due_at: new Date(now).toISOString(),
+    })
+    const yearDecision = computeDecision(yearCard, options, now, 'UTC')
+    // 300 * 2.5 = 750d -> 750 / 365 = 2.05 -> 2.1y
+    expect(yearDecision.previews.good.label).toBe('2.1y')
   })
 })

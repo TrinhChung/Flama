@@ -253,9 +253,75 @@ class StatsOverviewTests(unittest.TestCase):
 
             jan_10 = self._heatmap_day(payload, "2026-01-10")
             self.assertEqual(payload["today"]["cards"], 1)
+            self.assertEqual(payload["today"]["date"], "2026-01-10")
             self.assertEqual(jan_10["cards"], 1)
             self.assertEqual(jan_10["source"], "reviewed")
             self.assertFalse(jan_10["is_future"])
+
+    def test_today_reviewed_cards_take_precedence_over_due_cards(self):
+        with self.app.app_context():
+            now_utc = datetime(2026, 1, 10, 12, 0, 0)
+            # Add 5 reviewed cards today
+            for _ in range(5):
+                self._add_event(when_utc=datetime(2026, 1, 10, 9, 0, 0), duration_ms=1000)
+            # Add 44 due cards today
+            for _ in range(44):
+                self._add_progress(due_at=datetime(2026, 1, 10, 8, 0, 0))
+            db.session.commit()
+
+            payload = build_stats_overview(
+                user_id=self.user_id,
+                year=2026,
+                timezone_name="UTC",
+                now_utc=now_utc,
+            )
+
+            today_point = self._heatmap_day(payload, "2026-01-10")
+            self.assertEqual(payload["today"]["cards"], 5)
+            self.assertEqual(payload["today"]["date"], "2026-01-10")
+            # Today must show reviewed cards (5), not due cards (44)
+            self.assertEqual(today_point["cards"], 5)
+            self.assertEqual(today_point["source"], "reviewed")
+            self.assertFalse(today_point["is_future"])
+
+    def test_today_unstudied_shows_due_cards(self):
+        with self.app.app_context():
+            now_utc = datetime(2026, 1, 10, 12, 0, 0)
+            # 0 reviews today, but 44 due cards
+            for _ in range(44):
+                self._add_progress(due_at=datetime(2026, 1, 10, 8, 0, 0))
+            db.session.commit()
+
+            payload = build_stats_overview(
+                user_id=self.user_id,
+                year=2026,
+                timezone_name="UTC",
+                now_utc=now_utc,
+            )
+
+            today_point = self._heatmap_day(payload, "2026-01-10")
+            self.assertEqual(payload["today"]["cards"], 0)
+            self.assertEqual(payload["today"]["date"], "2026-01-10")
+            # Since unstudied today, show 44 due cards with is_future=True and source="due"
+            self.assertEqual(today_point["cards"], 44)
+            self.assertEqual(today_point["source"], "due")
+            self.assertTrue(today_point["is_future"])
+
+    def test_today_unstudied_and_no_due_shows_zero(self):
+        with self.app.app_context():
+            now_utc = datetime(2026, 1, 10, 12, 0, 0)
+            payload = build_stats_overview(
+                user_id=self.user_id,
+                year=2026,
+                timezone_name="UTC",
+                now_utc=now_utc,
+            )
+
+            today_point = self._heatmap_day(payload, "2026-01-10")
+            self.assertEqual(payload["today"]["cards"], 0)
+            self.assertEqual(today_point["cards"], 0)
+            self.assertEqual(today_point["source"], "reviewed")
+            self.assertFalse(today_point["is_future"])
 
 
 if __name__ == "__main__":

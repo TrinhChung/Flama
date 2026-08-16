@@ -57,6 +57,7 @@ def _safe_int(value: Any) -> int:
     except (TypeError, ValueError):
         return 0
 
+
 def _parse_sql_day(raw_day: Any) -> date | None:
     if isinstance(raw_day, date):
         return raw_day
@@ -71,6 +72,7 @@ def _parse_sql_day(raw_day: Any) -> date | None:
         return date.fromisoformat(text[:10])
     except ValueError:
         return None
+
 
 def _utc_to_local_day(moment: datetime, timezone_obj) -> date:
     utc_moment = moment
@@ -117,6 +119,7 @@ def _progress_due_local_day(
         timezone_name=timezone_name,
         day_boundary_hour_local=day_boundary_hour_local,
     )
+
 
 def _query_daily_review_aggregates_mysql(
     *,
@@ -426,6 +429,31 @@ def _query_future_due_day_counts_python(
     return by_day
 
 
+def build_progress_rows_query(*, user_id: int):
+    return (
+        db.session.query(
+            CardProgress.due_at,
+            CardProgress.due_day,
+            CardProgress.queue,
+            CardProgress.interval_days,
+            CardProgress.is_suspended,
+            Note.deck_id.label("note_deck_id"),
+        )
+        .select_from(CardProgress)
+        .outerjoin(Card, CardProgress.card_id == Card.id)
+        .outerjoin(Note, Card.note_id == Note.id)
+        .filter(CardProgress.user_id == user_id)
+    )
+
+
+def apply_scope_filter(query, scope_deck_ids: list[int] | None):
+    if scope_deck_ids is None:
+        return query
+    if not scope_deck_ids:
+        return query.filter(db.text("1=0"))
+    return query.filter(Note.deck_id.in_(scope_deck_ids))
+
+
 def query_future_due_day_counts(
     *,
     user_id: int,
@@ -458,35 +486,11 @@ def query_future_due_day_counts(
         )
         if local_day is None:
             continue
-        if local_day < start_local_day or local_day >= end_local_day:
-            continue
-        by_day[local_day] = _safe_int(by_day.get(local_day)) + 1
+        if local_day < start_local_day:
+            by_day[start_local_day] = _safe_int(by_day.get(start_local_day)) + 1
+        elif local_day < end_local_day:
+            by_day[local_day] = _safe_int(by_day.get(local_day)) + 1
     return by_day
-
-
-def build_progress_rows_query(*, user_id: int):
-    return (
-        db.session.query(
-            CardProgress.due_at,
-            CardProgress.due_day,
-            CardProgress.queue,
-            CardProgress.interval_days,
-            CardProgress.is_suspended,
-            Note.deck_id.label("note_deck_id"),
-        )
-        .select_from(CardProgress)
-        .outerjoin(Card, CardProgress.card_id == Card.id)
-        .outerjoin(Note, Card.note_id == Note.id)
-        .filter(CardProgress.user_id == user_id)
-    )
-
-
-def apply_scope_filter(query, scope_deck_ids: list[int] | None):
-    if scope_deck_ids is None:
-        return query
-    if not scope_deck_ids:
-        return query.filter(db.text("1=0"))
-    return query.filter(Note.deck_id.in_(scope_deck_ids))
 
 
 def aggregate_future_due_offsets_mysql(

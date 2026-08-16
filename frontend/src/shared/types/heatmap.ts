@@ -10,6 +10,7 @@ export type HeatmapDay = {
 }
 
 export type HeatmapToday = {
+  date?: string
   cards: number
   minutes: number
   sec_per_card: number
