@@ -677,6 +677,45 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         self.assertEqual(patch_response.status_code, 409)
         self.assertEqual((patch_response.get_json() or {}).get("error"), "CONFLICT")
 
+    def test_shared_deck_api_allows_updating_existing_shared_deck(self):
+        note_type = self._create_note_type()
+        with self.app.app_context():
+            deck = Deck(name="Update Deck", owner_user_id=self.user_id)
+            db.session.add(deck)
+            db.session.flush()
+            item = DeckMarketplaceItem(
+                owner_user_id=self.user_id,
+                source_deck_id=deck.id,
+                source_note_type_id=note_type["id"],
+                title="Original Title",
+                description="Original Description",
+                publish_status="published",
+            )
+            db.session.add(item)
+            db.session.commit()
+            item_id = item.id
+            deck_id = deck.id
+
+        patch_response = self.client.patch(
+            f"/api/shared/decks/{item_id}",
+            json={
+                "source_deck_id": deck_id,
+                "title": "Updated Title",
+                "description": "Updated Description",
+                "preview_text": "Updated Preview Text",
+                "taxonomy_domain": "language_learning",
+                "taxonomy_subject": "japanese",
+                "taxonomy_difficulty_band": "beginner",
+                "learning_goals": ["vocabulary"],
+                "primary_topics": ["reading_recall"],
+            },
+        )
+        self.assertEqual(patch_response.status_code, 200)
+        payload = patch_response.get_json() or {}
+        self.assertEqual(payload.get("title"), "Updated Title")
+        self.assertEqual(payload.get("description"), "Updated Description")
+        self.assertEqual(payload.get("preview_text"), "Updated Preview Text")
+
     def test_shared_deck_api_rejects_parent_when_descendant_is_shared(self):
         with self.app.app_context():
             child = Deck(
@@ -704,6 +743,29 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         payload = response.get_json() or {}
         self.assertEqual(payload.get("field"), "source_deck_id")
         self.assertIn("bộ con", payload.get("message", "").lower())
+
+    def test_shared_deck_api_defaults_title_to_source_deck_name(self):
+        note_type_id = self._create_note_type()["id"]
+        with self.app.app_context():
+            deck = Deck(
+                name="Auto Titled Deck",
+                owner_user_id=self.user_id,
+            )
+            db.session.add(deck)
+            db.session.commit()
+            deck_id = deck.id
+
+        response = self.client.post(
+            "/api/shared/decks",
+            json={
+                "source_deck_id": deck_id,
+                "source_note_type_id": note_type_id,
+                "primary_category": "General",
+            },
+        )
+        self.assertEqual(response.status_code, 201)
+        payload = response.get_json() or {}
+        self.assertEqual(payload.get("title"), "Auto Titled Deck")
 
     def test_standard_user_can_load_deck_publish_options(self):
         with self.app.app_context():

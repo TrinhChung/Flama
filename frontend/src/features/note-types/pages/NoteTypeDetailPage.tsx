@@ -3,10 +3,12 @@ import {
   ArrowLeft,
   Check,
   CheckCircle,
+  ExternalLink,
   Plus,
   RotateCcw,
   Share2,
   SlidersHorizontal,
+  Sparkles,
 } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useParams } from 'react-router-dom'
@@ -248,6 +250,18 @@ export function NoteTypeDetailPage() {
                 </Link>
               </Button>
             )}
+
+            <Button
+              variant="outline"
+              size="sm"
+              asChild
+              className="h-8 sm:h-9 px-3 text-xs font-semibold rounded-xl border-primary/30 text-primary hover:bg-primary/10"
+            >
+              <Link to="/flashcards/note-types/guide" target="_blank" rel="noopener noreferrer">
+                <Sparkles className="size-3.5 mr-1.5 text-primary" /> Hướng Dẫn & Prompt AI
+                <ExternalLink className="size-3 ml-1 opacity-70" />
+              </Link>
+            </Button>
 
             <Button variant="outline" size="sm" asChild className="h-8 sm:h-9 px-3 text-xs font-semibold rounded-xl">
               <Link to={`/flashcards/note-types/${noteTypeId}/fields`}>

@@ -356,6 +356,12 @@ def _resolve_media_url(value: Any, media_lookup: dict[str, Any]) -> str:
     if is_field_empty(value):
         return ""
     raw = str(value).strip()
+    if raw == PREVIEW_MEDIA_AUDIO_TOKEN:
+        return "/media/proxy/sample-audio"
+    if raw == PREVIEW_MEDIA_IMAGE_TOKEN:
+        return "/media/proxy/sample-image"
+    if raw == PREVIEW_MEDIA_DIAGRAM_TOKEN:
+        return "/media/proxy/sample-diagram"
     sound_match = re.match(r"^\[sound:([^\]]+)\]$", raw)
     if sound_match:
         raw = sound_match.group(1).strip()

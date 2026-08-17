@@ -6,6 +6,7 @@ import {
   Download,
   Eye,
   Flame,
+  HelpCircle,
   Layers,
   Loader2,
   Plus,
@@ -28,6 +29,72 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Page, PageHeader } from '@/shared/components/Page'
 import { EmptyState, PageError } from '@/shared/components/PageState'
+import { SpotlightTour, type TourStep } from '@/shared/components/SpotlightTour'
+
+const MARKET_STORAGE_KEY = 'flama_marketplace_spotlight_tour_v1'
+
+const getMarketTourSteps = (mode: 'decks' | 'note-types', hasItems: boolean): TourStep[] => {
+  const steps: TourStep[] = [
+    {
+      target: '[data-tour="market-mode-switcher"]',
+      title: '🔄 1. Chuyển Đổi Kho Học Liệu',
+      content:
+        'Chuyển đổi linh hoạt giữa "Kho Bộ Thẻ" (các bộ flashcard hoàn chỉnh) và "Kho Loại Thẻ" (các mẫu giao diện NoteType).',
+      placement: 'bottom',
+    },
+    {
+      target: '[data-tour="market-publish-btn"]',
+      title: mode === 'decks' ? '🚀 2. Đăng Tải Bộ Thẻ Của Bạn' : '🚀 2. Tạo Mẫu Thẻ Mới',
+      content:
+        mode === 'decks'
+          ? 'Chia sẻ bộ thẻ bạn đã biên soạn lên Marketplace để cộng đồng cùng học hoặc nhận đóng góp.'
+          : 'Tự tạo loại thẻ mới hoặc xuất bản NoteType của bạn lên Marketplace.',
+      placement: 'bottom',
+    },
+    {
+      target: '[data-tour="market-search-box"]',
+      title: '🔍 3. Tìm Kiếm Thông Minh',
+      content:
+        'Tìm kiếm nhanh theo tên bộ thẻ, trình độ JLPT (N5 - N1), từ vựng theo chủ đề, hoặc tên tác giả.',
+      placement: 'bottom',
+    },
+    {
+      target: '[data-tour="market-categories"]',
+      title: '🏷️ 4. Bộ Lọc Theo Chủ Đề',
+      content:
+        'Lọc nhanh theo các danh mục trọng tâm: JLPT N5, N4, N3, N2, N1, Từ vựng, Kanji, Giao tiếp, IT / Công nghệ...',
+      placement: 'bottom',
+    },
+    {
+      target: '[data-tour="market-sort-tabs"]',
+      title: '⚡ 5. Sắp Xếp Theo Nhu Cầu',
+      content:
+        'Xem các bộ thẻ được "Đề xuất" bởi thuật toán, "Phổ biến" nhiều lượt tải nhất, hoặc "Mới nhất" vừa đăng tải.',
+      placement: 'bottom',
+    },
+  ]
+
+  if (hasItems) {
+    steps.push(
+      {
+        target: '[data-tour="market-card-first"]',
+        title: '🎴 6. Thông Tin Thẻ Học Liệu',
+        content:
+          'Mỗi thẻ hiển thị chủ đề, giá bán (Miễn phí/Trả phí), tên tác giả, điểm đánh giá sao ⭐ và số lượng thẻ.',
+        placement: 'top',
+      },
+      {
+        target: '[data-tour="market-action-btn"]',
+        title: '📥 7. Xem Chi Tiết & Cài Đặt',
+        content:
+          'Bấm để xem trước danh sách thẻ, xem giao diện thực tế và cài đặt (Overlay Sync) trực tiếp vào tài khoản của bạn để học ngay!',
+        placement: 'top',
+      },
+    )
+  }
+
+  return steps
+}
 
 type MarketplaceItem = {
   id: string
@@ -55,32 +122,58 @@ type MarketplaceItem = {
 type SortView = 'recommended' | 'newest' | 'popular'
 
 const PRESET_CATEGORIES = [
+  'Tiếng Nhật',
   'JLPT N5',
   'JLPT N4',
   'JLPT N3',
   'JLPT N2',
   'JLPT N1',
+  'Tiếng Anh',
+  'IELTS',
+  'TOEIC',
+  'VSTEP',
+  'Tiếng Hàn',
+  'TOPIK',
+  'Tiếng Trung',
+  'HSK',
+  'IT / Công nghệ',
+  'AWS Cloud',
+  'THPT Quốc Gia',
+  'Y dược',
   'Từ vựng',
   'Kanji',
-  'Ngữ pháp',
   'Giao tiếp',
-  'IT / Công nghệ',
 ]
 
 function getCategoryBadgeStyle(categoryName: string | null | undefined) {
   if (!categoryName) return 'bg-muted text-muted-foreground border-border/60'
   const lower = categoryName.toLowerCase()
+  if (lower.includes('ielts') || lower.includes('toeic') || lower.includes('vstep') || lower.includes('tiếng anh')) {
+    return 'bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20'
+  }
+  if (lower.includes('topik') || lower.includes('tiếng hàn')) {
+    return 'bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-500/20'
+  }
+  if (lower.includes('hsk') || lower.includes('tiếng trung') || lower.includes('tocfl')) {
+    return 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/20'
+  }
+  if (lower.includes('aws') || lower.includes('azure') || lower.includes('it') || lower.includes('công nghệ')) {
+    return 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20'
+  }
   if (lower.includes('n5') || lower.includes('n4')) {
     return 'bg-sky-500/10 text-sky-700 dark:text-sky-400 border-sky-500/20'
   }
   if (lower.includes('n3')) {
     return 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20'
   }
-  if (lower.includes('n2') || lower.includes('n1')) {
+  if (lower.includes('n2') || lower.includes('n1') || lower.includes('tiếng nhật')) {
     return 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20'
   }
-  if (lower.includes('kanji')) {
+  if (lower.includes('kanji') || lower.includes('hán tự')) {
     return 'bg-primary/10 text-primary border-primary/20'
+  }
+  if (lower.includes('thpt') || lower.includes('y dược') || lower.includes('học thuật')) {
+    return 'bg-teal-500/10 text-teal-700 dark:text-teal-400 border-teal-500/20'
   }
   return 'bg-muted text-muted-foreground border-border/60'
 }
@@ -123,6 +216,7 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
   const [queryText, setQueryText] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
   const [category, setCategory] = useState('')
+  const [tourOpen, setTourOpen] = useState(false)
   const searchInputRef = useRef<HTMLInputElement>(null)
 
   const endpoint =
@@ -172,6 +266,24 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
     return merged
   }, [marketQuery.data?.items])
 
+  const tourSteps = useMemo(
+    () => getMarketTourSteps(mode, (marketQuery.data?.items.length ?? 0) > 0),
+    [mode, marketQuery.data?.items.length],
+  )
+
+  // Auto-launch marketplace spotlight tour for first-time visitors
+  useEffect(() => {
+    if (marketQuery.isSuccess) {
+      const completed = localStorage.getItem(MARKET_STORAGE_KEY)
+      if (!completed) {
+        const timer = setTimeout(() => {
+          setTourOpen(true)
+        }, 500)
+        return () => clearTimeout(timer)
+      }
+    }
+  }, [marketQuery.isSuccess])
+
   const isFiltered = Boolean(queryText || category)
   const totalCount = marketQuery.data?.items.length ?? 0
 
@@ -189,7 +301,17 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
         }
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <div className="inline-flex rounded-xl border border-border/80 bg-muted/40 p-1 shadow-2xs">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setTourOpen(true)}
+              className="h-8 sm:h-9 px-3 text-xs font-semibold rounded-xl"
+            >
+              <HelpCircle className="size-3.5 mr-1.5 text-primary" />
+              Tour Hướng Dẫn
+            </Button>
+
+            <div data-tour="market-mode-switcher" className="inline-flex rounded-xl border border-border/80 bg-muted/40 p-1 shadow-2xs">
               <Button
                 variant={mode === 'decks' ? 'default' : 'ghost'}
                 size="sm"
@@ -229,6 +351,7 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
               variant="default"
               size="sm"
               asChild
+              data-tour="market-publish-btn"
               className="h-8 sm:h-9 px-3.5 text-xs font-bold rounded-lg shadow-xs"
             >
               <Link
@@ -252,7 +375,7 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
           {/* Top Row: Search Input + Sorting Tabs */}
           <div className="flex flex-col sm:flex-row gap-3 sm:items-center justify-between">
             {/* Search Box with Kbd shortcut & Loader */}
-            <div className="relative flex-1">
+            <div data-tour="market-search-box" className="relative flex-1">
               <Label htmlFor="marketplace-search" className="sr-only">
                 Tìm kiếm học liệu
               </Label>
@@ -293,7 +416,7 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
             </div>
 
             {/* Sort Tabs & Reset Button */}
-            <div className="flex items-center gap-2 shrink-0">
+            <div data-tour="market-sort-tabs" className="flex items-center gap-2 shrink-0">
               <Tabs
                 value={view}
                 onValueChange={(value) => setView(value as SortView)}
@@ -343,7 +466,7 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
           </div>
 
           {/* Bottom Row: Quick Category Pills with Horizontal Scroll & ARIA */}
-          <div className="relative pt-2 border-t border-border/40">
+          <div data-tour="market-categories" className="relative pt-2 border-t border-border/40">
             <div
               role="group"
               aria-label="Lọc theo danh mục chủ đề"
@@ -473,7 +596,7 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
       {/* Item Card Grid */}
       {marketQuery.data?.items.length ? (
         <div className="grid gap-4 sm:gap-5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {marketQuery.data.items.map((item) => {
+          {marketQuery.data.items.map((item, index) => {
             const itemTitle = item.title || item.name || 'Học liệu không tên'
             const detailUrl =
               mode === 'decks'
@@ -487,6 +610,7 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
             return (
               <Card
                 key={item.id}
+                data-tour={index === 0 ? 'market-card-first' : undefined}
                 className="group relative flex flex-col justify-between overflow-hidden border-border/80 bg-card p-4 sm:p-5 transition-all duration-200 hover:-translate-y-1 hover:border-primary/40 hover:shadow-md rounded-xl"
               >
                 {/* Card Main Info Block */}
@@ -580,6 +704,7 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
                     <Button
                       size="sm"
                       asChild
+                      data-tour={index === 0 ? 'market-action-btn' : undefined}
                       className="w-full h-9 text-xs font-semibold rounded-lg shadow-xs"
                     >
                       <Link to={`/study?deck_id=${item.installed_deck_id}`}>
@@ -592,6 +717,7 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
                       variant="outline"
                       size="sm"
                       asChild
+                      data-tour={index === 0 ? 'market-action-btn' : undefined}
                       className="w-full h-9 text-xs font-semibold rounded-lg border-emerald-500/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10"
                     >
                       <Link to={detailUrl}>
@@ -604,6 +730,7 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
                       variant="outline"
                       size="sm"
                       asChild
+                      data-tour={index === 0 ? 'market-action-btn' : undefined}
                       className="w-full h-9 text-xs font-semibold rounded-lg hover:bg-primary hover:text-primary-foreground hover:border-primary transition-all"
                     >
                       <Link to={detailUrl}>
@@ -619,6 +746,20 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
           })}
         </div>
       ) : null}
+
+      {/* Interactive Spotlight Tour for Marketplace */}
+      <SpotlightTour
+        steps={tourSteps}
+        isOpen={tourOpen}
+        onClose={() => {
+          localStorage.setItem(MARKET_STORAGE_KEY, 'true')
+          setTourOpen(false)
+        }}
+        onComplete={() => {
+          localStorage.setItem(MARKET_STORAGE_KEY, 'true')
+          setTourOpen(false)
+        }}
+      />
     </Page>
   )
 }
