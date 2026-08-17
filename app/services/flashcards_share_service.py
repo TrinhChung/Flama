@@ -483,10 +483,6 @@ def create_shared_deck_item(
     is_admin: bool,
     require_source_note_type: bool
 ) -> tuple[DeckMarketplaceItem | None, str | None, str | None]:
-    title = (payload.get("title") or "").strip()
-    if not title:
-        return None, "title is required.", "title"
-
     source_deck_id_raw = payload.get("source_deck_id")
     try:
         source_deck_id = int(source_deck_id_raw)
@@ -501,6 +497,10 @@ def create_shared_deck_item(
     )
     if not eligibility["is_selectable"]:
         return None, str(eligibility["block_reason"]), "source_deck_id"
+
+    title = (payload.get("title") or "").strip() or (source_deck.name or "").strip()
+    if not title:
+        return None, "title is required.", "title"
 
     deck_item = DeckMarketplaceItem(
         owner_user_id=user_id,
@@ -520,6 +520,7 @@ def create_shared_deck_item(
     
     deferred_status = payload.get("publish_status") if "publish_status" in payload else None
     initial_payload = dict(payload)
+    initial_payload["title"] = title
     initial_payload.pop("publish_status", None)
     validation_error = flashcards_share.apply_deck_marketplace_payload(
         deck_item,
@@ -1503,7 +1504,10 @@ def apply_deck_marketplace_payload(
             except (TypeError, ValueError):
                 return "source_deck_id must be an integer."
     if "source_note_type_id" in payload:
-        deck_item.source_note_type_id = (payload.get("source_note_type_id") or "").strip() or None
+        raw_source_note_type_id = payload.get("source_note_type_id")
+        if isinstance(raw_source_note_type_id, dict):
+            raw_source_note_type_id = raw_source_note_type_id.get("id")
+        deck_item.source_note_type_id = (str(raw_source_note_type_id or "")).strip() or None
     if "version" in payload:
         deck_item.version = (payload.get("version") or "").strip() or "1.0.0"
     if "changelog" in payload:

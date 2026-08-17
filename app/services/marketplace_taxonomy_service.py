@@ -16,13 +16,15 @@ SUBJECT_OPTIONS = (
     {"id": "english", "label": "Tiếng Anh", "domain": "language_learning"},
     {"id": "chinese", "label": "Tiếng Trung", "domain": "language_learning"},
     {"id": "korean", "label": "Tiếng Hàn", "domain": "language_learning"},
-    {"id": "aws", "label": "AWS", "domain": "certification"},
+    {"id": "aws", "label": "AWS Cloud", "domain": "certification"},
+    {"id": "azure", "label": "Microsoft Azure", "domain": "certification"},
     {"id": "other_certification", "label": "Chứng chỉ khác", "domain": "certification"},
     {"id": "it_coding", "label": "CNTT & Lập trình", "domain": "professional_skills"},
     {"id": "business", "label": "Kinh doanh & Quản lý", "domain": "professional_skills"},
-    {"id": "science", "label": "Khoa học tự nhiên", "domain": "academic"},
+    {"id": "thpt_qg", "label": "Luyện thi THPT Quốc Gia", "domain": "academic"},
     {"id": "medical", "label": "Y dược", "domain": "academic"},
     {"id": "law", "label": "Luật", "domain": "academic"},
+    {"id": "science", "label": "Khoa học tự nhiên", "domain": "academic"},
     {"id": "other", "label": "Khác", "domain": "other"},
 )
 
@@ -42,12 +44,12 @@ AUDIENCE_OPTIONS = (
 
 LEARNING_GOAL_OPTIONS = (
     {"id": "vocabulary", "label": "Từ vựng"},
-    {"id": "kanji", "label": "Kanji"},
+    {"id": "kanji", "label": "Kanji / Hán tự"},
     {"id": "grammar", "label": "Ngữ pháp"},
-    {"id": "reading", "label": "Đọc"},
-    {"id": "listening", "label": "Nghe"},
-    {"id": "speaking", "label": "Nói"},
-    {"id": "writing", "label": "Viết"},
+    {"id": "reading", "label": "Đọc hiểu"},
+    {"id": "listening", "label": "Luyện nghe"},
+    {"id": "speaking", "label": "Luyện nói"},
+    {"id": "writing", "label": "Luyện viết"},
     {"id": "exam_prep", "label": "Luyện thi"},
     {"id": "daily_communication", "label": "Giao tiếp hằng ngày"},
     {"id": "drill", "label": "Ôn tập nhanh"},
@@ -55,6 +57,9 @@ LEARNING_GOAL_OPTIONS = (
     {"id": "service_comparison", "label": "So sánh dịch vụ"},
     {"id": "scenario_practice", "label": "Luyện tình huống"},
     {"id": "architecture_review", "label": "Ôn kiến trúc"},
+    {"id": "formula_mastery", "label": "Nắm vững công thức"},
+    {"id": "problem_solving", "label": "Giải bài tập / Case study"},
+    {"id": "code_implementation", "label": "Viết mã & Thực hành"},
 )
 
 TOPIC_OPTIONS = (
@@ -68,7 +73,7 @@ TOPIC_OPTIONS = (
     {"id": "business", "label": "Công việc"},
     {"id": "academic_english", "label": "Học thuật"},
     {"id": "business_english", "label": "Tiếng Anh công việc"},
-    {"id": "hanzi", "label": "Hanzi"},
+    {"id": "hanzi", "label": "Hanzi / Hán tự"},
     {"id": "pinyin", "label": "Pinyin"},
     {"id": "furigana", "label": "Furigana"},
     {"id": "compute", "label": "Compute"},
@@ -80,6 +85,30 @@ TOPIC_OPTIONS = (
     {"id": "serverless", "label": "Serverless"},
     {"id": "monitoring", "label": "Monitoring"},
     {"id": "architecture_concepts", "label": "Khái niệm kiến trúc"},
+    # Tech & Coding
+    {"id": "code_syntax", "label": "Cú pháp & Snippets"},
+    {"id": "algorithms_dsa", "label": "Cấu trúc dữ liệu & Thuật toán"},
+    {"id": "frontend_web", "label": "Frontend & Web"},
+    {"id": "backend_api", "label": "Backend & API"},
+    {"id": "devops_cloud", "label": "DevOps & Cloud"},
+    # Academic & THPT
+    {"id": "math_formulas", "label": "Công thức Toán"},
+    {"id": "physics_laws", "label": "Định luật Vật lý"},
+    {"id": "chemistry_reactions", "label": "Phản ứng Hóa học"},
+    {"id": "biology_genetics", "label": "Sinh học & Di truyền"},
+    {"id": "history_events", "label": "Sự kiện Lịch sử"},
+    {"id": "geography_facts", "label": "Địa lý"},
+    # Medical
+    {"id": "medical_terms", "label": "Thuật ngữ Y khoa"},
+    {"id": "anatomy", "label": "Giải phẫu học"},
+    {"id": "pharmacology", "label": "Dược lý & Thuốc"},
+    # Law
+    {"id": "law_clauses", "label": "Điều luật & Pháp điển"},
+    {"id": "legal_cases", "label": "Án lệ & Tố tụng"},
+    # Business
+    {"id": "project_management", "label": "Quản trị dự án / Agile"},
+    {"id": "finance_accounting", "label": "Tài chính & Kế toán"},
+    {"id": "marketing_sales", "label": "Marketing & Bán hàng"},
 )
 
 FORMAT_FEATURE_OPTIONS = (
@@ -114,11 +143,29 @@ SUBJECT_PACKS = {
                 "id": "jlpt",
                 "label": "JLPT",
                 "levels": (
-                    {"id": "n5", "label": "N5", "difficulty_band": "beginner"},
-                    {"id": "n4", "label": "N4", "difficulty_band": "beginner"},
-                    {"id": "n3", "label": "N3", "difficulty_band": "intermediate"},
-                    {"id": "n2", "label": "N2", "difficulty_band": "advanced"},
-                    {"id": "n1", "label": "N1", "difficulty_band": "advanced"},
+                    {"id": "n5", "label": "N5 (Sơ cấp 1)", "difficulty_band": "beginner"},
+                    {"id": "n4", "label": "N4 (Sơ cấp 2)", "difficulty_band": "beginner"},
+                    {"id": "n3", "label": "N3 (Trung cấp)", "difficulty_band": "intermediate"},
+                    {"id": "n2", "label": "N2 (Trung cao cấp)", "difficulty_band": "advanced"},
+                    {"id": "n1", "label": "N1 (Cao cấp)", "difficulty_band": "advanced"},
+                ),
+            },
+            {
+                "id": "kanji",
+                "label": "Kanji / Hán tự",
+                "levels": (
+                    {"id": "kanji_n5_n4", "label": "Kanji N5 - N4 (Cơ bản)", "difficulty_band": "beginner"},
+                    {"id": "kanji_n3_n2", "label": "Kanji N3 - N2 (Trung cấp)", "difficulty_band": "intermediate"},
+                    {"id": "kanji_n1_jouyou", "label": "Kanji N1 & 2136 chữ Thường dụng", "difficulty_band": "advanced"},
+                ),
+            },
+            {
+                "id": "bjt",
+                "label": "BJT / Giao tiếp",
+                "levels": (
+                    {"id": "kaiwa_basic", "label": "Giao tiếp đời sống (Minna)", "difficulty_band": "beginner"},
+                    {"id": "bjt_j3_j2", "label": "BJT J3 - J2 (Thương mại)", "difficulty_band": "intermediate"},
+                    {"id": "bjt_j1_plus", "label": "BJT J1 - J1+ (Cao cấp)", "difficulty_band": "advanced"},
                 ),
             },
         ),
@@ -129,32 +176,60 @@ SUBJECT_PACKS = {
     "english": {
         "frameworks": (
             {
-                "id": "cefr",
-                "label": "CEFR",
+                "id": "ielts",
+                "label": "IELTS",
                 "levels": (
-                    {"id": "a1_a2", "label": "A1-A2", "difficulty_band": "beginner"},
-                    {"id": "b1_b2", "label": "B1-B2", "difficulty_band": "intermediate"},
-                    {"id": "c1_c2", "label": "C1-C2", "difficulty_band": "advanced"},
+                    {"id": "ielts_4_5", "label": "IELTS 4.0 - 5.0", "difficulty_band": "beginner"},
+                    {"id": "ielts_5_5", "label": "IELTS 5.5 - 6.0", "difficulty_band": "intermediate"},
+                    {"id": "ielts_6_5", "label": "IELTS 6.5 - 7.0", "difficulty_band": "intermediate"},
+                    {"id": "ielts_7_plus", "label": "IELTS 7.5 - 8.0+", "difficulty_band": "advanced"},
                 ),
             },
             {
                 "id": "toeic",
                 "label": "TOEIC",
                 "levels": (
-                    {"id": "toeic_450", "label": "450+", "difficulty_band": "beginner"},
-                    {"id": "toeic_600", "label": "600+", "difficulty_band": "intermediate"},
-                    {"id": "toeic_750", "label": "750+", "difficulty_band": "intermediate"},
-                    {"id": "toeic_900", "label": "900+", "difficulty_band": "advanced"},
+                    {"id": "toeic_450", "label": "TOEIC 250 - 450", "difficulty_band": "beginner"},
+                    {"id": "toeic_600", "label": "TOEIC 500 - 650", "difficulty_band": "intermediate"},
+                    {"id": "toeic_750", "label": "TOEIC 700 - 850", "difficulty_band": "intermediate"},
+                    {"id": "toeic_900", "label": "TOEIC 900+", "difficulty_band": "advanced"},
+                    {"id": "toeic_sw", "label": "TOEIC Speaking & Writing", "difficulty_band": "intermediate"},
                 ),
             },
             {
-                "id": "ielts",
-                "label": "IELTS",
+                "id": "vstep",
+                "label": "VSTEP (Bậc 3-5)",
                 "levels": (
-                    {"id": "ielts_4_5", "label": "4.5+", "difficulty_band": "beginner"},
-                    {"id": "ielts_5_5", "label": "5.5+", "difficulty_band": "intermediate"},
-                    {"id": "ielts_6_5", "label": "6.5+", "difficulty_band": "intermediate"},
-                    {"id": "ielts_7_plus", "label": "7.0+", "difficulty_band": "advanced"},
+                    {"id": "vstep_b1", "label": "VSTEP B1 (Bậc 3)", "difficulty_band": "intermediate"},
+                    {"id": "vstep_b2", "label": "VSTEP B2 (Bậc 4)", "difficulty_band": "intermediate"},
+                    {"id": "vstep_c1", "label": "VSTEP C1 (Bậc 5)", "difficulty_band": "advanced"},
+                ),
+            },
+            {
+                "id": "cefr",
+                "label": "CEFR",
+                "levels": (
+                    {"id": "a1_a2", "label": "A1 - A2 (Cơ bản)", "difficulty_band": "beginner"},
+                    {"id": "b1_b2", "label": "B1 - B2 (Độc lập)", "difficulty_band": "intermediate"},
+                    {"id": "c1_c2", "label": "C1 - C2 (Thành thạo)", "difficulty_band": "advanced"},
+                ),
+            },
+            {
+                "id": "toefl",
+                "label": "TOEFL",
+                "levels": (
+                    {"id": "toefl_60", "label": "TOEFL iBT 40 - 60", "difficulty_band": "beginner"},
+                    {"id": "toefl_80", "label": "TOEFL iBT 61 - 80", "difficulty_band": "intermediate"},
+                    {"id": "toefl_100", "label": "TOEFL iBT 81 - 100+", "difficulty_band": "advanced"},
+                ),
+            },
+            {
+                "id": "thpt_qg",
+                "label": "Luyện thi THPT QG / K12",
+                "levels": (
+                    {"id": "thpt_english", "label": "Luyện thi THPT QG Tiếng Anh", "difficulty_band": "intermediate"},
+                    {"id": "cambridge_ket_pet", "label": "Cambridge KET / PET", "difficulty_band": "beginner"},
+                    {"id": "sat_digital", "label": "SAT Digital", "difficulty_band": "advanced"},
                 ),
             },
         ),
@@ -162,18 +237,81 @@ SUBJECT_PACKS = {
         "topics": ("meaning_recall", "sentence_patterns", "audio_recognition", "conversation", "travel", "business_english", "academic_english"),
         "features": ("audio", "example_sentences", "cloze", "preview_available", "speaking_prompt", "writing_prompt", "exam_style"),
     },
+    "korean": {
+        "frameworks": (
+            {
+                "id": "topik",
+                "label": "TOPIK",
+                "levels": (
+                    {"id": "topik_1", "label": "TOPIK 1 (Cấp 1 - Nhập môn)", "difficulty_band": "beginner"},
+                    {"id": "topik_2", "label": "TOPIK 2 (Cấp 2 - Đời sống)", "difficulty_band": "beginner"},
+                    {"id": "topik_3", "label": "TOPIK 3 (Cấp 3 - Xã hội)", "difficulty_band": "intermediate"},
+                    {"id": "topik_4", "label": "TOPIK 4 (Cấp 4 - Tin tức/Công việc)", "difficulty_band": "intermediate"},
+                    {"id": "topik_5", "label": "TOPIK 5 (Cấp 5 - Chuyên sâu)", "difficulty_band": "advanced"},
+                    {"id": "topik_6", "label": "TOPIK 6 (Cấp 6 - Bản xứ)", "difficulty_band": "advanced"},
+                ),
+            },
+            {
+                "id": "general_korean",
+                "label": "Tiếng Hàn Tổng Hợp / Giao tiếp",
+                "levels": (
+                    {"id": "korean_beginner", "label": "Tiếng Hàn Sơ cấp 1 - 2", "difficulty_band": "beginner"},
+                    {"id": "korean_intermediate", "label": "Tiếng Hàn Trung cấp 3 - 4", "difficulty_band": "intermediate"},
+                    {"id": "korean_advanced", "label": "Tiếng Hàn Cao cấp 5 - 6", "difficulty_band": "advanced"},
+                ),
+            },
+            {
+                "id": "eps_topik",
+                "label": "EPS-TOPIK (XKLĐ)",
+                "levels": (
+                    {"id": "eps_manufacturing", "label": "EPS-TOPIK Sản xuất chế tạo", "difficulty_band": "beginner"},
+                    {"id": "eps_construction", "label": "EPS-TOPIK Xây dựng / Nông nghiệp", "difficulty_band": "beginner"},
+                ),
+            },
+        ),
+        "learning_goals": ("vocabulary", "grammar", "reading", "listening", "speaking", "daily_communication", "exam_prep"),
+        "topics": ("meaning_recall", "reading_recall", "sentence_patterns", "audio_recognition", "conversation", "travel", "business"),
+        "features": ("audio", "example_sentences", "preview_available", "cloze"),
+    },
     "chinese": {
         "frameworks": (
             {
                 "id": "hsk",
-                "label": "HSK",
+                "label": "HSK (Tiêu chuẩn)",
                 "levels": (
-                    {"id": "hsk1", "label": "HSK1", "difficulty_band": "beginner"},
-                    {"id": "hsk2", "label": "HSK2", "difficulty_band": "beginner"},
-                    {"id": "hsk3", "label": "HSK3", "difficulty_band": "intermediate"},
-                    {"id": "hsk4", "label": "HSK4", "difficulty_band": "intermediate"},
-                    {"id": "hsk5", "label": "HSK5", "difficulty_band": "advanced"},
-                    {"id": "hsk6", "label": "HSK6", "difficulty_band": "advanced"},
+                    {"id": "hsk1", "label": "HSK 1 (150 từ)", "difficulty_band": "beginner"},
+                    {"id": "hsk2", "label": "HSK 2 (300 từ)", "difficulty_band": "beginner"},
+                    {"id": "hsk3", "label": "HSK 3 (600 từ)", "difficulty_band": "intermediate"},
+                    {"id": "hsk4", "label": "HSK 4 (1200 từ)", "difficulty_band": "intermediate"},
+                    {"id": "hsk5", "label": "HSK 5 (2500 từ)", "difficulty_band": "advanced"},
+                    {"id": "hsk6", "label": "HSK 6 (5000+ từ)", "difficulty_band": "advanced"},
+                ),
+            },
+            {
+                "id": "hsk_3_0",
+                "label": "HSK 3.0 (9 Cấp)",
+                "levels": (
+                    {"id": "hsk3_beginner", "label": "HSK 3.0 Sơ cấp (Cấp 1 - 3)", "difficulty_band": "beginner"},
+                    {"id": "hsk3_intermediate", "label": "HSK 3.0 Trung cấp (Cấp 4 - 6)", "difficulty_band": "intermediate"},
+                    {"id": "hsk3_advanced", "label": "HSK 3.0 Cao cấp (Cấp 7 - 9)", "difficulty_band": "advanced"},
+                ),
+            },
+            {
+                "id": "hskk",
+                "label": "HSKK (Khẩu ngữ)",
+                "levels": (
+                    {"id": "hskk_primary", "label": "HSKK Sơ cấp", "difficulty_band": "beginner"},
+                    {"id": "hskk_intermediate", "label": "HSKK Trung cấp", "difficulty_band": "intermediate"},
+                    {"id": "hskk_advanced", "label": "HSKK Cao cấp", "difficulty_band": "advanced"},
+                ),
+            },
+            {
+                "id": "tocfl",
+                "label": "TOCFL (Đài Loan / Phồn thể)",
+                "levels": (
+                    {"id": "tocfl_band_a", "label": "TOCFL Band A (A1 - A2)", "difficulty_band": "beginner"},
+                    {"id": "tocfl_band_b", "label": "TOCFL Band B (B1 - B2)", "difficulty_band": "intermediate"},
+                    {"id": "tocfl_band_c", "label": "TOCFL Band C (C1 - C2)", "difficulty_band": "advanced"},
                 ),
             },
         ),
@@ -181,22 +319,16 @@ SUBJECT_PACKS = {
         "topics": ("hanzi", "pinyin", "meaning_recall", "reading_recall", "audio_recognition", "conversation", "travel", "business"),
         "features": ("audio", "example_sentences", "preview_available", "cloze", "stroke_support"),
     },
-    "korean": {
-        "frameworks": (),
-        "learning_goals": ("vocabulary", "grammar", "reading", "listening", "speaking", "daily_communication"),
-        "topics": ("meaning_recall", "reading_recall", "sentence_patterns", "audio_recognition", "conversation", "travel", "business"),
-        "features": ("audio", "example_sentences", "preview_available", "cloze"),
-    },
     "aws": {
         "frameworks": (
             {
                 "id": "aws_certification",
                 "label": "AWS Certification",
                 "levels": (
-                    {"id": "foundational", "label": "Foundational", "difficulty_band": "beginner"},
-                    {"id": "associate", "label": "Associate", "difficulty_band": "intermediate"},
-                    {"id": "professional", "label": "Professional", "difficulty_band": "advanced"},
-                    {"id": "specialty", "label": "Specialty", "difficulty_band": "advanced"},
+                    {"id": "foundational", "label": "Cloud Practitioner (CCP)", "difficulty_band": "beginner"},
+                    {"id": "associate", "label": "Associate (SAA / DVA / SOA)", "difficulty_band": "intermediate"},
+                    {"id": "professional", "label": "Professional (SAP / DOP)", "difficulty_band": "advanced"},
+                    {"id": "specialty", "label": "Specialty (Security / Data / ML)", "difficulty_band": "advanced"},
                 ),
                 "tracks": (
                     {"id": "ccp", "label": "CCP"},
@@ -213,6 +345,110 @@ SUBJECT_PACKS = {
         "learning_goals": ("concept_recall", "service_comparison", "scenario_practice", "architecture_review", "exam_prep"),
         "topics": ("compute", "storage", "networking", "iam", "security", "databases", "serverless", "monitoring", "architecture_concepts"),
         "features": ("quick_drill", "exam_style", "preview_available", "architecture_diagram"),
+    },
+    "azure": {
+        "frameworks": (
+            {
+                "id": "azure_certification",
+                "label": "Microsoft Azure",
+                "levels": (
+                    {"id": "az_900", "label": "AZ-900 (Fundamentals)", "difficulty_band": "beginner"},
+                    {"id": "az_104", "label": "AZ-104 (Administrator)", "difficulty_band": "intermediate"},
+                    {"id": "az_204", "label": "AZ-204 (Developer)", "difficulty_band": "intermediate"},
+                    {"id": "az_305", "label": "AZ-305 (Solutions Architect)", "difficulty_band": "advanced"},
+                    {"id": "ai_dp_900", "label": "AI-900 / DP-900 (Data & AI)", "difficulty_band": "beginner"},
+                ),
+            },
+        ),
+        "learning_goals": ("concept_recall", "service_comparison", "scenario_practice", "exam_prep"),
+        "topics": ("compute", "storage", "networking", "iam", "security", "databases", "serverless", "monitoring", "architecture_concepts"),
+        "features": ("quick_drill", "exam_style", "preview_available", "architecture_diagram"),
+    },
+    "it_coding": {
+        "frameworks": (
+            {
+                "id": "coding_stack",
+                "label": "Lập trình & Kỹ năng CNTT",
+                "levels": (
+                    {"id": "frontend", "label": "Frontend (React, Vue, TS)", "difficulty_band": "intermediate"},
+                    {"id": "backend", "label": "Backend (Node.js, Python, Java, Go)", "difficulty_band": "intermediate"},
+                    {"id": "database", "label": "Database (SQL, MongoDB, Redis)", "difficulty_band": "intermediate"},
+                    {"id": "devops", "label": "DevOps & Cloud (Docker, K8s, Linux)", "difficulty_band": "advanced"},
+                    {"id": "ai_data", "label": "Data Science & AI / ML", "difficulty_band": "advanced"},
+                    {"id": "dsa_leetcode", "label": "Thuật toán & LeetCode", "difficulty_band": "advanced"},
+                ),
+            },
+        ),
+        "learning_goals": ("concept_recall", "scenario_practice", "drill", "exam_prep"),
+        "topics": ("architecture_concepts", "databases", "serverless", "security", "business"),
+        "features": ("example_sentences", "quick_drill", "preview_available"),
+    },
+    "thpt_qg": {
+        "frameworks": (
+            {
+                "id": "thpt_exam",
+                "label": "Môn thi THPT Quốc Gia",
+                "levels": (
+                    {"id": "thpt_math", "label": "Toán học THPT QG", "difficulty_band": "intermediate"},
+                    {"id": "thpt_physics", "label": "Vật lý THPT QG", "difficulty_band": "intermediate"},
+                    {"id": "thpt_chemistry", "label": "Hóa học THPT QG", "difficulty_band": "intermediate"},
+                    {"id": "thpt_biology", "label": "Sinh học THPT QG", "difficulty_band": "intermediate"},
+                    {"id": "thpt_history_geo", "label": "Lịch sử & Địa lý THPT QG", "difficulty_band": "intermediate"},
+                    {"id": "thpt_civic", "label": "GDCD THPT QG", "difficulty_band": "intermediate"},
+                ),
+            },
+        ),
+        "learning_goals": ("concept_recall", "exam_prep", "drill"),
+        "topics": ("meaning_recall", "academic_english"),
+        "features": ("example_sentences", "quick_drill", "exam_style", "preview_available"),
+    },
+    "medical": {
+        "frameworks": (
+            {
+                "id": "medical_field",
+                "label": "Y Dược & Thuật ngữ",
+                "levels": (
+                    {"id": "med_terms", "label": "Thuật ngữ Y khoa tiếng Anh", "difficulty_band": "intermediate"},
+                    {"id": "anatomy", "label": "Giải phẫu học (Anatomy)", "difficulty_band": "intermediate"},
+                    {"id": "pharmacology", "label": "Dược lý học (Pharmacology)", "difficulty_band": "advanced"},
+                ),
+            },
+        ),
+        "learning_goals": ("vocabulary", "concept_recall", "exam_prep", "drill"),
+        "topics": ("meaning_recall", "academic_english"),
+        "features": ("image_based", "example_sentences", "quick_drill", "preview_available"),
+    },
+    "law": {
+        "frameworks": (
+            {
+                "id": "law_field",
+                "label": "Chuyên ngành Luật",
+                "levels": (
+                    {"id": "civil_law", "label": "Luật Dân sự & Hôn nhân", "difficulty_band": "intermediate"},
+                    {"id": "criminal_law", "label": "Luật Hình sự & Tố tụng", "difficulty_band": "intermediate"},
+                    {"id": "business_law", "label": "Luật Doanh nghiệp & Đất đai", "difficulty_band": "advanced"},
+                ),
+            },
+        ),
+        "learning_goals": ("concept_recall", "exam_prep", "scenario_practice"),
+        "topics": ("meaning_recall", "sentence_patterns"),
+        "features": ("example_sentences", "quick_drill", "preview_available"),
+    },
+    "business": {
+        "frameworks": (
+            {
+                "id": "business_field",
+                "label": "Kinh doanh & Chứng chỉ nghề",
+                "levels": (
+                    {"id": "pmp_agile", "label": "PMP / Scrum Master / Agile", "difficulty_band": "advanced"},
+                    {"id": "cfa_acca", "label": "CFA / ACCA / Tài chính", "difficulty_band": "advanced"},
+                    {"id": "digital_mkt", "label": "Digital Marketing & SEO", "difficulty_band": "intermediate"},
+                ),
+            },
+        ),
+        "learning_goals": ("concept_recall", "scenario_practice", "exam_prep"),
+        "topics": ("business", "business_english", "conversation"),
+        "features": ("example_sentences", "quick_drill", "preview_available"),
     },
     "other": {
         "frameworks": (),
@@ -232,6 +468,7 @@ LEGACY_SUBJECT_ALIASES = {
     "korean": "korean",
     "tieng_han": "korean",
     "aws": "aws",
+    "azure": "azure",
     "other": "other",
     "khac": "other",
 }
@@ -253,9 +490,14 @@ KEYWORD_TO_GOALS = {
     "exam": "exam_prep",
     "jlpt": "exam_prep",
     "hsk": "exam_prep",
+    "topik": "exam_prep",
     "toeic": "exam_prep",
     "ielts": "exam_prep",
+    "vstep": "exam_prep",
+    "toefl": "exam_prep",
     "aws": "exam_prep",
+    "azure": "exam_prep",
+    "thpt": "exam_prep",
     "scenario": "scenario_practice",
     "architecture": "architecture_review",
 }
@@ -653,6 +895,18 @@ def _infer_legacy_taxonomy(
             normalized["framework"] = "hsk"
             normalized["framework_level"] = level_token
             normalized["subject"] = normalized.get("subject") or "chinese"
+            break
+    for level_token in ("topik_1", "topik_2", "topik_3", "topik_4", "topik_5", "topik_6", "topik"):
+        if level_token in haystack:
+            normalized["framework"] = "topik"
+            if level_token != "topik":
+                normalized["framework_level"] = level_token
+            normalized["subject"] = normalized.get("subject") or "korean"
+            break
+    for level_token in ("ielts", "toeic", "vstep"):
+        if level_token in haystack:
+            normalized["framework"] = level_token
+            normalized["subject"] = normalized.get("subject") or "english"
             break
 
     if not normalized.get("domain") and normalized.get("subject"):

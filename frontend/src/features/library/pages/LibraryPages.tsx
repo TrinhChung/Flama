@@ -1,4 +1,5 @@
-import { ArrowRight, BookOpen, Eye, Layers, Sparkles } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { ArrowRight, BookOpen, Eye, HelpCircle, Layers, Sparkles } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { appApi } from '@/app/api'
@@ -12,6 +13,9 @@ import {
   PageError,
   PageLoading,
 } from '@/shared/components/PageState'
+import { SpotlightTour, type TourStep } from '@/shared/components/SpotlightTour'
+
+const DECKS_STORAGE_KEY = 'flama_installed_decks_spotlight_tour_v1'
 
 type NoteTypeItem = {
   id: string
@@ -106,6 +110,8 @@ export function NoteTypesPage() {
 }
 
 export function InstalledDecksPage() {
+  const [tourOpen, setTourOpen] = useState(false)
+
   const query = useQuery({
     queryKey: ['installed-decks'],
     queryFn: () =>
@@ -114,39 +120,123 @@ export function InstalledDecksPage() {
       ),
   })
 
+  const items = query.data?.items || []
+
+  const tourSteps: TourStep[] = useMemo(() => {
+    const steps: TourStep[] = [
+      {
+        target: '[data-tour="decks-header"]',
+        title: '📚 1. Quản Lý Bộ Thẻ Đã Cài',
+        content:
+          'Nơi quản lý toàn bộ các bộ thẻ (Decks) bạn đã cài đặt từ Marketplace hoặc do chính bạn sở hữu để bắt đầu ôn luyện.',
+        placement: 'bottom',
+      },
+      {
+        target: '[data-tour="marketplace-explore-btn"]',
+        title: '🛍️ 2. Khám Phá Kho Bộ Thẻ Marketplace',
+        content:
+          'Bấm vào đây để duyệt qua hàng trăm bộ thẻ từ vựng, ngữ pháp, Kanji... chất lượng cao do cộng đồng Flama chia sẻ.',
+        placement: 'bottom',
+      },
+    ]
+
+    if (items.length > 0) {
+      steps.push(
+        {
+          target: '[data-tour="deck-card-first"]',
+          title: '🎴 3. Thông Tin Bộ Thẻ (Deck Card)',
+          content:
+            'Hiển thị tiêu đề bộ thẻ, tên tác giả đóng góp, trạng thái học tập (Đang sử dụng / Đã cài) và mô tả vắn tắt.',
+          placement: 'top',
+        },
+        {
+          target: '[data-tour="deck-action-btn"]',
+          title: '🚀 4. Nút "Học Ngay" (Spaced Repetition)',
+          content:
+            'Bấm nút này để bắt đầu phiên ôn tập với thuật toán Lặp lại ngắt quãng thông minh (Anki SM-2 / FSRS) giúp ghi nhớ sâu và lâu bền.',
+          placement: 'top',
+        },
+      )
+    } else {
+      steps.push({
+        target: '[data-tour="installed-decks-grid"]',
+        title: '📦 3. Khu Vực Bộ Thẻ Cá Nhân',
+        content:
+          'Sau khi cài đặt bộ thẻ từ Marketplace, các bộ thẻ sẽ xuất hiện tại đây để bạn bắt đầu học và theo dõi tiến độ.',
+        placement: 'top',
+      })
+    }
+
+    return steps
+  }, [items.length])
+
+  // Auto-launch spotlight tour for first-time visitors with no installed decks
+  useEffect(() => {
+    if (query.isSuccess) {
+      const completed = localStorage.getItem(DECKS_STORAGE_KEY)
+      if (!completed && items.length === 0) {
+        const timer = setTimeout(() => {
+          setTourOpen(true)
+        }, 500)
+        return () => clearTimeout(timer)
+      }
+    }
+  }, [query.isSuccess, items.length])
+
   if (query.isPending) return <PageLoading label="Đang tải deck đã cài…" />
   if (query.error) return <Page><PageError error={query.error} /></Page>
 
   return (
     <Page className="relative min-h-screen px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-6">
       <AmbientBackground intensity="subtle" />
-      <PageHeader
-        title="Deck đã cài"
-        description="Quản lý và tiếp tục học các bộ deck bạn đã cài từ Marketplace hoặc sở hữu."
-        actions={
-          <Button size="sm" className="rounded-xl font-bold text-xs sm:text-sm shadow-xs" asChild>
-            <Link to="/marketplace/decks" className="inline-flex items-center gap-1.5">
-              <Sparkles className="size-3.5" />
-              <span>Khám phá Marketplace</span>
-              <ArrowRight className="size-3.5" />
-            </Link>
-          </Button>
-        }
-      />
-      {!query.data.items.length ? (
-        <EmptyState
-          title="Chưa cài deck nào"
-          description="Khám phá marketplace và cài một deck để bắt đầu học."
+      <div data-tour="decks-header">
+        <PageHeader
+          title="Deck đã cài"
+          description="Quản lý và tiếp tục học các bộ deck bạn đã cài từ Marketplace hoặc sở hữu."
+          actions={
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setTourOpen(true)}
+                className="h-8 sm:h-9 px-3 text-xs font-semibold rounded-xl"
+              >
+                <HelpCircle className="size-3.5 mr-1.5 text-primary" />
+                Tour Hướng Dẫn
+              </Button>
+              <Button
+                size="sm"
+                data-tour="marketplace-explore-btn"
+                className="h-8 sm:h-9 px-3.5 rounded-xl font-bold text-xs sm:text-sm shadow-xs"
+                asChild
+              >
+                <Link to="/marketplace/decks" className="inline-flex items-center gap-1.5">
+                  <Sparkles className="size-3.5" />
+                  <span>Khám phá Marketplace</span>
+                  <ArrowRight className="size-3.5" />
+                </Link>
+              </Button>
+            </div>
+          }
         />
+      </div>
+      {!items.length ? (
+        <div data-tour="installed-decks-grid">
+          <EmptyState
+            title="Chưa cài deck nào"
+            description="Khám phá marketplace và cài một deck để bắt đầu học."
+          />
+        </div>
       ) : (
         <div className="grid gap-3 sm:gap-5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {query.data.items.map((item) => {
+          {items.map((item, index) => {
             const authorName = item.author?.account_name || item.author?.username || 'Cộng đồng'
             const authorInitial = authorName.charAt(0).toUpperCase()
 
             return (
               <Card
                 key={item.id}
+                data-tour={index === 0 ? 'deck-card-first' : undefined}
                 className="group relative flex flex-col justify-between overflow-hidden border-border/80 bg-card p-4 sm:p-5 transition-all duration-200 hover:-translate-y-1 hover:border-primary/50 hover:shadow-md rounded-2xl"
               >
                 <div className="flex flex-col flex-1 space-y-2">
@@ -199,6 +289,7 @@ export function InstalledDecksPage() {
                     <Button
                       size="sm"
                       asChild
+                      data-tour={index === 0 ? 'deck-action-btn' : undefined}
                       className="w-full h-8 sm:h-9 text-xs font-bold rounded-xl shadow-xs"
                     >
                       <Link to={`/study?deck_id=${item.installed_deck_id}`}>
@@ -211,6 +302,7 @@ export function InstalledDecksPage() {
                       variant="outline"
                       size="sm"
                       asChild
+                      data-tour={index === 0 ? 'deck-action-btn' : undefined}
                       className="w-full h-8 sm:h-9 text-xs font-semibold rounded-xl"
                     >
                       <Link to={`/marketplace/decks/${item.id}`}>
@@ -225,6 +317,20 @@ export function InstalledDecksPage() {
           })}
         </div>
       )}
+
+      {/* Interactive Spotlight Tour for Installed Decks */}
+      <SpotlightTour
+        steps={tourSteps}
+        isOpen={tourOpen}
+        onClose={() => {
+          localStorage.setItem(DECKS_STORAGE_KEY, 'true')
+          setTourOpen(false)
+        }}
+        onComplete={() => {
+          localStorage.setItem(DECKS_STORAGE_KEY, 'true')
+          setTourOpen(false)
+        }}
+      />
     </Page>
   )
 }

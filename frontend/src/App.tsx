@@ -57,6 +57,11 @@ const NoteTypeDetailPage = lazy(() =>
     default: module.NoteTypeDetailPage,
   })),
 )
+const NoteTypeGuidePage = lazy(() =>
+  import('./features/note-types/pages/NoteTypeGuidePage').then((module) => ({
+    default: module.NoteTypeGuidePage,
+  })),
+)
 const InstalledDecksPage = lazy(() =>
   import('./features/library/pages/LibraryPages').then((module) => ({
     default: module.InstalledDecksPage,
@@ -272,6 +277,10 @@ const router = createBrowserRouter([
           },
           { path: 'note-types', element: deferred(<NoteTypeManagerPage />) },
           {
+            path: 'note-types/guide',
+            element: deferred(<NoteTypeGuidePage />),
+          },
+          {
             path: 'note-types/:id',
             element: deferred(<NoteTypeDetailPage />),
           },
@@ -282,6 +291,10 @@ const router = createBrowserRouter([
           {
             path: 'flashcards/note-types',
             element: deferred(<NoteTypeManagerPage />),
+          },
+          {
+            path: 'flashcards/note-types/guide',
+            element: deferred(<NoteTypeGuidePage />),
           },
           {
             path: 'flashcards/note-types/:id',
