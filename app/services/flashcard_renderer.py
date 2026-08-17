@@ -751,6 +751,42 @@ def build_renderer_side_payload(
     }
 
 
+def _inject_dotted_field_nested_keys(context: dict[str, Any]) -> None:
+    """Mirror flat dotted keys (e.g. ``a.b``) into nested dicts.
+
+    Anki treats ``a.b`` as a literal field name.  Mustache (chevron /
+    mustache.js) interprets ``{{a.b}}`` as ``context["a"]["b"]``.  This
+    helper bridges the gap by ensuring both representations exist so
+    that templates imported from Anki render correctly under Mustache.
+
+    Safety: if the dot-prefix already exists as a non-dict value (i.e.
+    there is a real field with the same name as the prefix), the dotted
+    key is skipped to avoid overwriting unrelated data.
+    """
+    dotted_keys = [k for k in context if "." in k]
+    if not dotted_keys:
+        return
+    for key in dotted_keys:
+        parts = key.split(".")
+        target: dict[str, Any] | None = context
+        for part in parts[:-1]:
+            assert target is not None  # for type narrowing
+            existing = target.get(part)
+            if existing is None:
+                nested: dict[str, Any] = {}
+                target[part] = nested
+                target = nested
+            elif isinstance(existing, dict):
+                target = existing
+            else:
+                # Prefix collides with a non-dict value (a real field
+                # with the same name).  Skip to avoid data corruption.
+                target = None
+                break
+        if target is not None:
+            target.setdefault(parts[-1], context[key])
+
+
 def build_render_context(
     field_defs: list[Any],
     field_values: dict[str, Any] | None,
@@ -799,6 +835,11 @@ def build_render_context(
     # Common alias for compatibility with older templates.
     if "hanviet" in context and "han_viet" not in context:
         context["han_viet"] = context["hanviet"]
+
+    # Anki allows dots in field names (literal strings), but Mustache
+    # treats dots as nested property access.  Mirror flat dotted keys
+    # into nested dicts so both semantics work.
+    _inject_dotted_field_nested_keys(context)
 
     return context
 
