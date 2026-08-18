@@ -38,6 +38,8 @@ export interface DeckRowProps {
   onDragOver: (e: React.DragEvent, node: DeckNode) => void
   onDragEnter: (e: React.DragEvent, node: DeckNode) => void
   onDrop: (e: React.DragEvent, node: DeckNode) => void
+  isExpanded?: (deckId: number) => boolean
+  onToggleExpand?: (deckId: number) => void
 }
 
 export function DeckRow({
@@ -57,10 +59,13 @@ export function DeckRow({
   onDragOver,
   onDragEnter,
   onDrop,
+  isExpanded,
+  onToggleExpand,
 }: DeckRowProps) {
   const navigate = useNavigate()
-  const [expanded, setExpanded] = useState(true)
+  const [localExpanded, setLocalExpanded] = useState(false)
   const hasChildren = node.children.length > 0
+  const expanded = isExpanded ? isExpanded(node.id) : localExpanded
   const isSelected = selectedDeckId === node.id
 
   const isDraggingSelf = draggedDeck?.id === node.id
@@ -136,7 +141,11 @@ export function DeckRow({
               onDoubleClick={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.stopPropagation()
-                setExpanded((prev) => !prev)
+                if (onToggleExpand) {
+                  onToggleExpand(node.id)
+                } else {
+                  setLocalExpanded((prev) => !prev)
+                }
               }}
             >
               <ChevronRight
@@ -290,6 +299,8 @@ export function DeckRow({
               onDragOver={onDragOver}
               onDragEnter={onDragEnter}
               onDrop={onDrop}
+              isExpanded={isExpanded}
+              onToggleExpand={onToggleExpand}
             />
           ))
         : null}
