@@ -362,7 +362,7 @@ export function SharedNoteTypeDetailPage() {
                   </div>
                 </div>
 
-                <div className="rounded-xl border border-border/80 bg-muted/30 p-3.5 sm:p-4 text-center transition-all hover:bg-muted/50">
+                <div className="rounded-xl border border-border/80 bg-muted/30 p-3.5 sm:p-4 text-center transition-all hover:bg-muted/50 col-span-2 sm:col-span-1">
                   <div className="flex items-center justify-center gap-1 text-xs font-semibold text-muted-foreground">
                     <Layers className="size-3.5 text-primary" />
                     <span>Trường</span>
@@ -374,6 +374,81 @@ export function SharedNoteTypeDetailPage() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Mobile-Only Quick Action Card (Provides top action access on small screens) */}
+          <div className="block lg:hidden">
+            <Card className="border-primary/30 bg-primary/5 shadow-xs rounded-2xl p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-foreground">
+                  {noteType.pricing_mode === 'free' ? 'Miễn phí' : noteType.price_display}
+                </span>
+                <Badge variant="outline" className="text-xs font-semibold">
+                  {noteType.install_count.toLocaleString('vi-VN')} lượt cài
+                </Badge>
+              </div>
+
+              {noteType.is_owner ? (
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-10 text-xs font-bold rounded-xl"
+                    asChild
+                  >
+                    <Link to={`/marketplace/note-types/publish?id=${noteType.id}&edit=1`}>
+                      <Edit3 className="mr-1.5 size-3.5 text-primary" /> Sửa thông tin
+                    </Link>
+                  </Button>
+                  {noteType.publish_status === 'published' || noteType.publish_status === 'unlisted' ? (
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      className="h-10 text-xs font-bold rounded-xl"
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            'Bạn có chắc chắn muốn thu hồi loại thẻ này khỏi Marketplace?\n\nNgười dùng khác sẽ không thể tìm thấy hoặc cài đặt loại thẻ này nữa.'
+                          )
+                        ) {
+                          publishStatusMutation.mutate('private')
+                        }
+                      }}
+                      disabled={publishStatusMutation.isPending}
+                    >
+                      <EyeOff className="mr-1.5 size-3.5" /> Thu hồi
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="default"
+                      size="sm"
+                      className="h-10 text-xs font-bold rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white"
+                      onClick={() => publishStatusMutation.mutate('published')}
+                      disabled={publishStatusMutation.isPending}
+                    >
+                      <Globe className="mr-1.5 size-3.5" /> Xuất bản lại
+                    </Button>
+                  )}
+                </div>
+              ) : noteType.is_installed ? (
+                <Button className="w-full h-10 font-bold text-xs border-emerald-500/40 text-emerald-600 dark:text-emerald-400 rounded-xl" variant="outline" disabled>
+                  <CheckCircle className="mr-1.5 size-4" /> Đã cài đặt loại thẻ
+                </Button>
+              ) : (
+                <Button
+                  className="w-full h-11 font-bold text-sm shadow-xs bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl"
+                  onClick={() => installMutation.mutate()}
+                  disabled={installMutation.isPending}
+                >
+                  {installMutation.isPending ? (
+                    <Loader2 className="mr-2 size-4 animate-spin" />
+                  ) : (
+                    <Download className="mr-2 size-4" />
+                  )}
+                  {noteType.pricing_mode === 'paid' ? 'Mua Note Type' : 'Tải xuống & Cài đặt'}
+                </Button>
+              )}
+            </Card>
+          </div>
 
           {/* Live Preview Section (Reusing NoteTypeLivePreview) */}
           <NoteTypeLivePreview

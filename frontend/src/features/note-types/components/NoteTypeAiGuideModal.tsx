@@ -102,18 +102,18 @@ export function NoteTypeAiGuideModal({ open, onOpenChange }: NoteTypeAiGuideModa
 
         <div className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-4">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid grid-cols-4 w-full h-10 p-1 mb-4 rounded-xl bg-muted/60">
-              <TabsTrigger value="prompt" className="text-xs font-semibold rounded-lg">
-                🤖 Prompt AI Mẫu
+            <TabsList className="grid grid-cols-2 sm:grid-cols-4 w-full h-auto p-1 mb-4 rounded-xl bg-muted/60 gap-1">
+              <TabsTrigger value="prompt" className="h-8 sm:h-9 text-xs font-semibold rounded-lg">
+                🤖 Prompt AI
               </TabsTrigger>
-              <TabsTrigger value="tech" className="text-xs font-semibold rounded-lg">
-                ⚙️ Công Nghệ Thẻ
+              <TabsTrigger value="tech" className="h-8 sm:h-9 text-xs font-semibold rounded-lg">
+                ⚙️ Công Nghệ
               </TabsTrigger>
-              <TabsTrigger value="steps" className="text-xs font-semibold rounded-lg">
-                🚀 Các Bước Làm
+              <TabsTrigger value="steps" className="h-8 sm:h-9 text-xs font-semibold rounded-lg">
+                🚀 Các Bước
               </TabsTrigger>
-              <TabsTrigger value="rules" className="text-xs font-semibold rounded-lg">
-                ⚠️ Lưu Ý Tránh Lỗi
+              <TabsTrigger value="rules" className="h-8 sm:h-9 text-xs font-semibold rounded-lg">
+                ⚠️ Tránh Lỗi
               </TabsTrigger>
             </TabsList>
 

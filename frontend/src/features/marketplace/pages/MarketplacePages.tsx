@@ -300,26 +300,26 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
             : 'Các mẫu hiển thị Flashcard chuẩn đẹp, tối ưu hóa giao diện học Kanji, Từ vựng và Ngữ pháp.'
         }
         actions={
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-start sm:justify-end">
             <Button
               variant="outline"
               size="sm"
               onClick={() => setTourOpen(true)}
-              className="h-8 sm:h-9 px-3 text-xs font-semibold rounded-xl"
+              className="h-8 sm:h-9 px-2.5 sm:px-3 text-xs font-semibold rounded-xl shrink-0"
             >
-              <HelpCircle className="size-3.5 mr-1.5 text-primary" />
-              Tour Hướng Dẫn
+              <HelpCircle className="size-3.5 mr-1.5 text-primary shrink-0" />
+              <span className="hidden xs:inline">Tour </span>Hướng Dẫn
             </Button>
 
-            <div data-tour="market-mode-switcher" className="inline-flex rounded-xl border border-border/80 bg-muted/40 p-1 shadow-2xs">
+            <div data-tour="market-mode-switcher" className="inline-flex rounded-xl border border-border/80 bg-muted/40 p-0.5 sm:p-1 shadow-2xs shrink-0">
               <Button
                 variant={mode === 'decks' ? 'default' : 'ghost'}
                 size="sm"
                 asChild
-                className="h-8 sm:h-9 px-3 text-xs font-semibold rounded-lg transition-all"
+                className="h-7 sm:h-8 px-2.5 sm:px-3 text-xs font-semibold rounded-lg transition-all"
               >
                 <Link to="/marketplace/decks">
-                  <BookOpen className="mr-1.5 size-3.5" />
+                  <BookOpen className="mr-1 sm:mr-1.5 size-3.5 shrink-0" />
                   Bộ Thẻ
                 </Link>
               </Button>
@@ -327,10 +327,10 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
                 variant={mode === 'note-types' ? 'default' : 'ghost'}
                 size="sm"
                 asChild
-                className="h-8 sm:h-9 px-3 text-xs font-semibold rounded-lg transition-all"
+                className="h-7 sm:h-8 px-2.5 sm:px-3 text-xs font-semibold rounded-lg transition-all"
               >
                 <Link to="/marketplace/note-types">
-                  <Layers className="mr-1.5 size-3.5" />
+                  <Layers className="mr-1 sm:mr-1.5 size-3.5 shrink-0" />
                   Loại Thẻ
                 </Link>
               </Button>
@@ -340,7 +340,7 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
               variant="outline"
               size="sm"
               asChild
-              className="h-8 sm:h-9 px-3 text-xs font-semibold rounded-lg"
+              className="h-8 sm:h-9 px-2.5 sm:px-3 text-xs font-semibold rounded-lg shrink-0"
             >
               <Link to={mode === 'decks' ? '/installed-decks' : '/note-types'}>
                 {mode === 'decks' ? 'Deck đã cài' : 'Loại thẻ của tôi'}
@@ -352,7 +352,7 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
               size="sm"
               asChild
               data-tour="market-publish-btn"
-              className="h-8 sm:h-9 px-3.5 text-xs font-bold rounded-lg shadow-xs"
+              className="h-8 sm:h-9 px-3 sm:px-3.5 text-xs font-bold rounded-lg shadow-xs shrink-0"
             >
               <Link
                 to={
@@ -361,7 +361,7 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
                     : '/marketplace/note-types/publish'
                 }
               >
-                <Plus className="mr-1.5 size-3.5" />
+                <Plus className="mr-1 sm:mr-1.5 size-3.5 shrink-0" />
                 {mode === 'decks' ? 'Đăng tải bộ thẻ' : 'Tạo loại thẻ'}
               </Link>
             </Button>
@@ -425,23 +425,23 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
                 <TabsList className="grid grid-cols-3 w-full sm:w-auto h-10 p-1 rounded-lg bg-muted/60">
                   <TabsTrigger
                     value="recommended"
-                    className="text-xs font-semibold px-2.5 sm:px-3.5 py-1.5 rounded-md gap-1"
+                    className="text-xs font-semibold px-2 sm:px-3.5 py-1.5 rounded-md gap-1"
                   >
-                    <Star className="size-3 text-amber-500 fill-amber-400" />
-                    <span>Đề xuất</span>
+                    <Star className="size-3 text-amber-500 fill-amber-400 shrink-0" />
+                    <span className="truncate">Đề xuất</span>
                   </TabsTrigger>
                   <TabsTrigger
                     value="popular"
-                    className="text-xs font-semibold px-2.5 sm:px-3.5 py-1.5 rounded-md gap-1"
+                    className="text-xs font-semibold px-2 sm:px-3.5 py-1.5 rounded-md gap-1"
                   >
-                    <Flame className="size-3 text-primary" />
-                    <span>Phổ biến</span>
+                    <Flame className="size-3 text-primary shrink-0" />
+                    <span className="truncate">Phổ biến</span>
                   </TabsTrigger>
                   <TabsTrigger
                     value="newest"
-                    className="text-xs font-semibold px-2.5 sm:px-3.5 py-1.5 rounded-md"
+                    className="text-xs font-semibold px-2 sm:px-3.5 py-1.5 rounded-md"
                   >
-                    Mới nhất
+                    <span className="truncate">Mới nhất</span>
                   </TabsTrigger>
                 </TabsList>
               </Tabs>
@@ -470,7 +470,8 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
             <div
               role="group"
               aria-label="Lọc theo danh mục chủ đề"
-              className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-0.5 pr-8"
+              className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-0.5 pr-8 touch-pan-x overscroll-x-contain"
+              style={{ WebkitOverflowScrolling: 'touch' }}
             >
               <span className="text-[11px] font-semibold text-muted-foreground mr-1 shrink-0 uppercase tracking-wider">
                 Chủ đề:

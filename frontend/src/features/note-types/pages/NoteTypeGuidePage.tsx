@@ -187,17 +187,17 @@ export function NoteTypeGuidePage() {
       {/* Main Tabs Container */}
       <Tabs defaultValue="prompt" className="space-y-6">
         <div data-tour="guide-tabs">
-          <TabsList className="grid grid-cols-2 sm:grid-cols-4 w-full h-11 p-1 rounded-2xl bg-muted/60">
-            <TabsTrigger value="prompt" className="text-xs sm:text-sm font-semibold rounded-xl">
+          <TabsList className="grid grid-cols-2 sm:grid-cols-4 w-full h-auto p-1 rounded-2xl bg-muted/60 gap-1">
+            <TabsTrigger value="prompt" className="h-9 sm:h-10 text-xs sm:text-sm font-semibold rounded-xl">
               🤖 Prompt AI Mẫu
             </TabsTrigger>
-            <TabsTrigger value="tech" className="text-xs sm:text-sm font-semibold rounded-xl">
+            <TabsTrigger value="tech" className="h-9 sm:h-10 text-xs sm:text-sm font-semibold rounded-xl">
               ⚙️ Công Nghệ Thẻ
             </TabsTrigger>
-            <TabsTrigger value="steps" className="text-xs sm:text-sm font-semibold rounded-xl">
+            <TabsTrigger value="steps" className="h-9 sm:h-10 text-xs sm:text-sm font-semibold rounded-xl">
               🚀 Các Bước Làm
             </TabsTrigger>
-            <TabsTrigger value="rules" className="text-xs sm:text-sm font-semibold rounded-xl">
+            <TabsTrigger value="rules" className="h-9 sm:h-10 text-xs sm:text-sm font-semibold rounded-xl">
               ⚠️ Quy Tắc Tránh Lỗi
             </TabsTrigger>
           </TabsList>
