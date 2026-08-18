@@ -42,4 +42,28 @@ server {
         proxy_request_buffering on;
         proxy_read_timeout 30s;
     }
+
+    # Model Context Protocol (MCP) endpoint for AI agents (Cursor, Claude Desktop, Antigravity)
+    location = /v1/mcp {
+        limit_except POST OPTIONS { deny all; }
+        access_log off;
+        proxy_pass http://127.0.0.1:4790/v1/mcp;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_request_buffering on;
+        proxy_read_timeout 60s;
+    }
+
+    # URL-tokenized MCP endpoint
+    location ^~ /v1/mcp/ {
+        limit_except POST OPTIONS { deny all; }
+        access_log off;
+        proxy_pass http://127.0.0.1:4790;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_request_buffering on;
+        proxy_read_timeout 60s;
+    }
 }

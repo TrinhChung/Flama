@@ -132,6 +132,7 @@ def _register_models() -> None:
     from models.user_scheduler_settings import UserSchedulerSettings  # noqa: F401
     from models.scheduler_preset import SchedulerPreset  # noqa: F401
     from models.user_api_token import UserApiToken  # noqa: F401
+    from models.mcp_access_token import McpAccessToken  # noqa: F401
     from models.connect_note_ref import ConnectNoteRef  # noqa: F401
     from models.connect_pending_media import ConnectPendingMedia  # noqa: F401
     from models.connect_import_session import ConnectImportSession  # noqa: F401
@@ -521,7 +522,7 @@ def _apply_security_headers(response):
     if origin and ("*" in allowed or origin in allowed):
         response.headers["Access-Control-Allow-Origin"] = origin
         response.headers["Vary"] = "Origin"
-        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Content-Encoding, Authorization, X-Flama-Connect-Key, X-Package-SHA256"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Content-Encoding, Authorization, X-Flama-Connect-Key, X-Package-SHA256, MCP-Protocol-Version"
         response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
         response.headers["Access-Control-Max-Age"] = "600"
     return response
@@ -584,6 +585,10 @@ def create_connect_app(config: dict[str, Any] | None = None) -> Flask:
     db.init_app(app)
     _register_models()
     app.register_blueprint(connect_bp)
+
+    from app.connect.mcp import mcp_connect_bp
+    app.register_blueprint(mcp_connect_bp)
+
     app.after_request(_apply_security_headers)
 
     @app.errorhandler(RequestEntityTooLarge)

@@ -20,8 +20,8 @@ from models import db
 from models.mcp_access_token import McpAccessToken
 from models.user import User
 
-ALLOWED_SCOPES = frozenset({"deck:read"})
-DEFAULT_SCOPES = ("deck:read",)
+ALLOWED_SCOPES = frozenset({"deck:read", "note-type:read", "note:check", "note:create"})
+DEFAULT_SCOPES = ("deck:read", "note-type:read", "note:check", "note:create")
 _RATE_LIMIT_LOCK = threading.Lock()
 _RATE_LIMIT_BUCKETS: dict[str, deque[float]] = {}
 
@@ -40,15 +40,17 @@ class McpAccessTokenPersistenceError(RuntimeError):
 @dataclass(frozen=True)
 class IssuedMcpAccessToken:
     token: str
+    name: str
     scopes: tuple[str, ...]
-    expires_at: datetime
+    expires_at: datetime | None
     max_requests: int
 
     def to_display_payload(self) -> dict[str, Any]:
         return {
             "token": self.token,
+            "name": self.name,
             "scopes": list(self.scopes),
-            "expires_at": self.expires_at.isoformat(),
+            "expires_at": self.expires_at.isoformat() if self.expires_at else None,
             "remaining_requests": int(self.max_requests),
             "max_requests": int(self.max_requests),
         }
@@ -71,12 +73,10 @@ def _config_int(name: str, default: int, *, minimum: int = 1) -> int:
 
 
 def get_token_policy() -> dict[str, Any]:
-    ttl_seconds = _config_int("MCP_TOKEN_TTL_SECONDS", 10 * 60, minimum=60)
-    max_requests = _config_int("MCP_TOKEN_MAX_REQUESTS", 30, minimum=1)
     return {
-        "ttl_seconds": ttl_seconds,
-        "ttl_minutes": max(ttl_seconds // 60, 1),
-        "max_requests": max_requests,
+        "default_expiry_days": 180,
+        "allowed_expiry_days": [7, 30, 90, 180, 365],
+        "allow_no_expiry": True,
         "scopes": list(DEFAULT_SCOPES),
     }
 
@@ -131,14 +131,14 @@ def _dump_scopes(scopes: Iterable[str]) -> str:
 def _resolve_status(*, row: McpAccessToken, now: datetime) -> str:
     if bool(row.revoked):
         return "revoked"
-    if row.expires_at <= now:
+    if row.expires_at is not None and row.expires_at <= now:
         return "expired"
     if int(row.used_requests or 0) >= int(row.max_requests or 0):
         return "exhausted"
     return "active"
 
 
-def list_token_summaries(*, user_id: int, limit: int = 10) -> list[dict[str, Any]]:
+def list_token_summaries(*, user_id: int, limit: int = 50) -> list[dict[str, Any]]:
     now = datetime.utcnow()
     items: list[dict[str, Any]] = []
     for row in mcp_access_token_repository.list_tokens_for_user(user_id=user_id, limit=limit):
@@ -148,6 +148,7 @@ def list_token_summaries(*, user_id: int, limit: int = 10) -> list[dict[str, Any
         items.append(
             {
                 "id": int(row.id),
+                "name": getattr(row, "name", None) or "MCP Token",
                 "status": _resolve_status(row=row, now=now),
                 "scopes": list(_normalize_scopes(row.scopes)),
                 "expires_at": row.expires_at.isoformat() if row.expires_at else None,
@@ -162,30 +163,63 @@ def list_token_summaries(*, user_id: int, limit: int = 10) -> list[dict[str, Any
     return items
 
 
-def issue_short_lived_token(*, user_id: int) -> IssuedMcpAccessToken:
-    policy = get_token_policy()
+def issue_token(
+    *,
+    user_id: int,
+    name: str | None = None,
+    expires_in_days: int | None = 180,
+    scopes: Iterable[str] | None = None,
+) -> IssuedMcpAccessToken:
+    normalized_name = str(name or "").strip() or "MCP Token"
+    if len(normalized_name) > 120:
+        normalized_name = normalized_name[:120]
+
+    if expires_in_days is not None:
+        try:
+            days = int(expires_in_days)
+            if days <= 0:
+                expires_in_days = None
+            else:
+                expires_in_days = days
+        except (TypeError, ValueError):
+            expires_in_days = 180
+
+    token_scopes = _normalize_scopes(scopes) if scopes is not None else DEFAULT_SCOPES
+    if not token_scopes:
+        token_scopes = DEFAULT_SCOPES
+
     raw_token = f"flama_mcp_{secrets.token_urlsafe(32)}"
-    expires_at = datetime.utcnow() + timedelta(seconds=int(policy["ttl_seconds"]))
+    now = datetime.utcnow()
+    expires_at = (now + timedelta(days=expires_in_days)) if expires_in_days is not None else None
+    max_requests = 1_000_000
+
     row = mcp_access_token_repository.create_access_token(
         user_id=user_id,
+        name=normalized_name,
         token_hash=_hash_token(raw_token),
-        scopes=_dump_scopes(DEFAULT_SCOPES),
+        scopes=_dump_scopes(token_scopes),
         expires_at=expires_at,
-        max_requests=int(policy["max_requests"]),
+        max_requests=max_requests,
     )
     current_app.logger.info(
-        "Issued short-lived MCP token token_id=%s user_id=%s expires_at=%s max_requests=%s",
+        "Issued MCP token token_id=%s user_id=%s name=%s expires_at=%s",
         row.id,
         user_id,
-        expires_at.isoformat(),
-        int(policy["max_requests"]),
+        normalized_name,
+        expires_at.isoformat() if expires_at else "never",
     )
     return IssuedMcpAccessToken(
         token=raw_token,
-        scopes=DEFAULT_SCOPES,
+        name=normalized_name,
+        scopes=token_scopes,
         expires_at=expires_at,
-        max_requests=int(policy["max_requests"]),
+        max_requests=max_requests,
     )
+
+
+def issue_short_lived_token(*, user_id: int) -> IssuedMcpAccessToken:
+    """Backward compatibility alias for tests and older callers."""
+    return issue_token(user_id=user_id, expires_in_days=180)
 
 
 def revoke_token(*, user_id: int, token_id: int) -> bool:
@@ -198,9 +232,20 @@ def revoke_token(*, user_id: int, token_id: int) -> bool:
     return True
 
 
-def issue_token_and_commit(*, user_id: int) -> IssuedMcpAccessToken:
+def issue_token_and_commit(
+    *,
+    user_id: int,
+    name: str | None = None,
+    expires_in_days: int | None = 180,
+    scopes: Iterable[str] | None = None,
+) -> IssuedMcpAccessToken:
     try:
-        issued = issue_short_lived_token(user_id=user_id)
+        issued = issue_token(
+            user_id=user_id,
+            name=name,
+            expires_in_days=expires_in_days,
+            scopes=scopes,
+        )
         db.session.commit()
         return issued
     except SQLAlchemyError as exc:
@@ -272,7 +317,7 @@ def authenticate_bearer_token(
             status=401,
             code="MCP_TOKEN_REVOKED",
         )
-    if row.expires_at <= now:
+    if row.expires_at is not None and row.expires_at <= now:
         raise McpAccessTokenError(
             "MCP token has expired.",
             status=401,
