@@ -15,6 +15,7 @@ import {
   ShieldUser,
   Store,
   Ticket,
+  TrendingUp,
   Upload,
   Users,
   Zap,
@@ -68,6 +69,7 @@ export function AppSidebar({
     bootstrap.user?.is_admin || bootstrap.user?.role?.code === 'creator'
 
   const admin: AppNavigationItem[] = [
+    { title: 'Tăng trưởng & Thống kê', url: '/admin/analytics', icon: TrendingUp },
     ...(bootstrap.links.admin_users
       ? [
           { title: 'Người dùng', url: bootstrap.links.admin_users, icon: Users },

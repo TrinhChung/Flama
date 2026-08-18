@@ -7,6 +7,11 @@ from models import db
 
 
 EXPECTED_API_RULES = {
+    ("GET", "/api/admin/analytics/content-growth"),
+    ("GET", "/api/admin/analytics/growth"),
+    ("GET", "/api/admin/analytics/overview"),
+    ("GET", "/api/admin/analytics/retention-cohorts"),
+    ("GET", "/api/admin/analytics/study-time"),
     ("GET", "/api/admin/image-library"),
     ("POST", "/api/admin/image-library"),
     ("PATCH", "/api/admin/image-library/<asset_id>"),
@@ -160,7 +165,7 @@ class ApiRouteMapTests(unittest.TestCase):
             for method in rule.methods - {"HEAD", "OPTIONS"}
         }
         self.assertEqual(actual, EXPECTED_API_RULES)
-        self.assertEqual(len(actual), 125)
+        self.assertEqual(len(actual), 130)
 
 
 

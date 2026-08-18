@@ -103,6 +103,11 @@ const OrdersPage = lazy(() =>
     default: module.OrdersPage,
   })),
 )
+const AdminAnalyticsPage = lazy(() =>
+  import('./features/admin/pages/AdminAnalyticsPage').then((module) => ({
+    default: module.AdminAnalyticsPage,
+  })),
+)
 const AdminUsersPage = lazy(() =>
   import('./features/admin/pages/AdminUsersPage').then((module) => ({
     default: module.AdminUsersPage,
@@ -394,6 +399,11 @@ const router = createBrowserRouter([
             element: deferred(<SharedNoteTypeDetailPage />),
           },
           { path: 'orders', element: deferred(<OrdersPage />) },
+          { path: 'admin', element: <Navigate to="/admin/analytics" replace /> },
+          {
+            path: 'admin/analytics',
+            element: deferred(<AdminAnalyticsPage />),
+          },
           { path: 'admin/users', element: deferred(<AdminUsersPage />) },
           {
             path: 'admin/payments',

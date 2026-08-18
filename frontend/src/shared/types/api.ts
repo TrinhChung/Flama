@@ -34,6 +34,7 @@ export type FrontendLinks = {
   terms: string
   privacy: string
   cookies: string
+  admin_analytics?: string | null
   admin_users: string | null
   admin_payments: string | null
   admin_tts: string | null
