@@ -278,7 +278,7 @@ export function NoteTypeDetailPage() {
           <Card className="p-4 sm:p-5 border border-border/80 shadow-xs flex-1 flex flex-col rounded-2xl bg-card">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-3">
               <h3 className="text-sm font-bold text-foreground">Trình Soạn Thảo Template</h3>
-              <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto pb-0.5">
+              <div className="flex items-center gap-1.5 sm:gap-2 w-full sm:w-auto overflow-x-auto pb-0.5">
                 <NativeSelect
                   value={selectedTemplateId || ''}
                   onChange={(e) => setSelectedTemplateId(e.target.value)}
@@ -316,10 +316,16 @@ export function NoteTypeDetailPage() {
               </div>
             </div>
 
-            {/* Placeholder Toolbar */}
+            {/* Placeholder Toolbar with Horizontal Touch Scroll & Wrap */}
             <div className="mb-3 space-y-1.5">
-              <span className="text-xs font-semibold text-muted-foreground">Chèn trường dữ liệu (Placeholders):</span>
-              <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto pr-0.5">
+              <div className="flex items-center justify-between text-xs font-semibold text-muted-foreground">
+                <span>Chèn trường dữ liệu (Placeholders):</span>
+                <span className="text-[10px] font-normal sm:hidden text-muted-foreground">(Chạm để chèn)</span>
+              </div>
+              <div
+                className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none touch-pan-x overscroll-x-contain sm:flex-wrap"
+                style={{ WebkitOverflowScrolling: 'touch' }}
+              >
                 {fields.map((field) => (
                   <Button
                     key={field.id}
@@ -327,7 +333,7 @@ export function NoteTypeDetailPage() {
                     variant="outline"
                     size="sm"
                     onClick={() => insertPlaceholder(field.name)}
-                    className="h-7 px-2.5 text-xs font-mono text-foreground hover:bg-primary/10 hover:border-primary/40 hover:text-primary transition-all cursor-pointer rounded-lg border-border/80"
+                    className="shrink-0 h-7 px-2.5 text-xs font-mono text-foreground hover:bg-primary/10 hover:border-primary/40 hover:text-primary transition-all cursor-pointer rounded-lg border-border/80"
                   >
                     {`{{${field.name}}}`}
                   </Button>
@@ -403,7 +409,7 @@ export function NoteTypeDetailPage() {
                     shared_css: sharedCss,
                   })
                 }
-                className="font-bold px-5 h-9 text-xs sm:text-sm rounded-xl shadow-xs"
+                className="w-full sm:w-auto font-bold px-5 h-9 sm:h-10 text-xs sm:text-sm rounded-xl shadow-xs justify-center"
               >
                 <Check className="size-3.5 mr-1.5" /> Lưu Template
               </Button>

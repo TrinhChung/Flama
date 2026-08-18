@@ -69,9 +69,9 @@ export const NoteTypeLivePreview: React.FC<NoteTypeLivePreviewProps> = ({
 
   return (
     <Card className={`p-4 sm:p-5 border border-border/80 shadow-xs flex-1 flex flex-col rounded-2xl ${className}`}>
-      <div className="flex flex-wrap items-center justify-between gap-2 mb-3 min-h-[32px]">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-3 min-h-[32px]">
         <div className="flex items-center gap-2">
-          <div className="p-2 rounded-xl bg-primary/10 text-primary">
+          <div className="p-2 rounded-xl bg-primary/10 text-primary shrink-0">
             <Eye className="size-4" />
           </div>
           <div>
@@ -80,17 +80,17 @@ export const NoteTypeLivePreview: React.FC<NoteTypeLivePreviewProps> = ({
           </div>
           {isLoading && (
             <span className="text-xs text-primary font-semibold animate-pulse ml-2 flex items-center gap-1">
-              <Loader2 className="size-3 animate-spin" /> Đang cập nhật…
+              <Loader2 className="size-3 animate-spin shrink-0" /> Đang cập nhật…
             </span>
           )}
         </div>
 
-        <div className="flex items-center gap-1.5 ml-auto">
+        <div className="flex flex-wrap items-center gap-1.5 sm:ml-auto">
           {templates.length > 1 && onSelectTemplate && (
             <NativeSelect
               value={selectedTemplateId || templates[0]?.id}
               onChange={(e) => onSelectTemplate(e.target.value)}
-              className="h-8 text-xs font-medium w-36 rounded-xl bg-background"
+              className="h-8 text-xs font-medium flex-1 sm:w-36 rounded-xl bg-background"
             >
               {templates.map((tmpl) => (
                 <NativeSelectOption key={tmpl.id} value={tmpl.id}>

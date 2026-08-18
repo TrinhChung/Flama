@@ -438,8 +438,8 @@ export function MarketplacePublishDeckPage() {
       </div>
 
       {/* Wizard Stepper Progress Bar */}
-      <div className="rounded-2xl border border-border/80 bg-card/90 p-2 sm:p-3 shadow-xs backdrop-blur-md">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+      <div className="rounded-2xl border border-border/80 bg-card/90 p-1.5 sm:p-3 shadow-xs backdrop-blur-md">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-1.5 sm:gap-2">
           {WIZARD_STEPS.map((s) => {
             const StepIcon = s.icon
             const isActive = currentStep === s.id
@@ -449,7 +449,7 @@ export function MarketplacePublishDeckPage() {
                 key={s.id}
                 type="button"
                 onClick={() => goToStep(s.id)}
-                className={`flex items-center gap-2 p-2 sm:p-3 rounded-xl text-left transition-all relative overflow-hidden select-none min-h-[52px] ${
+                className={`flex items-center gap-2 p-2 sm:p-3 rounded-xl text-left transition-all relative overflow-hidden select-none min-h-[46px] sm:min-h-[52px] ${
                   isActive
                     ? 'bg-primary text-primary-foreground shadow-sm ring-2 ring-primary/20 font-bold scale-[1.01]'
                     : isCompleted
@@ -458,7 +458,7 @@ export function MarketplacePublishDeckPage() {
                 }`}
               >
                 <div
-                  className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center shrink-0 text-xs font-bold transition-all ${
+                  className={`w-6 h-6 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center shrink-0 text-xs font-bold transition-all ${
                     isActive
                       ? 'bg-primary-foreground/20 text-primary-foreground'
                       : isCompleted
@@ -466,13 +466,13 @@ export function MarketplacePublishDeckPage() {
                         : 'bg-muted text-muted-foreground'
                   }`}
                 >
-                  {isCompleted ? <Check className="w-4 h-4" /> : <StepIcon className="w-4 h-4" />}
+                  {isCompleted ? <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : <StepIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="text-xs font-bold truncate">
-                    Bước {s.id}: {s.title}
+                  <div className="text-[11px] sm:text-xs font-bold truncate">
+                    B{s.id}: {s.title}
                   </div>
-                  <div className={`text-[10px] truncate ${isActive ? 'text-primary-foreground/80' : 'text-muted-foreground'}`}>
+                  <div className={`text-[10px] hidden xs:block truncate ${isActive ? 'text-primary-foreground/80' : 'text-muted-foreground'}`}>
                     {s.sub}
                   </div>
                 </div>

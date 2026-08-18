@@ -116,7 +116,7 @@ function TreeItem({
               ? 'cursor-pointer border-transparent hover:bg-muted/60'
               : 'cursor-not-allowed border-transparent bg-muted/20 text-muted-foreground opacity-75'
         }`}
-        style={{ paddingLeft: `${0.65 + depth * 0.9}rem` }}
+        style={{ paddingLeft: `calc(0.5rem + ${depth} * clamp(0.45rem, 1.8vw, 0.85rem))` }}
         onClick={selectDeck}
         onKeyDown={(event) => {
           if (event.key === 'Enter' || event.key === ' ') {
@@ -130,7 +130,7 @@ function TreeItem({
             <button
               type="button"
               aria-label={`${expanded ? 'Thu gọn' : 'Mở rộng'} bộ ${deck.name}`}
-              className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+              className="shrink-0 rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground touch-manipulation min-w-[26px] min-h-[26px] flex items-center justify-center cursor-pointer"
               onClick={(event) => {
                 event.stopPropagation()
                 onToggle(deck.id)
@@ -139,7 +139,7 @@ function TreeItem({
               {expanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
             </button>
           ) : (
-            <span className="w-4 shrink-0" />
+            <span className="w-3 sm:w-4 shrink-0" />
           )}
 
           {hasChildren ? (
@@ -150,16 +150,16 @@ function TreeItem({
           <span className="truncate font-medium">{deck.name}</span>
         </div>
 
-        <div className="flex shrink-0 items-center gap-1.5">
+        <div className="flex shrink-0 items-center gap-1.5 ml-1">
           {deck.card_count > 0 && (
-            <Badge variant="secondary" className="px-1.5 py-0 text-[10px] font-medium">
+            <Badge variant="secondary" className="px-1.5 py-0 text-[10px] font-medium shrink-0">
               {deck.card_count} thẻ
             </Badge>
           )}
           {statusLabel && (
-            <Badge variant="outline" className="gap-1 px-1.5 py-0 text-[10px] font-medium">
-              <LockKeyhole className="size-2.5" />
-              {statusLabel}
+            <Badge variant="outline" className="gap-1 px-1.5 py-0 text-[10px] font-medium shrink-0 max-w-[110px] truncate">
+              <LockKeyhole className="size-2.5 shrink-0" />
+              <span className="truncate">{statusLabel}</span>
             </Badge>
           )}
         </div>
@@ -229,7 +229,7 @@ export function PublishDeckTree({ decks, selectedDeckId, onSelectDeck }: Publish
 
   return (
     <div className="space-y-2.5">
-      <div className="flex flex-col gap-2 sm:flex-row">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -239,20 +239,20 @@ export function PublishDeckTree({ decks, selectedDeckId, onSelectDeck }: Publish
             className="h-9 rounded-xl pl-9 text-xs"
           />
         </div>
-        <div className="flex items-center justify-end gap-1.5">
+        <div className="flex items-center justify-end gap-1.5 shrink-0">
           <button
             type="button"
-            className="rounded-lg border px-2 py-1 text-[10px] font-semibold hover:bg-muted"
+            className="rounded-lg border border-border/80 px-2.5 py-1.5 text-xs font-semibold hover:bg-muted transition-colors cursor-pointer"
             onClick={() => setExpandedIds(new Set(decks.map((deck) => deck.id)))}
           >
-            Mở rộng tất cả
+            Mở rộng
           </button>
           <button
             type="button"
-            className="rounded-lg border px-2 py-1 text-[10px] font-semibold hover:bg-muted"
+            className="rounded-lg border border-border/80 px-2.5 py-1.5 text-xs font-semibold hover:bg-muted transition-colors cursor-pointer"
             onClick={() => setExpandedIds(new Set())}
           >
-            Thu gọn tất cả
+            Thu gọn
           </button>
         </div>
       </div>

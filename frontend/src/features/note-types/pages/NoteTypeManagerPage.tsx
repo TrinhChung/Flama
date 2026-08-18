@@ -208,26 +208,26 @@ export function NoteTypeManagerPage() {
         title="Quản lý Loại Thẻ (Note Types)"
         description="Định nghĩa cấu trúc các trường dữ liệu và tùy chỉnh mẫu hiển thị Flashcard."
         actions={
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-start sm:justify-end">
             <Button
               variant="outline"
               size="sm"
               onClick={() => setTourOpen(true)}
-              className="h-8 sm:h-9 px-3 text-xs font-semibold rounded-xl"
+              className="h-8 sm:h-9 px-2.5 sm:px-3 text-xs font-semibold rounded-xl shrink-0"
             >
-              <HelpCircle className="size-3.5 mr-1.5 text-primary" />
-              Tour Hướng Dẫn
+              <HelpCircle className="size-3.5 mr-1.5 text-primary shrink-0" />
+              <span className="hidden xs:inline">Tour </span>Hướng Dẫn
             </Button>
             <Button
               variant="outline"
               size="sm"
               asChild
-              className="h-8 sm:h-9 px-3 text-xs font-semibold rounded-xl border-primary/30 text-primary hover:bg-primary/10"
+              className="h-8 sm:h-9 px-2.5 sm:px-3 text-xs font-semibold rounded-xl border-primary/30 text-primary hover:bg-primary/10 shrink-0"
             >
               <Link to="/flashcards/note-types/guide" target="_blank" rel="noopener noreferrer">
-                <Sparkles className="size-3.5 mr-1.5 text-primary" />
-                Hướng Dẫn & Prompt AI
-                <ExternalLink className="size-3 ml-1 opacity-70" />
+                <Sparkles className="size-3.5 mr-1.5 text-primary shrink-0" />
+                Prompt AI
+                <ExternalLink className="size-3 ml-1 opacity-70 shrink-0" />
               </Link>
             </Button>
             <Button
@@ -235,11 +235,11 @@ export function NoteTypeManagerPage() {
               size="sm"
               asChild
               data-tour="marketplace-btn"
-              className="h-8 sm:h-9 px-3 text-xs font-semibold rounded-xl"
+              className="h-8 sm:h-9 px-2.5 sm:px-3 text-xs font-semibold rounded-xl shrink-0"
             >
               <Link to="/marketplace/note-types">
-                <Sparkles className="size-3.5 mr-1.5 text-primary" />
-                Khám phá Kho NoteType
+                <Sparkles className="size-3.5 mr-1.5 text-primary shrink-0" />
+                Kho Mẫu
               </Link>
             </Button>
           </div>
@@ -272,7 +272,7 @@ export function NoteTypeManagerPage() {
           <Button
             size="sm"
             asChild
-            className="h-8 sm:h-9 px-3.5 text-xs font-bold rounded-xl shadow-xs shrink-0 bg-primary text-primary-foreground hover:bg-primary/90"
+            className="h-8 sm:h-9 px-3.5 text-xs font-bold rounded-xl shadow-xs shrink-0 self-start sm:self-auto bg-primary text-primary-foreground hover:bg-primary/90"
           >
             <Link to="/flashcards/note-types/guide" target="_blank" rel="noopener noreferrer">
               <Sparkles className="size-3.5 mr-1.5" />
@@ -365,14 +365,14 @@ export function NoteTypeManagerPage() {
                 </div>
               </div>
 
-              <div className="mt-4 pt-3 border-t border-border/60 flex items-center justify-between gap-2">
-                <div className="flex items-center gap-1.5">
+              <div className="mt-4 pt-3 border-t border-border/60 flex flex-wrap items-center justify-between gap-1.5 sm:gap-2">
+                <div className="flex flex-wrap items-center gap-1.5">
                   <Button
                     variant="outline"
                     size="sm"
                     asChild
                     data-tour={index === 0 ? 'card-fields-btn' : undefined}
-                    className="h-8 px-2.5 text-xs font-semibold rounded-xl"
+                    className="h-8 px-2 sm:px-2.5 text-xs font-semibold rounded-xl"
                   >
                     <Link to={`/flashcards/note-types/${item.id}/fields`}>
                       <SlidersHorizontal className="size-3.5 mr-1" />
@@ -385,7 +385,7 @@ export function NoteTypeManagerPage() {
                     size="sm"
                     asChild
                     data-tour={index === 0 ? 'card-template-btn' : undefined}
-                    className="h-8 px-2.5 text-xs font-semibold rounded-xl"
+                    className="h-8 px-2 sm:px-2.5 text-xs font-semibold rounded-xl"
                   >
                     <Link to={`/flashcards/note-types/${item.id}`}>
                       <Code2 className="size-3.5 mr-1" />
@@ -399,7 +399,7 @@ export function NoteTypeManagerPage() {
                       size="sm"
                       asChild
                       data-tour={index === 0 ? 'card-share-btn' : undefined}
-                      className="h-8 px-2.5 text-xs font-semibold rounded-xl text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10"
+                      className="h-8 px-2 sm:px-2.5 text-xs font-semibold rounded-xl text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10"
                     >
                       <Link to={`/marketplace/note-types/${item.id}`}>
                         <Share2 className="size-3.5 mr-1" />
@@ -412,7 +412,7 @@ export function NoteTypeManagerPage() {
                       size="sm"
                       asChild
                       data-tour={index === 0 ? 'card-share-btn' : undefined}
-                      className="h-8 px-2.5 text-xs font-semibold rounded-xl text-primary hover:text-primary hover:bg-primary/10"
+                      className="h-8 px-2 sm:px-2.5 text-xs font-semibold rounded-xl text-primary hover:text-primary hover:bg-primary/10"
                     >
                       <Link to={`/marketplace/note-types/publish?id=${item.id}`}>
                         <Share2 className="size-3.5 mr-1" />
@@ -425,7 +425,7 @@ export function NoteTypeManagerPage() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-8 px-2 text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-xl"
+                  className="h-8 px-2 text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-xl shrink-0"
                   onClick={() => {
                     setPurgeNoteType(false)
                     setNoteTypeToDelete(item)

@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   ArrowLeft,
   Check,
+  ChevronDown,
+  ChevronUp,
   Code2,
   GripVertical,
   Info,
@@ -60,6 +62,15 @@ export function NoteTypeFieldsPage() {
 
   // Drag & Drop State
   const [draggedId, setDraggedId] = useState<string | null>(null)
+
+  const editFormRef = useRef<HTMLDivElement>(null)
+  const scrollToFormOnMobile = () => {
+    if (typeof window !== 'undefined' && window.innerWidth < 768 && editFormRef.current) {
+      setTimeout(() => {
+        editFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+      }, 50)
+    }
+  }
 
   const query = useQuery({
     queryKey: ['note-type-fields', noteTypeId],
@@ -166,6 +177,24 @@ export function NoteTypeFieldsPage() {
     reorderMutation.mutate(payload)
   }
 
+  const handleMoveUp = (index: number) => {
+    if (index <= 0) return
+    const reordered = [...fields]
+    const [item] = reordered.splice(index, 1)
+    reordered.splice(index - 1, 0, item)
+    const payload = reordered.map((f, idx) => ({ id: f.id, position: idx }))
+    reorderMutation.mutate(payload)
+  }
+
+  const handleMoveDown = (index: number) => {
+    if (index >= fields.length - 1) return
+    const reordered = [...fields]
+    const [item] = reordered.splice(index, 1)
+    reordered.splice(index + 1, 0, item)
+    const payload = reordered.map((f, idx) => ({ id: f.id, position: idx }))
+    reorderMutation.mutate(payload)
+  }
+
   if (query.isPending) return <PageLoading label="Đang tải danh sách trường…" />
   if (query.error) return <Page><PageError error={query.error} /></Page>
 
@@ -195,7 +224,7 @@ export function NoteTypeFieldsPage() {
       />
 
       <div className="grid gap-6 md:grid-cols-12">
-        {/* Left Column: Drag-and-drop Field List */}
+        {/* Left Column: Drag-and-drop / Touch-reorder Field List */}
         <div className="md:col-span-5">
           <Card className="border-border/80 shadow-xs rounded-2xl h-full flex flex-col overflow-hidden bg-card">
             <CardHeader className="p-4 sm:p-5 flex flex-row items-center justify-between pb-2 sm:pb-2">
@@ -209,6 +238,7 @@ export function NoteTypeFieldsPage() {
                   setSelectedFieldId(null)
                   setNewName('')
                   setNewType('text')
+                  scrollToFormOnMobile()
                 }}
               >
                 <Plus className="size-3.5 mr-1" /> Thêm
@@ -216,11 +246,11 @@ export function NoteTypeFieldsPage() {
             </CardHeader>
             <CardContent className="p-4 sm:p-5 pt-0 flex-1 space-y-3">
               <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-                <Info className="size-3.5 text-primary" /> Kéo thả để sắp xếp lại vị trí trường
+                <Info className="size-3.5 text-primary shrink-0" /> Kéo thả hoặc bấm ▲/▼ để đổi vị trí
               </p>
 
               <div className="space-y-2 max-h-[480px] overflow-y-auto pr-1">
-                {fields.map((field) => (
+                {fields.map((field, index) => (
                   <div
                     key={field.id}
                     draggable
@@ -230,22 +260,55 @@ export function NoteTypeFieldsPage() {
                     onClick={() => {
                       setIsAddingField(false)
                       setSelectedFieldId(field.id)
+                      scrollToFormOnMobile()
                     }}
-                    className={`flex items-center gap-3 p-3.5 rounded-xl border transition-all cursor-grab active:cursor-grabbing ${
+                    className={`flex items-center gap-2 sm:gap-3 p-3 rounded-xl border transition-all cursor-pointer select-none ${
                       selectedFieldId === field.id && !isAddingField
                         ? 'border-primary bg-primary/10 shadow-xs'
                         : 'border-border/60 bg-card hover:bg-muted/40 hover:border-primary/40'
                     }`}
                   >
-                    <GripVertical className="size-4 text-muted-foreground/60 shrink-0" />
-                    <span className="flex-1 font-semibold text-sm truncate text-foreground">
+                    <GripVertical className="size-4 text-muted-foreground/60 shrink-0 hidden sm:block cursor-grab" />
+                    
+                    {/* Touch Reorder Buttons */}
+                    <div className="flex items-center gap-0.5 shrink-0">
+                      <button
+                        type="button"
+                        disabled={index === 0 || reorderMutation.isPending}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleMoveUp(index)
+                        }}
+                        className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-25 disabled:pointer-events-none transition-colors cursor-pointer"
+                        title="Di chuyển lên"
+                        aria-label="Di chuyển lên"
+                      >
+                        <ChevronUp className="size-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={index === fields.length - 1 || reorderMutation.isPending}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleMoveDown(index)
+                        }}
+                        className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-25 disabled:pointer-events-none transition-colors cursor-pointer"
+                        title="Di chuyển xuống"
+                        aria-label="Di chuyển xuống"
+                      >
+                        <ChevronDown className="size-3.5" />
+                      </button>
+                    </div>
+
+                    <span className="flex-1 font-semibold text-sm truncate text-foreground min-w-0">
                       {field.name}
                     </span>
-                    <Badge variant="outline" className="text-[11px] font-semibold lowercase px-2.5 py-0.5 rounded-md">
+
+                    <Badge variant="outline" className="text-[10px] sm:text-[11px] font-semibold lowercase px-2 py-0.5 rounded-md shrink-0">
                       {field.field_type}
                     </Badge>
                     {field.identity_role === 'primary' ? (
-                      <Badge className="text-[10px]">identity</Badge>
+                      <Badge className="text-[10px] shrink-0">id</Badge>
                     ) : null}
                   </div>
                 ))}
@@ -261,7 +324,7 @@ export function NoteTypeFieldsPage() {
         </div>
 
         {/* Right Column: Field Property Form / Add Field Form */}
-        <div className="md:col-span-7">
+        <div ref={editFormRef} className="md:col-span-7">
           {isAddingField ? (
             /* Add New Field Card */
             <Card className="border-primary/30 bg-card shadow-md rounded-2xl">
