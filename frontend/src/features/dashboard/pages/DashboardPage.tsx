@@ -49,6 +49,10 @@ export function DashboardPage() {
   const dashboard = dashboardQuery.data
   const selectedDeck = findDeck(dashboard.decks, selectedDeckId)
 
+  const hasCreatorAccess = Boolean(
+    bootstrap?.user?.is_admin || bootstrap?.user?.role?.code === 'creator',
+  )
+
   const studyUrl = selectedDeck?.study_url || bootstrap.links.study
   const statsUrl = selectedDeck ? `/statistics?deck_id=${selectedDeck.id}` : '/statistics'
   const browseUrl = selectedDeck ? `/browse?deck_id=${selectedDeck.id}` : bootstrap.links.browse
@@ -84,13 +88,13 @@ export function DashboardPage() {
             <BarChartLine className="size-3.5 sm:size-4" /> Stats
           </Link>
 
-          {bootstrap?.user?.is_admin ? (
-            <a
-              href={importUrl}
+          {hasCreatorAccess ? (
+            <Link
+              to={importUrl}
               className="dash-tab hidden sm:inline-flex items-center gap-1.5 rounded-lg px-2.5 sm:px-3.5 py-1.5 sm:py-2 text-[11px] sm:text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground transition shrink-0"
             >
               <Upload className="size-3.5 sm:size-4" /> Import
-            </a>
+            </Link>
           ) : null}
 
           <Link
@@ -199,6 +203,7 @@ export function DashboardPage() {
         opened={createOpened}
         onClose={() => setCreateOpened(false)}
         dashboard={dashboard}
+        selectedDeck={selectedDeck}
       />
       <DeckActionModal
         selection={selection}

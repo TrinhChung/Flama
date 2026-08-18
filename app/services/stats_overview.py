@@ -318,25 +318,28 @@ def build_stats_overview(
                 day_boundary_hour_local=day_boundary_hour,
             )
 
-    today_start_utc = _day_index_to_datetime(
-        today_day_index,
-        day_boundary_hour,
-        timezone_name=effective_timezone_name,
-    )
     tomorrow_start_utc = _day_index_to_datetime(
         today_day_index + 1,
         day_boundary_hour,
         timezone_name=effective_timezone_name,
     )
-    today_map = query_daily_review_aggregates(
-        user_id=user_id,
-        timezone_name=effective_timezone_name,
-        timezone_obj=timezone_obj,
-        start_utc=today_start_utc,
-        end_utc=tomorrow_start_utc,
-        day_boundary_hour_local=day_boundary_hour,
-    )
-    today_data = today_map.get(today_local, {"cards": 0, "duration_ms": 0})
+    if selected_year == today_local.year:
+        today_data = day_map.get(today_local, {"cards": 0, "duration_ms": 0})
+    else:
+        today_start_utc = _day_index_to_datetime(
+            today_day_index,
+            day_boundary_hour,
+            timezone_name=effective_timezone_name,
+        )
+        today_map = query_daily_review_aggregates(
+            user_id=user_id,
+            timezone_name=effective_timezone_name,
+            timezone_obj=timezone_obj,
+            start_utc=today_start_utc,
+            end_utc=tomorrow_start_utc,
+            day_boundary_hour_local=day_boundary_hour,
+        )
+        today_data = today_map.get(today_local, {"cards": 0, "duration_ms": 0})
     today_cards = _safe_int(today_data.get("cards"))
     today_duration_ms = max(0, _safe_int(today_data.get("duration_ms")))
     today_minutes = _round2(today_duration_ms / 60000.0)

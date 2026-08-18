@@ -8,6 +8,8 @@ import {
   CheckCircle2,
   AlertTriangle,
   Loader2,
+  Layers,
+  FileSpreadsheet,
 } from 'lucide-react'
 import type { useFileImportWizard } from '../hooks/useFileImportWizard'
 
@@ -17,56 +19,144 @@ interface ImportResultStepProps {
 
 export function ImportResultStep({ wizard }: ImportResultStepProps) {
   const {
+    isBatchMode,
     estimateMutation,
+    batchEstimateMutation,
     executeMutation,
+    batchExecuteMutation,
     handleEstimate,
     handleExecute,
     report,
+    batchReport,
     executionDone,
     hasEstimated,
   } = wizard
+
+  const isPending =
+    estimateMutation.isPending ||
+    batchEstimateMutation.isPending ||
+    executeMutation.isPending ||
+    batchExecuteMutation.isPending
 
   return (
     <Card className="border-border/80 shadow-sm rounded-2xl overflow-hidden">
       <CardHeader className="pb-3 border-b bg-card/50">
         <CardTitle className="text-sm font-semibold flex items-center gap-2">
           <CheckCircle2 className="size-4 text-primary" />
-          Rà soát &amp; Thực thi Import
+          Rà soát &amp; Thực thi Import {isBatchMode && '(Hàng loạt)'}
         </CardTitle>
         <CardDescription className="text-xs">
-          Chạy ước lượng thử nghiệm hoặc tiến hành nạp dữ liệu chính thức.
+          Chạy ước lượng thử nghiệm hoặc tiến hành nạp dữ liệu chính thức vào hệ thống.
         </CardDescription>
       </CardHeader>
       <CardContent className="pt-4 space-y-4">
         <div className="flex flex-wrap gap-3">
           <Button
             variant="outline"
-            disabled={estimateMutation.isPending || executeMutation.isPending}
+            disabled={isPending}
             onClick={handleEstimate}
             className="font-medium"
           >
-            {estimateMutation.isPending ? <Loader2 className="size-4 animate-spin mr-1.5" /> : null}
+            {isPending && !hasEstimated ? <Loader2 className="size-4 animate-spin mr-1.5" /> : null}
             1. Ước lượng thử nghiệm
           </Button>
 
           <Button
-            disabled={!hasEstimated || estimateMutation.isPending || executeMutation.isPending}
+            disabled={!hasEstimated || isPending}
             onClick={handleExecute}
             className="font-semibold shadow-sm"
           >
-            {executeMutation.isPending ? <Loader2 className="size-4 animate-spin mr-1.5" /> : null}
+            {isPending && hasEstimated ? <Loader2 className="size-4 animate-spin mr-1.5" /> : null}
             2. Thực thi import
           </Button>
         </div>
 
-        {(estimateMutation.isPending || executeMutation.isPending) && (
+        {isPending && (
           <div className="space-y-1.5">
             <Progress value={85} className="h-2" />
             <p className="text-xs text-muted-foreground text-center">Đang xử lý dữ liệu import…</p>
           </div>
         )}
 
-        {report && (
+        {/* Batch Report Display */}
+        {isBatchMode && batchReport && (
+          <div className="space-y-4 pt-2">
+            <Alert className={executionDone ? 'border-primary/40 bg-primary/5' : 'border-border/80 bg-muted/30'}>
+              {executionDone ? <CheckCircle2 className="size-5 text-primary" /> : <AlertTriangle className="size-5 text-muted-foreground" />}
+              <AlertTitle className="font-bold text-foreground">
+                {executionDone ? 'Thực thi Import Hàng loạt thành công!' : 'Kết quả ước lượng trước import (Hàng loạt)'}
+              </AlertTitle>
+              <AlertDescription className="mt-2 text-xs">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 font-medium">
+                  <div>Tổng số bài: {batchReport.overall_summary.total_files}</div>
+                  <div className="text-primary font-bold">Deck con tạo mới: {batchReport.overall_summary.created_decks}</div>
+                  <div className="text-primary font-bold">Thẻ thêm mới: {batchReport.overall_summary.inserted}</div>
+                  <div className="font-semibold">Cập nhật: {batchReport.overall_summary.updated}</div>
+                  <div className="text-muted-foreground">Bỏ qua: {batchReport.overall_summary.skipped}</div>
+                  <div className="text-destructive font-semibold">Lỗi: {batchReport.overall_summary.errors}</div>
+                </div>
+              </AlertDescription>
+            </Alert>
+
+            {/* Per-file Reports Table */}
+            <div className="border border-border/80 rounded-2xl overflow-hidden shadow-sm">
+              <div className="bg-muted/40 p-3 border-b text-xs font-bold text-foreground flex items-center gap-2">
+                <Layers className="size-4 text-primary" />
+                Chi tiết kết quả từng bài học ({batchReport.file_reports.length} bài)
+              </div>
+              <div className="overflow-x-auto">
+                <Table className="text-xs">
+                  <TableHeader className="bg-muted/20">
+                    <TableRow>
+                      <TableHead className="min-w-44">Tệp</TableHead>
+                      <TableHead className="min-w-44">Deck con</TableHead>
+                      <TableHead className="w-28 text-center">Trạng thái</TableHead>
+                      <TableHead className="w-24 text-right">Thêm mới</TableHead>
+                      <TableHead className="w-24 text-right">Cập nhật</TableHead>
+                      <TableHead className="w-24 text-right">Bỏ qua</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {batchReport.file_reports.map((fReport) => (
+                      <TableRow key={fReport.file_id}>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <FileSpreadsheet className="size-4 text-primary/70 shrink-0" />
+                            <span className="font-medium truncate max-w-44">{fReport.filename}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="font-medium text-foreground">
+                          {fReport.deck_name}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {fReport.status === 'skipped' ? (
+                            <Badge variant="outline" className="text-[10px]">Đã bỏ qua</Badge>
+                          ) : fReport.summary.errors > 0 ? (
+                            <Badge variant="destructive" className="text-[10px]">Có lỗi</Badge>
+                          ) : (
+                            <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-[10px]">Thành công</Badge>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right font-bold text-primary">
+                          {fReport.summary.inserted}
+                        </TableCell>
+                        <TableCell className="text-right font-medium">
+                          {fReport.summary.updated}
+                        </TableCell>
+                        <TableCell className="text-right text-muted-foreground">
+                          {fReport.summary.skipped}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Single File Report Display */}
+        {!isBatchMode && report && (
           <div className="space-y-4 pt-2">
             <Alert className={executionDone ? 'border-primary/40 bg-primary/5' : 'border-border/80 bg-muted/30'}>
               {executionDone ? <CheckCircle2 className="size-5 text-primary" /> : <AlertTriangle className="size-5 text-muted-foreground" />}

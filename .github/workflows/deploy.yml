@@ -318,14 +318,6 @@ jobs:
             --property="WorkingDirectory=$release_dir" \
             --property="EnvironmentFile=$desired_environment_file" \
             "$PROJECT_DIR/venv/bin/flask" --app wsgi.py bootstrap-admin-sync
-          systemd-run --quiet --wait --collect --pipe \
-            --unit="flama-seed-data-$RELEASE_ID" \
-            --property=User=flama \
-            --property=Group=flama \
-            --property="WorkingDirectory=$release_dir" \
-            --property="EnvironmentFile=$desired_environment_file" \
-            "$PROJECT_DIR/venv/bin/flask" --app wsgi.py seed-data-ensure \
-              --path static/seed_data
           install -m 0644 "$release_dir/deploy/flama.service" /etc/systemd/system/flama.service
           install -m 0644 "$release_dir/deploy/flama-connect.service" /etc/systemd/system/flama-connect.service
 

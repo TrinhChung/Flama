@@ -230,3 +230,83 @@ export const ankiImportApi = {
     )
   },
 }
+
+export interface BatchFileCollision {
+  is_collision: boolean
+  status: 'new' | 'identical' | 'partial' | 'different' | 'empty_deck'
+  overlap_percentage: number
+  message: string
+  suggested_action: 'create_new' | 'auto_rename' | 'upsert' | 'skip'
+  existing_deck_id?: number | null
+  existing_deck_name?: string | null
+  existing_notes_count?: number
+}
+
+export interface BatchFileMeta {
+  file_id: string
+  filename: string
+  file_size: number
+  total_rows: number
+  column_count: number
+  preview_rows: string[][]
+  columns: Array<{ index: number; name: string; display: string }>
+  suggested_deck_name: string
+  suggested_mapping: Record<
+    string,
+    { source_type: 'column' | 'ignore' | 'constant'; column_index: number | null; constant_value: string }
+  >
+  collision: BatchFileCollision
+  is_batch_collision: boolean
+}
+
+export interface BatchParseResponse {
+  token: string
+  parent_deck_id: number
+  note_type_id: string
+  files: BatchFileMeta[]
+  sample_columns: Array<{ index: number; name: string; display: string }>
+  suggested_mapping: Record<
+    string,
+    { source_type: 'column' | 'ignore' | 'constant'; column_index: number | null; constant_value: string }
+  >
+}
+
+export interface BatchFileConfig {
+  file_id: string
+  target_deck_name: string
+  action: 'create_new' | 'auto_rename' | 'upsert' | 'skip'
+  target_deck_id?: number | null
+}
+
+export interface BatchFileReport {
+  file_id: string
+  filename: string
+  deck_name: string
+  deck_id?: number | null
+  status: string
+  summary: {
+    total_rows: number
+    inserted: number
+    updated: number
+    skipped: number
+    unchanged?: number
+    errors: number
+  }
+  issues: Array<{ kind: string; row: number; reason: string; message: string }>
+}
+
+export interface BatchImportReport {
+  token: string
+  mode: string
+  overall_summary: {
+    total_files: number
+    processed_files: number
+    created_decks: number
+    inserted: number
+    updated: number
+    skipped: number
+    unchanged: number
+    errors: number
+  }
+  file_reports: BatchFileReport[]
+}

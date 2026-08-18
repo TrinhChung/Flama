@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   ArrowLeftRight,
   ArrowCounterclockwise,
@@ -8,6 +9,7 @@ import {
   PencilSquare,
   Share,
   TrashFill,
+  Upload,
 } from '@/shared/components/Icons'
 import {
   DropdownMenu,
@@ -56,6 +58,7 @@ export function DeckRow({
   onDragEnter,
   onDrop,
 }: DeckRowProps) {
+  const navigate = useNavigate()
   const [expanded, setExpanded] = useState(true)
   const hasChildren = node.children.length > 0
   const isSelected = selectedDeckId === node.id
@@ -234,6 +237,14 @@ export function DeckRow({
                 >
                   <Share className="size-4 text-orange-600" />
                   <span>Share Deck</span>
+                </DropdownMenuItem>
+
+                <DropdownMenuItem
+                  className="cursor-pointer text-sm py-2 px-2.5 font-medium flex items-center gap-2"
+                  onSelect={() => navigate(`/flashcards/import?deck_id=${node.id}`)}
+                >
+                  <Upload className="size-4 text-muted-foreground" />
+                  <span>Import thẻ</span>
                 </DropdownMenuItem>
 
                 <DropdownMenuSeparator className="my-1" />

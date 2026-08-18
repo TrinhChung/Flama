@@ -1,6 +1,6 @@
 import hashlib
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Tuple
 
 UTC = timezone.utc
@@ -12,14 +12,45 @@ from models import db
 from models.flashcard import Card, DeckCloneDeckMap, DeckInstall, Note
 from models.deck import Deck
 from models.card_progress import CardProgress
-from app.repositories.study_repository import counter_bucket_for_progress_values
-from app.services.stats_overview import get_effective_timezone_name
+from app.repositories.study_repository import default_deck_options, _today_day_index
+from app.services.stats_overview import get_effective_timezone_name, _build_timezone_obj
 from app.utils.deck_move_token import create_deck_move_token
 from app.utils.permissions import is_admin_user
 
 
 def _utcnow() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
+
+
+def _classify_progress_fast(
+    progress_queue: str | None,
+    progress_due_at: datetime | None,
+    progress_due_day: int | None,
+    progress_is_suspended: bool | None,
+    today_day_index: int,
+    timezone_obj,
+    boundary_hour: int,
+) -> str | None:
+    if progress_is_suspended:
+        return None
+    queue = (progress_queue or "new").strip().lower()
+    if queue == "new":
+        return "new"
+    if queue in ("learn", "learning", "relearning"):
+        return "learning"
+    if queue == "review":
+        if progress_due_day is not None:
+            r_due_day = int(progress_due_day)
+        elif progress_due_at is not None:
+            utc_moment = progress_due_at if progress_due_at.tzinfo else progress_due_at.replace(tzinfo=UTC)
+            local_moment = utc_moment.astimezone(timezone_obj).replace(tzinfo=None)
+            r_due_day = (local_moment - timedelta(hours=boundary_hour)).date().toordinal()
+        else:
+            r_due_day = today_day_index
+        if r_due_day <= today_day_index:
+            return "review"
+        return None
+    return "new"
 
 
 @dataclass
@@ -42,6 +73,14 @@ class DeckNode:
 def build_dashboard_data(current_user) -> Tuple[List[DeckNode], int, int, int, bool]:
     admin_mode = is_admin_user(current_user)
     timezone_name = get_effective_timezone_name(getattr(current_user, "timezone", "UTC"))
+    timezone_obj = _build_timezone_obj(timezone_name)
+    boundary_hour = int(default_deck_options().dayBoundaryHourLocal)
+    now = _utcnow()
+    today_day_index = _today_day_index(
+        now=now,
+        timezone_name=timezone_name,
+        day_boundary_hour_local=boundary_hour,
+    )
 
     from app.repositories.deck_tree_query import collect_accessible_decks
     decks = collect_accessible_decks(user_id=current_user.id, admin_mode=admin_mode)
@@ -51,8 +90,6 @@ def build_dashboard_data(current_user) -> Tuple[List[DeckNode], int, int, int, b
         installs = DeckInstall.query.filter_by(user_id=current_user.id).all()
     else:
         installs = []
-
-    now = _utcnow()
 
     visible_deck_ids = [deck.id for deck in decks if deck.id is not None]
     card_counts_by_deck: Dict[int, Dict[str, int]] = {
@@ -89,13 +126,14 @@ def build_dashboard_data(current_user) -> Tuple[List[DeckNode], int, int, int, b
             )
             bucket["total"] += 1
 
-            count_bucket = counter_bucket_for_progress_values(
-                queue=progress_queue,
-                due_at=progress_due_at,
-                due_day=progress_due_day,
-                is_suspended=progress_is_suspended,
-                now=now,
-                timezone_name=timezone_name,
+            count_bucket = _classify_progress_fast(
+                progress_queue=progress_queue,
+                progress_due_at=progress_due_at,
+                progress_due_day=progress_due_day,
+                progress_is_suspended=progress_is_suspended,
+                today_day_index=today_day_index,
+                timezone_obj=timezone_obj,
+                boundary_hour=boundary_hour,
             )
             if count_bucket == "new":
                 bucket["new"] += 1
@@ -165,13 +203,14 @@ def build_dashboard_data(current_user) -> Tuple[List[DeckNode], int, int, int, b
                     )
                     bucket["total"] += 1
 
-                    count_bucket = counter_bucket_for_progress_values(
-                        queue=progress_queue,
-                        due_at=progress_due_at,
-                        due_day=progress_due_day,
-                        is_suspended=progress_is_suspended,
-                        now=now,
-                        timezone_name=timezone_name,
+                    count_bucket = _classify_progress_fast(
+                        progress_queue=progress_queue,
+                        progress_due_at=progress_due_at,
+                        progress_due_day=progress_due_day,
+                        progress_is_suspended=progress_is_suspended,
+                        today_day_index=today_day_index,
+                        timezone_obj=timezone_obj,
+                        boundary_hour=boundary_hour,
                     )
                     if count_bucket == "new":
                         bucket["new"] += 1

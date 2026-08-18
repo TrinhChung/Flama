@@ -2,6 +2,7 @@
 
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
+import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DeckNode } from '../types'
 import { DeckTree } from './DeckTree'
@@ -45,13 +46,15 @@ describe('DeckTree interactions', () => {
 
     act(() => {
       root.render(
-        <DeckTree
-          nodes={[deck]}
-          adminMode={false}
-          onSelect={onSelect}
-          onActivate={onActivate}
-          onAction={vi.fn()}
-        />,
+        <MemoryRouter>
+          <DeckTree
+            nodes={[deck]}
+            adminMode={false}
+            onSelect={onSelect}
+            onActivate={onActivate}
+            onAction={vi.fn()}
+          />
+        </MemoryRouter>,
       )
     })
 
@@ -70,12 +73,14 @@ describe('DeckTree interactions', () => {
 
     act(() => {
       root.render(
-        <DeckTree
-          nodes={[deck]}
-          adminMode={false}
-          onActivate={onActivate}
-          onAction={vi.fn()}
-        />,
+        <MemoryRouter>
+          <DeckTree
+            nodes={[deck]}
+            adminMode={false}
+            onActivate={onActivate}
+            onAction={vi.fn()}
+          />
+        </MemoryRouter>,
       )
     })
 
@@ -94,12 +99,14 @@ describe('DeckTree interactions', () => {
 
     act(() => {
       root.render(
-        <DeckTree
-          nodes={[deck]}
-          adminMode={false}
-          onActivate={onActivate}
-          onAction={vi.fn()}
-        />,
+        <MemoryRouter>
+          <DeckTree
+            nodes={[deck]}
+            adminMode={false}
+            onActivate={onActivate}
+            onAction={vi.fn()}
+          />
+        </MemoryRouter>,
       )
     })
 
@@ -123,5 +130,30 @@ describe('DeckTree interactions', () => {
       delete (document as Partial<Document>).elementFromPoint
     }
     vi.useRealTimers()
+  })
+
+  it('renders settings menu with import option for deck', () => {
+    act(() => {
+      root.render(
+        <MemoryRouter>
+          <DeckTree
+            nodes={[deck]}
+            adminMode={false}
+            onAction={vi.fn()}
+          />
+        </MemoryRouter>,
+      )
+    })
+
+    const settingsButton = container.querySelector<HTMLButtonElement>('.deck-settings-btn')
+    expect(settingsButton).not.toBeNull()
+    act(() => {
+      settingsButton?.focus()
+      settingsButton?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true, cancelable: true }),
+      )
+    })
+
+    expect(document.body.textContent).toContain('Import thẻ')
   })
 })

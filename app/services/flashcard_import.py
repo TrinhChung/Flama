@@ -909,3 +909,491 @@ def run_import(
         "warnings": mismatch_warning + mapping_warnings,
     }
     return report
+
+
+def compare_file_with_deck_content(
+    *,
+    user_id: int,
+    file_data_path: Path,
+    delimiter: str,
+    has_header: bool,
+    note_type: Any,
+    mapping: dict[str, Any],
+    uniqueness_fields: list[str],
+    existing_deck_id: int,
+) -> dict[str, Any]:
+    """Compares uploaded file keys against existing notes in a target deck."""
+    existing_notes = Note.query.filter_by(user_id=user_id, deck_id=existing_deck_id).all()
+    if not existing_notes:
+        return {
+            "status": "empty_deck",
+            "overlap_ratio": 0.0,
+            "overlap_percentage": 0,
+            "existing_count": 0,
+            "file_count": 0,
+            "matched_keys_count": 0,
+            "message": "Deck hiện tại chưa có thẻ nào.",
+            "suggested_action": "upsert",
+        }
+
+    existing_keys: set[str] = set()
+    for n in existing_notes:
+        k = _build_compound_key(n.field_values if isinstance(n.field_values, dict) else {}, uniqueness_fields)
+        if k:
+            existing_keys.add(k)
+
+    field_defs = sorted(note_type.field_defs, key=lambda item: item.position)
+    incoming_keys: set[str] = set()
+    file_rows_count = 0
+
+    try:
+        with file_data_path.open("rb") as raw_file, TextIOWrapper(raw_file, encoding="utf-8-sig", newline="") as text_file:
+            reader, preamble = _prepare_import_reader(text_file, delimiter)
+            for row_idx, raw_row in enumerate(reader, start=1):
+                if row_idx == 1 and has_header:
+                    continue
+                row = ["" if cell is None else str(cell) for cell in raw_row]
+                if not any(cell.strip() for cell in row):
+                    continue
+                file_rows_count += 1
+                mapped_values: dict[str, Any] = {}
+                for field_def in field_defs:
+                    field_name = field_def.name
+                    config = mapping.get(field_name, {"source_type": "ignore"})
+                    if config.get("source_type") == "column":
+                        c_idx = config.get("column_index")
+                        if c_idx is not None and int(c_idx) < len(row):
+                            mapped_values[field_name] = row[int(c_idx)]
+                    elif config.get("source_type") == "constant":
+                        mapped_values[field_name] = config.get("constant_value") or ""
+
+                k = _build_compound_key(mapped_values, uniqueness_fields)
+                if k:
+                    incoming_keys.add(k)
+    except Exception:
+        pass
+
+    common_keys = incoming_keys & existing_keys
+    max_len = max(len(incoming_keys), len(existing_keys))
+    overlap_ratio = len(common_keys) / max_len if max_len > 0 else 0.0
+
+    if len(common_keys) == len(incoming_keys) == len(existing_keys) and len(common_keys) > 0:
+        status = "identical"
+        message = f"Nội dung trùng khớp 100% với {len(existing_notes)} thẻ hiện có trong deck."
+        suggested_action = "skip"
+    elif len(common_keys) > 0:
+        status = "partial"
+        overlap_pct = int(overlap_ratio * 100)
+        message = f"Trùng {len(common_keys)}/{len(incoming_keys)} thẻ ({overlap_pct}%). Deck hiện có {len(existing_notes)} thẻ."
+        suggested_action = "upsert"
+    else:
+        status = "different"
+        message = f"Cảnh báo: Deck hiện tại có {len(existing_notes)} thẻ nhưng nội dung khác hoàn toàn (0% trùng lặp). Khuyên bạn nên tạo bài mới!"
+        suggested_action = "auto_rename"
+
+    return {
+        "status": status,
+        "overlap_ratio": round(overlap_ratio, 3),
+        "overlap_percentage": int(overlap_ratio * 100),
+        "existing_count": len(existing_notes),
+        "file_count": file_rows_count,
+        "matched_keys_count": len(common_keys),
+        "message": message,
+        "suggested_action": suggested_action,
+    }
+
+
+def create_batch_import_session(
+    *,
+    user_id: int,
+    files: list[tuple[str, bytes]],
+    parent_deck_id: int,
+    note_type: Any,
+    child_decks: Sequence[Any],
+    delimiter_mode: str,
+    custom_delimiter: str | None,
+    has_header: bool,
+    uniqueness_fields: list[str],
+    naming_mode: str = "auto",
+    custom_pattern: str | None = None,
+) -> dict[str, Any]:
+    """Creates a temporary multi-file import session with naming and collision analysis."""
+    if not files:
+        raise ImportValidationError("No files uploaded for batch import")
+
+    token = str(uuid4())
+    root = _session_root(user_id, token)
+    files_dir = root / "files"
+    files_dir.mkdir(parents=True, exist_ok=True)
+
+    filenames = [f[0] for f in files]
+    delimiter = resolve_delimiter(delimiter_mode, custom_delimiter)
+
+    from app.services import deck_naming_service
+    deck_name_suggestions = deck_naming_service.generate_suggested_deck_names(
+        child_decks=child_decks,
+        filenames=filenames,
+        custom_pattern=custom_pattern,
+        naming_mode=naming_mode,
+    )
+    suggestion_by_filename = {item["filename"]: item for item in deck_name_suggestions}
+
+    file_items_meta: list[dict[str, Any]] = []
+    first_file_summary = None
+
+    for idx, (filename, file_bytes) in enumerate(files):
+        if len(file_bytes) > IMPORT_MAX_FILE_BYTES:
+            raise ImportValidationError(f"File '{filename}' exceeds {IMPORT_MAX_FILE_BYTES} bytes")
+
+        file_id = f"f_{idx}"
+        file_path = files_dir / f"{file_id}.bin"
+        file_path.write_bytes(file_bytes)
+
+        suggestion = suggestion_by_filename.get(
+            filename,
+            {
+                "suggested_deck_name": deck_naming_service.sanitize_filename_to_deck_name(filename),
+                "is_existing_collision": False,
+                "is_batch_collision": False,
+                "existing_deck": None,
+            },
+        )
+
+        try:
+            with file_path.open("rb") as raw_file, TextIOWrapper(raw_file, encoding="utf-8-sig", newline="") as text_file:
+                reader, preamble = _prepare_import_reader(text_file, delimiter)
+                eff_delim = str(preamble.get("delimiter") or delimiter)
+                rows_count = 0
+                cols_count = 0
+                header: list[str] = []
+                preview_rows: list[list[str]] = []
+                for r_idx, r in enumerate(reader, start=1):
+                    row_vals = ["" if v is None else str(v) for v in r]
+                    cols_count = max(cols_count, len(row_vals))
+                    if r_idx == 1 and has_header:
+                        header = row_vals
+                        continue
+                    if any(c.strip() for c in row_vals):
+                        rows_count += 1
+                        if len(preview_rows) < IMPORT_PREVIEW_ROWS:
+                            preview_rows.append(row_vals)
+        except csv.Error as exc:
+            raise ImportValidationError(f"Error parsing '{filename}': {exc}") from exc
+
+        col_count = len(header) if has_header and header else cols_count
+        columns = [
+            {
+                "index": i,
+                "name": header[i].strip() if i < len(header) else "",
+                "display": header[i].strip() if i < len(header) and header[i].strip() else f"Cột {i + 1}",
+            }
+            for i in range(max(col_count, cols_count))
+        ]
+
+        if first_file_summary is None:
+            first_file_summary = {
+                "columns": columns,
+                "column_count": col_count,
+                "header": header,
+                "delimiter": eff_delim,
+            }
+
+        suggested_mapping = suggest_mapping(
+            field_defs=note_type.field_defs,
+            has_header=has_header,
+            header=header or (first_file_summary["header"] if first_file_summary else []),
+            column_count=col_count,
+        )
+
+        collision_info = {
+            "is_collision": bool(suggestion.get("is_existing_collision")),
+            "status": "new" if not suggestion.get("is_existing_collision") else "different",
+            "overlap_percentage": 0,
+            "message": "Sẵn sàng tạo bài mới.",
+            "suggested_action": "create_new" if not suggestion.get("is_existing_collision") else "auto_rename",
+            "existing_deck_id": getattr(suggestion.get("existing_deck"), "id", None) if suggestion.get("existing_deck") else None,
+            "existing_deck_name": getattr(suggestion.get("existing_deck"), "name", None) if suggestion.get("existing_deck") else None,
+        }
+
+        if suggestion.get("is_existing_collision") and suggestion.get("existing_deck"):
+            comp = compare_file_with_deck_content(
+                user_id=user_id,
+                file_data_path=file_path,
+                delimiter=eff_delim,
+                has_header=has_header,
+                note_type=note_type,
+                mapping=suggested_mapping,
+                uniqueness_fields=uniqueness_fields,
+                existing_deck_id=suggestion["existing_deck"].id,
+            )
+            collision_info["status"] = comp["status"]
+            collision_info["overlap_percentage"] = comp["overlap_percentage"]
+            collision_info["message"] = comp["message"]
+            collision_info["suggested_action"] = comp["suggested_action"]
+            collision_info["existing_notes_count"] = comp["existing_count"]
+
+        file_meta = {
+            "file_id": file_id,
+            "filename": filename,
+            "file_size": len(file_bytes),
+            "total_rows": rows_count,
+            "column_count": col_count,
+            "preview_rows": preview_rows,
+            "columns": columns,
+            "suggested_deck_name": suggestion.get("suggested_deck_name", filename),
+            "suggested_mapping": suggested_mapping,
+            "collision": collision_info,
+            "is_batch_collision": bool(suggestion.get("is_batch_collision")),
+        }
+        file_items_meta.append(file_meta)
+
+    global_mapping = suggest_mapping(
+        field_defs=note_type.field_defs,
+        has_header=has_header,
+        header=first_file_summary.get("header", []) if first_file_summary else [],
+        column_count=first_file_summary.get("column_count", 0) if first_file_summary else 0,
+    )
+
+    batch_meta = {
+        "token": token,
+        "user_id": int(user_id),
+        "parent_deck_id": int(parent_deck_id) if parent_deck_id is not None else None,
+        "note_type_id": str(note_type.id),
+        "delimiter": delimiter,
+        "has_header": bool(has_header),
+        "created_at": datetime.utcnow().isoformat(),
+        "files": file_items_meta,
+        "uniqueness_fields": uniqueness_fields,
+        "global_mapping": global_mapping,
+    }
+
+    _session_meta_path(user_id, token).write_text(
+        json.dumps(batch_meta, ensure_ascii=True),
+        encoding="utf-8",
+    )
+
+    cleanup_expired_sessions(user_id=user_id)
+
+    return {
+        "token": token,
+        "parent_deck_id": int(parent_deck_id) if parent_deck_id is not None else None,
+        "note_type_id": str(note_type.id),
+        "files": file_items_meta,
+        "sample_columns": first_file_summary.get("columns", []) if first_file_summary else [],
+        "suggested_mapping": global_mapping,
+    }
+
+
+def load_batch_import_session(*, user_id: int, token: str) -> dict[str, Any]:
+    """Loads metadata for an active batch import session."""
+    normalized = (token or "").strip().lower()
+    if not IMPORT_TOKEN_REGEX.match(normalized):
+        raise ImportValidationError("Invalid import token")
+
+    meta_path = _session_meta_path(user_id, normalized)
+    if not meta_path.exists():
+        raise ImportValidationError("Batch import token not found or expired")
+
+    try:
+        payload = json.loads(meta_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ImportValidationError("Import metadata is corrupted") from exc
+
+    payload["token"] = normalized
+    return payload
+
+
+def run_batch_import(
+    *,
+    user_id: int,
+    batch_session_meta: dict[str, Any],
+    note_type: Any,
+    parent_deck_id: int | None,
+    file_configs: list[dict[str, Any]],
+    import_mode: str,
+    uniqueness_fields: list[str],
+    mapping: dict[str, Any],
+    dont_overwrite_empty: bool,
+    confirm_column_mismatch: bool,
+    apply_changes: bool,
+) -> dict[str, Any]:
+    """Executes or estimates import for multiple files in a batch."""
+    from app.repositories import vocabulary_repository as vocab_repo
+    from models.deck import Deck
+
+    token = batch_session_meta["token"]
+    session_files = {f["file_id"]: f for f in batch_session_meta.get("files", [])}
+    files_dir = _session_root(user_id, token) / "files"
+
+    file_results: list[dict[str, Any]] = []
+    overall_summary = {
+        "total_files": len(file_configs),
+        "processed_files": 0,
+        "created_decks": 0,
+        "inserted": 0,
+        "updated": 0,
+        "skipped": 0,
+        "unchanged": 0,
+        "errors": 0,
+    }
+
+    for config in file_configs:
+        file_id = config.get("file_id")
+        meta = session_files.get(file_id)
+        if not meta:
+            continue
+
+        filename = meta.get("filename", file_id)
+        action = config.get("action", "create_new")
+        target_deck_name = (
+            config.get("target_deck_name")
+            or meta.get("suggested_deck_name")
+            or "Bài mới"
+        ).strip()
+        target_deck_id = config.get("target_deck_id")
+
+        if action == "skip":
+            file_results.append(
+                {
+                    "file_id": file_id,
+                    "filename": filename,
+                    "deck_name": target_deck_name,
+                    "deck_id": None,
+                    "status": "skipped",
+                    "summary": {
+                        "total_rows": meta.get("total_rows", 0),
+                        "inserted": 0,
+                        "updated": 0,
+                        "skipped": meta.get("total_rows", 0),
+                        "errors": 0,
+                    },
+                    "issues": [],
+                }
+            )
+            overall_summary["skipped"] += meta.get("total_rows", 0)
+            overall_summary["processed_files"] += 1
+            continue
+
+        file_data_path = files_dir / f"{file_id}.bin"
+        if not file_data_path.exists():
+            continue
+
+        actual_deck_id = target_deck_id
+        if apply_changes:
+            if action == "create_new" or actual_deck_id is None:
+                # Find existing or create Deck
+                existing_child = None
+                if parent_deck_id is not None:
+                    existing_child = Deck.query.filter_by(
+                        parent_id=parent_deck_id,
+                        name=target_deck_name,
+                        deleted_at=None,
+                    ).first()
+                else:
+                    existing_child = Deck.query.filter_by(
+                        parent_id=None,
+                        owner_user_id=user_id,
+                        name=target_deck_name,
+                        deleted_at=None,
+                    ).first()
+
+                if existing_child and action != "create_new":
+                    actual_deck_id = existing_child.id
+                else:
+                    next_pos = vocab_repo.next_deck_position(parent_deck_id) if parent_deck_id else 0
+                    new_deck = Deck(
+                        parent_id=parent_deck_id,
+                        name=target_deck_name,
+                        position=next_pos,
+                        owner_user_id=user_id,
+                    )
+                    db.session.add(new_deck)
+                    db.session.flush()
+                    actual_deck_id = new_deck.id
+                    overall_summary["created_decks"] += 1
+        else:
+            if action == "create_new" or actual_deck_id is None:
+                # For estimate mode on new decks, use -1 so existing notes search returns empty
+                actual_deck_id = -1
+
+        single_file_session_meta = {
+            "token": f"{token}_{file_id}",
+            "data_path": str(file_data_path),
+            "delimiter": batch_session_meta.get("delimiter", ","),
+            "has_header": batch_session_meta.get("has_header", True),
+            "column_count": meta.get("column_count", 0),
+            "max_columns": max(meta.get("column_count", 0), len(meta.get("columns", [])), 100),
+        }
+
+        try:
+            file_report = run_import(
+                user_id=user_id,
+                session_meta=single_file_session_meta,
+                note_type=note_type,
+                target_deck_id=actual_deck_id,
+                mode=import_mode,
+                uniqueness_fields=uniqueness_fields,
+                raw_mapping=mapping,
+                dont_overwrite_empty=dont_overwrite_empty,
+                confirm_column_mismatch=True,
+                apply_changes=apply_changes,
+            )
+            s = file_report.get("summary", {})
+            overall_summary["inserted"] += s.get("inserted", 0)
+            overall_summary["updated"] += s.get("updated", 0)
+            overall_summary["skipped"] += s.get("skipped", 0)
+            overall_summary["unchanged"] += s.get("unchanged", 0)
+            overall_summary["errors"] += s.get("errors", 0)
+            overall_summary["processed_files"] += 1
+
+            file_results.append(
+                {
+                    "file_id": file_id,
+                    "filename": filename,
+                    "deck_name": target_deck_name,
+                    "deck_id": actual_deck_id if actual_deck_id != -1 else None,
+                    "status": "success" if s.get("errors", 0) == 0 else "warning",
+                    "summary": s,
+                    "issues": file_report.get("issues", []),
+                }
+            )
+        except ImportValidationError as exc:
+            total_r = meta.get("total_rows", 0)
+            overall_summary["errors"] += total_r or 1
+            overall_summary["processed_files"] += 1
+            file_results.append(
+                {
+                    "file_id": file_id,
+                    "filename": filename,
+                    "deck_name": target_deck_name,
+                    "deck_id": actual_deck_id if actual_deck_id != -1 else None,
+                    "status": "error",
+                    "summary": {
+                        "total_rows": total_r,
+                        "inserted": 0,
+                        "updated": 0,
+                        "skipped": 0,
+                        "errors": total_r or 1,
+                    },
+                    "issues": [
+                        {
+                            "kind": "error",
+                            "row": 0,
+                            "reason": "Lỗi phân tích",
+                            "message": str(exc),
+                        }
+                    ],
+                }
+            )
+
+    if apply_changes:
+        db.session.commit()
+
+    return {
+        "token": token,
+        "mode": import_mode,
+        "overall_summary": overall_summary,
+        "file_reports": file_results,
+    }
+
+
