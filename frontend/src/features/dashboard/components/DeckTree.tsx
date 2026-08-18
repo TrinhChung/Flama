@@ -1,6 +1,7 @@
 import { cn } from '@/lib/utils'
 import type { DeckNode, SelectedDeckAction } from '../types'
 import { useDeckTreeDragDrop } from '../hooks/useDeckTreeDragDrop'
+import { useDeckTreeExpanded } from '../hooks/useDeckTreeExpanded'
 import { DeckRow } from './DeckRow'
 
 export type DeckTreeProps = {
@@ -11,6 +12,8 @@ export type DeckTreeProps = {
   onActivate?: (deck: DeckNode) => void
   onAction: (action: SelectedDeckAction) => void
   onMoveDeck?: (deckId: number, targetParentId: number | null) => Promise<void>
+  isExpanded?: (deckId: number) => boolean
+  onToggleExpand?: (deckId: number) => void
 }
 
 export function DeckTree({
@@ -21,7 +24,12 @@ export function DeckTree({
   onActivate,
   onAction,
   onMoveDeck,
+  isExpanded,
+  onToggleExpand,
 }: DeckTreeProps) {
+  const expandedState = useDeckTreeExpanded(nodes, selectedDeckId)
+  const activeIsExpanded = isExpanded ?? expandedState.isExpanded
+  const activeToggleExpand = onToggleExpand ?? expandedState.toggleExpand
   const {
     draggedDeck,
     dragPos,
@@ -108,6 +116,8 @@ export function DeckTree({
           onDragOver={handleDragOverRow}
           onDragEnter={handleDragEnterRow}
           onDrop={handleDropOnRow}
+          isExpanded={activeIsExpanded}
+          onToggleExpand={activeToggleExpand}
         />
       ))}
     </div>
