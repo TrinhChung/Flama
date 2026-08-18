@@ -21,6 +21,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { dashboardQueryKey } from '../api'
+import { findDeck } from '../hooks/useDashboardPage'
 import {
   createDeckSchema,
   moveDeckSchema,
@@ -30,6 +31,7 @@ import {
   type RenameDeckForm,
 } from '../schemas'
 import type { DashboardPayload, DeckNode, SelectedDeckAction } from '../types'
+import { suggestNextDeckName } from '../utils/deckNaming'
 
 type DeckOption = { value: string; label: string }
 
@@ -85,16 +87,48 @@ function SubmitButton({ pending, children, variant }: {
   )
 }
 
-export function CreateDeckModal({ opened, onClose, dashboard }: {
+export function CreateDeckModal({
+  opened,
+  onClose,
+  dashboard,
+  selectedDeck = null,
+}: {
   opened: boolean
   onClose: () => void
   dashboard: DashboardPayload
+  selectedDeck?: DeckNode | null
 }) {
   const queryClient = useQueryClient()
   const form = useForm<CreateDeckForm>({
     resolver: zodResolver(createDeckSchema),
     defaultValues: { name: '', deck_path: '', parent_id: '' },
   })
+
+  const parentDeck =
+    selectedDeck?.parent_id != null
+      ? findDeck(dashboard.decks, selectedDeck.parent_id)
+      : null
+
+  useEffect(() => {
+    if (!opened) return
+
+    const siblingNames = selectedDeck
+      ? selectedDeck.parent_id != null
+        ? (parentDeck?.children ?? []).map((d) => d.name)
+        : dashboard.decks.map((d) => d.name)
+      : dashboard.decks.map((d) => d.name)
+
+    const suggestedName = suggestNextDeckName(selectedDeck?.name, siblingNames)
+    const targetParentId =
+      selectedDeck?.parent_id != null ? String(selectedDeck.parent_id) : ''
+
+    form.reset({
+      name: suggestedName,
+      deck_path: '',
+      parent_id: targetParentId,
+    })
+  }, [opened, selectedDeck, parentDeck, dashboard.decks, form])
+
   const mutation = useMutation<unknown, Error, CreateDeckForm>({
     mutationFn: (values) => appApi.createDeck(values),
     onSuccess: async () => {
@@ -105,12 +139,18 @@ export function CreateDeckModal({ opened, onClose, dashboard }: {
     },
   })
 
+  const descriptionText = selectedDeck
+    ? selectedDeck.parent_id != null
+      ? `Tạo deck đồng cấp với “${selectedDeck.name}” (trong deck “${parentDeck?.name ?? ''}”).`
+      : `Tạo deck đồng cấp với “${selectedDeck.name}” (ở cấp Root).`
+    : 'Tạo deck mới ở cấp Root.'
+
   return (
     <Dialog open={opened} onOpenChange={(open) => !open && onClose()}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Tạo deck mới</DialogTitle>
-          <DialogDescription>Tạo deck ở root hoặc đặt dưới một deck cha hiện có.</DialogDescription>
+          <DialogDescription>{descriptionText}</DialogDescription>
         </DialogHeader>
         <form className="space-y-4" onSubmit={form.handleSubmit((values) => mutation.mutate(values))}>
           <MutationError error={mutation.error} />
@@ -118,26 +158,13 @@ export function CreateDeckModal({ opened, onClose, dashboard }: {
             id="create-deck-name"
             label="Tên deck"
             placeholder="Ví dụ: N3 Kanji"
+            autoFocus
+            onFocus={(e) => e.target.select()}
             error={form.formState.errors.name?.message}
             {...form.register('name')}
           />
-          <Field
-            id="create-deck-path"
-            label="Đường dẫn nhiều cấp"
-            description="Tùy chọn, dùng dấu :: để tạo nhiều cấp."
-            placeholder="JLPT::N3::Kanji"
-            error={form.formState.errors.deck_path?.message}
-            {...form.register('deck_path')}
-          />
-          <div className="space-y-2">
-            <Label htmlFor="create-deck-parent">Deck cha</Label>
-            <NativeSelect id="create-deck-parent" className="w-full" {...form.register('parent_id')}>
-              <NativeSelectOption value="">Root</NativeSelectOption>
-              {flattenDecks(dashboard.decks).map((option) => (
-                <NativeSelectOption key={option.value} value={option.value}>{option.label}</NativeSelectOption>
-              ))}
-            </NativeSelect>
-          </div>
+          <input type="hidden" {...form.register('parent_id')} />
+          <input type="hidden" {...form.register('deck_path')} />
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>Hủy</Button>
             <SubmitButton pending={mutation.isPending}>Tạo deck</SubmitButton>

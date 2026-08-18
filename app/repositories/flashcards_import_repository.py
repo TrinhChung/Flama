@@ -73,7 +73,7 @@ def infer_default_note_type_id_for_deck(*, deck_id: int | None, user_id: int) ->
 
     deck_obj = Deck.query.get(deck_id)
     if deck_obj and deck_obj.note_type_id:
-        note_type = NoteType.query.filter_by(id=deck_obj.note_type_id, user_id=user_id).first()
+        note_type = NoteType.query.filter_by(id=deck_obj.note_type_id).first()
         if note_type:
             return note_type.id
 

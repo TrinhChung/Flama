@@ -89,7 +89,9 @@ export function useFileImportWizard() {
   const [searchParams] = useSearchParams()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const [selectedDeckId, setSelectedDeckId] = useState<string>('')
+  const deckIdQueryParam = searchParams.get('deck_id')
+
+  const [selectedDeckId, setSelectedDeckId] = useState<string>(() => deckIdQueryParam || '')
   const [selectedNoteTypeId, setSelectedNoteTypeId] = useState<string>('')
   const [autoSelectBadge, setAutoSelectBadge] = useState<boolean>(false)
 
@@ -137,8 +139,6 @@ export function useFileImportWizard() {
   const columnMismatchConfirmId = useId()
   const dontOverwriteEmptyId = useId()
 
-  const deckIdQueryParam = searchParams.get('deck_id')
-
   // Load import initial options
   const optionsQuery = useQuery({
     queryKey: ['flashcard-import-options', deckIdQueryParam],
@@ -148,10 +148,16 @@ export function useFileImportWizard() {
   useEffect(() => {
     if (optionsQuery.data) {
       const data = optionsQuery.data
-      if (data.initial_deck_id) setSelectedDeckId(String(data.initial_deck_id))
-      if (data.initial_note_type_id) setSelectedNoteTypeId(data.initial_note_type_id)
+      if (deckIdQueryParam && data.deck_options?.some((d) => String(d.id) === deckIdQueryParam)) {
+        setSelectedDeckId(deckIdQueryParam)
+      } else if (data.initial_deck_id) {
+        setSelectedDeckId(String(data.initial_deck_id))
+      }
+      if (data.initial_note_type_id) {
+        setSelectedNoteTypeId(data.initial_note_type_id)
+      }
     }
-  }, [optionsQuery.data])
+  }, [optionsQuery.data, deckIdQueryParam])
 
   const deckOptions = optionsQuery.data?.deck_options || []
   const noteTypeOptions = optionsQuery.data?.note_type_options || []

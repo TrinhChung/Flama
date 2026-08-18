@@ -4037,6 +4037,17 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         self.assertIn("note_type_options", data)
         self.assertIn("uniqueness_defaults", data)
 
+    def test_flashcard_import_options_preselects_specified_deck_id(self):
+        with self.app.app_context():
+            deck = Deck(name="Target Import Deck", owner_user_id=self.user_id)
+            db.session.add(deck)
+            db.session.commit()
+            deck_id = deck.id
+
+        response = self.client.get(f"/api/flashcards/import/options?deck_id={deck_id}")
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json() or {}
+        self.assertEqual(data.get("initial_deck_id"), deck_id)
 
     def test_shared_note_type_rate_is_limited_to_two_submissions_per_user(self):
         with self.app.app_context():
