@@ -56,6 +56,7 @@ const links: FrontendLinks = {
   terms: '/terms',
   privacy: '/privacy',
   cookies: '/cookies',
+  admin_analytics: '/admin/analytics',
   admin_users: '/admin/users',
   admin_payments: '/admin/payments',
   admin_tts: '/admin/tts',
@@ -120,6 +121,7 @@ function toBootstrap(payload: SessionResponse): FrontendBootstrap {
     support_contact_email: '',
     links: {
       ...links,
+      admin_analytics: isAdmin ? links.admin_analytics : null,
       admin_users: isAdmin ? links.admin_users : null,
       admin_payments: isAdmin ? links.admin_payments : null,
       admin_tts: isAdmin ? links.admin_tts : null,
