@@ -89,6 +89,11 @@ def _utc_to_business_day(
     timezone_name: str,
     day_boundary_hour_local: int,
 ) -> date:
+    tz_key = str(timezone_name or "").strip().upper()
+    offset_min = MYSQL_FIXED_OFFSET_MINUTES.get(tz_key)
+    if offset_min is not None:
+        naive_moment = moment.replace(tzinfo=None) if moment.tzinfo else moment
+        return (naive_moment + timedelta(minutes=offset_min - day_boundary_hour_local * 60)).date()
     return date.fromordinal(
         _day_index(
             moment,
@@ -596,6 +601,18 @@ def query_interval_days_rows(
     user_id: int,
     scope_deck_ids: list[int] | None,
 ) -> list[tuple[Any, Any]]:
+    if scope_deck_ids is None:
+        return (
+            db.session.query(
+                db.func.coalesce(CardProgress.interval_days_raw, CardProgress.interval_days),
+                CardProgress.queue,
+            )
+            .filter(
+                CardProgress.user_id == user_id,
+                db.or_(CardProgress.is_suspended.is_(False), CardProgress.is_suspended.is_(None)),
+            )
+            .all()
+        )
     query = build_progress_rows_query(user_id=user_id)
     query = apply_scope_filter(query, scope_deck_ids)
     query = query.filter(
@@ -612,6 +629,16 @@ def query_due_progress_rows(
     user_id: int,
     scope_deck_ids: list[int] | None = None,
 ) -> list[tuple[Any, Any, Any]]:
+    if scope_deck_ids is None:
+        return (
+            db.session.query(CardProgress.due_at, CardProgress.due_day, CardProgress.queue)
+            .filter(
+                CardProgress.user_id == user_id,
+                db.or_(CardProgress.due_at.isnot(None), CardProgress.due_day.isnot(None)),
+                db.or_(CardProgress.is_suspended.is_(False), CardProgress.is_suspended.is_(None)),
+            )
+            .all()
+        )
     query = build_progress_rows_query(user_id=user_id)
     query = apply_scope_filter(query, scope_deck_ids)
     query = query.filter(

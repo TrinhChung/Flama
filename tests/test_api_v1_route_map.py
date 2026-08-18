@@ -47,8 +47,12 @@ EXPECTED_API_RULES = {
     ("DELETE", "/api/decks/<int:deck_id>"),
     ("PATCH", "/api/decks/<int:deck_id>"),
     ("POST", "/api/decks/<int:deck_id>/progress-reset"),
+    ("POST", "/api/flashcards/import/batch/estimate"),
+    ("POST", "/api/flashcards/import/batch/execute"),
+    ("POST", "/api/flashcards/import/batch/parse"),
     ("POST", "/api/flashcards/import/estimate"),
     ("POST", "/api/flashcards/import/execute"),
+
     ("GET", "/api/flashcards/import/anki/capabilities"),
     ("POST", "/api/flashcards/import/anki/sessions"),
     ("DELETE", "/api/flashcards/import/anki/sessions/<session_id>"),
@@ -156,7 +160,8 @@ class ApiRouteMapTests(unittest.TestCase):
             for method in rule.methods - {"HEAD", "OPTIONS"}
         }
         self.assertEqual(actual, EXPECTED_API_RULES)
-        self.assertEqual(len(actual), 122)
+        self.assertEqual(len(actual), 125)
+
 
 
 

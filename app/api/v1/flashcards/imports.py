@@ -84,6 +84,66 @@ def execute_import():
     return jsonify(payload)
 
 
+@imports_bp.post("/flashcards/import/batch/parse")
+@creator_required
+def parse_batch_import():
+    raw_files = request.files.getlist("files") or request.files.getlist("file")
+    files_payload: list[tuple[str, bytes]] = []
+    for f in raw_files:
+        filename = str(getattr(f, "filename", "") or "")
+        if filename:
+            files_payload.append((filename, f.read()))
+
+    try:
+        payload = flashcard_import_api_service.parse_batch_import_files(
+            user_id=current_user.id,
+            admin_mode=is_admin_user(current_user),
+            parent_deck_id_raw=request.form.get("parent_deck_id"),
+            note_type_id=str(request.form.get("note_type_id") or "").strip(),
+            files=files_payload,
+            delimiter_mode=str(
+                request.form.get("delimiter_mode") or "csv"
+            ).strip().lower(),
+            custom_delimiter=request.form.get("custom_delimiter"),
+            has_header=_to_bool(request.form.get("has_header"), default=True),
+            naming_mode=str(request.form.get("naming_mode") or "auto").strip().lower(),
+            custom_pattern=request.form.get("custom_pattern"),
+        )
+    except flashcard_import_api_service.ImportApiError as exc:
+        return _error(exc)
+    return jsonify(payload)
+
+
+@imports_bp.post("/flashcards/import/batch/estimate")
+@creator_required
+def estimate_batch_import():
+    try:
+        payload = flashcard_import_api_service.run_batch_import_request(
+            user_id=current_user.id,
+            admin_mode=is_admin_user(current_user),
+            payload=request.get_json(silent=True) or {},
+            apply_changes=False,
+        )
+    except flashcard_import_api_service.ImportApiError as exc:
+        return _error(exc)
+    return jsonify(payload)
+
+
+@imports_bp.post("/flashcards/import/batch/execute")
+@creator_required
+def execute_batch_import():
+    try:
+        payload = flashcard_import_api_service.run_batch_import_request(
+            user_id=current_user.id,
+            admin_mode=is_admin_user(current_user),
+            payload=request.get_json(silent=True) or {},
+            apply_changes=True,
+        )
+    except flashcard_import_api_service.ImportApiError as exc:
+        return _error(exc)
+    return jsonify(payload)
+
+
 def _to_bool(value: object, *, default: bool) -> bool:
     if value is None:
         return default
