@@ -1,3 +1,5 @@
+import type { DeckNode } from '../types'
+
 /**
  * Utility for intelligent deck name suggestion and auto-incrementing.
  */
@@ -56,4 +58,70 @@ export function suggestNextDeckName(
   }
 
   return generateCandidate(1)
+}
+
+/**
+ * Recursively find the path tokens of deck names leading to the given target deck ID.
+ */
+export function getDeckPathTokens(decks: DeckNode[], targetId: number | null): string[] {
+  if (targetId === null) return []
+  for (const node of decks) {
+    if (node.id === targetId) {
+      return [node.name]
+    }
+    const childPath = getDeckPathTokens(node.children, targetId)
+    if (childPath.length > 0) {
+      return [node.name, ...childPath]
+    }
+  }
+  return []
+}
+
+/**
+ * Returns the full hierarchical path string (e.g. "SAA::deck10") for a deck ID.
+ */
+export function getDeckFullPath(decks: DeckNode[], targetId: number | null): string {
+  return getDeckPathTokens(decks, targetId).join('::')
+}
+
+/**
+ * Intelligent path suggestion for creating a new deck:
+ * - If selectedDeck is a child deck (parent_id != null): suggests a sibling within the same parent (e.g. SAA::deck9 -> SAA::deck10).
+ * - If selectedDeck is a root deck with children: suggests the next child inside that deck (e.g. SAA [with deck1..9] -> SAA::deck10).
+ * - If selectedDeck is a root deck without children: suggests the next root deck (e.g. SAA -> SAA 2).
+ * - If selectedDeck is null/undefined: returns empty string.
+ */
+export function suggestNextDeckPath(
+  selectedDeck: DeckNode | null | undefined,
+  dashboardDecks: DeckNode[],
+): string {
+  if (!selectedDeck) {
+    return ''
+  }
+
+  // Case 1: selectedDeck is a child deck (has a parent)
+  if (selectedDeck.parent_id !== null) {
+    const parentTokens = getDeckPathTokens(dashboardDecks, selectedDeck.parent_id)
+    const parentDeck = dashboardDecks
+      .flatMap(function flatten(d): DeckNode[] {
+        return [d, ...d.children.flatMap(flatten)]
+      })
+      .find((d) => d.id === selectedDeck.parent_id)
+
+    const siblingNames = (parentDeck?.children ?? []).map((d) => d.name)
+    const nextLeafName = suggestNextDeckName(selectedDeck.name, siblingNames)
+    return [...parentTokens, nextLeafName].join('::')
+  }
+
+  // Case 2: selectedDeck is a root deck with children -> suggest next child inside this deck
+  if (selectedDeck.children && selectedDeck.children.length > 0) {
+    const lastChild = selectedDeck.children[selectedDeck.children.length - 1]
+    const childrenNames = selectedDeck.children.map((d) => d.name)
+    const nextChildName = suggestNextDeckName(lastChild.name, childrenNames)
+    return [selectedDeck.name, nextChildName].join('::')
+  }
+
+  // Case 3: selectedDeck is a root deck without children -> suggest next sibling root deck
+  const rootNames = dashboardDecks.map((d) => d.name)
+  return suggestNextDeckName(selectedDeck.name, rootNames)
 }

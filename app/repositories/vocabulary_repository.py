@@ -80,11 +80,11 @@ def deck_name_exists_under_parent(
 
 
 def parse_create_deck_tokens(*, deck_path_raw: str, fallback_name: str) -> list[str]:
-    tokens = [item.strip() for item in (deck_path_raw or "").split("::") if item and item.strip()]
+    raw = (deck_path_raw or "").strip() or (fallback_name or "").strip()
+    tokens = [item.strip() for item in raw.split("::") if item and item.strip()]
     if tokens:
         return tokens
-    name = (fallback_name or "").strip() or "New Deck"
-    return [name]
+    return ["New Deck"]
 
 
 def deck_name_path_tokens(deck_obj: Deck | None) -> list[str]:

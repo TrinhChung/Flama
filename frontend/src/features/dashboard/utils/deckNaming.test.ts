@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { suggestNextDeckName } from './deckNaming'
+import {
+  getDeckFullPath,
+  getDeckPathTokens,
+  suggestNextDeckName,
+  suggestNextDeckPath,
+} from './deckNaming'
+import type { DeckNode } from '../types'
 
 describe('suggestNextDeckName', () => {
   it('increments trailing lesson numbers like N1:Bài 1 -> N1:Bài 2', () => {
@@ -50,3 +56,79 @@ describe('suggestNextDeckName', () => {
     expect(suggestNextDeckName('   ')).toBe('')
   })
 })
+
+const createTestNode = (
+  id: number,
+  name: string,
+  parentId: number | null = null,
+  children: DeckNode[] = [],
+): DeckNode => ({
+  id,
+  parent_id: parentId,
+  name,
+  depth: 0,
+  study_url: `/study?deck_id=${id}`,
+  counts: { new: 0, learning: 0, due: 0 },
+  move: { alias: `alias-${id}`, token: 't', parent_alias: null, parent_token: null },
+  actions: {
+    rename: '',
+    move: '',
+    delete: '',
+    reset: '',
+    share: '',
+  },
+  children,
+})
+
+describe('getDeckPathTokens and getDeckFullPath', () => {
+  const tree: DeckNode[] = [
+    createTestNode(1, 'SAA', null, [
+      createTestNode(2, 'deck9', 1, [
+        createTestNode(3, 'Part 1', 2),
+      ]),
+    ]),
+    createTestNode(4, 'JLPT N2', null),
+  ]
+
+  it('returns tokens for root and nested nodes', () => {
+    expect(getDeckPathTokens(tree, 1)).toEqual(['SAA'])
+    expect(getDeckPathTokens(tree, 2)).toEqual(['SAA', 'deck9'])
+    expect(getDeckPathTokens(tree, 3)).toEqual(['SAA', 'deck9', 'Part 1'])
+    expect(getDeckPathTokens(tree, 4)).toEqual(['JLPT N2'])
+    expect(getDeckPathTokens(tree, 999)).toEqual([])
+    expect(getDeckPathTokens(tree, null)).toEqual([])
+  })
+
+  it('returns full path joined with ::', () => {
+    expect(getDeckFullPath(tree, 1)).toBe('SAA')
+    expect(getDeckFullPath(tree, 2)).toBe('SAA::deck9')
+    expect(getDeckFullPath(tree, 3)).toBe('SAA::deck9::Part 1')
+    expect(getDeckFullPath(tree, null)).toBe('')
+  })
+})
+
+describe('suggestNextDeckPath', () => {
+  const deck1 = createTestNode(11, 'deck1', 1)
+  const deck9 = createTestNode(19, 'deck9', 1)
+  const saaNode = createTestNode(1, 'SAA', null, [deck1, deck9])
+  const emptyRoot = createTestNode(2, 'Kanji', null, [])
+  const dashboardDecks = [saaNode, emptyRoot]
+
+  it('returns empty string when no deck is selected', () => {
+    expect(suggestNextDeckPath(null, dashboardDecks)).toBe('')
+    expect(suggestNextDeckPath(undefined, dashboardDecks)).toBe('')
+  })
+
+  it('suggests sibling hierarchical path SAA::deck10 when child deck9 is selected', () => {
+    expect(suggestNextDeckPath(deck9, dashboardDecks)).toBe('SAA::deck10')
+  })
+
+  it('suggests next child SAA::deck10 when parent deck SAA with children is selected', () => {
+    expect(suggestNextDeckPath(saaNode, dashboardDecks)).toBe('SAA::deck10')
+  })
+
+  it('suggests next sibling root deck Kanji 2 when empty root deck is selected', () => {
+    expect(suggestNextDeckPath(emptyRoot, dashboardDecks)).toBe('Kanji 2')
+  })
+})
+
