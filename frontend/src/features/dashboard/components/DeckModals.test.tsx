@@ -82,7 +82,7 @@ describe('CreateDeckModal', () => {
     container.remove()
   })
 
-  it('pre-fills the next sibling deck name (N1:Bài 2) and sets sibling parent_id when child deck is selected', async () => {
+  it('pre-fills the hierarchical sibling deck path (N1 Master::N1:Bài 2) when child deck is selected', async () => {
     await act(async () => {
       root.render(
         <QueryClientProvider client={queryClient}>
@@ -98,7 +98,7 @@ describe('CreateDeckModal', () => {
 
     const nameInput = document.querySelector<HTMLInputElement>('#create-deck-name')
     expect(nameInput).not.toBeNull()
-    expect(nameInput?.value).toBe('N1:Bài 2')
+    expect(nameInput?.value).toBe('N1 Master::N1:Bài 2')
 
     // Ensure parent deck selection dropdown is NOT present in DOM
     const parentSelect = document.querySelector('#create-deck-parent')
@@ -111,9 +111,9 @@ describe('CreateDeckModal', () => {
     })
 
     expect(appApi.createDeck).toHaveBeenCalledWith({
-      name: 'N1:Bài 2',
-      deck_path: '',
-      parent_id: '2',
+      name: 'N1 Master::N1:Bài 2',
+      deck_path: 'N1 Master::N1:Bài 2',
+      parent_id: '',
     })
   })
 

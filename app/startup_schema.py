@@ -804,5 +804,12 @@ def ensure_backward_compatible_schema() -> None:
             )
             schema_changed = True
 
+    if "mcp_access_tokens" in inspector.get_table_names():
+        _ensure_column(
+            "mcp_access_tokens",
+            "name",
+            "ALTER TABLE mcp_access_tokens ADD COLUMN name VARCHAR(120) NULL DEFAULT 'MCP Token'",
+        )
+
     if schema_changed:
         db.session.commit()

@@ -1,5 +1,6 @@
 import {
   AudioLines,
+  Bot,
   ChartNoAxesColumn,
   CreditCard,
   Download,
@@ -58,6 +59,7 @@ export function AppSidebar({
   const extensions: AppNavigationItem[] = [
     { title: 'Tải Flama Audio', url: '/guide/flama-audio', icon: Download },
     { title: 'Kết nối Yomitan', url: '/settings/yomitan', icon: Key },
+    { title: 'Kết nối AI (MCP)', url: '/settings/mcp-tokens', icon: Bot },
   ]
 
   const creator: AppNavigationItem[] = [

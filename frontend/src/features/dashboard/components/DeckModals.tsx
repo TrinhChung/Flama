@@ -21,7 +21,6 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { dashboardQueryKey } from '../api'
-import { findDeck } from '../hooks/useDashboardPage'
 import {
   createDeckSchema,
   moveDeckSchema,
@@ -31,7 +30,7 @@ import {
   type RenameDeckForm,
 } from '../schemas'
 import type { DashboardPayload, DeckNode, SelectedDeckAction } from '../types'
-import { suggestNextDeckName } from '../utils/deckNaming'
+import { suggestNextDeckPath } from '../utils/deckNaming'
 
 type DeckOption = { value: string; label: string }
 
@@ -104,33 +103,25 @@ export function CreateDeckModal({
     defaultValues: { name: '', deck_path: '', parent_id: '' },
   })
 
-  const parentDeck =
-    selectedDeck?.parent_id != null
-      ? findDeck(dashboard.decks, selectedDeck.parent_id)
-      : null
-
   useEffect(() => {
     if (!opened) return
 
-    const siblingNames = selectedDeck
-      ? selectedDeck.parent_id != null
-        ? (parentDeck?.children ?? []).map((d) => d.name)
-        : dashboard.decks.map((d) => d.name)
-      : dashboard.decks.map((d) => d.name)
-
-    const suggestedName = suggestNextDeckName(selectedDeck?.name, siblingNames)
-    const targetParentId =
-      selectedDeck?.parent_id != null ? String(selectedDeck.parent_id) : ''
+    const suggestedPath = suggestNextDeckPath(selectedDeck, dashboard.decks)
 
     form.reset({
-      name: suggestedName,
-      deck_path: '',
-      parent_id: targetParentId,
+      name: suggestedPath,
+      deck_path: suggestedPath,
+      parent_id: '',
     })
-  }, [opened, selectedDeck, parentDeck, dashboard.decks, form])
+  }, [opened, selectedDeck, dashboard.decks, form])
 
   const mutation = useMutation<unknown, Error, CreateDeckForm>({
-    mutationFn: (values) => appApi.createDeck(values),
+    mutationFn: (values) =>
+      appApi.createDeck({
+        ...values,
+        deck_path: values.name,
+        parent_id: values.parent_id || '',
+      }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: dashboardQueryKey })
       toast.success('Deck đã được tạo.')
@@ -140,10 +131,8 @@ export function CreateDeckModal({
   })
 
   const descriptionText = selectedDeck
-    ? selectedDeck.parent_id != null
-      ? `Tạo deck đồng cấp với “${selectedDeck.name}” (trong deck “${parentDeck?.name ?? ''}”).`
-      : `Tạo deck đồng cấp với “${selectedDeck.name}” (ở cấp Root).`
-    : 'Tạo deck mới ở cấp Root.'
+    ? 'Đường dẫn phân cấp (sử dụng dấu “::” để thay đổi deck cha hoặc tạo cấu trúc lồng nhau).'
+    : 'Tạo deck mới (sử dụng dấu “::” để phân cấp thư mục, ví dụ: SAA::deck10).'
 
   return (
     <Dialog open={opened} onOpenChange={(open) => !open && onClose()}>
@@ -156,8 +145,9 @@ export function CreateDeckModal({
           <MutationError error={mutation.error} />
           <Field
             id="create-deck-name"
-            label="Tên deck"
-            placeholder="Ví dụ: N3 Kanji"
+            label="Tên hoặc đường dẫn Deck"
+            placeholder="Ví dụ: SAA::deck10"
+            description="Dùng dấu :: để phân cấp thư mục (ví dụ: SAA::deck10)"
             autoFocus
             onFocus={(e) => e.target.select()}
             error={form.formState.errors.name?.message}

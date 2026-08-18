@@ -10,13 +10,15 @@ from models.user import User
 def create_access_token(
     *,
     user_id: int,
+    name: str | None = None,
     token_hash: str,
     scopes: str,
     expires_at,
-    max_requests: int,
+    max_requests: int = 1000000,
 ) -> McpAccessToken:
     row = McpAccessToken(
         user_id=user_id,
+        name=str(name or "MCP Token").strip() or "MCP Token",
         token_hash=token_hash,
         scopes=scopes,
         expires_at=expires_at,
@@ -29,7 +31,7 @@ def create_access_token(
     return row
 
 
-def list_tokens_for_user(*, user_id: int, limit: int = 10) -> list[McpAccessToken]:
+def list_tokens_for_user(*, user_id: int, limit: int = 50) -> list[McpAccessToken]:
     return (
         McpAccessToken.query.filter(McpAccessToken.user_id == user_id)
         .order_by(McpAccessToken.created_at.desc(), McpAccessToken.id.desc())
@@ -47,4 +49,4 @@ def get_token_for_user(*, token_id: int, user_id: int) -> McpAccessToken | None:
 
 
 def get_user_by_id(user_id: int) -> User | None:
-    return User.query.get(int(user_id)) if user_id else None
+    return db.session.get(User, int(user_id)) if user_id else None

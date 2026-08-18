@@ -8,10 +8,11 @@ class McpAccessToken(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = db.Column(db.String(120), nullable=True, default="MCP Token")
     token_hash = db.Column(db.String(64), nullable=False, unique=True, index=True)
     scopes = db.Column(db.Text, nullable=False, default="[]")
-    expires_at = db.Column(db.DateTime, nullable=False, index=True)
-    max_requests = db.Column(db.Integer, nullable=False, default=30)
+    expires_at = db.Column(db.DateTime, nullable=True, index=True)
+    max_requests = db.Column(db.Integer, nullable=False, default=1000000)
     used_requests = db.Column(db.Integer, nullable=False, default=0)
     revoked = db.Column(db.Boolean, nullable=False, default=False, index=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
