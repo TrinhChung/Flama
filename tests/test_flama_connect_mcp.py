@@ -216,6 +216,8 @@ class FlamaConnectMcpTests(unittest.TestCase):
             "list_my_decks",
             "get_deck_tree",
             "get_deck",
+            "resolve_deck",
+            "batch_ensure_decks",
             "create_deck",
             "update_deck",
             "delete_deck",
@@ -229,11 +231,13 @@ class FlamaConnectMcpTests(unittest.TestCase):
             "move_note",
             "add_tags",
             "remove_tags",
-            # Batch
+            # Batch & Sync
             "batch_create_notes",
             "batch_update_notes",
             "batch_delete_notes",
             "batch_move_notes",
+            "preview_note_sync",
+            "sync_notes",
             # Study
             "get_due_card_counts",
             "get_study_queue",
@@ -245,9 +249,13 @@ class FlamaConnectMcpTests(unittest.TestCase):
             # Note Types
             "list_note_types",
             "get_note_type_schema",
+            "create_note_type",
+            "preview_note_type_update",
+            "update_note_type",
+            "delete_note_type",
         }
         self.assertEqual(tool_names, expected_tools)
-        self.assertEqual(len(tools), 27)
+        self.assertEqual(len(tools), 35)
 
     # -----------------------------------------------------------------------
     # Deck Tests
