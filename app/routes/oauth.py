@@ -58,189 +58,213 @@ def oauth_authorization_server_metadata():
     return jsonify(oauth_service.get_authorization_server_metadata(request))
 
 
-# --- Consent UI Rendering ---
+# --- Consent API Endpoints for React SPA ---
+
+SCOPE_METADATA: dict[str, dict[str, str]] = {
+    "deck:read": {
+        "id": "deck:read",
+        "title": "Xem danh mục & cấu trúc bộ thẻ",
+        "desc": "Đọc danh sách các bộ thẻ flashcard, cấu trúc thư mục phân cấp và số lượng thẻ.",
+        "category": "Bộ thẻ (Decks)",
+        "icon": "folder",
+    },
+    "deck:write": {
+        "id": "deck:write",
+        "title": "Quản lý & tạo mới bộ thẻ",
+        "desc": "Tạo bộ thẻ mới, đổi tên, cập nhật mô tả và tổ chức cây thư mục bộ bài.",
+        "category": "Bộ thẻ (Decks)",
+        "icon": "folder-plus",
+    },
+    "note:read": {
+        "id": "note:read",
+        "title": "Xem & tìm kiếm thẻ ghi nhớ",
+        "desc": "Đọc nội dung chi tiết các trường dữ liệu (từ vựng, kanji, nghĩa, ví dụ) và tìm kiếm thẻ.",
+        "category": "Thẻ ghi nhớ (Notes)",
+        "icon": "file-text",
+    },
+    "note:create": {
+        "id": "note:create",
+        "title": "Tạo thẻ ghi nhớ flashcard mới",
+        "desc": "Thêm từ vựng và thẻ mới vào bộ bài của bạn kèm các trường thông tin tự động.",
+        "category": "Thẻ ghi nhớ (Notes)",
+        "icon": "plus-circle",
+    },
+    "note:update": {
+        "id": "note:update",
+        "title": "Cập nhật thẻ ghi nhớ & nhãn (tags)",
+        "desc": "Chỉnh sửa nội dung thẻ, gắn thẻ phân loại (tags) hoặc chuyển thẻ sang bộ bài khác.",
+        "category": "Thẻ ghi nhớ (Notes)",
+        "icon": "edit",
+    },
+    "note:delete": {
+        "id": "note:delete",
+        "title": "Xóa thẻ ghi nhớ (Bảo vệ 2 bước)",
+        "desc": "Xóa thẻ ghi nhớ và các flashcard liên quan (bắt buộc phải có sự phê duyệt trực tiếp từ bạn).",
+        "category": "Thẻ ghi nhớ (Notes)",
+        "icon": "trash-2",
+    },
+    "note:check": {
+        "id": "note:check",
+        "title": "Kiểm tra trùng lặp thẻ",
+        "desc": "Kiểm tra xem từ vựng hay thẻ ghi nhớ đã tồn tại trong bộ bài của bạn chưa.",
+        "category": "Thẻ ghi nhớ (Notes)",
+        "icon": "check-circle",
+    },
+    "study:read": {
+        "id": "study:read",
+        "title": "Xem hàng đợi ôn tập Spaced Repetition",
+        "desc": "Xem danh sách các thẻ đến hạn học hôm nay và dự đoán khoảng cách lặp lại ngắt quãng.",
+        "category": "Học tập (SRS Study)",
+        "icon": "brain",
+    },
+    "study:write": {
+        "id": "study:write",
+        "title": "Ghi nhận kết quả ôn tập",
+        "desc": "Gửi đánh giá kết quả học tập (Again, Hard, Good, Easy) vào thuật toán tính lịch học Flama.",
+        "category": "Học tập (SRS Study)",
+        "icon": "zap",
+    },
+    "stats:read": {
+        "id": "stats:read",
+        "title": "Xem thống kê học tập & Streak",
+        "desc": "Theo dõi chuỗi ngày học liên tục (streak), số thẻ đã ôn hôm nay và tổng quan tiến độ.",
+        "category": "Thống kê (Analytics)",
+        "icon": "bar-chart",
+    },
+    "note-type:read": {
+        "id": "note-type:read",
+        "title": "Xem cấu trúc mẫu thẻ (Note Types)",
+        "desc": "Đọc danh sách mẫu thẻ (Vocabulary, Basic, Cloze) và cấu hình các trường dữ liệu tùy chỉnh.",
+        "category": "Mẫu thẻ (Note Types)",
+        "icon": "layers",
+    },
+}
 
 
-def _render_consent_page(
-    *,
-    client: Any,
-    scopes: list[str],
-    state: str | None,
-    redirect_uri: str,
-    code_challenge: str,
-    code_challenge_method: str,
-) -> str:
-    scope_descriptions = {
-        "deck:read": "Xem danh sách và cấu trúc bộ thẻ flashcard của bạn",
-        "note-type:read": "Xem danh sách mẫu thẻ (note types) và trường dữ liệu",
-        "note:check": "Tìm kiếm và kiểm tra trùng lặp thẻ ghi nhớ",
-        "note:create": "Tạo thẻ ghi nhớ mới và tạo hàng loạt thẻ vào bộ bài của bạn",
-    }
+@oauth_bp.get("/api/oauth/consent-info")
+def consent_info():
+    """Return metadata for the React SPA OAuth Consent screen."""
+    client_id = str(request.args.get("client_id") or "").strip()
+    scope_str = request.args.get("scope")
 
-    scopes_html = "".join(
-        f"""
-        <li style="display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px;">
-            <div style="background: rgba(99, 102, 241, 0.1); color: #4f46e5; border-radius: 8px; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-weight: bold; flex-shrink: 0;">✓</div>
-            <div>
-                <strong style="color: #1e293b; font-size: 14px;">{html.escape(scope)}</strong>
-                <p style="margin: 2px 0 0 0; color: #64748b; font-size: 13px;">{html.escape(scope_descriptions.get(scope, scope))}</p>
-            </div>
-        </li>
-        """
-        for scope in scopes
+    client = oauth_repository.get_client_by_client_id(client_id)
+    if not client:
+        return (
+            jsonify({"error": "invalid_client", "error_description": "Unknown client_id"}),
+            400,
+        )
+
+    requested_scopes = list(oauth_service.normalize_scopes(scope_str))
+    scopes_data = []
+    for sc in requested_scopes:
+        info = SCOPE_METADATA.get(
+            sc,
+            {
+                "id": sc,
+                "title": sc,
+                "desc": f"Quyền truy cập API: {sc}",
+                "category": "Tùy chỉnh",
+                "icon": "key",
+            },
+        )
+        scopes_data.append(info)
+
+    user_data = None
+    if current_user.is_authenticated:
+        user_data = {
+            "id": current_user.id,
+            "username": getattr(current_user, "username", "Tài khoản Flama"),
+            "email": getattr(current_user, "email", "") or "",
+        }
+
+    return jsonify(
+        {
+            "client": {
+                "client_id": client.client_id,
+                "client_name": client.client_name,
+                "client_uri": client.client_uri,
+                "is_confidential": bool(client.is_confidential),
+            },
+            "scopes": scopes_data,
+            "user": user_data,
+        }
     )
 
-    from app.csrf import generate_csrf_token
-    csrf_token = generate_csrf_token()
 
-    user_display = html.escape(getattr(current_user, "username", "Tài khoản Flama"))
-    client_name = html.escape(client.client_name)
+@oauth_bp.post("/api/oauth/consent-decision")
+def consent_decision():
+    """Handle user approval or denial from the React SPA Consent UI."""
+    if not current_user.is_authenticated:
+        return (
+            jsonify({"error": "unauthorized", "error_description": "User must be logged in"}),
+            401,
+        )
 
-    return f"""<!DOCTYPE html>
-<html lang="vi">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ủy quyền truy cập - Flama</title>
-    <style>
-        * {{ box-sizing: border-box; margin: 0; padding: 0; }}
-        body {{
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-            background: #f8fafc;
-            color: #1e293b;
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
-        }}
-        .card {{
-            background: #ffffff;
-            border: 1px solid #e2e8f0;
-            border-radius: 20px;
-            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.01);
-            max-width: 480px;
-            width: 100%;
-            padding: 32px;
-        }}
-        .header {{
-            text-align: center;
-            margin-bottom: 24px;
-        }}
-        .badge {{
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            background: #eef2ff;
-            color: #4f46e5;
-            padding: 4px 12px;
-            border-radius: 9999px;
-            font-size: 12px;
-            font-weight: 600;
-            margin-bottom: 12px;
-        }}
-        .title {{
-            font-size: 20px;
-            font-weight: 700;
-            color: #0f172a;
-            margin-bottom: 8px;
-        }}
-        .subtitle {{
-            font-size: 14px;
-            color: #64748b;
-            line-height: 1.5;
-        }}
-        .account-box {{
-            background: #f1f5f9;
-            border-radius: 12px;
-            padding: 12px 16px;
-            margin-bottom: 20px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            font-size: 13px;
-        }}
-        .scope-box {{
-            background: #fafafa;
-            border: 1px solid #f1f5f9;
-            border-radius: 12px;
-            padding: 16px;
-            margin-bottom: 24px;
-        }}
-        .scope-list {{
-            list-style: none;
-        }}
-        .btn-group {{
-            display: flex;
-            gap: 12px;
-        }}
-        .btn {{
-            flex: 1;
-            padding: 12px 20px;
-            border-radius: 12px;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            border: none;
-            transition: all 0.2s ease;
-            text-align: center;
-            text-decoration: none;
-        }}
-        .btn-primary {{
-            background: #4f46e5;
-            color: #ffffff;
-        }}
-        .btn-primary:hover {{
-            background: #4338ca;
-        }}
-        .btn-secondary {{
-            background: #e2e8f0;
-            color: #475569;
-        }}
-        .btn-secondary:hover {{
-            background: #cbd5e1;
-        }}
-    </style>
-</head>
-<body>
-    <div class="card">
-        <div class="header">
-            <div class="badge">Flama Remote MCP</div>
-            <h1 class="title">Cấp quyền cho {client_name}</h1>
-            <p class="subtitle">Ứng dụng muốn kết nối với tài khoản Flama của bạn để thao tác với Flashcard thông qua Model Context Protocol.</p>
-        </div>
+    if not bool(getattr(current_user, "is_active", True)):
+        return (
+            jsonify({"error": "access_denied", "error_description": "User account is disabled"}),
+            403,
+        )
 
-        <div class="account-box">
-            <span style="color: #64748b;">Đang đăng nhập:</span>
-            <strong style="color: #0f172a;">{user_display}</strong>
-        </div>
+    body = request.get_json(silent=True) or request.form or {}
+    client_id = str(body.get("client_id") or "").strip()
+    redirect_uri = str(body.get("redirect_uri") or "").strip()
+    response_type = str(body.get("response_type") or "code").strip()
+    scope = body.get("scope")
+    state = body.get("state")
+    code_challenge = body.get("code_challenge")
+    code_challenge_method = body.get("code_challenge_method") or "S256"
+    action = str(body.get("action") or "deny").strip().lower()
 
-        <div class="scope-box">
-            <div style="font-size: 12px; font-weight: 600; text-transform: uppercase; color: #94a3b8; margin-bottom: 12px; letter-spacing: 0.5px;">Quyền được yêu cầu:</div>
-            <ul class="scope-list">
-                {scopes_html}
-            </ul>
-        </div>
+    try:
+        client, scopes = oauth_service.validate_authorize_request(
+            client_id=client_id,
+            redirect_uri=redirect_uri,
+            response_type=response_type,
+            scope=scope,
+            state=state,
+            code_challenge=code_challenge,
+            code_challenge_method=code_challenge_method,
+        )
+    except OAuthError as err:
+        redirect_target = err.to_redirect_url()
+        if redirect_target:
+            return jsonify({"redirect_url": redirect_target}), 200
+        return jsonify(err.to_dict()), err.status
 
-        <form method="POST" action="/oauth/authorize">
-            <input type="hidden" name="csrf_token" value="{html.escape(csrf_token)}">
-            <input type="hidden" name="client_id" value="{html.escape(client.client_id)}">
-            <input type="hidden" name="redirect_uri" value="{html.escape(redirect_uri)}">
-            <input type="hidden" name="scope" value="{html.escape(' '.join(scopes))}">
-            <input type="hidden" name="state" value="{html.escape(state or '')}">
-            <input type="hidden" name="code_challenge" value="{html.escape(code_challenge)}">
-            <input type="hidden" name="code_challenge_method" value="{html.escape(code_challenge_method)}">
-            
-            <div class="btn-group">
-                <button type="submit" name="action" value="deny" class="btn btn-secondary">Từ chối</button>
-                <button type="submit" name="action" value="approve" class="btn btn-primary">Cho phép truy cập</button>
-            </div>
-        </form>
-    </div>
-</body>
-</html>
-"""
+    if action != "approve":
+        err = OAuthError(
+            "access_denied",
+            "The user denied the authorization request.",
+            redirect_uri=redirect_uri,
+            state=state,
+        )
+        return jsonify({"redirect_url": err.to_redirect_url()}), 200
 
+    try:
+        raw_code = oauth_service.issue_authorization_code(
+            client=client,
+            user=current_user,
+            redirect_uri=redirect_uri,
+            scopes=scopes,
+            code_challenge=code_challenge or "",
+            code_challenge_method=code_challenge_method,
+        )
+        redirect_success = oauth_service.build_redirect_url(
+            redirect_uri,
+            {"code": raw_code},
+            state=state,
+        )
+        return jsonify({"redirect_url": redirect_success}), 200
+    except Exception as exc:
+        logger.exception("Failed to issue authorization code via consent API: %s", exc)
+        err = OAuthError(
+            "server_error",
+            "Internal server error issuing authorization code.",
+            redirect_uri=redirect_uri,
+            state=state,
+        )
+        return jsonify({"redirect_url": err.to_redirect_url()}), 200
 
 
 # --- Core OAuth Endpoints ---
@@ -287,15 +311,10 @@ def authorize():
         return redirect(err.to_redirect_url())
 
     if request.method == "GET":
-        html_content = _render_consent_page(
-            client=client,
-            scopes=scopes,
-            state=state,
-            redirect_uri=redirect_uri,
-            code_challenge=code_challenge or "",
-            code_challenge_method=code_challenge_method,
-        )
-        return Response(html_content, mimetype="text/html")
+        query_string = request.query_string.decode("utf-8") if request.query_string else ""
+        consent_spa_url = f"/oauth/consent?{query_string}" if query_string else "/oauth/consent"
+        return redirect(consent_spa_url)
+
 
     # POST: User Decision
     action = request.form.get("action", "deny").strip().lower()

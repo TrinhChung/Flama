@@ -153,17 +153,67 @@ class OAuthRemoteMcpTests(unittest.TestCase):
         self.assertEqual(resp.status_code, 302)
         self.assertIn("/login?next=", resp.headers["Location"])
 
-    def test_authorize_renders_consent_page_when_logged_in(self):
+    def test_authorize_redirects_to_spa_consent_when_logged_in(self):
         self._login_user()
         verifier, challenge = self._generate_pkce()
         resp = self.client.get(
             f"/oauth/authorize?client_id={self.client_id}&redirect_uri={self.redirect_uri}&response_type=code&code_challenge={challenge}&code_challenge_method=S256&state=state123"
         )
-        self.assertEqual(resp.status_code, 200)
-        html_text = resp.get_data(as_text=True)
-        self.assertIn("Cấp quyền cho ChatGPT Assistant", html_text)
-        self.assertIn("deck:read", html_text)
-        self.assertIn("alice", html_text)
+        self.assertEqual(resp.status_code, 302)
+        loc = resp.headers["Location"]
+        self.assertIn("/oauth/consent?", loc)
+        self.assertIn(f"client_id={self.client_id}", loc)
+        self.assertIn("state=state123", loc)
+
+    def test_consent_info_and_decision_api(self):
+        self._login_user()
+        verifier, challenge = self._generate_pkce()
+
+        # 1. GET /api/oauth/consent-info
+        info_resp = self.client.get(
+            f"/api/oauth/consent-info?client_id={self.client_id}&scope=deck:read note:create"
+        )
+        self.assertEqual(info_resp.status_code, 200)
+        info_data = info_resp.get_json()
+        self.assertEqual(info_data["client"]["client_name"], "ChatGPT Assistant")
+        self.assertEqual(len(info_data["scopes"]), 2)
+        self.assertEqual(info_data["user"]["username"], "alice")
+
+        # 2. POST /api/oauth/consent-decision with deny
+        deny_resp = self.client.post(
+            "/api/oauth/consent-decision",
+            json={
+                "client_id": self.client_id,
+                "redirect_uri": self.redirect_uri,
+                "scope": "deck:read note:create",
+                "state": "state_denied",
+                "code_challenge": challenge,
+                "code_challenge_method": "S256",
+                "action": "deny",
+            },
+        )
+        self.assertEqual(deny_resp.status_code, 200)
+        deny_url = deny_resp.get_json()["redirect_url"]
+        self.assertTrue(deny_url.startswith(self.redirect_uri))
+        self.assertIn("error=access_denied", deny_url)
+
+        # 3. POST /api/oauth/consent-decision with approve
+        approve_resp = self.client.post(
+            "/api/oauth/consent-decision",
+            json={
+                "client_id": self.client_id,
+                "redirect_uri": self.redirect_uri,
+                "scope": "deck:read note:create",
+                "state": "state_approved",
+                "code_challenge": challenge,
+                "code_challenge_method": "S256",
+                "action": "approve",
+            },
+        )
+        self.assertEqual(approve_resp.status_code, 200)
+        approve_url = approve_resp.get_json()["redirect_url"]
+        self.assertTrue(approve_url.startswith(self.redirect_uri))
+        self.assertIn("code=", approve_url)
 
     def test_authorize_denial_redirects_with_access_denied(self):
         self._login_user()

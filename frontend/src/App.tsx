@@ -208,6 +208,11 @@ const CookiesPage = lazy(() =>
     default: module.CookiesPage,
   })),
 )
+const OAuthConsentPage = lazy(() =>
+  import('./features/oauth/pages/OAuthConsentPage').then((module) => ({
+    default: module.OAuthConsentPage,
+  })),
+)
 
 function deferred(element: ReactNode) {
   return (
@@ -228,6 +233,10 @@ const router = createBrowserRouter([
   {
     path: MAINTENANCE_PATH,
     element: <MaintenancePage />,
+  },
+  {
+    path: 'oauth/consent',
+    element: deferred(<OAuthConsentPage />),
   },
   {
     element: <AppLayout />,
