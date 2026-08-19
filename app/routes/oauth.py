@@ -390,7 +390,131 @@ def revoke():
         return resp
 
 
-# --- Connected Apps API for User Settings ---
+@oauth_bp.get("/oauth/userinfo")
+def userinfo():
+    """OIDC UserInfo Endpoint."""
+    from app.services import mcp_access_token_service, mcp_auth_service
+
+    raw_token = mcp_auth_service.extract_raw_token(request=request)
+    if not raw_token:
+        return (
+            jsonify(
+                {
+                    "error": "unauthorized",
+                    "error_description": "Bearer token required",
+                }
+            ),
+            401,
+        )
+    try:
+        token_auth = mcp_access_token_service.authenticate_bearer_token(
+            raw_token=raw_token
+        )
+        user = token_auth.user
+        return jsonify(
+            {
+                "sub": str(user.id),
+                "id": user.id,
+                "username": user.username,
+                "preferred_username": user.username,
+                "email": user.email,
+                "email_verified": True,
+            }
+        )
+    except Exception as exc:
+        return jsonify({"error": "invalid_token", "error_description": str(exc)}), 401
+
+
+# --- Connected Apps & OAuth Management API ---
+
+
+@oauth_bp.get("/api/oauth/endpoints-info")
+def get_endpoints_info():
+    """Return discovered URLs and suggested config for AI client setup."""
+    base_url = oauth_service.get_base_url(request)
+    return jsonify(
+        {
+            "base_url": base_url,
+            "auth_url": f"{base_url}/oauth/authorize",
+            "token_url": f"{base_url}/oauth/token",
+            "resource_url": f"{base_url}/api/mcp",
+            "userinfo_url": f"{base_url}/oauth/userinfo",
+            "openid_config_url": f"{base_url}/.well-known/openid-configuration",
+            "scopes": list(oauth_service.ALLOWED_SCOPES),
+            "scopes_string": " ".join(sorted(oauth_service.ALLOWED_SCOPES)),
+        }
+    )
+
+
+@oauth_bp.get("/api/oauth/clients")
+@login_required
+def list_oauth_clients():
+    """List registered OAuth 2.1 clients."""
+    clients = oauth_repository.list_clients(limit=50)
+    return jsonify({"items": [c.to_dict() for c in clients]})
+
+
+@oauth_bp.post("/api/oauth/clients")
+@login_required
+def create_oauth_client():
+    """Create or update a registered OAuth 2.1 client from UI."""
+    payload = request.get_json(silent=True) or request.form or {}
+    client_id = str(payload.get("client_id") or "").strip()
+    client_name = str(payload.get("client_name") or "").strip()
+    client_secret = payload.get("client_secret")
+    raw_redirect_uris = payload.get("redirect_uris") or []
+
+    if isinstance(raw_redirect_uris, str):
+        redirect_uris = [
+            u.strip() for u in raw_redirect_uris.splitlines() if u.strip()
+        ]
+    elif isinstance(raw_redirect_uris, list):
+        redirect_uris = [str(u).strip() for u in raw_redirect_uris if str(u).strip()]
+    else:
+        redirect_uris = []
+
+    if not client_id or not client_name:
+        return (
+            jsonify(
+                {
+                    "error": "VALIDATION_ERROR",
+                    "message": "Client ID và Tên ứng dụng là bắt buộc.",
+                }
+            ),
+            400,
+        )
+
+    if not redirect_uris:
+        return (
+            jsonify(
+                {
+                    "error": "VALIDATION_ERROR",
+                    "message": "Cần ít nhất một Callback / Redirect URL do ChatGPT cung cấp.",
+                }
+            ),
+            400,
+        )
+
+    client = oauth_service.register_oauth_client(
+        client_id=client_id,
+        client_name=client_name,
+        client_secret=str(client_secret).strip() if client_secret else None,
+        redirect_uris=redirect_uris,
+        is_confidential=bool(client_secret and str(client_secret).strip()),
+    )
+    return jsonify({"success": True, "client": client.to_dict()}), 201
+
+
+@oauth_bp.delete("/api/oauth/clients/<int:client_pk>")
+@login_required
+def delete_oauth_client(client_pk: int):
+    """Delete a registered OAuth 2.1 client."""
+    client = oauth_repository.get_client_by_id(client_pk)
+    if not client:
+        return jsonify({"error": "NOT_FOUND", "message": "Client không tồn tại."}), 404
+    db.session.delete(client)
+    db.session.commit()
+    return jsonify({"success": True})
 
 
 @oauth_bp.get("/api/oauth/connected-apps")
@@ -410,3 +534,4 @@ def revoke_connected_app(client_id: str):
         client_id=client_id,
     )
     return jsonify({"success": True, "revoked_count": count})
+

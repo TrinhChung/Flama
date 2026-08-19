@@ -17,6 +17,7 @@ import { McpAboutTab } from '../components/McpAboutTab'
 import { McpTokensTab } from '../components/McpTokensTab'
 import { McpGuideTab } from '../components/McpGuideTab'
 import { McpToolsTab } from '../components/McpToolsTab'
+import { McpOAuthTab } from '../components/McpOAuthTab'
 
 export function McpTokensPage() {
   const [activeTab, setActiveTab] = useState('tokens')
@@ -32,7 +33,7 @@ export function McpTokensPage() {
       <div className="space-y-4 sm:space-y-6">
         <PageHeader
           title="Kết nối AI qua Model Context Protocol (MCP)"
-          description="Tích hợp Claude Desktop, Cursor, Antigravity và các trợ lý AI với kho Flashcard Flama để tự động tra cứu, tạo thẻ và ôn tập."
+          description="Tích hợp ChatGPT, Claude Desktop, Cursor và các trợ lý AI với kho Flashcard Flama để tự động tra cứu, tạo thẻ và ôn tập."
         />
 
         {/* Quick Highlights Bar */}
@@ -43,7 +44,7 @@ export function McpTokensPage() {
             </div>
             <div className="min-w-0">
               <div className="text-[11px] sm:text-xs font-semibold truncate">AI Chat 2 chiều</div>
-              <div className="text-[10px] sm:text-[11px] text-muted-foreground truncate">Claude, Cursor, Agents</div>
+              <div className="text-[10px] sm:text-[11px] text-muted-foreground truncate">ChatGPT, Claude, Cursor</div>
             </div>
           </div>
 
@@ -72,8 +73,8 @@ export function McpTokensPage() {
               <Flame className="size-4.5 sm:size-5" />
             </div>
             <div className="min-w-0">
-              <div className="text-[11px] sm:text-xs font-semibold truncate">Flama Connect</div>
-              <div className="text-[10px] sm:text-[11px] text-muted-foreground truncate">Port 4790 siêu tốc</div>
+              <div className="text-[11px] sm:text-xs font-semibold truncate">OAuth 2.1 PKCE</div>
+              <div className="text-[10px] sm:text-[11px] text-muted-foreground truncate">ChatGPT Connectors</div>
             </div>
           </div>
         </div>
@@ -88,8 +89,16 @@ export function McpTokensPage() {
               className="flex-1 sm:flex-none px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium rounded-xl gap-1.5 transition-all"
             >
               <KeyRound className="size-4 text-primary shrink-0" />
-              <span className="hidden sm:inline">Quản lý Token (Khuyên dùng)</span>
+              <span className="hidden sm:inline">Quản lý Token (Claude / Cursor)</span>
               <span className="sm:hidden">Token</span>
+            </TabsTrigger>
+            <TabsTrigger
+              value="oauth"
+              className="flex-1 sm:flex-none px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium rounded-xl gap-1.5 transition-all"
+            >
+              <Bot className="size-4 text-purple-500 shrink-0" />
+              <span className="hidden sm:inline">ChatGPT & OAuth 2.1 (Mới)</span>
+              <span className="sm:hidden">ChatGPT</span>
             </TabsTrigger>
             <TabsTrigger
               value="about"
@@ -120,6 +129,7 @@ export function McpTokensPage() {
 
         {/* Tab Contents */}
         <McpTokensTab hookResult={hookResult} />
+        <McpOAuthTab />
         <McpAboutTab />
         <McpGuideTab />
         <McpToolsTab />
@@ -127,3 +137,4 @@ export function McpTokensPage() {
     </Page>
   )
 }
+
