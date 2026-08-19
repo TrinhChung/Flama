@@ -744,3 +744,51 @@ class OAuthRemoteMcpTests(unittest.TestCase):
         find_res = find_call.get_json()["result"]["structuredContent"]
         self.assertGreaterEqual(len(find_res["notes"]), 1)
 
+    def test_mcp_tool_call_with_chatgpt_metadata(self):
+        self._login_user()
+        verifier, challenge = self._generate_pkce()
+        resp = self.client.post(
+            "/oauth/authorize",
+            data={
+                "client_id": self.client_id,
+                "redirect_uri": self.redirect_uri,
+                "scope": "deck:read",
+                "code_challenge": challenge,
+                "code_challenge_method": "S256",
+                "action": "approve",
+            },
+        )
+        auth_code = parse_qs(urlparse(resp.headers["Location"]).query)["code"][0]
+        token_resp = self.client.post(
+            "/oauth/token",
+            data={
+                "grant_type": "authorization_code",
+                "client_id": self.client_id,
+                "client_secret": self.client_secret,
+                "code": auth_code,
+                "code_verifier": verifier,
+                "redirect_uri": self.redirect_uri,
+            },
+        )
+        access_token = token_resp.get_json()["access_token"]
+
+        # Call tools/call with ChatGPT-style metadata in params and empty arguments
+        mcp_call = self.client.post(
+            "/api/mcp",
+            headers={"Authorization": f"Bearer {access_token}"},
+            json={
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {
+                    "name": "list_my_decks",
+                    "arguments": {},
+                    "_meta": {"progressToken": 12345, "context": "chatgpt_session"},
+                },
+            },
+        )
+        self.assertEqual(mcp_call.status_code, 200)
+        result = mcp_call.get_json()["result"]
+        self.assertIn("content", result)
+
+

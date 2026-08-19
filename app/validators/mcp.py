@@ -62,7 +62,7 @@ def validate_mcp_jsonrpc_request(payload: Any) -> McpJsonRpcRequest:
 
 
 def validate_empty_arguments(arguments: Any, *, tool_name: str) -> dict[str, Any]:
-    """Ensure tools expecting no arguments receive empty object or null."""
+    """Ensure tools expecting no arguments receive empty object or null, ignoring extra metadata."""
     if arguments is None:
         return {}
     if not isinstance(arguments, dict):
@@ -72,14 +72,8 @@ def validate_empty_arguments(arguments: Any, *, tool_name: str) -> dict[str, Any
             status=400,
             code="INVALID_PARAMS",
         )
-    if arguments:
-        raise RequestValidationError(
-            f"Tool {tool_name} không nhận arguments.",
-            field="arguments",
-            status=400,
-            code="INVALID_PARAMS",
-        )
     return {}
+
 
 
 def validate_list_my_decks_arguments(arguments: Any) -> dict[str, Any]:
@@ -233,7 +227,7 @@ def validate_get_due_card_counts_arguments(arguments: Any) -> dict[str, Any]:
 
 
 def validate_mcp_tool_call_params(params: Any) -> dict[str, Any]:
-    """Restrict tools/call params to the minimal shape this endpoint supports."""
+    """Validate and extract tools/call params supporting MCP metadata (_meta, context, etc.)."""
     if not isinstance(params, dict):
         raise RequestValidationError(
             "params phải là JSON object.",
@@ -242,13 +236,27 @@ def validate_mcp_tool_call_params(params: Any) -> dict[str, Any]:
             code="INVALID_PARAMS",
         )
 
-    unknown_keys = sorted(str(key) for key in params.keys() if key not in {"name", "arguments"})
-    if unknown_keys:
+    name = params.get("name")
+    if not name or not isinstance(name, str) or not name.strip():
         raise RequestValidationError(
-            "tools/call chỉ hỗ trợ name và arguments.",
-            field="params",
+            "name là bắt buộc.",
+            field="name",
             status=400,
             code="INVALID_PARAMS",
         )
 
-    return params
+    arguments = params.get("arguments")
+    if arguments is not None and not isinstance(arguments, dict):
+        raise RequestValidationError(
+            "arguments phải là JSON object.",
+            field="arguments",
+            status=400,
+            code="INVALID_PARAMS",
+        )
+
+    return {
+        "name": name.strip(),
+        "arguments": arguments if isinstance(arguments, dict) else {},
+        "_meta": params.get("_meta"),
+    }
+
