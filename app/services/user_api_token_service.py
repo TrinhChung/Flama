@@ -25,6 +25,7 @@ DEFAULT_SCOPES = (
     "deck:read",
     "deck:write",
     "note-type:read",
+    "note-type:write",
     "note:check",
     "note:read",
     "note:create",

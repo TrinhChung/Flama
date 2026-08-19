@@ -10,12 +10,15 @@ from app.validators.mcp import (
     validate_add_tags_arguments,
     validate_batch_create_notes_arguments,
     validate_batch_delete_notes_arguments,
+    validate_batch_ensure_decks_arguments,
     validate_batch_move_notes_arguments,
     validate_batch_update_notes_arguments,
     validate_create_deck_arguments,
     validate_create_note_arguments,
+    validate_create_note_type_arguments,
     validate_delete_deck_arguments,
     validate_delete_note_arguments,
+    validate_delete_note_type_arguments,
     validate_find_notes_arguments,
     validate_get_card_arguments,
     validate_get_deck_arguments,
@@ -30,10 +33,15 @@ from app.validators.mcp import (
     validate_list_note_types_arguments,
     validate_list_notes_arguments,
     validate_move_note_arguments,
+    validate_preview_note_sync_arguments,
+    validate_preview_note_type_update_arguments,
     validate_remove_tags_arguments,
+    validate_resolve_deck_arguments,
     validate_submit_review_arguments,
+    validate_sync_notes_arguments,
     validate_update_deck_arguments,
     validate_update_note_arguments,
+    validate_update_note_type_arguments,
 )
 
 
@@ -145,6 +153,59 @@ GET_DECK_TOOL = McpToolDefinition(
 )
 
 
+def _call_resolve_deck(*, user_id: int, arguments: dict[str, Any]) -> dict[str, Any]:
+    return mcp_tool_service._wrap_tool_result(
+        mcp_tool_service.resolve_deck(user_id=user_id, path=arguments["path"])
+    )
+
+
+RESOLVE_DECK_TOOL = McpToolDefinition(
+    name=mcp_tool_service.RESOLVE_DECK_TOOL_NAME,
+    title="Resolve Deck by Path",
+    description="Find a flashcard deck by its hierarchical path (e.g. 'English::Luyện Đề::Bài 8') without creating it if missing.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "path": {"type": "string", "description": "Hierarchical path of the deck (separated by '::' or '/')"},
+        },
+        "required": ["path"],
+        "additionalProperties": False,
+    },
+    required_scope="deck:read",
+    annotations={"readOnly": True},
+    handler=_call_resolve_deck,
+    arguments_validator=validate_resolve_deck_arguments,
+)
+
+
+def _call_batch_ensure_decks(*, user_id: int, arguments: dict[str, Any]) -> dict[str, Any]:
+    return mcp_tool_service._wrap_tool_result(
+        mcp_tool_service.batch_ensure_decks(user_id=user_id, paths=arguments["paths"])
+    )
+
+
+BATCH_ENSURE_DECKS_TOOL = McpToolDefinition(
+    name=mcp_tool_service.BATCH_ENSURE_DECKS_TOOL_NAME,
+    title="Batch Ensure Decks",
+    description="Ensure multiple hierarchical deck paths exist in a single call, idempotently creating any missing parent or child decks.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "paths": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "List of hierarchical deck paths (e.g. ['English::Luyện Đề::Bài 8', 'English::Luyện Đề::Bài 9'])",
+            },
+        },
+        "required": ["paths"],
+        "additionalProperties": False,
+    },
+    required_scope="deck:write",
+    handler=_call_batch_ensure_decks,
+    arguments_validator=validate_batch_ensure_decks_arguments,
+)
+
+
 def _call_create_deck(*, user_id: int, arguments: dict[str, Any]) -> dict[str, Any]:
     return mcp_tool_service._wrap_tool_result(
         mcp_tool_service.create_deck(
@@ -152,6 +213,7 @@ def _call_create_deck(*, user_id: int, arguments: dict[str, Any]) -> dict[str, A
             name=arguments["name"],
             parent_id=arguments.get("parent_id"),
             description=arguments.get("description"),
+            default_note_type_id=arguments.get("default_note_type_id"),
         )
     )
 
@@ -159,13 +221,14 @@ def _call_create_deck(*, user_id: int, arguments: dict[str, Any]) -> dict[str, A
 CREATE_DECK_TOOL = McpToolDefinition(
     name=mcp_tool_service.CREATE_DECK_TOOL_NAME,
     title="Create Deck",
-    description="Create a new flashcard deck or subdeck. Supports path notation (e.g. 'Japanese::Vocabulary::N1') or explicit parent_id.",
+    description="Create a new flashcard deck or subdeck. Supports path notation (e.g. 'Japanese::Vocabulary::N1'), explicit parent_id, and default_note_type_id.",
     input_schema={
         "type": "object",
         "properties": {
             "name": {"type": "string", "description": "Name or hierarchical path of the deck"},
             "parent_id": {"type": ["integer", "null"], "description": "Optional parent deck ID"},
             "description": {"type": ["string", "null"], "description": "Optional deck description"},
+            "default_note_type_id": {"type": ["string", "null"], "description": "Optional default note type UUID for notes created in this deck"},
         },
         "required": ["name"],
         "additionalProperties": False,
@@ -185,6 +248,8 @@ def _call_update_deck(*, user_id: int, arguments: dict[str, Any]) -> dict[str, A
             description=arguments.get("description"),
             parent_id=arguments.get("parent_id"),
             update_parent=bool(arguments.get("update_parent")),
+            default_note_type_id=arguments.get("default_note_type_id"),
+            update_default_note_type=bool(arguments.get("update_default_note_type")),
         )
     )
 
@@ -192,7 +257,7 @@ def _call_update_deck(*, user_id: int, arguments: dict[str, Any]) -> dict[str, A
 UPDATE_DECK_TOOL = McpToolDefinition(
     name=mcp_tool_service.UPDATE_DECK_TOOL_NAME,
     title="Update Deck",
-    description="Update a deck's name, description, or move it under a new parent deck.",
+    description="Update a deck's name, description, move it under a new parent deck, or update its default note type.",
     input_schema={
         "type": "object",
         "properties": {
@@ -200,6 +265,7 @@ UPDATE_DECK_TOOL = McpToolDefinition(
             "name": {"type": "string", "description": "New deck name"},
             "description": {"type": ["string", "null"], "description": "New deck description"},
             "parent_id": {"type": ["integer", "null"], "description": "New parent deck ID (null to move to top level)"},
+            "default_note_type_id": {"type": ["string", "null"], "description": "New default note type UUID (null to clear default note type)"},
         },
         "required": ["deck_id"],
         "additionalProperties": False,
@@ -670,6 +736,113 @@ BATCH_MOVE_NOTES_TOOL = McpToolDefinition(
 )
 
 
+def _call_preview_note_sync(*, user_id: int, arguments: dict[str, Any]) -> dict[str, Any]:
+    return mcp_tool_service._wrap_tool_result(
+        mcp_tool_service.preview_note_sync(
+            user_id=user_id,
+            source_key=arguments.get("source_key"),
+            deck_id=arguments.get("deck_id"),
+            deck_path=arguments.get("deck_path"),
+            note_type_id=arguments.get("note_type_id"),
+            note_type_name=arguments.get("note_type_name"),
+            notes=arguments["notes"],
+        )
+    )
+
+
+PREVIEW_NOTE_SYNC_TOOL = McpToolDefinition(
+    name=mcp_tool_service.PREVIEW_NOTE_SYNC_TOOL_NAME,
+    title="Preview Note Synchronization",
+    description="Simulate external note synchronization against existing database notes without modifying any data. Returns counts and per-item diffs (create, update, unchanged, invalid, conflict).",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "source_key": {"type": ["string", "null"], "description": "Identifier for external source (e.g. 'google_sheets:doc123', 'excel:unit1')"},
+            "deck_id": {"type": ["integer", "null"], "description": "Default target deck ID for items"},
+            "deck_path": {"type": ["string", "null"], "description": "Default target deck path (e.g. 'English::Luyện Đề::Bài 8')"},
+            "note_type_id": {"type": ["string", "null"], "description": "Note type UUID"},
+            "note_type_name": {"type": ["string", "null"], "description": "Note type name (e.g. 'Vocabulary', 'Basic')"},
+            "notes": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "external_id": {"type": ["string", "null"], "description": "Unique identifier from external source row"},
+                        "fields": {"type": "object", "description": "Field values mapping"},
+                        "tags": {"type": "array", "items": {"type": "string"}, "description": "Tags list"},
+                        "deck_id": {"type": ["integer", "null"], "description": "Optional per-item deck override ID"},
+                        "deck_path": {"type": ["string", "null"], "description": "Optional per-item deck override path"},
+                    },
+                    "required": ["fields"],
+                },
+                "description": "List of notes to preview sync",
+            },
+        },
+        "required": ["notes"],
+        "additionalProperties": False,
+    },
+    required_scope="note:read",
+    annotations={"readOnly": True},
+    handler=_call_preview_note_sync,
+    arguments_validator=validate_preview_note_sync_arguments,
+)
+
+
+def _call_sync_notes(*, user_id: int, arguments: dict[str, Any]) -> dict[str, Any]:
+    return mcp_tool_service._wrap_tool_result(
+        mcp_tool_service.sync_notes(
+            user_id=user_id,
+            source_key=arguments.get("source_key"),
+            deck_id=arguments.get("deck_id"),
+            deck_path=arguments.get("deck_path"),
+            note_type_id=arguments.get("note_type_id"),
+            note_type_name=arguments.get("note_type_name"),
+            notes=arguments["notes"],
+            stop_on_error=bool(arguments.get("stop_on_error", False)),
+            ensure_decks=bool(arguments.get("ensure_decks", True)),
+        )
+    )
+
+
+SYNC_NOTES_TOOL = McpToolDefinition(
+    name=mcp_tool_service.SYNC_NOTES_TOOL_NAME,
+    title="Synchronize External Notes",
+    description="Idempotently synchronize external notes into Flama decks with external identity tracking, field validation, and card generation. Automatically creates or updates changed notes while skipping identical ones.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "source_key": {"type": ["string", "null"], "description": "Identifier for external source (e.g. 'google_sheets:doc123', 'excel:unit1')"},
+            "deck_id": {"type": ["integer", "null"], "description": "Default target deck ID for items"},
+            "deck_path": {"type": ["string", "null"], "description": "Default target deck path (e.g. 'English::Luyện Đề::Bài 8')"},
+            "note_type_id": {"type": ["string", "null"], "description": "Note type UUID"},
+            "note_type_name": {"type": ["string", "null"], "description": "Note type name (e.g. 'Vocabulary', 'Basic')"},
+            "stop_on_error": {"type": "boolean", "description": "Whether to halt and rollback on first validation error (default: false for partial sync)", "default": False},
+            "ensure_decks": {"type": "boolean", "description": "Whether to automatically create target decks if they do not exist (default: true)", "default": True},
+            "notes": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "external_id": {"type": ["string", "null"], "description": "Unique identifier from external source row"},
+                        "fields": {"type": "object", "description": "Field values mapping"},
+                        "tags": {"type": "array", "items": {"type": "string"}, "description": "Tags list"},
+                        "deck_id": {"type": ["integer", "null"], "description": "Optional per-item deck override ID"},
+                        "deck_path": {"type": ["string", "null"], "description": "Optional per-item deck override path"},
+                    },
+                    "required": ["fields"],
+                },
+                "description": "List of notes to synchronize",
+            },
+        },
+        "required": ["notes"],
+        "additionalProperties": False,
+    },
+    required_scope="note:create",
+    handler=_call_sync_notes,
+    arguments_validator=validate_sync_notes_arguments,
+)
+
+
 # ---------------------------------------------------------------------------
 # 5. Study & Card Review Operations
 # ---------------------------------------------------------------------------
@@ -877,7 +1050,7 @@ def _call_get_note_type_schema(*, user_id: int, arguments: dict[str, Any]) -> di
 GET_NOTE_TYPE_SCHEMA_TOOL = McpToolDefinition(
     name=mcp_tool_service.GET_NOTE_TYPE_SCHEMA_TOOL_NAME,
     title="Get Note Type Schema",
-    description="Return detailed field definitions and templates for a specific note type by id or name.",
+    description="Return detailed field definitions, validation constraints, and templates for a specific note type by id or name.",
     input_schema={
         "type": "object",
         "properties": {
@@ -893,6 +1066,189 @@ GET_NOTE_TYPE_SCHEMA_TOOL = McpToolDefinition(
 )
 
 
+def _call_create_note_type(*, user_id: int, arguments: dict[str, Any]) -> dict[str, Any]:
+    return mcp_tool_service._wrap_tool_result(
+        mcp_tool_service.create_note_type(
+            user_id=user_id,
+            name=arguments["name"],
+            description=arguments.get("description"),
+            fields=arguments.get("fields"),
+            templates=arguments.get("templates"),
+        )
+    )
+
+
+CREATE_NOTE_TYPE_TOOL = McpToolDefinition(
+    name=mcp_tool_service.CREATE_NOTE_TYPE_TOOL_NAME,
+    title="Create Note Type",
+    description="Create a new flashcard note type (model) with custom fields and card templates.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "name": {"type": "string", "description": "Unique name of the new note type"},
+            "description": {"type": ["string", "null"], "description": "Optional description"},
+            "fields": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string", "description": "Field name (e.g. 'Word', 'Meaning')"},
+                        "field_type": {
+                            "type": "string",
+                            "enum": ["text", "richtext", "markdown", "image", "audio", "diagram"],
+                            "default": "text",
+                            "description": "Field data type",
+                        },
+                        "required": {"type": "boolean", "default": False},
+                        "identity_role": {"type": ["string", "null"], "enum": [None, "primary"], "description": "Set to 'primary' for duplicate detection key"},
+                    },
+                    "required": ["name"],
+                },
+                "description": "List of field definitions",
+            },
+            "templates": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string", "description": "Template card name (e.g. 'Card 1')"},
+                        "front_html": {"type": "string", "description": "Front card HTML markup with {{Field}} placeholders"},
+                        "back_html": {"type": "string", "description": "Back card HTML markup with {{Field}} and {{FrontSide}} placeholders"},
+                        "shared_css": {"type": "string", "description": "Optional shared CSS styling"},
+                    },
+                    "required": ["name"],
+                },
+                "description": "List of card templates",
+            },
+        },
+        "required": ["name"],
+        "additionalProperties": False,
+    },
+    required_scope="note-type:write",
+    handler=_call_create_note_type,
+    arguments_validator=validate_create_note_type_arguments,
+)
+
+
+def _call_preview_note_type_update(*, user_id: int, arguments: dict[str, Any]) -> dict[str, Any]:
+    return mcp_tool_service._wrap_tool_result(
+        mcp_tool_service.preview_note_type_update(
+            user_id=user_id,
+            note_type_id=arguments["note_type_id"],
+            name=arguments.get("name"),
+            description=arguments.get("description"),
+            fields=arguments.get("fields"),
+            templates=arguments.get("templates"),
+        )
+    )
+
+
+PREVIEW_NOTE_TYPE_UPDATE_TOOL = McpToolDefinition(
+    name=mcp_tool_service.PREVIEW_NOTE_TYPE_UPDATE_TOOL_NAME,
+    title="Preview Note Type Update",
+    description="Analyze and preview the impact of modifying a note type, fields, or templates (affected notes/cards/decks, data loss risk, template recompilation) and generate a preview token.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "note_type_id": {"type": "string", "description": "UUID of the note type to update"},
+            "name": {"type": "string", "description": "New note type name"},
+            "description": {"type": ["string", "null"], "description": "New description"},
+            "fields": {
+                "description": "Full fields list or delta object with added/renamed/removed/modified",
+            },
+            "templates": {
+                "description": "Full templates list or delta object",
+            },
+        },
+        "required": ["note_type_id"],
+        "additionalProperties": False,
+    },
+    required_scope="note-type:read",
+    annotations={"readOnly": True},
+    handler=_call_preview_note_type_update,
+    arguments_validator=validate_preview_note_type_update_arguments,
+)
+
+
+def _call_update_note_type(*, user_id: int, arguments: dict[str, Any]) -> dict[str, Any]:
+    return mcp_tool_service._wrap_tool_result(
+        mcp_tool_service.update_note_type(
+            user_id=user_id,
+            note_type_id=arguments["note_type_id"],
+            name=arguments.get("name"),
+            description=arguments.get("description"),
+            fields=arguments.get("fields"),
+            templates=arguments.get("templates"),
+            preview_id=arguments.get("preview_id"),
+            confirm=bool(arguments.get("confirm", False)),
+        )
+    )
+
+
+UPDATE_NOTE_TYPE_TOOL = McpToolDefinition(
+    name=mcp_tool_service.UPDATE_NOTE_TYPE_TOOL_NAME,
+    title="Update Note Type",
+    description="Update a note type's name, description, fields, or templates with automatic data preservation when renaming fields.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "note_type_id": {"type": "string", "description": "UUID of the note type to update"},
+            "name": {"type": "string", "description": "New note type name"},
+            "description": {"type": ["string", "null"], "description": "New description"},
+            "fields": {"description": "Updated fields list or delta"},
+            "templates": {"description": "Updated templates list or delta"},
+            "preview_id": {"type": ["string", "null"], "description": "Preview token from preview_note_type_update for stale protection"},
+            "confirm": {"type": "boolean", "description": "Explicit confirmation for destructive changes", "default": False},
+        },
+        "required": ["note_type_id"],
+        "additionalProperties": False,
+    },
+    required_scope="note-type:write",
+    handler=_call_update_note_type,
+    arguments_validator=validate_update_note_type_arguments,
+)
+
+
+def _call_delete_note_type(*, user_id: int, arguments: dict[str, Any]) -> dict[str, Any]:
+    return mcp_tool_service._wrap_tool_result(
+        mcp_tool_service.delete_note_type(
+            user_id=user_id,
+            note_type_id=arguments["note_type_id"],
+            confirm=bool(arguments.get("confirm", False)),
+            preview_id=arguments.get("preview_id"),
+        )
+    )
+
+
+DELETE_NOTE_TYPE_TOOL = McpToolDefinition(
+    name=mcp_tool_service.DELETE_NOTE_TYPE_TOOL_NAME,
+    title="Delete Note Type",
+    description=(
+        "Permanently delete a note type. This is a destructive operation. "
+        "AI MUST first call without confirm (or confirm=false) to preview the impact (notes, cards, decks affected, and whether deletion is allowed), "
+        "ask for user approval, and only call with confirm=true after the user explicitly confirms."
+    ),
+    input_schema={
+        "type": "object",
+        "properties": {
+            "note_type_id": {"type": "string", "description": "UUID of the note type to delete"},
+            "confirm": {
+                "type": "boolean",
+                "description": "Set to true only after the user has explicitly confirmed deletion after reviewing the impact.",
+                "default": False,
+            },
+            "preview_id": {"type": ["string", "null"], "description": "Preview token from the initial preview call"},
+        },
+        "required": ["note_type_id"],
+        "additionalProperties": False,
+    },
+    required_scope="note-type:write",
+    annotations={"destructive": True},
+    handler=_call_delete_note_type,
+    arguments_validator=validate_delete_note_type_arguments,
+)
+
+
 # ---------------------------------------------------------------------------
 # All Registered MCP Tools
 # ---------------------------------------------------------------------------
@@ -902,6 +1258,8 @@ _MCP_TOOL_DEFINITIONS = (
     LIST_MY_DECKS_TOOL,
     GET_DECK_TREE_TOOL,
     GET_DECK_TOOL,
+    RESOLVE_DECK_TOOL,
+    BATCH_ENSURE_DECKS_TOOL,
     CREATE_DECK_TOOL,
     UPDATE_DECK_TOOL,
     DELETE_DECK_TOOL,
@@ -916,11 +1274,13 @@ _MCP_TOOL_DEFINITIONS = (
     MOVE_NOTE_TOOL,
     ADD_TAGS_TOOL,
     REMOVE_TAGS_TOOL,
-    # Batch
+    # Batch & Sync
     BATCH_CREATE_NOTES_TOOL,
     BATCH_UPDATE_NOTES_TOOL,
     BATCH_DELETE_NOTES_TOOL,
     BATCH_MOVE_NOTES_TOOL,
+    PREVIEW_NOTE_SYNC_TOOL,
+    SYNC_NOTES_TOOL,
     # Study & Cards
     GET_DUE_CARD_COUNTS_TOOL,
     GET_STUDY_QUEUE_TOOL,
@@ -932,6 +1292,10 @@ _MCP_TOOL_DEFINITIONS = (
     # Note Types
     LIST_NOTE_TYPES_TOOL,
     GET_NOTE_TYPE_SCHEMA_TOOL,
+    CREATE_NOTE_TYPE_TOOL,
+    PREVIEW_NOTE_TYPE_UPDATE_TOOL,
+    UPDATE_NOTE_TYPE_TOOL,
+    DELETE_NOTE_TYPE_TOOL,
 )
 _MCP_TOOLS_BY_NAME = {tool.name: tool for tool in _MCP_TOOL_DEFINITIONS}
 

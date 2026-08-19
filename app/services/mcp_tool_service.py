@@ -10,11 +10,17 @@ from sqlalchemy import or_
 
 from app.repositories import study_repository, vocabulary_repository
 from app.repositories.deck_tree_query import collect_subtree_ids as _collect_deck_subtree_ids
-from app.services import stats_overview
+from app.services import flashcard_content_service, note_sync_service, stats_overview
 from app.services.anki_content_normalizer import normalize_anki_field_values
 from app.services.anki_scheduler import applyAnswer, computeAnswerPreview
 from app.services.deck_management_service import delete_deck_subtree
-from app.services.flashcard_renderer import render_template_pair
+from app.services.flashcard_renderer import TemplateCompileError, render_template_pair
+from app.services.mcp_preview_service import (
+    compute_resource_version,
+    consume_preview_token,
+    create_preview_token,
+    validate_preview_token,
+)
 from app.services.scheduler_config_service import resolve_deck_options
 from app.services.study_service import apply_study_answer_and_commit
 from app.validators.flashcard_input import RequestValidationError
@@ -34,6 +40,8 @@ MCP_PROTOCOL_VERSION = "2025-11-25"
 LIST_MY_DECKS_TOOL_NAME = "list_my_decks"
 GET_DECK_TREE_TOOL_NAME = "get_deck_tree"
 GET_DECK_TOOL_NAME = "get_deck"
+RESOLVE_DECK_TOOL_NAME = "resolve_deck"
+BATCH_ENSURE_DECKS_TOOL_NAME = "batch_ensure_decks"
 CREATE_DECK_TOOL_NAME = "create_deck"
 UPDATE_DECK_TOOL_NAME = "update_deck"
 DELETE_DECK_TOOL_NAME = "delete_deck"
@@ -52,6 +60,8 @@ BATCH_CREATE_NOTES_TOOL_NAME = "batch_create_notes"
 BATCH_UPDATE_NOTES_TOOL_NAME = "batch_update_notes"
 BATCH_DELETE_NOTES_TOOL_NAME = "batch_delete_notes"
 BATCH_MOVE_NOTES_TOOL_NAME = "batch_move_notes"
+PREVIEW_NOTE_SYNC_TOOL_NAME = "preview_note_sync"
+SYNC_NOTES_TOOL_NAME = "sync_notes"
 
 GET_DUE_CARD_COUNTS_TOOL_NAME = "get_due_card_counts"
 GET_STUDY_QUEUE_TOOL_NAME = "get_study_queue"
@@ -63,6 +73,10 @@ GET_STUDY_STATS_TOOL_NAME = "get_study_stats"
 
 LIST_NOTE_TYPES_TOOL_NAME = "list_note_types"
 GET_NOTE_TYPE_SCHEMA_TOOL_NAME = "get_note_type_schema"
+CREATE_NOTE_TYPE_TOOL_NAME = "create_note_type"
+PREVIEW_NOTE_TYPE_UPDATE_TOOL_NAME = "preview_note_type_update"
+UPDATE_NOTE_TYPE_TOOL_NAME = "update_note_type"
+DELETE_NOTE_TYPE_TOOL_NAME = "delete_note_type"
 
 
 def _compact_description(raw_value: str | None, *, max_length: int = 200) -> str | None:
@@ -189,7 +203,7 @@ def get_deck_tree(*, user_id: int) -> list[dict[str, Any]]:
 
 
 def get_deck(*, user_id: int, deck_id: int) -> dict[str, Any]:
-    """Get metadata and counts for a single deck owned by user."""
+    """Get metadata and counts for a single deck owned by user, including default note type and note types in use."""
     deck = Deck.query.filter_by(id=deck_id, owner_user_id=user_id, deleted_at=None).first()
     if deck is None:
         raise RequestValidationError(
@@ -208,6 +222,34 @@ def get_deck(*, user_id: int, deck_id: int) -> dict[str, Any]:
     )
     subdeck_count = Deck.query.filter_by(parent_id=deck_id, owner_user_id=user_id, deleted_at=None).count()
 
+    default_nt = None
+    if deck.note_type:
+        default_nt = {
+            "id": str(deck.note_type.id),
+            "name": deck.note_type.name,
+        }
+
+    note_types_rows = (
+        db.session.query(Note.note_type_id, db.func.count(Note.id))
+        .filter(Note.deck_id == deck_id, Note.user_id == user_id)
+        .group_by(Note.note_type_id)
+        .all()
+    )
+    note_type_ids = [r[0] for r in note_types_rows if r[0]]
+    note_type_map: dict[str, str] = {}
+    if note_type_ids:
+        nts = NoteType.query.filter(NoteType.id.in_(note_type_ids)).all()
+        note_type_map = {nt.id: nt.name for nt in nts}
+
+    note_types_in_use = [
+        {
+            "id": str(nt_id),
+            "name": note_type_map.get(nt_id, "Unknown"),
+            "notes_count": int(count),
+        }
+        for nt_id, count in note_types_rows
+    ]
+
     return {
         "deck_id": int(deck.id),
         "name": deck.name,
@@ -215,10 +257,128 @@ def get_deck(*, user_id: int, deck_id: int) -> dict[str, Any]:
         "description": deck.description,
         "parent_id": int(deck.parent_id) if deck.parent_id is not None else None,
         "position": int(deck.position or 0),
+        "default_note_type": default_nt,
+        "note_types_in_use": note_types_in_use,
         "note_count": note_count,
         "card_count": card_count,
         "subdeck_count": subdeck_count,
         "created_at": deck.created_at.isoformat() if deck.created_at else None,
+    }
+
+
+def resolve_deck(*, user_id: int, path: str) -> dict[str, Any]:
+    """Find a deck by hierarchical path without creating it if missing."""
+    cleaned = str(path or "").strip()
+    if not cleaned:
+        return {
+            "found": False,
+            "deck_id": None,
+            "name": None,
+            "full_path": None,
+            "parent_id": None,
+        }
+
+    tokens = [t.strip() for t in cleaned.replace("/", "::").split("::") if t.strip()]
+    if not tokens:
+        return {
+            "found": False,
+            "deck_id": None,
+            "name": None,
+            "full_path": None,
+            "parent_id": None,
+        }
+
+    current_parent_id: int | None = None
+    leaf_deck: Deck | None = None
+
+    for token in tokens:
+        candidates = Deck.query.filter_by(
+            parent_id=current_parent_id,
+            owner_user_id=user_id,
+            deleted_at=None,
+        ).all()
+
+        # 1. Exact match
+        matched = next((d for d in candidates if d.name == token), None)
+        # 2. Case-insensitive fallback
+        if matched is None:
+            token_lower = token.lower()
+            matched = next((d for d in candidates if d.name.lower() == token_lower), None)
+
+        if matched is None:
+            return {
+                "found": False,
+                "deck_id": None,
+                "name": None,
+                "full_path": None,
+                "parent_id": None,
+            }
+
+        leaf_deck = matched
+        current_parent_id = matched.id
+
+    if leaf_deck is None:
+        return {
+            "found": False,
+            "deck_id": None,
+            "name": None,
+            "full_path": None,
+            "parent_id": None,
+        }
+
+    return {
+        "found": True,
+        "deck_id": int(leaf_deck.id),
+        "name": leaf_deck.name,
+        "full_path": _build_deck_full_path(leaf_deck, user_id),
+        "parent_id": int(leaf_deck.parent_id) if leaf_deck.parent_id is not None else None,
+        "description": leaf_deck.description,
+    }
+
+
+def batch_ensure_decks(*, user_id: int, paths: list[str]) -> dict[str, Any]:
+    """Ensure multiple hierarchical deck paths exist, creating missing nodes idempotently."""
+    results: dict[str, Any] = {}
+    created_count = 0
+    existing_count = 0
+
+    for raw_path in paths:
+        cleaned = str(raw_path or "").strip()
+        if not cleaned:
+            continue
+        tokens = [t.strip() for t in cleaned.replace("/", "::").split("::") if t.strip()]
+        if not tokens:
+            continue
+
+        upsert_res = vocabulary_repository.upsert_deck_path(
+            parent_id=None,
+            path_tokens=tokens,
+            owner_user_id=user_id,
+            admin_mode=False,
+        )
+        if upsert_res.final_deck is not None:
+            final_deck = upsert_res.final_deck
+            is_created = upsert_res.created_count > 0
+            if is_created:
+                created_count += 1
+            else:
+                existing_count += 1
+
+            results[cleaned] = {
+                "deck_id": int(final_deck.id),
+                "name": final_deck.name,
+                "full_path": _build_deck_full_path(final_deck, user_id),
+                "parent_id": int(final_deck.parent_id) if final_deck.parent_id is not None else None,
+                "created": is_created,
+            }
+
+    db.session.commit()
+
+    return {
+        "results": results,
+        "total_requested": len(paths),
+        "created_count": created_count,
+        "existing_count": existing_count,
     }
 
 
@@ -228,6 +388,7 @@ def create_deck(
     name: str,
     parent_id: int | None = None,
     description: str | None = None,
+    default_note_type_id: str | None = None,
 ) -> dict[str, Any]:
     """Create a new flashcard deck or subdeck."""
     if parent_id is not None:
@@ -239,6 +400,10 @@ def create_deck(
                 status=404,
                 code="PARENT_DECK_NOT_FOUND",
             )
+
+    resolved_note_type = None
+    if default_note_type_id:
+        resolved_note_type = _resolve_note_type_for_user(user_id=user_id, note_type_id=default_note_type_id)
 
     cleaned_name = str(name).strip()
     if "::" in cleaned_name or "/" in cleaned_name:
@@ -258,11 +423,14 @@ def create_deck(
             )
         if description:
             upsert_res.final_deck.description = description
-            db.session.commit()
+        if resolved_note_type:
+            upsert_res.final_deck.note_type_id = resolved_note_type.id
+        db.session.commit()
         return {
             "deck_id": int(upsert_res.final_deck.id),
             "name": upsert_res.final_deck.name,
             "parent_id": int(upsert_res.final_deck.parent_id) if upsert_res.final_deck.parent_id else None,
+            "default_note_type": {"id": str(resolved_note_type.id), "name": resolved_note_type.name} if resolved_note_type else None,
             "created_count": upsert_res.created_count,
             "created_at": upsert_res.final_deck.created_at.isoformat() if upsert_res.final_deck.created_at else None,
         }
@@ -274,11 +442,15 @@ def create_deck(
         deleted_at=None,
     ).first()
     if existing is not None:
+        if resolved_note_type and existing.note_type_id != resolved_note_type.id:
+            existing.note_type_id = resolved_note_type.id
+            db.session.commit()
         return {
             "deck_id": int(existing.id),
             "name": existing.name,
             "parent_id": int(existing.parent_id) if existing.parent_id is not None else None,
             "description": existing.description,
+            "default_note_type": {"id": str(existing.note_type.id), "name": existing.note_type.name} if existing.note_type else None,
             "created_at": existing.created_at.isoformat() if existing.created_at else None,
             "existing": True,
         }
@@ -290,6 +462,7 @@ def create_deck(
         name=cleaned_name,
         description=description,
         position=position,
+        note_type_id=resolved_note_type.id if resolved_note_type else None,
     )
     db.session.add(new_deck)
     db.session.commit()
@@ -299,6 +472,7 @@ def create_deck(
         "name": new_deck.name,
         "parent_id": int(new_deck.parent_id) if new_deck.parent_id is not None else None,
         "description": new_deck.description,
+        "default_note_type": {"id": str(resolved_note_type.id), "name": resolved_note_type.name} if resolved_note_type else None,
         "created_at": new_deck.created_at.isoformat() if new_deck.created_at else None,
         "existing": False,
     }
@@ -312,8 +486,10 @@ def update_deck(
     description: str | None = None,
     parent_id: int | None = None,
     update_parent: bool = False,
+    default_note_type_id: str | None = None,
+    update_default_note_type: bool = False,
 ) -> dict[str, Any]:
-    """Update a deck's name, description, or parent."""
+    """Update a deck's name, description, parent, or default note type."""
     deck = Deck.query.filter_by(id=deck_id, owner_user_id=user_id, deleted_at=None).first()
     if deck is None:
         raise RequestValidationError(
@@ -355,6 +531,13 @@ def update_deck(
         deck.parent_id = parent_id
         deck.position = vocabulary_repository.next_deck_position(parent_id)
 
+    if update_default_note_type:
+        if default_note_type_id is not None:
+            resolved_nt = _resolve_note_type_for_user(user_id=user_id, note_type_id=default_note_type_id)
+            deck.note_type_id = resolved_nt.id
+        else:
+            deck.note_type_id = None
+
     db.session.commit()
     return {
         "deck_id": int(deck.id),
@@ -362,6 +545,7 @@ def update_deck(
         "description": deck.description,
         "parent_id": int(deck.parent_id) if deck.parent_id is not None else None,
         "position": int(deck.position or 0),
+        "default_note_type": {"id": str(deck.note_type.id), "name": deck.note_type.name} if deck.note_type else None,
         "updated": True,
     }
 
@@ -960,6 +1144,54 @@ def batch_move_notes(*, user_id: int, note_ids: list[str], deck_id: int) -> dict
     }
 
 
+def preview_note_sync(
+    *,
+    user_id: int,
+    source_key: str | None = None,
+    deck_id: int | None = None,
+    deck_path: str | None = None,
+    note_type_id: str | None = None,
+    note_type_name: str | None = None,
+    notes: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Preview synchronization of external notes against existing records without mutating database."""
+    return note_sync_service.preview_sync_notes(
+        user_id=user_id,
+        source_key=source_key,
+        deck_id=deck_id,
+        deck_path=deck_path,
+        note_type_id=note_type_id,
+        note_type_name=note_type_name,
+        notes=notes,
+    )
+
+
+def sync_notes(
+    *,
+    user_id: int,
+    source_key: str | None = None,
+    deck_id: int | None = None,
+    deck_path: str | None = None,
+    note_type_id: str | None = None,
+    note_type_name: str | None = None,
+    notes: list[dict[str, Any]],
+    stop_on_error: bool = False,
+    ensure_decks: bool = True,
+) -> dict[str, Any]:
+    """Synchronize/upsert external notes into Flama decks with idempotency and external identity tracking."""
+    return note_sync_service.execute_sync_notes(
+        user_id=user_id,
+        source_key=source_key,
+        deck_id=deck_id,
+        deck_path=deck_path,
+        note_type_id=note_type_id,
+        note_type_name=note_type_name,
+        notes=notes,
+        stop_on_error=stop_on_error,
+        ensure_decks=ensure_decks,
+    )
+
+
 # ---------------------------------------------------------------------------
 # 5. Study & Card Review Operations
 # ---------------------------------------------------------------------------
@@ -1388,7 +1620,7 @@ def list_note_types(*, user_id: int) -> list[dict[str, Any]]:
 
 
 def get_note_type_schema(*, user_id: int, note_type_id: str | None = None, name: str | None = None) -> dict[str, Any]:
-    """Return field definitions and templates for a specific note type."""
+    """Return comprehensive field definitions, validation metadata, and templates for a specific note type."""
     query = NoteType.query.filter(
         or_(
             NoteType.user_id == user_id,
@@ -1411,33 +1643,701 @@ def get_note_type_schema(*, user_id: int, note_type_id: str | None = None, name:
             code="NOT_FOUND",
         )
 
+    is_owner = int(nt.user_id) == int(user_id)
+    sorted_field_defs = sorted(nt.field_defs, key=lambda item: item.position)
+    sorted_templates = sorted(nt.templates, key=lambda item: item.position)
+
     fields = [
         {
+            "id": str(f.id),
             "name": f.name,
             "field_type": f.field_type,
             "position": f.position,
             "required": bool(f.required),
             "identity_role": f.identity_role,
+            "default": None,
+            "editable": is_owner,
+            "validation_constraints": {
+                "allowed_types": ["text", "richtext", "markdown", "image", "audio", "diagram"],
+                "required": bool(f.required),
+                "is_primary_identity": f.identity_role == "primary",
+                "max_length": 100000,
+            },
         }
-        for f in sorted(nt.field_defs, key=lambda item: item.position)
+        for f in sorted_field_defs
     ]
 
     templates = [
         {
+            "id": str(t.id),
             "name": t.name,
             "position": t.position,
+            "is_default": bool(t.is_default),
             "front_html": t.front_html,
             "back_html": t.back_html,
+            "shared_css": t.shared_css or "",
         }
-        for t in sorted(nt.templates, key=lambda item: item.position)
+        for t in sorted_templates
     ]
 
     return {
         "id": str(nt.id),
         "name": nt.name,
         "description": nt.description,
+        "is_official": bool(nt.is_official),
+        "is_owner": is_owner,
+        "field_names": [f.name for f in sorted_field_defs],
         "fields": fields,
         "templates": templates,
+        "sample_note_payload": {
+            "deck_id": None,
+            "note_type_id": str(nt.id),
+            "fields": {f.name: f"<{f.name}>" for f in sorted_field_defs},
+            "tags": [],
+        },
+    }
+
+
+def _owned_note_type_for_mutation(*, user_id: int, note_type_id: str) -> NoteType:
+    nt = NoteType.query.filter_by(id=note_type_id).first()
+    if nt is None:
+        raise RequestValidationError(
+            f"Không tìm thấy NoteType ID {note_type_id}.",
+            field="note_type_id",
+            status=404,
+            code="NOTE_TYPE_NOT_FOUND",
+        )
+    if int(nt.user_id) != int(user_id):
+        raise RequestValidationError(
+            "Bạn không có quyền chỉnh sửa hoặc xóa NoteType này vì không phải là người sở hữu.",
+            field="note_type_id",
+            status=403,
+            code="FORBIDDEN",
+        )
+    return nt
+
+
+def create_note_type(
+    *,
+    user_id: int,
+    name: str,
+    description: str | None = None,
+    fields: list[dict[str, Any]] | None = None,
+    templates: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Create a new note type (model) with custom fields and templates."""
+    cleaned_name = str(name or "").strip()
+    if not cleaned_name:
+        raise RequestValidationError("Tên NoteType là bắt buộc.", field="name", status=400, code="INVALID_PARAMS")
+
+    existing = NoteType.query.filter_by(user_id=user_id, name=cleaned_name).first()
+    if existing is not None:
+        raise RequestValidationError(
+            f"Note type '{cleaned_name}' đã tồn tại.",
+            field="name",
+            status=400,
+            code="NOTE_TYPE_ALREADY_EXISTS",
+        )
+
+    note_type = NoteType(
+        user_id=user_id,
+        name=cleaned_name,
+        description=str(description).strip() if description is not None else None,
+    )
+    db.session.add(note_type)
+    db.session.flush()
+
+    if not fields:
+        fields = [
+            {"name": "Word", "field_type": "text", "position": 0, "required": True, "identity_role": "primary"},
+            {"name": "Meaning", "field_type": "text", "position": 1, "required": True, "identity_role": None},
+        ]
+
+    field_defs_objs: list[FieldDef] = []
+    seen_names: set[str] = set()
+    primary_count = 0
+    for idx, f in enumerate(fields):
+        f_name = str(f.get("name") or "").strip()
+        if not f_name:
+            db.session.rollback()
+            raise RequestValidationError(f"Field name at index {idx} cannot be empty.", field="fields", status=400, code="INVALID_PARAMS")
+        if f_name.lower() in seen_names:
+            db.session.rollback()
+            raise RequestValidationError(f"Duplicate field name: '{f_name}'.", field="fields", status=400, code="DUPLICATE_FIELD_NAME")
+        seen_names.add(f_name.lower())
+
+        f_type = str(f.get("field_type") or "text").strip().lower()
+        if f_type not in {"text", "richtext", "markdown", "image", "audio", "diagram"}:
+            db.session.rollback()
+            raise RequestValidationError(f"Unsupported field_type: '{f_type}'.", field="fields", status=400, code="INVALID_FIELD_TYPE")
+
+        identity_role = f.get("identity_role")
+        if identity_role == "primary":
+            primary_count += 1
+            if primary_count > 1:
+                db.session.rollback()
+                raise RequestValidationError("Only one primary identity field allowed.", field="fields", status=400, code="MULTIPLE_PRIMARY_IDENTITY")
+            if f_type != "text":
+                db.session.rollback()
+                raise RequestValidationError("Primary identity field must have type 'text'.", field="fields", status=400, code="INVALID_IDENTITY_TYPE")
+
+        f_obj = FieldDef(
+            note_type_id=note_type.id,
+            name=f_name,
+            field_type=f_type,
+            position=int(f.get("position", idx)),
+            required=True if identity_role == "primary" else bool(f.get("required", False)),
+            identity_role=identity_role,
+        )
+        db.session.add(f_obj)
+        field_defs_objs.append(f_obj)
+
+    db.session.flush()
+
+    if not templates:
+        first_name = field_defs_objs[0].name
+        second_name = field_defs_objs[1].name if len(field_defs_objs) > 1 else first_name
+        templates = [
+            {
+                "name": "Card 1",
+                "front_html": f"{{{{{first_name}}}}}",
+                "back_html": f"{{{{FrontSide}}}}\n<hr id=\"answer\">\n{{{{{second_name}}}}}",
+                "shared_css": "",
+                "position": 0,
+            }
+        ]
+
+    for idx, t in enumerate(templates):
+        t_name = str(t.get("name") or f"Card {idx + 1}").strip()
+        front_html = str(t.get("front_html") or f"{{{{{field_defs_objs[0].name}}}}}").strip()
+        back_html = str(t.get("back_html") or f"{{{{FrontSide}}}}\n<hr id=\"answer\">\n{{{{{field_defs_objs[0].name}}}}}").strip()
+        shared_css = str(t.get("shared_css") or "").strip()
+
+        t_obj = Template(
+            note_type_id=note_type.id,
+            name=t_name,
+            front_html=front_html,
+            back_html=back_html,
+            shared_css=shared_css,
+            position=int(t.get("position", idx)),
+            is_default=(idx == 0),
+        )
+
+        try:
+            render_template_pair(
+                template=t_obj,
+                field_defs=field_defs_objs,
+                field_values={f.name: "sample" for f in field_defs_objs},
+                preview_note_key="creation_check",
+            )
+        except Exception as exc:
+            db.session.rollback()
+            raise RequestValidationError(
+                f"Lỗi cú pháp trong template '{t_name}': {str(exc)}",
+                field="templates",
+                status=400,
+                code="TEMPLATE_SYNTAX_ERROR",
+            ) from exc
+
+        db.session.add(t_obj)
+
+    db.session.commit()
+    return get_note_type_schema(user_id=user_id, note_type_id=note_type.id)
+
+
+def preview_note_type_update(
+    *,
+    user_id: int,
+    note_type_id: str,
+    name: str | None = None,
+    description: str | None = None,
+    fields: list[dict[str, Any]] | dict[str, Any] | None = None,
+    templates: list[dict[str, Any]] | dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Analyze and preview the impact of modifying a note type, fields, or templates."""
+    nt = _owned_note_type_for_mutation(user_id=user_id, note_type_id=note_type_id)
+
+    notes_count = Note.query.filter_by(note_type_id=nt.id, user_id=user_id).count()
+    cards_count = Card.query.join(Note, Card.note_id == Note.id).filter(Note.note_type_id == nt.id, Note.user_id == user_id).count()
+    decks_rows = db.session.query(Deck.id, Deck.name).join(Note, Note.deck_id == Deck.id).filter(Note.note_type_id == nt.id, Note.user_id == user_id).distinct().all()
+    affected_decks = [{"id": int(r[0]), "name": r[1]} for r in decks_rows]
+
+    current_field_map = {f.name: f for f in nt.field_defs}
+    current_field_ids = {f.id: f for f in nt.field_defs}
+    current_template_map = {t.name: t for t in nt.templates}
+    current_template_ids = {t.id: t for t in nt.templates}
+
+    added_fields: list[dict[str, Any]] = []
+    renamed_fields: list[dict[str, str]] = []
+    removed_fields: list[str] = []
+    modified_fields: list[dict[str, Any]] = []
+
+    data_loss_possible = False
+    template_regeneration_required = False
+    validation_errors: list[str] = []
+    warnings: list[str] = []
+
+    # Parse Fields
+    if fields is not None:
+        if isinstance(fields, dict):
+            for af in fields.get("added", []):
+                added_fields.append({"name": af.get("name"), "field_type": af.get("field_type", "text")})
+            for rf in fields.get("renamed", []):
+                renamed_fields.append({"old_name": rf.get("old_name"), "new_name": rf.get("new_name")})
+            for rm in fields.get("removed", []):
+                removed_fields.append(str(rm))
+            for mf in fields.get("modified", []):
+                modified_fields.append(mf)
+        elif isinstance(fields, list):
+            new_names = set()
+            for f in fields:
+                f_name = f.get("name")
+                f_id = f.get("id")
+                old_name = f.get("old_name")
+                new_names.add(f_name)
+
+                if old_name and old_name in current_field_map and old_name != f_name:
+                    renamed_fields.append({"old_name": old_name, "new_name": f_name})
+                elif f_id and f_id in current_field_ids and current_field_ids[f_id].name != f_name:
+                    renamed_fields.append({"old_name": current_field_ids[f_id].name, "new_name": f_name})
+                elif f_name not in current_field_map and not old_name:
+                    added_fields.append({"name": f_name, "field_type": f.get("field_type", "text")})
+
+            renamed_old_names = {r["old_name"] for r in renamed_fields}
+            for curr_name in current_field_map:
+                if curr_name not in new_names and curr_name not in renamed_old_names:
+                    removed_fields.append(curr_name)
+
+    # Check data loss on removed fields
+    for rem_f in removed_fields:
+        if notes_count > 0:
+            notes_with_data = 0
+            for note in Note.query.filter_by(note_type_id=nt.id, user_id=user_id).all():
+                if note.field_values and note.field_values.get(rem_f):
+                    notes_with_data += 1
+            if notes_with_data > 0:
+                data_loss_possible = True
+                warnings.append(
+                    f"⚠️ Xóa trường '{rem_f}': Có {notes_with_data} note(s) đang chứa dữ liệu ở trường này. "
+                    "Dữ liệu trong các trường này sẽ bị xóa vĩnh viễn khỏi các note."
+                )
+            else:
+                warnings.append(f"Xóa trường '{rem_f}' (trường không chứa dữ liệu trong note nào).")
+
+    # Parse Templates
+    added_templates: list[str] = []
+    updated_templates: list[str] = []
+    removed_templates: list[str] = []
+
+    if templates is not None:
+        template_regeneration_required = True
+        if isinstance(templates, dict):
+            for at in templates.get("added", []):
+                added_templates.append(at.get("name", "New Card"))
+            for ut in templates.get("updated", []):
+                updated_templates.append(ut.get("name", "Card"))
+            for rt in templates.get("removed", []):
+                removed_templates.append(str(rt))
+        elif isinstance(templates, list):
+            new_t_names = {t.get("name") for t in templates}
+            for t in templates:
+                t_name = t.get("name")
+                t_id = t.get("id")
+                if t_name not in current_template_map and not (t_id and t_id in current_template_ids):
+                    added_templates.append(t_name)
+                else:
+                    updated_templates.append(t_name)
+            for curr_t in current_template_map:
+                if curr_t not in new_t_names:
+                    removed_templates.append(curr_t)
+
+    for rem_t in removed_templates:
+        tmpl_obj = current_template_map.get(rem_t)
+        if tmpl_obj:
+            cards_affected = Card.query.filter_by(template_id=tmpl_obj.id).count()
+            if cards_affected > 0:
+                data_loss_possible = True
+                warnings.append(
+                    f"⚠️ Xóa template '{rem_t}': Sẽ xóa vĩnh viễn {cards_affected} card(s) và toàn bộ lịch sử học tập liên quan."
+                )
+
+    if renamed_fields:
+        renamed_desc = ", ".join(f"{r['old_name']} -> {r['new_name']}" for r in renamed_fields)
+        warnings.append(
+            f"Đổi tên trường ({renamed_desc}): "
+            f"Hệ thống sẽ tự động di chuyển dữ liệu trong {notes_count} note(s) sang tên trường mới mà không làm mất dữ liệu."
+        )
+
+    resource_version = compute_resource_version(
+        resource_type="note_type",
+        resource_id=nt.id,
+        notes_count=notes_count,
+        cards_count=cards_count,
+        updated_at=nt.updated_at,
+    )
+
+    impact_summary = {
+        "notes_count": notes_count,
+        "cards_count": cards_count,
+        "added_fields": len(added_fields),
+        "renamed_fields": len(renamed_fields),
+        "removed_fields": len(removed_fields),
+        "added_templates": len(added_templates),
+        "removed_templates": len(removed_templates),
+        "data_loss_possible": data_loss_possible,
+    }
+
+    preview_id, expires_at = create_preview_token(
+        user_id=user_id,
+        action="update_note_type",
+        resource_id=nt.id,
+        resource_version=resource_version,
+        impact_summary=impact_summary,
+    )
+
+    return {
+        "preview_id": preview_id,
+        "expires_at": expires_at,
+        "resource_version": resource_version,
+        "note_type_id": str(nt.id),
+        "note_type_name": nt.name,
+        "affected_notes": notes_count,
+        "affected_cards": cards_count,
+        "affected_decks": affected_decks,
+        "changes": {
+            "name_change": {"old": nt.name, "new": name} if (name and name != nt.name) else None,
+            "description_change": bool(description is not None and description != nt.description),
+            "added_fields": added_fields,
+            "renamed_fields": renamed_fields,
+            "removed_fields": removed_fields,
+            "modified_fields": modified_fields,
+            "added_templates": added_templates,
+            "updated_templates": updated_templates,
+            "removed_templates": removed_templates,
+        },
+        "data_loss_possible": data_loss_possible,
+        "template_regeneration_required": template_regeneration_required,
+        "validation_errors": validation_errors,
+        "warnings": warnings,
+        "requires_confirmation": data_loss_possible,
+    }
+
+
+def update_note_type(
+    *,
+    user_id: int,
+    note_type_id: str,
+    name: str | None = None,
+    description: str | None = None,
+    fields: list[dict[str, Any]] | dict[str, Any] | None = None,
+    templates: list[dict[str, Any]] | dict[str, Any] | None = None,
+    preview_id: str | None = None,
+    confirm: bool = False,
+) -> dict[str, Any]:
+    """Update a note type's schema, metadata, fields, or templates with data migration support."""
+    nt = _owned_note_type_for_mutation(user_id=user_id, note_type_id=note_type_id)
+
+    notes_count = Note.query.filter_by(note_type_id=nt.id, user_id=user_id).count()
+    cards_count = Card.query.join(Note, Card.note_id == Note.id).filter(Note.note_type_id == nt.id, Note.user_id == user_id).count()
+
+    current_resource_version = compute_resource_version(
+        resource_type="note_type",
+        resource_id=nt.id,
+        notes_count=notes_count,
+        cards_count=cards_count,
+        updated_at=nt.updated_at,
+    )
+
+    if preview_id:
+        is_valid, err_code, err_msg = validate_preview_token(
+            preview_id=preview_id,
+            user_id=user_id,
+            action="update_note_type",
+            resource_id=nt.id,
+            current_resource_version=current_resource_version,
+        )
+        if not is_valid:
+            raise RequestValidationError(
+                err_msg or "Preview token không hợp lệ hoặc đã hết hạn.",
+                field="preview_id",
+                status=400 if err_code != "STALE_PREVIEW_ERROR" else 409,
+                code=err_code or "INVALID_PREVIEW_TOKEN",
+            )
+
+    # 1. Update Name & Description
+    if name is not None:
+        clean_name = str(name).strip()
+        if not clean_name:
+            raise RequestValidationError("Tên NoteType không được để trống.", field="name", status=400, code="INVALID_PARAMS")
+        if clean_name != nt.name:
+            conflict = NoteType.query.filter_by(user_id=user_id, name=clean_name).first()
+            if conflict:
+                raise RequestValidationError(f"NoteType mang tên '{clean_name}' đã tồn tại.", field="name", status=400, code="DUPLICATE_NAME")
+            nt.name = clean_name
+
+    if description is not None:
+        nt.description = str(description).strip() or None
+
+    # 2. Update Fields
+    if fields is not None:
+        current_fields = {f.name: f for f in nt.field_defs}
+        current_field_ids = {f.id: f for f in nt.field_defs}
+
+        if isinstance(fields, dict):
+            # Process delta format
+            for ren in fields.get("renamed", []):
+                old_name = ren.get("old_name")
+                new_name = ren.get("new_name")
+                if old_name and new_name and old_name in current_fields and old_name != new_name:
+                    field_obj = current_fields[old_name]
+                    field_obj.name = new_name
+                    # Migrate data in notes
+                    for note in Note.query.filter_by(note_type_id=nt.id, user_id=user_id).all():
+                        if note.field_values and old_name in note.field_values:
+                            fvals = dict(note.field_values)
+                            fvals[new_name] = fvals.pop(old_name)
+                            note.field_values = fvals
+
+            for rem_name in fields.get("removed", []):
+                if rem_name in current_fields:
+                    field_obj = current_fields[rem_name]
+                    for note in Note.query.filter_by(note_type_id=nt.id, user_id=user_id).all():
+                        if note.field_values and rem_name in note.field_values:
+                            fvals = dict(note.field_values)
+                            fvals.pop(rem_name, None)
+                            note.field_values = fvals
+                    db.session.delete(field_obj)
+
+            for add_f in fields.get("added", []):
+                add_name = add_f.get("name")
+                if add_name and add_name not in current_fields:
+                    f_obj = FieldDef(
+                        note_type_id=nt.id,
+                        name=add_name,
+                        field_type=add_f.get("field_type", "text"),
+                        position=int(add_f.get("position", len(nt.field_defs))),
+                        required=bool(add_f.get("required", False)),
+                        identity_role=add_f.get("identity_role"),
+                    )
+                    db.session.add(f_obj)
+
+            for mod_f in fields.get("modified", []):
+                mod_name = mod_f.get("name")
+                if mod_name in current_fields:
+                    f_obj = current_fields[mod_name]
+                    if "field_type" in mod_f:
+                        f_obj.field_type = mod_f["field_type"]
+                    if "required" in mod_f:
+                        f_obj.required = bool(mod_f["required"])
+                    if "position" in mod_f:
+                        f_obj.position = int(mod_f["position"])
+                    if "identity_role" in mod_f:
+                        f_obj.identity_role = mod_f["identity_role"]
+
+        elif isinstance(fields, list):
+            # Process list format
+            seen_names = set()
+            for idx, f in enumerate(fields):
+                f_name = f.get("name")
+                f_id = f.get("id")
+                old_name = f.get("old_name")
+
+                if f_id and f_id in current_field_ids:
+                    f_obj = current_field_ids[f_id]
+                    if f_obj.name != f_name:
+                        # Rename
+                        prev_name = f_obj.name
+                        f_obj.name = f_name
+                        for note in Note.query.filter_by(note_type_id=nt.id, user_id=user_id).all():
+                            if note.field_values and prev_name in note.field_values:
+                                fvals = dict(note.field_values)
+                                fvals[f_name] = fvals.pop(prev_name)
+                                note.field_values = fvals
+                    f_obj.field_type = f.get("field_type", f_obj.field_type)
+                    f_obj.required = bool(f.get("required", f_obj.required))
+                    f_obj.position = int(f.get("position", idx))
+                    f_obj.identity_role = f.get("identity_role", f_obj.identity_role)
+                    seen_names.add(f_name)
+                elif old_name and old_name in current_fields:
+                    f_obj = current_fields[old_name]
+                    f_obj.name = f_name
+                    for note in Note.query.filter_by(note_type_id=nt.id, user_id=user_id).all():
+                        if note.field_values and old_name in note.field_values:
+                            fvals = dict(note.field_values)
+                            fvals[f_name] = fvals.pop(old_name)
+                            note.field_values = fvals
+                    f_obj.field_type = f.get("field_type", f_obj.field_type)
+                    f_obj.required = bool(f.get("required", f_obj.required))
+                    f_obj.position = int(f.get("position", idx))
+                    f_obj.identity_role = f.get("identity_role", f_obj.identity_role)
+                    seen_names.add(f_name)
+                elif f_name in current_fields:
+                    f_obj = current_fields[f_name]
+                    f_obj.field_type = f.get("field_type", f_obj.field_type)
+                    f_obj.required = bool(f.get("required", f_obj.required))
+                    f_obj.position = int(f.get("position", idx))
+                    f_obj.identity_role = f.get("identity_role", f_obj.identity_role)
+                    seen_names.add(f_name)
+                else:
+                    # New field
+                    f_obj = FieldDef(
+                        note_type_id=nt.id,
+                        name=f_name,
+                        field_type=f.get("field_type", "text"),
+                        position=int(f.get("position", idx)),
+                        required=bool(f.get("required", False)),
+                        identity_role=f.get("identity_role"),
+                    )
+                    db.session.add(f_obj)
+                    seen_names.add(f_name)
+
+    # 3. Update Templates
+    if templates is not None:
+        current_templates = {t.name: t for t in nt.templates}
+        current_template_ids = {t.id: t for t in nt.templates}
+
+        if isinstance(templates, list):
+            for idx, t in enumerate(templates):
+                t_id = t.get("id")
+                t_name = t.get("name") or f"Card {idx + 1}"
+                t_obj = current_template_ids.get(t_id) if t_id else current_templates.get(t_name)
+
+                if t_obj:
+                    if "name" in t:
+                        t_obj.name = t["name"]
+                    if "front_html" in t:
+                        t_obj.front_html = t["front_html"]
+                    if "back_html" in t:
+                        t_obj.back_html = t["back_html"]
+                    if "shared_css" in t:
+                        t_obj.shared_css = t["shared_css"]
+                    if "position" in t:
+                        t_obj.position = int(t["position"])
+                else:
+                    # Create new template and create cards for existing notes
+                    new_t = Template(
+                        note_type_id=nt.id,
+                        name=t_name,
+                        front_html=str(t.get("front_html") or ""),
+                        back_html=str(t.get("back_html") or ""),
+                        shared_css=str(t.get("shared_css") or ""),
+                        position=int(t.get("position", idx)),
+                        is_default=False,
+                    )
+                    db.session.add(new_t)
+                    db.session.flush()
+                    for note in Note.query.filter_by(note_type_id=nt.id, user_id=user_id).all():
+                        db.session.add(Card(note_id=note.id, template_id=new_t.id))
+
+    if preview_id:
+        consume_preview_token(preview_id)
+
+    db.session.commit()
+    return get_note_type_schema(user_id=user_id, note_type_id=nt.id)
+
+
+def delete_note_type(
+    *,
+    user_id: int,
+    note_type_id: str,
+    confirm: bool = False,
+    preview_id: str | None = None,
+) -> dict[str, Any]:
+    """Delete a note type with 2-step confirmation and safety checks."""
+    nt = _owned_note_type_for_mutation(user_id=user_id, note_type_id=note_type_id)
+
+    notes_count = Note.query.filter_by(note_type_id=nt.id, user_id=user_id).count()
+    cards_count = Card.query.join(Note, Card.note_id == Note.id).filter(Note.note_type_id == nt.id, Note.user_id == user_id).count()
+    decks_rows = db.session.query(Deck.id, Deck.name).join(Note, Note.deck_id == Deck.id).filter(Note.note_type_id == nt.id, Note.user_id == user_id).distinct().all()
+    affected_decks = [{"id": int(r[0]), "name": r[1]} for r in decks_rows]
+
+    current_resource_version = compute_resource_version(
+        resource_type="note_type",
+        resource_id=nt.id,
+        notes_count=notes_count,
+        cards_count=cards_count,
+        updated_at=nt.updated_at,
+    )
+
+    if not confirm:
+        preview_token_id, expires_at = create_preview_token(
+            user_id=user_id,
+            action="delete_note_type",
+            resource_id=nt.id,
+            resource_version=current_resource_version,
+            impact_summary={
+                "notes_count": notes_count,
+                "cards_count": cards_count,
+                "affected_decks": affected_decks,
+            },
+        )
+
+        can_delete = (notes_count == 0)
+        warning_msg = (
+            f"⚠️ CẢNH BÁO XÓA NOTE TYPE: Bạn đang chuẩn bị xóa NoteType '{nt.name}'. "
+            if can_delete
+            else (
+                f"⚠️ KHÔNG THỂ XÓA: NoteType '{nt.name}' đang chứa {notes_count} note(s) và {cards_count} card(s) "
+                f"thuộc {len(affected_decks)} deck(s). Theo business rule của hệ thống, không được xóa NoteType đang có notes. "
+                "AI cần báo cho người dùng xóa hoặc di chuyển các notes trước."
+            )
+        )
+
+        return {
+            "requires_confirmation": True,
+            "action": "delete_note_type",
+            "preview_id": preview_token_id,
+            "expires_at": expires_at,
+            "resource_version": current_resource_version,
+            "can_delete": can_delete,
+            "impact": {
+                "note_type_id": str(nt.id),
+                "name": nt.name,
+                "notes_count": notes_count,
+                "cards_count": cards_count,
+                "affected_decks": affected_decks,
+            },
+            "warning": warning_msg,
+        }
+
+    # If confirmed
+    if preview_id:
+        is_valid, err_code, err_msg = validate_preview_token(
+            preview_id=preview_id,
+            user_id=user_id,
+            action="delete_note_type",
+            resource_id=nt.id,
+            current_resource_version=current_resource_version,
+        )
+        if not is_valid:
+            raise RequestValidationError(
+                err_msg or "Preview token không hợp lệ hoặc đã hết hạn.",
+                field="preview_id",
+                status=400 if err_code != "STALE_PREVIEW_ERROR" else 409,
+                code=err_code or "INVALID_PREVIEW_TOKEN",
+            )
+
+    if notes_count > 0:
+        raise RequestValidationError(
+            f"Không thể xóa NoteType '{nt.name}' vì đang có {notes_count} notes sử dụng. Cần xóa hoặc di chuyển các notes trước khi xóa note type.",
+            field="note_type_id",
+            status=409,
+            code="NOTE_TYPE_HAS_NOTES",
+        )
+
+    nt_name = nt.name
+    nt_id = nt.id
+    flashcard_content_service.delete_note_type(user_id=user_id, note_type_id=nt.id)
+
+    if preview_id:
+        consume_preview_token(preview_id)
+
+    return {
+        "success": True,
+        "deleted": True,
+        "note_type_id": str(nt_id),
+        "note_type_name": nt_name,
+        "message": f"NoteType '{nt_name}' đã được xóa thành công.",
     }
 
 
@@ -1465,3 +2365,4 @@ def _resolve_note_type_for_user(*, user_id: int, note_type_id: str | None = None
             code="NOTE_TYPE_NOT_FOUND",
         )
     return nt
+
