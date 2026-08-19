@@ -9,6 +9,7 @@ from .flashcards import flashcards_bp
 from .image_library import image_library_bp
 from .main import main_bp
 from .mcp import mcp_bp
+from .oauth import oauth_bp
 from .payments import payments_bp
 from .spa_routes import spa_routes_bp
 from .user_orders import user_orders_bp
@@ -24,6 +25,7 @@ def register_blueprints(app: Flask) -> None:
     register_api_blueprints(app)
     app.register_blueprint(main_bp)
     app.register_blueprint(mcp_bp)
+    app.register_blueprint(oauth_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(admin_payments_bp)

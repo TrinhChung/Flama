@@ -810,6 +810,22 @@ def ensure_backward_compatible_schema() -> None:
             "name",
             "ALTER TABLE mcp_access_tokens ADD COLUMN name VARCHAR(120) NULL DEFAULT 'MCP Token'",
         )
+        _ensure_column(
+            "mcp_access_tokens",
+            "client_id",
+            "ALTER TABLE mcp_access_tokens ADD COLUMN client_id INT NULL",
+        )
+        _ensure_column(
+            "mcp_access_tokens",
+            "refresh_token_hash",
+            "ALTER TABLE mcp_access_tokens ADD COLUMN refresh_token_hash VARCHAR(64) NULL",
+        )
+        _ensure_column(
+            "mcp_access_tokens",
+            "refresh_token_expires_at",
+            "ALTER TABLE mcp_access_tokens ADD COLUMN refresh_token_expires_at DATETIME NULL",
+        )
 
     if schema_changed:
         db.session.commit()
+

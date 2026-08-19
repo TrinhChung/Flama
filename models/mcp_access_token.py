@@ -8,10 +8,13 @@ class McpAccessToken(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    client_id = db.Column(db.Integer, db.ForeignKey("oauth_clients.id", ondelete="SET NULL"), nullable=True, index=True)
     name = db.Column(db.String(120), nullable=True, default="MCP Token")
     token_hash = db.Column(db.String(64), nullable=False, unique=True, index=True)
+    refresh_token_hash = db.Column(db.String(64), nullable=True, unique=True, index=True)
     scopes = db.Column(db.Text, nullable=False, default="[]")
     expires_at = db.Column(db.DateTime, nullable=True, index=True)
+    refresh_token_expires_at = db.Column(db.DateTime, nullable=True, index=True)
     max_requests = db.Column(db.Integer, nullable=False, default=1000000)
     used_requests = db.Column(db.Integer, nullable=False, default=0)
     revoked = db.Column(db.Boolean, nullable=False, default=False, index=True)
@@ -19,6 +22,7 @@ class McpAccessToken(db.Model):
     last_used_at = db.Column(db.DateTime, nullable=True)
 
     user = db.relationship("User", foreign_keys=[user_id])
+    client = db.relationship("OAuthClient", foreign_keys=[client_id])
 
     __table_args__ = (
         db.Index(
@@ -28,3 +32,4 @@ class McpAccessToken(db.Model):
             "created_at",
         ),
     )
+
