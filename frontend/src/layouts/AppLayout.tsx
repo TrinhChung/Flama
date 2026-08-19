@@ -41,6 +41,8 @@ const pageTitles: Record<string, string> = {
   '/study': 'Học flashcard',
   '/note-types': 'Loại thẻ',
   '/installed-decks': 'Deck đã cài',
+  '/audio/generate': 'Studio tạo âm thanh Deck',
+  '/audio': 'Studio tạo âm thanh Deck',
   '/import': 'Import thẻ',
   '/sync': 'Đồng bộ Anki Desktop',
   '/marketplace/decks': 'Bộ thẻ',
