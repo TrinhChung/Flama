@@ -21,6 +21,16 @@ logger = logging.getLogger(__name__)
 mcp_connect_bp = Blueprint("flama_connect_mcp", __name__)
 
 
+@mcp_connect_bp.get("/.well-known/oauth-protected-resource")
+def connect_oauth_protected_resource():
+    """RFC 9728 Protected Resource Metadata for Flama Connect."""
+    data = oauth_service.get_protected_resource_metadata(request)
+    base_url = oauth_service.get_base_url(request)
+    data["resource"] = f"{base_url}/v1/mcp"
+    return jsonify(data)
+
+
+
 def _jsonrpc_error(
     request_id: Any,
     *,

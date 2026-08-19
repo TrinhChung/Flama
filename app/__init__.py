@@ -39,6 +39,7 @@ def create_app(config: Optional[dict] = None) -> Flask:
     from models.oauth_authorization_code import OAuthAuthorizationCode  # noqa: F401  # register model
     from models.mcp_access_token import McpAccessToken  # noqa: F401  # register model
     from models.user_api_token import UserApiToken  # noqa: F401
+
     from models.connect_note_ref import ConnectNoteRef  # noqa: F401
     from models.connect_pending_media import ConnectPendingMedia  # noqa: F401
     from models.connect_import_session import ConnectImportSession  # noqa: F401

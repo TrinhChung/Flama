@@ -177,4 +177,6 @@ def revoke_tokens_for_user_client(*, user_id: int, client_id: str) -> int:
     for t in tokens:
         t.revoked = True
         db.session.add(t)
+    db.session.commit()
     return len(tokens)
+
