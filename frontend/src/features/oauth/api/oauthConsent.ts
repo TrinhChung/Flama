@@ -11,6 +11,8 @@ export type OAuthScopeItem = {
 export type OAuthClientInfo = {
   client_id: string
   client_name: string
+  client_uri?: string | null
+  is_confidential?: boolean
   is_trusted?: boolean
 }
 

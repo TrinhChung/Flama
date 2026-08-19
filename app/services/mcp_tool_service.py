@@ -830,16 +830,12 @@ def create_note(*, user_id: int, note_data: dict[str, Any]) -> dict[str, Any]:
 
     templates = list(note_type.templates)
     if not templates:
-        tmpl = Template(
-            note_type_id=note_type.id,
-            name="Card 1",
-            position=0,
-            front_html="{{Front}}",
-            back_html="{{Back}}",
+        raise RequestValidationError(
+            f"NoteType '{note_type.name}' (ID: {note_type.id}) không có template nào. Một NoteType hợp lệ để tạo thẻ phải có ít nhất một Template.",
+            field="note_type_id",
+            status=400,
+            code="NOTE_TYPE_HAS_NO_TEMPLATE",
         )
-        db.session.add(tmpl)
-        db.session.flush()
-        templates = [tmpl]
 
     created_cards: list[dict[str, Any]] = []
     for template in templates:
@@ -1794,6 +1790,15 @@ def create_note_type(
 
     db.session.flush()
 
+    if templates is not None and len(templates) == 0:
+        db.session.rollback()
+        raise RequestValidationError(
+            "NoteType phải có ít nhất một Template.",
+            field="templates",
+            status=400,
+            code="NOTE_TYPE_MUST_HAVE_TEMPLATES",
+        )
+
     if not templates:
         first_name = field_defs_objs[0].name
         second_name = field_defs_objs[1].name if len(field_defs_objs) > 1 else first_name
@@ -2023,6 +2028,72 @@ def preview_note_type_update(
     }
 
 
+def _detect_destructive_note_type_changes(
+    *,
+    nt: NoteType,
+    fields: list[dict[str, Any]] | dict[str, Any] | None,
+    templates: list[dict[str, Any]] | dict[str, Any] | None,
+    notes_count: int,
+    cards_count: int,
+) -> tuple[bool, list[str]]:
+    current_field_map = {f.name: f for f in nt.field_defs}
+    current_field_ids = {f.id: f for f in nt.field_defs}
+    current_template_map = {t.name: t for t in nt.templates}
+    current_template_ids = {t.id: t for t in nt.templates}
+
+    reasons: list[str] = []
+
+    # Check removed fields
+    removed_fields: list[str] = []
+    if fields is not None:
+        if isinstance(fields, dict):
+            for rm in fields.get("removed", []):
+                removed_fields.append(str(rm))
+        elif isinstance(fields, list):
+            new_names = set()
+            renamed_old = set()
+            for f in fields:
+                f_name = f.get("name")
+                f_id = f.get("id")
+                old_name = f.get("old_name")
+                new_names.add(f_name)
+                if old_name and old_name in current_field_map and old_name != f_name:
+                    renamed_old.add(old_name)
+                elif f_id and f_id in current_field_ids and current_field_ids[f_id].name != f_name:
+                    renamed_old.add(current_field_ids[f_id].name)
+            for curr_name in current_field_map:
+                if curr_name not in new_names and curr_name not in renamed_old:
+                    removed_fields.append(curr_name)
+
+    for rf in removed_fields:
+        if notes_count > 0:
+            reasons.append(f"Xóa trường '{rf}' khi có {notes_count} note(s) đang tồn tại")
+
+    # Check removed templates
+    removed_templates: list[str] = []
+    if templates is not None:
+        if isinstance(templates, dict):
+            for rt in templates.get("removed", []):
+                removed_templates.append(str(rt))
+        elif isinstance(templates, list):
+            new_t_names = {t.get("name") for t in templates}
+            new_t_ids = {t.get("id") for t in templates if t.get("id")}
+            for curr_name, curr_t in current_template_map.items():
+                if curr_name not in new_t_names and curr_t.id not in new_t_ids:
+                    removed_templates.append(curr_name)
+
+    for rt in removed_templates:
+        tmpl_obj = current_template_map.get(rt)
+        if tmpl_obj:
+            t_cards = Card.query.filter_by(template_id=tmpl_obj.id).count()
+            if t_cards > 0 or cards_count > 0:
+                reasons.append(f"Xóa template '{rt}' làm mất các thẻ card và lịch sử ôn tập")
+        elif cards_count > 0:
+            reasons.append(f"Xóa template '{rt}'")
+
+    return bool(reasons), reasons
+
+
 def update_note_type(
     *,
     user_id: int,
@@ -2039,6 +2110,34 @@ def update_note_type(
 
     notes_count = Note.query.filter_by(note_type_id=nt.id, user_id=user_id).count()
     cards_count = Card.query.join(Note, Card.note_id == Note.id).filter(Note.note_type_id == nt.id, Note.user_id == user_id).count()
+
+    is_destructive, destructive_reasons = _detect_destructive_note_type_changes(
+        nt=nt,
+        fields=fields,
+        templates=templates,
+        notes_count=notes_count,
+        cards_count=cards_count,
+    )
+
+    if is_destructive:
+        if not preview_id or not str(preview_id).strip():
+            raise RequestValidationError(
+                "Thao tác cập nhật NoteType này có khả năng gây mất dữ liệu ("
+                + "; ".join(destructive_reasons)
+                + "). Bắt buộc phải gọi preview_note_type_update trước để lấy preview_id và kiểm tra tác động.",
+                field="preview_id",
+                status=400,
+                code="PREVIEW_REQUIRED",
+            )
+        if not confirm:
+            raise RequestValidationError(
+                "Thao tác cập nhật NoteType này có khả năng gây mất dữ liệu ("
+                + "; ".join(destructive_reasons)
+                + "). Bắt buộc phải có sự xác nhận của người dùng với confirm=true.",
+                field="confirm",
+                status=400,
+                code="CONFIRMATION_REQUIRED",
+            )
 
     current_resource_version = compute_resource_version(
         resource_type="note_type",
@@ -2137,6 +2236,7 @@ def update_note_type(
         elif isinstance(fields, list):
             # Process list format
             seen_names = set()
+            new_field_names = {f.get("name") for f in fields if f.get("name")}
             for idx, f in enumerate(fields):
                 f_name = f.get("name")
                 f_id = f.get("id")
@@ -2191,12 +2291,78 @@ def update_note_type(
                     db.session.add(f_obj)
                     seen_names.add(f_name)
 
+            # Delete fields removed from list
+            for curr_name, curr_f in current_fields.items():
+                if curr_name not in new_field_names:
+                    for note in Note.query.filter_by(note_type_id=nt.id, user_id=user_id).all():
+                        if note.field_values and curr_name in note.field_values:
+                            fvals = dict(note.field_values)
+                            fvals.pop(curr_name, None)
+                            note.field_values = fvals
+                    db.session.delete(curr_f)
+
+        db.session.flush()
+        if not nt.field_defs:
+            db.session.rollback()
+            raise RequestValidationError(
+                "NoteType phải có ít nhất một trường dữ liệu (field).",
+                field="fields",
+                status=400,
+                code="NOTE_TYPE_MUST_HAVE_FIELDS",
+            )
+
     # 3. Update Templates
     if templates is not None:
         current_templates = {t.name: t for t in nt.templates}
         current_template_ids = {t.id: t for t in nt.templates}
 
-        if isinstance(templates, list):
+        if isinstance(templates, dict):
+            for rem_name in templates.get("removed", []):
+                t_obj = current_templates.get(str(rem_name))
+                if t_obj:
+                    Card.query.filter_by(template_id=t_obj.id).delete(synchronize_session=False)
+                    db.session.delete(t_obj)
+
+            for upd in templates.get("updated", []):
+                t_id = upd.get("id")
+                t_name = upd.get("name")
+                t_obj = current_template_ids.get(t_id) if t_id else current_templates.get(t_name)
+                if t_obj:
+                    if "name" in upd:
+                        t_obj.name = upd["name"]
+                    if "front_html" in upd:
+                        t_obj.front_html = upd["front_html"]
+                    if "back_html" in upd:
+                        t_obj.back_html = upd["back_html"]
+                    if "shared_css" in upd:
+                        t_obj.shared_css = upd["shared_css"]
+                    if "position" in upd:
+                        t_obj.position = int(upd["position"])
+
+            for add_t in templates.get("added", []):
+                t_name = add_t.get("name", "New Card")
+                new_t = Template(
+                    note_type_id=nt.id,
+                    name=t_name,
+                    front_html=str(add_t.get("front_html") or ""),
+                    back_html=str(add_t.get("back_html") or ""),
+                    shared_css=str(add_t.get("shared_css") or ""),
+                    position=int(add_t.get("position", len(nt.templates))),
+                    is_default=False,
+                )
+                db.session.add(new_t)
+                db.session.flush()
+                for note in Note.query.filter_by(note_type_id=nt.id, user_id=user_id).all():
+                    db.session.add(Card(note_id=note.id, template_id=new_t.id))
+
+        elif isinstance(templates, list):
+            new_t_names = {t.get("name") for t in templates if t.get("name")}
+            new_t_ids = {t.get("id") for t in templates if t.get("id")}
+            for curr_name, curr_t in current_templates.items():
+                if curr_name not in new_t_names and curr_t.id not in new_t_ids:
+                    Card.query.filter_by(template_id=curr_t.id).delete(synchronize_session=False)
+                    db.session.delete(curr_t)
+
             for idx, t in enumerate(templates):
                 t_id = t.get("id")
                 t_name = t.get("name") or f"Card {idx + 1}"
@@ -2228,6 +2394,16 @@ def update_note_type(
                     db.session.flush()
                     for note in Note.query.filter_by(note_type_id=nt.id, user_id=user_id).all():
                         db.session.add(Card(note_id=note.id, template_id=new_t.id))
+
+        db.session.flush()
+        if not nt.templates:
+            db.session.rollback()
+            raise RequestValidationError(
+                "NoteType phải có ít nhất một Template.",
+                field="templates",
+                status=400,
+                code="NOTE_TYPE_MUST_HAVE_TEMPLATES",
+            )
 
     if preview_id:
         consume_preview_token(preview_id)

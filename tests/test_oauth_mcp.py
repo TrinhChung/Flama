@@ -720,7 +720,7 @@ class OAuthRemoteMcpTests(unittest.TestCase):
             data={
                 "client_id": self.client_id,
                 "redirect_uri": self.redirect_uri,
-                "scope": "deck:read note-type:read note:check note:create",
+                "scope": "deck:read note-type:read note:check note:create note:read",
                 "state": "s_note",
                 "code_challenge": challenge,
                 "code_challenge_method": "S256",
