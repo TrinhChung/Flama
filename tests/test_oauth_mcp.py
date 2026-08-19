@@ -47,11 +47,20 @@ class OAuthRemoteMcpTests(unittest.TestCase):
             )
             self.other_user.set_password("password123")
 
-            db.session.add_all([self.user, self.other_user])
+            self.admin_user = User(
+                username="admin",
+                email="admin@example.com",
+                timezone="UTC",
+                is_admin=True,
+            )
+            self.admin_user.set_password("adminpass123")
+
+            db.session.add_all([self.user, self.other_user, self.admin_user])
             db.session.flush()
 
             self.user_id = self.user.id
             self.other_user_id = self.other_user.id
+            self.admin_user_id = self.admin_user.id
 
             # Create test decks
             db.session.add_all(
@@ -116,10 +125,21 @@ class OAuthRemoteMcpTests(unittest.TestCase):
             db.session.commit()
 
 
+    def _logout(self):
+        return self.client.delete("/api/session")
+
     def _login_user(self):
+        self._logout()
         return self.client.post(
             "/api/auth/login",
             json={"email": "alice@example.com", "password": "password123"},
+        )
+
+    def _login_admin(self):
+        self._logout()
+        return self.client.post(
+            "/api/auth/login",
+            json={"email": "admin@example.com", "password": "adminpass123"},
         )
 
     def _generate_pkce(self) -> tuple[str, str]:
@@ -466,16 +486,75 @@ class OAuthRemoteMcpTests(unittest.TestCase):
         self.assertIn("deck:read", data["scopes_string"])
 
     def test_oauth_clients_crud_api(self):
+        # 1. Non-admin user gets 403 Forbidden on all CRUD operations
         self._login_user()
 
-        # 1. Create client via API
+        non_admin_list = self.client.get("/api/oauth/clients")
+        self.assertEqual(non_admin_list.status_code, 403)
+        self.assertEqual(non_admin_list.get_json()["error"], "FORBIDDEN")
+
+        non_admin_create = self.client.post(
+            "/api/oauth/clients",
+            json={
+                "client_id": "claude_custom",
+                "client_name": "Claude Desktop Custom",
+                "redirect_uris": ["https://claude.ai/callback"],
+            },
+        )
+        self.assertEqual(non_admin_create.status_code, 403)
+        self.assertEqual(non_admin_create.get_json()["error"], "FORBIDDEN")
+
+        non_admin_delete = self.client.delete("/api/oauth/clients/1")
+        self.assertEqual(non_admin_delete.status_code, 403)
+        self.assertEqual(non_admin_delete.get_json()["error"], "FORBIDDEN")
+
+        # 2. Login as Admin
+        self._login_admin()
+
+        # Validation test: invalid client_id
+        bad_id_resp = self.client.post(
+            "/api/oauth/clients",
+            json={
+                "client_id": "bad id with spaces!",
+                "client_name": "Bad ID App",
+                "redirect_uris": ["https://example.com/callback"],
+            },
+        )
+        self.assertEqual(bad_id_resp.status_code, 400)
+        self.assertEqual(bad_id_resp.get_json()["error"], "VALIDATION_ERROR")
+
+        # Validation test: URI with fragment (#)
+        bad_uri_resp = self.client.post(
+            "/api/oauth/clients",
+            json={
+                "client_id": "bad_uri_app",
+                "client_name": "Bad URI App",
+                "redirect_uris": ["https://example.com/callback#fragment"],
+            },
+        )
+        self.assertEqual(bad_uri_resp.status_code, 400)
+        self.assertEqual(bad_uri_resp.get_json()["error"], "VALIDATION_ERROR")
+
+        # Validation test: Non-loopback HTTP URI
+        bad_http_resp = self.client.post(
+            "/api/oauth/clients",
+            json={
+                "client_id": "bad_http_app",
+                "client_name": "Bad HTTP App",
+                "redirect_uris": ["http://remote-server.com/callback"],
+            },
+        )
+        self.assertEqual(bad_http_resp.status_code, 400)
+        self.assertEqual(bad_http_resp.get_json()["error"], "VALIDATION_ERROR")
+
+        # 3. Create client via API as Admin
         create_resp = self.client.post(
             "/api/oauth/clients",
             json={
                 "client_id": "claude_custom",
                 "client_name": "Claude Desktop Custom",
                 "client_secret": "secret_claude_999",
-                "redirect_uris": ["https://claude.ai/callback", "https://localhost:8080"],
+                "redirect_uris": ["https://claude.ai/callback", "http://localhost:8080/cb"],
             },
         )
         self.assertEqual(create_resp.status_code, 201)
@@ -484,18 +563,18 @@ class OAuthRemoteMcpTests(unittest.TestCase):
         self.assertEqual(len(created_client["redirect_uris"]), 2)
         client_pk = created_client["id"]
 
-        # 2. List clients
+        # 4. List clients as Admin
         list_resp = self.client.get("/api/oauth/clients")
         self.assertEqual(list_resp.status_code, 200)
         items = list_resp.get_json()["items"]
         client_ids = [c["client_id"] for c in items]
         self.assertIn("claude_custom", client_ids)
 
-        # 3. Delete client
+        # 5. Delete client as Admin
         del_resp = self.client.delete(f"/api/oauth/clients/{client_pk}")
         self.assertEqual(del_resp.status_code, 200)
 
-        # 4. Verify deletion
+        # 6. Verify deletion
         list_resp_2 = self.client.get("/api/oauth/clients")
         client_ids_2 = [c["client_id"] for c in list_resp_2.get_json()["items"]]
         self.assertNotIn("claude_custom", client_ids_2)

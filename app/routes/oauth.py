@@ -11,6 +11,7 @@ from urllib.parse import quote, unquote
 from flask import Blueprint, Response, jsonify, redirect, request, url_for
 from flask_login import current_user, login_required
 
+from app.api.common.security import admin_required
 from models import db
 from app.repositories import oauth_repository
 from app.services import mcp_scope_service, oauth_service
@@ -401,9 +402,9 @@ def get_endpoints_info():
 
 
 @oauth_bp.get("/api/oauth/clients")
-@login_required
+@admin_required
 def list_oauth_clients():
-    """List registered OAuth 2.1 clients."""
+    """List registered OAuth 2.1 clients (Admin only)."""
     try:
         clients = oauth_repository.list_clients(limit=50)
         return jsonify({"items": [c.to_dict() for c in clients]})
@@ -414,9 +415,9 @@ def list_oauth_clients():
 
 
 @oauth_bp.post("/api/oauth/clients")
-@login_required
+@admin_required
 def create_oauth_client():
-    """Create or update a registered OAuth 2.1 client from UI."""
+    """Create or update a registered OAuth 2.1 client from UI (Admin only)."""
     payload = request.get_json(silent=True) or request.form or {}
     client_id = str(payload.get("client_id") or "").strip()
     client_name = str(payload.get("client_name") or "").strip()
@@ -432,28 +433,6 @@ def create_oauth_client():
     else:
         redirect_uris = []
 
-    if not client_id or not client_name:
-        return (
-            jsonify(
-                {
-                    "error": "VALIDATION_ERROR",
-                    "message": "Client ID và Tên ứng dụng là bắt buộc.",
-                }
-            ),
-            400,
-        )
-
-    if not redirect_uris:
-        return (
-            jsonify(
-                {
-                    "error": "VALIDATION_ERROR",
-                    "message": "Cần ít nhất một Callback / Redirect URL do ứng dụng cung cấp.",
-                }
-            ),
-            400,
-        )
-
     try:
         client = oauth_service.register_oauth_client(
             client_id=client_id,
@@ -463,6 +442,11 @@ def create_oauth_client():
             is_confidential=bool(client_secret and str(client_secret).strip()),
         )
         return jsonify({"success": True, "client": client.to_dict()}), 201
+    except OAuthError as exc:
+        return (
+            jsonify({"error": "VALIDATION_ERROR", "message": str(exc)}),
+            400,
+        )
     except Exception as exc:
         logger.exception("Failed to create OAuth client: %s", exc)
         db.session.rollback()
@@ -478,9 +462,9 @@ def create_oauth_client():
 
 
 @oauth_bp.delete("/api/oauth/clients/<int:client_pk>")
-@login_required
+@admin_required
 def delete_oauth_client(client_pk: int):
-    """Delete a registered OAuth 2.1 client."""
+    """Delete a registered OAuth 2.1 client (Admin only)."""
     try:
         client = oauth_repository.get_client_by_id(client_pk)
         if not client:

@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Callable, Mapping
 
 from flask import Flask
+from sqlalchemy import text
 
 from models import db
 
@@ -25,11 +26,23 @@ def run_startup_maintenance(
     if config_overrides:
         runtime_config.update(config_overrides)
 
-    if not bool(runtime_config.get("STARTUP_RUN_MAINTENANCE", True)):
-        app.logger.info("Skipping startup maintenance because STARTUP_RUN_MAINTENANCE is disabled.")
-        return
-
     with app.app_context():
+        # Step 1: Verify database connectivity
+        if bool(runtime_config.get("STARTUP_CHECK_DB_CONNECTIVITY", True)):
+            try:
+                db.session.execute(text("SELECT 1"))
+            except Exception as conn_err:
+                app.logger.error("Database connectivity check failed on startup: %s", conn_err)
+                if not bool(runtime_config.get("TESTING", False)):
+                    raise
+
+        # Step 2: Check if schema maintenance tasks should run
+        if not bool(runtime_config.get("STARTUP_RUN_MAINTENANCE", False)):
+            app.logger.info(
+                "App bootstrap ready. Startup schema mutation is disabled (managed by Alembic migrations)."
+            )
+            return
+
         completed_tasks: list[str] = []
         try:
             if bool(runtime_config.get("STARTUP_RUN_DB_CREATE_ALL", True)):
