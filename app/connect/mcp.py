@@ -7,7 +7,7 @@ from typing import Any
 
 from flask import Blueprint, jsonify, make_response, request
 
-from app.services import mcp_auth_service, mcp_tool_registry, mcp_tool_service
+from app.services import mcp_auth_service, mcp_tool_registry, mcp_tool_service, oauth_service
 from app.services.mcp_access_token_service import McpAccessTokenError
 from app.validators import (
     RequestValidationError,
@@ -43,7 +43,13 @@ def _jsonrpc_error(
     response.status_code = status
     response.headers["MCP-Protocol-Version"] = mcp_tool_service.MCP_PROTOCOL_VERSION
     response.headers["Cache-Control"] = "no-store"
+    if status == 401:
+        base_url = oauth_service.get_base_url(request)
+        response.headers["WWW-Authenticate"] = (
+            f'Bearer error="unauthorized", resource_metadata="{base_url}/.well-known/oauth-protected-resource"'
+        )
     return response
+
 
 
 def _jsonrpc_result(request_id: Any, result: dict, *, status: int = 200):

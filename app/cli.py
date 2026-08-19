@@ -430,6 +430,51 @@ def register_cli_commands(app: Flask) -> None:
             f"owner_user_id={target_user.id}, path={root}"
         )
 
+    @app.cli.command("seed-oauth-client")
+    @click.option("--client-id", required=True, help="OAuth Client ID (e.g. chatgpt_flama)")
+    @click.option("--name", "client_name", required=True, help="OAuth Client Name (e.g. ChatGPT)")
+    @click.option("--redirect-uri", "redirect_uris", multiple=True, required=True, help="Allowed Redirect URIs (can specify multiple)")
+    @click.option("--secret", "client_secret", default=None, help="Client Secret for confidential clients (optional)")
+    @click.option("--client-uri", default=None, help="Client Homepage / Information URI")
+    @click.option("--confidential/--public", default=True, help="Whether this is a confidential client")
+    def seed_oauth_client(
+        client_id: str,
+        client_name: str,
+        redirect_uris: tuple[str, ...],
+        client_secret: str | None,
+        client_uri: str | None,
+        confidential: bool,
+    ) -> None:
+        """Seed or update an OAuth 2.1 client."""
+        from app.services import oauth_service
+
+        client = oauth_service.register_oauth_client(
+            client_id=client_id,
+            client_name=client_name,
+            client_secret=client_secret,
+            client_uri=client_uri,
+            redirect_uris=list(redirect_uris),
+            is_confidential=confidential,
+        )
+        click.echo(
+            f"OAuth Client saved: id={client.id}, client_id={client.client_id}, name='{client.client_name}'"
+        )
+
+    @app.cli.command("list-oauth-clients")
+    def list_oauth_clients_cmd() -> None:
+        """List registered OAuth 2.1 clients."""
+        from app.repositories import oauth_repository
+
+        clients = oauth_repository.list_clients()
+        if not clients:
+            click.echo("No OAuth clients found.")
+            return
+        for c in clients:
+            click.echo(
+                f"- [{c.id}] client_id={c.client_id} name='{c.client_name}' confidential={c.is_confidential} redirect_uris={c.get_redirect_uris()}"
+            )
+
+
 
 def _resolve_seed_data_owner(bootstrap_user: User) -> User:
     official_items = (

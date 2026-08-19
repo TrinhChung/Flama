@@ -132,6 +132,8 @@ def _register_models() -> None:
     from models.user_scheduler_settings import UserSchedulerSettings  # noqa: F401
     from models.scheduler_preset import SchedulerPreset  # noqa: F401
     from models.user_api_token import UserApiToken  # noqa: F401
+    from models.oauth_client import OAuthClient  # noqa: F401
+    from models.oauth_authorization_code import OAuthAuthorizationCode  # noqa: F401
     from models.mcp_access_token import McpAccessToken  # noqa: F401
     from models.connect_note_ref import ConnectNoteRef  # noqa: F401
     from models.connect_pending_media import ConnectPendingMedia  # noqa: F401
