@@ -13,6 +13,7 @@ from app import create_app
 from app.services import mcp_access_token_service, oauth_service
 from models import db
 from models.deck import Deck
+from models.flashcard import FieldDef, NoteType, Template
 from models.oauth_client import OAuthClient
 from models.user import User
 
@@ -70,6 +71,36 @@ class OAuthRemoteMcpTests(unittest.TestCase):
                 ]
             )
 
+            # Create NoteType
+            note_type = NoteType(user_id=self.user_id, name="Japanese Vocabulary")
+            db.session.add(note_type)
+            db.session.flush()
+            self.note_type_id = note_type.id
+
+            db.session.add_all(
+                [
+                    FieldDef(
+                        note_type_id=note_type.id,
+                        name="word",
+                        field_type="text",
+                        position=0,
+                    ),
+                    FieldDef(
+                        note_type_id=note_type.id,
+                        name="meaning_vi",
+                        field_type="text",
+                        position=1,
+                    ),
+                    Template(
+                        note_type_id=note_type.id,
+                        name="Forward Card",
+                        front_html="{{word}}",
+                        back_html="{{FrontSide}}<hr>{{meaning_vi}}",
+                        position=0,
+                    ),
+                ]
+            )
+
             # Register OAuth Client (ChatGPT)
             self.client_id = "chatgpt_flama"
             self.client_secret = "secret_openai_123"
@@ -83,6 +114,7 @@ class OAuthRemoteMcpTests(unittest.TestCase):
                 is_confidential=True,
             )
             db.session.commit()
+
 
     def _login_user(self):
         return self.client.post(
@@ -370,3 +402,345 @@ class OAuthRemoteMcpTests(unittest.TestCase):
         )
         self.assertEqual(resp.status_code, 400)
         self.assertEqual(resp.get_json()["error"], "invalid_request")
+
+    def test_endpoints_info_api(self):
+        resp = self.client.get("/api/oauth/endpoints-info")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.get_json()
+        self.assertIn("auth_url", data)
+        self.assertIn("token_url", data)
+        self.assertIn("resource_url", data)
+        self.assertIn("userinfo_url", data)
+        self.assertIn("openid_config_url", data)
+        self.assertIn("scopes", data)
+        self.assertIn("deck:read", data["scopes_string"])
+
+    def test_oauth_clients_crud_api(self):
+        self._login_user()
+
+        # 1. Create client via API
+        create_resp = self.client.post(
+            "/api/oauth/clients",
+            json={
+                "client_id": "claude_custom",
+                "client_name": "Claude Desktop Custom",
+                "client_secret": "secret_claude_999",
+                "redirect_uris": ["https://claude.ai/callback", "https://localhost:8080"],
+            },
+        )
+        self.assertEqual(create_resp.status_code, 201)
+        created_client = create_resp.get_json()["client"]
+        self.assertEqual(created_client["client_id"], "claude_custom")
+        self.assertEqual(len(created_client["redirect_uris"]), 2)
+        client_pk = created_client["id"]
+
+        # 2. List clients
+        list_resp = self.client.get("/api/oauth/clients")
+        self.assertEqual(list_resp.status_code, 200)
+        items = list_resp.get_json()["items"]
+        client_ids = [c["client_id"] for c in items]
+        self.assertIn("claude_custom", client_ids)
+
+        # 3. Delete client
+        del_resp = self.client.delete(f"/api/oauth/clients/{client_pk}")
+        self.assertEqual(del_resp.status_code, 200)
+
+        # 4. Verify deletion
+        list_resp_2 = self.client.get("/api/oauth/clients")
+        client_ids_2 = [c["client_id"] for c in list_resp_2.get_json()["items"]]
+        self.assertNotIn("claude_custom", client_ids_2)
+
+    def test_oidc_userinfo_endpoint(self):
+        # 1. Obtain access token
+        self._login_user()
+        verifier, challenge = self._generate_pkce()
+        self.client.post(
+            "/oauth/authorize",
+            data={
+                "client_id": self.client_id,
+                "redirect_uri": self.redirect_uri,
+                "scope": "deck:read note:create",
+                "state": "s1",
+                "code_challenge": challenge,
+                "code_challenge_method": "S256",
+                "action": "approve",
+            },
+        )
+        auth_code = parse_qs(urlparse(self.client.post(
+            "/oauth/authorize",
+            data={
+                "client_id": self.client_id,
+                "redirect_uri": self.redirect_uri,
+                "scope": "deck:read",
+                "state": "s2",
+                "code_challenge": challenge,
+                "code_challenge_method": "S256",
+                "action": "approve",
+            },
+        ).headers["Location"]).query)["code"][0]
+
+        token_resp = self.client.post(
+            "/oauth/token",
+            data={
+                "grant_type": "authorization_code",
+                "client_id": self.client_id,
+                "client_secret": self.client_secret,
+                "code": auth_code,
+                "code_verifier": verifier,
+                "redirect_uri": self.redirect_uri,
+            },
+        )
+        access_token = token_resp.get_json()["access_token"]
+
+        # 2. Call userinfo with token
+        uinfo_resp = self.client.get(
+            "/oauth/userinfo",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        self.assertEqual(uinfo_resp.status_code, 200)
+        uinfo = uinfo_resp.get_json()
+        self.assertEqual(uinfo["username"], "alice")
+        self.assertEqual(uinfo["email"], "alice@example.com")
+        self.assertEqual(uinfo["sub"], str(self.user_id))
+
+        # 3. Call userinfo without token
+        unauth_resp = self.client.get("/oauth/userinfo")
+        self.assertEqual(unauth_resp.status_code, 401)
+
+    def test_connected_apps_management_and_revoke(self):
+        # 1. Authorize ChatGPT to create a connected app
+        self._login_user()
+        verifier, challenge = self._generate_pkce()
+        resp = self.client.post(
+            "/oauth/authorize",
+            data={
+                "client_id": self.client_id,
+                "redirect_uri": self.redirect_uri,
+                "scope": "deck:read",
+                "state": "s_conn",
+                "code_challenge": challenge,
+                "code_challenge_method": "S256",
+                "action": "approve",
+            },
+        )
+        auth_code = parse_qs(urlparse(resp.headers["Location"]).query)["code"][0]
+
+        token_resp = self.client.post(
+            "/oauth/token",
+            data={
+                "grant_type": "authorization_code",
+                "client_id": self.client_id,
+                "client_secret": self.client_secret,
+                "code": auth_code,
+                "code_verifier": verifier,
+                "redirect_uri": self.redirect_uri,
+            },
+        )
+        self.assertEqual(token_resp.status_code, 200)
+
+        # 2. List connected apps
+        apps_resp = self.client.get("/api/oauth/connected-apps")
+        self.assertEqual(apps_resp.status_code, 200)
+        items = apps_resp.get_json()["items"]
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]["client_id"], self.client_id)
+        self.assertEqual(items[0]["client_name"], "ChatGPT Assistant")
+
+        # 3. Revoke connected app
+        rev_resp = self.client.post(f"/api/oauth/connected-apps/{self.client_id}/revoke")
+        self.assertEqual(rev_resp.status_code, 200)
+        self.assertTrue(rev_resp.get_json()["success"])
+
+        # 4. Verify list is now empty
+        apps_resp_2 = self.client.get("/api/oauth/connected-apps")
+        self.assertEqual(len(apps_resp_2.get_json()["items"]), 0)
+
+    def test_oauth_basic_auth_token_exchange(self):
+        self._login_user()
+        verifier, challenge = self._generate_pkce()
+        resp = self.client.post(
+            "/oauth/authorize",
+            data={
+                "client_id": self.client_id,
+                "redirect_uri": self.redirect_uri,
+                "scope": "deck:read",
+                "state": "s_basic",
+                "code_challenge": challenge,
+                "code_challenge_method": "S256",
+                "action": "approve",
+            },
+        )
+        auth_code = parse_qs(urlparse(resp.headers["Location"]).query)["code"][0]
+
+        # Use HTTP Basic Auth header instead of form body for client credentials
+        creds = base64.b64encode(f"{self.client_id}:{self.client_secret}".encode("utf-8")).decode("ascii")
+        token_resp = self.client.post(
+            "/oauth/token",
+            headers={"Authorization": f"Basic {creds}"},
+            data={
+                "grant_type": "authorization_code",
+                "code": auth_code,
+                "code_verifier": verifier,
+                "redirect_uri": self.redirect_uri,
+            },
+        )
+        self.assertEqual(token_resp.status_code, 200)
+        self.assertIn("access_token", token_resp.get_json())
+
+    def test_public_client_pkce_without_secret(self):
+        # Register public client
+        public_client_id = "cursor_public_app"
+        public_redirect = "http://localhost:8080/callback"
+        with self.app.app_context():
+            oauth_service.register_oauth_client(
+                client_id=public_client_id,
+                client_name="Cursor Public IDE",
+                client_secret=None,
+                redirect_uris=[public_redirect],
+                is_confidential=False,
+            )
+
+        self._login_user()
+        verifier, challenge = self._generate_pkce()
+        resp = self.client.post(
+            "/oauth/authorize",
+            data={
+                "client_id": public_client_id,
+                "redirect_uri": public_redirect,
+                "scope": "deck:read",
+                "state": "s_pub",
+                "code_challenge": challenge,
+                "code_challenge_method": "S256",
+                "action": "approve",
+            },
+        )
+        auth_code = parse_qs(urlparse(resp.headers["Location"]).query)["code"][0]
+
+        # Exchange token without client_secret
+        token_resp = self.client.post(
+            "/oauth/token",
+            data={
+                "grant_type": "authorization_code",
+                "client_id": public_client_id,
+                "code": auth_code,
+                "code_verifier": verifier,
+                "redirect_uri": public_redirect,
+            },
+        )
+        self.assertEqual(token_resp.status_code, 200)
+        self.assertIn("access_token", token_resp.get_json())
+
+    def test_wrong_client_secret_rejected(self):
+        self._login_user()
+        verifier, challenge = self._generate_pkce()
+        resp = self.client.post(
+            "/oauth/authorize",
+            data={
+                "client_id": self.client_id,
+                "redirect_uri": self.redirect_uri,
+                "scope": "deck:read",
+                "state": "s_bad_sec",
+                "code_challenge": challenge,
+                "code_challenge_method": "S256",
+                "action": "approve",
+            },
+        )
+        auth_code = parse_qs(urlparse(resp.headers["Location"]).query)["code"][0]
+
+        token_resp = self.client.post(
+            "/oauth/token",
+            data={
+                "grant_type": "authorization_code",
+                "client_id": self.client_id,
+                "client_secret": "completely_wrong_secret",
+                "code": auth_code,
+                "code_verifier": verifier,
+                "redirect_uri": self.redirect_uri,
+            },
+        )
+        self.assertEqual(token_resp.status_code, 401)
+        self.assertEqual(token_resp.get_json()["error"], "invalid_client")
+
+    def test_create_note_mcp_tool_via_oauth(self):
+        # 1. Authorize with note:create scope
+        self._login_user()
+        verifier, challenge = self._generate_pkce()
+        resp = self.client.post(
+            "/oauth/authorize",
+            data={
+                "client_id": self.client_id,
+                "redirect_uri": self.redirect_uri,
+                "scope": "deck:read note-type:read note:check note:create",
+                "state": "s_note",
+                "code_challenge": challenge,
+                "code_challenge_method": "S256",
+                "action": "approve",
+            },
+        )
+        auth_code = parse_qs(urlparse(resp.headers["Location"]).query)["code"][0]
+
+        token_resp = self.client.post(
+            "/oauth/token",
+            data={
+                "grant_type": "authorization_code",
+                "client_id": self.client_id,
+                "client_secret": self.client_secret,
+                "code": auth_code,
+                "code_verifier": verifier,
+                "redirect_uri": self.redirect_uri,
+            },
+        )
+        access_token = token_resp.get_json()["access_token"]
+
+        # 2. Call create_note MCP tool
+        mcp_call = self.client.post(
+            "/api/mcp",
+            headers={"Authorization": f"Bearer {access_token}"},
+            json={
+                "jsonrpc": "2.0",
+                "id": "create-1",
+                "method": "tools/call",
+                "params": {
+                    "name": "create_note",
+                    "arguments": {
+                        "deck_name": "Alice Japanese N1",
+                        "note_type_name": "Japanese Vocabulary",
+                        "fields": {
+                            "word": "勉強",
+                            "meaning_vi": "Học tập",
+                        },
+                    },
+                },
+            },
+        )
+        self.assertEqual(mcp_call.status_code, 200)
+        res = mcp_call.get_json()
+        self.assertIn("structuredContent", res["result"])
+        note_res = res["result"]["structuredContent"]
+        self.assertIn("note_id", note_res)
+        self.assertEqual(note_res["deck_name"], "Alice Japanese N1")
+        self.assertFalse(note_res["updated_existing"])
+        self.assertGreaterEqual(len(note_res["cards"]), 1)
+
+
+
+        # 3. Call find_notes MCP tool to verify search works
+        find_call = self.client.post(
+            "/api/mcp",
+            headers={"Authorization": f"Bearer {access_token}"},
+            json={
+                "jsonrpc": "2.0",
+                "id": "find-1",
+                "method": "tools/call",
+                "params": {
+                    "name": "find_notes",
+                    "arguments": {
+                        "query": "勉強",
+                    },
+                },
+            },
+        )
+        self.assertEqual(find_call.status_code, 200)
+        find_res = find_call.get_json()["result"]["structuredContent"]
+        self.assertGreaterEqual(len(find_res["notes"]), 1)
+

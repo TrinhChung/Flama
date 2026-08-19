@@ -11,6 +11,7 @@ from urllib.parse import quote, unquote
 from flask import Blueprint, Response, jsonify, redirect, request, url_for
 from flask_login import current_user, login_required
 
+from models import db
 from app.repositories import oauth_repository
 from app.services import oauth_service
 from app.services.oauth_service import OAuthError
@@ -450,8 +451,13 @@ def get_endpoints_info():
 @login_required
 def list_oauth_clients():
     """List registered OAuth 2.1 clients."""
-    clients = oauth_repository.list_clients(limit=50)
-    return jsonify({"items": [c.to_dict() for c in clients]})
+    try:
+        clients = oauth_repository.list_clients(limit=50)
+        return jsonify({"items": [c.to_dict() for c in clients]})
+    except Exception as exc:
+        logger.exception("Failed to list OAuth clients: %s", exc)
+        db.session.rollback()
+        return jsonify({"items": []})
 
 
 @oauth_bp.post("/api/oauth/clients")
@@ -495,26 +501,45 @@ def create_oauth_client():
             400,
         )
 
-    client = oauth_service.register_oauth_client(
-        client_id=client_id,
-        client_name=client_name,
-        client_secret=str(client_secret).strip() if client_secret else None,
-        redirect_uris=redirect_uris,
-        is_confidential=bool(client_secret and str(client_secret).strip()),
-    )
-    return jsonify({"success": True, "client": client.to_dict()}), 201
+    try:
+        client = oauth_service.register_oauth_client(
+            client_id=client_id,
+            client_name=client_name,
+            client_secret=str(client_secret).strip() if client_secret else None,
+            redirect_uris=redirect_uris,
+            is_confidential=bool(client_secret and str(client_secret).strip()),
+        )
+        return jsonify({"success": True, "client": client.to_dict()}), 201
+    except Exception as exc:
+        logger.exception("Failed to create OAuth client: %s", exc)
+        db.session.rollback()
+        return (
+            jsonify(
+                {
+                    "error": "DATABASE_ERROR",
+                    "message": f"Không thể lưu OAuth Client: {exc}",
+                }
+            ),
+            500,
+        )
 
 
 @oauth_bp.delete("/api/oauth/clients/<int:client_pk>")
 @login_required
 def delete_oauth_client(client_pk: int):
     """Delete a registered OAuth 2.1 client."""
-    client = oauth_repository.get_client_by_id(client_pk)
-    if not client:
-        return jsonify({"error": "NOT_FOUND", "message": "Client không tồn tại."}), 404
-    db.session.delete(client)
-    db.session.commit()
-    return jsonify({"success": True})
+    try:
+        client = oauth_repository.get_client_by_id(client_pk)
+        if not client:
+            return jsonify({"error": "NOT_FOUND", "message": "Client không tồn tại."}), 404
+        db.session.delete(client)
+        db.session.commit()
+        return jsonify({"success": True})
+    except Exception as exc:
+        logger.exception("Failed to delete OAuth client: %s", exc)
+        db.session.rollback()
+        return jsonify({"error": "DATABASE_ERROR", "message": str(exc)}), 500
+
 
 
 @oauth_bp.get("/api/oauth/connected-apps")

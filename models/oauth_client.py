@@ -14,7 +14,7 @@ class OAuthClient(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     client_id = db.Column(db.String(64), nullable=False, unique=True, index=True)
-    client_secret_hash = db.Column(db.String(128), nullable=True)
+    client_secret_hash = db.Column(db.String(255), nullable=True)
     client_name = db.Column(db.String(120), nullable=False, default="OAuth Client")
     client_uri = db.Column(db.String(255), nullable=True)
     redirect_uris = db.Column(db.Text, nullable=False, default="[]")

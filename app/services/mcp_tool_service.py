@@ -233,10 +233,23 @@ def _resolve_deck_for_user(*, user_id: int, deck_id: int | None = None, deck_nam
             code="DECK_NOT_FOUND",
         )
     if deck_name and str(deck_name).strip():
-        return vocabulary_repository.upsert_deck_path(
-            user_id=user_id,
-            deck_path=str(deck_name).strip(),
-            lock=True,
+        cleaned = str(deck_name).strip()
+        tokens = [t.strip() for t in cleaned.replace("/", "::").split("::") if t.strip()]
+        if not tokens:
+            tokens = [cleaned]
+        upsert_res = vocabulary_repository.upsert_deck_path(
+            parent_id=None,
+            path_tokens=tokens,
+            owner_user_id=user_id,
+            admin_mode=False,
+        )
+        if upsert_res.final_deck is not None:
+            return upsert_res.final_deck
+        raise RequestValidationError(
+            f"Không thể tìm hoặc tạo deck '{deck_name}'.",
+            field="deck_name",
+            status=400,
+            code="DECK_CREATION_FAILED",
         )
     raise RequestValidationError(
         "Cần chỉ định deck_id hoặc deck_name.",
@@ -244,6 +257,7 @@ def _resolve_deck_for_user(*, user_id: int, deck_id: int | None = None, deck_nam
         status=400,
         code="INVALID_PARAMS",
     )
+
 
 
 def _resolve_note_type_for_user(*, user_id: int, note_type_id: str | None = None, note_type_name: str | None = None) -> NoteType:

@@ -33,6 +33,7 @@ import { Label } from '@/components/ui/label'
 import { TabsContent } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 
+import { FLAMA_MCP_URL, BACKEND_ORIGIN } from '@/config/env'
 import { useMcpOAuth } from '../hooks/useMcpOAuth'
 
 export function McpOAuthTab() {
@@ -58,18 +59,20 @@ export function McpOAuthTab() {
     refresh,
   } = useMcpOAuth()
 
+  const defaultBase = BACKEND_ORIGIN || window.location.origin
   const ep = endpointsQuery.data || {
-    base_url: window.location.origin,
-    auth_url: `${window.location.origin}/oauth/authorize`,
-    token_url: `${window.location.origin}/oauth/token`,
-    resource_url: `${window.location.origin}/api/mcp`,
-    userinfo_url: `${window.location.origin}/oauth/userinfo`,
-    openid_config_url: `${window.location.origin}/.well-known/openid-configuration`,
+    base_url: defaultBase,
+    auth_url: `${defaultBase}/oauth/authorize`,
+    token_url: `${defaultBase}/oauth/token`,
+    resource_url: FLAMA_MCP_URL || `${defaultBase}/api/mcp`,
+    userinfo_url: `${defaultBase}/oauth/userinfo`,
+    openid_config_url: `${defaultBase}/.well-known/openid-configuration`,
     scopes_string: 'deck:read note-type:read note:check note:create',
   }
 
   const clients = clientsQuery.data?.items || []
   const connectedApps = connectedAppsQuery.data?.items || []
+
 
   return (
     <TabsContent value="oauth" className="space-y-6">
