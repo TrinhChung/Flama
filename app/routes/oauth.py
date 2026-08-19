@@ -90,6 +90,9 @@ def _render_consent_page(
         for scope in scopes
     )
 
+    from app.csrf import generate_csrf_token
+    csrf_token = generate_csrf_token()
+
     user_display = html.escape(getattr(current_user, "username", "Tài khoản Flama"))
     client_name = html.escape(client.client_name)
 
@@ -220,6 +223,7 @@ def _render_consent_page(
         </div>
 
         <form method="POST" action="/oauth/authorize">
+            <input type="hidden" name="csrf_token" value="{html.escape(csrf_token)}">
             <input type="hidden" name="client_id" value="{html.escape(client.client_id)}">
             <input type="hidden" name="redirect_uri" value="{html.escape(redirect_uri)}">
             <input type="hidden" name="scope" value="{html.escape(' '.join(scopes))}">
@@ -236,6 +240,7 @@ def _render_consent_page(
 </body>
 </html>
 """
+
 
 
 # --- Core OAuth Endpoints ---

@@ -9,11 +9,11 @@ from flask import current_app, jsonify, request, session
 
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS", "TRACE"}
 SESSION_TOKEN_KEY = "_csrf_token"
+OAUTH_EXEMPT_PATHS = frozenset({"/oauth/token", "/oauth/revoke", "/api/mcp", "/v1/mcp"})
 
 
 def init_csrf_protection(app) -> None:
     """Register CSRF helpers on the Flask app."""
-
     app.before_request(protect_from_csrf)
 
 
@@ -40,7 +40,7 @@ def protect_from_csrf():
         return None
 
     auth_header = str(request.headers.get("Authorization") or "")
-    if auth_header.startswith("Bearer "):
+    if auth_header.startswith("Bearer ") or auth_header.startswith("Basic "):
         return None
 
     session_token = str(session.get(SESSION_TOKEN_KEY) or "")
@@ -52,6 +52,8 @@ def protect_from_csrf():
 
 
 def _is_exempt_endpoint() -> bool:
+    if request.path in OAUTH_EXEMPT_PATHS or request.path.startswith("/api/mcp") or request.path.startswith("/v1/mcp"):
+        return True
     exempt_endpoints = set(current_app.config.get("CSRF_EXEMPT_ENDPOINTS", ()))
     return (request.endpoint or "") in exempt_endpoints
 
