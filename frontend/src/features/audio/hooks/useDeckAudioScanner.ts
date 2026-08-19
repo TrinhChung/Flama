@@ -12,10 +12,14 @@ import type {
   FieldMapping,
 } from '../types'
 
+import type { DeckOption } from '@/features/import/components/DeckSelectionTreeView'
+
 export type SimpleDeck = {
   id: number
   name: string
   parent_id?: number | null
+  path?: string
+  counts?: { total?: number; new?: number; learn?: number; due?: number }
 }
 
 function generateId(): string {
@@ -40,6 +44,32 @@ export function useDeckAudioScanner(initialDeckId?: number | null) {
 
   const decks = useMemo(() => decksQuery.data || [], [decksQuery.data])
 
+  const deckOptions: DeckOption[] = useMemo(() => {
+    const rawDecks = decksQuery.data || []
+    const deckMap = new Map<number, SimpleDeck>()
+    rawDecks.forEach((d) => deckMap.set(d.id, d))
+
+    const buildPath = (deck: SimpleDeck): string => {
+      const parts = [deck.name]
+      let cur = deck
+      const seen = new Set<number>()
+      while (cur.parent_id != null && deckMap.has(cur.parent_id) && !seen.has(cur.parent_id)) {
+        seen.add(cur.parent_id)
+        cur = deckMap.get(cur.parent_id)!
+        parts.unshift(cur.name)
+      }
+      return parts.join('::')
+    }
+
+    return rawDecks.map((d) => ({
+      id: d.id,
+      name: d.name,
+      path: d.path || buildPath(d),
+      parent_id: d.parent_id,
+      notes_count: d.counts?.total ?? d.counts?.due ?? 0,
+    }))
+  }, [decksQuery.data])
+
   // 2. Perform Deck Scan
   const handleScanDeck = useCallback(async (deckId: number) => {
     setIsScanning(true)
@@ -49,15 +79,27 @@ export function useDeckAudioScanner(initialDeckId?: number | null) {
 
       // Initialize rules from auto-detected mappings
       const availableFields: string[] = []
-      for (const nt of data.note_types) {
-        for (const f of nt.fields) {
+      for (const nt of data.note_types || []) {
+        for (const f of nt.fields || []) {
           if (f.name && !availableFields.includes(f.name)) {
             availableFields.push(f.name)
           }
         }
       }
+      for (const n of data.notes || []) {
+        for (const k of Object.keys(n.field_values || {})) {
+          if (k && !availableFields.includes(k)) {
+            availableFields.push(k)
+          }
+        }
+      }
+      for (const k of (data as any).available_fields || []) {
+        if (k && !availableFields.includes(k)) {
+          availableFields.push(k)
+        }
+      }
 
-      if (data.auto_mappings.length > 0) {
+      if (data.auto_mappings && data.auto_mappings.length > 0) {
         const mappings: FieldMapping[] = data.auto_mappings.map((m) => ({
           id: generateId(),
           sourceField: m.source_field,
@@ -78,8 +120,8 @@ export function useDeckAudioScanner(initialDeckId?: number | null) {
         setRules([defaultRule])
       } else {
         // Fallback default mapping
-        const sourceField = availableFields.find((f) => ['Reading', 'Word', 'Front', 'Expression'].includes(f)) || availableFields[0] || 'Word'
-        const destField = availableFields.find((f) => f.toLowerCase().includes('audio') || f.toLowerCase().includes('sound')) || 'Audio'
+        const sourceField = availableFields.find((f) => ['Reading', 'Word', 'Front', 'Expression', 'Vocabulary', 'Kanji'].includes(f)) || availableFields[0] || 'Word'
+        const destField = availableFields.find((f) => f.toLowerCase().includes('audio') || f.toLowerCase().includes('sound')) || availableFields[availableFields.length - 1] || 'Audio'
 
         const defaultRule: AudioRuleConfig = {
           id: generateId(),
@@ -123,10 +165,18 @@ export function useDeckAudioScanner(initialDeckId?: number | null) {
   const availableFieldNames = useMemo(() => {
     if (!scanData) return []
     const names = new Set<string>()
-    for (const nt of scanData.note_types) {
-      for (const f of nt.fields) {
+    for (const nt of scanData.note_types || []) {
+      for (const f of nt.fields || []) {
         if (f.name) names.add(f.name)
       }
+    }
+    for (const n of scanData.notes || []) {
+      for (const k of Object.keys(n.field_values || {})) {
+        if (k) names.add(k)
+      }
+    }
+    for (const k of (scanData as any).available_fields || []) {
+      if (k) names.add(k)
     }
     return Array.from(names)
   }, [scanData])
@@ -296,6 +346,7 @@ export function useDeckAudioScanner(initialDeckId?: number | null) {
 
   return {
     decks,
+    deckOptions,
     isDecksLoading: decksQuery.isLoading,
     selectedDeckId,
     setSelectedDeckId,

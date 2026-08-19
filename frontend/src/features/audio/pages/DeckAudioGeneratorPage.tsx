@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   AudioLines,
   CheckCircle2,
+  Folder,
   HelpCircle,
   Layers,
   ListPlus,
@@ -20,7 +21,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
-import { NativeSelect } from '@/components/ui/native-select'
+import { DeckSelectionTreeView } from '@/features/import/components/DeckSelectionTreeView'
 import { DeckAudioQueueMonitor } from '../components/DeckAudioQueueMonitor'
 import { DeckAudioRuleCard } from '../components/DeckAudioRuleCard'
 import { FlamaAudioConnectionGate } from '../components/FlamaAudioConnectionGate'
@@ -34,8 +35,7 @@ export function DeckAudioGeneratorPage() {
   const queue = useDeckAudioQueue()
 
   const {
-    decks,
-    isDecksLoading,
+    deckOptions,
     selectedDeckId,
     setSelectedDeckId,
     isScanning,
@@ -64,6 +64,8 @@ export function DeckAudioGeneratorPage() {
     removeQueuedJob,
     clearCompleted,
   } = queue
+
+  const selectedDeck = deckOptions.find((d) => d.id === selectedDeckId)
 
   const handleStartOrQueue = () => {
     if (!isAudioHelperConnected) {
@@ -120,8 +122,8 @@ export function DeckAudioGeneratorPage() {
       {/* Flama Audio Connection Banner */}
       <FlamaAudioConnectionGate onConnectionChange={setIsAudioHelperConnected} />
 
-      {/* Section 1: Deck Selector & Smart Scan Stats */}
-      <Card className="rounded-2xl border-border/70 shadow-xs">
+      {/* Section 1: Deck Selector (Tree View) & Smart Scan Stats */}
+      <Card className="rounded-2xl border-border/70 shadow-xs overflow-hidden">
         <CardHeader className="p-4 sm:p-5 border-b bg-muted/20">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-2.5">
@@ -131,7 +133,7 @@ export function DeckAudioGeneratorPage() {
               </CardTitle>
             </div>
 
-            {selectedDeckId && (
+            {selectedDeckId && scanData && (
               <Button
                 variant="outline"
                 size="sm"
@@ -145,120 +147,156 @@ export function DeckAudioGeneratorPage() {
             )}
           </div>
           <CardDescription className="text-xs text-muted-foreground mt-1">
-            Chọn bộ thẻ bạn muốn tạo âm thanh. Hệ thống sẽ tự động quét các trường audio, đối soát trường gốc và kiểm tra file hỏng.
+            Chọn bộ thẻ bạn muốn tạo âm thanh từ cây danh mục Deck bên dưới. Hệ thống sẽ tự động quét các trường audio, đối soát trường gốc và kiểm tra file hỏng.
           </CardDescription>
         </CardHeader>
 
-        <CardContent className="p-4 sm:p-5 space-y-5">
-          {/* Deck Select Dropdown */}
-          <div className="space-y-1.5 max-w-md">
-            <Label className="text-xs font-semibold">Chọn Deck mục tiêu</Label>
-            <NativeSelect
-              value={selectedDeckId || ''}
-              onChange={(e) => setSelectedDeckId(e.target.value ? Number(e.target.value) : null)}
-              disabled={isDecksLoading || isScanning}
-              className="h-10 text-xs sm:text-sm rounded-xl font-semibold"
-            >
-              <option value="">-- Chọn một bộ thẻ flashcard --</option>
-              {decks.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name}
-                </option>
-              ))}
-            </NativeSelect>
+        <CardContent className="p-4 sm:p-5">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            {/* Left: Deck Selection Tree (Deck Case) */}
+            <div className="lg:col-span-5 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                  <Folder className="size-3.5 text-amber-500" />
+                  Danh mục Deck
+                </Label>
+                {selectedDeck && (
+                  <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 text-[11px] font-semibold truncate max-w-[200px]">
+                    {selectedDeck.name}
+                  </Badge>
+                )}
+              </div>
+              <DeckSelectionTreeView
+                deckOptions={deckOptions}
+                selectedDeckId={selectedDeckId ? String(selectedDeckId) : ''}
+                onSelectDeck={(id) => setSelectedDeckId(id ? Number(id) : null)}
+              />
+            </div>
+
+            {/* Right: Scan Analysis Stats & Mode Settings */}
+            <div className="lg:col-span-7 flex flex-col justify-center space-y-4">
+              {!selectedDeckId ? (
+                <div className="flex flex-col items-center justify-center border border-dashed border-border/80 rounded-2xl p-8 text-center bg-muted/10 min-h-[260px] h-full">
+                  <div className="flex size-12 items-center justify-center rounded-2xl bg-muted text-muted-foreground/60 mb-3">
+                    <Layers className="size-6" />
+                  </div>
+                  <p className="text-sm font-bold text-foreground">Chưa chọn bộ thẻ</p>
+                  <p className="text-xs text-muted-foreground mt-1 max-w-sm">
+                    Nhấp chọn một bộ thẻ trong cây danh mục bên trái để bắt đầu phân tích dữ liệu và thiết lập âm thanh.
+                  </p>
+                </div>
+              ) : isScanning ? (
+                <div className="flex flex-col items-center justify-center border border-primary/20 rounded-2xl p-8 text-center bg-primary/5 min-h-[260px] h-full space-y-3 animate-pulse">
+                  <LoaderCircle className="size-8 text-primary animate-spin" />
+                  <div className="space-y-1">
+                    <p className="text-sm font-bold text-primary">Đang quét phân tích Deck...</p>
+                    <p className="text-xs text-muted-foreground max-w-sm">
+                      Đang đọc cấu trúc các trường, đối soát liên kết âm thanh và kiểm tra tính toàn vẹn file trên ổ đĩa.
+                    </p>
+                  </div>
+                </div>
+              ) : scanData ? (
+                <div className="space-y-4">
+                  {/* Selected Deck Overview Info */}
+                  <div className="flex items-center justify-between p-3.5 bg-muted/30 border border-border/60 rounded-2xl">
+                    <div className="min-w-0">
+                      <div className="text-[11px] text-muted-foreground font-medium">Bộ thẻ đang xử lý:</div>
+                      <div className="text-sm font-bold text-foreground truncate">{scanData.deck.name}</div>
+                    </div>
+                    <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 font-bold shrink-0">
+                      {scanData.total_notes} thẻ
+                    </Badge>
+                  </div>
+
+                  {/* 4 Stat Cards */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                    {/* Total Notes */}
+                    <div className="p-3 rounded-xl bg-muted/30 border border-border/50 space-y-0.5">
+                      <span className="text-[10px] font-medium text-muted-foreground">Tổng số từ</span>
+                      <p className="text-base font-black text-foreground font-mono">
+                        {scanData.total_notes}
+                      </p>
+                    </div>
+
+                    {/* Needs Audio */}
+                    <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 space-y-0.5">
+                      <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-300 flex items-center gap-1">
+                        <Sparkles className="size-2.5" />
+                        Cần tạo âm
+                      </span>
+                      <p className="text-base font-black text-amber-700 dark:text-amber-300 font-mono">
+                        {scanData.summary.needs_audio_count}
+                      </p>
+                    </div>
+
+                    {/* Missing Audio */}
+                    <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 space-y-0.5">
+                      <span className="text-[10px] font-semibold text-rose-700 dark:text-rose-300 flex items-center gap-1">
+                        <Volume2 className="size-2.5" />
+                        Chưa có âm
+                      </span>
+                      <p className="text-base font-black text-rose-700 dark:text-rose-300 font-mono">
+                        {scanData.summary.missing_field_count}
+                      </p>
+                    </div>
+
+                    {/* Broken Audio */}
+                    <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 space-y-0.5">
+                      <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-300 flex items-center gap-1">
+                        <AlertTriangle className="size-2.5" />
+                        File hỏng
+                      </span>
+                      <p className="text-base font-black text-amber-700 dark:text-amber-300 font-mono">
+                        {scanData.summary.broken_field_count}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Mode Selector */}
+                  <div className="p-3.5 rounded-2xl border border-border/60 bg-card space-y-2">
+                    <Label className="text-xs font-semibold">Chế độ áp dụng</Label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setGenerationMode('missing_and_broken')}
+                        className={`flex flex-col text-left p-3 rounded-xl border transition-all cursor-pointer ${
+                          generationMode === 'missing_and_broken'
+                            ? 'border-primary/50 bg-primary/10 text-primary ring-1 ring-primary/20 shadow-xs'
+                            : 'border-border/60 hover:bg-muted/40'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold">Chỉ bù thiếu &amp; hỏng</span>
+                          {generationMode === 'missing_and_broken' && <CheckCircle2 className="size-3.5 text-primary" />}
+                        </div>
+                        <span className="text-[11px] text-muted-foreground mt-1">
+                          Tạo cho {scanData.summary.needs_audio_count} từ chưa có âm hoặc file lỗi (Nhanh &amp; tiết kiệm).
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setGenerationMode('all')}
+                        className={`flex flex-col text-left p-3 rounded-xl border transition-all cursor-pointer ${
+                          generationMode === 'all'
+                            ? 'border-primary/50 bg-primary/10 text-primary ring-1 ring-primary/20 shadow-xs'
+                            : 'border-border/60 hover:bg-muted/40'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold">Tạo lại tất cả (Ghi đè)</span>
+                          {generationMode === 'all' && <CheckCircle2 className="size-3.5 text-primary" />}
+                        </div>
+                        <span className="text-[11px] text-muted-foreground mt-1">
+                          Tạo mới toàn bộ {scanData.total_notes} từ trong Deck.
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </div>
           </div>
-
-          {/* Scanning Indicator */}
-          {isScanning && (
-            <div className="flex items-center gap-2 p-4 rounded-xl bg-muted/40 text-xs font-semibold text-primary animate-pulse">
-              <LoaderCircle className="size-4 animate-spin" />
-              <span>Đang phân tích cấu trúc thẻ và kiểm tra file âm thanh trong Deck...</span>
-            </div>
-          )}
-
-          {/* Scan Results Stats */}
-          {scanData && !isScanning && (
-            <div className="space-y-4 pt-1">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {/* Total Notes */}
-                <div className="p-3.5 rounded-xl bg-muted/30 border border-border/50 space-y-1">
-                  <span className="text-[11px] font-medium text-muted-foreground">Tổng số từ trong Deck</span>
-                  <p className="text-lg font-black text-foreground font-mono">
-                    {scanData.total_notes}
-                  </p>
-                </div>
-
-                {/* Needs Audio */}
-                <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 space-y-1">
-                  <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-300 flex items-center gap-1">
-                    <Sparkles className="size-3" />
-                    Cần tạo âm thanh
-                  </span>
-                  <p className="text-lg font-black text-amber-700 dark:text-amber-300 font-mono">
-                    {scanData.summary.needs_audio_count}
-                  </p>
-                </div>
-
-                {/* Missing Audio */}
-                <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 space-y-1">
-                  <span className="text-[11px] font-semibold text-rose-700 dark:text-rose-300 flex items-center gap-1">
-                    <Volume2 className="size-3" />
-                    Chưa có âm thanh
-                  </span>
-                  <p className="text-lg font-black text-rose-700 dark:text-rose-300 font-mono">
-                    {scanData.summary.missing_field_count}
-                  </p>
-                </div>
-
-                {/* Broken Audio */}
-                <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 space-y-1">
-                  <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-300 flex items-center gap-1">
-                    <AlertTriangle className="size-3" />
-                    File âm thanh lỗi/mất
-                  </span>
-                  <p className="text-lg font-black text-amber-700 dark:text-amber-300 font-mono">
-                    {scanData.summary.broken_field_count}
-                  </p>
-                </div>
-              </div>
-
-              {/* Generation Mode Selector */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl bg-muted/20 border border-border/50">
-                <div className="space-y-0.5">
-                  <span className="text-xs font-bold text-foreground">
-                    Chế độ áp dụng:
-                  </span>
-                  <p className="text-[11px] text-muted-foreground">
-                    {generationMode === 'missing_and_broken'
-                      ? 'Chỉ tạo cho các từ đang thiếu audio hoặc file âm thanh bị lỗi/mất (Tiết kiệm thời gian).'
-                      : 'Tạo lại toàn bộ file âm thanh mới cho tất cả các từ trong Deck (Ghi đè).'}
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-2 shrink-0">
-                  <Button
-                    type="button"
-                    variant={generationMode === 'missing_and_broken' ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setGenerationMode('missing_and_broken')}
-                    className="h-8 text-xs"
-                  >
-                    <CheckCircle2 className="size-3 mr-1" />
-                    Chỉ bù thiếu &amp; hỏng
-                  </Button>
-                  <Button
-                    type="button"
-                    variant={generationMode === 'all' ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setGenerationMode('all')}
-                    className="h-8 text-xs"
-                  >
-                    Tạo lại tất cả
-                  </Button>
-                </div>
-              </div>
-            </div>
-          )}
         </CardContent>
       </Card>
 

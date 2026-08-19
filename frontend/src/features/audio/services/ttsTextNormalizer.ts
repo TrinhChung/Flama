@@ -7,19 +7,21 @@ export function cleanTextForTts(rawText: string, engineId: 'voicevox' | 'kokoro'
   if (!rawText) return ''
   let text = String(rawText)
 
-  // Strip HTML tags
+  // 1. Strip [sound:...] media tags first
+  text = text.replace(/\[sound:[^\]]+\]/gi, '')
+
+  // 2. Strip HTML tags
   text = text.replace(/<[^>]*>/g, ' ')
 
   if (engineId === 'voicevox') {
-    // Replace Japanese furigana brackets: 漢字[かんじ] -> かんじ or 漢字(かんじ) -> かんじ
-    text = text.replace(/[\u4e00-\u9faf\u3040-\u309f\u30a0-\u30ff]+\s*\[([^\]]+)\]/g, '$1')
-    text = text.replace(/[\u4e00-\u9faf\u3040-\u309f\u30a0-\u30ff]+\s*\(([^)]+)\)/g, '$1')
+    // 3. Replace Japanese furigana brackets:
+    // e.g. 漢字[かんじ] -> かんじ, 食[た]べる -> たべる
+    text = text.replace(/([\u4e00-\u9faf\u30a0-\u30ff]+)\s*\[([^\]]+)\]/g, '$2')
+    // e.g. 漢字(かんじ) -> かんじ, 食べる(たべる) -> たべる
+    text = text.replace(/([\u4e00-\u9faf\u3040-\u30ff]+)\s*\(([\u3040-\u309f]+)\)/g, '$2')
   }
 
-  // Strip [sound:...] media tags
-  text = text.replace(/\[sound:[^\]]+\]/gi, '')
-
-  // Decode common HTML entities
+  // 4. Decode common HTML entities
   text = text
     .replace(/&nbsp;/gi, ' ')
     .replace(/&amp;/gi, '&')

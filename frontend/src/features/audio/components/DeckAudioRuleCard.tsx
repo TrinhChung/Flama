@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowRight,
+  Globe,
   LoaderCircle,
   Play,
   Plus,
@@ -19,27 +20,57 @@ import { flamaAudioClient } from '@/lib/flamaAudioClient'
 import { resolveLocaleFromVoiceId } from '../services/ttsTextNormalizer'
 import type { AudioRuleConfig, FieldMapping, VoiceDescriptor } from '../types'
 
-const FALLBACK_VOICEVOX_VOICES: Array<{ id: string; label: string; group: string }> = [
+const FALLBACK_VOICEVOX_SPEAKERS: Array<{ id: string; label: string; group: string }> = [
   { id: '3', label: 'ズンダモン (Zundamon) - ノーマル', group: 'ズンダモン (Zundamon)' },
   { id: '1', label: 'ズンダモン (Zundamon) - あまあま', group: 'ズンダモン (Zundamon)' },
   { id: '7', label: 'ズンダモン (Zundamon) - ツンツン', group: 'ズンダモン (Zundamon)' },
   { id: '5', label: 'ズンダモン (Zundamon) - セクシー', group: 'ズンダモン (Zundamon)' },
+  { id: '22', label: 'ズンダモン (Zundamon) - ささやき', group: 'ズンダモン (Zundamon)' },
+  { id: '38', label: 'ズンダモン (Zundamon) - ヒソヒソ', group: 'ズンダモン (Zundamon)' },
   { id: '2', label: '四国めたん (Metan) - ノーマル', group: '四国めたん (Metan)' },
   { id: '0', label: '四国めたん (Metan) - あまあま', group: '四国めたん (Metan)' },
+  { id: '6', label: '四国めたん (Metan) - ツンツン', group: '四国めたん (Metan)' },
+  { id: '4', label: '四国めたん (Metan) - セクシー', group: '四国めたん (Metan)' },
+  { id: '36', label: '四国めたん (Metan) - ささやき', group: '四国めたん (Metan)' },
   { id: '8', label: '春日部つむぎ (Tsumugi) - ノーマル', group: '春日部つむぎ (Tsumugi)' },
   { id: '10', label: '波音リツ (Ritsu) - ノーマル', group: '波音リツ (Ritsu)' },
+  { id: '9', label: '雨晴はう (Hau) - ノーマル', group: '雨晴はう (Hau)' },
   { id: '14', label: '冥鳴ひまり (Himari) - ノーマル', group: '冥鳴ひまり (Himari)' },
   { id: '16', label: '九州そら (Sora) - ノーマル', group: '九州そら (Sora)' },
+  { id: '15', label: '九州そら (Sora) - あまあま', group: '九州そら (Sora)' },
+  { id: '18', label: '九州そら (Sora) - ツンツン', group: '九州そら (Sora)' },
+  { id: '17', label: '九州そら (Sora) - セクシー', group: '九州そら (Sora)' },
+  { id: '20', label: 'もち子さん (Mochiko) - ノーマル', group: 'もち子さん (Mochiko)' },
+  { id: '21', label: '剣崎雌雄 (Shiu) - ノーマル', group: '剣崎雌雄 (Shiu)' },
 ]
 
-const FALLBACK_KOKORO_VOICES: Array<{ id: string; label: string; group: string }> = [
-  { id: 'af_bella', label: 'Bella [English (US)] - Female', group: '🇺🇸 English (US)' },
-  { id: 'af_sarah', label: 'Sarah [English (US)] - Female', group: '🇺🇸 English (US)' },
-  { id: 'am_adam', label: 'Adam [English (US)] - Male', group: '🇺🇸 English (US)' },
-  { id: 'bf_emma', label: 'Emma [English (UK)] - Female', group: '🇬🇧 English (UK)' },
-  { id: 'zf_xiaobei', label: 'Xiaobei [Mandarin Chinese] - Female', group: '🇨🇳 Mandarin Chinese' },
-  { id: 'ef_dora', label: 'Dora [Spanish] - Female', group: '🇪🇸 Spanish' },
-  { id: 'ff_siwis', label: 'Siwis [French] - Female', group: '🇫🇷 French' },
+const FALLBACK_KOKORO_SPEAKERS: Array<{ id: string; label: string; group: string; lang: string }> = [
+  { id: 'af_bella', label: 'Bella [English (US)] - Female', group: '🇺🇸 English (US)', lang: 'en-US' },
+  { id: 'af_sarah', label: 'Sarah [English (US)] - Female', group: '🇺🇸 English (US)', lang: 'en-US' },
+  { id: 'am_adam', label: 'Adam [English (US)] - Male', group: '🇺🇸 English (US)', lang: 'en-US' },
+  { id: 'am_michael', label: 'Michael [English (US)] - Male', group: '🇺🇸 English (US)', lang: 'en-US' },
+  { id: 'bf_emma', label: 'Emma [English (UK)] - Female', group: '🇬🇧 English (UK)', lang: 'en-GB' },
+  { id: 'bm_george', label: 'George [English (UK)] - Male', group: '🇬🇧 English (UK)', lang: 'en-GB' },
+  { id: 'zf_xiaobei', label: 'Xiaobei [Mandarin Chinese] - Female', group: '🇨🇳 Mandarin Chinese', lang: 'zh-CN' },
+  { id: 'zm_yunjian', label: 'Yunjian [Mandarin Chinese] - Male', group: '🇨🇳 Mandarin Chinese', lang: 'zh-CN' },
+  { id: 'ef_dora', label: 'Dora [Spanish] - Female', group: '🇪🇸 Spanish', lang: 'es-ES' },
+  { id: 'ff_siwis', label: 'Siwis [French] - Female', group: '🇫🇷 French', lang: 'fr-FR' },
+  { id: 'hf_alpha', label: 'Alpha [Hindi] - Female', group: '🇮🇳 Hindi', lang: 'hi-IN' },
+  { id: 'if_sara', label: 'Sara [Italian] - Female', group: '🇮🇹 Italian', lang: 'it-IT' },
+  { id: 'pf_dora', label: 'Dora [Portuguese] - Female', group: '🇧🇷 Portuguese', lang: 'pt-BR' },
+]
+
+const KOKORO_LANGUAGES = [
+  { code: 'all', label: '🌐 Tất cả ngôn ngữ' },
+  { code: 'en-US', label: '🇺🇸 Tiếng Anh (Mỹ) - English (US)' },
+  { code: 'en-GB', label: '🇬🇧 Tiếng Anh (Anh) - English (UK)' },
+  { code: 'zh-CN', label: '🇨🇳 Tiếng Trung - Mandarin Chinese' },
+  { code: 'es-ES', label: '🇪🇸 Tiếng Tây Ban Nha - Spanish' },
+  { code: 'fr-FR', label: '🇫🇷 Tiếng Pháp - French' },
+  { code: 'ja-JP', label: '🇯🇵 Tiếng Nhật - Japanese' },
+  { code: 'hi-IN', label: '🇮🇳 Tiếng Hindi' },
+  { code: 'it-IT', label: '🇮🇹 Tiếng Ý - Italian' },
+  { code: 'pt-BR', label: '🇧🇷 Tiếng Bồ Đào Nha - Portuguese' },
 ]
 
 type DeckAudioRuleCardProps = {
@@ -68,10 +99,16 @@ export function DeckAudioRuleCard({
   onUpdateMapping,
 }: DeckAudioRuleCardProps) {
   const [voices, setVoices] = useState<VoiceDescriptor[]>([])
+  const [selectedLang, setSelectedLang] = useState<string>('all')
   const [previewText, setPreviewText] = useState(sampleWord || (rule.engineId === 'kokoro' ? 'Hello world' : 'こんにちは'))
   const [isPreviewing, setIsPreviewing] = useState(false)
-  const [showAdvancedSliders, setShowAdvancedSliders] = useState(false)
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null)
+
+  // Fallback field names if none provided
+  const fieldList = useMemo(() => {
+    if (availableFieldNames.length > 0) return availableFieldNames
+    return ['Word', 'Reading', 'Front', 'Expression', 'Back', 'Audio', 'FrontAudio', 'Reading_audio', 'Vietnamese']
+  }, [availableFieldNames])
 
   // Fetch available voices for current engine
   useEffect(() => {
@@ -89,45 +126,91 @@ export function DeckAudioRuleCard({
     }
   }, [rule.engineId])
 
-  // Grouped voice options
+  // Grouped voice options matching Browse and filtered by selected language
   const groupedVoices = useMemo(() => {
     const isKokoro = rule.engineId === 'kokoro'
     if (voices.length > 0) {
-      const groups: Record<string, Array<{ id: string; label: string }>> = {}
+      const groups: Record<string, Array<{ id: string; label: string; lang: string }>> = {}
       for (const v of voices) {
         let groupName = v.speaker_name || 'VOICEVOX'
+        let langCode = 'ja-JP'
         if (isKokoro) {
           const prefix = v.voice_id ? v.voice_id[0].toLowerCase() : 'a'
           switch (prefix) {
-            case 'a': groupName = '🇺🇸 English (US)'; break
-            case 'b': groupName = '🇬🇧 English (UK)'; break
-            case 'z': groupName = '🇨🇳 Mandarin Chinese'; break
-            case 'e': groupName = '🇪🇸 Spanish'; break
-            case 'f': groupName = '🇫🇷 French'; break
-            case 'h': groupName = '🇮🇳 Hindi'; break
-            case 'i': groupName = '🇮🇹 Italian'; break
-            case 'p': groupName = '🇧🇷 Portuguese'; break
-            default: groupName = '🌐 Other Languages'
+            case 'a': groupName = '🇺🇸 English (US)'; langCode = 'en-US'; break
+            case 'b': groupName = '🇬🇧 English (UK)'; langCode = 'en-GB'; break
+            case 'z': groupName = '🇨🇳 Mandarin Chinese'; langCode = 'zh-CN'; break
+            case 'e': groupName = '🇪🇸 Spanish'; langCode = 'es-ES'; break
+            case 'f': groupName = '🇫🇷 French'; langCode = 'fr-FR'; break
+            case 'h': groupName = '🇮🇳 Hindi'; langCode = 'hi-IN'; break
+            case 'i': groupName = '🇮🇹 Italian'; langCode = 'it-IT'; break
+            case 'p': groupName = '🇧🇷 Portuguese'; langCode = 'pt-BR'; break
+            case 'j': groupName = '🇯🇵 Japanese'; langCode = 'ja-JP'; break
+            default: groupName = '🌐 Other Languages'; langCode = 'other'; break
           }
         }
+
+        // Apply language filter
+        if (isKokoro && selectedLang !== 'all' && langCode !== selectedLang) {
+          continue
+        }
+
         if (!groups[groupName]) groups[groupName] = []
         groups[groupName].push({
           id: v.voice_id,
           label: `${v.speaker_name || ''} ${v.style_name ? `(${v.style_name})` : ''}`.trim() || v.name || v.voice_id,
+          lang: langCode,
         })
       }
       return groups
     }
 
     // Fallback
-    const fallbackList = isKokoro ? FALLBACK_KOKORO_VOICES : FALLBACK_VOICEVOX_VOICES
-    const groups: Record<string, Array<{ id: string; label: string }>> = {}
+    const fallbackList = isKokoro ? FALLBACK_KOKORO_SPEAKERS : FALLBACK_VOICEVOX_SPEAKERS
+    const groups: Record<string, Array<{ id: string; label: string; lang?: string }>> = {}
     for (const item of fallbackList) {
+      const itemLang = (item as any).lang || 'ja-JP'
+      if (isKokoro && selectedLang !== 'all' && itemLang !== selectedLang) {
+        continue
+      }
       if (!groups[item.group]) groups[item.group] = []
-      groups[item.group].push({ id: item.id, label: item.label })
+      groups[item.group].push({ id: item.id, label: item.label, lang: itemLang })
     }
     return groups
-  }, [voices, rule.engineId])
+  }, [voices, rule.engineId, selectedLang])
+
+  // When language filter changes and current voice is not in filtered list, auto-select first available
+  const handleLanguageChange = (newLang: string) => {
+    setSelectedLang(newLang)
+    if (newLang === 'all') return
+
+    // Find first voice matching this language
+    const isKokoro = rule.engineId === 'kokoro'
+    if (isKokoro) {
+      let targetPrefix = 'a'
+      switch (newLang) {
+        case 'en-US': targetPrefix = 'a'; break
+        case 'en-GB': targetPrefix = 'b'; break
+        case 'zh-CN': targetPrefix = 'z'; break
+        case 'es-ES': targetPrefix = 'e'; break
+        case 'fr-FR': targetPrefix = 'f'; break
+        case 'hi-IN': targetPrefix = 'h'; break
+        case 'it-IT': targetPrefix = 'i'; break
+        case 'pt-BR': targetPrefix = 'p'; break
+        case 'ja-JP': targetPrefix = 'j'; break
+      }
+
+      const matchingVoice = voices.find((v) => v.voice_id?.toLowerCase().startsWith(targetPrefix))
+        || FALLBACK_KOKORO_SPEAKERS.find((v) => v.lang === newLang)
+
+      if (matchingVoice) {
+        const nextId = 'voice_id' in matchingVoice ? (matchingVoice.voice_id as string) : matchingVoice.id
+        if (nextId) {
+          onUpdateRule(rule.id, { voiceId: nextId })
+        }
+      }
+    }
+  }
 
   const handleResetSliders = () => {
     onUpdateRule(rule.id, {
@@ -200,8 +283,8 @@ export function DeckAudioRuleCard({
       </CardHeader>
 
       <CardContent className="p-4 sm:p-5 space-y-5">
-        {/* Engine & Voice Grid */}
-        <div className="grid gap-4 sm:grid-cols-2">
+        {/* Engine, Language Filter & Voice Grid */}
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
           {/* Engine Selector */}
           <div className="space-y-1.5">
             <Label className="text-xs font-semibold">Công cụ phát âm (TTS Engine)</Label>
@@ -210,32 +293,66 @@ export function DeckAudioRuleCard({
               onChange={(e) => {
                 const nextEngine = e.target.value as 'voicevox' | 'kokoro'
                 const defaultVoice = nextEngine === 'kokoro' ? 'af_bella' : '3'
+                setSelectedLang('all')
                 onUpdateRule(rule.id, { engineId: nextEngine, voiceId: defaultVoice })
               }}
-              className="h-9 text-xs rounded-xl"
+              className="h-10 text-xs sm:text-sm rounded-xl"
             >
               <option value="voicevox">VOICEVOX (Tiếng Nhật tự nhiên Offline)</option>
-              <option value="kokoro">Kokoro-82M (Đa ngôn ngữ: Anh, Trung, Tây Ban Nha, Pháp...)</option>
+              <option value="kokoro">Kokoro-82M (Đa ngôn ngữ Offline)</option>
             </NativeSelect>
           </div>
 
-          {/* Voice Selector */}
+          {/* Language Filter */}
           <div className="space-y-1.5">
-            <Label className="text-xs font-semibold">Giọng đọc (Voice / Speaker)</Label>
+            <Label className="text-xs font-semibold flex items-center gap-1">
+              <Globe className="size-3.5 text-primary" />
+              <span>Ngôn ngữ (Language)</span>
+            </Label>
+            {rule.engineId === 'kokoro' ? (
+              <NativeSelect
+                value={selectedLang}
+                onChange={(e) => handleLanguageChange(e.target.value)}
+                className="h-10 text-xs sm:text-sm rounded-xl font-medium"
+              >
+                {KOKORO_LANGUAGES.map((lang) => (
+                  <option key={lang.code} value={lang.code}>
+                    {lang.label}
+                  </option>
+                ))}
+              </NativeSelect>
+            ) : (
+              <NativeSelect
+                value="ja-JP"
+                disabled
+                className="h-10 text-xs sm:text-sm rounded-xl bg-muted/40 font-medium"
+              >
+                <option value="ja-JP">🇯🇵 Tiếng Nhật (Japanese)</option>
+              </NativeSelect>
+            )}
+          </div>
+
+          {/* Voice Selector */}
+          <div className="space-y-1.5 sm:col-span-2 lg:col-span-1">
+            <Label className="text-xs font-semibold">Giọng phát âm ({rule.engineId === 'kokoro' ? 'Kokoro' : 'VOICEVOX'})</Label>
             <NativeSelect
               value={rule.voiceId}
               onChange={(e) => onUpdateRule(rule.id, { voiceId: e.target.value })}
-              className="h-9 text-xs rounded-xl"
+              className="h-10 text-xs sm:text-sm rounded-xl"
             >
-              {Object.entries(groupedVoices).map(([groupName, groupItems]) => (
-                <optgroup key={groupName} label={groupName}>
-                  {groupItems.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.label}
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
+              {Object.keys(groupedVoices).length === 0 ? (
+                <option value="">Không có giọng đọc phù hợp</option>
+              ) : (
+                Object.entries(groupedVoices).map(([groupName, groupItems]) => (
+                  <optgroup key={groupName} label={groupName}>
+                    {groupItems.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.label}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))
+              )}
             </NativeSelect>
           </div>
         </div>
@@ -246,7 +363,7 @@ export function DeckAudioRuleCard({
             <div className="flex items-center gap-2">
               <Volume2 className="size-4 text-primary" />
               <span className="text-xs font-bold text-foreground">
-                Ánh xạ trường (Cột nguồn chữ $\rightarrow$ Cột ghi file âm thanh)
+                Ánh xạ trường (Cột nguồn từ $\rightarrow$ Ghi file audio vào)
               </span>
             </div>
 
@@ -255,7 +372,7 @@ export function DeckAudioRuleCard({
               variant="outline"
               size="sm"
               onClick={() => onAddMapping(rule.id)}
-              className="h-7 text-[11px] gap-1 border-primary/30 text-primary hover:bg-primary/10"
+              className="h-7 text-[11px] gap-1 border-primary/30 text-primary hover:bg-primary/10 font-semibold"
             >
               <Plus className="size-3" />
               <span>Thêm cặp trường</span>
@@ -266,20 +383,20 @@ export function DeckAudioRuleCard({
             {rule.mappings.map((m, mIdx) => (
               <div
                 key={m.id}
-                className="flex flex-col sm:flex-row items-center gap-2 rounded-lg bg-card p-2.5 border border-border/50 shadow-2xs"
+                className="flex flex-col sm:flex-row items-center gap-2 rounded-xl bg-card p-3 border border-border/50 shadow-2xs"
               >
                 <div className="flex-1 w-full space-y-1">
-                  <span className="text-[11px] font-medium text-muted-foreground">
-                    Trường nguồn (chữ) #{mIdx + 1}:
+                  <span className="text-[11px] font-semibold text-muted-foreground">
+                    Cột nguồn từ #{mIdx + 1}:
                   </span>
                   <NativeSelect
                     value={m.sourceField}
                     onChange={(e) =>
                       onUpdateMapping(rule.id, m.id, { sourceField: e.target.value })
                     }
-                    className="h-8 text-xs rounded-lg"
+                    className="h-9 text-xs sm:text-sm rounded-xl"
                   >
-                    {availableFieldNames.map((f) => (
+                    {fieldList.map((f) => (
                       <option key={f} value={f}>
                         {f}
                       </option>
@@ -292,17 +409,17 @@ export function DeckAudioRuleCard({
                 </div>
 
                 <div className="flex-1 w-full space-y-1">
-                  <span className="text-[11px] font-medium text-muted-foreground">
-                    Ghi file audio vào trường:
+                  <span className="text-[11px] font-semibold text-muted-foreground">
+                    Ghi file audio vào:
                   </span>
                   <NativeSelect
                     value={m.destinationField}
                     onChange={(e) =>
                       onUpdateMapping(rule.id, m.id, { destinationField: e.target.value })
                     }
-                    className="h-8 text-xs rounded-lg"
+                    className="h-9 text-xs sm:text-sm rounded-xl"
                   >
-                    {availableFieldNames.map((f) => (
+                    {fieldList.map((f) => (
                       <option key={f} value={f}>
                         {f}
                       </option>
@@ -317,6 +434,7 @@ export function DeckAudioRuleCard({
                     size="sm"
                     onClick={() => onRemoveMapping(rule.id, m.id)}
                     className="h-8 self-end sm:self-center mt-2 sm:mt-4 text-destructive hover:bg-destructive/10"
+                    title="Xóa cặp trường"
                   >
                     <Trash2 className="size-3.5" />
                   </Button>
@@ -326,114 +444,112 @@ export function DeckAudioRuleCard({
           </div>
         </div>
 
-        {/* Sliders Accordion Toggle */}
-        <div className="space-y-3">
+        {/* Sliders Block (Identical to Browse AudioAdvancedSettings) */}
+        <div className="space-y-2.5 pt-1">
           <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-xs font-bold text-foreground">
+              <Sliders className="size-4 text-primary" />
+              <span>Cấu hình thông số giọng đọc nâng cao</span>
+            </div>
+
             <Button
               type="button"
               variant="ghost"
               size="sm"
-              onClick={() => setShowAdvancedSliders(!showAdvancedSliders)}
-              className="h-7 text-xs font-semibold gap-1.5 text-muted-foreground hover:text-foreground"
+              onClick={handleResetSliders}
+              className="h-8 text-xs font-semibold text-muted-foreground hover:text-primary gap-1"
             >
-              <Sliders className="size-3.5" />
-              <span>{showAdvancedSliders ? 'Ẩn thông số nâng cao' : 'Tùy chỉnh tốc độ, cao độ, ngữ điệu'}</span>
+              <RotateCcw className="size-3.5" />
+              <span>Khôi phục mặc định</span>
             </Button>
-
-            {showAdvancedSliders && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={handleResetSliders}
-                className="h-7 text-xs gap-1 text-muted-foreground hover:text-primary"
-              >
-                <RotateCcw className="size-3" />
-                <span>Mặc định</span>
-              </Button>
-            )}
           </div>
 
-          {showAdvancedSliders && (
-            <div className="grid gap-3.5 sm:grid-cols-2 rounded-xl border border-border/50 bg-muted/10 p-4">
-              {/* Speed */}
-              <div className="space-y-1.5">
-                <div className="flex justify-between text-xs">
-                  <span className="font-semibold">Tốc độ nói (Speed)</span>
-                  <span className="font-mono text-primary font-bold">{rule.speed.toFixed(2)}x</span>
-                </div>
-                <input
-                  type="range"
-                  min="0.5"
-                  max="2.0"
-                  step="0.05"
-                  className="w-full h-1.5 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
-                  value={rule.speed}
-                  onChange={(e) => onUpdateRule(rule.id, { speed: parseFloat(e.target.value) })}
-                />
+          <div className="grid gap-3.5 sm:grid-cols-2 pt-1">
+            {/* Volume Scale */}
+            <div className="p-3.5 bg-background border border-border/60 rounded-xl space-y-2 hover:border-primary/40 transition-colors shadow-2xs">
+              <div className="flex items-center justify-between text-xs font-medium text-foreground">
+                <span>Âm lượng</span>
+                <span className="font-mono text-[11px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-md">
+                  {rule.volume.toFixed(2)}
+                </span>
               </div>
-
-              {/* Pitch */}
-              <div className="space-y-1.5">
-                <div className="flex justify-between text-xs">
-                  <span className="font-semibold">Cao độ (Pitch)</span>
-                  <span className="font-mono text-primary font-bold">{rule.pitch.toFixed(2)}</span>
-                </div>
-                <input
-                  type="range"
-                  min="-0.15"
-                  max="0.15"
-                  step="0.01"
-                  className="w-full h-1.5 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
-                  value={rule.pitch}
-                  onChange={(e) => onUpdateRule(rule.id, { pitch: parseFloat(e.target.value) })}
-                />
-              </div>
-
-              {/* Intonation */}
-              <div className="space-y-1.5">
-                <div className="flex justify-between text-xs">
-                  <span className="font-semibold">Ngữ điệu (Intonation)</span>
-                  <span className="font-mono text-primary font-bold">{rule.intonation.toFixed(2)}</span>
-                </div>
-                <input
-                  type="range"
-                  min="0.0"
-                  max="2.0"
-                  step="0.05"
-                  className="w-full h-1.5 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
-                  value={rule.intonation}
-                  onChange={(e) => onUpdateRule(rule.id, { intonation: parseFloat(e.target.value) })}
-                />
-              </div>
-
-              {/* Volume */}
-              <div className="space-y-1.5">
-                <div className="flex justify-between text-xs">
-                  <span className="font-semibold">Âm lượng (Volume)</span>
-                  <span className="font-mono text-primary font-bold">{rule.volume.toFixed(2)}x</span>
-                </div>
-                <input
-                  type="range"
-                  min="0.0"
-                  max="2.0"
-                  step="0.05"
-                  className="w-full h-1.5 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
-                  value={rule.volume}
-                  onChange={(e) => onUpdateRule(rule.id, { volume: parseFloat(e.target.value) })}
-                />
-              </div>
+              <input
+                type="range"
+                min="0"
+                max="2"
+                step="0.01"
+                className="w-full h-1.5 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
+                value={rule.volume}
+                onChange={(e) => onUpdateRule(rule.id, { volume: parseFloat(e.target.value) })}
+              />
             </div>
-          )}
+
+            {/* Pitch */}
+            <div className="p-3.5 bg-background border border-border/60 rounded-xl space-y-2 hover:border-primary/40 transition-colors shadow-2xs">
+              <div className="flex items-center justify-between text-xs font-medium text-foreground">
+                <span>Cao độ</span>
+                <span className="font-mono text-[11px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-md">
+                  {rule.pitch.toFixed(2)}
+                </span>
+              </div>
+              <input
+                type="range"
+                min="-0.4"
+                max="0.4"
+                step="0.01"
+                className="w-full h-1.5 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
+                value={rule.pitch}
+                onChange={(e) => onUpdateRule(rule.id, { pitch: parseFloat(e.target.value) })}
+              />
+            </div>
+
+            {/* Speed */}
+            <div className="p-3.5 bg-background border border-border/60 rounded-xl space-y-2 hover:border-primary/40 transition-colors shadow-2xs">
+              <div className="flex items-center justify-between text-xs font-medium text-foreground">
+                <span>Tốc độ đọc</span>
+                <span className="font-mono text-[11px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-md">
+                  {rule.speed.toFixed(2)}
+                </span>
+              </div>
+              <input
+                type="range"
+                min="0.1"
+                max="4"
+                step="0.01"
+                className="w-full h-1.5 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
+                value={rule.speed}
+                onChange={(e) => onUpdateRule(rule.id, { speed: parseFloat(e.target.value) })}
+              />
+            </div>
+
+            {/* Intonation */}
+            <div className="p-3.5 bg-background border border-border/60 rounded-xl space-y-2 hover:border-primary/40 transition-colors shadow-2xs">
+              <div className="flex items-center justify-between text-xs font-medium text-foreground">
+                <span>Ngữ điệu</span>
+                <span className="font-mono text-[11px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-md">
+                  {rule.intonation.toFixed(2)}
+                </span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="2"
+                step="0.01"
+                className="w-full h-1.5 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
+                value={rule.intonation}
+                onChange={(e) => onUpdateRule(rule.id, { intonation: parseFloat(e.target.value) })}
+              />
+            </div>
+          </div>
         </div>
 
         {/* Preview Voice Bar */}
-        <div className="flex flex-col sm:flex-row items-center gap-2 pt-1 border-t">
+        <div className="flex flex-col sm:flex-row items-center gap-2 pt-2 border-t">
           <Input
             value={previewText}
             onChange={(e) => setPreviewText(e.target.value)}
             placeholder="Nhập văn bản nghe thử phát âm..."
-            className="h-8 text-xs rounded-lg flex-1"
+            className="h-9 text-xs rounded-xl flex-1"
           />
           <Button
             type="button"
@@ -441,7 +557,7 @@ export function DeckAudioRuleCard({
             size="sm"
             onClick={handlePreview}
             disabled={isPreviewing}
-            className="h-8 text-xs gap-1.5 w-full sm:w-auto shrink-0"
+            className="h-9 text-xs gap-1.5 w-full sm:w-auto shrink-0 font-semibold"
           >
             {isPreviewing ? (
               <LoaderCircle className="size-3.5 animate-spin text-primary" />

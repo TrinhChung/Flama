@@ -90,6 +90,13 @@ def infer_auto_mappings(field_defs: list[FieldDef]) -> list[dict[str, Any]]:
                 if stripped_lower in field_name_lookup and field_name_lookup[stripped_lower] != dest_name:
                     source_name = field_name_lookup[stripped_lower]
                     confidence = "exact_suffix"
+                else:
+                    # Prefix matching on stripped root
+                    for k_lower, k_orig in field_name_lookup.items():
+                        if k_orig != dest_name and (k_lower.startswith(stripped_lower) or stripped_lower.startswith(k_lower)):
+                            source_name = k_orig
+                            confidence = "prefix_suffix"
+                            break
 
         # 2. If not matched, try prefix pattern (e.g. AudioReading -> Reading, Audio_Front -> Front)
         if not source_name:
@@ -130,6 +137,25 @@ def infer_auto_mappings(field_defs: list[FieldDef]) -> list[dict[str, Any]]:
             )
             used_destinations.add(dest_name)
 
+    # If no audio field exists at all in the note type, provide a sensible default mapping
+    if not mappings and field_defs:
+        source_name = None
+        for p in _PRIORITY_SOURCE_FIELDS:
+            if p.lower() in field_name_lookup:
+                source_name = field_name_lookup[p.lower()]
+                break
+        if not source_name:
+            source_name = field_defs[0].name
+
+        if source_name:
+            mappings.append(
+                {
+                    "source_field": source_name,
+                    "destination_field": "Audio",
+                    "confidence": "suggested_default",
+                }
+            )
+
     return mappings
 
 
@@ -141,12 +167,22 @@ def scan_deck_audio(
     upload_root: Path,
 ) -> dict[str, Any]:
     """Scan a deck's notes, note types, and media assets for audio generation readiness."""
-    deck = Deck.query.filter_by(id=deck_id).first()
+    from app.repositories.deck_tree_query import collect_subtree_ids
+
+    deck = (
+        Deck.query.filter_by(id=deck_id)
+        .options(selectinload(Deck.note_type).selectinload(NoteType.field_defs))
+        .first()
+    )
     if deck is None:
         raise AudioScanError(f"Deck #{deck_id} không tồn tại.", status=404, code="DECK_NOT_FOUND")
 
+    subtree_deck_ids = collect_subtree_ids(deck_id)
+    if not subtree_deck_ids:
+        subtree_deck_ids = [deck_id]
+
     notes_query = (
-        Note.query.filter(Note.deck_id == deck_id)
+        Note.query.filter(Note.deck_id.in_(subtree_deck_ids))
         .options(
             selectinload(Note.note_type).selectinload(NoteType.field_defs),
             selectinload(Note.cards),
@@ -159,11 +195,25 @@ def scan_deck_audio(
 
     notes: list[Note] = notes_query.all()
 
-    # Collect note types
+    # Collect note types from deck and notes
     note_type_map: dict[str, NoteType] = {}
+    if deck.note_type and deck.note_type.id:
+        note_type_map[deck.note_type.id] = deck.note_type
+
     for note in notes:
         if note.note_type and note.note_type.id not in note_type_map:
             note_type_map[note.note_type.id] = note.note_type
+
+    # Also query any note_type_ids that weren't loaded
+    missing_nt_ids = {note.note_type_id for note in notes if note.note_type_id and note.note_type_id not in note_type_map}
+    if missing_nt_ids:
+        extra_nts = (
+            NoteType.query.filter(NoteType.id.in_(missing_nt_ids))
+            .options(selectinload(NoteType.field_defs))
+            .all()
+        )
+        for nt in extra_nts:
+            note_type_map[nt.id] = nt
 
     all_field_defs: list[FieldDef] = []
     seen_field_keys: set[str] = set()
@@ -174,9 +224,27 @@ def scan_deck_audio(
                 seen_field_keys.add(key)
                 all_field_defs.append(fd)
 
+    # Check note.field_values for any field names not in FieldDef
+    existing_field_names_lower = {f.name.lower() for f in all_field_defs if f.name}
+    for note in notes:
+        for f_name in (note.field_values or {}).keys():
+            if f_name and f_name.lower() not in existing_field_names_lower:
+                existing_field_names_lower.add(f_name.lower())
+                synthetic_fd = FieldDef(
+                    name=f_name,
+                    field_type="audio" if ("audio" in f_name.lower() or "sound" in f_name.lower()) else "text",
+                    position=len(all_field_defs),
+                    required=False,
+                )
+                all_field_defs.append(synthetic_fd)
+
     # Compute suggested auto-mappings across note types
     auto_mappings = infer_auto_mappings(all_field_defs)
     mapped_destinations = {m["destination_field"] for m in auto_mappings}
+
+    all_available_field_names = [f.name for f in all_field_defs if f.name]
+    if not all_available_field_names:
+        all_available_field_names = ["Front", "Back", "Audio"]
 
     resolved_upload_root = upload_root.resolve()
 
@@ -213,14 +281,19 @@ def scan_deck_audio(
         # Check all destination fields from auto mappings or fields with audio in name/type
         note_field_defs = note.note_type.field_defs if note.note_type else []
         note_field_names = {f.name for f in note_field_defs if f.name}
+        if not note_field_names:
+            note_field_names = set(field_values.keys())
 
         dest_fields_to_check = set(mapped_destinations)
         for f in note_field_defs:
             if f.name and (f.field_type == "audio" or "audio" in f.name.lower() or "sound" in f.name.lower()):
                 dest_fields_to_check.add(f.name)
+        for k in field_values.keys():
+            if "audio" in k.lower() or "sound" in k.lower():
+                dest_fields_to_check.add(k)
 
         for dest_field in dest_fields_to_check:
-            if dest_field not in note_field_names:
+            if dest_field not in note_field_names and dest_field not in field_values:
                 continue
 
             raw_val = str(field_values.get(dest_field) or "").strip()
@@ -318,6 +391,7 @@ def scan_deck_audio(
             "name": deck.name,
         },
         "total_notes": len(notes),
+        "available_fields": all_available_field_names,
         "summary": {
             "total_notes": len(notes),
             "needs_audio_count": len(needs_audio_note_ids),
