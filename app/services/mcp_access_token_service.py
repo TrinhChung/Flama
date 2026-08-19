@@ -20,10 +20,75 @@ from models import db
 from models.mcp_access_token import McpAccessToken
 from models.user import User
 
-ALLOWED_SCOPES = frozenset({"deck:read", "note-type:read", "note:check", "note:create"})
-DEFAULT_SCOPES = ("deck:read", "note-type:read", "note:check", "note:create")
+ALLOWED_SCOPES = frozenset(
+    {
+        "deck:read",
+        "deck:write",
+        "note-type:read",
+        "note:check",
+        "note:read",
+        "note:create",
+        "note:update",
+        "note:delete",
+        "study:read",
+        "study:write",
+        "stats:read",
+        "read",
+        "write",
+        "*",
+    }
+)
+DEFAULT_SCOPES = (
+    "deck:read",
+    "deck:write",
+    "note-type:read",
+    "note:check",
+    "note:read",
+    "note:create",
+    "note:update",
+    "note:delete",
+    "study:read",
+    "study:write",
+    "stats:read",
+)
 _RATE_LIMIT_LOCK = threading.Lock()
 _RATE_LIMIT_BUCKETS: dict[str, deque[float]] = {}
+
+
+def has_scope(granted_scopes: Iterable[str], required_scope: str | None) -> bool:
+    """Check if granted scopes satisfy required_scope with wildcard and alias fallbacks."""
+    if not required_scope:
+        return True
+    granted = set(granted_scopes)
+    if "*" in granted:
+        return True
+    if required_scope in granted:
+        return True
+    if required_scope in ("note:read", "note:check"):
+        if any(s in granted for s in ("note:read", "note:check", "note:create", "read", "write")):
+            return True
+    if required_scope in ("note:update", "note:delete"):
+        if any(s in granted for s in ("note:update", "note:delete", "note:create", "write")):
+            return True
+    if required_scope == "deck:write":
+        if any(s in granted for s in ("deck:write", "note:create", "write")):
+            return True
+    if required_scope == "deck:read":
+        if any(s in granted for s in ("deck:read", "read", "write")):
+            return True
+    if required_scope == "study:read":
+        if any(s in granted for s in ("study:read", "deck:read", "read", "write")):
+            return True
+    if required_scope == "study:write":
+        if any(s in granted for s in ("study:write", "note:create", "write")):
+            return True
+    if required_scope == "stats:read":
+        if any(s in granted for s in ("stats:read", "deck:read", "read", "write")):
+            return True
+    if required_scope == "note-type:read":
+        if any(s in granted for s in ("note-type:read", "read", "write")):
+            return True
+    return False
 
 
 class McpAccessTokenError(RuntimeError):
@@ -331,7 +396,7 @@ def authenticate_bearer_token(
         )
 
     scopes = _normalize_scopes(row.scopes)
-    if required_scope and required_scope not in scopes:
+    if required_scope and not has_scope(scopes, required_scope):
         raise McpAccessTokenError(
             "MCP token does not grant the required scope.",
             status=403,

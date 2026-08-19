@@ -39,8 +39,19 @@ class FlamaConnectMcpTests(unittest.TestCase):
             )
             user.set_password("password")
             db.session.add(user)
+
+            other_user = User(
+                username="other_user",
+                email="other@example.com",
+                timezone="UTC",
+                is_admin=False,
+            )
+            other_user.set_password("password")
+            db.session.add(other_user)
             db.session.flush()
+
             self.user_id = user.id
+            self.other_user_id = other_user.id
 
             # Create UserApiToken
             issued_api_token = user_api_token_service.issue_token(
@@ -103,8 +114,18 @@ class FlamaConnectMcpTests(unittest.TestCase):
                 position=1,
             )
             db.session.add(deck)
+
+            other_deck = Deck(
+                name="Secret Other Deck",
+                owner_user_id=other_user.id,
+                description="Other user deck",
+                position=1,
+            )
+            db.session.add(other_deck)
             db.session.flush()
+
             self.deck_id = deck.id
+            self.other_deck_id = other_deck.id
 
             # Initial Note
             note = Note(
@@ -115,10 +136,26 @@ class FlamaConnectMcpTests(unittest.TestCase):
                 tags=["verb", "n5"],
             )
             db.session.add(note)
-            db.session.flush()
-            self.note_id = note.id
 
-            db.session.add(Card(note_id=note.id, template_id=note_type.templates[0].id))
+            other_note = Note(
+                user_id=other_user.id,
+                deck_id=other_deck.id,
+                note_type_id=note_type.id,
+                field_values={"Word": "他人の言葉", "Reading": "たにん", "Meaning": "other's note"},
+                tags=["secret"],
+            )
+            db.session.add(other_note)
+            db.session.flush()
+
+            self.note_id = note.id
+            self.other_note_id = other_note.id
+
+            card = Card(note_id=note.id, template_id=note_type.templates[0].id)
+            db.session.add(card)
+            db.session.add(Card(note_id=other_note.id, template_id=note_type.templates[0].id))
+            db.session.flush()
+            self.card_id = card.id
+
             db.session.commit()
 
     def tearDown(self):
@@ -175,16 +212,46 @@ class FlamaConnectMcpTests(unittest.TestCase):
         tools = data["result"]["tools"]
         tool_names = {t["name"] for t in tools}
         expected_tools = {
+            # Decks
             "list_my_decks",
             "get_deck_tree",
-            "list_note_types",
-            "get_note_type_schema",
+            "get_deck",
+            "create_deck",
+            "update_deck",
+            "delete_deck",
+            # Notes
+            "list_notes",
+            "get_note",
             "find_notes",
             "create_note",
+            "update_note",
+            "delete_note",
+            "move_note",
+            "add_tags",
+            "remove_tags",
+            # Batch
             "batch_create_notes",
+            "batch_update_notes",
+            "batch_delete_notes",
+            "batch_move_notes",
+            # Study
             "get_due_card_counts",
+            "get_study_queue",
+            "get_card",
+            "submit_review",
+            # Stats
+            "get_deck_stats",
+            "get_study_stats",
+            # Note Types
+            "list_note_types",
+            "get_note_type_schema",
         }
-        self.assertTrue(expected_tools.issubset(tool_names))
+        self.assertEqual(tool_names, expected_tools)
+        self.assertEqual(len(tools), 27)
+
+    # -----------------------------------------------------------------------
+    # Deck Tests
+    # -----------------------------------------------------------------------
 
     def test_call_list_my_decks_bearer_auth(self):
         response = self._post_mcp(
@@ -202,106 +269,140 @@ class FlamaConnectMcpTests(unittest.TestCase):
         self.assertEqual(len(decks), 1)
         self.assertEqual(decks[0]["name"], "JLPT N5")
 
-    def test_call_list_my_decks_url_token_auth(self):
+    def test_call_get_deck(self):
         response = self._post_mcp(
             {
                 "jsonrpc": "2.0",
                 "id": 4,
                 "method": "tools/call",
-                "params": {"name": "list_my_decks", "arguments": {}},
+                "params": {"name": "get_deck", "arguments": {"deck_id": self.deck_id}},
             },
-            url_token=self.api_token_str,
+            token=self.api_token_str,
         )
         self.assertEqual(response.status_code, 200)
         data = response.get_json()
-        decks = data["result"]["structuredContent"]["decks"]
-        self.assertEqual(len(decks), 1)
+        res = data["result"]["structuredContent"]
+        self.assertEqual(res["deck_id"], self.deck_id)
+        self.assertEqual(res["name"], "JLPT N5")
+        self.assertEqual(res["note_count"], 1)
+        self.assertEqual(res["card_count"], 1)
 
-    def test_call_list_my_decks_mcp_access_token(self):
+    def test_call_create_update_delete_deck(self):
+        # 1. create_deck (simple)
         response = self._post_mcp(
             {
                 "jsonrpc": "2.0",
                 "id": 5,
                 "method": "tools/call",
-                "params": {"name": "list_my_decks", "arguments": {}},
+                "params": {
+                    "name": "create_deck",
+                    "arguments": {
+                        "name": "JLPT N1",
+                        "description": "Advanced Japanese deck",
+                    },
+                },
             },
-            token=self.mcp_token_str,
+            token=self.api_token_str,
         )
         self.assertEqual(response.status_code, 200)
-        data = response.get_json()
-        decks = data["result"]["structuredContent"]["decks"]
-        self.assertEqual(len(decks), 1)
+        created = response.get_json()["result"]["structuredContent"]
+        new_deck_id = created["deck_id"]
+        self.assertEqual(created["name"], "JLPT N1")
 
-    def test_call_get_deck_tree(self):
+        # 2. create_deck (hierarchical path)
         response = self._post_mcp(
             {
                 "jsonrpc": "2.0",
                 "id": 6,
                 "method": "tools/call",
-                "params": {"name": "get_deck_tree", "arguments": {}},
+                "params": {
+                    "name": "create_deck",
+                    "arguments": {
+                        "name": "Japanese::Grammar::N1",
+                    },
+                },
             },
             token=self.api_token_str,
         )
         self.assertEqual(response.status_code, 200)
-        data = response.get_json()
-        tree = data["result"]["structuredContent"]["tree"]
-        self.assertIsInstance(tree, list)
-        self.assertGreaterEqual(len(tree), 1)
 
-    def test_call_list_note_types_and_schema(self):
-        # 1. list_note_types
+        # 3. update_deck (rename & reparent)
         response = self._post_mcp(
             {
                 "jsonrpc": "2.0",
                 "id": 7,
                 "method": "tools/call",
-                "params": {"name": "list_note_types", "arguments": {}},
+                "params": {
+                    "name": "update_deck",
+                    "arguments": {
+                        "deck_id": new_deck_id,
+                        "name": "JLPT N1 Super",
+                        "description": "Updated desc",
+                        "parent_id": self.deck_id,
+                    },
+                },
             },
             token=self.api_token_str,
         )
         self.assertEqual(response.status_code, 200)
-        data = response.get_json()
-        note_types = data["result"]["structuredContent"]["note_types"]
-        self.assertGreaterEqual(len(note_types), 1)
+        updated = response.get_json()["result"]["structuredContent"]
+        self.assertEqual(updated["name"], "JLPT N1 Super")
+        self.assertEqual(updated["parent_id"], self.deck_id)
 
-        # 2. get_note_type_schema
+        # 4. delete_deck without confirm (dry-run impact preview)
         response = self._post_mcp(
             {
                 "jsonrpc": "2.0",
                 "id": 8,
                 "method": "tools/call",
                 "params": {
-                    "name": "get_note_type_schema",
-                    "arguments": {"note_type_id": self.note_type_id},
+                    "name": "delete_deck",
+                    "arguments": {"deck_id": new_deck_id},
                 },
             },
             token=self.api_token_str,
         )
         self.assertEqual(response.status_code, 200)
-        data = response.get_json()
-        schema = data["result"]["structuredContent"]
-        self.assertEqual(schema["name"], "Japanese Vocabulary")
-        self.assertEqual(len(schema["fields"]), 3)
-        self.assertEqual(len(schema["templates"]), 1)
+        preview = response.get_json()["result"]["structuredContent"]
+        self.assertTrue(preview["requires_confirmation"])
+        self.assertEqual(preview["deck_id"], new_deck_id)
+        self.assertIn("impact", preview)
+        self.assertIn("warning", preview)
 
-    def test_call_create_note_and_find_notes(self):
-        # 1. create_note
+        # 5. delete_deck with confirm=True (actual deletion)
+        response = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 81,
+                "method": "tools/call",
+                "params": {
+                    "name": "delete_deck",
+                    "arguments": {"deck_id": new_deck_id, "confirm": True},
+                },
+            },
+            token=self.api_token_str,
+        )
+        self.assertEqual(response.status_code, 200)
+        deleted = response.get_json()["result"]["structuredContent"]
+        self.assertTrue(deleted["success"])
+
+    # -----------------------------------------------------------------------
+    # Note Listing & Reading Tests
+    # -----------------------------------------------------------------------
+
+    def test_call_list_notes_and_get_note(self):
+        # 1. list_notes without query
         response = self._post_mcp(
             {
                 "jsonrpc": "2.0",
                 "id": 9,
                 "method": "tools/call",
                 "params": {
-                    "name": "create_note",
+                    "name": "list_notes",
                     "arguments": {
                         "deck_id": self.deck_id,
-                        "note_type_id": self.note_type_id,
-                        "fields": {
-                            "Word": "飲む",
-                            "Reading": "のむ",
-                            "Meaning": "to drink",
-                        },
-                        "tags": ["verb", "n5"],
+                        "limit": 10,
+                        "offset": 0,
                     },
                 },
             },
@@ -309,34 +410,250 @@ class FlamaConnectMcpTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 200)
         data = response.get_json()
-        created = data["result"]["structuredContent"]
-        self.assertIn("note_id", created)
-        self.assertEqual(len(created["cards"]), 1)
+        list_res = data["result"]["structuredContent"]
+        self.assertEqual(list_res["total"], 1)
+        self.assertEqual(len(list_res["notes"]), 1)
+        self.assertEqual(list_res["notes"][0]["fields"]["Word"], "食べる")
 
-        # 2. find_notes
+        # 2. get_note
         response = self._post_mcp(
             {
                 "jsonrpc": "2.0",
                 "id": 10,
                 "method": "tools/call",
                 "params": {
-                    "name": "find_notes",
-                    "arguments": {"query": "飲む"},
+                    "name": "get_note",
+                    "arguments": {"note_id": str(self.note_id)},
                 },
             },
             token=self.api_token_str,
         )
         self.assertEqual(response.status_code, 200)
-        data = response.get_json()
-        notes = data["result"]["structuredContent"]["notes"]
-        self.assertEqual(len(notes), 1)
-        self.assertEqual(notes[0]["fields"]["Word"], "飲む")
+        note_data = response.get_json()["result"]["structuredContent"]
+        self.assertEqual(note_data["note_id"], str(self.note_id))
+        self.assertEqual(note_data["fields"]["Word"], "食べる")
+        self.assertEqual(len(note_data["cards"]), 1)
+        self.assertEqual(note_data["cards"][0]["queue"], "new")
 
-    def test_call_batch_create_notes(self):
+    def test_call_find_notes(self):
+        # find_notes by keyword
         response = self._post_mcp(
             {
                 "jsonrpc": "2.0",
                 "id": 11,
+                "method": "tools/call",
+                "params": {
+                    "name": "find_notes",
+                    "arguments": {
+                        "query": "食べる",
+                        "deck_id": self.deck_id,
+                    },
+                },
+            },
+            token=self.api_token_str,
+        )
+        self.assertEqual(response.status_code, 200)
+        res = response.get_json()["result"]["structuredContent"]
+        self.assertEqual(res["total_matches"], 1)
+        self.assertEqual(res["notes"][0]["fields"]["Word"], "食べる")
+
+        # find_notes by tag
+        response = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 12,
+                "method": "tools/call",
+                "params": {
+                    "name": "find_notes",
+                    "arguments": {"tag": "verb"},
+                },
+            },
+            token=self.api_token_str,
+        )
+        self.assertEqual(response.status_code, 200)
+        res = response.get_json()["result"]["structuredContent"]
+        self.assertEqual(res["total_matches"], 1)
+
+    # -----------------------------------------------------------------------
+    # Note Mutation & Organization Tests
+    # -----------------------------------------------------------------------
+
+    def test_call_update_note_partial_fields(self):
+        # update_note with only Meaning field (Word & Reading must be preserved!)
+        response = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 13,
+                "method": "tools/call",
+                "params": {
+                    "name": "update_note",
+                    "arguments": {
+                        "note_id": str(self.note_id),
+                        "fields": {"Meaning": "to eat, consume"},
+                    },
+                },
+            },
+            token=self.api_token_str,
+        )
+        self.assertEqual(response.status_code, 200)
+        updated = response.get_json()["result"]["structuredContent"]
+        self.assertTrue(updated["success"])
+        self.assertEqual(updated["fields"]["Word"], "食べる")
+        self.assertEqual(updated["fields"]["Reading"], "たべる")
+        self.assertEqual(updated["fields"]["Meaning"], "to eat, consume")
+
+    def test_call_add_and_remove_tags(self):
+        # add_tags
+        response = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 14,
+                "method": "tools/call",
+                "params": {
+                    "name": "add_tags",
+                    "arguments": {
+                        "note_ids": [str(self.note_id)],
+                        "tags": ["difficult", "JLPT_N5"],
+                    },
+                },
+            },
+            token=self.api_token_str,
+        )
+        self.assertEqual(response.status_code, 200)
+        res = response.get_json()["result"]["structuredContent"]
+        self.assertEqual(res["updated_count"], 1)
+
+        # verify tags on note
+        note_res = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 15,
+                "method": "tools/call",
+                "params": {"name": "get_note", "arguments": {"note_id": str(self.note_id)}},
+            },
+            token=self.api_token_str,
+        ).get_json()["result"]["structuredContent"]
+        self.assertIn("difficult", note_res["tags"])
+        self.assertIn("verb", note_res["tags"])
+
+        # remove_tags
+        response = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 16,
+                "method": "tools/call",
+                "params": {
+                    "name": "remove_tags",
+                    "arguments": {
+                        "note_ids": [str(self.note_id)],
+                        "tags": ["difficult"],
+                    },
+                },
+            },
+            token=self.api_token_str,
+        )
+        self.assertEqual(response.status_code, 200)
+
+        # verify tag removed
+        note_res = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 17,
+                "method": "tools/call",
+                "params": {"name": "get_note", "arguments": {"note_id": str(self.note_id)}},
+            },
+            token=self.api_token_str,
+        ).get_json()["result"]["structuredContent"]
+        self.assertNotIn("difficult", note_res["tags"])
+        self.assertIn("verb", note_res["tags"])
+
+    def test_call_move_note_and_delete_note(self):
+        # 1. create secondary deck
+        new_deck_res = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 18,
+                "method": "tools/call",
+                "params": {"name": "create_deck", "arguments": {"name": "Deck 2"}},
+            },
+            token=self.api_token_str,
+        ).get_json()["result"]["structuredContent"]
+        target_deck_id = new_deck_res["deck_id"]
+
+        # 2. move_note
+        response = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 19,
+                "method": "tools/call",
+                "params": {
+                    "name": "move_note",
+                    "arguments": {
+                        "note_id": str(self.note_id),
+                        "deck_id": target_deck_id,
+                    },
+                },
+            },
+            token=self.api_token_str,
+        )
+        self.assertEqual(response.status_code, 200)
+
+        # verify deck moved
+        note_res = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 20,
+                "method": "tools/call",
+                "params": {"name": "get_note", "arguments": {"note_id": str(self.note_id)}},
+            },
+            token=self.api_token_str,
+        ).get_json()["result"]["structuredContent"]
+        self.assertEqual(note_res["deck_id"], target_deck_id)
+
+        # 3. delete_note without confirm (preview only)
+        response = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 21,
+                "method": "tools/call",
+                "params": {
+                    "name": "delete_note",
+                    "arguments": {"note_id": str(self.note_id)},
+                },
+            },
+            token=self.api_token_str,
+        )
+        self.assertEqual(response.status_code, 200)
+        note_del_preview = response.get_json()["result"]["structuredContent"]
+        self.assertTrue(note_del_preview["requires_confirmation"])
+        self.assertEqual(note_del_preview["note_id"], str(self.note_id))
+
+        # 4. delete_note with confirm=True
+        response = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 211,
+                "method": "tools/call",
+                "params": {
+                    "name": "delete_note",
+                    "arguments": {"note_id": str(self.note_id), "confirm": True},
+                },
+            },
+            token=self.api_token_str,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.get_json()["result"]["structuredContent"]["success"])
+
+    # -----------------------------------------------------------------------
+    # Batch Operations Tests
+    # -----------------------------------------------------------------------
+
+    def test_call_batch_operations(self):
+        # 1. batch_create_notes
+        response = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 22,
                 "method": "tools/call",
                 "params": {
                     "name": "batch_create_notes",
@@ -346,11 +663,13 @@ class FlamaConnectMcpTests(unittest.TestCase):
                                 "deck_id": self.deck_id,
                                 "note_type_id": self.note_type_id,
                                 "fields": {"Word": "本", "Reading": "ほん", "Meaning": "book"},
+                                "tags": ["noun"],
                             },
                             {
                                 "deck_id": self.deck_id,
                                 "note_type_id": self.note_type_id,
                                 "fields": {"Word": "車", "Reading": "くるま", "Meaning": "car"},
+                                "tags": ["noun"],
                             },
                         ]
                     },
@@ -359,35 +678,251 @@ class FlamaConnectMcpTests(unittest.TestCase):
             token=self.api_token_str,
         )
         self.assertEqual(response.status_code, 200)
-        data = response.get_json()
-        batch_res = data["result"]["structuredContent"]
-        self.assertEqual(batch_res["created_count"], 2)
-        self.assertEqual(len(batch_res["note_ids"]), 2)
+        batch_create_res = response.get_json()["result"]["structuredContent"]
+        self.assertEqual(batch_create_res["created_count"], 2)
+        note_ids = batch_create_res["note_ids"]
 
-    def test_call_get_due_card_counts(self):
+        # 2. batch_update_notes
         response = self._post_mcp(
             {
                 "jsonrpc": "2.0",
-                "id": 12,
+                "id": 23,
                 "method": "tools/call",
                 "params": {
-                    "name": "get_due_card_counts",
+                    "name": "batch_update_notes",
+                    "arguments": {
+                        "notes": [
+                            {
+                                "note_id": note_ids[0],
+                                "fields": {"Meaning": "book, main"},
+                            },
+                            {
+                                "note_id": note_ids[1],
+                                "tags": ["noun", "vehicle"],
+                            },
+                        ]
+                    },
+                },
+            },
+            token=self.api_token_str,
+        )
+        self.assertEqual(response.status_code, 200)
+        batch_up_res = response.get_json()["result"]["structuredContent"]
+        self.assertEqual(batch_up_res["updated_count"], 2)
+
+        # 3. batch_delete_notes without confirm (preview only)
+        response = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 24,
+                "method": "tools/call",
+                "params": {
+                    "name": "batch_delete_notes",
+                    "arguments": {"note_ids": note_ids},
+                },
+            },
+            token=self.api_token_str,
+        )
+        self.assertEqual(response.status_code, 200)
+        batch_preview = response.get_json()["result"]["structuredContent"]
+        self.assertTrue(batch_preview["requires_confirmation"])
+        self.assertEqual(batch_preview["impact"]["found_notes_to_delete"], 2)
+
+        # 4. batch_delete_notes with confirm=True
+        response = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 241,
+                "method": "tools/call",
+                "params": {
+                    "name": "batch_delete_notes",
+                    "arguments": {"note_ids": note_ids, "confirm": True},
+                },
+            },
+            token=self.api_token_str,
+        )
+        self.assertEqual(response.status_code, 200)
+        batch_del_res = response.get_json()["result"]["structuredContent"]
+        self.assertEqual(batch_del_res["deleted_count"], 2)
+
+    # -----------------------------------------------------------------------
+    # Study & Card Review Tests
+    # -----------------------------------------------------------------------
+
+    def test_call_study_flow_and_review(self):
+        # 1. get_study_queue
+        response = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 25,
+                "method": "tools/call",
+                "params": {
+                    "name": "get_study_queue",
+                    "arguments": {"deck_id": self.deck_id, "limit": 5},
+                },
+            },
+            token=self.api_token_str,
+        )
+        self.assertEqual(response.status_code, 200)
+        queue_res = response.get_json()["result"]["structuredContent"]
+        self.assertIn("cards", queue_res)
+        self.assertGreaterEqual(len(queue_res["cards"]), 1)
+        card_item = queue_res["cards"][0]
+        self.assertIn("front_html", card_item)
+        self.assertIn("intervals_preview", card_item)
+        target_card_id = card_item["card_id"]
+
+        # 2. get_card
+        response = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 26,
+                "method": "tools/call",
+                "params": {
+                    "name": "get_card",
+                    "arguments": {"card_id": target_card_id},
+                },
+            },
+            token=self.api_token_str,
+        )
+        self.assertEqual(response.status_code, 200)
+        card_res = response.get_json()["result"]["structuredContent"]
+        self.assertEqual(card_res["card_id"], target_card_id)
+        self.assertIn("intervals_preview", card_res)
+
+        # 3. submit_review ("good")
+        response = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 27,
+                "method": "tools/call",
+                "params": {
+                    "name": "submit_review",
+                    "arguments": {
+                        "card_id": target_card_id,
+                        "rating": "good",
+                        "duration_ms": 3500,
+                    },
+                },
+            },
+            token=self.api_token_str,
+        )
+        self.assertEqual(response.status_code, 200)
+        review_res = response.get_json()["result"]["structuredContent"]
+        self.assertTrue(review_res["success"])
+        self.assertEqual(review_res["card_id"], target_card_id)
+        self.assertEqual(review_res["rating"], "good")
+        self.assertEqual(review_res["reps"], 1)
+
+    # -----------------------------------------------------------------------
+    # Statistics Tests
+    # -----------------------------------------------------------------------
+
+    def test_call_get_deck_stats_and_study_stats(self):
+        # 1. get_deck_stats
+        response = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 28,
+                "method": "tools/call",
+                "params": {
+                    "name": "get_deck_stats",
+                    "arguments": {"deck_id": self.deck_id},
+                },
+            },
+            token=self.api_token_str,
+        )
+        self.assertEqual(response.status_code, 200)
+        deck_stats = response.get_json()["result"]["structuredContent"]
+        self.assertEqual(deck_stats["deck_id"], self.deck_id)
+        self.assertEqual(deck_stats["note_count"], 1)
+        self.assertEqual(deck_stats["card_count"], 1)
+
+        # 2. get_study_stats
+        response = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 29,
+                "method": "tools/call",
+                "params": {
+                    "name": "get_study_stats",
                     "arguments": {},
                 },
             },
             token=self.api_token_str,
         )
         self.assertEqual(response.status_code, 200)
+        study_stats = response.get_json()["result"]["structuredContent"]
+        self.assertIn("current_streak_days", study_stats)
+        self.assertIn("total_decks", study_stats)
+        self.assertIn("total_notes", study_stats)
+
+    # -----------------------------------------------------------------------
+    # Security & Error Handling Tests
+    # -----------------------------------------------------------------------
+
+    def test_unauthorized_access_to_other_user_resources_rejected(self):
+        # Attempt to get other user's deck
+        response = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 30,
+                "method": "tools/call",
+                "params": {
+                    "name": "get_deck",
+                    "arguments": {"deck_id": self.other_deck_id},
+                },
+            },
+            token=self.api_token_str,
+        )
+        self.assertEqual(response.status_code, 404)
         data = response.get_json()
-        counts = data["result"]["structuredContent"]
-        self.assertIn("total_due", counts)
-        self.assertIn("new_cards", counts)
+        self.assertEqual(data["error"]["code"], -32602)
+        self.assertEqual(data["error"]["data"]["code"], "DECK_NOT_FOUND")
+
+        # Attempt to get other user's note
+        response = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 31,
+                "method": "tools/call",
+                "params": {
+                    "name": "get_note",
+                    "arguments": {"note_id": str(self.other_note_id)},
+                },
+            },
+            token=self.api_token_str,
+        )
+        self.assertEqual(response.status_code, 404)
+        data = response.get_json()
+        self.assertEqual(data["error"]["code"], -32602)
+        self.assertEqual(data["error"]["data"]["code"], "NOTE_NOT_FOUND")
+
+    def test_invalid_rating_rejected(self):
+        response = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 32,
+                "method": "tools/call",
+                "params": {
+                    "name": "submit_review",
+                    "arguments": {
+                        "card_id": str(self.card_id),
+                        "rating": "super_easy",
+                    },
+                },
+            },
+            token=self.api_token_str,
+        )
+        self.assertEqual(response.status_code, 400)
+        data = response.get_json()
+        self.assertEqual(data["error"]["code"], -32602)
 
     def test_unauthenticated_tools_call_rejected(self):
         response = self._post_mcp(
             {
                 "jsonrpc": "2.0",
-                "id": 13,
+                "id": 33,
                 "method": "tools/call",
                 "params": {"name": "list_my_decks", "arguments": {}},
             }
@@ -400,7 +935,7 @@ class FlamaConnectMcpTests(unittest.TestCase):
         response = self._post_mcp(
             {
                 "jsonrpc": "2.0",
-                "id": 14,
+                "id": 34,
                 "method": "tools/call",
                 "params": {"name": "list_my_decks", "arguments": {}},
             },
@@ -414,7 +949,7 @@ class FlamaConnectMcpTests(unittest.TestCase):
         response = self._post_mcp(
             {
                 "jsonrpc": "2.0",
-                "id": 15,
+                "id": 35,
                 "method": "unknown/method",
                 "params": {},
             }

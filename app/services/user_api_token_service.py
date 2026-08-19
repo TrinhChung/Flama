@@ -12,6 +12,7 @@ import secrets
 
 from sqlalchemy import or_
 
+from app.services.mcp_access_token_service import has_scope
 from models import db
 from models.audit_log import AuditLog
 from models.user import User
@@ -20,7 +21,19 @@ from models.user_api_token import UserApiToken
 
 TOKEN_PREFIX = "flama_yt_"
 TOKEN_RE = re.compile(r"^flama_yt_[0-9a-f]{8}_[A-Za-z0-9_-]{40,64}$")
-DEFAULT_SCOPES = ("deck:read", "note-type:read", "note:check", "note:create")
+DEFAULT_SCOPES = (
+    "deck:read",
+    "deck:write",
+    "note-type:read",
+    "note:check",
+    "note:read",
+    "note:create",
+    "note:update",
+    "note:delete",
+    "study:read",
+    "study:write",
+    "stats:read",
+)
 ALLOWED_EXPIRY_DAYS = {30, 90, 180, 365}
 MAX_ACTIVE_TOKENS_PER_USER = 10
 MAX_TOKEN_RECORDS_PER_USER = 100
@@ -171,7 +184,7 @@ def authenticate_token_detailed(
         return "revoked", None
     if record.expires_at is not None and record.expires_at <= now:
         return "expired", None
-    if required_scope and required_scope not in parse_scopes(record):
+    if required_scope and not has_scope(parse_scopes(record), required_scope):
         return "permission_denied", None
     user = db.session.get(User, record.user_id)
     if user is None or not user.is_active:
