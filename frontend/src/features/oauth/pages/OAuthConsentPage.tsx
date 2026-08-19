@@ -12,9 +12,11 @@ import {
   Flame,
   Folder,
   FolderPlus,
+  Globe,
   Layers,
   Loader2,
   PlusCircle,
+  RefreshCw,
   ShieldCheck,
   Trash2,
   Zap,
@@ -38,6 +40,7 @@ function getScopeIcon(id: string) {
   if (id === 'note:create') return <PlusCircle className="size-4 text-emerald-500" />
   if (id === 'note:update') return <Edit3 className="size-4 text-indigo-500" />
   if (id === 'note:delete') return <Trash2 className="size-4 text-rose-500" />
+  if (id === 'note:sync') return <RefreshCw className="size-4 text-emerald-500" />
   if (id === 'note:read' || id === 'note:check') return <FileText className="size-4 text-blue-500" />
   if (id === 'study:write') return <Zap className="size-4 text-purple-500" />
   if (id.startsWith('study:')) return <Brain className="size-4 text-purple-500" />
@@ -109,7 +112,8 @@ export function OAuthConsentPage() {
   }
 
   const currentUser = consentInfo?.user || bootstrap?.user
-  const clientName = consentInfo?.client?.client_name || 'ChatGPT Assistant'
+  const clientName = consentInfo?.client?.client_name || 'Ứng dụng bên ngoài'
+  const clientUri = consentInfo?.client?.client_uri
   const scopesList = consentInfo?.scopes || []
 
   // Check login
@@ -182,10 +186,10 @@ export function OAuthConsentPage() {
           <CardContent className="p-6 sm:p-8 space-y-6">
             {/* 1. Connector Bridge Hero */}
             <div className="flex items-center justify-center gap-3 sm:gap-4 pt-2">
-              {/* ChatGPT Icon */}
+              {/* Client Application Icon */}
               <div
-                className="size-13 sm:size-14 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shadow-md shrink-0 transition-transform hover:scale-105"
-                title="ChatGPT / OpenAI"
+                className="size-13 sm:size-14 rounded-2xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 text-white flex items-center justify-center shadow-md shrink-0 transition-transform hover:scale-105"
+                title={clientName}
               >
                 <Bot className="size-7 sm:size-8" />
               </div>
@@ -224,6 +228,12 @@ export function OAuthConsentPage() {
                   {clientName}
                 </span>
               </h1>
+              {clientUri && (
+                <div className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground">
+                  <Globe className="size-3.5" />
+                  <span>{clientUri}</span>
+                </div>
+              )}
               <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed max-w-md mx-auto">
                 Ứng dụng yêu cầu kết nối an toàn với kho thẻ Flama của bạn để hỗ trợ tra cứu từ vựng, tạo flashcard và đồng bộ tiến độ học tập.
               </p>

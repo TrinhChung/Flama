@@ -15,14 +15,15 @@ from flask import Request, current_app
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from app.repositories import oauth_repository
+from app.services import mcp_scope_service
 from models import db
 from models.mcp_access_token import McpAccessToken
 from models.oauth_authorization_code import OAuthAuthorizationCode
 from models.oauth_client import OAuthClient
 from models.user import User
 
-ALLOWED_SCOPES = frozenset({"deck:read", "note-type:read", "note:check", "note:create"})
-DEFAULT_SCOPES = ("deck:read", "note-type:read", "note:check", "note:create")
+ALLOWED_SCOPES = mcp_scope_service.ALLOWED_OAUTH_SCOPES
+DEFAULT_SCOPES = mcp_scope_service.DEFAULT_SCOPES
 AUTH_CODE_EXPIRY_SECONDS = 300  # 5 minutes
 ACCESS_TOKEN_EXPIRY_SECONDS = 86400  # 24 hours
 REFRESH_TOKEN_EXPIRY_DAYS = 90
@@ -86,17 +87,7 @@ def hash_secret(secret: str) -> str:
 
 
 def normalize_scopes(raw_scopes: Any) -> tuple[str, ...]:
-    if raw_scopes is None:
-        return DEFAULT_SCOPES
-    if isinstance(raw_scopes, str):
-        items = [s.strip() for s in raw_scopes.replace(",", " ").split() if s.strip()]
-    elif isinstance(raw_scopes, (list, tuple, set)):
-        items = [str(s).strip() for s in raw_scopes if str(s).strip()]
-    else:
-        return DEFAULT_SCOPES
-
-    valid = [s for s in items if s in ALLOWED_SCOPES]
-    return tuple(valid) if valid else DEFAULT_SCOPES
+    return mcp_scope_service.validate_and_normalize_oauth_scopes(raw_scopes)
 
 
 def verify_pkce(*, code_verifier: str, code_challenge: str, method: str = "S256") -> bool:
@@ -139,7 +130,7 @@ def get_protected_resource_metadata(req: Request | None = None) -> dict[str, Any
     return {
         "resource": f"{base_url}/api/mcp",
         "authorization_servers": [base_url],
-        "scopes_supported": list(ALLOWED_SCOPES),
+        "scopes_supported": sorted(mcp_scope_service.ALL_GRANULAR_SCOPES),
         "bearer_methods_supported": ["header"],
     }
 
@@ -156,7 +147,7 @@ def get_authorization_server_metadata(req: Request | None = None) -> dict[str, A
         "grant_types_supported": ["authorization_code", "refresh_token"],
         "code_challenge_methods_supported": ["S256"],
         "token_endpoint_auth_methods_supported": ["client_secret_post", "client_secret_basic", "none"],
-        "scopes_supported": list(ALLOWED_SCOPES) + ["openid", "profile", "email"],
+        "scopes_supported": sorted(mcp_scope_service.ALLOWED_OAUTH_SCOPES),
     }
 
 
@@ -249,7 +240,15 @@ def validate_authorize_request(
             state=state,
         )
 
-    normalized_scopes = list(normalize_scopes(scope))
+    try:
+        normalized_scopes = list(mcp_scope_service.validate_and_normalize_oauth_scopes(scope))
+    except ValueError as err:
+        raise OAuthError(
+            "invalid_scope",
+            str(err),
+            redirect_uri=redirect_uri,
+            state=state,
+        ) from err
     return client, normalized_scopes
 
 

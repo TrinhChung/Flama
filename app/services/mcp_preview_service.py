@@ -1,4 +1,36 @@
-"""Preview token and stale protection management for destructive or impactful MCP actions."""
+"""Preview token and stale protection management for destructive or impactful MCP actions.
+
+Architecture & Lifecycle:
+-------------------------
+1. Generation (`create_preview_token`):
+   When a caller runs an impactful or destructive preview action (e.g. `preview_note_type_update`,
+   `delete_note_type`, `delete_deck`), the service calculates a deterministic `resource_version`
+   fingerprint of the target resource and generates a temporary `preview_id` with TTL.
+
+2. Verification (`validate_preview_token`):
+   Before executing the mutation, the caller passes `preview_id`. The service verifies:
+   - Token existence and expiry (TTL).
+   - Ownership matching (`user_id`).
+   - Action matching (`action`).
+   - Target resource matching (`resource_id`).
+   - State freshness (`resource_version == current_resource_version`). If the resource
+     was modified by another request in the interim, `STALE_PREVIEW_ERROR` (HTTP 409) is returned.
+
+3. Consumption (`consume_preview_token`):
+   Upon successful mutation, the preview token is immediately consumed (single-use).
+
+Operational Limitations & Multi-Worker Architecture Note:
+---------------------------------------------------------
+- Current Implementation:
+  Preview tokens are stored in-process memory (`_PREVIEW_TOKENS` dict protected by a threading Lock).
+  This is optimized for single-worker processes or development/testing environments.
+
+- TODO / Future Shared Storage:
+  When scaling to multi-worker Gunicorn deployments (`gunicorn -w 4`) or multi-instance container
+  clusters, preview tokens must be persisted in a shared storage backend (such as Redis with native
+  TTL or a persistent database table `mcp_preview_tokens`) to ensure preview validation works across
+  arbitrary worker nodes.
+"""
 
 from __future__ import annotations
 

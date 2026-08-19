@@ -208,6 +208,13 @@ def preview_sync_notes(
         note_type_id=note_type_id,
         note_type_name=note_type_name,
     )
+    if not note_type.templates:
+        raise RequestValidationError(
+            f"NoteType '{note_type.name}' (ID: {note_type.id}) không có template nào. Một NoteType hợp lệ để tạo thẻ phải có ít nhất một Template.",
+            field="note_type_id",
+            status=400,
+            code="NOTE_TYPE_HAS_NO_TEMPLATE",
+        )
     field_defs = sorted(note_type.field_defs, key=lambda f: f.position)
     effective_source_key = (str(source_key).strip() if source_key else "default")
 
@@ -316,6 +323,22 @@ def preview_sync_notes(
         existing_note: Note | None = None
         if existing_ref and existing_ref.note:
             existing_note = existing_ref.note
+            if str(existing_note.note_type_id) != str(note_type.id):
+                summary["conflicts"] += 1
+                items_report.append(
+                    {
+                        "index": idx,
+                        "external_id": ext_id,
+                        "action": "conflict",
+                        "note_id": str(existing_note.id),
+                        "deck_id": target_deck_id_val,
+                        "reason": f"NoteType mismatch: existing note #{existing_note.id} uses NoteType '{existing_note.note_type_id}', but sync requested NoteType '{note_type.id}'. NoteType migration during sync is not supported.",
+                        "validation_errors": [
+                            f"NoteType không khớp: Note #{existing_note.id} đang dùng NoteType '{existing_note.note_type_id}', không thể sync dưới NoteType '{note_type.id}'."
+                        ],
+                    }
+                )
+                continue
         elif not ext_id and primary_field and target_deck_id_val:
             primary_val = normalize_compare_text(normalized_fields.get(primary_field.name))
             if primary_val:
@@ -431,16 +454,12 @@ def execute_sync_notes(
     field_defs = sorted(note_type.field_defs, key=lambda f: f.position)
     templates = list(note_type.templates)
     if not templates:
-        tmpl = Template(
-            note_type_id=note_type.id,
-            name="Card 1",
-            position=0,
-            front_html="{{Front}}",
-            back_html="{{Back}}",
+        raise RequestValidationError(
+            f"NoteType '{note_type.name}' (ID: {note_type.id}) không có template nào. Một NoteType hợp lệ để tạo thẻ phải có ít nhất một Template.",
+            field="note_type_id",
+            status=400,
+            code="NOTE_TYPE_HAS_NO_TEMPLATE",
         )
-        db.session.add(tmpl)
-        db.session.flush()
-        templates = [tmpl]
 
     effective_source_key = (str(source_key).strip() if source_key else "default")
 
@@ -541,6 +560,23 @@ def execute_sync_notes(
         existing_note: Note | None = None
         if existing_ref and existing_ref.note:
             existing_note = existing_ref.note
+            if str(existing_note.note_type_id) != str(note_type.id):
+                summary["failed"] += 1
+                err_detail = {
+                    "index": idx,
+                    "external_id": ext_id,
+                    "error": f"NoteType mismatch: existing note #{existing_note.id} uses NoteType '{existing_note.note_type_id}', but sync requested NoteType '{note_type.id}'. NoteType migration during sync is not supported.",
+                    "code": "NOTE_TYPE_MISMATCH",
+                }
+                failed_items.append(err_detail)
+                if stop_on_error:
+                    db.session.rollback()
+                    raise RequestValidationError(
+                        f"Lỗi ở item #{idx}: Note #{existing_note.id} đang dùng NoteType '{existing_note.note_type_id}', không thể đồng bộ dưới NoteType '{note_type.id}'.",
+                        status=409,
+                        code="NOTE_TYPE_MISMATCH",
+                    )
+                continue
         elif not ext_id and primary_field:
             primary_val = normalize_compare_text(normalized_fields.get(primary_field.name))
             if primary_val:

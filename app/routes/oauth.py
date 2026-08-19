@@ -13,7 +13,7 @@ from flask_login import current_user, login_required
 
 from models import db
 from app.repositories import oauth_repository
-from app.services import oauth_service
+from app.services import mcp_scope_service, oauth_service
 from app.services.oauth_service import OAuthError
 
 logger = logging.getLogger(__name__)
@@ -60,85 +60,7 @@ def oauth_authorization_server_metadata():
 
 # --- Consent API Endpoints for React SPA ---
 
-SCOPE_METADATA: dict[str, dict[str, str]] = {
-    "deck:read": {
-        "id": "deck:read",
-        "title": "Xem danh mục & cấu trúc bộ thẻ",
-        "desc": "Đọc danh sách các bộ thẻ flashcard, cấu trúc thư mục phân cấp và số lượng thẻ.",
-        "category": "Bộ thẻ (Decks)",
-        "icon": "folder",
-    },
-    "deck:write": {
-        "id": "deck:write",
-        "title": "Quản lý & tạo mới bộ thẻ",
-        "desc": "Tạo bộ thẻ mới, đổi tên, cập nhật mô tả và tổ chức cây thư mục bộ bài.",
-        "category": "Bộ thẻ (Decks)",
-        "icon": "folder-plus",
-    },
-    "note:read": {
-        "id": "note:read",
-        "title": "Xem & tìm kiếm thẻ ghi nhớ",
-        "desc": "Đọc nội dung chi tiết các trường dữ liệu (từ vựng, kanji, nghĩa, ví dụ) và tìm kiếm thẻ.",
-        "category": "Thẻ ghi nhớ (Notes)",
-        "icon": "file-text",
-    },
-    "note:create": {
-        "id": "note:create",
-        "title": "Tạo thẻ ghi nhớ flashcard mới",
-        "desc": "Thêm từ vựng và thẻ mới vào bộ bài của bạn kèm các trường thông tin tự động.",
-        "category": "Thẻ ghi nhớ (Notes)",
-        "icon": "plus-circle",
-    },
-    "note:update": {
-        "id": "note:update",
-        "title": "Cập nhật thẻ ghi nhớ & nhãn (tags)",
-        "desc": "Chỉnh sửa nội dung thẻ, gắn thẻ phân loại (tags) hoặc chuyển thẻ sang bộ bài khác.",
-        "category": "Thẻ ghi nhớ (Notes)",
-        "icon": "edit",
-    },
-    "note:delete": {
-        "id": "note:delete",
-        "title": "Xóa thẻ ghi nhớ (Bảo vệ 2 bước)",
-        "desc": "Xóa thẻ ghi nhớ và các flashcard liên quan (bắt buộc phải có sự phê duyệt trực tiếp từ bạn).",
-        "category": "Thẻ ghi nhớ (Notes)",
-        "icon": "trash-2",
-    },
-    "note:check": {
-        "id": "note:check",
-        "title": "Kiểm tra trùng lặp thẻ",
-        "desc": "Kiểm tra xem từ vựng hay thẻ ghi nhớ đã tồn tại trong bộ bài của bạn chưa.",
-        "category": "Thẻ ghi nhớ (Notes)",
-        "icon": "check-circle",
-    },
-    "study:read": {
-        "id": "study:read",
-        "title": "Xem hàng đợi ôn tập Spaced Repetition",
-        "desc": "Xem danh sách các thẻ đến hạn học hôm nay và dự đoán khoảng cách lặp lại ngắt quãng.",
-        "category": "Học tập (SRS Study)",
-        "icon": "brain",
-    },
-    "study:write": {
-        "id": "study:write",
-        "title": "Ghi nhận kết quả ôn tập",
-        "desc": "Gửi đánh giá kết quả học tập (Again, Hard, Good, Easy) vào thuật toán tính lịch học Flama.",
-        "category": "Học tập (SRS Study)",
-        "icon": "zap",
-    },
-    "stats:read": {
-        "id": "stats:read",
-        "title": "Xem thống kê học tập & Streak",
-        "desc": "Theo dõi chuỗi ngày học liên tục (streak), số thẻ đã ôn hôm nay và tổng quan tiến độ.",
-        "category": "Thống kê (Analytics)",
-        "icon": "bar-chart",
-    },
-    "note-type:read": {
-        "id": "note-type:read",
-        "title": "Xem cấu trúc mẫu thẻ (Note Types)",
-        "desc": "Đọc danh sách mẫu thẻ (Vocabulary, Basic, Cloze) và cấu hình các trường dữ liệu tùy chỉnh.",
-        "category": "Mẫu thẻ (Note Types)",
-        "icon": "layers",
-    },
-}
+SCOPE_METADATA = mcp_scope_service.SCOPE_METADATA
 
 
 @oauth_bp.get("/api/oauth/consent-info")
@@ -154,7 +76,14 @@ def consent_info():
             400,
         )
 
-    requested_scopes = list(oauth_service.normalize_scopes(scope_str))
+    try:
+        requested_scopes = list(oauth_service.normalize_scopes(scope_str))
+    except ValueError as err:
+        return (
+            jsonify({"error": "invalid_scope", "error_description": str(err)}),
+            400,
+        )
+
     scopes_data = []
     for sc in requested_scopes:
         info = SCOPE_METADATA.get(
@@ -519,7 +448,7 @@ def create_oauth_client():
             jsonify(
                 {
                     "error": "VALIDATION_ERROR",
-                    "message": "Cần ít nhất một Callback / Redirect URL do ChatGPT cung cấp.",
+                    "message": "Cần ít nhất một Callback / Redirect URL do ứng dụng cung cấp.",
                 }
             ),
             400,
