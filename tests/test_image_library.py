@@ -405,5 +405,108 @@ class ImageLibraryTests(unittest.TestCase):
             self.assertEqual(SharedImageAsset.query.count(), 0)
 
 
+
+    def test_create_with_tags_and_filter_by_tag(self):
+        self._login()
+        resp = self.client.post(
+            "/admin/image-library",
+            data={
+                "action": "create",
+                "image_key": "cherry",
+                "is_enabled": "1",
+                "tags": "cherry, Fruit, red",
+                "image": (io.BytesIO(_MIN_PNG_BYTES), "cherry.png", "image/png"),
+            },
+            content_type="multipart/form-data",
+            follow_redirects=True,
+        )
+        self.assertEqual(resp.status_code, 200)
+        with self.app.app_context():
+            row = SharedImageAsset.query.filter_by(image_key="cherry").first()
+            self.assertIsNotNone(row)
+            self.assertEqual(row.tags, ["cherry", "fruit", "red"])
+
+    def test_deduplication_via_service(self):
+        from app.services import image_library_service
+        upload_root = Path(self.upload_tmp.name).resolve()
+
+        with self.app.app_context():
+            admin = User.query.filter_by(username="image-admin").first()
+            # 1. Create first image
+            upload1 = image_library_service.prepare_image_upload(
+                file_data=_MIN_PNG_BYTES,
+                filename="first.png",
+                max_bytes=1024 * 1024,
+                max_pixels=25_000_000,
+                remote_timeout_seconds=6,
+                remote_max_redirects=3,
+            )
+            row1 = image_library_service.create_image(
+                image_key="first_img",
+                description="First description",
+                tags=["cat", "animal"],
+                validated_upload=upload1,
+                upload_root=upload_root,
+                actor_user_id=admin.id,
+                deduplicate=True,
+            )
+            self.assertEqual(row1.image_key, "first_img")
+            self.assertEqual(row1.tags, ["cat", "animal"])
+
+            # 2. Create second image with identical content
+            upload2 = image_library_service.prepare_image_upload(
+                file_data=_MIN_PNG_BYTES,
+                filename="second.png",
+                max_bytes=1024 * 1024,
+                max_pixels=25_000_000,
+                remote_timeout_seconds=6,
+                remote_max_redirects=3,
+            )
+            row2 = image_library_service.create_image(
+                image_key="second_img",
+                tags=["pet", "cute", "animal"],
+                validated_upload=upload2,
+                upload_root=upload_root,
+                actor_user_id=admin.id,
+                deduplicate=True,
+            )
+            # Should reuse row1
+            self.assertEqual(row2.id, row1.id)
+            self.assertEqual(row2.tags, ["cat", "animal", "pet", "cute"])
+            self.assertEqual(SharedImageAsset.query.count(), 1)
+
+    def test_delete_asset_and_file_cleanup(self):
+        from app.services import image_library_service
+        upload_root = Path(self.upload_tmp.name).resolve()
+
+        with self.app.app_context():
+            admin = User.query.filter_by(username="image-admin").first()
+            upload = image_library_service.prepare_image_upload(
+                file_data=_MIN_PNG_BYTES,
+                filename="to_delete.png",
+                max_bytes=1024 * 1024,
+                max_pixels=25_000_000,
+                remote_timeout_seconds=6,
+                remote_max_redirects=3,
+            )
+            row = image_library_service.create_image(
+                image_key="to_delete",
+                tags=["delete_me"],
+                validated_upload=upload,
+                upload_root=upload_root,
+                actor_user_id=admin.id,
+            )
+            file_path = upload_root / row.storage_path
+            self.assertTrue(file_path.exists())
+
+            # Delete image
+            image_library_service.delete_image(
+                row=row,
+                upload_root=upload_root,
+                actor_user_id=admin.id,
+            )
+            self.assertEqual(SharedImageAsset.query.count(), 0)
+            self.assertFalse(file_path.exists())
+
 if __name__ == "__main__":
     unittest.main()

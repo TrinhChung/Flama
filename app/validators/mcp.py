@@ -879,6 +879,143 @@ def validate_sync_notes_arguments(arguments: Any) -> dict[str, Any]:
     return payload
 
 
+def validate_import_image_arguments(arguments: Any) -> dict[str, Any]:
+    if not isinstance(arguments, dict):
+        raise RequestValidationError(
+            "arguments phải là JSON object.",
+            field="arguments",
+            status=400,
+            code="INVALID_PARAMS",
+        )
+    if "user_id" in arguments or "userId" in arguments:
+        raise RequestValidationError(
+            "user_id không được phép truyền trong arguments.",
+            field="arguments",
+            status=400,
+            code="INVALID_PARAMS",
+        )
+
+    url = arguments.get("url") or arguments.get("source_url")
+    file_data = arguments.get("file_data") or arguments.get("file")
+    filename = arguments.get("filename")
+    image_key = arguments.get("image_key") or arguments.get("name")
+    tags = arguments.get("tags")
+    description = arguments.get("description")
+    is_enabled = arguments.get("is_enabled")
+
+    if not url and not file_data:
+        raise RequestValidationError(
+            "Cần cung cấp 'url' hoặc 'file_data' để import ảnh.",
+            field="url",
+            status=400,
+            code="INVALID_PARAMS",
+        )
+    if url and file_data:
+        raise RequestValidationError(
+            "Chỉ chọn một nguồn ảnh: 'url' hoặc 'file_data'.",
+            field="url",
+            status=400,
+            code="INVALID_PARAMS",
+        )
+
+    if url is not None:
+        url_str = str(url).strip()
+        if not url_str:
+            raise RequestValidationError("url không được để trống.", field="url", status=400, code="INVALID_PARAMS")
+        if len(url_str) > 2048:
+            raise RequestValidationError("url quá dài (tối đa 2048 ký tự).", field="url", status=400, code="INVALID_PARAMS")
+        url = url_str
+
+    if tags is not None and not isinstance(tags, (list, tuple, set, str)):
+        raise RequestValidationError("tags phải là danh sách chuỗi hoặc chuỗi phân cách dấu phẩy.", field="tags", status=400, code="INVALID_PARAMS")
+
+    return {
+        "url": url,
+        "file_data": file_data,
+        "filename": str(filename).strip() if filename else None,
+        "image_key": str(image_key).strip() if image_key else None,
+        "tags": tags,
+        "description": str(description).strip() if description is not None else "",
+        "is_enabled": is_enabled if isinstance(is_enabled, bool) else True,
+    }
+
+
+def validate_search_images_arguments(arguments: Any) -> dict[str, Any]:
+    if arguments is None:
+        arguments = {}
+    if not isinstance(arguments, dict):
+        raise RequestValidationError(
+            "arguments phải là JSON object.",
+            field="arguments",
+            status=400,
+            code="INVALID_PARAMS",
+        )
+    if "user_id" in arguments or "userId" in arguments:
+        raise RequestValidationError(
+            "user_id không được phép truyền trong arguments.",
+            field="arguments",
+            status=400,
+            code="INVALID_PARAMS",
+        )
+
+    query = arguments.get("query") or arguments.get("q")
+    tag = arguments.get("tag")
+    status = arguments.get("status")
+    limit = arguments.get("limit", 20)
+    offset = arguments.get("offset", 0)
+
+    try:
+        limit = max(1, min(int(limit), 60))
+    except (TypeError, ValueError):
+        limit = 20
+
+    try:
+        offset = max(0, int(offset))
+    except (TypeError, ValueError):
+        offset = 0
+
+    return {
+        "query": str(query).strip() if query is not None else "",
+        "tag": str(tag).strip() if tag is not None else None,
+        "status": str(status).strip().lower() if status else "",
+        "limit": limit,
+        "offset": offset,
+    }
+
+
+def validate_get_image_arguments(arguments: Any) -> dict[str, Any]:
+    if not isinstance(arguments, dict):
+        raise RequestValidationError(
+            "arguments phải là JSON object.",
+            field="arguments",
+            status=400,
+            code="INVALID_PARAMS",
+        )
+    if "user_id" in arguments or "userId" in arguments:
+        raise RequestValidationError(
+            "user_id không được phép truyền trong arguments.",
+            field="arguments",
+            status=400,
+            code="INVALID_PARAMS",
+        )
+
+    image_key = arguments.get("image_key") or arguments.get("name")
+    asset_id = arguments.get("asset_id") or arguments.get("id")
+
+    if not image_key and not asset_id:
+        raise RequestValidationError(
+            "Cần cung cấp 'image_key' hoặc 'asset_id'.",
+            field="image_key",
+            status=400,
+            code="INVALID_PARAMS",
+        )
+
+    return {
+        "image_key": str(image_key).strip() if image_key else None,
+        "asset_id": str(asset_id).strip() if asset_id else None,
+    }
+
+
 def validate_mcp_tool_call_params(params: Any) -> dict[str, Any]:
     """Validate and extract tools/call params supporting MCP metadata (_meta, context, etc.)."""
     if not isinstance(params, dict):

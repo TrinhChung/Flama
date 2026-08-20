@@ -350,14 +350,20 @@ def save_support_donation_config(
 def serialize_image_asset(row: SharedImageAsset) -> dict[str, Any]:
     return {
         "id": str(row.id),
+        "asset_id": str(row.id),
         "image_key": str(row.image_key or ""),
+        "name": str(row.image_key or ""),
         "description": str(row.description or ""),
         "filename": str(row.filename or "") or None,
         "mime_type": str(row.mime_type or "") or None,
         "size_bytes": int(row.size_bytes or 0),
         "sha256": str(row.sha256 or "") or None,
         "is_enabled": bool(row.is_enabled),
+        "status": "enabled" if row.is_enabled else "disabled",
         "has_file": bool(row.storage_path),
+        "file_exists": bool(row.storage_path),
+        "tags": list(row.tags or []),
+        "source_url": str(row.source_url or "") or None,
         "url": url_for("image_library.image_content", image_key=row.image_key),
         "preview_url": url_for("image_library.admin_preview", asset_id=row.id),
         "created_at": row.created_at.isoformat() if row.created_at else None,
@@ -367,13 +373,15 @@ def serialize_image_asset(row: SharedImageAsset) -> dict[str, Any]:
 
 def list_image_assets(
     *,
-    search_term: str,
-    status: str,
-    page: int,
-    per_page: int,
+    search_term: str = "",
+    tag: str | None = None,
+    status: str = "",
+    page: int = 1,
+    per_page: int = 24,
 ) -> dict[str, Any]:
     result = image_library_repository.list_assets(
         search_term=search_term,
+        tag=tag,
         status=status,
         page=page,
         per_page=per_page,
@@ -387,7 +395,7 @@ def list_image_assets(
         "has_prev": result.has_prev,
         "has_next": result.has_next,
         "summary": image_library_repository.count_summary(),
-        "filters": {"q": search_term, "status": status or "all"},
+        "filters": {"q": search_term, "tag": tag or "", "status": status or "all"},
     }
 
 
@@ -395,13 +403,15 @@ def save_image_asset(
     *,
     actor_user_id: int,
     payload: dict[str, Any],
-    uploaded_file: Any,
-    row: SharedImageAsset | None,
+    uploaded_file: Any = None,
+    row: SharedImageAsset | None = None,
 ) -> SharedImageAsset:
     try:
         validated_upload = image_library_service.prepare_image_upload(
             uploaded_file,
             source_url=str(payload.get("source_url") or ""),
+            file_data=payload.get("file_data") or payload.get("file") or None,
+            filename=str(payload.get("filename") or "") or None,
             max_bytes=int(
                 current_app.config.get(
                     "IMAGE_LIBRARY_MAX_BYTES",
@@ -431,14 +441,19 @@ def save_image_asset(
                 current_app.config.get("FLASHCARD_MEDIA_SCAN_ENABLED", False)
             ),
         )
+        tags_val = payload.get("tags")
+        source_url_val = payload.get("source_url")
+        raw_key = payload.get("image_key") or payload.get("name") or ""
         if row is None:
             return image_library_service.create_image(
-                image_key=payload.get("image_key") or "",
+                image_key=raw_key,
                 description=payload.get("description") or "",
                 is_enabled=parse_enabled_value(
-                    payload.get("is_enabled"),
-                    default=False,
+                    payload.get("is_enabled") if "is_enabled" in payload else (payload.get("status") == "enabled" if "status" in payload else None),
+                    default=True if ("status" in payload or "is_enabled" in payload) else False,
                 ),
+                tags=tags_val,
+                source_url=source_url_val,
                 validated_upload=validated_upload,
                 upload_root=Path(
                     current_app.config["FLASHCARD_MEDIA_UPLOAD_ROOT"]
@@ -453,9 +468,11 @@ def save_image_asset(
                 else row.description or ""
             ),
             is_enabled=parse_enabled_value(
-                payload.get("is_enabled"),
+                payload.get("is_enabled") if "is_enabled" in payload else (payload.get("status") == "enabled" if "status" in payload else None),
                 default=bool(row.is_enabled),
             ),
+            tags=tags_val if "tags" in payload else None,
+            source_url=source_url_val if "source_url" in payload else None,
             validated_upload=validated_upload,
             upload_root=Path(
                 current_app.config["FLASHCARD_MEDIA_UPLOAD_ROOT"]
@@ -480,6 +497,27 @@ def save_image_asset(
         raise AdminRestApiError(
             "DB_ERROR",
             "Could not save the image asset.",
+            status=500,
+        ) from exc
+
+
+def delete_image_asset(
+    *,
+    actor_user_id: int,
+    row: SharedImageAsset,
+) -> None:
+    try:
+        image_library_service.delete_image(
+            row=row,
+            upload_root=Path(
+                current_app.config["FLASHCARD_MEDIA_UPLOAD_ROOT"]
+            ).resolve(),
+            actor_user_id=actor_user_id,
+        )
+    except image_library_service.ImageLibraryPersistenceError as exc:
+        raise AdminRestApiError(
+            "DB_ERROR",
+            "Could not delete image library entry.",
             status=500,
         ) from exc
 

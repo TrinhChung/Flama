@@ -33,6 +33,7 @@ from models.note import Note
 from models.note_type import NoteType
 from models.template import Template
 from models.user import User
+from models.shared_image_asset import SharedImageAsset
 
 MCP_PROTOCOL_VERSION = "2025-11-25"
 
@@ -77,6 +78,10 @@ CREATE_NOTE_TYPE_TOOL_NAME = "create_note_type"
 PREVIEW_NOTE_TYPE_UPDATE_TOOL_NAME = "preview_note_type_update"
 UPDATE_NOTE_TYPE_TOOL_NAME = "update_note_type"
 DELETE_NOTE_TYPE_TOOL_NAME = "delete_note_type"
+
+IMPORT_IMAGE_TOOL_NAME = "import_image"
+SEARCH_IMAGES_TOOL_NAME = "search_images"
+GET_IMAGE_TOOL_NAME = "get_image"
 
 
 def _compact_description(raw_value: str | None, *, max_length: int = 200) -> str | None:
@@ -801,14 +806,20 @@ def create_note(*, user_id: int, note_data: dict[str, Any]) -> dict[str, Any]:
             for ex in existing:
                 if str((ex.field_values or {}).get(identity_field.name) or "").strip().lower() == identity_val:
                     # Update fields and return existing note
-                    updated = False
+                    changed_field_names: set[str] = set()
                     fvals = dict(ex.field_values or {})
                     for k, v in normalized_fields.items():
                         if v and fvals.get(k) != v:
                             fvals[k] = v
-                            updated = True
-                    if updated:
+                            changed_field_names.add(k)
+                    if changed_field_names:
                         ex.field_values = fvals
+                        from app.services import deck_working_tree_service
+
+                        deck_working_tree_service.mark_note_fields_changed(
+                            note=ex,
+                            field_names=changed_field_names,
+                        )
                         db.session.commit()
                     return {
                         "note_id": str(ex.id),
@@ -850,6 +861,13 @@ def create_note(*, user_id: int, note_data: dict[str, Any]) -> dict[str, Any]:
             }
         )
 
+    from app.services import deck_working_tree_service
+
+    deck_working_tree_service.mark_note_fields_changed(
+        note=note,
+        field_names=(note.field_values or {}).keys(),
+        operation="add",
+    )
     db.session.commit()
     return {
         "note_id": str(note.id),
@@ -878,12 +896,35 @@ def update_note(
             code="NOTE_NOT_FOUND",
         )
 
-    if deck_id is not None:
-        target_deck = _resolve_deck_for_user(user_id=user_id, deck_id=deck_id)
-        note.deck_id = target_deck.id
+    original_deck_id = note.deck_id
+    original_fields = dict(note.field_values or {})
+
+    target_deck = (
+        _resolve_deck_for_user(user_id=user_id, deck_id=deck_id)
+        if deck_id is not None
+        else None
+    )
+    from app.services import deck_working_tree_service
+
+    if (
+        target_deck is not None
+        and original_deck_id != target_deck.id
+        and deck_working_tree_service.note_has_shared_release_dependents(note)
+    ):
+        raise RequestValidationError(
+            "A released shared note cannot move decks until release-aware membership moves are supported.",
+            field="deck_id",
+            status=409,
+            code="SHARED_ENTITY_RETIRE_REQUIRED",
+        )
 
     if tags is not None:
-        note.tags = [str(t).strip() for t in tags if str(t).strip()]
+        next_tags = [str(t).strip() for t in tags if str(t).strip()]
+        _ensure_note_tags_version_safe(note=note, next_tags=next_tags)
+        note.tags = next_tags
+
+    if target_deck is not None:
+        note.deck_id = target_deck.id
 
     if fields is not None:
         current_fields = dict(note.field_values or {})
@@ -895,6 +936,35 @@ def update_note(
         else:
             note.field_values = current_fields
 
+    changed_field_names = {
+        field_name
+        for field_name in set(original_fields) | set(note.field_values or {})
+        if original_fields.get(field_name) != (note.field_values or {}).get(field_name)
+    }
+    if original_deck_id != note.deck_id:
+        all_field_names = set(original_fields) | set(note.field_values or {})
+        deck_working_tree_service.mark_note_field_batches_changed(
+            mutations=[
+                {
+                    "note": note,
+                    "field_names": all_field_names,
+                    "operation": "remove",
+                    "deck_id": original_deck_id,
+                },
+                {
+                    "note": note,
+                    "field_names": all_field_names,
+                    "operation": "add",
+                    "deck_id": note.deck_id,
+                },
+            ],
+        )
+    elif changed_field_names:
+        deck_working_tree_service.mark_note_fields_changed(
+            note=note,
+            field_names=changed_field_names,
+        )
+
     db.session.commit()
     return {
         "success": True,
@@ -903,6 +973,25 @@ def update_note(
         "fields": dict(note.field_values or {}),
         "tags": list(note.tags or []),
     }
+
+
+def _ensure_note_tags_version_safe(
+    *,
+    note: Note,
+    next_tags: list[str],
+) -> None:
+    if list(note.tags or []) == list(next_tags or []):
+        return
+    from app.services import deck_working_tree_service
+
+    if not deck_working_tree_service.note_has_shared_release_dependents(note):
+        return
+    raise RequestValidationError(
+        "Tags on a released shared note cannot change until note metadata is included in deck releases.",
+        field="tags",
+        status=409,
+        code="SHARED_NOTE_METADATA_VERSIONING_REQUIRED",
+    )
 
 
 def delete_note(*, user_id: int, note_id: str, confirm: bool = False) -> dict[str, Any]:
@@ -914,6 +1003,16 @@ def delete_note(*, user_id: int, note_id: str, confirm: bool = False) -> dict[st
             field="note_id",
             status=404,
             code="NOTE_NOT_FOUND",
+        )
+
+    from app.services import deck_working_tree_service
+
+    if deck_working_tree_service.note_has_shared_release_dependents(note):
+        raise RequestValidationError(
+            "Published shared notes cannot be hard-deleted because learner history must be preserved.",
+            field="note_id",
+            status=409,
+            code="SHARED_ENTITY_RETIRE_REQUIRED",
         )
 
     card_ids = [c.id for c in note.cards]
@@ -976,6 +1075,7 @@ def add_tags(*, user_id: int, note_ids: list[str], tags: list[str]) -> dict[str,
 
     clean_new_tags = [str(t).strip() for t in tags if str(t).strip()]
     updated_ids: list[str] = []
+    changed_tags_by_note_id: dict[str, list[str]] = {}
 
     for note in notes:
         current_tags = list(note.tags or [])
@@ -985,8 +1085,14 @@ def add_tags(*, user_id: int, note_ids: list[str], tags: list[str]) -> dict[str,
                 current_tags.append(tag)
                 modified = True
         if modified:
-            note.tags = current_tags
+            _ensure_note_tags_version_safe(note=note, next_tags=current_tags)
+            changed_tags_by_note_id[str(note.id)] = current_tags
         updated_ids.append(str(note.id))
+
+    for note in notes:
+        next_tags = changed_tags_by_note_id.get(str(note.id))
+        if next_tags is not None:
+            note.tags = next_tags
 
     db.session.commit()
     return {
@@ -1010,13 +1116,20 @@ def remove_tags(*, user_id: int, note_ids: list[str], tags: list[str]) -> dict[s
 
     tags_to_remove = set(str(t).strip() for t in tags if str(t).strip())
     updated_ids: list[str] = []
+    changed_tags_by_note_id: dict[str, list[str]] = {}
 
     for note in notes:
         current_tags = list(note.tags or [])
         remaining = [t for t in current_tags if t not in tags_to_remove]
         if len(remaining) != len(current_tags):
-            note.tags = remaining
+            _ensure_note_tags_version_safe(note=note, next_tags=remaining)
+            changed_tags_by_note_id[str(note.id)] = remaining
         updated_ids.append(str(note.id))
+
+    for note in notes:
+        next_tags = changed_tags_by_note_id.get(str(note.id))
+        if next_tags is not None:
+            note.tags = next_tags
 
     db.session.commit()
     return {
@@ -1077,6 +1190,21 @@ def batch_delete_notes(*, user_id: int, note_ids: list[str], confirm: bool = Fal
     notes = Note.query.filter(Note.id.in_(note_ids), Note.user_id == user_id).all()
     found_note_ids = {str(n.id) for n in notes}
 
+    from app.services import deck_working_tree_service
+
+    protected_note_ids = [
+        str(note.id)
+        for note in notes
+        if deck_working_tree_service.note_has_shared_release_dependents(note)
+    ]
+    if protected_note_ids:
+        raise RequestValidationError(
+            "Published shared notes cannot be hard-deleted because learner history must be preserved.",
+            field="note_ids",
+            status=409,
+            code="SHARED_ENTITY_RETIRE_REQUIRED",
+        )
+
     all_card_ids: list[str] = []
     for note in notes:
         all_card_ids.extend([c.id for c in note.cards])
@@ -1125,8 +1253,49 @@ def batch_move_notes(*, user_id: int, note_ids: list[str], deck_id: int) -> dict
     notes = Note.query.filter(Note.id.in_(note_ids), Note.user_id == user_id).all()
     found_note_ids = {str(n.id) for n in notes}
 
+    from app.services import deck_working_tree_service
+
+    protected_move_ids = [
+        str(note.id)
+        for note in notes
+        if note.deck_id != target_deck.id
+        and deck_working_tree_service.note_has_shared_release_dependents(note)
+    ]
+    if protected_move_ids:
+        raise RequestValidationError(
+            "Released shared notes cannot move decks until release-aware membership moves are supported.",
+            field="note_ids",
+            status=409,
+            code="SHARED_ENTITY_RETIRE_REQUIRED",
+        )
+
+    dirty_mutations: list[dict[str, Any]] = []
     for note in notes:
+        original_deck_id = note.deck_id
         note.deck_id = target_deck.id
+        if original_deck_id == note.deck_id:
+            continue
+        all_field_names = list((note.field_values or {}).keys())
+        dirty_mutations.extend(
+            [
+                {
+                    "note": note,
+                    "field_names": all_field_names,
+                    "operation": "remove",
+                    "deck_id": original_deck_id,
+                },
+                {
+                    "note": note,
+                    "field_names": all_field_names,
+                    "operation": "add",
+                    "deck_id": note.deck_id,
+                },
+            ]
+        )
+
+    deck_working_tree_service.mark_note_field_batches_changed(
+        mutations=dirty_mutations,
+    )
 
     db.session.commit()
     failed_ids = [nid for nid in note_ids if nid not in found_note_ids]
@@ -2108,6 +2277,34 @@ def update_note_type(
     """Update a note type's schema, metadata, fields, or templates with data migration support."""
     nt = _owned_note_type_for_mutation(user_id=user_id, note_type_id=note_type_id)
 
+    # The generic MCP note-type mutation rewrites fields/templates and cards
+    # directly.  Shared decks require stable field/card identity plus release
+    # dirty tracking, which is enforced by the dedicated field endpoints.
+    # Keep this broad mutation path closed until template/card versioning is
+    # part of DeckRelease instead of letting it bypass the publish gate.
+    from app.services import deck_working_tree_service
+
+    has_shared_lineage = deck_working_tree_service.note_type_has_shared_release_dependents(
+        note_type_id=str(nt.id),
+        owner_user_id=user_id,
+    )
+    changes_shared_shape = bool(
+        fields is not None
+        or templates is not None
+        or (name is not None and str(name).strip() != str(nt.name or "").strip())
+    )
+    if has_shared_lineage and changes_shared_shape:
+        raise RequestValidationError(
+            "Published shared note types must be changed through version-aware field APIs; template/card changes are not release-versioned yet.",
+            field=(
+                "templates"
+                if templates is not None
+                else ("fields" if fields is not None else "name")
+            ),
+            status=409,
+            code="SHARED_SCHEMA_VERSIONING_REQUIRED",
+        )
+
     notes_count = Note.query.filter_by(note_type_id=nt.id, user_id=user_id).count()
     cards_count = Card.query.join(Note, Card.note_id == Note.id).filter(Note.note_type_id == nt.id, Note.user_id == user_id).count()
 
@@ -2542,3 +2739,159 @@ def _resolve_note_type_for_user(*, user_id: int, note_type_id: str | None = None
         )
     return nt
 
+
+
+def serialize_mcp_image_asset(row: SharedImageAsset) -> dict[str, Any]:
+    return {
+        "id": str(row.id),
+        "image_key": str(row.image_key or ""),
+        "description": str(row.description or ""),
+        "filename": str(row.filename or "") or None,
+        "mime_type": str(row.mime_type or "") or None,
+        "size_bytes": int(row.size_bytes or 0),
+        "sha256": str(row.sha256 or "") or None,
+        "is_enabled": bool(row.is_enabled),
+        "tags": list(row.tags or []),
+        "source_url": str(row.source_url or "") or None,
+        "url": f"/media/library/{row.image_key}",
+        "preview_url": f"/admin/image-library/{row.id}/preview",
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+        "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+    }
+
+
+def import_image(
+    *,
+    user_id: int,
+    url: str | None = None,
+    file_data: str | bytes | None = None,
+    filename: str | None = None,
+    image_key: str | None = None,
+    tags: list[str] | str | None = None,
+    description: str = "",
+    is_enabled: bool = True,
+) -> dict[str, Any]:
+    from app.services import image_library_service
+    from flask import current_app
+    from pathlib import Path
+
+    max_bytes = int(
+        current_app.config.get(
+            "IMAGE_LIBRARY_MAX_BYTES",
+            current_app.config.get("FLASHCARD_MEDIA_MAX_BYTES", 5 * 1024 * 1024),
+        )
+    )
+    max_pixels = int(current_app.config.get("IMAGE_LIBRARY_MAX_PIXELS", 25_000_000))
+    remote_timeout = float(current_app.config.get("IMAGE_LIBRARY_REMOTE_FETCH_TIMEOUT_SECONDS", 6))
+    remote_redirects = int(current_app.config.get("IMAGE_LIBRARY_REMOTE_FETCH_MAX_REDIRECTS", 3))
+    scanner = current_app.config.get("FLASHCARD_MEDIA_SCANNER")
+    scan_enabled = bool(current_app.config.get("FLASHCARD_MEDIA_SCAN_ENABLED", False))
+    upload_root = Path(current_app.config["FLASHCARD_MEDIA_UPLOAD_ROOT"]).resolve()
+
+    validated_upload = image_library_service.prepare_image_upload(
+        uploaded=None,
+        source_url=url or "",
+        file_data=file_data,
+        filename=filename,
+        max_bytes=max_bytes,
+        max_pixels=max_pixels,
+        remote_timeout_seconds=remote_timeout,
+        remote_max_redirects=remote_redirects,
+        scanner=scanner,
+        scan_enabled=scan_enabled,
+    )
+
+    try:
+        row = image_library_service.create_image(
+            image_key=image_key,
+            description=description,
+            is_enabled=is_enabled,
+            tags=tags,
+            source_url=url,
+            validated_upload=validated_upload,
+            upload_root=upload_root,
+            actor_user_id=user_id,
+            deduplicate=True,
+        )
+    except image_library_service.ImageLibraryConflictError as exc:
+        raise RequestValidationError(
+            "image_key already exists.",
+            field="image_key",
+            status=409,
+            code="CONFLICT",
+        ) from exc
+    except image_library_service.ImageLibraryPersistenceError as exc:
+        raise RequestValidationError(
+            "Không thể lưu hình ảnh vào thư viện.",
+            field="image",
+            status=500,
+            code="PERSISTENCE_ERROR",
+        ) from exc
+
+    return {
+        "image": serialize_mcp_image_asset(row),
+        "is_deduplicated": getattr(row, "_is_deduplicated", False),
+    }
+
+
+def search_images(
+    *,
+    user_id: int,
+    query: str = "",
+    tag: str | None = None,
+    status: str = "enabled",
+    limit: int = 20,
+    offset: int = 0,
+) -> dict[str, Any]:
+    from app.repositories import image_library_repository
+
+    page = (offset // limit) + 1 if limit > 0 else 1
+    per_page = limit
+
+    filter_status = status if status in {"enabled", "disabled", "missing_file"} else ""
+    if status == "all":
+        filter_status = ""
+
+    result = image_library_repository.list_assets(
+        search_term=query,
+        tag=tag,
+        status=filter_status,
+        page=page,
+        per_page=per_page,
+    )
+
+    items = [serialize_mcp_image_asset(row) for row in result.items]
+    return {
+        "items": items,
+        "total": result.total,
+        "limit": limit,
+        "offset": offset,
+        "has_more": (offset + len(items)) < result.total,
+    }
+
+
+def get_image(
+    *,
+    user_id: int,
+    image_key: str | None = None,
+    asset_id: str | None = None,
+) -> dict[str, Any]:
+    from app.repositories import image_library_repository
+
+    row = None
+    if image_key:
+        row = image_library_repository.get_by_key(image_key)
+    elif asset_id:
+        row = image_library_repository.get_by_id(asset_id)
+
+    if row is None:
+        raise RequestValidationError(
+            f"Không tìm thấy hình ảnh với key/id: {image_key or asset_id}.",
+            field="image_key" if image_key else "asset_id",
+            status=404,
+            code="IMAGE_NOT_FOUND",
+        )
+
+    return {
+        "image": serialize_mcp_image_asset(row),
+    }

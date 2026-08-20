@@ -18,6 +18,8 @@ SCOPE_NOTE_SYNC = "note:sync"
 SCOPE_STUDY_READ = "study:read"
 SCOPE_STUDY_WRITE = "study:write"
 SCOPE_STATS_READ = "stats:read"
+SCOPE_MEDIA_READ = "media:read"
+SCOPE_MEDIA_WRITE = "media:write"
 
 # --- All Granular Scopes ---
 ALL_GRANULAR_SCOPES: frozenset[str] = frozenset(
@@ -35,6 +37,8 @@ ALL_GRANULAR_SCOPES: frozenset[str] = frozenset(
         SCOPE_STUDY_READ,
         SCOPE_STUDY_WRITE,
         SCOPE_STATS_READ,
+        SCOPE_MEDIA_READ,
+        SCOPE_MEDIA_WRITE,
     }
 )
 
@@ -90,6 +94,8 @@ DEFAULT_SCOPES: tuple[str, ...] = (
     SCOPE_STUDY_READ,
     SCOPE_STUDY_WRITE,
     SCOPE_STATS_READ,
+    SCOPE_MEDIA_READ,
+    SCOPE_MEDIA_WRITE,
 )
 
 # Read-only granular scopes (satisfied by legacy 'read')
@@ -101,6 +107,7 @@ READ_ONLY_GRANULAR_SCOPES: frozenset[str] = frozenset(
         SCOPE_NOTE_READ,
         SCOPE_STUDY_READ,
         SCOPE_STATS_READ,
+        SCOPE_MEDIA_READ,
     }
 )
 
@@ -114,6 +121,7 @@ WRITE_GRANULAR_SCOPES: frozenset[str] = frozenset(
         SCOPE_NOTE_DELETE,
         SCOPE_NOTE_SYNC,
         SCOPE_STUDY_WRITE,
+        SCOPE_MEDIA_WRITE,
     }
 )
 
@@ -209,6 +217,20 @@ SCOPE_METADATA: dict[str, dict[str, str]] = {
         "desc": "Tạo mới, chỉnh sửa trường dữ liệu hoặc mẫu card (bảo vệ preview cho thao tác gây mất dữ liệu).",
         "category": "Mẫu thẻ (Note Types)",
         "icon": "layers",
+    },
+    SCOPE_MEDIA_READ: {
+        "id": SCOPE_MEDIA_READ,
+        "title": "Xem & tìm kiếm hình ảnh",
+        "desc": "Đọc và tìm kiếm hình ảnh trong thư viện ảnh dùng chung (Image Library).",
+        "category": "Hình ảnh (Image Library)",
+        "icon": "image",
+    },
+    SCOPE_MEDIA_WRITE: {
+        "id": SCOPE_MEDIA_WRITE,
+        "title": "Tải lên & quản lý hình ảnh",
+        "desc": "Tải lên, import từ URL và gắn thẻ hình ảnh trong thư viện ảnh dùng chung.",
+        "category": "Hình ảnh (Image Library)",
+        "icon": "upload-cloud",
     },
     SCOPE_OPENID: {
         "id": SCOPE_OPENID,

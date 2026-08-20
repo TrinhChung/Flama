@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlalchemy import case, func
+from sqlalchemy import case, cast, func, or_, Text
 
 from app.validators import escape_like_pattern
+from models import db
 from models.shared_image_asset import SharedImageAsset
 
 
@@ -39,18 +40,35 @@ def get_by_key(image_key: str) -> SharedImageAsset | None:
     ).first()
 
 
+def get_by_sha256(sha256: str) -> SharedImageAsset | None:
+    if not sha256:
+        return None
+    return SharedImageAsset.query.filter_by(sha256=sha256).first()
+
+
 def list_assets(
     *,
-    search_term: str,
-    status: str,
-    page: int,
-    per_page: int,
+    search_term: str = "",
+    tag: str | None = None,
+    status: str = "",
+    page: int = 1,
+    per_page: int = 24,
 ) -> SharedImagePage:
     query = SharedImageAsset.query
     if search_term:
-        escaped = escape_like_pattern(search_term)
+        escaped = escape_like_pattern(search_term.lower())
+        pattern = f"%{escaped}%"
         query = query.filter(
-            SharedImageAsset.image_key.ilike(f"%{escaped}%", escape="\\"),
+            or_(
+                SharedImageAsset.image_key.ilike(pattern, escape="\\"),
+                SharedImageAsset.description.ilike(pattern, escape="\\"),
+                func.lower(cast(SharedImageAsset.tags, Text)).like(pattern, escape="\\"),
+            )
+        )
+    if tag:
+        escaped_tag = escape_like_pattern(tag.lower())
+        query = query.filter(
+            func.lower(cast(SharedImageAsset.tags, Text)).like(f"%{escaped_tag}%", escape="\\")
         )
     if status == "enabled":
         query = query.filter(SharedImageAsset.is_enabled.is_(True))

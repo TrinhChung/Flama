@@ -167,12 +167,14 @@ def admin_page():
             )
             if action == "create":
                 row = image_library_service.create_image(
-                    image_key=request.form.get("image_key") or "",
+                    image_key=request.form.get("image_key") or request.form.get("name") or "",
                     description=request.form.get("description") or "",
                     is_enabled=parse_enabled_value(
                         request.form.get("is_enabled"),
                         default=False,
                     ),
+                    tags=request.form.get("tags"),
+                    source_url=request.form.get("source_url"),
                     validated_upload=validated_upload,
                     upload_root=_upload_root(),
                     actor_user_id=actor_user_id,
@@ -185,6 +187,8 @@ def admin_page():
                         request.form.get("is_enabled"),
                         default=False,
                     ),
+                    tags=request.form.get("tags") if "tags" in request.form else None,
+                    source_url=request.form.get("source_url") if "source_url" in request.form else None,
                     validated_upload=validated_upload,
                     upload_root=_upload_root(),
                     actor_user_id=actor_user_id,
@@ -212,6 +216,7 @@ def admin_page():
     except RequestValidationError as exc:
         flash(str(exc), "danger")
         search_term = ""
+    tag = (request.args.get("tag") or "").strip().lower()
     status = (request.args.get("status") or "").strip().lower()
     if status not in VALID_STATUS_FILTERS:
         status = ""
@@ -223,6 +228,7 @@ def admin_page():
     )
     assets_page = image_library_repository.list_assets(
         search_term=search_term,
+        tag=tag,
         status=status,
         page=page,
         per_page=per_page,

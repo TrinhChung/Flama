@@ -27,12 +27,21 @@ def list_image_assets():
             status=400,
             field="q",
         )
+    tag = str(request.args.get("tag") or "").strip()
+    if len(tag) > 100:
+        return error_response(
+            "VALIDATION_ERROR",
+            "tag must not exceed 100 characters.",
+            status=400,
+            field="tag",
+        )
     status = str(request.args.get("status") or "").strip().lower()
     if status not in IMAGE_STATUS_FILTERS:
         status = ""
     return jsonify(
         admin_rest_api_service.list_image_assets(
             search_term=search_term,
+            tag=tag,
             status=status,
             page=admin_service.coerce_int(
                 request.args.get("page"),
@@ -88,3 +97,23 @@ def update_image_asset(asset_id: str):
     return jsonify(
         {"item": admin_rest_api_service.serialize_image_asset(row)}
     )
+
+
+@admin_image_library_bp.delete("/<asset_id>")
+@admin_required
+def delete_image_asset(asset_id: str):
+    row = admin_rest_api_service.get_image_asset(asset_id)
+    if row is None:
+        return error_response(
+            "NOT_FOUND",
+            "Image asset not found.",
+            status=404,
+        )
+    try:
+        admin_rest_api_service.delete_image_asset(
+            actor_user_id=current_user.id,
+            row=row,
+        )
+    except admin_rest_api_service.AdminRestApiError as exc:
+        return admin_service_error(exc)
+    return jsonify({"deleted": True, "id": asset_id})

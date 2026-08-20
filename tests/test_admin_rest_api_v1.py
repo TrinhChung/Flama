@@ -133,21 +133,37 @@ class AdminRestApiV1Tests(unittest.TestCase):
                 "image_key": "rest_image",
                 "description": "Fileless image key",
                 "is_enabled": True,
+                "tags": ["test", "Admin REST", "sample"],
             },
         )
         self.assertEqual(create_response.status_code, 201)
         item = create_response.get_json()["item"]
         self.assertEqual(item["image_key"], "rest_image")
+        self.assertEqual(item["tags"], ["test", "admin rest", "sample"])
         self.assertFalse(item["has_file"])
+
+        # Tag search
+        tag_resp = self.client.get("/api/admin/image-library?tag=admin+rest")
+        self.assertEqual(tag_resp.status_code, 200)
+        self.assertEqual(len(tag_resp.get_json()["items"]), 1)
 
         patch_response = self.client.patch(
             f"/api/admin/image-library/{item['id']}",
-            json={"is_enabled": False},
+            json={"is_enabled": False, "tags": ["updated tag"]},
         )
         self.assertEqual(patch_response.status_code, 200)
         patched = patch_response.get_json()["item"]
         self.assertFalse(patched["is_enabled"])
+        self.assertEqual(patched["tags"], ["updated tag"])
         self.assertEqual(patched["description"], "Fileless image key")
+
+        # Delete image
+        delete_response = self.client.delete(f"/api/admin/image-library/{item['id']}")
+        self.assertEqual(delete_response.status_code, 200)
+        self.assertTrue(delete_response.get_json()["deleted"])
+
+        list_after_delete = self.client.get("/api/admin/image-library")
+        self.assertEqual(list_after_delete.get_json()["items"], [])
 
     def test_regular_user_is_forbidden(self):
         self._login("rest-regular@example.com")

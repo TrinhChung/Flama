@@ -3,6 +3,11 @@
 from __future__ import annotations
 
 import json
+import io
+import base64
+from unittest.mock import patch
+from PIL import Image
+from app.services.remote_image_fetcher import RemoteImagePayload
 import unittest
 from datetime import datetime
 
@@ -17,6 +22,19 @@ from models.note_type import NoteType
 from models.template import Template
 from models.user import User
 
+
+
+
+def _make_test_png_b64(color=(245, 105, 24, 255)) -> str:
+    output = io.BytesIO()
+    Image.new("RGBA", (24, 18), color).save(output, format="PNG")
+    return base64.b64encode(output.getvalue()).decode("utf-8")
+
+
+def _make_test_png_b64_bytes(color=(200, 100, 50, 255)) -> bytes:
+    output = io.BytesIO()
+    Image.new("RGBA", (24, 18), color).save(output, format="PNG")
+    return output.getvalue()
 
 class FlamaConnectMcpTests(unittest.TestCase):
     def setUp(self):
@@ -253,9 +271,13 @@ class FlamaConnectMcpTests(unittest.TestCase):
             "preview_note_type_update",
             "update_note_type",
             "delete_note_type",
+            # Image Library
+            "import_image",
+            "search_images",
+            "get_image",
         }
         self.assertEqual(tool_names, expected_tools)
-        self.assertEqual(len(tools), 35)
+        self.assertEqual(len(tools), 38)
 
     # -----------------------------------------------------------------------
     # Deck Tests
@@ -966,6 +988,159 @@ class FlamaConnectMcpTests(unittest.TestCase):
         data = response.get_json()
         self.assertEqual(data["error"]["code"], -32601)
 
+
+
+    # -----------------------------------------------------------------------
+    # Image Library MCP Tests
+    # -----------------------------------------------------------------------
+
+    def test_import_image_base64_and_search_and_get(self):
+        b64_data = _make_test_png_b64()
+        # 1. Import image with base64 data and tags
+        resp = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 101,
+                "method": "tools/call",
+                "params": {
+                    "name": "import_image",
+                    "arguments": {
+                        "file_data": b64_data,
+                        "filename": "apple.png",
+                        "image_key": "red_apple",
+                        "tags": ["apple", "Red Apple", "fruit", "food"],
+                        "description": "A crisp red apple",
+                    },
+                },
+            },
+            token=self.api_token_str,
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.get_json()["result"]["structuredContent"]
+        self.assertIn("image", data)
+        image = data["image"]
+        self.assertEqual(image["image_key"], "red_apple")
+        self.assertIn("apple", image["tags"])
+        self.assertIn("red apple", image["tags"])
+        self.assertIn("fruit", image["tags"])
+        self.assertIn("food", image["tags"])
+        self.assertFalse(data["is_deduplicated"])
+
+        # 2. Search images by tag
+        search_resp = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 102,
+                "method": "tools/call",
+                "params": {
+                    "name": "search_images",
+                    "arguments": {"tag": "apple"},
+                },
+            },
+            token=self.api_token_str,
+        )
+        self.assertEqual(search_resp.status_code, 200)
+        search_data = search_resp.get_json()["result"]["structuredContent"]
+        self.assertEqual(search_data["total"], 1)
+        self.assertEqual(search_data["items"][0]["image_key"], "red_apple")
+
+        # 3. Get image by key
+        get_resp = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 103,
+                "method": "tools/call",
+                "params": {
+                    "name": "get_image",
+                    "arguments": {"image_key": "red_apple"},
+                },
+            },
+            token=self.api_token_str,
+        )
+        self.assertEqual(get_resp.status_code, 200)
+        get_data = get_resp.get_json()["result"]["structuredContent"]
+        self.assertEqual(get_data["image"]["image_key"], "red_apple")
+
+    def test_import_image_deduplication_merges_tags(self):
+        b64_data = _make_test_png_b64(color=(10, 200, 50, 255))
+
+        # First import
+        resp1 = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 104,
+                "method": "tools/call",
+                "params": {
+                    "name": "import_image",
+                    "arguments": {
+                        "file_data": b64_data,
+                        "tags": ["tree", "green"],
+                        "description": "Green tree",
+                    },
+                },
+            },
+            token=self.api_token_str,
+        )
+        self.assertEqual(resp1.status_code, 200)
+        data1 = resp1.get_json()["result"]["structuredContent"]
+        self.assertFalse(data1["is_deduplicated"])
+        asset_id = data1["image"]["id"]
+
+        # Second import with identical content hash but new tags
+        resp2 = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 105,
+                "method": "tools/call",
+                "params": {
+                    "name": "import_image",
+                    "arguments": {
+                        "file_data": b64_data,
+                        "tags": ["nature", "forest", "tree"],
+                    },
+                },
+            },
+            token=self.api_token_str,
+        )
+        self.assertEqual(resp2.status_code, 200)
+        data2 = resp2.get_json()["result"]["structuredContent"]
+        self.assertTrue(data2["is_deduplicated"])
+        self.assertEqual(data2["image"]["id"], asset_id)
+        # Verify merged tags
+        tags = data2["image"]["tags"]
+        self.assertIn("tree", tags)
+        self.assertIn("green", tags)
+        self.assertIn("nature", tags)
+        self.assertIn("forest", tags)
+
+    @patch("app.services.image_library_service.fetch_remote_image")
+    def test_import_image_url_mocked(self, mock_fetch):
+        png_bytes = _make_test_png_b64_bytes()
+        mock_fetch.return_value = RemoteImagePayload(
+            content=png_bytes,
+            mime_type="image/png",
+            filename="banana.png",
+            source_url="https://example.com/banana.png",
+        )
+        resp = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 106,
+                "method": "tools/call",
+                "params": {
+                    "name": "import_image",
+                    "arguments": {
+                        "url": "https://example.com/banana.png",
+                        "tags": ["banana", "yellow", "fruit"],
+                    },
+                },
+            },
+            token=self.api_token_str,
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.get_json()["result"]["structuredContent"]
+        self.assertEqual(data["image"]["source_url"], "https://example.com/banana.png")
+        self.assertIn("banana", data["image"]["tags"])
 
 if __name__ == "__main__":
     unittest.main()
