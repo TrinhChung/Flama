@@ -47,6 +47,8 @@ class OAuthClient(db.Model):
             "client_uri": self.client_uri,
             "redirect_uris": self.get_redirect_uris(),
             "is_confidential": bool(self.is_confidential),
+            "has_secret": bool(self.client_secret_hash),
             "is_active": bool(self.is_active),
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
+

@@ -570,43 +570,56 @@ class OAuthRemoteMcpTests(unittest.TestCase):
         client_ids = [c["client_id"] for c in items]
         self.assertIn("claude_custom", client_ids)
 
-        # 5. Delete client as Admin
+        # 5. Update client via PUT API
+        update_resp = self.client.put(
+            f"/api/oauth/clients/{client_pk}",
+            json={
+                "client_name": "Claude Desktop Renamed",
+                "redirect_uris": ["https://claude.ai/cb_new"],
+            },
+        )
+        self.assertEqual(update_resp.status_code, 200)
+        updated_client = update_resp.get_json()["client"]
+        self.assertEqual(updated_client["client_name"], "Claude Desktop Renamed")
+        self.assertEqual(updated_client["redirect_uris"], ["https://claude.ai/cb_new"])
+
+        # 6. Rotate secret for client
+        rotate_sec_resp = self.client.post(
+            f"/api/oauth/clients/{client_pk}/rotate-secret",
+            json={"new_secret": "my_brand_new_secret_123"},
+        )
+        self.assertEqual(rotate_sec_resp.status_code, 200)
+        rot_data = rotate_sec_resp.get_json()
+        self.assertEqual(rot_data["client_secret"], "my_brand_new_secret_123")
+        self.assertTrue(rot_data["client"]["has_secret"])
+
+        # 7. Delete client as Admin
         del_resp = self.client.delete(f"/api/oauth/clients/{client_pk}")
         self.assertEqual(del_resp.status_code, 200)
 
-        # 6. Verify deletion
+        # 8. Verify deletion
         list_resp_2 = self.client.get("/api/oauth/clients")
         client_ids_2 = [c["client_id"] for c in list_resp_2.get_json()["items"]]
         self.assertNotIn("claude_custom", client_ids_2)
 
+
     def test_oidc_userinfo_endpoint(self):
-        # 1. Obtain access token
+        # 1. Obtain access token with openid, profile, email
         self._login_user()
         verifier, challenge = self._generate_pkce()
-        self.client.post(
+        auth_resp = self.client.post(
             "/oauth/authorize",
             data={
                 "client_id": self.client_id,
                 "redirect_uri": self.redirect_uri,
-                "scope": "deck:read note:create",
+                "scope": "openid profile email deck:read",
                 "state": "s1",
                 "code_challenge": challenge,
                 "code_challenge_method": "S256",
                 "action": "approve",
             },
         )
-        auth_code = parse_qs(urlparse(self.client.post(
-            "/oauth/authorize",
-            data={
-                "client_id": self.client_id,
-                "redirect_uri": self.redirect_uri,
-                "scope": "deck:read",
-                "state": "s2",
-                "code_challenge": challenge,
-                "code_challenge_method": "S256",
-                "action": "approve",
-            },
-        ).headers["Location"]).query)["code"][0]
+        auth_code = parse_qs(urlparse(auth_resp.headers["Location"]).query)["code"][0]
 
         token_resp = self.client.post(
             "/oauth/token",
@@ -621,7 +634,7 @@ class OAuthRemoteMcpTests(unittest.TestCase):
         )
         access_token = token_resp.get_json()["access_token"]
 
-        # 2. Call userinfo with token
+        # 2. Call userinfo with full OIDC token -> returns all claims
         uinfo_resp = self.client.get(
             "/oauth/userinfo",
             headers={"Authorization": f"Bearer {access_token}"},
@@ -632,7 +645,78 @@ class OAuthRemoteMcpTests(unittest.TestCase):
         self.assertEqual(uinfo["email"], "alice@example.com")
         self.assertEqual(uinfo["sub"], str(self.user_id))
 
-        # 3. Call userinfo without token
+        # 3. Obtain token with openid + profile only (no email)
+        verifier2, challenge2 = self._generate_pkce()
+        auth_resp2 = self.client.post(
+            "/oauth/authorize",
+            data={
+                "client_id": self.client_id,
+                "redirect_uri": self.redirect_uri,
+                "scope": "openid profile",
+                "state": "s2",
+                "code_challenge": challenge2,
+                "code_challenge_method": "S256",
+                "action": "approve",
+            },
+        )
+        auth_code2 = parse_qs(urlparse(auth_resp2.headers["Location"]).query)["code"][0]
+        token_resp2 = self.client.post(
+            "/oauth/token",
+            data={
+                "grant_type": "authorization_code",
+                "client_id": self.client_id,
+                "client_secret": self.client_secret,
+                "code": auth_code2,
+                "code_verifier": verifier2,
+                "redirect_uri": self.redirect_uri,
+            },
+        )
+        access_token2 = token_resp2.get_json()["access_token"]
+        uinfo_resp2 = self.client.get(
+            "/oauth/userinfo",
+            headers={"Authorization": f"Bearer {access_token2}"},
+        )
+        self.assertEqual(uinfo_resp2.status_code, 200)
+        uinfo2 = uinfo_resp2.get_json()
+        self.assertEqual(uinfo2["username"], "alice")
+        self.assertEqual(uinfo2["sub"], str(self.user_id))
+        self.assertNotIn("email", uinfo2)
+
+        # 4. Obtain token with only deck:read (no openid) -> 403 insufficient_scope
+        verifier3, challenge3 = self._generate_pkce()
+        auth_resp3 = self.client.post(
+            "/oauth/authorize",
+            data={
+                "client_id": self.client_id,
+                "redirect_uri": self.redirect_uri,
+                "scope": "deck:read",
+                "state": "s3",
+                "code_challenge": challenge3,
+                "code_challenge_method": "S256",
+                "action": "approve",
+            },
+        )
+        auth_code3 = parse_qs(urlparse(auth_resp3.headers["Location"]).query)["code"][0]
+        token_resp3 = self.client.post(
+            "/oauth/token",
+            data={
+                "grant_type": "authorization_code",
+                "client_id": self.client_id,
+                "client_secret": self.client_secret,
+                "code": auth_code3,
+                "code_verifier": verifier3,
+                "redirect_uri": self.redirect_uri,
+            },
+        )
+        access_token3 = token_resp3.get_json()["access_token"]
+        uinfo_resp3 = self.client.get(
+            "/oauth/userinfo",
+            headers={"Authorization": f"Bearer {access_token3}"},
+        )
+        self.assertEqual(uinfo_resp3.status_code, 403)
+        self.assertEqual(uinfo_resp3.get_json()["error"], "insufficient_scope")
+
+        # 5. Call userinfo without token -> 401 Unauthorized
         unauth_resp = self.client.get("/oauth/userinfo")
         self.assertEqual(unauth_resp.status_code, 401)
 

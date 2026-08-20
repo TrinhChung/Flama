@@ -94,8 +94,11 @@ App Startup Factory
   - Đổi mặc định `STARTUP_RUN_MAINTENANCE`, `STARTUP_RUN_DB_CREATE_ALL`, `STARTUP_RUN_BACKWARD_COMPAT_SCHEMA` thành `False` trong production runtime.
   - Startup app chỉ thực hiện **Health Check / Connectivity Check / Migration Version Check** (kiểm tra DB sống và migration đã lên version mới nhất).
   - Tách các task dọn dẹp dữ liệu một lần (như seed role, seed TTS) thành lệnh CLI bảo trì riêng biệt (`flask maintenance ...`).
-- **Files tác động:** `app/startup.py`, `app/__init__.py`, `app/startup_schema.py`, `migrations/`, `deploy/`.
-- **Trạng thái:** `[ ] SẴN SÀNG TRIỂN KHAI`
+- **Files tác động:** `app/startup.py`, `app/__init__.py`, `app/startup_schema.py`, `migrations/versions/20260820_000018_add_user_management_schema.py`, `deploy/`.
+- **Trạng thái:** `[x] ĐÃ HOÀN THÀNH (2026-08-20)`:
+  - Đã tạo migration Alembic `20260820_000018_add_user_management_schema.py` bổ sung bảng `user_permission_audit_logs` và cột `users.is_disabled`.
+  - Mặc định `STARTUP_RUN_MAINTENANCE=False` trong production/normal runtime, startup app chỉ thực hiện DB connectivity check.
+  - Đã có đầy đủ các lệnh CLI nạp dữ liệu độc lập: `clone-cutover-overlay`, `user-role-seed`, `tts-provider-seed`, `startup-maintenance`.
 
 ---
 
@@ -113,8 +116,11 @@ App Startup Factory
     - Chỉ trả về profile info (`username`, `display_name`) khi có scope `profile`.
     - Chỉ trả về email khi có scope `email`, và lấy giá trị `email_verified` thật từ model User.
   - Điều chỉnh `DEFAULT_SCOPES` sang mức tối thiểu (hoặc bắt buộc client chỉ định scope rõ ràng khi request authorization).
-- **Files tác động:** `app/services/mcp_scope_service.py`, `app/services/mcp_access_token_service.py`, `app/routes/oauth.py`, `tests/test_oauth_api.py`.
-- **Trạng thái:** `[ ] SẴN SÀNG TRIỂN KHAI`
+- **Files tác động:** `app/services/mcp_scope_service.py`, `app/services/mcp_access_token_service.py`, `app/routes/oauth.py`, `tests/test_oauth_mcp.py`.
+- **Trạng thái:** `[x] ĐÃ HOÀN THÀNH (2026-08-20)`:
+  - Đã thêm `ALL_OIDC_SCOPES` vào `ALLOWED_MCP_SCOPES` trong `mcp_scope_service.py` để token bảo toàn các scope OIDC khi lưu trữ.
+  - Đã nâng cấp endpoint `/oauth/userinfo` trong `app/routes/oauth.py` kiểm tra bắt buộc scope `openid` (trả về 403 `insufficient_scope` nếu thiếu), đồng thời chỉ trích xuất claims theo `profile` và `email` qua hàm `extract_userinfo_claims()`.
+  - Đã cập nhật và mở rộng unit test trong `tests/test_oauth_mcp.py` kiểm tra toàn diện các kịch bản OIDC claims và chặn thiếu scope.
 
 ---
 

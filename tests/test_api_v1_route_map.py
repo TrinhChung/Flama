@@ -136,6 +136,7 @@ EXPECTED_API_RULES = {
     ("GET", "/api/statistics/today-future"),
     ("GET", "/api/support-donation"),
     ("POST", "/api/support-donation/checkout"),
+    ("GET", "/api/support-donation/status"),
     ("POST", "/api/tickets"),
     ("GET", "/api/tickets/<ticket_id_or_code>"),
     ("POST", "/api/tickets/<ticket_id_or_code>/replies"),
@@ -168,7 +169,7 @@ class ApiRouteMapTests(unittest.TestCase):
             for method in rule.methods - {"HEAD", "OPTIONS"}
         }
         self.assertEqual(actual, EXPECTED_API_RULES)
-        self.assertEqual(len(actual), 133)
+        self.assertEqual(len(actual), 134)
 
 
 

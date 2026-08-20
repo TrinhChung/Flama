@@ -261,6 +261,73 @@ def register_oauth_client(
     return client
 
 
+def update_oauth_client(
+    client_pk: int,
+    *,
+    client_name: str | None = None,
+    client_secret: str | None = None,
+    client_uri: str | None = None,
+    redirect_uris: Iterable[str] | None = None,
+    is_confidential: bool | None = None,
+) -> OAuthClient:
+    client = oauth_repository.get_client_by_id(client_pk)
+    if not client:
+        raise OAuthError("invalid_client", "OAuth Client không tồn tại.", status=404)
+
+    target_name = client_name if client_name is not None else client.client_name
+    target_uris = redirect_uris if redirect_uris is not None else client.get_redirect_uris()
+    target_uri = client_uri if client_uri is not None else client.client_uri
+
+    sanitized_uris = validate_client_metadata(
+        client_id=client.client_id,
+        client_name=target_name,
+        redirect_uris=target_uris,
+        client_secret=client_secret,
+        client_uri=target_uri,
+    )
+
+    secret_hash = ...
+    if client_secret is not None:
+        secret_hash = generate_password_hash(client_secret) if client_secret.strip() else None
+
+    oauth_repository.update_client(
+        client,
+        client_name=target_name,
+        client_secret_hash=secret_hash,
+        client_uri=target_uri,
+        redirect_uris=sanitized_uris,
+        is_confidential=is_confidential,
+    )
+    db.session.commit()
+    return client
+
+
+def rotate_client_secret(
+    client_pk: int,
+    *,
+    new_secret: str | None = None,
+) -> tuple[OAuthClient, str]:
+    client = oauth_repository.get_client_by_id(client_pk)
+    if not client:
+        raise OAuthError("invalid_client", "OAuth Client không tồn tại.", status=404)
+
+    secret_value = str(new_secret or "").strip()
+    if not secret_value:
+        secret_value = f"flama_sec_{secrets.token_urlsafe(24)}"
+
+    if len(secret_value) > 255:
+        raise OAuthError("invalid_client_metadata", "Client Secret không được vượt quá 255 ký tự.")
+
+    secret_hash = generate_password_hash(secret_value)
+    oauth_repository.update_client(
+        client,
+        client_secret_hash=secret_hash,
+        is_confidential=True,
+    )
+    db.session.commit()
+    return client, secret_value
+
+
 def validate_authorize_request(
     *,
     client_id: str,

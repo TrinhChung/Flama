@@ -50,3 +50,47 @@ def get_token_for_user(*, token_id: int, user_id: int) -> McpAccessToken | None:
 
 def get_user_by_id(user_id: int) -> User | None:
     return db.session.get(User, int(user_id)) if user_id else None
+
+
+def update_token(
+    row: McpAccessToken,
+    *,
+    name: str | None = None,
+    scopes: str | None = None,
+    expires_at: object = ...,
+    token_hash: str | None = None,
+    revoked: bool | None = None,
+) -> McpAccessToken:
+    if name is not None:
+        row.name = str(name).strip() or "MCP Token"
+    if scopes is not None:
+        row.scopes = scopes
+    if expires_at is not ...:
+        row.expires_at = expires_at
+    if token_hash is not None:
+        row.token_hash = token_hash
+    if revoked is not None:
+        row.revoked = revoked
+    db.session.add(row)
+    return row
+
+
+def delete_token(row: McpAccessToken) -> None:
+    db.session.delete(row)
+
+
+def purge_revoked_and_expired_tokens(user_id: int, now) -> int:
+    from sqlalchemy import or_
+
+    deleted_count = (
+        McpAccessToken.query.filter(
+            McpAccessToken.user_id == user_id,
+            or_(
+                McpAccessToken.revoked.is_(True),
+                (McpAccessToken.expires_at.isnot(None) & (McpAccessToken.expires_at <= now)),
+            ),
+        )
+        .delete(synchronize_session=False)
+    )
+    return deleted_count
+

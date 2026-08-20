@@ -255,6 +255,101 @@ class McpAccessTokenTests(unittest.TestCase):
         payload = response.get_json()
         self.assertEqual(payload["error"]["data"]["code"], "MCP_TOKEN_REVOKED")
 
+    def test_update_token(self):
+        self._login()
+        create_resp = self.client.post("/api/mcp-tokens", json={"name": "Old Name", "expires_in_days": 30})
+        self.assertEqual(create_resp.status_code, 201)
+
+        with self.app.app_context():
+            row = McpAccessToken.query.filter_by(user_id=self.owner_id).order_by(McpAccessToken.id.desc()).first()
+            token_id = row.id
+
+        update_resp = self.client.patch(
+            f"/api/mcp-tokens/{token_id}",
+            json={"name": "New Name", "expires_in_days": 90, "scopes": ["deck:read"]},
+        )
+        self.assertEqual(update_resp.status_code, 200)
+        item = update_resp.get_json()["item"]
+        self.assertEqual(item["name"], "New Name")
+        self.assertEqual(item["scopes"], ["deck:read"])
+
+    def test_rotate_token(self):
+        old_token = self._generate_token(name="Rotating Agent")
+
+        with self.app.app_context():
+            row = McpAccessToken.query.filter_by(user_id=self.owner_id).order_by(McpAccessToken.id.desc()).first()
+            token_id = row.id
+            count_before = McpAccessToken.query.count()
+
+        rotate_resp = self.client.post(
+            f"/api/mcp-tokens/{token_id}/rotate",
+            json={"expires_in_days": 180},
+        )
+        self.assertEqual(rotate_resp.status_code, 200)
+        new_token = rotate_resp.get_json()["item"]["token"]
+        self.assertTrue(new_token.startswith("flama_mcp_"))
+        self.assertNotEqual(old_token, new_token)
+
+        # Confirm DB row count is unchanged (no duplicates created)
+        with self.app.app_context():
+            count_after = McpAccessToken.query.count()
+            self.assertEqual(count_before, count_after)
+
+        # Old token is rejected
+        old_resp = self.app.test_client().post(
+            "/api/mcp",
+            json=self._mcp_payload(),
+            headers=self._mcp_headers(old_token),
+        )
+        self.assertEqual(old_resp.status_code, 401)
+
+        # New token works
+        new_resp = self.app.test_client().post(
+            "/api/mcp",
+            json=self._mcp_payload(),
+            headers=self._mcp_headers(new_token),
+        )
+        self.assertEqual(new_resp.status_code, 200)
+
+    def test_purge_token(self):
+        self._login()
+        self.client.post("/api/mcp-tokens", json={"name": "To Purge"})
+
+        with self.app.app_context():
+            row = McpAccessToken.query.filter_by(user_id=self.owner_id).order_by(McpAccessToken.id.desc()).first()
+            token_id = row.id
+
+        purge_resp = self.client.delete(f"/api/mcp-tokens/{token_id}/purge")
+        self.assertEqual(purge_resp.status_code, 204)
+
+        with self.app.app_context():
+            row_after = McpAccessToken.query.filter_by(id=token_id).first()
+            self.assertIsNone(row_after)
+
+    def test_cleanup_tokens(self):
+        self._login()
+        # Create 1 active, 1 revoked, 1 expired
+        self.client.post("/api/mcp-tokens", json={"name": "Active Token"})
+        self.client.post("/api/mcp-tokens", json={"name": "Revoked Token"})
+        self.client.post("/api/mcp-tokens", json={"name": "Expired Token"})
+
+        with self.app.app_context():
+            tokens = McpAccessToken.query.filter_by(user_id=self.owner_id).order_by(McpAccessToken.id.asc()).all()
+            tokens[1].revoked = True
+            tokens[2].expires_at = datetime.utcnow() - timedelta(days=1)
+            db.session.commit()
+
+        cleanup_resp = self.client.post("/api/mcp-tokens/cleanup")
+        self.assertEqual(cleanup_resp.status_code, 200)
+        data = cleanup_resp.get_json()
+        self.assertEqual(data["purged_count"], 2)
+
+        with self.app.app_context():
+            remaining = McpAccessToken.query.filter_by(user_id=self.owner_id).all()
+            self.assertEqual(len(remaining), 1)
+            self.assertEqual(remaining[0].name, "Active Token")
+
 
 if __name__ == "__main__":
     unittest.main()
+
