@@ -189,6 +189,10 @@ def build_app_config(overrides: Mapping[str, Any] | None = None) -> dict[str, An
             os.getenv("SUPPORT_CONTACT_EMAIL", "").strip()
             or os.getenv("ADMIN_EMAIL", "").strip()
         ),
+        "TRUST_PROXY": coerce_bool_env(
+            "TRUST_PROXY",
+            default=coerce_bool_env("FLAMA_TRUST_PROXY", default=False),
+        ),
     }
     config["PAYMENTS_V1_ENABLED"] = config["PAYMENTS_ENABLED"]
 

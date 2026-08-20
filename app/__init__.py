@@ -11,7 +11,6 @@ from .routes import register_blueprints
 from .settings import BASE_DIR, build_app_config
 from .spa import init_spa_delivery
 from .startup import run_startup_maintenance
-from .startup_schema import ensure_backward_compatible_schema
 
 
 def create_app(config: Optional[dict] = None) -> Flask:
@@ -33,6 +32,10 @@ def create_app(config: Optional[dict] = None) -> Flask:
     init_spa_delivery(app)
     init_csrf_protection(app)
     init_cors(app)
+
+    if app.config.get("TRUST_PROXY"):
+        from werkzeug.middleware.proxy_fix import ProxyFix
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
     from models.user import User
     from models.oauth_client import OAuthClient  # noqa: F401  # register model
@@ -168,9 +171,6 @@ def create_app(config: Optional[dict] = None) -> Flask:
         )
         return jsonify({"error": "INTERNAL_ERROR", "message": "Internal server error."}), 500
 
-    run_startup_maintenance(
-        app,
-        ensure_backward_compatible_schema=ensure_backward_compatible_schema,
-    )
+    run_startup_maintenance(app)
 
     return app

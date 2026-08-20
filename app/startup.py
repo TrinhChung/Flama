@@ -13,12 +13,13 @@ from .services import flashcards_share
 from .services.tts_provider_service import ensure_default_tts_providers
 from .services.user_management_schema import ensure_user_management_schema
 from .services.user_roles import ensure_default_user_roles
+from .startup_schema import ensure_backward_compatible_schema
 
 
 def run_startup_maintenance(
     app: Flask,
     *,
-    ensure_backward_compatible_schema: Callable[[], None],
+    ensure_backward_compatible_schema: Callable[[], None] | None = None,
     config_overrides: Mapping[str, Any] | None = None,
 ) -> None:
     """Run legacy bootstrap tasks behind explicit config flags."""
@@ -54,7 +55,12 @@ def run_startup_maintenance(
                 completed_tasks.append("ensure_user_management_schema")
 
             if bool(runtime_config.get("STARTUP_RUN_BACKWARD_COMPAT_SCHEMA", True)):
-                ensure_backward_compatible_schema()
+                compat_fn = (
+                    ensure_backward_compatible_schema
+                    if ensure_backward_compatible_schema is not None
+                    else globals()["ensure_backward_compatible_schema"]
+                )
+                compat_fn()
                 completed_tasks.append("ensure_backward_compatible_schema")
 
             if bool(runtime_config.get("STARTUP_RUN_DEFAULT_USER_ROLE_SEED", bool(app.config.get("TESTING")))):
