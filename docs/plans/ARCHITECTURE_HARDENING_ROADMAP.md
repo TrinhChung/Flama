@@ -118,24 +118,9 @@ App Startup Factory
 
 ---
 
-### Nhóm 2: Ưu Tiên P1 — Chuẩn Hóa Boundary, CI & Auth Surface
+### Nhóm 2: Ưu Tiên P1 — Chuẩn Hóa Boundary & Auth Surface
 
-#### 🟡 Task 2.1: Bổ Sung CI Integration Test Chạy Trên MySQL 8 Thật (P1 CI/CD)
-- **Hiện trạng:**
-  - File: `.github/workflows/ci.yml`.
-  - Lỗi: CI backend hiện tại chỉ chạy unittest trên SQLite in-memory, không kiểm tra được tính tương thích của dialect MySQL (JSON column queries, foreign key constraints, collation, upsert locks). Chưa có bước kiểm tra chạy sạch migration Alembic từ DB trắng.
-- **Giải pháp:**
-  - Bổ sung một job `backend-mysql` trong GitHub Actions:
-    1. Khởi chạy service container `mysql:8.0`.
-    2. Chạy `flask db upgrade` từ migration đầu tiên đến `heads` trên database trắng.
-    3. Boot Flask app với chế độ schema auto-repair **TẮT** (`STARTUP_RUN_MAINTENANCE=False`).
-    4. Chạy bộ integration test cho các module trọng yếu: OAuth 2.1 / Remote MCP, Shared Deck Overlay & Clone, Anki Scheduler, payOS Payments.
-- **Files tác động:** `.github/workflows/ci.yml`.
-- **Trạng thái:** `[ ] SẴN SÀNG TRIỂN KHAI`
-
----
-
-#### 🟡 Task 2.2: Dọn Dẹp Business Logic Trong `app/routes/vocabulary.py` (P1 Boundary)
+#### 🟡 Task 2.1: Dọn Dẹp Business Logic Trong `app/routes/vocabulary.py` (P1 Boundary)
 - **Hiện trạng:**
   - File: `app/routes/vocabulary.py`.
   - Lỗi: File dài gần 1000 dòng, trực tiếp import model (`Deck`, `CardProgress`), thực hiện query phức tạp, tự gọi `db.session.commit()` / `rollback()`, xử lý tạo/đổi tên/di chuyển/reset deck, dùng `flash()` và redirect kiểu web cũ. Trong khi hệ thống đã có REST API canonical dưới `/api/decks/*` và `/api/learning/*`.
@@ -148,7 +133,7 @@ App Startup Factory
 
 ---
 
-#### 🟡 Task 2.3: Chuẩn Hóa Cơ Chế Auth Của MCP & Deprecate Legacy Fallbacks (P1 Security)
+#### 🟡 Task 2.2: Chuẩn Hóa Cơ Chế Auth Của MCP & Deprecate Legacy Fallbacks (P1 Security)
 - **Hiện trạng:**
   - File: `app/services/mcp_auth_service.py`, `app/connect/mcp.py`.
   - Lỗi: MCP auth resolver hỗ trợ quá nhiều phương thức: Bearer token, `X-Flama-Connect-Key`, URL token (`/v1/mcp/<url_token>`), Body key, và Web Session (session được cấp scope wildcard `*`). Truyền token qua URL tiềm ẩn nguy cơ lộ token qua log Nginx/Gunicorn và browser history.
@@ -163,7 +148,7 @@ App Startup Factory
 
 ---
 
-#### 🟡 Task 2.4: Gom Cụm Chính Sách Token & Loại Bỏ Config Rác (P1 Config)
+#### 🟡 Task 2.3: Gom Cụm Chính Sách Token & Loại Bỏ Config Rác (P1 Config)
 - **Hiện trạng:**
   - File: `app/settings.py`, `app/services/mcp_access_token_service.py`, `app/services/oauth_service.py`.
   - Lỗi: `settings.py` khai báo `MCP_TOKEN_TTL_SECONDS` và `MCP_TOKEN_MAX_REQUESTS` nhưng không nơi nào sử dụng. Trong khi đó, `mcp_access_token_service.py` hardcode hạn 180 ngày và 1.000.000 requests; `oauth_service.py` hardcode 24 giờ.
@@ -175,7 +160,7 @@ App Startup Factory
 
 ---
 
-### Nhóm 3: Ưu Tiên P2 — Modularization & Scale Readiness
+### Nhóm 3: Ưu Tiên P2 / P3 — Modularization, Scale Readiness & CI Parity (Ưu tiên thấp)
 
 #### 🟢 Task 3.1: Centralized Model Registry (`models.registry`) (P2 Code Quality)
 - **Hiện trạng:**
@@ -229,6 +214,21 @@ App Startup Factory
 
 ---
 
+#### ⚪ Task 3.5: Bổ Sung CI Integration Test Chạy Trên MySQL 8 Thật (P3 CI/CD - Ưu tiên thấp)
+- **Hiện trạng:**
+  - File: `.github/workflows/ci.yml`.
+  - Lỗi: CI backend hiện tại chỉ chạy unittest trên SQLite in-memory, không kiểm tra được tính tương thích của dialect MySQL (JSON column queries, foreign key constraints, collation, upsert locks). Chưa có bước kiểm tra chạy sạch migration Alembic từ DB trắng.
+- **Giải pháp (Triển khai khi cần thiết ở giai đoạn hoàn thiện CI/CD):**
+  - Bổ sung một job `backend-mysql` trong GitHub Actions:
+    1. Khởi chạy service container `mysql:8.0`.
+    2. Chạy `flask db upgrade` từ migration đầu tiên đến `heads` trên database trắng.
+    3. Boot Flask app với chế độ schema auto-repair **TẮT** (`STARTUP_RUN_MAINTENANCE=False`).
+    4. Chạy bộ integration test cho các module trọng yếu: OAuth 2.1 / Remote MCP, Shared Deck Overlay & Clone, Anki Scheduler, payOS Payments.
+- **Files tác động:** `.github/workflows/ci.yml`.
+- **Trạng thái:** `[ ] SẴN SÀNG TRIỂN KHAI (ƯU TIÊN THẤP)`
+
+---
+
 ## 4. Kế Hoạch Triển Khai Theo Giai Đoạn (Execution Plan)
 
 ```mermaid
@@ -239,24 +239,24 @@ flowchart TD
         T13["Task 1.3: Fix OIDC Scope & UserInfo Protection"]
     end
 
-    subgraph Phase2["Giai Đoạn 2: P1 CI Parity & Boundary Clean"]
-        T21["Task 2.1: MySQL 8 Migration & Integration CI Job"]
-        T22["Task 2.2: Dọn dẹp vocabulary.py & Chuẩn hóa /api"]
-        T23["Task 2.3: Chuẩn hóa MCP Auth & Bỏ URL Token"]
-        T24["Task 2.4: Centralize TokenPolicy & Dọn Config"]
+    subgraph Phase2["Giai Đoạn 2: P1 Boundary Clean & Auth Surface"]
+        T21["Task 2.1: Dọn dẹp vocabulary.py & Chuẩn hóa /api"]
+        T22["Task 2.2: Chuẩn hóa MCP Auth & Bỏ URL Token"]
+        T23["Task 2.3: Centralize TokenPolicy & Dọn Config"]
     end
 
-    subgraph Phase3["Giai Đoạn 3: P2 Modularization & Scaling"]
+    subgraph Phase3["Giai Đoạn 3: P2/P3 Modularization & Scaling (Ưu tiên thấp)"]
         T31["Task 3.1: Centralized Model Registry"]
         T32["Task 3.2: Refactor nội bộ app/connect/"]
         T33["Task 3.3: Thống nhất Frontend Topology Docs"]
         T34["Task 3.4: Dependency Pinning & Multi-worker Ready"]
+        T35["Task 3.5: MySQL 8 Migration & Integration CI Job (Low Priority)"]
     end
 
     Phase1 --> Phase2 --> Phase3
 ```
 
-### Thứ tự 3 việc thực hiện ngay lập tức:
-1. **Khóa OAuth Client Management (Task 1.1):** Đóng lỗ hổng bảo mật cấp cao nhất trong auth surface.
+### Thứ tự các việc trọng tâm thực hiện tiếp theo:
+1. **Fix OIDC Scope & UserInfo Protection (Task 1.3):** Hoàn tất bảo vệ dữ liệu người dùng và chuẩn hóa OIDC OAuth 2.1.
 2. **Bỏ DDL Mutation khỏi Startup (Task 1.2):** Xác lập Alembic làm chủ thể schema duy nhất, giải phóng app startup.
-3. **Thêm MySQL 8 Integration CI (Task 2.1):** Tạo lưới an toàn kiểm tra migration và database thật trước khi dọn tiếp các phần sâu hơn.
+3. **Dọn dẹp vocabulary.py & Chuẩn hóa /api (Task 2.1):** Đưa toàn bộ transaction/mutation về đúng service & repository layer.
