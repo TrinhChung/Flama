@@ -230,10 +230,15 @@ def authorize():
         return jsonify(err.to_dict()), err.status
 
     # Require user authentication
+    frontend_base = oauth_service.get_frontend_base_url(request)
+    current_base = oauth_service.get_base_url(request)
+    is_external_frontend = bool(frontend_base and frontend_base.rstrip("/") != current_base.rstrip("/"))
+
     if not current_user.is_authenticated:
         # Redirect to login page and preserve the full authorization URL in 'next'
         auth_url = request.full_path
-        login_url = f"/login?next={quote(auth_url, safe='')}"
+        login_path = f"/login?next={quote(auth_url, safe='')}"
+        login_url = f"{frontend_base}{login_path}" if is_external_frontend else login_path
         return redirect(login_url)
 
     if not bool(getattr(current_user, "is_active", True)):
@@ -242,7 +247,8 @@ def authorize():
 
     if request.method == "GET":
         query_string = request.query_string.decode("utf-8") if request.query_string else ""
-        consent_spa_url = f"/oauth/consent?{query_string}" if query_string else "/oauth/consent"
+        consent_path = f"/oauth/consent?{query_string}" if query_string else "/oauth/consent"
+        consent_spa_url = f"{frontend_base}{consent_path}" if is_external_frontend else consent_path
         return redirect(consent_spa_url)
 
 

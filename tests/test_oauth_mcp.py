@@ -185,6 +185,40 @@ class OAuthRemoteMcpTests(unittest.TestCase):
         self.assertIn(f"client_id={self.client_id}", loc)
         self.assertIn("state=state123", loc)
 
+    def test_authorize_redirects_to_external_frontend_consent_when_cors_configured(self):
+        self.app.config["CORS_ALLOWED_ORIGINS"] = ("https://flama.stmtp.com",)
+        self._login_user()
+        verifier, challenge = self._generate_pkce()
+        resp = self.client.get(
+            f"/oauth/authorize?client_id={self.client_id}&redirect_uri={self.redirect_uri}&response_type=code&code_challenge={challenge}&code_challenge_method=S256&state=state123"
+        )
+        self.assertEqual(resp.status_code, 302)
+        loc = resp.headers["Location"]
+        self.assertTrue(loc.startswith("https://flama.stmtp.com/oauth/consent?"))
+        self.assertIn(f"client_id={self.client_id}", loc)
+        self.assertIn("state=state123", loc)
+
+    def test_authorize_redirects_to_external_frontend_login_when_unauthenticated(self):
+        self.app.config["CORS_ALLOWED_ORIGINS"] = ("https://flama.stmtp.com",)
+        verifier, challenge = self._generate_pkce()
+        resp = self.client.get(
+            f"/oauth/authorize?client_id={self.client_id}&redirect_uri={self.redirect_uri}&response_type=code&code_challenge={challenge}&code_challenge_method=S256&state=state123"
+        )
+        self.assertEqual(resp.status_code, 302)
+        loc = resp.headers["Location"]
+        self.assertTrue(loc.startswith("https://flama.stmtp.com/login?next="))
+
+    def test_serve_react_spa_redirects_to_external_frontend_when_dist_missing(self):
+        from unittest.mock import patch
+        self.app.config["CORS_ALLOWED_ORIGINS"] = ("https://flama.stmtp.com",)
+        with patch("pathlib.Path.is_file", return_value=False):
+            resp = self.client.get("/oauth/consent?client_id=test_client&state=123")
+            self.assertEqual(resp.status_code, 302)
+            self.assertEqual(
+                resp.headers["Location"],
+                "https://flama.stmtp.com/oauth/consent?client_id=test_client&state=123",
+            )
+
     def test_consent_info_and_decision_api(self):
         self._login_user()
         verifier, challenge = self._generate_pkce()

@@ -112,8 +112,18 @@ def create_app(config: Optional[dict] = None) -> Flask:
     @login_manager.unauthorized_handler
     def handle_unauthorized():
         if not request.path.startswith("/api/"):
+            from app.services import oauth_service
+
+            frontend_base = oauth_service.get_frontend_base_url(request)
+            current_base = oauth_service.get_base_url(request)
             next_url = request.full_path.rstrip("?")
-            return redirect(f"/login?next={next_url}")
+            login_path = f"/login?next={next_url}"
+            login_url = (
+                f"{frontend_base}{login_path}"
+                if frontend_base and frontend_base.rstrip("/") != current_base.rstrip("/")
+                else login_path
+            )
+            return redirect(login_url)
         return (
             jsonify(
                 {

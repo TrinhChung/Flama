@@ -26,4 +26,18 @@ def resolve_safe_next_url(raw_value: str | None, *, default_endpoint: str = "mai
             path = f"{path}?{parsed_candidate.query}"
         return path
 
+    from app.services import oauth_service
+
+    frontend_base = oauth_service.get_frontend_base_url(request)
+    if frontend_base:
+        parsed_frontend = urlparse(frontend_base)
+        if (
+            parsed_candidate.scheme in {"http", "https"}
+            and parsed_candidate.netloc == parsed_frontend.netloc
+        ):
+            path = parsed_candidate.path or "/"
+            if parsed_candidate.query:
+                path = f"{path}?{parsed_candidate.query}"
+            return path
+
     return url_for(default_endpoint)
