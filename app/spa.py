@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from flask import Response, current_app, jsonify, request, send_from_directory
+from flask import Response, current_app, jsonify, redirect, request, send_from_directory
 
 from app.settings import BASE_DIR
 
@@ -79,12 +79,22 @@ def serve_react_spa(*_args, **_kwargs) -> Response:
 
     During development the Vite dev-server proxies API calls back to Flask,
     so this helper is primarily used in production where Flask serves the
-    built frontend assets itself.  If the build artefact is missing a plain
-    404 text response is returned so the developer knows to run ``npm run
-    build`` first.
+    built frontend assets itself.  If the build artefact is missing and an
+    external frontend origin is configured, redirect there. Otherwise, a
+    plain 404 text response is returned so the developer knows to run
+    ``npm run build`` first.
     """
     index = _FRONTEND_DIST / "index.html"
     if not index.is_file():
+        from app.services import oauth_service
+
+        frontend_base = oauth_service.get_frontend_base_url(request)
+        current_base = oauth_service.get_base_url(request)
+        if frontend_base and frontend_base.rstrip("/") != current_base.rstrip("/"):
+            query_string = request.query_string.decode("utf-8") if request.query_string else ""
+            target_path = f"{request.path}?{query_string}" if query_string else request.path
+            return redirect(f"{frontend_base}{target_path}")
+
         return Response(
             "React build not found – run 'npm run build' in frontend/",
             status=404,

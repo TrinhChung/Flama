@@ -126,6 +126,40 @@ def get_base_url(req: Request | None = None) -> str:
     return current_app.config.get("SERVER_NAME") or "http://localhost:4789"
 
 
+def get_frontend_base_url(req: Request | None = None) -> str:
+    """Return the base URL of the frontend application (e.g. https://flama.stmtp.com)."""
+    # 1. Explicit FRONTEND_URL
+    try:
+        frontend_url = str(current_app.config.get("FRONTEND_URL") or "").strip().rstrip("/")
+        if frontend_url:
+            return frontend_url
+    except RuntimeError:
+        pass
+
+    # 2. First valid http/https origin in CORS_ALLOWED_ORIGINS
+    try:
+        cors_origins = current_app.config.get("CORS_ALLOWED_ORIGINS", ())
+        for origin in cors_origins:
+            origin_str = str(origin or "").strip().rstrip("/")
+            if (
+                origin_str
+                and origin_str != "*"
+                and (origin_str.startswith("http://") or origin_str.startswith("https://"))
+            ):
+                return origin_str
+    except RuntimeError:
+        pass
+
+    # 3. Fallback to request host if available
+    if req:
+        proto = req.headers.get("X-Forwarded-Proto") or req.scheme
+        host = req.headers.get("X-Forwarded-Host") or req.host
+        if host:
+            return f"{proto}://{host}".rstrip("/")
+
+    return ""
+
+
 def get_protected_resource_metadata(req: Request | None = None) -> dict[str, Any]:
     base_url = get_base_url(req)
     return {

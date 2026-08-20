@@ -104,6 +104,7 @@ def build_app_config(overrides: Mapping[str, Any] | None = None) -> dict[str, An
             "pool_recycle": 1800,
         },
         "CORS_ALLOWED_ORIGINS": comma_separated_env("CORS_ALLOWED_ORIGINS"),
+        "FRONTEND_URL": os.getenv("FRONTEND_URL", "").strip().rstrip("/"),
         # Browser-driven Anki imports now terminate on the canonical Flask API.
         # Keep the established package-service keys during the transport
         # migration so deployments retain the same bounded upload behavior.

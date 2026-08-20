@@ -1,5 +1,5 @@
 import { AlertCircle, ArrowRight, Eye, EyeOff, Lock, Mail, LoaderCircle } from 'lucide-react'
-import { Navigate } from 'react-router-dom'
+import { Navigate, useSearchParams } from 'react-router-dom'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -9,6 +9,7 @@ import { AuthCard } from '../components/AuthCard'
 import { useLoginForm } from '../hooks/useLoginForm'
 
 export function LoginPage() {
+  const [searchParams] = useSearchParams()
   const bootstrapQuery = useBootstrap()
   const bootstrap = bootstrapQuery.data
   const { form, showPassword, toggleShowPassword, isPending, error, onSubmit } = useLoginForm()
@@ -22,6 +23,10 @@ export function LoginPage() {
   }
 
   if (bootstrap?.user) {
+    const next = searchParams.get('next') || ''
+    if (next.startsWith('/') && !next.startsWith('//')) {
+      return <Navigate to={next} replace />
+    }
     return <Navigate to="/dashboard" replace />
   }
 
