@@ -85,4 +85,28 @@ describe('DiffWorkspace', () => {
 
     expect(onFiltersChange).toHaveBeenCalledWith({ query: '', changeType: 'added' })
   })
+
+  it('caps very large expanded values and connects the disclosure control', () => {
+    const hugeValue = Array.from({ length: 250 }, (_, index) => `line ${index + 1}`).join('\n')
+    act(() => {
+      root.render(
+        <DiffWorkspace
+          summary={summary}
+          items={[{ ...items[0], before_value: hugeValue }]}
+          filters={{ query: '', changeType: 'all' }}
+          onFiltersChange={vi.fn()}
+        />,
+      )
+    })
+
+    const row = container.querySelector<HTMLButtonElement>('[aria-expanded="false"]')
+    act(() => row?.click())
+
+    const controlledId = row?.getAttribute('aria-controls')
+    expect(controlledId).toBeTruthy()
+    expect(document.getElementById(controlledId || '')).not.toBeNull()
+    expect(container.textContent).toContain('chỉ hiển thị 200 dòng')
+    expect(container.textContent).toContain('line 200')
+    expect(container.textContent).not.toContain('line 201')
+  })
 })

@@ -56,6 +56,7 @@ const links: FrontendLinks = {
   terms: '/terms',
   privacy: '/privacy',
   cookies: '/cookies',
+  admin_analytics: '/admin/analytics',
   admin_users: '/admin/users',
   admin_payments: '/admin/payments',
   admin_tts: '/admin/tts',
@@ -120,6 +121,7 @@ function toBootstrap(payload: SessionResponse): FrontendBootstrap {
     support_contact_email: '',
     links: {
       ...links,
+      admin_analytics: isAdmin ? links.admin_analytics : null,
       admin_users: isAdmin ? links.admin_users : null,
       admin_payments: isAdmin ? links.admin_payments : null,
       admin_tts: isAdmin ? links.admin_tts : null,
@@ -261,8 +263,9 @@ export const appApi = {
   },
 
   async getDashboardOverview(year: number): Promise<DashboardOverview> {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
     return apiRequest<DashboardOverview>(
-      `${API_BASE}/statistics/overview?year=${encodeURIComponent(year)}`,
+      `${API_BASE}/statistics/overview?year=${encodeURIComponent(year)}&timezone=${encodeURIComponent(tz)}`,
     )
   },
 
@@ -284,8 +287,9 @@ export const appApi = {
     })
   },
 
-  async deleteDeck(deckId: number) {
-    return apiJson(`${API_BASE}/decks/${deckId}`, 'DELETE')
+  async deleteDeck(deckId: number, params?: { purge?: boolean }) {
+    const suffix = params?.purge ? '?purge=true' : ''
+    return apiJson(`${API_BASE}/decks/${deckId}${suffix}`, 'DELETE')
   },
 
   async resetDeck(deckId: number) {
@@ -305,11 +309,13 @@ export const appApi = {
   async getTodayFutureStats(
     filters: StatisticsFilters,
   ): Promise<TodayFutureStats> {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
     const params = new URLSearchParams({
       scope: filters.scope,
       history_range: filters.historyRange,
       future_range: filters.futureRange,
       backlog: String(filters.backlog),
+      timezone: tz,
     })
     if (filters.deckId !== null) {
       params.set('deck_id', String(filters.deckId))

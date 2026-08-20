@@ -1,7 +1,9 @@
 import {
   AudioLines,
+  Bot,
   ChartNoAxesColumn,
   CreditCard,
+  Download,
   Heart,
   Image as ImageIcon,
   Key,
@@ -14,6 +16,7 @@ import {
   ShieldUser,
   Store,
   Ticket,
+  TrendingUp,
   Upload,
   Users,
   Zap,
@@ -54,7 +57,10 @@ export function AppSidebar({
   ]
 
   const extensions: AppNavigationItem[] = [
+    { title: 'Tạo âm thanh Deck', url: '/audio/generate', icon: AudioLines },
+    { title: 'Tải Flama Audio', url: '/guide/flama-audio', icon: Download },
     { title: 'Kết nối Yomitan', url: '/settings/yomitan', icon: Key },
+    { title: 'Kết nối AI (MCP)', url: '/settings/mcp-tokens', icon: Bot },
   ]
 
   const creator: AppNavigationItem[] = [
@@ -66,6 +72,7 @@ export function AppSidebar({
     bootstrap.user?.is_admin || bootstrap.user?.role?.code === 'creator'
 
   const admin: AppNavigationItem[] = [
+    { title: 'Tăng trưởng & Thống kê', url: '/admin/analytics', icon: TrendingUp },
     ...(bootstrap.links.admin_users
       ? [
           { title: 'Người dùng', url: bootstrap.links.admin_users, icon: Users },

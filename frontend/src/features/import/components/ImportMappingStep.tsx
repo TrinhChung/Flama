@@ -133,29 +133,32 @@ export function ImportMappingStep({ wizard }: ImportMappingStepProps) {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-3">
               <Label className="font-semibold text-xs">Chế độ ghi đè</Label>
-              <div className="space-y-2 text-xs font-medium">
-                <label className="flex items-center gap-2 cursor-pointer">
+              <div className="space-y-2 text-xs">
+                <label className="flex items-center gap-2 cursor-pointer select-none">
                   <input
                     type="radio"
                     name="importMode"
+                    className="accent-primary size-3.5 cursor-pointer"
                     checked={importMode === 'insert_only'}
                     onChange={() => setImportMode('insert_only')}
                   />
                   <span>Chỉ thêm mới (Insert Only)</span>
                 </label>
-                <label className="flex items-center gap-2 cursor-pointer">
+                <label className="flex items-center gap-2 cursor-pointer select-none">
                   <input
                     type="radio"
                     name="importMode"
+                    className="accent-primary size-3.5 cursor-pointer"
                     checked={importMode === 'update_only'}
                     onChange={() => setImportMode('update_only')}
                   />
                   <span>Chỉ cập nhật (Update Only)</span>
                 </label>
-                <label className="flex items-center gap-2 cursor-pointer">
+                <label className="flex items-center gap-2 cursor-pointer select-none">
                   <input
                     type="radio"
                     name="importMode"
+                    className="accent-primary size-3.5 cursor-pointer"
                     checked={importMode === 'upsert'}
                     onChange={() => setImportMode('upsert')}
                   />

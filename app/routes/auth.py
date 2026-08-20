@@ -66,7 +66,7 @@ def login():
     if request.method == "POST":
         email = request.form.get("email", "").strip().lower()
         password = request.form.get("password", "")
-        remote_addr = request.headers.get("X-Forwarded-For", request.remote_addr)
+        remote_addr = request.remote_addr
 
         if not email or not password:
             flash("Vui lòng nhập email và mật khẩu.", "warning")

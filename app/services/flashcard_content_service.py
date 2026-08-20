@@ -157,9 +157,6 @@ def update_note_type(
     return marketplace_query_service.serialize_note_type(note_type)
 
 
-<<<<<<< Updated upstream
-def delete_note_type(*, user_id: int, note_type_id: str) -> dict[str, bool]:
-=======
 def delete_note_type(*, user_id: int, note_type_id: str, purge: bool = False, is_admin: bool = False) -> dict[str, bool]:
     if purge:
         if not is_admin:
@@ -201,7 +198,6 @@ def delete_note_type(*, user_id: int, note_type_id: str, purge: bool = False, is
         db.session.commit()
         return {"success": True, "purged": True}
 
->>>>>>> Stashed changes
     note_type = _owned_note_type(user_id=user_id, note_type_id=note_type_id)
     if Note.query.filter_by(note_type_id=note_type.id).count() > 0:
         raise ContentApiError(

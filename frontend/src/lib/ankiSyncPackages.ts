@@ -16,6 +16,77 @@ export interface DetectedMediaType {
   kind: 'image' | 'audio'
 }
 
+export function chunkNdjsonItems<T>(
+  items: T[],
+  toRecord: (item: T) => unknown,
+  maxItems: number,
+  maxBytes: number,
+): T[][] {
+  const itemLimit = Math.max(1, Math.floor(maxItems))
+  const byteLimit = Math.max(1, Math.floor(maxBytes * 0.85))
+  const encoder = new TextEncoder()
+  const batches: T[][] = []
+  let current: T[] = []
+  let currentBytes = 0
+
+  for (const item of items) {
+    const lineBytes = encoder.encode(`${JSON.stringify(toRecord(item))}\n`).byteLength
+    if (
+      current.length > 0
+      && (current.length >= itemLimit || currentBytes + lineBytes > byteLimit)
+    ) {
+      batches.push(current)
+      current = []
+      currentBytes = 0
+    }
+    current.push(item)
+    currentBytes += lineBytes
+  }
+  if (current.length > 0) batches.push(current)
+  return batches
+}
+
+export function resolveAcceptedMediaFilenames(
+  acceptedFilenames: unknown,
+  itemCount: number,
+  packageFilenames: string[],
+): Set<string> {
+  if (Array.isArray(acceptedFilenames)) {
+    return new Set(acceptedFilenames.filter((name): name is string => typeof name === 'string'))
+  }
+  return itemCount === packageFilenames.length
+    ? new Set(packageFilenames)
+    : new Set<string>()
+}
+
+export function rewriteMediaFieldValue(
+  value: string,
+  referencedMedia: Iterable<string>,
+  mediaRename: ReadonlyMap<string, string>,
+): string {
+  let updated = value
+  for (const original of referencedMedia) {
+    const safe = mediaRename.get(original)
+    if (updated === original) {
+      updated = safe || ''
+      continue
+    }
+    if (updated === `[sound:${original}]`) {
+      updated = safe ? `[sound:${safe}]` : ''
+      continue
+    }
+    if (updated.includes(`[sound:${original}]`)) {
+      updated = updated.replaceAll(`[sound:${original}]`, safe ? `[sound:${safe}]` : '')
+    }
+    if (safe && updated.includes(original)) {
+      updated = updated
+        .replaceAll(`src="${original}"`, `src="${safe}"`)
+        .replaceAll(`src='${original}'`, `src='${safe}'`)
+    }
+  }
+  return updated
+}
+
 const MEDIA_BY_EXTENSION: Record<string, DetectedMediaType> = {
   jpg: { extension: 'jpg', mimeType: 'image/jpeg', kind: 'image' },
   jpeg: { extension: 'jpg', mimeType: 'image/jpeg', kind: 'image' },

@@ -21,6 +21,7 @@ import {
   applyPreparedInstalledUpdate,
   getInstalledDeckUpdate,
   getInstalledDeckUpdates,
+  markInstalledDeckUpdateSeen,
   prepareInstalledDeckUpdate,
   resolveInstalledUpdateConflict,
 } from '../api'
@@ -159,6 +160,14 @@ export function InstalledDeckUpdatePage() {
     getNextPageParam: (page) => page.next_cursor || undefined,
   })
 
+  const markSeenMutation = useMutation({
+    mutationFn: () => markInstalledDeckUpdateSeen(installId, releaseId),
+    onSuccess: (updates) => {
+      queryClient.setQueryData(['installed-deck-updates', installId], updates)
+      void queryClient.invalidateQueries({ queryKey: ['installed-decks'] })
+    },
+  })
+
   const firstPage = diffQuery.data?.pages[0]
   const loadedPages = diffQuery.data?.pages || []
   const visiblePageIndex = Math.min(pageIndex, Math.max(loadedPages.length - 1, 0))
@@ -170,6 +179,18 @@ export function InstalledDeckUpdatePage() {
   useEffect(() => {
     setPageIndex(0)
   }, [filters])
+
+  useEffect(() => {
+    const updates = updatesQuery.data
+    if (
+      !updates?.unread_update
+      || updates.installation.available_release?.id !== releaseId
+      || !markSeenMutation.isIdle
+    ) {
+      return
+    }
+    markSeenMutation.mutate()
+  }, [markSeenMutation, releaseId, updatesQuery.data])
 
   const prepareMutation = useMutation({
     mutationFn: () => prepareInstalledDeckUpdate(
@@ -388,7 +409,7 @@ export function InstalledDeckUpdatePage() {
             return
           }
           void diffQuery.fetchNextPage().then((result) => {
-            if (result.data.pages.length > loadedPages.length) {
+            if ((result.data?.pages.length ?? 0) > loadedPages.length) {
               setPageIndex((current) => current + 1)
             }
           })

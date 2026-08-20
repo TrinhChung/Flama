@@ -13,6 +13,10 @@ import {
   Share2,
   Star,
   User,
+  EyeOff,
+  Edit3,
+  Globe,
+  Lock,
 } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useParams } from 'react-router-dom'
@@ -85,6 +89,7 @@ type SharedNoteTypeDetail = {
   field_defs?: FieldDef[]
   templates?: TemplateItem[]
   recent_reviews?: ReviewItem[]
+  publish_status?: 'private' | 'published' | 'unlisted' | 'archived'
 }
 
 type PreviewResponse = {
@@ -180,6 +185,7 @@ export function SharedNoteTypeDetailPage() {
     },
   })
 
+  // Rating Mutation
   const rateMutation = useMutation({
     mutationFn: async () => {
       setSubmitError(null)
@@ -196,6 +202,25 @@ export function SharedNoteTypeDetailPage() {
     },
     onError: (error: Error) => {
       setSubmitError(error.message || 'Không thể gửi đánh giá.')
+    },
+  })
+  const publishStatusMutation = useMutation({
+    mutationFn: async (newStatus: 'private' | 'published' | 'unlisted' | 'archived') => {
+      return appApi.mutate<SharedNoteTypeDetail>(`/api/note-types/${id}/publish`, 'POST', {
+        publish_status: newStatus,
+      })
+    },
+    onSuccess: (data) => {
+      toast.success(
+        data.publish_status === 'private'
+          ? 'Đã thu hồi loại thẻ khỏi Marketplace!'
+          : 'Đã cập nhật trạng thái xuất bản loại thẻ!'
+      )
+      queryClient.invalidateQueries({ queryKey: ['shared-note-type-detail', id] })
+      queryClient.invalidateQueries({ queryKey: ['marketplace'] })
+    },
+    onError: (error: Error) => {
+      toast.error('Không thể cập nhật trạng thái', { description: error.message })
     },
   })
 
@@ -255,9 +280,8 @@ export function SharedNoteTypeDetailPage() {
         {/* Main Left Content */}
         <div className="space-y-4 sm:space-y-5">
           {/* Main Card */}
-          <Card className="relative overflow-hidden border-border/40 sm:border-border/80 bg-card/90 backdrop-blur-md shadow-xs sm:shadow-sm rounded-xl sm:rounded-2xl">
-            <div className="h-2 w-full bg-gradient-to-r from-primary via-orange-500 to-amber-500" />
-            <CardHeader className="space-y-3 p-3.5 sm:p-6 pb-3">
+          <Card className="border-border/80 bg-card shadow-xs rounded-2xl">
+            <CardHeader className="space-y-3 p-4 sm:p-6 pb-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge variant="secondary" className="px-2.5 py-0.5 text-xs font-bold rounded-md">
@@ -323,8 +347,8 @@ export function SharedNoteTypeDetailPage() {
                     <span>Đánh giá</span>
                   </div>
                   <div className="mt-1 flex items-center justify-center gap-1 font-extrabold text-base text-foreground">
-                    <span>{noteType.rating_avg.toFixed(1)}</span>
-                    <span className="text-xs font-normal text-muted-foreground">({noteType.rating_count})</span>
+                    <span className="tabular-nums">{noteType.rating_avg.toFixed(1)}</span>
+                    <span className="text-xs font-normal text-muted-foreground tabular-nums">({noteType.rating_count})</span>
                   </div>
                 </div>
 
@@ -333,23 +357,98 @@ export function SharedNoteTypeDetailPage() {
                     <Download className="size-3.5 text-primary" />
                     <span>Lượt cài</span>
                   </div>
-                  <div className="mt-1 font-extrabold text-base text-foreground">
+                  <div className="mt-1 font-extrabold text-base text-foreground tabular-nums">
                     {noteType.install_count.toLocaleString('vi-VN')}
                   </div>
                 </div>
 
-                <div className="rounded-xl border border-border/80 bg-muted/30 p-3.5 sm:p-4 text-center transition-all hover:bg-muted/50">
+                <div className="rounded-xl border border-border/80 bg-muted/30 p-3.5 sm:p-4 text-center transition-all hover:bg-muted/50 col-span-2 sm:col-span-1">
                   <div className="flex items-center justify-center gap-1 text-xs font-semibold text-muted-foreground">
                     <Layers className="size-3.5 text-primary" />
                     <span>Trường</span>
                   </div>
-                  <div className="mt-1 font-extrabold text-base text-foreground">
+                  <div className="mt-1 font-extrabold text-base text-foreground tabular-nums">
                     {fields.length} trường
                   </div>
                 </div>
               </div>
             </CardContent>
           </Card>
+
+          {/* Mobile-Only Quick Action Card (Provides top action access on small screens) */}
+          <div className="block lg:hidden">
+            <Card className="border-primary/30 bg-primary/5 shadow-xs rounded-2xl p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-foreground">
+                  {noteType.pricing_mode === 'free' ? 'Miễn phí' : noteType.price_display}
+                </span>
+                <Badge variant="outline" className="text-xs font-semibold">
+                  {noteType.install_count.toLocaleString('vi-VN')} lượt cài
+                </Badge>
+              </div>
+
+              {noteType.is_owner ? (
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-10 text-xs font-bold rounded-xl"
+                    asChild
+                  >
+                    <Link to={`/marketplace/note-types/publish?id=${noteType.id}&edit=1`}>
+                      <Edit3 className="mr-1.5 size-3.5 text-primary" /> Sửa thông tin
+                    </Link>
+                  </Button>
+                  {noteType.publish_status === 'published' || noteType.publish_status === 'unlisted' ? (
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      className="h-10 text-xs font-bold rounded-xl"
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            'Bạn có chắc chắn muốn thu hồi loại thẻ này khỏi Marketplace?\n\nNgười dùng khác sẽ không thể tìm thấy hoặc cài đặt loại thẻ này nữa.'
+                          )
+                        ) {
+                          publishStatusMutation.mutate('private')
+                        }
+                      }}
+                      disabled={publishStatusMutation.isPending}
+                    >
+                      <EyeOff className="mr-1.5 size-3.5" /> Thu hồi
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="default"
+                      size="sm"
+                      className="h-10 text-xs font-bold rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white"
+                      onClick={() => publishStatusMutation.mutate('published')}
+                      disabled={publishStatusMutation.isPending}
+                    >
+                      <Globe className="mr-1.5 size-3.5" /> Xuất bản lại
+                    </Button>
+                  )}
+                </div>
+              ) : noteType.is_installed ? (
+                <Button className="w-full h-10 font-bold text-xs border-emerald-500/40 text-emerald-600 dark:text-emerald-400 rounded-xl" variant="outline" disabled>
+                  <CheckCircle className="mr-1.5 size-4" /> Đã cài đặt loại thẻ
+                </Button>
+              ) : (
+                <Button
+                  className="w-full h-11 font-bold text-sm shadow-xs bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl"
+                  onClick={() => installMutation.mutate()}
+                  disabled={installMutation.isPending}
+                >
+                  {installMutation.isPending ? (
+                    <Loader2 className="mr-2 size-4 animate-spin" />
+                  ) : (
+                    <Download className="mr-2 size-4" />
+                  )}
+                  {noteType.pricing_mode === 'paid' ? 'Mua Note Type' : 'Tải xuống & Cài đặt'}
+                </Button>
+              )}
+            </Card>
+          </div>
 
           {/* Live Preview Section (Reusing NoteTypeLivePreview) */}
           <NoteTypeLivePreview
@@ -503,10 +602,92 @@ export function SharedNoteTypeDetailPage() {
             </CardHeader>
             <CardContent className="p-4 sm:p-5 pt-0 space-y-3">
               {noteType.is_owner ? (
-                <Button className="w-full h-10 sm:h-11 font-bold text-xs sm:text-sm rounded-xl" variant="secondary" disabled>
-                  <CheckCircle className="mr-1.5 size-4 text-primary" />
-                  Bạn là tác giả loại thẻ này
-                </Button>
+                <div className="space-y-3 p-3 rounded-xl border border-primary/20 bg-primary/5 shadow-2xs">
+                  <div className="flex items-center justify-between border-b border-primary/10 pb-1.5 mb-1.5">
+                    <span className="text-[10px] font-black tracking-wider text-muted-foreground uppercase">Bảng điều khiển Tác giả</span>
+                    <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-[9px] font-extrabold text-primary">
+                      Tác giả
+                    </span>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground font-medium">Trạng thái chia sẻ:</span>
+                      {noteType.publish_status === 'published' && (
+                        <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold px-2 py-0.5 rounded-md text-[10px]">
+                          <Globe className="mr-1 size-3 text-emerald-500" />
+                          Đang hiển thị
+                        </Badge>
+                      )}
+                      {noteType.publish_status === 'unlisted' && (
+                        <Badge variant="outline" className="border-blue-500/30 bg-blue-500/10 text-blue-600 dark:text-blue-400 font-bold px-2 py-0.5 rounded-md text-[10px]">
+                          <Globe className="mr-1 size-3 text-blue-500" />
+                          Không công khai
+                        </Badge>
+                      )}
+                      {noteType.publish_status === 'private' && (
+                        <Badge variant="outline" className="border-destructive/30 bg-destructive/10 text-destructive font-bold px-2 py-0.5 rounded-md text-[10px]">
+                          <Lock className="mr-1 size-3 text-destructive" />
+                          Đã thu hồi (Riêng tư)
+                        </Badge>
+                      )}
+                      {noteType.publish_status === 'archived' && (
+                        <Badge variant="outline" className="border-slate-500/30 bg-slate-500/10 text-slate-500 font-bold px-2 py-0.5 rounded-md text-[10px]">
+                          <Lock className="mr-1 size-3 text-slate-500" />
+                          Đã lưu trữ
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid gap-2 pt-1">
+                    {noteType.publish_status === 'published' || noteType.publish_status === 'unlisted' ? (
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        className="w-full font-bold text-xs h-9 rounded-xl flex items-center justify-center gap-1.5"
+                        onClick={() => {
+                          if (
+                            window.confirm(
+                              'Bạn có chắc chắn muốn thu hồi loại thẻ này khỏi Marketplace?\n\nNgười dùng khác sẽ không thể tìm thấy hoặc cài đặt loại thẻ này nữa. Những người đã cài đặt trước đó vẫn có thể tiếp tục sử dụng.'
+                            )
+                          ) {
+                            publishStatusMutation.mutate('private')
+                          }
+                        }}
+                        disabled={publishStatusMutation.isPending}
+                      >
+                        <EyeOff className="size-3.5" />
+                        Thu hồi loại thẻ
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="default"
+                        size="sm"
+                        className="w-full font-bold text-xs h-9 rounded-xl flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+                        onClick={() => {
+                          publishStatusMutation.mutate('published')
+                        }}
+                        disabled={publishStatusMutation.isPending}
+                      >
+                        <Globe className="size-3.5" />
+                        Xuất bản lại loại thẻ
+                      </Button>
+                    )}
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full font-bold text-xs h-9 rounded-xl flex items-center justify-center gap-1.5"
+                      asChild
+                    >
+                      <Link to={`/marketplace/note-types/publish?id=${noteType.id}&edit=1`}>
+                        <Edit3 className="size-3.5 text-primary" />
+                        Chỉnh sửa thông tin
+                      </Link>
+                    </Button>
+                  </div>
+                </div>
               ) : noteType.is_installed ? (
                 <Button className="w-full h-10 sm:h-11 font-bold text-xs sm:text-sm border-emerald-500/40 text-emerald-600 dark:text-emerald-400 rounded-xl" variant="outline" disabled>
                   <CheckCircle className="mr-1.5 size-4" />
@@ -514,7 +695,7 @@ export function SharedNoteTypeDetailPage() {
                 </Button>
               ) : (
                 <Button
-                  className="w-full h-11 sm:h-12 font-bold text-sm sm:text-base shadow-md bg-gradient-to-r from-primary to-primary/90 hover:opacity-95 text-primary-foreground rounded-xl"
+                  className="w-full h-11 sm:h-12 font-bold text-sm sm:text-base shadow-xs bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl transition-all"
                   size="lg"
                   onClick={() => installMutation.mutate()}
                   disabled={installMutation.isPending}

@@ -1,145 +1,44 @@
 """Contract snapshot for the canonical REST API URL map."""
 
+from __future__ import annotations
+
+import json
+import os
+from pathlib import Path
 import unittest
 
 from app import create_app
 from models import db
 
+SNAPSHOT_PATH = Path(__file__).resolve().parent / "snapshots" / "api_v1_routes.json"
 
-EXPECTED_API_RULES = {
-    ("GET", "/api/admin/image-library"),
-    ("POST", "/api/admin/image-library"),
-    ("PATCH", "/api/admin/image-library/<asset_id>"),
-    ("GET", "/api/admin/payments"),
-    ("GET", "/api/admin/payments/orders"),
-    ("GET", "/api/admin/payments/orders/<order_id>"),
-    ("GET", "/api/admin/payments/transactions"),
-    ("GET", "/api/admin/payments/transactions/<attempt_id>"),
-    ("GET", "/api/admin/support-donation"),
-    ("PUT", "/api/admin/support-donation"),
-    ("GET", "/api/admin/tickets"),
-    ("PATCH", "/api/admin/tickets/<ticket_id>"),
-    ("GET", "/api/admin/tts-providers"),
-    ("POST", "/api/admin/tts-providers"),
-    ("DELETE", "/api/admin/tts-providers/<int:provider_id>"),
-    ("PUT", "/api/admin/tts-providers/<int:provider_id>"),
-    ("GET", "/api/admin/users"),
-    ("PATCH", "/api/admin/users/<int:user_id>"),
-    ("POST", "/api/admin/users/roles/batch"),
-    ("POST", "/api/admin/users/status/batch"),
-    ("POST", "/api/auth/login"),
-    ("POST", "/api/auth/register"),
-    ("GET", "/api/browse/cards"),
-    ("DELETE", "/api/browse/cards/<card_id>"),
-    ("GET", "/api/browse/cards/<card_id>"),
-    ("PATCH", "/api/browse/cards/<card_id>"),
-    ("GET", "/api/browse/decks"),
-    ("GET", "/api/browse/decks/tree"),
-    ("GET", "/api/browse/notes"),
-    ("PATCH", "/api/browse/notes/<note_id>"),
-    ("POST", "/api/browse/voicevox/generate"),
-    ("POST", "/api/browse/voicevox/precheck"),
-    ("POST", "/api/browse/voicevox/preview"),
-    ("GET", "/api/dashboard"),
-    ("GET", "/api/download/flama-audio"),
-    ("GET", "/api/download/flama-audio.sha256"),
-    ("POST", "/api/decks"),
-    ("DELETE", "/api/decks/<int:deck_id>"),
-    ("PATCH", "/api/decks/<int:deck_id>"),
-    ("POST", "/api/decks/<int:deck_id>/progress-reset"),
-    ("POST", "/api/flashcards/import/estimate"),
-    ("POST", "/api/flashcards/import/execute"),
-    ("GET", "/api/flashcards/import/anki/capabilities"),
-    ("POST", "/api/flashcards/import/anki/sessions"),
-    ("DELETE", "/api/flashcards/import/anki/sessions/<session_id>"),
-    ("GET", "/api/flashcards/import/anki/sessions/<session_id>"),
-    ("POST", "/api/flashcards/import/anki/sessions/<session_id>/complete"),
-    ("PUT", "/api/flashcards/import/anki/sessions/<session_id>/packages/cards/<int:sequence>"),
-    ("PUT", "/api/flashcards/import/anki/sessions/<session_id>/packages/media/<int:sequence>"),
-    ("GET", "/api/flashcards/import/options"),
-    ("POST", "/api/flashcards/import/parse"),
-    ("GET", "/api/health"),
-    ("GET", "/api/integration-tokens"),
-    ("POST", "/api/integration-tokens"),
-    ("DELETE", "/api/integration-tokens/<int:token_id>"),
-    ("POST", "/api/integration-tokens/<int:token_id>/rotate"),
-    ("GET", "/api/marketplace/installed-decks"),
-    ("GET", "/api/marketplace/installations/<install_id>/updates"),
-    ("GET", "/api/marketplace/installations/<install_id>/updates/<release_id>/diff"),
-    ("POST", "/api/marketplace/installations/<install_id>/updates/<release_id>/prepare"),
-    ("POST", "/api/marketplace/installations/<install_id>/updates/<release_id>/apply"),
-    ("POST", "/api/marketplace/installations/<install_id>/updates/<release_id>/mark-seen"),
-    ("POST", "/api/marketplace/rebases/<rebase_id>/conflicts/<int:conflict_id>/resolve"),
-    ("POST", "/api/marketplace/rebases/<rebase_id>/apply"),
-    ("GET", "/api/marketplace/decks/<deck_item_id>/releases"),
-    ("POST", "/api/marketplace/decks/<deck_item_id>/releases"),
-    ("GET", "/api/marketplace/decks/<deck_item_id>/releases/preview"),
-    ("GET", "/api/marketplace/decks/<deck_item_id>/releases/<release_id>"),
-    ("GET", "/api/marketplace/decks/<deck_item_id>/releases/<release_id>/changes"),
-    ("GET", "/api/marketplace/note-types"),
-    ("GET", "/api/marketplace/note-types/hub"),
-    ("GET", "/api/marketplace/note-types/recommendations"),
-    ("GET", "/api/marketplace/note-types/<note_type_id>"),
-    ("POST", "/api/marketplace/note-types/<note_type_id>/install"),
-    ("POST", "/api/marketplace/note-types/<note_type_id>/publish"),
-    ("POST", "/api/marketplace/note-types/<note_type_id>/rate"),
-    ("DELETE", "/api/marketplace/note-types/<note_type_id>/save"),
-    ("POST", "/api/marketplace/note-types/<note_type_id>/save"),
-    ("POST", "/api/marketplace/note-types/<note_type_id>/templates/<template_id>/preview"),
-    ("GET", "/api/mcp-tokens"),
-    ("POST", "/api/mcp-tokens"),
-    ("DELETE", "/api/mcp-tokens/<int:token_id>"),
-    ("DELETE", "/api/media/<asset_id>"),
-    ("GET", "/api/note-types"),
-    ("POST", "/api/note-types"),
-    ("GET", "/api/note-types/<note_type_id>"),
-    ("PATCH", "/api/note-types/<note_type_id>"),
-    ("DELETE", "/api/note-types/<note_type_id>"),
-    ("POST", "/api/note-types/<note_type_id>/publish"),
-    ("GET", "/api/note-types/<note_type_id>/fields"),
 
-    ("POST", "/api/note-types/<note_type_id>/fields"),
-    ("PATCH", "/api/note-types/<note_type_id>/fields/<field_id>"),
-    ("DELETE", "/api/note-types/<note_type_id>/fields/<field_id>"),
-    ("POST", "/api/note-types/<note_type_id>/fields/reorder"),
-    ("GET", "/api/note-types/<note_type_id>/templates"),
-    ("POST", "/api/note-types/<note_type_id>/templates"),
-    ("PATCH", "/api/note-types/<note_type_id>/templates/<template_id>"),
-    ("DELETE", "/api/note-types/<note_type_id>/templates/<template_id>"),
-    ("POST", "/api/note-types/<note_type_id>/templates/<template_id>/preview"),
-    ("POST", "/api/note-types/<note_type_id>/templates/<template_id>/reset"),
-    ("GET", "/api/notes"),
-    ("POST", "/api/notes"),
-    ("GET", "/api/notes/<note_id>"),
-    ("PATCH", "/api/notes/<note_id>"),
-    ("DELETE", "/api/notes/<note_id>"),
-    ("POST", "/api/notes/<note_id>/markdown-media"),
-    ("POST", "/api/notes/<note_id>/media"),
-    ("GET", "/api/orders"),
-    ("GET", "/api/orders/<order_id>"),
-    ("DELETE", "/api/session"),
-    ("GET", "/api/session"),
-    ("GET", "/api/shared/note-types"),
-    ("GET", "/api/shared/note-types/hub"),
-    ("GET", "/api/shared/note-types/recommendations"),
-    ("GET", "/api/shared/note-types/<note_type_id>"),
-    ("POST", "/api/shared/note-types/<note_type_id>/install"),
-    ("POST", "/api/shared/note-types/<note_type_id>/rate"),
-    ("DELETE", "/api/shared/note-types/<note_type_id>/save"),
-    ("POST", "/api/shared/note-types/<note_type_id>/save"),
-    ("POST", "/api/shared/note-types/<note_type_id>/templates/<template_id>/preview"),
-    ("GET", "/api/statistics"),
-    ("GET", "/api/statistics/overview"),
-    ("GET", "/api/statistics/today-future"),
-    ("GET", "/api/support-donation"),
-    ("POST", "/api/support-donation/checkout"),
-    ("POST", "/api/tickets"),
-    ("GET", "/api/tickets/<ticket_id_or_code>"),
-    ("POST", "/api/tickets/<ticket_id_or_code>/replies"),
-    ("GET", "/api/tickets/attachments/<filename>"),
-    ("GET", "/api/tickets/my"),
-    ("POST", "/api/tickets/upload-image"),
-}
+def _extract_actual_rules(app) -> set[tuple[str, str]]:
+    return {
+        (method, rule.rule)
+        for rule in app.url_map.iter_rules()
+        if rule.endpoint.startswith("api_v1.")
+        for method in rule.methods - {"HEAD", "OPTIONS"}
+    }
+
+
+def _save_snapshot(rules: set[tuple[str, str]]) -> None:
+    SNAPSHOT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    sorted_rules = sorted(rules, key=lambda item: (item[1], item[0]))
+    formatted_entries = [
+        f"  {json.dumps([method, path], ensure_ascii=False)}"
+        for method, path in sorted_rules
+    ]
+    content = "[\n" + ",\n".join(formatted_entries) + "\n]\n"
+    SNAPSHOT_PATH.write_text(content, encoding="utf-8")
+
+
+def _load_snapshot() -> set[tuple[str, str]] | None:
+    if not SNAPSHOT_PATH.exists():
+        return None
+    with open(SNAPSHOT_PATH, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    return {tuple(item) for item in data}
 
 
 class ApiRouteMapTests(unittest.TestCase):
@@ -158,19 +57,58 @@ class ApiRouteMapTests(unittest.TestCase):
             db.drop_all()
 
     def test_rule_and_method_contract_is_stable(self):
-        actual = {
-            (method, rule.rule)
-            for rule in self.app.url_map.iter_rules()
-            if rule.endpoint.startswith("api_v1.")
-            for method in rule.methods - {"HEAD", "OPTIONS"}
-        }
-        self.assertEqual(actual, EXPECTED_API_RULES)
-        self.assertEqual(len(actual), 131)
+        actual = _extract_actual_rules(self.app)
 
+        should_update = (
+            os.getenv("UPDATE_SNAPSHOT", "").strip().lower() in {"1", "true", "yes", "on"}
+            or os.getenv("UPDATE_ROUTE_SNAPSHOT", "").strip().lower() in {"1", "true", "yes", "on"}
+        )
 
+        if should_update:
+            _save_snapshot(actual)
+            print(f"\n[OK] Updated API route snapshot at {SNAPSHOT_PATH} ({len(actual)} routes).")
+            return
+
+        expected = _load_snapshot()
+        if expected is None:
+            self.fail(
+                f"Snapshot file not found at {SNAPSHOT_PATH}.\n"
+                "Run with UPDATE_SNAPSHOT=1 to generate it:\n"
+                "  UPDATE_SNAPSHOT=1 py -3.12 -m unittest tests/test_api_v1_route_map.py"
+            )
+
+        if actual != expected:
+            added = sorted(actual - expected, key=lambda item: (item[1], item[0]))
+            removed = sorted(expected - actual, key=lambda item: (item[1], item[0]))
+
+            diff_lines = []
+            if added:
+                diff_lines.append(f"\nAdded routes ({len(added)}):")
+                for method, path in added:
+                    diff_lines.append(f"  + {method:<7} {path}")
+            if removed:
+                diff_lines.append(f"\nRemoved routes ({len(removed)}):")
+                for method, path in removed:
+                    diff_lines.append(f"  - {method:<7} {path}")
+
+            help_msg = (
+                "\n\nTo accept these changes and update the snapshot, run:\n"
+                "  python scripts/update_route_snapshot.py\n"
+                "or:\n"
+                "  UPDATE_SNAPSHOT=1 python -m unittest tests/test_api_v1_route_map.py\n"
+                "or in PowerShell:\n"
+                "  $env:UPDATE_SNAPSHOT='1'; py -3.12 -m unittest tests/test_api_v1_route_map.py"
+            )
+
+            self.fail(
+                f"API route contract snapshot mismatch! (Expected {len(expected)}, got {len(actual)})"
+                + "\n".join(diff_lines)
+                + help_msg
+            )
 
         self.assertFalse(
-            any(rule.rule.startswith("/api/v1") for rule in self.app.url_map.iter_rules())
+            any(rule.rule.startswith("/api/v1") for rule in self.app.url_map.iter_rules()),
+            "Legacy /api/v1 prefix detected in route rules.",
         )
 
 

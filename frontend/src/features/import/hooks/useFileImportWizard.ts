@@ -4,6 +4,12 @@ import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { appApi } from '@/app/api'
 import { apiRequest } from '@/shared/api/client'
+import type {
+  BatchFileMeta,
+  BatchFileConfig,
+  BatchParseResponse,
+  BatchImportReport,
+} from '../api'
 
 export type DeckOption = {
   id: number
@@ -89,16 +95,25 @@ export function useFileImportWizard() {
   const [searchParams] = useSearchParams()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const [selectedDeckId, setSelectedDeckId] = useState<string>('')
+  const deckIdQueryParam = searchParams.get('deck_id')
+
+  const [selectedDeckId, setSelectedDeckId] = useState<string>(() => deckIdQueryParam || '')
   const [selectedNoteTypeId, setSelectedNoteTypeId] = useState<string>('')
   const [autoSelectBadge, setAutoSelectBadge] = useState<boolean>(false)
 
-  // Step A: Parse State
+  // Files State (Single & Batch)
+  const [files, setFiles] = useState<File[]>([])
   const [file, setFile] = useState<File | null>(null)
   const [isDragOver, setIsDragOver] = useState<boolean>(false)
   const [delimiterMode, setDelimiterMode] = useState<'csv' | 'tsv' | 'custom'>('csv')
   const [customDelimiter, setCustomDelimiter] = useState<string>('')
   const [hasHeader, setHasHeader] = useState<boolean>(true)
+
+  // Batch Naming State
+  const [namingMode, setNamingMode] = useState<'auto' | 'filename' | 'custom'>('auto')
+  const [customPattern, setCustomPattern] = useState<string>('Bài {n}')
+  const [batchFiles, setBatchFiles] = useState<BatchFileMeta[]>([])
+  const [batchFileConfigs, setBatchFileConfigs] = useState<Record<string, BatchFileConfig>>({})
 
   // Parse result state
   const [token, setToken] = useState<string | null>(null)
@@ -118,6 +133,7 @@ export function useFileImportWizard() {
 
   // Step D: Report & Execution State
   const [report, setReport] = useState<ImportReport | null>(null)
+  const [batchReport, setBatchReport] = useState<BatchImportReport | null>(null)
   const [hasEstimated, setHasEstimated] = useState<boolean>(false)
   const [executionDone, setExecutionDone] = useState<boolean>(false)
 
@@ -137,7 +153,7 @@ export function useFileImportWizard() {
   const columnMismatchConfirmId = useId()
   const dontOverwriteEmptyId = useId()
 
-  const deckIdQueryParam = searchParams.get('deck_id')
+  const isBatchMode = files.length > 1
 
   // Load import initial options
   const optionsQuery = useQuery({
@@ -148,10 +164,16 @@ export function useFileImportWizard() {
   useEffect(() => {
     if (optionsQuery.data) {
       const data = optionsQuery.data
-      if (data.initial_deck_id) setSelectedDeckId(String(data.initial_deck_id))
-      if (data.initial_note_type_id) setSelectedNoteTypeId(data.initial_note_type_id)
+      if (deckIdQueryParam && data.deck_options?.some((d) => String(d.id) === deckIdQueryParam)) {
+        setSelectedDeckId(deckIdQueryParam)
+      } else if (data.initial_deck_id) {
+        setSelectedDeckId(String(data.initial_deck_id))
+      }
+      if (data.initial_note_type_id) {
+        setSelectedNoteTypeId(data.initial_note_type_id)
+      }
     }
-  }, [optionsQuery.data])
+  }, [optionsQuery.data, deckIdQueryParam])
 
   const deckOptions = optionsQuery.data?.deck_options || []
   const noteTypeOptions = optionsQuery.data?.note_type_options || []
@@ -199,7 +221,7 @@ export function useFileImportWizard() {
     setAutoSelectBadge(false)
   }
 
-  // Parse mutation
+  // Single file parse mutation
   const parseMutation = useMutation({
     mutationFn: async (uploadedFile: File) => {
       const formData = new FormData()
@@ -220,6 +242,7 @@ export function useFileImportWizard() {
       setPreviewRows(data.preview_rows)
       setParseWarnings(data.warnings)
       setReport(null)
+      setBatchReport(null)
       setHasEstimated(false)
       setExecutionDone(false)
 
@@ -241,7 +264,66 @@ export function useFileImportWizard() {
     },
   })
 
-  // Estimate mutation
+  // Batch parse mutation
+  const batchParseMutation = useMutation({
+    mutationFn: async (uploadedFiles: File[]) => {
+      const formData = new FormData()
+      uploadedFiles.forEach((f) => formData.append('files', f))
+      formData.append('parent_deck_id', selectedDeckId || '')
+      formData.append('note_type_id', selectedNoteTypeId)
+      formData.append('delimiter_mode', delimiterMode)
+      formData.append('custom_delimiter', customDelimiter)
+      formData.append('has_header', hasHeader ? '1' : '0')
+      formData.append('naming_mode', namingMode)
+      if (namingMode === 'custom' && customPattern) {
+        formData.append('custom_pattern', customPattern)
+      }
+
+      return apiRequest<BatchParseResponse>('/api/flashcards/import/batch/parse', {
+        method: 'POST',
+        body: formData,
+      })
+    },
+    onSuccess: (data, uploadedFiles) => {
+      setToken(data.token)
+      setBatchFiles(data.files)
+      setColumns(data.sample_columns)
+      setReport(null)
+      setBatchReport(null)
+      setHasEstimated(false)
+      setExecutionDone(false)
+
+      const initialConfigs: Record<string, BatchFileConfig> = {}
+      data.files.forEach((f) => {
+        initialConfigs[f.file_id] = {
+          file_id: f.file_id,
+          target_deck_name: f.suggested_deck_name,
+          action: f.collision.suggested_action || 'create_new',
+          target_deck_id: f.collision.existing_deck_id,
+        }
+      })
+      setBatchFileConfigs(initialConfigs)
+
+      if (data.suggested_mapping) {
+        setMapping(data.suggested_mapping)
+      }
+
+      const totalRows = data.files.reduce((acc, f) => acc + f.total_rows, 0)
+      setParseMeta({
+        filename: `${uploadedFiles.length} tệp (${uploadedFiles[0]?.name}...)`,
+        totalRows,
+        columnCount: data.sample_columns.length,
+        delimiterLabel: delimiterMode,
+      })
+
+      toast.success(`Đã phân tích ${uploadedFiles.length} tệp bài học thành công!`)
+    },
+    onError: (err: Error) => {
+      toast.error('Lỗi phân tích nhiều file', { description: err.message })
+    },
+  })
+
+  // Single Estimate mutation
   const estimateMutation = useMutation({
     mutationFn: async () => {
       const payload = {
@@ -272,7 +354,40 @@ export function useFileImportWizard() {
     },
   })
 
-  // Execute mutation
+  // Batch Estimate mutation
+  const batchEstimateMutation = useMutation({
+    mutationFn: async () => {
+      const payload = {
+        token,
+        parent_deck_id: selectedDeckId ? Number(selectedDeckId) : null,
+        note_type_id: selectedNoteTypeId,
+        import_mode: importMode,
+        uniqueness_fields:
+          uniquenessFields.length > 0 ? uniquenessFields : fields.length > 0 ? [fields[0].name] : [],
+        mapping,
+        dont_overwrite_empty: dontOverwriteEmpty,
+        confirm_column_mismatch: true,
+        file_configs: Object.values(batchFileConfigs),
+      }
+      return appApi.mutate<BatchImportReport>('/flashcards/import/batch/estimate', 'POST', payload)
+    },
+    onSuccess: (data) => {
+      setBatchReport(data)
+      setHasEstimated(true)
+      setExecutionDone(false)
+      const s = data.overall_summary
+      if (s.errors > 0) {
+        toast.warning(`Ước lượng hoàn tất: ${s.errors} lỗi, ${s.inserted} thẻ mới sẽ thêm.`)
+      } else {
+        toast.success(`Ước lượng thành công: Tạo ${s.created_decks} bài mới, nạp ${s.inserted} thẻ.`)
+      }
+    },
+    onError: (err: Error) => {
+      toast.error('Ước lượng hàng loạt thất bại', { description: err.message })
+    },
+  })
+
+  // Single Execute mutation
   const executeMutation = useMutation({
     mutationFn: async () => {
       const payload = {
@@ -298,7 +413,47 @@ export function useFileImportWizard() {
     },
   })
 
+  // Batch Execute mutation
+  const batchExecuteMutation = useMutation({
+    mutationFn: async () => {
+      const payload = {
+        token,
+        parent_deck_id: selectedDeckId ? Number(selectedDeckId) : null,
+        note_type_id: selectedNoteTypeId,
+        import_mode: importMode,
+        uniqueness_fields:
+          uniquenessFields.length > 0 ? uniquenessFields : fields.length > 0 ? [fields[0].name] : [],
+        mapping,
+        dont_overwrite_empty: dontOverwriteEmpty,
+        confirm_column_mismatch: true,
+        file_configs: Object.values(batchFileConfigs),
+      }
+      return appApi.mutate<BatchImportReport>('/flashcards/import/batch/execute', 'POST', payload)
+    },
+
+    onSuccess: (data) => {
+      setBatchReport(data)
+      setExecutionDone(true)
+      const s = data.overall_summary
+      toast.success(`Import thành công ${s.processed_files} bài học! Thêm mới: ${s.inserted} thẻ, Tạo mới: ${s.created_decks} deck con.`)
+    },
+    onError: (err: Error) => {
+      toast.error('Thực thi import hàng loạt thất bại', { description: err.message })
+    },
+  })
+
+  const updateBatchFileConfig = (fileId: string, patch: Partial<BatchFileConfig>) => {
+    setBatchFileConfigs((prev) => ({
+      ...prev,
+      [fileId]: {
+        ...prev[fileId],
+        ...patch,
+      },
+    }))
+  }
+
   const checkDeckEmptyAndConfirm = () => {
+    if (isBatchMode) return true
     if (!warnOnNonEmptyDeck || !selectedDeckId) return true
 
     const targetDeck = deckOptions.find((d) => String(d.id) === selectedDeckId)
@@ -316,32 +471,57 @@ export function useFileImportWizard() {
 
   const handleEstimate = () => {
     if (checkDeckEmptyAndConfirm()) {
-      estimateMutation.mutate()
+      if (isBatchMode) {
+        batchEstimateMutation.mutate()
+      } else {
+        estimateMutation.mutate()
+      }
     }
   }
 
   const handleExecute = () => {
     if (checkDeckEmptyAndConfirm()) {
-      executeMutation.mutate()
+      if (isBatchMode) {
+        batchExecuteMutation.mutate()
+      } else {
+        executeMutation.mutate()
+      }
     }
   }
 
-  const handleFileSelect = (selectedFile: File) => {
-    setFile(selectedFile)
-    const ext = selectedFile.name.split('.').pop()?.toLowerCase()
+  const handleFilesSelect = (selectedFiles: FileList | File[]) => {
+    const list = Array.from(selectedFiles)
+    if (!list.length) return
+
+    setFiles(list)
+    const firstFile = list[0]
+    setFile(firstFile)
+
+    const ext = firstFile.name.split('.').pop()?.toLowerCase()
     if (ext === 'tsv') {
       setDelimiterMode('tsv')
     } else if (ext === 'csv') {
       setDelimiterMode('csv')
     }
-    parseMutation.mutate(selectedFile)
+
+    if (list.length > 1) {
+      batchParseMutation.mutate(list)
+    } else {
+      parseMutation.mutate(firstFile)
+    }
+  }
+
+  const handleApplyNamingRule = () => {
+    if (files.length > 1) {
+      batchParseMutation.mutate(files)
+    }
   }
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault()
     setIsDragOver(false)
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      handleFileSelect(e.dataTransfer.files[0])
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      handleFilesSelect(e.dataTransfer.files)
     }
   }
 
@@ -359,6 +539,17 @@ export function useFileImportWizard() {
     autoSelectBadge,
     file,
     setFile,
+    files,
+    setFiles,
+    isBatchMode,
+    batchFiles,
+    batchFileConfigs,
+    updateBatchFileConfig,
+    namingMode,
+    setNamingMode,
+    customPattern,
+    setCustomPattern,
+    handleApplyNamingRule,
     isDragOver,
     setIsDragOver,
     delimiterMode,
@@ -389,6 +580,7 @@ export function useFileImportWizard() {
     setConfirmColumnMismatch,
     report,
     setReport,
+    batchReport,
     hasEstimated,
     setHasEstimated,
     executionDone,
@@ -397,11 +589,14 @@ export function useFileImportWizard() {
     handleWarnOnNonEmptyDeckChange,
     optionsQuery,
     parseMutation,
+    batchParseMutation,
     estimateMutation,
+    batchEstimateMutation,
     executeMutation,
+    batchExecuteMutation,
     handleEstimate,
     handleExecute,
-    handleFileSelect,
+    handleFilesSelect,
     handleDrop,
     currentStep,
     deckOptions,

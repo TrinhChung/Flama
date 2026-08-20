@@ -193,6 +193,36 @@ class StudyCounterIntegrationTest(unittest.TestCase):
             self.assertEqual(progress.due_at, datetime(2026, 2, 22, 19, 0, 0))
             self.assertEqual(progress.due_day, datetime(2026, 2, 23).date().toordinal())
 
+    def test_buried_progress_is_hidden_until_its_day_expires(self):
+        from app.services.anki_scheduler import _day_index
+        from app.repositories.study_repository import study_bucket_for_progress_values
+
+        now = datetime(2026, 8, 13, 12, 0, 0)
+        today = _day_index(now, 4, timezone_name="Asia/Tokyo")
+        common = {
+            "queue": "new",
+            "due_at": None,
+            "due_day": None,
+            "is_suspended": False,
+            "is_buried": True,
+            "now": now,
+            "timezone_name": "Asia/Tokyo",
+            "day_boundary_hour_local": 4,
+        }
+        self.assertIsNone(
+            study_bucket_for_progress_values(
+                **common,
+                buried_until_day=today + 1,
+            )
+        )
+        self.assertEqual(
+            study_bucket_for_progress_values(
+                **common,
+                buried_until_day=today - 1,
+            ),
+            "new",
+        )
+
 
 if __name__ == '__main__':
     unittest.main()

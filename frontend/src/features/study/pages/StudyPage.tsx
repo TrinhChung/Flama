@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { PageError, PageLoading } from '@/shared/components/PageState'
 import { StudyHeaderToolbar } from '../components/StudyHeaderToolbar'
 import { StudyCardRendererFrame } from '../components/StudyCardRendererFrame'
 import { StudyBottomBar } from '../components/StudyBottomBar'
 import { StudyCompletionCard } from '../components/StudyCompletionCard'
+import { StudySessionConflict } from '../components/StudySessionConflict'
 import { StudyWaitingCard } from '../components/StudyWaitingCard'
 import { useStudySession } from '../hooks/useStudySession'
 import { isBackgroundRolloverCommit } from '../session/studySessionEngine'
@@ -14,6 +15,7 @@ import type { SchedulerDecision } from '../scheduler/types'
 
 export function StudyPage() {
   const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
   const deckIdRaw = searchParams.get('deck_id')
   const study = useStudySession(deckIdRaw)
 
@@ -91,6 +93,23 @@ export function StudyPage() {
     }
   }, [activeCardKey, card?.card_id, decision, revealed, study])
 
+  const handleUndo = useCallback(async () => {
+    if (study.isBusy || !study.canUndo) return
+    try {
+      const undoneCardId = await study.undo()
+      if (undoneCardId && study.session?.snapshot.session_id) {
+        const restoredCardKey = `${study.session.snapshot.session_id}:${undoneCardId}`
+        setDecisionState({
+          cardKey: restoredCardKey,
+          value: study.prepareDecision(undoneCardId),
+        })
+        setRevealedCardKey(restoredCardKey)
+      }
+    } catch {
+      // Any error will be exposed via study.error
+    }
+  }, [study])
+
   const handleCommit = useCallback(() => {
     void study.commit({ reason: 'manual_exit' }).catch(() => {})
   }, [study])
@@ -118,13 +137,42 @@ export function StudyPage() {
   }, [])
 
   useEffect(() => {
+    if (study.leaseConflict) return
+
     const handleKeyDown = (event: KeyboardEvent) => {
       const activeEl = document.activeElement
       const activeTag = (activeEl?.tagName || '').toLowerCase()
-      if (activeTag === 'input' || activeTag === 'textarea' || (activeEl as HTMLElement)?.isContentEditable) return
+      if (
+        event.defaultPrevented
+        || event.isComposing
+        || activeTag === 'input'
+        || activeTag === 'textarea'
+        || activeTag === 'select'
+        || (activeEl as HTMLElement)?.isContentEditable
+      ) return
 
       const code = event.code
       const key = event.key
+
+      const isUndo = (
+        (event.ctrlKey || event.metaKey) && (key === 'z' || key === 'Z' || code === 'KeyZ')
+      ) || (
+        !event.ctrlKey && !event.metaKey && !event.altKey && (key === 'z' || key === 'Z' || code === 'KeyZ')
+      )
+
+      if (isUndo) {
+        event.preventDefault()
+        void handleUndo()
+        return
+      }
+
+      if (
+        event.altKey
+        || event.ctrlKey
+        || event.metaKey
+        || activeTag === 'button'
+        || activeTag === 'a'
+      ) return
 
       const isSpaceOrEnter = code === 'Space' || key === ' ' || key === 'Spacebar' || code === 'Enter' || key === 'Enter'
       const isOne = key === '1' || code === 'Digit1' || code === 'Numpad1'
@@ -176,7 +224,9 @@ export function StudyPage() {
     handleAnswer,
     handleReveal,
     handleToggleFullscreen,
+    handleUndo,
     revealed,
+    study.leaseConflict,
   ])
 
   if (!deckIdRaw) {
@@ -197,6 +247,19 @@ export function StudyPage() {
     return (
       <div className="h-screen h-[100dvh] w-full flex items-center justify-center">
         <PageLoading label="Đang tạo phiên học…" />
+      </div>
+    )
+  }
+
+  if (study.leaseConflict) {
+    return (
+      <div className="flex h-screen h-[100dvh] w-full items-center justify-center overflow-y-auto bg-background p-4 text-foreground sm:p-6">
+        <StudySessionConflict
+          deckName={deckName}
+          takeoverState={study.takeoverState}
+          onTakeover={study.requestTakeover}
+          onLeave={() => navigate('/dashboard', { replace: true })}
+        />
       </div>
     )
   }
@@ -307,6 +370,7 @@ export function StudyPage() {
           cardId={card.card_id}
           revealed={revealed}
           canEdit={false}
+          canUndo={study.canUndo}
           newCount={counts.new}
           learnCount={counts.learning}
           dueCount={counts.due}
@@ -316,6 +380,9 @@ export function StudyPage() {
           onReveal={handleReveal}
           onAnswer={(rating) => {
             void handleAnswer(rating)
+          }}
+          onUndo={() => {
+            void handleUndo()
           }}
           onEdit={() => {}}
           onToggleFullscreen={handleToggleFullscreen}

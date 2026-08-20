@@ -64,4 +64,10 @@ class DeckCloneNoteFieldOverride(db.Model):
             "field_name",
             name="uq_clone_note_override_install_note_field",
         ),
+        UniqueConstraint(
+            "deck_install_id",
+            "source_note_id",
+            "source_field_def_id",
+            name="uq_clone_note_override_install_note_field_def",
+        ),
     )

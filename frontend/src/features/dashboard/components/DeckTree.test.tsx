@@ -2,6 +2,7 @@
 
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
+import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DeckNode } from '../types'
 import { DeckTree } from './DeckTree'
@@ -45,13 +46,15 @@ describe('DeckTree interactions', () => {
 
     act(() => {
       root.render(
-        <DeckTree
-          nodes={[deck]}
-          adminMode={false}
-          onSelect={onSelect}
-          onActivate={onActivate}
-          onAction={vi.fn()}
-        />,
+        <MemoryRouter>
+          <DeckTree
+            nodes={[deck]}
+            adminMode={false}
+            onSelect={onSelect}
+            onActivate={onActivate}
+            onAction={vi.fn()}
+          />
+        </MemoryRouter>,
       )
     })
 
@@ -70,12 +73,14 @@ describe('DeckTree interactions', () => {
 
     act(() => {
       root.render(
-        <DeckTree
-          nodes={[deck]}
-          adminMode={false}
-          onActivate={onActivate}
-          onAction={vi.fn()}
-        />,
+        <MemoryRouter>
+          <DeckTree
+            nodes={[deck]}
+            adminMode={false}
+            onActivate={onActivate}
+            onAction={vi.fn()}
+          />
+        </MemoryRouter>,
       )
     })
 
@@ -94,12 +99,14 @@ describe('DeckTree interactions', () => {
 
     act(() => {
       root.render(
-        <DeckTree
-          nodes={[deck]}
-          adminMode={false}
-          onActivate={onActivate}
-          onAction={vi.fn()}
-        />,
+        <MemoryRouter>
+          <DeckTree
+            nodes={[deck]}
+            adminMode={false}
+            onActivate={onActivate}
+            onAction={vi.fn()}
+          />
+        </MemoryRouter>,
       )
     })
 
@@ -123,5 +130,123 @@ describe('DeckTree interactions', () => {
       delete (document as Partial<Document>).elementFromPoint
     }
     vi.useRealTimers()
+  })
+
+  it('renders settings menu with import option for deck', () => {
+    act(() => {
+      root.render(
+        <MemoryRouter>
+          <DeckTree
+            nodes={[deck]}
+            adminMode={false}
+            onAction={vi.fn()}
+          />
+        </MemoryRouter>,
+      )
+    })
+
+    const settingsButton = container.querySelector<HTMLButtonElement>('.deck-settings-btn')
+    expect(settingsButton).not.toBeNull()
+    act(() => {
+      settingsButton?.focus()
+      settingsButton?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true, cancelable: true }),
+      )
+    })
+
+    expect(document.body.textContent).toContain('Import thẻ')
+  })
+
+  it('keeps child decks collapsed by default and persists expanded state to localStorage on toggle', () => {
+    localStorage.clear()
+
+    const childDeck: DeckNode = {
+      ...deck,
+      id: 99,
+      parent_id: 42,
+      name: 'N3 Grammar Child',
+      depth: 1,
+      children: [],
+    }
+
+    const parentDeck: DeckNode = {
+      ...deck,
+      id: 42,
+      name: 'N3 Parent',
+      children: [childDeck],
+    }
+
+    act(() => {
+      root.render(
+        <MemoryRouter>
+          <DeckTree
+            nodes={[parentDeck]}
+            adminMode={false}
+            onAction={vi.fn()}
+          />
+        </MemoryRouter>,
+      )
+    })
+
+    // On initial load, child deck should be collapsed (not in DOM)
+    expect(container.querySelector('[data-node-id="99"]')).toBeNull()
+
+    const toggleButton = container.querySelector<HTMLButtonElement>('.tree-toggle')
+    expect(toggleButton).not.toBeNull()
+    expect(toggleButton?.getAttribute('aria-expanded')).toBe('false')
+
+    // Click to expand
+    act(() => {
+      toggleButton?.click()
+    })
+
+    expect(container.querySelector('[data-node-id="99"]')).not.toBeNull()
+    expect(toggleButton?.getAttribute('aria-expanded')).toBe('true')
+    expect(localStorage.getItem('flama_dashboard_expanded_deck_ids')).toContain('42')
+
+    // Click again to collapse
+    act(() => {
+      toggleButton?.click()
+    })
+
+    expect(container.querySelector('[data-node-id="99"]')).toBeNull()
+    expect(toggleButton?.getAttribute('aria-expanded')).toBe('false')
+  })
+
+  it('restores expanded state from localStorage on load', () => {
+    localStorage.setItem('flama_dashboard_expanded_deck_ids', JSON.stringify([42]))
+
+    const childDeck: DeckNode = {
+      ...deck,
+      id: 99,
+      parent_id: 42,
+      name: 'N3 Grammar Child',
+      depth: 1,
+      children: [],
+    }
+
+    const parentDeck: DeckNode = {
+      ...deck,
+      id: 42,
+      name: 'N3 Parent',
+      children: [childDeck],
+    }
+
+    act(() => {
+      root.render(
+        <MemoryRouter>
+          <DeckTree
+            nodes={[parentDeck]}
+            adminMode={false}
+            onAction={vi.fn()}
+          />
+        </MemoryRouter>,
+      )
+    })
+
+    // Child deck should be restored as expanded
+    expect(container.querySelector('[data-node-id="99"]')).not.toBeNull()
+    const toggleButton = container.querySelector<HTMLButtonElement>('.tree-toggle')
+    expect(toggleButton?.getAttribute('aria-expanded')).toBe('true')
   })
 })

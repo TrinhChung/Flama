@@ -14,7 +14,7 @@ import {
   Sparkles,
 } from 'lucide-react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { appApi } from '@/app/api'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -50,9 +50,56 @@ type CheckoutResult = {
   message?: string
 }
 
+type DonationStatusResult = {
+  id?: string | null
+  merchant_order_code?: string
+  status: string
+  status_display?: {
+    code: string
+    tone: string
+    label: string
+    headline: string
+    description: string
+  }
+  total_amount_minor?: number
+  currency_code?: string
+  headline?: string
+  message?: string
+}
+
 export function SupportPage() {
+  const [searchParams] = useSearchParams()
   const { data: bootstrap } = useBootstrap()
   const authenticated = Boolean(bootstrap?.user)
+
+  const paymentOrderId = (
+    searchParams.get('payment_order_id') ||
+    searchParams.get('order_id') ||
+    ''
+  ).trim()
+
+  const supportProviderOrderCode = (
+    searchParams.get('support_provider_order_code') ||
+    searchParams.get('orderCode') ||
+    searchParams.get('order_code') ||
+    ''
+  ).trim()
+
+  const donationStatusQuery = useQuery({
+    queryKey: ['support-donation-status', paymentOrderId, supportProviderOrderCode],
+    queryFn: async () => {
+      if (paymentOrderId) {
+        return appApi.get<DonationStatusResult>(`/api/payments/orders/${paymentOrderId}`)
+      }
+      if (supportProviderOrderCode) {
+        return appApi.get<DonationStatusResult>('/api/support-donation/status', {
+          support_provider_order_code: supportProviderOrderCode,
+        })
+      }
+      return null
+    },
+    enabled: Boolean(paymentOrderId || supportProviderOrderCode),
+  })
 
   const query = useQuery({
     queryKey: ['support-donation'],
@@ -118,6 +165,73 @@ export function SupportPage() {
           />
         </div>
       </div>
+
+      {/* Donation Status Banner when returning from PayOS */}
+      {donationStatusQuery.data ? (
+        <Card
+          className={`overflow-hidden border shadow-lg rounded-2xl ${
+            donationStatusQuery.data.status === 'paid'
+              ? 'border-emerald-500/30 bg-emerald-500/5'
+              : donationStatusQuery.data.status === 'pending_payment' || donationStatusQuery.data.status === 'pending'
+                ? 'border-amber-500/30 bg-amber-500/5'
+                : 'border-destructive/30 bg-destructive/5'
+          }`}
+        >
+          <CardContent className="p-4 sm:p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5">
+                {donationStatusQuery.data.status === 'paid' ? (
+                  <span className="flex size-10 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600">
+                    <Heart className="size-5 fill-emerald-500" />
+                  </span>
+                ) : donationStatusQuery.data.status === 'pending_payment' || donationStatusQuery.data.status === 'pending' ? (
+                  <span className="flex size-10 items-center justify-center rounded-xl bg-amber-500/10 text-amber-600">
+                    <Clock className="size-5 animate-pulse" />
+                  </span>
+                ) : (
+                  <span className="flex size-10 items-center justify-center rounded-xl bg-destructive/10 text-destructive">
+                    <AlertCircle className="size-5" />
+                  </span>
+                )}
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <Badge
+                    variant="outline"
+                    className={
+                      donationStatusQuery.data.status === 'paid'
+                        ? 'border-emerald-500/30 text-emerald-700 bg-emerald-500/10'
+                        : 'border-amber-500/30 text-amber-700 bg-amber-500/10'
+                    }
+                  >
+                    {donationStatusQuery.data.status_display?.label || donationStatusQuery.data.status}
+                  </Badge>
+                  {donationStatusQuery.data.merchant_order_code ? (
+                    <span className="font-mono text-xs text-muted-foreground font-semibold">
+                      #{donationStatusQuery.data.merchant_order_code}
+                    </span>
+                  ) : null}
+                </div>
+                <h4 className="font-bold text-foreground sm:text-base">
+                  {donationStatusQuery.data.headline || donationStatusQuery.data.status_display?.headline || 'Kết quả giao dịch ủng hộ'}
+                </h4>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  {donationStatusQuery.data.message || donationStatusQuery.data.status_display?.description}
+                </p>
+              </div>
+            </div>
+
+            {donationStatusQuery.data.total_amount_minor ? (
+              <div className="text-right shrink-0">
+                <span className="text-xs text-muted-foreground uppercase font-semibold">Số tiền</span>
+                <p className="text-lg sm:text-xl font-black text-primary">
+                  {donationStatusQuery.data.total_amount_minor.toLocaleString('vi-VN')} {donationStatusQuery.data.currency_code || 'VND'}
+                </p>
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+      ) : null}
 
       <div className="grid gap-6 sm:gap-8 lg:grid-cols-12">
         {/* Left Column: Interactive Online PayOS Donation Form */}

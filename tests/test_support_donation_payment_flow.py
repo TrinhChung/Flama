@@ -396,6 +396,61 @@ class SupportDonationPaymentFlowTests(unittest.TestCase):
         self.assertIn("dừng", order_payload.get("headline", "").lower())
         self.assertIn("phiên mới", order_payload.get("next_action", "").lower())
 
+    def test_get_support_donation_status_with_order_id_and_provider_code(self):
+        self._login()
+        with patch(
+            "app.services.payment.provider.payos_provider.create_checkout_session",
+            side_effect=self._fake_checkout_session,
+        ):
+            create_response = self.client.post(
+                "/api/support-donation/checkout",
+                json={
+                    "amount_minor": 50000,
+                    "anonymous": False,
+                    "return_url": "http://localhost/support-donation",
+                    "cancel_url": "http://localhost/support-donation",
+                },
+            )
+
+        self.assertEqual(create_response.status_code, 201)
+        order_id = (((create_response.get_json() or {}).get("order") or {}).get("id"))
+        self.assertTrue(order_id)
+
+        # Test authenticated lookup via /api/support-donation/status?payment_order_id=...
+        status_response = self.client.get(f"/api/support-donation/status?payment_order_id={order_id}")
+        self.assertEqual(status_response.status_code, 200)
+        status_payload = status_response.get_json() or {}
+        self.assertEqual(status_payload.get("id"), order_id)
+
+        # Test anonymous lookup via provider_order_code
+        provider_link = PaymentLink(
+            id="anon-plink-1",
+            order_code=1774664619309321,
+            amount=50000,
+            amount_paid=50000,
+            amount_remaining=0,
+            status="PAID",
+            created_at="2026-03-28T11:24:05Z",
+            transactions=[],
+            cancellation_reason=None,
+            canceled_at=None,
+        )
+
+        with patch(
+            "app.services.payment.provider.payos_provider.assert_payos_provider_available",
+            return_value=None,
+        ), patch(
+            "app.services.payment.provider.payos_provider.payos_client.get_payment_link",
+            return_value=provider_link,
+        ):
+            anon_response = self.client.get("/api/support-donation/status?support_provider_order_code=1774664619309321")
+
+        self.assertEqual(anon_response.status_code, 200)
+        anon_payload = anon_response.get_json() or {}
+        self.assertEqual(anon_payload.get("status"), "paid")
+        self.assertEqual(anon_payload.get("grant_status"), "completed")
+        self.assertEqual(anon_payload.get("total_amount_minor"), 50000)
+
 
 if __name__ == "__main__":
     unittest.main()

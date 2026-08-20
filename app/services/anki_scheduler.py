@@ -431,6 +431,19 @@ def _set_review_due(
     return state
 
 
+def format_interval_days(days: int | float) -> str:
+    clamped_days = max(1, int(round(days)))
+    if clamped_days < 30:
+        return f"{clamped_days}d"
+    if clamped_days < 365:
+        months = round(clamped_days / 30.0, 1)
+        months_str = f"{months:g}"
+        return f"{months_str}m"
+    years = round(clamped_days / 365.0, 1)
+    years_str = f"{years:g}"
+    return f"{years_str}y"
+
+
 def _preview_from_state(
     state: CardState,
     options: DeckOptions,
@@ -445,7 +458,7 @@ def _preview_from_state(
             "seconds": None,
             "days": raw_days,
             "intervalDays": rounded_days,
-            "label": f"{rounded_days}d",
+            "label": format_interval_days(rounded_days),
         }
 
     if state.dueDay is not None:
@@ -461,7 +474,7 @@ def _preview_from_state(
             "seconds": delta_seconds,
             "days": float(interval_days),
             "intervalDays": interval_days,
-            "label": f"{interval_days}d",
+            "label": format_interval_days(interval_days),
         }
 
     due = state.due
@@ -491,7 +504,7 @@ def _preview_from_state(
         "seconds": delta_seconds,
         "days": delta_seconds / 86400,
         "intervalDays": days,
-        "label": f"{days}d",
+        "label": format_interval_days(days),
     }
 
 

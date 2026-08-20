@@ -38,3 +38,29 @@ static/tmp/
 !/migrations/versions/*.py
 
 /app/static/
+
+# Node & Package Managers
+node_modules/
+**/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+.npm/
+
+# Agent, Tooling & Plugin metadata
+.agent/
+.agents/
+.stitch/
+.impeccable/
+plugins/
+
+# External agent skills in skills/ (preserve repo-local skills: docs-architect, nihongo-agent-architect)
+skills/*
+!skills/docs-architect/
+!skills/nihongo-agent-architect/
+
+# OS / Editor files
+.DS_Store
+Thumbs.db

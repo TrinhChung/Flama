@@ -43,16 +43,13 @@ class DeployWorkflowTests(unittest.TestCase):
         admin_bootstrap_position = workflow.index(
             '"$PROJECT_DIR/venv/bin/flask" --app wsgi.py bootstrap-admin-sync'
         )
-        seed_position = workflow.index(
-            '"$PROJECT_DIR/venv/bin/flask" --app wsgi.py seed-data-ensure'
-        )
         activation_position = workflow.index(
             'ln -sfn "$release_dir" "$PROJECT_DIR/current"'
         )
 
         self.assertLess(migration_position, admin_bootstrap_position)
-        self.assertLess(migration_position, seed_position)
-        self.assertLess(migration_position, activation_position)
+        self.assertLess(admin_bootstrap_position, activation_position)
+        self.assertNotIn("seed-data-ensure", workflow)
 
     def test_database_migration_uses_release_directory_and_managed_environment(self):
         workflow = WORKFLOW_PATH.read_text(encoding="utf-8")

@@ -57,6 +57,11 @@ const NoteTypeDetailPage = lazy(() =>
     default: module.NoteTypeDetailPage,
   })),
 )
+const NoteTypeGuidePage = lazy(() =>
+  import('./features/note-types/pages/NoteTypeGuidePage').then((module) => ({
+    default: module.NoteTypeGuidePage,
+  })),
+)
 const InstalledDecksPage = lazy(() =>
   import('./features/library/pages/LibraryPages').then((module) => ({
     default: module.InstalledDecksPage,
@@ -93,9 +98,19 @@ const SharedNoteTypeDetailPage = lazy(() =>
     default: module.SharedNoteTypeDetailPage,
   })),
 )
+const PaymentResultPage = lazy(() =>
+  import('./features/marketplace/pages/MarketplacePages').then((module) => ({
+    default: module.PaymentResultPage,
+  })),
+)
 const OrdersPage = lazy(() =>
   import('./features/orders/pages/OrdersPage').then((module) => ({
     default: module.OrdersPage,
+  })),
+)
+const AdminAnalyticsPage = lazy(() =>
+  import('./features/admin/pages/AdminAnalyticsPage').then((module) => ({
+    default: module.AdminAnalyticsPage,
   })),
 )
 const AdminUsersPage = lazy(() =>
@@ -126,6 +141,11 @@ const YomitanTokensPage = lazy(() =>
 const FeedbackPage = lazy(() =>
   import('./features/support/pages/FeedbackPage').then((module) => ({
     default: module.FeedbackPage,
+  })),
+)
+const DeckAudioGeneratorPage = lazy(() =>
+  import('./features/audio/pages/DeckAudioGeneratorPage').then((module) => ({
+    default: module.DeckAudioGeneratorPage,
   })),
 )
 const AdminImageLibraryPage = lazy(() =>
@@ -223,6 +243,11 @@ const CookiesPage = lazy(() =>
     default: module.CookiesPage,
   })),
 )
+const OAuthConsentPage = lazy(() =>
+  import('./features/oauth/pages/OAuthConsentPage').then((module) => ({
+    default: module.OAuthConsentPage,
+  })),
+)
 
 function deferred(element: ReactNode) {
   return (
@@ -245,6 +270,10 @@ const router = createBrowserRouter([
     element: <MaintenancePage />,
   },
   {
+    path: 'oauth/consent',
+    element: deferred(<OAuthConsentPage />),
+  },
+  {
     element: <AppLayout />,
     children: [
       { index: true, element: <LandingPage /> },
@@ -257,7 +286,15 @@ const router = createBrowserRouter([
       },
       {
         path: 'support-donation/result',
-        element: <Navigate to="/support" replace />,
+        element: deferred(<PaymentResultPage />),
+      },
+      {
+        path: 'payments/marketplace-result',
+        element: deferred(<PaymentResultPage />),
+      },
+      {
+        path: 'payments/result',
+        element: deferred(<PaymentResultPage />),
       },
       { path: 'guide/tts-key', element: deferred(<TtsKeyGuidePage />) },
       {
@@ -297,6 +334,10 @@ const router = createBrowserRouter([
           },
           { path: 'note-types', element: deferred(<NoteTypeManagerPage />) },
           {
+            path: 'note-types/guide',
+            element: deferred(<NoteTypeGuidePage />),
+          },
+          {
             path: 'note-types/:id',
             element: deferred(<NoteTypeDetailPage />),
           },
@@ -307,6 +348,10 @@ const router = createBrowserRouter([
           {
             path: 'flashcards/note-types',
             element: deferred(<NoteTypeManagerPage />),
+          },
+          {
+            path: 'flashcards/note-types/guide',
+            element: deferred(<NoteTypeGuidePage />),
           },
           {
             path: 'flashcards/note-types/:id',
@@ -339,6 +384,18 @@ const router = createBrowserRouter([
           {
             path: 'flashcards/change-requests/:requestId',
             element: deferred(<ChangeRequestDetailPage />),
+          },
+          {
+            path: 'audio/generate',
+            element: deferred(<DeckAudioGeneratorPage />),
+          },
+          {
+            path: 'audio',
+            element: <Navigate to="/audio/generate" replace />,
+          },
+          {
+            path: 'flashcards/audio',
+            element: <Navigate to="/audio/generate" replace />,
           },
           {
             element: <RequireCreator />,
@@ -426,6 +483,11 @@ const router = createBrowserRouter([
             element: deferred(<SharedNoteTypeDetailPage />),
           },
           { path: 'orders', element: deferred(<OrdersPage />) },
+          { path: 'admin', element: <Navigate to="/admin/analytics" replace /> },
+          {
+            path: 'admin/analytics',
+            element: deferred(<AdminAnalyticsPage />),
+          },
           { path: 'admin/users', element: deferred(<AdminUsersPage />) },
           {
             path: 'admin/payments',

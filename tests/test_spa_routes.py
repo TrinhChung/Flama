@@ -70,6 +70,7 @@ class SpaRouteTests(unittest.TestCase):
             "/browse",
             "/study",
             "/installed-decks",
+            "/installed-decks/install-1/updates/release-2",
             "/sync",
             "/flashcards/sync",
             "/import",
@@ -89,7 +90,13 @@ class SpaRouteTests(unittest.TestCase):
             "app.spa.serve_react_spa",
             side_effect=self._shell,
         ):
-            for path in ("/sync", "/flashcards/sync", "/import", "/flashcards/import"):
+            for path in (
+                "/sync",
+                "/flashcards/sync",
+                "/import",
+                "/flashcards/import",
+                "/creator/decks/deck-item-1/releases/new",
+            ):
                 with self.subTest(path=path):
                     response = self.client.get(path)
                     self.assertEqual(response.status_code, 200)

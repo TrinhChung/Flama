@@ -40,8 +40,8 @@ SOUND_REFERENCE_RE = re.compile(
     r"^\[sound:(yomitan_audio_[A-Za-z0-9_-]{8,96}\.mp3)\]$",
     flags=re.IGNORECASE,
 )
-IMPORT_MEDIA_FILENAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,254}$")
-IMPORT_SOUND_REFERENCE_RE = re.compile(r"^\[sound:([A-Za-z0-9][A-Za-z0-9_.-]{0,254})\]$")
+IMPORT_MEDIA_FILENAME_RE = re.compile(r"^[\w][\w_.-]{0,254}$")
+IMPORT_SOUND_REFERENCE_RE = re.compile(r"^\[sound:([\w][\w_.-]{0,254})\]$")
 IMPORT_MEDIA_MIME_BY_EXTENSION = {
     "jpg": "image/jpeg",
     "jpeg": "image/jpeg",
@@ -410,6 +410,7 @@ def resolve_import_media(
     note_type: NoteType,
     raw_fields: object,
     lock: bool,
+    existing_note: Note | None = None,
 ) -> tuple[dict[str, ConnectImportMedia], set[str]]:
     if not isinstance(raw_fields, dict):
         return {}, set()
@@ -429,7 +430,13 @@ def resolve_import_media(
         else:
             filename = raw
         if not IMPORT_MEDIA_FILENAME_RE.fullmatch(filename):
-            raise ConnectMediaError(f'Trường media "{field_name}" chứa tham chiếu không hợp lệ.')
+            raw_fields[field_name] = ""
+            current_app.logger.warning(
+                "Skipping invalid Anki media reference field=%s session_id=%s",
+                field_name,
+                session_id,
+            )
+            continue
         requested[field_name] = filename
     if not requested:
         return {}, set()
@@ -443,19 +450,59 @@ def resolve_import_media(
     if lock:
         query = query.with_for_update()
     rows = {row.filename: row for row in query.all()}
-    missing = [filename for filename in filenames if filename not in rows]
-    if missing:
-        raise ConnectMediaError(f"Chưa upload media: {', '.join(missing[:5])}")
+
+    existing_assets: dict[str, list[MediaAsset]] = {}
+    if existing_note is not None:
+        for asset in MediaAsset.query.filter_by(note_id=existing_note.id).all():
+            existing_assets.setdefault(asset.field_name, []).append(asset)
+
+    valid_attachments = {}
+    allowed: set[str] = set()
     for field_name, filename in requested.items():
         expected = media_fields[field_name]
-        row_kind = rows[filename].media_kind
+        staged = rows.get(filename)
+        if staged is None:
+            matching_existing = next(
+                (
+                    asset
+                    for asset in existing_assets.get(field_name, [])
+                    if (
+                        asset.filename == filename
+                        or filename.startswith(f"{asset.sha256}.")
+                    )
+                    and (
+                        (expected == "audio")
+                        == str(asset.mime_type or "").startswith("audio/")
+                    )
+                ),
+                None,
+            )
+            if matching_existing is not None:
+                allowed.add(filename)
+                allowed.add(f"[sound:{filename}]")
+                continue
+            raw_fields[field_name] = ""
+            current_app.logger.warning(
+                "Skipping missing Anki media filename=%s field=%s session_id=%s",
+                filename,
+                field_name,
+                session_id,
+            )
+            continue
+        row_kind = staged.media_kind
         if (expected == "audio") != (row_kind == "audio"):
-            raise ConnectMediaError(f'Media "{filename}" không đúng loại trường "{field_name}".')
-    allowed: set[str] = set()
-    for filename in filenames:
+            raw_fields[field_name] = ""
+            current_app.logger.warning(
+                "Skipping wrong-kind Anki media filename=%s field=%s session_id=%s",
+                filename,
+                field_name,
+                session_id,
+            )
+            continue
+        valid_attachments[field_name] = staged
         allowed.add(filename)
         allowed.add(f"[sound:{filename}]")
-    return {field: rows[filename] for field, filename in requested.items()}, allowed
+    return valid_attachments, allowed
 
 
 def materialize_import_media(
@@ -468,46 +515,57 @@ def materialize_import_media(
         return MaterializedMedia((), ())
     values = dict(note.field_values or {})
     final_paths: list[Path] = []
+    attached_count = 0
     try:
         for field_name, staged in attachments.items():
-            staged_path = _safe_path(staged.storage_path)
             try:
-                content = staged_path.read_bytes()
-            except OSError as exc:
-                raise ConnectMediaError("Media staging không còn tồn tại.") from exc
-            if len(content) != staged.size_bytes or hashlib.sha256(content).hexdigest() != staged.sha256:
-                raise ConnectMediaError("Media staging không còn toàn vẹn.")
-            extension = Path(staged.filename).suffix.lower().lstrip(".")
-            storage_filename = f"{uuid4().hex}_{staged.sha256[:12]}.{extension}"
-            relative_path = Path(str(user_id)) / note.id / storage_filename
-            final_path = _safe_path(relative_path)
-            final_path.parent.mkdir(parents=True, exist_ok=True)
+                staged_path = _safe_path(staged.storage_path)
+                try:
+                    content = staged_path.read_bytes()
+                except OSError as exc:
+                    current_app.logger.warning("Media staging không còn tồn tại cho %s: %s", staged.filename, exc)
+                    values[field_name] = ""
+                    continue
+                if len(content) != staged.size_bytes or hashlib.sha256(content).hexdigest() != staged.sha256:
+                    current_app.logger.warning("Media staging không còn toàn vẹn cho %s", staged.filename)
+                    values[field_name] = ""
+                    continue
+                extension = Path(staged.filename).suffix.lower().lstrip(".")
+                storage_filename = f"{uuid4().hex}_{staged.sha256[:12]}.{extension}"
+                relative_path = Path(str(user_id)) / note.id / storage_filename
+                final_path = _safe_path(relative_path)
+                final_path.parent.mkdir(parents=True, exist_ok=True)
 
-            existing = MediaAsset.query.filter_by(
-                note_id=note.id,
-                field_name=field_name,
-                sha256=staged.sha256,
-            ).first()
-            if existing is None:
-                final_path.write_bytes(content)
-                final_paths.append(final_path)
-                existing = MediaAsset(
+                existing = MediaAsset.query.filter_by(
                     note_id=note.id,
                     field_name=field_name,
-                    filename=staged.filename,
-                    mime_type=staged.mime_type,
-                    storage_path=str(relative_path).replace("\\", "/"),
                     sha256=staged.sha256,
-                    size_bytes=staged.size_bytes,
-                )
-                db.session.add(existing)
-            values[field_name] = staged.filename
+                ).first()
+                if existing is None:
+                    final_path.write_bytes(content)
+                    final_paths.append(final_path)
+                    existing = MediaAsset(
+                        note_id=note.id,
+                        field_name=field_name,
+                        filename=staged.filename,
+                        mime_type=staged.mime_type,
+                        storage_path=str(relative_path).replace("\\", "/"),
+                        sha256=staged.sha256,
+                        size_bytes=staged.size_bytes,
+                    )
+                    db.session.add(existing)
+                values[field_name] = staged.filename
+                attached_count += 1
+            except Exception as exc:
+                current_app.logger.error("Lỗi khi xử lý import media %s: %s", staged.filename, exc)
+                values[field_name] = ""
+                continue
         note.field_values = values
         db.session.add(
             AuditLog(
                 user_id=user_id,
                 action="connect.import_media.attach",
-                payload={"note_id": note.id, "media_count": len(attachments)},
+                payload={"note_id": note.id, "media_count": attached_count},
             )
         )
     except Exception:

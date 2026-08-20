@@ -71,12 +71,10 @@ def move_deck(*, deck_obj: Deck, new_parent_id: Optional[int]) -> None:
     deck_obj.position = vocabulary_ctrl.next_deck_position(new_parent_id)
     db.session.commit()
 
-def delete_deck_subtree(*, deck_obj: Deck, user_id: int, is_admin: bool) -> str:
+def delete_deck_subtree(*, deck_obj: Deck, user_id: int, is_admin: bool, purge: bool = False) -> str:
     """Delete a local deck, or archive a shared source while preserving installs."""
     deck_ids_to_delete = _collect_deck_subtree_ids(deck_obj.id)
 
-<<<<<<< Updated upstream
-=======
     if purge:
         if not is_admin:
             raise ValueError("Only administrators can purge decks.")
@@ -138,7 +136,6 @@ def delete_deck_subtree(*, deck_obj: Deck, user_id: int, is_admin: bool) -> str:
         db.session.commit()
         return "purged"
 
->>>>>>> Stashed changes
     marketplace_source_ids = set(deck_ids_to_delete)
     marketplace_source_ids.update(_collect_deck_ancestor_ids(deck_obj.id))
     marketplace_items = (

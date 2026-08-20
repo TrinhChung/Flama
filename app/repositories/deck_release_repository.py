@@ -17,6 +17,7 @@ from models.deck_release import DeckRelease
 from models.deck_release_change import DeckReleaseChange
 from models.deck_release_entity_membership import DeckReleaseEntityMembership
 from models.deck_release_note_checkpoint import DeckReleaseNoteCheckpoint
+from models.deck_working_dirty_entity import DeckWorkingDirtyEntity
 from models.field_def import FieldDef
 from models.note import Note
 
@@ -119,6 +120,32 @@ def list_source_field_defs(deck_item: DeckMarketplaceItem) -> list[FieldDef]:
     return (
         FieldDef.query.filter_by(note_type_id=deck_item.source_note_type_id)
         .order_by(FieldDef.position.asc(), FieldDef.id.asc())
+        .all()
+    )
+
+
+def list_notes_by_ids(note_ids: Iterable[str]) -> list[Note]:
+    normalized_ids = sorted({str(note_id) for note_id in note_ids if note_id})
+    if not normalized_ids:
+        return []
+    return Note.query.filter(Note.id.in_(normalized_ids)).all()
+
+
+def list_field_defs_by_ids(field_def_ids: Iterable[str]) -> list[FieldDef]:
+    normalized_ids = sorted(
+        {str(field_def_id) for field_def_id in field_def_ids if field_def_id}
+    )
+    if not normalized_ids:
+        return []
+    return FieldDef.query.filter(FieldDef.id.in_(normalized_ids)).all()
+
+
+def list_working_dirty_entities(
+    deck_item_id: str,
+) -> list[DeckWorkingDirtyEntity]:
+    return (
+        DeckWorkingDirtyEntity.query.filter_by(deck_item_id=deck_item_id)
+        .order_by(DeckWorkingDirtyEntity.id.asc())
         .all()
     )
 

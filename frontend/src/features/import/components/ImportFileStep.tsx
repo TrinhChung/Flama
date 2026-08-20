@@ -14,8 +14,10 @@ import {
   FileText,
   Table as TableIcon,
   Filter,
+  Files,
 } from 'lucide-react'
 import type { useFileImportWizard } from '../hooks/useFileImportWizard'
+import { BatchFileTable } from './BatchFileTable'
 
 interface ImportFileStepProps {
   wizard: ReturnType<typeof useFileImportWizard>
@@ -25,11 +27,21 @@ export function ImportFileStep({ wizard }: ImportFileStepProps) {
   const {
     token,
     file,
+    files,
+    isBatchMode,
+    batchFiles,
+    batchFileConfigs,
+    updateBatchFileConfig,
+    namingMode,
+    setNamingMode,
+    customPattern,
+    setCustomPattern,
+    handleApplyNamingRule,
     isDragOver,
     setIsDragOver,
     handleDrop,
     fileInputRef,
-    handleFileSelect,
+    handleFilesSelect,
     delimiterModeSelectId,
     delimiterMode,
     setDelimiterMode,
@@ -37,12 +49,15 @@ export function ImportFileStep({ wizard }: ImportFileStepProps) {
     customDelimiter,
     setCustomDelimiter,
     parseMutation,
+    batchParseMutation,
     parseMeta,
     columns,
     previewRows,
     hasHeader,
     setHasHeader,
   } = wizard
+
+  const isParsing = parseMutation.isPending || batchParseMutation.isPending
 
   return (
     <Card className="border-border/80 shadow-sm rounded-2xl overflow-hidden">
@@ -51,14 +66,14 @@ export function ImportFileStep({ wizard }: ImportFileStepProps) {
           <div>
             <CardTitle className="text-sm font-semibold flex items-center gap-2">
               <UploadCloud className="size-4 text-primary" />
-              Tải file &amp; Parse dữ liệu
+              Tải file &amp; Parse dữ liệu {isBatchMode && `(${files.length} bài học)`}
             </CardTitle>
             <CardDescription className="text-xs">
-              Chọn tệp CSV, TSV hoặc định dạng có phân tách tự định nghĩa.
+              Chọn 1 hoặc nhiều tệp CSV, TSV cùng lúc (mỗi tệp tương ứng 1 bài học / Deck con).
             </CardDescription>
           </div>
           <Badge variant={token ? 'default' : 'secondary'} className="text-xs">
-            {token ? 'Parse thành công' : 'Chờ tải file'}
+            {token ? (isBatchMode ? `Đã phân tích ${batchFiles.length} bài` : 'Parse thành công') : 'Chờ tải file'}
           </Badge>
         </div>
       </CardHeader>
@@ -80,16 +95,25 @@ export function ImportFileStep({ wizard }: ImportFileStepProps) {
           <input
             ref={fileInputRef}
             type="file"
+            multiple
             accept=".csv,.tsv,.txt"
             className="hidden"
-            onChange={(e) => e.target.files?.[0] && handleFileSelect(e.target.files[0])}
+            onChange={(e) => e.target.files && handleFilesSelect(e.target.files)}
           />
-          <FileSpreadsheet className="size-10 mx-auto text-primary mb-2 opacity-85" />
+          {files.length > 1 ? (
+            <Files className="size-10 mx-auto text-primary mb-2 opacity-85" />
+          ) : (
+            <FileSpreadsheet className="size-10 mx-auto text-primary mb-2 opacity-85" />
+          )}
           <p className="text-sm font-semibold text-foreground">
-            {file ? file.name : 'Kéo thả file vào đây hoặc nhấp để chọn tệp'}
+            {files.length > 1
+              ? `Đã chọn ${files.length} tệp (${files.map((f) => f.name).slice(0, 3).join(', ')}${files.length > 3 ? '...' : ''})`
+              : file
+              ? file.name
+              : 'Kéo thả 1 hoặc nhiều tệp vào đây hoặc nhấp để chọn'}
           </p>
           <p className="text-xs text-muted-foreground mt-1">
-            Định dạng hỗ trợ: CSV, TSV, TXT (Tối đa 50MB)
+            Định dạng hỗ trợ: CSV, TSV, TXT (Tối đa 50MB mỗi tệp, hỗ trợ nạp hàng loạt nhiều bài)
           </p>
         </div>
 
@@ -123,10 +147,16 @@ export function ImportFileStep({ wizard }: ImportFileStepProps) {
             <Button
               variant="outline"
               className="w-full font-medium"
-              disabled={!file || parseMutation.isPending}
-              onClick={() => file && parseMutation.mutate(file)}
+              disabled={(!file && files.length === 0) || isParsing}
+              onClick={() => {
+                if (isBatchMode && files.length > 1) {
+                  batchParseMutation.mutate(files)
+                } else if (file) {
+                  parseMutation.mutate(file)
+                }
+              }}
             >
-              {parseMutation.isPending ? <Loader2 className="size-4 animate-spin mr-1.5" /> : <RotateCcw className="size-4 mr-1.5" />}
+              {isParsing ? <Loader2 className="size-4 animate-spin mr-1.5" /> : <RotateCcw className="size-4 mr-1.5" />}
               Parse lại
             </Button>
           </div>
@@ -141,8 +171,23 @@ export function ImportFileStep({ wizard }: ImportFileStepProps) {
           </div>
         )}
 
-        {/* Preview Table */}
-        {columns.length > 0 && (
+        {/* Multi-file Interactive Table */}
+        {isBatchMode && batchFiles.length > 0 && (
+          <BatchFileTable
+            batchFiles={batchFiles}
+            fileConfigs={batchFileConfigs}
+            onUpdateConfig={updateBatchFileConfig}
+            namingMode={namingMode}
+            onChangeNamingMode={setNamingMode}
+            customPattern={customPattern}
+            onChangeCustomPattern={setCustomPattern}
+            onApplyNamingRule={handleApplyNamingRule}
+            isReparsing={batchParseMutation.isPending}
+          />
+        )}
+
+        {/* Single File Preview Table */}
+        {!isBatchMode && columns.length > 0 && (
           <div className="border border-border/80 rounded-2xl overflow-hidden mt-3">
             <div className="bg-muted/40 p-3 border-b flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div>
@@ -150,10 +195,11 @@ export function ImportFileStep({ wizard }: ImportFileStepProps) {
                 <p className="text-[11px] text-muted-foreground">Hiển thị các dòng mẫu đã phân tách cột.</p>
               </div>
               <div className="flex items-center gap-4 text-xs font-medium">
-                <label className="flex items-center gap-1.5 cursor-pointer">
+                <label className="flex items-center gap-1.5 cursor-pointer select-none">
                   <input
                     type="radio"
                     name="headerMode"
+                    className="accent-primary size-3.5 cursor-pointer"
                     checked={hasHeader}
                     onChange={() => {
                       setHasHeader(true)
@@ -162,10 +208,11 @@ export function ImportFileStep({ wizard }: ImportFileStepProps) {
                   />
                   <span>Có tiêu đề</span>
                 </label>
-                <label className="flex items-center gap-1.5 cursor-pointer">
+                <label className="flex items-center gap-1.5 cursor-pointer select-none">
                   <input
                     type="radio"
                     name="headerMode"
+                    className="accent-primary size-3.5 cursor-pointer"
                     checked={!hasHeader}
                     onChange={() => {
                       setHasHeader(false)

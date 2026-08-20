@@ -12,6 +12,20 @@ from app.services.anki_scheduler import _day_index
 from app.repositories.study_repository import REVIEW_QUEUE, normalize_progress_queue
 
 UTC = timezone.utc
+MYSQL_FIXED_OFFSET_MINUTES = {
+    "UTC": 0,
+    "ETC/UTC": 0,
+    "GMT": 0,
+    "ASIA/HO_CHI_MINH": 7 * 60,
+    "ASIA/BANGKOK": 7 * 60,
+    "ASIA/JAKARTA": 7 * 60,
+    "ASIA/TOKYO": 9 * 60,
+    "ASIA/SEOUL": 9 * 60,
+    "ASIA/SHANGHAI": 8 * 60,
+    "ASIA/HONG_KONG": 8 * 60,
+    "ASIA/SINGAPORE": 8 * 60,
+    "ASIA/TAIPEI": 8 * 60,
+}
 
 
 def _session_dialect_name() -> str:
@@ -20,10 +34,21 @@ def _session_dialect_name() -> str:
 
 
 def can_use_mysql_local_day_sql(*, timezone_name: str) -> bool:
-    """Only UTC is safe in local MySQL setups without timezone tables."""
-    if _session_dialect_name() != "mysql":
+    """Use SQL for fixed-offset zones without requiring MySQL timezone tables."""
+    bind = db.session.get_bind()
+    if bind is None or bind.dialect.name != "mysql":
         return False
-    return str(timezone_name or "").strip().upper() in {"UTC", "ETC/UTC", "GMT"}
+    return str(timezone_name or "").strip().upper() in MYSQL_FIXED_OFFSET_MINUTES
+
+
+def _mysql_local_timestamp(timezone_name: str):
+    offset = MYSQL_FIXED_OFFSET_MINUTES[str(timezone_name or "").strip().upper()]
+    if offset == 0:
+        return ReviewEvent.reviewed_at
+    return db.func.date_add(
+        ReviewEvent.reviewed_at,
+        db.text(f"INTERVAL {int(offset)} MINUTE"),
+    )
 
 
 def _safe_int(value: Any) -> int:
@@ -31,6 +56,7 @@ def _safe_int(value: Any) -> int:
         return int(value or 0)
     except (TypeError, ValueError):
         return 0
+
 
 def _parse_sql_day(raw_day: Any) -> date | None:
     if isinstance(raw_day, date):
@@ -47,6 +73,7 @@ def _parse_sql_day(raw_day: Any) -> date | None:
     except ValueError:
         return None
 
+
 def _utc_to_local_day(moment: datetime, timezone_obj) -> date:
     utc_moment = moment
     if utc_moment.tzinfo is None:
@@ -62,6 +89,11 @@ def _utc_to_business_day(
     timezone_name: str,
     day_boundary_hour_local: int,
 ) -> date:
+    tz_key = str(timezone_name or "").strip().upper()
+    offset_min = MYSQL_FIXED_OFFSET_MINUTES.get(tz_key)
+    if offset_min is not None:
+        naive_moment = moment.replace(tzinfo=None) if moment.tzinfo else moment
+        return (naive_moment + timedelta(minutes=offset_min - day_boundary_hour_local * 60)).date()
     return date.fromordinal(
         _day_index(
             moment,
@@ -93,17 +125,18 @@ def _progress_due_local_day(
         day_boundary_hour_local=day_boundary_hour_local,
     )
 
+
 def _query_daily_review_aggregates_mysql(
     *,
     user_id: int,
-    mysql_timezone: str,
+    timezone_name: str,
     start_utc: datetime,
     end_utc: datetime,
     day_boundary_hour_local: int,
 ) -> dict[date, dict[str, int]]:
     local_day_expr = db.func.date(
         db.func.date_sub(
-            ReviewEvent.reviewed_at,
+            _mysql_local_timestamp(timezone_name),
             db.text(f"INTERVAL {int(day_boundary_hour_local)} HOUR"),
         )
     )
@@ -197,7 +230,7 @@ def query_daily_review_aggregates(
     if can_use_mysql_local_day_sql(timezone_name=timezone_name):
         return _query_daily_review_aggregates_mysql(
             user_id=user_id,
-            mysql_timezone="+00:00",
+            timezone_name=timezone_name,
             start_utc=start_utc,
             end_utc=end_utc,
             day_boundary_hour_local=day_boundary_hour_local,
@@ -214,13 +247,13 @@ def query_daily_review_aggregates(
 def _query_active_review_days_mysql(
     *,
     user_id: int,
-    mysql_timezone: str,
+    timezone_name: str,
     end_utc: datetime,
     day_boundary_hour_local: int,
 ) -> set[date]:
     local_day_expr = db.func.date(
         db.func.date_sub(
-            ReviewEvent.reviewed_at,
+            _mysql_local_timestamp(timezone_name),
             db.text(f"INTERVAL {int(day_boundary_hour_local)} HOUR"),
         )
     )
@@ -283,7 +316,7 @@ def query_active_review_days(
     if can_use_mysql_local_day_sql(timezone_name=timezone_name):
         return _query_active_review_days_mysql(
             user_id=user_id,
-            mysql_timezone="+00:00",
+            timezone_name=timezone_name,
             end_utc=end_utc,
             day_boundary_hour_local=day_boundary_hour_local,
         )
@@ -401,6 +434,31 @@ def _query_future_due_day_counts_python(
     return by_day
 
 
+def build_progress_rows_query(*, user_id: int):
+    return (
+        db.session.query(
+            CardProgress.due_at,
+            CardProgress.due_day,
+            CardProgress.queue,
+            CardProgress.interval_days,
+            CardProgress.is_suspended,
+            Note.deck_id.label("note_deck_id"),
+        )
+        .select_from(CardProgress)
+        .outerjoin(Card, CardProgress.card_id == Card.id)
+        .outerjoin(Note, Card.note_id == Note.id)
+        .filter(CardProgress.user_id == user_id)
+    )
+
+
+def apply_scope_filter(query, scope_deck_ids: list[int] | None):
+    if scope_deck_ids is None:
+        return query
+    if not scope_deck_ids:
+        return query.filter(db.text("1=0"))
+    return query.filter(Note.deck_id.in_(scope_deck_ids))
+
+
 def query_future_due_day_counts(
     *,
     user_id: int,
@@ -433,35 +491,11 @@ def query_future_due_day_counts(
         )
         if local_day is None:
             continue
-        if local_day < start_local_day or local_day >= end_local_day:
-            continue
-        by_day[local_day] = _safe_int(by_day.get(local_day)) + 1
+        if local_day < start_local_day:
+            by_day[start_local_day] = _safe_int(by_day.get(start_local_day)) + 1
+        elif local_day < end_local_day:
+            by_day[local_day] = _safe_int(by_day.get(local_day)) + 1
     return by_day
-
-
-def build_progress_rows_query(*, user_id: int):
-    return (
-        db.session.query(
-            CardProgress.due_at,
-            CardProgress.due_day,
-            CardProgress.queue,
-            CardProgress.interval_days,
-            CardProgress.is_suspended,
-            Note.deck_id.label("note_deck_id"),
-        )
-        .select_from(CardProgress)
-        .outerjoin(Card, CardProgress.card_id == Card.id)
-        .outerjoin(Note, Card.note_id == Note.id)
-        .filter(CardProgress.user_id == user_id)
-    )
-
-
-def apply_scope_filter(query, scope_deck_ids: list[int] | None):
-    if scope_deck_ids is None:
-        return query
-    if not scope_deck_ids:
-        return query.filter(db.text("1=0"))
-    return query.filter(Note.deck_id.in_(scope_deck_ids))
 
 
 def aggregate_future_due_offsets_mysql(
@@ -567,6 +601,18 @@ def query_interval_days_rows(
     user_id: int,
     scope_deck_ids: list[int] | None,
 ) -> list[tuple[Any, Any]]:
+    if scope_deck_ids is None:
+        return (
+            db.session.query(
+                db.func.coalesce(CardProgress.interval_days_raw, CardProgress.interval_days),
+                CardProgress.queue,
+            )
+            .filter(
+                CardProgress.user_id == user_id,
+                db.or_(CardProgress.is_suspended.is_(False), CardProgress.is_suspended.is_(None)),
+            )
+            .all()
+        )
     query = build_progress_rows_query(user_id=user_id)
     query = apply_scope_filter(query, scope_deck_ids)
     query = query.filter(
@@ -583,6 +629,16 @@ def query_due_progress_rows(
     user_id: int,
     scope_deck_ids: list[int] | None = None,
 ) -> list[tuple[Any, Any, Any]]:
+    if scope_deck_ids is None:
+        return (
+            db.session.query(CardProgress.due_at, CardProgress.due_day, CardProgress.queue)
+            .filter(
+                CardProgress.user_id == user_id,
+                db.or_(CardProgress.due_at.isnot(None), CardProgress.due_day.isnot(None)),
+                db.or_(CardProgress.is_suspended.is_(False), CardProgress.is_suspended.is_(None)),
+            )
+            .all()
+        )
     query = build_progress_rows_query(user_id=user_id)
     query = apply_scope_filter(query, scope_deck_ids)
     query = query.filter(

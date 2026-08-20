@@ -6,9 +6,12 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 import hashlib
 import json
+import math
 import re
 import unicodedata
 from typing import Any
+
+from sqlalchemy.orm import selectinload
 
 from app.services import flashcards_share_service, flama_connect_media_service
 from app.services.anki_content_normalizer import normalize_anki_field_values
@@ -16,6 +19,7 @@ from app.validators.flashcard_input import RequestValidationError, validate_note
 from models import db
 from models.audit_log import AuditLog
 from models.card import Card
+from models.card_progress import CardProgress
 from models.connect_note_ref import ConnectNoteRef
 from models.connect_pending_media import ConnectPendingMedia
 from models.connect_import_session import ConnectImportSession
@@ -23,6 +27,7 @@ from models.connect_note_type_ref import ConnectNoteTypeRef
 from models.connect_review_event_ref import ConnectReviewEventRef
 from models.connect_source_deck_ref import ConnectSourceDeckRef
 from models.connect_source_note_ref import ConnectSourceNoteRef
+from models.connect_source_card_ref import ConnectSourceCardRef
 from models.deck import Deck
 from models.deck_clone_added_note import DeckCloneAddedNote
 from models.deck_clone_deck_map import DeckCloneDeckMap
@@ -31,6 +36,7 @@ from models.field_def import FieldDef
 from models.note import Note
 from models.note_type import NoteType
 from models.note_type_install import NoteTypeInstall
+from models.media_asset import MediaAsset
 from models.template import Template
 from models.user import User
 
@@ -73,6 +79,16 @@ class PreparedNote:
     clone_map: DeckCloneDeckMap | None
     pending_audio: dict[str, ConnectPendingMedia]
     pending_import_media: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class ImportBatchContext:
+    """Stable schema/deck state reused by every note in one transport package."""
+
+    note_types_by_id: dict[str, NoteType]
+    note_type_hashes_by_id: dict[str, str]
+    decks_by_path: dict[str, Deck]
+    clone_maps_by_deck_id: dict[int, DeckCloneDeckMap]
 
 
 @dataclass(frozen=True)
@@ -125,9 +141,10 @@ def _resolve_deck(user_id: int, deck_name: object, *, lock: bool = False, allow_
     if len(matches) >= 1:
         target_deck = matches[0]
     else:
-        # 2. Case-insensitive path match or single name match
+        # 2. Case-insensitive full-path match. Never bind a root name to an
+        # unrelated nested deck that happens to share the same leaf name.
         lower_target = target.lower()
-        matches = [deck for deck in owned if _deck_path(deck).lower() == lower_target or deck.name.lower() == lower_target]
+        matches = [deck for deck in owned if _deck_path(deck).lower() == lower_target]
         if len(matches) >= 1:
             target_deck = matches[0]
         elif allow_create:
@@ -178,7 +195,11 @@ def _resolve_deck(user_id: int, deck_name: object, *, lock: bool = False, allow_
     return deck
 
 
-def _accessible_note_types(user_id: int) -> list[NoteType]:
+def _accessible_note_types(
+    user_id: int,
+    *,
+    eager_schema: bool = False,
+) -> list[NoteType]:
     installed_ids = [
         r[0]
         for r in db.session.query(NoteTypeInstall.installed_note_type_id)
@@ -186,14 +207,16 @@ def _accessible_note_types(user_id: int) -> list[NoteType]:
         .all()
         if r[0]
     ]
-    return (
-        NoteType.query.filter(
+    query = NoteType.query.filter(
             (NoteType.user_id == user_id)
             | (NoteType.id.in_(installed_ids))
         )
-        .order_by(NoteType.name.asc(), NoteType.id.asc())
-        .all()
-    )
+    if eager_schema:
+        query = query.options(
+            selectinload(NoteType.field_defs),
+            selectinload(NoteType.templates),
+        )
+    return query.order_by(NoteType.name.asc(), NoteType.id.asc()).all()
 
 
 def model_names(user_id: int) -> list[str]:
@@ -254,6 +277,8 @@ def _parse_note(
     allow_create_deck: bool = False,
     allow_mixed_model: bool = False,
     import_session_id: str | None = None,
+    batch_context: ImportBatchContext | None = None,
+    existing_note: Note | None = None,
 ) -> PreparedNote:
     if not isinstance(raw_note, dict):
         raise ConnectError("note must be an object")
@@ -264,13 +289,22 @@ def _parse_note(
         if raw_note.get(media_key):
             raise ConnectError("media import is not supported in this version")
 
-    deck = _resolve_deck(
-        user_id,
-        raw_note.get("deckName"),
-        lock=lock_deck,
-        allow_create=allow_create_deck,
-    )
-    note_type = _resolve_note_type(user_id, raw_note.get("modelName"))
+    deck_name = raw_note.get("deckName")
+    normalized_deck_name = deck_name.strip() if isinstance(deck_name, str) else ""
+    deck = batch_context.decks_by_path.get(normalized_deck_name) if batch_context else None
+    if deck is None:
+        deck = _resolve_deck(
+            user_id,
+            deck_name,
+            lock=lock_deck,
+            allow_create=allow_create_deck,
+        )
+
+    model_name = raw_note.get("modelName")
+    normalized_model_name = model_name.strip() if isinstance(model_name, str) else ""
+    note_type = batch_context.note_types_by_id.get(normalized_model_name) if batch_context else None
+    if note_type is None:
+        note_type = _resolve_note_type(user_id, model_name)
     if not allow_mixed_model and deck.note_type_id is not None and deck.note_type_id != note_type.id:
         raise ConnectError("deck is bound to a different model")
     if not note_type.templates:
@@ -337,6 +371,7 @@ def _parse_note(
                 note_type=note_type,
                 raw_fields=fields,
                 lock=lock_deck,
+                existing_note=existing_note,
             )
         else:
             pending_audio, allowed_media_references = flama_connect_media_service.resolve_pending_audio(
@@ -357,6 +392,7 @@ def _parse_note(
                 "tags": tags,
             },
             note_media_ids=allowed_media_references,
+            allow_missing_media=import_session_id is not None,
         )
     except RequestValidationError as exc:
         raise ConnectError(str(exc)) from exc
@@ -373,7 +409,11 @@ def _parse_note(
         identity_field=identity,
         identity_value=identity_value,
         allow_duplicate=bool(options.get("allowDuplicate", False)),
-        clone_map=_clone_map_for_deck(user_id, deck.id),
+        clone_map=(
+            batch_context.clone_maps_by_deck_id.get(deck.id)
+            if batch_context is not None
+            else _clone_map_for_deck(user_id, deck.id)
+        ),
         pending_audio=pending_audio,
         pending_import_media=pending_import_media,
     )
@@ -642,6 +682,41 @@ def _session_source_key(params: dict[str, Any]) -> str:
     return value
 
 
+def _migrate_source_aliases(user_id: int, source_key: str, raw_aliases: object) -> None:
+    """Move legacy endpoint-based refs into the profile-aware source namespace."""
+    if raw_aliases is None:
+        return
+    if not isinstance(raw_aliases, list) or len(raw_aliases) > 5:
+        raise ConnectError("sourceAliases must be an array with at most 5 entries")
+    aliases: list[str] = []
+    for raw in raw_aliases:
+        alias = str(raw or "").strip()
+        if not alias or len(alias) > 255 or any(ord(char) < 32 for char in alias):
+            raise ConnectError("sourceAliases contains an invalid source key")
+        if alias != source_key and alias not in aliases:
+            aliases.append(alias)
+
+    specs = (
+        (ConnectNoteTypeRef, "external_model_id", "note_type_id"),
+        (ConnectSourceDeckRef, "external_deck_id", "deck_id"),
+        (ConnectSourceNoteRef, "external_note_id", "note_id"),
+    )
+    for alias in aliases:
+        for model, external_field, target_field in specs:
+            rows = model.query.filter_by(user_id=user_id, source_key=alias).all()
+            for row in rows:
+                external_id = getattr(row, external_field)
+                existing = model.query.filter_by(
+                    user_id=user_id,
+                    source_key=source_key,
+                    **{external_field: external_id},
+                ).first()
+                if existing is None:
+                    row.source_key = source_key
+                elif getattr(existing, target_field) == getattr(row, target_field):
+                    db.session.delete(row)
+
+
 def _normalize_note_type_plan(raw: object) -> NormalizedNoteTypePlan:
     if not isinstance(raw, dict):
         raise ConnectError("noteTypes entries must be objects")
@@ -855,6 +930,87 @@ def _target_note_type_hash(note_type: NoteType) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
+def prepare_import_batch_context(
+    *,
+    user_id: int,
+    session: ConnectImportSession,
+    cards: list[dict[str, Any]],
+) -> ImportBatchContext:
+    """Load immutable package-level lookup state once instead of once per note."""
+
+    bindings = dict(session.note_type_bindings or {})
+    target_note_type_ids = {
+        str(binding.get("targetNoteTypeId") or "")
+        for binding in bindings.values()
+        if isinstance(binding, dict) and binding.get("targetNoteTypeId")
+    }
+    note_types = _accessible_note_types(user_id, eager_schema=True)
+    note_types_by_id = {
+        note_type.id: note_type
+        for note_type in note_types
+        if note_type.id in target_note_type_ids
+    }
+    note_type_hashes_by_id = {
+        note_type_id: _target_note_type_hash(note_type)
+        for note_type_id, note_type in note_types_by_id.items()
+    }
+
+    target_paths = {
+        str(note_payload.get("deckName") or "").strip()
+        for card in cards
+        if isinstance(card, dict)
+        and isinstance((note_payload := card.get("note")), dict)
+        and str(note_payload.get("deckName") or "").strip()
+    }
+    owned_decks = _owned_decks(user_id)
+    decks_by_path = {
+        path: deck
+        for deck in owned_decks
+        if (path := _deck_path(deck)) in target_paths
+    }
+    target_deck_ids = [deck.id for deck in decks_by_path.values()]
+    if target_deck_ids:
+        locked_by_id = {
+            deck.id: deck
+            for deck in Deck.query.filter(
+                Deck.id.in_(target_deck_ids),
+                Deck.owner_user_id == user_id,
+                Deck.deleted_at.is_(None),
+            )
+            .with_for_update()
+            .all()
+        }
+        decks_by_path = {
+            path: locked_by_id.get(deck.id, deck)
+            for path, deck in decks_by_path.items()
+        }
+
+    clone_maps_by_deck_id: dict[int, DeckCloneDeckMap] = {}
+    if target_deck_ids:
+        clone_maps = (
+            DeckCloneDeckMap.query.join(
+                DeckInstall,
+                DeckInstall.id == DeckCloneDeckMap.deck_install_id,
+            )
+            .filter(
+                DeckCloneDeckMap.local_deck_id.in_(target_deck_ids),
+                DeckInstall.user_id == user_id,
+                DeckInstall.clone_mode == "logical_overlay",
+            )
+            .all()
+        )
+        clone_maps_by_deck_id = {
+            clone_map.local_deck_id: clone_map for clone_map in clone_maps
+        }
+
+    return ImportBatchContext(
+        note_types_by_id=note_types_by_id,
+        note_type_hashes_by_id=note_type_hashes_by_id,
+        decks_by_path=decks_by_path,
+        clone_maps_by_deck_id=clone_maps_by_deck_id,
+    )
+
+
 def _upsert_note_type_ref(
     *,
     user_id: int,
@@ -888,6 +1044,7 @@ def create_import_session(user_id: int, params: dict[str, Any]) -> dict[str, Any
     if mode not in IMPORT_SESSION_MODES:
         raise ConnectError("mode must be strict or auto_sync_missing")
     source_key = _session_source_key(params)
+    _migrate_source_aliases(user_id, source_key, params.get("sourceAliases"))
     selected_decks_raw = params.get("selectedDecks") or []
     if not isinstance(selected_decks_raw, list) or not selected_decks_raw:
         raise ConnectError("selectedDecks must contain at least one target deck")
@@ -1093,11 +1250,174 @@ def _reconcile_note_cards(note: Note, note_type: NoteType) -> None:
             db.session.add(Card(note_id=note.id, template_id=template.id))
 
 
+def _migrate_cards_progress(
+    user_id: int,
+    note: Note,
+    note_type: NoteType,
+    cards_progress_payload: list[dict[str, Any]],
+) -> None:
+    if not cards_progress_payload:
+        return
+
+    from datetime import datetime, timezone
+    from app.services.scheduler_config_service import resolve_scheduler_runtime_settings
+    from app.services.anki_scheduler import _day_index, _day_index_to_datetime
+    from models.card import Card
+    from models.card_progress import CardProgress
+    from models.user import User
+
+    user = db.session.get(User, user_id)
+    timezone_name = getattr(user, "timezone", "UTC") or "UTC"
+    runtime = resolve_scheduler_runtime_settings(user_id=user_id)
+    boundary_hour = runtime.day_boundary_hour_local
+
+    now = datetime.utcnow()
+    today_day_index_flama = _day_index(now, boundary_hour, timezone_name=timezone_name)
+
+    templates = sorted(note_type.templates, key=lambda item: (item.position, item.id))
+
+    # Flush newly reconciled cards and query them directly
+    db.session.flush()
+    existing_cards = {card.template_id: card for card in Card.query.filter_by(note_id=note.id).all()}
+
+    if not isinstance(cards_progress_payload, list) or len(cards_progress_payload) > 100:
+        raise ConnectError("cardsProgress must be an array with at most 100 entries")
+    progress_map: dict[int, dict[str, Any]] = {}
+    for item in cards_progress_payload:
+        if not isinstance(item, dict):
+            raise ConnectError("cardsProgress entries must be objects")
+        ord_value = item.get("ord")
+        if isinstance(ord_value, bool) or not isinstance(ord_value, int) or not 0 <= ord_value <= 99:
+            raise ConnectError("cardsProgress ord must be an integer between 0 and 99")
+        if ord_value in progress_map:
+            raise ConnectError("cardsProgress contains duplicate ord values")
+        for field_name in ("type", "queue", "interval", "factor", "reps", "lapses"):
+            value = item.get(field_name, 0)
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(float(value)):
+                raise ConnectError(f"cardsProgress {field_name} must be a finite number")
+        if int(item.get("type", 0)) not in {0, 1, 2, 3}:
+            raise ConnectError("cardsProgress type is invalid")
+        if int(item.get("queue", 0)) not in {-3, -2, -1, 0, 1, 2, 3, 4}:
+            raise ConnectError("cardsProgress queue is invalid")
+        if not 0 <= int(item.get("interval", 0)) <= 365000:
+            raise ConnectError("cardsProgress interval is out of range")
+        if not 0 <= int(item.get("factor", 0)) <= 10000:
+            raise ConnectError("cardsProgress factor is out of range")
+        if not 0 <= int(item.get("reps", 0)) <= 2_000_000_000:
+            raise ConnectError("cardsProgress reps is out of range")
+        if not 0 <= int(item.get("lapses", 0)) <= 2_000_000_000:
+            raise ConnectError("cardsProgress lapses is out of range")
+        progress_map[ord_value] = item
+
+    for ord_idx, template in enumerate(templates):
+        card = existing_cards.get(template.id)
+        if not card:
+            continue
+
+        progress_data = progress_map.get(ord_idx)
+        if not progress_data:
+            continue
+
+        progress = CardProgress.query.filter_by(
+            user_id=user_id,
+            card_id=card.id,
+        ).with_for_update().first()
+        existing_progress = progress is not None
+
+        anki_last_reviewed_at = None
+        last_rev_str = progress_data.get("lastReviewAt")
+        if last_rev_str:
+            if not isinstance(last_rev_str, str) or len(last_rev_str) > 64:
+                raise ConnectError("cardsProgress lastReviewAt is invalid")
+            try:
+                clean_str = last_rev_str.replace("Z", "+00:00")
+                anki_last_reviewed_at = datetime.fromisoformat(clean_str)
+                if anki_last_reviewed_at.tzinfo is not None:
+                    anki_last_reviewed_at = anki_last_reviewed_at.astimezone(timezone.utc).replace(tzinfo=None)
+            except ValueError as exc:
+                raise ConnectError("cardsProgress lastReviewAt is invalid") from exc
+
+        # Conflict Handling: Newest progress wins
+        if progress is not None:
+            if progress.last_reviewed_at is not None:
+                if anki_last_reviewed_at is not None and anki_last_reviewed_at >= progress.last_reviewed_at:
+                    pass
+                else:
+                    continue
+        else:
+            progress = CardProgress(user_id=user_id, card_id=card.id)
+            db.session.add(progress)
+
+        anki_type = progress_data.get("type", 0)
+        anki_queue = progress_data.get("queue", 0)
+
+        # 0=new, 1=learning, 2=review, 3=relearning
+        queue_map = {0: "new", 1: "learning", 2: "review", 3: "relearning"}
+        progress.queue = queue_map.get(anki_type, "new")
+
+        # queue: -1=suspended, -2=sched buried, -3=user buried
+        progress.is_suspended = (anki_queue == -1)
+        progress.is_buried = (anki_queue in {-2, -3})
+        if progress.is_buried:
+            progress.buried_until_day = today_day_index_flama + 1
+        else:
+            progress.buried_until_day = None
+
+        progress.interval_days = int(progress_data.get("interval", 0))
+        progress.interval_days_raw = float(progress_data.get("interval", 0))
+        progress.ease_factor = float(progress_data.get("factor", 2500)) / 1000.0
+        progress.reps = int(progress_data.get("reps", 0))
+        progress.lapses = int(progress_data.get("lapses", 0))
+        progress.last_reviewed_at = anki_last_reviewed_at
+
+        relative_due = progress_data.get("relativeDue")
+        due_at_str = progress_data.get("dueAt")
+        if relative_due is not None:
+            if isinstance(relative_due, bool) or not isinstance(relative_due, (int, float)):
+                raise ConnectError("cardsProgress relativeDue must be a number or null")
+            if not -365000 <= int(relative_due) <= 365000:
+                raise ConnectError("cardsProgress relativeDue is out of range")
+            progress.due_day = today_day_index_flama + int(relative_due)
+            progress.due_at = _day_index_to_datetime(
+                progress.due_day,
+                boundary_hour,
+                timezone_name=timezone_name,
+            )
+        elif due_at_str:
+            if not isinstance(due_at_str, str) or len(due_at_str) > 64:
+                raise ConnectError("cardsProgress dueAt is invalid")
+            try:
+                clean_str = due_at_str.replace("Z", "+00:00")
+                dt = datetime.fromisoformat(clean_str)
+                if dt.tzinfo is not None:
+                    dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+                progress.due_at = dt
+            except (TypeError, ValueError) as exc:
+                raise ConnectError("cardsProgress dueAt is invalid") from exc
+            progress.due_day = None
+        elif anki_type == 2:
+            progress.due_day = today_day_index_flama
+            progress.due_at = now
+        elif anki_type in {1, 3}:
+            progress.due_at = now
+            progress.due_day = None
+        else:
+            progress.due_day = None
+            progress.due_at = now
+
+        progress.step_index = 0
+        progress.review_kind = "review"
+        progress.scheduler_mode = runtime.scheduler_mode
+        if existing_progress:
+            progress.revision = int(progress.revision or 0) + 1
+
+
 def _upsert_import_card(
     *,
     user_id: int,
     session: ConnectImportSession,
     card_data: dict[str, Any],
+    batch_context: ImportBatchContext | None = None,
 ) -> tuple[Note, bool, bool, Any, Any]:
     external_note_id = str(card_data.get("ankiNoteId") or "").strip()
     source_model_id = str(card_data.get("sourceModelId") or "").strip()
@@ -1122,11 +1442,28 @@ def _upsert_import_card(
     target_note_type_id = str(binding.get("targetNoteTypeId") or "")
     if str(note_payload.get("modelName") or "") != target_note_type_id:
         raise ConnectError("card target NoteType does not match the preflight binding")
-    target_note_type = _resolve_note_type(user_id, target_note_type_id)
-    if _target_note_type_hash(target_note_type) != str(binding.get("targetSchemaHash") or ""):
+    target_note_type = (
+        batch_context.note_types_by_id.get(target_note_type_id)
+        if batch_context is not None
+        else None
+    )
+    if target_note_type is None:
+        target_note_type = _resolve_note_type(user_id, target_note_type_id)
+    target_schema_hash = (
+        batch_context.note_type_hashes_by_id.get(target_note_type_id)
+        if batch_context is not None
+        else None
+    ) or _target_note_type_hash(target_note_type)
+    if target_schema_hash != str(binding.get("targetSchemaHash") or ""):
         session.status = "blocked_note_types"
         raise ConnectError("target NoteType changed after preflight; run preflight again")
 
+    source_ref = ConnectSourceNoteRef.query.filter_by(
+        user_id=user_id,
+        source_key=session.source_key,
+        external_note_id=external_note_id,
+    ).with_for_update().first()
+    note = source_ref.note if source_ref is not None else None
     prepared = _parse_note(
         user_id,
         note_payload,
@@ -1134,22 +1471,16 @@ def _upsert_import_card(
         allow_create_deck=True,
         allow_mixed_model=True,
         import_session_id=session.id,
+        batch_context=batch_context,
+        existing_note=note,
     )
-    source_ref = ConnectSourceNoteRef.query.filter_by(
-        user_id=user_id,
-        source_key=session.source_key,
-        external_note_id=external_note_id,
-    ).with_for_update().first()
     already_counted = bool(
         source_ref is not None
         and source_ref.last_session_id == session.id
         and source_ref.content_hash == content_hash.lower()
     )
-    note = source_ref.note if source_ref is not None else None
     created = False
     changed_field_names: set[str] = set()
-    if note is None:
-        note = _find_existing_note(user_id, prepared)
     if note is None:
         note = Note(
             note_type_id=prepared.note_type.id,
@@ -1227,6 +1558,9 @@ def _upsert_import_card(
         deck_ref.source_path = source_deck_path
         deck_ref.deck_id = prepared.deck.id
     _reconcile_note_cards(note, prepared.note_type)
+    cards_progress_payload = card_data.get("cardsProgress")
+    if cards_progress_payload:
+        _migrate_cards_progress(user_id, note, prepared.note_type, cards_progress_payload)
     materialized = flama_connect_media_service.materialize_import_media(
         user_id=user_id,
         note=note,
@@ -1270,12 +1604,28 @@ def _upsert_import_card(
     return note, created, already_counted, connect_ref, materialized
 
 
-def import_cards(user_id: int, params: dict[str, Any]) -> dict[str, Any]:
+def import_cards(
+    user_id: int,
+    params: dict[str, Any],
+    *,
+    commit: bool = True,
+    batch_context: ImportBatchContext | None = None,
+) -> dict[str, Any]:
     session = _get_import_session(user_id, params.get("importSessionId"), require_ready=True)
     cards = params.get("cards")
     if not isinstance(cards, list) or len(cards) > MAX_NOTES_PER_REQUEST:
         raise ConnectError(f"cards must be an array with at most {MAX_NOTES_PER_REQUEST} entries")
+    if batch_context is None:
+        batch_context = prepare_import_batch_context(
+            user_id=user_id,
+            session=session,
+            cards=[card for card in cards if isinstance(card, dict)],
+        )
     session.status = "importing"
+    session.attempted_notes = min(
+        int(session.total_notes or 0),
+        int(session.attempted_notes or 0) + len(cards),
+    )
     results: list[dict[str, Any]] = []
     materialized_results: list[Any] = []
     for card_data in cards:
@@ -1290,6 +1640,7 @@ def import_cards(user_id: int, params: dict[str, Any]) -> dict[str, Any]:
                     user_id=user_id,
                     session=session,
                     card_data=card_data,
+                    batch_context=batch_context,
                 )
                 db.session.flush()
             materialized_results.append(materialized)
@@ -1316,16 +1667,16 @@ def import_cards(user_id: int, params: dict[str, Any]) -> dict[str, Any]:
             if len(errors) < 100:
                 errors.append({"ankiNoteId": anki_note_id, "error": str(exc)})
             session.error_summary = errors
-    if session.processed_notes >= session.total_notes and not any(not item.get("imported") for item in results):
-        session.status = "completed"
-        session.completed_at = datetime.utcnow()
-    try:
-        db.session.commit()
-    except Exception:
-        db.session.rollback()
-        for materialized in materialized_results:
-            flama_connect_media_service.compensate_materialized(materialized)
-        raise
+    # Completion is an explicit transport boundary. Progress and review
+    # packages are intentionally uploaded after note packages.
+    if commit:
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            for materialized in materialized_results:
+                flama_connect_media_service.compensate_materialized(materialized)
+            raise
     return {"importSessionId": session.id, "status": session.status, "results": results}
 
 
@@ -1339,6 +1690,7 @@ def get_import_status(user_id: int, session_id: object) -> dict[str, Any]:
         "noteTypeBindings": dict(session.note_type_bindings or {}),
         "totalNotes": session.total_notes,
         "processedNotes": session.processed_notes,
+        "attemptedNotes": session.attempted_notes,
         "totalMedia": session.total_media,
         "processedMedia": session.processed_media,
         "errors": list(session.error_summary or []),
@@ -1346,9 +1698,6 @@ def get_import_status(user_id: int, session_id: object) -> dict[str, Any]:
     }
 
 
-<<<<<<< Updated upstream
-def complete_import_session(user_id: int, session_id: object) -> dict[str, Any]:
-=======
 def get_import_note_statuses(
     user_id: int,
     session_id: object,
@@ -1496,7 +1845,6 @@ def complete_import_session(
     *,
     expected_notes: object | None = None,
 ) -> dict[str, Any]:
->>>>>>> Stashed changes
     session = _get_import_session(user_id, session_id, require_ready=False)
     if session.status in {"blocked_note_types", "failed", "cancelled", "expired"}:
         raise ConnectError("import session cannot be completed from its current state")
@@ -1507,6 +1855,17 @@ def complete_import_session(
         return get_import_status(user_id, session.id)
     if session.status == "partial_failed":
         return get_import_status(user_id, session.id)
+    if expected_notes is None:
+        expected_notes = session.total_notes
+    if isinstance(expected_notes, bool) or not isinstance(expected_notes, int):
+        raise ConnectError("expectedNotes must be a non-negative integer")
+    if expected_notes < 0 or expected_notes > session.total_notes:
+        raise ConnectError("expectedNotes is outside the preflight note count")
+    if session.attempted_notes < expected_notes:
+        raise ConnectError(
+            f"import is incomplete: attempted {session.attempted_notes} of {expected_notes} expected notes"
+        )
+    session.total_notes = expected_notes
     session.status = "partial_failed" if session.error_summary else "completed"
     session.completed_at = datetime.utcnow()
     if session.status == "completed":

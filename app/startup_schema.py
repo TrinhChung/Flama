@@ -804,5 +804,50 @@ def ensure_backward_compatible_schema() -> None:
             )
             schema_changed = True
 
+    table_names = inspector.get_table_names()
+    if "oauth_clients" not in table_names:
+        from models.oauth_client import OAuthClient
+
+        OAuthClient.__table__.create(bind=db.engine, checkfirst=True)
+        schema_changed = True
+    else:
+        try:
+            if db.engine.dialect.name == "mysql":
+                db.session.execute(sa.text("ALTER TABLE oauth_clients MODIFY COLUMN client_secret_hash VARCHAR(255) NULL"))
+                schema_changed = True
+        except Exception:
+            pass
+
+
+    if "oauth_authorization_codes" not in table_names:
+        from models.oauth_authorization_code import OAuthAuthorizationCode
+
+        OAuthAuthorizationCode.__table__.create(bind=db.engine, checkfirst=True)
+        schema_changed = True
+
+    if "mcp_access_tokens" in table_names:
+        _ensure_column(
+            "mcp_access_tokens",
+            "name",
+            "ALTER TABLE mcp_access_tokens ADD COLUMN name VARCHAR(120) NULL DEFAULT 'MCP Token'",
+        )
+        _ensure_column(
+            "mcp_access_tokens",
+            "client_id",
+            "ALTER TABLE mcp_access_tokens ADD COLUMN client_id INT NULL",
+        )
+        _ensure_column(
+            "mcp_access_tokens",
+            "refresh_token_hash",
+            "ALTER TABLE mcp_access_tokens ADD COLUMN refresh_token_hash VARCHAR(64) NULL",
+        )
+        _ensure_column(
+            "mcp_access_tokens",
+            "refresh_token_expires_at",
+            "ALTER TABLE mcp_access_tokens ADD COLUMN refresh_token_expires_at DATETIME NULL",
+        )
+
     if schema_changed:
         db.session.commit()
+
+

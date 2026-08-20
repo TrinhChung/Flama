@@ -22,14 +22,23 @@ from . import (
 )
 
 
+def _request_conflicts_only() -> bool:
+    return str(
+        request.args.get("conflicts_only")
+        or request.args.get("conflict")
+        or ""
+    ).strip().lower() in {"1", "true", "yes"}
+
+
 def _change_request_response_payload(request_id: str) -> dict:
-    request_obj = deck_change_request_service.get_request_detail_for_user(
+    return deck_change_request_service.get_serialized_request_page_for_user(
         request_id=request_id,
         user_id=current_user.id,
-    )
-    return deck_change_request_service.serialize_request(
-        request_obj,
-        viewer_user_id=current_user.id,
+        cursor=request.args.get("cursor"),
+        limit=request.args.get("limit"),
+        change_type=request.args.get("type") or request.args.get("change_type"),
+        query_text=request.args.get("q"),
+        conflicts_only=_request_conflicts_only(),
     )
 
 
@@ -96,14 +105,7 @@ def get_active_deck_change_request(deck_item_id: str):
         )
         if request_obj is None:
             return jsonify({"request": None})
-        return jsonify(
-            {
-                "request": deck_change_request_service.serialize_request(
-                    request_obj,
-                    viewer_user_id=current_user.id,
-                )
-            }
-        )
+        return jsonify({"request": _change_request_response_payload(request_obj.id)})
     except deck_change_request_service.ChangeRequestError as exc:
         return _handle_change_request_error(exc)
 
@@ -120,12 +122,7 @@ def build_deck_change_request_draft(deck_item_id: str):
             description=draft_input.description,
         )
         db.session.commit()
-        return jsonify(
-            deck_change_request_service.serialize_request(
-                request_obj,
-                viewer_user_id=current_user.id,
-            )
-        ), 201
+        return jsonify(_change_request_response_payload(request_obj.id)), 201
     except RequestValidationError as exc:
         db.session.rollback()
         return _api_error(exc.code, str(exc), status=exc.status, field=exc.field)
@@ -148,12 +145,7 @@ def sync_deck_change_request(deck_item_id: str, request_id: str):
             actor_user_id=current_user.id,
         )
         db.session.commit()
-        return jsonify(
-            deck_change_request_service.serialize_request(
-                request_obj,
-                viewer_user_id=current_user.id,
-            )
-        )
+        return jsonify(_change_request_response_payload(request_obj.id))
     except deck_change_request_service.ChangeRequestError as exc:
         return _handle_change_request_error(exc)
 
@@ -180,12 +172,7 @@ def resolve_deck_change_request_conflict(deck_item_id: str, request_id: str, con
             resolved_value=resolution_input.resolved_value,
         )
         db.session.commit()
-        return jsonify(
-            deck_change_request_service.serialize_request(
-                request_obj,
-                viewer_user_id=current_user.id,
-            )
-        )
+        return jsonify(_change_request_response_payload(request_obj.id))
     except RequestValidationError as exc:
         db.session.rollback()
         return _api_error(exc.code, str(exc), status=exc.status, field=exc.field)
@@ -208,12 +195,7 @@ def submit_deck_change_request(deck_item_id: str, request_id: str):
             actor_user_id=current_user.id,
         )
         db.session.commit()
-        return jsonify(
-            deck_change_request_service.serialize_request(
-                request_obj,
-                viewer_user_id=current_user.id,
-            )
-        )
+        return jsonify(_change_request_response_payload(request_obj.id))
     except deck_change_request_service.ChangeRequestError as exc:
         return _handle_change_request_error(exc)
 
@@ -223,15 +205,13 @@ def submit_deck_change_request(deck_item_id: str, request_id: str):
 def list_incoming_change_requests():
     try:
         deck_item_id = (request.args.get("deck_item_id") or "").strip() or None
-        rows = deck_change_request_service.list_incoming_requests(
+        payload = deck_change_request_service.list_incoming_requests(
             owner_user_id=current_user.id,
             deck_item_id=deck_item_id,
+            cursor=request.args.get("cursor"),
+            limit=request.args.get("limit"),
         )
-        return jsonify(
-            {
-                "items": [deck_change_request_service.serialize_request_summary(row) for row in rows]
-            }
-        )
+        return jsonify(payload)
     except deck_change_request_service.ChangeRequestError as exc:
         return _handle_change_request_error(exc)
 
@@ -263,12 +243,7 @@ def approve_change_request(request_id: str):
             review_comment=review_input.review_comment,
         )
         db.session.commit()
-        return jsonify(
-            deck_change_request_service.serialize_request(
-                request_obj,
-                viewer_user_id=current_user.id,
-            )
-        )
+        return jsonify(_change_request_response_payload(request_obj.id))
     except RequestValidationError as exc:
         db.session.rollback()
         return _api_error(exc.code, str(exc), status=exc.status, field=exc.field)
@@ -294,12 +269,7 @@ def reject_change_request(request_id: str):
             review_comment=review_input.review_comment,
         )
         db.session.commit()
-        return jsonify(
-            deck_change_request_service.serialize_request(
-                request_obj,
-                viewer_user_id=current_user.id,
-            )
-        )
+        return jsonify(_change_request_response_payload(request_obj.id))
     except RequestValidationError as exc:
         db.session.rollback()
         return _api_error(exc.code, str(exc), status=exc.status, field=exc.field)

@@ -305,8 +305,8 @@ Luu y:
 
 Tai lieu payment canonical:
 
-- `docs/FLAMA_PAYMENT_ARCHITECTURE.md`
-- `docs/SYSTEM_ARCHITECTURE.md`
+- `docs/architecture/FLAMA_PAYMENT_ARCHITECTURE.md`
+- `docs/architecture/SYSTEM_ARCHITECTURE.md`
 
 ## Core Commands
 

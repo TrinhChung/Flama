@@ -124,7 +124,7 @@ export const AnkiSyncTab: React.FC<AnkiSyncTabProps> = ({
 
   // Step 4: Sync Execution State
   const [syncMode, setSyncMode] = useState<'new_and_changed' | 'only_new' | 'resync_all'>('new_and_changed')
-  const [autoSyncMissingNoteTypes, setAutoSyncMissingNoteTypes] = useState(false)
+  const [autoSyncMissingNoteTypes, setAutoSyncMissingNoteTypes] = useState(true)
   const [isSyncing, setIsSyncing] = useState(false)
   const [syncProgress, setSyncProgress] = useState<{
     phase: string
@@ -136,6 +136,7 @@ export const AnkiSyncTab: React.FC<AnkiSyncTabProps> = ({
   } | null>(null)
   const [syncReport, setSyncReport] = useState<{
     totalSynced: number
+    totalSkipped?: number
     totalMediaDetected?: number
     errors: string[]
   } | null>(null)
@@ -411,6 +412,7 @@ export const AnkiSyncTab: React.FC<AnkiSyncTabProps> = ({
       const syncResultPromise = new Promise<{
         success: boolean
         totalSynced: number
+        totalSkipped: number
         totalMediaDetected: number
         errors: string[]
       }>((resolve, reject) => {
@@ -432,6 +434,13 @@ export const AnkiSyncTab: React.FC<AnkiSyncTabProps> = ({
           } else if (type === 'ERROR') {
             reject(new Error(payload.message || 'Lỗi đồng bộ dữ liệu.'))
           }
+        }
+
+        workerRef.current.onerror = (event) => {
+          reject(new Error(event.message || 'Worker đồng bộ đã dừng ngoài dự kiến.'))
+        }
+        workerRef.current.onmessageerror = () => {
+          reject(new Error('Không đọc được phản hồi từ Worker đồng bộ.'))
         }
 
         workerRef.current.postMessage({
@@ -460,6 +469,7 @@ export const AnkiSyncTab: React.FC<AnkiSyncTabProps> = ({
 
       setSyncReport({
         totalSynced: result.totalSynced,
+        totalSkipped: result.totalSkipped,
         totalMediaDetected: result.totalMediaDetected,
         errors: result.errors,
       })
@@ -470,6 +480,8 @@ export const AnkiSyncTab: React.FC<AnkiSyncTabProps> = ({
         queryClient.invalidateQueries({ queryKey: ['decks'] }),
         queryClient.invalidateQueries({ queryKey: ['import-options'] }),
         queryClient.invalidateQueries({ queryKey: ['stats-overview'] }),
+        queryClient.invalidateQueries({ queryKey: ['frontend', 'dashboard'] }),
+        queryClient.invalidateQueries({ queryKey: ['frontend', 'statistics'] }),
       ])
     } catch (err: any) {
       setSyncReport({
@@ -788,7 +800,10 @@ export const AnkiSyncTab: React.FC<AnkiSyncTabProps> = ({
                 {syncReport.errors.length === 0 ? 'Hoàn tất đồng bộ thành công!' : 'Đồng bộ có lỗi xảy ra'}
               </AlertTitle>
               <AlertDescription className="mt-1.5 text-xs space-y-2">
-                <div>Đã nạp thành công {syncReport.totalSynced} thẻ từ vựng lên Flama Cloud.</div>
+                <div>Đã đồng bộ {syncReport.totalSynced} note lên Flama.</div>
+                {Boolean(syncReport.totalSkipped) && (
+                  <div>Đã bỏ qua {syncReport.totalSkipped} note không thay đổi.</div>
+                )}
 
                 {Boolean(syncReport.totalMediaDetected) && (
                   <div className="text-muted-foreground text-[11px]">
@@ -796,9 +811,13 @@ export const AnkiSyncTab: React.FC<AnkiSyncTabProps> = ({
                   </div>
                 )}
 
-                {syncReport.errors.map((err, idx) => (
-                  <div key={idx} className="text-destructive font-mono text-[11px]">• {err}</div>
-                ))}
+                {syncReport.errors.length > 0 && (
+                  <div className="max-h-[160px] overflow-y-auto pr-1 mt-1.5 space-y-1 border-t border-destructive/20 pt-1.5">
+                    {syncReport.errors.map((err, idx) => (
+                      <div key={idx} className="text-destructive font-mono text-[11px] break-words">• {err}</div>
+                    ))}
+                  </div>
+                )}
               </AlertDescription>
             </Alert>
           )}
@@ -857,7 +876,10 @@ export const AnkiSyncTab: React.FC<AnkiSyncTabProps> = ({
                   {syncReport.errors.length === 0 ? 'Thành công!' : 'Có lỗi phát sinh'}
                 </AlertTitle>
                 <AlertDescription className="mt-1 text-xs space-y-2">
-                  <div>Đã đồng bộ {syncReport.totalSynced} thẻ từ vựng lên Flama.</div>
+                  <div>Đã đồng bộ {syncReport.totalSynced} note lên Flama.</div>
+                  {Boolean(syncReport.totalSkipped) && (
+                    <div>Đã bỏ qua {syncReport.totalSkipped} note không thay đổi.</div>
+                  )}
 
                   {Boolean(syncReport.totalMediaDetected) && (
                     <div className="text-muted-foreground text-[11px] border-t border-border/60 pt-1.5">
@@ -865,9 +887,13 @@ export const AnkiSyncTab: React.FC<AnkiSyncTabProps> = ({
                     </div>
                   )}
 
-                  {syncReport.errors.map((err, idx) => (
-                    <div key={idx} className="text-destructive font-mono text-[11px]">• {err}</div>
-                  ))}
+                  {syncReport.errors.length > 0 && (
+                    <div className="max-h-[160px] overflow-y-auto pr-1 mt-1.5 space-y-1 border-t border-destructive/20 pt-1.5">
+                      {syncReport.errors.map((err, idx) => (
+                        <div key={idx} className="text-destructive font-mono text-[11px] break-words">• {err}</div>
+                      ))}
+                    </div>
+                  )}
                 </AlertDescription>
               </Alert>
             )}

@@ -11,7 +11,6 @@ from .routes import register_blueprints
 from .settings import BASE_DIR, build_app_config
 from .spa import init_spa_delivery
 from .startup import run_startup_maintenance
-from .startup_schema import ensure_backward_compatible_schema
 
 
 def create_app(config: Optional[dict] = None) -> Flask:
@@ -34,9 +33,16 @@ def create_app(config: Optional[dict] = None) -> Flask:
     init_csrf_protection(app)
     init_cors(app)
 
+    if app.config.get("TRUST_PROXY"):
+        from werkzeug.middleware.proxy_fix import ProxyFix
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+
     from models.user import User
+    from models.oauth_client import OAuthClient  # noqa: F401  # register model
+    from models.oauth_authorization_code import OAuthAuthorizationCode  # noqa: F401  # register model
     from models.mcp_access_token import McpAccessToken  # noqa: F401  # register model
     from models.user_api_token import UserApiToken  # noqa: F401
+
     from models.connect_note_ref import ConnectNoteRef  # noqa: F401
     from models.connect_pending_media import ConnectPendingMedia  # noqa: F401
     from models.connect_import_session import ConnectImportSession  # noqa: F401
@@ -45,7 +51,8 @@ def create_app(config: Optional[dict] = None) -> Flask:
     from models.connect_note_type_ref import ConnectNoteTypeRef  # noqa: F401
     from models.connect_source_deck_ref import ConnectSourceDeckRef  # noqa: F401
     from models.connect_source_note_ref import ConnectSourceNoteRef  # noqa: F401
-    from models.user_scheduler_settings import UserSchedulerSettings  # noqa: F401  # register model
+    from models.connect_source_card_ref import ConnectSourceCardRef  # noqa: F401
+    from models.connect_review_event_ref import ConnectReviewEventRef  # noqa: F401
     from models.user_scheduler_settings import UserSchedulerSettings  # noqa: F401  # register model
     from models.user_role import UserRole  # noqa: F401  # register model
     from models.user_permission_audit_log import UserPermissionAuditLog  # noqa: F401
@@ -164,9 +171,6 @@ def create_app(config: Optional[dict] = None) -> Flask:
         )
         return jsonify({"error": "INTERNAL_ERROR", "message": "Internal server error."}), 500
 
-    run_startup_maintenance(
-        app,
-        ensure_backward_compatible_schema=ensure_backward_compatible_schema,
-    )
+    run_startup_maintenance(app)
 
     return app

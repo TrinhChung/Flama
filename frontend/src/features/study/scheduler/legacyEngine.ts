@@ -607,6 +607,19 @@ export function applyAnswer(
   return applyReview(state, options, nowMs, rating, timezone)
 }
 
+export function formatIntervalDays(days: number): string {
+  const clampedDays = Math.max(1, Math.floor(days + 0.5))
+  if (clampedDays < 30) {
+    return `${clampedDays}d`
+  }
+  if (clampedDays < 365) {
+    const months = Number((clampedDays / 30).toFixed(1))
+    return `${months}m`
+  }
+  const years = Number((clampedDays / 365).toFixed(1))
+  return `${years}y`
+}
+
 function previewFromState(
   state: SchedulerCardState,
   options: SchedulerOptions,
@@ -620,7 +633,7 @@ function previewFromState(
       seconds: null,
       days: rawDays,
       intervalDays: rounded,
-      label: `${rounded}d`,
+      label: formatIntervalDays(rounded),
     }
   }
   if (state.due_day !== null) {
@@ -639,7 +652,7 @@ function previewFromState(
       seconds: Math.max(0, Math.floor((dueMs - nowMs) / 1000)),
       days: intervalDays,
       intervalDays,
-      label: `${intervalDays}d`,
+      label: formatIntervalDays(intervalDays),
     }
   }
   const dueMs = epochMsFromIso(state.due_at)
@@ -675,7 +688,7 @@ function previewFromState(
     seconds,
     days: seconds / 86_400,
     intervalDays: days,
-    label: `${days}d`,
+    label: formatIntervalDays(days),
   }
 }
 

@@ -132,7 +132,7 @@ class McpListMyDecksTests(unittest.TestCase):
         self.assertEqual(payload["result"]["protocolVersion"], "2025-11-25")
         self.assertIn("tools", payload["result"]["capabilities"])
 
-    def test_tools_list_requires_authenticated_admin(self):
+    def test_tools_list_allows_discovery(self):
         response = self._mcp_post(
             {
                 "jsonrpc": "2.0",
@@ -142,9 +142,9 @@ class McpListMyDecksTests(unittest.TestCase):
             }
         )
 
-        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.status_code, 200)
         payload = response.get_json()
-        self.assertEqual(payload["error"]["data"]["code"], "AUTH_REQUIRED")
+        self.assertIn("tools", payload["result"])
 
     def test_tools_list_exposes_only_list_my_decks_for_admin(self):
         self._login_owner()
@@ -161,12 +161,15 @@ class McpListMyDecksTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         payload = response.get_json()
         tools = payload["result"]["tools"]
-        self.assertEqual(len(tools), 1)
-        self.assertEqual(tools[0]["name"], "list_my_decks")
-        self.assertEqual(tools[0]["title"], "List My Decks")
-        self.assertIn("currently authenticated user", tools[0]["description"])
-        self.assertEqual(tools[0]["inputSchema"]["properties"], {})
-        self.assertFalse(tools[0]["inputSchema"]["additionalProperties"])
+        self.assertGreaterEqual(len(tools), 1)
+        tool_map = {t["name"]: t for t in tools}
+        self.assertIn("list_my_decks", tool_map)
+        list_tool = tool_map["list_my_decks"]
+        self.assertEqual(list_tool["name"], "list_my_decks")
+        self.assertEqual(list_tool["title"], "List My Decks")
+        self.assertIn("authenticated user", list_tool["description"])
+        self.assertEqual(list_tool["inputSchema"]["properties"], {})
+        self.assertFalse(list_tool["inputSchema"]["additionalProperties"])
 
     def test_list_my_decks_returns_only_owned_decks(self):
         self._login_owner()

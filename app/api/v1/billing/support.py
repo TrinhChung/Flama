@@ -67,3 +67,53 @@ def create_support_checkout():
             field=exc.field,
         )
     return jsonify(_frontend_checkout_fields(result)), status
+
+
+@support_bp.get("/status")
+def get_support_donation_status():
+    from app.services import payment_service, support_donation_service
+    from app.services.payment.provider.payos_provider import PayOSProviderError
+
+    order_id = (request.args.get("payment_order_id") or request.args.get("order_id") or "").strip()
+    provider_order_code = (
+        request.args.get("support_provider_order_code")
+        or request.args.get("provider_order_code")
+        or ""
+    ).strip()
+
+    if order_id:
+        if not current_user.is_authenticated:
+            return error_response(
+                "AUTHENTICATION_REQUIRED",
+                "Authentication is required to view saved donation order status.",
+                status=401,
+            )
+        try:
+            result = payment_service.get_order_detail_for_user(
+                order_id=order_id,
+                user_id=int(current_user.id),
+            )
+            return jsonify(result)
+        except payment_service.PaymentServiceError as exc:
+            return error_response(exc.error, exc.message, status=exc.status, field=exc.field)
+
+    if provider_order_code:
+        try:
+            result = support_donation_service.get_anonymous_checkout_status(
+                provider_order_code=provider_order_code
+            )
+            return jsonify(result)
+        except PayOSProviderError as exc:
+            return error_response(exc.code, str(exc), status=exc.status)
+        except Exception as exc:
+            return error_response(
+                "PAYMENT_LOOKUP_FAILED",
+                "Không thể kiểm tra trạng thái đóng góp lúc này.",
+                status=502,
+            )
+
+    return error_response(
+        "VALIDATION_ERROR",
+        "Cần cung cấp payment_order_id hoặc support_provider_order_code.",
+        status=400,
+    )

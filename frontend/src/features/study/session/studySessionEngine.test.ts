@@ -8,6 +8,7 @@ import {
   decisionForCard,
   isBackgroundRolloverCommit,
   prepareCommit,
+  undoLocalAnswer,
 } from './studySessionEngine'
 
 function snapshot(): StudySessionSnapshot {
@@ -312,5 +313,123 @@ describe('local study session engine', () => {
     const answered = applyLocalAnswer(local, 'card-1', 'good', decision, 250)
 
     expect(buildSessionView(answered, now + 1000).session_state).toBe('active')
+  })
+
+  it('undoes a local answer and restores previous card state and events', () => {
+    vi.stubGlobal('crypto', {
+      randomUUID: () => '00000000-0000-4000-8000-000000000001',
+    })
+    const initial = createPersistedSession(snapshot())
+    const now = Date.parse(initial.snapshot.server_now_utc)
+    const originalState = { ...initial.snapshot.cards[0].state }
+
+    const decision = decisionForCard(initial, 'card-1', now + 1000)
+    const answered = applyLocalAnswer(
+      initial,
+      'card-1',
+      'good',
+      decision,
+      500,
+    )
+    expect(answered.events).toHaveLength(1)
+    expect(answered.snapshot.cards[0].state.type).toBe('learning')
+    expect(answered.touched_card_ids).toEqual(['card-1'])
+
+    const undone = undoLocalAnswer(answered)
+    expect(undone).not.toBeNull()
+    expect(undone?.undoneCardId).toBe('card-1')
+    expect(undone?.session.events).toHaveLength(0)
+    expect(undone?.session.touched_card_ids).toHaveLength(0)
+    expect(undone?.session.snapshot.cards[0].state).toEqual(originalState)
+
+    const view = buildSessionView(undone!.session, now)
+    expect(view.card?.card_id).toBe('card-1')
+  })
+
+  it('handles multiple sequential undos correctly across different cards', () => {
+    vi.stubGlobal('crypto', {
+      randomUUID: () => '00000000-0000-4000-8000-000000000001',
+    })
+    let current = createPersistedSession(snapshotWithCards(3))
+    const now = Date.parse(current.snapshot.server_now_utc)
+    const initialStates = current.snapshot.cards.map((c) => ({ ...c.state }))
+
+    // Answer card-1, card-2, card-3
+    for (let i = 1; i <= 3; i++) {
+      const cardId = `card-${i}`
+      const decision = decisionForCard(current, cardId, now + i * 1000)
+      current = applyLocalAnswer(current, cardId, 'easy', decision, 200)
+    }
+    expect(current.events).toHaveLength(3)
+    expect(current.touched_card_ids).toEqual(['card-1', 'card-2', 'card-3'])
+
+    // Undo card-3
+    const undo3 = undoLocalAnswer(current)
+    expect(undo3?.undoneCardId).toBe('card-3')
+    expect(undo3?.session.events).toHaveLength(2)
+    expect(undo3?.session.touched_card_ids).toEqual(['card-1', 'card-2'])
+    expect(undo3?.session.snapshot.cards[2].state).toEqual(initialStates[2])
+
+    // Undo card-2
+    const undo2 = undoLocalAnswer(undo3!.session)
+    expect(undo2?.undoneCardId).toBe('card-2')
+    expect(undo2?.session.events).toHaveLength(1)
+    expect(undo2?.session.touched_card_ids).toEqual(['card-1'])
+    expect(undo2?.session.snapshot.cards[1].state).toEqual(initialStates[1])
+
+    // Undo card-1
+    const undo1 = undoLocalAnswer(undo2!.session)
+    expect(undo1?.undoneCardId).toBe('card-1')
+    expect(undo1?.session.events).toHaveLength(0)
+    expect(undo1?.session.touched_card_ids).toHaveLength(0)
+    expect(undo1?.session.snapshot.cards[0].state).toEqual(initialStates[0])
+
+    // Undoing when empty returns null
+    expect(undoLocalAnswer(undo1!.session)).toBeNull()
+  })
+
+  it('locks the active card and does not auto-switch when another learning card becomes due on tick', () => {
+    vi.stubGlobal('crypto', {
+      randomUUID: () => '00000000-0000-4000-8000-000000000001',
+    })
+    const snap = snapshotWithCards(2)
+    const now = Date.parse(snap.server_now_utc)
+
+    // Card 1: Review card due today
+    snap.cards[0].state = {
+      ...snap.cards[0].state,
+      type: 'review',
+      due_day: 0,
+      due_at: null,
+    }
+    // Card 2: Learning card due in 60s
+    snap.cards[1].state = {
+      ...snap.cards[1].state,
+      type: 'learning',
+      due_day: null,
+      due_at: new Date(now + 60_000).toISOString(),
+    }
+
+    const session = createPersistedSession(snap)
+    expect(session.active_card_id).toBe('card-1')
+
+    // At t = now, card-1 is on screen
+    const viewAtStart = buildSessionView(session, now)
+    expect(viewAtStart.card?.card_id).toBe('card-1')
+
+    // At t = now + 70s, card-2 becomes due in learning queue (normally higher priority than review)
+    // But card-1 is locked as active_card_id, so buildSessionView must NOT switch to card-2
+    const viewAfterTick = buildSessionView(session, now + 70_000)
+    expect(viewAfterTick.card?.card_id).toBe('card-1')
+    expect(viewAfterTick.counts.learning).toBe(1)
+    expect(viewAfterTick.counts.due).toBe(1)
+
+    // Only after answering card-1 does the session transition to card-2
+    const decision = decisionForCard(session, 'card-1', now + 70_000)
+    const answered = applyLocalAnswer(session, 'card-1', 'good', decision, 1000)
+    expect(answered.active_card_id).toBe('card-2')
+
+    const viewAfterAnswer = buildSessionView(answered, now + 70_000)
+    expect(viewAfterAnswer.card?.card_id).toBe('card-2')
   })
 })

@@ -5,15 +5,22 @@ import hashlib
 import json
 import tempfile
 import unittest
+from datetime import datetime, timezone
+from unittest.mock import patch
 
 from app import create_app
 from models import db
 from models.connect_import_session import ConnectImportSession
+from models.connect_review_event_ref import ConnectReviewEventRef
+from models.connect_source_card_ref import ConnectSourceCardRef
+from models.card_progress import CardProgress
 from models.deck import Deck
 from models.field_def import FieldDef
 from models.note import Note
 from models.note_type import NoteType
+from models.media_asset import MediaAsset
 from models.template import Template
+from models.review_event import ReviewEvent
 from models.user import User
 from models.user_role import UserRole
 
@@ -147,6 +154,101 @@ class AnkiImportApiTests(unittest.TestCase):
         self._login("anki-import-creator@example.com")
         response = self.client.get("/api/flashcards/import/anki/capabilities")
         self.assertEqual(response.status_code, 200, response.get_json())
+        self.assertEqual(response.get_json()["cardBatchMaxItems"], 50)
+        self.assertEqual(response.get_json()["cardPackageTargetItems"], 500)
+        self.assertEqual(response.get_json()["cardPackageMaxItems"], 1000)
+        self.assertEqual(response.get_json()["cardPackageMaxBytes"], 16 * 1024 * 1024)
+
+    def _obsolete_duplicate_create_session(self) -> dict:
+        response = self.client.post(
+            "/api/flashcards/import/anki/sessions",
+            json=self._session_payload(),
+        )
+        self.assertEqual(response.status_code, 201, response.get_json())
+        return response.get_json()
+
+    def test_admin_can_create_upload_complete_and_read_session(self):
+        self._login()
+        capabilities = self.client.get("/api/flashcards/import/anki/capabilities")
+        self.assertEqual(capabilities.status_code, 200)
+        self.assertEqual(capabilities.get_json()["formatVersion"], 1)
+
+        created = self._create_session()
+        self.assertEqual(created["status"], "note_types_ready")
+        session_id = created["importSessionId"]
+        with self.app.app_context():
+            stored = db.session.get(ConnectImportSession, session_id)
+            self.assertEqual(stored.source, "anki")
+            self.assertEqual(stored.user_id, self.admin_id)
+
+        record = {
+            "ankiNoteId": 101,
+            "sourceModelId": "anki-model-1",
+            "sourceDeckId": "anki-inbox",
+            "sourceDeckPath": "Inbox",
+            "contentHash": "b" * 64,
+            "note": {
+                "deckName": "Inbox",
+                "modelName": self.note_type_id,
+                "fields": {"Word": "猫", "Meaning": "cat"},
+                "tags": ["anki"],
+                "options": {
+                    "allowDuplicate": False,
+                    "duplicateScope": "collection",
+                    "duplicateScopeOptions": {
+                        "deckName": None,
+                        "checkChildren": False,
+                        "checkAllModels": False,
+                    },
+                },
+            },
+        }
+        package = gzip.compress((json.dumps(record) + "\n").encode("utf-8"), mtime=0)
+        uploaded = self.client.put(
+            f"/api/flashcards/import/anki/sessions/{session_id}/packages/cards/0",
+            data=package,
+            content_type="application/x-ndjson",
+            headers={
+                "Content-Encoding": "gzip",
+                "X-Package-SHA256": hashlib.sha256(package).hexdigest(),
+            },
+        )
+        self.assertEqual(uploaded.status_code, 200, uploaded.get_json())
+        self.assertTrue(uploaded.get_json()["results"][0]["imported"])
+
+        completed = self.client.post(
+            f"/api/flashcards/import/anki/sessions/{session_id}/complete",
+            json={},
+        )
+        self.assertEqual(completed.status_code, 200, completed.get_json())
+        self.assertEqual(completed.get_json()["status"], "completed")
+        status = self.client.get(
+            f"/api/flashcards/import/anki/sessions/{session_id}"
+        )
+        self.assertEqual(status.status_code, 200)
+        self.assertEqual(status.get_json()["processedNotes"], 1)
+        with self.app.app_context():
+            self.assertEqual(
+                Note.query.filter_by(user_id=self.admin_id, deck_id=self.deck_id).count(),
+                1,
+            )
+
+    def _obsolete_duplicate_owner_scope_without_assertion(self):
+        anonymous = self.client.get("/api/flashcards/import/anki/capabilities")
+        self.assertIn(anonymous.status_code, {302, 401})
+
+        self._login("anki-import-user@example.com")
+        forbidden = self.client.get("/api/flashcards/import/anki/capabilities")
+        self.assertEqual(forbidden.status_code, 403)
+
+        self.client.delete("/api/session")
+        self._login()
+        created = self._create_session()
+        session_id = created["importSessionId"]
+        with self.app.app_context():
+            stored = db.session.get(ConnectImportSession, session_id)
+            stored.user_id = self.admin_id + 999
+            db.session.commit()
 
     def _create_session(self) -> dict:
         response = self.client.post(
@@ -156,7 +258,7 @@ class AnkiImportApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 201, response.get_json())
         return response.get_json()
 
-    def test_admin_can_create_upload_complete_and_read_session(self):
+    def _obsolete_duplicate_admin_flow(self):
         self._login()
         capabilities = self.client.get("/api/flashcards/import/anki/capabilities")
         self.assertEqual(capabilities.status_code, 200)
@@ -243,6 +345,228 @@ class AnkiImportApiTests(unittest.TestCase):
         )
         self.assertEqual(hidden.status_code, 404)
 
+    def test_anki_progress_migration(self):
+        self._login()
+        created = self._create_session()
+        session_id = created["importSessionId"]
+
+        # Note with several card progresses
+        record = {
+            "ankiNoteId": 201,
+            "sourceModelId": "anki-model-1",
+            "sourceDeckId": "anki-inbox",
+            "sourceDeckPath": "Inbox",
+            "contentHash": "c" * 64,
+            "note": {
+                "deckName": "Inbox",
+                "modelName": self.note_type_id,
+                "fields": {"Word": "犬", "Meaning": "dog"},
+                "tags": ["anki-progress"],
+            },
+            "cardsProgress": [
+                {
+                    "ord": 0,
+                    "type": 2, # review card
+                    "queue": 2,
+                    "relativeDue": 3,
+                    "interval": 14,
+                    "factor": 2500,
+                    "reps": 8,
+                    "lapses": 1,
+                    "lastReviewAt": "2026-08-13T12:00:00Z"
+                }
+            ]
+        }
+
+        package = gzip.compress((json.dumps(record) + "\n").encode("utf-8"), mtime=0)
+        uploaded = self.client.put(
+            f"/api/flashcards/import/anki/sessions/{session_id}/packages/cards/0",
+            data=package,
+            content_type="application/x-ndjson",
+            headers={
+                "Content-Encoding": "gzip",
+                "X-Package-SHA256": hashlib.sha256(package).hexdigest(),
+            },
+        )
+        self.assertEqual(uploaded.status_code, 200, uploaded.get_json())
+        self.assertTrue(uploaded.get_json()["results"][0]["imported"])
+
+        from models.card import Card
+        from models.card_progress import CardProgress
+
+        with self.app.app_context():
+            note = Note.query.filter_by(user_id=self.admin_id).filter(Note.tags.contains("anki-progress")).one()
+            self.assertEqual(len(note.cards), 1)
+            card = note.cards[0]
+
+            progress = CardProgress.query.filter_by(user_id=self.admin_id, card_id=card.id).one()
+            self.assertEqual(progress.queue, "review")
+            self.assertEqual(progress.interval_days, 14)
+            self.assertEqual(progress.ease_factor, 2.5)
+            self.assertEqual(progress.reps, 8)
+            self.assertEqual(progress.lapses, 1)
+            self.assertIsNotNone(progress.due_day)
+            self.assertIsNotNone(progress.due_at)
+            self.assertEqual(progress.is_suspended, False)
+            self.assertEqual(progress.is_buried, False)
+
+        # Let's test conflict resolution:
+        # 1. Update with older progress: Flama progress should NOT be overwritten (newest wins)
+        record2 = {
+            "ankiNoteId": 201,
+            "sourceModelId": "anki-model-1",
+            "sourceDeckId": "anki-inbox",
+            "sourceDeckPath": "Inbox",
+            # We change contentHash to trigger reload
+            "contentHash": "d" * 64,
+            "note": {
+                "deckName": "Inbox",
+                "modelName": self.note_type_id,
+                "fields": {"Word": "犬", "Meaning": "dog"},
+                "tags": ["anki-progress"],
+            },
+            "cardsProgress": [
+                {
+                    "ord": 0,
+                    "type": 2,
+                    "queue": 2,
+                    "relativeDue": 3,
+                    "interval": 10, # older interval is different
+                    "factor": 2200,
+                    "reps": 5,
+                    "lapses": 0,
+                    "lastReviewAt": "2026-08-11T12:00:00Z" # older review date
+                }
+            ]
+        }
+
+        created2 = self._create_session()
+        session_id2 = created2["importSessionId"]
+        package2 = gzip.compress((json.dumps(record2) + "\n").encode("utf-8"), mtime=0)
+        uploaded2 = self.client.put(
+            f"/api/flashcards/import/anki/sessions/{session_id2}/packages/cards/0",
+            data=package2,
+            content_type="application/x-ndjson",
+            headers={
+                "Content-Encoding": "gzip",
+                "X-Package-SHA256": hashlib.sha256(package2).hexdigest(),
+            },
+        )
+        self.assertEqual(uploaded2.status_code, 200, uploaded2.get_json())
+
+        with self.app.app_context():
+            progress = CardProgress.query.filter_by(user_id=self.admin_id, card_id=card.id).one()
+            # It should keep the newer progress from the first package (interval = 14)
+            self.assertEqual(progress.interval_days, 14)
+
+        # 2. Update with newer progress: Flama progress should be overwritten
+        record3 = {
+            "ankiNoteId": 201,
+            "sourceModelId": "anki-model-1",
+            "sourceDeckId": "anki-inbox",
+            "sourceDeckPath": "Inbox",
+            "contentHash": "e" * 64,
+            "note": {
+                "deckName": "Inbox",
+                "modelName": self.note_type_id,
+                "fields": {"Word": "犬", "Meaning": "dog"},
+                "tags": ["anki-progress"],
+            },
+            "cardsProgress": [
+                {
+                    "ord": 0,
+                    "type": 2,
+                    "queue": 2,
+                    "relativeDue": 1,
+                    "interval": 20,
+                    "factor": 2600,
+                    "reps": 12,
+                    "lapses": 2,
+                    "lastReviewAt": "2026-08-15T12:00:00Z" # newer review date
+                }
+            ]
+        }
+
+        created3 = self._create_session()
+        session_id3 = created3["importSessionId"]
+        package3 = gzip.compress((json.dumps(record3) + "\n").encode("utf-8"), mtime=0)
+        uploaded3 = self.client.put(
+            f"/api/flashcards/import/anki/sessions/{session_id3}/packages/cards/0",
+            data=package3,
+            content_type="application/x-ndjson",
+            headers={
+                "Content-Encoding": "gzip",
+                "X-Package-SHA256": hashlib.sha256(package3).hexdigest(),
+            },
+        )
+        self.assertEqual(uploaded3.status_code, 200, uploaded3.get_json())
+
+        with self.app.app_context():
+            progress = CardProgress.query.filter_by(user_id=self.admin_id, card_id=card.id).one()
+            # It should update to the newer progress (interval = 20)
+            self.assertEqual(progress.interval_days, 20)
+            self.assertEqual(progress.ease_factor, 2.6)
+            self.assertEqual(progress.reps, 12)
+            self.assertEqual(progress.lapses, 2)
+
+    def test_anki_progress_migration_suspended_and_learning(self):
+        self._login()
+        created = self._create_session()
+        session_id = created["importSessionId"]
+
+        record = {
+            "ankiNoteId": 301,
+            "sourceModelId": "anki-model-1",
+            "sourceDeckId": "anki-inbox",
+            "sourceDeckPath": "Inbox",
+            "contentHash": "f" * 64,
+            "note": {
+                "deckName": "Inbox",
+                "modelName": self.note_type_id,
+                "fields": {"Word": "鳥", "Meaning": "bird"},
+                "tags": ["anki-progress-extra"],
+            },
+            "cardsProgress": [
+                {
+                    "ord": 0,
+                    "type": 1, # learning card
+                    "queue": -1, # suspended
+                    "dueAt": "2026-08-13T15:30:00Z",
+                    "interval": 0,
+                    "factor": 2500,
+                    "reps": 3,
+                    "lapses": 0,
+                    "lastReviewAt": "2026-08-13T15:20:00Z"
+                }
+            ]
+        }
+
+        package = gzip.compress((json.dumps(record) + "\n").encode("utf-8"), mtime=0)
+        uploaded = self.client.put(
+            f"/api/flashcards/import/anki/sessions/{session_id}/packages/cards/0",
+            data=package,
+            content_type="application/x-ndjson",
+            headers={
+                "Content-Encoding": "gzip",
+                "X-Package-SHA256": hashlib.sha256(package).hexdigest(),
+            },
+        )
+        self.assertEqual(uploaded.status_code, 200, uploaded.get_json())
+
+        from models.card import Card
+        from models.card_progress import CardProgress
+
+        with self.app.app_context():
+            note = Note.query.filter_by(user_id=self.admin_id).filter(Note.tags.contains("anki-progress-extra")).one()
+            card = note.cards[0]
+            progress = CardProgress.query.filter_by(user_id=self.admin_id, card_id=card.id).one()
+            self.assertEqual(progress.queue, "learning")
+            self.assertEqual(progress.is_suspended, True)
+            self.assertEqual(progress.is_buried, False)
+            self.assertEqual(progress.interval_days, 0)
+            self.assertEqual(progress.due_day, None)
+            self.assertIsNotNone(progress.due_at)
+
     def test_cancel_removes_session_from_importable_state(self):
         self._login()
         created = self._create_session()
@@ -252,8 +576,6 @@ class AnkiImportApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200, response.get_json())
         self.assertEqual(response.get_json()["status"], "cancelled")
 
-<<<<<<< Updated upstream
-=======
     def test_complete_rejects_missing_card_records(self):
         self._login()
         created = self._create_session()
@@ -721,8 +1043,6 @@ class AnkiImportApiTests(unittest.TestCase):
             repaired_status.get_json()["notes"][0]["cards"][0]["reviewCursor"],
             str(third_ms),
         )
-
->>>>>>> Stashed changes
 
 if __name__ == "__main__":
     unittest.main()

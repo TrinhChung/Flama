@@ -23,7 +23,12 @@ def init_spa_delivery(app) -> None:
     @app.before_request
     def route_frontend_navigation():
         path = request.path
-        if path == "/api" or path.startswith("/api/"):
+        if (
+            path == "/api"
+            or path.startswith("/api/")
+            or path.startswith("/.well-known/")
+            or (path.startswith("/oauth/") and path != "/oauth/consent")
+        ):
             return None
 
         legacy_adapters_enabled = bool(

@@ -5,16 +5,32 @@ from __future__ import annotations
 from flask import Blueprint, jsonify, request
 from flask_login import current_user, login_required
 
+from models import db
 from app.api.common import error_response, optional_int_query
 from app.services.rest_api_service import (
     build_dashboard_payload,
     build_statistics_bootstrap_payload,
 )
-from app.services.stats_overview import build_stats_overview
+from app.services.stats_overview import (
+    build_stats_overview,
+    get_effective_timezone_name,
+    update_user_timezone,
+)
 from app.services.stats_today_future import build_today_future_stats
 
 
 analytics_bp = Blueprint("api_v1_analytics", __name__)
+
+
+def _resolve_request_timezone() -> str:
+    client_tz = request.args.get("timezone") or request.headers.get("X-Timezone")
+    if client_tz:
+        effective = get_effective_timezone_name(client_tz)
+        if current_user.is_authenticated and client_tz != getattr(current_user, "timezone", None):
+            if update_user_timezone(current_user, client_tz):
+                db.session.commit()
+        return effective
+    return get_effective_timezone_name(getattr(current_user, "timezone", "UTC"))
 
 
 @analytics_bp.get("/dashboard")
@@ -51,11 +67,12 @@ def statistics_overview():
             field="year",
         )
 
+    resolved_tz = _resolve_request_timezone()
     return jsonify(
         build_stats_overview(
             user_id=current_user.id,
             year=year,
-            timezone_name=getattr(current_user, "timezone", "UTC"),
+            timezone_name=resolved_tz,
         )
     )
 
@@ -96,10 +113,11 @@ def statistics_today_future():
                 field=field_name,
             )
 
+    resolved_tz = _resolve_request_timezone()
     return jsonify(
         build_today_future_stats(
             user_id=current_user.id,
-            timezone_name=getattr(current_user, "timezone", "UTC"),
+            timezone_name=resolved_tz,
             scope=scope,
             deck_id=deck_id,
             history_range=history_range,

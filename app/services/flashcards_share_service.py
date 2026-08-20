@@ -66,6 +66,40 @@ def _audit(user_id: int | None, action: str, payload: dict | None = None) -> Non
     db.session.add(entry)
 
 
+def _stage_initial_release_if_visible(
+    deck_item: DeckMarketplaceItem,
+) -> str | None:
+    """Pin visible legacy/new listings to an immutable initial release.
+
+    The release service deliberately leaves transaction ownership to its
+    caller.  Keeping this helper inside the listing/install transaction means
+    an install can never be created against a live, mutable source snapshot.
+    """
+
+    if deck_item.current_release_id is not None:
+        return None
+    status = str(deck_item.publish_status or "").strip().lower()
+    if status not in PUBLISH_STATUSES_VISIBLE:
+        return None
+
+    from app.services import deck_release_service
+
+    db.session.flush()
+    try:
+        deck_release_service.publish_release(
+            deck_item_id=str(deck_item.id),
+            user_id=int(deck_item.owner_user_id),
+            version_label=str(deck_item.version or "1.0.0"),
+            changelog=deck_item.changelog,
+            expected_current_release_id=None,
+            expected_working_revision=int(deck_item.working_revision or 0),
+            idempotency_key=f"initial-listing:{deck_item.id}",
+        )
+    except deck_release_service.DeckReleaseError as exc:
+        return exc.message
+    return None
+
+
 def _is_mysql_deadlock(exc: Exception) -> bool:
     """Best-effort deadlock detection used by retry wrappers."""
     original = getattr(exc, "orig", None)
@@ -484,10 +518,6 @@ def create_shared_deck_item(
     is_admin: bool,
     require_source_note_type: bool
 ) -> tuple[DeckMarketplaceItem | None, str | None, str | None]:
-    title = (payload.get("title") or "").strip()
-    if not title:
-        return None, "title is required.", "title"
-
     source_deck_id_raw = payload.get("source_deck_id")
     try:
         source_deck_id = int(source_deck_id_raw)
@@ -502,6 +532,10 @@ def create_shared_deck_item(
     )
     if not eligibility["is_selectable"]:
         return None, str(eligibility["block_reason"]), "source_deck_id"
+
+    title = (payload.get("title") or "").strip() or (source_deck.name or "").strip()
+    if not title:
+        return None, "title is required.", "title"
 
     deck_item = DeckMarketplaceItem(
         owner_user_id=user_id,
@@ -521,6 +555,7 @@ def create_shared_deck_item(
     
     deferred_status = payload.get("publish_status") if "publish_status" in payload else None
     initial_payload = dict(payload)
+    initial_payload["title"] = title
     initial_payload.pop("publish_status", None)
     validation_error = flashcards_share.apply_deck_marketplace_payload(
         deck_item,
@@ -559,6 +594,10 @@ def create_shared_deck_item(
         deck_item,
         deck_active_review_threshold=DECK_ACTIVE_REVIEW_THRESHOLD,
     )
+    initial_release_error = flashcards_share._stage_initial_release_if_visible(deck_item)
+    if initial_release_error:
+        db.session.rollback()
+        return None, initial_release_error, "publish_status"
     _audit(user_id, "market.deck_item.create", {"deck_item_id": deck_item.id})
     try:
         db.session.commit()
@@ -580,6 +619,19 @@ def update_shared_deck_item(
     is_admin: bool,
     require_source_note_type: bool
 ) -> tuple[bool, str | None, str | None]:
+    if deck_item.current_release_id is not None:
+        if (
+            "version" in payload
+            and str(payload.get("version") or "").strip() != str(deck_item.version or "").strip()
+        ):
+            return False, "version is managed by immutable deck releases.", "version"
+        if (
+            "changelog" in payload
+            and (str(payload.get("changelog") or "").strip() or None)
+            != (str(deck_item.changelog or "").strip() or None)
+        ):
+            return False, "changelog is managed by immutable deck releases.", "changelog"
+
     if "source_deck_id" in payload:
         raw_source_deck_id = payload.get("source_deck_id")
         try:
@@ -621,6 +673,10 @@ def update_shared_deck_item(
         deck_item,
         deck_active_review_threshold=DECK_ACTIVE_REVIEW_THRESHOLD,
     )
+    initial_release_error = flashcards_share._stage_initial_release_if_visible(deck_item)
+    if initial_release_error:
+        db.session.rollback()
+        return False, initial_release_error, "publish_status"
     _audit(user_id, "market.deck_item.update", {"deck_item_id": deck_item.id})
     db.session.commit()
     return True, None, None
@@ -1504,7 +1560,10 @@ def apply_deck_marketplace_payload(
             except (TypeError, ValueError):
                 return "source_deck_id must be an integer."
     if "source_note_type_id" in payload:
-        deck_item.source_note_type_id = (payload.get("source_note_type_id") or "").strip() or None
+        raw_source_note_type_id = payload.get("source_note_type_id")
+        if isinstance(raw_source_note_type_id, dict):
+            raw_source_note_type_id = raw_source_note_type_id.get("id")
+        deck_item.source_note_type_id = (str(raw_source_note_type_id or "")).strip() or None
     if "version" in payload:
         deck_item.version = (payload.get("version") or "").strip() or "1.0.0"
     if "changelog" in payload:
@@ -3126,6 +3185,13 @@ def install_shared_deck_item_for_user(
                 "already_installed": True,
             },
         }
+
+    initial_release_error = _stage_initial_release_if_visible(deck_item)
+    if initial_release_error:
+        raise ShareControllerError(
+            f"Unable to create the initial deck release: {initial_release_error}",
+            status=409,
+        )
 
     now = _utcnow()
     source_deck_id = deck_item.source_deck_id

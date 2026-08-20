@@ -2,7 +2,10 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   buildCardNdjsonPackage,
   buildMediaZip,
+  chunkNdjsonItems,
   detectMediaType,
+  resolveAcceptedMediaFilenames,
+  rewriteMediaFieldValue,
   shouldFlushMediaPackage,
   uploadPackageWithRetry,
 } from './ankiSyncPackages'
@@ -46,6 +49,48 @@ describe('ankiSyncPackages', () => {
     const result = await buildCardNdjsonPackage([{ ankiNoteId: 1 }, { ankiNoteId: 2 }])
     expect(result.blob.size).toBeGreaterThan(0)
     expect(['gzip', 'identity']).toContain(result.contentEncoding)
+  })
+
+  it('groups card transport packages by the advertised item limit', () => {
+    const batches = chunkNdjsonItems(
+      Array.from({ length: 1_001 }, (_, index) => ({ id: index })),
+      (item) => item,
+      500,
+      16 * 1024 * 1024,
+    )
+
+    expect(batches.map((batch) => batch.length)).toEqual([500, 500, 1])
+  })
+
+  it('flushes a card package before its encoded NDJSON byte budget', () => {
+    const batches = chunkNdjsonItems(
+      [{ value: 'a'.repeat(60) }, { value: 'b'.repeat(60) }],
+      (item) => item,
+      500,
+      100,
+    )
+
+    expect(batches).toHaveLength(2)
+  })
+
+  it('keeps only media filenames accepted by a partial package response', () => {
+    const accepted = resolveAcceptedMediaFilenames(
+      ['valid.png'],
+      1,
+      ['valid.png', 'invalid.mp3'],
+    )
+
+    expect([...accepted]).toEqual(['valid.png'])
+    expect(accepted.has('invalid.mp3')).toBe(false)
+  })
+
+  it('clears failed media fields while preserving successful media fields', () => {
+    const renames = new Map([['valid.png', 'hash.png']])
+    const references = ['valid.png', 'missing.mp3']
+
+    expect(rewriteMediaFieldValue('valid.png', references, renames)).toBe('hash.png')
+    expect(rewriteMediaFieldValue('[sound:missing.mp3]', references, renames)).toBe('')
+    expect(rewriteMediaFieldValue('vocabulary text', references, renames)).toBe('vocabulary text')
   })
 
   it('keeps a failed package fatal after bounded retries', async () => {

@@ -77,7 +77,15 @@ def installed_deck_update_diff(install_id: str, release_id: str):
 )
 @login_required
 def prepare_installed_deck_update(install_id: str, release_id: str):
-    body = request.get_json(silent=True) or {}
+    body = request.get_json(silent=True)
+    if body is None:
+        body = {}
+    if not isinstance(body, dict):
+        return error_response(
+            "VALIDATION_ERROR",
+            "Payload must be a JSON object.",
+            status=400,
+        )
     try:
         rebase = deck_install_rebase_service.prepare_update(
             install_id=install_id,
@@ -102,7 +110,15 @@ def prepare_installed_deck_update(install_id: str, release_id: str):
 )
 @login_required
 def apply_installed_deck_update(install_id: str, release_id: str):
-    body = request.get_json(silent=True) or {}
+    body = request.get_json(silent=True)
+    if body is None:
+        body = {}
+    if not isinstance(body, dict):
+        return error_response(
+            "VALIDATION_ERROR",
+            "Payload must be a JSON object.",
+            status=400,
+        )
     try:
         rebase = deck_install_rebase_service.prepare_and_apply_update(
             install_id=install_id,
@@ -150,7 +166,15 @@ def mark_installed_deck_update_seen(install_id: str, release_id: str):
 )
 @login_required
 def resolve_installed_deck_update_conflict(rebase_id: str, conflict_id: int):
-    body = request.get_json(silent=True) or {}
+    body = request.get_json(silent=True)
+    if body is None:
+        body = {}
+    if not isinstance(body, dict):
+        return error_response(
+            "VALIDATION_ERROR",
+            "Payload must be a JSON object.",
+            status=400,
+        )
     try:
         rebase = deck_install_rebase_service.resolve_conflict(
             rebase_id=rebase_id,

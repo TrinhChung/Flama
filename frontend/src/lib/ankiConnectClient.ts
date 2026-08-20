@@ -25,6 +25,27 @@ export interface AnkiCardInfo {
   modelName: string
   deckName: string
   note: number
+  ord: number
+  type: number
+  queue: number
+  due: number
+  interval: number
+  factor: number
+  reps: number
+  lapses: number
+  left?: number
+  mod?: number
+}
+
+export interface AnkiReviewLog {
+  id: number
+  usn: number
+  ease: number
+  ivl: number
+  lastIvl: number
+  factor: number
+  time: number
+  type: number
 }
 
 export interface AnkiTemplateInfo {
@@ -40,12 +61,15 @@ export interface AnkiModelStylingInfo {
 export interface IAnkiConnectClient {
   checkConnection(endpoint?: string): Promise<{ status: AnkiConnectStatus; version?: number; error?: string }>
   getVersion(endpoint?: string): Promise<number>
+  getActiveProfile(endpoint?: string): Promise<string>
+  getCollectionIdentity(endpoint?: string): Promise<string>
   getDeckNames(endpoint?: string): Promise<string[]>
   getDeckNamesAndIds(endpoint?: string): Promise<Record<string, number>>
   findNotes(query: string, endpoint?: string): Promise<number[]>
   notesInfo(notes: number[], endpoint?: string): Promise<AnkiNoteInfo[]>
   findCards(query: string, endpoint?: string): Promise<number[]>
   cardsInfo(cards: number[], endpoint?: string): Promise<AnkiCardInfo[]>
+  getReviewsOfCards(cards: number[], endpoint?: string): Promise<Record<number, AnkiReviewLog[]>>
   getModelNames(endpoint?: string): Promise<string[]>
   getModelNamesAndIds(endpoint?: string): Promise<Record<string, number>>
   getModelFieldNames(modelName: string, endpoint?: string): Promise<string[]>
@@ -117,7 +141,7 @@ export class AnkiConnectClient implements IAnkiConnectClient {
     } catch (err: any) {
       const msg = String(err?.message || '')
       if (msg.includes('Connection refused') || msg.includes('Failed to fetch')) {
-        return { status: 'Connection refused', error: 'Không thể kết nối tới 127.0.0.1:8765. Hãy đảm bảo Anki Desktop đang chạy và AnkiConnect plugin đã được cài đặt.' }
+        return { status: 'Connection refused', error: 'Không thể kết nối tới Anki Desktop (127.0.0.1:8765). Có thể phần mềm Anki chưa bật, thiếu add-on AnkiConnect, hoặc trình duyệt chặn kết nối (lỗi CORS).' }
       }
       if (msg.includes('timed out')) {
         return { status: 'Timeout', error: 'Kết nối AnkiConnect bị quá thời gian (Timeout).' }
@@ -128,6 +152,25 @@ export class AnkiConnectClient implements IAnkiConnectClient {
 
   async getVersion(endpoint?: string): Promise<number> {
     return this.request<number>('version', {}, endpoint)
+  }
+
+  async getActiveProfile(endpoint?: string): Promise<string> {
+    try {
+      const profile = await this.request<string>('getActiveProfile', {}, endpoint)
+      return String(profile || '').trim() || 'default'
+    } catch {
+      return 'default'
+    }
+  }
+
+  async getCollectionIdentity(endpoint?: string): Promise<string> {
+    const profile = await this.getActiveProfile(endpoint)
+    try {
+      const mediaDir = await this.request<string>('getMediaDirPath', {}, endpoint)
+      return `${profile}\u0000${String(mediaDir || '').trim()}`
+    } catch {
+      return profile
+    }
   }
 
   async getDeckNames(endpoint?: string): Promise<string[]> {
@@ -159,6 +202,11 @@ export class AnkiConnectClient implements IAnkiConnectClient {
   async cardsInfo(cards: number[], endpoint?: string): Promise<AnkiCardInfo[]> {
     if (!cards || cards.length === 0) return []
     return this.request<AnkiCardInfo[]>('cardsInfo', { cards }, endpoint)
+  }
+
+  async getReviewsOfCards(cards: number[], endpoint?: string): Promise<Record<number, AnkiReviewLog[]>> {
+    if (!cards || cards.length === 0) return {}
+    return this.request<Record<number, AnkiReviewLog[]>>('getReviewsOfCards', { cards }, endpoint)
   }
 
   async getModelNames(endpoint?: string): Promise<string[]> {

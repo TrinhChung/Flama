@@ -7,12 +7,15 @@
 
 import type { AnkiImportNoteTypePlan } from '@/features/import/api'
 import { ankiImportApi } from '@/features/import/api'
-import type { AnkiCardInfo, AnkiNoteInfo } from '@/lib/ankiConnectClient'
+import type { AnkiCardInfo, AnkiNoteInfo, AnkiReviewLog } from '@/lib/ankiConnectClient'
 import { ankiConnectClient } from '@/lib/ankiConnectClient'
 import {
   buildCardNdjsonPackage,
   buildMediaZip,
+  chunkNdjsonItems,
   detectMediaType,
+  resolveAcceptedMediaFilenames,
+  rewriteMediaFieldValue,
   shouldFlushMediaPackage,
   type MediaPackageEntry,
   uploadPackageWithRetry,
@@ -20,6 +23,7 @@ import {
 import {
   extractAudioReferences,
   extractImageReferences,
+  ankiHtmlToPlainText,
   sanitizeAnkiHtml,
 } from '@/lib/ankiHtmlSanitizer'
 
@@ -150,13 +154,28 @@ function savedTargetId(modelName: string, noteTypeMap?: Record<string, string>):
   return ''
 }
 
+const MEDIA_FILENAME_RE = /^[\p{L}\p{N}_][\p{L}\p{N}_.-]{0,254}$/u;
+const MEDIA_EXTENSION_RE = /\.(png|jpg|jpeg|gif|webp|svg|mp3|wav|ogg|webm)$/i;
+
+function isValidMediaFilename(filename: string): boolean {
+  return MEDIA_FILENAME_RE.test(filename) && MEDIA_EXTENSION_RE.test(filename);
+}
+
 function normalizeMediaFieldValue(value: string, targetFieldType: string): string {
+  if (targetFieldType === 'text') return ankiHtmlToPlainText(value)
   if (targetFieldType === 'audio') {
     const filename = extractAudioReferences(value)[0]
-    return filename ? `[sound:${filename}]` : value.trim()
+    if (filename) return `[sound:${filename}]`
+    const trimmed = value.trim()
+    if (isValidMediaFilename(trimmed)) return `[sound:${trimmed}]`
+    return sanitizeAnkiHtml(value)
   }
   if (targetFieldType === 'image' || targetFieldType === 'diagram') {
-    return extractImageReferences(value)[0] || value.trim()
+    const filename = extractImageReferences(value)[0]
+    if (filename) return filename
+    const trimmed = value.trim()
+    if (isValidMediaFilename(trimmed)) return trimmed
+    return sanitizeAnkiHtml(value)
   }
   return sanitizeAnkiHtml(value)
 }
@@ -164,14 +183,100 @@ function normalizeMediaFieldValue(value: string, targetFieldType: string): strin
 function mediaReferencesForValue(value: string, fieldType: string): { images: string[]; audios: string[] } {
   if (fieldType === 'audio') {
     const audios = extractAudioReferences(value)
+    if (audios.length > 0) return { images: [], audios }
     const direct = value.replace(/^\[sound:|\]$/g, '').trim()
-    return { images: [], audios: audios.length > 0 ? audios : direct ? [direct] : [] }
+    if (direct && isValidMediaFilename(direct)) {
+      return { images: [], audios: [direct] }
+    }
+    return { images: [], audios: [] }
   }
   if (fieldType === 'image' || fieldType === 'diagram') {
     const images = extractImageReferences(value)
-    return { images: images.length > 0 ? images : value.trim() ? [value.trim()] : [], audios: [] }
+    if (images.length > 0) return { images, audios: [] }
+    const direct = value.trim()
+    if (direct && isValidMediaFilename(direct)) {
+      return { images: [direct], audios: [] }
+    }
+    return { images: [], audios: [] }
   }
   return { images: extractImageReferences(value), audios: extractAudioReferences(value) }
+}
+
+async function findRelativeDue(cardId: number, endpoint?: string): Promise<number> {
+  let low = -100000
+  let high = 100000
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2)
+    const matched = await ankiConnectClient.findCards(`cid:${cardId} prop:due<=${mid}`, endpoint)
+    if (matched.length > 0) {
+      high = mid - 1
+    } else {
+      low = mid + 1
+    }
+  }
+  return low
+}
+
+export function canonicalizeAnkiEndpoint(endpoint?: string): string {
+  const raw = String(endpoint || 'http://127.0.0.1:8765').trim() || 'http://127.0.0.1:8765'
+  try {
+    const parsed = new URL(raw)
+    if (['localhost', '[::1]', '::1'].includes(parsed.hostname)) parsed.hostname = '127.0.0.1'
+    parsed.pathname = ''
+    parsed.search = ''
+    parsed.hash = ''
+    return parsed.origin.toLowerCase()
+  } catch {
+    return raw.replace(/\/+$/, '').toLowerCase()
+  }
+}
+
+export function ankiProgressSnapshot(card: AnkiCardInfo) {
+  return {
+    sourceCardId: card.cardId,
+    ord: card.ord,
+    type: card.type,
+    queue: card.queue,
+    due: card.due,
+    interval: card.interval,
+    factor: card.factor,
+    reps: card.reps,
+    lapses: card.lapses,
+    left: card.left || 0,
+    mod: card.mod || 0,
+  }
+}
+
+export function ankiReviewRecord(sourceCardId: number, log: AnkiReviewLog) {
+  return {
+    sourceReviewId: log.id,
+    sourceCardId,
+    ease: log.ease,
+    type: log.type,
+    ivl: log.ivl,
+    lastIvl: log.lastIvl,
+    factor: log.factor,
+    time: log.time,
+  }
+}
+
+export function shouldQueueAnkiHistory(params: {
+  reps: number
+  syncMode: 'new_and_changed' | 'only_new' | 'resync_all'
+  progressState?: 'new' | 'changed' | 'unchanged' | 'local_changed'
+  reviewCursor?: string | null
+  progressUploadFailed: boolean
+  mappedDuringProgress: boolean
+}): boolean {
+  if (params.reps <= 0 || params.progressUploadFailed) return false
+  if (params.progressState === 'new' && !params.mappedDuringProgress) return false
+  return (
+    params.syncMode === 'resync_all' ||
+    !params.reviewCursor ||
+    params.progressState === 'new' ||
+    params.progressState === 'changed' ||
+    params.progressState === 'local_changed'
+  )
 }
 
 export async function executeAnkiSync(
@@ -182,11 +287,18 @@ export async function executeAnkiSync(
   flamaUserId: number,
   onProgress?: (progress: SyncProgressUpdate) => void,
   options: AnkiSyncOptions = {}
-): Promise<{ success: boolean; totalSynced: number; totalMediaDetected: number; errors: string[] }> {
+): Promise<{ success: boolean; totalSynced: number; totalSkipped: number; totalMediaDetected: number; errors: string[] }> {
   const endpoint = options.endpoint || ''
   const syncMedia = options.syncMedia !== false
   const targetRoot = options.targetDeckName?.trim() || deckName
-  const sourceKey = JSON.stringify([flamaUserId, endpoint || 'default-anki'])
+  const collectionIdentity = await ankiConnectClient.getCollectionIdentity(endpoint)
+  const sourceKey = `anki-v2:${await calculateStringHash(collectionIdentity)}`
+  const sourceAliases = [...new Set([
+    JSON.stringify([flamaUserId, endpoint || 'default-anki']),
+    JSON.stringify([flamaUserId, 'default-anki']),
+    JSON.stringify([flamaUserId, 'http://127.0.0.1:8765']),
+    JSON.stringify([flamaUserId, 'http://localhost:8765']),
+  ])]
   const errors: string[] = []
 
   onProgress?.({
@@ -208,7 +320,9 @@ export async function executeAnkiSync(
   }
 
   const noteIds = [...deckSetsByNote.keys()]
-  if (noteIds.length === 0) return { success: true, totalSynced: 0, totalMediaDetected: 0, errors: [] }
+  if (noteIds.length === 0) {
+    return { success: true, totalSynced: 0, totalSkipped: 0, totalMediaDetected: 0, errors: [] }
+  }
   const notesInfo = await fetchNotesInfo(noteIds, endpoint)
   const usedModelNames = [...new Set(notesInfo.map((note) => note.modelName))]
   const targetOptions = options.noteTypeOptions || []
@@ -300,6 +414,29 @@ export async function executeAnkiSync(
     })
   }
 
+  const cardsInfoMap = new Map<number, AnkiCardInfo>(cardsInfo.map((card) => [card.cardId, card]))
+  const allCardIds = candidateNotes.flatMap((note) => note.info.cards || [])
+  const missingCardIds = allCardIds.filter((id) => !cardsInfoMap.has(id))
+  if (missingCardIds.length > 0) {
+    const extraCardsInfo = await fetchCardsInfo(missingCardIds, endpoint)
+    for (const card of extraCardsInfo) {
+      cardsInfoMap.set(card.cardId, card)
+    }
+  }
+
+  const reviewCard = [...cardsInfoMap.values()].find(
+    (card) => card.type === 2 || (card.queue === 3 && (card.type === 1 || card.type === 3)),
+  )
+  let todayDayIndexAnki: number | null = null
+  if (reviewCard) {
+    try {
+      const relativeDue = await findRelativeDue(reviewCard.cardId, endpoint)
+      todayDayIndexAnki = reviewCard.due - relativeDue
+    } catch (e) {
+      console.warn('Error resolving todayDayIndexAnki:', e)
+    }
+  }
+
   onProgress?.({
     phase: 'preflight', totalNotes: candidateNotes.length, processedNotes: 0,
     totalMedia: uniqueMedia.size, processedMedia: 0,
@@ -307,7 +444,7 @@ export async function executeAnkiSync(
   })
   const session = await ankiImportApi.createSession(
     {
-      source: 'anki', sourceKey, sourceRootPath: deckName, targetRootPath: targetRoot,
+      source: 'anki', sourceKey, sourceAliases, sourceRootPath: deckName, targetRootPath: targetRoot,
       selectedDecks: targetDeckPaths, decks: deckManifest, totalNotes: candidateNotes.length,
       totalMedia: syncMedia ? uniqueMedia.size : 0, appVersion: '2.0.0',
       mode: options.autoSyncMissingNoteTypes ? 'auto_sync_missing' : 'strict',
@@ -322,14 +459,22 @@ export async function executeAnkiSync(
   const bindingByModelName = new Map(
     Object.entries(session.noteTypeBindings).map(([sourceModelId, binding]) => [binding.sourceModelName, { sourceModelId, ...binding }])
   )
-  const eligible: Array<{
+  type PreparedSyncNote = {
     item: (typeof candidateNotes)[number]
     contentHash: string
     targetDeckPath: string
     targetNoteTypeId: string
     sourceModelId: string
     mappedFields: Record<string, string>
-  }> = []
+    progressRecords: Array<ReturnType<typeof ankiProgressSnapshot> & {
+      externalNoteId: number
+      snapshotHash: string
+      sourceToday: number | null
+      force: boolean
+    }>
+    knownMediaHashes: Set<string>
+  }
+  const preparedNotes: PreparedSyncNote[] = []
   for (const item of candidateNotes) {
     const binding = bindingByModelName.get(item.info.modelName)
     if (!binding) continue
@@ -343,18 +488,98 @@ export async function executeAnkiSync(
     }
     const targetDeckPath = mapAnkiDeckPath(deckName, item.sourceDeckPath, targetRoot)
     const profileId = JSON.stringify([sourceKey, deckName, item.info.modelName, targetDeckPath, binding.targetNoteTypeId])
-    const contentHash = await calculateStringHash(JSON.stringify({ profileId, fields: mappedFields, tags: item.info.tags }))
-    const existing = await getNoteSyncState(sourceKey, item.info.noteId)
-    const status = classifyNoteSyncStatus(existing, profileId, contentHash, syncMode)
-    if (syncMode === 'only_new' && status !== 'New') continue
-    if (syncMode === 'new_and_changed' && status === 'Unchanged') continue
-    eligible.push({ item, contentHash, targetDeckPath, targetNoteTypeId: binding.targetNoteTypeId, sourceModelId: binding.sourceModelId, mappedFields })
+    const progressRecords = (await Promise.all((item.info.cards || []).map(async (cardId) => {
+      const card = cardsInfoMap.get(cardId)
+      if (!card) return null
+      const snapshot = ankiProgressSnapshot(card)
+      return {
+        ...snapshot,
+        externalNoteId: item.info.noteId,
+        snapshotHash: await calculateStringHash(JSON.stringify(snapshot)),
+        sourceToday: todayDayIndexAnki,
+        force: syncMode === 'resync_all',
+      }
+    }))).filter((record): record is NonNullable<typeof record> => record !== null)
+    const contentHash = await calculateStringHash(JSON.stringify({
+      profileId,
+      fields: mappedFields,
+      tags: item.info.tags,
+    }))
+    preparedNotes.push({
+      item,
+      contentHash,
+      targetDeckPath,
+      targetNoteTypeId: binding.targetNoteTypeId,
+      sourceModelId: binding.sourceModelId,
+      mappedFields,
+      progressRecords,
+      knownMediaHashes: new Set<string>(),
+    })
+  }
+
+  const serverStateByNote = new Map<number, {
+    state: 'new' | 'changed' | 'unchanged'
+    mediaHashes: string[]
+    cards: Array<{
+      sourceCardId: number
+      progressState: 'new' | 'changed' | 'unchanged' | 'local_changed'
+      reviewCursor: string | null
+    }>
+  }>()
+  for (const batch of chunks(preparedNotes, 500)) {
+    const response = await ankiImportApi.getNoteStatuses(
+      session.importSessionId,
+      batch.map((entry) => ({
+        ankiNoteId: entry.item.info.noteId,
+        contentHash: entry.contentHash,
+        cards: entry.progressRecords.map((record) => ({
+          sourceCardId: record.sourceCardId,
+          snapshotHash: record.snapshotHash,
+        })),
+      })),
+    )
+    for (const state of response.notes) serverStateByNote.set(state.ankiNoteId, state)
+  }
+
+  const eligible = preparedNotes.filter((entry) => {
+    const serverState = serverStateByNote.get(entry.item.info.noteId)
+    if (!serverState) return true
+    entry.knownMediaHashes = new Set(serverState.mediaHashes)
+    if (syncMode === 'only_new') return serverState.state === 'new'
+    if (syncMode === 'new_and_changed') return serverState.state !== 'unchanged'
+    return true
+  })
+  const schedulerEligibleNotes = preparedNotes.filter((entry) => {
+    const state = serverStateByNote.get(entry.item.info.noteId)?.state
+    return syncMode !== 'only_new' || state === 'new'
+  })
+  const progressRecords = schedulerEligibleNotes.flatMap((entry) => {
+    const cardStates = new Map(
+      (serverStateByNote.get(entry.item.info.noteId)?.cards || [])
+        .map((card) => [Number(card.sourceCardId), card] as const),
+    )
+    return entry.progressRecords.filter((record) => {
+      const state = cardStates.get(record.sourceCardId)?.progressState || 'new'
+      if (state === 'local_changed' && syncMode !== 'resync_all') return false
+      return syncMode === 'resync_all' || state === 'new' || state === 'changed'
+    })
+  })
+  const eligibleMedia = syncMedia
+    ? new Set(eligible.flatMap((entry) => [...entry.item.images, ...entry.item.audios]))
+    : new Set<string>()
+  const mediaConsumers = new Map<string, PreparedSyncNote[]>()
+  for (const entry of eligible) {
+    for (const filename of new Set([...entry.item.images, ...entry.item.audios])) {
+      const consumers = mediaConsumers.get(filename) || []
+      consumers.push(entry)
+      mediaConsumers.set(filename, consumers)
+    }
   }
 
   let processedMedia = 0
   const mediaRename = new Map<string, string>()
+  const capabilities = await ankiImportApi.capabilities()
   if (syncMedia) {
-    const capabilities = await ankiImportApi.capabilities()
     let packageEntries: MediaPackageEntry[] = []
     let packageRenames: Array<[string, string]> = []
     let packageSafeNames = new Set<string>()
@@ -366,108 +591,166 @@ export async function executeAnkiSync(
       if (packageEntries.length === 0) return
       const entries = [...packageEntries]
       const renames = [...packageRenames]
-      const zipBlob = await buildMediaZip(entries)
-      if (zipBlob.size > capabilities.mediaPackageMaxBytes) {
-        throw new Error(`Package media ${packageSequence} vượt giới hạn ${capabilities.mediaPackageMaxBytes} byte.`)
+      try {
+        const zipBlob = await buildMediaZip(entries)
+        if (zipBlob.size > capabilities.mediaPackageMaxBytes) {
+          throw new Error(`Package media ${packageSequence} vượt giới hạn ${capabilities.mediaPackageMaxBytes} byte.`)
+        }
+        const packageHash = await calculateBinaryHash(await zipBlob.arrayBuffer())
+        const result = await uploadPackageWithRetry(
+          () => ankiImportApi.uploadMediaPackage(
+              session.importSessionId,
+              packageSequence,
+              zipBlob,
+              packageHash,
+            ),
+          (delayMs) => new Promise((resolve) => globalThis.setTimeout(resolve, delayMs))
+        )
+        const accepted = resolveAcceptedMediaFilenames(
+          result.acceptedFilenames,
+          result.itemCount,
+          entries.map((entry) => entry.filename),
+        )
+        for (const entry of entries) {
+          if (accepted.has(entry.filename)) uploadedSafeNames.add(entry.filename)
+        }
+        for (const [original, safe] of renames) {
+          if (accepted.has(safe)) mediaRename.set(original, safe)
+        }
+        for (const rejected of result.rejectedFilenames || []) {
+          console.warn(`Bỏ qua media không hợp lệ "${rejected}".`)
+        }
+      } catch (uploadError: any) {
+        console.warn(`Bỏ qua package media ${packageSequence}: ${uploadError?.message || String(uploadError)}`)
+      } finally {
+        packageEntries = []
+        packageRenames = []
+        packageSafeNames = new Set<string>()
+        packageBytes = 0
+        packageSequence++
+        processedMedia = mediaRename.size
+        onProgress?.({
+          phase: 'media', totalNotes: eligible.length, processedNotes: 0,
+          totalMedia: eligibleMedia.size, processedMedia,
+          currentMessage: `Đã upload package media ${packageSequence} (${processedMedia}/${eligibleMedia.size} file)`,
+        })
       }
-      const packageHash = await calculateBinaryHash(await zipBlob.arrayBuffer())
-      await uploadPackageWithRetry(
-        () => ankiImportApi.uploadMediaPackage(
-            session.importSessionId,
-            packageSequence,
-            zipBlob,
-            packageHash,
-          ),
-        (delayMs) => new Promise((resolve) => window.setTimeout(resolve, delayMs))
-      )
-      for (const entry of entries) uploadedSafeNames.add(entry.filename)
-      for (const [original, safe] of renames) mediaRename.set(original, safe)
-      packageEntries = []
-      packageRenames = []
-      packageSafeNames = new Set<string>()
-      packageBytes = 0
-      packageSequence++
-      processedMedia = mediaRename.size
-      onProgress?.({
-        phase: 'media', totalNotes: eligible.length, processedNotes: 0,
-        totalMedia: uniqueMedia.size, processedMedia,
-        currentMessage: `Đã upload package media ${packageSequence} (${processedMedia}/${uniqueMedia.size} file)`,
-      })
     }
 
-    for (const filename of uniqueMedia) {
-      const base64 = await ankiConnectClient.retrieveMediaFile(filename, endpoint)
-      if (!base64) {
-        throw new Error(`Không đọc được media "${filename}" từ Anki. Chưa import card để tránh mất media.`)
-      }
-      const prepared = await (async () => {
-        try {
-          const binary = atob(base64)
-          const bytes = new Uint8Array(binary.length)
-          for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index)
-          const mediaType = detectMediaType(bytes, filename)
-          const mediaHash = await calculateBinaryHash(bytes.buffer)
-          const safeFilename = `${mediaHash}.${mediaType.extension}`
-          const mediaBlob = new Blob([bytes], { type: mediaType.mimeType })
-          return { safeFilename, mediaBlob }
-        } catch (error) {
-          throw new Error(`Lỗi xử lý media "${filename}": ${error instanceof Error ? error.message : String(error)} Chưa import card để tránh mất media.`)
+    for (const filename of eligibleMedia) {
+      try {
+        const base64 = await ankiConnectClient.retrieveMediaFile(filename, endpoint)
+        if (!base64) {
+          throw new Error(`Không đọc được từ Anki.`)
         }
-      })()
-      const { safeFilename, mediaBlob } = prepared
-      if (mediaBlob.size > capabilities.mediaFileMaxBytes) {
-        throw new Error(`Media "${filename}" vượt giới hạn ${capabilities.mediaFileMaxBytes} byte. Chưa import card để tránh mất media.`)
+        const prepared = await (async () => {
+          try {
+            const binary = atob(base64)
+            const bytes = new Uint8Array(binary.length)
+            for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index)
+            const mediaType = detectMediaType(bytes, filename)
+            const mediaHash = await calculateBinaryHash(bytes.buffer)
+            const safeFilename = `${mediaHash}.${mediaType.extension}`
+            const mediaBlob = new Blob([bytes], { type: mediaType.mimeType })
+            return { safeFilename, mediaBlob }
+          } catch (error) {
+            throw new Error(`Lỗi xử lý file: ${error instanceof Error ? error.message : String(error)}`)
+          }
+        })()
+        const { safeFilename, mediaBlob } = prepared
+        const mediaHash = safeFilename.split('.', 1)[0]
+        const consumers = mediaConsumers.get(filename) || []
+        if (
+          consumers.length > 0 &&
+          consumers.every((entry) => entry.knownMediaHashes.has(mediaHash))
+        ) {
+          mediaRename.set(filename, safeFilename)
+          processedMedia = mediaRename.size
+          continue
+        }
+        if (mediaBlob.size > capabilities.mediaFileMaxBytes) {
+          throw new Error(`Vượt giới hạn kích thước file (${capabilities.mediaFileMaxBytes} byte).`)
+        }
+        if (uploadedSafeNames.has(safeFilename)) {
+          mediaRename.set(filename, safeFilename)
+          processedMedia = mediaRename.size
+          continue
+        }
+        if (shouldFlushMediaPackage(
+          packageBytes,
+          packageEntries.length,
+          mediaBlob.size,
+          capabilities.mediaPackageMaxBytes,
+          capabilities.mediaPackageMaxEntries
+        )) {
+          await flushPackage()
+        }
+        if (uploadedSafeNames.has(safeFilename)) {
+          mediaRename.set(filename, safeFilename)
+          processedMedia = mediaRename.size
+          continue
+        }
+        if (!packageSafeNames.has(safeFilename)) {
+          packageEntries.push({ filename: safeFilename, blob: mediaBlob })
+          packageBytes += mediaBlob.size
+          packageSafeNames.add(safeFilename)
+        }
+        packageRenames.push([filename, safeFilename])
+      } catch (mediaError: any) {
+        console.warn(`Bỏ qua media "${filename}": ${mediaError?.message || String(mediaError)}`)
       }
-      if (uploadedSafeNames.has(safeFilename)) {
-        mediaRename.set(filename, safeFilename)
-        processedMedia = mediaRename.size
-        continue
-      }
-      if (shouldFlushMediaPackage(
-        packageBytes,
-        packageEntries.length,
-        mediaBlob.size,
-        capabilities.mediaPackageMaxBytes,
-        capabilities.mediaPackageMaxEntries
-      )) {
-        await flushPackage()
-      }
-      if (uploadedSafeNames.has(safeFilename)) {
-        mediaRename.set(filename, safeFilename)
-        processedMedia = mediaRename.size
-        continue
-      }
-      if (!packageSafeNames.has(safeFilename)) {
-        packageEntries.push({ filename: safeFilename, blob: mediaBlob })
-        packageBytes += mediaBlob.size
-        packageSafeNames.add(safeFilename)
-      }
-      packageRenames.push([filename, safeFilename])
     }
     await flushPackage()
     for (const entry of eligible) {
+      const referencedMedia = new Set([...entry.item.images, ...entry.item.audios])
       for (const [fieldName, value] of Object.entries(entry.mappedFields)) {
-        let updated = value
-        for (const [original, safe] of mediaRename) {
-          if (updated === original) updated = safe
-          if (updated === `[sound:${original}]`) updated = `[sound:${safe}]`
-        }
-        entry.mappedFields[fieldName] = updated
+        entry.mappedFields[fieldName] = rewriteMediaFieldValue(
+          value,
+          referencedMedia,
+          mediaRename,
+        )
       }
     }
   }
 
+  const cardPackageMaxItems = Math.max(1, Math.min(
+    capabilities.cardPackageMaxItems || 1_000,
+    capabilities.cardPackageTargetItems || capabilities.cardBatchMaxItems || 500,
+  ))
+  const cardPackageMaxBytes = Math.min(
+    capabilities.cardPackageMaxBytes || capabilities.mediaPackageMaxBytes,
+    capabilities.cardPackageMaxUncompressedBytes || capabilities.mediaPackageMaxUncompressedBytes,
+  )
+  const toCardPackageRecord = ({
+    item,
+    contentHash,
+    targetDeckPath,
+    targetNoteTypeId,
+    sourceModelId,
+    mappedFields,
+  }: PreparedSyncNote) => ({
+    ankiNoteId: item.info.noteId,
+    sourceModelId,
+    sourceDeckId: item.sourceDeckId,
+    sourceDeckPath: item.sourceDeckPath,
+    contentHash,
+    note: {
+      deckName: targetDeckPath,
+      modelName: targetNoteTypeId,
+      fields: mappedFields,
+      tags: item.info.tags,
+    },
+  })
   let totalSynced = 0
   let cardPackageSequence = 0
-  for (const batch of chunks(eligible, 50)) {
-    const cards = batch.map(({ item, contentHash, targetDeckPath, targetNoteTypeId, sourceModelId, mappedFields }) => ({
-      ankiNoteId: item.info.noteId,
-      sourceModelId,
-      sourceDeckId: item.sourceDeckId,
-      sourceDeckPath: item.sourceDeckPath,
-      contentHash,
-      note: { deckName: targetDeckPath, modelName: targetNoteTypeId, fields: mappedFields, tags: item.info.tags },
-    }))
+  const cardBatches = chunkNdjsonItems(
+    eligible,
+    toCardPackageRecord,
+    cardPackageMaxItems,
+    cardPackageMaxBytes,
+  )
+  for (const batch of cardBatches) {
+    const cards = batch.map(toCardPackageRecord)
     try {
       const cardPackage = await buildCardNdjsonPackage(cards)
       const cardPackageHash = await calculateBinaryHash(await cardPackage.blob.arrayBuffer())
@@ -479,7 +762,7 @@ export async function executeAnkiSync(
             cardPackageHash,
             cardPackage.contentEncoding,
           ),
-        (delayMs) => new Promise((resolve) => window.setTimeout(resolve, delayMs))
+        (delayMs) => new Promise((resolve) => globalThis.setTimeout(resolve, delayMs))
       )
       cardPackageSequence++
       const byNote = indexImportCardResults(result.results)
@@ -502,17 +785,157 @@ export async function executeAnkiSync(
     }
     onProgress?.({
       phase: 'uploading', totalNotes: eligible.length, processedNotes: totalSynced,
-      totalMedia: uniqueMedia.size, processedMedia,
+      totalMedia: eligibleMedia.size, processedMedia,
       currentMessage: `Đã đồng bộ ${totalSynced}/${eligible.length} note...`,
     })
   }
 
-  await ankiImportApi.completeSession(session.importSessionId)
+  let progressPackageSequence = 0
+  const unmappedHistoryCardIds = new Set<number>()
+  const mappedDuringProgress = new Set<number>()
+  for (const batch of chunks(progressRecords, 500)) {
+    try {
+      const syncPackage = await buildCardNdjsonPackage(batch)
+      const packageHash = await calculateBinaryHash(await syncPackage.blob.arrayBuffer())
+      const result = await uploadPackageWithRetry(
+        () => ankiImportApi.uploadSyncPackage(
+          session.importSessionId,
+          'progress',
+          progressPackageSequence,
+          syncPackage.blob,
+          packageHash,
+          syncPackage.contentEncoding,
+        ),
+        (delayMs) => new Promise((resolve) => globalThis.setTimeout(resolve, delayMs)),
+      )
+      progressPackageSequence++
+      for (const outcome of result.results) {
+        if (outcome.state === 'failed') {
+          const sourceCardId = Number(outcome.sourceCardId)
+          if (Number.isFinite(sourceCardId)) unmappedHistoryCardIds.add(sourceCardId)
+        } else {
+          const sourceCardId = Number(outcome.sourceCardId)
+          if (Number.isFinite(sourceCardId)) mappedDuringProgress.add(sourceCardId)
+        }
+        if (outcome.state === 'failed' || outcome.state === 'due_unresolved') {
+          errors.push(`Card Anki #${outcome.sourceCardId}: ${outcome.error || 'Không đồng bộ được tiến độ.'}`)
+        }
+      }
+    } catch (error) {
+      for (const record of batch) unmappedHistoryCardIds.add(record.sourceCardId)
+      errors.push(`Lỗi đồng bộ tiến độ: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+
+  try {
+    for (const batch of chunks(schedulerEligibleNotes, 500)) {
+      const response = await ankiImportApi.getNoteStatuses(
+        session.importSessionId,
+        batch.map((entry) => ({
+          ankiNoteId: entry.item.info.noteId,
+          contentHash: entry.contentHash,
+          cards: entry.progressRecords.map((record) => ({
+            sourceCardId: record.sourceCardId,
+            snapshotHash: record.snapshotHash,
+          })),
+        })),
+      )
+      for (const state of response.notes) serverStateByNote.set(state.ankiNoteId, state)
+    }
+  } catch (error) {
+    errors.push(`Không thể xác nhận card đã map sau khi đồng bộ progress: ${error instanceof Error ? error.message : String(error)}`)
+  }
+
+  const historyCandidates: Array<{ card: AnkiCardInfo; reviewCursor: number }> = []
+  for (const entry of schedulerEligibleNotes) {
+    const states = new Map(
+      (serverStateByNote.get(entry.item.info.noteId)?.cards || [])
+        .map((card) => [Number(card.sourceCardId), card] as const),
+    )
+    for (const record of entry.progressRecords) {
+      const card = cardsInfoMap.get(record.sourceCardId)
+      const state = states.get(record.sourceCardId)
+      if (!card || !shouldQueueAnkiHistory({
+        reps: card.reps,
+        syncMode,
+        progressState: state?.progressState,
+        reviewCursor: state?.reviewCursor,
+        progressUploadFailed: unmappedHistoryCardIds.has(record.sourceCardId),
+        mappedDuringProgress: mappedDuringProgress.has(record.sourceCardId),
+      })) continue
+      const cursor = Number(state?.reviewCursor || 0)
+      historyCandidates.push({ card, reviewCursor: Number.isFinite(cursor) ? cursor : 0 })
+    }
+  }
+
+  const reviewRecords: ReturnType<typeof ankiReviewRecord>[] = []
+  try {
+    for (const batch of chunks(historyCandidates, 500)) {
+      const response = await ankiConnectClient.getReviewsOfCards(
+        batch.map((entry) => entry.card.cardId),
+        endpoint,
+      )
+      for (const entry of batch) {
+        for (const log of response[entry.card.cardId] || []) {
+          if (log.id > entry.reviewCursor) reviewRecords.push(ankiReviewRecord(entry.card.cardId, log))
+        }
+      }
+    }
+  } catch (error) {
+    errors.push(`Không đọc đủ lịch sử ôn tập từ Anki: ${error instanceof Error ? error.message : String(error)}`)
+  }
+
+  reviewRecords.sort((left, right) => left.sourceReviewId - right.sourceReviewId)
+  let reviewPackageSequence = 0
+  const blockedReviewCardIds = new Set<number>()
+  for (const batch of chunks(reviewRecords, 500)) {
+    const uploadBatch = batch.filter((record) => !blockedReviewCardIds.has(record.sourceCardId))
+    if (uploadBatch.length === 0) continue
+    try {
+      const syncPackage = await buildCardNdjsonPackage(uploadBatch)
+      const packageHash = await calculateBinaryHash(await syncPackage.blob.arrayBuffer())
+      const result = await uploadPackageWithRetry(
+        () => ankiImportApi.uploadSyncPackage(
+          session.importSessionId,
+          'reviews',
+          reviewPackageSequence,
+          syncPackage.blob,
+          packageHash,
+          syncPackage.contentEncoding,
+        ),
+        (delayMs) => new Promise((resolve) => globalThis.setTimeout(resolve, delayMs)),
+      )
+      reviewPackageSequence++
+      for (const outcome of result.results) {
+        if (outcome.state === 'failed') {
+          const sourceCardId = Number(outcome.sourceCardId)
+          if (Number.isFinite(sourceCardId)) blockedReviewCardIds.add(sourceCardId)
+          errors.push(`Revlog Anki #${outcome.sourceReviewId}: ${outcome.error || 'Không nhập được lịch sử.'}`)
+        }
+      }
+    } catch (error) {
+      errors.push(`Lỗi đồng bộ lịch sử ôn tập: ${error instanceof Error ? error.message : String(error)}`)
+      break
+    }
+  }
+
+  try {
+    await ankiImportApi.completeSession(session.importSessionId, eligible.length)
+  } catch (error) {
+    await ankiImportApi.cancelSession(session.importSessionId).catch(() => undefined)
+    errors.push(`Không thể chốt phiên đồng bộ: ${error instanceof Error ? error.message : String(error)}`)
+  }
 
   onProgress?.({
     phase: 'completed', totalNotes: eligible.length, processedNotes: totalSynced,
-    totalMedia: uniqueMedia.size, processedMedia,
+    totalMedia: eligibleMedia.size, processedMedia,
     currentMessage: `Hoàn tất đồng bộ ${totalSynced} note.`,
   })
-  return { success: errors.length === 0, totalSynced, totalMediaDetected: uniqueMedia.size, errors }
+  return {
+    success: errors.length === 0,
+    totalSynced,
+    totalSkipped: preparedNotes.length - eligible.length,
+    totalMediaDetected: Math.max(0, eligibleMedia.size - processedMedia),
+    errors,
+  }
 }

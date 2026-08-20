@@ -27,6 +27,12 @@ def get_admin_order_detail(order_id: str) -> dict[str, Any] | None:
 
 
 def get_user_order_detail(*, order_id: str, user_id: int) -> dict[str, Any] | None:
+    from app.services import payment_service
+
+    try:
+        payment_service.get_order_detail_for_user(order_id=order_id, user_id=user_id)
+    except Exception:
+        pass
     order = order_queries.get_order_detail_for_user(order_id=order_id, user_id=user_id)
     if order is None:
         return None

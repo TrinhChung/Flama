@@ -23,21 +23,18 @@ def get_ticket_by_code(ticket_code: str) -> SupportTicket | None:
 
 
 def list_user_tickets(user_id: int | None, user_email: str | None = None) -> list[SupportTicket]:
-    query = SupportTicket.query
-    if user_id is not None:
-        if user_email:
-            query = query.filter(
-                or_(
-                    SupportTicket.user_id == user_id,
-                    SupportTicket.user_email == user_email,
-                )
-            )
-        else:
-            query = query.filter(SupportTicket.user_id == user_id)
-    elif user_email:
-        query = query.filter(SupportTicket.user_email == user_email)
-    else:
+    if user_id is None:
         return []
+    query = SupportTicket.query
+    if user_email:
+        query = query.filter(
+            or_(
+                SupportTicket.user_id == user_id,
+                SupportTicket.user_email == user_email,
+            )
+        )
+    else:
+        query = query.filter(SupportTicket.user_id == user_id)
 
     return query.order_by(SupportTicket.created_at.desc()).all()
 

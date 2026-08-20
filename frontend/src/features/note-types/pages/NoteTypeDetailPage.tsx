@@ -3,10 +3,12 @@ import {
   ArrowLeft,
   Check,
   CheckCircle,
+  ExternalLink,
   Plus,
   RotateCcw,
   Share2,
   SlidersHorizontal,
+  Sparkles,
 } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useParams } from 'react-router-dom'
@@ -16,8 +18,9 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { AmbientBackground } from '@/components/ambient-background'
 import { NoteTypeLivePreview } from '../components/NoteTypeLivePreview'
-import { Page } from '@/shared/components/Page'
+import { Page, PageHeader } from '@/shared/components/Page'
 import { PageError, PageLoading } from '@/shared/components/PageState'
 
 type FieldDefItem = {
@@ -219,55 +222,67 @@ export function NoteTypeDetailPage() {
   if (detailQuery.error) return <Page><PageError error={detailQuery.error} /></Page>
 
   return (
-    <Page className="w-full max-w-none px-4 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4 sm:space-y-5">
-      {/* Top Header Row */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-2 sm:mb-3">
-        <div className="min-w-0">
-          <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground truncate">
-            {noteType?.name || 'NoteType Detail'}
-          </h2>
-          <span className="text-xs text-muted-foreground">Field + template management</span>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" size="sm" asChild className="h-8 sm:h-9 px-3 text-xs font-semibold rounded-lg">
-            <Link to="/flashcards/note-types">
-              <ArrowLeft className="size-3.5 mr-1" /> Back
-            </Link>
-          </Button>
+    <Page className="w-full max-w-7xl px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-6">
+      <AmbientBackground intensity="subtle" />
 
-          {noteType?.publish_status === 'published' || noteType?.publish_status === 'unlisted' ? (
-            <Button variant="outline" size="sm" asChild className="h-8 sm:h-9 px-3 text-xs font-semibold border-emerald-500/40 text-emerald-600 dark:text-emerald-400 rounded-lg">
-              <Link to={`/marketplace/note-types/${noteTypeId}`}>
-                <CheckCircle className="size-3.5 mr-1 text-emerald-500" /> View on Marketplace
+      {/* Standardized Flama PageHeader */}
+      <PageHeader
+        title={noteType?.name || 'Chi tiết Loại thẻ'}
+        description="Tùy chỉnh mã Front HTML, Back HTML, CSS và kiểm tra trực tiếp hiệu ứng hiển thị."
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="outline" size="sm" asChild className="h-8 sm:h-9 px-3 text-xs font-semibold rounded-xl">
+              <Link to="/flashcards/note-types">
+                <ArrowLeft className="size-3.5 mr-1.5" /> Quay lại
               </Link>
             </Button>
-          ) : (
-            <Button variant="secondary" size="sm" asChild className="h-8 sm:h-9 px-3 text-xs font-semibold bg-slate-900 text-white hover:bg-slate-800 rounded-lg">
-              <Link to={`/marketplace/note-types/publish?id=${noteTypeId}`}>
-                <Share2 className="size-3.5 mr-1 text-orange-400" /> Share Listing
+
+            {noteType?.publish_status === 'published' || noteType?.publish_status === 'unlisted' ? (
+              <Button variant="outline" size="sm" asChild className="h-8 sm:h-9 px-3 text-xs font-semibold border-emerald-500/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 rounded-xl">
+                <Link to={`/marketplace/note-types/${noteTypeId}`}>
+                  <CheckCircle className="size-3.5 mr-1.5 text-emerald-500" /> Xem trên Marketplace
+                </Link>
+              </Button>
+            ) : (
+              <Button size="sm" asChild className="h-8 sm:h-9 px-3 text-xs font-bold rounded-xl shadow-xs">
+                <Link to={`/marketplace/note-types/publish?id=${noteTypeId}`}>
+                  <Share2 className="size-3.5 mr-1.5" /> Chia sẻ lên Kho
+                </Link>
+              </Button>
+            )}
+
+            <Button
+              variant="outline"
+              size="sm"
+              asChild
+              className="h-8 sm:h-9 px-3 text-xs font-semibold rounded-xl border-primary/30 text-primary hover:bg-primary/10"
+            >
+              <Link to="/flashcards/note-types/guide" target="_blank" rel="noopener noreferrer">
+                <Sparkles className="size-3.5 mr-1.5 text-primary" /> Hướng Dẫn & Prompt AI
+                <ExternalLink className="size-3 ml-1 opacity-70" />
               </Link>
             </Button>
-          )}
 
-          <Button variant="outline" size="sm" asChild className="h-8 sm:h-9 px-3 text-xs font-semibold rounded-lg">
-            <Link to={`/flashcards/note-types/${noteTypeId}/fields`}>
-              <SlidersHorizontal className="size-3.5 mr-1" /> Edit Fields
-            </Link>
-          </Button>
-        </div>
-      </div>
+            <Button variant="outline" size="sm" asChild className="h-8 sm:h-9 px-3 text-xs font-semibold rounded-xl">
+              <Link to={`/flashcards/note-types/${noteTypeId}/fields`}>
+                <SlidersHorizontal className="size-3.5 mr-1.5" /> Quản lý Trường
+              </Link>
+            </Button>
+          </div>
+        }
+      />
 
-      <div className="grid gap-4 lg:grid-cols-12 items-stretch mb-4">
+      <div className="grid gap-5 lg:grid-cols-12 items-stretch">
         {/* Left Column: Template Editor */}
         <div className="lg:col-span-6 flex flex-col">
-          <Card className="p-4 sm:p-5 border-0 sm:border border-border/80 shadow-none sm:shadow-xs flex-1 flex flex-col rounded-2xl">
+          <Card className="p-4 sm:p-5 border border-border/80 shadow-xs flex-1 flex flex-col rounded-2xl bg-card">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-3">
-              <h3 className="text-sm font-semibold text-foreground">Template Editor</h3>
-              <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto pb-0.5">
+              <h3 className="text-sm font-bold text-foreground">Trình Soạn Thảo Template</h3>
+              <div className="flex items-center gap-1.5 sm:gap-2 w-full sm:w-auto overflow-x-auto pb-0.5">
                 <NativeSelect
                   value={selectedTemplateId || ''}
                   onChange={(e) => setSelectedTemplateId(e.target.value)}
-                  className="h-8 sm:h-9 text-xs flex-1 sm:w-40 min-w-[120px] rounded-lg"
+                  className="h-8 sm:h-9 text-xs font-medium flex-1 sm:w-40 min-w-[120px] rounded-xl bg-background"
                 >
                   {templates.map((tmpl) => (
                     <NativeSelectOption key={tmpl.id} value={tmpl.id}>
@@ -279,31 +294,38 @@ export function NoteTypeDetailPage() {
                 <Button
                   size="sm"
                   variant="outline"
-                  className="h-8 sm:h-9 px-3 text-xs font-semibold rounded-lg shrink-0"
+                  className="h-8 sm:h-9 px-2.5 text-xs font-semibold rounded-xl shrink-0"
                   onClick={() => createTemplateMutation.mutate()}
                 >
-                  <Plus className="size-3.5 mr-1" /> New
+                  <Plus className="size-3.5 mr-1" /> Mới
                 </Button>
 
                 <Button
                   size="sm"
-                  variant="outline"
-                  className="h-8 sm:h-9 px-3 text-xs font-semibold text-amber-700 hover:bg-amber-50 rounded-lg shrink-0"
+                  variant="ghost"
+                  className="h-8 sm:h-9 px-2.5 text-xs font-semibold text-destructive hover:bg-destructive/10 rounded-xl shrink-0"
                   onClick={() => {
                     if (window.confirm('Khôi phục template về mặc định ban đầu?')) {
                       resetTemplateMutation.mutate()
                     }
                   }}
+                  title="Đặt lại template mặc định"
                 >
                   <RotateCcw className="size-3.5 mr-1" /> Reset
                 </Button>
               </div>
             </div>
 
-            {/* Placeholder Toolbar */}
-            <div className="mb-3">
-              <span className="text-xs text-muted-foreground">Insert placeholder:</span>
-              <div className="flex flex-wrap gap-1.5 mt-1.5 max-h-28 overflow-y-auto pr-0.5">
+            {/* Placeholder Toolbar with Horizontal Touch Scroll & Wrap */}
+            <div className="mb-3 space-y-1.5">
+              <div className="flex items-center justify-between text-xs font-semibold text-muted-foreground">
+                <span>Chèn trường dữ liệu (Placeholders):</span>
+                <span className="text-[10px] font-normal sm:hidden text-muted-foreground">(Chạm để chèn)</span>
+              </div>
+              <div
+                className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none touch-pan-x overscroll-x-contain sm:flex-wrap"
+                style={{ WebkitOverflowScrolling: 'touch' }}
+              >
                 {fields.map((field) => (
                   <Button
                     key={field.id}
@@ -311,7 +333,7 @@ export function NoteTypeDetailPage() {
                     variant="outline"
                     size="sm"
                     onClick={() => insertPlaceholder(field.name)}
-                    className="h-7 sm:h-8 px-2 sm:px-2.5 text-xs font-mono text-foreground hover:bg-orange-50 hover:border-orange-300 hover:text-orange-700 transition-all cursor-pointer rounded-md"
+                    className="shrink-0 h-7 px-2.5 text-xs font-mono text-foreground hover:bg-primary/10 hover:border-primary/40 hover:text-primary transition-all cursor-pointer rounded-lg border-border/80"
                   >
                     {`{{${field.name}}}`}
                   </Button>
@@ -327,14 +349,14 @@ export function NoteTypeDetailPage() {
               onValueChange={(val) => setActiveTab(val as 'front' | 'back' | 'css')}
               className="flex-1 flex flex-col"
             >
-              <TabsList className="grid grid-cols-3 w-full h-8 sm:h-9 p-1 mb-2 rounded-lg">
-                <TabsTrigger value="front" className="text-xs font-semibold py-1 rounded-md">
+              <TabsList className="grid grid-cols-3 w-full h-9 p-1 mb-2 rounded-xl">
+                <TabsTrigger value="front" className="text-xs font-semibold py-1 rounded-lg">
                   Front HTML
                 </TabsTrigger>
-                <TabsTrigger value="back" className="text-xs font-semibold py-1 rounded-md">
+                <TabsTrigger value="back" className="text-xs font-semibold py-1 rounded-lg">
                   Back HTML
                 </TabsTrigger>
-                <TabsTrigger value="css" className="text-xs font-semibold py-1 rounded-md">
+                <TabsTrigger value="css" className="text-xs font-semibold py-1 rounded-lg">
                   Shared CSS
                 </TabsTrigger>
               </TabsList>
@@ -387,15 +409,15 @@ export function NoteTypeDetailPage() {
                     shared_css: sharedCss,
                   })
                 }
-                className="bg-primary text-primary-foreground font-bold px-5 h-8 sm:h-9 text-xs sm:text-sm rounded-lg shadow-xs"
+                className="w-full sm:w-auto font-bold px-5 h-9 sm:h-10 text-xs sm:text-sm rounded-xl shadow-xs justify-center"
               >
-                <Check className="size-3.5 mr-1" /> Save
+                <Check className="size-3.5 mr-1.5" /> Lưu Template
               </Button>
             </div>
           </Card>
         </div>
 
-        {/* Right Column: Live Preview Frame (Reusing NoteTypeLivePreview) */}
+        {/* Right Column: Live Preview Frame */}
         <div className="lg:col-span-6 flex flex-col">
           <NoteTypeLivePreview
             cardId={`note-type-live-preview-${noteTypeId}`}
@@ -410,8 +432,8 @@ export function NoteTypeDetailPage() {
             fieldDefs={fields}
             isLoading={isPreviewLoading}
             error={previewError}
-            title="Live Preview"
-            subtitle="(Uses sample field data)"
+            title="Xem Trước Trực Tiếp (Live Preview)"
+            subtitle="(Hiển thị mô phỏng dữ liệu thẻ mẫu)"
           />
         </div>
       </div>

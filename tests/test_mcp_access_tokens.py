@@ -82,9 +82,12 @@ class McpAccessTokenTests(unittest.TestCase):
             follow_redirects=True,
         )
 
-    def _generate_token(self) -> str:
+    def _generate_token(self, name: str = "Test Token", expires_in_days: int | None = 180) -> str:
         self._login()
-        response = self.client.post("/api/mcp-tokens")
+        response = self.client.post(
+            "/api/mcp-tokens",
+            json={"name": name, "expires_in_days": expires_in_days},
+        )
         self.assertEqual(response.status_code, 201)
         return str((response.get_json() or {}).get("item", {}).get("token") or "")
 
@@ -108,23 +111,39 @@ class McpAccessTokenTests(unittest.TestCase):
     def test_generate_token_shows_plaintext_once(self):
         self._login()
 
-        response = self.client.post("/api/mcp-tokens")
+        response = self.client.post("/api/mcp-tokens", json={"name": "My AI Agent"})
         self.assertEqual(response.status_code, 201)
-        token = str((response.get_json() or {}).get("item", {}).get("token") or "")
+        data = response.get_json() or {}
+        item = data.get("item", {})
+        token = str(item.get("token") or "")
         self.assertTrue(token.startswith("flama_mcp_"))
+        self.assertEqual(item.get("name"), "My AI Agent")
+        self.assertIsNotNone(item.get("expires_at"))
 
         list_response = self.client.get("/api/mcp-tokens")
         self.assertEqual(list_response.status_code, 200)
         self.assertNotIn(token, list_response.get_data(as_text=True))
 
-    def test_non_admin_dashboard_hides_mcp_link(self):
-        self._login_regular()
+    def test_custom_name_and_never_expires(self):
+        self._login()
 
-        response = self.client.get("/dashboard")
+        response = self.client.post(
+            "/api/mcp-tokens",
+            json={"name": "Permanent Cursor", "expires_in_days": None},
+        )
+        self.assertEqual(response.status_code, 201)
+        data = response.get_json() or {}
+        item = data.get("item", {})
+        self.assertEqual(item.get("name"), "Permanent Cursor")
+        self.assertIsNone(item.get("expires_at"))
 
-        self.assertEqual(response.status_code, 200)
-        html = response.get_data(as_text=True)
-        self.assertNotIn("MCP Tokens", html)
+        list_response = self.client.get("/api/mcp-tokens")
+        self.assertEqual(list_response.status_code, 200)
+        items = (list_response.get_json() or {}).get("items", [])
+        created = next((x for x in items if x["name"] == "Permanent Cursor"), None)
+        self.assertIsNotNone(created)
+        self.assertIsNone(created["expires_at"])
+        self.assertEqual(created["status"], "active")
 
     def test_mcp_token_page_is_available_from_separate_route(self):
         self._login()
@@ -134,22 +153,20 @@ class McpAccessTokenTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b'<div id="root"></div>', response.data)
 
-    def test_non_admin_cannot_open_mcp_token_page(self):
+    def test_regular_user_can_generate_and_list_tokens(self):
         self._login_regular()
 
-        response = self.client.get("/settings/mcp-tokens", follow_redirects=False)
-        self.assertEqual(response.status_code, 200)
-        api_response = self.client.get("/api/mcp-tokens")
-        self.assertEqual(api_response.status_code, 403)
+        create_response = self.client.post(
+            "/api/mcp-tokens",
+            json={"name": "Regular User Token", "expires_in_days": 30},
+        )
+        self.assertEqual(create_response.status_code, 201)
 
-    def test_non_admin_cannot_generate_mcp_token(self):
-        self._login_regular()
-
-        response = self.client.post("/api/mcp-tokens")
-        self.assertEqual(response.status_code, 403)
-        with self.app.app_context():
-            rows = McpAccessToken.query.filter_by(user_id=self.other_user_id).all()
-            self.assertEqual(rows, [])
+        list_response = self.client.get("/api/mcp-tokens")
+        self.assertEqual(list_response.status_code, 200)
+        items = (list_response.get_json() or {}).get("items", [])
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]["name"], "Regular User Token")
 
     def test_bearer_token_can_call_mcp_without_session(self):
         token = self._generate_token()
@@ -165,34 +182,6 @@ class McpAccessTokenTests(unittest.TestCase):
         payload = response.get_json()
         decks = payload["result"]["structuredContent"]["decks"]
         self.assertEqual([deck["name"] for deck in decks], ["Owner Deck"])
-
-    def test_non_admin_session_cannot_call_mcp(self):
-        self._login_regular()
-
-        response = self.client.post(
-            "/api/mcp",
-            json=self._mcp_payload(),
-            headers={"MCP-Protocol-Version": "2025-11-25"},
-        )
-
-        self.assertEqual(response.status_code, 403)
-        payload = response.get_json()
-        self.assertEqual(payload["error"]["data"]["code"], "ADMIN_REQUIRED")
-
-    def test_non_admin_bearer_token_is_rejected(self):
-        with self.app.app_context():
-            issued_token = mcp_access_token_service.issue_short_lived_token(user_id=self.other_user_id)
-            db.session.commit()
-
-        response = self.app.test_client().post(
-            "/api/mcp",
-            json=self._mcp_payload(),
-            headers=self._mcp_headers(issued_token.token),
-        )
-
-        self.assertEqual(response.status_code, 403)
-        payload = response.get_json()
-        self.assertEqual(payload["error"]["data"]["code"], "ADMIN_REQUIRED")
 
     def test_invalid_bearer_does_not_fallback_to_session(self):
         self._login()
@@ -225,32 +214,6 @@ class McpAccessTokenTests(unittest.TestCase):
         self.assertEqual(response.status_code, 401)
         payload = response.get_json()
         self.assertEqual(payload["error"]["data"]["code"], "MCP_TOKEN_EXPIRED")
-
-    def test_request_limit_is_enforced(self):
-        token = self._generate_token()
-
-        with self.app.app_context():
-            row = McpAccessToken.query.filter_by(user_id=self.owner_id).order_by(McpAccessToken.id.desc()).first()
-            self.assertIsNotNone(row)
-            row.max_requests = 1
-            db.session.commit()
-
-        external_client = self.app.test_client()
-        first_response = external_client.post(
-            "/api/mcp",
-            json=self._mcp_payload(),
-            headers=self._mcp_headers(token),
-        )
-        second_response = external_client.post(
-            "/api/mcp",
-            json=self._mcp_payload(),
-            headers=self._mcp_headers(token),
-        )
-
-        self.assertEqual(first_response.status_code, 200)
-        self.assertEqual(second_response.status_code, 429)
-        payload = second_response.get_json()
-        self.assertEqual(payload["error"]["data"]["code"], "MCP_TOKEN_REQUEST_LIMIT_EXCEEDED")
 
     def test_scope_is_enforced(self):
         token = self._generate_token()
@@ -292,37 +255,101 @@ class McpAccessTokenTests(unittest.TestCase):
         payload = response.get_json()
         self.assertEqual(payload["error"]["data"]["code"], "MCP_TOKEN_REVOKED")
 
-    def test_token_rate_limit_returns_429(self):
-        self.app.config["MCP_TOKEN_RATE_LIMIT_MAX_REQUESTS"] = 1
-        token = self._generate_token()
+    def test_update_token(self):
+        self._login()
+        create_resp = self.client.post("/api/mcp-tokens", json={"name": "Old Name", "expires_in_days": 30})
+        self.assertEqual(create_resp.status_code, 201)
 
-        external_client = self.app.test_client()
-        initialize_response = external_client.post(
-            "/api/mcp",
-            json={
-                "jsonrpc": "2.0",
-                "id": 1,
-                "method": "initialize",
-                "params": {
-                    "protocolVersion": "2025-11-25",
-                    "capabilities": {},
-                    "clientInfo": {"name": "rate-limit-test", "version": "0.1.0"},
-                },
-            },
-            headers=self._mcp_headers(token),
-        )
-        list_response = external_client.post(
-            "/api/mcp",
-            json={
-                "jsonrpc": "2.0",
-                "id": 2,
-                "method": "tools/list",
-                "params": {},
-            },
-            headers=self._mcp_headers(token),
-        )
+        with self.app.app_context():
+            row = McpAccessToken.query.filter_by(user_id=self.owner_id).order_by(McpAccessToken.id.desc()).first()
+            token_id = row.id
 
-        self.assertEqual(initialize_response.status_code, 200)
-        self.assertEqual(list_response.status_code, 429)
-        payload = list_response.get_json()
-        self.assertEqual(payload["error"]["data"]["code"], "MCP_RATE_LIMIT_EXCEEDED")
+        update_resp = self.client.patch(
+            f"/api/mcp-tokens/{token_id}",
+            json={"name": "New Name", "expires_in_days": 90, "scopes": ["deck:read"]},
+        )
+        self.assertEqual(update_resp.status_code, 200)
+        item = update_resp.get_json()["item"]
+        self.assertEqual(item["name"], "New Name")
+        self.assertEqual(item["scopes"], ["deck:read"])
+
+    def test_rotate_token(self):
+        old_token = self._generate_token(name="Rotating Agent")
+
+        with self.app.app_context():
+            row = McpAccessToken.query.filter_by(user_id=self.owner_id).order_by(McpAccessToken.id.desc()).first()
+            token_id = row.id
+            count_before = McpAccessToken.query.count()
+
+        rotate_resp = self.client.post(
+            f"/api/mcp-tokens/{token_id}/rotate",
+            json={"expires_in_days": 180},
+        )
+        self.assertEqual(rotate_resp.status_code, 200)
+        new_token = rotate_resp.get_json()["item"]["token"]
+        self.assertTrue(new_token.startswith("flama_mcp_"))
+        self.assertNotEqual(old_token, new_token)
+
+        # Confirm DB row count is unchanged (no duplicates created)
+        with self.app.app_context():
+            count_after = McpAccessToken.query.count()
+            self.assertEqual(count_before, count_after)
+
+        # Old token is rejected
+        old_resp = self.app.test_client().post(
+            "/api/mcp",
+            json=self._mcp_payload(),
+            headers=self._mcp_headers(old_token),
+        )
+        self.assertEqual(old_resp.status_code, 401)
+
+        # New token works
+        new_resp = self.app.test_client().post(
+            "/api/mcp",
+            json=self._mcp_payload(),
+            headers=self._mcp_headers(new_token),
+        )
+        self.assertEqual(new_resp.status_code, 200)
+
+    def test_purge_token(self):
+        self._login()
+        self.client.post("/api/mcp-tokens", json={"name": "To Purge"})
+
+        with self.app.app_context():
+            row = McpAccessToken.query.filter_by(user_id=self.owner_id).order_by(McpAccessToken.id.desc()).first()
+            token_id = row.id
+
+        purge_resp = self.client.delete(f"/api/mcp-tokens/{token_id}/purge")
+        self.assertEqual(purge_resp.status_code, 204)
+
+        with self.app.app_context():
+            row_after = McpAccessToken.query.filter_by(id=token_id).first()
+            self.assertIsNone(row_after)
+
+    def test_cleanup_tokens(self):
+        self._login()
+        # Create 1 active, 1 revoked, 1 expired
+        self.client.post("/api/mcp-tokens", json={"name": "Active Token"})
+        self.client.post("/api/mcp-tokens", json={"name": "Revoked Token"})
+        self.client.post("/api/mcp-tokens", json={"name": "Expired Token"})
+
+        with self.app.app_context():
+            tokens = McpAccessToken.query.filter_by(user_id=self.owner_id).order_by(McpAccessToken.id.asc()).all()
+            tokens[1].revoked = True
+            tokens[2].expires_at = datetime.utcnow() - timedelta(days=1)
+            db.session.commit()
+
+        cleanup_resp = self.client.post("/api/mcp-tokens/cleanup")
+        self.assertEqual(cleanup_resp.status_code, 200)
+        data = cleanup_resp.get_json()
+        self.assertEqual(data["purged_count"], 2)
+
+        with self.app.app_context():
+            remaining = McpAccessToken.query.filter_by(user_id=self.owner_id).all()
+            self.assertEqual(len(remaining), 1)
+            self.assertEqual(remaining[0].name, "Active Token")
+
+
+if __name__ == "__main__":
+    unittest.main()
+

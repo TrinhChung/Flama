@@ -59,6 +59,11 @@ class DeckMarketplaceItem(db.Model):
         index=True,
     )
     working_revision = db.Column(db.BigInteger, nullable=False, default=0)
+    # Highest working revision for which every source mutation was recorded in
+    # deck_working_dirty_entities.  A mismatch makes release preview/publish
+    # fall back to the full-deck comparison instead of trusting an incomplete
+    # sparse change set.
+    dirty_tracking_revision = db.Column(db.BigInteger, nullable=False, default=0)
     publish_status = db.Column(
         db.Enum("private", "published", "unlisted", "archived", name="deck_marketplace_publish_status_enum", native_enum=False),
         nullable=False,

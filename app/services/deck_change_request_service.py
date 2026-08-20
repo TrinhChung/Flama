@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 from collections import Counter
@@ -22,6 +23,7 @@ from models.deck_clone_field_order_override import DeckCloneFieldOrderOverride
 from models.deck_clone_note_field_override import DeckCloneNoteFieldOverride
 from models.deck_install import DeckInstall
 from models.deck_marketplace_item import DeckMarketplaceItem
+from models.deck_release import DeckRelease
 from models.field_def import FieldDef
 from models.note import Note
 
@@ -46,6 +48,28 @@ CHANGE_TYPE_FIELD_DEF_UPDATE = "field_def_update"
 CHANGE_TYPE_FIELD_DEF_DISABLE = "field_def_disable"
 CHANGE_TYPE_FIELD_DEF_ADD = "field_def_add"
 CHANGE_TYPE_FIELD_ORDER_UPDATE = "field_order_update"
+
+CHANGE_REQUEST_CHANGE_TYPES = {
+    CHANGE_TYPE_NOTE_FIELD_SET,
+    CHANGE_TYPE_NOTE_FIELD_REMOVE,
+    CHANGE_TYPE_FIELD_DEF_UPDATE,
+    CHANGE_TYPE_FIELD_DEF_DISABLE,
+    CHANGE_TYPE_FIELD_DEF_ADD,
+    CHANGE_TYPE_FIELD_ORDER_UPDATE,
+}
+CHANGE_REQUEST_DIFF_FILTERS = {
+    "added": {CHANGE_TYPE_FIELD_DEF_ADD},
+    "modified": {
+        CHANGE_TYPE_NOTE_FIELD_SET,
+        CHANGE_TYPE_FIELD_DEF_UPDATE,
+        CHANGE_TYPE_FIELD_ORDER_UPDATE,
+    },
+    "removed": {CHANGE_TYPE_NOTE_FIELD_REMOVE, CHANGE_TYPE_FIELD_DEF_DISABLE},
+}
+DEFAULT_INBOX_PAGE_LIMIT = 30
+MAX_INBOX_PAGE_LIMIT = 100
+DEFAULT_ITEM_PAGE_LIMIT = 100
+MAX_ITEM_PAGE_LIMIT = 250
 
 MISSING_MARKER = {"__missing__": True}
 
@@ -97,6 +121,116 @@ def _stable_json(value: Any) -> str:
         ensure_ascii=True,
         separators=(",", ":"),
     )
+
+
+def _encode_cursor(payload: dict[str, Any]) -> str:
+    raw = _stable_json(payload).encode("utf-8")
+    return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+
+
+def _decode_cursor(raw_cursor: str | None, *, expected_kind: str) -> dict[str, Any] | None:
+    normalized = str(raw_cursor or "").strip()
+    if not normalized:
+        return None
+    try:
+        padded = normalized + "=" * (-len(normalized) % 4)
+        payload = json.loads(base64.urlsafe_b64decode(padded.encode("ascii")).decode("utf-8"))
+        if not isinstance(payload, dict) or payload.get("kind") != expected_kind:
+            raise ValueError("cursor kind mismatch")
+        return payload
+    except (ValueError, TypeError, UnicodeError, json.JSONDecodeError) as exc:
+        raise ChangeRequestError(
+            "cursor is invalid.",
+            status=400,
+            field="cursor",
+        ) from exc
+
+
+def _coerce_page_limit(
+    raw_limit: Any,
+    *,
+    default: int,
+    maximum: int,
+) -> int:
+    if raw_limit is None or str(raw_limit).strip() == "":
+        return default
+    try:
+        value = int(raw_limit)
+    except (TypeError, ValueError) as exc:
+        raise ChangeRequestError(
+            "limit must be an integer.",
+            status=400,
+            field="limit",
+        ) from exc
+    if value < 1 or value > maximum:
+        raise ChangeRequestError(
+            f"limit must be between 1 and {maximum}.",
+            status=400,
+            field="limit",
+        )
+    return value
+
+
+def _normalize_item_filters(
+    *,
+    raw_change_type: str | None,
+    query_text: str | None,
+    conflicts_only: bool,
+) -> tuple[set[str] | None, str | None, bool, str]:
+    normalized_type = str(raw_change_type or "").strip().lower()
+    normalized_query = str(query_text or "").strip()
+    if len(normalized_query) > 200:
+        raise ChangeRequestError(
+            "q must be at most 200 characters.",
+            status=400,
+            field="q",
+        )
+    change_types: set[str] | None = None
+    if normalized_type and normalized_type != "all":
+        if normalized_type == "conflict":
+            conflicts_only = True
+        elif normalized_type in CHANGE_REQUEST_DIFF_FILTERS:
+            change_types = set(CHANGE_REQUEST_DIFF_FILTERS[normalized_type])
+        elif normalized_type in CHANGE_REQUEST_CHANGE_TYPES:
+            change_types = {normalized_type}
+        else:
+            raise ChangeRequestError(
+                "type is invalid.",
+                status=400,
+                field="type",
+            )
+    filter_key = hashlib.sha256(
+        _stable_json(
+            {
+                "change_types": sorted(change_types or []),
+                "q": normalized_query,
+                "conflicts_only": bool(conflicts_only),
+            }
+        ).encode("utf-8")
+    ).hexdigest()[:16]
+    return change_types, normalized_query or None, bool(conflicts_only), filter_key
+
+
+def _load_notes_by_ids(note_ids: set[str], *, chunk_size: int = 500) -> dict[str, Note]:
+    rows_by_id: dict[str, Note] = {}
+    normalized = sorted({str(note_id) for note_id in note_ids if note_id})
+    for offset in range(0, len(normalized), chunk_size):
+        rows = Note.query.filter(Note.id.in_(normalized[offset:offset + chunk_size])).all()
+        rows_by_id.update({str(row.id): row for row in rows})
+    return rows_by_id
+
+
+def _load_field_defs_by_ids(
+    field_ids: set[str],
+    *,
+    chunk_size: int = 500,
+) -> dict[str, FieldDef]:
+    rows_by_id: dict[str, FieldDef] = {}
+    normalized = sorted({str(field_id) for field_id in field_ids if field_id})
+    for offset in range(0, len(normalized), chunk_size):
+        rows = FieldDef.query.filter(FieldDef.id.in_(normalized[offset:offset + chunk_size])).all()
+        rows_by_id.update({str(row.id): row for row in rows})
+    return rows_by_id
 
 
 def _overlay_state_payload(install: DeckInstall) -> dict[str, Any]:
@@ -365,7 +499,7 @@ def _get_request_install(request_obj: DeckChangeRequest) -> DeckInstall | None:
 
 
 def _ensure_request_view_access(request_obj: DeckChangeRequest, *, user_id: int) -> None:
-    if user_id not in {int(request_obj.requester_user_id), int(request_obj.owner_user_id)}:
+    if int(user_id) not in {int(request_obj.requester_user_id), int(request_obj.owner_user_id)}:
         raise ChangeRequestError(
             "You do not have access to this change request.",
             status=403,
@@ -385,6 +519,88 @@ def _ensure_owner_access(request_obj: DeckChangeRequest, *, user_id: int) -> Non
         raise ChangeRequestError(
             "Only the deck owner can review this change request.",
             status=403,
+        )
+
+
+def _validate_request_install_binding(
+    request_obj: DeckChangeRequest,
+    install: DeckInstall,
+    *,
+    requester_user_id: int | None = None,
+) -> None:
+    """Reject stale/corrupt request-to-install bindings before mutation."""
+
+    if str(install.id) != str(request_obj.deck_install_id or ""):
+        raise ChangeRequestError(
+            "The change request is no longer bound to its installed clone.",
+            status=409,
+            error="CHANGE_REQUEST_INSTALL_MISMATCH",
+        )
+    if str(install.deck_item_id or "") != str(request_obj.deck_item_id or ""):
+        raise ChangeRequestError(
+            "The shared deck for this request no longer matches the installed clone.",
+            status=409,
+            error="CHANGE_REQUEST_INSTALL_MISMATCH",
+        )
+    if requester_user_id is not None and int(install.user_id) != int(requester_user_id):
+        raise ChangeRequestError(
+            "Only the owner of the installed clone can modify this change request.",
+            status=403,
+        )
+
+
+def _validate_request_base_release(
+    request_obj: DeckChangeRequest,
+    install: DeckInstall,
+) -> None:
+    """Keep contribution comparison anchored to one immutable applied release."""
+
+    request_base_id = str(request_obj.base_release_id or "").strip() or None
+    install_base_id = str(install.applied_release_id or "").strip() or None
+    if request_base_id != install_base_id:
+        raise ChangeRequestError(
+            "The installed deck moved to another release. Rebuild the contribution draft.",
+            status=409,
+            error="CHANGE_REQUEST_BASE_RELEASE_CHANGED",
+        )
+    if request_base_id is None:
+        return
+    release = db.session.get(DeckRelease, request_base_id)
+    if (
+        release is None
+        or str(release.deck_item_id or "") != str(request_obj.deck_item_id or "")
+        or str(release.status or "") != "published"
+    ):
+        raise ChangeRequestError(
+            "The contribution base release is invalid.",
+            status=409,
+            error="CHANGE_REQUEST_BASE_RELEASE_INVALID",
+        )
+
+
+def _validate_install_release_for_contribution(
+    install: DeckInstall,
+    deck_item: DeckMarketplaceItem,
+) -> None:
+    release_id = str(install.applied_release_id or "").strip() or None
+    if str(install.version_mode or "") == "release" and release_id is None:
+        raise ChangeRequestError(
+            "The installed deck does not have a valid applied release.",
+            status=409,
+            error="CHANGE_REQUEST_BASE_RELEASE_INVALID",
+        )
+    if release_id is None:
+        return
+    release = db.session.get(DeckRelease, release_id)
+    if (
+        release is None
+        or str(release.deck_item_id or "") != str(deck_item.id)
+        or str(release.status or "") != "published"
+    ):
+        raise ChangeRequestError(
+            "The installed deck's applied release is invalid.",
+            status=409,
+            error="CHANGE_REQUEST_BASE_RELEASE_INVALID",
         )
 
 
@@ -422,6 +638,11 @@ def _build_local_change_payloads(
         base_field_defs = deck_release_service.get_field_defs_at_release(
             install.applied_release
         )
+    base_field_ids_by_name = {
+        str(payload.get("name") or ""): str(field_id)
+        for field_id, payload in base_field_defs.items()
+        if str(payload.get("name") or "").strip()
+    }
     removed_field_names = set(schema_view.removed_field_names or set())
     renamed_field_names = dict(schema_view.renamed_field_names or {})
     if uses_release_base:
@@ -467,10 +688,13 @@ def _build_local_change_payloads(
         )
         .all()
     )
+    live_fields_by_id = _load_field_defs_by_ids(
+        {str(row.source_field_def_id) for row in override_rows if row.source_field_def_id}
+    )
     has_order_override = order_row is not None and bool(order_row.ordered_def_ids)
 
     for override in override_rows:
-        source_field = FieldDef.query.get(override.source_field_def_id)
+        source_field = live_fields_by_id.get(str(override.source_field_def_id))
         base_payload = base_field_defs.get(str(override.source_field_def_id))
         if source_field is None and base_payload is not None:
             source_field = SimpleNamespace(
@@ -598,13 +822,25 @@ def _build_local_change_payloads(
             install.applied_release,
             {str(row.source_note_id) for row in note_override_rows},
         )
+    source_notes_by_id = _load_notes_by_ids(
+        {str(row.source_note_id) for row in note_override_rows if row.source_note_id}
+    )
+    inverse_rename_map = {
+        str(renamed_name): str(source_name)
+        for source_name, renamed_name in renamed_field_names.items()
+        if str(source_name) and str(renamed_name)
+    }
     for row in note_override_rows:
-        source_note = Note.query.get(row.source_note_id)
+        source_note = source_notes_by_id.get(str(row.source_note_id))
         if source_note is None:
             continue
+        stable_field_id = str(row.source_field_def_id or "").strip() or None
+        if stable_field_id is None:
+            lookup_name = inverse_rename_map.get(str(row.field_name), str(row.field_name))
+            stable_field_id = base_field_ids_by_name.get(lookup_name)
         release_field_name = str(
             (
-                base_field_defs.get(str(row.source_field_def_id or ""), {})
+                base_field_defs.get(str(stable_field_id or ""), {})
                 or {}
             ).get("name")
             or row.field_name
@@ -652,7 +888,7 @@ def _build_local_change_payloads(
                 "after_value": after_value,
                 "metadata_json": {
                     "source_note_id": source_note.id,
-                    "source_field_def_id": row.source_field_def_id,
+                    "source_field_def_id": stable_field_id,
                     "field_name": effective_field_name,
                     "source_note_label": _note_label(source_note),
                 },
@@ -722,6 +958,13 @@ def build_or_refresh_draft_request(
             status=409,
             error="CHANGE_REQUEST_PENDING",
         )
+    if active_request is not None:
+        _ensure_requester_access(active_request, user_id=requester_user_id)
+        _validate_request_install_binding(
+            active_request,
+            install,
+            requester_user_id=requester_user_id,
+        )
 
     item_payloads, fingerprint = _build_local_change_payloads(install)
     if not item_payloads:
@@ -753,8 +996,13 @@ def build_or_refresh_draft_request(
         db.session.add(request_obj)
         db.session.flush()
     else:
-        request_obj.items.clear()
-        request_obj.conflicts.clear()
+        DeckChangeRequestConflict.query.filter_by(
+            change_request_id=request_obj.id
+        ).delete(synchronize_session=False)
+        DeckChangeRequestItem.query.filter_by(
+            change_request_id=request_obj.id
+        ).delete(synchronize_session=False)
+        db.session.expire(request_obj, ["items", "conflicts"])
 
     request_obj.deck_install_id = install.id
     request_obj.deck_item_id = deck_item.id
@@ -829,7 +1077,12 @@ def _current_state_for_item(
     if change_type in {CHANGE_TYPE_NOTE_FIELD_SET, CHANGE_TYPE_NOTE_FIELD_REMOVE}:
         source_note_id = str(metadata.get("source_note_id") or item.source_ref_id or "").strip()
         source_field_id = str(metadata.get("source_field_def_id") or "").strip()
-        source_field = db.session.get(FieldDef, source_field_id) if source_field_id else None
+        field_defs_by_id = context.get("field_defs_by_id")
+        source_field = (
+            field_defs_by_id.get(source_field_id)
+            if isinstance(field_defs_by_id, dict) and source_field_id
+            else db.session.get(FieldDef, source_field_id) if source_field_id else None
+        )
         field_name = str(
             (source_field.name if source_field is not None else None)
             or metadata.get("field_name")
@@ -837,7 +1090,12 @@ def _current_state_for_item(
             or ""
         ).strip()
         field_name = dict(context.get("rename_map") or {}).get(field_name, field_name)
-        source_note = Note.query.get(source_note_id)
+        notes_by_id = context.get("notes_by_id")
+        source_note = (
+            notes_by_id.get(source_note_id)
+            if isinstance(notes_by_id, dict)
+            else Note.query.get(source_note_id)
+        )
         if source_note is None:
             return dict(MISSING_MARKER)
         values = _apply_schema_only_values(
@@ -850,7 +1108,13 @@ def _current_state_for_item(
         return dict(MISSING_MARKER)
 
     if change_type == CHANGE_TYPE_FIELD_DEF_UPDATE:
-        source_field = FieldDef.query.get(str(metadata.get("source_field_def_id") or item.source_ref_id or "").strip())
+        field_id = str(metadata.get("source_field_def_id") or item.source_ref_id or "").strip()
+        field_defs_by_id = context.get("field_defs_by_id")
+        source_field = (
+            field_defs_by_id.get(field_id)
+            if isinstance(field_defs_by_id, dict)
+            else FieldDef.query.get(field_id)
+        )
         if source_field is None:
             return dict(MISSING_MARKER)
         property_name = str(metadata.get("property_name") or item.path_key or "").strip()
@@ -858,7 +1122,13 @@ def _current_state_for_item(
         return snapshot.get(property_name, dict(MISSING_MARKER))
 
     if change_type == CHANGE_TYPE_FIELD_DEF_DISABLE:
-        source_field = FieldDef.query.get(str(metadata.get("source_field_def_id") or item.source_ref_id or "").strip())
+        field_id = str(metadata.get("source_field_def_id") or item.source_ref_id or "").strip()
+        field_defs_by_id = context.get("field_defs_by_id")
+        source_field = (
+            field_defs_by_id.get(field_id)
+            if isinstance(field_defs_by_id, dict)
+            else FieldDef.query.get(field_id)
+        )
         return _source_field_snapshot(source_field)
 
     if change_type == CHANGE_TYPE_FIELD_DEF_ADD:
@@ -866,14 +1136,66 @@ def _current_state_for_item(
         field_name = str(metadata.get("field_name") or item.path_key or "").strip()
         if not source_note_type_id or not field_name:
             return dict(MISSING_MARKER)
-        source_field = FieldDef.query.filter_by(note_type_id=source_note_type_id, name=field_name).first()
+        fields_by_name = context.get("fields_by_name")
+        source_field = (
+            fields_by_name.get(field_name)
+            if isinstance(fields_by_name, dict)
+            else FieldDef.query.filter_by(note_type_id=source_note_type_id, name=field_name).first()
+        )
         return _source_field_snapshot(source_field)
 
     if change_type == CHANGE_TYPE_FIELD_ORDER_UPDATE:
         source_note_type_id = str(metadata.get("source_note_type_id") or request_obj.source_note_type_id or "").strip()
+        current_order = context.get("current_field_order")
+        if isinstance(current_order, list):
+            return current_order
         return _build_current_source_order_tokens(source_note_type_id)
 
     return dict(MISSING_MARKER)
+
+
+def _preload_current_state_context(
+    request_obj: DeckChangeRequest,
+    items: list[DeckChangeRequestItem],
+    *,
+    schema_context: dict[str, Any],
+) -> dict[str, Any]:
+    """Batch-load live rows needed for conflict detection."""
+
+    note_ids: set[str] = set()
+    field_ids: set[str] = set()
+    needs_fields_by_name = False
+    needs_field_order = False
+    for item in items:
+        metadata = dict(item.metadata_json or {})
+        if item.change_type in {CHANGE_TYPE_NOTE_FIELD_SET, CHANGE_TYPE_NOTE_FIELD_REMOVE}:
+            note_id = str(metadata.get("source_note_id") or item.source_ref_id or "").strip()
+            if note_id:
+                note_ids.add(note_id)
+            field_id = str(metadata.get("source_field_def_id") or "").strip()
+            if field_id:
+                field_ids.add(field_id)
+        elif item.change_type in {CHANGE_TYPE_FIELD_DEF_UPDATE, CHANGE_TYPE_FIELD_DEF_DISABLE}:
+            field_id = str(metadata.get("source_field_def_id") or item.source_ref_id or "").strip()
+            if field_id:
+                field_ids.add(field_id)
+        elif item.change_type == CHANGE_TYPE_FIELD_DEF_ADD:
+            needs_fields_by_name = True
+        elif item.change_type == CHANGE_TYPE_FIELD_ORDER_UPDATE:
+            needs_field_order = True
+
+    context = dict(schema_context)
+    context["notes_by_id"] = _load_notes_by_ids(note_ids)
+    context["field_defs_by_id"] = _load_field_defs_by_ids(field_ids)
+    source_note_type_id = str(request_obj.source_note_type_id or "").strip()
+    if needs_fields_by_name and source_note_type_id:
+        rows = FieldDef.query.filter_by(note_type_id=source_note_type_id).all()
+        context["fields_by_name"] = {str(row.name): row for row in rows}
+    if needs_field_order:
+        context["current_field_order"] = _build_current_source_order_tokens(
+            source_note_type_id
+        )
+    return context
 
 
 def _build_conflict_for_item(
@@ -940,6 +1262,12 @@ def sync_request(
             status=409,
             error="CHANGE_REQUEST_INSTALL_MISSING",
         )
+    _validate_request_install_binding(
+        request_obj,
+        install,
+        requester_user_id=None if allow_owner_actor else actor_user_id,
+    )
+    _validate_request_base_release(request_obj, install)
 
     if enforce_overlay_fingerprint:
         current_fingerprint = compute_overlay_fingerprint(install)
@@ -955,9 +1283,15 @@ def sync_request(
                 error="CHANGE_REQUEST_STALE",
             )
 
-    context = _request_schema_context(list(request_obj.items or []), use_effective_values=True)
+    request_items = list(request_obj.items or [])
+    schema_context = _request_schema_context(request_items, use_effective_values=True)
+    context = _preload_current_state_context(
+        request_obj,
+        request_items,
+        schema_context=schema_context,
+    )
     created_conflicts = 0
-    for item in request_obj.items:
+    for item in request_items:
         existing_conflict = _primary_conflict(item)
         current_state = _current_state_for_item(request_obj, item, context=context)
         if _item_has_conflict(
@@ -1040,6 +1374,19 @@ def resolve_request_conflict(
     resolved_value: Any,
 ) -> DeckChangeRequest:
     _ensure_requester_access(request_obj, user_id=actor_user_id)
+    install = _get_request_install(request_obj)
+    if install is None:
+        raise ChangeRequestError(
+            "The installed clone for this change request no longer exists.",
+            status=409,
+            error="CHANGE_REQUEST_INSTALL_MISSING",
+        )
+    _validate_request_install_binding(
+        request_obj,
+        install,
+        requester_user_id=actor_user_id,
+    )
+    _validate_request_base_release(request_obj, install)
     if request_obj.status != REQUEST_STATUS_HAS_CONFLICT:
         raise ChangeRequestError(
             "This change request does not currently have unresolved conflicts.",
@@ -1101,8 +1448,14 @@ def resolve_request_conflict(
 
 
 def _request_has_effective_changes(request_obj: DeckChangeRequest) -> bool:
-    context = _request_schema_context(list(request_obj.items or []), use_effective_values=True)
-    for item in request_obj.items:
+    request_items = list(request_obj.items or [])
+    schema_context = _request_schema_context(request_items, use_effective_values=True)
+    context = _preload_current_state_context(
+        request_obj,
+        request_items,
+        schema_context=schema_context,
+    )
+    for item in request_items:
         if _item_is_dropped_from_request(item):
             continue
         current_state = _current_state_for_item(request_obj, item, context=context)
@@ -1198,11 +1551,169 @@ def list_incoming_requests(
     *,
     owner_user_id: int,
     deck_item_id: str | None = None,
-) -> list[DeckChangeRequest]:
-    return deck_change_request_repository.list_incoming_requests_for_owner(
+    cursor: str | None = None,
+    limit: Any = None,
+) -> dict[str, Any]:
+    page_limit = _coerce_page_limit(
+        limit,
+        default=DEFAULT_INBOX_PAGE_LIMIT,
+        maximum=MAX_INBOX_PAGE_LIMIT,
+    )
+    normalized_deck_item_id = str(deck_item_id or "").strip() or None
+    cursor_payload = _decode_cursor(cursor, expected_kind="change_request_inbox")
+    cursor_updated_at = None
+    cursor_id = None
+    if cursor_payload is not None:
+        if (str(cursor_payload.get("deck_item_id") or "").strip() or None) != normalized_deck_item_id:
+            raise ChangeRequestError(
+                "cursor does not match the current inbox filter.",
+                status=400,
+                field="cursor",
+            )
+        try:
+            cursor_updated_at = datetime.fromisoformat(str(cursor_payload["updated_at"]))
+            cursor_id = str(cursor_payload["id"]).strip()
+            if not cursor_id:
+                raise ValueError("empty cursor id")
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ChangeRequestError(
+                "cursor is invalid.",
+                status=400,
+                field="cursor",
+            ) from exc
+
+    rows, has_more = deck_change_request_repository.list_incoming_requests_for_owner(
         owner_user_id,
         statuses={REQUEST_STATUS_PENDING_REVIEW},
-        deck_item_id=deck_item_id,
+        deck_item_id=normalized_deck_item_id,
+        cursor_updated_at=cursor_updated_at,
+        cursor_id=cursor_id,
+        limit=page_limit,
+    )
+    next_cursor = None
+    if has_more and rows:
+        last_request = rows[-1][0]
+        next_cursor = _encode_cursor(
+            {
+                "kind": "change_request_inbox",
+                "deck_item_id": normalized_deck_item_id,
+                "updated_at": last_request.updated_at.isoformat(timespec="microseconds"),
+                "id": str(last_request.id),
+            }
+        )
+    return {
+        "items": [
+            serialize_request_summary(
+                request_obj,
+                item_count=item_count,
+                unresolved_conflict_count=unresolved_count,
+            )
+            for request_obj, item_count, unresolved_count in rows
+        ],
+        "page": {
+            "limit": page_limit,
+            "has_more": has_more,
+            "next_cursor": next_cursor,
+        },
+    }
+
+
+def get_serialized_request_page_for_user(
+    *,
+    request_id: str,
+    user_id: int,
+    cursor: str | None = None,
+    limit: Any = None,
+    change_type: str | None = None,
+    query_text: str | None = None,
+    conflicts_only: bool = False,
+) -> dict[str, Any]:
+    request_obj = deck_change_request_repository.get_request_header(request_id)
+    if request_obj is None:
+        raise ChangeRequestError(
+            "Change request not found.",
+            status=404,
+            error="FIELD_NOT_FOUND",
+        )
+    _ensure_request_view_access(request_obj, user_id=user_id)
+    page_limit = _coerce_page_limit(
+        limit,
+        default=DEFAULT_ITEM_PAGE_LIMIT,
+        maximum=MAX_ITEM_PAGE_LIMIT,
+    )
+    change_types, normalized_query, normalized_conflicts_only, filter_key = _normalize_item_filters(
+        raw_change_type=change_type,
+        query_text=query_text,
+        conflicts_only=conflicts_only,
+    )
+    cursor_payload = _decode_cursor(cursor, expected_kind="change_request_items")
+    after_sort_order = None
+    after_id = None
+    if cursor_payload is not None:
+        try:
+            if str(cursor_payload["request_id"]) != str(request_obj.id):
+                raise ValueError("request mismatch")
+            if int(cursor_payload["revision"]) != int(request_obj.revision or 0):
+                raise ChangeRequestError(
+                    "The change request changed while paging. Refresh the diff.",
+                    status=409,
+                    error="CHANGE_REQUEST_CURSOR_STALE",
+                    field="cursor",
+                )
+            if str(cursor_payload["filter_key"]) != filter_key:
+                raise ValueError("filter mismatch")
+            after_sort_order = int(cursor_payload["sort_order"])
+            after_id = str(cursor_payload["id"]).strip()
+            if not after_id:
+                raise ValueError("empty cursor id")
+        except ChangeRequestError:
+            raise
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ChangeRequestError(
+                "cursor does not match the current request or filters.",
+                status=400,
+                field="cursor",
+            ) from exc
+
+    item_rows, has_more, filtered_count = deck_change_request_repository.list_request_items_page(
+        request_obj.id,
+        after_sort_order=after_sort_order,
+        after_id=after_id,
+        limit=page_limit,
+        change_types=change_types,
+        query_text=normalized_query,
+        conflicts_only=normalized_conflicts_only,
+    )
+    item_count, unresolved_count, change_counts = deck_change_request_repository.get_request_counts(
+        request_obj.id
+    )
+    next_cursor = None
+    if has_more and item_rows:
+        last_item = item_rows[-1]
+        next_cursor = _encode_cursor(
+            {
+                "kind": "change_request_items",
+                "request_id": str(request_obj.id),
+                "revision": int(request_obj.revision or 0),
+                "filter_key": filter_key,
+                "sort_order": int(last_item.sort_order or 0),
+                "id": str(last_item.id),
+            }
+        )
+    return serialize_request_page(
+        request_obj,
+        viewer_user_id=user_id,
+        item_rows=item_rows,
+        item_count=item_count,
+        unresolved_conflict_count=unresolved_count,
+        change_counts=change_counts,
+        page={
+            "limit": page_limit,
+            "has_more": has_more,
+            "next_cursor": next_cursor,
+            "filtered_item_count": filtered_count,
+            "revision": int(request_obj.revision or 0),
+        },
     )
 
 
@@ -1223,7 +1734,7 @@ def get_active_request_for_deck_item(
     )
     if active_request is None:
         return None
-    return deck_change_request_repository.get_request_with_detail(active_request.id)
+    return deck_change_request_repository.get_request_header(active_request.id)
 
 
 def has_pending_review_request_for_install(deck_install_id: str) -> bool:
@@ -1350,6 +1861,22 @@ def approve_and_merge_request(
             error="CHANGE_REQUEST_CONFLICTS_UNRESOLVED",
         )
 
+    if any(
+        item.change_type == CHANGE_TYPE_FIELD_DEF_DISABLE
+        and not _item_is_dropped_from_request(item)
+        and _effective_disable_value(item)
+        for item in request_obj.items
+    ):
+        # FieldDef is the stable identity used by releases and every clone
+        # overlay.  Hard deletion would cascade-delete clone schema deltas and
+        # make old release diffs impossible to address.  Keep this blocked
+        # until the shared entity has an explicit soft-retirement lifecycle.
+        raise ChangeRequestError(
+            "Shared fields must be retired instead of deleted before this contribution can be merged.",
+            status=409,
+            error="SHARED_ENTITY_RETIRE_REQUIRED",
+        )
+
     install = _get_request_install(request_obj)
     if install is None:
         raise ChangeRequestError(
@@ -1437,17 +1964,32 @@ def approve_and_merge_request(
         added_field_id_map[str(item.local_ref_id or "")] = next_field.id
 
     rename_map = dict(current_context.get("rename_map") or {})
-    for item in request_obj.items:
-        if _item_is_dropped_from_request(item):
-            continue
-        if item.change_type not in {CHANGE_TYPE_NOTE_FIELD_SET, CHANGE_TYPE_NOTE_FIELD_REMOVE}:
-            continue
+    note_change_items = [
+        item
+        for item in request_obj.items
+        if not _item_is_dropped_from_request(item)
+        and item.change_type in {CHANGE_TYPE_NOTE_FIELD_SET, CHANGE_TYPE_NOTE_FIELD_REMOVE}
+    ]
+    notes_by_id = _load_notes_by_ids(
+        {
+            str((dict(item.metadata_json or {})).get("source_note_id") or item.source_ref_id or "")
+            for item in note_change_items
+        }
+    )
+    note_field_defs_by_id = _load_field_defs_by_ids(
+        {
+            str((dict(item.metadata_json or {})).get("source_field_def_id") or "")
+            for item in note_change_items
+        }
+    )
+    for item in note_change_items:
         metadata = dict(item.metadata_json or {})
-        source_note = Note.query.get(str(metadata.get("source_note_id") or item.source_ref_id or "").strip())
+        source_note_id = str(metadata.get("source_note_id") or item.source_ref_id or "").strip()
+        source_note = notes_by_id.get(source_note_id)
         if source_note is None:
             continue
         source_field_id = str(metadata.get("source_field_def_id") or "").strip()
-        source_field = db.session.get(FieldDef, source_field_id) if source_field_id else None
+        source_field = note_field_defs_by_id.get(source_field_id) if source_field_id else None
         field_name = str(
             (source_field.name if source_field is not None else None)
             or metadata.get("field_name")
@@ -1587,46 +2129,65 @@ def reject_request(
     return request_obj
 
 
-def serialize_request(request_obj: DeckChangeRequest, *, viewer_user_id: int) -> dict[str, Any]:
-    unresolved_conflicts = [
-        row for row in (request_obj.conflicts or [])
-        if row.resolved_at is None
-    ]
-    change_counts = Counter(item.change_type for item in (request_obj.items or []))
-    item_rows = []
-    for item in request_obj.items or []:
-        conflict = next((row for row in (item.conflicts or []) if row is not None), None)
-        item_rows.append(
-            {
-                "id": item.id,
-                "change_type": item.change_type,
-                "source_ref_id": item.source_ref_id,
-                "local_ref_id": item.local_ref_id,
-                "path_key": item.path_key,
-                "path_label": item.path_label,
-                "before_value": item.before_value,
-                "after_value": item.after_value,
-                "effective_after_value": _effective_after_value(item),
-                "metadata": dict(item.metadata_json or {}),
-                "is_conflict": bool(item.is_conflict),
-                "conflict": (
-                    {
-                        "id": conflict.id,
-                        "conflict_type": conflict.conflict_type,
-                        "source_ref_id": conflict.source_ref_id,
-                        "upstream_value": conflict.upstream_value,
-                        "local_value": conflict.local_value,
-                        "base_value": conflict.base_value,
-                        "resolution_mode": conflict.resolution_mode,
-                        "resolved_value": conflict.resolved_value,
-                        "resolved_at": conflict.resolved_at.isoformat() if conflict.resolved_at else None,
-                    }
-                    if conflict
-                    else None
-                ),
-            }
-        )
+def _serialize_conflict(row: DeckChangeRequestConflict) -> dict[str, Any]:
+    return {
+        "id": row.id,
+        "item_id": row.item_id,
+        "conflict_type": row.conflict_type,
+        "source_ref_id": row.source_ref_id,
+        "upstream_value": row.upstream_value,
+        "local_value": row.local_value,
+        "base_value": row.base_value,
+        "resolution_mode": row.resolution_mode,
+        "resolved_value": row.resolved_value,
+        "resolved_at": row.resolved_at.isoformat() if row.resolved_at else None,
+    }
 
+
+def _serialize_request_item(item: DeckChangeRequestItem) -> dict[str, Any]:
+    metadata = dict(item.metadata_json or {})
+    conflict = next((row for row in (item.conflicts or []) if row is not None), None)
+    field_def_id = str(metadata.get("source_field_def_id") or "").strip() or None
+    if field_def_id is None and item.change_type in {
+        CHANGE_TYPE_FIELD_DEF_UPDATE,
+        CHANGE_TYPE_FIELD_DEF_DISABLE,
+    }:
+        field_def_id = str(item.source_ref_id or "").strip() or None
+    return {
+        "id": item.id,
+        "change_type": item.change_type,
+        "source_ref_id": item.source_ref_id,
+        "local_ref_id": item.local_ref_id,
+        "source_note_id": metadata.get("source_note_id"),
+        "field_def_id": field_def_id,
+        "path_key": item.path_key,
+        "path_label": item.path_label,
+        "before_value": item.before_value,
+        "after_value": item.after_value,
+        "effective_after_value": _effective_after_value(item),
+        "metadata": metadata,
+        "is_conflict": bool(item.is_conflict),
+        "conflict": _serialize_conflict(conflict) if conflict else None,
+    }
+
+
+def serialize_request_page(
+    request_obj: DeckChangeRequest,
+    *,
+    viewer_user_id: int,
+    item_rows: list[DeckChangeRequestItem],
+    item_count: int,
+    unresolved_conflict_count: int,
+    change_counts: dict[str, int],
+    page: dict[str, Any],
+) -> dict[str, Any]:
+    serialized_items = [_serialize_request_item(item) for item in item_rows]
+    page_conflicts = [
+        _serialize_conflict(conflict)
+        for item in item_rows
+        for conflict in (item.conflicts or [])
+        if conflict is not None
+    ]
     return {
         "id": request_obj.id,
         "deck_install_id": request_obj.deck_install_id,
@@ -1672,13 +2233,13 @@ def serialize_request(request_obj: DeckChangeRequest, *, viewer_user_id: int) ->
             if request_obj.deck_item
             else None
         ),
-        "item_count": len(request_obj.items or []),
-        "unresolved_conflict_count": len(unresolved_conflicts),
+        "item_count": int(item_count),
+        "unresolved_conflict_count": int(unresolved_conflict_count),
         "change_counts": dict(change_counts),
         "can_submit": (
             int(request_obj.requester_user_id) == int(viewer_user_id)
             and request_obj.status == REQUEST_STATUS_DRAFT
-            and not unresolved_conflicts
+            and int(unresolved_conflict_count) == 0
         ),
         "can_resolve": (
             int(request_obj.requester_user_id) == int(viewer_user_id)
@@ -1688,31 +2249,48 @@ def serialize_request(request_obj: DeckChangeRequest, *, viewer_user_id: int) ->
             int(request_obj.owner_user_id) == int(viewer_user_id)
             and request_obj.status == REQUEST_STATUS_PENDING_REVIEW
         ),
-        "items": item_rows,
-        "conflicts": [
-            {
-                "id": row.id,
-                "item_id": row.item_id,
-                "conflict_type": row.conflict_type,
-                "source_ref_id": row.source_ref_id,
-                "upstream_value": row.upstream_value,
-                "local_value": row.local_value,
-                "base_value": row.base_value,
-                "resolution_mode": row.resolution_mode,
-                "resolved_value": row.resolved_value,
-                "resolved_at": row.resolved_at.isoformat() if row.resolved_at else None,
-            }
-            for row in request_obj.conflicts or []
-        ],
+        "items": serialized_items,
+        "conflicts": page_conflicts,
+        "page": page,
     }
 
 
-def serialize_request_summary(request_obj: DeckChangeRequest) -> dict[str, Any]:
-    unresolved_conflict_count = (
-        len([row for row in (request_obj.conflicts or []) if row.resolved_at is None])
-        if request_obj.conflicts is not None
-        else 0
+def serialize_request(request_obj: DeckChangeRequest, *, viewer_user_id: int) -> dict[str, Any]:
+    """Serialize an already-loaded request graph (legacy/internal callers)."""
+
+    item_rows = list(request_obj.items or [])
+    unresolved_conflicts = [
+        row for row in (request_obj.conflicts or []) if row.resolved_at is None
+    ]
+    return serialize_request_page(
+        request_obj,
+        viewer_user_id=viewer_user_id,
+        item_rows=item_rows,
+        item_count=len(item_rows),
+        unresolved_conflict_count=len(unresolved_conflicts),
+        change_counts=dict(Counter(item.change_type for item in item_rows)),
+        page={
+            "limit": len(item_rows),
+            "has_more": False,
+            "next_cursor": None,
+            "filtered_item_count": len(item_rows),
+            "revision": int(request_obj.revision or 0),
+        },
     )
+
+
+def serialize_request_summary(
+    request_obj: DeckChangeRequest,
+    *,
+    item_count: int | None = None,
+    unresolved_conflict_count: int | None = None,
+) -> dict[str, Any]:
+    if item_count is None:
+        item_count = len(request_obj.items or [])
+    if unresolved_conflict_count is None:
+        unresolved_conflict_count = len(
+            [row for row in (request_obj.conflicts or []) if row.resolved_at is None]
+        )
     return {
         "id": request_obj.id,
         "deck_item_id": request_obj.deck_item_id,
@@ -1732,8 +2310,8 @@ def serialize_request_summary(request_obj: DeckChangeRequest) -> dict[str, Any]:
             if request_obj.deck_item
             else None
         ),
-        "item_count": len(request_obj.items or []),
-        "unresolved_conflict_count": unresolved_conflict_count,
+        "item_count": int(item_count),
+        "unresolved_conflict_count": int(unresolved_conflict_count),
         "submitted_at": request_obj.submitted_at.isoformat() if request_obj.submitted_at else None,
         "updated_at": request_obj.updated_at.isoformat() if request_obj.updated_at else None,
     }

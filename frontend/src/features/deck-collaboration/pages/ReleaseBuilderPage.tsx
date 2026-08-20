@@ -239,7 +239,7 @@ export function ReleaseBuilderPage() {
             return
           }
           void previewQuery.fetchNextPage().then((result) => {
-            if (result.data.pages.length > loadedPages.length) {
+            if ((result.data?.pages.length ?? 0) > loadedPages.length) {
               setPageIndex((current) => current + 1)
             }
           })

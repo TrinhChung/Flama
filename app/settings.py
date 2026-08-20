@@ -135,6 +135,10 @@ def build_app_config(overrides: Mapping[str, Any] | None = None) -> dict[str, An
             "CONNECT_CARD_PACKAGE_MAX_ITEMS",
             default=1000,
         ),
+        "CONNECT_CARD_PACKAGE_TARGET_ITEMS": coerce_int_env(
+            "CONNECT_CARD_PACKAGE_TARGET_ITEMS",
+            default=500,
+        ),
         "FLASHCARD_MEDIA_UPLOAD_ROOT": str(resolve_media_upload_root()),
         "FLASHCARD_MEDIA_MAX_BYTES": int(os.getenv("FLASHCARD_MEDIA_MAX_BYTES", str(10 * 1024 * 1024))),
         "IMAGE_LIBRARY_MAX_BYTES": int(os.getenv("IMAGE_LIBRARY_MAX_BYTES", str(5 * 1024 * 1024))),
@@ -185,6 +189,10 @@ def build_app_config(overrides: Mapping[str, Any] | None = None) -> dict[str, An
             os.getenv("SUPPORT_CONTACT_EMAIL", "").strip()
             or os.getenv("ADMIN_EMAIL", "").strip()
         ),
+        "TRUST_PROXY": coerce_bool_env(
+            "TRUST_PROXY",
+            default=coerce_bool_env("FLAMA_TRUST_PROXY", default=False),
+        ),
     }
     config["PAYMENTS_V1_ENABLED"] = config["PAYMENTS_ENABLED"]
 
@@ -205,14 +213,32 @@ def _apply_startup_defaults(config: dict[str, Any]) -> None:
         "dev",
     }
 
-    config.setdefault("STARTUP_RUN_MAINTENANCE", True)
-    config.setdefault("STARTUP_RUN_DB_CREATE_ALL", True)
-    config.setdefault("STARTUP_RUN_USER_MANAGEMENT_SCHEMA", True)
-    config.setdefault("STARTUP_RUN_BACKWARD_COMPAT_SCHEMA", True)
-    config.setdefault("STARTUP_RUN_DEFAULT_USER_ROLE_SEED", True)
-    config.setdefault("STARTUP_RUN_DEFAULT_TTS_PROVIDER_SEED", True)
-    # Clone cutover is a one-time corrective task and usually unnecessary in tests.
-    config.setdefault("STARTUP_RUN_CLONE_CUTOVER", not testing)
+    # By default, in production/normal runtime, schema is managed solely by Alembic migrations.
+    # App startup only runs DB create/maintenance in TESTING mode or if explicitly enabled via env/override.
+    config.setdefault(
+        "STARTUP_RUN_MAINTENANCE",
+        coerce_bool_env("STARTUP_RUN_MAINTENANCE", default=testing),
+    )
+    config.setdefault(
+        "STARTUP_RUN_DB_CREATE_ALL",
+        coerce_bool_env("STARTUP_RUN_DB_CREATE_ALL", default=testing),
+    )
+    config.setdefault(
+        "STARTUP_RUN_USER_MANAGEMENT_SCHEMA",
+        coerce_bool_env("STARTUP_RUN_USER_MANAGEMENT_SCHEMA", default=testing),
+    )
+    config.setdefault(
+        "STARTUP_RUN_BACKWARD_COMPAT_SCHEMA",
+        coerce_bool_env("STARTUP_RUN_BACKWARD_COMPAT_SCHEMA", default=False),
+    )
+    config.setdefault(
+        "STARTUP_CHECK_DB_CONNECTIVITY",
+        coerce_bool_env("STARTUP_CHECK_DB_CONNECTIVITY", default=True),
+    )
+    # Seed operations are decoupled from normal app startup
+    config.setdefault("STARTUP_RUN_DEFAULT_USER_ROLE_SEED", testing)
+    config.setdefault("STARTUP_RUN_DEFAULT_TTS_PROVIDER_SEED", testing)
+    config.setdefault("STARTUP_RUN_CLONE_CUTOVER", False)
     config.setdefault(
         "STARTUP_CUTOVER_FAIL_ON_MISMATCH",
         _startup_cutover_fail_on_mismatch_default(default_cutover_fail_on_mismatch),

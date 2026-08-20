@@ -317,6 +317,12 @@ class RestApiV1Tests(unittest.TestCase):
         )
         self.assertEqual(rename_response.status_code, 403)
 
+        purge_response = self.client.delete(
+            f"/api/decks/{regular_deck_id}?purge=true"
+        )
+        self.assertEqual(purge_response.status_code, 403)
+        self.assertEqual(purge_response.get_json()["error"], "FORBIDDEN")
+
     def test_admin_user_resource_lists_roles_and_updates_status(self):
         self._login_admin()
         register_response = self.client.post(
@@ -394,8 +400,6 @@ class RestApiV1Tests(unittest.TestCase):
         self.assertEqual(v1_response.status_code, 200)
         self.assertEqual(v1_response.get_json(), legacy_response.get_json())
 
-<<<<<<< Updated upstream
-=======
     def test_deck_and_note_type_purge(self):
         self._login_admin()
 
@@ -544,8 +548,6 @@ class RestApiV1Tests(unittest.TestCase):
             preserved_review = db.session.get(ReviewEvent, review_event_id)
             self.assertIsNotNone(preserved_review)
             self.assertIsNone(preserved_review.note_type_id)
-
->>>>>>> Stashed changes
 
 if __name__ == "__main__":
     unittest.main()

@@ -122,6 +122,7 @@ def mark_note_fields_changed(
                 source_deck_id=resolved_deck_id,
                 metadata={"field_name": field_name},
             )
+        item.dirty_tracking_revision = int(item.working_revision or 0)
     return len(items)
 
 
@@ -159,6 +160,7 @@ def mark_field_def_changed(
                 field_def_id=str(field_def.id),
                 source_deck_id=item.source_deck_id,
             )
+        item.dirty_tracking_revision = int(item.working_revision or 0)
     return len(items)
 
 

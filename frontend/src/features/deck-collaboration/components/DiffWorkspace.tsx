@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useId, useState, type FormEvent, type ReactNode } from 'react'
 import {
   AlertTriangle,
   ChevronDown,
@@ -61,6 +61,9 @@ const CHANGE_LABELS: Record<DiffChangeType, string> = {
   conflict: 'Xung đột',
 }
 
+const MAX_RENDERED_DIFF_CHARS = 20_000
+const MAX_RENDERED_DIFF_LINES = 200
+
 function ChangeIcon({ type }: { type: DiffChangeType }) {
   if (type === 'added') return <CirclePlus className="size-4" />
   if (type === 'removed') return <MinusCircle className="size-4" />
@@ -101,7 +104,11 @@ function DiffValueBlock({
   side: 'before' | 'after'
 }) {
   const text = valueToText(value)
-  const lines = text.split('\n')
+  const characterPreview = text.slice(0, MAX_RENDERED_DIFF_CHARS)
+  const previewLines = characterPreview.split('\n')
+  const lines = previewLines.slice(0, MAX_RENDERED_DIFF_LINES)
+  const isTruncated = text.length > characterPreview.length
+    || previewLines.length > lines.length
   const isBefore = side === 'before'
 
   return (
@@ -115,13 +122,17 @@ function DiffValueBlock({
     >
       {lines.map((line, index) => (
         <div
-          key={`${index}-${line}`}
+          key={index}
           className="grid min-w-max grid-cols-[2.25rem_1rem_minmax(0,1fr)] px-2"
         >
-          <span className="select-none border-r border-foreground/10 pr-2 text-right text-muted-foreground/70">
+          <span
+            aria-hidden="true"
+            className="select-none border-r border-foreground/10 pr-2 text-right text-muted-foreground/70"
+          >
             {index + 1}
           </span>
           <span
+            aria-hidden="true"
             className={cn(
               'select-none text-center font-semibold',
               isBefore ? 'text-red-700 dark:text-red-300' : 'text-emerald-700 dark:text-emerald-300',
@@ -132,6 +143,12 @@ function DiffValueBlock({
           <span className="whitespace-pre-wrap break-words pr-3">{line || ' '}</span>
         </div>
       ))}
+      {isTruncated ? (
+        <p className="border-t border-foreground/10 px-3 py-2 text-xs text-muted-foreground">
+          Nội dung quá dài; chỉ hiển thị {MAX_RENDERED_DIFF_LINES.toLocaleString('vi-VN')} dòng hoặc{' '}
+          {MAX_RENDERED_DIFF_CHARS.toLocaleString('vi-VN')} ký tự đầu tiên.
+        </p>
+      ) : null}
     </div>
   )
 }
@@ -145,13 +162,14 @@ function DiffRow({
   expanded: boolean
   onToggle: () => void
 }) {
+  const contentId = useId()
   const beforeValue = item.before_value !== undefined
     ? item.before_value
     : item.before_preview
   const afterValue = item.after_value !== undefined
     ? item.after_value
     : item.after_preview
-  const title = item.note_label || item.note_id || item.entity_id
+  const title = item.note_label || item.note_id || item.entity_id || 'Thay đổi'
   const fieldLabel = item.field_name || item.entity_kind.replaceAll('_', ' ')
 
   return (
@@ -163,12 +181,14 @@ function DiffRow({
         type="button"
         className="flex w-full items-center gap-3 px-3 py-3 text-left transition-colors hover:bg-muted/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:px-4"
         aria-expanded={expanded}
+        aria-controls={contentId}
         onClick={onToggle}
       >
-        <span className="text-muted-foreground">
+        <span aria-hidden="true" className="text-muted-foreground">
           {expanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
         </span>
         <span
+          aria-hidden="true"
           className={cn(
             'flex size-8 shrink-0 items-center justify-center rounded-lg border',
             changeTone(item.change_type),
@@ -192,7 +212,7 @@ function DiffRow({
       </button>
 
       {expanded ? (
-        <div className="border-t">
+        <div id={contentId} className="border-t">
           <div className="flex flex-wrap items-center justify-between gap-2 bg-muted/35 px-3 py-2 font-mono text-[11px] text-muted-foreground sm:px-4">
             <span>@@ {title} / {fieldLabel} @@</span>
             <span>{item.operation || item.change_type}</span>
@@ -336,6 +356,10 @@ export function DiffWorkspace({
           ))}
         </div>
       )}
+
+      <p className="sr-only" role="status" aria-live="polite">
+        {isFetching ? 'Đang tải thay đổi.' : `Đang hiển thị ${items.length.toLocaleString('vi-VN')} thay đổi.`}
+      </p>
 
       {hasPrevious || hasMore ? (
         <div className="flex items-center justify-center gap-2 pt-2">

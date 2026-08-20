@@ -291,30 +291,43 @@ export function getInstalledDeckUpdates(
   return apiRequest<RawInstalledDeckUpdates>(
     `/api/marketplace/installations/${encodeSegment(installId)}/updates`,
     { signal },
-  ).then((payload) => {
-    const appliedRelease = payload.applied_release
-      ? normalizeRelease(payload.applied_release)
-      : null
-    const availableRelease = payload.available_release
-      ? normalizeRelease(payload.available_release)
-      : null
-    return {
-      installation: {
-        id: String(payload.install_id),
-        deck_item_id: payload.deck_item_id === null || payload.deck_item_id === undefined
-          ? null
-          : String(payload.deck_item_id),
-        version_mode: payload.version_mode,
-        applied_release: appliedRelease,
-        available_release: availableRelease,
-        overlay_revision: payload.overlay_revision,
-      },
-      items: availableRelease ? [availableRelease] : [],
-      update_available: payload.update_available,
-      unread_update: payload.unread_update,
-      change_count: payload.change_count || availableRelease?.change_count || 0,
-    } satisfies InstalledDeckUpdates
-  })
+  ).then(normalizeInstalledDeckUpdates)
+}
+
+function normalizeInstalledDeckUpdates(payload: RawInstalledDeckUpdates) {
+  const appliedRelease = payload.applied_release
+    ? normalizeRelease(payload.applied_release)
+    : null
+  const availableRelease = payload.available_release
+    ? normalizeRelease(payload.available_release)
+    : null
+  return {
+    installation: {
+      id: String(payload.install_id),
+      deck_item_id: payload.deck_item_id === null || payload.deck_item_id === undefined
+        ? null
+        : String(payload.deck_item_id),
+      version_mode: payload.version_mode,
+      applied_release: appliedRelease,
+      available_release: availableRelease,
+      overlay_revision: payload.overlay_revision,
+    },
+    items: availableRelease ? [availableRelease] : [],
+    update_available: payload.update_available,
+    unread_update: payload.unread_update,
+    change_count: payload.change_count || availableRelease?.change_count || 0,
+  } satisfies InstalledDeckUpdates
+}
+
+export function markInstalledDeckUpdateSeen(
+  installId: string,
+  releaseId: string,
+) {
+  return appApi.mutate<RawInstalledDeckUpdates>(
+    `/api/marketplace/installations/${encodeSegment(installId)}/updates/${encodeSegment(releaseId)}/mark-seen`,
+    'POST',
+    {},
+  ).then(normalizeInstalledDeckUpdates)
 }
 
 export function getInstalledDeckUpdate(

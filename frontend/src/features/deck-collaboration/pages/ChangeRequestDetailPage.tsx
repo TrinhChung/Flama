@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { useBootstrap } from '@/shared/api/bootstrap'
 import { Page, PageHeader } from '@/shared/components/Page'
 import { PageError, PageLoading } from '@/shared/components/PageState'
 import {
@@ -166,6 +167,7 @@ function ContributionConflictCard({
 export function ChangeRequestDetailPage() {
   const { requestId = '' } = useParams<{ requestId: string }>()
   const queryClient = useQueryClient()
+  const bootstrapQuery = useBootstrap()
   const [filters, setFilters] = useState<DiffFilters>({ query: '', changeType: 'all' })
   const [pageIndex, setPageIndex] = useState(0)
   const [reviewComment, setReviewComment] = useState('')
@@ -201,9 +203,18 @@ export function ChangeRequestDetailPage() {
     queryClient.setQueryData(['deck-change-request', requestId], nextRequest)
     queryClient.setQueryData(
       ['active-deck-change-request', nextRequest.deck_item_id],
-      { request: nextRequest.status === 'pending_review' ? nextRequest : null },
+      {
+        request: nextRequest.status === 'merged' || nextRequest.status === 'rejected'
+          ? null
+          : nextRequest,
+      },
     )
     void queryClient.invalidateQueries({ queryKey: ['incoming-deck-change-requests'] })
+    if (nextRequest.status === 'merged') {
+      void queryClient.invalidateQueries({
+        queryKey: ['deck-release-preview', nextRequest.deck_item_id],
+      })
+    }
   }
 
   const syncMutation = useMutation({
@@ -270,6 +281,9 @@ export function ChangeRequestDetailPage() {
   }
 
   const unresolvedConflicts = request.conflicts.filter((conflict) => !conflict.resolved_at)
+  const viewerId = bootstrapQuery.data?.user?.id
+  const isOwner = viewerId === request.owner.id
+  const isRequester = viewerId === request.requester.id
   const isBusy = syncMutation.isPending
     || resolveMutation.isPending
     || submitMutation.isPending
@@ -289,9 +303,17 @@ export function ChangeRequestDetailPage() {
                 Shared deck
               </Link>
             </Button>
-            <Button variant="outline" asChild>
-              <Link to="/flashcards/change-requests/incoming">Inbox owner</Link>
-            </Button>
+            {isOwner ? (
+              <Button variant="outline" asChild>
+                <Link to="/flashcards/change-requests/incoming">Đóng góp cần duyệt</Link>
+              </Button>
+            ) : isRequester ? (
+              <Button variant="outline" asChild>
+                <Link to={`/flashcards/shared-decks/${request.deck_item_id}/change-request`}>
+                  Bản đóng góp của tôi
+                </Link>
+              </Button>
+            ) : null}
           </>
         }
       />
@@ -379,13 +401,23 @@ export function ChangeRequestDetailPage() {
                 Gửi owner duyệt
               </Button>
             ) : null}
-            {request.status === 'merged' ? (
+            {request.status === 'merged' && isOwner ? (
               <Button className="w-full" asChild>
                 <Link to={`/creator/decks/${request.deck_item_id}/releases/new`}>
                   <Check />
                   Tạo release mới
                 </Link>
               </Button>
+            ) : null}
+            {request.status === 'pending_review' && isRequester ? (
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                Đóng góp đang chờ chủ sở hữu duyệt. Deck local của bạn vẫn có thể tiếp tục được chỉnh sửa.
+              </p>
+            ) : null}
+            {request.status === 'merged' && !isOwner ? (
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                Đóng góp đã được merge vào working deck. Người dùng khác chỉ nhận thay đổi sau khi chủ sở hữu phát hành release mới.
+              </p>
             ) : null}
             {request.status === 'rejected' ? (
               <p className="text-xs leading-relaxed text-muted-foreground">

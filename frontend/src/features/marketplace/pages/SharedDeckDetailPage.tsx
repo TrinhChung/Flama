@@ -20,7 +20,12 @@ import {
   Star,
   BookOpen,
   User,
+  EyeOff,
+  Edit3,
+  Globe,
+  Lock,
 } from 'lucide-react'
+import { toast } from 'sonner'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { appApi } from '@/app/api'
@@ -119,6 +124,7 @@ type SharedDeckDetail = {
   source_deck_id?: number | null
   source_note_type_id?: string | null
   source_note_type?: SourceNoteType | null
+  publish_status?: 'private' | 'published' | 'unlisted' | 'archived'
 }
 
 type PreviewResponse = {
@@ -231,6 +237,25 @@ export function SharedDeckDetailPage() {
       setSubmitError(error.message || 'Không thể gửi đánh giá.')
     },
   })
+  const publishStatusMutation = useMutation({
+    mutationFn: async (newStatus: 'private' | 'published' | 'unlisted' | 'archived') => {
+      return appApi.mutate<SharedDeckDetail>(`/api/shared/decks/${id}`, 'PATCH', {
+        publish_status: newStatus,
+      })
+    },
+    onSuccess: (data) => {
+      toast.success(
+        data.publish_status === 'private'
+          ? 'Đã thu hồi bộ deck khỏi Marketplace!'
+          : 'Đã cập nhật trạng thái xuất bản bộ deck!'
+      )
+      queryClient.invalidateQueries({ queryKey: ['shared-deck-detail', id] })
+      queryClient.invalidateQueries({ queryKey: ['marketplace'] })
+    },
+    onError: (error: Error) => {
+      toast.error('Không thể cập nhật trạng thái', { description: error.message })
+    },
+  })
 
   if (deckQuery.isPending) {
     return (
@@ -290,9 +315,8 @@ export function SharedDeckDetailPage() {
         {/* Main Left Content Column */}
         <div className="space-y-4 sm:space-y-5">
           {/* Main Card */}
-          <Card className="relative overflow-hidden border-border/40 sm:border-border/80 bg-card/90 backdrop-blur-md shadow-xs sm:shadow-sm rounded-xl sm:rounded-2xl">
-            <div className="h-2 w-full bg-gradient-to-r from-primary via-orange-500 to-amber-500" />
-            <CardHeader className="space-y-3 p-3.5 sm:p-6 pb-3">
+          <Card className="border-border/80 bg-card shadow-xs rounded-2xl">
+            <CardHeader className="space-y-3 p-4 sm:p-6 pb-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge variant="secondary" className="px-2.5 py-0.5 text-xs font-bold rounded-md">
@@ -358,8 +382,8 @@ export function SharedDeckDetailPage() {
                     <span>Đánh giá</span>
                   </div>
                   <div className="mt-1 flex items-center justify-center gap-1 font-extrabold text-base text-foreground">
-                    <span>{deck.rating_avg.toFixed(1)}</span>
-                    <span className="text-xs font-normal text-muted-foreground">({deck.rating_count})</span>
+                    <span className="tabular-nums">{deck.rating_avg.toFixed(1)}</span>
+                    <span className="text-xs font-normal text-muted-foreground tabular-nums">({deck.rating_count})</span>
                   </div>
                 </div>
 
@@ -368,7 +392,7 @@ export function SharedDeckDetailPage() {
                     <Download className="size-3.5 text-primary" />
                     <span>Lượt cài</span>
                   </div>
-                  <div className="mt-1 font-extrabold text-base text-foreground">
+                  <div className="mt-1 font-extrabold text-base text-foreground tabular-nums">
                     {deck.install_count.toLocaleString('vi-VN')}
                   </div>
                 </div>
@@ -378,7 +402,7 @@ export function SharedDeckDetailPage() {
                     <Layers className="size-3.5 text-primary" />
                     <span>Xem mẫu</span>
                   </div>
-                  <div className="mt-1 font-extrabold text-base text-foreground">
+                  <div className="mt-1 font-extrabold text-base text-foreground tabular-nums">
                     {samples.length} từ
                   </div>
                 </div>
@@ -395,6 +419,90 @@ export function SharedDeckDetailPage() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Mobile-Only Quick Action Card (Provides top action access on small screens) */}
+          <div className="block lg:hidden">
+            <Card className="border-primary/30 bg-primary/5 shadow-xs rounded-2xl p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-foreground">
+                  {deck.pricing_mode === 'free' ? 'Miễn phí' : deck.price_display}
+                </span>
+                <Badge variant="outline" className="text-xs font-semibold">
+                  {deck.install_count.toLocaleString('vi-VN')} lượt cài
+                </Badge>
+              </div>
+
+              {deck.is_owner ? (
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-10 text-xs font-bold rounded-xl"
+                    asChild
+                  >
+                    <Link to={`/marketplace/decks/publish?deck_id=${deck.source_deck_id}&deck_item_id=${deck.id}&edit=1`}>
+                      <Edit3 className="mr-1.5 size-3.5 text-primary" /> Sửa thông tin
+                    </Link>
+                  </Button>
+                  {deck.publish_status === 'published' || deck.publish_status === 'unlisted' ? (
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      className="h-10 text-xs font-bold rounded-xl"
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            'Bạn có chắc chắn muốn thu hồi bộ thẻ này khỏi Marketplace?\n\nNgười dùng khác sẽ không thể tìm thấy hoặc cài đặt bộ thẻ này nữa.'
+                          )
+                        ) {
+                          publishStatusMutation.mutate('private')
+                        }
+                      }}
+                      disabled={publishStatusMutation.isPending}
+                    >
+                      <EyeOff className="mr-1.5 size-3.5" /> Thu hồi
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="default"
+                      size="sm"
+                      className="h-10 text-xs font-bold rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white"
+                      onClick={() => publishStatusMutation.mutate('published')}
+                      disabled={publishStatusMutation.isPending}
+                    >
+                      <Globe className="mr-1.5 size-3.5" /> Xuất bản lại
+                    </Button>
+                  )}
+                </div>
+              ) : deck.is_installed ? (
+                <div className="flex gap-2">
+                  <Button className="flex-1 h-10 font-bold text-xs border-emerald-500/40 text-emerald-600 dark:text-emerald-400 rounded-xl" variant="outline" disabled>
+                    <CheckCircle className="mr-1.5 size-4" /> Đã cài đặt
+                  </Button>
+                  {deck.installed_deck_id ? (
+                    <Button className="flex-1 h-10 font-bold text-xs shadow-xs bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl" asChild>
+                      <Link to={`/study?deck_id=${deck.installed_deck_id}`}>
+                        <BookOpen className="mr-1.5 size-4" /> Học ngay
+                      </Link>
+                    </Button>
+                  ) : null}
+                </div>
+              ) : (
+                <Button
+                  className="w-full h-11 font-bold text-sm shadow-xs bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl"
+                  onClick={() => installMutation.mutate()}
+                  disabled={installMutation.isPending}
+                >
+                  {installMutation.isPending ? (
+                    <Loader2 className="mr-2 size-4 animate-spin" />
+                  ) : (
+                    <Download className="mr-2 size-4" />
+                  )}
+                  {deck.pricing_mode === 'paid' ? 'Mua bộ deck' : 'Tải xuống & Cài đặt'}
+                </Button>
+              )}
+            </Card>
+          </div>
 
           {/* Section 1: Interactive Sample & Live Previewer */}
           <Card className="border-border shadow-xs overflow-hidden rounded-2xl">
@@ -502,11 +610,17 @@ export function SharedDeckDetailPage() {
               </div>
             </CardHeader>
 
-            {/* Quick Word Select Chips */}
+            {/* Quick Word Select Chips with Smooth Horizontal Scroll */}
             {samples.length > 0 ? (
-              <div className="p-3.5 bg-muted/10 border-b border-border/60">
-                <div className="text-xs font-semibold text-muted-foreground mb-2">Chọn nhanh từ mẫu:</div>
-                <div className="flex flex-wrap gap-2">
+              <div className="p-3 sm:p-3.5 bg-muted/10 border-b border-border/60">
+                <div className="text-xs font-semibold text-muted-foreground mb-1.5 flex items-center justify-between">
+                  <span>Chọn nhanh từ mẫu:</span>
+                  <span className="text-[11px] font-normal text-muted-foreground">({samples.length} mẫu)</span>
+                </div>
+                <div
+                  className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none touch-pan-x overscroll-x-contain"
+                  style={{ WebkitOverflowScrolling: 'touch' }}
+                >
                   {samples.map((sample, idx) => {
                     const isSelected = idx === activeSampleIndex
                     return (
@@ -514,7 +628,7 @@ export function SharedDeckDetailPage() {
                         key={idx}
                         type="button"
                         onClick={() => setActiveSampleIndex(idx)}
-                        className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                        className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
                           isSelected
                             ? 'bg-primary text-primary-foreground border-primary shadow-xs'
                             : 'bg-card text-foreground hover:bg-muted border-border/80'
@@ -707,19 +821,115 @@ export function SharedDeckDetailPage() {
             </CardHeader>
             <CardContent className="p-4 sm:p-5 pt-0 space-y-3">
               {deck.is_owner ? (
-                <div className="space-y-2">
-                  <Button className="w-full h-10 sm:h-11 font-bold text-xs sm:text-sm rounded-xl" variant="secondary" asChild>
-                    <Link to={`/creator/decks/${id}/releases/new`}>
-                      <GitCompare className="mr-1.5 size-4 text-primary" />
-                      Phát hành phiên bản mới
-                    </Link>
-                  </Button>
-                  <Button className="w-full h-9 sm:h-10 font-semibold text-xs sm:text-sm rounded-xl" variant="outline" asChild>
-                    <Link to={`/flashcards/change-requests/incoming?deck_item_id=${id}`}>
-                      <Inbox className="mr-1.5 size-4" />
-                      Đóng góp cần duyệt
-                    </Link>
-                  </Button>
+                <div className="space-y-3 p-3 rounded-xl border border-primary/20 bg-primary/5 shadow-2xs">
+                  <div className="flex items-center justify-between border-b border-primary/10 pb-1.5 mb-1.5">
+                    <span className="text-[10px] font-black tracking-wider text-muted-foreground uppercase">Bảng điều khiển Tác giả</span>
+                    <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-[9px] font-extrabold text-primary">
+                      Tác giả
+                    </span>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground font-medium">Trạng thái chia sẻ:</span>
+                      {deck.publish_status === 'published' && (
+                        <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold px-2 py-0.5 rounded-md text-[10px]">
+                          <Globe className="mr-1 size-3 text-emerald-500" />
+                          Đang hiển thị
+                        </Badge>
+                      )}
+                      {deck.publish_status === 'unlisted' && (
+                        <Badge variant="outline" className="border-blue-500/30 bg-blue-500/10 text-blue-600 dark:text-blue-400 font-bold px-2 py-0.5 rounded-md text-[10px]">
+                          <Globe className="mr-1 size-3 text-blue-500" />
+                          Không công khai
+                        </Badge>
+                      )}
+                      {deck.publish_status === 'private' && (
+                        <Badge variant="outline" className="border-destructive/30 bg-destructive/10 text-destructive font-bold px-2 py-0.5 rounded-md text-[10px]">
+                          <Lock className="mr-1 size-3 text-destructive" />
+                          Đã thu hồi (Riêng tư)
+                        </Badge>
+                      )}
+                      {deck.publish_status === 'archived' && (
+                        <Badge variant="outline" className="border-slate-500/30 bg-slate-500/10 text-slate-500 font-bold px-2 py-0.5 rounded-md text-[10px]">
+                          <Lock className="mr-1 size-3 text-slate-500" />
+                          Đã lưu trữ
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid gap-2 pt-1">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="h-9 w-full rounded-xl text-xs font-bold"
+                      asChild
+                    >
+                      <Link to={`/creator/decks/${id}/releases/new`}>
+                        <GitCompare className="size-3.5 text-primary" />
+                        Phát hành phiên bản mới
+                      </Link>
+                    </Button>
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-9 w-full rounded-xl text-xs font-bold"
+                      asChild
+                    >
+                      <Link to={`/flashcards/change-requests/incoming?deck_item_id=${id}`}>
+                        <Inbox className="size-3.5" />
+                        Đóng góp cần duyệt
+                      </Link>
+                    </Button>
+
+                    {deck.publish_status === 'published' || deck.publish_status === 'unlisted' ? (
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        className="w-full font-bold text-xs h-9 rounded-xl flex items-center justify-center gap-1.5"
+                        onClick={() => {
+                          if (
+                            window.confirm(
+                              'Bạn có chắc chắn muốn thu hồi bộ thẻ này khỏi Marketplace?\n\nNgười dùng khác sẽ không thể tìm thấy hoặc cài đặt bộ thẻ này nữa. Những người đã cài đặt trước đó vẫn có thể tiếp tục sử dụng.'
+                            )
+                          ) {
+                            publishStatusMutation.mutate('private')
+                          }
+                        }}
+                        disabled={publishStatusMutation.isPending}
+                      >
+                        <EyeOff className="size-3.5" />
+                        Thu hồi bộ deck
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="default"
+                        size="sm"
+                        className="w-full font-bold text-xs h-9 rounded-xl flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+                        onClick={() => {
+                          publishStatusMutation.mutate('published')
+                        }}
+                        disabled={publishStatusMutation.isPending}
+                      >
+                        <Globe className="size-3.5" />
+                        Xuất bản lại bộ deck
+                      </Button>
+                    )}
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full font-bold text-xs h-9 rounded-xl flex items-center justify-center gap-1.5"
+                      asChild
+                    >
+                      <Link to={`/marketplace/decks/publish?deck_id=${deck.source_deck_id}&deck_item_id=${deck.id}&edit=1`}>
+                        <Edit3 className="size-3.5 text-primary" />
+                        Chỉnh sửa thông tin
+                      </Link>
+                    </Button>
+                  </div>
                 </div>
               ) : deck.is_installed ? (
                 <div className="space-y-2">
@@ -734,7 +944,7 @@ export function SharedDeckDetailPage() {
                     </Link>
                   </Button>
                   {deck.installed_deck_id ? (
-                    <Button className="w-full h-10 sm:h-11 font-bold text-xs sm:text-sm shadow-md bg-gradient-to-r from-primary to-primary/90 rounded-xl" asChild>
+                    <Button className="w-full h-10 sm:h-11 font-bold text-xs sm:text-sm shadow-xs bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl transition-all" asChild>
                       <Link to={`/study?deck_id=${deck.installed_deck_id}`}>
                         <BookOpen className="mr-1.5 size-4" />
                         Bắt đầu học ngay
@@ -744,7 +954,7 @@ export function SharedDeckDetailPage() {
                 </div>
               ) : (
                 <Button
-                  className="w-full h-11 sm:h-12 font-bold text-sm sm:text-base shadow-md bg-gradient-to-r from-primary to-primary/90 hover:opacity-95 text-primary-foreground rounded-xl"
+                  className="w-full h-11 sm:h-12 font-bold text-sm sm:text-base shadow-xs bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl transition-all"
                   size="lg"
                   onClick={() => installMutation.mutate()}
                   disabled={installMutation.isPending}

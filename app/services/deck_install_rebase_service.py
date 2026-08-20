@@ -564,7 +564,12 @@ def prepare_update(
             schema_by_id=schema_by_id,
             order_row=order_row,
         )
-        if local is None or _same(local.value, upstream_value) or _same(upstream_value, base_value):
+        if (
+            local is None
+            or _same(local.value, upstream_value)
+            or _same(local.value, base_value)
+            or _same(upstream_value, base_value)
+        ):
             continue
         db.session.add(
             DeckInstallRebaseConflict(
@@ -776,7 +781,7 @@ def apply_prepared_update(*, rebase_id: str, user_id: int) -> DeckInstallRebase:
             continue
         key = str(change.change_key or f"{change.entity_kind}:{change.entity_id}:{change.property_key}")
         conflict = conflicts_by_key.get(key)
-        if _same(local.value, upstream_value):
+        if _same(local.value, upstream_value) or _same(local.value, base_value):
             overlay_mutated = _clear_local_overlay(local) or overlay_mutated
         elif _same(upstream_value, base_value):
             continue
@@ -785,7 +790,13 @@ def apply_prepared_update(*, rebase_id: str, user_id: int) -> DeckInstallRebase:
         elif conflict.resolution_mode == "keep_upstream":
             overlay_mutated = _clear_local_overlay(local) or overlay_mutated
         elif conflict.resolution_mode == "manual":
-            overlay_mutated = _set_local_overlay(local, conflict.resolved_value) or overlay_mutated
+            if _same(conflict.resolved_value, upstream_value):
+                overlay_mutated = _clear_local_overlay(local) or overlay_mutated
+            else:
+                overlay_mutated = (
+                    _set_local_overlay(local, conflict.resolved_value)
+                    or overlay_mutated
+                )
 
     now = _utcnow()
     if overlay_mutated:
