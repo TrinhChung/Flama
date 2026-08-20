@@ -25,6 +25,14 @@ class DeckReleaseSchemaTests(unittest.TestCase):
 
         self.assertEqual(revision.revision, "20260812_000016")
         self.assertEqual(revision.down_revision, "20260811_000015")
+        hardening = importlib.import_module(
+            "migrations.versions.20260820_000019_harden_deck_release_tracking"
+        )
+        self.assertEqual(hardening.revision, "20260820_000019")
+        self.assertEqual(
+            hardening.down_revision,
+            ("20260812_000016", "20260820_000018"),
+        )
 
     def test_release_foundation_tables_and_pointers_are_registered(self):
         self.assertEqual(DeckRelease.__tablename__, "deck_releases")
@@ -49,6 +57,7 @@ class DeckReleaseSchemaTests(unittest.TestCase):
 
         self.assertIn("current_release_id", DeckMarketplaceItem.__table__.c)
         self.assertIn("working_revision", DeckMarketplaceItem.__table__.c)
+        self.assertIn("dirty_tracking_revision", DeckMarketplaceItem.__table__.c)
         self.assertIn("applied_release_id", DeckInstall.__table__.c)
         self.assertIn("seen_release_id", DeckInstall.__table__.c)
         self.assertIn("overlay_revision", DeckInstall.__table__.c)
@@ -94,6 +103,11 @@ class DeckReleaseSchemaTests(unittest.TestCase):
             for constraint in DeckInstallRebase.__table__.constraints
             if isinstance(constraint, sa.UniqueConstraint)
         }
+        clone_override_constraint_names = {
+            constraint.name
+            for constraint in DeckCloneNoteFieldOverride.__table__.constraints
+            if isinstance(constraint, sa.UniqueConstraint)
+        }
 
         self.assertIn("uq_deck_releases_item_sequence", release_constraint_names)
         self.assertIn("uq_deck_releases_item_version", release_constraint_names)
@@ -102,6 +116,10 @@ class DeckReleaseSchemaTests(unittest.TestCase):
         self.assertIn(
             "uq_deck_install_rebases_install_idempotency",
             rebase_constraint_names,
+        )
+        self.assertIn(
+            "uq_clone_note_override_install_note_field_def",
+            clone_override_constraint_names,
         )
 
 
