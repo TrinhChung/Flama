@@ -551,6 +551,9 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             self.assertIsNotNone(deck_item)
             self.assertEqual(deck_item.source_deck_id, self.deck_id)
             self.assertEqual(deck_item.source_note_type_id, note_type_id)
+            self.assertIsNotNone(deck_item.current_release_id)
+            self.assertEqual(len(deck_item.releases), 1)
+            self.assertEqual(deck_item.releases[0].version_label, "1.0.0")
 
     def test_shared_deck_api_rejects_duplicate_and_child_of_shared_parent(self):
         with self.app.app_context():
@@ -715,6 +718,13 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         self.assertEqual(payload.get("title"), "Updated Title")
         self.assertEqual(payload.get("description"), "Updated Description")
         self.assertEqual(payload.get("preview_text"), "Updated Preview Text")
+
+        version_response = self.client.patch(
+            f"/api/shared/decks/{item_id}",
+            json={"version": "2.0.0"},
+        )
+        self.assertEqual(version_response.status_code, 409)
+        self.assertEqual((version_response.get_json() or {}).get("field"), "version")
 
     def test_shared_deck_api_rejects_parent_when_descendant_is_shared(self):
         with self.app.app_context():
@@ -1389,6 +1399,10 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             self.assertIsNotNone(install_row)
             self.assertEqual(install_row.clone_mode, "logical_overlay")
             self.assertIsNotNone(install_row.base_snapshot_at)
+            self.assertEqual(install_row.version_mode, "release")
+            self.assertIsNotNone(install_row.applied_release_id)
+            deck_item = db.session.get(DeckMarketplaceItem, deck_item_id)
+            self.assertEqual(install_row.applied_release_id, deck_item.current_release_id)
             subtree_ids = self._collect_subtree_ids(int(installed_root_id))
             cloned_notes_count = Note.query.filter(
                 Note.user_id == learner_id,

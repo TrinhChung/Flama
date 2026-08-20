@@ -3,8 +3,8 @@ import { apiRequest } from '@/shared/api/client'
 import type {
   AppliedInstalledUpdate,
   ApplyInstalledUpdateInput,
+  ChangeRequestInbox,
   ChangeRequestItem,
-  ChangeRequestSummary,
   ConflictResolutionInput,
   CreateDeckReleaseInput,
   CursorDiffPage,
@@ -549,6 +549,20 @@ export function summarizeDiffItems(items: DiffItem[]): DiffSummary {
   }
 }
 
+export function summarizeChangeRequest(request: DeckChangeRequest): DiffSummary {
+  const count = (changeType: string) => Number(request.change_counts[changeType] || 0)
+  return {
+    total: request.item_count,
+    entities: request.item_count,
+    added: count('field_def_add'),
+    modified: count('note_field_set')
+      + count('field_def_update')
+      + count('field_order_update'),
+    removed: count('note_field_remove') + count('field_def_disable'),
+    conflicts: request.unresolved_conflict_count,
+  }
+}
+
 export function filterDiffItems(items: DiffItem[], filters: DiffFilters) {
   const query = filters.query.trim().toLocaleLowerCase('vi-VN')
   return items.filter((item) => {
@@ -632,20 +646,31 @@ export function submitDeckChangeRequest(deckItemId: string, requestId: string) {
 
 export function getIncomingDeckChangeRequests(
   deckItemId?: string | null,
+  query: { cursor?: string | null; limit?: number } = {},
   signal?: AbortSignal,
 ) {
   const search = new URLSearchParams()
   if (deckItemId?.trim()) search.set('deck_item_id', deckItemId.trim())
+  if (query.cursor) search.set('cursor', query.cursor)
+  if (query.limit) search.set('limit', String(query.limit))
   const suffix = search.size ? `?${search.toString()}` : ''
-  return apiRequest<{ items: ChangeRequestSummary[] }>(
+  return apiRequest<ChangeRequestInbox>(
     `/api/change-requests/incoming${suffix}`,
     { signal },
   )
 }
 
-export function getDeckChangeRequest(requestId: string, signal?: AbortSignal) {
-  return apiRequest<DeckChangeRequest>(
+export function getDeckChangeRequest(
+  requestId: string,
+  query: DiffQuery = {},
+  signal?: AbortSignal,
+) {
+  const path = withDiffQuery(
     `/api/change-requests/${encodeSegment(requestId)}`,
+    query,
+  )
+  return apiRequest<DeckChangeRequest>(
+    path,
     { signal },
   )
 }

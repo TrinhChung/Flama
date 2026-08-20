@@ -684,6 +684,11 @@ def _build_local_change_payloads(
         .all()
     )
     added_ids = {str(row.id) for row in added_rows}
+    added_field_ids_by_name = {
+        str(row.name): str(row.id)
+        for row in added_rows
+        if str(row.name or "").strip()
+    }
     order_row = DeckCloneFieldOrderOverride.query.filter_by(deck_install_id=install.id).first()
     items: list[dict[str, Any]] = []
     sort_order = 0
@@ -704,6 +709,12 @@ def _build_local_change_payloads(
     for override in override_rows:
         source_field = live_fields_by_id.get(str(override.source_field_def_id))
         base_payload = base_field_defs.get(str(override.source_field_def_id))
+        if uses_release_base and base_payload is None:
+            raise ChangeRequestError(
+                "A schema override no longer maps to a field in the applied release.",
+                status=409,
+                error="CHANGE_REQUEST_FIELD_IDENTITY_MISSING",
+            )
         if source_field is None and base_payload is not None:
             source_field = SimpleNamespace(
                 id=str(override.source_field_def_id),
@@ -846,6 +857,17 @@ def _build_local_change_payloads(
         if stable_field_id is None:
             lookup_name = inverse_rename_map.get(str(row.field_name), str(row.field_name))
             stable_field_id = base_field_ids_by_name.get(lookup_name)
+        local_added_field_def_id = (
+            added_field_ids_by_name.get(str(row.field_name))
+            if stable_field_id is None
+            else None
+        )
+        if uses_release_base and stable_field_id is None and local_added_field_def_id is None:
+            raise ChangeRequestError(
+                "A note override no longer maps to a field in the applied release.",
+                status=409,
+                error="CHANGE_REQUEST_FIELD_IDENTITY_MISSING",
+            )
         release_field_name = str(
             (
                 base_field_defs.get(str(stable_field_id or ""), {})
@@ -897,6 +919,7 @@ def _build_local_change_payloads(
                 "metadata_json": {
                     "source_note_id": source_note.id,
                     "source_field_def_id": stable_field_id,
+                    "local_added_field_def_id": local_added_field_def_id,
                     "field_name": effective_field_name,
                     "source_note_label": _note_label(source_note),
                 },
@@ -1987,7 +2010,13 @@ def approve_and_merge_request(
     )
     note_field_defs_by_id = _load_field_defs_by_ids(
         {
-            str((dict(item.metadata_json or {})).get("source_field_def_id") or "")
+            str(
+                (dict(item.metadata_json or {})).get("source_field_def_id")
+                or added_field_id_map.get(
+                    str((dict(item.metadata_json or {})).get("local_added_field_def_id") or "")
+                )
+                or ""
+            )
             for item in note_change_items
         }
     )
@@ -1997,7 +2026,11 @@ def approve_and_merge_request(
         source_note = notes_by_id.get(source_note_id)
         if source_note is None:
             continue
-        source_field_id = str(metadata.get("source_field_def_id") or "").strip()
+        source_field_id = str(
+            metadata.get("source_field_def_id")
+            or added_field_id_map.get(str(metadata.get("local_added_field_def_id") or ""))
+            or ""
+        ).strip()
         source_field = note_field_defs_by_id.get(source_field_id) if source_field_id else None
         field_name = str(
             (source_field.name if source_field is not None else None)
