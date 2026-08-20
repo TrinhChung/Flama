@@ -10,7 +10,9 @@
     "typecheck": "tsc -b --pretty",
     "test": "vitest run",
     "check": "npm run lint && npm run build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "audit:seo": "lighthouse http://localhost:5173 --preset=desktop --only-categories=seo --chrome-flags=\"--user-data-dir=C:/Users/chung/.gemini/chrome-profiles/flama-devtools\" --view",
+    "audit:lighthouse": "lighthouse http://localhost:5173 --preset=desktop --only-categories=seo,performance,accessibility,best-practices --chrome-flags=\"--user-data-dir=C:/Users/chung/.gemini/chrome-profiles/flama-devtools\" --view"
   },
   "dependencies": {
     "@fontsource-variable/geist": "^5.3.0",
@@ -44,6 +46,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",
     "jsdom": "^30.0.1",
+    "lighthouse": "^13.4.1",
     "oxlint": "^1.71.0",
     "shadcn": "^4.15.0",
     "typescript": "~6.0.2",

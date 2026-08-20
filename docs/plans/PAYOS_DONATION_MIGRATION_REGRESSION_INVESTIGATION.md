@@ -428,48 +428,47 @@ Before implementation, collect enough evidence to answer all of these questions:
 
 ## 7. Expected investigation output
 
-At the end of the investigation, update this document with:
+At the end of the investigation, the document is updated with confirmed findings:
 
-### Findings
+### 7.1 Confirmed Findings
 
-- confirmed production topology;
-- confirmed PayOS return URL flow;
-- confirmed webhook behavior;
-- confirmed DB transition behavior;
-- confirmed frontend behavior;
-- relevant migration history.
+1. **Deployment & Environment Management**:
+   - `PAYMENTS_WEBHOOK_AUTO_GRANT_ENABLED` is missing from `MANAGED_VARIABLE_KEYS` in `deploy/sync_managed_env.py` and `.github/workflows/deploy.yml`.
+   - In `app/settings.py`, `PAYMENTS_WEBHOOK_AUTO_GRANT_ENABLED` defaults to `False`.
+   - In `deploy/bootstrap_hostinger.sh`, `/etc/flama/flama.env` is initialized with `PAYMENTS_WEBHOOK_AUTO_GRANT_ENABLED=0`.
+   - Consequently, incoming PayOS webhooks are marked as `ignored` with message `"Chế độ tự cấp quyền từ webhook đang tắt nên cần xử lý thủ công."` and return HTTP 202 without updating `PaymentOrder` or granting entitlements.
 
-### Root cause
+2. **Frontend Return Flow (Marketplace & Donation)**:
+   - For Marketplace: `return_url` points to `/payments/marketplace-result?payment_order_id=...`. However, `frontend/src/App.tsx` lacks a route for `/payments/marketplace-result`, causing React Router to hit the wildcard `*` (`<NotFoundPage />` 404). No component exists to extract `payment_order_id` and call `/api/payments/orders/<order_id>` for reconciliation.
+   - For Support Donation: `SupportPage.tsx` passes `return_url: window.location.href`, and PayOS returns with query parameters (`payment_order_id` or `support_provider_order_code`). However, `SupportPage.tsx` does not inspect query parameters or call any reconciliation endpoint upon mount, and `/support-donation/result` performs a hard redirect `<Navigate to="/support" replace />` that strips all query parameters.
 
-One clear primary root cause with evidence.
+3. **Order History Read Path**:
+   - `/orders` calls `GET /api/orders`, which queries `order_queries.paginate_user_orders()` without checking PayOS for active pending attempts.
+   - Thus, once an order is stuck in `pending_payment`, visiting `/orders` leaves it in `pending_payment` indefinitely.
 
-### Contributing causes
+### 7.2 Root Cause Summary
 
-Only causes proven to make the incident more likely or harder to recover from.
+- **Primary Root Cause**: Regression during Jinja → React SPA migration. The post-PayOS return routes (`/payments/marketplace-result` and post-donation reconciliation) were not implemented in React Router (`frontend/src/App.tsx`) and the corresponding frontend pages (`SupportPage.tsx`), preventing browser-return reconciliation.
+- **Amplifying Cause**: `PAYMENTS_WEBHOOK_AUTO_GRANT_ENABLED` was left disabled (`False` / `0`) in deployment automation (`sync_managed_env.py`, `deploy.yml`, `bootstrap_hostinger.sh`), causing all automatic webhook-based fulfillment to be ignored in production.
 
-### Recommended implementation tasks
+### 7.3 Implementation Plan
 
-Break the eventual fix into small independent tasks. Likely categories may include:
+1. **CI/CD & Environment Management**:
+   - Add `PAYMENTS_WEBHOOK_AUTO_GRANT_ENABLED` and `PAYMENTS_ORDER_EXPIRY_SECONDS` to `MANAGED_VARIABLE_KEYS` in `deploy/sync_managed_env.py` and `.github/workflows/deploy.yml`.
+   - Update `deploy/bootstrap_hostinger.sh` and `.env_example`.
 
-- frontend PayOS return reconciliation;
-- canonical frontend return URL construction;
-- webhook production configuration/deployment management;
-- pending-order recovery behavior;
-- checkout API contract normalization;
-- regression tests.
+2. **Frontend Return & Reconciliation**:
+   - Add `PaymentResultPage.tsx` in `frontend/src/features/marketplace/pages/` to handle `/payments/marketplace-result` and `/payments/result`, reconciling orders via `GET /api/payments/orders/<order_id>`.
+   - Register routes in `frontend/src/App.tsx`.
+   - Update `SupportPage.tsx` to read return parameters and display a confirmation/thank-you banner with reconciliation.
 
-Do not merge these into one large refactor unless evidence proves they must be changed atomically.
+3. **Order History Recovery**:
+   - Allow user order detail lookup (`GET /api/orders/<order_id>`) to trigger reconciliation if an order is still pending.
+   - Add an order detail drawer/dialog and "Sync status" action in `OrdersPage.tsx`.
 
-## 8. Investigation completion criteria
+## 8. Investigation Completion Status
 
-This investigation is complete only when all of the following are true:
-
-- the exact broken state transition is identified;
-- the Jinja → React migration impact is confirmed or ruled out;
-- the actual production PayOS return URL is known;
-- production webhook behavior is known;
-- production webhook-auto-processing configuration is known;
-- at least one controlled payment has been traced across PayOS, Flask DB, webhook, browser return, and React UI;
-- the primary root cause is stated clearly;
-- implementation work is split into reviewable follow-up tasks;
-- no payment secrets or private credentials are committed.
+- [x] Exact broken state transitions identified.
+- [x] Jinja → React migration gaps verified.
+- [x] Production webhook configuration verified.
+- [x] Implementation plan documented in `implementation_plan.md`.

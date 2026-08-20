@@ -22,6 +22,7 @@ export type OAuthClientItem = {
   client_uri: string | null
   redirect_uris: string[]
   is_confidential: boolean
+  has_secret?: boolean
   is_active: boolean
   created_at: string | null
 }
@@ -33,6 +34,15 @@ export type ConnectedAppItem = {
   authorized_at: string | null
   last_used_at: string | null
   token_id: number
+}
+
+function generateRandomKey(prefix = 'flama_sec_'): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-'
+  let result = prefix
+  for (let i = 0; i < 32; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length))
+  }
+  return result
 }
 
 export function useMcpOAuth() {
@@ -49,6 +59,17 @@ export function useMcpOAuth() {
   )
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
+
+  // Edit states for existing client
+  const [editingClient, setEditingClient] = useState<OAuthClientItem | null>(null)
+  const [editClientName, setEditClientName] = useState('')
+  const [editClientSecret, setEditClientSecret] = useState('')
+  const [editRedirectUrisText, setEditRedirectUrisText] = useState('')
+  const [isEditOpen, setIsEditOpen] = useState(false)
+
+  // Rotate secret state
+  const [rotateClientTarget, setRotateClientTarget] = useState<OAuthClientItem | null>(null)
+  const [newRotatedSecret, setNewRotatedSecret] = useState<{ clientName: string; secret: string } | null>(null)
 
   // 1. Fetch endpoints metadata
   const endpointsQuery = useQuery({
@@ -106,6 +127,55 @@ export function useMcpOAuth() {
     onError: (error: Error) => toast.error(error.message || 'Không thể tạo OAuth Client.'),
   })
 
+  // Update Client Mutation
+  const updateClientMutation = useMutation({
+    mutationFn: () => {
+      if (!editingClient) throw new Error('Không tìm thấy client để sửa')
+      const uris = editRedirectUrisText
+        .split('\n')
+        .map((u) => u.trim())
+        .filter(Boolean)
+      return appApi.mutate<{ success: boolean; client: OAuthClientItem }>(
+        `/api/oauth/clients/${editingClient.id}`,
+        'PUT',
+        {
+          client_name: editClientName.trim(),
+          client_secret: editClientSecret.trim() || null,
+          redirect_uris: uris,
+        }
+      )
+    },
+    onSuccess: async () => {
+      setIsEditOpen(false)
+      setEditingClient(null)
+      await refresh()
+      toast.success('Đã cập nhật thông tin OAuth Client.')
+    },
+    onError: (error: Error) => toast.error(error.message || 'Không thể cập nhật OAuth Client.'),
+  })
+
+  // Rotate Secret Mutation
+  const rotateSecretMutation = useMutation({
+    mutationFn: ({ clientPk, customSecret }: { clientPk: number; customSecret?: string }) =>
+      appApi.mutate<{ success: boolean; client: OAuthClientItem; client_secret: string }>(
+        `/api/oauth/clients/${clientPk}/rotate-secret`,
+        'POST',
+        { new_secret: customSecret || null }
+      ),
+    onSuccess: async (data) => {
+      if (rotateClientTarget) {
+        setNewRotatedSecret({
+          clientName: rotateClientTarget.client_name,
+          secret: data.client_secret,
+        })
+      }
+      setRotateClientTarget(null)
+      await refresh()
+      toast.success('Đã tạo mới Client Secret thành công!')
+    },
+    onError: (error: Error) => toast.error(error.message || 'Không thể đổi Secret.'),
+  })
+
   // Delete Client Mutation
   const deleteClientMutation = useMutation({
     mutationFn: (clientPk: number) =>
@@ -127,6 +197,14 @@ export function useMcpOAuth() {
     },
     onError: (error: Error) => toast.error(error.message),
   })
+
+  const openEditClient = (client: OAuthClientItem) => {
+    setEditingClient(client)
+    setEditClientName(client.client_name)
+    setEditClientSecret('')
+    setEditRedirectUrisText(client.redirect_uris.join('\n'))
+    setIsEditOpen(true)
+  }
 
   const copy = async (key: string, text: string) => {
     try {
@@ -153,12 +231,31 @@ export function useMcpOAuth() {
     setRedirectUrisText,
     isCreateOpen,
     setIsCreateOpen,
+    editingClient,
+    setEditingClient,
+    editClientName,
+    setEditClientName,
+    editClientSecret,
+    setEditClientSecret,
+    editRedirectUrisText,
+    setEditRedirectUrisText,
+    isEditOpen,
+    setIsEditOpen,
+    openEditClient,
+    rotateClientTarget,
+    setRotateClientTarget,
+    newRotatedSecret,
+    setNewRotatedSecret,
+    generateRandomKey,
     copiedKey,
     copy,
     createClientMutation,
+    updateClientMutation,
+    rotateSecretMutation,
     deleteClientMutation,
     revokeConnectedAppMutation,
     refresh,
     isAdmin,
   }
 }
+

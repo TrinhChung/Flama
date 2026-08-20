@@ -272,6 +272,212 @@ def revoke_token_and_commit(*, user_id: int, token_id: int) -> bool:
         ) from exc
 
 
+def update_token(
+    *,
+    user_id: int,
+    token_id: int,
+    name: str | None = None,
+    expires_in_days: object = ...,
+    scopes: Iterable[str] | None = None,
+) -> dict[str, Any] | None:
+    row = mcp_access_token_repository.get_token_for_user(token_id=token_id, user_id=user_id)
+    if row is None:
+        return None
+
+    normalized_name = None
+    if name is not None:
+        normalized_name = str(name).strip() or "MCP Token"
+        if len(normalized_name) > 120:
+            normalized_name = normalized_name[:120]
+
+    expires_at = ...
+    if expires_in_days is not ...:
+        if expires_in_days is not None:
+            try:
+                days = int(expires_in_days)
+                expires_at = (datetime.utcnow() + timedelta(days=days)) if days > 0 else None
+            except (TypeError, ValueError):
+                expires_at = ...
+        else:
+            expires_at = None
+
+    token_scopes_json = None
+    if scopes is not None:
+        normalized_scopes = _normalize_scopes(scopes)
+        if not normalized_scopes:
+            normalized_scopes = DEFAULT_SCOPES
+        token_scopes_json = _dump_scopes(normalized_scopes)
+
+    updated_row = mcp_access_token_repository.update_token(
+        row,
+        name=normalized_name,
+        scopes=token_scopes_json,
+        expires_at=expires_at,
+    )
+    now = datetime.utcnow()
+    max_requests = int(updated_row.max_requests or 0)
+    used_requests = int(updated_row.used_requests or 0)
+    return {
+        "id": int(updated_row.id),
+        "name": getattr(updated_row, "name", None) or "MCP Token",
+        "status": _resolve_status(row=updated_row, now=now),
+        "scopes": list(_normalize_scopes(updated_row.scopes)),
+        "expires_at": updated_row.expires_at.isoformat() if updated_row.expires_at else None,
+        "max_requests": max_requests,
+        "used_requests": used_requests,
+        "remaining_requests": max(max_requests - used_requests, 0),
+        "created_at": updated_row.created_at.isoformat() if updated_row.created_at else None,
+        "last_used_at": updated_row.last_used_at.isoformat() if updated_row.last_used_at else None,
+        "revoked": bool(updated_row.revoked),
+    }
+
+
+def update_token_and_commit(
+    *,
+    user_id: int,
+    token_id: int,
+    name: str | None = None,
+    expires_in_days: object = ...,
+    scopes: Iterable[str] | None = None,
+) -> dict[str, Any] | None:
+    try:
+        updated = update_token(
+            user_id=user_id,
+            token_id=token_id,
+            name=name,
+            expires_in_days=expires_in_days,
+            scopes=scopes,
+        )
+        if updated is None:
+            db.session.rollback()
+            return None
+        db.session.commit()
+        return updated
+    except SQLAlchemyError as exc:
+        db.session.rollback()
+        raise McpAccessTokenPersistenceError("Could not update the MCP token.") from exc
+
+
+def rotate_token(
+    *,
+    user_id: int,
+    token_id: int,
+    expires_in_days: object = ...,
+    scopes: Iterable[str] | None = None,
+) -> IssuedMcpAccessToken | None:
+    row = mcp_access_token_repository.get_token_for_user(token_id=token_id, user_id=user_id)
+    if row is None:
+        return None
+
+    raw_token = f"flama_mcp_{secrets.token_urlsafe(32)}"
+    now = datetime.utcnow()
+
+    expires_at = ...
+    if expires_in_days is not ...:
+        if expires_in_days is not None:
+            try:
+                days = int(expires_in_days)
+                expires_at = (now + timedelta(days=days)) if days > 0 else None
+            except (TypeError, ValueError):
+                expires_at = ...
+        else:
+            expires_at = None
+
+    token_scopes_json = None
+    if scopes is not None:
+        token_scopes = _normalize_scopes(scopes)
+        if not token_scopes:
+            token_scopes = DEFAULT_SCOPES
+        token_scopes_json = _dump_scopes(token_scopes)
+    else:
+        token_scopes = _normalize_scopes(row.scopes)
+
+    updated_row = mcp_access_token_repository.update_token(
+        row,
+        token_hash=_hash_token(raw_token),
+        scopes=token_scopes_json,
+        expires_at=expires_at,
+        revoked=False,
+    )
+    current_app.logger.info(
+        "Rotated MCP token token_id=%s user_id=%s expires_at=%s",
+        token_id,
+        user_id,
+        updated_row.expires_at.isoformat() if updated_row.expires_at else "never",
+    )
+    return IssuedMcpAccessToken(
+        token=raw_token,
+        name=getattr(updated_row, "name", None) or "MCP Token",
+        scopes=token_scopes,
+        expires_at=updated_row.expires_at,
+        max_requests=int(updated_row.max_requests or 1_000_000),
+    )
+
+
+def rotate_token_and_commit(
+    *,
+    user_id: int,
+    token_id: int,
+    expires_in_days: object = ...,
+    scopes: Iterable[str] | None = None,
+) -> IssuedMcpAccessToken | None:
+    try:
+        issued = rotate_token(
+            user_id=user_id,
+            token_id=token_id,
+            expires_in_days=expires_in_days,
+            scopes=scopes,
+        )
+        if issued is None:
+            db.session.rollback()
+            return None
+        db.session.commit()
+        return issued
+    except SQLAlchemyError as exc:
+        db.session.rollback()
+        raise McpAccessTokenPersistenceError("Could not rotate the MCP token.") from exc
+
+
+def purge_token(*, user_id: int, token_id: int) -> bool:
+    row = mcp_access_token_repository.get_token_for_user(token_id=token_id, user_id=user_id)
+    if row is None:
+        return False
+    mcp_access_token_repository.delete_token(row)
+    current_app.logger.info("Purged MCP token token_id=%s user_id=%s", token_id, user_id)
+    return True
+
+
+def purge_token_and_commit(*, user_id: int, token_id: int) -> bool:
+    try:
+        purged = purge_token(user_id=user_id, token_id=token_id)
+        if not purged:
+            db.session.rollback()
+            return False
+        db.session.commit()
+        return True
+    except SQLAlchemyError as exc:
+        db.session.rollback()
+        raise McpAccessTokenPersistenceError("Could not permanently delete the MCP token.") from exc
+
+
+def cleanup_tokens(*, user_id: int) -> int:
+    now = datetime.utcnow()
+    count = mcp_access_token_repository.purge_revoked_and_expired_tokens(user_id=user_id, now=now)
+    current_app.logger.info("Cleaned up %s revoked/expired MCP tokens for user_id=%s", count, user_id)
+    return count
+
+
+def cleanup_tokens_and_commit(*, user_id: int) -> int:
+    try:
+        count = cleanup_tokens(user_id=user_id)
+        db.session.commit()
+        return count
+    except SQLAlchemyError as exc:
+        db.session.rollback()
+        raise McpAccessTokenPersistenceError("Could not cleanup expired MCP tokens.") from exc
+
+
+
 def enforce_rate_limit(*, bucket_key: str) -> None:
     max_requests = _rate_limit_max_requests()
     window_seconds = _rate_limit_window_seconds()

@@ -52,6 +52,34 @@ def create_client(
     return client
 
 
+def update_client(
+    client: OAuthClient,
+    *,
+    client_name: str | None = None,
+    client_secret_hash: object = ...,
+    client_uri: object = ...,
+    redirect_uris: Iterable[str] | None = None,
+    is_confidential: bool | None = None,
+    is_active: bool | None = None,
+) -> OAuthClient:
+    if client_name is not None:
+        client.client_name = client_name.strip()
+    if client_secret_hash is not ...:
+        client.client_secret_hash = client_secret_hash
+    if client_uri is not ...:
+        client.client_uri = str(client_uri).strip() if client_uri else None
+    if redirect_uris is not None:
+        uris = [str(u).strip() for u in redirect_uris if str(u).strip()]
+        client.redirect_uris = json.dumps(uris, ensure_ascii=False)
+    if is_confidential is not None:
+        client.is_confidential = is_confidential
+    if is_active is not None:
+        client.is_active = is_active
+    db.session.add(client)
+    return client
+
+
+
 def create_authorization_code(
     *,
     code_hash: str,

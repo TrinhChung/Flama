@@ -72,7 +72,7 @@ ALLOWED_OAUTH_SCOPES: frozenset[str] = frozenset(
 
 # --- Allowed MCP Token Scopes (includes legacy for UserApiToken / internal) ---
 ALLOWED_MCP_SCOPES: frozenset[str] = frozenset(
-    ALL_GRANULAR_SCOPES | ALL_LEGACY_SCOPES
+    ALL_GRANULAR_SCOPES | ALL_LEGACY_SCOPES | ALL_OIDC_SCOPES
 )
 
 # --- Default Scopes (when no scope is specified in OAuth / token creation) ---
@@ -313,3 +313,27 @@ def has_scope(granted_scopes: Iterable[str], required_scope: str | None) -> bool
             return True
 
     return False
+
+
+def extract_userinfo_claims(user: Any, granted_scopes: Iterable[str]) -> dict[str, Any]:
+    """Extract standard OIDC claims from user object based on granted scopes."""
+    claims: dict[str, Any] = {
+        "sub": str(getattr(user, "id", "")),
+    }
+
+    if has_scope(granted_scopes, SCOPE_PROFILE):
+        username = getattr(user, "username", "")
+        claims["id"] = getattr(user, "id", None)
+        claims["username"] = username
+        claims["preferred_username"] = username
+        display_name = getattr(user, "display_name", None)
+        if display_name:
+            claims["name"] = display_name
+
+    if has_scope(granted_scopes, SCOPE_EMAIL):
+        email = getattr(user, "email", "")
+        claims["email"] = email
+        # Email is verified if user has email and is active / verified
+        claims["email_verified"] = bool(getattr(user, "email_verified", bool(email)))
+
+    return claims

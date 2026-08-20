@@ -98,6 +98,11 @@ const SharedNoteTypeDetailPage = lazy(() =>
     default: module.SharedNoteTypeDetailPage,
   })),
 )
+const PaymentResultPage = lazy(() =>
+  import('./features/marketplace/pages/MarketplacePages').then((module) => ({
+    default: module.PaymentResultPage,
+  })),
+)
 const OrdersPage = lazy(() =>
   import('./features/orders/pages/OrdersPage').then((module) => ({
     default: module.OrdersPage,
@@ -256,7 +261,15 @@ const router = createBrowserRouter([
       },
       {
         path: 'support-donation/result',
-        element: <Navigate to="/support" replace />,
+        element: deferred(<PaymentResultPage />),
+      },
+      {
+        path: 'payments/marketplace-result',
+        element: deferred(<PaymentResultPage />),
+      },
+      {
+        path: 'payments/result',
+        element: deferred(<PaymentResultPage />),
       },
       { path: 'guide/tts-key', element: deferred(<TtsKeyGuidePage />) },
       {

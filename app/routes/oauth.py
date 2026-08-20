@@ -347,8 +347,8 @@ def revoke():
 
 @oauth_bp.get("/oauth/userinfo")
 def userinfo():
-    """OIDC UserInfo Endpoint."""
-    from app.services import mcp_access_token_service, mcp_auth_service
+    """OIDC UserInfo Endpoint (RFC 6749 / OpenID Connect Core 1.0)."""
+    from app.services import mcp_access_token_service, mcp_auth_service, mcp_scope_service
 
     raw_token = mcp_auth_service.extract_raw_token(request=request)
     if not raw_token:
@@ -365,17 +365,22 @@ def userinfo():
         token_auth = mcp_access_token_service.authenticate_bearer_token(
             raw_token=raw_token
         )
-        user = token_auth.user
-        return jsonify(
-            {
-                "sub": str(user.id),
-                "id": user.id,
-                "username": user.username,
-                "preferred_username": user.username,
-                "email": user.email,
-                "email_verified": True,
-            }
+        if not mcp_scope_service.has_scope(token_auth.scopes, mcp_scope_service.SCOPE_OPENID):
+            return (
+                jsonify(
+                    {
+                        "error": "insufficient_scope",
+                        "error_description": "The access token does not have 'openid' scope.",
+                    }
+                ),
+                403,
+            )
+
+        claims = mcp_scope_service.extract_userinfo_claims(
+            user=token_auth.user,
+            granted_scopes=token_auth.scopes,
         )
+        return jsonify(claims)
     except Exception as exc:
         return jsonify({"error": "invalid_token", "error_description": str(exc)}), 401
 
@@ -461,6 +466,64 @@ def create_oauth_client():
         )
 
 
+@oauth_bp.put("/api/oauth/clients/<int:client_pk>")
+@admin_required
+def update_oauth_client_endpoint(client_pk: int):
+    """Update a registered OAuth 2.1 client (Admin only)."""
+    payload = request.get_json(silent=True) or request.form or {}
+    client_name = str(payload.get("client_name") or "").strip() if "client_name" in payload else None
+    client_secret = str(payload.get("client_secret") or "").strip() if "client_secret" in payload else None
+    raw_redirect_uris = payload.get("redirect_uris")
+
+    redirect_uris = None
+    if raw_redirect_uris is not None:
+        if isinstance(raw_redirect_uris, str):
+            redirect_uris = [u.strip() for u in raw_redirect_uris.splitlines() if u.strip()]
+        elif isinstance(raw_redirect_uris, list):
+            redirect_uris = [str(u).strip() for u in raw_redirect_uris if str(u).strip()]
+        else:
+            redirect_uris = []
+
+    try:
+        client = oauth_service.update_oauth_client(
+            client_pk,
+            client_name=client_name,
+            client_secret=client_secret,
+            redirect_uris=redirect_uris,
+            is_confidential=bool(client_secret) if client_secret is not None else None,
+        )
+        return jsonify({"success": True, "client": client.to_dict()}), 200
+    except OAuthError as exc:
+        return jsonify({"error": "VALIDATION_ERROR", "message": str(exc)}), exc.status
+    except Exception as exc:
+        logger.exception("Failed to update OAuth client: %s", exc)
+        db.session.rollback()
+        return jsonify({"error": "DATABASE_ERROR", "message": str(exc)}), 500
+
+
+@oauth_bp.post("/api/oauth/clients/<int:client_pk>/rotate-secret")
+@admin_required
+def rotate_oauth_client_secret(client_pk: int):
+    """Rotate or regenerate secret for an OAuth 2.1 client (Admin only)."""
+    payload = request.get_json(silent=True) or request.form or {}
+    new_secret = str(payload.get("new_secret") or "").strip() if payload.get("new_secret") else None
+
+    try:
+        client, secret_value = oauth_service.rotate_client_secret(
+            client_pk,
+            new_secret=new_secret,
+        )
+        data = client.to_dict()
+        data["client_secret"] = secret_value
+        return jsonify({"success": True, "client": data, "client_secret": secret_value}), 200
+    except OAuthError as exc:
+        return jsonify({"error": "VALIDATION_ERROR", "message": str(exc)}), exc.status
+    except Exception as exc:
+        logger.exception("Failed to rotate OAuth client secret: %s", exc)
+        db.session.rollback()
+        return jsonify({"error": "DATABASE_ERROR", "message": str(exc)}), 500
+
+
 @oauth_bp.delete("/api/oauth/clients/<int:client_pk>")
 @admin_required
 def delete_oauth_client(client_pk: int):
@@ -476,6 +539,7 @@ def delete_oauth_client(client_pk: int):
         logger.exception("Failed to delete OAuth client: %s", exc)
         db.session.rollback()
         return jsonify({"error": "DATABASE_ERROR", "message": str(exc)}), 500
+
 
 
 

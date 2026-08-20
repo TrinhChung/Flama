@@ -4,9 +4,11 @@ import {
   Copy,
   Globe,
   KeyRound,
+  Pencil,
   Plus,
   RefreshCw,
   ShieldCheck,
+  Sparkles,
   Trash2,
   Zap,
 } from 'lucide-react'
@@ -35,6 +37,7 @@ import { Textarea } from '@/components/ui/textarea'
 
 import { FLAMA_MCP_URL, BACKEND_ORIGIN } from '@/config/env'
 import { useMcpOAuth } from '../hooks/useMcpOAuth'
+import { useState } from 'react'
 
 export function McpOAuthTab() {
   const {
@@ -51,14 +54,34 @@ export function McpOAuthTab() {
     setRedirectUrisText,
     isCreateOpen,
     setIsCreateOpen,
+    editingClient,
+    editClientName,
+    setEditClientName,
+    editClientSecret,
+
+    setEditClientSecret,
+    editRedirectUrisText,
+    setEditRedirectUrisText,
+    isEditOpen,
+    setIsEditOpen,
+    openEditClient,
+    rotateClientTarget,
+    setRotateClientTarget,
+    newRotatedSecret,
+    setNewRotatedSecret,
+    generateRandomKey,
     copiedKey,
     copy,
     createClientMutation,
+    updateClientMutation,
+    rotateSecretMutation,
     deleteClientMutation,
     revokeConnectedAppMutation,
     refresh,
     isAdmin,
   } = useMcpOAuth()
+
+  const [customRotateSecret, setCustomRotateSecret] = useState('')
 
   const defaultBase = BACKEND_ORIGIN || window.location.origin
   const ep = endpointsQuery.data || {
@@ -73,7 +96,6 @@ export function McpOAuthTab() {
 
   const clients = clientsQuery.data?.items || []
   const connectedApps = connectedAppsQuery.data?.items || []
-
 
   return (
     <TabsContent value="oauth" className="space-y-6">
@@ -107,29 +129,28 @@ export function McpOAuthTab() {
                     Đăng ký ChatGPT Connector
                   </Button>
                 </DialogTrigger>
-              <DialogContent className="sm:max-w-md">
-                <DialogHeader>
-                  <DialogTitle className="flex items-center gap-2">
-                    <ShieldCheck className="size-5 text-primary" />
-                    Đăng ký OAuth Client cho ChatGPT
-                  </DialogTitle>
-                  <DialogDescription className="text-xs sm:text-sm">
-                    Nhập thông tin Callback URL do ChatGPT cấp để cấp phép cho Connector.
-                  </DialogDescription>
-                </DialogHeader>
+                <DialogContent className="sm:max-w-md">
+                  <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2">
+                      <ShieldCheck className="size-5 text-primary" />
+                      Đăng ký OAuth Client cho ChatGPT
+                    </DialogTitle>
+                    <DialogDescription className="text-xs sm:text-sm">
+                      Nhập thông tin Callback URL do ChatGPT cấp để cấp phép cho Connector.
+                    </DialogDescription>
+                  </DialogHeader>
 
-                <div className="space-y-4 py-2">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="c-name" className="text-xs font-semibold">Tên Ứng dụng</Label>
-                    <Input
-                      id="c-name"
-                      value={clientName}
-                      onChange={(e) => setClientName(e.target.value)}
-                      placeholder="ChatGPT Assistant"
-                    />
-                  </div>
+                  <div className="space-y-4 py-2">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="c-name" className="text-xs font-semibold">Tên Ứng dụng</Label>
+                      <Input
+                        id="c-name"
+                        value={clientName}
+                        onChange={(e) => setClientName(e.target.value)}
+                        placeholder="ChatGPT Assistant"
+                      />
+                    </div>
 
-                  <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
                       <Label htmlFor="c-id" className="text-xs font-semibold">Client ID</Label>
                       <Input
@@ -139,52 +160,104 @@ export function McpOAuthTab() {
                         placeholder="chatgpt_flama"
                       />
                     </div>
+
                     <div className="space-y-1.5">
-                      <Label htmlFor="c-secret" className="text-xs font-semibold">Client Secret</Label>
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="c-secret" className="text-xs font-semibold">Client Secret</Label>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="xs"
+                          className="h-6 text-[11px] text-primary gap-1 px-1.5"
+                          onClick={() => setClientSecret(generateRandomKey())}
+                        >
+                          <Sparkles className="size-3" />
+                          Tạo Secret ngẫu nhiên
+                        </Button>
+                      </div>
                       <Input
                         id="c-secret"
                         value={clientSecret}
                         onChange={(e) => setClientSecret(e.target.value)}
                         placeholder="flama_secret_2026"
+                        className="font-mono text-xs"
                       />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label htmlFor="c-redirect" className="text-xs font-semibold">
+                        Callback / Redirect URL từ ChatGPT
+                      </Label>
+                      <Textarea
+                        id="c-redirect"
+                        rows={3}
+                        value={redirectUrisText}
+                        onChange={(e) => setRedirectUrisText(e.target.value)}
+                        placeholder="https://chatgpt.com/connector/oauth/ZIPD0EH64oVa"
+                        className="font-mono text-xs"
+                      />
+                      <p className="text-[11px] text-muted-foreground">
+                        Dán chính xác đường dẫn Callback URL do ChatGPT hiển thị tại ô "Callback URL".
+                      </p>
                     </div>
                   </div>
 
-                  <div className="space-y-1.5">
-                    <Label htmlFor="c-redirect" className="text-xs font-semibold">
-                      Callback / Redirect URL từ ChatGPT
-                    </Label>
-                    <Textarea
-                      id="c-redirect"
-                      rows={3}
-                      value={redirectUrisText}
-                      onChange={(e) => setRedirectUrisText(e.target.value)}
-                      placeholder="https://chatgpt.com/connector/oauth/ZIPD0EH64oVa"
-                      className="font-mono text-xs"
-                    />
-                    <p className="text-[11px] text-muted-foreground">
-                      Dán chính xác đường dẫn Callback URL do ChatGPT hiển thị tại ô "Callback URL".
-                    </p>
-                  </div>
-                </div>
-
-                <DialogFooter className="gap-2 sm:gap-0">
-                  <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
-                    Hủy
-                  </Button>
-                  <Button
-                    onClick={() => createClientMutation.mutate()}
-                    disabled={createClientMutation.isPending}
-                  >
-                    {createClientMutation.isPending ? 'Đang lưu…' : 'Lưu Client'}
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
+                  <DialogFooter className="gap-2 sm:gap-0">
+                    <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
+                      Hủy
+                    </Button>
+                    <Button
+                      onClick={() => createClientMutation.mutate()}
+                      disabled={createClientMutation.isPending || !clientId.trim() || !clientName.trim()}
+                    >
+                      {createClientMutation.isPending ? 'Đang lưu…' : 'Lưu Client'}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             ) : null}
           </div>
         </CardHeader>
       </Card>
+
+      {/* Newly Rotated Secret Notification */}
+      {newRotatedSecret && (
+        <Card className="border-emerald-500/50 bg-emerald-500/10 dark:bg-emerald-950/30">
+          <CardHeader className="p-4 sm:p-5 pb-2">
+            <CardTitle className="text-sm sm:text-base font-bold text-emerald-950 dark:text-emerald-100 flex items-center justify-between">
+              <span className="flex items-center gap-2">
+                <ShieldCheck className="size-5 text-emerald-600 dark:text-emerald-400" />
+                Client Secret mới cho "{newRotatedSecret.clientName}"
+              </span>
+              <Button
+                variant="ghost"
+                size="xs"
+                className="text-xs text-muted-foreground hover:text-foreground h-6 px-2"
+                onClick={() => setNewRotatedSecret(null)}
+              >
+                Đóng
+              </Button>
+            </CardTitle>
+            <CardDescription className="text-xs text-emerald-900 dark:text-emerald-200">
+              Hãy sao chép chuỗi Client Secret này và cập nhật vào cấu hình ChatGPT của bạn. Chuỗi secret sẽ không hiển thị lại.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-4 sm:p-5 pt-0 space-y-2">
+            <div className="flex items-center gap-2 rounded-lg border border-emerald-400/60 bg-background/80 p-2 text-xs font-mono">
+              <span className="flex-1 break-all select-all">{newRotatedSecret.secret}</span>
+              <Button
+                size="sm"
+                variant="outline"
+                className="shrink-0 h-8 gap-1 text-xs"
+                onClick={() => copy('Client Secret', newRotatedSecret.secret)}
+              >
+                {copiedKey === 'Client Secret' ? <Check className="size-3.5 text-emerald-600" /> : <Copy className="size-3.5" />}
+                {copiedKey === 'Client Secret' ? 'Đã chép' : 'Sao chép Secret'}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* 2. Endpoints Copy-Paste Table */}
       <Card className="shadow-2xs">
@@ -330,7 +403,9 @@ export function McpOAuthTab() {
                 </tr>
                 <tr>
                   <td className="p-3 font-semibold">Client ID & Secret</td>
-                  <td className="p-3 font-mono text-[11px]">chatgpt_flama / flama_secret_2026</td>
+                  <td className="p-3 font-mono text-[11px]">
+                    {clients.length > 0 ? clients[0].client_id : 'chatgpt_flama'} / [Secret bạn đã tạo]
+                  </td>
                   <td className="p-3 text-muted-foreground">Lấy từ danh sách client bên dưới</td>
                 </tr>
                 <tr>
@@ -365,7 +440,7 @@ export function McpOAuthTab() {
             </CardTitle>
             <CardDescription className="text-xs">
               {isAdmin
-                ? 'Các Client ID được phép yêu cầu xác thực qua Flama OAuth.'
+                ? 'Quản lý Client ID, Secret và Redirect URIs được phép kết nối.'
                 : 'Cấu hình OAuth Client do Quản trị viên quản lý.'}
             </CardDescription>
           </CardHeader>
@@ -384,26 +459,64 @@ export function McpOAuthTab() {
                   key={c.id}
                   className="p-3 rounded-xl border bg-card flex items-start justify-between gap-2 text-xs"
                 >
-                  <div className="space-y-1 min-w-0">
-                    <div className="font-bold text-foreground flex items-center gap-2">
-                      {c.client_name}
+                  <div className="space-y-1.5 min-w-0 flex-1">
+                    <div className="font-bold text-foreground flex flex-wrap items-center gap-2">
+                      <span>{c.client_name}</span>
                       <Badge variant="outline" className="text-[10px] font-mono">
                         {c.client_id}
                       </Badge>
+                      {c.has_secret ? (
+                        <Badge variant="default" className="text-[10px] bg-emerald-600 dark:bg-emerald-700">
+                          Đã có Secret
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary" className="text-[10px]">
+                          Không có Secret
+                        </Badge>
+                      )}
                     </div>
                     <div className="text-[11px] text-muted-foreground truncate">
                       Callbacks: {c.redirect_uris.join(', ')}
                     </div>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-7 text-destructive hover:bg-destructive/10 shrink-0"
-                    onClick={() => deleteClientMutation.mutate(c.id)}
-                    title="Xóa Client"
-                  >
-                    <Trash2 className="size-3.5" />
-                  </Button>
+
+                  <div className="flex items-center gap-1 shrink-0">
+                    {/* Edit Client */}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-7 text-muted-foreground hover:text-foreground"
+                      onClick={() => openEditClient(c)}
+                      title="Chỉnh sửa Client"
+                    >
+                      <Pencil className="size-3.5" />
+                    </Button>
+
+                    {/* Rotate Secret */}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-7 text-amber-600 hover:bg-amber-50 hover:text-amber-700 dark:hover:bg-amber-950/40"
+                      onClick={() => {
+                        setRotateClientTarget(c)
+                        setCustomRotateSecret('')
+                      }}
+                      title="Tạo mới / Đổi Secret"
+                    >
+                      <RefreshCw className="size-3.5" />
+                    </Button>
+
+                    {/* Delete Client */}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-7 text-destructive hover:bg-destructive/10"
+                      onClick={() => deleteClientMutation.mutate(c.id)}
+                      title="Xóa Client"
+                    >
+                      <Trash2 className="size-3.5" />
+                    </Button>
+                  </div>
                 </div>
               ))
             )}
@@ -452,6 +565,146 @@ export function McpOAuthTab() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Edit OAuth Client Dialog */}
+      <Dialog open={isEditOpen} onOpenChange={(open) => !open && setIsEditOpen(false)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="size-4.5 text-primary" />
+              Chỉnh sửa OAuth Client
+            </DialogTitle>
+            <DialogDescription className="text-xs sm:text-sm">
+              Cập nhật tên, secret hoặc danh sách Callback URLs của Client <strong>{editingClient?.client_id}</strong>.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-c-name" className="text-xs font-semibold">Tên Ứng dụng</Label>
+              <Input
+                id="edit-c-name"
+                value={editClientName}
+                onChange={(e) => setEditClientName(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="edit-c-secret" className="text-xs font-semibold">
+                  Client Secret mới (để trống nếu giữ nguyên)
+                </Label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="xs"
+                  className="h-6 text-[11px] text-primary gap-1 px-1.5"
+                  onClick={() => setEditClientSecret(generateRandomKey())}
+                >
+                  <Sparkles className="size-3" />
+                  Tạo ngẫu nhiên
+                </Button>
+              </div>
+              <Input
+                id="edit-c-secret"
+                value={editClientSecret}
+                onChange={(e) => setEditClientSecret(e.target.value)}
+                placeholder="Để trống để giữ nguyên secret cũ"
+                className="font-mono text-xs"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-c-redirect" className="text-xs font-semibold">
+                Callback / Redirect URLs (mỗi URL một dòng)
+              </Label>
+              <Textarea
+                id="edit-c-redirect"
+                rows={3}
+                value={editRedirectUrisText}
+                onChange={(e) => setEditRedirectUrisText(e.target.value)}
+                className="font-mono text-xs"
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setIsEditOpen(false)}>
+              Hủy
+            </Button>
+            <Button
+              onClick={() => updateClientMutation.mutate()}
+              disabled={updateClientMutation.isPending || !editClientName.trim()}
+            >
+              {updateClientMutation.isPending ? 'Đang lưu…' : 'Lưu thay đổi'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Rotate Client Secret Dialog */}
+      <Dialog open={rotateClientTarget !== null} onOpenChange={(open) => !open && setRotateClientTarget(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
+              <RefreshCw className="size-5" />
+              Đổi Client Secret cho "{rotateClientTarget?.client_name}"
+            </DialogTitle>
+            <DialogDescription className="text-xs sm:text-sm">
+              Tạo mới mã bí mật (Client Secret) để cập nhật vào ChatGPT Connector.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 py-2">
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Bạn có thể để hệ thống tự động sinh một chuỗi Secret 32 ký tự an toàn, hoặc nhập một chuỗi bí mật tùy chọn bên dưới.
+            </p>
+
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="rotate-c-sec" className="text-xs font-semibold">Secret tùy chỉnh (Tùy chọn)</Label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="xs"
+                  className="h-6 text-[11px] text-primary gap-1 px-1.5"
+                  onClick={() => setCustomRotateSecret(generateRandomKey())}
+                >
+                  <Sparkles className="size-3" />
+                  Sinh ngẫu nhiên
+                </Button>
+              </div>
+              <Input
+                id="rotate-c-sec"
+                value={customRotateSecret}
+                onChange={(e) => setCustomRotateSecret(e.target.value)}
+                placeholder="Để trống để tự động tạo secret an toàn"
+                className="font-mono text-xs"
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setRotateClientTarget(null)}>
+              Hủy bỏ
+            </Button>
+            <Button
+              className="bg-amber-600 hover:bg-amber-700 text-white"
+              disabled={rotateSecretMutation.isPending}
+              onClick={() => {
+                if (rotateClientTarget) {
+                  rotateSecretMutation.mutate({
+                    clientPk: rotateClientTarget.id,
+                    customSecret: customRotateSecret.trim() || undefined,
+                  })
+                }
+              }}
+            >
+              {rotateSecretMutation.isPending ? 'Đang tạo…' : 'Xác nhận Đổi Secret'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </TabsContent>
   )
 }
