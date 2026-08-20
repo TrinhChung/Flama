@@ -51,6 +51,14 @@ export type CursorDiffPage = {
   next_cursor: string | null
 }
 
+export type CursorPageMeta = {
+  limit: number
+  has_more: boolean
+  next_cursor: string | null
+  filtered_item_count?: number
+  revision?: number
+}
+
 export type ReleaseRef = {
   id: string
   sequence_no?: number | null
@@ -237,6 +245,7 @@ export type DeckChangeRequest = {
   can_review: boolean
   items: ChangeRequestItem[]
   conflicts: ChangeRequestConflict[]
+  page?: CursorPageMeta
 }
 
 export type ChangeRequestSummary = Pick<
@@ -262,6 +271,11 @@ export type LocalChangesPreview = {
   item_count: number
   change_counts: Record<string, number>
   items: LocalChangeItem[]
+}
+
+export type ChangeRequestInbox = {
+  items: ChangeRequestSummary[]
+  page?: CursorPageMeta
 }
 
 export type ConflictResolutionInput = {
