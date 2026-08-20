@@ -20,6 +20,7 @@ from models.connect_note_ref import ConnectNoteRef
 from models.connect_pending_media import ConnectPendingMedia
 from models.connect_import_session import ConnectImportSession
 from models.connect_note_type_ref import ConnectNoteTypeRef
+from models.connect_review_event_ref import ConnectReviewEventRef
 from models.connect_source_deck_ref import ConnectSourceDeckRef
 from models.connect_source_note_ref import ConnectSourceNoteRef
 from models.deck import Deck
@@ -1345,7 +1346,157 @@ def get_import_status(user_id: int, session_id: object) -> dict[str, Any]:
     }
 
 
+<<<<<<< Updated upstream
 def complete_import_session(user_id: int, session_id: object) -> dict[str, Any]:
+=======
+def get_import_note_statuses(
+    user_id: int,
+    session_id: object,
+    notes: object,
+) -> dict[str, Any]:
+    session = _get_import_session(user_id, session_id, require_ready=True)
+    if not isinstance(notes, list) or len(notes) > 1000:
+        raise ConnectError("notes must be an array with at most 1000 entries")
+
+    requested: dict[str, str] = {}
+    requested_cards: dict[str, list[dict[str, Any]]] = {}
+    original_ids: dict[str, object] = {}
+    for item in notes:
+        if not isinstance(item, dict):
+            raise ConnectError("note status entries must be objects")
+        external_id = str(item.get("ankiNoteId") or "").strip()
+        content_hash = str(item.get("contentHash") or "").strip().lower()
+        if not external_id or len(external_id) > 128:
+            raise ConnectError("note status ankiNoteId is invalid")
+        if not re.fullmatch(r"[0-9a-f]{64}", content_hash):
+            raise ConnectError("note status contentHash must be a SHA-256 hex string")
+        if external_id in requested:
+            raise ConnectError("note status contains duplicate ankiNoteId values")
+        requested[external_id] = content_hash
+        original_ids[external_id] = item.get("ankiNoteId")
+        raw_cards = item.get("cards") or []
+        if not isinstance(raw_cards, list) or len(raw_cards) > 100:
+            raise ConnectError("note status cards must be an array with at most 100 entries")
+        normalized_cards: list[dict[str, Any]] = []
+        seen_card_ids: set[str] = set()
+        for raw_card in raw_cards:
+            if not isinstance(raw_card, dict):
+                raise ConnectError("note status card entries must be objects")
+            source_card_id = str(raw_card.get("sourceCardId") or "").strip()
+            snapshot_hash = str(raw_card.get("snapshotHash") or "").strip().lower()
+            if not source_card_id or len(source_card_id) > 128 or source_card_id in seen_card_ids:
+                raise ConnectError("note status sourceCardId is invalid or duplicated")
+            if not re.fullmatch(r"[0-9a-f]{64}", snapshot_hash):
+                raise ConnectError("note status snapshotHash must be a SHA-256 hex string")
+            seen_card_ids.add(source_card_id)
+            normalized_cards.append(
+                {"sourceCardId": source_card_id, "snapshotHash": snapshot_hash}
+            )
+        requested_cards[external_id] = normalized_cards
+
+    refs = ConnectSourceNoteRef.query.filter(
+        ConnectSourceNoteRef.user_id == user_id,
+        ConnectSourceNoteRef.source_key == session.source_key,
+        ConnectSourceNoteRef.external_note_id.in_(list(requested)),
+    ).all() if requested else []
+    refs_by_external_id = {row.external_note_id: row for row in refs}
+    requested_card_ids = [
+        card["sourceCardId"]
+        for cards in requested_cards.values()
+        for card in cards
+    ]
+    card_refs = ConnectSourceCardRef.query.filter(
+        ConnectSourceCardRef.user_id == user_id,
+        ConnectSourceCardRef.source_key == session.source_key,
+        ConnectSourceCardRef.external_card_id.in_(requested_card_ids),
+    ).all() if requested_card_ids else []
+    card_refs_by_external_id = {row.external_card_id: row for row in card_refs}
+    orphan_review_card_ids = {
+        row[0]
+        for row in db.session.query(ConnectReviewEventRef.external_card_id)
+        .filter(
+            ConnectReviewEventRef.user_id == user_id,
+            ConnectReviewEventRef.source_key == session.source_key,
+            ConnectReviewEventRef.external_card_id.in_(requested_card_ids),
+            ConnectReviewEventRef.status == "imported",
+            ConnectReviewEventRef.review_event_id.is_(None),
+        )
+        .distinct()
+        .all()
+    } if requested_card_ids else set()
+    note_ids = [row.note_id for row in refs if row.note_id]
+    media_by_note: dict[str, set[str]] = {}
+    if note_ids:
+        for asset in MediaAsset.query.filter(MediaAsset.note_id.in_(note_ids)).all():
+            if asset.sha256:
+                media_by_note.setdefault(asset.note_id, set()).add(asset.sha256.lower())
+
+    results: list[dict[str, Any]] = []
+    for external_id, content_hash in requested.items():
+        ref = refs_by_external_id.get(external_id)
+        if ref is None or ref.note is None:
+            state = "new"
+            media_hashes: list[str] = []
+        else:
+            state = "unchanged" if ref.content_hash == content_hash else "changed"
+            media_hashes = sorted(media_by_note.get(ref.note_id, set()))
+        cards_result: list[dict[str, Any]] = []
+        for requested_card in requested_cards.get(external_id, []):
+            card_ref = card_refs_by_external_id.get(requested_card["sourceCardId"])
+            if card_ref is not None and card_ref.external_note_id != external_id:
+                card_ref = None
+            if card_ref is None:
+                progress_state = "new"
+                review_cursor = None
+            else:
+                progress = CardProgress.query.filter_by(
+                    user_id=user_id,
+                    card_id=card_ref.card_id,
+                ).first()
+                local_changed = (
+                    progress is not None
+                    and card_ref.applied_local_revision is not None
+                    and int(progress.revision or 0) != int(card_ref.applied_local_revision)
+                )
+                if local_changed:
+                    progress_state = "local_changed"
+                elif card_ref.snapshot_hash == requested_card["snapshotHash"]:
+                    progress_state = "unchanged"
+                else:
+                    progress_state = "changed"
+                # A cursor is only valid while every imported provenance row
+                # still has its ReviewEvent analytics projection. Returning a
+                # null cursor requests an idempotent replay and repairs gaps.
+                review_cursor = (
+                    None
+                    if requested_card["sourceCardId"] in orphan_review_card_ids
+                    else card_ref.review_cursor
+                )
+            cards_result.append(
+                {
+                    "sourceCardId": requested_card["sourceCardId"],
+                    "progressState": progress_state,
+                    "reviewCursor": str(review_cursor) if review_cursor is not None else None,
+                }
+            )
+        results.append(
+            {
+                "ankiNoteId": original_ids[external_id],
+                "state": state,
+                "mediaHashes": media_hashes,
+                "cards": cards_result,
+            }
+        )
+    return {"importSessionId": session.id, "notes": results}
+
+
+def complete_import_session(
+    user_id: int,
+    session_id: object,
+    *,
+    expected_notes: object | None = None,
+) -> dict[str, Any]:
+>>>>>>> Stashed changes
     session = _get_import_session(user_id, session_id, require_ready=False)
     if session.status in {"blocked_note_types", "failed", "cancelled", "expired"}:
         raise ConnectError("import session cannot be completed from its current state")

@@ -75,6 +75,70 @@ def delete_deck_subtree(*, deck_obj: Deck, user_id: int, is_admin: bool) -> str:
     """Delete a local deck, or archive a shared source while preserving installs."""
     deck_ids_to_delete = _collect_deck_subtree_ids(deck_obj.id)
 
+<<<<<<< Updated upstream
+=======
+    if purge:
+        if not is_admin:
+            raise ValueError("Only administrators can purge decks.")
+
+        from models.deck_change_request import DeckChangeRequest
+        from models.review_event import ReviewEvent
+        from models.study_session import StudySession
+        from models.study_session_card import StudySessionCard
+
+        # 1. Delete DeckChangeRequests referencing local_deck_id or source_deck_id in deck_ids_to_delete
+        DeckChangeRequest.query.filter(
+            (DeckChangeRequest.local_deck_id.in_(deck_ids_to_delete)) |
+            (DeckChangeRequest.source_deck_id.in_(deck_ids_to_delete))
+        ).delete(synchronize_session=False)
+
+        # 2. Delete DeckInstalls referencing local_deck_id or source_deck_id in deck_ids_to_delete
+        DeckInstall.query.filter(
+            (DeckInstall.local_deck_id.in_(deck_ids_to_delete)) |
+            (DeckInstall.source_deck_id.in_(deck_ids_to_delete))
+        ).delete(synchronize_session=False)
+
+        # 3. Delete DeckMarketplaceItems referencing source_deck_id in deck_ids_to_delete
+        DeckMarketplaceItem.query.filter(
+            DeckMarketplaceItem.source_deck_id.in_(deck_ids_to_delete)
+        ).delete(synchronize_session=False)
+
+        # 4. ReviewEvent is an immutable analytics fact. Detach the deleted
+        # deck snapshot instead of erasing study history and breaking imported
+        # Anki provenance links.
+        ReviewEvent.query.filter(
+            ReviewEvent.deck_id.in_(deck_ids_to_delete)
+        ).update({ReviewEvent.deck_id: None}, synchronize_session=False)
+
+        # 5. Delete StudySessionCards referencing local_deck_id in deck_ids_to_delete
+        StudySessionCard.query.filter(
+            StudySessionCard.local_deck_id.in_(deck_ids_to_delete)
+        ).delete(synchronize_session=False)
+
+        # 6. Delete StudySessions referencing local_deck_id in deck_ids_to_delete
+        StudySession.query.filter(
+            StudySession.local_deck_id.in_(deck_ids_to_delete)
+        ).delete(synchronize_session=False)
+
+        # 7. Collect and delete all notes and cards inside the deck subtree
+        note_rows = db.session.query(Note.id).filter(Note.deck_id.in_(deck_ids_to_delete)).all()
+        note_ids = [str(row[0]) for row in note_rows if row and row[0]]
+        if note_ids:
+            card_rows = db.session.query(Card.id).filter(Card.note_id.in_(note_ids)).all()
+            card_ids = [str(row[0]) for row in card_rows if row and row[0]]
+            if card_ids:
+                CardProgress.query.filter(CardProgress.card_id.in_(card_ids)).delete(
+                    synchronize_session=False
+                )
+                Card.query.filter(Card.id.in_(card_ids)).delete(synchronize_session=False)
+            Note.query.filter(Note.id.in_(note_ids)).delete(synchronize_session=False)
+
+        # 8. Delete the deck object itself
+        db.session.delete(deck_obj)
+        db.session.commit()
+        return "purged"
+
+>>>>>>> Stashed changes
     marketplace_source_ids = set(deck_ids_to_delete)
     marketplace_source_ids.update(_collect_deck_ancestor_ids(deck_obj.id))
     marketplace_items = (

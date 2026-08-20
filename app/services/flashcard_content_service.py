@@ -157,7 +157,51 @@ def update_note_type(
     return marketplace_query_service.serialize_note_type(note_type)
 
 
+<<<<<<< Updated upstream
 def delete_note_type(*, user_id: int, note_type_id: str) -> dict[str, bool]:
+=======
+def delete_note_type(*, user_id: int, note_type_id: str, purge: bool = False, is_admin: bool = False) -> dict[str, bool]:
+    if purge:
+        if not is_admin:
+            raise ContentApiError("FORBIDDEN", "Only administrators can purge note types.", status=403)
+        note_type = db.session.get(NoteType, note_type_id)
+        if note_type is None:
+            raise ContentApiError("FIELD_NOT_FOUND", "Note type not found.", status=404)
+
+        from models.deck_change_request import DeckChangeRequest
+        from models.deck_install import DeckInstall
+        from models.deck_marketplace_item import DeckMarketplaceItem
+        from models.review_event import ReviewEvent
+
+        # 1. Preserve immutable study history while detaching the purged
+        # content dimension. This also keeps imported Anki provenance valid.
+        ReviewEvent.query.filter(ReviewEvent.note_type_id == note_type_id).update(
+            {ReviewEvent.note_type_id: None},
+            synchronize_session=False,
+        )
+
+        # 2. Delete all DeckChangeRequests referencing this note type
+        DeckChangeRequest.query.filter(DeckChangeRequest.source_note_type_id == note_type_id).delete(synchronize_session=False)
+
+        # 3. Delete all DeckInstalls referencing this note type
+        DeckInstall.query.filter(DeckInstall.source_note_type_id == note_type_id).delete(synchronize_session=False)
+
+        # 4. Delete all DeckMarketplaceItems referencing this note type
+        DeckMarketplaceItem.query.filter(DeckMarketplaceItem.source_note_type_id == note_type_id).delete(synchronize_session=False)
+
+        # 5. Delete all NoteTypeInstalls where this note type is source or installed
+        NoteTypeInstall.query.filter(
+            (NoteTypeInstall.source_note_type_id == note_type_id) |
+            (NoteTypeInstall.installed_note_type_id == note_type_id)
+        ).delete(synchronize_session=False)
+
+        # 6. Delete NoteType itself, which cascades
+        db.session.delete(note_type)
+        _audit(user_id, "note_type.purge", {"note_type_id": note_type_id})
+        db.session.commit()
+        return {"success": True, "purged": True}
+
+>>>>>>> Stashed changes
     note_type = _owned_note_type(user_id=user_id, note_type_id=note_type_id)
     if Note.query.filter_by(note_type_id=note_type.id).count() > 0:
         raise ContentApiError(
