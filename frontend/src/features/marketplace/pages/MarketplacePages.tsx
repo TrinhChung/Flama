@@ -775,3 +775,4 @@ export function SharedNoteTypesPage() {
 
 export { SharedDeckDetailPage } from './SharedDeckDetailPage'
 export { SharedNoteTypeDetailPage } from './SharedNoteTypeDetailPage'
+export { PaymentResultPage } from './PaymentResultPage'

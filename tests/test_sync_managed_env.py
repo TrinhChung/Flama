@@ -34,8 +34,10 @@ class SyncManagedEnvironmentTests(unittest.TestCase):
             "FLASHCARD_MEDIA_MAX_BYTES": "10485760",
             "FLASHCARD_MEDIA_SCAN_ENABLED": "0",
             "PAYMENTS_ENABLED": "1",
+            "PAYMENTS_ORDER_EXPIRY_SECONDS": "1800",
             "PAYMENTS_PAID_INSTALL_REQUIRED": "1",
             "PAYMENTS_PROVIDER": "payos",
+            "PAYMENTS_WEBHOOK_AUTO_GRANT_ENABLED": "1",
         }
 
     def test_build_and_apply_updates_only_managed_keys(self):

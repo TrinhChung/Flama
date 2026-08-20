@@ -104,24 +104,23 @@ Meaning:
 
 ## 4. Current route ownership
 
-### 4.1 User-facing routes
+### 4.1 User-facing routes & React SPA Pages
 
-`app/routes/payments.py`
+**Frontend React SPA (`frontend/src/App.tsx`):**
+- `/payments/marketplace-result`: Handles post-checkout return for marketplace purchases, renders `PaymentResultPage` with immediate PayOS reconciliation.
+- `/payments/result`: Universal payment result route.
+- `/support-donation/result` & `/support`: Support donation result & landing page with query parameter reconciliation.
+- `/orders`: User order history (`OrdersPage`) with detailed modal and manual reconciliation action for pending orders.
 
-- `GET /payments/marketplace-result`
-- `POST /api/payments/orders`
-- `GET /api/payments/orders/<order_id>`
-- `POST /api/payments/orders/<order_id>/cancel`
-- `POST /api/payments/providers/payos/webhook`
-
-`app/routes/user_orders.py`
-
-- `GET /orders`
-- `GET /orders/<order_id>`
+**Backend REST Endpoints:**
+- `GET /api/payments/orders/<order_id>` (`app/routes/payments.py`): Reconciles pending order attempt against PayOS and returns order details.
+- `GET /api/v1/orders/<order_id>` (`app/api/v1/billing/orders.py`): Reconciles pending order and returns order detail payload.
+- `GET /api/support-donation/status` (`app/api/v1/billing/support.py`): Reconciles and returns status for saved and anonymous support donations.
+- `POST /api/payments/providers/payos/webhook` (`app/routes/payments.py`): Webhook receiver from PayOS (processes and fulfills orders when `PAYMENTS_WEBHOOK_AUTO_GRANT_ENABLED=1`).
 
 ### 4.2 Admin-facing routes
 
-`app/routes/admin_payments.py`
+`app/routes/admin_payments.py` & `app/api/v1/admin/payments.py`
 
 - `GET /admin/payments`
 - `GET /admin/payments/orders`
