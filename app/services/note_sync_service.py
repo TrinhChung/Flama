@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import Any
 
 from app.repositories import vocabulary_repository
+from app.services import deck_working_tree_service
 from app.services.anki_content_normalizer import normalize_anki_field_values
 from app.services.flashcard_renderer import is_field_empty
 from app.validators.flashcard_input import RequestValidationError
@@ -66,6 +67,50 @@ def compute_note_content_hash(
     }
     encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def _ensure_version_safe_note_tags_mutation(
+    *,
+    note: Note,
+    current_tags: list[str] | None,
+    next_tags: list[str] | None,
+) -> None:
+    current = {normalize_compare_text(tag) for tag in (current_tags or [])}
+    incoming = {normalize_compare_text(tag) for tag in (next_tags or [])}
+    if current == incoming:
+        return
+    if not deck_working_tree_service.note_has_shared_release_dependents(note):
+        return
+    # This service owns the batch transaction. A late tag conflict may follow
+    # earlier pending note writes, so fail the whole batch closed.
+    db.session.rollback()
+    raise RequestValidationError(
+        "Tags on a released shared note cannot change until note metadata is versioned.",
+        field="tags",
+        status=409,
+        code="SHARED_NOTE_METADATA_VERSIONING_REQUIRED",
+    )
+
+
+def _ensure_version_safe_note_deck_mutation(
+    *,
+    note: Note,
+    current_deck_id: int | None,
+    next_deck_id: int | None,
+) -> None:
+    if current_deck_id == next_deck_id:
+        return
+    if not deck_working_tree_service.note_has_shared_release_dependents(note):
+        return
+    # This service owns the batch transaction. A late membership conflict may
+    # follow earlier pending note writes, so fail the whole batch closed.
+    db.session.rollback()
+    raise RequestValidationError(
+        "Released shared notes cannot move between decks; retire the note and add a replacement in a new release.",
+        field="deck_id",
+        status=409,
+        code="SHARED_ENTITY_RETIRE_REQUIRED",
+    )
 
 
 def _resolve_deck_target(
@@ -493,6 +538,7 @@ def execute_sync_notes(
     unchanged_note_ids: list[str] = []
     failed_items: list[dict[str, Any]] = []
     seen_external_ids: set[str] = set()
+    dirty_mutations: list[dict[str, Any]] = []
 
     for idx, item in enumerate(notes):
         raw_external_id = item.get("external_id")
@@ -609,6 +655,17 @@ def execute_sync_notes(
             )
             db.session.add(new_note)
             db.session.flush()
+            dirty_mutations.append(
+                {
+                    "note": new_note,
+                    "field_names": set(normalized_fields) | {
+                        str(field_def.name)
+                        for field_def in field_defs
+                        if str(field_def.name or "").strip()
+                    },
+                    "operation": "add",
+                }
+            )
 
             # Create Cards
             for tmpl in templates:
@@ -651,10 +708,53 @@ def execute_sync_notes(
             deck_changed = (cur_deck_id != target_deck_id_val)
 
             if changed_fields or tags_changed or deck_changed:
+                if deck_changed:
+                    _ensure_version_safe_note_deck_mutation(
+                        note=existing_note,
+                        current_deck_id=cur_deck_id,
+                        next_deck_id=target_deck_id_val,
+                    )
+                if tags_changed:
+                    _ensure_version_safe_note_tags_mutation(
+                        note=existing_note,
+                        current_tags=cur_tags,
+                        next_tags=item_tags,
+                    )
                 existing_note.field_values = normalized_fields
                 existing_note.tags = item_tags
                 existing_note.deck_id = target_deck_id_val
                 existing_note.updated_at = datetime.utcnow()
+
+                if deck_changed:
+                    all_field_names = {
+                        str(field_def.name)
+                        for field_def in field_defs
+                        if str(field_def.name or "").strip()
+                    } | set(cur_fields) | set(normalized_fields)
+                    dirty_mutations.extend(
+                        [
+                            {
+                                "note": existing_note,
+                                "field_names": all_field_names,
+                                "operation": "remove",
+                                "deck_id": cur_deck_id,
+                            },
+                            {
+                                "note": existing_note,
+                                "field_names": all_field_names,
+                                "operation": "add",
+                                "deck_id": target_deck_id_val,
+                            },
+                        ]
+                    )
+                elif changed_fields:
+                    dirty_mutations.append(
+                        {
+                            "note": existing_note,
+                            "field_names": set(changed_fields),
+                            "operation": "set",
+                        }
+                    )
 
                 if existing_ref:
                     existing_ref.content_hash = content_hash
@@ -679,6 +779,9 @@ def execute_sync_notes(
                 unchanged_note_ids.append(str(existing_note.id))
                 summary["unchanged"] += 1
 
+    deck_working_tree_service.mark_note_field_batches_changed(
+        mutations=dirty_mutations,
+    )
     db.session.commit()
 
     return {

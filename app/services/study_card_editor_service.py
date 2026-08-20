@@ -6,6 +6,7 @@ from typing import Any
 
 from app.repositories import study_card_editor_repository as study_edit_repo
 from app.repositories.vocabulary_repository import note_display_triplet, note_field_values_as_strings
+from app.services import deck_working_tree_service
 from app.services.flashcard_renderer import (
     TemplateCompileError,
     render_template_pair,
@@ -72,17 +73,82 @@ def update_study_card_note(
             code=exc.code,
         ) from exc
 
-    next_values = dict(note.field_values or {})
+    original_values = dict(note.field_values or {})
+    original_deck_id = note.deck_id
+    next_values = dict(original_values)
     for key_name, value in validated.field_updates.items():
         next_values[key_name] = value
-    if validated.field_updates:
+    changed_field_names = {
+        key_name
+        for key_name in validated.field_updates
+        if original_values.get(key_name) != next_values.get(key_name)
+    }
+    tags_changed = bool(
+        validated.update_tags
+        and list(note.tags or []) != list(validated.tags or [])
+    )
+    deck_changed = bool(
+        validated.update_deck and original_deck_id != validated.deck_id
+    )
+    if deck_changed and deck_working_tree_service.note_has_shared_release_dependents(note):
+        raise StudyCardEditError(
+            "Released shared notes cannot move between decks; retire the note and add a replacement in a new release.",
+            status=409,
+            field="deck_id",
+            code="SHARED_ENTITY_RETIRE_REQUIRED",
+        )
+    if tags_changed and deck_working_tree_service.note_has_shared_release_dependents(note):
+        raise StudyCardEditError(
+            "Tags on a released shared note cannot change until note metadata is versioned.",
+            status=409,
+            field="tags",
+            code="SHARED_NOTE_METADATA_VERSIONING_REQUIRED",
+        )
+
+    if changed_field_names:
         note.field_values = next_values
-    if validated.update_tags:
+    if tags_changed:
         note.tags = validated.tags
     if validated.update_deck:
         note.deck_id = validated.deck_id
 
-    if validated.field_updates or validated.update_tags or validated.update_deck:
+    dirty_mutations: list[dict[str, Any]] = []
+    if deck_changed:
+        all_field_names = {
+            str(field_def.name)
+            for field_def in note_type.field_defs
+            if str(field_def.name or "").strip()
+        } | set(original_values) | set(note.field_values or {})
+        dirty_mutations.extend(
+            [
+                {
+                    "note": note,
+                    "field_names": all_field_names,
+                    "operation": "remove",
+                    "deck_id": original_deck_id,
+                },
+                {
+                    "note": note,
+                    "field_names": all_field_names,
+                    "operation": "add",
+                    "deck_id": note.deck_id,
+                },
+            ]
+        )
+    elif changed_field_names:
+        dirty_mutations.append(
+            {
+                "note": note,
+                "field_names": changed_field_names,
+                "operation": "set",
+            }
+        )
+    if dirty_mutations:
+        deck_working_tree_service.mark_note_field_batches_changed(
+            mutations=dirty_mutations,
+        )
+
+    if changed_field_names or tags_changed or deck_changed:
         study_edit_repo.commit_note_edit()
 
     rendered_front_html = ""

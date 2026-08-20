@@ -100,6 +100,8 @@ class ReleaseDiffPlan:
     working_state: DeckReleaseState | None
     sparse_memberships: dict[tuple[str, str], dict[str, Any] | None] | None
     strategy: str
+    initial_baseline_mode: str | None = None
+    baseline_note_count: int | None = None
 
 
 def _utcnow() -> datetime:
@@ -257,7 +259,11 @@ def _field_def_payload(field_def: Any) -> dict[str, Any]:
     }
 
 
-def _build_working_state(item: DeckMarketplaceItem) -> DeckReleaseState:
+def _build_working_state(
+    item: DeckMarketplaceItem,
+    *,
+    include_notes: bool = True,
+) -> DeckReleaseState:
     if item.source_deck_id is None:
         raise DeckReleaseError(
             "SOURCE_DECK_REQUIRED",
@@ -273,27 +279,27 @@ def _build_working_state(item: DeckMarketplaceItem) -> DeckReleaseState:
 
     field_rows = deck_release_repository.list_source_field_defs(item)
     field_defs = {str(row.id): _field_def_payload(row) for row in field_rows}
-    field_id_by_name = {
-        str(payload["name"]): field_id
-        for field_id, payload in field_defs.items()
-    }
-
     notes: dict[str, NoteReleaseState] = {}
-    for note in deck_release_repository.list_source_notes(item):
-        raw_values = dict(note.field_values or {})
-        values_by_id = {
-            field_id_by_name[field_name]: value
-            for field_name, value in raw_values.items()
-            if field_name in field_id_by_name
+    if include_notes:
+        field_id_by_name = {
+            str(payload["name"]): field_id
+            for field_id, payload in field_defs.items()
         }
-        notes[str(note.id)] = NoteReleaseState(
-            source_note_id=str(note.id),
-            source_deck_id=int(note.deck_id) if note.deck_id is not None else None,
-            note_type_id=str(note.note_type_id) if note.note_type_id else None,
-            field_values_by_id=values_by_id,
-            raw_field_values=raw_values,
-            tags=list(note.tags or []),
-        )
+        for note in deck_release_repository.list_source_notes(item):
+            raw_values = dict(note.field_values or {})
+            values_by_id = {
+                field_id_by_name[field_name]: value
+                for field_name, value in raw_values.items()
+                if field_name in field_id_by_name
+            }
+            notes[str(note.id)] = NoteReleaseState(
+                source_note_id=str(note.id),
+                source_deck_id=int(note.deck_id) if note.deck_id is not None else None,
+                note_type_id=str(note.note_type_id) if note.note_type_id else None,
+                field_values_by_id=values_by_id,
+                raw_field_values=raw_values,
+                tags=list(note.tags or []),
+            )
 
     return DeckReleaseState(
         deck_item_id=str(item.id),
@@ -1216,6 +1222,7 @@ def _try_build_sparse_diff(
 def _build_release_diff_plan(
     *,
     item: DeckMarketplaceItem,
+    include_initial_checkpoint_state: bool = True,
 ) -> ReleaseDiffPlan:
     base_release = item.current_release
     if base_release is not None:
@@ -1226,18 +1233,51 @@ def _build_release_diff_plan(
         if sparse_plan is not None:
             return sparse_plan
         base_state = reconstruct_release_state(base_release)
-    else:
-        base_state = _empty_release_state(str(item.id))
-    working_state = _build_working_state(item)
+        working_state = _build_working_state(item)
+        return ReleaseDiffPlan(
+            changes=_build_atomic_diff(
+                item=item,
+                base_state=base_state,
+                working_state=working_state,
+            ),
+            working_state=working_state,
+            sparse_memberships=None,
+            strategy="full",
+        )
+
+    base_state = _empty_release_state(str(item.id))
+    preserve_legacy_diff = (
+        deck_release_repository.has_legacy_install_without_release(str(item.id))
+    )
+    working_state = _build_working_state(
+        item,
+        include_notes=(preserve_legacy_diff or include_initial_checkpoint_state),
+    )
+    baseline_note_count = (
+        len(working_state.notes)
+        if working_state.notes
+        else deck_release_repository.count_source_notes(item)
+    )
+    diff_working_state = working_state
+    baseline_mode = "atomic" if preserve_legacy_diff else "checkpoint"
+    if not preserve_legacy_diff:
+        diff_working_state = DeckReleaseState(
+            deck_item_id=working_state.deck_item_id,
+            sequence_no=working_state.sequence_no,
+            field_defs=working_state.field_defs,
+            notes={},
+        )
     return ReleaseDiffPlan(
         changes=_build_atomic_diff(
             item=item,
             base_state=base_state,
-            working_state=working_state,
+            working_state=diff_working_state,
         ),
         working_state=working_state,
         sparse_memberships=None,
         strategy="full",
+        initial_baseline_mode=baseline_mode,
+        baseline_note_count=baseline_note_count,
     )
 
 
@@ -1334,7 +1374,10 @@ def preview_release(
         )
 
     base_release = item.current_release
-    diff_plan = _build_release_diff_plan(item=item)
+    diff_plan = _build_release_diff_plan(
+        item=item,
+        include_initial_checkpoint_state=False,
+    )
     all_changes = diff_plan.changes
     filtered = [
         row
@@ -1366,13 +1409,17 @@ def preview_release(
         if has_more and page
         else None
     )
+    summary = _summary_for_changes(all_changes)
+    if diff_plan.baseline_note_count is not None:
+        summary["baseline_note_count"] = int(diff_plan.baseline_note_count)
     return {
         "deck_item_id": str(item.id),
         "deck_title": item.title,
         "base_release": serialize_release(base_release) if base_release else None,
         "working_revision": working_revision,
         "snapshot_revision": str(working_revision),
-        "summary": _summary_for_changes(all_changes),
+        "summary": summary,
+        "initial_baseline_mode": diff_plan.initial_baseline_mode,
         "items": [_serialize_change_dict(row) for row in page],
         "next_cursor": next_cursor,
     }
@@ -1457,6 +1504,34 @@ def _release_manifest_hash(changes: list[dict[str, Any]]) -> str:
 
 def _checkpoint_hash(*, field_values: dict[str, Any], tags: list[Any]) -> str:
     return _hash_value({"field_values": field_values, "tags": tags})
+
+
+def _initial_release_manifest_hash(
+    *,
+    changes: list[dict[str, Any]],
+    checkpoints: list[DeckReleaseNoteCheckpoint],
+) -> str:
+    """Commit initial checkpoint content when note atoms are compacted away."""
+
+    digest = hashlib.sha256()
+    digest.update(b"deck-initial-release-v1\0")
+    digest.update(_release_manifest_hash(changes).encode("ascii"))
+    for checkpoint in sorted(
+        checkpoints,
+        key=lambda row: str(row.source_note_id),
+    ):
+        digest.update(b"\0")
+        digest.update(
+            _json_bytes(
+                {
+                    "source_note_id": str(checkpoint.source_note_id),
+                    "source_deck_id": checkpoint.source_deck_id,
+                    "note_type_id": str(checkpoint.note_type_id),
+                    "content_hash": checkpoint.content_hash,
+                }
+            )
+        )
+    return digest.hexdigest()
 
 
 def _build_release_change_rows(
@@ -1752,11 +1827,14 @@ def publish_release(
                 "Initial release state could not be built.",
                 status=409,
             )
-        deck_release_repository.add_note_checkpoints(
-            _create_initial_checkpoints(
-                release=release,
-                working_state=working_state,
-            )
+        initial_checkpoints = _create_initial_checkpoints(
+            release=release,
+            working_state=working_state,
+        )
+        deck_release_repository.add_note_checkpoints(initial_checkpoints)
+        release.manifest_hash = _initial_release_manifest_hash(
+            changes=changes,
+            checkpoints=initial_checkpoints,
         )
     if diff_plan.sparse_memberships is not None:
         _sync_sparse_memberships(

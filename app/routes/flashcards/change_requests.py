@@ -90,7 +90,15 @@ def get_local_deck_change_preview(deck_item_id: str):
             user_id=current_user.id,
             deck_item_id=deck_item_id,
         )
-        return jsonify(deck_change_request_service.preview_local_changes_for_install(install))
+        return jsonify(
+            deck_change_request_service.preview_local_changes_for_install(
+                install,
+                cursor=request.args.get("cursor"),
+                limit=request.args.get("limit"),
+                change_type=request.args.get("type") or request.args.get("change_type"),
+                query_text=request.args.get("q"),
+            )
+        )
     except deck_change_request_service.ChangeRequestError as exc:
         return _handle_change_request_error(exc)
 

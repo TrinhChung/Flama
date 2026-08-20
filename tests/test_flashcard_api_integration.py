@@ -28,6 +28,7 @@ from models.flashcard import (
 )
 from models.user import User
 from models.deck import Deck
+from models.deck_release import DeckRelease
 from models.template import Template
 from models.card_progress import CardProgress
 from sqlalchemy import event
@@ -211,6 +212,144 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         self.assertIn("<b>dog</b>", preview["back_html"])
         self.assertEqual(preview["front_renderer_payload"]["html"], preview["front_html"])
         self.assertEqual(preview["back_renderer_payload"]["html"], preview["back_html"])
+
+    def test_released_shared_note_type_rejects_all_template_mutations(self):
+        note_type = self._create_note_type()
+        note_type_id = note_type["id"]
+        template_id = note_type["templates"][0]["id"]
+        note_response = self.client.post(
+            "/api/notes",
+            json={
+                "note_type_id": note_type_id,
+                "deck_id": self.deck_id,
+                "field_values": {
+                    "Word": "dog",
+                    "Reading": "inu",
+                    "Meaning": "dog",
+                },
+            },
+        )
+        self.assertEqual(note_response.status_code, 201, note_response.get_json())
+
+        with self.app.app_context():
+            learner = User(
+                username="template-guard-learner",
+                email="template-guard-learner@example.com",
+            )
+            learner.set_password("password")
+            db.session.add(learner)
+            db.session.flush()
+            local_deck = Deck(
+                name="Template guard install",
+                owner_user_id=learner.id,
+                note_type_id=note_type_id,
+            )
+            db.session.add(local_deck)
+            db.session.flush()
+            item = DeckMarketplaceItem(
+                owner_user_id=self.user_id,
+                source_deck_id=self.deck_id,
+                source_note_type_id=note_type_id,
+                title="Template guard source",
+                publish_status="published",
+            )
+            db.session.add(item)
+            db.session.flush()
+            release = DeckRelease(
+                deck_item_id=item.id,
+                sequence_no=1,
+                version_label="1.0.0",
+                status="published",
+                created_by_user_id=self.user_id,
+            )
+            db.session.add(release)
+            db.session.flush()
+            item.current_release_id = release.id
+            db.session.add(
+                DeckInstall(
+                    deck_item_id=item.id,
+                    user_id=learner.id,
+                    local_deck_id=local_deck.id,
+                    source_deck_id=self.deck_id,
+                    source_note_type_id=note_type_id,
+                    source_owner_user_id=self.user_id,
+                    applied_release_id=release.id,
+                    seen_release_id=release.id,
+                    version_mode="release",
+                    clone_mode="logical_overlay",
+                )
+            )
+            db.session.commit()
+            template = db.session.get(Template, template_id)
+            template_snapshot = (
+                template.name,
+                template.front_html,
+                template.back_html,
+                template.shared_css,
+                bool(template.is_default),
+            )
+            card_snapshot = [
+                (str(card.id), str(card.template_id))
+                for card in Card.query.order_by(Card.id.asc()).all()
+            ]
+            template_count = Template.query.filter_by(
+                note_type_id=note_type_id
+            ).count()
+
+        blocked_requests = [
+            self.client.post(
+                f"/api/note-types/{note_type_id}/templates",
+                json={
+                    "name": "Blocked template",
+                    "front_html": "{{Word}}",
+                    "back_html": "{{Meaning}}",
+                },
+            ),
+            self.client.patch(
+                f"/api/note-types/{note_type_id}/templates/{template_id}",
+                json={"front_html": "blocked {{Word}}"},
+            ),
+            self.client.post(
+                f"/api/note-types/{note_type_id}/templates/{template_id}/reset"
+            ),
+            self.client.delete(
+                f"/api/note-types/{note_type_id}/templates/{template_id}"
+            ),
+        ]
+        for response in blocked_requests:
+            with self.subTest(payload=response.get_json()):
+                self.assertEqual(response.status_code, 409, response.get_json())
+                self.assertEqual(
+                    response.get_json()["error"],
+                    "SHARED_SCHEMA_VERSIONING_REQUIRED",
+                )
+                self.assertEqual(response.get_json()["field"], "template")
+
+        with self.app.app_context():
+            db.session.expire_all()
+            template = db.session.get(Template, template_id)
+            self.assertIsNotNone(template)
+            self.assertEqual(
+                (
+                    template.name,
+                    template.front_html,
+                    template.back_html,
+                    template.shared_css,
+                    bool(template.is_default),
+                ),
+                template_snapshot,
+            )
+            self.assertEqual(
+                Template.query.filter_by(note_type_id=note_type_id).count(),
+                template_count,
+            )
+            self.assertEqual(
+                [
+                    (str(card.id), str(card.template_id))
+                    for card in Card.query.order_by(Card.id.asc()).all()
+                ],
+                card_snapshot,
+            )
 
     def test_canonical_api_content_crud_and_media_contract(self):
         create_response = self.client.post(
@@ -545,6 +684,8 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         self.assertEqual(payload.get("taxonomy_metadata", {}).get("target_audience"), "Self-study beginners")
         self.assertEqual(payload.get("source_deck_id"), self.deck_id)
         self.assertEqual(payload.get("source_note_type_id"), note_type_id)
+        self.assertTrue(payload.get("release_versioned"))
+        self.assertIsNotNone(payload.get("current_release_id"))
 
         with self.app.app_context():
             deck_item = DeckMarketplaceItem.query.filter_by(title="Shared Deck API Create").first()

@@ -100,6 +100,43 @@ def _stage_initial_release_if_visible(
     return None
 
 
+def ensure_visible_deck_item_initial_release(deck_item_id: str) -> dict[str, Any]:
+    """Stage an initial immutable release for one visible legacy listing.
+
+    This is used by the rollout CLI.  The caller owns commit/rollback so large
+    catalogs can be processed one listing at a time without a long transaction.
+    """
+
+    deck_item = (
+        DeckMarketplaceItem.query.filter_by(id=str(deck_item_id))
+        .with_for_update()
+        .first()
+    )
+    if deck_item is None:
+        return {"deck_item_id": str(deck_item_id), "status": "missing"}
+    if deck_item.current_release_id is not None:
+        return {
+            "deck_item_id": str(deck_item.id),
+            "status": "already_versioned",
+            "release_id": str(deck_item.current_release_id),
+        }
+    if str(deck_item.publish_status or "").strip().lower() not in PUBLISH_STATUSES_VISIBLE:
+        return {"deck_item_id": str(deck_item.id), "status": "not_visible"}
+
+    error = _stage_initial_release_if_visible(deck_item)
+    if error:
+        return {
+            "deck_item_id": str(deck_item.id),
+            "status": "failed",
+            "error": error,
+        }
+    return {
+        "deck_item_id": str(deck_item.id),
+        "status": "created",
+        "release_id": str(deck_item.current_release_id),
+    }
+
+
 def _is_mysql_deadlock(exc: Exception) -> bool:
     """Best-effort deadlock detection used by retry wrappers."""
     original = getattr(exc, "orig", None)

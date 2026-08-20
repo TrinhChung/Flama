@@ -9,6 +9,7 @@ from models import db
 from models.flashcard import Card
 from models.card_progress import CardProgress
 from models.deck import Deck
+from app.services import deck_working_tree_service
 from app.services.anki_scheduler import _day_index, DeckOptions, default_deck_options
 from app.repositories.study_repository import (
     apply_card_state_to_progress as _apply_card_state_to_progress,
@@ -121,7 +122,12 @@ def apply_study_answer_and_commit(
     if getattr(updated_state, "leeched", False) and card.note.user_id == user.id:
         current_tags = [str(tag).strip() for tag in (card.note.tags or []) if str(tag).strip()]
         normalized_tags = {tag.lower() for tag in current_tags}
-        if "leech" not in normalized_tags:
+        if (
+            "leech" not in normalized_tags
+            and not deck_working_tree_service.note_has_shared_release_dependents(
+                card.note
+            )
+        ):
             card.note.tags = current_tags + ["leech"]
     _touch_note_type_install_usage(user_id=user.id, installed_note_type_id=card.note.note_type_id, activity_at=now)
 

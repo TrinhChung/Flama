@@ -17,6 +17,12 @@ marketplace_installations_bp = Blueprint(
     __name__,
 )
 
+_PERSISTED_REBASE_ERRORS = {
+    "REBASE_CONFLICTS_UNRESOLVED",
+    "APPLIED_RELEASE_STALE",
+    "OVERLAY_REVISION_STALE",
+}
+
 
 @marketplace_installations_bp.get("/installed-decks")
 @login_required
@@ -135,12 +141,19 @@ def apply_installed_deck_update(install_id: str, release_id: str):
     except DeckInstallUpdateError as exc:
         # A conflicting preparation is durable so the user can resolve it by
         # field without rebuilding the entire diff.
-        if exc.error == "REBASE_CONFLICTS_UNRESOLVED" and exc.details:
+        if exc.error in _PERSISTED_REBASE_ERRORS:
             db.session.commit()
         else:
             db.session.rollback()
         return _handle_update_error(exc)
-    return jsonify({"rebase": deck_install_rebase_service.serialize_rebase(rebase)})
+    return jsonify(
+        {
+            "rebase": deck_install_rebase_service.serialize_rebase(
+                rebase,
+                include_conflicts=False,
+            )
+        }
+    )
 
 
 @marketplace_installations_bp.post(
@@ -188,7 +201,29 @@ def resolve_installed_deck_update_conflict(rebase_id: str, conflict_id: int):
     except DeckInstallUpdateError as exc:
         db.session.rollback()
         return _handle_update_error(exc)
-    return jsonify({"rebase": deck_install_rebase_service.serialize_rebase(rebase)})
+    return jsonify(
+        {
+            "rebase": deck_install_rebase_service.serialize_rebase(
+                rebase,
+                include_conflicts=False,
+            )
+        }
+    )
+
+
+@marketplace_installations_bp.get("/rebases/<rebase_id>/conflicts")
+@login_required
+def installed_deck_update_conflicts(rebase_id: str):
+    try:
+        payload = deck_install_rebase_service.get_rebase_conflicts_page(
+            rebase_id=rebase_id,
+            user_id=current_user.id,
+            after_id=request.args.get("after_id"),
+            limit=request.args.get("limit", 100),
+        )
+    except DeckInstallUpdateError as exc:
+        return _handle_update_error(exc)
+    return jsonify(payload)
 
 
 @marketplace_installations_bp.post("/rebases/<rebase_id>/apply")
@@ -201,6 +236,16 @@ def apply_prepared_installed_deck_update(rebase_id: str):
         )
         db.session.commit()
     except DeckInstallUpdateError as exc:
-        db.session.rollback()
+        if exc.error in _PERSISTED_REBASE_ERRORS:
+            db.session.commit()
+        else:
+            db.session.rollback()
         return _handle_update_error(exc)
-    return jsonify({"rebase": deck_install_rebase_service.serialize_rebase(rebase)})
+    return jsonify(
+        {
+            "rebase": deck_install_rebase_service.serialize_rebase(
+                rebase,
+                include_conflicts=False,
+            )
+        }
+    )

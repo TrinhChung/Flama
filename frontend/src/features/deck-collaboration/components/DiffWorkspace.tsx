@@ -362,7 +362,10 @@ export function DiffWorkspace({
       </p>
 
       {hasPrevious || hasMore ? (
-        <div className="flex items-center justify-center gap-2 pt-2">
+        <nav
+          className="flex items-center justify-center gap-2 pt-2"
+          aria-label="Phân trang thay đổi"
+        >
           <Button
             type="button"
             variant="outline"
@@ -383,7 +386,7 @@ export function DiffWorkspace({
             {isFetchingMore ? <LoaderCircle className="size-4 animate-spin" /> : null}
             Trang tiếp
           </Button>
-        </div>
+        </nav>
       ) : null}
     </section>
   )

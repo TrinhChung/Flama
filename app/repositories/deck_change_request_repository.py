@@ -79,45 +79,12 @@ def list_incoming_requests_for_owner(
     if not statuses:
         return [], False
 
-    item_counts = (
-        db.session.query(
-            DeckChangeRequestItem.change_request_id.label("change_request_id"),
-            func.count(DeckChangeRequestItem.id).label("item_count"),
-        )
-        .group_by(DeckChangeRequestItem.change_request_id)
-        .subquery()
-    )
-    unresolved_counts = (
-        db.session.query(
-            DeckChangeRequestConflict.change_request_id.label("change_request_id"),
-            func.count(DeckChangeRequestConflict.id).label("unresolved_conflict_count"),
-        )
-        .filter(DeckChangeRequestConflict.resolved_at.is_(None))
-        .group_by(DeckChangeRequestConflict.change_request_id)
-        .subquery()
-    )
-    query = (
-        db.session.query(
-            DeckChangeRequest,
-            func.coalesce(item_counts.c.item_count, 0),
-            func.coalesce(unresolved_counts.c.unresolved_conflict_count, 0),
-        )
-        .outerjoin(
-            item_counts,
-            item_counts.c.change_request_id == DeckChangeRequest.id,
-        )
-        .outerjoin(
-            unresolved_counts,
-            unresolved_counts.c.change_request_id == DeckChangeRequest.id,
-        )
-        .options(
-            joinedload(DeckChangeRequest.deck_item),
-            joinedload(DeckChangeRequest.requester),
-        )
-        .filter(
-            DeckChangeRequest.owner_user_id == owner_user_id,
-            DeckChangeRequest.status.in_(sorted(statuses)),
-        )
+    query = DeckChangeRequest.query.options(
+        joinedload(DeckChangeRequest.deck_item),
+        joinedload(DeckChangeRequest.requester),
+    ).filter(
+        DeckChangeRequest.owner_user_id == owner_user_id,
+        DeckChangeRequest.status.in_(sorted(statuses)),
     )
     if deck_item_id:
         query = query.filter(DeckChangeRequest.deck_item_id == deck_item_id)
@@ -139,9 +106,42 @@ def list_incoming_requests_for_owner(
         .limit(limit + 1)
         .all()
     )
+    page_rows = rows[:limit]
+    request_ids = [str(row.id) for row in page_rows]
+    item_count_by_request = {
+        str(request_id): int(row_count or 0)
+        for request_id, row_count in (
+            db.session.query(
+                DeckChangeRequestItem.change_request_id,
+                func.count(DeckChangeRequestItem.id),
+            )
+            .filter(DeckChangeRequestItem.change_request_id.in_(request_ids or [""]))
+            .group_by(DeckChangeRequestItem.change_request_id)
+            .all()
+        )
+    }
+    unresolved_count_by_request = {
+        str(request_id): int(row_count or 0)
+        for request_id, row_count in (
+            db.session.query(
+                DeckChangeRequestConflict.change_request_id,
+                func.count(DeckChangeRequestConflict.id),
+            )
+            .filter(
+                DeckChangeRequestConflict.change_request_id.in_(request_ids or [""]),
+                DeckChangeRequestConflict.resolved_at.is_(None),
+            )
+            .group_by(DeckChangeRequestConflict.change_request_id)
+            .all()
+        )
+    }
     return [
-        (request_obj, int(item_count or 0), int(unresolved_count or 0))
-        for request_obj, item_count, unresolved_count in rows[:limit]
+        (
+            request_obj,
+            item_count_by_request.get(str(request_obj.id), 0),
+            unresolved_count_by_request.get(str(request_obj.id), 0),
+        )
+        for request_obj in page_rows
     ], len(rows) > limit
 
 

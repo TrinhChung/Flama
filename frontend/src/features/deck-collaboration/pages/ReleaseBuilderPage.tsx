@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft,
@@ -71,14 +71,11 @@ export function ReleaseBuilderPage() {
   const firstPage = previewQuery.data?.pages[0]
   const loadedPages = previewQuery.data?.pages || []
   const visiblePageIndex = Math.min(pageIndex, Math.max(loadedPages.length - 1, 0))
-  const items = useMemo(
-    () => loadedPages[visiblePageIndex]?.items || [],
-    [loadedPages, visiblePageIndex],
-  )
+  const items = loadedPages[visiblePageIndex]?.items || []
 
   useEffect(() => {
     setPageIndex(0)
-  }, [filters])
+  }, [filters, itemId])
 
   useEffect(() => {
     if (versionLabel || !firstPage) return

@@ -12,6 +12,7 @@ from sqlalchemy import func, or_
 
 from app.repositories.deck_tree_query import collect_subtree_ids
 from models import db
+from models.deck_install import DeckInstall
 from models.deck_marketplace_item import DeckMarketplaceItem
 from models.deck_release import DeckRelease
 from models.deck_release_change import DeckReleaseChange
@@ -121,6 +122,32 @@ def list_source_field_defs(deck_item: DeckMarketplaceItem) -> list[FieldDef]:
         FieldDef.query.filter_by(note_type_id=deck_item.source_note_type_id)
         .order_by(FieldDef.position.asc(), FieldDef.id.asc())
         .all()
+    )
+
+
+def count_source_notes(deck_item: DeckMarketplaceItem) -> int:
+    deck_ids = collect_subtree_ids(deck_item.source_deck_id)
+    if not deck_ids or not deck_item.source_note_type_id:
+        return 0
+    return int(
+        Note.query.filter(
+            Note.deck_id.in_(deck_ids),
+            Note.note_type_id == deck_item.source_note_type_id,
+            Note.user_id == deck_item.owner_user_id,
+        ).count()
+    )
+
+
+def has_legacy_install_without_release(deck_item_id: str) -> bool:
+    return (
+        db.session.query(DeckInstall.id)
+        .filter(
+            DeckInstall.deck_item_id == deck_item_id,
+            DeckInstall.applied_release_id.is_(None),
+        )
+        .limit(1)
+        .first()
+        is not None
     )
 
 

@@ -109,4 +109,30 @@ describe('DiffWorkspace', () => {
     expect(container.textContent).toContain('line 200')
     expect(container.textContent).not.toContain('line 201')
   })
+
+  it('requests the next cursor page only after the user asks for it', () => {
+    const onLoadMore = vi.fn()
+    act(() => {
+      root.render(
+        <DiffWorkspace
+          summary={summary}
+          items={items}
+          filters={{ query: '', changeType: 'all' }}
+          onFiltersChange={vi.fn()}
+          hasMore
+          onLoadMore={onLoadMore}
+          pageLabel="Trang 1"
+        />,
+      )
+    })
+
+    expect(onLoadMore).not.toHaveBeenCalled()
+    const nextButton = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent?.includes('Trang tiếp'),
+    )
+    act(() => nextButton?.click())
+
+    expect(onLoadMore).toHaveBeenCalledTimes(1)
+    expect(container.querySelector('nav[aria-label="Phân trang thay đổi"]')).not.toBeNull()
+  })
 })

@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQueryClient,
+  type InfiniteData,
+} from '@tanstack/react-query'
 import {
   ArrowLeft,
   Check,
@@ -24,12 +29,11 @@ import { PageError, PageLoading } from '@/shared/components/PageState'
 import {
   approveDeckChangeRequest,
   contributionItemToDiffItem,
-  filterDiffItems,
   getDeckChangeRequest,
   rejectDeckChangeRequest,
   resolveDeckChangeRequestConflict,
   submitDeckChangeRequest,
-  summarizeDiffItems,
+  summarizeChangeRequest,
   syncDeckChangeRequest,
 } from '../api'
 import { ChangeRequestStatusBadge } from '../components/ChangeRequestStatusBadge'
@@ -173,48 +177,87 @@ export function ChangeRequestDetailPage() {
   const [reviewComment, setReviewComment] = useState('')
   const [manualValues, setManualValues] = useState<Record<string, string>>({})
 
-  const query = useQuery({
-    queryKey: ['deck-change-request', requestId],
+  const query = useInfiniteQuery({
+    queryKey: ['deck-change-request', requestId, filters],
     enabled: Boolean(requestId),
-    queryFn: ({ signal }) => getDeckChangeRequest(requestId, signal),
+    initialPageParam: null as string | null,
+    queryFn: ({ pageParam, signal }) => getDeckChangeRequest(
+      requestId,
+      {
+        cursor: pageParam,
+        limit: PAGE_SIZE,
+        changeType: filters.changeType,
+        query: filters.query,
+      },
+      signal,
+    ),
+    getNextPageParam: (page) => page.page?.next_cursor || undefined,
   })
-  const request = query.data
+  const loadedPages = query.data?.pages || []
+  const request = loadedPages[0]
+  const visiblePageIndex = Math.min(pageIndex, Math.max(loadedPages.length - 1, 0))
+  const visibleRequest = loadedPages[visiblePageIndex]
   const allDiffItems = useMemo(
-    () => request?.items.map((item, index) => contributionItemToDiffItem(item, index)) || [],
-    [request?.items],
+    () => visibleRequest?.items.map((item, index) => contributionItemToDiffItem(item, index)) || [],
+    [visibleRequest?.items],
   )
-  const summary = useMemo(() => summarizeDiffItems(allDiffItems), [allDiffItems])
-  const filteredItems = useMemo(
-    () => filterDiffItems(allDiffItems, filters),
-    [allDiffItems, filters],
-  )
-  const pageCount = Math.max(1, Math.ceil(filteredItems.length / PAGE_SIZE))
-  const visiblePageIndex = Math.min(pageIndex, pageCount - 1)
-  const visibleItems = filteredItems.slice(
-    visiblePageIndex * PAGE_SIZE,
-    (visiblePageIndex + 1) * PAGE_SIZE,
+  const summary = useMemo(
+    () => request ? summarizeChangeRequest(request) : null,
+    [request],
   )
 
   useEffect(() => {
     setPageIndex(0)
-  }, [filters, allDiffItems.length])
+  }, [filters, requestId])
 
   function storeRequest(nextRequest: DeckChangeRequest) {
-    queryClient.setQueryData(['deck-change-request', requestId], nextRequest)
-    queryClient.setQueryData(
-      ['active-deck-change-request', nextRequest.deck_item_id],
-      {
-        request: nextRequest.status === 'merged' || nextRequest.status === 'rejected'
-          ? null
-          : nextRequest,
-      },
+    queryClient.setQueriesData<InfiniteData<DeckChangeRequest>>(
+      { queryKey: ['deck-change-request', requestId] },
+      (current) => current
+        ? {
+            ...current,
+            pages: current.pages.map((page) => ({
+              ...page,
+              ...nextRequest,
+              items: page.items,
+              conflicts: page.conflicts,
+              page: page.page,
+            })),
+          }
+        : current,
     )
+    queryClient.setQueriesData<InfiniteData<{ request: DeckChangeRequest | null }>>(
+      { queryKey: ['active-deck-change-request', nextRequest.deck_item_id] },
+      (current) => current
+        ? {
+            ...current,
+            pages: current.pages.map((page) => ({
+              ...page,
+              request: nextRequest.status === 'merged' || nextRequest.status === 'rejected'
+                ? null
+                : page.request
+                  ? {
+                      ...page.request,
+                      ...nextRequest,
+                      items: page.request.items,
+                      conflicts: page.request.conflicts,
+                      page: page.request.page,
+                    }
+                  : nextRequest,
+            })),
+          }
+        : current,
+    )
+    void queryClient.invalidateQueries({
+      queryKey: ['active-deck-change-request', nextRequest.deck_item_id],
+    })
     void queryClient.invalidateQueries({ queryKey: ['incoming-deck-change-requests'] })
     if (nextRequest.status === 'merged') {
       void queryClient.invalidateQueries({
         queryKey: ['deck-release-preview', nextRequest.deck_item_id],
       })
     }
+    void queryClient.invalidateQueries({ queryKey: ['deck-change-request', requestId] })
   }
 
   const syncMutation = useMutation({
@@ -276,11 +319,13 @@ export function ChangeRequestDetailPage() {
 
   if (!requestId) return <Page><PageError error={new Error('Thiếu mã change request.')} /></Page>
   if (query.isPending) return <PageLoading label="Đang tải change request…" />
-  if (query.error || !request) {
+  if (query.error || !request || !summary) {
     return <Page><PageError error={query.error || new Error('Không tìm thấy change request.')} /></Page>
   }
 
-  const unresolvedConflicts = request.conflicts.filter((conflict) => !conflict.resolved_at)
+  const unresolvedConflicts = (visibleRequest?.conflicts || []).filter(
+    (conflict) => !conflict.resolved_at,
+  )
   const viewerId = bootstrapQuery.data?.user?.id
   const isOwner = viewerId === request.owner.id
   const isRequester = viewerId === request.requester.id
@@ -455,16 +500,55 @@ export function ChangeRequestDetailPage() {
         </section>
       ) : null}
 
+      {request.can_resolve
+        && request.unresolved_conflict_count > 0
+        && !unresolvedConflicts.length
+        && filters.changeType !== 'conflict' ? (
+          <Alert>
+            <ShieldAlert />
+            <AlertTitle>Còn {request.unresolved_conflict_count.toLocaleString('vi-VN')} xung đột</AlertTitle>
+            <AlertDescription className="flex flex-wrap items-center gap-2">
+              Chuyển sang bộ lọc xung đột để xử lý theo từng field.
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setFilters((current) => ({
+                  ...current,
+                  changeType: 'conflict',
+                }))}
+              >
+                Xem xung đột
+              </Button>
+            </AlertDescription>
+          </Alert>
+        ) : null}
+
       <DiffWorkspace
         summary={summary}
-        items={visibleItems}
+        items={allDiffItems}
         filters={filters}
-        onFiltersChange={setFilters}
+        onFiltersChange={(nextFilters) => {
+          setFilters(nextFilters)
+          setPageIndex(0)
+        }}
+        isFetching={query.isFetching}
+        isFetchingMore={query.isFetchingNextPage}
         hasPrevious={visiblePageIndex > 0}
         onPrevious={() => setPageIndex((current) => Math.max(0, current - 1))}
-        hasMore={visiblePageIndex < pageCount - 1}
-        onLoadMore={() => setPageIndex((current) => Math.min(pageCount - 1, current + 1))}
-        pageLabel={`Trang ${visiblePageIndex + 1}/${pageCount}`}
+        hasMore={visiblePageIndex < loadedPages.length - 1 || query.hasNextPage}
+        onLoadMore={() => {
+          if (visiblePageIndex < loadedPages.length - 1) {
+            setPageIndex((current) => current + 1)
+            return
+          }
+          void query.fetchNextPage().then((result) => {
+            if ((result.data?.pages.length || 0) > loadedPages.length) {
+              setPageIndex((current) => current + 1)
+            }
+          })
+        }}
+        pageLabel={`Trang ${visiblePageIndex + 1}`}
         emptyTitle="Không có thay đổi khớp bộ lọc"
         emptyDescription="Thử chọn loại thay đổi khác hoặc xóa từ khóa tìm kiếm."
       />

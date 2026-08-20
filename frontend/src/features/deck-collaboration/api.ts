@@ -17,6 +17,7 @@ import type {
   DiffSummary,
   InstalledDeckUpdatePage,
   InstalledDeckUpdates,
+  InstalledUpdateConflictPage,
   LocalChangeItem,
   LocalChangesPreview,
   PreparedInstalledUpdate,
@@ -128,6 +129,15 @@ type RawUpdateConflict = {
   base_value?: unknown
   local_value?: unknown
   upstream_value?: unknown
+  resolution_mode?: 'keep_mine' | 'keep_upstream' | 'manual' | null
+  resolved_value?: unknown
+  resolved_at?: string | null
+}
+
+type RawRebaseConflictPage = {
+  limit: number
+  has_more: boolean
+  next_after_id: string | number | null
 }
 
 type RawPreparedInstalledUpdate = {
@@ -138,10 +148,20 @@ type RawPreparedInstalledUpdate = {
   conflict_count?: number
   resolved_conflict_count?: number
   conflicts?: RawUpdateConflict[]
+  conflict_page?: RawRebaseConflictPage
 }
 
 type RawPreparedInstalledUpdateEnvelope = {
   rebase: RawPreparedInstalledUpdate
+}
+
+type RawInstalledUpdateConflictPage = {
+  rebase_id: string | number
+  status: string
+  conflict_count: number
+  resolved_conflict_count: number
+  items: RawUpdateConflict[]
+  page: RawRebaseConflictPage
 }
 
 type DiffQuery = {
@@ -294,6 +314,55 @@ export function getInstalledDeckUpdates(
   ).then(normalizeInstalledDeckUpdates)
 }
 
+function normalizeUpdateConflict(conflict: RawUpdateConflict) {
+  return {
+    id: String(conflict.id),
+    change_id: conflict.change_id === null || conflict.change_id === undefined
+      ? conflict.change_key
+      : String(conflict.change_id),
+    note_label: conflict.note_label,
+    field_name: conflict.field_name || conflict.property_key,
+    base_value: conflict.base_value,
+    local_value: conflict.local_value,
+    upstream_value: conflict.upstream_value,
+    resolution_mode: conflict.resolution_mode,
+    resolved_value: conflict.resolved_value,
+    resolved_at: conflict.resolved_at,
+  }
+}
+
+function normalizeConflictPage(page: RawRebaseConflictPage) {
+  return {
+    limit: page.limit,
+    has_more: page.has_more,
+    next_after_id: page.next_after_id === null ? null : String(page.next_after_id),
+  }
+}
+
+function normalizePreparedInstalledUpdate(
+  payload: RawPreparedInstalledUpdate,
+): PreparedInstalledUpdate {
+  const conflicts = (payload.conflicts || []).map(normalizeUpdateConflict)
+  const conflictCount = payload.conflict_count ?? conflicts.length
+  const resolvedConflictCount = payload.resolved_conflict_count
+    ?? conflicts.filter((conflict) => Boolean(conflict.resolved_at)).length
+  return {
+    rebase_id: String(payload.id),
+    status: payload.status === 'applied'
+      ? 'applied'
+      : conflictCount > resolvedConflictCount
+        ? 'conflicts'
+        : 'ready',
+    conflict_count: conflictCount,
+    resolved_conflict_count: resolvedConflictCount,
+    conflicts,
+    conflict_page: payload.conflict_page
+      ? normalizeConflictPage(payload.conflict_page)
+      : undefined,
+    expected_overlay_revision: payload.expected_overlay_revision,
+  }
+}
+
 function normalizeInstalledDeckUpdates(payload: RawInstalledDeckUpdates) {
   const appliedRelease = payload.applied_release
     ? normalizeRelease(payload.applied_release)
@@ -383,34 +452,33 @@ export function prepareInstalledDeckUpdate(
     `/api/marketplace/installations/${encodeSegment(installId)}/updates/${encodeSegment(releaseId)}/prepare`,
     'POST',
     body,
-  ).then(({ rebase: payload }) => {
-    const conflicts = (payload.conflicts || []).map((conflict) => ({
-      id: String(conflict.id),
-      change_id: conflict.change_id === null || conflict.change_id === undefined
-        ? conflict.change_key
-        : String(conflict.change_id),
-      note_label: conflict.note_label,
-      field_name: conflict.field_name || conflict.property_key,
-      base_value: conflict.base_value,
-      local_value: conflict.local_value,
-      upstream_value: conflict.upstream_value,
-    }))
-    const unresolvedCount = Math.max(
-      0,
-      (payload.conflict_count || conflicts.length) - (payload.resolved_conflict_count || 0),
-    )
-    return {
-      rebase_id: String(payload.id),
-      status: payload.status === 'applied'
-        ? 'applied'
-        : unresolvedCount > 0
-          ? 'conflicts'
-          : 'ready',
-      conflict_count: payload.conflict_count || conflicts.length,
-      conflicts,
-      expected_overlay_revision: payload.expected_overlay_revision,
-    } satisfies PreparedInstalledUpdate
-  })
+  ).then(({ rebase }) => normalizePreparedInstalledUpdate(rebase))
+}
+
+export function getInstalledUpdateConflicts(
+  rebaseId: string,
+  afterId?: string | null,
+  limit = 100,
+  signal?: AbortSignal,
+) {
+  const search = new URLSearchParams()
+  if (afterId) search.set('after_id', afterId)
+  search.set('limit', String(limit))
+  return apiRequest<RawInstalledUpdateConflictPage>(
+    `/api/marketplace/rebases/${encodeSegment(rebaseId)}/conflicts?${search.toString()}`,
+    { signal },
+  ).then((payload) => ({
+    rebase_id: String(payload.rebase_id),
+    status: payload.status === 'applied'
+      ? 'applied'
+      : payload.conflict_count > payload.resolved_conflict_count
+        ? 'conflicts'
+        : 'ready',
+    conflict_count: payload.conflict_count,
+    resolved_conflict_count: payload.resolved_conflict_count,
+    items: payload.items.map(normalizeUpdateConflict),
+    page: normalizeConflictPage(payload.page),
+  } satisfies InstalledUpdateConflictPage))
 }
 
 export function applyInstalledDeckUpdate(
@@ -435,11 +503,11 @@ export function resolveInstalledUpdateConflict(
   conflictId: string,
   resolutionMode: 'keep_mine' | 'keep_upstream',
 ) {
-  return appApi.mutate(
+  return appApi.mutate<RawPreparedInstalledUpdateEnvelope>(
     `/api/marketplace/rebases/${encodeSegment(rebaseId)}/conflicts/${encodeSegment(conflictId)}/resolve`,
     'POST',
     { resolution_mode: resolutionMode },
-  )
+  ).then(({ rebase }) => normalizePreparedInstalledUpdate(rebase))
 }
 
 export function applyPreparedInstalledUpdate(rebaseId: string) {
@@ -550,16 +618,32 @@ export function summarizeDiffItems(items: DiffItem[]): DiffSummary {
 }
 
 export function summarizeChangeRequest(request: DeckChangeRequest): DiffSummary {
-  const count = (changeType: string) => Number(request.change_counts[changeType] || 0)
+  return summarizeContributionCounts(
+    request.item_count,
+    request.unresolved_conflict_count,
+    request.change_counts,
+  )
+}
+
+export function summarizeLocalChanges(preview: LocalChangesPreview): DiffSummary {
+  return summarizeContributionCounts(preview.item_count, 0, preview.change_counts)
+}
+
+function summarizeContributionCounts(
+  itemCount: number,
+  unresolvedConflictCount: number,
+  changeCounts: Record<string, number>,
+): DiffSummary {
+  const count = (changeType: string) => Number(changeCounts[changeType] || 0)
   return {
-    total: request.item_count,
-    entities: request.item_count,
+    total: itemCount,
+    entities: itemCount,
     added: count('field_def_add'),
     modified: count('note_field_set')
       + count('field_def_update')
       + count('field_order_update'),
     removed: count('note_field_remove') + count('field_def_disable'),
-    conflicts: request.unresolved_conflict_count,
+    conflicts: unresolvedConflictCount,
   }
 }
 
@@ -587,19 +671,32 @@ export function filterDiffItems(items: DiffItem[], filters: DiffFilters) {
   })
 }
 
-export function getLocalDeckChanges(deckItemId: string, signal?: AbortSignal) {
-  return apiRequest<LocalChangesPreview>(
+export function getLocalDeckChanges(
+  deckItemId: string,
+  query: DiffQuery = {},
+  signal?: AbortSignal,
+) {
+  const path = withDiffQuery(
     `/api/shared/decks/${encodeSegment(deckItemId)}/change-requests/local-changes`,
+    query,
+  )
+  return apiRequest<LocalChangesPreview>(
+    path,
     { signal },
   )
 }
 
 export function getActiveDeckChangeRequest(
   deckItemId: string,
+  query: DiffQuery = {},
   signal?: AbortSignal,
 ) {
-  return apiRequest<{ request: DeckChangeRequest | null }>(
+  const path = withDiffQuery(
     `/api/shared/decks/${encodeSegment(deckItemId)}/change-requests/active`,
+    query,
+  )
+  return apiRequest<{ request: DeckChangeRequest | null }>(
+    path,
     { signal },
   )
 }

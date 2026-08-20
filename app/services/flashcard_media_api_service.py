@@ -8,6 +8,7 @@ from typing import Any
 
 from sqlalchemy.exc import SQLAlchemyError
 
+from app.services import deck_working_tree_service
 from app.validators import (
     RequestValidationError,
     resolve_safe_storage_path,
@@ -116,9 +117,19 @@ def upload_media(
     if existing:
         if not markdown_inline:
             values = dict(note.field_values or {})
-            values[validated.field_name] = existing.id
-            note.field_values = values
-            db.session.commit()
+            if values.get(validated.field_name) != existing.id:
+                values[validated.field_name] = existing.id
+                note.field_values = values
+                deck_working_tree_service.mark_note_field_batches_changed(
+                    mutations=[
+                        {
+                            "note": note,
+                            "field_names": {validated.field_name},
+                            "operation": "set",
+                        }
+                    ],
+                )
+                db.session.commit()
         return _media_payload(existing, include_filename=markdown_inline), 200
 
     resolved_root = upload_root.resolve()
@@ -155,6 +166,15 @@ def upload_media(
             values = dict(note.field_values or {})
             values[validated.field_name] = asset.id
             note.field_values = values
+            deck_working_tree_service.mark_note_field_batches_changed(
+                mutations=[
+                    {
+                        "note": note,
+                        "field_names": {validated.field_name},
+                        "operation": "set",
+                    }
+                ],
+            )
         db.session.add(
             AuditLog(
                 user_id=user_id,
@@ -219,6 +239,7 @@ def upload_media_batch(
     results: list[dict[str, Any]] = []
     success_count = 0
     failed_count = 0
+    dirty_field_names_by_note_id: dict[str, set[str]] = {}
 
     try:
         for idx, item in enumerate(items):
@@ -319,8 +340,12 @@ def upload_media_batch(
             if existing:
                 if not markdown_inline:
                     values = dict(note.field_values or {})
-                    values[validated.field_name] = existing.id
-                    note.field_values = values
+                    if values.get(validated.field_name) != existing.id:
+                        values[validated.field_name] = existing.id
+                        note.field_values = values
+                        dirty_field_names_by_note_id.setdefault(note.id, set()).add(
+                            validated.field_name
+                        )
                 payload = _media_payload(existing, include_filename=markdown_inline)
                 payload["item_id"] = item_id
                 payload["status"] = "success"
@@ -369,6 +394,9 @@ def upload_media_batch(
                 values = dict(note.field_values or {})
                 values[validated.field_name] = asset.id
                 note.field_values = values
+                dirty_field_names_by_note_id.setdefault(note.id, set()).add(
+                    validated.field_name
+                )
 
             db.session.add(
                 AuditLog(
@@ -391,6 +419,16 @@ def upload_media_batch(
             results.append(payload)
             success_count += 1
 
+        deck_working_tree_service.mark_note_field_batches_changed(
+            mutations=[
+                {
+                    "note": note_map[note_id],
+                    "field_names": field_names,
+                    "operation": "set",
+                }
+                for note_id, field_names in dirty_field_names_by_note_id.items()
+            ],
+        )
         db.session.commit()
     except SQLAlchemyError:
         db.session.rollback()
@@ -435,9 +473,11 @@ def delete_media(
         full_path = None
     note = asset.note
     values = dict(note.field_values or {})
+    cleared_field = False
     if values.get(asset.field_name) == asset.id:
         values[asset.field_name] = ""
         note.field_values = values
+        cleared_field = True
     db.session.delete(asset)
     db.session.add(
         AuditLog(
@@ -446,6 +486,16 @@ def delete_media(
             payload={"asset_id": asset.id, "note_id": note.id},
         )
     )
+    if cleared_field:
+        deck_working_tree_service.mark_note_field_batches_changed(
+            mutations=[
+                {
+                    "note": note,
+                    "field_names": {asset.field_name},
+                    "operation": "set",
+                }
+            ],
+        )
     db.session.commit()
     if full_path is not None and full_path.exists():
         try:

@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQueryClient,
+  type InfiniteData,
+} from '@tanstack/react-query'
 import { ArrowLeft, FileDiff, LoaderCircle, RefreshCcw, Send } from 'lucide-react'
 import { Link, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -14,11 +19,11 @@ import { PageError, PageLoading } from '@/shared/components/PageState'
 import {
   buildDeckChangeRequestDraft,
   contributionItemToDiffItem,
-  filterDiffItems,
   getActiveDeckChangeRequest,
   getLocalDeckChanges,
   submitDeckChangeRequest,
-  summarizeDiffItems,
+  summarizeChangeRequest,
+  summarizeLocalChanges,
   syncDeckChangeRequest,
 } from '../api'
 import { ChangeRequestStatusBadge } from '../components/ChangeRequestStatusBadge'
@@ -36,17 +41,50 @@ export function DeckChangeRequestPage() {
   const [filters, setFilters] = useState<DiffFilters>({ query: '', changeType: 'all' })
   const [pageIndex, setPageIndex] = useState(0)
 
-  const localQuery = useQuery({
-    queryKey: ['local-deck-changes', deckItemId],
+  const localQuery = useInfiniteQuery({
+    queryKey: ['local-deck-changes', deckItemId, filters],
     enabled: Boolean(deckItemId),
-    queryFn: ({ signal }) => getLocalDeckChanges(deckItemId, signal),
+    initialPageParam: null as string | null,
+    queryFn: ({ pageParam, signal }) => getLocalDeckChanges(
+      deckItemId,
+      {
+        cursor: pageParam,
+        limit: PAGE_SIZE,
+        changeType: filters.changeType,
+        query: filters.query,
+      },
+      signal,
+    ),
+    getNextPageParam: (page) => page.page?.next_cursor || undefined,
   })
-  const activeQuery = useQuery({
-    queryKey: ['active-deck-change-request', deckItemId],
+  const activeQuery = useInfiniteQuery({
+    queryKey: ['active-deck-change-request', deckItemId, filters],
     enabled: Boolean(deckItemId),
-    queryFn: ({ signal }) => getActiveDeckChangeRequest(deckItemId, signal),
+    initialPageParam: null as string | null,
+    queryFn: ({ pageParam, signal }) => getActiveDeckChangeRequest(
+      deckItemId,
+      {
+        cursor: pageParam,
+        limit: PAGE_SIZE,
+        changeType: filters.changeType,
+        query: filters.query,
+      },
+      signal,
+    ),
+    getNextPageParam: (page) => page.request?.page?.next_cursor || undefined,
   })
-  const activeRequest = activeQuery.data?.request || null
+  const localPages = localQuery.data?.pages || []
+  const activePages = activeQuery.data?.pages || []
+  const activeRequest = activePages[0]?.request || null
+  const sourcePages = activeRequest ? activePages : localPages
+  const visiblePageIndex = Math.min(pageIndex, Math.max(sourcePages.length - 1, 0))
+  const visibleActiveRequest = activeRequest
+    ? activePages[visiblePageIndex]?.request
+    : null
+  const visibleLocalPreview = activeRequest
+    ? null
+    : localPages[visiblePageIndex]
+  const localPreview = localPages[0]
 
   useEffect(() => {
     if (!activeRequest || formInitialized.current) return
@@ -56,30 +94,46 @@ export function DeckChangeRequestPage() {
   }, [activeRequest])
 
   const allDiffItems = useMemo(() => {
-    const items = activeRequest?.items || localQuery.data?.items || []
+    const items = visibleActiveRequest?.items || visibleLocalPreview?.items || []
     return items.map((item, index) => contributionItemToDiffItem(item, index))
-  }, [activeRequest?.items, localQuery.data?.items])
-  const summary = useMemo(() => summarizeDiffItems(allDiffItems), [allDiffItems])
-  const filteredItems = useMemo(
-    () => filterDiffItems(allDiffItems, filters),
-    [allDiffItems, filters],
-  )
-  const pageCount = Math.max(1, Math.ceil(filteredItems.length / PAGE_SIZE))
-  const visiblePageIndex = Math.min(pageIndex, pageCount - 1)
-  const visibleItems = filteredItems.slice(
-    visiblePageIndex * PAGE_SIZE,
-    (visiblePageIndex + 1) * PAGE_SIZE,
+  }, [visibleActiveRequest?.items, visibleLocalPreview?.items])
+  const summary = useMemo(
+    () => activeRequest
+      ? summarizeChangeRequest(activeRequest)
+      : localPreview
+        ? summarizeLocalChanges(localPreview)
+        : null,
+    [activeRequest, localPreview],
   )
 
   useEffect(() => {
     setPageIndex(0)
-  }, [filters, allDiffItems.length])
+  }, [activeRequest?.id, filters])
 
   function storeRequest(request: DeckChangeRequest) {
-    queryClient.setQueryData(
-      ['active-deck-change-request', deckItemId],
-      { request },
+    queryClient.setQueriesData<InfiniteData<{ request: DeckChangeRequest | null }>>(
+      { queryKey: ['active-deck-change-request', deckItemId] },
+      (current) => current
+        ? {
+            ...current,
+            pages: current.pages.map((page) => ({
+              ...page,
+              request: page.request
+                ? {
+                    ...page.request,
+                    ...request,
+                    items: page.request.items,
+                    conflicts: page.request.conflicts,
+                    page: page.request.page,
+                  }
+                : request,
+            })),
+          }
+        : current,
     )
+    void queryClient.invalidateQueries({
+      queryKey: ['active-deck-change-request', deckItemId],
+    })
   }
 
   const draftMutation = useMutation({
@@ -131,9 +185,18 @@ export function DeckChangeRequestPage() {
   if (localQuery.error || activeQuery.error) {
     return <Page><PageError error={localQuery.error || activeQuery.error} /></Page>
   }
+  if (!summary) {
+    return <Page><PageError error={new Error('Không có dữ liệu diff đóng góp.')} /></Page>
+  }
 
   const isPendingReview = activeRequest?.status === 'pending_review'
   const isBusy = draftMutation.isPending || syncMutation.isPending || submitMutation.isPending
+  const hasAnyChanges = Boolean(activeRequest?.item_count || localPreview?.item_count)
+  const isFetchingDiff = activeRequest ? activeQuery.isFetching : localQuery.isFetching
+  const isFetchingMore = activeRequest
+    ? activeQuery.isFetchingNextPage
+    : localQuery.isFetchingNextPage
+  const hasNextPage = activeRequest ? activeQuery.hasNextPage : localQuery.hasNextPage
 
   return (
     <Page className="max-w-[96rem]">
@@ -202,7 +265,7 @@ export function DeckChangeRequestPage() {
             <Button
               type="button"
               variant="outline"
-              disabled={isBusy || isPendingReview || !localQuery.data?.item_count}
+              disabled={isBusy || isPendingReview || !localPreview?.item_count}
               onClick={() => draftMutation.mutate()}
             >
               {draftMutation.isPending ? <LoaderCircle className="animate-spin" /> : <FileDiff />}
@@ -229,7 +292,7 @@ export function DeckChangeRequestPage() {
         </CardContent>
       </Card>
 
-      {!allDiffItems.length ? (
+      {!hasAnyChanges ? (
         <Alert>
           <AlertTitle>Chưa có thay đổi local</AlertTitle>
           <AlertDescription>
@@ -239,14 +302,33 @@ export function DeckChangeRequestPage() {
       ) : (
         <DiffWorkspace
           summary={summary}
-          items={visibleItems}
+          items={allDiffItems}
           filters={filters}
-          onFiltersChange={setFilters}
+          onFiltersChange={(nextFilters) => {
+            setFilters(nextFilters)
+            setPageIndex(0)
+          }}
+          isFetching={isFetchingDiff}
+          isFetchingMore={isFetchingMore}
           hasPrevious={visiblePageIndex > 0}
           onPrevious={() => setPageIndex((current) => Math.max(0, current - 1))}
-          hasMore={visiblePageIndex < pageCount - 1}
-          onLoadMore={() => setPageIndex((current) => Math.min(pageCount - 1, current + 1))}
-          pageLabel={`Trang ${visiblePageIndex + 1}/${pageCount}`}
+          hasMore={visiblePageIndex < sourcePages.length - 1 || hasNextPage}
+          onLoadMore={() => {
+            if (visiblePageIndex < sourcePages.length - 1) {
+              setPageIndex((current) => current + 1)
+              return
+            }
+            const previousPageCount = sourcePages.length
+            const nextPage = activeRequest
+              ? activeQuery.fetchNextPage()
+              : localQuery.fetchNextPage()
+            void nextPage.then((result) => {
+              if ((result.data?.pages.length || 0) > previousPageCount) {
+                setPageIndex((current) => current + 1)
+              }
+            })
+          }}
+          pageLabel={`Trang ${visiblePageIndex + 1}`}
           emptyTitle="Không có thay đổi khớp bộ lọc"
           emptyDescription="Thử chọn loại thay đổi khác hoặc xóa từ khóa tìm kiếm."
         />

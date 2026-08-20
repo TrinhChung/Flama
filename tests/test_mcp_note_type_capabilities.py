@@ -9,7 +9,14 @@ from app.connect import create_connect_app
 from app.services import mcp_access_token_service, mcp_tool_service, user_api_token_service
 from models import db
 from models.card import Card
+from models.card_progress import CardProgress
 from models.deck import Deck
+from models.deck_clone_note_field_override import DeckCloneNoteFieldOverride
+from models.deck_install import DeckInstall
+from models.deck_marketplace_item import DeckMarketplaceItem
+from models.deck_release import DeckRelease
+from models.deck_release_entity_membership import DeckReleaseEntityMembership
+from models.deck_working_dirty_entity import DeckWorkingDirtyEntity
 from models.field_def import FieldDef
 from models.note import Note
 from models.note_type import NoteType
@@ -531,3 +538,223 @@ class McpNoteTypeCapabilitiesTests(unittest.TestCase):
             deck_meta = self._call_tool("get_deck", {"deck_id": deck_id})
             self.assertEqual(deck_meta["note_count"], 4)
             self.assertEqual(deck_meta["note_types_in_use"][0]["notes_count"], 4)
+
+    def test_shared_owner_note_mutations_track_and_destructive_tools_preserve_history(self):
+        with self.app.app_context():
+            source_root = Deck(
+                name="Shared MCP source",
+                owner_user_id=self.user_id,
+                note_type_id=self.note_type_id,
+            )
+            db.session.add(source_root)
+            db.session.flush()
+            source_child = Deck(
+                name="Moved cards",
+                owner_user_id=self.user_id,
+                note_type_id=self.note_type_id,
+                parent_id=source_root.id,
+            )
+            learner = User(
+                username="mcp-shared-learner",
+                email="mcp-shared-learner@example.com",
+            )
+            learner.set_password("password123")
+            db.session.add_all([source_child, learner])
+            db.session.flush()
+            local_deck = Deck(
+                name="Shared MCP install",
+                owner_user_id=learner.id,
+                note_type_id=self.note_type_id,
+            )
+            item = DeckMarketplaceItem(
+                owner_user_id=self.user_id,
+                source_deck_id=source_root.id,
+                source_note_type_id=self.note_type_id,
+                title="Shared MCP source",
+                publish_status="published",
+            )
+            db.session.add_all([local_deck, item])
+            db.session.flush()
+            release = DeckRelease(
+                deck_item_id=item.id,
+                sequence_no=1,
+                version_label="1.0.0",
+                status="published",
+                created_by_user_id=self.user_id,
+            )
+            db.session.add(release)
+            db.session.flush()
+            item.current_release_id = release.id
+            install = DeckInstall(
+                deck_item_id=item.id,
+                user_id=learner.id,
+                local_deck_id=local_deck.id,
+                source_deck_id=source_root.id,
+                source_note_type_id=self.note_type_id,
+                source_owner_user_id=self.user_id,
+                applied_release_id=release.id,
+                seen_release_id=release.id,
+                version_mode="release",
+                clone_mode="logical_overlay",
+            )
+            db.session.add(install)
+            db.session.commit()
+
+            created = self._call_tool(
+                "create_note",
+                {
+                    "deck_id": source_root.id,
+                    "note_type_id": self.note_type_id,
+                    "fields": {
+                        "Word": "dog",
+                        "Reading": "inu",
+                        "Meaning": "dog",
+                    },
+                },
+            )
+            note_id = created["note_id"]
+            item = db.session.get(DeckMarketplaceItem, item.id)
+            self.assertEqual(int(item.working_revision or 0), 1)
+            self.assertEqual(int(item.dirty_tracking_revision or 0), 1)
+            created_dirty = DeckWorkingDirtyEntity.query.filter_by(
+                deck_item_id=item.id,
+                entity_kind="note_field",
+                entity_id=note_id,
+            ).all()
+            self.assertEqual(len(created_dirty), 3)
+            self.assertTrue(all(row.operation == "add" for row in created_dirty))
+
+            updated = self._call_tool(
+                "update_note",
+                {"note_id": note_id, "fields": {"Word": "hound"}},
+            )
+            self.assertEqual(updated["fields"]["Word"], "hound")
+            db.session.expire_all()
+            item = db.session.get(DeckMarketplaceItem, item.id)
+            self.assertEqual(int(item.working_revision or 0), 2)
+            word_field = FieldDef.query.filter_by(
+                note_type_id=self.note_type_id,
+                name="Word",
+            ).one()
+            word_dirty = DeckWorkingDirtyEntity.query.filter_by(
+                deck_item_id=item.id,
+                entity_kind="note_field",
+                entity_id=note_id,
+                field_def_id=word_field.id,
+            ).one()
+            self.assertEqual(word_dirty.operation, "set")
+            self.assertEqual(int(word_dirty.working_revision or 0), 2)
+            self.assertIsNotNone(word_dirty.current_hash)
+
+            moved = self._call_tool(
+                "move_note",
+                {"note_id": note_id, "deck_id": source_child.id},
+            )
+            self.assertEqual(int(moved["deck_id"]), source_child.id)
+            db.session.expire_all()
+            item = db.session.get(DeckMarketplaceItem, item.id)
+            self.assertEqual(int(item.working_revision or 0), 3)
+            self.assertEqual(int(item.dirty_tracking_revision or 0), 3)
+            moved_dirty = DeckWorkingDirtyEntity.query.filter_by(
+                deck_item_id=item.id,
+                entity_kind="note_field",
+                entity_id=note_id,
+            ).all()
+            self.assertEqual(len(moved_dirty), 3)
+            self.assertTrue(all(row.operation == "add" for row in moved_dirty))
+            self.assertTrue(
+                all(int(row.source_deck_id) == source_child.id for row in moved_dirty)
+            )
+            self.assertTrue(
+                all(int(row.working_revision or 0) == 3 for row in moved_dirty)
+            )
+
+            note = db.session.get(Note, note_id)
+            card = Card.query.filter_by(note_id=note_id).one()
+            progress = CardProgress(
+                user_id=learner.id,
+                card_id=card.id,
+                queue="review",
+                interval_days=12,
+                reps=7,
+                revision=4,
+            )
+            overlay = DeckCloneNoteFieldOverride(
+                deck_install_id=install.id,
+                source_note_id=note_id,
+                source_field_def_id=word_field.id,
+                base_release_id=release.id,
+                field_name="Word",
+                operation="set",
+                value="learner-local-word",
+            )
+            # Publish the newly tracked note before exercising history guards.
+            membership = DeckReleaseEntityMembership(
+                deck_item_id=item.id,
+                entity_kind="note",
+                entity_id=note_id,
+                source_deck_id=source_child.id,
+                introduced_sequence=1,
+                metadata_json={"note_type_id": self.note_type_id},
+            )
+            db.session.add_all([progress, overlay, membership])
+            db.session.commit()
+            card_id = card.id
+            progress_id = progress.id
+            overlay_id = overlay.id
+            item_id = item.id
+
+            def call_blocked(name: str, arguments: dict, expected_code: str):
+                response = self.client.post(
+                    "/v1/mcp",
+                    headers={
+                        "MCP-Protocol-Version": "2025-11-25",
+                        "Content-Type": "application/json",
+                        "Authorization": f"Bearer {self.token}",
+                    },
+                    json={
+                        "jsonrpc": "2.0",
+                        "id": f"blocked-{name}",
+                        "method": "tools/call",
+                        "params": {"name": name, "arguments": arguments},
+                    },
+                )
+                self.assertEqual(response.status_code, 409, response.get_json())
+                payload = response.get_json()
+                self.assertEqual(payload["error"]["data"]["code"], expected_code)
+
+            call_blocked(
+                "delete_note",
+                {"note_id": note_id, "confirm": True},
+                "SHARED_ENTITY_RETIRE_REQUIRED",
+            )
+            call_blocked(
+                "update_note",
+                {"note_id": note_id, "tags": ["blocked-tag"]},
+                "SHARED_NOTE_METADATA_VERSIONING_REQUIRED",
+            )
+            call_blocked(
+                "update_note_type",
+                {
+                    "note_type_id": self.note_type_id,
+                    "fields": {
+                        "added": [
+                            {"name": "BlockedField", "field_type": "text"}
+                        ]
+                    },
+                },
+                "SHARED_SCHEMA_VERSIONING_REQUIRED",
+            )
+
+            db.session.expire_all()
+            preserved_note = db.session.get(Note, note_id)
+            self.assertIsNotNone(preserved_note)
+            self.assertEqual(preserved_note.tags, [])
+            self.assertEqual(preserved_note.field_values["Word"], "hound")
+            self.assertIsNotNone(db.session.get(Card, card_id))
+            self.assertIsNotNone(db.session.get(CardProgress, progress_id))
+            self.assertIsNotNone(
+                db.session.get(DeckCloneNoteFieldOverride, overlay_id)
+            )
+            preserved_item = db.session.get(DeckMarketplaceItem, item_id)
+            self.assertEqual(int(preserved_item.working_revision or 0), 3)

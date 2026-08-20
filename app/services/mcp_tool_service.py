@@ -1038,6 +1038,16 @@ def delete_note(*, user_id: int, note_id: str, confirm: bool = False) -> dict[st
             ),
         }
 
+    deck_working_tree_service.mark_note_field_batches_changed(
+        mutations=[
+            {
+                "note": note,
+                "field_names": (note.field_values or {}).keys(),
+                "operation": "remove",
+            }
+        ],
+    )
+
     if card_ids:
         CardProgress.query.filter(CardProgress.card_id.in_(card_ids)).delete(synchronize_session=False)
 
@@ -1228,6 +1238,17 @@ def batch_delete_notes(*, user_id: int, note_ids: list[str], confirm: bool = Fal
                 "Chỉ gọi lại tool với 'confirm=true' khi người dùng đã phê duyệt rõ ràng."
             ),
         }
+
+    deck_working_tree_service.mark_note_field_batches_changed(
+        mutations=[
+            {
+                "note": note,
+                "field_names": (note.field_values or {}).keys(),
+                "operation": "remove",
+            }
+            for note in notes
+        ],
+    )
 
     if all_card_ids:
         CardProgress.query.filter(CardProgress.card_id.in_(all_card_ids)).delete(synchronize_session=False)

@@ -8,6 +8,7 @@ from app.repositories import deck_release_repository
 from app.services import deck_release_service, deck_working_tree_service
 from models import db
 from models.deck import Deck
+from models.deck_install import DeckInstall
 from models.deck_marketplace_item import DeckMarketplaceItem
 from models.deck_release import DeckRelease
 from models.deck_release_change import DeckReleaseChange
@@ -164,16 +165,22 @@ class DeckReleaseApiTests(unittest.TestCase):
         )
 
     def test_owner_preview_is_atomic_cursor_paginated_and_owner_only(self):
-        response = self.client.get(
-            f"/api/marketplace/decks/{self.deck_item_id}/releases/preview",
-            query_string={"limit": 3},
-        )
+        with patch.object(
+            deck_release_repository,
+            "list_source_notes",
+            side_effect=AssertionError("checkpoint preview scanned all notes"),
+        ):
+            response = self.client.get(
+                f"/api/marketplace/decks/{self.deck_item_id}/releases/preview",
+                query_string={"limit": 3},
+            )
         self.assertEqual(response.status_code, 200)
         payload = response.get_json()
         self.assertIsNone(payload["base_release"])
         self.assertEqual(payload["working_revision"], 0)
-        # Five field-def properties x two fields, plus four present note fields.
-        self.assertEqual(payload["summary"]["change_count"], 14)
+        self.assertEqual(payload["summary"]["change_count"], 10)
+        self.assertEqual(payload["summary"]["baseline_note_count"], 2)
+        self.assertEqual(payload["initial_baseline_mode"], "checkpoint")
         self.assertEqual(len(payload["items"]), 3)
         self.assertIsNotNone(payload["next_cursor"])
         self.assertTrue(
@@ -229,7 +236,7 @@ class DeckReleaseApiTests(unittest.TestCase):
         self.assertFalse(first_payload["replayed"])
         release_id = first_payload["release"]["id"]
         self.assertEqual(first_payload["release"]["sequence_no"], 1)
-        self.assertEqual(first_payload["release"]["change_count"], 14)
+        self.assertEqual(first_payload["release"]["change_count"], 10)
 
         replay = self._publish(
             version_label="1.0.0",
@@ -251,7 +258,7 @@ class DeckReleaseApiTests(unittest.TestCase):
             )
             self.assertEqual(
                 DeckReleaseChange.query.filter_by(release_id=release_id).count(),
-                14,
+                10,
             )
             self.assertEqual(
                 DeckReleaseNoteCheckpoint.query.filter_by(
@@ -264,6 +271,85 @@ class DeckReleaseApiTests(unittest.TestCase):
                     deck_item_id=self.deck_item_id
                 ).count(),
                 4,
+            )
+            release = db.session.get(DeckRelease, release_id)
+            persisted_changes = DeckReleaseChange.query.filter_by(
+                release_id=release_id
+            ).all()
+            schema_only_manifest = deck_release_service._release_manifest_hash(
+                [
+                    {
+                        "change_key": row.change_key,
+                        "entity_kind": row.entity_kind,
+                        "entity_id": row.entity_id,
+                        "field_def_id": row.field_def_id,
+                        "property_key": row.property_key,
+                        "operation": row.operation,
+                        "before_hash": row.before_hash,
+                        "after_hash": row.after_hash,
+                        "source_deck_id": row.source_deck_id,
+                    }
+                    for row in persisted_changes
+                ]
+            )
+            self.assertNotEqual(release.manifest_hash, schema_only_manifest)
+            self.assertEqual(
+                deck_release_service.get_note_values_at_release(
+                    release_id,
+                    self.first_note_id,
+                )["Word"],
+                db.session.get(Note, self.first_note_id).field_values["Word"],
+            )
+
+    def test_initial_release_preserves_atomic_baseline_for_legacy_install(self):
+        with self.app.app_context():
+            item = db.session.get(DeckMarketplaceItem, self.deck_item_id)
+            db.session.add(
+                DeckInstall(
+                    deck_item_id=item.id,
+                    user_id=self.learner_id,
+                    clone_mode="logical_overlay",
+                    source_deck_id=item.source_deck_id,
+                    source_note_type_id=item.source_note_type_id,
+                    source_owner_user_id=item.owner_user_id,
+                    applied_release_id=None,
+                    seen_release_id=None,
+                    version_mode="legacy_snapshot",
+                )
+            )
+            db.session.commit()
+
+        preview = self.client.get(
+            f"/api/marketplace/decks/{self.deck_item_id}/releases/preview"
+        )
+        self.assertEqual(preview.status_code, 200)
+        preview_payload = preview.get_json()
+        self.assertEqual(preview_payload["initial_baseline_mode"], "atomic")
+        self.assertEqual(preview_payload["summary"]["baseline_note_count"], 2)
+        self.assertEqual(preview_payload["summary"]["change_count"], 14)
+
+        published = self._publish(
+            version_label="1.0.0",
+            expected_release_id=None,
+            expected_working_revision=0,
+            key="legacy-baseline-v1",
+        )
+        self.assertEqual(published.status_code, 201)
+        release_id = published.get_json()["release"]["id"]
+        self.assertEqual(published.get_json()["release"]["change_count"], 14)
+        with self.app.app_context():
+            self.assertEqual(
+                DeckReleaseChange.query.filter_by(
+                    release_id=release_id,
+                    entity_kind="note_field",
+                ).count(),
+                4,
+            )
+            self.assertEqual(
+                DeckReleaseNoteCheckpoint.query.filter_by(
+                    release_id=release_id
+                ).count(),
+                2,
             )
 
     def test_second_release_diff_history_filters_and_reconstruction(self):
@@ -690,14 +776,25 @@ class DeckReleaseApiTests(unittest.TestCase):
         first_release_id = first.get_json()["release"]["id"]
 
         with self.app.app_context():
+            # Simulate a mutation path that bumped the working revision without
+            # journaling its field-level change (for example an older merge
+            # worker), followed by a normally tracked owner edit.
+            meaning_field = db.session.get(FieldDef, self.meaning_field_id)
+            meaning_field.required = True
+            item = db.session.get(DeckMarketplaceItem, self.deck_item_id)
+            item.working_revision = 1
             note = db.session.get(Note, self.first_note_id)
             note.field_values = {
                 **dict(note.field_values or {}),
-                "Word": "untracked direct update",
+                "Word": "tracked after journal gap",
             }
-            item = db.session.get(DeckMarketplaceItem, self.deck_item_id)
-            item.working_revision = 1
-            # dirty_tracking_revision intentionally remains at zero.
+            deck_working_tree_service.mark_note_fields_changed(
+                note=note,
+                field_names={"Word"},
+            )
+            self.assertEqual(int(item.working_revision), 2)
+            # A later tracked edit must not paper over the earlier journal gap.
+            self.assertEqual(int(item.dirty_tracking_revision), 0)
             db.session.commit()
 
         with patch.object(
@@ -708,11 +805,50 @@ class DeckReleaseApiTests(unittest.TestCase):
             second = self._publish(
                 version_label="1.1.0",
                 expected_release_id=first_release_id,
-                expected_working_revision=1,
+                expected_working_revision=2,
                 key="fallback-v2",
             )
         self.assertEqual(second.status_code, 201)
+        self.assertEqual(second.get_json()["release"]["change_count"], 2)
         self.assertGreaterEqual(full_scan.call_count, 1)
+
+    def test_release_bootstrap_cli_is_dry_run_by_default_and_idempotent(self):
+        runner = self.app.test_cli_runner()
+
+        dry_run = runner.invoke(
+            args=["deck-release-bootstrap", "--deck-item-id", self.deck_item_id]
+        )
+        self.assertEqual(dry_run.exit_code, 0, dry_run.output)
+        self.assertIn("dry run", dry_run.output)
+        with self.app.app_context():
+            item = db.session.get(DeckMarketplaceItem, self.deck_item_id)
+            self.assertIsNone(item.current_release_id)
+
+        applied = runner.invoke(
+            args=[
+                "deck-release-bootstrap",
+                "--deck-item-id",
+                self.deck_item_id,
+                "--apply",
+            ]
+        )
+        self.assertEqual(applied.exit_code, 0, applied.output)
+        self.assertIn("created=1", applied.output)
+        with self.app.app_context():
+            item = db.session.get(DeckMarketplaceItem, self.deck_item_id)
+            self.assertIsNotNone(item.current_release_id)
+            self.assertEqual(item.current_release.version_label, "0.0.0")
+
+        replay = runner.invoke(
+            args=[
+                "deck-release-bootstrap",
+                "--deck-item-id",
+                self.deck_item_id,
+                "--apply",
+            ]
+        )
+        self.assertEqual(replay.exit_code, 0, replay.output)
+        self.assertIn("scanned=0", replay.output)
 
 
 if __name__ == "__main__":

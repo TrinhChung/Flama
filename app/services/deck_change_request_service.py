@@ -11,7 +11,7 @@ from types import SimpleNamespace
 from typing import Any
 
 from app.repositories import deck_change_request_repository, flashcards_share_repository
-from app.services import flashcards_share
+from app.services import deck_working_tree_service, flashcards_share
 from models import db
 from models.audit_log import AuditLog
 from models.deck_change_request import DeckChangeRequest
@@ -312,6 +312,7 @@ def _source_field_snapshot(field_def: FieldDef | None) -> dict[str, Any]:
         "field_type": field_def.field_type,
         "position": int(field_def.position or 0),
         "required": bool(field_def.required),
+        "identity_role": field_def.identity_role,
     }
 
 
@@ -931,15 +932,97 @@ def _build_local_change_payloads(
     return items, fingerprint
 
 
-def preview_local_changes_for_install(install: DeckInstall) -> dict[str, Any]:
+def preview_local_changes_for_install(
+    install: DeckInstall,
+    *,
+    cursor: str | None = None,
+    limit: Any = None,
+    change_type: str | None = None,
+    query_text: str | None = None,
+) -> dict[str, Any]:
     items, fingerprint = _build_local_change_payloads(install)
+    page_limit = _coerce_page_limit(
+        limit,
+        default=DEFAULT_ITEM_PAGE_LIMIT,
+        maximum=MAX_ITEM_PAGE_LIMIT,
+    )
+    change_types, normalized_query, conflicts_only, filter_key = _normalize_item_filters(
+        raw_change_type=change_type,
+        query_text=query_text,
+        conflicts_only=False,
+    )
+    if conflicts_only:
+        filtered_items: list[dict[str, Any]] = []
+    else:
+        normalized_query_folded = str(normalized_query or "").casefold()
+        filtered_items = [
+            item
+            for item in items
+            if (not change_types or item["change_type"] in change_types)
+            and (
+                not normalized_query_folded
+                or normalized_query_folded in str(item.get("path_label") or "").casefold()
+                or normalized_query_folded in str(item.get("path_key") or "").casefold()
+                or normalized_query_folded in str(item.get("source_ref_id") or "").casefold()
+            )
+        ]
+    filtered_item_count = len(filtered_items)
+    after_sort_order: int | None = None
+    cursor_payload = _decode_cursor(cursor, expected_kind="local_change_items")
+    if cursor_payload is not None:
+        try:
+            if str(cursor_payload["install_id"]) != str(install.id):
+                raise ValueError("install mismatch")
+            if str(cursor_payload["fingerprint"]) != fingerprint:
+                raise ChangeRequestError(
+                    "Local clone changes changed while paging. Refresh the diff.",
+                    status=409,
+                    error="CHANGE_REQUEST_CURSOR_STALE",
+                    field="cursor",
+                )
+            if str(cursor_payload["filter_key"]) != filter_key:
+                raise ValueError("filter mismatch")
+            after_sort_order = int(cursor_payload["sort_order"])
+        except ChangeRequestError:
+            raise
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ChangeRequestError(
+                "cursor does not match the current local diff or filters.",
+                status=400,
+                field="cursor",
+            ) from exc
+    if after_sort_order is not None:
+        filtered_items = [
+            item
+            for item in filtered_items
+            if int(item.get("sort_order") or 0) > after_sort_order
+        ]
+    page_items = filtered_items[:page_limit]
+    has_more = len(filtered_items) > page_limit
+    next_cursor = None
+    if has_more and page_items:
+        next_cursor = _encode_cursor(
+            {
+                "kind": "local_change_items",
+                "install_id": str(install.id),
+                "fingerprint": fingerprint,
+                "filter_key": filter_key,
+                "sort_order": int(page_items[-1].get("sort_order") or 0),
+            }
+        )
     return {
         "deck_install_id": install.id,
         "deck_item_id": install.deck_item_id,
         "overlay_fingerprint": fingerprint,
         "item_count": len(items),
         "change_counts": dict(Counter(item["change_type"] for item in items)),
-        "items": items,
+        "items": page_items,
+        "page": {
+            "limit": page_limit,
+            "has_more": has_more,
+            "next_cursor": next_cursor,
+            "filtered_item_count": filtered_item_count,
+        },
     }
 
 
@@ -1766,7 +1849,7 @@ def get_active_request_for_deck_item(
     )
     if active_request is None:
         return None
-    return deck_change_request_repository.get_request_header(active_request.id)
+    return active_request
 
 
 def has_pending_review_request_for_install(deck_install_id: str) -> bool:
@@ -1787,14 +1870,23 @@ def _rename_note_type_field_values(
 ) -> None:
     if not note_type_id or not old_name or not new_name or old_name == new_name:
         return
-    rows = Note.query.filter_by(note_type_id=note_type_id).all()
-    for note in rows:
-        values = dict(note.field_values or {})
-        if old_name in values and new_name not in values:
-            values[new_name] = values.pop(old_name)
-        elif old_name in values:
-            values.pop(old_name)
-        note.field_values = values
+    last_id: str | None = None
+    while True:
+        query = Note.query.filter_by(note_type_id=note_type_id)
+        if last_id is not None:
+            query = query.filter(Note.id > last_id)
+        rows = query.order_by(Note.id.asc()).limit(500).all()
+        if not rows:
+            break
+        for note in rows:
+            values = dict(note.field_values or {})
+            if old_name in values and new_name not in values:
+                values[new_name] = values.pop(old_name)
+            elif old_name in values:
+                values.pop(old_name)
+            note.field_values = values
+        db.session.flush()
+        last_id = str(rows[-1].id)
 
 
 def _remove_note_type_field_values(
@@ -1804,12 +1896,21 @@ def _remove_note_type_field_values(
 ) -> None:
     if not note_type_id or not field_name:
         return
-    rows = Note.query.filter_by(note_type_id=note_type_id).all()
-    for note in rows:
-        values = dict(note.field_values or {})
-        if field_name in values:
-            values.pop(field_name, None)
-            note.field_values = values
+    last_id: str | None = None
+    while True:
+        query = Note.query.filter_by(note_type_id=note_type_id)
+        if last_id is not None:
+            query = query.filter(Note.id > last_id)
+        rows = query.order_by(Note.id.asc()).limit(500).all()
+        if not rows:
+            break
+        for note in rows:
+            values = dict(note.field_values or {})
+            if field_name in values:
+                values.pop(field_name, None)
+                note.field_values = values
+        db.session.flush()
+        last_id = str(rows[-1].id)
 
 
 def _normalize_field_positions(note_type_id: str) -> None:
@@ -1863,6 +1964,127 @@ def _cleanup_install_overlay_rows(
             DeckCloneNoteFieldOverride.deck_install_id == install.id,
             DeckCloneNoteFieldOverride.id.in_(sorted(note_override_ids)),
         ).delete(synchronize_session=False)
+
+
+def _build_merged_working_tree_changes(
+    request_obj: DeckChangeRequest,
+    *,
+    added_field_id_map: dict[str, str],
+    source_note_type_id: str,
+) -> list[dict[str, Any]]:
+    """Describe final owner state touched by one contribution merge."""
+
+    changes: list[dict[str, Any]] = []
+    field_property_values = {
+        "name": lambda row: row.name,
+        "field_type": lambda row: row.field_type,
+        "position": lambda row: int(row.position or 0),
+        "required": lambda row: bool(row.required),
+        "identity_role": lambda row: row.identity_role,
+    }
+    has_field_order_change = False
+    for request_item in request_obj.items:
+        if _item_is_dropped_from_request(request_item):
+            continue
+        metadata = dict(request_item.metadata_json or {})
+        if request_item.change_type == CHANGE_TYPE_FIELD_DEF_UPDATE:
+            field_id = str(
+                metadata.get("source_field_def_id") or request_item.source_ref_id or ""
+            ).strip()
+            property_key = str(
+                metadata.get("property_name") or request_item.path_key or ""
+            ).strip()
+            field_obj = db.session.get(FieldDef, field_id) if field_id else None
+            value_getter = field_property_values.get(property_key)
+            if field_obj is None or value_getter is None:
+                continue
+            changes.append(
+                {
+                    "entity_kind": "field_def",
+                    "entity_id": field_obj.id,
+                    "field_def_id": field_obj.id,
+                    "property_key": property_key,
+                    "operation": "set",
+                    "current_value": value_getter(field_obj),
+                    "source_deck_id": request_obj.source_deck_id,
+                    "metadata": {"field_name": field_obj.name},
+                }
+            )
+            continue
+        if request_item.change_type == CHANGE_TYPE_FIELD_DEF_ADD:
+            field_id = added_field_id_map.get(str(request_item.local_ref_id or ""))
+            field_obj = db.session.get(FieldDef, field_id) if field_id else None
+            if field_obj is None:
+                continue
+            for property_key, value_getter in field_property_values.items():
+                changes.append(
+                    {
+                        "entity_kind": "field_def",
+                        "entity_id": field_obj.id,
+                        "field_def_id": field_obj.id,
+                        "property_key": property_key,
+                        "operation": "add",
+                        "current_value": value_getter(field_obj),
+                        "source_deck_id": request_obj.source_deck_id,
+                        "metadata": {"field_name": field_obj.name},
+                    }
+                )
+            continue
+        if request_item.change_type == CHANGE_TYPE_FIELD_ORDER_UPDATE:
+            has_field_order_change = True
+            continue
+        if request_item.change_type not in {
+            CHANGE_TYPE_NOTE_FIELD_SET,
+            CHANGE_TYPE_NOTE_FIELD_REMOVE,
+        }:
+            continue
+        note_id = str(
+            metadata.get("source_note_id") or request_item.source_ref_id or ""
+        ).strip()
+        field_id = str(
+            metadata.get("source_field_def_id")
+            or added_field_id_map.get(
+                str(metadata.get("local_added_field_def_id") or "")
+            )
+            or ""
+        ).strip()
+        note = db.session.get(Note, note_id) if note_id else None
+        field_obj = db.session.get(FieldDef, field_id) if field_id else None
+        if note is None or field_obj is None:
+            continue
+        values = dict(note.field_values or {})
+        field_name = str(field_obj.name)
+        exists = field_name in values
+        changes.append(
+            {
+                "entity_kind": "note_field",
+                "entity_id": note.id,
+                "field_def_id": field_obj.id,
+                "property_key": f"field:{field_obj.id}",
+                "operation": "set" if exists else "remove",
+                "current_value": values.get(field_name),
+                "source_deck_id": note.deck_id,
+                "metadata": {"field_name": field_name},
+            }
+        )
+
+    if has_field_order_change and source_note_type_id:
+        for field_obj in FieldDef.query.filter_by(
+            note_type_id=source_note_type_id
+        ).all():
+            changes.append(
+                {
+                    "entity_kind": "field_def",
+                    "entity_id": field_obj.id,
+                    "field_def_id": field_obj.id,
+                    "property_key": "position",
+                    "operation": "set",
+                    "current_value": int(field_obj.position or 0),
+                    "source_deck_id": request_obj.source_deck_id,
+                    "metadata": {"field_name": field_obj.name},
+                }
+            )
+    return changes
 
 
 def approve_and_merge_request(
@@ -2118,11 +2340,18 @@ def approve_and_merge_request(
     request_obj.merged_at = merged_at
     request_obj.review_comment = review_comment or None
     request_obj.last_sync_status = "clean"
+    dirty_changes = _build_merged_working_tree_changes(
+        request_obj,
+        added_field_id_map=added_field_id_map,
+        source_note_type_id=source_note_type_id,
+    )
     if request_obj.deck_item is not None:
         request_obj.deck_item.updated_at = merged_at
-        request_obj.deck_item.working_revision = int(
-            request_obj.deck_item.working_revision or 0
-        ) + 1
+        if dirty_changes:
+            deck_working_tree_service.mark_deck_item_batch_changed(
+                item=request_obj.deck_item,
+                changes=dirty_changes,
+            )
 
     _audit(
         actor_user_id,
@@ -2132,6 +2361,7 @@ def approve_and_merge_request(
             "deck_item_id": request_obj.deck_item_id,
             "deck_install_id": request_obj.deck_install_id,
             "merge_status": request_obj.status,
+            "dirty_change_count": len(dirty_changes),
         },
     )
     db.session.flush()

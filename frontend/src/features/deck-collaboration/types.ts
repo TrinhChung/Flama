@@ -140,13 +140,33 @@ export type UpdateConflict = {
   base_value?: DiffValue
   local_value?: DiffValue
   upstream_value?: DiffValue
+  resolution_mode?: UpdateConflictResolution | 'manual' | null
+  resolved_value?: DiffValue
+  resolved_at?: string | null
+}
+
+export type RebaseConflictPageMeta = {
+  limit: number
+  has_more: boolean
+  next_after_id: string | null
+}
+
+export type InstalledUpdateConflictPage = {
+  rebase_id: string
+  status: PreparedInstalledUpdate['status']
+  conflict_count: number
+  resolved_conflict_count: number
+  items: UpdateConflict[]
+  page: RebaseConflictPageMeta
 }
 
 export type PreparedInstalledUpdate = {
   rebase_id: string
   status: 'ready' | 'conflicts' | 'applied'
   conflict_count: number
+  resolved_conflict_count: number
   conflicts: UpdateConflict[]
+  conflict_page?: RebaseConflictPageMeta
   expected_overlay_revision?: string | number | null
 }
 
@@ -271,6 +291,7 @@ export type LocalChangesPreview = {
   item_count: number
   change_counts: Record<string, number>
   items: LocalChangeItem[]
+  page?: CursorPageMeta
 }
 
 export type ChangeRequestInbox = {

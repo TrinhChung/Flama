@@ -8,7 +8,7 @@ import re
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Iterable, List
+from typing import Any, Dict, Iterable, List
 
 import click
 from flask import Flask
@@ -230,6 +230,92 @@ def register_cli_commands(app: Flask) -> None:
                 click.echo(
                     f"- deck_install_id={error.get('deck_install_id')}: {error.get('message')}"
                 )
+
+    @app.cli.command("deck-release-bootstrap")
+    @click.option(
+        "--deck-item-id",
+        type=str,
+        default=None,
+        help="Bootstrap only one marketplace deck listing.",
+    )
+    @click.option(
+        "--limit",
+        type=click.IntRange(1, 10_000),
+        default=100,
+        show_default=True,
+        help="Maximum number of visible legacy listings to inspect.",
+    )
+    @click.option(
+        "--apply",
+        is_flag=True,
+        default=False,
+        help="Commit each initial release; otherwise validate with rollback.",
+    )
+    def deck_release_bootstrap(
+        deck_item_id: str | None,
+        limit: int,
+        apply: bool,
+    ) -> None:
+        """Pin visible legacy listings to immutable initial releases."""
+
+        query = DeckMarketplaceItem.query.filter(
+            DeckMarketplaceItem.current_release_id.is_(None),
+            DeckMarketplaceItem.publish_status.in_(["published", "unlisted"]),
+        )
+        if deck_item_id:
+            query = query.filter(DeckMarketplaceItem.id == deck_item_id.strip())
+        item_ids = [
+            str(row[0])
+            for row in query.with_entities(DeckMarketplaceItem.id)
+            .order_by(DeckMarketplaceItem.id.asc())
+            .limit(limit)
+            .all()
+        ]
+
+        counts = {
+            "created": 0,
+            "already_versioned": 0,
+            "not_visible": 0,
+            "missing": 0,
+            "failed": 0,
+        }
+        failures: list[dict[str, Any]] = []
+        for current_item_id in item_ids:
+            try:
+                result = flashcards_share.ensure_visible_deck_item_initial_release(
+                    current_item_id
+                )
+                status = str(result.get("status") or "failed")
+                counts[status] = counts.get(status, 0) + 1
+                if status == "failed":
+                    failures.append(result)
+                if apply and status == "created":
+                    db.session.commit()
+                else:
+                    db.session.rollback()
+            except Exception as exc:
+                db.session.rollback()
+                counts["failed"] += 1
+                failures.append(
+                    {"deck_item_id": current_item_id, "error": str(exc)}
+                )
+
+        click.echo(
+            "Deck release bootstrap "
+            f"{'applied' if apply else 'dry run'}: "
+            f"scanned={len(item_ids)}, created={counts['created']}, "
+            f"failed={counts['failed']}, skipped="
+            f"{counts['already_versioned'] + counts['not_visible'] + counts['missing']}"
+        )
+        for failure in failures:
+            click.echo(
+                f"- deck_item_id={failure.get('deck_item_id')}: "
+                f"{failure.get('error') or 'unknown error'}"
+            )
+        if failures:
+            raise click.ClickException(
+                f"{len(failures)} deck listing(s) could not be bootstrapped."
+            )
 
     @app.cli.command("user-role-seed")
     def user_role_seed() -> None:
