@@ -1,9 +1,11 @@
 """Focused integration tests for immutable shared-deck release APIs."""
 
 import unittest
+from unittest.mock import patch
 
 from app import create_app
-from app.services import deck_release_service
+from app.repositories import deck_release_repository
+from app.services import deck_release_service, deck_working_tree_service
 from models import db
 from models.deck import Deck
 from models.deck_marketplace_item import DeckMarketplaceItem
@@ -621,6 +623,96 @@ class DeckReleaseApiTests(unittest.TestCase):
             self.assertEqual(int(memberships[0].removed_sequence), 2)
             self.assertEqual(int(memberships[1].introduced_sequence), 3)
             self.assertIsNone(memberships[1].removed_sequence)
+
+    def test_tracked_second_release_uses_sparse_note_reads(self):
+        first = self._publish(
+            version_label="1.0.0",
+            expected_release_id=None,
+            expected_working_revision=0,
+            key="sparse-v1",
+        )
+        first_release_id = first.get_json()["release"]["id"]
+
+        with self.app.app_context():
+            note = db.session.get(Note, self.first_note_id)
+            note.field_values = {
+                **dict(note.field_values or {}),
+                "Word": "tracked sparse update",
+            }
+            deck_working_tree_service.mark_note_fields_changed(
+                note=note,
+                field_names={"Word"},
+            )
+            db.session.commit()
+            item = db.session.get(DeckMarketplaceItem, self.deck_item_id)
+            self.assertEqual(int(item.working_revision), 1)
+            self.assertEqual(int(item.dirty_tracking_revision), 1)
+
+        with patch.object(
+            deck_release_repository,
+            "list_source_notes",
+            side_effect=AssertionError("sparse release scanned the full note set"),
+        ):
+            preview = self.client.get(
+                f"/api/marketplace/decks/{self.deck_item_id}/releases/preview"
+            )
+            self.assertEqual(preview.status_code, 200)
+            self.assertEqual(preview.get_json()["summary"]["change_count"], 1)
+            second = self._publish(
+                version_label="1.1.0",
+                expected_release_id=first_release_id,
+                expected_working_revision=1,
+                key="sparse-v2",
+            )
+
+        self.assertEqual(second.status_code, 201)
+        second_release_id = second.get_json()["release"]["id"]
+        self.assertEqual(second.get_json()["release"]["change_count"], 1)
+        with self.app.app_context():
+            values = deck_release_service.get_note_values_at_release(
+                second_release_id,
+                self.first_note_id,
+            )
+            self.assertEqual(values["Word"], "tracked sparse update")
+            item = db.session.get(DeckMarketplaceItem, self.deck_item_id)
+            self.assertEqual(
+                int(item.dirty_tracking_revision),
+                int(item.working_revision),
+            )
+
+    def test_untrusted_dirty_journal_falls_back_to_full_comparison(self):
+        first = self._publish(
+            version_label="1.0.0",
+            expected_release_id=None,
+            expected_working_revision=0,
+            key="fallback-v1",
+        )
+        first_release_id = first.get_json()["release"]["id"]
+
+        with self.app.app_context():
+            note = db.session.get(Note, self.first_note_id)
+            note.field_values = {
+                **dict(note.field_values or {}),
+                "Word": "untracked direct update",
+            }
+            item = db.session.get(DeckMarketplaceItem, self.deck_item_id)
+            item.working_revision = 1
+            # dirty_tracking_revision intentionally remains at zero.
+            db.session.commit()
+
+        with patch.object(
+            deck_release_repository,
+            "list_source_notes",
+            wraps=deck_release_repository.list_source_notes,
+        ) as full_scan:
+            second = self._publish(
+                version_label="1.1.0",
+                expected_release_id=first_release_id,
+                expected_working_revision=1,
+                key="fallback-v2",
+            )
+        self.assertEqual(second.status_code, 201)
+        self.assertGreaterEqual(full_scan.call_count, 1)
 
 
 if __name__ == "__main__":

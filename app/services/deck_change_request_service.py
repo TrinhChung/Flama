@@ -274,6 +274,8 @@ def _overlay_state_payload(install: DeckInstall) -> dict[str, Any]:
         {
             "id": row.id,
             "source_note_id": row.source_note_id,
+            "source_field_def_id": row.source_field_def_id,
+            "base_release_id": row.base_release_id,
             "field_name": row.field_name,
             "operation": row.operation,
             "value": row.value,
@@ -643,6 +645,12 @@ def _build_local_change_payloads(
         for field_id, payload in base_field_defs.items()
         if str(payload.get("name") or "").strip()
     }
+    if not base_field_ids_by_name and source_note_type_id:
+        base_field_ids_by_name = {
+            str(row.name): str(row.id)
+            for row in FieldDef.query.filter_by(note_type_id=source_note_type_id).all()
+            if str(row.name or "").strip()
+        }
     removed_field_names = set(schema_view.removed_field_names or set())
     renamed_field_names = dict(schema_view.renamed_field_names or {})
     if uses_release_base:
@@ -952,6 +960,7 @@ def build_or_refresh_draft_request(
         user_id=requester_user_id,
         deck_item_id=deck_item_id,
     )
+    _validate_install_release_for_contribution(install, deck_item)
     if active_request is not None and active_request.status == REQUEST_STATUS_PENDING_REVIEW:
         raise ChangeRequestError(
             "A change request for this install is already pending review.",
