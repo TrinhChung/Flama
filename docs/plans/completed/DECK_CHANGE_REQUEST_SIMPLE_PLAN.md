@@ -1,11 +1,43 @@
-# Shared Deck Collaboration, Release, and Update Plan [COMPLETED]
+# Shared Deck Collaboration, Release, and Update Plan [IMPLEMENTED / HARDENING]
 
-> **Trạng thái:** HOÀN THÀNH (COMPLETED)  
-> **Các thành phần đã triển khai:**
-> - Models: `deck_change_request`, `deck_change_request_item`, `deck_change_request_conflict` (`migrations/versions/20260330_000006_add_deck_change_request_tables.py`).
-> - Business logic & conflict engine: `app/services/deck_change_request_service.py`, `app/repositories/deck_change_request_repository.py`.
-> - REST APIs: preview local changes, build/sync draft, resolve conflicts, submit request, owner inbox, approve/merge, reject (`app/routes/flashcards/change_requests.py` & canonical `/api`).
-> - Frontend UI: Change request management, conflict resolution modal và review views trong React SPA.
+> **Cập nhật triển khai 2026-08-21**
+>
+> Các mục "target/phase/gap" phía sau được giữ làm lịch sử quyết định thiết kế. Khi có
+> khác biệt, snapshot triển khai và API contract trong bản cập nhật này là authoritative.
+> Những phần đã ship gồm:
+>
+> - Contribution/change request theo sparse field delta, stable `source_field_def_id`,
+>   conflict resolution, owner inbox, merge/reject và cursor pagination.
+> - Immutable `DeckRelease`, atomic change log, initial checkpoint, working-tree dirty
+>   journal và sparse publish cho các release sau.
+> - `DeckInstall.applied_release_id`/`seen_release_id`, thông báo update chưa đọc,
+>   preview diff, prepare rebase, resolve conflict và apply có optimistic concurrency.
+> - Clone đọc giá trị tại applied release; apply update giữ nguyên `Note.id`, `Card.id`
+>   và `CardProgress`, đồng thời chỉ prune overlay thật sự chồng lấn.
+> - React Git-style diff workspace với lọc/search phía server, cursor paging, lazy expand,
+>   giới hạn nội dung render và các màn creator release, contribution, installed update.
+> - Listing public mới tự tạo initial release trong cùng transaction. Listing public cũ
+>   được bootstrap an toàn khi owner cập nhật hoặc trước lần install mới; rollout hàng
+>   loạt dùng `flask deck-release-bootstrap` (dry-run mặc định, thêm `--apply` để commit).
+> - Browse/search/count/sort của clone dùng effective values tại `applied_release_id`
+>   cộng overlay; `q` và sort được áp dụng trên projection này trước pagination, nên owner
+>   working edit chưa publish không làm rò kết quả hoặc đổi thứ tự của clone.
+>
+> **Đã xác minh:** focused backend suites, route contract, SQLite migration round-trip,
+> React typecheck/build/component tests. Alembic có một head
+> `20260820_000019` và đã downgrade/upgrade qua merge head trên SQLite.
+> **Chưa được chứng nhận:** migration round-trip trên MySQL 8 live và
+> benchmark/concurrency thực tế ở 10k–50k records; đây vẫn là deployment gate.
+>
+> **Giới hạn atomic hiện tại:** release chỉ version hóa `FieldDef`/field order,
+> Note field values và membership visibility. Note tags, template/card layout, tên/schema
+> cấp NoteType và thao tác chuyển deck của một Note đã có release membership
+> chưa có atomic release representation hoàn chỉnh. Các mutation tương ứng qua Content
+> API, Browse, MCP và Flama Connect bị fail-closed (`409`) để tránh leak owner working
+> state hoặc phá `CardProgress`. Marketplace listing metadata như description, taxonomy
+> và pricing không phải clone content nên vẫn có thể chỉnh theo policy riêng. Note mới
+> chưa từng publish vẫn sửa/chuyển deck bình thường; field/value changes của Note đã
+> publish vẫn đi qua dirty journal/release.
 
 ## 1. Mục đích tài liệu
 
@@ -17,11 +49,13 @@ Tài liệu này là kế hoạch triển khai chính thức cho ba luồng liê
 
 Tài liệu phân biệt rõ:
 
-- **Current baseline**: code đã tồn tại trong repo.
-- **Target behavior**: hành vi cần đạt.
-- **Implementation plan**: phần chưa implement và thứ tự triển khai.
+- **Implementation snapshot**: code và contract đang chạy, ưu tiên khi vận hành/debug.
+- **Target behavior/phases**: lịch sử thiết kế đã dẫn tới implementation hiện tại.
+- **Residual/deployment gates**: phần thật sự chưa atomic-versioned hoặc chưa được chứng
+  nhận trên MySQL/load thực tế.
 
-Không được đọc tài liệu này như một kế hoạch xây lại clone từ đầu. Logical overlay và change-request MVP hiện tại là baseline phải được giữ và harden.
+Không được đọc tài liệu này như một kế hoạch xây lại clone từ đầu. Logical overlay,
+immutable release và change-request subsystem hiện tại là baseline phải được giữ/harden.
 
 ## 2. Current baseline trong repo
 
@@ -56,10 +90,13 @@ Files chính:
 Hành vi hiện tại:
 
 1. Install mới dùng `DeckInstall.clone_mode='logical_overlay'`.
-2. Install lưu source deck, source note type, source owner và `base_snapshot_at`.
+2. Install lưu lineage và release pointers: `source_deck_id`, `source_note_type_id`,
+   `source_owner_user_id`, `applied_release_id`, `seen_release_id`, `version_mode`.
+   `base_snapshot_at` chỉ còn là compatibility fallback cho install legacy chưa bootstrap.
 3. Hệ thống copy deck tree shell và tạo `DeckCloneDeckMap`.
 4. Hệ thống không copy source `Note`/`Card` theo từng learner.
-5. Browse/study dùng source Note/Card rồi apply clone schema/note overlay.
+5. Browse/study giữ source Note/Card identity nhưng reconstruct membership, schema và
+   note values tại `applied_release_id`, sau đó apply clone overlay.
 6. Local edit được lưu thưa trong:
    - `DeckCloneFieldDefOverride`
    - `DeckCloneAddedFieldDef`
@@ -98,18 +135,18 @@ API hiện có:
 6. Owner inbox/detail.
 7. Approve/merge và reject.
 
-Reject hiện đã đúng một phần yêu cầu mới:
+Reject hiện đúng semantics yêu cầu:
 
 1. Không sửa source.
 2. Không xóa overlay của contributor.
 3. Lưu reason vào request.
 
-Merge hiện chưa đúng semantics release mới:
+Merge hiện đúng release gate:
 
-1. Merge sửa source rows trực tiếp.
-2. Merge cleanup overlay tương ứng.
-3. Merge nâng `base_snapshot_at` của install.
-4. Vì clone đọc source live, merge có thể làm thay đổi hiển thị của clone khác mà chưa publish.
+1. Merge apply immutable request snapshot vào owner working tree và ghi dirty journal.
+2. Merge không publish, không advance release pointer của install nào và không tạo update badge.
+3. Merge/reject đều không cleanup contributor overlay; contributor vẫn giữ bản local.
+4. Chỉ explicit owner publish mới tạo `DeckRelease` mới và làm update available.
 
 ### 2.4 Seam giữ lịch sử học
 
@@ -122,70 +159,46 @@ Do đó invariant bắt buộc là:
 3. New Note/Card có ID mới và progress mới.
 4. Local-added note được merge cần map local/source identity có kiểm soát và remap progress tương tự legacy cutover helper nếu cần.
 
-## 3. Gaps và rủi ro cần xử lý
+## 3. Trạng thái các gaps ban đầu
 
-### P0: `base_snapshot_at` không phải content version
+### Đã xử lý
 
-`base_snapshot_at` chỉ lọc row theo `created_at`:
+1. `base_snapshot_at` không còn là content version cho install release-mode. Clone pin
+   `DeckInstall.applied_release_id`; membership/value/schema được đọc tại release đó.
+2. `DeckRelease` bất biến, current/applied/seen pointers, preview/publish/history,
+   update diff, prepare/resolve/apply và optimistic concurrency đã có.
+3. Contribution dùng `base_release_id`, request revision và stable
+   `source_field_def_id`; field rename không làm mất identity của note override.
+4. Shared Note/FieldDef hard delete bị chặn khi có released dependents. Visibility
+   remove/re-add dùng các membership interval bất biến, giữ Note/Card/Progress identity.
+5. Owner inbox và request items dùng keyset cursor; aggregate counts không hydrate toàn
+   bộ graph. Rebase conflicts cũng được materialize thưa và phân trang riêng.
+6. Jump nhiều release được collapse trong SQL theo `change_key` thành first-before /
+   last-after; net no-op như add rồi remove hoặc set về giá trị gốc bị loại khỏi summary,
+   page và `rebase.change_count`.
 
-1. Owner sửa field hiện hữu: clone có thể thấy ngay.
-2. Owner thêm Note/Card/FieldDef sau snapshot: clone cũ không thấy.
-3. Owner hard-delete source row: clone mất row ngay và có nguy cơ mất progress do cascade.
+### Còn giới hạn / fail-closed
 
-Target phải thay timestamp snapshot bằng một published release thật.
-
-### P0: chưa có immutable release/publish gate
-
-`DeckMarketplaceItem.version` hiện chỉ là metadata mutable. Repo chưa có:
-
-1. Release history bất biến.
-2. Sparse release delta.
-3. Current published release pointer.
-4. Applied release pointer trên từng install.
-5. Available-update/seen state.
-6. Preview/rebase/apply upstream update.
-
-### P0: conflict base của contribution có thể sai
-
-Overlay hiện chủ yếu lưu after-value. Draft lấy `before_value` từ source tại thời điểm build draft, không phải published base lúc learner bắt đầu sửa.
-
-Nếu owner đổi cùng field sau khi learner sửa nhưng trước khi learner build draft, conflict có thể bị bỏ sót. Cần `base_release_id` và stable field identity.
-
-### P0: hard delete có thể xóa lịch sử học
-
-Source Note có thể bị hard-delete, kéo theo Card và `CardProgress` qua FK cascade. Trước khi release hỗ trợ remove:
-
-1. Shared Note/Card/FieldDef/Template cần tombstone/retired semantics.
-2. Release membership quyết định visibility.
-3. Cleanup vật lý chỉ được thực hiện theo retention policy sau khi chứng minh không còn install/progress phụ thuộc.
-
-### P1: scale diff chưa phù hợp deck lớn
-
-Hiện tại:
-
-1. Draft có N+1 lookup theo FieldDef/Note.
-2. Sync lookup source theo từng request item.
-3. Request detail eager-load và serialize toàn bộ items/conflicts.
-4. Owner inbox dùng `.all()` không pagination.
-5. Jinja/vanilla JS render toàn bộ diff array vào DOM.
-6. Fingerprint build bằng cách load toàn bộ overlay vào Python/JSON.
-
-### P1: identity note field đang dựa vào tên
-
-`DeckCloneNoteFieldOverride` dùng `field_name`. Upstream rename có thể làm mất mapping hoặc tạo conflict sai.
-
-Target dùng `source_field_def_id` làm identity; tên field chỉ là label/compatibility.
-
-### P1: NoteType có thể nằm ngoài scope deck
-
-Field rename/remove hiện có thể rewrite mọi Note dùng cùng NoteType, kể cả Note ngoài source deck.
-
-V1 phải chọn một trong hai policy:
-
-1. Chỉ cho schema contribution/release khi NoteType độc quyền cho shared deck; hoặc
-2. Version NoteType như dependency riêng và pin `note_type_release_id` trong deck release.
-
-Khuyến nghị v1: enforce exclusive provenance cho schema-changing operation; NoteType release độc lập là phase sau.
+1. Atomic release kinds hiện chỉ gồm `note_field` và `field_def` (field order là property
+   có stable field identity), cộng membership visibility. Note tags, template/card layout,
+   tên/schema NoteType và deck move của Note đã có membership chưa atomic-versioned.
+2. Vì vậy sửa tags của released shared Note trả
+   `SHARED_NOTE_METADATA_VERSIONING_REQUIRED`; template/card-layout hoặc tên/metadata
+   ảnh hưởng schema của NoteType trả `SHARED_SCHEMA_VERSIONING_REQUIRED`; deck move và hard
+   delete Note/Card/FieldDef trả `SHARED_ENTITY_RETIRE_REQUIRED`. Content API, Browse,
+   MCP và Flama Connect đều áp dụng guard dựa trên historical release membership, kể cả
+   khi Note đã chuyển khỏi source subtree hiện tại. Đây là guardrail chủ động, không phải
+   silent fallback sang live source.
+3. Note mới chưa có historical membership và không thuộc legacy snapshot vẫn editable /
+   movable. Field/value mutation của released Note vẫn được hỗ trợ và ghi sparse dirty
+   atoms bình thường; guard chỉ chặn mutation chưa có representation an toàn.
+4. Local-change preview chỉ materialize tập overlay thưa, không scan full source deck,
+   nhưng fingerprint/page đầu vẫn O(số local overrides). Cần benchmark nếu một install có
+   hàng chục nghìn local changes.
+5. Large publish vẫn synchronous; repo chưa có worker/outbox production để xử lý 50k
+   dirty changes hoặc push notification fan-out.
+6. MySQL 8 live migration/load/deadlock benchmark chưa chạy; hiện mới có SQLite
+   round-trip và MySQL 8 dialect compilation cho các query window/`EXISTS`.
 
 ## 4. Target architecture
 
@@ -225,7 +238,7 @@ Owner có thêm lớp thứ tư:
 
 4. `owner_working`: source đang sửa nhưng chưa publish.
 
-## 5. Data model đề xuất
+## 5. Data model đã triển khai
 
 ### 5.1 `deck_releases`
 
@@ -260,11 +273,12 @@ Columns chính:
 
 1. `id BIGINT` PK để giảm index footprint trên MySQL.
 2. `release_id`, `release_sequence_no`.
-3. `entity_kind`: `note`, `note_field`, `field_def`, `field_order`, `template`, `deck_node`, `card`.
+3. `entity_kind` atomic hiện tại: `note_field` và `field_def`; field order được biểu diễn
+   bằng các property `position` ổn định của FieldDef.
 4. `entity_id`: stable source ID.
 5. `field_def_id` nullable.
 6. `property_key`.
-7. `operation`: `add`, `set`, `remove`, `move`, `retire`.
+7. `operation`: `add`, `set`, `remove`.
 8. `before_value`, `after_value` JSON: chỉ một property, không phải toàn card.
 9. `before_hash`, `after_hash`.
 10. `source_deck_id`, `sort_key`.
@@ -284,15 +298,20 @@ Không index JSON trực tiếp. Các filter/sort keys phải có column riêng.
 
 1. Một JSON snapshot/Note tại checkpoint release.
 2. Tận dụng `Note.field_values` hiện tại.
-3. Tạo initial checkpoint và checkpoint định kỳ, không snapshot mỗi release.
-4. Ngưỡng ban đầu để benchmark: sau khoảng 20 release hoặc cumulative delta vượt 20-25% deck.
+3. Hiện tạo full Note checkpoint ở initial release; các release sau reconstruct bằng sparse
+   atomic changes. Periodic checkpoint/compaction chưa triển khai.
+4. Khi không có legacy install với `applied_release_id IS NULL`, initial release chỉ emit
+   schema atoms và lưu Note baseline trong checkpoints. Nếu có legacy null-pointer install,
+   initial release vẫn emit Note atomic adds bên cạnh checkpoints để null -> initial diff /
+   rebase không bị thiếu dữ liệu.
 
 `deck_release_entity_memberships`:
 
 1. `deck_item_id`, `entity_kind`, `entity_id`.
 2. `introduced_sequence`, `removed_sequence`.
 3. `source_deck_id` và stable mapping metadata.
-4. Visibility không còn phụ thuộc `created_at <= base_snapshot_at`.
+4. Visibility không còn phụ thuộc `created_at <= base_snapshot_at`. Remove đóng interval;
+   re-add tạo interval mới thay vì sửa lịch sử cũ.
 
 Read/query layer phải release-aware cho cả browse list/search/sort/count và study, không chỉ render card detail.
 
@@ -302,7 +321,8 @@ Read/query layer phải release-aware cho cả browse list/search/sort/count và
 
 1. `current_release_id`.
 2. `working_revision BIGINT`.
-3. Giữ `version/changelog` làm cache compatibility cho current release.
+3. `dirty_tracking_revision BIGINT` để chỉ tin sparse journal khi marker khớp working revision.
+4. Giữ `version/changelog` làm cache compatibility cho current release.
 
 `DeckInstall`:
 
@@ -315,7 +335,7 @@ Read/query layer phải release-aware cho cả browse list/search/sort/count và
 `DeckCloneNoteFieldOverride`:
 
 1. Thêm `source_field_def_id`.
-2. Thêm `base_release_id` hoặc `base_value_hash`.
+2. Thêm `base_release_id`.
 3. Giữ `field_name` tạm thời cho compatibility/display.
 4. Nếu local value bằng published base thì xóa override thay vì giữ no-op row.
 
@@ -324,7 +344,7 @@ Read/query layer phải release-aware cho cả browse list/search/sort/count và
 1. Thêm `base_release_id`.
 2. Thêm `revision BIGINT`.
 3. Thêm `active_slot` nullable để enforce tối đa một active request/install.
-4. Cache item/conflict counts để summary không load toàn bộ relationship.
+4. Item/conflict counts được aggregate theo query để summary không load toàn bộ relationship.
 
 ### 5.5 Working dirty set
 
@@ -334,7 +354,8 @@ Read/query layer phải release-aware cho cả browse list/search/sort/count và
 2. Lưu base/current hash, operation và `updated_at`.
 3. Owner edit O(1) và publish chỉ xử lý dirty set.
 4. Nếu working value quay lại published value thì xóa dirty row.
-5. Cần fallback reconciliation/hash vì hiện có nhiều đường ghi Note/schema: Browse, import, Flama Connect, API note type.
+5. Khi `dirty_tracking_revision` lệch `working_revision`, preview/publish fail-safe sang full
+   reconstruction/diff. Khi marker khớp, subsequent release chỉ batch-read dirty source/base rows.
 
 ### 5.6 Update attempt và conflict
 
@@ -360,7 +381,9 @@ O(initial published notes/fields)
 + O(active conflicts/update decisions)
 ```
 
-Không có thành phần `deck size × số releases × số installs`.
+Không có thành phần `deck size × số releases × số installs`. Initial publish vẫn có một
+chi phí O(deck size) để tạo baseline checkpoints; legacy null-pointer install có thể làm
+baseline Note atoms bị lưu thêm một lần để giữ compatibility semantics.
 
 ## 6. Contribution workflow: clone -> owner
 
@@ -447,17 +470,23 @@ Partial item merge là phase sau.
 
 ### 7.2 Release preview
 
-1. So sánh working dirty set với current release.
-2. Trả summary trước; item diff dùng cursor.
-3. Owner nhập `version_label` và changelog.
-4. Client gửi `expected_current_release_id` và `expected_working_revision`.
+1. Release thứ hai trở đi ưu tiên sparse diff từ dirty set; source/base rows được batch-read
+   theo dirty identity, không scan toàn deck khi tracking marker đáng tin.
+2. Marker/hash/journal không đáng tin thì fallback full diff để ưu tiên correctness.
+3. Initial preview không có legacy null-pointer install chỉ đọc schema và trả
+   `initial_baseline_mode='checkpoint'` cùng `baseline_note_count`, không load mọi Note.
+   Có legacy null-pointer install thì dùng `initial_baseline_mode='atomic'`.
+4. Trả summary trước; item diff dùng cursor.
+5. Owner nhập `version_label` và changelog.
+6. Client gửi `expected_current_release_id` và `expected_working_revision`.
 
 ### 7.3 Publish
 
 1. Lock marketplace/release head bằng `SELECT ... FOR UPDATE`.
 2. Enforce expected head và working revision.
 3. Tạo release `building`.
-4. Bulk insert sparse changes/checkpoint/membership theo batch.
+4. Initial publish tạo full Note checkpoints. Subsequent publish bulk-insert sparse changes
+   và chỉ cập nhật các membership bị dirty; không tạo full-card/full-install copies.
 5. Validate manifest hash/counts.
 6. Atomic chuyển release sang `published` và swap `DeckMarketplaceItem.current_release_id`.
 7. Không update/fan-out mọi `DeckInstall` trong publish transaction.
@@ -477,7 +506,10 @@ DeckInstall.applied_release_id != DeckMarketplaceItem.current_release_id
 1. Base = install applied release.
 2. Target = selected/latest published release.
 3. Diff feed đọc shared release changes, không materialize lại theo install.
-4. Khi jump qua nhiều release, collapse các changes cùng natural key thành base -> target.
+4. Khi jump qua nhiều release, SQL window collapse các event cùng `change_key` thành
+   first-before -> last-after và loại net no-op; summary/count/page đều dùng effective diff.
+5. Query overlap với local overlay dùng correlated `EXISTS` theo install/source identity,
+   không tạo `IN (...)` chứa hàng nghìn Note/FieldDef IDs.
 
 ### 8.2 Conflict rules
 
@@ -507,47 +539,80 @@ Resolution:
 
 Removed Note/Card chỉ bị ẩn theo membership. Nếu được đưa lại vào release sau, identity/progress cũ vẫn có thể được phục hồi.
 
-## 9. API plan
+## 9. API contract hiện tại
 
 ### 9.1 Owner release APIs
 
-1. `GET /api/shared/decks/<item_id>/releases/preview`
-2. `POST /api/shared/decks/<item_id>/releases`
-3. `GET /api/shared/decks/<item_id>/releases`
-4. `GET /api/shared/decks/<item_id>/releases/<release_id>`
-5. `GET /api/shared/decks/<item_id>/releases/<release_id>/changes?cursor=&limit=&type=&deck_id=&q=`
+1. `GET /api/marketplace/decks/<item_id>/releases/preview?cursor=&limit=&entity_kind=&operation=&deck_id=&q=`
+2. `POST /api/marketplace/decks/<item_id>/releases`
+3. `GET /api/marketplace/decks/<item_id>/releases?cursor=&limit=`
+4. `GET /api/marketplace/decks/<item_id>/releases/<release_id>`
+5. `GET /api/marketplace/decks/<item_id>/releases/<release_id>/changes?cursor=&limit=&entity_kind=&operation=&deck_id=&q=`
+
+Release feeds mặc định 100, tối đa 200 items/page. Preview cursor bind vào
+`working_revision`; revision đổi giữa các page trả cursor stale thay vì trộn hai snapshot.
+Publish yêu cầu `expected_current_release_id` (null cho initial), hỗ trợ
+`expected_working_revision` và `Idempotency-Key` tối đa 64 ký tự.
 
 ### 9.2 Installed update APIs
 
-1. `GET /api/installed-decks/<install_id>/updates`
-2. `GET /api/installed-decks/<install_id>/updates/<release_id>/diff?cursor=&limit=&type=&q=`
-3. `POST /api/installed-decks/<install_id>/updates/<release_id>/prepare`
-4. `POST /api/install-rebases/<rebase_id>/conflicts/<conflict_id>/resolve`
-5. `POST /api/install-rebases/<rebase_id>/apply`
-6. `POST /api/installed-decks/<install_id>/updates/<release_id>/mark-seen`
+1. `GET /api/marketplace/installations/<install_id>/updates`
+2. `GET /api/marketplace/installations/<install_id>/updates/<release_id>/diff?cursor=&limit=&entity_kind=&operation=&q=`
+3. `POST /api/marketplace/installations/<install_id>/updates/<release_id>/prepare`
+4. `POST /api/marketplace/installations/<install_id>/updates/<release_id>/apply`
+5. `POST /api/marketplace/installations/<install_id>/updates/<release_id>/mark-seen`
+6. `GET /api/marketplace/rebases/<rebase_id>/conflicts?after_id=&limit=`
+7. `POST /api/marketplace/rebases/<rebase_id>/conflicts/<conflict_id>/resolve`
+8. `POST /api/marketplace/rebases/<rebase_id>/apply`
+
+Update diff mặc định 100, tối đa 200 items/page và `q` tối đa 200 ký tự. Conflict
+page mặc định 100, tối đa 200, keyset theo numeric `after_id`. Prepare/direct-apply
+conflict envelope chỉ nhúng page đầu trong `rebase.conflicts` cùng
+`rebase.conflict_page={limit,has_more,next_after_id}`. Resolve/apply thành công không gửi
+lại mảng conflicts; client lấy page sau qua GET riêng.
 
 ### 9.3 Contribution API hardening
 
-Giữ endpoint/state machine hiện có, nhưng thay contract detail:
+Contract đã ship:
 
-1. `GET /api/change-requests/<id>` chỉ trả summary/permissions/counts.
-2. `GET /api/change-requests/<id>/items?cursor=&limit=&change_type=&conflict_only=&deck_id=&q=`.
-3. Local preview cũng dùng cursor.
-4. Draft/submit/sync/approve/reject nhận `expected_revision`.
-5. Mutation quan trọng nhận `Idempotency-Key`.
+1. `GET /api/shared/decks/<item_id>/change-requests/local-changes?cursor=&limit=&type=&q=`
+2. `GET /api/shared/decks/<item_id>/change-requests/active?cursor=&limit=&type=&q=&conflicts_only=`
+3. `POST /api/shared/decks/<item_id>/change-requests/draft`
+4. `POST /api/shared/decks/<item_id>/change-requests/<request_id>/sync`
+5. `POST /api/shared/decks/<item_id>/change-requests/<request_id>/conflicts/<conflict_id>/resolve`
+6. `POST /api/shared/decks/<item_id>/change-requests/<request_id>/submit`
+7. `GET /api/change-requests/incoming?deck_item_id=&cursor=&limit=`
+8. `GET /api/change-requests/<request_id>?cursor=&limit=&type=&q=&conflicts_only=`
+9. `POST /api/change-requests/<request_id>/approve`
+10. `POST /api/change-requests/<request_id>/reject`
+
+Local preview và request detail trả header/counts cùng đúng một item page; không có
+endpoint `/items` riêng. Item pages mặc định 100, tối đa 250; inbox mặc định 30, tối đa
+100; `q` tối đa 200 ký tự. Cursor bind vào install fingerprint hoặc request revision và
+filter key, nên state/filter đổi giữa các page trả lỗi stale/invalid thay vì bỏ/duplicate row.
 
 Diff response shape:
 
 ```json
 {
-  "snapshot_revision": "...",
-  "summary": {},
+  "id": "request-uuid",
+  "revision": 1,
+  "item_count": 0,
+  "unresolved_conflict_count": 0,
+  "change_counts": {},
   "items": [],
-  "next_cursor": null
+  "conflicts": [],
+  "page": {
+    "limit": 100,
+    "has_more": false,
+    "next_cursor": null,
+    "filtered_item_count": 0,
+    "revision": 1
+  }
 }
 ```
 
-Summary item chỉ chứa preview/truncated size. Full base/before/after hoặc structured hunks được fetch khi expand.
+`conflicts` chỉ chứa conflicts thuộc item page hiện tại; counts là aggregate toàn request.
 
 ## 10. React UX plan
 
@@ -845,9 +910,14 @@ Không giữ index low-selectivity/thừa nếu composite query index đã cover
 2. Review comment threads.
 3. Multi-branch/cherry-pick.
 4. Shared NoteType release dependency đầy đủ.
-5. Local deck tree contribution add/move/delete.
-6. Tag contribution.
-7. Template/card-layout contribution nếu chưa có tombstone/version dependency.
+5. Local deck tree contribution add/move/delete và release-aware deck move cho Note đã
+   có historical membership. Hiện các bề mặt API/MCP/Connect fail-closed; Note mới chưa
+   publish vẫn movable.
+6. Note tag contribution/atomic versioning. Mutation tags trên released lineage hiện
+   fail-closed thay vì đi xuyên release gate.
+7. Template/card-layout và NoteType name/schema atomic versioning. Mutation ảnh hưởng
+   schema của released lineage hiện fail-closed để giữ template/Card/Progress ổn định;
+   listing description/taxonomy/pricing không thuộc restriction này.
 8. Push/WebSocket/email notification.
 9. Physical cleanup/garbage collection của retired entities.
 
@@ -920,6 +990,23 @@ Không giữ index low-selectivity/thừa nếu composite query index đã cover
 
 ## 17. Performance gates
 
+### Strategy đã triển khai
+
+1. Owner mutation ghi một dirty key/property và tăng working revision; subsequent
+   preview/publish batch-read dirty source/base rows. Marker mismatch mới full-scan.
+2. Initial baseline dùng checkpoint-only Note values nếu không có legacy null install;
+   legacy null install dùng atomic Note baseline để giữ update semantics.
+3. Jump nhiều release collapse/aggregate effective diff trong SQL, không load toàn range
+   vào Python chỉ để lấy summary; net no-op bị loại.
+4. Rebase chỉ query release changes có overlap bằng `EXISTS` trên overlay tables; không
+   phát sinh `IN` hàng nghìn bind params. Test đã cover hơn 1.000 overlays.
+5. Conflict response mặc định 100, tối đa 200 và keyset `after_id`; test đã cover 1.005
+   conflicts. Change-request inbox/items cũng có hard cursor limits như mục 9.3.
+6. Clone browse `q`, total/count và word sort chạy trên release-pinned values cộng overlay
+   trước pagination; không query/sort theo owner live values rồi mới sửa payload.
+
+Các mục p95 bên dưới vẫn là acceptance targets, chưa phải số benchmark đã đạt trên MySQL.
+
 Benchmark datasets:
 
 1. 10.000 và 50.000 Notes.
@@ -950,9 +1037,11 @@ Theo dõi bắt buộc:
 5. Serialized payload size.
 6. Release/checkpoint storage growth.
 
-## 18. Definition of Done
+## 18. Definition of Done và deployment gates còn lại
 
-Feature chỉ được coi là hoàn tất khi:
+Các correctness invariants 1-6, 8-9 và compatibility test coverage đã ship. Các mục 7,
+10 và phần concurrency/load của 9 vẫn là production deployment gates, vì chưa có
+benchmark/MySQL live proof.
 
 1. Owner edit không leak sang clone trước publish.
 2. Merge contribution không publish ngầm.
@@ -967,14 +1056,30 @@ Feature chỉ được coi là hoàn tất khi:
 11. Legacy overlay-only install/cutover tests vẫn pass.
 12. Tài liệu runtime/cutover/runbook được cập nhật khớp code.
 
-## 19. Baseline verification trước khi bắt đầu implementation
+## 19. Verification snapshot 2026-08-21
 
-Lần khảo sát gần nhất đã chạy:
+Focused backend regression gần nhất:
 
 ```powershell
-.\.venv\Scripts\python.exe -m unittest tests.test_deck_change_request_flow tests.test_vocab_seed_sharing
+.\.venv\Scripts\python.exe -m unittest `
+  tests.test_deck_release_schema `
+  tests.test_deck_release_api `
+  tests.test_deck_install_rebase_flow `
+  tests.test_deck_change_request_flow
 ```
 
-Kết quả baseline: 19 tests pass.
+Kết quả: **36 tests pass** trên SQLite harness. Các focused proofs gồm sparse subsequent
+release không gọi full note scan, journal-gap full fallback, immutable membership
+remove/re-add, initial baseline hai mode, skipped-release net no-op collapse, IDOR /
+idempotency, release-aware browse `q`/sort, hơn 1.000 overlays và 1.005 rebase conflicts.
 
-Đây chỉ chứng minh flow hiện tại không regression ở SQLite test harness; chưa phải proof cho immutable releases, MySQL performance hoặc large-deck behavior.
+Alembic real SQLite round-trip qua merge head:
+
+1. `ScriptDirectory.get_heads() == ['20260820_000019']`.
+2. Downgrade về hai branch heads
+   `['20260812_000016', '20260820_000018']`.
+3. Upgrade lại head `['20260820_000019']`.
+
+MySQL 8 dialect compilation đã pass cho effective-collapse window query và overlap
+`EXISTS`, nhưng **chưa chạy migration round-trip, EXPLAIN/load hoặc deadlock/concurrency
+test trên MySQL live**.

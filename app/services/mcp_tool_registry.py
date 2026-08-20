@@ -20,6 +20,9 @@ from app.validators.mcp import (
     validate_delete_note_arguments,
     validate_delete_note_type_arguments,
     validate_find_notes_arguments,
+    validate_get_image_arguments,
+    validate_import_image_arguments,
+    validate_search_images_arguments,
     validate_get_card_arguments,
     validate_get_deck_arguments,
     validate_get_deck_tree_arguments,
@@ -1250,6 +1253,152 @@ DELETE_NOTE_TYPE_TOOL = McpToolDefinition(
 
 
 # ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# 7. Image Library Tools
+# ---------------------------------------------------------------------------
+
+def _call_import_image(*, user_id: int, arguments: dict[str, Any]) -> dict[str, Any]:
+    return mcp_tool_service._wrap_tool_result(
+        mcp_tool_service.import_image(
+            user_id=user_id,
+            url=arguments.get("url"),
+            file_data=arguments.get("file_data"),
+            filename=arguments.get("filename"),
+            image_key=arguments.get("image_key"),
+            tags=arguments.get("tags"),
+            description=arguments.get("description", ""),
+            is_enabled=arguments.get("is_enabled", True),
+        )
+    )
+
+
+IMPORT_IMAGE_TOOL = McpToolDefinition(
+    name=mcp_tool_service.IMPORT_IMAGE_TOOL_NAME,
+    title="Import Image to Library",
+    description="Import an image into the Flama shared Image Library from a remote URL or base64 file data, with English tags and automatic SHA-256 deduplication.",
+    required_scope="media:write",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "url": {
+                "type": "string",
+                "description": "Public HTTP/HTTPS URL of the image to fetch and import.",
+            },
+            "file_data": {
+                "type": "string",
+                "description": "Base64-encoded image data or data URI (data:image/...;base64,...).",
+            },
+            "filename": {
+                "type": "string",
+                "description": "Optional original filename (e.g. apple.png).",
+            },
+            "image_key": {
+                "type": "string",
+                "description": "Optional unique slug identifier (e.g. 'red_apple'). If omitted, derived from tags or filename.",
+            },
+            "tags": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "English tags describing the image content (e.g. ['apple', 'fruit', 'red', 'food']).",
+            },
+            "description": {
+                "type": "string",
+                "description": "Optional description or context of the image.",
+            },
+            "is_enabled": {
+                "type": "boolean",
+                "description": "Whether the image is enabled for use. Defaults to true.",
+            },
+        },
+    },
+    handler=_call_import_image,
+    arguments_validator=validate_import_image_arguments,
+)
+
+
+def _call_search_images(*, user_id: int, arguments: dict[str, Any]) -> dict[str, Any]:
+    return mcp_tool_service._wrap_tool_result(
+        mcp_tool_service.search_images(
+            user_id=user_id,
+            query=arguments.get("query", ""),
+            tag=arguments.get("tag"),
+            status=arguments.get("status", "enabled"),
+            limit=arguments.get("limit", 20),
+            offset=arguments.get("offset", 0),
+        )
+    )
+
+
+SEARCH_IMAGES_TOOL = McpToolDefinition(
+    name=mcp_tool_service.SEARCH_IMAGES_TOOL_NAME,
+    title="Search Image Library",
+    description="Search images in the Flama Image Library by keyword query, English tag, or status.",
+    required_scope="media:read",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "query": {
+                "type": "string",
+                "description": "Keyword search across image key, description, and tags.",
+            },
+            "tag": {
+                "type": "string",
+                "description": "Exact tag filter (e.g. 'apple', 'fruit').",
+            },
+            "status": {
+                "type": "string",
+                "enum": ["enabled", "disabled", "all"],
+                "description": "Status filter. Defaults to 'enabled'.",
+            },
+            "limit": {
+                "type": "integer",
+                "description": "Maximum number of items to return (1-60). Default is 20.",
+            },
+            "offset": {
+                "type": "integer",
+                "description": "Number of items to skip for pagination. Default is 0.",
+            },
+        },
+    },
+    handler=_call_search_images,
+    arguments_validator=validate_search_images_arguments,
+)
+
+
+def _call_get_image(*, user_id: int, arguments: dict[str, Any]) -> dict[str, Any]:
+    return mcp_tool_service._wrap_tool_result(
+        mcp_tool_service.get_image(
+            user_id=user_id,
+            image_key=arguments.get("image_key"),
+            asset_id=arguments.get("asset_id"),
+        )
+    )
+
+
+GET_IMAGE_TOOL = McpToolDefinition(
+    name=mcp_tool_service.GET_IMAGE_TOOL_NAME,
+    title="Get Image Details",
+    description="Get metadata, URL, tags, and dimensions of a specific image by image_key or asset_id.",
+    required_scope="media:read",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "image_key": {
+                "type": "string",
+                "description": "The unique slug key of the image (e.g. 'red_apple').",
+            },
+            "asset_id": {
+                "type": "string",
+                "description": "The UUID/ID of the image asset.",
+            },
+        },
+    },
+    handler=_call_get_image,
+    arguments_validator=validate_get_image_arguments,
+)
+
 # All Registered MCP Tools
 # ---------------------------------------------------------------------------
 
@@ -1296,6 +1445,10 @@ _MCP_TOOL_DEFINITIONS = (
     PREVIEW_NOTE_TYPE_UPDATE_TOOL,
     UPDATE_NOTE_TYPE_TOOL,
     DELETE_NOTE_TYPE_TOOL,
+    # Image Library
+    IMPORT_IMAGE_TOOL,
+    SEARCH_IMAGES_TOOL,
+    GET_IMAGE_TOOL,
 )
 _MCP_TOOLS_BY_NAME = {tool.name: tool for tool in _MCP_TOOL_DEFINITIONS}
 

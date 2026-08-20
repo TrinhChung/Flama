@@ -1,5 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowRight, BookOpen, Eye, HelpCircle, Layers, Sparkles } from 'lucide-react'
+import {
+  ArrowRight,
+  BookOpen,
+  Eye,
+  FileDiff,
+  HelpCircle,
+  Layers,
+  RefreshCcw,
+  Sparkles,
+} from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { appApi } from '@/app/api'
@@ -33,12 +42,17 @@ type MarketplaceAuthor = {
 
 type InstalledDeckItem = {
   id: string
+  deck_install_id?: string | null
   title: string
   description: string | null
   author: MarketplaceAuthor | null
   installed_deck_id: number | null
   install_bucket: 'using_now' | 'installed' | 'owned'
   last_sync_status: string | null
+  applied_release?: { id: string; version_label: string } | null
+  available_release?: { id: string; version_label: string } | null
+  update_available?: boolean
+  unread_update?: boolean
 }
 
 function formatUpdatedAt(value: string | null) {
@@ -47,6 +61,18 @@ function formatUpdatedAt(value: string | null) {
     dateStyle: 'medium',
     timeStyle: 'short',
   }).format(new Date(value))
+}
+
+function formatSyncStatus(value: string) {
+  const labels: Record<string, string> = {
+    needs_sync: 'Đóng góp cần đồng bộ',
+    draft: 'Đóng góp bản nháp',
+    has_conflict: 'Đóng góp có xung đột',
+    pending_review: 'Đang chờ duyệt',
+    rejected: 'Đóng góp bị từ chối',
+    merged: 'Đóng góp đã merge',
+  }
+  return labels[value] || value.replaceAll('_', ' ')
 }
 
 export function NoteTypesPage() {
@@ -253,9 +279,13 @@ export function InstalledDecksPage() {
                           : 'Đã cài'}
                     </Badge>
 
-                    {item.last_sync_status ? (
-                      <span className="text-xs text-muted-foreground truncate">
-                        {item.last_sync_status}
+                    {item.update_available ? (
+                      <span className="truncate text-xs font-semibold text-primary">
+                        Có bản {item.available_release?.version_label || 'mới'}
+                      </span>
+                    ) : item.last_sync_status ? (
+                      <span className="truncate text-xs text-muted-foreground">
+                        {formatSyncStatus(item.last_sync_status)}
                       </span>
                     ) : null}
                   </div>
@@ -284,7 +314,23 @@ export function InstalledDecksPage() {
                 </div>
 
                 {/* Bottom Action */}
-                <div className="mt-4 pt-3 border-t border-border/60">
+                <div className="mt-4 space-y-2 border-t border-border/60 pt-3">
+                  {item.update_available && item.deck_install_id && item.available_release ? (
+                    <Button size="sm" asChild className="h-8 w-full rounded-xl text-xs font-bold sm:h-9">
+                      <Link to={`/installed-decks/${item.deck_install_id}/updates/${item.available_release.id}`}>
+                        <RefreshCcw className="mr-1.5 size-3.5" />
+                        {item.unread_update ? 'Xem cập nhật mới' : 'Xem cập nhật'}
+                      </Link>
+                    </Button>
+                  ) : null}
+                  {item.deck_install_id && item.install_bucket !== 'owned' ? (
+                    <Button variant="outline" size="sm" asChild className="h-8 w-full rounded-xl text-xs font-semibold sm:h-9">
+                      <Link to={`/flashcards/shared-decks/${item.id}/change-request`}>
+                        <FileDiff className="mr-1.5 size-3.5" />
+                        Đóng góp chỉnh sửa
+                      </Link>
+                    </Button>
+                  ) : null}
                   {item.installed_deck_id ? (
                     <Button
                       size="sm"

@@ -847,6 +847,25 @@ def ensure_backward_compatible_schema() -> None:
             "ALTER TABLE mcp_access_tokens ADD COLUMN refresh_token_expires_at DATETIME NULL",
         )
 
+    if "shared_image_assets" in table_names:
+        _ensure_column(
+            "shared_image_assets",
+            "source_url",
+            "ALTER TABLE shared_image_assets ADD COLUMN source_url VARCHAR(2048) NULL",
+        )
+        tags_ddl = (
+            "ALTER TABLE shared_image_assets ADD COLUMN tags JSON NULL"
+            if is_mysql
+            else "ALTER TABLE shared_image_assets ADD COLUMN tags JSON DEFAULT '[]'"
+        )
+        if _ensure_column("shared_image_assets", "tags", tags_ddl):
+            db.session.execute(
+                sa.text(
+                    "UPDATE shared_image_assets SET tags = '[]' WHERE tags IS NULL"
+                )
+            )
+            schema_changed = True
+
     if schema_changed:
         db.session.commit()
 

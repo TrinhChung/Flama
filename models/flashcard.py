@@ -14,8 +14,15 @@ from models.deck_change_request import DeckChangeRequest
 from models.deck_change_request_conflict import DeckChangeRequestConflict
 from models.deck_change_request_item import DeckChangeRequestItem
 from models.deck_install import DeckInstall
+from models.deck_install_rebase import DeckInstallRebase
+from models.deck_install_rebase_conflict import DeckInstallRebaseConflict
 from models.deck_marketplace_item import DeckMarketplaceItem
+from models.deck_release import DeckRelease
+from models.deck_release_change import DeckReleaseChange
+from models.deck_release_entity_membership import DeckReleaseEntityMembership
+from models.deck_release_note_checkpoint import DeckReleaseNoteCheckpoint
 from models.deck_review import DeckReview
+from models.deck_working_dirty_entity import DeckWorkingDirtyEntity
 from models.field_def import FieldDef
 from models.field_rename_job import FieldRenameJob
 from models.media_asset import MediaAsset
@@ -45,8 +52,15 @@ __all__ = [
     "DeckChangeRequestConflict",
     "DeckChangeRequestItem",
     "DeckInstall",
+    "DeckInstallRebase",
+    "DeckInstallRebaseConflict",
     "DeckMarketplaceItem",
+    "DeckRelease",
+    "DeckReleaseChange",
+    "DeckReleaseEntityMembership",
+    "DeckReleaseNoteCheckpoint",
     "DeckReview",
+    "DeckWorkingDirtyEntity",
     "FieldDef",
     "FieldRenameJob",
     "MediaAsset",

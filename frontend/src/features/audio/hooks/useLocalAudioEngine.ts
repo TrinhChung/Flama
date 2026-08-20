@@ -3,7 +3,11 @@ import { toast } from 'sonner'
 import { updateCardFieldValuesInSessions } from '@/features/study/session/sessionStore'
 import { flamaAudioClient } from '@/lib/flamaAudioClient'
 import { apiRequest } from '@/shared/api/client'
-import { uploadNoteMediaBlob } from '@/shared/api/noteMedia'
+import {
+  uploadNoteMediaBlob,
+  uploadNoteMediaBatch,
+  type BatchMediaItemInput,
+} from '@/shared/api/noteMedia'
 import type { VoiceDescriptor } from '../types'
 
 export type ProcessItemStatus = 'pending' | 'synthesizing' | 'uploading' | 'done' | 'failed' | 'skipped'
@@ -560,106 +564,194 @@ export function useLocalAudioEngine(options: {
     setIsProcessing(true)
     setProgressPercent(0)
 
-    const batchItems: BatchItem[] = []
-    for (const cardId of targetCardIds) {
-      try {
-        const detail = await apiRequest<{
-          card: { word: string }
-          note: { id: string; field_values?: Record<string, string> }
-          can_upload_media?: boolean
-        }>(`/api/browse/cards/${encodeURIComponent(cardId)}`)
+    // Step 1: Pre-fetch card details in parallel chunks
+    const CHUNK_SIZE = 8
+    const batchItems: BatchItem[] = new Array(targetCardIds.length)
 
-        const noteValues = detail.note.field_values || {}
-        const rawText = noteValues[sourceField] || noteValues['Reading'] || noteValues['reading'] || detail.card.word || ''
-        const wordText = cleanTextForVoiceVox(rawText)
+    for (let i = 0; i < targetCardIds.length; i += CHUNK_SIZE) {
+      const chunk = targetCardIds.slice(i, i + CHUNK_SIZE)
+      await Promise.all(
+        chunk.map(async (cardId, chunkIdx) => {
+          const globalIdx = i + chunkIdx
+          try {
+            const detail = await apiRequest<{
+              card: { word: string }
+              note: { id: string; field_values?: Record<string, string> }
+              can_upload_media?: boolean
+            }>(`/api/browse/cards/${encodeURIComponent(cardId)}`)
 
-        if (detail.can_upload_media === false) {
-          batchItems.push({
-            cardId,
-            noteId: detail.note.id,
-            word: detail.card.word,
-            sourceText: wordText,
-            status: 'skipped',
-            error: 'Bộ thẻ Clone không hỗ trợ tạo media trực tiếp',
-          })
-        } else {
-          batchItems.push({
-            cardId,
-            noteId: detail.note.id,
-            word: detail.card.word,
-            sourceText: wordText,
-            status: 'pending',
-          })
-        }
-      } catch {
-        batchItems.push({
-          cardId,
-          noteId: '',
-          word: cardId,
-          sourceText: '',
-          status: 'failed',
-          error: 'Không thể tải chi tiết thẻ',
+            const noteValues = detail.note.field_values || {}
+            const rawText =
+              noteValues[sourceField] ||
+              noteValues['Reading'] ||
+              noteValues['reading'] ||
+              detail.card.word ||
+              ''
+            const wordText = cleanTextForVoiceVox(rawText)
+
+            if (detail.can_upload_media === false) {
+              batchItems[globalIdx] = {
+                cardId,
+                noteId: detail.note.id,
+                word: detail.card.word,
+                sourceText: wordText,
+                status: 'skipped',
+                error: 'Bộ thẻ Clone không hỗ trợ tạo media trực tiếp',
+              }
+            } else {
+              batchItems[globalIdx] = {
+                cardId,
+                noteId: detail.note.id,
+                word: detail.card.word,
+                sourceText: wordText,
+                status: 'pending',
+              }
+            }
+          } catch {
+            batchItems[globalIdx] = {
+              cardId,
+              noteId: '',
+              word: cardId,
+              sourceText: '',
+              status: 'failed',
+              error: 'Không thể tải chi tiết thẻ',
+            }
+          }
         })
-      }
+      )
     }
 
     setItems([...batchItems])
 
     const total = batchItems.length
-    let completedCount = 0
+    const itemsToProcess = batchItems
+      .map((item, index) => ({ item, index }))
+      .filter(({ item }) => item.status === 'pending')
 
-    for (let i = 0; i < batchItems.length; i++) {
-      const item = batchItems[i]
-      if (item.status === 'skipped' || item.status === 'failed') {
-        completedCount++
-        setProgressPercent(Math.round((completedCount / total) * 100))
-        continue
-      }
+    let completedCount = total - itemsToProcess.length
+    setProgressPercent(total > 0 ? Math.round((completedCount / total) * 100) : 100)
 
-      if (!item.sourceText.trim()) {
-        item.status = 'failed'
-        item.error = `Trường '${sourceField}' rỗng`
-        setItems([...batchItems])
-        completedCount++
-        setProgressPercent(Math.round((completedCount / total) * 100))
-        continue
-      }
+    // Step 2: Concurrency Worker Pool for TTS + Batch Upload
+    const TTS_CONCURRENCY = 3
+    const UPLOAD_BATCH_SIZE = 15
 
-      item.status = 'synthesizing'
+    type SynthesizedEntry = {
+      index: number
+      item: BatchItem
+      blob: Blob
+    }
+
+    const uploadBuffer: SynthesizedEntry[] = []
+
+    const flushUploadBuffer = async () => {
+      if (uploadBuffer.length === 0) return
+      const currentBatch = [...uploadBuffer]
+      uploadBuffer.length = 0
+
+      // Mark status as uploading
+      currentBatch.forEach(({ index }) => {
+        batchItems[index].status = 'uploading'
+      })
       setItems([...batchItems])
 
       try {
-        const wavBlob = await flamaAudioClient.synthesize({
-          request_id: `req_${Date.now()}_${i}`,
-          engine_id: engineId,
-          language: isKokoro ? resolveLocaleFromVoiceId(selectedVoiceId) : 'ja-JP',
-          voice_id: selectedVoiceId,
-          text: item.sourceText,
-          options: { speed, pitch, intonation: intonationScale, volume: volumeScale },
+        const batchPayload: BatchMediaItemInput[] = currentBatch.map(({ index, item, blob }) => ({
+          itemId: String(index),
+          noteId: item.noteId,
+          fieldName: destinationField,
+          blob,
+          filename: `${engineId}_${item.cardId}.wav`,
+        }))
+
+        const res = await uploadNoteMediaBatch(batchPayload)
+        const resultMap = new Map(res.items.map((it) => [it.item_id, it]))
+
+        currentBatch.forEach(({ index, item }) => {
+          const result = resultMap.get(String(index))
+          if (result && result.status === 'success') {
+            batchItems[index].status = 'done'
+            if (result.url) {
+              updateCardFieldValuesInSessions(item.cardId, { [destinationField]: result.url })
+            }
+          } else {
+            batchItems[index].status = 'failed'
+            batchItems[index].error = result?.message || result?.error || 'Tải lên thất bại'
+          }
+          completedCount++
         })
-
-        item.status = 'uploading'
-        setItems([...batchItems])
-
-        const res = await uploadNoteMediaBlob(
-          item.noteId,
-          destinationField,
-          wavBlob,
-          `${engineId}_${item.cardId}.wav`,
-        )
-
-        item.status = 'done'
-        if (res.url) {
-          updateCardFieldValuesInSessions(item.cardId, { [destinationField]: res.url })
+      } catch {
+        // Fallback to single upload per item if batch upload endpoint fails
+        for (const { index, item, blob } of currentBatch) {
+          try {
+            const res = await uploadNoteMediaBlob(
+              item.noteId,
+              destinationField,
+              blob,
+              `${engineId}_${item.cardId}.wav`,
+            )
+            batchItems[index].status = 'done'
+            if (res.url) {
+              updateCardFieldValuesInSessions(item.cardId, { [destinationField]: res.url })
+            }
+          } catch (err) {
+            batchItems[index].status = 'failed'
+            batchItems[index].error = err instanceof Error ? err.message : 'Tạo audio thất bại'
+          }
+          completedCount++
         }
-      } catch (err) {
-        item.status = 'failed'
-        item.error = err instanceof Error ? err.message : 'Tạo audio thất bại'
       }
 
       setItems([...batchItems])
-      completedCount++
       setProgressPercent(Math.round((completedCount / total) * 100))
+    }
+
+    let currentIndex = 0
+
+    const ttsWorker = async () => {
+      while (currentIndex < itemsToProcess.length) {
+        const nextIdx = currentIndex++
+        const { item, index } = itemsToProcess[nextIdx]
+
+        if (!item.sourceText.trim()) {
+          batchItems[index].status = 'failed'
+          batchItems[index].error = `Trường '${sourceField}' rỗng`
+          completedCount++
+          setItems([...batchItems])
+          setProgressPercent(Math.round((completedCount / total) * 100))
+          continue
+        }
+
+        batchItems[index].status = 'synthesizing'
+        setItems([...batchItems])
+
+        try {
+          const wavBlob = await flamaAudioClient.synthesize({
+            request_id: `req_${Date.now()}_${index}`,
+            engine_id: engineId,
+            language: isKokoro ? resolveLocaleFromVoiceId(selectedVoiceId) : 'ja-JP',
+            voice_id: selectedVoiceId,
+            text: item.sourceText,
+            options: { speed, pitch, intonation: intonationScale, volume: volumeScale },
+          })
+
+          uploadBuffer.push({ index, item, blob: wavBlob })
+          if (uploadBuffer.length >= UPLOAD_BATCH_SIZE) {
+            await flushUploadBuffer()
+          }
+        } catch (err) {
+          batchItems[index].status = 'failed'
+          batchItems[index].error = err instanceof Error ? err.message : 'Tạo audio thất bại'
+          completedCount++
+          setItems([...batchItems])
+          setProgressPercent(Math.round((completedCount / total) * 100))
+        }
+      }
+    }
+
+    if (itemsToProcess.length > 0) {
+      const activeWorkers = Math.min(TTS_CONCURRENCY, itemsToProcess.length)
+      await Promise.all(Array.from({ length: activeWorkers }, () => ttsWorker()))
+      await flushUploadBuffer()
     }
 
     setIsProcessing(false)

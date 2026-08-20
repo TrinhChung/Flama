@@ -101,10 +101,12 @@ def delete_deck_subtree(*, deck_obj: Deck, user_id: int, is_admin: bool, purge: 
             DeckMarketplaceItem.source_deck_id.in_(deck_ids_to_delete)
         ).delete(synchronize_session=False)
 
-        # 4. Delete ReviewEvents referencing deck_id in deck_ids_to_delete
+        # 4. ReviewEvent is an immutable analytics fact. Detach the deleted
+        # deck snapshot instead of erasing study history and breaking imported
+        # Anki provenance links.
         ReviewEvent.query.filter(
             ReviewEvent.deck_id.in_(deck_ids_to_delete)
-        ).delete(synchronize_session=False)
+        ).update({ReviewEvent.deck_id: None}, synchronize_session=False)
 
         # 5. Delete StudySessionCards referencing local_deck_id in deck_ids_to_delete
         StudySessionCard.query.filter(

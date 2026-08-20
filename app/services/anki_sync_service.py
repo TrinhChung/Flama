@@ -286,11 +286,16 @@ def _import_review(
         source_key=session.source_key,
         external_review_id=external_review_id,
     ).with_for_update().first()
+    repairing_projection = existing is not None
     if existing is not None:
         if existing.payload_hash != payload_hash:
             raise AnkiSyncError("source review ID already exists with different content")
         existing.last_session_id = session.id
-        return "unchanged", existing
+        # ReviewEvent is the analytics projection while this provenance row is
+        # the durable external identity. If the projection was removed by an
+        # older purge flow, replay the same Anki revlog row to repair it.
+        if existing.status == "ignored" or existing.review_event_id is not None:
+            return "unchanged", existing
 
     source_card = ConnectSourceCardRef.query.filter_by(
         user_id=session.user_id,
@@ -299,15 +304,20 @@ def _import_review(
     ).with_for_update().first()
     if source_card is None or source_card.card is None:
         raise AnkiSyncError("source card has not been mapped")
-    ref = ConnectReviewEventRef(
-        user_id=session.user_id,
-        source_key=session.source_key,
-        external_review_id=external_review_id,
-        external_card_id=external_card_id,
-        payload_hash=payload_hash,
-        last_session_id=session.id,
-    )
-    db.session.add(ref)
+    if existing is None:
+        ref = ConnectReviewEventRef(
+            user_id=session.user_id,
+            source_key=session.source_key,
+            external_review_id=external_review_id,
+            external_card_id=external_card_id,
+            payload_hash=payload_hash,
+            last_session_id=session.id,
+        )
+        db.session.add(ref)
+    else:
+        ref = existing
+        ref.external_card_id = external_card_id
+        ref.ignored_reason = None
     if ease == 0:
         ref.status = "ignored"
         ref.ignored_reason = "manual_or_rescheduled"
@@ -344,6 +354,8 @@ def _import_review(
             progress.last_reviewed_at = reviewed_at
             progress.last_review_event_id = event.id
     source_card.review_cursor = max(int(source_card.review_cursor or 0), int(external_review_id))
+    if repairing_projection and ref.status == "imported":
+        return "repaired", ref
     return ref.status, ref
 
 
@@ -385,7 +397,7 @@ def import_reviews(
                         {
                             "sourceReviewId": current_record.get("sourceReviewId"),
                             "sourceCardId": current_record.get("sourceCardId"),
-                            "imported": state == "imported",
+                            "imported": state in {"imported", "repaired"},
                             "state": state,
                         }
                     )

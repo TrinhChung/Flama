@@ -62,6 +62,17 @@ class DeckChangeRequest(db.Model):
     description = db.Column(db.Text, nullable=True)
     status = db.Column(db.String(32), nullable=False, default="needs_sync", index=True)
     install_snapshot_at = db.Column(db.DateTime, nullable=True)
+    base_release_id = db.Column(
+        db.String(36),
+        db.ForeignKey(
+            "deck_releases.id",
+            name="fk_deck_change_requests_base_release",
+            ondelete="SET NULL",
+        ),
+        nullable=True,
+        index=True,
+    )
+    revision = db.Column(db.BigInteger, nullable=False, default=0)
     overlay_fingerprint = db.Column(db.String(64), nullable=False)
     last_synced_overlay_fingerprint = db.Column(db.String(64), nullable=True)
     last_sync_status = db.Column(db.String(32), nullable=True, index=True)
@@ -78,6 +89,7 @@ class DeckChangeRequest(db.Model):
     local_deck = db.relationship("Deck", foreign_keys=[local_deck_id])
     source_deck = db.relationship("Deck", foreign_keys=[source_deck_id])
     source_note_type = db.relationship("NoteType", foreign_keys=[source_note_type_id])
+    base_release = db.relationship("DeckRelease", foreign_keys=[base_release_id])
     requester = db.relationship("User", foreign_keys=[requester_user_id])
     owner = db.relationship("User", foreign_keys=[owner_user_id])
     reviewed_by = db.relationship("User", foreign_keys=[reviewed_by_user_id])

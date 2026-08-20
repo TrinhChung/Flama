@@ -60,6 +60,60 @@ def upload_markdown_media(note_id: str):
     return _upload(note_id, markdown_inline=True)
 
 
+@media_bp.post("/notes/media/batch")
+@login_required
+def upload_notes_media_batch():
+    import json
+
+    manifest_raw = request.form.get("manifest")
+    items_input = []
+    if manifest_raw:
+        try:
+            items_input = json.loads(manifest_raw)
+            if not isinstance(items_input, list):
+                return jsonify({"error": "VALIDATION_ERROR", "message": "manifest must be a JSON array."}), 400
+        except (json.JSONDecodeError, TypeError) as exc:
+            return jsonify({"error": "VALIDATION_ERROR", "message": f"Invalid manifest JSON: {exc}"}), 400
+
+    batch_items = []
+    for idx, item in enumerate(items_input):
+        if not isinstance(item, dict):
+            continue
+        file_key = str(item.get("file_key") or f"file_{idx}")
+        uploaded = request.files.get(file_key)
+        if not uploaded and f"files[{idx}]" in request.files:
+            uploaded = request.files.get(f"files[{idx}]")
+        if not uploaded and "files" in request.files:
+            files_list = request.files.getlist("files")
+            if idx < len(files_list):
+                uploaded = files_list[idx]
+
+        batch_items.append({
+            "item_id": item.get("item_id", str(idx)),
+            "note_id": item.get("note_id"),
+            "field_name": item.get("field_name"),
+            "uploaded": uploaded,
+            "markdown_inline": bool(item.get("markdown_inline", False)),
+        })
+
+    if not batch_items:
+        return jsonify({"error": "VALIDATION_ERROR", "message": "No items provided in batch."}), 400
+
+    try:
+        payload = flashcard_media_api_service.upload_media_batch(
+            user_id=current_user.id,
+            items=batch_items,
+            upload_root=Path(current_app.config["FLASHCARD_MEDIA_UPLOAD_ROOT"]),
+            max_bytes=int(current_app.config.get("FLASHCARD_MEDIA_MAX_BYTES", 10 * 1024 * 1024)),
+            scanner=current_app.config.get("FLASHCARD_MEDIA_SCANNER"),
+            scan_enabled=bool(current_app.config.get("FLASHCARD_MEDIA_SCAN_ENABLED", False)),
+        )
+    except flashcard_media_api_service.MediaApiError as exc:
+        return _error(exc)
+
+    return jsonify(payload), 200
+
+
 @media_bp.delete("/media/<asset_id>")
 @login_required
 def delete_media(asset_id: str):

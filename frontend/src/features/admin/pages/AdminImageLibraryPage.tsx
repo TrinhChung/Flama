@@ -2,10 +2,12 @@ import { useEffect, useState } from 'react'
 import {
   Eye,
   Image as ImageIcon,
+  Link as LinkIcon,
   Plus,
   RotateCcw,
   Search,
   ShieldCheck,
+  Trash2,
   Upload,
   X,
 } from 'lucide-react'
@@ -35,11 +37,14 @@ type ImageAsset = {
   id: string
   asset_id?: string
   name: string
+  image_key?: string
   description: string | null
   mime_type?: string
   status: 'enabled' | 'disabled' | string
   file_exists?: boolean
   url?: string
+  source_url?: string | null
+  tags?: string[]
   storage_path?: string
   created_at?: string
 }
@@ -64,9 +69,12 @@ export function AdminImageLibraryPage() {
   const [editingAsset, setEditingAsset] = useState<ImageAsset | null>(null)
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
+  const [tagsInput, setTagsInput] = useState('')
+  const [sourceUrl, setSourceUrl] = useState('')
   const [isEnabled, setIsEnabled] = useState(true)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [previewModalUrl, setPreviewModalUrl] = useState<string | null>(null)
+  const [deleteConfirmAsset, setDeleteConfirmAsset] = useState<ImageAsset | null>(null)
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -93,7 +101,11 @@ export function AdminImageLibraryPage() {
       const formData = new FormData()
       formData.append('name', name)
       formData.append('description', description)
+      formData.append('tags', tagsInput)
       formData.append('status', isEnabled ? 'enabled' : 'disabled')
+      if (sourceUrl.trim()) {
+        formData.append('source_url', sourceUrl.trim())
+      }
       if (selectedFile) {
         formData.append('image', selectedFile)
       }
@@ -111,10 +123,24 @@ export function AdminImageLibraryPage() {
     onError: (error: Error) => toast.error(error.message),
   })
 
+  const deleteMutation = useMutation({
+    mutationFn: async (assetId: string) => {
+      return appApi.mutate(`/admin/image-library/${assetId}`, 'DELETE')
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['admin', 'image-library'] })
+      toast.success('Đã xóa hình ảnh khỏi thư viện.')
+      setDeleteConfirmAsset(null)
+    },
+    onError: (error: Error) => toast.error(error.message),
+  })
+
   const openCreateModal = () => {
     setEditingAsset(null)
     setName('')
     setDescription('')
+    setTagsInput('')
+    setSourceUrl('')
     setIsEnabled(true)
     setSelectedFile(null)
     setIsModalOpen(true)
@@ -122,8 +148,10 @@ export function AdminImageLibraryPage() {
 
   const openEditModal = (asset: ImageAsset) => {
     setEditingAsset(asset)
-    setName(asset.name)
+    setName(asset.name || asset.image_key || '')
     setDescription(asset.description || '')
+    setTagsInput((asset.tags || []).join(', '))
+    setSourceUrl(asset.source_url || '')
     setIsEnabled(asset.status === 'enabled')
     setSelectedFile(null)
     setIsModalOpen(true)
@@ -133,6 +161,8 @@ export function AdminImageLibraryPage() {
     setIsModalOpen(false)
     setEditingAsset(null)
     setSelectedFile(null)
+    setTagsInput('')
+    setSourceUrl('')
   }
 
   if (query.isPending) return <PageLoading label="Đang tải thư viện ảnh Admin…" />
@@ -149,7 +179,7 @@ export function AdminImageLibraryPage() {
         </Badge>
         <PageHeader
           title="Thư viện ảnh dùng chung"
-          description="Quản lý và upload các tài nguyên hình ảnh hệ thống."
+          description="Quản lý, upload và gắn thẻ tiếng Anh cho các tài nguyên hình ảnh hệ thống."
           actions={
             <Button onClick={openCreateModal} className="gap-2">
               <Plus className="size-4" /> Upload ảnh mới
@@ -165,7 +195,7 @@ export function AdminImageLibraryPage() {
             <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               className="pl-9 pr-9"
-              placeholder="Tìm theo tên hoặc mô tả ảnh…"
+              placeholder="Tìm theo tên, tag tiếng Anh, hoặc mô tả ảnh…"
               value={searchText}
               onChange={(e) => setSearchText(e.target.value)}
             />
@@ -238,6 +268,7 @@ export function AdminImageLibraryPage() {
                       variant="secondary"
                       className="size-8 rounded-full"
                       onClick={() => setPreviewModalUrl(imageUrl)}
+                      title="Xem ảnh"
                     >
                       <Eye className="size-4" />
                     </Button>
@@ -246,8 +277,18 @@ export function AdminImageLibraryPage() {
                       variant="secondary"
                       className="size-8 rounded-full"
                       onClick={() => openEditModal(asset)}
+                      title="Chỉnh sửa"
                     >
                       <ImageIcon className="size-4" />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="destructive"
+                      className="size-8 rounded-full"
+                      onClick={() => setDeleteConfirmAsset(asset)}
+                      title="Xóa ảnh"
+                    >
+                      <Trash2 className="size-4" />
                     </Button>
                   </div>
                 </div>
@@ -268,8 +309,22 @@ export function AdminImageLibraryPage() {
                         {asset.description}
                       </p>
                     )}
+                    {asset.tags && asset.tags.length > 0 && (
+                      <div className="flex flex-wrap gap-1 pt-1.5">
+                        {asset.tags.map((t) => (
+                          <Badge
+                            key={t}
+                            variant="outline"
+                            className="text-[10px] px-1.5 py-0 font-normal bg-muted/40 cursor-pointer hover:bg-primary/10 hover:text-primary transition-colors"
+                            onClick={() => setSearchText(t)}
+                          >
+                            #{t}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  <div className="pt-2 text-[10px] text-muted-foreground flex justify-between">
+                  <div className="pt-2 text-[10px] text-muted-foreground flex justify-between items-center">
                     <span>ID: #{assetId}</span>
                     <span>{asset.mime_type || 'image'}</span>
                   </div>
@@ -318,27 +373,40 @@ export function AdminImageLibraryPage() {
             </DialogTitle>
             <DialogDescription>
               {editingAsset
-                ? 'Cập nhật tên, mô tả hoặc thay thế tập tin ảnh.'
-                : 'Chọn tập tin ảnh và khai báo thông tin hình ảnh.'}
+                ? 'Cập nhật tên, tags tiếng Anh, mô tả hoặc thay thế tập tin ảnh.'
+                : 'Chọn tập tin ảnh hoặc link URL và khai báo tags tiếng Anh.'}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-2">
             <div className="space-y-2">
-              <Label htmlFor="asset-name">Tên hiển thị</Label>
+              <Label htmlFor="asset-name">Tên hiển thị (Key)</Label>
               <Input
                 id="asset-name"
-                placeholder="Ví dụ: Banner JLPT N3"
+                placeholder="Ví dụ: red_apple hoặc Banner JLPT N3"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
               />
             </div>
 
             <div className="space-y-2">
+              <Label htmlFor="asset-tags">Tags tiếng Anh (phân cách bằng dấu phẩy)</Label>
+              <Input
+                id="asset-tags"
+                placeholder="Ví dụ: apple, red apple, fruit, fresh food"
+                value={tagsInput}
+                onChange={(e) => setTagsInput(e.target.value)}
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Tags giúp AI và người dùng tìm kiếm và tái sử dụng ảnh nhanh chóng.
+              </p>
+            </div>
+
+            <div className="space-y-2">
               <Label htmlFor="asset-desc">Mô tả ngắn</Label>
               <Textarea
                 id="asset-desc"
-                rows={3}
+                rows={2}
                 placeholder="Mô tả mục đích sử dụng ảnh…"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
@@ -357,6 +425,23 @@ export function AdminImageLibraryPage() {
               />
             </div>
 
+            <div className="space-y-2">
+              <Label htmlFor="asset-url">
+                <span className="flex items-center gap-1.5">
+                  <LinkIcon className="size-3.5 text-muted-foreground" />
+                  Hoặc Link hình ảnh (URL từ Internet)
+                </span>
+              </Label>
+              <Input
+                id="asset-url"
+                type="url"
+                placeholder="https://images.example.com/photo.jpg"
+                value={sourceUrl}
+                onChange={(e) => setSourceUrl(e.target.value)}
+                disabled={Boolean(selectedFile)}
+              />
+            </div>
+
             <div className="flex items-center justify-between rounded-lg border p-3">
               <div>
                 <Label className="text-sm font-semibold">Trạng thái Kích hoạt</Label>
@@ -371,11 +456,37 @@ export function AdminImageLibraryPage() {
               Hủy
             </Button>
             <Button
-              disabled={(!editingAsset && !selectedFile) || !name.trim() || saveMutation.isPending}
+              disabled={(!editingAsset && !selectedFile && !sourceUrl.trim()) || !name.trim() || saveMutation.isPending}
               onClick={() => saveMutation.mutate()}
             >
               <Upload className="mr-1.5 size-4" />
               {editingAsset ? 'Cập nhật' : 'Upload'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Modal */}
+      <Dialog open={Boolean(deleteConfirmAsset)} onOpenChange={(open) => !open && setDeleteConfirmAsset(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-destructive flex items-center gap-2">
+              <Trash2 className="size-5" /> Xác nhận xóa ảnh
+            </DialogTitle>
+            <DialogDescription>
+              Bạn có chắc chắn muốn xóa ảnh <strong>“{deleteConfirmAsset?.name}”</strong> (ID: #{deleteConfirmAsset?.id})? Thao tác này sẽ xóa vĩnh viễn tệp ảnh khỏi hệ thống.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteConfirmAsset(null)}>
+              Hủy
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={deleteMutation.isPending}
+              onClick={() => deleteConfirmAsset && deleteMutation.mutate(deleteConfirmAsset.id || deleteConfirmAsset.asset_id || '')}
+            >
+              <Trash2 className="mr-1.5 size-4" /> Xóa vĩnh viễn
             </Button>
           </DialogFooter>
         </DialogContent>

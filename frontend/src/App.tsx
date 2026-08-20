@@ -163,6 +163,31 @@ const MarketplacePublishNoteTypePage = lazy(() =>
     default: module.MarketplacePublishNoteTypePage,
   })),
 )
+const ReleaseBuilderPage = lazy(() =>
+  import('./features/deck-collaboration/pages/ReleaseBuilderPage').then((module) => ({
+    default: module.ReleaseBuilderPage,
+  })),
+)
+const InstalledDeckUpdatePage = lazy(() =>
+  import('./features/deck-collaboration/pages/InstalledDeckUpdatePage').then((module) => ({
+    default: module.InstalledDeckUpdatePage,
+  })),
+)
+const DeckChangeRequestPage = lazy(() =>
+  import('./features/deck-collaboration/pages/DeckChangeRequestPage').then((module) => ({
+    default: module.DeckChangeRequestPage,
+  })),
+)
+const ChangeRequestInboxPage = lazy(() =>
+  import('./features/deck-collaboration/pages/ChangeRequestInboxPage').then((module) => ({
+    default: module.ChangeRequestInboxPage,
+  })),
+)
+const ChangeRequestDetailPage = lazy(() =>
+  import('./features/deck-collaboration/pages/ChangeRequestDetailPage').then((module) => ({
+    default: module.ChangeRequestDetailPage,
+  })),
+)
 const AdminPermissionsPage = lazy(() =>
   import('./features/admin/pages/AdminPermissionsPage').then((module) => ({
     default: module.AdminPermissionsPage,
@@ -341,8 +366,24 @@ const router = createBrowserRouter([
             element: deferred(<InstalledDecksPage />),
           },
           {
+            path: 'installed-decks/:installId/updates/:releaseId',
+            element: deferred(<InstalledDeckUpdatePage />),
+          },
+          {
             path: 'flashcards/installed-decks',
             element: <Navigate to="/installed-decks" replace />,
+          },
+          {
+            path: 'flashcards/shared-decks/:deckItemId/change-request',
+            element: deferred(<DeckChangeRequestPage />),
+          },
+          {
+            path: 'flashcards/change-requests/incoming',
+            element: deferred(<ChangeRequestInboxPage />),
+          },
+          {
+            path: 'flashcards/change-requests/:requestId',
+            element: deferred(<ChangeRequestDetailPage />),
           },
           {
             path: 'audio/generate',
@@ -374,6 +415,10 @@ const router = createBrowserRouter([
               {
                 path: 'import',
                 element: deferred(<FileImportPage />),
+              },
+              {
+                path: 'creator/decks/:itemId/releases/new',
+                element: deferred(<ReleaseBuilderPage />),
               },
             ],
           },

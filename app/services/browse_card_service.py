@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 from typing import Any, Mapping
 
-from sqlalchemy import func
+from sqlalchemy import case, false, func
 from sqlalchemy.orm import aliased, selectinload
 
 UTC = timezone.utc
@@ -273,6 +273,9 @@ def list_browse_cards(
             selectinload(Card.template),
         )
     )
+    clone_scopes = []
+    clone_scope_conditions: list[tuple[Any, Any]] = []
+    owned_visibility_condition = None
     if admin_mode:
         if selected_ids:
             query = query.filter(Note.deck_id.in_(selected_ids))
@@ -282,7 +285,6 @@ def list_browse_cards(
             return _empty_result()
     else:
         local_scope_ids = set(selected_ids or scoped_ids)
-        clone_scopes = []
         source_to_local_deck_id: dict[int, int] = {}
 
         if selected_ids is not None:
@@ -335,24 +337,31 @@ def list_browse_cards(
 
         visibility_filters = []
         if local_scope_ids:
-            visibility_filters.append(
-                db.and_(
-                    Note.user_id == user_id,
-                    Note.deck_id.in_(local_scope_ids),
-                )
+            owned_visibility_condition = db.and_(
+                Note.user_id == user_id,
+                Note.deck_id.in_(local_scope_ids),
             )
+            visibility_filters.append(owned_visibility_condition)
         for clone_scope in clone_scopes:
             scope_filters = [Note.deck_id.in_(clone_scope.source_deck_ids)]
             if clone_scope.source_owner_user_id is not None:
                 scope_filters.append(Note.user_id == clone_scope.source_owner_user_id)
-            if clone_scope.base_snapshot_at is not None:
+            release_membership = share_ctrl.release_note_membership_filter(
+                clone_scope.install,
+                Note.id,
+            )
+            if release_membership is not None:
+                scope_filters.append(release_membership)
+            elif clone_scope.base_snapshot_at is not None:
                 scope_filters.extend(
                     [
                         Note.created_at <= clone_scope.base_snapshot_at,
                         Card.created_at <= clone_scope.base_snapshot_at,
                     ]
                 )
-            visibility_filters.append(db.and_(*scope_filters))
+            scope_condition = db.and_(*scope_filters)
+            visibility_filters.append(scope_condition)
+            clone_scope_conditions.append((clone_scope, scope_condition))
 
         if not visibility_filters:
             return _empty_result()
@@ -363,14 +372,172 @@ def list_browse_cards(
             if local_name:
                 deck_lookup.setdefault(source_deck_id, local_name)
 
+    clone_projections: list[dict[str, Any]] = []
+    if (
+        not admin_mode
+        and clone_scope_conditions
+        and (bool(keyword) or sort_by == "word")
+    ):
+        initial_field_names_cache: dict[tuple[str, int], dict[str, str]] = {}
+        earlier_scope_condition = None
+        for clone_scope, raw_scope_condition in clone_scope_conditions:
+            exclusive_scope_condition = raw_scope_condition
+            if earlier_scope_condition is not None:
+                exclusive_scope_condition = db.and_(
+                    raw_scope_condition,
+                    ~earlier_scope_condition,
+                )
+                earlier_scope_condition = db.or_(
+                    earlier_scope_condition,
+                    raw_scope_condition,
+                )
+            else:
+                earlier_scope_condition = raw_scope_condition
+
+            install = clone_scope.install
+            source_note_type_id = str(
+                install.source_note_type_id or ""
+            ).strip()
+            if not source_note_type_id:
+                clone_projections.append(
+                    {
+                        "condition": exclusive_scope_condition,
+                        "all_fields": [],
+                        "word": browse_card_repository.owned_note_word_expression(),
+                    }
+                )
+                continue
+
+            schema_view = share_ctrl.build_clone_schema_view(
+                install=install,
+                source_note_type_id=source_note_type_id,
+            )
+            release = (
+                install.applied_release
+                if install.version_mode == "release"
+                and install.applied_release_id
+                else None
+            )
+            target_sequence = int(release.sequence_no) if release is not None else None
+            deck_item_id = str(release.deck_item_id) if release is not None else None
+            initial_field_names: dict[str, str] = {}
+            if release is not None:
+                initial_cache_key = (deck_item_id, target_sequence)
+                initial_field_names = initial_field_names_cache.get(
+                    initial_cache_key,
+                    {},
+                )
+                if initial_cache_key not in initial_field_names_cache:
+                    initial_field_names = (
+                        browse_card_repository.load_initial_release_field_names(
+                            deck_item_id=deck_item_id,
+                            through_sequence=target_sequence,
+                        )
+                    )
+                    initial_field_names_cache[initial_cache_key] = initial_field_names
+
+            added_field_names = browse_card_repository.load_clone_added_field_names(
+                deck_install_id=str(install.id)
+            )
+            all_field_expressions = []
+            word_field_expressions = []
+            reverse_rename_map = {
+                str(resolved_name): str(source_name)
+                for source_name, resolved_name in (
+                    schema_view.renamed_field_names or {}
+                ).items()
+            }
+            for field_def in schema_view.field_defs or []:
+                field_id = str(getattr(field_def, "id", "") or "").strip()
+                field_name = str(
+                    getattr(field_def, "name", "") or ""
+                ).strip()
+                if not field_id or not field_name:
+                    continue
+                is_added_field = field_id in added_field_names
+                source_field_id = None if is_added_field else field_id
+                checkpoint_field_name = None
+                if not is_added_field:
+                    checkpoint_field_name = (
+                        initial_field_names.get(field_id)
+                        if release is not None
+                        else reverse_rename_map.get(field_name, field_name)
+                    )
+                if (
+                    release is not None
+                    and not is_added_field
+                    and not checkpoint_field_name
+                ):
+                    # Compatibility for early release rows that predate stable
+                    # field-name events. Current releases always have the map.
+                    checkpoint_field_name = field_name
+                override_names = [field_name]
+                if checkpoint_field_name:
+                    override_names.append(checkpoint_field_name)
+                if is_added_field:
+                    override_names.append(added_field_names[field_id])
+                field_expression = (
+                    browse_card_repository.clone_effective_field_text_expression(
+                        deck_install_id=str(install.id),
+                        deck_item_id=deck_item_id,
+                        target_release_sequence=target_sequence,
+                        source_field_def_id=source_field_id,
+                        checkpoint_field_name=checkpoint_field_name,
+                        override_field_names=override_names,
+                    )
+                )
+                all_field_expressions.append(field_expression)
+                if str(getattr(field_def, "field_type", "") or "").lower() in (
+                    browse_card_repository.TEXT_FIELD_TYPES
+                ):
+                    word_field_expressions.append(field_expression)
+
+            clone_projections.append(
+                {
+                    "condition": exclusive_scope_condition,
+                    "all_fields": all_field_expressions,
+                    "word": browse_card_repository.first_non_empty_text_expression(
+                        word_field_expressions
+                    ),
+                }
+            )
+
     if keyword:
         keyword_like = f"%{escape_like_pattern(keyword.lower())}%"
-        query = query.filter(
-            func.lower(db.cast(Note.field_values, db.Text)).like(
-                keyword_like,
-                escape="\\",
+        if admin_mode:
+            query = query.filter(
+                func.lower(db.cast(Note.field_values, db.Text)).like(
+                    keyword_like,
+                    escape="\\",
+                )
             )
-        )
+        else:
+            effective_search_conditions = []
+            if owned_visibility_condition is not None:
+                effective_search_conditions.append(
+                    db.and_(
+                        owned_visibility_condition,
+                        func.lower(db.cast(Note.field_values, db.Text)).like(
+                            keyword_like,
+                            escape="\\",
+                        ),
+                    )
+                )
+            for projection in clone_projections:
+                effective_search_conditions.append(
+                    db.and_(
+                        projection["condition"],
+                        browse_card_repository.effective_fields_search_condition(
+                            projection["all_fields"],
+                            keyword_like=keyword_like,
+                        ),
+                    )
+                )
+            query = query.filter(
+                db.or_(*effective_search_conditions)
+                if effective_search_conditions
+                else false()
+            )
     if tag:
         tag_like = f"%{escape_like_pattern(tag.lower())}%"
         query = query.filter(
@@ -404,10 +571,31 @@ def list_browse_cards(
         else:
             query = query.order_by(Deck.name.asc(), Card.updated_at.desc())
     elif sort_by == "word":
-        sort_expr = func.lower(db.cast(Note.field_values, db.Text))
+        owned_word_expression = browse_card_repository.owned_note_word_expression()
+        if admin_mode:
+            sort_expr = func.lower(func.coalesce(owned_word_expression, ""))
+        else:
+            word_cases = []
+            if owned_visibility_condition is not None:
+                word_cases.append(
+                    (owned_visibility_condition, owned_word_expression)
+                )
+            word_cases.extend(
+                (projection["condition"], projection["word"])
+                for projection in clone_projections
+            )
+            sort_expr = func.lower(
+                func.coalesce(
+                    case(*word_cases, else_=owned_word_expression)
+                    if word_cases
+                    else owned_word_expression,
+                    "",
+                )
+            )
         query = query.order_by(
             sort_expr.desc() if sort_dir == "desc" else sort_expr.asc(),
             Card.updated_at.desc(),
+            Card.id.asc(),
         )
     else:
         due_sort_day_expr = db.case(
@@ -437,6 +625,46 @@ def list_browse_cards(
         user_id=user_id,
         card_ids=[card_obj.id for card_obj in pagination.items],
     )
+    clone_scope_by_card_id: dict[str, Any] = {}
+    release_note_ids: dict[str, set[str]] = {}
+    release_install_by_id: dict[str, Any] = {}
+    if not admin_mode and clone_scopes:
+        for card_obj in pagination.items:
+            note_obj = card_obj.note
+            if note_obj is None or note_obj.user_id == user_id or note_obj.deck_id is None:
+                continue
+            matching_scope = next(
+                (
+                    scope
+                    for scope in clone_scopes
+                    if int(note_obj.deck_id) in set(scope.source_deck_ids)
+                    and (
+                        scope.source_owner_user_id is None
+                        or int(note_obj.user_id) == int(scope.source_owner_user_id)
+                    )
+                ),
+                None,
+            )
+            if matching_scope is None:
+                continue
+            clone_scope_by_card_id[str(card_obj.id)] = matching_scope
+            release_id = str(matching_scope.install.applied_release_id or "")
+            if matching_scope.install.version_mode == "release" and release_id:
+                release_note_ids.setdefault(release_id, set()).add(str(note_obj.id))
+                release_install_by_id[release_id] = matching_scope.install
+
+    release_values_by_note: dict[tuple[str, str], dict[str, Any]] = {}
+    if release_note_ids:
+        from app.services import deck_release_service
+
+        for release_id, note_ids in release_note_ids.items():
+            resolved_values = deck_release_service.get_note_values_for_ids_at_release(
+                release_install_by_id[release_id].applied_release,
+                note_ids,
+            )
+            for note_id, values in resolved_values.items():
+                release_values_by_note[(release_id, str(note_id))] = values
+
     rows = []
     for card_obj in pagination.items:
         row_payload = vocabulary_ctrl.build_browse_row(
@@ -447,19 +675,17 @@ def list_browse_cards(
             timezone_name=timezone_name,
         )
         if not admin_mode and card_obj.note and card_obj.note.user_id != user_id:
-            clone_scope = share_ctrl.resolve_clone_scope_for_card(
-                user_id=user_id,
-                card_obj=card_obj,
-            )
-            if clone_scope is not None and share_ctrl.is_card_visible_in_clone_scope(
-                scope=clone_scope,
-                card_obj=card_obj,
-            ):
+            clone_scope = clone_scope_by_card_id.get(str(card_obj.id))
+            if clone_scope is not None:
+                release_id = str(clone_scope.install.applied_release_id or "")
                 adjusted_payload = _apply_clone_overlay_to_browse_payload(
                     payload={"card": row_payload, "note": {}, "fields": []},
                     card_obj=card_obj,
                     clone_scope=clone_scope,
                     deck_lookup=deck_lookup,
+                    base_field_values=release_values_by_note.get(
+                        (release_id, str(card_obj.note.id))
+                    ),
                 )
                 row_payload = adjusted_payload.get("card") or row_payload
         rows.append(row_payload)
@@ -542,12 +768,32 @@ def delete_browse_card(
     if not card_obj:
         raise BrowseApiError("Card not found", status=404)
 
+    from app.services import deck_working_tree_service
+
+    if card_obj.note is not None and deck_working_tree_service.note_has_shared_release_dependents(
+        card_obj.note
+    ):
+        raise BrowseApiError(
+            "Published shared cards cannot be hard-deleted because learner history must be preserved.",
+            status=409,
+            code="SHARED_ENTITY_RETIRE_REQUIRED",
+        )
+
     note_id = card_obj.note_id
     db.session.delete(card_obj)
     db.session.flush()
     if Card.query.filter(Card.note_id == note_id).count() == 0:
         note_obj = db.session.get(Note, note_id)
         if note_obj:
+            deck_working_tree_service.mark_note_field_batches_changed(
+                mutations=[
+                    {
+                        "note": note_obj,
+                        "field_names": (note_obj.field_values or {}).keys(),
+                        "operation": "remove",
+                    }
+                ],
+            )
             db.session.delete(note_obj)
     db.session.commit()
     return {"success": True}
@@ -604,7 +850,19 @@ def update_legacy_browse_note(
             code=exc.code,
         ) from exc
 
+    changed_field_names = {
+        key
+        for key in set(note_obj.field_values or {}) | set(merged_values)
+        if (note_obj.field_values or {}).get(key) != merged_values.get(key)
+    }
     note_obj.field_values = merged_values
+    if changed_field_names:
+        from app.services import deck_working_tree_service
+
+        deck_working_tree_service.mark_note_fields_changed(
+            note=note_obj,
+            field_names=changed_field_names,
+        )
     db.session.commit()
     return {
         "success": True,
@@ -694,9 +952,23 @@ def _update_owned_browse_card(
     note_obj,
     validated,
 ) -> dict[str, Any]:
+    from app.services import deck_working_tree_service
+
+    original_deck_id = note_obj.deck_id
     accessible_deck_ids: set[int] | None = None
     if validated.update_deck:
         selected_deck_id = validated.deck_id
+        if (
+            original_deck_id != selected_deck_id
+            and deck_working_tree_service.note_has_shared_release_dependents(
+                note_obj
+            )
+        ):
+            raise BrowseCardUpdateError(
+                "A released shared note cannot move decks until release-aware membership moves are supported.",
+                status=409,
+                code="SHARED_ENTITY_RETIRE_REQUIRED",
+            )
         if selected_deck_id is None:
             note_obj.deck_id = None
         else:
@@ -712,6 +984,17 @@ def _update_owned_browse_card(
             note_obj.deck_id = selected_deck_id
 
     if validated.update_tags:
+        if (
+            list(note_obj.tags or []) != list(validated.tags or [])
+            and deck_working_tree_service.note_has_shared_release_dependents(
+                note_obj
+            )
+        ):
+            raise BrowseCardUpdateError(
+                "Tags on a released shared note cannot change until note metadata is versioned in deck releases.",
+                status=409,
+                code="SHARED_NOTE_METADATA_VERSIONING_REQUIRED",
+            )
         note_obj.tags = validated.tags
 
     if validated.field_updates:
@@ -719,6 +1002,31 @@ def _update_owned_browse_card(
         for key_name, value in validated.field_updates.items():
             next_values[key_name] = value
         note_obj.field_values = next_values
+
+    deck_changed = validated.update_deck and original_deck_id != note_obj.deck_id
+    if validated.field_updates and not deck_changed:
+        deck_working_tree_service.mark_note_fields_changed(
+            note=note_obj,
+            field_names=validated.field_updates.keys(),
+        )
+    if deck_changed:
+        all_field_names = list((note_obj.field_values or {}).keys())
+        deck_working_tree_service.mark_note_field_batches_changed(
+            mutations=[
+                {
+                    "note": note_obj,
+                    "field_names": all_field_names,
+                    "operation": "remove",
+                    "deck_id": original_deck_id,
+                },
+                {
+                    "note": note_obj,
+                    "field_names": all_field_names,
+                    "operation": "add",
+                    "deck_id": note_obj.deck_id,
+                },
+            ],
+        )
 
     browse_card_repository.commit_changes()
 
@@ -817,6 +1125,7 @@ def _apply_clone_overlay_to_browse_payload(
     card_obj,
     clone_scope,
     deck_lookup: dict[int, str],
+    base_field_values: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     from app.services import flashcards_share as share_ctrl
 
@@ -835,6 +1144,7 @@ def _apply_clone_overlay_to_browse_payload(
             install=clone_scope.install,
             source_note=note_obj,
             schema_view=schema_view,
+            base_field_values=base_field_values,
         )
     else:
         overlay_field_defs = note_obj.note_type.field_defs if note_obj.note_type else []

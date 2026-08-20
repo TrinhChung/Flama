@@ -987,6 +987,62 @@ class AnkiImportApiTests(unittest.TestCase):
         self.assertEqual(card_status["progressState"], "unchanged")
         self.assertEqual(card_status["reviewCursor"], str(third_ms))
 
+        # Provenance is the durable identity. If an older purge removed the
+        # analytics projection, note-status must invalidate the cursor so a
+        # normal incremental sync can replay and repair the missing event.
+        with self.app.app_context():
+            first_ref = ConnectReviewEventRef.query.filter_by(
+                user_id=self.admin_id,
+                external_review_id=str(first_ms),
+            ).one()
+            first_event = db.session.get(ReviewEvent, first_ref.review_event_id)
+            first_ref.review_event_id = None
+            db.session.delete(first_event)
+            db.session.commit()
+
+        orphan_status = self.client.post(
+            f"/api/flashcards/import/anki/sessions/{session_id}/note-status",
+            json={"notes": [{
+                "ankiNoteId": 1001,
+                "contentHash": "1" * 64,
+                "cards": [{"sourceCardId": 2001, "snapshotHash": "2" * 64}],
+            }]},
+        )
+        self.assertEqual(orphan_status.status_code, 200, orphan_status.get_json())
+        self.assertIsNone(orphan_status.get_json()["notes"][0]["cards"][0]["reviewCursor"])
+
+        repair = self.client.put(
+            f"/api/flashcards/import/anki/sessions/{session_id}/packages/reviews/3",
+            data=review_package,
+            headers=headers,
+        )
+        self.assertEqual(repair.status_code, 200, repair.get_json())
+        self.assertEqual(
+            [item["state"] for item in repair.get_json()["results"]],
+            ["repaired", "unchanged"],
+        )
+        with self.app.app_context():
+            self.assertEqual(ReviewEvent.query.filter_by(user_id=self.admin_id).count(), 3)
+            self.assertEqual(
+                ConnectReviewEventRef.query.filter_by(user_id=self.admin_id)
+                .filter(ConnectReviewEventRef.review_event_id.isnot(None))
+                .count(),
+                3,
+            )
+
+        repaired_status = self.client.post(
+            f"/api/flashcards/import/anki/sessions/{session_id}/note-status",
+            json={"notes": [{
+                "ankiNoteId": 1001,
+                "contentHash": "1" * 64,
+                "cards": [{"sourceCardId": 2001, "snapshotHash": "2" * 64}],
+            }]},
+        )
+        self.assertEqual(repaired_status.status_code, 200, repaired_status.get_json())
+        self.assertEqual(
+            repaired_status.get_json()["notes"][0]["cards"][0]["reviewCursor"],
+            str(third_ms),
+        )
 
 if __name__ == "__main__":
     unittest.main()

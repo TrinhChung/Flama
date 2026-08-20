@@ -20,6 +20,8 @@ class SharedImageAsset(db.Model):
     sha256 = db.Column(db.String(64), nullable=True)
     size_bytes = db.Column(db.Integer, nullable=False, default=0)
     is_enabled = db.Column(db.Boolean, nullable=False, default=True)
+    source_url = db.Column(db.String(2048), nullable=True)
+    tags = db.Column(db.JSON, nullable=False, default=list)
     created_by_user_id = db.Column(
         db.Integer,
         db.ForeignKey("users.id", ondelete="SET NULL"),
@@ -45,4 +47,5 @@ class SharedImageAsset(db.Model):
         UniqueConstraint("image_key", name="uq_shared_image_assets_image_key"),
         Index("ix_shared_image_assets_is_enabled", "is_enabled"),
         Index("ix_shared_image_assets_updated_at", "updated_at"),
+        Index("ix_shared_image_assets_sha256", "sha256"),
     )

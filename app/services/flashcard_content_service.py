@@ -8,7 +8,11 @@ import logging
 from types import SimpleNamespace
 from typing import Any, Mapping
 
-from app.services import flashcards_share_service, marketplace_query_service
+from app.services import (
+    deck_working_tree_service,
+    flashcards_share_service,
+    marketplace_query_service,
+)
 from app.services.flashcard_legacy import (
     LEGACY_BACK_TEMPLATE,
     LEGACY_FRONT_TEMPLATE,
@@ -126,6 +130,23 @@ def update_note_type(
     payload: dict[str, Any],
 ) -> dict[str, Any]:
     note_type = _owned_note_type(user_id=user_id, note_type_id=note_type_id)
+    requested_name = str(
+        payload.get("title") or payload.get("name") or ""
+    ).strip()
+    if (
+        requested_name
+        and requested_name != str(note_type.name or "").strip()
+        and deck_working_tree_service.note_type_has_shared_release_dependents(
+            note_type_id=str(note_type.id),
+            owner_user_id=user_id,
+        )
+    ):
+        raise ContentApiError(
+            "SHARED_SCHEMA_VERSIONING_REQUIRED",
+            "The name of a released shared note type cannot change until note-type metadata is versioned.",
+            status=409,
+            field="name",
+        )
     requested_status = str(payload.get("publish_status") or "").strip().lower()
     if requested_status in flashcards_share_service.PUBLISH_STATUSES_VISIBLE:
         eligibility = flashcards_share_service.get_note_type_publish_eligibility(
@@ -166,8 +187,12 @@ def delete_note_type(*, user_id: int, note_type_id: str, purge: bool = False, is
         from models.deck_marketplace_item import DeckMarketplaceItem
         from models.review_event import ReviewEvent
 
-        # 1. Delete all ReviewEvents referencing this note type
-        ReviewEvent.query.filter(ReviewEvent.note_type_id == note_type_id).delete(synchronize_session=False)
+        # 1. Preserve immutable study history while detaching the purged
+        # content dimension. This also keeps imported Anki provenance valid.
+        ReviewEvent.query.filter(ReviewEvent.note_type_id == note_type_id).update(
+            {ReviewEvent.note_type_id: None},
+            synchronize_session=False,
+        )
 
         # 2. Delete all DeckChangeRequests referencing this note type
         DeckChangeRequest.query.filter(DeckChangeRequest.source_note_type_id == note_type_id).delete(synchronize_session=False)
@@ -300,6 +325,13 @@ def create_field(
         position=(int(max_position) if max_position is not None else -1) + 1,
     )
     db.session.add(field)
+    db.session.flush()
+    deck_working_tree_service.mark_field_def_changed(
+        field_def=field,
+        owner_user_id=user_id,
+        property_keys={"name", "field_type", "position", "required", "identity_role"},
+        operation="add",
+    )
     _audit(
         user_id,
         "field.create",
@@ -318,6 +350,12 @@ def update_field(
 ) -> dict[str, Any]:
     note_type = _owned_note_type(user_id=user_id, note_type_id=note_type_id)
     field = _field(note_type_id=note_type.id, field_id=field_id)
+    previous_properties = {
+        "name": field.name,
+        "field_type": field.field_type,
+        "required": bool(field.required),
+        "identity_role": field.identity_role,
+    }
     old_name = field.name
     new_name = str(payload.get("name") or field.name).strip()
     new_type = str(payload.get("field_type") or field.field_type).strip()
@@ -395,6 +433,23 @@ def update_field(
             "status": job.status,
             "processed_notes": job.processed_notes,
         }
+    current_properties = {
+        "name": field.name,
+        "field_type": field.field_type,
+        "required": bool(field.required),
+        "identity_role": field.identity_role,
+    }
+    changed_properties = {
+        key
+        for key, value in current_properties.items()
+        if previous_properties.get(key) != value
+    }
+    if changed_properties:
+        deck_working_tree_service.mark_field_def_changed(
+            field_def=field,
+            owner_user_id=user_id,
+            property_keys=changed_properties,
+        )
     _audit(
         user_id,
         "field.update",
@@ -426,6 +481,15 @@ def delete_field(
         raise ContentApiError(
             "IDENTITY_FIELD_REQUIRED",
             "Clear or reassign the primary identity field before deleting it.",
+            status=409,
+        )
+    if deck_working_tree_service.note_type_has_shared_release_dependents(
+        note_type_id=note_type.id,
+        owner_user_id=user_id,
+    ):
+        raise ContentApiError(
+            "SHARED_ENTITY_RETIRE_REQUIRED",
+            "Published shared fields must be retired through a release-safe operation.",
             status=409,
         )
     for note in Note.query.filter_by(
@@ -500,6 +564,12 @@ def reorder_fields(
                 f"Invalid position for field {field_id}",
                 field="body",
             ) from exc
+    for field in fields:
+        deck_working_tree_service.mark_field_def_changed(
+            field_def=field,
+            owner_user_id=user_id,
+            property_keys={"position"},
+        )
     _audit(user_id, "field.reorder", {"note_type_id": note_type.id})
     db.session.commit()
     return {"success": True}
@@ -527,6 +597,10 @@ def create_template(
     payload: dict[str, Any],
 ) -> dict[str, Any]:
     note_type = _owned_note_type(user_id=user_id, note_type_id=note_type_id)
+    _ensure_version_safe_template_mutation(
+        note_type=note_type,
+        owner_user_id=user_id,
+    )
     template, error = flashcards_share_service.create_template(
         note_type_id=note_type.id,
         user_id=user_id,
@@ -549,6 +623,11 @@ def update_template(
 ) -> dict[str, Any]:
     note_type = _owned_note_type(user_id=user_id, note_type_id=note_type_id)
     template = _template(note_type_id=note_type.id, template_id=template_id)
+    if {"name", "front_html", "back_html", "shared_css"}.intersection(payload):
+        _ensure_version_safe_template_mutation(
+            note_type=note_type,
+            owner_user_id=user_id,
+        )
     if "name" in payload:
         template.name = str(payload.get("name") or "").strip() or template.name
     if "front_html" in payload:
@@ -589,6 +668,10 @@ def reset_template(
 ) -> dict[str, Any]:
     note_type = _owned_note_type(user_id=user_id, note_type_id=note_type_id)
     template = _template(note_type_id=note_type.id, template_id=template_id)
+    _ensure_version_safe_template_mutation(
+        note_type=note_type,
+        owner_user_id=user_id,
+    )
     template.front_html = LEGACY_FRONT_TEMPLATE.strip()
     template.back_html = LEGACY_BACK_TEMPLATE.strip()
     template.shared_css = LEGACY_SHARED_CSS.strip()
@@ -604,6 +687,10 @@ def delete_template(
 ) -> dict[str, bool]:
     note_type = _owned_note_type(user_id=user_id, note_type_id=note_type_id)
     template = _template(note_type_id=note_type.id, template_id=template_id)
+    _ensure_version_safe_template_mutation(
+        note_type=note_type,
+        owner_user_id=user_id,
+    )
     if template.is_default:
         raise ContentApiError(
             "VALIDATION_ERROR",
@@ -883,6 +970,11 @@ def create_note(
     db.session.add(note)
     db.session.flush()
     _create_cards(note)
+    deck_working_tree_service.mark_note_fields_changed(
+        note=note,
+        field_names=(note.field_values or {}).keys(),
+        operation="add",
+    )
     flashcards_share_service.touch_note_type_install_usage(
         user_id=user_id,
         installed_note_type_id=note.note_type_id,
@@ -911,6 +1003,7 @@ def update_note(
     payload: dict[str, Any],
 ) -> dict[str, Any]:
     note = _owned_note(user_id=user_id, note_id=note_id)
+    original_deck_id = note.deck_id
     note_type = _owned_note_type(
         user_id=user_id,
         note_type_id=note.note_type_id,
@@ -924,6 +1017,25 @@ def update_note(
         )
     except RequestValidationError as exc:
         raise _validation_error(exc) from exc
+    if (
+        validated.update_deck
+        and original_deck_id != validated.deck_id
+        and deck_working_tree_service.note_has_shared_release_dependents(note)
+    ):
+        raise ContentApiError(
+            "SHARED_ENTITY_RETIRE_REQUIRED",
+            (
+                "A released shared note cannot move decks until release-aware "
+                "membership moves are supported."
+            ),
+            status=409,
+            field="deck_id",
+        )
+    if validated.update_tags:
+        _ensure_version_safe_note_tags_mutation(
+            note=note,
+            next_tags=validated.tags,
+        )
     if validated.field_updates:
         values = dict(note.field_values or {})
         values.update(validated.field_updates)
@@ -945,6 +1057,30 @@ def update_note(
             consistency_error,
             field="deck_id",
         )
+    deck_changed = validated.update_deck and original_deck_id != note.deck_id
+    if validated.field_updates and not deck_changed:
+        deck_working_tree_service.mark_note_fields_changed(
+            note=note,
+            field_names=validated.field_updates.keys(),
+        )
+    if deck_changed:
+        all_field_names = list((note.field_values or {}).keys())
+        deck_working_tree_service.mark_note_field_batches_changed(
+            mutations=[
+                {
+                    "note": note,
+                    "field_names": all_field_names,
+                    "operation": "remove",
+                    "deck_id": original_deck_id,
+                },
+                {
+                    "note": note,
+                    "field_names": all_field_names,
+                    "operation": "add",
+                    "deck_id": note.deck_id,
+                },
+            ],
+        )
     _audit(user_id, "note.update", {"note_id": note.id})
     db.session.commit()
     return {
@@ -956,6 +1092,21 @@ def update_note(
 
 def delete_note(*, user_id: int, note_id: str) -> dict[str, bool]:
     note = _owned_note(user_id=user_id, note_id=note_id)
+    if deck_working_tree_service.note_has_shared_release_dependents(note):
+        raise ContentApiError(
+            "SHARED_ENTITY_RETIRE_REQUIRED",
+            "Published shared notes cannot be hard-deleted because learner history must be preserved.",
+            status=409,
+        )
+    deck_working_tree_service.mark_note_field_batches_changed(
+        mutations=[
+            {
+                "note": note,
+                "field_names": (note.field_values or {}).keys(),
+                "operation": "remove",
+            }
+        ],
+    )
     db.session.delete(note)
     _audit(user_id, "note.delete", {"note_id": note.id})
     db.session.commit()
@@ -971,6 +1122,58 @@ def _owned_note_type(*, user_id: int, note_type_id: str) -> NoteType:
             status=404,
         )
     return row
+
+
+def _ensure_version_safe_template_mutation(
+    *,
+    note_type: NoteType,
+    owner_user_id: int,
+) -> None:
+    """Prevent template/card changes from bypassing immutable deck releases.
+
+    Release deltas currently version field definitions and note-field values.
+    Templates also determine the physical Card rows, so mutating them while a
+    released lineage has learners would otherwise leak unpublished owner work
+    into installed decks and could destroy CardProgress history.  Keep the
+    operation closed until template/card changes have their own release-safe
+    representation.
+    """
+
+    if not deck_working_tree_service.note_type_has_shared_release_dependents(
+        note_type_id=str(note_type.id),
+        owner_user_id=owner_user_id,
+    ):
+        return
+    raise ContentApiError(
+        "SHARED_SCHEMA_VERSIONING_REQUIRED",
+        (
+            "Templates used by a released shared deck cannot be changed yet. "
+            "Create a new note type or wait for template-aware releases so "
+            "installed card and study history remain stable."
+        ),
+        status=409,
+        field="template",
+    )
+
+
+def _ensure_version_safe_note_tags_mutation(
+    *,
+    note: Note,
+    next_tags: list[Any] | None,
+) -> None:
+    if list(note.tags or []) == list(next_tags or []):
+        return
+    if not deck_working_tree_service.note_has_shared_release_dependents(note):
+        return
+    raise ContentApiError(
+        "SHARED_NOTE_METADATA_VERSIONING_REQUIRED",
+        (
+            "Tags on a released shared note cannot change until note metadata "
+            "is included in deck releases."
+        ),
+        status=409,
+        field="tags",
+    )
 
 
 def _owned_note(*, user_id: int, note_id: str) -> Note:

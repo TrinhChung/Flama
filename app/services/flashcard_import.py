@@ -632,6 +632,7 @@ def run_import(
         templates = Template.query.filter_by(note_type_id=note_type.id).order_by(Template.position.asc()).all()
 
     insert_payload_buffer: list[dict[str, Any]] = []
+    pending_updated_dirty: list[tuple[Note, set[str]]] = []
 
     def push_issue(*, kind: str, row: int, reason: str, message: str) -> None:
         if kind == "skip":
@@ -651,10 +652,11 @@ def run_import(
             )
 
     def flush_pending() -> None:
-        nonlocal pending_writes, insert_payload_buffer
+        nonlocal pending_writes, insert_payload_buffer, pending_updated_dirty
         if not apply_changes or pending_writes <= 0:
             pending_writes = 0
             insert_payload_buffer = []
+            pending_updated_dirty = []
             return
 
         if insert_payload_buffer:
@@ -679,8 +681,27 @@ def run_import(
             if cards:
                 db.session.add_all(cards)
 
+            from app.services import deck_working_tree_service
+
+            for note in notes:
+                deck_working_tree_service.mark_note_fields_changed(
+                    note=note,
+                    field_names=(note.field_values or {}).keys(),
+                    operation="add",
+                )
+
+        if pending_updated_dirty:
+            from app.services import deck_working_tree_service
+
+            for note, changed_names in pending_updated_dirty:
+                deck_working_tree_service.mark_note_fields_changed(
+                    note=note,
+                    field_names=changed_names,
+                )
+
         db.session.commit()
         insert_payload_buffer = []
+        pending_updated_dirty = []
         pending_writes = 0
 
     mapped_column_indexes = [
@@ -861,6 +882,7 @@ def run_import(
                     current_values = note_obj.field_values if isinstance(note_obj.field_values, dict) else {}
                     merged_values = dict(current_values)
                     changed = False
+                    changed_names: set[str] = set()
 
                     for field_def in field_defs:
                         field_name = field_def.name
@@ -874,6 +896,7 @@ def run_import(
                             continue
                         merged_values[field_name] = incoming
                         changed = True
+                        changed_names.add(field_name)
 
                     if not changed:
                         summary["unchanged"] += 1
@@ -883,6 +906,7 @@ def run_import(
                     pending_writes += 1
                     if apply_changes:
                         note_obj.field_values = merged_values
+                        pending_updated_dirty.append((note_obj, changed_names))
 
                 if apply_changes and pending_writes >= chunk_limit:
                     flush_pending()

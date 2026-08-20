@@ -10,6 +10,7 @@ import {
   Check,
   CheckCircle2,
   DollarSign,
+  GitCompare,
   Sparkles,
   Target
 } from 'lucide-react'
@@ -117,6 +118,9 @@ export function MarketplacePublishDeckPage() {
   })
 
   const deckItem = deckItemQuery.data
+  const isReleaseVersioned = Boolean(
+    isEditMode && (deckItem?.release_versioned || deckItem?.current_release_id),
+  )
 
   // Populate form states from edit data
   useEffect(() => {
@@ -163,6 +167,13 @@ export function MarketplacePublishDeckPage() {
         ? Number(deckItem?.source_deck_id || sourceDeckId)
         : Number(sourceDeckId)
 
+      const releaseMetadata = isReleaseVersioned
+        ? {}
+        : {
+            version: version.trim() || '1.0.0',
+            changelog: changelog.trim(),
+          }
+
       return appApi.mutate(endpoint, method, {
         source_deck_id: effectiveSourceDeckId,
         title: title.trim(),
@@ -170,9 +181,8 @@ export function MarketplacePublishDeckPage() {
         description: description.trim(),
         pricing_mode: pricingMode,
         price_amount_minor: pricingMode === 'paid' ? priceAmountMinor : 0,
-        version: version.trim() || '1.0.0',
         tags: tags ? tags.split(',').map((t) => t.trim()).filter(Boolean) : [],
-        changelog: changelog.trim(),
+        ...releaseMetadata,
         primary_category: effectiveCategory,
         subcategory: subcategory.trim(),
         target_audience: targetAudience.trim(),
@@ -633,16 +643,25 @@ export function MarketplacePublishDeckPage() {
                         className="h-10 text-xs sm:text-sm rounded-xl"
                       />
                     </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="changelog" className="text-xs font-semibold">Ghi chú phát hành (Changelog)</Label>
-                      <Input
-                        id="changelog"
-                        placeholder="Ví dụ: Bổ sung 50 ví dụ thực tế và audio tự nhiên..."
-                        value={changelog}
-                        onChange={(e) => setChangelog(e.target.value)}
-                        className="h-10 text-xs sm:text-sm rounded-xl"
-                      />
-                    </div>
+                    {isReleaseVersioned ? (
+                      <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs">
+                        <p className="font-semibold text-foreground">Changelog được quản lý theo release</p>
+                        <p className="mt-1 leading-relaxed text-muted-foreground">
+                          Lưu cấu hình listing tại đây; ghi chú nội dung thay đổi khi tạo phiên bản mới.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-1.5">
+                        <Label htmlFor="changelog" className="text-xs font-semibold">Ghi chú phát hành (Changelog)</Label>
+                        <Input
+                          id="changelog"
+                          placeholder="Ví dụ: Bổ sung 50 ví dụ thực tế và audio tự nhiên..."
+                          value={changelog}
+                          onChange={(e) => setChangelog(e.target.value)}
+                          className="h-10 text-xs sm:text-sm rounded-xl"
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -1105,15 +1124,34 @@ export function MarketplacePublishDeckPage() {
                   </div>
 
                   {/* Version */}
-                  <div className="space-y-1.5">
-                    <Label htmlFor="version" className="text-xs font-semibold">Phiên bản phát hành</Label>
-                    <Input
-                      id="version"
-                      value={version}
-                      onChange={(e) => setVersion(e.target.value)}
-                      className="h-10 text-xs sm:text-sm rounded-xl font-mono"
-                    />
-                  </div>
+                  {isReleaseVersioned ? (
+                    <div className="flex flex-col gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="text-xs font-semibold text-foreground">
+                          Phiên bản {version || 'hiện tại'} được khóa theo immutable release
+                        </p>
+                        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                          Cập nhật listing không phát hành dữ liệu mới tới những người đã clone deck.
+                        </p>
+                      </div>
+                      <Button type="button" variant="outline" size="sm" asChild>
+                        <Link to={`/creator/decks/${deckItemId}/releases/new`}>
+                          <GitCompare className="size-3.5" />
+                          Tạo release mới
+                        </Link>
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5">
+                      <Label htmlFor="version" className="text-xs font-semibold">Phiên bản phát hành</Label>
+                      <Input
+                        id="version"
+                        value={version}
+                        onChange={(e) => setVersion(e.target.value)}
+                        className="h-10 text-xs sm:text-sm rounded-xl font-mono"
+                      />
+                    </div>
+                  )}
 
                   {/* Summary Checklist before Submit */}
                   <div className="p-4 rounded-xl border border-border/80 bg-muted/30 space-y-2.5 text-xs">

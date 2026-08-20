@@ -174,6 +174,7 @@ def _register_models() -> None:
         StudySessionCommit,
         Template,
     )
+    from models.shared_image_asset import SharedImageAsset  # noqa: F401
 
 
 def _reject_duplicate_json_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:

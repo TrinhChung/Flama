@@ -259,6 +259,13 @@ def serialize_deck_marketplace_item(deck_item: DeckMarketplaceItem) -> dict[str,
         ),
         "version": deck_item.version,
         "changelog": deck_item.changelog,
+        "current_release_id": (
+            str(deck_item.current_release_id)
+            if deck_item.current_release_id is not None
+            else None
+        ),
+        "working_revision": int(deck_item.working_revision or 0),
+        "release_versioned": deck_item.current_release_id is not None,
         "publish_status": deck_item.publish_status,
         "is_official": bool(deck_item.is_official),
         "install_count": int(deck_item.install_count or 0),

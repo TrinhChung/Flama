@@ -11,7 +11,7 @@ from typing import Any, Tuple
 
 UTC = timezone.utc
 
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, exists, or_
 from sqlalchemy.exc import IntegrityError, OperationalError
 
 from app.repositories import flashcards_share_repository
@@ -29,6 +29,7 @@ from models.flashcard import (
     DeckCloneNoteFieldOverride,
     DeckInstall,
     DeckMarketplaceItem,
+    DeckReleaseEntityMembership,
     DeckReview,
     FieldDef,
     Note,
@@ -63,6 +64,77 @@ def _audit(user_id: int | None, action: str, payload: dict | None = None) -> Non
         payload=payload or {},
     )
     db.session.add(entry)
+
+
+def _stage_initial_release_if_visible(
+    deck_item: DeckMarketplaceItem,
+) -> str | None:
+    """Pin visible legacy/new listings to an immutable initial release.
+
+    The release service deliberately leaves transaction ownership to its
+    caller.  Keeping this helper inside the listing/install transaction means
+    an install can never be created against a live, mutable source snapshot.
+    """
+
+    if deck_item.current_release_id is not None:
+        return None
+    status = str(deck_item.publish_status or "").strip().lower()
+    if status not in PUBLISH_STATUSES_VISIBLE:
+        return None
+
+    from app.services import deck_release_service
+
+    db.session.flush()
+    try:
+        deck_release_service.publish_release(
+            deck_item_id=str(deck_item.id),
+            user_id=int(deck_item.owner_user_id),
+            version_label=str(deck_item.version or "1.0.0"),
+            changelog=deck_item.changelog,
+            expected_current_release_id=None,
+            expected_working_revision=int(deck_item.working_revision or 0),
+            idempotency_key=f"initial-listing:{deck_item.id}",
+        )
+    except deck_release_service.DeckReleaseError as exc:
+        return exc.message
+    return None
+
+
+def ensure_visible_deck_item_initial_release(deck_item_id: str) -> dict[str, Any]:
+    """Stage an initial immutable release for one visible legacy listing.
+
+    This is used by the rollout CLI.  The caller owns commit/rollback so large
+    catalogs can be processed one listing at a time without a long transaction.
+    """
+
+    deck_item = (
+        DeckMarketplaceItem.query.filter_by(id=str(deck_item_id))
+        .with_for_update()
+        .first()
+    )
+    if deck_item is None:
+        return {"deck_item_id": str(deck_item_id), "status": "missing"}
+    if deck_item.current_release_id is not None:
+        return {
+            "deck_item_id": str(deck_item.id),
+            "status": "already_versioned",
+            "release_id": str(deck_item.current_release_id),
+        }
+    if str(deck_item.publish_status or "").strip().lower() not in PUBLISH_STATUSES_VISIBLE:
+        return {"deck_item_id": str(deck_item.id), "status": "not_visible"}
+
+    error = _stage_initial_release_if_visible(deck_item)
+    if error:
+        return {
+            "deck_item_id": str(deck_item.id),
+            "status": "failed",
+            "error": error,
+        }
+    return {
+        "deck_item_id": str(deck_item.id),
+        "status": "created",
+        "release_id": str(deck_item.current_release_id),
+    }
 
 
 def _is_mysql_deadlock(exc: Exception) -> bool:
@@ -559,6 +631,10 @@ def create_shared_deck_item(
         deck_item,
         deck_active_review_threshold=DECK_ACTIVE_REVIEW_THRESHOLD,
     )
+    initial_release_error = flashcards_share._stage_initial_release_if_visible(deck_item)
+    if initial_release_error:
+        db.session.rollback()
+        return None, initial_release_error, "publish_status"
     _audit(user_id, "market.deck_item.create", {"deck_item_id": deck_item.id})
     try:
         db.session.commit()
@@ -580,6 +656,19 @@ def update_shared_deck_item(
     is_admin: bool,
     require_source_note_type: bool
 ) -> tuple[bool, str | None, str | None]:
+    if deck_item.current_release_id is not None:
+        if (
+            "version" in payload
+            and str(payload.get("version") or "").strip() != str(deck_item.version or "").strip()
+        ):
+            return False, "version is managed by immutable deck releases.", "version"
+        if (
+            "changelog" in payload
+            and (str(payload.get("changelog") or "").strip() or None)
+            != (str(deck_item.changelog or "").strip() or None)
+        ):
+            return False, "changelog is managed by immutable deck releases.", "changelog"
+
     if "source_deck_id" in payload:
         raw_source_deck_id = payload.get("source_deck_id")
         try:
@@ -621,6 +710,10 @@ def update_shared_deck_item(
         deck_item,
         deck_active_review_threshold=DECK_ACTIVE_REVIEW_THRESHOLD,
     )
+    initial_release_error = flashcards_share._stage_initial_release_if_visible(deck_item)
+    if initial_release_error:
+        db.session.rollback()
+        return False, initial_release_error, "publish_status"
     _audit(user_id, "market.deck_item.update", {"deck_item_id": deck_item.id})
     db.session.commit()
     return True, None, None
@@ -1569,7 +1662,13 @@ def is_card_visible_in_clone_scope(
         return False
     if scope.source_owner_user_id is not None and card_obj.note.user_id != scope.source_owner_user_id:
         return False
-    if scope.base_snapshot_at is not None:
+    if _install_uses_release(scope.install):
+        if not _note_is_member_of_applied_release(
+            install=scope.install,
+            note_id=card_obj.note.id,
+        ):
+            return False
+    elif scope.base_snapshot_at is not None:
         note_created = card_obj.note.created_at or datetime.min
         card_created = card_obj.created_at or datetime.min
         if note_created > scope.base_snapshot_at or card_created > scope.base_snapshot_at:
@@ -2189,6 +2288,39 @@ def clone_deck_subtree(
 def _install_snapshot_at(install: DeckInstall) -> datetime | None:
     return install.base_snapshot_at or install.installed_at
 
+
+def _install_uses_release(install: DeckInstall) -> bool:
+    return bool(
+        str(getattr(install, "version_mode", "") or "").strip() == "release"
+        and getattr(install, "applied_release_id", None)
+        and getattr(install, "applied_release", None) is not None
+    )
+
+
+def release_note_membership_filter(install: DeckInstall, note_id_column):
+    """Build the note-membership predicate for an install's applied release."""
+
+    if not _install_uses_release(install):
+        return None
+    target_sequence = int(install.applied_release.sequence_no or 0)
+    return exists().where(
+        DeckReleaseEntityMembership.deck_item_id == install.deck_item_id,
+        DeckReleaseEntityMembership.entity_kind == "note",
+        DeckReleaseEntityMembership.entity_id == note_id_column,
+        DeckReleaseEntityMembership.introduced_sequence <= target_sequence,
+        or_(
+            DeckReleaseEntityMembership.removed_sequence.is_(None),
+            DeckReleaseEntityMembership.removed_sequence > target_sequence,
+        ),
+    )
+
+
+def _note_is_member_of_applied_release(*, install: DeckInstall, note_id: str) -> bool:
+    predicate = release_note_membership_filter(install, str(note_id))
+    if predicate is None:
+        return True
+    return db.session.query(predicate).scalar() is True
+
 def resolve_clone_scope_for_local_deck(
     *,
     user_id: int,
@@ -2248,7 +2380,10 @@ def query_clone_scope_cards(scope: CloneDeckScope):
     source_conditions = [Note.deck_id.in_(scope.source_deck_ids)]
     if scope.source_owner_user_id is not None:
         source_conditions.append(Note.user_id == scope.source_owner_user_id)
-    if scope.base_snapshot_at is not None:
+    release_membership = release_note_membership_filter(scope.install, Note.id)
+    if release_membership is not None:
+        source_conditions.append(release_membership)
+    elif scope.base_snapshot_at is not None:
         source_conditions.extend(
             [Note.created_at <= scope.base_snapshot_at, Card.created_at <= scope.base_snapshot_at]
         )
@@ -2286,7 +2421,13 @@ def resolve_clone_scope_for_card(
         if install.source_owner_user_id is not None and card_obj.note.user_id != install.source_owner_user_id:
             continue
         snapshot_at = _install_snapshot_at(install)
-        if snapshot_at is not None:
+        if _install_uses_release(install):
+            if not _note_is_member_of_applied_release(
+                install=install,
+                note_id=card_obj.note.id,
+            ):
+                continue
+        elif snapshot_at is not None:
             note_created = card_obj.note.created_at or datetime.min
             card_created = card_obj.created_at or datetime.min
             if note_created > snapshot_at or card_created > snapshot_at:
@@ -2315,8 +2456,51 @@ def build_clone_schema_view(
     install: DeckInstall,
     source_note_type_id: str,
 ) -> CloneSchemaView:
+    cache = None
+    cache_key = (
+        str(install.id),
+        str(getattr(install, "applied_release_id", None) or "legacy"),
+        int(getattr(install, "overlay_revision", 0) or 0),
+        str(source_note_type_id),
+    )
+    try:
+        from flask import g, has_request_context
+
+        if has_request_context():
+            cache = getattr(g, "_clone_schema_view_cache", None)
+            if cache is None:
+                cache = {}
+                setattr(g, "_clone_schema_view_cache", cache)
+            cached_view = cache.get(cache_key)
+            if cached_view is not None:
+                return cached_view
+    except (ImportError, RuntimeError):
+        cache = None
+
     snapshot_at = _install_snapshot_at(install)
-    source_defs = flashcards_share_repository.get_field_defs_for_note_type(source_note_type_id, snapshot_at)
+    if _install_uses_release(install):
+        from app.services import deck_release_service
+
+        release_field_defs = deck_release_service.get_field_defs_at_release(
+            install.applied_release
+        )
+        source_defs = [
+            SimpleNamespace(
+                id=field_id,
+                name=str(payload.get("name") or ""),
+                field_type=str(payload.get("field_type") or "text"),
+                position=int(payload.get("position") or 0),
+                required=bool(payload.get("required")),
+                identity_role=payload.get("identity_role"),
+            )
+            for field_id, payload in release_field_defs.items()
+            if str(payload.get("name") or "").strip()
+        ]
+    else:
+        source_defs = flashcards_share_repository.get_field_defs_for_note_type(
+            source_note_type_id,
+            snapshot_at,
+        )
 
     override_rows = flashcards_share_repository.get_clone_field_overrides(install.id)
     override_by_source_id = {
@@ -2415,19 +2599,52 @@ def build_clone_schema_view(
             )
         )
 
-    return CloneSchemaView(
+    resolved_view = CloneSchemaView(
         field_defs=resolved_defs,
         removed_field_names=removed_field_names,
         renamed_field_names=renamed_field_names,
     )
+    if cache is not None:
+        cache[cache_key] = resolved_view
+    return resolved_view
 
 def apply_clone_note_field_overrides(
     *,
     install: DeckInstall,
     source_note: Note,
     schema_view: CloneSchemaView,
+    base_field_values: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    values = dict(source_note.field_values or {})
+    if base_field_values is not None:
+        values = dict(base_field_values)
+    elif _install_uses_release(install):
+        from app.services import deck_release_service
+
+        release_values = None
+        note_cache = None
+        cache_key = (str(install.applied_release_id), str(source_note.id))
+        try:
+            from flask import g, has_request_context
+
+            if has_request_context():
+                note_cache = getattr(g, "_clone_release_note_values_cache", None)
+                if note_cache is None:
+                    note_cache = {}
+                    setattr(g, "_clone_release_note_values_cache", note_cache)
+                if cache_key in note_cache:
+                    release_values = note_cache[cache_key]
+        except (ImportError, RuntimeError):
+            note_cache = None
+        if release_values is None:
+            release_values = deck_release_service.get_note_values_at_release(
+                install.applied_release,
+                source_note.id,
+            )
+            if note_cache is not None:
+                note_cache[cache_key] = release_values
+        values = dict(release_values or {})
+    else:
+        values = dict(source_note.field_values or {})
 
     for removed_name in schema_view.removed_field_names:
         values.pop(removed_name, None)
@@ -2442,11 +2659,20 @@ def apply_clone_note_field_overrides(
         values.pop(old_name, None)
 
     note_override_rows = flashcards_share_repository.get_clone_note_field_overrides(install.id, source_note.id)
+    active_field_names_by_id = {
+        str(field_def.id): str(field_def.name)
+        for field_def in schema_view.field_defs
+        if field_def.id and str(field_def.name or "").strip()
+    }
     for row in note_override_rows:
+        field_name = active_field_names_by_id.get(
+            str(row.source_field_def_id or ""),
+            row.field_name,
+        )
         if row.operation == "remove":
-            values.pop(row.field_name, None)
+            values.pop(field_name, None)
         else:
-            values[row.field_name] = row.value
+            values[field_name] = row.value
 
     for removed_name in schema_view.removed_field_names:
         values.pop(removed_name, None)
@@ -2474,10 +2700,6 @@ def upsert_clone_overlay(
 ) -> tuple[dict[str, int], str | None]:
     if deck_install.clone_mode != "logical_overlay":
         return {}, "This install does not support overlay edits."
-    from app.services import deck_change_request_service
-
-    if deck_change_request_service.has_pending_review_request_for_install(deck_install.id):
-        return {}, "Local clone edits are locked while a change request is pending review."
 
     counters = {
         "updated_defs": 0,
@@ -2490,19 +2712,35 @@ def upsert_clone_overlay(
     source_note_type_id = (deck_install.source_note_type_id or "").strip()
     source_field_ids: set[str] = set()
     source_fields_by_id: dict[str, FieldDef] = {}
+    source_fields_by_name: dict[str, FieldDef] = {}
     if source_note_type_id:
-        source_field_rows = FieldDef.query.filter(
-            FieldDef.note_type_id == source_note_type_id
-        )
-        snapshot_at = _install_snapshot_at(deck_install)
-        if snapshot_at is not None:
-            source_field_rows = source_field_rows.filter(FieldDef.created_at <= snapshot_at)
-        source_fields_by_id = {
-            str(row.id): row
-            for row in source_field_rows.all()
-            if row and row.id
-        }
+        if _install_uses_release(deck_install):
+            from app.services import deck_release_service
+
+            source_fields_by_id = {
+                str(field_id): SimpleNamespace(id=field_id, **dict(properties or {}))
+                for field_id, properties in deck_release_service.get_field_defs_at_release(
+                    deck_install.applied_release
+                ).items()
+            }
+        else:
+            source_field_rows = FieldDef.query.filter(
+                FieldDef.note_type_id == source_note_type_id
+            )
+            snapshot_at = _install_snapshot_at(deck_install)
+            if snapshot_at is not None:
+                source_field_rows = source_field_rows.filter(FieldDef.created_at <= snapshot_at)
+            source_fields_by_id = {
+                str(row.id): row
+                for row in source_field_rows.all()
+                if row and row.id
+            }
         source_field_ids = set(source_fields_by_id)
+        source_fields_by_name = {
+            str(row.name): row
+            for row in source_fields_by_id.values()
+            if row and str(row.name or "").strip()
+        }
 
     updated_defs_payload = payload.get("updated_defs")
     if updated_defs_payload is not None:
@@ -2680,24 +2918,51 @@ def upsert_clone_overlay(
             ).first()
             if source_map_exists is None:
                 return {}, "note_field_overrides source note is outside clone scope."
-            if snapshot_at is not None and (source_note.created_at or datetime.min) > snapshot_at:
+            if _install_uses_release(deck_install) and not _note_is_member_of_applied_release(
+                install=deck_install,
+                note_id=source_note.id,
+            ):
+                return {}, "note_field_overrides references note outside applied release."
+            if (
+                not _install_uses_release(deck_install)
+                and snapshot_at is not None
+                and (source_note.created_at or datetime.min) > snapshot_at
+            ):
                 return {}, "note_field_overrides source note is newer than snapshot."
 
             operation = str(item.get("operation") or "set").strip().lower()
             if operation not in {"set", "remove"}:
                 return {}, "note_field_overrides.operation must be set/remove."
-            override = DeckCloneNoteFieldOverride.query.filter_by(
-                deck_install_id=deck_install.id,
-                source_note_id=source_note_id,
-                field_name=field_name,
-            ).first()
+            source_field = source_fields_by_name.get(field_name)
+            override = None
+            if source_field is not None:
+                override = DeckCloneNoteFieldOverride.query.filter_by(
+                    deck_install_id=deck_install.id,
+                    source_note_id=source_note_id,
+                    source_field_def_id=source_field.id,
+                ).first()
+            if override is None:
+                override = DeckCloneNoteFieldOverride.query.filter_by(
+                    deck_install_id=deck_install.id,
+                    source_note_id=source_note_id,
+                    field_name=field_name,
+                ).first()
             if override is None:
                 override = DeckCloneNoteFieldOverride(
                     deck_install_id=deck_install.id,
                     source_note_id=source_note_id,
                     field_name=field_name,
+                    source_field_def_id=(
+                        source_field.id
+                        if source_field is not None
+                        else None
+                    ),
+                    base_release_id=deck_install.applied_release_id,
                 )
                 db.session.add(override)
+            elif source_field is not None:
+                override.source_field_def_id = source_field.id
+                override.field_name = field_name
             override.operation = operation
             if operation == "remove":
                 override.value = None
@@ -2707,6 +2972,7 @@ def upsert_clone_overlay(
                 counters["updated_note_fields"] += 1
 
     deck_install.last_sync_status = "needs_sync"
+    deck_install.overlay_revision = int(deck_install.overlay_revision or 0) + 1
     return counters, None
 
 def deck_installs_covering_deck(*, user_id: int, deck_id: int) -> list[DeckInstall]:
@@ -2957,6 +3223,13 @@ def install_shared_deck_item_for_user(
             },
         }
 
+    initial_release_error = _stage_initial_release_if_visible(deck_item)
+    if initial_release_error:
+        raise ShareControllerError(
+            f"Unable to create the initial deck release: {initial_release_error}",
+            status=409,
+        )
+
     now = _utcnow()
     source_deck_id = deck_item.source_deck_id
     if source_deck_id is None:
@@ -3013,6 +3286,9 @@ def install_shared_deck_item_for_user(
         source_note_type_id=(deck_item.source_note_type_id or "").strip() or None,
         source_owner_user_id=deck_item.owner_user_id,
         base_snapshot_at=now,
+        applied_release_id=deck_item.current_release_id,
+        seen_release_id=deck_item.current_release_id,
+        version_mode=("release" if deck_item.current_release_id else "legacy_snapshot"),
         purchase_amount_minor=purchase_amount_minor,
         installed_at=now,
         purchased_at=now if deck_item.pricing_mode == "paid" else None,

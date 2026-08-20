@@ -18,7 +18,11 @@ from app.repositories.study_repository import (
     card_state_from_progress,
     load_card_progress_map,
 )
-from app.services import flashcards_share_service, study_artifact_service
+from app.services import (
+    deck_working_tree_service,
+    flashcards_share_service,
+    study_artifact_service,
+)
 from app.services.anki_scheduler import (
     CardState,
     DeckOptions,
@@ -1244,7 +1248,12 @@ def commit_study_session(
                 for tag in (card.note.tags or [])
                 if str(tag).strip()
             ]
-            if "leech" not in {tag.lower() for tag in tags}:
+            if (
+                "leech" not in {tag.lower() for tag in tags}
+                and not deck_working_tree_service.note_has_shared_release_dependents(
+                    card.note
+                )
+            ):
                 card.note.tags = tags + ["leech"]
         flashcards_share_service.touch_note_type_install_usage(
             user_id=int(user.id),

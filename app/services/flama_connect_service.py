@@ -24,6 +24,7 @@ from models.connect_note_ref import ConnectNoteRef
 from models.connect_pending_media import ConnectPendingMedia
 from models.connect_import_session import ConnectImportSession
 from models.connect_note_type_ref import ConnectNoteTypeRef
+from models.connect_review_event_ref import ConnectReviewEventRef
 from models.connect_source_deck_ref import ConnectSourceDeckRef
 from models.connect_source_note_ref import ConnectSourceNoteRef
 from models.connect_source_card_ref import ConnectSourceCardRef
@@ -494,13 +495,22 @@ def add_note(user_id: int, raw_note: object) -> int:
         if existing_note:
             # Update fields if new content is present
             updated = False
+            changed_field_names: set[str] = set()
             field_vals = dict(existing_note.field_values or {})
             for k, v in prepared.fields.items():
                 if v and field_vals.get(k) != v:
                     field_vals[k] = v
                     updated = True
+                    changed_field_names.add(k)
             if updated:
                 existing_note.field_values = field_vals
+                if prepared.clone_map is None:
+                    from app.services import deck_working_tree_service
+
+                    deck_working_tree_service.mark_note_fields_changed(
+                        note=existing_note,
+                        field_names=changed_field_names,
+                    )
                 db.session.commit()
             return existing_note.id
         raise ConnectError("cannot create note because it is a duplicate in the target deck")
@@ -544,6 +554,14 @@ def add_note(user_id: int, raw_note: object) -> int:
             db.session.add(DeckCloneAddedNote(deck_install_id=install.id, note_id=note.id))
             install.last_sync_status = "needs_sync"
             install.last_activity_at = datetime.utcnow()
+        else:
+            from app.services import deck_working_tree_service
+
+            deck_working_tree_service.mark_note_fields_changed(
+                note=note,
+                field_names=(note.field_values or {}).keys(),
+                operation="add",
+            )
 
         ref = _ensure_note_ref(note, user_id)
         db.session.add(
@@ -1218,12 +1236,32 @@ def _get_import_session(user_id: int, session_id: object, *, require_ready: bool
     return session
 
 
-def _reconcile_note_cards(note: Note, note_type: NoteType) -> None:
+def _reconcile_note_cards(
+    note: Note,
+    note_type: NoteType,
+    *,
+    is_new_note: bool = False,
+    preserve_released_history: bool | None = None,
+) -> None:
     templates = sorted(note_type.templates, key=lambda item: (item.position, item.id))
     if not templates:
         raise ConnectError("model has no card template")
     expected_ids = {template.id for template in templates}
     existing_by_template = {card.template_id: card for card in note.cards}
+    requires_reconcile = expected_ids != set(existing_by_template)
+    if requires_reconcile and not is_new_note:
+        from app.services import deck_working_tree_service
+
+        must_preserve_history = (
+            deck_working_tree_service.note_has_shared_release_dependents(note)
+            if preserve_released_history is None
+            else preserve_released_history
+        )
+        if must_preserve_history:
+            raise ConnectError(
+                "cannot change card templates for a released shared note; "
+                "template-aware deck releases are required to preserve study history"
+            )
     for card in list(note.cards):
         if card.template_id not in expected_ids:
             db.session.delete(card)
@@ -1462,6 +1500,9 @@ def _upsert_import_card(
         and source_ref.content_hash == content_hash.lower()
     )
     created = False
+    changed_field_names: set[str] = set()
+    previous_deck_id: int | None = None
+    preserve_released_history = False
     if note is None:
         note = Note(
             note_type_id=prepared.note_type.id,
@@ -1474,10 +1515,41 @@ def _upsert_import_card(
         db.session.flush()
         created = True
     else:
+        from app.services import deck_working_tree_service
+
+        previous_deck_id = note.deck_id
+        previous_tags = list(note.tags or [])
+        preserve_released_history = (
+            deck_working_tree_service.note_has_shared_release_dependents(note)
+        )
+        if previous_deck_id != prepared.deck.id and preserve_released_history:
+            raise ConnectError(
+                "cannot move a released shared note between decks until "
+                "release-aware membership moves are supported"
+            )
+        if (
+            str(note.note_type_id) != str(prepared.note_type.id)
+            and preserve_released_history
+        ):
+            raise ConnectError(
+                "cannot change the note type of a released shared note; "
+                "schema-aware deck releases are required"
+            )
+        if previous_tags != list(prepared.tags or []) and preserve_released_history:
+            raise ConnectError(
+                "cannot change tags on a released shared note until note "
+                "metadata is versioned in deck releases"
+            )
+        previous_values = dict(note.field_values or {})
         note.note_type_id = prepared.note_type.id
         note.deck_id = prepared.deck.id
         note.field_values = prepared.fields
         note.tags = prepared.tags
+        changed_field_names = {
+            key
+            for key in set(previous_values) | set(prepared.fields)
+            if previous_values.get(key) != prepared.fields.get(key)
+        }
 
     if prepared.clone_map is not None:
         install = prepared.clone_map.deck_install
@@ -1524,7 +1596,12 @@ def _upsert_import_card(
     else:
         deck_ref.source_path = source_deck_path
         deck_ref.deck_id = prepared.deck.id
-    _reconcile_note_cards(note, prepared.note_type)
+    _reconcile_note_cards(
+        note,
+        prepared.note_type,
+        is_new_note=created,
+        preserve_released_history=preserve_released_history,
+    )
     cards_progress_payload = card_data.get("cardsProgress")
     if cards_progress_payload:
         _migrate_cards_progress(user_id, note, prepared.note_type, cards_progress_payload)
@@ -1533,6 +1610,49 @@ def _upsert_import_card(
         note=note,
         attachments=prepared.pending_import_media,
     )
+    if prepared.clone_map is None:
+        from app.services import deck_working_tree_service
+
+        if created:
+            dirty_mutations = [
+                {
+                    "note": note,
+                    "field_names": (note.field_values or {}).keys(),
+                    "operation": "add",
+                }
+            ]
+        elif previous_deck_id != note.deck_id:
+            all_field_names = set(previous_values) | set(note.field_values or {})
+            dirty_mutations = [
+                {
+                    "note": note,
+                    "field_names": all_field_names,
+                    "operation": "remove",
+                    "deck_id": previous_deck_id,
+                },
+                {
+                    "note": note,
+                    "field_names": all_field_names,
+                    "operation": "add",
+                    "deck_id": note.deck_id,
+                },
+            ]
+        else:
+            final_changed_names = {
+                key
+                for key in set(previous_values) | set(note.field_values or {})
+                if previous_values.get(key) != (note.field_values or {}).get(key)
+            }
+            dirty_mutations = [
+                {
+                    "note": note,
+                    "field_names": final_changed_names,
+                    "operation": "set",
+                }
+            ]
+        deck_working_tree_service.mark_note_field_batches_changed(
+            mutations=dirty_mutations,
+        )
     connect_ref = _ensure_note_ref(note, user_id)
 
     if source_ref is None:
@@ -1727,6 +1847,19 @@ def get_import_note_statuses(
         ConnectSourceCardRef.external_card_id.in_(requested_card_ids),
     ).all() if requested_card_ids else []
     card_refs_by_external_id = {row.external_card_id: row for row in card_refs}
+    orphan_review_card_ids = {
+        row[0]
+        for row in db.session.query(ConnectReviewEventRef.external_card_id)
+        .filter(
+            ConnectReviewEventRef.user_id == user_id,
+            ConnectReviewEventRef.source_key == session.source_key,
+            ConnectReviewEventRef.external_card_id.in_(requested_card_ids),
+            ConnectReviewEventRef.status == "imported",
+            ConnectReviewEventRef.review_event_id.is_(None),
+        )
+        .distinct()
+        .all()
+    } if requested_card_ids else set()
     note_ids = [row.note_id for row in refs if row.note_id]
     media_by_note: dict[str, set[str]] = {}
     if note_ids:
@@ -1767,7 +1900,14 @@ def get_import_note_statuses(
                     progress_state = "unchanged"
                 else:
                     progress_state = "changed"
-                review_cursor = card_ref.review_cursor
+                # A cursor is only valid while every imported provenance row
+                # still has its ReviewEvent analytics projection. Returning a
+                # null cursor requests an idempotent replay and repairs gaps.
+                review_cursor = (
+                    None
+                    if requested_card["sourceCardId"] in orphan_review_card_ids
+                    else card_ref.review_cursor
+                )
             cards_result.append(
                 {
                     "sourceCardId": requested_card["sourceCardId"],

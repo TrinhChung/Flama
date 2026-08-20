@@ -28,6 +28,7 @@ def public_spa_page():
 @spa_routes_bp.get("/browse")
 @spa_routes_bp.get("/study")
 @spa_routes_bp.get("/installed-decks")
+@spa_routes_bp.get("/installed-decks/<install_id>/updates/<release_id>")
 @spa_routes_bp.get("/marketplace/decks")
 @spa_routes_bp.get("/marketplace/decks/publish")
 @spa_routes_bp.get("/marketplace/decks/<item_id>")
@@ -37,8 +38,12 @@ def public_spa_page():
 @spa_routes_bp.get("/flashcards/shared-note-types")
 @spa_routes_bp.get("/flashcards/shared-note-types/<item_id>")
 @login_required
-def authenticated_spa_page(item_id: str | None = None):
-    del item_id
+def authenticated_spa_page(
+    item_id: str | None = None,
+    install_id: str | None = None,
+    release_id: str | None = None,
+):
+    del item_id, install_id, release_id
     return serve_react_spa()
 
 
@@ -46,8 +51,10 @@ def authenticated_spa_page(item_id: str | None = None):
 @spa_routes_bp.get("/flashcards/import")
 @spa_routes_bp.get("/sync")
 @spa_routes_bp.get("/flashcards/sync")
+@spa_routes_bp.get("/creator/decks/<item_id>/releases/new")
 @login_required
-def creator_spa_page():
+def creator_spa_page(item_id: str | None = None):
+    del item_id
     if not is_creator_user(current_user):
         return redirect("/dashboard")
     return serve_react_spa()

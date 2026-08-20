@@ -477,6 +477,7 @@ class RestApiV1Tests(unittest.TestCase):
             db.session.add(rev)
 
             db.session.commit()
+            review_event_id = rev.id
 
         # Verify they exist
         with self.app.app_context():
@@ -524,6 +525,10 @@ class RestApiV1Tests(unittest.TestCase):
             from models.deck_change_request import DeckChangeRequest
             self.assertIsNone(db.session.get(Deck, deck_id))
             self.assertEqual(ReviewEvent.query.filter_by(deck_id=deck_id).count(), 0)
+            preserved_review = db.session.get(ReviewEvent, review_event_id)
+            self.assertIsNotNone(preserved_review)
+            self.assertIsNone(preserved_review.deck_id)
+            self.assertEqual(preserved_review.note_type_id, nt_id)
             self.assertEqual(DeckInstall.query.filter_by(source_deck_id=deck_id).count(), 0)
             self.assertEqual(DeckMarketplaceItem.query.filter_by(source_deck_id=deck_id).count(), 0)
             self.assertEqual(DeckChangeRequest.query.filter_by(source_deck_id=deck_id).count(), 0)
@@ -540,7 +545,9 @@ class RestApiV1Tests(unittest.TestCase):
             from models.note_type_install import NoteTypeInstall
             self.assertIsNone(db.session.get(NoteType, nt_id))
             self.assertEqual(NoteTypeInstall.query.filter_by(source_note_type_id=nt_id).count(), 0)
-
+            preserved_review = db.session.get(ReviewEvent, review_event_id)
+            self.assertIsNotNone(preserved_review)
+            self.assertIsNone(preserved_review.note_type_id)
 
 if __name__ == "__main__":
     unittest.main()

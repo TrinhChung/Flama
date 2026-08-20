@@ -553,6 +553,8 @@ def patch_shared_deck_item(deck_item_id: str):
         require_source_note_type=True,
     )
     if validation_error:
+        if error_field in {"version", "changelog"} and "managed by immutable deck releases" in validation_error:
+            return _api_error("CONFLICT", validation_error, field=error_field, status=409)
         if error_field in {"source_deck_id", "source_note_type_id"} and "cannot be changed" in validation_error:
             return _api_error("CONFLICT", validation_error, field=error_field, status=409)
         if error_field == "source_deck_id" and validation_error == "source_deck_id not found.":

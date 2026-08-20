@@ -25,6 +25,9 @@ from models.deck_clone_added_note import DeckCloneAddedNote
 from models.deck_clone_deck_map import DeckCloneDeckMap
 from models.deck_install import DeckInstall
 from models.deck_marketplace_item import DeckMarketplaceItem
+from models.deck_release import DeckRelease
+from models.deck_release_entity_membership import DeckReleaseEntityMembership
+from models.deck_working_dirty_entity import DeckWorkingDirtyEntity
 from models.field_def import FieldDef
 from models.media_asset import MediaAsset
 from models.note import Note
@@ -543,6 +546,453 @@ class FlamaConnectTests(unittest.TestCase):
             self.assertEqual(existing.field_values["Image"], image_name)
             self.assertEqual(existing.field_values["Sound"], f"[sound:{audio_name}]")
             self.assertEqual(MediaAsset.query.filter_by(note_id=existing.id).count(), 2)
+
+    def test_shared_import_tracks_final_media_move_and_blocks_destructive_seams(self):
+        source_key = "shared-import-profile"
+        source_model_id = "shared-media-model"
+        external_note_id = "shared-existing-note"
+        with self.app.app_context():
+            image_field = FieldDef(
+                note_type_id=self.note_type_id,
+                name="Image",
+                field_type="image",
+                position=2,
+            )
+            sound_field = FieldDef(
+                note_type_id=self.note_type_id,
+                name="Sound",
+                field_type="audio",
+                position=3,
+            )
+            shared_root = Deck(
+                owner_user_id=self.user_id,
+                note_type_id=self.note_type_id,
+                name="Shared import",
+            )
+            db.session.add_all([image_field, sound_field, shared_root])
+            db.session.flush()
+            before_deck = Deck(
+                owner_user_id=self.user_id,
+                note_type_id=self.note_type_id,
+                parent_id=shared_root.id,
+                name="Before",
+            )
+            after_deck = Deck(
+                owner_user_id=self.user_id,
+                note_type_id=self.note_type_id,
+                parent_id=shared_root.id,
+                name="After",
+            )
+            db.session.add_all([before_deck, after_deck])
+            db.session.flush()
+            note = Note(
+                note_type_id=self.note_type_id,
+                user_id=self.user_id,
+                deck_id=before_deck.id,
+                field_values={
+                    "Meaning": "old meaning",
+                    "Word": "shared-word",
+                    "Image": "",
+                    "Sound": "",
+                },
+                tags=["yomitan"],
+            )
+            db.session.add(note)
+            db.session.flush()
+            card = Card(note_id=note.id, template_id=Template.query.one().id)
+            item = DeckMarketplaceItem(
+                owner_user_id=self.user_id,
+                source_deck_id=shared_root.id,
+                source_note_type_id=self.note_type_id,
+                title="Shared import source",
+                publish_status="published",
+            )
+            db.session.add_all([card, item])
+            db.session.flush()
+            release = DeckRelease(
+                deck_item_id=item.id,
+                sequence_no=1,
+                version_label="1.0.0",
+                status="published",
+                created_by_user_id=self.user_id,
+            )
+            db.session.add(release)
+            db.session.flush()
+            item.current_release_id = release.id
+            db.session.add(
+                ConnectSourceNoteRef(
+                    user_id=self.user_id,
+                    source_key=source_key,
+                    external_note_id=external_note_id,
+                    source_model_id=source_model_id,
+                    source_deck_path="Source::Before",
+                    note_id=note.id,
+                    content_hash="0" * 64,
+                )
+            )
+            db.session.commit()
+            note_id = note.id
+            item_id = item.id
+            before_deck_id = before_deck.id
+            after_deck_id = after_deck.id
+            original_card_ids = [str(row.id) for row in note.cards]
+
+        def note_type_plan(
+            target_note_type_id: str,
+            model_id: str,
+            *,
+            include_second_template: bool = False,
+        ) -> dict:
+            templates = [
+                {
+                    "name": "Card 1",
+                    "frontHtml": "{{Word}}",
+                    "backHtml": "{{Meaning}}",
+                    "sharedCss": "",
+                }
+            ]
+            if include_second_template:
+                templates.append(
+                    {
+                        "name": "Card 2",
+                        "frontHtml": "{{Meaning}}",
+                        "backHtml": "{{Word}}",
+                        "sharedCss": "",
+                    }
+                )
+            return {
+                "sourceModelId": model_id,
+                "sourceModelName": "Shared media model",
+                "targetNoteTypeId": target_note_type_id,
+                "fields": [
+                    {"name": "Word", "fieldType": "text"},
+                    {"name": "Meaning", "fieldType": "richtext"},
+                    {"name": "Image", "fieldType": "image"},
+                    {"name": "Sound", "fieldType": "audio"},
+                ],
+                "templates": templates,
+                "fieldMapping": {
+                    "Word": "Word",
+                    "Meaning": "Meaning",
+                    "Image": "Image",
+                    "Sound": "Sound",
+                },
+            }
+
+        def create_session(plan: dict, marker: str, *, total_media: int = 0) -> dict:
+            payload = self._call(
+                "createImportSession",
+                {
+                    "source": "anki",
+                    "sourceKey": source_key,
+                    "sourceRootPath": "Source",
+                    "targetRootPath": "Shared import",
+                    "selectedDecks": [
+                        "Shared import::Before",
+                        "Shared import::After",
+                    ],
+                    "totalNotes": 1,
+                    "totalMedia": total_media,
+                    "mode": "strict",
+                    "noteTypes": [plan],
+                    "planHash": marker * 64,
+                },
+            ).get_json()
+            self.assertEqual(payload["status"], "note_types_ready", payload)
+            return payload
+
+        def import_existing(
+            session: dict,
+            *,
+            model_id: str,
+            target_note_type_id: str,
+            deck_name: str,
+            content_marker: str,
+            tags: list[str],
+            image_name: str,
+            audio_name: str,
+        ) -> dict:
+            note_payload = self._note(deck_name, "shared-word")
+            note_payload["modelName"] = target_note_type_id
+            note_payload["tags"] = tags
+            note_payload["fields"].update(
+                {
+                    "Meaning": "updated meaning",
+                    "Image": image_name,
+                    "Sound": f"[sound:{audio_name}]",
+                }
+            )
+            return self._call(
+                "importCards",
+                {
+                    "importSessionId": session["importSessionId"],
+                    "cards": [
+                        {
+                            "ankiNoteId": external_note_id,
+                            "sourceModelId": model_id,
+                            "sourceDeckId": "source-before-id",
+                            "sourceDeckPath": "Source::Before",
+                            "contentHash": content_marker * 64,
+                            "note": note_payload,
+                        }
+                    ],
+                },
+            ).get_json()
+
+        plan = note_type_plan(self.note_type_id, source_model_id)
+        session = create_session(plan, "1", total_media=2)
+        image_name = f"{'3' * 64}.png"
+        audio_name = f"{'4' * 64}.mp3"
+        image_upload = self._call(
+            "storeMediaFile",
+            {
+                "importSessionId": session["importSessionId"],
+                "mediaKind": "image",
+                "filename": image_name,
+                "data": base64.b64encode(_MIN_PNG_BYTES).decode("ascii"),
+            },
+        )
+        audio_upload = self._call(
+            "storeMediaFile",
+            {
+                "importSessionId": session["importSessionId"],
+                "mediaKind": "audio",
+                "filename": audio_name,
+                "data": base64.b64encode(_MIN_MP3_BYTES).decode("ascii"),
+            },
+        )
+        self.assertEqual(image_upload.get_json()["filename"], image_name)
+        self.assertEqual(audio_upload.get_json()["filename"], audio_name)
+
+        imported = import_existing(
+            session,
+            model_id=source_model_id,
+            target_note_type_id=self.note_type_id,
+            deck_name="Shared import::After",
+            content_marker="2",
+            tags=["yomitan"],
+            image_name=image_name,
+            audio_name=audio_name,
+        )
+        self.assertTrue(imported["results"][0]["imported"], imported)
+
+        with self.app.app_context():
+            # This note is working content added after release 1, so the move
+            # is legal and must be journaled before the next publish.
+            db.session.expire_all()
+            note = db.session.get(Note, note_id)
+            item = db.session.get(DeckMarketplaceItem, item_id)
+            self.assertEqual(note.deck_id, after_deck_id)
+            self.assertNotEqual(note.deck_id, before_deck_id)
+            self.assertEqual(note.field_values["Meaning"], "updated meaning")
+            self.assertEqual(note.field_values["Image"], image_name)
+            self.assertEqual(note.field_values["Sound"], audio_name)
+            self.assertEqual(int(item.working_revision or 0), 1)
+            self.assertEqual(int(item.dirty_tracking_revision or 0), 1)
+            dirty_rows = DeckWorkingDirtyEntity.query.filter_by(
+                deck_item_id=item_id,
+                entity_kind="note_field",
+                entity_id=note_id,
+            ).all()
+            self.assertEqual(len(dirty_rows), 4)
+            field_names_by_id = {
+                str(field.id): field.name
+                for field in FieldDef.query.filter_by(
+                    note_type_id=self.note_type_id
+                ).all()
+            }
+
+            def value_hash(value: object) -> str:
+                encoded = json.dumps(
+                    value,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    default=str,
+                ).encode("utf-8")
+                return hashlib.sha256(encoded).hexdigest()
+
+            for row in dirty_rows:
+                field_name = field_names_by_id[str(row.field_def_id)]
+                self.assertEqual(row.operation, "add")
+                self.assertEqual(int(row.source_deck_id), after_deck_id)
+                self.assertEqual(int(row.working_revision or 0), 1)
+                self.assertEqual(
+                    row.current_hash,
+                    value_hash(note.field_values[field_name]),
+                )
+            preserved_values = dict(note.field_values)
+            preserved_tags = list(note.tags or [])
+            self.assertEqual(preserved_tags, ["yomitan"])
+            # Simulate that next publish. From this point immutable membership
+            # makes destructive tag/schema/card mutations unsafe.
+            db.session.add(
+                DeckReleaseEntityMembership(
+                    deck_item_id=item_id,
+                    entity_kind="note",
+                    entity_id=note_id,
+                    source_deck_id=after_deck_id,
+                    introduced_sequence=1,
+                    metadata_json={"note_type_id": self.note_type_id},
+                )
+            )
+            db.session.commit()
+            from app.services import deck_working_tree_service
+
+            self.assertTrue(
+                deck_working_tree_service.note_has_shared_release_dependents(note)
+            )
+
+        tag_session = create_session(plan, "5")
+        tag_blocked = import_existing(
+            tag_session,
+            model_id=source_model_id,
+            target_note_type_id=self.note_type_id,
+            deck_name="Shared import::After",
+            content_marker="6",
+            tags=["blocked-tag"],
+            image_name=image_name,
+            audio_name=audio_name,
+        )
+        self.assertFalse(tag_blocked["results"][0]["imported"], tag_blocked)
+        self.assertIn(
+            "cannot change tags on a released shared note",
+            tag_blocked["results"][0]["error"],
+        )
+
+        with self.app.app_context():
+            alternative_type = NoteType(
+                user_id=self.user_id,
+                name="Alternative shared import type",
+            )
+            db.session.add(alternative_type)
+            db.session.flush()
+            db.session.add_all(
+                [
+                    FieldDef(
+                        note_type_id=alternative_type.id,
+                        name="Word",
+                        field_type="text",
+                        position=0,
+                        required=True,
+                        identity_role="primary",
+                    ),
+                    FieldDef(
+                        note_type_id=alternative_type.id,
+                        name="Meaning",
+                        field_type="richtext",
+                        position=1,
+                    ),
+                    FieldDef(
+                        note_type_id=alternative_type.id,
+                        name="Image",
+                        field_type="image",
+                        position=2,
+                    ),
+                    FieldDef(
+                        note_type_id=alternative_type.id,
+                        name="Sound",
+                        field_type="audio",
+                        position=3,
+                    ),
+                    Template(
+                        note_type_id=alternative_type.id,
+                        name="Card 1",
+                        front_html="{{Word}}",
+                        back_html="{{Meaning}}",
+                        position=0,
+                        is_default=True,
+                    ),
+                ]
+            )
+            db.session.commit()
+            alternative_type_id = alternative_type.id
+
+        alternative_model_id = "alternative-shared-model"
+        alternative_plan = note_type_plan(
+            alternative_type_id,
+            alternative_model_id,
+        )
+        type_session = create_session(alternative_plan, "7")
+        type_blocked = import_existing(
+            type_session,
+            model_id=alternative_model_id,
+            target_note_type_id=alternative_type_id,
+            deck_name="Shared import::After",
+            content_marker="8",
+            tags=["yomitan"],
+            image_name=image_name,
+            audio_name=audio_name,
+        )
+        self.assertFalse(type_blocked["results"][0]["imported"], type_blocked)
+        self.assertIn(
+            "cannot change the note type of a released shared note",
+            type_blocked["results"][0]["error"],
+        )
+
+        with self.app.app_context():
+            db.session.add(
+                Template(
+                    note_type_id=self.note_type_id,
+                    name="Card 2",
+                    front_html="{{Meaning}}",
+                    back_html="{{Word}}",
+                    position=1,
+                )
+            )
+            db.session.commit()
+
+        template_plan = note_type_plan(
+            self.note_type_id,
+            source_model_id,
+            include_second_template=True,
+        )
+        template_session = create_session(template_plan, "9")
+        template_blocked = import_existing(
+            template_session,
+            model_id=source_model_id,
+            target_note_type_id=self.note_type_id,
+            deck_name="Shared import::After",
+            content_marker="a",
+            tags=["yomitan"],
+            image_name=image_name,
+            audio_name=audio_name,
+        )
+        self.assertFalse(
+            template_blocked["results"][0]["imported"],
+            template_blocked,
+        )
+        self.assertIn(
+            "cannot change card templates for a released shared note",
+            template_blocked["results"][0]["error"],
+        )
+
+        with self.app.app_context():
+            db.session.expire_all()
+            note = db.session.get(Note, note_id)
+            item = db.session.get(DeckMarketplaceItem, item_id)
+            self.assertEqual(note.note_type_id, self.note_type_id)
+            self.assertEqual(note.deck_id, after_deck_id)
+            self.assertEqual(note.field_values, preserved_values)
+            self.assertEqual(note.tags, preserved_tags)
+            self.assertEqual(
+                [
+                    str(row.id)
+                    for row in Card.query.filter_by(note_id=note_id)
+                    .order_by(Card.id.asc())
+                    .all()
+                ],
+                sorted(original_card_ids),
+            )
+            self.assertEqual(int(item.working_revision or 0), 1)
+            self.assertEqual(
+                DeckWorkingDirtyEntity.query.filter_by(
+                    deck_item_id=item_id,
+                    entity_kind="note_field",
+                    entity_id=note_id,
+                ).count(),
+                4,
+            )
 
     def test_import_ignores_missing_media_and_imports_successfully(self):
         with self.app.app_context():

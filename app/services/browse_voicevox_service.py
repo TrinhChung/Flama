@@ -14,7 +14,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import selectinload
 from werkzeug.utils import secure_filename
 
-from app.services import tts_provider_service
+from app.services import deck_working_tree_service, tts_provider_service
 from models import db
 from models.flashcard import Card, MediaAsset, Note, NoteType
 
@@ -263,6 +263,7 @@ def generate_voicevox(
         tuple[tts_provider_service.SynthesizedAudioResult, list[str]],
     ] = {}
     audio_field_append_warned = False
+    dirty_mutations: list[dict[str, Any]] = []
 
     for sequence, note_obj in enumerate(selected_notes, start=1):
         field_defs = {
@@ -400,8 +401,16 @@ def generate_voicevox(
                     "hệ thống đã ghi đè bằng file mới."
                 )
                 audio_field_append_warned = True
-        note_values[destination_field] = next_value
-        note_obj.field_values = note_values
+        if note_values.get(destination_field) != next_value:
+            note_values[destination_field] = next_value
+            note_obj.field_values = note_values
+            dirty_mutations.append(
+                {
+                    "note": note_obj,
+                    "field_names": {destination_field},
+                    "operation": "set",
+                }
+            )
         generated_items.append(
             {
                 "note_id": note_obj.id,
@@ -414,6 +423,9 @@ def generate_voicevox(
         )
 
     try:
+        deck_working_tree_service.mark_note_field_batches_changed(
+            mutations=dirty_mutations,
+        )
         db.session.commit()
     except SQLAlchemyError as exc:
         db.session.rollback()

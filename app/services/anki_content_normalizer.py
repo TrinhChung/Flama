@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+from app.services import deck_working_tree_service
 from models import db
 from models.connect_source_note_ref import ConnectSourceNoteRef
 from models.field_def import FieldDef
@@ -82,6 +83,7 @@ def backfill_anki_note_entities(
         query = query.filter(Note.deck_id == deck_id)
 
     field_type_cache: dict[str, tuple[FieldDef, ...]] = {}
+    dirty_mutations: list[dict[str, object]] = []
     scanned = 0
     changed = 0
     for note in query.yield_per(250):
@@ -101,7 +103,26 @@ def backfill_anki_note_entities(
         normalized = normalize_anki_field_values(current, field_defs)
         if normalized != current:
             note.field_values = normalized
+            dirty_mutations.append(
+                {
+                    "note": note,
+                    "field_names": {
+                        field_name
+                        for field_name in set(current) | set(normalized)
+                        if current.get(field_name) != normalized.get(field_name)
+                    },
+                    "operation": "set",
+                }
+            )
             changed += 1
+            if len(dirty_mutations) >= 250:
+                deck_working_tree_service.mark_note_field_batches_changed(
+                    mutations=dirty_mutations,
+                )
+                dirty_mutations.clear()
 
+    deck_working_tree_service.mark_note_field_batches_changed(
+        mutations=dirty_mutations,
+    )
     db.session.flush()
     return AnkiEntityBackfillResult(scanned=scanned, changed=changed)

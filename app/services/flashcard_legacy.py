@@ -324,6 +324,15 @@ def ensure_legacy_note_type(db_session, user_id: int) -> tuple[NoteType, Templat
         db_session.add(note_type)
         db_session.flush()
 
+    locked_template = _released_deck_template_if_schema_locked(
+        db_session=db_session,
+        note_type=note_type,
+        owner_user_id=user_id,
+        required_field_names={name for name, _, _ in LEGACY_FIELD_DEFS},
+    )
+    if locked_template is not None:
+        return note_type, locked_template
+
     existing_fields = {field.name: field for field in note_type.field_defs}
     has_identity_field = any(
         field.identity_role == "primary" for field in existing_fields.values()
@@ -400,6 +409,15 @@ def ensure_quiz_note_type(db_session, user_id: int) -> tuple[NoteType, Template]
         db_session.add(note_type)
         db_session.flush()
 
+    locked_template = _released_deck_template_if_schema_locked(
+        db_session=db_session,
+        note_type=note_type,
+        owner_user_id=user_id,
+        required_field_names={name for name, _, _ in QUIZ_FIELD_DEFS},
+    )
+    if locked_template is not None:
+        return note_type, locked_template
+
     existing_fields = {field.name: field for field in note_type.field_defs}
     for position, (name, field_type, required) in enumerate(QUIZ_FIELD_DEFS):
         field = existing_fields.get(name)
@@ -445,3 +463,44 @@ def ensure_quiz_note_type(db_session, user_id: int) -> tuple[NoteType, Template]
 
     db_session.flush()
     return note_type, template
+
+
+def _released_deck_template_if_schema_locked(
+    *,
+    db_session,
+    note_type: NoteType,
+    owner_user_id: int,
+    required_field_names: set[str],
+) -> Template | None:
+    """Return the existing template when auto-repair would bypass a release.
+
+    The legacy/quiz ensure endpoints historically rewrote FieldDef and
+    Template rows on every call.  Once a deck release references this note
+    type, those live writes would be visible to learners without publish and
+    could change Card identity.  A complete released schema is therefore
+    treated as immutable; an incomplete one fails closed for manual repair.
+    """
+
+    from app.services import deck_working_tree_service
+
+    if not deck_working_tree_service.note_type_has_shared_release_dependents(
+        note_type_id=str(note_type.id),
+        owner_user_id=owner_user_id,
+    ):
+        return None
+    existing_names = {
+        str(field.name)
+        for field in note_type.field_defs
+        if str(field.name or "").strip()
+    }
+    template = (
+        db_session.query(Template)
+        .filter(Template.note_type_id == note_type.id)
+        .order_by(Template.position.asc(), Template.created_at.asc())
+        .first()
+    )
+    if required_field_names.issubset(existing_names) and template is not None:
+        return template
+    raise ValueError(
+        "Released shared note type schema is incomplete and cannot be auto-repaired without template-aware releases."
+    )

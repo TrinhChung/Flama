@@ -9,10 +9,13 @@ import {
   Download,
   ExternalLink,
   Eye,
+  FileDiff,
+  GitCompare,
   Heart,
   Layers,
   Loader2,
   MessageSquare,
+  Inbox,
   Sparkles,
   Star,
   BookOpen,
@@ -857,6 +860,30 @@ export function SharedDeckDetailPage() {
                   </div>
 
                   <div className="grid gap-2 pt-1">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="h-9 w-full rounded-xl text-xs font-bold"
+                      asChild
+                    >
+                      <Link to={`/creator/decks/${id}/releases/new`}>
+                        <GitCompare className="size-3.5 text-primary" />
+                        Phát hành phiên bản mới
+                      </Link>
+                    </Button>
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-9 w-full rounded-xl text-xs font-bold"
+                      asChild
+                    >
+                      <Link to={`/flashcards/change-requests/incoming?deck_item_id=${id}`}>
+                        <Inbox className="size-3.5" />
+                        Đóng góp cần duyệt
+                      </Link>
+                    </Button>
+
                     {deck.publish_status === 'published' || deck.publish_status === 'unlisted' ? (
                       <Button
                         variant="destructive"
@@ -909,6 +936,12 @@ export function SharedDeckDetailPage() {
                   <Button className="w-full h-10 sm:h-11 font-bold text-xs sm:text-sm border-emerald-500/40 text-emerald-600 dark:text-emerald-400 rounded-xl" variant="outline" disabled>
                     <CheckCircle className="mr-1.5 size-4" />
                     Đã cài đặt vào thư viện
+                  </Button>
+                  <Button className="w-full h-9 sm:h-10 font-semibold text-xs sm:text-sm rounded-xl" variant="outline" asChild>
+                    <Link to={`/flashcards/shared-decks/${id}/change-request`}>
+                      <FileDiff className="mr-1.5 size-4" />
+                      Đóng góp chỉnh sửa
+                    </Link>
                   </Button>
                   {deck.installed_deck_id ? (
                     <Button className="w-full h-10 sm:h-11 font-bold text-xs sm:text-sm shadow-xs bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl transition-all" asChild>
