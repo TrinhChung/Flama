@@ -837,7 +837,7 @@ SYNC_NOTES_TOOL = McpToolDefinition(
         "required": ["notes"],
         "additionalProperties": False,
     },
-    required_scope="note:create",
+    required_scope="note:sync",
     handler=_call_sync_notes,
     arguments_validator=validate_sync_notes_arguments,
 )

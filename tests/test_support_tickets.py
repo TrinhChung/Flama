@@ -136,6 +136,58 @@ class SupportTicketApiTests(unittest.TestCase):
         item2 = detail_resp2.get_json()["item"]
         self.assertEqual(len(item2["replies"]), 2)
 
+    def test_ticket_security_access_restrictions(self):
+        # 1. Unauthenticated access to /api/tickets/my must be rejected (401)
+        self.client.post("/logout")
+        unauth_resp = self.client.get("/api/tickets/my")
+        self.assertEqual(unauth_resp.status_code, 401)
+
+        # 2. Create ticket as user1
+        self._login("user@example.com")
+        create_resp = self.client.post(
+            "/api/tickets",
+            json={"title": "Ticket của User 1", "description": "Nội dung riêng tư"},
+        )
+        self.assertEqual(create_resp.status_code, 201)
+        user1_ticket_id = create_resp.get_json()["item"]["id"]
+        user1_ticket_code = create_resp.get_json()["item"]["ticket_code"]
+
+        # 3. Create user2
+        with self.app.app_context():
+            user_role = UserRole.query.filter_by(code="regular").first()
+            user2 = User(
+                username="ticket-user-2",
+                email="user2@example.com",
+                is_admin=False,
+                role=user_role,
+            )
+            user2.set_password("password")
+            db.session.add(user2)
+            db.session.commit()
+
+        # 4. Login as user2 and attempt horizontal access to user1 tickets
+        self._login("user2@example.com")
+
+        # Passing ?email=user@example.com must not reveal user1 tickets
+        list_resp = self.client.get("/api/tickets/my?email=user@example.com")
+        self.assertEqual(list_resp.status_code, 200)
+        items = list_resp.get_json()["items"]
+        self.assertEqual(len(items), 0)
+
+        # Accessing user1 ticket details by id/code must be forbidden (403)
+        detail_id_resp = self.client.get(f"/api/tickets/{user1_ticket_id}")
+        self.assertEqual(detail_id_resp.status_code, 403)
+
+        detail_code_resp = self.client.get(f"/api/tickets/{user1_ticket_code}")
+        self.assertEqual(detail_code_resp.status_code, 403)
+
+        # Attempting to reply to user1 ticket must be forbidden (403)
+        reply_resp = self.client.post(
+            f"/api/tickets/{user1_ticket_code}/replies",
+            json={"message": "Can thiệp trái phép"},
+        )
+        self.assertEqual(reply_resp.status_code, 403)
+
 
 if __name__ == "__main__":
     unittest.main()

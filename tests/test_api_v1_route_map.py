@@ -32,6 +32,7 @@ EXPECTED_API_RULES = {
     ("PATCH", "/api/admin/users/<int:user_id>"),
     ("POST", "/api/admin/users/roles/batch"),
     ("POST", "/api/admin/users/status/batch"),
+    ("POST", "/api/audio/deck-scan"),
     ("POST", "/api/auth/login"),
     ("POST", "/api/auth/register"),
     ("GET", "/api/browse/cards"),
@@ -51,7 +52,9 @@ EXPECTED_API_RULES = {
     ("POST", "/api/decks"),
     ("DELETE", "/api/decks/<int:deck_id>"),
     ("PATCH", "/api/decks/<int:deck_id>"),
+    ("POST", "/api/decks/<int:deck_id>/audio-scan"),
     ("POST", "/api/decks/<int:deck_id>/progress-reset"),
+    ("POST", "/api/flashcards/audio/deck-scan"),
     ("POST", "/api/flashcards/import/batch/estimate"),
     ("POST", "/api/flashcards/import/batch/execute"),
     ("POST", "/api/flashcards/import/batch/parse"),
@@ -165,7 +168,7 @@ class ApiRouteMapTests(unittest.TestCase):
             for method in rule.methods - {"HEAD", "OPTIONS"}
         }
         self.assertEqual(actual, EXPECTED_API_RULES)
-        self.assertEqual(len(actual), 130)
+        self.assertEqual(len(actual), 133)
 
 
 

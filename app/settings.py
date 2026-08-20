@@ -189,6 +189,10 @@ def build_app_config(overrides: Mapping[str, Any] | None = None) -> dict[str, An
             os.getenv("SUPPORT_CONTACT_EMAIL", "").strip()
             or os.getenv("ADMIN_EMAIL", "").strip()
         ),
+        "TRUST_PROXY": coerce_bool_env(
+            "TRUST_PROXY",
+            default=coerce_bool_env("FLAMA_TRUST_PROXY", default=False),
+        ),
     }
     config["PAYMENTS_V1_ENABLED"] = config["PAYMENTS_ENABLED"]
 
@@ -209,10 +213,28 @@ def _apply_startup_defaults(config: dict[str, Any]) -> None:
         "dev",
     }
 
-    config.setdefault("STARTUP_RUN_MAINTENANCE", True)
-    config.setdefault("STARTUP_RUN_DB_CREATE_ALL", True)
-    config.setdefault("STARTUP_RUN_USER_MANAGEMENT_SCHEMA", True)
-    config.setdefault("STARTUP_RUN_BACKWARD_COMPAT_SCHEMA", True)
+    # By default, in production/normal runtime, schema is managed solely by Alembic migrations.
+    # App startup only runs DB create/maintenance in TESTING mode or if explicitly enabled via env/override.
+    config.setdefault(
+        "STARTUP_RUN_MAINTENANCE",
+        coerce_bool_env("STARTUP_RUN_MAINTENANCE", default=testing),
+    )
+    config.setdefault(
+        "STARTUP_RUN_DB_CREATE_ALL",
+        coerce_bool_env("STARTUP_RUN_DB_CREATE_ALL", default=testing),
+    )
+    config.setdefault(
+        "STARTUP_RUN_USER_MANAGEMENT_SCHEMA",
+        coerce_bool_env("STARTUP_RUN_USER_MANAGEMENT_SCHEMA", default=testing),
+    )
+    config.setdefault(
+        "STARTUP_RUN_BACKWARD_COMPAT_SCHEMA",
+        coerce_bool_env("STARTUP_RUN_BACKWARD_COMPAT_SCHEMA", default=False),
+    )
+    config.setdefault(
+        "STARTUP_CHECK_DB_CONNECTIVITY",
+        coerce_bool_env("STARTUP_CHECK_DB_CONNECTIVITY", default=True),
+    )
     # Seed operations are decoupled from normal app startup
     config.setdefault("STARTUP_RUN_DEFAULT_USER_ROLE_SEED", testing)
     config.setdefault("STARTUP_RUN_DEFAULT_TTS_PROVIDER_SEED", testing)

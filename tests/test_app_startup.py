@@ -58,6 +58,33 @@ class AppStartupTests(unittest.TestCase):
         self.assertFalse(kwargs["config_overrides"]["STARTUP_RUN_CLONE_CUTOVER"])
         self.assertFalse(kwargs["config_overrides"]["STARTUP_CUTOVER_FAIL_ON_MISMATCH"])
 
+    def test_production_defaults_disable_startup_schema_mutation(self):
+        with (
+            patch("app.startup.ensure_backward_compatible_schema") as ensure_compat,
+            patch("app.startup.ensure_user_management_schema") as ensure_user_mgmt,
+            patch("app.startup.db.create_all") as create_all,
+            patch("app.startup.db.session.execute") as execute_sql,
+        ):
+            app = create_app(
+                {
+                    "TESTING": False,
+                    "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
+                    "WTF_CSRF_ENABLED": False,
+                }
+            )
+
+        self.assertFalse(app.config["STARTUP_RUN_MAINTENANCE"])
+        self.assertFalse(app.config["STARTUP_RUN_DB_CREATE_ALL"])
+        self.assertFalse(app.config["STARTUP_RUN_USER_MANAGEMENT_SCHEMA"])
+        self.assertFalse(app.config["STARTUP_RUN_BACKWARD_COMPAT_SCHEMA"])
+        self.assertTrue(app.config["STARTUP_CHECK_DB_CONNECTIVITY"])
+
+        # Schema mutation functions must NOT be called on production boot
+        ensure_compat.assert_not_called()
+        ensure_user_mgmt.assert_not_called()
+        create_all.assert_not_called()
+        execute_sql.assert_called()
+
 
 if __name__ == "__main__":
     unittest.main()

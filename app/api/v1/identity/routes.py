@@ -66,10 +66,7 @@ def login():
         result = identity_api_service.login_account(
             payload=payload,
             authenticated=bool(current_user.is_authenticated),
-            remote_addr=request.headers.get(
-                "X-Forwarded-For",
-                request.remote_addr,
-            ),
+            remote_addr=request.remote_addr,
         )
     except identity_api_service.IdentityApiError as exc:
         return _service_error(exc)

@@ -90,11 +90,12 @@ def create_ticket():
 
 
 @tickets_bp.get("/tickets/my")
+@login_required
 def list_my_tickets():
-    user_id = current_user.id if current_user.is_authenticated else None
-    user_email = request.args.get("email") or (current_user.email if current_user.is_authenticated else None)
-
-    items = support_ticket_service.list_user_tickets(user_id=user_id, user_email=user_email)
+    items = support_ticket_service.list_user_tickets(
+        user_id=current_user.id,
+        user_email=current_user.email,
+    )
     return jsonify({"items": items})
 
 

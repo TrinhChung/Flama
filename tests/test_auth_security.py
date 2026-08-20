@@ -151,6 +151,35 @@ class AuthSecurityTests(unittest.TestCase):
         )
         self.assertEqual(locked.status_code, 429)
 
+    def test_login_rate_limit_cannot_be_bypassed_via_x_forwarded_for(self):
+        token = self._csrf_token("/login")
+        # Attempt failures with rotating X-Forwarded-For headers
+        for i in range(3):
+            response = self.client.post(
+                "/login",
+                data={
+                    "email": "secure-user@example.com",
+                    "password": "wrong-password",
+                    "_csrf_token": token,
+                },
+                headers={"X-Forwarded-For": f"198.51.100.{i + 1}"},
+                follow_redirects=False,
+            )
+            self.assertEqual(response.status_code, 200)
+
+        # 4th attempt with another spoofed IP must still be rate limited (429)
+        locked = self.client.post(
+            "/login",
+            data={
+                "email": "secure-user@example.com",
+                "password": "wrong-password",
+                "_csrf_token": token,
+            },
+            headers={"X-Forwarded-For": "203.0.113.99"},
+            follow_redirects=False,
+        )
+        self.assertEqual(locked.status_code, 429)
+
 
 if __name__ == "__main__":
     unittest.main()

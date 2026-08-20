@@ -57,6 +57,7 @@ export function McpOAuthTab() {
     deleteClientMutation,
     revokeConnectedAppMutation,
     refresh,
+    isAdmin,
   } = useMcpOAuth()
 
   const defaultBase = BACKEND_ORIGIN || window.location.origin
@@ -98,13 +99,14 @@ export function McpOAuthTab() {
               </CardDescription>
             </div>
 
-            <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-              <DialogTrigger asChild>
-                <Button className="shrink-0 gap-1.5 shadow-xs">
-                  <Plus className="size-4" />
-                  Đăng ký ChatGPT Connector
-                </Button>
-              </DialogTrigger>
+            {isAdmin ? (
+              <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+                <DialogTrigger asChild>
+                  <Button className="shrink-0 gap-1.5 shadow-xs">
+                    <Plus className="size-4" />
+                    Đăng ký ChatGPT Connector
+                  </Button>
+                </DialogTrigger>
               <DialogContent className="sm:max-w-md">
                 <DialogHeader>
                   <DialogTitle className="flex items-center gap-2">
@@ -179,6 +181,7 @@ export function McpOAuthTab() {
                 </DialogFooter>
               </DialogContent>
             </Dialog>
+            ) : null}
           </div>
         </CardHeader>
       </Card>
@@ -353,19 +356,25 @@ export function McpOAuthTab() {
 
       {/* 4. Registered OAuth Clients & Connected Apps */}
       <div className="grid gap-6 md:grid-cols-2">
-        {/* Clients Table */}
+        {/* Clients Table (Admin Only) */}
         <Card className="shadow-2xs">
           <CardHeader className="p-4 sm:p-6 pb-3">
             <CardTitle className="text-sm sm:text-base font-bold flex items-center gap-2">
               <KeyRound className="size-4.5 text-primary" />
-              OAuth Clients Đã Đăng Ký ({clients.length})
+              OAuth Clients {isAdmin ? `(${clients.length})` : ''}
             </CardTitle>
             <CardDescription className="text-xs">
-              Các Client ID được phép yêu cầu xác thực qua Flama OAuth.
+              {isAdmin
+                ? 'Các Client ID được phép yêu cầu xác thực qua Flama OAuth.'
+                : 'Cấu hình OAuth Client do Quản trị viên quản lý.'}
             </CardDescription>
           </CardHeader>
           <CardContent className="p-4 sm:p-6 pt-0 space-y-2.5">
-            {clients.length === 0 ? (
+            {!isAdmin ? (
+              <div className="text-center py-6 px-3 text-xs text-muted-foreground border rounded-xl border-dashed">
+                Đăng ký & quản lý OAuth Client chỉ khả dụng cho Quản trị viên (Admin). Bạn vẫn có thể sử dụng thông số Endpoint ở trên để kết nối ChatGPT và quản lý các phiên đã duyệt quyền ở bên cạnh.
+              </div>
+            ) : clients.length === 0 ? (
               <div className="text-center py-6 text-xs text-muted-foreground border rounded-xl border-dashed">
                 Chưa có Client nào. Hãy bấm "Đăng ký ChatGPT Connector" ở trên để tạo.
               </div>

@@ -11,9 +11,10 @@ from urllib.parse import quote, unquote
 from flask import Blueprint, Response, jsonify, redirect, request, url_for
 from flask_login import current_user, login_required
 
+from app.api.common.security import admin_required
 from models import db
 from app.repositories import oauth_repository
-from app.services import oauth_service
+from app.services import mcp_scope_service, oauth_service
 from app.services.oauth_service import OAuthError
 
 logger = logging.getLogger(__name__)
@@ -60,85 +61,7 @@ def oauth_authorization_server_metadata():
 
 # --- Consent API Endpoints for React SPA ---
 
-SCOPE_METADATA: dict[str, dict[str, str]] = {
-    "deck:read": {
-        "id": "deck:read",
-        "title": "Xem danh mục & cấu trúc bộ thẻ",
-        "desc": "Đọc danh sách các bộ thẻ flashcard, cấu trúc thư mục phân cấp và số lượng thẻ.",
-        "category": "Bộ thẻ (Decks)",
-        "icon": "folder",
-    },
-    "deck:write": {
-        "id": "deck:write",
-        "title": "Quản lý & tạo mới bộ thẻ",
-        "desc": "Tạo bộ thẻ mới, đổi tên, cập nhật mô tả và tổ chức cây thư mục bộ bài.",
-        "category": "Bộ thẻ (Decks)",
-        "icon": "folder-plus",
-    },
-    "note:read": {
-        "id": "note:read",
-        "title": "Xem & tìm kiếm thẻ ghi nhớ",
-        "desc": "Đọc nội dung chi tiết các trường dữ liệu (từ vựng, kanji, nghĩa, ví dụ) và tìm kiếm thẻ.",
-        "category": "Thẻ ghi nhớ (Notes)",
-        "icon": "file-text",
-    },
-    "note:create": {
-        "id": "note:create",
-        "title": "Tạo thẻ ghi nhớ flashcard mới",
-        "desc": "Thêm từ vựng và thẻ mới vào bộ bài của bạn kèm các trường thông tin tự động.",
-        "category": "Thẻ ghi nhớ (Notes)",
-        "icon": "plus-circle",
-    },
-    "note:update": {
-        "id": "note:update",
-        "title": "Cập nhật thẻ ghi nhớ & nhãn (tags)",
-        "desc": "Chỉnh sửa nội dung thẻ, gắn thẻ phân loại (tags) hoặc chuyển thẻ sang bộ bài khác.",
-        "category": "Thẻ ghi nhớ (Notes)",
-        "icon": "edit",
-    },
-    "note:delete": {
-        "id": "note:delete",
-        "title": "Xóa thẻ ghi nhớ (Bảo vệ 2 bước)",
-        "desc": "Xóa thẻ ghi nhớ và các flashcard liên quan (bắt buộc phải có sự phê duyệt trực tiếp từ bạn).",
-        "category": "Thẻ ghi nhớ (Notes)",
-        "icon": "trash-2",
-    },
-    "note:check": {
-        "id": "note:check",
-        "title": "Kiểm tra trùng lặp thẻ",
-        "desc": "Kiểm tra xem từ vựng hay thẻ ghi nhớ đã tồn tại trong bộ bài của bạn chưa.",
-        "category": "Thẻ ghi nhớ (Notes)",
-        "icon": "check-circle",
-    },
-    "study:read": {
-        "id": "study:read",
-        "title": "Xem hàng đợi ôn tập Spaced Repetition",
-        "desc": "Xem danh sách các thẻ đến hạn học hôm nay và dự đoán khoảng cách lặp lại ngắt quãng.",
-        "category": "Học tập (SRS Study)",
-        "icon": "brain",
-    },
-    "study:write": {
-        "id": "study:write",
-        "title": "Ghi nhận kết quả ôn tập",
-        "desc": "Gửi đánh giá kết quả học tập (Again, Hard, Good, Easy) vào thuật toán tính lịch học Flama.",
-        "category": "Học tập (SRS Study)",
-        "icon": "zap",
-    },
-    "stats:read": {
-        "id": "stats:read",
-        "title": "Xem thống kê học tập & Streak",
-        "desc": "Theo dõi chuỗi ngày học liên tục (streak), số thẻ đã ôn hôm nay và tổng quan tiến độ.",
-        "category": "Thống kê (Analytics)",
-        "icon": "bar-chart",
-    },
-    "note-type:read": {
-        "id": "note-type:read",
-        "title": "Xem cấu trúc mẫu thẻ (Note Types)",
-        "desc": "Đọc danh sách mẫu thẻ (Vocabulary, Basic, Cloze) và cấu hình các trường dữ liệu tùy chỉnh.",
-        "category": "Mẫu thẻ (Note Types)",
-        "icon": "layers",
-    },
-}
+SCOPE_METADATA = mcp_scope_service.SCOPE_METADATA
 
 
 @oauth_bp.get("/api/oauth/consent-info")
@@ -154,7 +77,14 @@ def consent_info():
             400,
         )
 
-    requested_scopes = list(oauth_service.normalize_scopes(scope_str))
+    try:
+        requested_scopes = list(oauth_service.normalize_scopes(scope_str))
+    except ValueError as err:
+        return (
+            jsonify({"error": "invalid_scope", "error_description": str(err)}),
+            400,
+        )
+
     scopes_data = []
     for sc in requested_scopes:
         info = SCOPE_METADATA.get(
@@ -472,9 +402,9 @@ def get_endpoints_info():
 
 
 @oauth_bp.get("/api/oauth/clients")
-@login_required
+@admin_required
 def list_oauth_clients():
-    """List registered OAuth 2.1 clients."""
+    """List registered OAuth 2.1 clients (Admin only)."""
     try:
         clients = oauth_repository.list_clients(limit=50)
         return jsonify({"items": [c.to_dict() for c in clients]})
@@ -485,9 +415,9 @@ def list_oauth_clients():
 
 
 @oauth_bp.post("/api/oauth/clients")
-@login_required
+@admin_required
 def create_oauth_client():
-    """Create or update a registered OAuth 2.1 client from UI."""
+    """Create or update a registered OAuth 2.1 client from UI (Admin only)."""
     payload = request.get_json(silent=True) or request.form or {}
     client_id = str(payload.get("client_id") or "").strip()
     client_name = str(payload.get("client_name") or "").strip()
@@ -503,28 +433,6 @@ def create_oauth_client():
     else:
         redirect_uris = []
 
-    if not client_id or not client_name:
-        return (
-            jsonify(
-                {
-                    "error": "VALIDATION_ERROR",
-                    "message": "Client ID và Tên ứng dụng là bắt buộc.",
-                }
-            ),
-            400,
-        )
-
-    if not redirect_uris:
-        return (
-            jsonify(
-                {
-                    "error": "VALIDATION_ERROR",
-                    "message": "Cần ít nhất một Callback / Redirect URL do ChatGPT cung cấp.",
-                }
-            ),
-            400,
-        )
-
     try:
         client = oauth_service.register_oauth_client(
             client_id=client_id,
@@ -534,6 +442,11 @@ def create_oauth_client():
             is_confidential=bool(client_secret and str(client_secret).strip()),
         )
         return jsonify({"success": True, "client": client.to_dict()}), 201
+    except OAuthError as exc:
+        return (
+            jsonify({"error": "VALIDATION_ERROR", "message": str(exc)}),
+            400,
+        )
     except Exception as exc:
         logger.exception("Failed to create OAuth client: %s", exc)
         db.session.rollback()
@@ -549,9 +462,9 @@ def create_oauth_client():
 
 
 @oauth_bp.delete("/api/oauth/clients/<int:client_pk>")
-@login_required
+@admin_required
 def delete_oauth_client(client_pk: int):
-    """Delete a registered OAuth 2.1 client."""
+    """Delete a registered OAuth 2.1 client (Admin only)."""
     try:
         client = oauth_repository.get_client_by_id(client_pk)
         if not client:

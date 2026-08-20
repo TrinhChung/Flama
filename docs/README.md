@@ -35,12 +35,13 @@ Các kế hoạch và migration kỹ thuật đã hoàn thành và đưa vào v�
 | [`CLONE_CUTOVER_REPORT.md`](plans/completed/CLONE_CUTOVER_REPORT.md) | Báo cáo hoàn tất cutover mô hình shared deck sang logical overlay. |
 | [`SCHEDULER_FIX_DOCUMENTATION.md`](plans/completed/SCHEDULER_FIX_DOCUMENTATION.md) | Tài liệu sửa lỗi và chuẩn hóa bộ lập lịch Anki Scheduler. |
 
-### 💡 Đề Xuất & Chưa Triển Khai (`docs/plans/proposals/`)
+### 💡 Đề Xuất & Chưa Triển Khai (`docs/plans/proposals/` & Lộ Trình)
 
-Các đề xuất kỹ thuật và ý tưởng tính năng đang ở dạng dự thảo:
+Các đề xuất kỹ thuật và lộ trình nâng cấp kiến trúc đang triển khai:
 
 | Tài liệu | Mô tả |
 |---|---|
+| [`ARCHITECTURE_HARDENING_ROADMAP.md`](plans/ARCHITECTURE_HARDENING_ROADMAP.md) | **Lộ trình củng cố kiến trúc Modular Monolith**: Vá quyền OAuth/MCP, Alembic schema ownership, CI MySQL 8, REST API boundaries. |
 | [`DECOUPLE_TEMPLATE_NOTE_TYPE_PROPOSAL.md`](plans/proposals/DECOUPLE_TEMPLATE_NOTE_TYPE_PROPOSAL.md) | Bản thảo đề xuất tách Template độc lập khỏi Note Type. |
 | [`FLASHCARD_FOR_KIDS_PLAN.md`](plans/proposals/FLASHCARD_FOR_KIDS_PLAN.md) | Ý tưởng phát triển bộ flashcard chuyên biệt cho trẻ em. |
 

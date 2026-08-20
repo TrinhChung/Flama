@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 import hashlib
 import json
+import re
 import secrets
 from typing import Any, Iterable
 from urllib.parse import urlencode, urlparse, urlunparse, parse_qsl
@@ -15,14 +16,15 @@ from flask import Request, current_app
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from app.repositories import oauth_repository
+from app.services import mcp_scope_service
 from models import db
 from models.mcp_access_token import McpAccessToken
 from models.oauth_authorization_code import OAuthAuthorizationCode
 from models.oauth_client import OAuthClient
 from models.user import User
 
-ALLOWED_SCOPES = frozenset({"deck:read", "note-type:read", "note:check", "note:create"})
-DEFAULT_SCOPES = ("deck:read", "note-type:read", "note:check", "note:create")
+ALLOWED_SCOPES = mcp_scope_service.ALLOWED_OAUTH_SCOPES
+DEFAULT_SCOPES = mcp_scope_service.DEFAULT_SCOPES
 AUTH_CODE_EXPIRY_SECONDS = 300  # 5 minutes
 ACCESS_TOKEN_EXPIRY_SECONDS = 86400  # 24 hours
 REFRESH_TOKEN_EXPIRY_DAYS = 90
@@ -86,17 +88,7 @@ def hash_secret(secret: str) -> str:
 
 
 def normalize_scopes(raw_scopes: Any) -> tuple[str, ...]:
-    if raw_scopes is None:
-        return DEFAULT_SCOPES
-    if isinstance(raw_scopes, str):
-        items = [s.strip() for s in raw_scopes.replace(",", " ").split() if s.strip()]
-    elif isinstance(raw_scopes, (list, tuple, set)):
-        items = [str(s).strip() for s in raw_scopes if str(s).strip()]
-    else:
-        return DEFAULT_SCOPES
-
-    valid = [s for s in items if s in ALLOWED_SCOPES]
-    return tuple(valid) if valid else DEFAULT_SCOPES
+    return mcp_scope_service.validate_and_normalize_oauth_scopes(raw_scopes)
 
 
 def verify_pkce(*, code_verifier: str, code_challenge: str, method: str = "S256") -> bool:
@@ -139,7 +131,7 @@ def get_protected_resource_metadata(req: Request | None = None) -> dict[str, Any
     return {
         "resource": f"{base_url}/api/mcp",
         "authorization_servers": [base_url],
-        "scopes_supported": list(ALLOWED_SCOPES),
+        "scopes_supported": sorted(mcp_scope_service.ALL_GRANULAR_SCOPES),
         "bearer_methods_supported": ["header"],
     }
 
@@ -156,9 +148,76 @@ def get_authorization_server_metadata(req: Request | None = None) -> dict[str, A
         "grant_types_supported": ["authorization_code", "refresh_token"],
         "code_challenge_methods_supported": ["S256"],
         "token_endpoint_auth_methods_supported": ["client_secret_post", "client_secret_basic", "none"],
-        "scopes_supported": list(ALLOWED_SCOPES) + ["openid", "profile", "email"],
+        "scopes_supported": sorted(mcp_scope_service.ALLOWED_OAUTH_SCOPES),
     }
 
+
+CLIENT_ID_REGEX = re.compile(r"^[a-zA-Z0-9_\-]{3,64}$")
+URI_SCHEME_REGEX = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*$")
+
+
+def validate_client_metadata(
+    *,
+    client_id: str,
+    client_name: str,
+    redirect_uris: Iterable[str] | None,
+    client_secret: str | None = None,
+    client_uri: str | None = None,
+) -> list[str]:
+    """Validate OAuth 2.1 client registration metadata and return sanitized redirect URIs."""
+    client_id_clean = str(client_id or "").strip()
+    if not client_id_clean:
+        raise OAuthError("invalid_client_metadata", "Client ID là bắt buộc.")
+    if not CLIENT_ID_REGEX.match(client_id_clean):
+        raise OAuthError(
+            "invalid_client_metadata",
+            "Client ID phải gồm từ 3 đến 64 ký tự chữ cái, chữ số, gạch dưới (_) hoặc gạch ngang (-).",
+        )
+
+    client_name_clean = str(client_name or "").strip()
+    if not client_name_clean:
+        raise OAuthError("invalid_client_metadata", "Tên ứng dụng là bắt buộc.")
+    if len(client_name_clean) > 120:
+        raise OAuthError("invalid_client_metadata", "Tên ứng dụng không được vượt quá 120 ký tự.")
+
+    if client_secret and len(str(client_secret)) > 255:
+        raise OAuthError("invalid_client_metadata", "Client Secret không được vượt quá 255 ký tự.")
+
+    if client_uri:
+        parsed_curi = urlparse(str(client_uri).strip())
+        if parsed_curi.scheme not in ("http", "https") or not parsed_curi.netloc:
+            raise OAuthError("invalid_client_metadata", "Client URI phải là URL hợp lệ (http/https).")
+
+    raw_uris = [str(u).strip() for u in (redirect_uris or []) if str(u).strip()]
+    if not raw_uris:
+        raise OAuthError("invalid_client_metadata", "Cần ít nhất một Redirect URI hợp lệ.")
+    if len(raw_uris) > 20:
+        raise OAuthError("invalid_client_metadata", "Không được đăng ký quá 20 Redirect URIs.")
+
+    sanitized_uris: list[str] = []
+    for uri in raw_uris:
+        if len(uri) > 500:
+            raise OAuthError("invalid_client_metadata", f"Redirect URI vượt quá độ dài tối đa (500 ký tự): {uri[:50]}...")
+        parsed = urlparse(uri)
+        if not parsed.scheme or not URI_SCHEME_REGEX.match(parsed.scheme):
+            raise OAuthError("invalid_client_metadata", f"Redirect URI có scheme không hợp lệ: {uri}")
+        if parsed.fragment:
+            raise OAuthError(
+                "invalid_client_metadata",
+                f"Redirect URI không được chứa fragment (#): {uri}",
+            )
+        scheme_lower = parsed.scheme.lower()
+        if scheme_lower == "http":
+            hostname = (parsed.hostname or "").lower()
+            if hostname not in ("localhost", "127.0.0.1", "::1", "[::1]"):
+                raise OAuthError(
+                    "invalid_client_metadata",
+                    f"Redirect URI qua HTTP chỉ được chấp nhận cho loopback (localhost/127.0.0.1). Hãy sử dụng HTTPS cho: {uri}",
+                )
+        if uri not in sanitized_uris:
+            sanitized_uris.append(uri)
+
+    return sanitized_uris
 
 
 def register_oauth_client(
@@ -170,28 +229,32 @@ def register_oauth_client(
     redirect_uris: Iterable[str] | None = None,
     is_confidential: bool = True,
 ) -> OAuthClient:
+    sanitized_uris = validate_client_metadata(
+        client_id=client_id,
+        client_name=client_name,
+        redirect_uris=redirect_uris,
+        client_secret=client_secret,
+        client_uri=client_uri,
+    )
     secret_hash = generate_password_hash(client_secret) if client_secret else None
-    existing = oauth_repository.get_client_by_client_id(client_id)
+    existing = oauth_repository.get_client_by_client_id(client_id.strip())
     if existing:
         existing.client_name = client_name.strip()
         if secret_hash:
             existing.client_secret_hash = secret_hash
         existing.client_uri = client_uri.strip() if client_uri else None
-        existing.redirect_uris = json.dumps(
-            [str(u).strip() for u in (redirect_uris or []) if str(u).strip()],
-            ensure_ascii=False,
-        )
+        existing.redirect_uris = json.dumps(sanitized_uris, ensure_ascii=False)
         existing.is_confidential = is_confidential
         db.session.add(existing)
         db.session.commit()
         return existing
 
     client = oauth_repository.create_client(
-        client_id=client_id,
-        client_name=client_name,
+        client_id=client_id.strip(),
+        client_name=client_name.strip(),
         client_secret_hash=secret_hash,
-        client_uri=client_uri,
-        redirect_uris=redirect_uris,
+        client_uri=client_uri.strip() if client_uri else None,
+        redirect_uris=sanitized_uris,
         is_confidential=is_confidential,
     )
     db.session.commit()
@@ -249,7 +312,15 @@ def validate_authorize_request(
             state=state,
         )
 
-    normalized_scopes = list(normalize_scopes(scope))
+    try:
+        normalized_scopes = list(mcp_scope_service.validate_and_normalize_oauth_scopes(scope))
+    except ValueError as err:
+        raise OAuthError(
+            "invalid_scope",
+            str(err),
+            redirect_uri=redirect_uri,
+            state=state,
+        ) from err
     return client, normalized_scopes
 
 

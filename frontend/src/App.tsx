@@ -138,6 +138,11 @@ const FeedbackPage = lazy(() =>
     default: module.FeedbackPage,
   })),
 )
+const DeckAudioGeneratorPage = lazy(() =>
+  import('./features/audio/pages/DeckAudioGeneratorPage').then((module) => ({
+    default: module.DeckAudioGeneratorPage,
+  })),
+)
 const AdminImageLibraryPage = lazy(() =>
   import('./features/admin/pages/AdminImageLibraryPage').then((module) => ({
     default: module.AdminImageLibraryPage,
@@ -325,6 +330,18 @@ const router = createBrowserRouter([
           {
             path: 'flashcards/installed-decks',
             element: <Navigate to="/installed-decks" replace />,
+          },
+          {
+            path: 'audio/generate',
+            element: deferred(<DeckAudioGeneratorPage />),
+          },
+          {
+            path: 'audio',
+            element: <Navigate to="/audio/generate" replace />,
+          },
+          {
+            path: 'flashcards/audio',
+            element: <Navigate to="/audio/generate" replace />,
           },
           {
             element: <RequireCreator />,

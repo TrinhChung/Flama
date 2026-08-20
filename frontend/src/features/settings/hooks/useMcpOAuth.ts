@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { appApi } from '@/app/api'
+import { useBootstrap } from '@/shared/api/bootstrap'
 
 export type OAuthEndpointsInfo = {
   base_url: string
@@ -36,6 +37,8 @@ export type ConnectedAppItem = {
 
 export function useMcpOAuth() {
   const queryClient = useQueryClient()
+  const { data: bootstrap } = useBootstrap()
+  const isAdmin = Boolean(bootstrap?.user?.is_admin)
 
   // Form states for creating a new client
   const [clientName, setClientName] = useState('ChatGPT')
@@ -53,24 +56,28 @@ export function useMcpOAuth() {
     queryFn: () => appApi.get<OAuthEndpointsInfo>('/api/oauth/endpoints-info'),
   })
 
-  // 2. Fetch registered OAuth clients
+  // 2. Fetch registered OAuth clients (Admin only)
   const clientsQuery = useQuery({
     queryKey: ['oauth-clients'],
     queryFn: () => appApi.get<{ items: OAuthClientItem[] }>('/api/oauth/clients'),
+    enabled: isAdmin,
   })
 
-  // 3. Fetch connected apps
+  // 3. Fetch connected apps (All authenticated users)
   const connectedAppsQuery = useQuery({
     queryKey: ['oauth-connected-apps'],
     queryFn: () => appApi.get<{ items: ConnectedAppItem[] }>('/api/oauth/connected-apps'),
   })
 
   const refresh = async () => {
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ['oauth-clients'] }),
+    const invalidations = [
       queryClient.invalidateQueries({ queryKey: ['oauth-connected-apps'] }),
       queryClient.invalidateQueries({ queryKey: ['oauth-endpoints-info'] }),
-    ])
+    ]
+    if (isAdmin) {
+      invalidations.push(queryClient.invalidateQueries({ queryKey: ['oauth-clients'] }))
+    }
+    await Promise.all(invalidations)
   }
 
   // Create Client Mutation
@@ -152,5 +159,6 @@ export function useMcpOAuth() {
     deleteClientMutation,
     revokeConnectedAppMutation,
     refresh,
+    isAdmin,
   }
 }

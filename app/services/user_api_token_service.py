@@ -12,7 +12,7 @@ import secrets
 
 from sqlalchemy import or_
 
-from app.services.mcp_access_token_service import has_scope
+from app.services import mcp_scope_service
 from models import db
 from models.audit_log import AuditLog
 from models.user import User
@@ -21,20 +21,8 @@ from models.user_api_token import UserApiToken
 
 TOKEN_PREFIX = "flama_yt_"
 TOKEN_RE = re.compile(r"^flama_yt_[0-9a-f]{8}_[A-Za-z0-9_-]{40,64}$")
-DEFAULT_SCOPES = (
-    "deck:read",
-    "deck:write",
-    "note-type:read",
-    "note-type:write",
-    "note:check",
-    "note:read",
-    "note:create",
-    "note:update",
-    "note:delete",
-    "study:read",
-    "study:write",
-    "stats:read",
-)
+DEFAULT_SCOPES = mcp_scope_service.DEFAULT_SCOPES
+has_scope = mcp_scope_service.has_scope
 ALLOWED_EXPIRY_DAYS = {30, 90, 180, 365}
 MAX_ACTIVE_TOKENS_PER_USER = 10
 MAX_TOKEN_RECORDS_PER_USER = 100
