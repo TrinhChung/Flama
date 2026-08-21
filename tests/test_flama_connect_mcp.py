@@ -906,7 +906,7 @@ class FlamaConnectMcpTests(unittest.TestCase):
             },
             token=self.api_token_str,
         )
-        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.status_code, 400)
         data = response.get_json()
         self.assertEqual(data["error"]["code"], -32602)
         self.assertEqual(data["error"]["data"]["code"], "DECK_NOT_FOUND")
@@ -924,7 +924,7 @@ class FlamaConnectMcpTests(unittest.TestCase):
             },
             token=self.api_token_str,
         )
-        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.status_code, 400)
         data = response.get_json()
         self.assertEqual(data["error"]["code"], -32602)
         self.assertEqual(data["error"]["data"]["code"], "NOTE_NOT_FOUND")
@@ -948,6 +948,7 @@ class FlamaConnectMcpTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         data = response.get_json()
         self.assertEqual(data["error"]["code"], -32602)
+        self.assertEqual(data["error"]["data"]["code"], "INVALID_PARAMS")
 
     def test_unauthenticated_tools_call_rejected(self):
         response = self._post_mcp(
@@ -1216,7 +1217,7 @@ class FlamaConnectMcpTests(unittest.TestCase):
         data_all = resp_all.get_json()["result"]["structuredContent"]
         self.assertEqual(data_all["total"], 2)
 
-    def test_get_image_not_found_returns_404_not_502(self):
+    def test_get_image_not_found_returns_controlled_tool_error(self):
         # 1. Non-existent image_key
         resp = self._post_mcp(
             {
@@ -1225,15 +1226,16 @@ class FlamaConnectMcpTests(unittest.TestCase):
                 "method": "tools/call",
                 "params": {
                     "name": "get_image",
-                    "arguments": {"image_key": "non_existent_key_999"},
+                    "arguments": {"image_key": "mcp-healthcheck-nonexistent"},
                 },
             },
             token=self.api_token_str,
         )
-        self.assertEqual(resp.status_code, 404)
+        self.assertEqual(resp.status_code, 400)
         data = resp.get_json()
         self.assertEqual(data["error"]["code"], -32602)
         self.assertEqual(data["error"]["data"]["code"], "IMAGE_NOT_FOUND")
+        self.assertIn("mcp-healthcheck-nonexistent", data["error"]["message"])
 
         # 2. Non-existent asset_id
         resp_id = self._post_mcp(
@@ -1248,32 +1250,51 @@ class FlamaConnectMcpTests(unittest.TestCase):
             },
             token=self.api_token_str,
         )
-        self.assertEqual(resp_id.status_code, 404)
+        self.assertEqual(resp_id.status_code, 400)
         data_id = resp_id.get_json()
         self.assertEqual(data_id["error"]["code"], -32602)
         self.assertEqual(data_id["error"]["data"]["code"], "IMAGE_NOT_FOUND")
 
-        # 3. Non-existent alias name / id
-        resp_alias = self._post_mcp(
+        # 3. Malformed / non-UUID asset_id
+        resp_malformed = self._post_mcp(
             {
                 "jsonrpc": "2.0",
                 "id": 112,
                 "method": "tools/call",
                 "params": {
                     "name": "get_image",
-                    "arguments": {"name": "ghost_image_slug"},
+                    "arguments": {"asset_id": "invalid-asset-id-format!@#"},
                 },
             },
             token=self.api_token_str,
         )
-        self.assertEqual(resp_alias.status_code, 404)
-        self.assertEqual(resp_alias.get_json()["error"]["data"]["code"], "IMAGE_NOT_FOUND")
+        self.assertEqual(resp_malformed.status_code, 400)
+        self.assertEqual(resp_malformed.get_json()["error"]["code"], -32602)
+        self.assertEqual(resp_malformed.get_json()["error"]["data"]["code"], "IMAGE_NOT_FOUND")
 
-        # 4. Empty / whitespace arguments rejected with 400 INVALID_PARAMS
+        # 4. Missing required identifier (empty arguments) -> Schema validation error (400)
         resp_empty = self._post_mcp(
             {
                 "jsonrpc": "2.0",
                 "id": 113,
+                "method": "tools/call",
+                "params": {
+                    "name": "get_image",
+                    "arguments": {},
+                },
+            },
+            token=self.api_token_str,
+        )
+        self.assertEqual(resp_empty.status_code, 400)
+        data_empty = resp_empty.get_json()
+        self.assertEqual(data_empty["error"]["code"], -32602)
+        self.assertEqual(data_empty["error"]["data"]["code"], "INVALID_PARAMS")
+
+        # 5. Whitespace-only argument -> Schema validation error (400)
+        resp_ws = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 114,
                 "method": "tools/call",
                 "params": {
                     "name": "get_image",
@@ -1282,44 +1303,99 @@ class FlamaConnectMcpTests(unittest.TestCase):
             },
             token=self.api_token_str,
         )
-        self.assertEqual(resp_empty.status_code, 400)
-        self.assertEqual(resp_empty.get_json()["error"]["data"]["code"], "INVALID_PARAMS")
+        self.assertEqual(resp_ws.status_code, 400)
+        data_ws = resp_ws.get_json()
+        self.assertEqual(data_ws["error"]["code"], -32602)
+        self.assertEqual(data_ws["error"]["data"]["code"], "INVALID_PARAMS")
 
-        # 5. Wrong image_key with valid fallback asset_id succeeds
+        # 6. Existing image by image_key and by asset_id
         with self.app.app_context():
             from models.shared_image_asset import SharedImageAsset
             existing_asset = SharedImageAsset(
-                image_key="fallback_test_image",
-                description="Fallback image",
+                image_key="apple_red",
+                description="A fresh red apple",
                 mime_type="image/webp",
-                sha256="fallbacktest000000000000000000000000000000000000000000000000000000",
-                size_bytes=1024,
-                storage_path="image_library/fallback_test.webp",
+                sha256="applered0000000000000000000000000000000000000000000000000000000",
+                size_bytes=2048,
+                storage_path="image_library/apple_red.webp",
                 is_enabled=True,
-                tags=["fallback"],
+                tags=["fruit", "apple"],
             )
             db.session.add(existing_asset)
             db.session.commit()
             valid_id = existing_asset.id
 
-        resp_fallback = self._post_mcp(
+        # Get by image_key
+        resp_by_key = self._post_mcp(
             {
                 "jsonrpc": "2.0",
-                "id": 114,
+                "id": 115,
                 "method": "tools/call",
                 "params": {
                     "name": "get_image",
-                    "arguments": {
-                        "image_key": "wrong_key_that_does_not_exist",
-                        "asset_id": valid_id,
-                    },
+                    "arguments": {"image_key": "apple_red"},
                 },
             },
             token=self.api_token_str,
         )
-        self.assertEqual(resp_fallback.status_code, 200)
-        fallback_data = resp_fallback.get_json()["result"]["structuredContent"]["image"]
-        self.assertEqual(fallback_data["asset_id"], valid_id)
+        self.assertEqual(resp_by_key.status_code, 200)
+        res_by_key = resp_by_key.get_json()["result"]
+        self.assertEqual(res_by_key["structuredContent"]["image"]["image_key"], "apple_red")
+        self.assertEqual(res_by_key["structuredContent"]["image"]["asset_id"], valid_id)
+
+        # Get by asset_id
+        resp_by_id = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 116,
+                "method": "tools/call",
+                "params": {
+                    "name": "get_image",
+                    "arguments": {"asset_id": valid_id},
+                },
+            },
+            token=self.api_token_str,
+        )
+        self.assertEqual(resp_by_id.status_code, 200)
+        res_by_id = resp_by_id.get_json()["result"]
+        self.assertEqual(res_by_id["structuredContent"]["image"]["id"], valid_id)
+
+    def test_mcp_usable_after_get_image_error(self):
+        """MCP session must remain completely usable and intact after get_image not-found error."""
+        # Step 1: Call get_image with nonexistent key (returns 400 with structured JSON-RPC error, never terminating transport)
+        resp1 = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 201,
+                "method": "tools/call",
+                "params": {
+                    "name": "get_image",
+                    "arguments": {"image_key": "mcp-healthcheck-nonexistent"},
+                },
+            },
+            token=self.api_token_str,
+        )
+        self.assertEqual(resp1.status_code, 400)
+        data1 = resp1.get_json()
+        self.assertEqual(data1["error"]["code"], -32602)
+        self.assertEqual(data1["error"]["data"]["code"], "IMAGE_NOT_FOUND")
+
+        # Step 2: Immediately call search_images in the same session lifecycle
+        resp2 = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 202,
+                "method": "tools/call",
+                "params": {
+                    "name": "search_images",
+                    "arguments": {"limit": 5},
+                },
+            },
+            token=self.api_token_str,
+        )
+        self.assertEqual(resp2.status_code, 200)
+        data2 = resp2.get_json()
+        self.assertIn("items", data2["result"]["structuredContent"])
 
     def test_search_images_missing_scope_returns_403(self):
         with self.app.app_context():
