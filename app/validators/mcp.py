@@ -984,6 +984,8 @@ def validate_search_images_arguments(arguments: Any) -> dict[str, Any]:
 
 
 def validate_get_image_arguments(arguments: Any) -> dict[str, Any]:
+    if arguments is None:
+        arguments = {}
     if not isinstance(arguments, dict):
         raise RequestValidationError(
             "arguments phải là JSON object.",
@@ -999,8 +1001,11 @@ def validate_get_image_arguments(arguments: Any) -> dict[str, Any]:
             code="INVALID_PARAMS",
         )
 
-    image_key = arguments.get("image_key") or arguments.get("name")
-    asset_id = arguments.get("asset_id") or arguments.get("id")
+    raw_key = arguments.get("image_key") or arguments.get("name")
+    raw_id = arguments.get("asset_id") or arguments.get("id")
+
+    image_key = str(raw_key).strip() if raw_key is not None and str(raw_key).strip() else None
+    asset_id = str(raw_id).strip() if raw_id is not None and str(raw_id).strip() else None
 
     if not image_key and not asset_id:
         raise RequestValidationError(
@@ -1011,8 +1016,8 @@ def validate_get_image_arguments(arguments: Any) -> dict[str, Any]:
         )
 
     return {
-        "image_key": str(image_key).strip() if image_key else None,
-        "asset_id": str(asset_id).strip() if asset_id else None,
+        "image_key": image_key,
+        "asset_id": asset_id,
     }
 
 

@@ -1217,6 +1217,7 @@ class FlamaConnectMcpTests(unittest.TestCase):
         self.assertEqual(data_all["total"], 2)
 
     def test_get_image_not_found_returns_404_not_502(self):
+        # 1. Non-existent image_key
         resp = self._post_mcp(
             {
                 "jsonrpc": "2.0",
@@ -1233,6 +1234,92 @@ class FlamaConnectMcpTests(unittest.TestCase):
         data = resp.get_json()
         self.assertEqual(data["error"]["code"], -32602)
         self.assertEqual(data["error"]["data"]["code"], "IMAGE_NOT_FOUND")
+
+        # 2. Non-existent asset_id
+        resp_id = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 111,
+                "method": "tools/call",
+                "params": {
+                    "name": "get_image",
+                    "arguments": {"asset_id": "00000000-0000-0000-0000-000000000000"},
+                },
+            },
+            token=self.api_token_str,
+        )
+        self.assertEqual(resp_id.status_code, 404)
+        data_id = resp_id.get_json()
+        self.assertEqual(data_id["error"]["code"], -32602)
+        self.assertEqual(data_id["error"]["data"]["code"], "IMAGE_NOT_FOUND")
+
+        # 3. Non-existent alias name / id
+        resp_alias = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 112,
+                "method": "tools/call",
+                "params": {
+                    "name": "get_image",
+                    "arguments": {"name": "ghost_image_slug"},
+                },
+            },
+            token=self.api_token_str,
+        )
+        self.assertEqual(resp_alias.status_code, 404)
+        self.assertEqual(resp_alias.get_json()["error"]["data"]["code"], "IMAGE_NOT_FOUND")
+
+        # 4. Empty / whitespace arguments rejected with 400 INVALID_PARAMS
+        resp_empty = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 113,
+                "method": "tools/call",
+                "params": {
+                    "name": "get_image",
+                    "arguments": {"image_key": "   "},
+                },
+            },
+            token=self.api_token_str,
+        )
+        self.assertEqual(resp_empty.status_code, 400)
+        self.assertEqual(resp_empty.get_json()["error"]["data"]["code"], "INVALID_PARAMS")
+
+        # 5. Wrong image_key with valid fallback asset_id succeeds
+        with self.app.app_context():
+            from models.shared_image_asset import SharedImageAsset
+            existing_asset = SharedImageAsset(
+                image_key="fallback_test_image",
+                description="Fallback image",
+                mime_type="image/webp",
+                sha256="fallbacktest000000000000000000000000000000000000000000000000000000",
+                size_bytes=1024,
+                storage_path="image_library/fallback_test.webp",
+                is_enabled=True,
+                tags=["fallback"],
+            )
+            db.session.add(existing_asset)
+            db.session.commit()
+            valid_id = existing_asset.id
+
+        resp_fallback = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 114,
+                "method": "tools/call",
+                "params": {
+                    "name": "get_image",
+                    "arguments": {
+                        "image_key": "wrong_key_that_does_not_exist",
+                        "asset_id": valid_id,
+                    },
+                },
+            },
+            token=self.api_token_str,
+        )
+        self.assertEqual(resp_fallback.status_code, 200)
+        fallback_data = resp_fallback.get_json()["result"]["structuredContent"]["image"]
+        self.assertEqual(fallback_data["asset_id"], valid_id)
 
     def test_search_images_missing_scope_returns_403(self):
         with self.app.app_context():

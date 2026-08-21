@@ -2777,6 +2777,7 @@ def serialize_mcp_image_asset(row: SharedImageAsset) -> dict[str, Any]:
 
     return {
         "id": str(row.id),
+        "asset_id": str(row.id),
         "image_key": str(row.image_key or ""),
         "description": str(row.description or ""),
         "filename": str(row.filename or "") or None,
@@ -2914,12 +2915,13 @@ def get_image(
     row = None
     if image_key:
         row = image_library_repository.get_by_key(image_key)
-    elif asset_id:
+    if row is None and asset_id:
         row = image_library_repository.get_by_id(asset_id)
 
     if row is None:
+        identifier = image_key or asset_id or "unknown"
         raise RequestValidationError(
-            f"Không tìm thấy hình ảnh với key/id: {image_key or asset_id}.",
+            f"Không tìm thấy hình ảnh với key/id: {identifier}.",
             field="image_key" if image_key else "asset_id",
             status=404,
             code="IMAGE_NOT_FOUND",
