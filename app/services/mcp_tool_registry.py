@@ -1453,6 +1453,7 @@ _MCP_TOOL_DEFINITIONS = (
     GET_IMAGE_TOOL,
 )
 _MCP_TOOLS_BY_NAME = {tool.name: tool for tool in _MCP_TOOL_DEFINITIONS}
+_MCP_TOOLS_BY_LOWER_NAME = {tool.name.lower(): tool for tool in _MCP_TOOL_DEFINITIONS}
 
 
 def list_mcp_tools() -> list[dict[str, Any]]:
@@ -1461,8 +1462,49 @@ def list_mcp_tools() -> list[dict[str, Any]]:
 
 
 def get_mcp_tool(tool_name: str) -> McpToolDefinition | None:
-    """Resolve a tool definition by name."""
-    return _MCP_TOOLS_BY_NAME.get(str(tool_name or "").strip())
+    """Resolve a tool definition by name, supporting exact match, case-insensitivity, and namespace prefixes.
+
+    Examples supported:
+    - 'search_images' (exact)
+    - 'Flama.search_images', 'flama.search_images' (dot namespace)
+    - 'Flama:search_images' (colon namespace)
+    - 'Flama/search_images' (slash namespace)
+    - 'Flama__search_images' (double underscore namespace)
+    - 'flama_search_images' (single underscore namespace fallback)
+    """
+    raw_name = str(tool_name or "").strip()
+    if not raw_name:
+        return None
+
+    # 1. Exact match
+    if raw_name in _MCP_TOOLS_BY_NAME:
+        return _MCP_TOOLS_BY_NAME[raw_name]
+
+    # 2. Case-insensitive exact match
+    raw_lower = raw_name.lower()
+    if raw_lower in _MCP_TOOLS_BY_LOWER_NAME:
+        return _MCP_TOOLS_BY_LOWER_NAME[raw_lower]
+
+    # 3. Explicit namespace separators (., :, /, __)
+    for sep in (".", ":", "/", "__"):
+        if sep in raw_name:
+            suffix = raw_name.split(sep, 1)[-1].strip()
+            if suffix in _MCP_TOOLS_BY_NAME:
+                return _MCP_TOOLS_BY_NAME[suffix]
+            suffix_lower = suffix.lower()
+            if suffix_lower in _MCP_TOOLS_BY_LOWER_NAME:
+                return _MCP_TOOLS_BY_LOWER_NAME[suffix_lower]
+
+    # 4. Fallback for flama_<tool_name> prefix
+    if raw_lower.startswith("flama_"):
+        suffix = raw_name[6:].strip()
+        if suffix in _MCP_TOOLS_BY_NAME:
+            return _MCP_TOOLS_BY_NAME[suffix]
+        suffix_lower = suffix.lower()
+        if suffix_lower in _MCP_TOOLS_BY_LOWER_NAME:
+            return _MCP_TOOLS_BY_LOWER_NAME[suffix_lower]
+
+    return None
 
 
 def call_mcp_tool(*, tool_name: str, user_id: int, arguments: Any) -> dict[str, Any]:
@@ -1471,3 +1513,4 @@ def call_mcp_tool(*, tool_name: str, user_id: int, arguments: Any) -> dict[str, 
     if tool_definition is None:
         raise KeyError(str(tool_name or "").strip())
     return tool_definition.execute(user_id=user_id, arguments=arguments)
+

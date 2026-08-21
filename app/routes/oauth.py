@@ -47,16 +47,21 @@ def _extract_client_credentials() -> tuple[str, str | None]:
 
 
 @oauth_bp.get("/.well-known/oauth-protected-resource")
-def oauth_protected_resource():
+@oauth_bp.get("/.well-known/oauth-protected-resource/<path:resource_path>")
+@oauth_bp.get("/api/mcp/.well-known/oauth-protected-resource")
+def oauth_protected_resource(resource_path: str | None = None):
     """RFC 9728 Protected Resource Metadata."""
     return jsonify(oauth_service.get_protected_resource_metadata(request))
 
 
 @oauth_bp.get("/.well-known/oauth-authorization-server")
+@oauth_bp.get("/.well-known/oauth-authorization-server/<path:subpath>")
 @oauth_bp.get("/.well-known/openid-configuration")
-def oauth_authorization_server_metadata():
+@oauth_bp.get("/.well-known/openid-configuration/<path:subpath>")
+def oauth_authorization_server_metadata(subpath: str | None = None):
     """RFC 8414 Authorization Server Metadata."""
     return jsonify(oauth_service.get_authorization_server_metadata(request))
+
 
 
 # --- Consent API Endpoints for React SPA ---

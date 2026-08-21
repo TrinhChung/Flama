@@ -986,9 +986,10 @@ class FlamaConnectMcpTests(unittest.TestCase):
                 "params": {},
             }
         )
-        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.status_code, 400)
         data = response.get_json()
         self.assertEqual(data["error"]["code"], -32601)
+
 
 
 

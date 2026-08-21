@@ -174,15 +174,20 @@ def build_app_config(overrides: Mapping[str, Any] | None = None) -> dict[str, An
             default=30 * 60,
         ),
         "MCP_TOKEN_TTL_SECONDS": coerce_int_env("MCP_TOKEN_TTL_SECONDS", default=10 * 60),
-        "MCP_TOKEN_MAX_REQUESTS": coerce_int_env("MCP_TOKEN_MAX_REQUESTS", default=30),
+        "MCP_TOKEN_RATE_LIMIT_ENABLED": coerce_bool_env(
+            "MCP_TOKEN_RATE_LIMIT_ENABLED",
+            default=False,
+        ),
         "MCP_TOKEN_RATE_LIMIT_WINDOW_SECONDS": coerce_int_env(
             "MCP_TOKEN_RATE_LIMIT_WINDOW_SECONDS",
             default=60,
         ),
         "MCP_TOKEN_RATE_LIMIT_MAX_REQUESTS": coerce_int_env(
             "MCP_TOKEN_RATE_LIMIT_MAX_REQUESTS",
-            default=20,
+            default=100_000,
         ),
+
+
         "PAYOS_CLIENT_ID": os.getenv("PAYOS_CLIENT_ID", "").strip(),
         "PAYOS_API_KEY": os.getenv("PAYOS_API_KEY", "").strip(),
         "PAYOS_CHECKSUM_KEY": os.getenv("PAYOS_CHECKSUM_KEY", "").strip(),
