@@ -21,6 +21,7 @@ from models.note import Note
 from models.note_type import NoteType
 from models.template import Template
 from models.user import User
+from models.shared_image_asset import SharedImageAsset
 
 
 
@@ -1141,6 +1142,182 @@ class FlamaConnectMcpTests(unittest.TestCase):
         data = resp.get_json()["result"]["structuredContent"]
         self.assertEqual(data["image"]["source_url"], "https://example.com/banana.png")
         self.assertIn("banana", data["image"]["tags"])
+
+    def test_search_images_empty_library(self):
+        resp = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 107,
+                "method": "tools/call",
+                "params": {
+                    "name": "search_images",
+                    "arguments": {"limit": 5},
+                },
+            },
+            token=self.api_token_str,
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.get_json()["result"]["structuredContent"]
+        self.assertEqual(data["total"], 0)
+        self.assertEqual(data["items"], [])
+        self.assertEqual(data["limit"], 5)
+        self.assertEqual(data["offset"], 0)
+        self.assertFalse(data["has_more"])
+
+    def test_search_images_default_status_filter_and_queries(self):
+        with self.app.app_context():
+            img_enabled = SharedImageAsset(
+                image_key="cherry_red",
+                description="Red cherry fruit",
+                is_enabled=True,
+                tags=["cherry", "fruit", "red"],
+            )
+            img_disabled = SharedImageAsset(
+                image_key="cherry_black",
+                description="Black cherry fruit",
+                is_enabled=False,
+                tags=["cherry", "fruit", "black"],
+            )
+            db.session.add_all([img_enabled, img_disabled])
+            db.session.commit()
+
+        # 1. Default status should be "enabled"
+        resp = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 108,
+                "method": "tools/call",
+                "params": {
+                    "name": "search_images",
+                    "arguments": {"query": "cherry"},
+                },
+            },
+            token=self.api_token_str,
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.get_json()["result"]["structuredContent"]
+        self.assertEqual(data["total"], 1)
+        self.assertEqual(data["items"][0]["image_key"], "cherry_red")
+
+        # 2. status="all" should return both
+        resp_all = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 109,
+                "method": "tools/call",
+                "params": {
+                    "name": "search_images",
+                    "arguments": {"query": "cherry", "status": "all"},
+                },
+            },
+            token=self.api_token_str,
+        )
+        self.assertEqual(resp_all.status_code, 200)
+        data_all = resp_all.get_json()["result"]["structuredContent"]
+        self.assertEqual(data_all["total"], 2)
+
+    def test_get_image_not_found_returns_404_not_502(self):
+        resp = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 110,
+                "method": "tools/call",
+                "params": {
+                    "name": "get_image",
+                    "arguments": {"image_key": "non_existent_key_999"},
+                },
+            },
+            token=self.api_token_str,
+        )
+        self.assertEqual(resp.status_code, 404)
+        data = resp.get_json()
+        self.assertEqual(data["error"]["code"], -32602)
+        self.assertEqual(data["error"]["data"]["code"], "IMAGE_NOT_FOUND")
+
+    def test_search_images_missing_scope_returns_403(self):
+        with self.app.app_context():
+            issued_token = mcp_access_token_service.issue_token_and_commit(
+                user_id=self.user_id,
+                name="Deck Only Token",
+                scopes=["deck:read"],
+            )
+            deck_token_str = issued_token.token
+
+        resp = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 111,
+                "method": "tools/call",
+                "params": {
+                    "name": "search_images",
+                    "arguments": {"limit": 5},
+                },
+            },
+            token=deck_token_str,
+        )
+        self.assertEqual(resp.status_code, 403)
+        data = resp.get_json()
+        self.assertEqual(data["error"]["code"], -32003)
+        self.assertEqual(data["error"]["data"]["code"], "MCP_SCOPE_FORBIDDEN")
+
+    def test_import_image_missing_scope_returns_403(self):
+        with self.app.app_context():
+            issued_token = mcp_access_token_service.issue_token_and_commit(
+                user_id=self.user_id,
+                name="Media Read Only Token",
+                scopes=["media:read"],
+            )
+            read_only_token_str = issued_token.token
+
+        resp = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 112,
+                "method": "tools/call",
+                "params": {
+                    "name": "import_image",
+                    "arguments": {
+                        "file_data": _make_test_png_b64(),
+                        "image_key": "peach",
+                    },
+                },
+            },
+            token=read_only_token_str,
+        )
+        self.assertEqual(resp.status_code, 403)
+        data = resp.get_json()
+        self.assertEqual(data["error"]["code"], -32003)
+        self.assertEqual(data["error"]["data"]["code"], "MCP_SCOPE_FORBIDDEN")
+
+    def test_serialize_mcp_image_asset_robustness(self):
+        from app.services.mcp_tool_service import serialize_mcp_image_asset
+
+        with self.app.app_context():
+            asset_null_tags = SharedImageAsset(
+                image_key="null_tags",
+                description="null tags asset",
+                tags=None,
+            )
+            asset_str_tags = SharedImageAsset(
+                image_key="str_tags",
+                description="str tags asset",
+                tags='["orange", "citrus"]',
+            )
+            asset_invalid_str = SharedImageAsset(
+                image_key="inv_tags",
+                description="invalid str tags asset",
+                tags="invalid_json_string",
+            )
+            res_null = serialize_mcp_image_asset(asset_null_tags)
+            self.assertEqual(res_null["tags"], [])
+            self.assertEqual(res_null["image_key"], "null_tags")
+
+            res_str = serialize_mcp_image_asset(asset_str_tags)
+            self.assertEqual(res_str["tags"], ["orange", "citrus"])
+
+            res_inv = serialize_mcp_image_asset(asset_invalid_str)
+            self.assertEqual(res_inv["tags"], [])
+
 
 if __name__ == "__main__":
     unittest.main()

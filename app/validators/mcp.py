@@ -977,7 +977,7 @@ def validate_search_images_arguments(arguments: Any) -> dict[str, Any]:
     return {
         "query": str(query).strip() if query is not None else "",
         "tag": str(tag).strip() if tag is not None else None,
-        "status": str(status).strip().lower() if status else "",
+        "status": str(status).strip().lower() if status else "enabled",
         "limit": limit,
         "offset": offset,
     }

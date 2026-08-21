@@ -2763,6 +2763,18 @@ def _resolve_note_type_for_user(*, user_id: int, note_type_id: str | None = None
 
 
 def serialize_mcp_image_asset(row: SharedImageAsset) -> dict[str, Any]:
+    raw_tags = row.tags
+    if isinstance(raw_tags, (list, tuple, set)):
+        tags_list = [str(t) for t in raw_tags if t is not None]
+    elif isinstance(raw_tags, str) and raw_tags.strip().startswith("["):
+        try:
+            parsed = json.loads(raw_tags)
+            tags_list = [str(t) for t in parsed if t is not None] if isinstance(parsed, list) else []
+        except Exception:
+            tags_list = []
+    else:
+        tags_list = []
+
     return {
         "id": str(row.id),
         "image_key": str(row.image_key or ""),
@@ -2772,7 +2784,7 @@ def serialize_mcp_image_asset(row: SharedImageAsset) -> dict[str, Any]:
         "size_bytes": int(row.size_bytes or 0),
         "sha256": str(row.sha256 or "") or None,
         "is_enabled": bool(row.is_enabled),
-        "tags": list(row.tags or []),
+        "tags": tags_list,
         "source_url": str(row.source_url or "") or None,
         "url": f"/media/library/{row.image_key}",
         "preview_url": f"/admin/image-library/{row.id}/preview",
