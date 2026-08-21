@@ -100,6 +100,7 @@ export type AudioDeckJob = {
   status: AudioDeckJobStatus
   rules: AudioRuleConfig[]
   mode: 'missing_and_broken' | 'all'
+  concurrency?: number
   stats: {
     totalItems: number
     completedItems: number
@@ -109,6 +110,10 @@ export type AudioDeckJob = {
     progressPercent: number
     currentWord?: string
     currentField?: string
+    activeWorkers?: number
+    itemsPerSecond?: number
+    estimatedSecondsRemaining?: number
+    activeWords?: string[]
   }
   items: AudioJobItem[]
 }

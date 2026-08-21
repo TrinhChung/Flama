@@ -5,7 +5,9 @@ import { cleanTextForTts, resolveLocaleFromVoiceId } from './services/ttsTextNor
 import {
   clearStoredAudioQueue,
   loadStoredAudioQueue,
+  loadStoredConcurrency,
   saveStoredAudioQueue,
+  saveStoredConcurrency,
 } from './services/audioQueueStorage'
 import type { AudioDeckJob } from './types'
 
@@ -51,9 +53,10 @@ describe('TTS Text Normalizer', () => {
   })
 })
 
-describe('Audio Queue Storage Persistence', () => {
+describe('Audio Queue Storage & Concurrency Persistence', () => {
   beforeEach(() => {
     clearStoredAudioQueue()
+    localStorage.removeItem('flama_deck_audio_concurrency_v1')
   })
 
   it('saves and loads audio queue from localStorage', () => {
@@ -141,5 +144,20 @@ describe('Audio Queue Storage Persistence', () => {
 
     clearStoredAudioQueue()
     expect(loadStoredAudioQueue()).toHaveLength(0)
+  })
+
+  it('loads default concurrency of 3 when unconfigured', () => {
+    expect(loadStoredConcurrency()).toBe(3)
+  })
+
+  it('saves and loads custom concurrency, clamping values between 1 and 5', () => {
+    saveStoredConcurrency(4)
+    expect(loadStoredConcurrency()).toBe(4)
+
+    saveStoredConcurrency(10) // should clamp to 5
+    expect(loadStoredConcurrency()).toBe(5)
+
+    saveStoredConcurrency(0) // should clamp to 1
+    expect(loadStoredConcurrency()).toBe(1)
   })
 })

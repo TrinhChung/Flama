@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react'
 import {
+  Activity,
   AlertCircle,
   CheckCircle2,
   Clock,
@@ -11,6 +12,7 @@ import {
   Trash2,
   Volume2,
   XCircle,
+  Zap,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -21,6 +23,8 @@ import type { AudioDeckJob, AudioJobItem } from '../types'
 type DeckAudioQueueMonitorProps = {
   jobs: AudioDeckJob[]
   activeJob: AudioDeckJob | null
+  concurrency?: number
+  onConcurrencyChange?: (concurrency: number) => void
   onPause: () => void
   onResume: (jobId: string) => void
   onCancel: (jobId: string) => void
@@ -31,6 +35,8 @@ type DeckAudioQueueMonitorProps = {
 export function DeckAudioQueueMonitor({
   jobs,
   activeJob,
+  concurrency = 3,
+  onConcurrencyChange,
   onPause,
   onResume,
   onCancel,
@@ -126,8 +132,31 @@ export function DeckAudioQueueMonitor({
               </div>
             </div>
 
-            {/* Action Buttons */}
-            <div className="flex items-center gap-2 self-end sm:self-center">
+            {/* Action Buttons & Concurrency Selector */}
+            <div className="flex flex-wrap items-center gap-2.5 self-end sm:self-center">
+              {/* Concurrency Selector */}
+              <div className="flex items-center gap-1 bg-muted/40 p-1 rounded-xl border border-border/50">
+                <span className="text-[11px] font-semibold text-muted-foreground px-1.5 flex items-center gap-1">
+                  <Zap className="size-3 text-amber-500" />
+                  <span>Số luồng:</span>
+                </span>
+                {[1, 2, 3, 5].map((cnt) => (
+                  <button
+                    key={cnt}
+                    type="button"
+                    onClick={() => onConcurrencyChange?.(cnt)}
+                    className={`px-2 py-0.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                      concurrency === cnt
+                        ? 'bg-primary text-primary-foreground shadow-xs'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
+                    }`}
+                    title={`${cnt} luồng song song`}
+                  >
+                    {cnt}
+                  </button>
+                ))}
+              </div>
+
               {displayedJob.status === 'running' && (
                 <Button
                   variant="outline"
@@ -168,7 +197,7 @@ export function DeckAudioQueueMonitor({
 
           <CardContent className="p-4 sm:p-5 space-y-5">
             {/* Progress Bar & Counter */}
-            <div className="space-y-2 rounded-xl border border-border/50 bg-muted/20 p-4">
+            <div className="space-y-2.5 rounded-xl border border-border/50 bg-muted/20 p-4">
               <div className="flex justify-between items-center text-xs">
                 <div className="flex items-center gap-2">
                   <span className="font-bold text-foreground">
@@ -189,13 +218,49 @@ export function DeckAudioQueueMonitor({
               </div>
               <Progress value={displayedJob.stats.progressPercent} className="h-2.5 rounded-full" />
 
-              {/* Current word indicator */}
-              {displayedJob.status === 'running' && displayedJob.stats.currentWord && (
-                <div className="flex items-center gap-2 pt-1 text-xs text-muted-foreground">
-                  <LoaderCircle className="size-3.5 animate-spin text-primary shrink-0" />
-                  <span>
-                    Đang xử lý từ: <strong className="text-foreground">{displayedJob.stats.currentWord}</strong> (Trường {displayedJob.stats.currentField})
-                  </span>
+              {/* Multi-thread Live Speed & Realtime Indicators */}
+              {displayedJob.status === 'running' && (
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-border/40 text-xs">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="outline" className="bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20 font-bold text-[11px] gap-1">
+                      <Zap className="size-3 animate-pulse text-amber-500" />
+                      <span>{displayedJob.stats.activeWorkers || 1} luồng song song</span>
+                    </Badge>
+
+                    {displayedJob.stats.itemsPerSecond && displayedJob.stats.itemsPerSecond > 0 ? (
+                      <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 font-mono text-[11px] font-bold gap-1">
+                        <Activity className="size-3" />
+                        <span>~{displayedJob.stats.itemsPerSecond} từ/giây</span>
+                      </Badge>
+                    ) : null}
+
+                    {displayedJob.stats.estimatedSecondsRemaining !== undefined && displayedJob.stats.estimatedSecondsRemaining > 0 ? (
+                      <span className="text-muted-foreground text-[11px]">
+                        Ước tính còn: <strong className="text-foreground">{displayedJob.stats.estimatedSecondsRemaining > 60 ? `${Math.ceil(displayedJob.stats.estimatedSecondsRemaining / 60)} phút` : `${displayedJob.stats.estimatedSecondsRemaining}s`}</strong>
+                      </span>
+                    ) : null}
+                  </div>
+
+                  {/* Active words currently running in parallel */}
+                  {displayedJob.stats.activeWords && displayedJob.stats.activeWords.length > 0 ? (
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground flex-wrap">
+                      <span className="text-[11px] font-semibold text-foreground shrink-0">Đang chạy:</span>
+                      <div className="flex items-center gap-1 flex-wrap">
+                        {displayedJob.stats.activeWords.map((w, idx) => (
+                          <Badge key={idx} variant="secondary" className="text-[10px] bg-primary/10 text-primary border-primary/20 font-medium py-0">
+                            {w}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  ) : displayedJob.stats.currentWord ? (
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <LoaderCircle className="size-3 animate-spin text-primary shrink-0" />
+                      <span>
+                        Đang xử lý: <strong className="text-foreground">{displayedJob.stats.currentWord}</strong>
+                      </span>
+                    </div>
+                  ) : null}
                 </div>
               )}
             </div>
