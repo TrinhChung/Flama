@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from typing import Any, Callable
 
 from app.services import mcp_tool_service
+from app.validators import RequestValidationError
+from models import db
 from app.validators.mcp import (
     validate_add_tags_arguments,
     validate_batch_create_notes_arguments,

@@ -93,16 +93,56 @@ def _compact_description(raw_value: str | None, *, max_length: int = 200) -> str
     return normalized[: max_length - 3].rstrip() + "..."
 
 
-def _wrap_tool_result(structured_content: dict[str, Any]) -> dict[str, Any]:
+def _wrap_tool_result(structured_content: dict[str, Any], *, is_error: bool = False) -> dict[str, Any]:
     """Wrap structured content in standard MCP content and structuredContent envelope."""
+    if is_error:
+        error_info = structured_content.get("error") if isinstance(structured_content, dict) else None
+        error_msg = error_info.get("message") if isinstance(error_info, dict) else str(structured_content)
+        text_content = error_msg or json.dumps(structured_content, ensure_ascii=False, indent=2)
+    else:
+        text_content = json.dumps(structured_content, ensure_ascii=False, indent=2)
+
+    result: dict[str, Any] = {
+        "content": [
+            {
+                "type": "text",
+                "text": text_content,
+            }
+        ],
+        "structuredContent": structured_content,
+    }
+    if is_error:
+        result["isError"] = True
+    return result
+
+
+def _wrap_tool_error(exc: RequestValidationError | Exception | str, *, code: str | None = None, field: str | None = None) -> dict[str, Any]:
+    """Wrap a tool execution error in a standard MCP CallToolResult with isError=True."""
+    if isinstance(exc, RequestValidationError):
+        error_payload = {
+            "error": {
+                "code": exc.code or code or "TOOL_ERROR",
+                "message": str(exc),
+                "field": exc.field or field,
+            }
+        }
+    else:
+        error_payload = {
+            "error": {
+                "code": code or "TOOL_ERROR",
+                "message": str(exc),
+                "field": field,
+            }
+        }
     return {
         "content": [
             {
                 "type": "text",
-                "text": json.dumps(structured_content, ensure_ascii=False, indent=2),
+                "text": error_payload["error"]["message"],
             }
         ],
-        "structuredContent": structured_content,
+        "isError": True,
+        "structuredContent": error_payload,
     }
 
 

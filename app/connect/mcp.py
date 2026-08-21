@@ -229,7 +229,7 @@ def handle_mcp_request(url_token: str | None = None, session_user: Any = None):
             )
             db.session.commit()
             logger.info(
-                "MCP Connect tool=%s user_id=%s auth_type=%s",
+                "MCP Connect tool=%s user_id=%s auth_type=%s success=True",
                 tool_name,
                 auth_context.user.id,
                 auth_context.auth_type,
@@ -245,11 +245,15 @@ def handle_mcp_request(url_token: str | None = None, session_user: Any = None):
         )
     except RequestValidationError as exc:
         db.session.rollback()
+        # For JSON-RPC over HTTP, domain validation / resource errors (like 404 NOT_FOUND) must
+        # return HTTP 400 so client transports do not mistake it for a missing URL endpoint
+        # and terminate the MCP session.
+        http_status = 400 if exc.status in (404, 400) else exc.status
         return _jsonrpc_error(
             request_id,
             code=-32602,
             message=str(exc),
-            status=exc.status,
+            status=http_status,
             data={"field": exc.field, "code": exc.code},
         )
     except McpAccessTokenError as exc:
