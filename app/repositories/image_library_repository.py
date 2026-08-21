@@ -30,13 +30,23 @@ class SharedImagePage:
         return self.page < self.total_pages
 
 
-def get_by_id(asset_id: str) -> SharedImageAsset | None:
-    return SharedImageAsset.query.filter_by(id=asset_id).first()
+def get_by_id(asset_id: str | None) -> SharedImageAsset | None:
+    if not asset_id:
+        return None
+    cleaned = str(asset_id).strip()
+    if not cleaned:
+        return None
+    return SharedImageAsset.query.filter_by(id=cleaned).first()
 
 
-def get_by_key(image_key: str) -> SharedImageAsset | None:
+def get_by_key(image_key: str | None) -> SharedImageAsset | None:
+    if not image_key:
+        return None
+    cleaned = str(image_key).strip()
+    if not cleaned:
+        return None
     return SharedImageAsset.query.filter(
-        func.lower(SharedImageAsset.image_key) == image_key.lower(),
+        func.lower(SharedImageAsset.image_key) == cleaned.lower(),
     ).first()
 
 
