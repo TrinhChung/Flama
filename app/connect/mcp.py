@@ -22,12 +22,15 @@ mcp_connect_bp = Blueprint("flama_connect_mcp", __name__)
 
 
 @mcp_connect_bp.get("/.well-known/oauth-protected-resource")
-def connect_oauth_protected_resource():
+@mcp_connect_bp.get("/.well-known/oauth-protected-resource/<path:resource_path>")
+@mcp_connect_bp.get("/v1/mcp/.well-known/oauth-protected-resource")
+def connect_oauth_protected_resource(resource_path: str | None = None):
     """RFC 9728 Protected Resource Metadata for Flama Connect."""
     data = oauth_service.get_protected_resource_metadata(request)
     base_url = oauth_service.get_base_url(request)
     data["resource"] = f"{base_url}/v1/mcp"
     return jsonify(data)
+
 
 
 
@@ -114,6 +117,10 @@ def handle_mcp_request(url_token: str | None = None, session_user: Any = None):
     request_id = rpc_request.request_id
 
     try:
+        # Method: ping (Standard MCP protocol liveness check)
+        if rpc_request.method == "ping":
+            return _jsonrpc_result(request_id, {})
+
         # Method: initialize
         if rpc_request.method == "initialize":
             auth_context = mcp_auth_service.authenticate_mcp_request_if_present(
@@ -141,6 +148,7 @@ def handle_mcp_request(url_token: str | None = None, session_user: Any = None):
                         "prompts": {
                             "listChanged": False,
                         },
+                        "logging": {},
                     },
                     "serverInfo": {
                         "name": "flama-mcp-connect",
@@ -156,8 +164,8 @@ def handle_mcp_request(url_token: str | None = None, session_user: Any = None):
                 },
             )
 
-        # Method: notifications/initialized
-        if rpc_request.method == "notifications/initialized":
+        # Method: notifications/initialized or any notifications
+        if rpc_request.method.startswith("notifications/") or rpc_request.method == "notifications/initialized":
             response = make_response("", 204)
             response.headers["MCP-Protocol-Version"] = mcp_tool_service.MCP_PROTOCOL_VERSION
             return response
@@ -185,6 +193,25 @@ def handle_mcp_request(url_token: str | None = None, session_user: Any = None):
                 },
             )
 
+        # Method: resources/templates/list
+        if rpc_request.method in ("resources/templates/list", "resourceTemplates/list"):
+            return _jsonrpc_result(
+                request_id,
+                {
+                    "resourceTemplates": [],
+                },
+            )
+
+        # Method: resources/read
+        if rpc_request.method == "resources/read":
+            return _jsonrpc_error(
+                request_id,
+                code=-32602,
+                message="Resource not found.",
+                status=400,
+                data={"code": "RESOURCE_NOT_FOUND"},
+            )
+
         # Method: prompts/list
         if rpc_request.method == "prompts/list":
             return _jsonrpc_result(
@@ -193,6 +220,20 @@ def handle_mcp_request(url_token: str | None = None, session_user: Any = None):
                     "prompts": [],
                 },
             )
+
+        # Method: prompts/get
+        if rpc_request.method == "prompts/get":
+            return _jsonrpc_error(
+                request_id,
+                code=-32602,
+                message="Prompt not found.",
+                status=400,
+                data={"code": "PROMPT_NOT_FOUND"},
+            )
+
+        # Method: logging/setLevel
+        if rpc_request.method == "logging/setLevel":
+            return _jsonrpc_result(request_id, {})
 
         # Method: tools/call
         if rpc_request.method == "tools/call":
@@ -240,9 +281,10 @@ def handle_mcp_request(url_token: str | None = None, session_user: Any = None):
             request_id,
             code=-32601,
             message=f"Unsupported MCP method: {rpc_request.method}",
-            status=404,
+            status=400,
             data={"code": "METHOD_NOT_FOUND"},
         )
+
     except RequestValidationError as exc:
         db.session.rollback()
         # For JSON-RPC over HTTP, domain validation / resource errors (like 404 NOT_FOUND) must

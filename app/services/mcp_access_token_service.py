@@ -83,12 +83,21 @@ def get_token_policy() -> dict[str, Any]:
     }
 
 
+def _rate_limit_enabled() -> bool:
+    try:
+        return bool(current_app.config.get("MCP_TOKEN_RATE_LIMIT_ENABLED", False))
+    except RuntimeError:
+        return False
+
+
 def _rate_limit_window_seconds() -> int:
     return _config_int("MCP_TOKEN_RATE_LIMIT_WINDOW_SECONDS", 60, minimum=1)
 
 
 def _rate_limit_max_requests() -> int:
-    return _config_int("MCP_TOKEN_RATE_LIMIT_MAX_REQUESTS", 20, minimum=1)
+    return _config_int("MCP_TOKEN_RATE_LIMIT_MAX_REQUESTS", 100_000, minimum=1)
+
+
 
 
 def reset_rate_limit_state() -> None:
@@ -479,6 +488,10 @@ def cleanup_tokens_and_commit(*, user_id: int) -> int:
 
 
 def enforce_rate_limit(*, bucket_key: str) -> None:
+    """Sliding-window token rate limiter. Guarded by MCP_TOKEN_RATE_LIMIT_ENABLED and MCP_TOKEN_RATE_LIMIT_MAX_REQUESTS."""
+    if not _rate_limit_enabled():
+        return
+
     max_requests = _rate_limit_max_requests()
     window_seconds = _rate_limit_window_seconds()
     now_ts = time.monotonic()
@@ -495,6 +508,8 @@ def enforce_rate_limit(*, bucket_key: str) -> None:
                 code="MCP_RATE_LIMIT_EXCEEDED",
             )
         bucket.append(now_ts)
+
+
 
 
 def authenticate_bearer_token(
