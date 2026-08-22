@@ -5,8 +5,11 @@ import { flamaAudioClient } from '@/lib/flamaAudioClient'
 import { uploadNoteMediaBlob } from '@/shared/api/noteMedia'
 import {
   clearStoredAudioQueue,
+  flushStoredAudioQueueSave,
   loadStoredAudioQueue,
-  saveStoredAudioQueue,
+  loadStoredConcurrency,
+  saveStoredAudioQueueDebounced,
+  saveStoredConcurrency,
 } from '../services/audioQueueStorage'
 import { resolveLocaleFromVoiceId } from '../services/ttsTextNormalizer'
 import type { AudioDeckJob, AudioJobItem } from '../types'
@@ -14,18 +17,30 @@ import type { AudioDeckJob, AudioJobItem } from '../types'
 export function useDeckAudioQueue() {
   const [jobs, setJobs] = useState<AudioDeckJob[]>(() => loadStoredAudioQueue())
   const [activeJobId, setActiveJobId] = useState<string | null>(null)
+  const [concurrency, setConcurrencyState] = useState<number>(() => loadStoredConcurrency())
+
+  const concurrencyRef = useRef<number>(concurrency)
   const isExecutingRef = useRef<boolean>(false)
   const shouldPauseRef = useRef<boolean>(false)
 
-  // Sync state changes to storage
+  // Update concurrency setting
+  const setConcurrency = useCallback((newVal: number) => {
+    const clamped = Math.max(1, Math.min(5, newVal))
+    setConcurrencyState(clamped)
+    concurrencyRef.current = clamped
+    saveStoredConcurrency(clamped)
+  }, [])
+
+  // Sync state changes to storage (debounced)
   useEffect(() => {
-    saveStoredAudioQueue(jobs)
+    saveStoredAudioQueueDebounced(jobs)
   }, [jobs])
 
   // Current active job
-  const activeJob = jobs.find((j) => j.id === activeJobId) || jobs.find((j) => j.status === 'running') || null
+  const activeJob =
+    jobs.find((j) => j.id === activeJobId) || jobs.find((j) => j.status === 'running') || null
 
-  // Process a single item
+  // Process a single item: synthesize + upload
   const processItem = async (
     item: AudioJobItem,
   ): Promise<{ success: boolean; error?: string; assetUrl?: string }> => {
@@ -63,7 +78,7 @@ export function useDeckAudioQueue() {
     }
   }
 
-  // Queue Executor Loop
+  // Queue Executor Loop with Multi-Worker Concurrency Pool
   const runQueueWorker = useCallback(async () => {
     if (isExecutingRef.current) return
     isExecutingRef.current = true
@@ -71,8 +86,11 @@ export function useDeckAudioQueue() {
 
     while (true) {
       // Find current running or next queued job
-      let currentJobs = loadStoredAudioQueue()
-      let targetJob = currentJobs.find((j) => j.status === 'running') || currentJobs.find((j) => j.status === 'queued')
+      const currentJobs = loadStoredAudioQueue()
+      let targetJob =
+        currentJobs.find((j) => j.id === activeJobId && j.status === 'running') ||
+        currentJobs.find((j) => j.status === 'running') ||
+        currentJobs.find((j) => j.status === 'queued')
 
       if (!targetJob) {
         break
@@ -87,10 +105,11 @@ export function useDeckAudioQueue() {
           ...targetJob,
           status: 'running',
           startedAt: targetJob.startedAt || new Date().toISOString(),
+          concurrency: concurrencyRef.current,
         }
         setJobs((prev) => {
           const next = prev.map((j) => (j.id === currentJobId ? targetJob! : j))
-          saveStoredAudioQueue(next)
+          flushStoredAudioQueueSave(next)
           return next
         })
       }
@@ -101,97 +120,161 @@ export function useDeckAudioQueue() {
       } catch {
         toast.error('Mất kết nối với Flama Audio Desktop. Đang tạm dừng hàng đợi...')
         setJobs((prev) => {
-          const next = prev.map((j) => (j.id === currentJobId ? { ...j, status: 'paused' as const } : j))
-          saveStoredAudioQueue(next)
+          const next = prev.map((j) =>
+            j.id === currentJobId ? { ...j, status: 'paused' as const } : j,
+          )
+          flushStoredAudioQueueSave(next)
           return next
         })
         break
       }
 
-      let isJobFinished = true
+      // Prepare items and concurrency tracking
+      const items = [...targetJob.items]
+      let cursor = 0
+      let activeWorkersCount = 0
+      const activeWordsMap = new Map<number, { word: string; field: string }>()
+      const sessionStartTime = Date.now()
+      let completedInSession = 0
 
-      // Iterate through items
-      for (let i = 0; i < targetJob.items.length; i++) {
-        if (shouldPauseRef.current) {
-          isJobFinished = false
-          break
-        }
+      const updateJobProgressState = (currentItems: AudioJobItem[]) => {
+        const completed = currentItems.filter((it) => it.status === 'done').length
+        const failed = currentItems.filter((it) => it.status === 'failed').length
+        const skipped = currentItems.filter((it) => it.status === 'skipped').length
+        const progress = Math.round(((completed + failed + skipped) / currentItems.length) * 100)
 
-        const item = targetJob.items[i]
-        if (item.status === 'done' || item.status === 'skipped') {
-          continue
-        }
+        const elapsedSec = (Date.now() - sessionStartTime) / 1000
+        const itemsPerSecond =
+          completedInSession > 0 && elapsedSec > 0.5
+            ? Math.round((completedInSession / elapsedSec) * 10) / 10
+            : 0
 
-        // Update item status: synthesizing
+        const remainingCount = currentItems.length - (completed + failed + skipped)
+        const estimatedSecondsRemaining =
+          itemsPerSecond > 0 ? Math.round(remainingCount / itemsPerSecond) : undefined
+
+        const activeWords = Array.from(activeWordsMap.values()).map((v) => v.word)
+        const firstActive = activeWordsMap.values().next().value
+
         setJobs((prev) => {
           const next = prev.map((j) => {
             if (j.id !== currentJobId) return j
-            const updatedItems = [...j.items]
-            updatedItems[i] = { ...updatedItems[i], status: 'synthesizing' }
             return {
               ...j,
-              items: updatedItems,
-              stats: {
-                ...j.stats,
-                currentItemIndex: i + 1,
-                currentWord: item.word,
-                currentField: item.destinationField,
-              },
-            }
-          })
-          saveStoredAudioQueue(next)
-          return next
-        })
-
-        // Execute synthesis & upload
-        const result = await processItem(item)
-
-        // Update item status: done or failed
-        setJobs((prev) => {
-          const next = prev.map((j) => {
-            if (j.id !== currentJobId) return j
-            const updatedItems = [...j.items]
-            updatedItems[i] = {
-              ...updatedItems[i],
-              status: result.success ? 'done' : 'failed',
-              error: result.error,
-              assetUrl: result.assetUrl,
-            }
-
-            const completed = updatedItems.filter((it) => it.status === 'done').length
-            const failed = updatedItems.filter((it) => it.status === 'failed').length
-            const skipped = updatedItems.filter((it) => it.status === 'skipped').length
-            const progress = Math.round(((completed + failed + skipped) / updatedItems.length) * 100)
-
-            return {
-              ...j,
-              items: updatedItems,
+              items: [...currentItems],
+              concurrency: concurrencyRef.current,
               stats: {
                 ...j.stats,
                 completedItems: completed,
                 failedItems: failed,
                 skippedItems: skipped,
-                currentItemIndex: i + 1,
                 progressPercent: progress,
+                activeWorkers: activeWorkersCount,
+                itemsPerSecond,
+                estimatedSecondsRemaining,
+                activeWords,
+                currentWord: firstActive?.word,
+                currentField: firstActive?.field,
               },
             }
           })
-          saveStoredAudioQueue(next)
+          saveStoredAudioQueueDebounced(next)
           return next
         })
       }
 
+      // Worker task
+      const worker = async () => {
+        while (true) {
+          if (shouldPauseRef.current) {
+            break
+          }
+
+          // Pick next pending item
+          let itemIndex = -1
+          while (cursor < items.length) {
+            const idx = cursor++
+            const it = items[idx]
+            if (it && it.status !== 'done' && it.status !== 'skipped') {
+              itemIndex = idx
+              break
+            }
+          }
+
+          if (itemIndex === -1) {
+            break
+          }
+
+          const currentItem = items[itemIndex]
+          activeWorkersCount++
+          activeWordsMap.set(itemIndex, {
+            word: currentItem.word,
+            field: currentItem.destinationField,
+          })
+
+          // Mark item as synthesizing
+          items[itemIndex] = { ...currentItem, status: 'synthesizing' }
+          updateJobProgressState(items)
+
+          if (shouldPauseRef.current) {
+            items[itemIndex] = { ...currentItem, status: 'pending' }
+            activeWorkersCount--
+            activeWordsMap.delete(itemIndex)
+            updateJobProgressState(items)
+            break
+          }
+
+          // Synthesize & upload
+          const result = await processItem(currentItem)
+
+          activeWorkersCount--
+          activeWordsMap.delete(itemIndex)
+
+          if (result.success) {
+            completedInSession++
+            items[itemIndex] = {
+              ...currentItem,
+              status: 'done',
+              assetUrl: result.assetUrl,
+            }
+          } else {
+            items[itemIndex] = {
+              ...currentItem,
+              status: 'failed',
+              error: result.error,
+            }
+          }
+
+          updateJobProgressState(items)
+        }
+      }
+
+      // Spawn concurrent workers
+      const poolSize = Math.max(1, Math.min(5, concurrencyRef.current))
+      const workers = Array.from({ length: poolSize }, () => worker())
+      await Promise.all(workers)
+
       if (shouldPauseRef.current) {
         setJobs((prev) => {
-          const next = prev.map((j) => (j.id === currentJobId ? { ...j, status: 'paused' as const } : j))
-          saveStoredAudioQueue(next)
+          const next = prev.map((j) =>
+            j.id === currentJobId
+              ? {
+                  ...j,
+                  status: 'paused' as const,
+                  stats: { ...j.stats, activeWorkers: 0, activeWords: [] },
+                }
+              : j,
+          )
+          flushStoredAudioQueueSave(next)
           return next
         })
         break
       }
 
-      if (isJobFinished) {
-        // Mark job as completed
+      const allCompleted = items.every((it) => it.status === 'done' || it.status === 'skipped')
+      const hasFailures = items.some((it) => it.status === 'failed')
+
+      if (allCompleted || hasFailures) {
         setJobs((prev) => {
           const next = prev.map((j) =>
             j.id === currentJobId
@@ -199,20 +282,33 @@ export function useDeckAudioQueue() {
                   ...j,
                   status: 'completed' as const,
                   completedAt: new Date().toISOString(),
-                  stats: { ...j.stats, progressPercent: 100 },
+                  stats: {
+                    ...j.stats,
+                    activeWorkers: 0,
+                    activeWords: [],
+                    progressPercent: 100,
+                  },
                 }
               : j,
           )
-          saveStoredAudioQueue(next)
+          flushStoredAudioQueueSave(next)
           return next
         })
-        toast.success(`Đã hoàn tất tạo âm thanh cho Deck "${targetJob.deckName}"!`)
+
+        const failedCount = items.filter((it) => it.status === 'failed').length
+        if (failedCount > 0) {
+          toast.warning(
+            `Hoàn tất tạo âm thanh cho Deck "${targetJob.deckName}" với ${failedCount} mục lỗi.`,
+          )
+        } else {
+          toast.success(`Đã hoàn tất tạo âm thanh cho Deck "${targetJob.deckName}"!`)
+        }
       }
     }
 
     isExecutingRef.current = false
     setActiveJobId(null)
-  }, [])
+  }, [activeJobId])
 
   // Auto-start queue if there are queued/running jobs on mount or state update
   const triggerQueue = useCallback(() => {
@@ -223,9 +319,13 @@ export function useDeckAudioQueue() {
 
   // Public Queue Actions
   const addJobToQueue = (job: AudioDeckJob) => {
+    const jobWithConcurrency = {
+      ...job,
+      concurrency: concurrencyRef.current,
+    }
     setJobs((prev) => {
-      const next = [...prev, job]
-      saveStoredAudioQueue(next)
+      const next = [...prev, jobWithConcurrency]
+      flushStoredAudioQueueSave(next)
       return next
     })
     toast.success(`Đã thêm Deck "${job.deckName}" vào hàng đợi (${job.items.length} mục).`)
@@ -235,8 +335,16 @@ export function useDeckAudioQueue() {
   const pauseActiveJob = () => {
     shouldPauseRef.current = true
     setJobs((prev) => {
-      const next = prev.map((j) => (j.status === 'running' ? { ...j, status: 'paused' as const } : j))
-      saveStoredAudioQueue(next)
+      const next = prev.map((j) =>
+        j.status === 'running'
+          ? {
+              ...j,
+              status: 'paused' as const,
+              stats: { ...j.stats, activeWorkers: 0, activeWords: [] },
+            }
+          : j,
+      )
+      flushStoredAudioQueueSave(next)
       return next
     })
     toast.info('Đang tạm dừng hàng đợi tạo âm thanh...')
@@ -245,7 +353,7 @@ export function useDeckAudioQueue() {
   const resumeJob = (jobId: string) => {
     setJobs((prev) => {
       const next = prev.map((j) => (j.id === jobId ? { ...j, status: 'queued' as const } : j))
-      saveStoredAudioQueue(next)
+      flushStoredAudioQueueSave(next)
       return next
     })
     toast.success('Đã kích hoạt lại tác vụ.')
@@ -257,8 +365,16 @@ export function useDeckAudioQueue() {
       shouldPauseRef.current = true
     }
     setJobs((prev) => {
-      const next = prev.map((j) => (j.id === jobId ? { ...j, status: 'cancelled' as const } : j))
-      saveStoredAudioQueue(next)
+      const next = prev.map((j) =>
+        j.id === jobId
+          ? {
+              ...j,
+              status: 'cancelled' as const,
+              stats: { ...j.stats, activeWorkers: 0, activeWords: [] },
+            }
+          : j,
+      )
+      flushStoredAudioQueueSave(next)
       return next
     })
     toast.info('Đã hủy tác vụ.')
@@ -267,7 +383,7 @@ export function useDeckAudioQueue() {
   const removeQueuedJob = (jobId: string) => {
     setJobs((prev) => {
       const next = prev.filter((j) => j.id !== jobId)
-      saveStoredAudioQueue(next)
+      flushStoredAudioQueueSave(next)
       return next
     })
     toast.info('Đã xóa khỏi hàng đợi.')
@@ -275,8 +391,10 @@ export function useDeckAudioQueue() {
 
   const clearCompleted = () => {
     setJobs((prev) => {
-      const next = prev.filter((j) => j.status === 'running' || j.status === 'queued' || j.status === 'paused')
-      saveStoredAudioQueue(next)
+      const next = prev.filter(
+        (j) => j.status === 'running' || j.status === 'queued' || j.status === 'paused',
+      )
+      flushStoredAudioQueueSave(next)
       return next
     })
     toast.info('Đã dọn dẹp các tác vụ đã hoàn tất.')
@@ -293,6 +411,8 @@ export function useDeckAudioQueue() {
     jobs,
     activeJob,
     activeJobId,
+    concurrency,
+    setConcurrency,
     addJobToQueue,
     pauseActiveJob,
     resumeJob,
@@ -303,3 +423,4 @@ export function useDeckAudioQueue() {
     triggerQueue,
   }
 }
+

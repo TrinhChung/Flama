@@ -74,6 +74,7 @@ public class KokoroOnnxEngine : IDisposable
             // Initialize helper modules
             var cmuDict = new CmuDictionary(File.Exists(_cmuDictPath) ? _cmuDictPath : null);
             _g2p = new EnglishG2P(cmuDict);
+            _chineseG2p = new ChineseG2P(_g2p);
             _tokenizer = new KokoroTokenizer(File.Exists(_configPath) ? _configPath : null);
             _voiceManager = new VoiceManager(File.Exists(_voicesPath) ? _voicesPath : null);
 
@@ -104,11 +105,6 @@ public class KokoroOnnxEngine : IDisposable
         if (_g2p == null || _tokenizer == null || _voiceManager == null)
         {
             throw new InvalidOperationException("Kokoro engine components failed to initialize.");
-        }
-
-        if (_chineseG2p == null)
-        {
-            _chineseG2p = new ChineseG2P(_g2p);
         }
 
         IG2P g2p = ResolveG2P(language, voiceId);

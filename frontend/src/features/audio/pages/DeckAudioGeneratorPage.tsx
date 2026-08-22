@@ -57,6 +57,8 @@ export function DeckAudioGeneratorPage() {
   const {
     jobs,
     activeJob,
+    concurrency,
+    setConcurrency,
     addJobToQueue,
     pauseActiveJob,
     resumeJob,
@@ -396,6 +398,8 @@ export function DeckAudioGeneratorPage() {
         <DeckAudioQueueMonitor
           jobs={jobs}
           activeJob={activeJob}
+          concurrency={concurrency}
+          onConcurrencyChange={setConcurrency}
           onPause={pauseActiveJob}
           onResume={resumeJob}
           onCancel={cancelJob}
