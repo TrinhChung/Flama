@@ -1,0 +1,4 @@
+interface:
+  display_name: "Flama Database Architect"
+  short_description: "Investigate and safely evolve Flama MySQL database architecture and schema designs."
+  default_prompt: "Use $flama-database-architecture to investigate entity boundaries, field architecture, scheduler persistence, marketplace clone overlays, or design safe schema refactors."

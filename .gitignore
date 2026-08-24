@@ -56,10 +56,12 @@ lerna-debug.log*
 .impeccable/
 plugins/
 
-# External agent skills in skills/ (preserve repo-local skills: docs-architect, nihongo-agent-architect)
+# External agent skills in skills/ (preserve repo-local skills: docs-architect, nihongo-agent-architect, flama-database-architecture)
 skills/*
 !skills/docs-architect/
 !skills/nihongo-agent-architect/
+!skills/flama-database-architecture/
+
 
 # OS / Editor files
 .DS_Store
