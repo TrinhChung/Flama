@@ -83,3 +83,13 @@ Các quy chuẩn và kỹ năng dành cho các AI Coding Agent (Antigravity, Cod
 | [`DATABASE_ARCHITECTURE.md`](skills/DATABASE_ARCHITECTURE.md) | **Cẩm nang điều tra & tiến hóa kiến trúc CSDL Flama MySQL** (Entity Landscape, Checklist rà soát, Migration 5 pha zero-downtime). |
 | [`BRANCH_STRATEGY.md`](skills/BRANCH_STRATEGY.md) | **Chiến lược phân nhánh Git cho Agent** (Quy tắc không làm bẩn master/develop, task isolation). |
 
+---
+
+## 🔍 6. Code Review (`docs/reviews/`)
+
+Các báo cáo review code/tài liệu để tra cứu lại:
+
+| Tài liệu | Mô tả |
+|---|---|
+| [`code-review-c2c5902-decoupling-docs-2026-08-25.md`](reviews/code-review-c2c5902-decoupling-docs-2026-08-25.md) | Review commit `c2c5902` (bộ tài liệu decoupling + skill database-architecture): 6 phát hiện + danh sách claim đã kiểm chứng. |
+
