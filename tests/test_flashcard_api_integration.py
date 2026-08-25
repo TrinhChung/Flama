@@ -29,6 +29,7 @@ from models.flashcard import (
 from models.user import User
 from models.deck import Deck
 from models.deck_release import DeckRelease
+from models.field_def import FieldDef
 from models.template import Template
 from models.card_progress import CardProgress
 from sqlalchemy import event
@@ -4156,12 +4157,20 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             self.assertEqual(deck_a_count, 1)
             self.assertEqual(deck_b_count, 1)
 
-    def test_flashcard_import_forbids_non_admin(self):
+    def test_flashcard_import_allows_non_admin_with_own_note_type(self):
         with self.app.app_context():
             learner = User(username="import-learner", email="import-learner@example.com", is_admin=False)
             learner.set_password("password")
             db.session.add(learner)
+            db.session.flush()
+
+            nt = NoteType(user_id=learner.id, name="Learner Vocab")
+            db.session.add(nt)
+            db.session.flush()
+            db.session.add(FieldDef(note_type_id=nt.id, name="Word", position=0))
+            db.session.add(FieldDef(note_type_id=nt.id, name="Meaning", position=1))
             db.session.commit()
+            note_type_id = nt.id
 
         learner_client = self.app.test_client()
         learner_client.post(
@@ -4173,12 +4182,13 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         parse_resp = learner_client.post(
             "/api/flashcards/import/parse",
             data={
+                "note_type_id": note_type_id,
                 "delimiter_mode": "csv",
                 "file": (io.BytesIO(b"Word,Meaning\n"), "test.csv"),
             },
             content_type="multipart/form-data",
         )
-        self.assertEqual(parse_resp.status_code, 403)
+        self.assertEqual(parse_resp.status_code, 200)
 
     def test_flashcard_import_page_renders(self):
         response = self.client.get("/flashcards/import")
