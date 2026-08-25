@@ -19,18 +19,9 @@ export function AnkiSyncPage() {
     checkAnkiConnection,
     handleEndpointChange,
     bootstrapQuery,
-    hasCreatorAccess,
     optionsQuery,
     noteTypeOptions,
   } = useAnkiSyncPage()
-
-  if (bootstrapQuery.data && !hasCreatorAccess) {
-    return (
-      <Page>
-        <PageError error={new Error('Chức năng đồng bộ Anki chỉ dành cho Nhà sáng tạo.')} />
-      </Page>
-    )
-  }
 
   if (optionsQuery.isPending || bootstrapQuery.isPending) {
     return <PageLoading label="Đang tải cấu hình đồng bộ..." />

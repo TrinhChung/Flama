@@ -66,15 +66,11 @@ export function useAnkiSyncPage() {
     queryKey: ['bootstrap'],
     queryFn: () => appApi.getBootstrap(),
   })
-  const hasCreatorAccess = Boolean(
-    bootstrapQuery.data?.user?.is_admin ||
-      bootstrapQuery.data?.user?.role?.code === 'creator',
-  )
 
   const optionsQuery = useQuery<ImportOptionsResponse>({
     queryKey: ['import-options'],
     queryFn: () => appApi.get<ImportOptionsResponse>('/flashcards/import/options'),
-    enabled: hasCreatorAccess,
+    enabled: Boolean(bootstrapQuery.data),
   })
 
   const noteTypeOptions: NoteTypeOption[] =
@@ -105,7 +101,6 @@ export function useAnkiSyncPage() {
     checkAnkiConnection,
     handleEndpointChange,
     bootstrapQuery,
-    hasCreatorAccess,
     optionsQuery,
     noteTypeOptions,
   }
