@@ -338,7 +338,14 @@ export function useFileImportWizard() {
       }
       return appApi.mutate<ImportReport>('/flashcards/import/estimate', 'POST', payload)
     },
+    onMutate: () => {
+      toast?.loading?.('Đang ước lượng dữ liệu import…', {
+        id: 'file-import-op',
+        description: 'Hệ thống đang kiểm tra tính hợp lệ và xung đột dữ liệu.',
+      })
+    },
     onSuccess: (data) => {
+      toast?.dismiss?.('file-import-op')
       setReport(data)
       setHasEstimated(true)
       setExecutionDone(false)
@@ -350,7 +357,7 @@ export function useFileImportWizard() {
       }
     },
     onError: (err: Error) => {
-      toast.error('Ước lượng thất bại', { description: err.message })
+      toast.error('Ước lượng thất bại', { id: 'file-import-op', description: err.message })
     },
   })
 
@@ -371,7 +378,14 @@ export function useFileImportWizard() {
       }
       return appApi.mutate<BatchImportReport>('/flashcards/import/batch/estimate', 'POST', payload)
     },
+    onMutate: () => {
+      toast?.loading?.('Đang ước lượng hàng loạt bài học…', {
+        id: 'file-import-op',
+        description: 'Hệ thống đang phân tích các tệp và cấu trúc deck con.',
+      })
+    },
     onSuccess: (data) => {
+      toast?.dismiss?.('file-import-op')
       setBatchReport(data)
       setHasEstimated(true)
       setExecutionDone(false)
@@ -383,7 +397,7 @@ export function useFileImportWizard() {
       }
     },
     onError: (err: Error) => {
-      toast.error('Ước lượng hàng loạt thất bại', { description: err.message })
+      toast.error('Ước lượng hàng loạt thất bại', { id: 'file-import-op', description: err.message })
     },
   })
 
@@ -402,14 +416,22 @@ export function useFileImportWizard() {
       }
       return appApi.mutate<ImportReport>('/flashcards/import/execute', 'POST', payload)
     },
+    onMutate: () => {
+      toast?.loading?.('Đang thực thi nạp thẻ vào hệ thống…', {
+        id: 'file-import-op',
+        description: 'Quá trình nạp thẻ và sinh flashcard đang diễn ra. Vui lòng không đóng trang!',
+      })
+    },
     onSuccess: (data) => {
       setReport(data)
       setExecutionDone(true)
       const s = data.summary
-      toast.success(`Import hoàn tất! Thêm mới: ${s.inserted}, Cập nhật: ${s.updated}, Bỏ qua: ${s.skipped}.`)
+      toast.success(`Import hoàn tất! Thêm mới: ${s.inserted}, Cập nhật: ${s.updated}, Bỏ qua: ${s.skipped}.`, {
+        id: 'file-import-op',
+      })
     },
     onError: (err: Error) => {
-      toast.error('Thực thi import thất bại', { description: err.message })
+      toast.error('Thực thi import thất bại', { id: 'file-import-op', description: err.message })
     },
   })
 
@@ -430,15 +452,22 @@ export function useFileImportWizard() {
       }
       return appApi.mutate<BatchImportReport>('/flashcards/import/batch/execute', 'POST', payload)
     },
-
+    onMutate: () => {
+      toast?.loading?.('Đang thực thi nạp hàng loạt bài học…', {
+        id: 'file-import-op',
+        description: 'Đang tạo các deck con và nạp flashcard. Quá trình có thể mất từ 10-30 giây.',
+      })
+    },
     onSuccess: (data) => {
       setBatchReport(data)
       setExecutionDone(true)
       const s = data.overall_summary
-      toast.success(`Import thành công ${s.processed_files} bài học! Thêm mới: ${s.inserted} thẻ, Tạo mới: ${s.created_decks} deck con.`)
+      toast.success(`Import thành công ${s.processed_files} bài học! Thêm mới: ${s.inserted} thẻ, Tạo mới: ${s.created_decks} deck con.`, {
+        id: 'file-import-op',
+      })
     },
     onError: (err: Error) => {
-      toast.error('Thực thi import hàng loạt thất bại', { description: err.message })
+      toast.error('Thực thi import hàng loạt thất bại', { id: 'file-import-op', description: err.message })
     },
   })
 

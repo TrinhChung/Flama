@@ -364,8 +364,14 @@ export function useBrowseState() {
       }
       return cardIds.length
     },
+    onMutate: () => {
+      toast?.loading?.('Đang xóa các thẻ đã chọn…', {
+        id: 'bulk-delete-cards',
+        description: 'Vui lòng chờ trong khi hệ thống cập nhật cơ sở dữ liệu.',
+      })
+    },
     onSuccess: (count) => {
-      toast.success(`Đã xóa thành công ${count} thẻ đã chọn.`)
+      toast.success(`Đã xóa thành công ${count} thẻ đã chọn.`, { id: 'bulk-delete-cards' })
       if (activeCardId && selectedCards.includes(activeCardId)) {
         setActiveCardId(null)
       }
@@ -373,7 +379,7 @@ export function useBrowseState() {
       void queryClient.invalidateQueries({ queryKey: ['browse', 'cards'] })
     },
     onError: (error: Error) => {
-      toast.error('Lỗi khi xóa hàng loạt', { description: error.message })
+      toast.error('Lỗi khi xóa hàng loạt', { id: 'bulk-delete-cards', description: error.message })
     },
   })
 
@@ -391,11 +397,17 @@ export function useBrowseState() {
       use_opus?: boolean
       settings?: Record<string, number>
     }) => appApi.mutate('/browse/voicevox/generate', 'POST', payload),
+    onMutate: () => {
+      toast?.loading?.('Đang tạo âm thanh VoiceVox…', {
+        id: 'generate-tts',
+        description: 'Hệ thống đang gọi bộ tổng hợp giọng nói và đính kèm âm thanh vào thẻ.',
+      })
+    },
     onSuccess: () => {
       if (ttsApiKey.trim()) {
         void saveApiKeyIfValid(ttsApiKey, false)
       }
-      toast.success(`Đã tạo âm thanh VoiceVox cho ${targetTtsCardIds.length} thẻ!`)
+      toast.success(`Đã tạo âm thanh VoiceVox cho ${targetTtsCardIds.length} thẻ!`, { id: 'generate-tts' })
       setIsTtsModalOpen(false)
       void queryClient.invalidateQueries({ queryKey: ['browse', 'cards'] })
       if (activeCardId) {
@@ -403,7 +415,7 @@ export function useBrowseState() {
       }
     },
     onError: (error: Error) => {
-      toast.error('Không thể tạo âm thanh VoiceVox', { description: error.message })
+      toast.error('Không thể tạo âm thanh VoiceVox', { id: 'generate-tts', description: error.message })
     },
   })
 

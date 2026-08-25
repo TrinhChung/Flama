@@ -95,6 +95,12 @@ export function ReleaseBuilderPage() {
       },
       publishIdempotencyKey.current,
     ),
+    onMutate: () => {
+      toast?.loading?.('Đang tạo và đóng gói bản phát hành…', {
+        id: 'deck-publish',
+        description: 'Hệ thống đang snapshot toàn bộ flashcard và cấu trúc deck.',
+      })
+    },
     onSuccess: async (release) => {
       await queryClient.invalidateQueries({
         queryKey: ['deck-release-preview', itemId],
@@ -102,11 +108,15 @@ export function ReleaseBuilderPage() {
       await queryClient.invalidateQueries({
         queryKey: ['deck-releases', itemId],
       })
-      toast.success(`Đã phát hành phiên bản ${release.version_label}.`)
+      toast.success(`Đã phát hành phiên bản ${release.version_label}.`, {
+        id: 'deck-publish',
+      })
       navigate(`/marketplace/decks/${itemId}`)
     },
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : 'Không thể phát hành phiên bản mới.')
+      toast.error(error instanceof Error ? error.message : 'Không thể phát hành phiên bản mới.', {
+        id: 'deck-publish',
+      })
     },
   })
 
@@ -208,10 +218,17 @@ export function ReleaseBuilderPage() {
               disabled={!canPublish || publishMutation.isPending}
               onClick={() => publishMutation.mutate()}
             >
-              {publishMutation.isPending
-                ? <LoaderCircle className="animate-spin" />
-                : <Rocket />}
-              Phát hành {versionLabel || 'phiên bản mới'}
+              {publishMutation.isPending ? (
+                <>
+                  <LoaderCircle className="animate-spin" />
+                  Đang phát hành {versionLabel || 'phiên bản mới'}…
+                </>
+              ) : (
+                <>
+                  <Rocket />
+                  Phát hành {versionLabel || 'phiên bản mới'}
+                </>
+              )}
             </Button>
             <p className="text-xs leading-relaxed text-muted-foreground">
               Thao tác dùng revision hiện tại để ngăn phát hành nhầm khi deck vừa được sửa ở nơi khác.

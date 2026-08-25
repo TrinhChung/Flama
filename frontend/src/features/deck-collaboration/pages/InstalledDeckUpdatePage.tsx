@@ -314,7 +314,14 @@ export function InstalledDeckUpdatePage() {
         idempotency_key: prepareIdempotencyKey.current,
       },
     ),
+    onMutate: () => {
+      toast?.loading?.('Đang kiểm tra và chuẩn bị dữ liệu cập nhật…', {
+        id: 'installed-deck-update',
+        description: 'Hệ thống đang đối soát các field và xung đột phiên bản.',
+      })
+    },
     onSuccess: (result) => {
+      toast?.dismiss?.('installed-deck-update')
       const initialConflictPage = preparedConflictPage(result)
       const conflictQueryKey = ['installed-update-conflicts', result.rebase_id] as const
       if (initialConflictPage) {
@@ -334,7 +341,9 @@ export function InstalledDeckUpdatePage() {
       }
     },
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : 'Không thể chuẩn bị bản cập nhật.')
+      toast.error(error instanceof Error ? error.message : 'Không thể chuẩn bị bản cập nhật.', {
+        id: 'installed-deck-update',
+      })
     },
   })
 
@@ -397,14 +406,24 @@ export function InstalledDeckUpdatePage() {
       if (!prepared) throw new Error('Hãy kiểm tra xung đột trước khi cập nhật.')
       return applyPreparedInstalledUpdate(prepared.rebase_id)
     },
+    onMutate: () => {
+      toast?.loading?.('Đang áp dụng bản cập nhật bộ thẻ…', {
+        id: 'installed-deck-update',
+        description: 'Đang rebase overlay và nâng cấp phiên bản deck. Vui lòng không đóng trang!',
+      })
+    },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['installed-deck-updates', installId] })
       await queryClient.invalidateQueries({ queryKey: ['installed-decks'] })
-      toast.success(`Đã cập nhật deck lên phiên bản ${firstPage?.target_release.version_label || ''}.`)
+      toast.success(`Đã cập nhật deck lên phiên bản ${firstPage?.target_release.version_label || ''}.`, {
+        id: 'installed-deck-update',
+      })
       navigate('/installed-decks')
     },
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : 'Không thể áp dụng bản cập nhật.')
+      toast.error(error instanceof Error ? error.message : 'Không thể áp dụng bản cập nhật.', {
+        id: 'installed-deck-update',
+      })
     },
   })
 
@@ -489,10 +508,17 @@ export function InstalledDeckUpdatePage() {
                 disabled={prepareMutation.isPending || !updatesQuery.data.update_available}
                 onClick={() => prepareMutation.mutate()}
               >
-                {prepareMutation.isPending
-                  ? <LoaderCircle className="animate-spin" />
-                  : <RefreshCcw />}
-                Kiểm tra xung đột
+                {prepareMutation.isPending ? (
+                  <>
+                    <LoaderCircle className="animate-spin" />
+                    Đang kiểm tra xung đột…
+                  </>
+                ) : (
+                  <>
+                    <RefreshCcw />
+                    Kiểm tra xung đột
+                  </>
+                )}
               </Button>
             ) : (
               <Button
@@ -501,10 +527,17 @@ export function InstalledDeckUpdatePage() {
                 disabled={!canApply || applyMutation.isPending || resolveMutation.isPending}
                 onClick={() => applyMutation.mutate()}
               >
-                {applyMutation.isPending
-                  ? <LoaderCircle className="animate-spin" />
-                  : <Check />}
-                Áp dụng phiên bản {firstPage.target_release.version_label}
+                {applyMutation.isPending ? (
+                  <>
+                    <LoaderCircle className="animate-spin" />
+                    Đang áp dụng cập nhật…
+                  </>
+                ) : (
+                  <>
+                    <Check />
+                    Áp dụng phiên bản {firstPage.target_release.version_label}
+                  </>
+                )}
               </Button>
             )}
 
