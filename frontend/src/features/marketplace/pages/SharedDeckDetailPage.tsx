@@ -193,7 +193,15 @@ export function SharedDeckDetailPage() {
         order?: { id: string; active_attempt?: { checkout_url?: string } }
       }>(`/api/shared/decks/${id}/install`, 'POST')
     },
+    onMutate: () => {
+      toast?.loading?.('Đang khởi tạo và cài đặt bộ thẻ…', {
+        id: 'shared-deck-install',
+        description:
+          'Đối với bộ thẻ lớn (nhiều bài học hoặc từ vựng), quá trình có thể mất từ 10-30 giây. Vui lòng không đóng trình duyệt!',
+      })
+    },
     onSuccess: (data) => {
+      toast?.dismiss?.('shared-deck-install')
       if (data.payment_required && data.order) {
         const checkoutUrl = data.order.active_attempt?.checkout_url
         if (checkoutUrl) {
@@ -203,8 +211,19 @@ export function SharedDeckDetailPage() {
         navigate(`/orders`)
         return
       }
+      toast.success('Cài đặt bộ thẻ thành công!')
       queryClient.invalidateQueries({ queryKey: ['shared-deck-detail', id] })
       queryClient.invalidateQueries({ queryKey: ['marketplace'] })
+      queryClient.invalidateQueries({ queryKey: ['installed-decks'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+    },
+    onError: (error: Error) => {
+      toast.error('Không thể cài đặt bộ thẻ', {
+        id: 'shared-deck-install',
+        description:
+          error.message ||
+          'Đã có lỗi xảy ra trong quá trình cài đặt. Vui lòng thử lại sau ít phút.',
+      })
     },
   })
 
@@ -494,11 +513,16 @@ export function SharedDeckDetailPage() {
                   disabled={installMutation.isPending}
                 >
                   {installMutation.isPending ? (
-                    <Loader2 className="mr-2 size-4 animate-spin" />
+                    <>
+                      <Loader2 className="mr-2 size-4 animate-spin" />
+                      {deck.pricing_mode === 'paid' ? 'Đang tạo thanh toán…' : 'Đang cài đặt bộ thẻ…'}
+                    </>
                   ) : (
-                    <Download className="mr-2 size-4" />
+                    <>
+                      <Download className="mr-2 size-4" />
+                      {deck.pricing_mode === 'paid' ? 'Mua bộ deck' : 'Tải xuống & Cài đặt'}
+                    </>
                   )}
-                  {deck.pricing_mode === 'paid' ? 'Mua bộ deck' : 'Tải xuống & Cài đặt'}
                 </Button>
               )}
             </Card>
@@ -960,11 +984,16 @@ export function SharedDeckDetailPage() {
                   disabled={installMutation.isPending}
                 >
                   {installMutation.isPending ? (
-                    <Loader2 className="mr-2 size-5 animate-spin" />
+                    <>
+                      <Loader2 className="mr-2 size-5 animate-spin" />
+                      {deck.pricing_mode === 'paid' ? 'Đang tạo thanh toán…' : 'Đang cài đặt bộ thẻ…'}
+                    </>
                   ) : (
-                    <Download className="mr-2 size-5" />
+                    <>
+                      <Download className="mr-2 size-5" />
+                      {deck.pricing_mode === 'paid' ? 'Mua bộ deck' : 'Tải xuống & Cài đặt'}
+                    </>
                   )}
-                  {deck.pricing_mode === 'paid' ? 'Mua bộ deck' : 'Tải xuống & Cài đặt'}
                 </Button>
               )}
 

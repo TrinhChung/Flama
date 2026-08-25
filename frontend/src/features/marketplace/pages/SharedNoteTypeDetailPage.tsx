@@ -158,7 +158,14 @@ export function SharedNoteTypeDetailPage() {
         order?: { id: string; active_attempt?: { checkout_url?: string } }
       }>(`/api/shared/note-types/${id}/install`, 'POST')
     },
+    onMutate: () => {
+      toast?.loading?.('Đang khởi tạo và cài đặt loại thẻ…', {
+        id: 'shared-note-type-install',
+        description: 'Đang tải cấu hình trường và template. Vui lòng chờ!',
+      })
+    },
     onSuccess: (data) => {
+      toast?.dismiss?.('shared-note-type-install')
       if (data.payment_required && data.order) {
         const checkoutUrl = data.order.active_attempt?.checkout_url
         if (checkoutUrl) {
@@ -168,11 +175,16 @@ export function SharedNoteTypeDetailPage() {
         window.location.assign('/orders')
         return
       }
+      toast.success('Cài đặt loại thẻ thành công!')
       queryClient.invalidateQueries({ queryKey: ['shared-note-type-detail', id] })
       queryClient.invalidateQueries({ queryKey: ['marketplace'] })
+      queryClient.invalidateQueries({ queryKey: ['note-types'] })
     },
     onError: (error: Error) => {
-      toast.error(error.message || 'Không thể cài đặt Note Type.')
+      toast.error('Không thể cài đặt loại thẻ', {
+        id: 'shared-note-type-install',
+        description: error.message || 'Đã có lỗi xảy ra. Vui lòng thử lại sau ít phút.',
+      })
     },
   })
 
@@ -440,11 +452,16 @@ export function SharedNoteTypeDetailPage() {
                   disabled={installMutation.isPending}
                 >
                   {installMutation.isPending ? (
-                    <Loader2 className="mr-2 size-4 animate-spin" />
+                    <>
+                      <Loader2 className="mr-2 size-4 animate-spin" />
+                      {noteType.pricing_mode === 'paid' ? 'Đang tạo thanh toán…' : 'Đang cài đặt loại thẻ…'}
+                    </>
                   ) : (
-                    <Download className="mr-2 size-4" />
+                    <>
+                      <Download className="mr-2 size-4" />
+                      {noteType.pricing_mode === 'paid' ? 'Mua Note Type' : 'Tải xuống & Cài đặt'}
+                    </>
                   )}
-                  {noteType.pricing_mode === 'paid' ? 'Mua Note Type' : 'Tải xuống & Cài đặt'}
                 </Button>
               )}
             </Card>
@@ -701,11 +718,16 @@ export function SharedNoteTypeDetailPage() {
                   disabled={installMutation.isPending}
                 >
                   {installMutation.isPending ? (
-                    <Loader2 className="mr-2 size-5 animate-spin" />
+                    <>
+                      <Loader2 className="mr-2 size-5 animate-spin" />
+                      {noteType.pricing_mode === 'paid' ? 'Đang tạo thanh toán…' : 'Đang cài đặt loại thẻ…'}
+                    </>
                   ) : (
-                    <Download className="mr-2 size-5" />
+                    <>
+                      <Download className="mr-2 size-5" />
+                      {noteType.pricing_mode === 'paid' ? 'Mua Note Type' : 'Tải xuống & Cài đặt'}
+                    </>
                   )}
-                  {noteType.pricing_mode === 'paid' ? 'Mua Note Type' : 'Tải xuống & Cài đặt'}
                 </Button>
               )}
 

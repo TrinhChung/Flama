@@ -57,8 +57,14 @@ export function ImportResultStep({ wizard }: ImportResultStepProps) {
             onClick={handleEstimate}
             className="font-medium"
           >
-            {isPending && !hasEstimated ? <Loader2 className="size-4 animate-spin mr-1.5" /> : null}
-            1. Ước lượng thử nghiệm
+            {isPending && (estimateMutation.isPending || batchEstimateMutation.isPending) ? (
+              <>
+                <Loader2 className="size-4 animate-spin mr-1.5" />
+                Đang ước lượng dữ liệu…
+              </>
+            ) : (
+              '1. Ước lượng thử nghiệm'
+            )}
           </Button>
 
           <Button
@@ -66,8 +72,14 @@ export function ImportResultStep({ wizard }: ImportResultStepProps) {
             onClick={handleExecute}
             className="font-semibold shadow-sm"
           >
-            {isPending && hasEstimated ? <Loader2 className="size-4 animate-spin mr-1.5" /> : null}
-            2. Thực thi import
+            {isPending && (executeMutation.isPending || batchExecuteMutation.isPending) ? (
+              <>
+                <Loader2 className="size-4 animate-spin mr-1.5" />
+                Đang nạp thẻ vào hệ thống…
+              </>
+            ) : (
+              '2. Thực thi import'
+            )}
           </Button>
         </div>
 
