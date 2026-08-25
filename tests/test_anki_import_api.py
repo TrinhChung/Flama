@@ -324,13 +324,13 @@ class AnkiImportApiTests(unittest.TestCase):
                 1,
             )
 
-    def test_routes_require_admin_session_and_are_owner_scoped(self):
+    def test_routes_require_login_session_and_are_owner_scoped(self):
         anonymous = self.client.get("/api/flashcards/import/anki/capabilities")
         self.assertIn(anonymous.status_code, {302, 401})
 
         self._login("anki-import-user@example.com")
-        forbidden = self.client.get("/api/flashcards/import/anki/capabilities")
-        self.assertEqual(forbidden.status_code, 403)
+        allowed = self.client.get("/api/flashcards/import/anki/capabilities")
+        self.assertEqual(allowed.status_code, 200)
 
         self.client.delete("/api/session")
         self._login()

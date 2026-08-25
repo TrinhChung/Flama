@@ -1,6 +1,4 @@
 import { Link } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
-import { appApi } from '@/app/api'
 import {
   BarChartLine,
   Collection,
@@ -16,14 +14,6 @@ type StudyHeaderToolbarProps = {
 }
 
 export function StudyHeaderToolbar({ deckName, deckId, cardId }: StudyHeaderToolbarProps) {
-  const bootstrapQuery = useQuery({
-    queryKey: ['bootstrap'],
-    queryFn: () => appApi.getBootstrap(),
-  })
-  const hasCreatorAccess = Boolean(
-    bootstrapQuery.data?.user?.is_admin ||
-      bootstrapQuery.data?.user?.role?.code === 'creator',
-  )
 
   const statsUrl = deckId ? `/statistics?deck_id=${deckId}` : '/statistics'
   const browseUrl = deckId
@@ -62,14 +52,12 @@ export function StudyHeaderToolbar({ deckName, deckId, cardId }: StudyHeaderTool
             <BarChartLine className="size-3.5 sm:size-4" /> Stats
           </Link>
 
-          {hasCreatorAccess ? (
-            <Link
-              to={importUrl}
-              className="dash-tab hidden sm:inline-flex items-center gap-1.5 rounded-lg px-2.5 sm:px-3.5 py-1.5 sm:py-2 text-[11px] sm:text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground transition shrink-0"
-            >
-              <Upload className="size-3.5 sm:size-4" /> Import
-            </Link>
-          ) : null}
+          <Link
+            to={importUrl}
+            className="dash-tab hidden sm:inline-flex items-center gap-1.5 rounded-lg px-2.5 sm:px-3.5 py-1.5 sm:py-2 text-[11px] sm:text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground transition shrink-0"
+          >
+            <Upload className="size-3.5 sm:size-4" /> Import
+          </Link>
 
           <Link
             to={browseUrl}

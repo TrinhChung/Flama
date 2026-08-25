@@ -71,3 +71,25 @@ Các tài liệu đánh giá hoặc kế hoạch giai đoạn trước, được
 | [`FLAMA_PAYMENT_DOMAIN_EXPANSION_PLAN.md`](historical/FLAMA_PAYMENT_DOMAIN_EXPANSION_PLAN.md) | Bản thiết kế thanh toán cũ (đã thay thế bởi payOS). |
 | [`flashcard_system_design.md.resolved`](historical/flashcard_system_design.md.resolved) | Bản thiết kế hệ thống Flashcard ban đầu. |
 | [`SECURITY_ASSESSMENT_2026-04-06.md`](historical/SECURITY_ASSESSMENT_2026-04-06.md) | Báo cáo đánh giá an toàn thông tin ngày 2026-04-06. |
+
+---
+
+## 🛠️ 5. Agent Skills & Quy Trình Làm Việc (`docs/skills/`)
+
+Các quy chuẩn và kỹ năng dành cho các AI Coding Agent (Antigravity, Codex, Tri, San, v.v.):
+
+| Tài liệu | Mô tả |
+|---|---|
+| [`DATABASE_ARCHITECTURE.md`](skills/DATABASE_ARCHITECTURE.md) | **Cẩm nang điều tra & tiến hóa kiến trúc CSDL Flama MySQL** (Entity Landscape, Checklist rà soát, Migration 5 pha zero-downtime). |
+| [`BRANCH_STRATEGY.md`](skills/BRANCH_STRATEGY.md) | **Chiến lược phân nhánh Git cho Agent** (Quy tắc không làm bẩn master/develop, task isolation). |
+
+---
+
+## 🔍 6. Code Review (`docs/reviews/`)
+
+Các báo cáo review code/tài liệu để tra cứu lại:
+
+| Tài liệu | Mô tả |
+|---|---|
+| [`code-review-c2c5902-decoupling-docs-2026-08-25.md`](reviews/code-review-c2c5902-decoupling-docs-2026-08-25.md) | Review commit `c2c5902` (bộ tài liệu decoupling + skill database-architecture): 6 phát hiện + danh sách claim đã kiểm chứng. |
+

@@ -398,24 +398,24 @@ const router = createBrowserRouter([
             element: <Navigate to="/audio/generate" replace />,
           },
           {
+            path: 'flashcards/sync',
+            element: deferred(<AnkiSyncPage />),
+          },
+          {
+            path: 'sync',
+            element: deferred(<AnkiSyncPage />),
+          },
+          {
+            path: 'flashcards/import',
+            element: deferred(<FileImportPage />),
+          },
+          {
+            path: 'import',
+            element: deferred(<FileImportPage />),
+          },
+          {
             element: <RequireCreator />,
             children: [
-              {
-                path: 'flashcards/sync',
-                element: deferred(<AnkiSyncPage />),
-              },
-              {
-                path: 'sync',
-                element: deferred(<AnkiSyncPage />),
-              },
-              {
-                path: 'flashcards/import',
-                element: deferred(<FileImportPage />),
-              },
-              {
-                path: 'import',
-                element: deferred(<FileImportPage />),
-              },
               {
                 path: 'creator/decks/:itemId/releases/new',
                 element: deferred(<ReleaseBuilderPage />),

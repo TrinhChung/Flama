@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from flask import Blueprint, current_app, jsonify, request
-from flask_login import current_user
+from flask_login import current_user, login_required
 
-from app.api.common import creator_required, error_response
+from app.api.common import error_response
 from app.services import anki_import_service
 from models import db
 
@@ -50,13 +50,13 @@ def _error(exc: Exception):
 
 
 @anki_imports_bp.get("/flashcards/import/anki/capabilities")
-@creator_required
+@login_required
 def capabilities():
     return jsonify(anki_import_service.capabilities())
 
 
 @anki_imports_bp.post("/flashcards/import/anki/sessions")
-@creator_required
+@login_required
 def create_session():
     payload = request.get_json(silent=True)
     if not isinstance(payload, dict):
@@ -77,7 +77,7 @@ def create_session():
 
 
 @anki_imports_bp.get("/flashcards/import/anki/sessions/<session_id>")
-@creator_required
+@login_required
 def get_session(session_id: str):
     try:
         return jsonify(
@@ -92,7 +92,7 @@ def get_session(session_id: str):
 
 
 @anki_imports_bp.post("/flashcards/import/anki/sessions/<session_id>/note-status")
-@creator_required
+@login_required
 def get_note_statuses(session_id: str):
     payload = request.get_json(silent=True)
     if not isinstance(payload, dict):
@@ -113,7 +113,7 @@ def get_note_statuses(session_id: str):
 @anki_imports_bp.put(
     "/flashcards/import/anki/sessions/<session_id>/packages/media/<int:sequence>"
 )
-@creator_required
+@login_required
 def upload_media_package(session_id: str, sequence: int):
     try:
         result = anki_import_service.receive_media_package(
@@ -139,7 +139,7 @@ def upload_media_package(session_id: str, sequence: int):
 @anki_imports_bp.put(
     "/flashcards/import/anki/sessions/<session_id>/packages/cards/<int:sequence>"
 )
-@creator_required
+@login_required
 def upload_card_package(session_id: str, sequence: int):
     try:
         result = anki_import_service.receive_card_package(
@@ -190,7 +190,7 @@ def _upload_sync_package(session_id: str, sequence: int, kind: str):
 @anki_imports_bp.put(
     "/flashcards/import/anki/sessions/<session_id>/packages/progress/<int:sequence>"
 )
-@creator_required
+@login_required
 def upload_progress_package(session_id: str, sequence: int):
     return _upload_sync_package(session_id, sequence, "progress")
 
@@ -198,13 +198,13 @@ def upload_progress_package(session_id: str, sequence: int):
 @anki_imports_bp.put(
     "/flashcards/import/anki/sessions/<session_id>/packages/reviews/<int:sequence>"
 )
-@creator_required
+@login_required
 def upload_review_package(session_id: str, sequence: int):
     return _upload_sync_package(session_id, sequence, "reviews")
 
 
 @anki_imports_bp.post("/flashcards/import/anki/sessions/<session_id>/complete")
-@creator_required
+@login_required
 def complete_session(session_id: str):
     payload = request.get_json(silent=True)
     if not isinstance(payload, dict):
@@ -226,7 +226,7 @@ def complete_session(session_id: str):
 
 
 @anki_imports_bp.delete("/flashcards/import/anki/sessions/<session_id>")
-@creator_required
+@login_required
 def cancel_session(session_id: str):
     try:
         result = anki_import_service.cancel_session(

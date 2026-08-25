@@ -68,9 +68,6 @@ export function AppSidebar({
     { title: 'Nhập file (CSV/TSV)', url: '/import', icon: Upload },
   ]
 
-  const hasCreatorAccess =
-    bootstrap.user?.is_admin || bootstrap.user?.role?.code === 'creator'
-
   const admin: AppNavigationItem[] = [
     { title: 'Tăng trưởng & Thống kê', url: '/admin/analytics', icon: TrendingUp },
     ...(bootstrap.links.admin_users
@@ -92,9 +89,6 @@ export function AppSidebar({
 
   const settings: AppNavigationItem[] = [
     { title: 'Đóng góp ý kiến', url: '/feedback', icon: MessageSquareHeart },
-    ...(bootstrap.user?.is_admin
-      ? [{ title: 'MCP Access Tokens', url: '/settings/mcp-tokens', icon: Key }]
-      : []),
   ]
 
   return (
@@ -105,7 +99,7 @@ export function AppSidebar({
       <SidebarContent>
         <NavMain label="Học tập" items={primary} />
         <NavMain label="Học liệu" items={library} />
-        {hasCreatorAccess ? <NavMain label="Nhà sáng tạo" items={creator} /> : null}
+        <NavMain label="Nhập & Đồng bộ" items={creator} />
         <NavMain label="Phần mở rộng" items={extensions} />
         {bootstrap.user?.is_admin ? <NavMain label="Quản trị Admin" items={admin} /> : null}
         <NavMain label="Cài đặt" items={settings} />

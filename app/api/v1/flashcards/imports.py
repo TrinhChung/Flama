@@ -1,9 +1,8 @@
 """Flashcard import REST API V1 resources."""
 
 from flask import Blueprint, jsonify, request
-from flask_login import current_user
+from flask_login import current_user, login_required
 
-from app.api.common import creator_required
 from app.services import flashcard_import_api_service
 from app.utils.permissions import is_admin_user
 
@@ -21,7 +20,7 @@ def _error(exc: flashcard_import_api_service.ImportApiError):
 
 
 @imports_bp.get("/flashcards/import/options")
-@creator_required
+@login_required
 def import_options():
     return jsonify(
         flashcard_import_api_service.build_import_options(
@@ -34,7 +33,7 @@ def import_options():
 
 
 @imports_bp.post("/flashcards/import/parse")
-@creator_required
+@login_required
 def parse_import():
     upload = request.files.get("file")
     try:
@@ -55,7 +54,7 @@ def parse_import():
 
 
 @imports_bp.post("/flashcards/import/estimate")
-@creator_required
+@login_required
 def estimate_import():
     try:
         payload = flashcard_import_api_service.run_import_request(
@@ -70,7 +69,7 @@ def estimate_import():
 
 
 @imports_bp.post("/flashcards/import/execute")
-@creator_required
+@login_required
 def execute_import():
     try:
         payload = flashcard_import_api_service.run_import_request(
@@ -85,7 +84,7 @@ def execute_import():
 
 
 @imports_bp.post("/flashcards/import/batch/parse")
-@creator_required
+@login_required
 def parse_batch_import():
     raw_files = request.files.getlist("files") or request.files.getlist("file")
     files_payload: list[tuple[str, bytes]] = []
@@ -115,7 +114,7 @@ def parse_batch_import():
 
 
 @imports_bp.post("/flashcards/import/batch/estimate")
-@creator_required
+@login_required
 def estimate_batch_import():
     try:
         payload = flashcard_import_api_service.run_batch_import_request(
@@ -130,7 +129,7 @@ def estimate_batch_import():
 
 
 @imports_bp.post("/flashcards/import/batch/execute")
-@creator_required
+@login_required
 def execute_batch_import():
     try:
         payload = flashcard_import_api_service.run_batch_import_request(
