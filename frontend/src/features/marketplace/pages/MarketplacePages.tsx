@@ -107,6 +107,9 @@ type MarketplaceItem = {
   install_count: number
   card_count?: number
   note_count?: number
+  lesson_count?: number
+  total_decks?: number
+  has_subdecks?: boolean
   price_display: string
   pricing_mode: string
   is_installed: boolean
@@ -669,7 +672,7 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
 
                 {/* Card Bottom Block */}
                 <div className="mt-4 pt-3.5 border-t border-border/60 space-y-3">
-                  {/* Rating, Card Count & Install Stats */}
+                  {/* Rating, Lesson/Card Count & Install Stats */}
                   <div className="flex items-center justify-between text-xs text-muted-foreground">
                     <span className="inline-flex items-center gap-1 font-semibold text-foreground">
                       <Star className="size-3.5 fill-amber-400 text-amber-500" />
@@ -684,7 +687,19 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
                     </span>
 
                     <div className="flex items-center gap-2 font-medium">
-                      {cardCount ? (
+                      {mode === 'decks' && item.lesson_count ? (
+                        <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+                          <BookOpen className="size-3 text-primary" />
+                          <span className="tabular-nums">{item.lesson_count} bài</span>
+                        </span>
+                      ) : null}
+
+                      {item.note_count ? (
+                        <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+                          <Layers className="size-3 text-primary" />
+                          <span className="tabular-nums">{item.note_count.toLocaleString('vi-VN')} từ</span>
+                        </span>
+                      ) : cardCount ? (
                         <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
                           <Layers className="size-3 text-primary" />
                           <span className="tabular-nums">{cardCount} thẻ</span>

@@ -382,9 +382,10 @@ def list_shared_decks():
     sorted_items = _sort_deck_items(filtered, sort_key)
     installs = DeckInstall.query.filter_by(user_id=current_user.id).all()
     install_map = {row.deck_item_id: row for row in installs}
+    stats_map = marketplace_query_service.batch_compute_deck_items_stats(sorted_items)
     payload_items = []
     for item in sorted_items:
-        row = _serialize_deck_marketplace_item(item)
+        row = _serialize_deck_marketplace_item(item, stats=stats_map.get(item.id))
         install = install_map.get(item.id)
         row["is_installed"] = install is not None
         row["installed_deck_id"] = install.local_deck_id if install else None
@@ -474,6 +475,7 @@ def get_shared_deck_item(deck_item_id: str):
             user_id=current_user.id,
         )
     )
+    payload["lessons"] = marketplace_query_service.build_shared_deck_lessons_structure(deck_item)
 
     return jsonify(payload)
 
@@ -642,9 +644,14 @@ def install_shared_deck_item(deck_item_id: str):
         publish_statuses_visible=PUBLISH_STATUSES_VISIBLE,
     )
     if error_message:
-        error_code = "DEADLOCK_RETRY_EXCEEDED" if error_message == flashcards_share.SHARED_DECK_INSTALL_DEADLOCK_MESSAGE else (
-            "FIELD_NOT_FOUND" if status_code == 404 else "VALIDATION_ERROR"
-        )
+        if status_code == 503:
+            error_code = "DECK_RELEASE_NOT_READY"
+        elif error_message == flashcards_share.SHARED_DECK_INSTALL_DEADLOCK_MESSAGE:
+            error_code = "DEADLOCK_RETRY_EXCEEDED"
+        elif status_code == 404:
+            error_code = "FIELD_NOT_FOUND"
+        else:
+            error_code = "VALIDATION_ERROR"
         return _api_error(
             error_code,
             error_message,

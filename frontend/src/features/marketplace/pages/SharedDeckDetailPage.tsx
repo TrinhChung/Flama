@@ -24,6 +24,8 @@ import {
   Edit3,
   Globe,
   Lock,
+  Search,
+  FolderTree,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -39,6 +41,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { Textarea } from '@/components/ui/textarea'
 import { CardDisplay } from '@/features/study/components/CardDisplay'
@@ -91,6 +94,21 @@ type SourceNoteType = {
   templates?: TemplateItem[]
 }
 
+type LessonItem = {
+  id: number
+  name: string
+  parent_id: number | null
+  depth: number
+  is_root: boolean
+  direct_note_count: number
+  direct_card_count: number
+  note_count: number
+  card_count: number
+  total_note_count: number
+  total_card_count: number
+  has_children: boolean
+}
+
 type SharedDeckDetail = {
   id: string
   title?: string
@@ -102,6 +120,12 @@ type SharedDeckDetail = {
   rating_avg: number
   rating_count: number
   install_count: number
+  note_count?: number
+  card_count?: number
+  lesson_count?: number
+  total_decks?: number
+  has_subdecks?: boolean
+  lessons?: LessonItem[]
   updated_at?: string
   created_at?: string
   badges?: string[]
@@ -143,6 +167,7 @@ export function SharedDeckDetailPage() {
   const [activeSampleIndex, setActiveSampleIndex] = useState<number>(0)
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('')
   const [previewSide, setPreviewSide] = useState<'front' | 'back'>('front')
+  const [lessonSearch, setLessonSearch] = useState<string>('')
 
   // Rating state
   const [ratingScore, setRatingScore] = useState<number>(5)
@@ -163,6 +188,15 @@ export function SharedDeckDetailPage() {
   const currentSample = samples[activeSampleIndex] || null
   const sourceNoteType = deck?.source_note_type || null
   const templates = useMemo(() => sourceNoteType?.templates || [], [sourceNoteType?.templates])
+
+  // Filter lessons based on search query
+  const displayLessons = useMemo(() => {
+    const allLessons = deck?.lessons || []
+    const subLessons = allLessons.length > 1 ? allLessons.filter((l) => !l.is_root) : allLessons
+    if (!lessonSearch.trim()) return subLessons
+    const query = lessonSearch.trim().toLowerCase()
+    return subLessons.filter((l) => l.name.toLowerCase().includes(query))
+  }, [deck?.lessons, lessonSearch])
 
   // Auto select default template
   useEffect(() => {
@@ -194,10 +228,15 @@ export function SharedDeckDetailPage() {
       }>(`/api/shared/decks/${id}/install`, 'POST')
     },
     onMutate: () => {
+      const lessonText = deck?.lesson_count ? `${deck.lesson_count} bài học` : ''
+      const noteText = deck?.note_count ? `${deck.note_count.toLocaleString('vi-VN')} từ vựng` : ''
+      const countSummary = [lessonText, noteText].filter(Boolean).join(' • ')
+
       toast?.loading?.('Đang khởi tạo và cài đặt bộ thẻ…', {
         id: 'shared-deck-install',
-        description:
-          'Đối với bộ thẻ lớn (nhiều bài học hoặc từ vựng), quá trình có thể mất từ 10-30 giây. Vui lòng không đóng trình duyệt!',
+        description: countSummary
+          ? `Đang thiết lập ${countSummary} vào thư viện của bạn. Vui lòng không đóng trình duyệt!`
+          : 'Đối với bộ thẻ lớn (nhiều bài học hoặc từ vựng), quá trình có thể mất từ 10-30 giây. Vui lòng không đóng trình duyệt!',
       })
     },
     onSuccess: (data) => {
@@ -418,21 +457,21 @@ export function SharedDeckDetailPage() {
 
                 <div className="rounded-xl border border-border/80 bg-muted/30 p-3.5 sm:p-4 text-center transition-all hover:bg-muted/50">
                   <div className="flex items-center justify-center gap-1 text-xs font-semibold text-muted-foreground">
-                    <Layers className="size-3.5 text-primary" />
-                    <span>Xem mẫu</span>
+                    <BookOpen className="size-3.5 text-primary" />
+                    <span>Bài học</span>
                   </div>
                   <div className="mt-1 font-extrabold text-base text-foreground tabular-nums">
-                    {samples.length} từ
+                    {deck.lesson_count ? `${deck.lesson_count} bài` : '1 bài'}
                   </div>
                 </div>
 
                 <div className="rounded-xl border border-border/80 bg-muted/30 p-3.5 sm:p-4 text-center transition-all hover:bg-muted/50">
                   <div className="flex items-center justify-center gap-1 text-xs font-semibold text-muted-foreground">
-                    <Clock className="size-3.5 text-muted-foreground" />
-                    <span>Cập nhật</span>
+                    <Layers className="size-3.5 text-primary" />
+                    <span>Từ vựng</span>
                   </div>
-                  <div className="mt-1 text-xs font-bold text-foreground">
-                    {deck.updated_at ? new Date(deck.updated_at).toLocaleDateString('vi-VN') : 'Mới'}
+                  <div className="mt-1 font-extrabold text-base text-foreground tabular-nums">
+                    {(deck.note_count || samples.length).toLocaleString('vi-VN')} từ
                   </div>
                 </div>
               </div>
@@ -449,6 +488,13 @@ export function SharedDeckDetailPage() {
                 <Badge variant="outline" className="text-xs font-semibold">
                   {deck.install_count.toLocaleString('vi-VN')} lượt cài
                 </Badge>
+              </div>
+
+              <div className="rounded-xl border border-primary/20 bg-background/80 p-2.5 text-xs flex items-center justify-between font-medium">
+                <span className="text-muted-foreground">Quy mô học liệu:</span>
+                <span className="font-bold text-foreground">
+                  {deck.lesson_count ? `${deck.lesson_count} bài học` : '1 bài học'} • {(deck.note_count || samples.length).toLocaleString('vi-VN')} từ vựng
+                </span>
               </div>
 
               {deck.is_owner ? (
@@ -697,6 +743,96 @@ export function SharedDeckDetailPage() {
                   />
                 )}
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Section 2: Deck Lessons & Word Counts Breakdown */}
+          <Card className="border-border shadow-xs overflow-hidden rounded-2xl">
+            <CardHeader className="p-4 sm:p-5 pb-3 border-b bg-muted/20">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2.5 rounded-xl bg-primary/10 text-primary">
+                    <BookOpen className="size-5" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-lg font-bold flex flex-wrap items-center gap-2">
+                      <span>Cấu trúc bài học & từ vựng</span>
+                      {deck.lesson_count ? (
+                        <Badge variant="secondary" className="text-xs font-bold rounded-md">
+                          {deck.lesson_count} bài
+                        </Badge>
+                      ) : null}
+                      <Badge variant="outline" className="text-xs font-bold rounded-md text-primary border-primary/30">
+                        {(deck.note_count || samples.length).toLocaleString('vi-VN')} từ vựng
+                      </Badge>
+                    </CardTitle>
+                    <CardDescription className="text-xs">
+                      Chi tiết danh sách các bài học và số lượng từ vựng trong bộ thẻ này.
+                    </CardDescription>
+                  </div>
+                </div>
+
+                {deck.lessons && deck.lessons.length > 3 ? (
+                  <div className="relative w-full sm:w-60">
+                    <Search className="absolute left-2.5 top-2.5 size-3.5 text-muted-foreground" />
+                    <Input
+                      placeholder="Tìm kiếm bài học..."
+                      value={lessonSearch}
+                      onChange={(e) => setLessonSearch(e.target.value)}
+                      className="h-8 pl-8 text-xs rounded-lg"
+                    />
+                  </div>
+                ) : null}
+              </div>
+            </CardHeader>
+
+            <CardContent className="p-4 sm:p-5 pt-4 space-y-2.5">
+              {displayLessons.length > 0 ? (
+                <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
+                  {displayLessons.map((lesson, idx) => (
+                    <div
+                      key={lesson.id}
+                      className="flex items-center justify-between p-3 rounded-xl border border-border/80 bg-card hover:bg-muted/30 transition-colors shadow-2xs gap-3"
+                      style={{ paddingLeft: `${Math.max(12, (lesson.depth || 0) * 16 + 12)}px` }}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="flex size-6 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary font-bold text-xs">
+                          {lesson.depth > 0 ? '•' : idx + 1}
+                        </div>
+                        <span className="font-bold text-xs sm:text-sm text-foreground truncate">
+                          {lesson.name}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Badge
+                          variant="secondary"
+                          className="font-bold text-xs px-2.5 py-0.5 rounded-md bg-primary/10 text-primary hover:bg-primary/15"
+                        >
+                          <Layers className="mr-1 size-3" />
+                          {lesson.note_count.toLocaleString('vi-VN')} từ
+                        </Badge>
+                        {lesson.card_count && lesson.card_count !== lesson.note_count ? (
+                          <Badge variant="outline" className="text-xs font-semibold text-muted-foreground rounded-md">
+                            {lesson.card_count.toLocaleString('vi-VN')} thẻ
+                          </Badge>
+                        ) : null}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : lessonSearch ? (
+                <div className="text-center py-6 text-xs text-muted-foreground">
+                  Không tìm thấy bài học nào phù hợp với từ khóa &ldquo;{lessonSearch}&rdquo;.
+                </div>
+              ) : (
+                <div className="flex items-center justify-between p-4 rounded-xl border border-border/80 bg-muted/20 text-xs">
+                  <span className="font-semibold text-foreground">1 bài học tổng hợp</span>
+                  <Badge variant="secondary" className="font-bold text-xs">
+                    {(deck.note_count || samples.length).toLocaleString('vi-VN')} từ vựng
+                  </Badge>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -977,24 +1113,47 @@ export function SharedDeckDetailPage() {
                   ) : null}
                 </div>
               ) : (
-                <Button
-                  className="w-full h-11 sm:h-12 font-bold text-sm sm:text-base shadow-xs bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl transition-all"
-                  size="lg"
-                  onClick={() => installMutation.mutate()}
-                  disabled={installMutation.isPending}
-                >
-                  {installMutation.isPending ? (
-                    <>
-                      <Loader2 className="mr-2 size-5 animate-spin" />
-                      {deck.pricing_mode === 'paid' ? 'Đang tạo thanh toán…' : 'Đang cài đặt bộ thẻ…'}
-                    </>
-                  ) : (
-                    <>
-                      <Download className="mr-2 size-5" />
-                      {deck.pricing_mode === 'paid' ? 'Mua bộ deck' : 'Tải xuống & Cài đặt'}
-                    </>
-                  )}
-                </Button>
+                <>
+                  <div className="rounded-xl border border-border/80 bg-muted/20 p-3 text-xs space-y-1.5 shadow-2xs">
+                    <div className="flex items-center justify-between text-muted-foreground font-medium">
+                      <span className="flex items-center gap-1.5">
+                        <BookOpen className="size-3.5 text-primary" />
+                        Số bài học:
+                      </span>
+                      <span className="font-bold text-foreground">
+                        {deck.lesson_count ? `${deck.lesson_count} bài` : '1 bài'}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-muted-foreground font-medium">
+                      <span className="flex items-center gap-1.5">
+                        <Layers className="size-3.5 text-primary" />
+                        Tổng số từ vựng:
+                      </span>
+                      <span className="font-bold text-foreground">
+                        {(deck.note_count || samples.length).toLocaleString('vi-VN')} từ
+                      </span>
+                    </div>
+                  </div>
+
+                  <Button
+                    className="w-full h-11 sm:h-12 font-bold text-sm sm:text-base shadow-xs bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl transition-all"
+                    size="lg"
+                    onClick={() => installMutation.mutate()}
+                    disabled={installMutation.isPending}
+                  >
+                    {installMutation.isPending ? (
+                      <>
+                        <Loader2 className="mr-2 size-5 animate-spin" />
+                        {deck.pricing_mode === 'paid' ? 'Đang tạo thanh toán…' : 'Đang cài đặt bộ thẻ…'}
+                      </>
+                    ) : (
+                      <>
+                        <Download className="mr-2 size-5" />
+                        {deck.pricing_mode === 'paid' ? 'Mua bộ deck' : 'Tải xuống & Cài đặt'}
+                      </>
+                    )}
+                  </Button>
+                </>
               )}
 
               {!deck.is_owner ? (

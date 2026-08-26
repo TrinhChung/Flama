@@ -203,8 +203,11 @@ def _can_user_rate_note_type(note_type: NoteType, *, user_id: int) -> bool:
 def _serialize_note_type_marketplace_card(note_type: NoteType) -> dict[str, Any]:
     return marketplace_query_service.serialize_note_type_marketplace_card(note_type)
 
-def _serialize_deck_marketplace_item(deck_item: DeckMarketplaceItem) -> dict[str, Any]:
-    return marketplace_query_service.serialize_deck_marketplace_item(deck_item)
+def _serialize_deck_marketplace_item(
+    deck_item: DeckMarketplaceItem,
+    stats: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    return marketplace_query_service.serialize_deck_marketplace_item(deck_item, stats=stats)
 
 
 def _apply_deck_marketplace_payload(deck_item: DeckMarketplaceItem, payload: dict[str, Any]) -> str | None:
