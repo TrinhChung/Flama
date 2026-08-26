@@ -91,11 +91,24 @@ def get_token_policy(*, user: Any = None, user_id: int | None = None) -> dict[st
         else (0, daily_quota or -1, 0)
     )
 
+    available_scopes = [
+        {
+            "id": k,
+            "title": v.get("title", k),
+            "desc": v.get("desc", ""),
+            "category": v.get("category", "Chung"),
+            "icon": v.get("icon", "shield"),
+        }
+        for k, v in mcp_scope_service.SCOPE_METADATA.items()
+        if k in mcp_scope_service.ALL_GRANULAR_SCOPES
+    ]
+
     return {
         "default_expiry_days": 180,
         "allowed_expiry_days": [7, 30, 90, 180, 365],
         "allow_no_expiry": True,
         "scopes": list(DEFAULT_SCOPES),
+        "available_scopes": available_scopes,
         "daily_quota": daily_quota,
         "daily_used": daily_used,
         "daily_remaining": daily_remaining,
