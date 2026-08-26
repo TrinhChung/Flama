@@ -204,6 +204,11 @@ def build_app_config(overrides: Mapping[str, Any] | None = None) -> dict[str, An
         "RATE_LIMIT_BACKEND": os.getenv("RATE_LIMIT_BACKEND", "local").strip().lower(),
         "RATE_LIMIT_KEY_PREFIX": os.getenv("RATE_LIMIT_KEY_PREFIX", "flama:v1").strip(),
         "RATE_LIMIT_HMAC_KEY": os.getenv("RATE_LIMIT_HMAC_KEY", "").strip(),
+        "RATE_LIMIT_DAILY_ENABLED": coerce_bool_env("RATE_LIMIT_DAILY_ENABLED", default=True),
+        "RATE_LIMIT_REGULAR_DAILY_MAX": coerce_int_env("RATE_LIMIT_REGULAR_DAILY_MAX", default=300),
+        "RATE_LIMIT_CREATOR_DAILY_MAX": coerce_int_env("RATE_LIMIT_CREATOR_DAILY_MAX", default=2000),
+        "RATE_LIMIT_ENTERPRISE_DAILY_MAX": coerce_int_env("RATE_LIMIT_ENTERPRISE_DAILY_MAX", default=10000),
+        "RATE_LIMIT_DAILY_TIMEZONE": os.getenv("RATE_LIMIT_DAILY_TIMEZONE", "Asia/Ho_Chi_Minh").strip() or "Asia/Ho_Chi_Minh",
         "MCP_PREVIEW_BACKEND": os.getenv("MCP_PREVIEW_BACKEND", "local").strip().lower(),
         "MCP_PREVIEW_TTL_SECONDS": coerce_int_env("MCP_PREVIEW_TTL_SECONDS", default=600),
         "SHARED_DECK_TREE_CLONE_MODE": os.getenv(

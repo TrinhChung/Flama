@@ -20,7 +20,7 @@ def list_tokens():
             "items": mcp_access_token_service.list_token_summaries(
                 user_id=current_user.id
             ),
-            "policy": mcp_access_token_service.get_token_policy(),
+            "policy": mcp_access_token_service.get_token_policy(user=current_user),
         }
     )
 

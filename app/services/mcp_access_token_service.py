@@ -16,7 +16,7 @@ from flask import current_app
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.repositories import mcp_access_token_repository
-from app.services import mcp_scope_service
+from app.services import daily_rate_limit_service, mcp_scope_service
 from app.services import redis_state_service
 from models import db
 from models.mcp_access_token import McpAccessToken
@@ -33,7 +33,7 @@ class McpAccessTokenError(RuntimeError):
     def __init__(self, message: str, *, status: int, code: str) -> None:
         super().__init__(message)
         self.status = int(status)
-        self.code = str(code)
+        self.code = str(code or "MCP_AUTH_FAILED")
 
 
 class McpAccessTokenPersistenceError(RuntimeError):
@@ -75,12 +75,31 @@ def _config_int(name: str, default: int, *, minimum: int = 1) -> int:
     return max(value, minimum)
 
 
-def get_token_policy() -> dict[str, Any]:
+def get_token_policy(*, user: Any = None, user_id: int | None = None) -> dict[str, Any]:
+    resolved_user = user
+    if resolved_user is None and user_id is not None:
+        resolved_user = mcp_access_token_repository.get_user_by_id(user_id)
+
+    daily_quota = (
+        daily_rate_limit_service.resolve_user_daily_quota(resolved_user)
+        if resolved_user is not None
+        else None
+    )
+    daily_used, daily_remaining, reset_epoch = (
+        daily_rate_limit_service.get_daily_usage(int(resolved_user.id), daily_quota)
+        if resolved_user is not None
+        else (0, daily_quota or -1, 0)
+    )
+
     return {
         "default_expiry_days": 180,
         "allowed_expiry_days": [7, 30, 90, 180, 365],
         "allow_no_expiry": True,
         "scopes": list(DEFAULT_SCOPES),
+        "daily_quota": daily_quota,
+        "daily_used": daily_used,
+        "daily_remaining": daily_remaining,
+        "daily_reset_epoch": reset_epoch,
     }
 
 
@@ -97,8 +116,6 @@ def _rate_limit_window_seconds() -> int:
 
 def _rate_limit_max_requests() -> int:
     return _config_int("MCP_TOKEN_RATE_LIMIT_MAX_REQUESTS", 100_000, minimum=1)
-
-
 
 
 def reset_rate_limit_state() -> None:
@@ -566,8 +583,6 @@ def _raise_rate_limited() -> None:
     )
 
 
-
-
 def authenticate_bearer_token(
     *,
     raw_token: str,
@@ -630,6 +645,18 @@ def authenticate_bearer_token(
             status=403,
             code="USER_DISABLED",
         )
+
+    daily_quota = daily_rate_limit_service.resolve_user_daily_quota(user)
+    if daily_quota is not None:
+        allowed, used_count, remaining, reset_epoch = daily_rate_limit_service.consume_daily_quota(
+            int(user.id), daily_quota
+        )
+        if not allowed:
+            raise McpAccessTokenError(
+                f"MCP daily rate limit reached ({daily_quota} requests/day). Please try again tomorrow.",
+                status=429,
+                code="MCP_DAILY_RATE_LIMIT_EXCEEDED",
+            )
 
     enforce_rate_limit(bucket_key=f"mcp-token:{row.id}")
 
