@@ -5,7 +5,6 @@ import {
   CheckCircle,
   ChevronLeft,
   ChevronRight,
-  Clock,
   Download,
   ExternalLink,
   Eye,
@@ -19,13 +18,11 @@ import {
   Sparkles,
   Star,
   BookOpen,
-  User,
   EyeOff,
   Edit3,
   Globe,
   Lock,
   Search,
-  FolderTree,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -45,7 +42,7 @@ import { Input } from '@/components/ui/input'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { Textarea } from '@/components/ui/textarea'
 import { CardDisplay } from '@/features/study/components/CardDisplay'
-import { Page, PageHeader } from '@/shared/components/Page'
+import { Page } from '@/shared/components/Page'
 import { EmptyState, PageError, PageLoading } from '@/shared/components/PageState'
 
 type AuthorProfile = {
@@ -356,164 +353,242 @@ export function SharedDeckDetailPage() {
     <Page className="space-y-4 sm:space-y-6 relative px-2.5 sm:px-6 lg:px-8 py-3 sm:py-6">
       <AmbientBackground intensity="subtle" />
 
-      <PageHeader
-        title={deckTitle}
-        description={deck.preview_text || deck.description || 'Chi tiết bộ thẻ trên marketplace Flama.'}
-        actions={
-          <Button variant="outline" size="sm" asChild className="group h-8 sm:h-9 px-3 sm:px-3.5 text-xs font-semibold rounded-xl">
-            <Link to="/marketplace/decks">
-              <ArrowLeft className="mr-1 sm:mr-1.5 size-3.5 group-hover:-translate-x-0.5 transition-transform" />
-              Quay lại Marketplace
-            </Link>
-          </Button>
-        }
-      />
+      {/* Top Breadcrumb Navigation & Back Action */}
+      <div className="flex items-center justify-between gap-3 pb-0.5">
+        <nav className="flex items-center gap-1.5 text-xs text-muted-foreground overflow-hidden text-ellipsis whitespace-nowrap">
+          <Link
+            to="/marketplace/decks"
+            className="hover:text-foreground transition-colors font-medium hover:underline"
+          >
+            Marketplace
+          </Link>
+          <ChevronRight className="size-3.5 shrink-0 opacity-50" />
+          <span className="font-medium text-foreground/70 truncate hidden xs:inline">
+            {deck.primary_category || 'Tiếng Nhật'}
+          </span>
+          <ChevronRight className="size-3.5 shrink-0 opacity-50 hidden xs:inline" />
+          <span className="font-semibold text-foreground truncate max-w-[160px] sm:max-w-xs md:max-w-md">
+            {deckTitle}
+          </span>
+        </nav>
 
-      <div className="grid gap-4 sm:gap-5 lg:grid-cols-[1fr_340px]">
-        {/* Main Left Content Column */}
-        <div className="space-y-4 sm:space-y-5">
-          {/* Main Card */}
-          <Card className="border-border/80 bg-card shadow-xs rounded-2xl">
-            <CardHeader className="space-y-3 p-4 sm:p-6 pb-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="secondary" className="px-2.5 py-0.5 text-xs font-bold rounded-md">
-                    {deck.primary_category || 'Tiếng Nhật'}
-                  </Badge>
-                  {(deck.badges || []).map((badge) => (
-                    <Badge key={badge} variant="outline" className="text-xs font-semibold rounded-md">
-                      <Award className="mr-1 size-3 text-primary" />
-                      {badge}
-                    </Badge>
-                  ))}
-                </div>
+        <Button
+          variant="outline"
+          size="sm"
+          asChild
+          className="group shrink-0 h-8 sm:h-9 px-3 sm:px-3.5 text-xs font-semibold rounded-xl"
+        >
+          <Link to="/marketplace/decks">
+            <ArrowLeft className="mr-1 sm:mr-1.5 size-3.5 group-hover:-translate-x-0.5 transition-transform" />
+            <span className="hidden sm:inline">Quay lại Marketplace</span>
+            <span className="sm:hidden">Quay lại</span>
+          </Link>
+        </Button>
+      </div>
 
-                <span
-                  className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-extrabold border ${
-                    deck.pricing_mode === 'free'
-                      ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30'
-                      : 'bg-primary/10 text-primary border-primary/30'
-                  }`}
-                >
-                  {deck.price_display || 'Miễn phí'}
-                </span>
-              </div>
-
-              <CardTitle className="text-2xl font-black tracking-tight text-foreground sm:text-3xl leading-tight">
-                {deckTitle}
-              </CardTitle>
-
-              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                <div className="flex items-center gap-1.5">
-                  <div className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary font-bold text-[10px]">
-                    {authorName.charAt(0).toUpperCase()}
-                  </div>
-                  <span className="font-semibold text-foreground">{authorName}</span>
-                </div>
-                <span>•</span>
-                <span className="flex items-center gap-1 font-medium text-emerald-600 dark:text-emerald-400">
-                  <CheckCircle className="size-3.5" /> Flama Marketplace
-                </span>
-              </div>
-            </CardHeader>
-
-            <CardContent className="p-5 sm:p-6 pt-0 space-y-4">
-              <p className="text-xs sm:text-sm leading-relaxed text-muted-foreground font-normal">
-                {deck.description || 'Chưa có mô tả chi tiết cho bộ thẻ này.'}
-              </p>
-
-              {tagsList.length > 0 ? (
-                <div className="flex flex-wrap gap-1.5 pt-1">
-                  {tagsList.map((tag) => (
-                    <Badge key={tag} variant="outline" className="text-[11px] text-muted-foreground font-medium px-2.5 py-0.5 rounded-md">
-                      #{tag}
-                    </Badge>
-                  ))}
-                </div>
-              ) : null}
-
-              {/* Stat Grid */}
-              <div className="grid grid-cols-2 gap-3 pt-1 sm:grid-cols-4">
-                <div className="rounded-xl border border-border/80 bg-muted/30 p-3.5 sm:p-4 text-center transition-all hover:bg-muted/50">
-                  <div className="flex items-center justify-center gap-1 text-xs font-semibold text-muted-foreground">
-                    <Star className="size-3.5 fill-amber-400 text-amber-500" />
-                    <span>Đánh giá</span>
-                  </div>
-                  <div className="mt-1 flex items-center justify-center gap-1 font-extrabold text-base text-foreground">
-                    <span className="tabular-nums">{deck.rating_avg.toFixed(1)}</span>
-                    <span className="text-xs font-normal text-muted-foreground tabular-nums">({deck.rating_count})</span>
-                  </div>
-                </div>
-
-                <div className="rounded-xl border border-border/80 bg-muted/30 p-3.5 sm:p-4 text-center transition-all hover:bg-muted/50">
-                  <div className="flex items-center justify-center gap-1 text-xs font-semibold text-muted-foreground">
-                    <Download className="size-3.5 text-primary" />
-                    <span>Lượt cài</span>
-                  </div>
-                  <div className="mt-1 font-extrabold text-base text-foreground tabular-nums">
-                    {deck.install_count.toLocaleString('vi-VN')}
-                  </div>
-                </div>
-
-                <div className="rounded-xl border border-border/80 bg-muted/30 p-3.5 sm:p-4 text-center transition-all hover:bg-muted/50">
-                  <div className="flex items-center justify-center gap-1 text-xs font-semibold text-muted-foreground">
-                    <BookOpen className="size-3.5 text-primary" />
-                    <span>Bài học</span>
-                  </div>
-                  <div className="mt-1 font-extrabold text-base text-foreground tabular-nums">
-                    {deck.lesson_count ? `${deck.lesson_count} bài` : '1 bài'}
-                  </div>
-                </div>
-
-                <div className="rounded-xl border border-border/80 bg-muted/30 p-3.5 sm:p-4 text-center transition-all hover:bg-muted/50">
-                  <div className="flex items-center justify-center gap-1 text-xs font-semibold text-muted-foreground">
-                    <Layers className="size-3.5 text-primary" />
-                    <span>Từ vựng</span>
-                  </div>
-                  <div className="mt-1 font-extrabold text-base text-foreground tabular-nums">
-                    {(deck.note_count || samples.length).toLocaleString('vi-VN')} từ
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Mobile-Only Quick Action Card (Provides top action access on small screens) */}
-          <div className="block lg:hidden">
-            <Card className="border-primary/30 bg-primary/5 shadow-xs rounded-2xl p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-foreground">
-                  {deck.pricing_mode === 'free' ? 'Miễn phí' : deck.price_display}
-                </span>
-                <Badge variant="outline" className="text-xs font-semibold">
-                  {deck.install_count.toLocaleString('vi-VN')} lượt cài
+      <div className="space-y-4 sm:space-y-6">
+        {/* Main Hero Card with Integrated Actions & Author Info */}
+        <Card className="border-border/80 bg-card shadow-xs rounded-2xl overflow-hidden">
+          <CardHeader className="space-y-3.5 p-4 sm:p-6 pb-3">
+            <div className="flex flex-wrap items-center justify-between gap-2.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="secondary" className="px-2.5 py-0.5 text-xs font-bold rounded-md">
+                  {deck.primary_category || 'Tiếng Nhật'}
                 </Badge>
+                {(deck.badges || []).map((badge) => (
+                  <Badge key={badge} variant="outline" className="text-xs font-semibold rounded-md">
+                    <Award className="mr-1 size-3 text-primary" />
+                    {badge}
+                  </Badge>
+                ))}
+                {deck.is_owner && (
+                  <Badge
+                    variant="outline"
+                    className={`text-xs font-bold px-2 py-0.5 rounded-md ${
+                      deck.publish_status === 'published'
+                        ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                        : deck.publish_status === 'unlisted'
+                        ? 'border-blue-500/30 bg-blue-500/10 text-blue-600 dark:text-blue-400'
+                        : 'border-destructive/30 bg-destructive/10 text-destructive'
+                    }`}
+                  >
+                    {deck.publish_status === 'published' ? (
+                      <>
+                        <Globe className="mr-1 size-3 text-emerald-500" />
+                        Đang hiển thị
+                      </>
+                    ) : deck.publish_status === 'unlisted' ? (
+                      <>
+                        <Globe className="mr-1 size-3 text-blue-500" />
+                        Không công khai
+                      </>
+                    ) : (
+                      <>
+                        <Lock className="mr-1 size-3 text-destructive" />
+                        Riêng tư (Đã thu hồi)
+                      </>
+                    )}
+                  </Badge>
+                )}
               </div>
 
-              <div className="rounded-xl border border-primary/20 bg-background/80 p-2.5 text-xs flex items-center justify-between font-medium">
-                <span className="text-muted-foreground">Quy mô học liệu:</span>
-                <span className="font-bold text-foreground">
-                  {deck.lesson_count ? `${deck.lesson_count} bài học` : '1 bài học'} • {(deck.note_count || samples.length).toLocaleString('vi-VN')} từ vựng
-                </span>
+              <span
+                className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-extrabold border ${
+                  deck.pricing_mode === 'free'
+                    ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30'
+                    : 'bg-primary/10 text-primary border-primary/30'
+                }`}
+              >
+                {deck.pricing_mode === 'free' ? (
+                  <Sparkles className="mr-1 size-3" />
+                ) : null}
+                {deck.price_display || 'Miễn phí'}
+              </span>
+            </div>
+
+            <CardTitle className="text-2xl font-black tracking-tight text-foreground sm:text-3xl lg:text-4xl leading-tight">
+              {deckTitle}
+            </CardTitle>
+
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs text-muted-foreground pt-0.5">
+              <div className="flex items-center gap-2">
+                <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary font-bold text-xs ring-1 ring-primary/20">
+                  {authorName.charAt(0).toUpperCase()}
+                </div>
+                <div className="flex items-center gap-1.5 font-semibold text-foreground">
+                  <span>{authorName}</span>
+                  <span className="text-muted-foreground font-normal hidden sm:inline">
+                    ({deck.author_profile?.published_count || 1} bộ thẻ đã xuất bản)
+                  </span>
+                </div>
+              </div>
+              <span className="text-muted-foreground/40 hidden sm:inline">•</span>
+              <span className="inline-flex items-center gap-1 font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md text-[11px]">
+                <CheckCircle className="size-3" /> Flama Marketplace
+              </span>
+              {deck.updated_at ? (
+                <>
+                  <span className="text-muted-foreground/40 hidden sm:inline">•</span>
+                  <span className="text-muted-foreground text-[11px]">
+                    Cập nhật: {new Date(deck.updated_at).toLocaleDateString('vi-VN')}
+                  </span>
+                </>
+              ) : null}
+            </div>
+          </CardHeader>
+
+          <CardContent className="p-4 sm:p-6 pt-0 space-y-4 sm:space-y-5">
+            {deck.description ? (
+              <p className="text-xs sm:text-sm leading-relaxed text-muted-foreground/90 font-normal">
+                {deck.description}
+              </p>
+            ) : null}
+
+            {tagsList.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5">
+                {tagsList.map((tag) => (
+                  <Badge
+                    key={tag}
+                    variant="outline"
+                    className="text-[11px] text-muted-foreground font-medium px-2.5 py-0.5 rounded-md hover:bg-muted/50 transition-colors"
+                  >
+                    #{tag}
+                  </Badge>
+                ))}
+              </div>
+            ) : null}
+
+            {/* Stat Grid (2x2 on mobile, 4 columns on tablet & desktop) */}
+            <div className="grid grid-cols-2 gap-2.5 sm:gap-3.5 sm:grid-cols-4">
+              <div className="rounded-xl border border-border/80 bg-muted/30 p-3 sm:p-4 text-center transition-all hover:bg-muted/50">
+                <div className="flex items-center justify-center gap-1 text-xs font-semibold text-muted-foreground">
+                  <Star className="size-3.5 fill-amber-400 text-amber-500" />
+                  <span>Đánh giá</span>
+                </div>
+                <div className="mt-1 flex items-center justify-center gap-1 font-extrabold text-lg sm:text-2xl text-foreground font-mono">
+                  <span className="tabular-nums">{deck.rating_avg.toFixed(1)}</span>
+                  <span className="text-xs font-normal text-muted-foreground font-sans tabular-nums">
+                    ({deck.rating_count})
+                  </span>
+                </div>
               </div>
 
+              <div className="rounded-xl border border-border/80 bg-muted/30 p-3 sm:p-4 text-center transition-all hover:bg-muted/50">
+                <div className="flex items-center justify-center gap-1 text-xs font-semibold text-muted-foreground">
+                  <Download className="size-3.5 text-primary" />
+                  <span>Lượt cài</span>
+                </div>
+                <div className="mt-1 font-extrabold text-lg sm:text-2xl text-foreground tabular-nums font-mono">
+                  {deck.install_count.toLocaleString('vi-VN')}
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-border/80 bg-muted/30 p-3 sm:p-4 text-center transition-all hover:bg-muted/50">
+                <div className="flex items-center justify-center gap-1 text-xs font-semibold text-muted-foreground">
+                  <BookOpen className="size-3.5 text-primary" />
+                  <span>Bài học</span>
+                </div>
+                <div className="mt-1 font-extrabold text-lg sm:text-2xl text-foreground tabular-nums font-mono">
+                  {deck.lesson_count ? `${deck.lesson_count} bài` : '1 bài'}
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-border/80 bg-muted/30 p-3 sm:p-4 text-center transition-all hover:bg-muted/50">
+                <div className="flex items-center justify-center gap-1 text-xs font-semibold text-muted-foreground">
+                  <Layers className="size-3.5 text-primary" />
+                  <span>Từ vựng</span>
+                </div>
+                <div className="mt-1 font-extrabold text-lg sm:text-2xl text-foreground tabular-nums font-mono">
+                  {(deck.note_count || samples.length).toLocaleString('vi-VN')} từ
+                </div>
+              </div>
+            </div>
+
+            {/* Integrated Primary Action Area */}
+            <div className="pt-3 border-t border-border/60">
               {deck.is_owner ? (
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex lg:flex-wrap items-center gap-2 sm:gap-2.5">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="h-10 sm:h-10 min-h-[40px] px-4 rounded-xl text-xs font-bold shadow-2xs justify-center"
+                    asChild
+                  >
+                    <Link to={`/creator/decks/${id}/releases/new`}>
+                      <GitCompare className="mr-1.5 size-3.5 text-primary" />
+                      Phát hành phiên bản mới
+                    </Link>
+                  </Button>
+
                   <Button
                     variant="outline"
                     size="sm"
-                    className="h-10 text-xs font-bold rounded-xl"
+                    className="h-10 sm:h-10 min-h-[40px] px-4 rounded-xl text-xs font-bold justify-center"
+                    asChild
+                  >
+                    <Link to={`/flashcards/change-requests/incoming?deck_item_id=${id}`}>
+                      <Inbox className="mr-1.5 size-3.5" />
+                      Đóng góp cần duyệt
+                    </Link>
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-10 sm:h-10 min-h-[40px] px-4 font-bold text-xs rounded-xl justify-center"
                     asChild
                   >
                     <Link to={`/marketplace/decks/publish?deck_id=${deck.source_deck_id}&deck_item_id=${deck.id}&edit=1`}>
-                      <Edit3 className="mr-1.5 size-3.5 text-primary" /> Sửa thông tin
+                      <Edit3 className="mr-1.5 size-3.5 text-primary" />
+                      Chỉnh sửa thông tin
                     </Link>
                   </Button>
+
                   {deck.publish_status === 'published' || deck.publish_status === 'unlisted' ? (
                     <Button
                       variant="destructive"
                       size="sm"
-                      className="h-10 text-xs font-bold rounded-xl"
+                      className="h-10 sm:h-10 min-h-[40px] px-4 font-bold text-xs rounded-xl justify-center"
                       onClick={() => {
                         if (
                           window.confirm(
@@ -525,54 +600,107 @@ export function SharedDeckDetailPage() {
                       }}
                       disabled={publishStatusMutation.isPending}
                     >
-                      <EyeOff className="mr-1.5 size-3.5" /> Thu hồi
+                      <EyeOff className="mr-1.5 size-3.5" />
+                      Thu hồi bộ deck
                     </Button>
                   ) : (
                     <Button
                       variant="default"
                       size="sm"
-                      className="h-10 text-xs font-bold rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white"
+                      className="h-10 sm:h-10 min-h-[40px] px-4 font-bold text-xs rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white justify-center"
                       onClick={() => publishStatusMutation.mutate('published')}
                       disabled={publishStatusMutation.isPending}
                     >
-                      <Globe className="mr-1.5 size-3.5" /> Xuất bản lại
+                      <Globe className="mr-1.5 size-3.5" />
+                      Xuất bản lại
                     </Button>
                   )}
                 </div>
               ) : deck.is_installed ? (
-                <div className="flex gap-2">
-                  <Button className="flex-1 h-10 font-bold text-xs border-emerald-500/40 text-emerald-600 dark:text-emerald-400 rounded-xl" variant="outline" disabled>
-                    <CheckCircle className="mr-1.5 size-4" /> Đã cài đặt
-                  </Button>
+                <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2.5">
                   {deck.installed_deck_id ? (
-                    <Button className="flex-1 h-10 font-bold text-xs shadow-xs bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl" asChild>
+                    <Button
+                      className="h-11 sm:h-11 min-h-[44px] px-5 font-bold text-sm shadow-xs bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl transition-all justify-center"
+                      asChild
+                    >
                       <Link to={`/study?deck_id=${deck.installed_deck_id}`}>
-                        <BookOpen className="mr-1.5 size-4" /> Học ngay
+                        <BookOpen className="mr-2 size-4" />
+                        Bắt đầu học ngay
                       </Link>
                     </Button>
                   ) : null}
+
+                  <div className="inline-flex items-center justify-center gap-1.5 h-11 min-h-[44px] px-4 font-bold text-xs sm:text-sm border border-emerald-500/40 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 rounded-xl">
+                    <CheckCircle className="size-4 text-emerald-500" />
+                    Đã cài đặt vào thư viện
+                  </div>
+
+                  <Button
+                    className="h-11 min-h-[44px] px-4 font-semibold text-xs sm:text-sm rounded-xl justify-center"
+                    variant="outline"
+                    asChild
+                  >
+                    <Link to={`/flashcards/shared-decks/${id}/change-request`}>
+                      <FileDiff className="mr-1.5 size-4" />
+                      Đóng góp chỉnh sửa
+                    </Link>
+                  </Button>
+
+                  <Button
+                    className="h-11 min-h-[44px] px-4 font-semibold text-xs sm:text-sm rounded-xl justify-center"
+                    variant="outline"
+                    onClick={() => saveMutation.mutate(deck.is_saved)}
+                    disabled={saveMutation.isPending}
+                  >
+                    <Heart
+                      className={`mr-1.5 size-4 ${
+                        deck.is_saved ? 'fill-primary text-primary' : ''
+                      }`}
+                    />
+                    {deck.is_saved ? 'Đã lưu' : 'Lưu bộ deck'}
+                  </Button>
                 </div>
               ) : (
-                <Button
-                  className="w-full h-11 font-bold text-sm shadow-xs bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl"
-                  onClick={() => installMutation.mutate()}
-                  disabled={installMutation.isPending}
-                >
-                  {installMutation.isPending ? (
-                    <>
-                      <Loader2 className="mr-2 size-4 animate-spin" />
-                      {deck.pricing_mode === 'paid' ? 'Đang tạo thanh toán…' : 'Đang cài đặt bộ thẻ…'}
-                    </>
-                  ) : (
-                    <>
-                      <Download className="mr-2 size-4" />
-                      {deck.pricing_mode === 'paid' ? 'Mua bộ deck' : 'Tải xuống & Cài đặt'}
-                    </>
-                  )}
-                </Button>
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                  <Button
+                    className="h-11 sm:h-12 min-h-[44px] px-6 font-bold text-sm sm:text-base shadow-sm bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl transition-all justify-center"
+                    size="lg"
+                    onClick={() => installMutation.mutate()}
+                    disabled={installMutation.isPending}
+                  >
+                    {installMutation.isPending ? (
+                      <>
+                        <Loader2 className="mr-2 size-5 animate-spin" />
+                        {deck.pricing_mode === 'paid' ? 'Đang tạo thanh toán…' : 'Đang cài đặt bộ thẻ…'}
+                      </>
+                    ) : (
+                      <>
+                        <Download className="mr-2 size-5" />
+                        {deck.pricing_mode === 'paid'
+                          ? `Mua bộ deck • ${deck.price_display}`
+                          : 'Tải xuống & Cài đặt miễn phí'}
+                      </>
+                    )}
+                  </Button>
+
+                  <Button
+                    className="h-11 sm:h-12 min-h-[44px] px-4 font-semibold text-xs sm:text-sm rounded-xl justify-center"
+                    variant="outline"
+                    onClick={() => saveMutation.mutate(deck.is_saved)}
+                    disabled={saveMutation.isPending}
+                  >
+                    <Heart
+                      className={`mr-1.5 size-4 ${
+                        deck.is_saved ? 'fill-primary text-primary' : ''
+                      }`}
+                    />
+                    {deck.is_saved ? 'Đã lưu vào danh sách' : 'Lưu bộ deck'}
+                  </Button>
+                </div>
               )}
-            </Card>
-          </div>
+            </div>
+          </CardContent>
+        </Card>
 
           {/* Section 1: Interactive Sample & Live Previewer */}
           <Card className="border-border shadow-xs overflow-hidden rounded-2xl">
@@ -967,258 +1095,46 @@ export function SharedDeckDetailPage() {
               </div>
             </CardContent>
           </Card>
-        </div>
 
-        {/* Right Sidebar Column */}
-        <div className="space-y-6">
-          <Card className="sticky top-6 border-border shadow-xs overflow-hidden rounded-2xl">
-            <div className="h-1.5 w-full bg-primary" />
-            <CardHeader className="p-4 sm:p-5 pb-3">
-              <CardTitle className="text-base font-bold">Hành động & Cài đặt</CardTitle>
-              <CardDescription className="text-xs">
-                Đồng bộ bộ thẻ vào thư viện cá nhân bằng Logical Overlay.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="p-4 sm:p-5 pt-0 space-y-3">
-              {deck.is_owner ? (
-                <div className="space-y-3 p-3 rounded-xl border border-primary/20 bg-primary/5 shadow-2xs">
-                  <div className="flex items-center justify-between border-b border-primary/10 pb-1.5 mb-1.5">
-                    <span className="text-[10px] font-black tracking-wider text-muted-foreground uppercase">Bảng điều khiển Tác giả</span>
-                    <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-[9px] font-extrabold text-primary">
-                      Tác giả
-                    </span>
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-muted-foreground font-medium">Trạng thái chia sẻ:</span>
-                      {deck.publish_status === 'published' && (
-                        <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold px-2 py-0.5 rounded-md text-[10px]">
-                          <Globe className="mr-1 size-3 text-emerald-500" />
-                          Đang hiển thị
-                        </Badge>
-                      )}
-                      {deck.publish_status === 'unlisted' && (
-                        <Badge variant="outline" className="border-blue-500/30 bg-blue-500/10 text-blue-600 dark:text-blue-400 font-bold px-2 py-0.5 rounded-md text-[10px]">
-                          <Globe className="mr-1 size-3 text-blue-500" />
-                          Không công khai
-                        </Badge>
-                      )}
-                      {deck.publish_status === 'private' && (
-                        <Badge variant="outline" className="border-destructive/30 bg-destructive/10 text-destructive font-bold px-2 py-0.5 rounded-md text-[10px]">
-                          <Lock className="mr-1 size-3 text-destructive" />
-                          Đã thu hồi (Riêng tư)
-                        </Badge>
-                      )}
-                      {deck.publish_status === 'archived' && (
-                        <Badge variant="outline" className="border-slate-500/30 bg-slate-500/10 text-slate-500 font-bold px-2 py-0.5 rounded-md text-[10px]">
-                          <Lock className="mr-1 size-3 text-slate-500" />
-                          Đã lưu trữ
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="grid gap-2 pt-1">
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      className="h-9 w-full rounded-xl text-xs font-bold"
-                      asChild
-                    >
-                      <Link to={`/creator/decks/${id}/releases/new`}>
-                        <GitCompare className="size-3.5 text-primary" />
-                        Phát hành phiên bản mới
-                      </Link>
-                    </Button>
-
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-9 w-full rounded-xl text-xs font-bold"
-                      asChild
-                    >
-                      <Link to={`/flashcards/change-requests/incoming?deck_item_id=${id}`}>
-                        <Inbox className="size-3.5" />
-                        Đóng góp cần duyệt
-                      </Link>
-                    </Button>
-
-                    {deck.publish_status === 'published' || deck.publish_status === 'unlisted' ? (
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        className="w-full font-bold text-xs h-9 rounded-xl flex items-center justify-center gap-1.5"
-                        onClick={() => {
-                          if (
-                            window.confirm(
-                              'Bạn có chắc chắn muốn thu hồi bộ thẻ này khỏi Marketplace?\n\nNgười dùng khác sẽ không thể tìm thấy hoặc cài đặt bộ thẻ này nữa. Những người đã cài đặt trước đó vẫn có thể tiếp tục sử dụng.'
-                            )
-                          ) {
-                            publishStatusMutation.mutate('private')
-                          }
-                        }}
-                        disabled={publishStatusMutation.isPending}
-                      >
-                        <EyeOff className="size-3.5" />
-                        Thu hồi bộ deck
-                      </Button>
-                    ) : (
-                      <Button
-                        variant="default"
-                        size="sm"
-                        className="w-full font-bold text-xs h-9 rounded-xl flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
-                        onClick={() => {
-                          publishStatusMutation.mutate('published')
-                        }}
-                        disabled={publishStatusMutation.isPending}
-                      >
-                        <Globe className="size-3.5" />
-                        Xuất bản lại bộ deck
-                      </Button>
-                    )}
-
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="w-full font-bold text-xs h-9 rounded-xl flex items-center justify-center gap-1.5"
-                      asChild
-                    >
-                      <Link to={`/marketplace/decks/publish?deck_id=${deck.source_deck_id}&deck_item_id=${deck.id}&edit=1`}>
-                        <Edit3 className="size-3.5 text-primary" />
-                        Chỉnh sửa thông tin
-                      </Link>
-                    </Button>
-                  </div>
-                </div>
-              ) : deck.is_installed ? (
-                <div className="space-y-2">
-                  <Button className="w-full h-10 sm:h-11 font-bold text-xs sm:text-sm border-emerald-500/40 text-emerald-600 dark:text-emerald-400 rounded-xl" variant="outline" disabled>
-                    <CheckCircle className="mr-1.5 size-4" />
-                    Đã cài đặt vào thư viện
-                  </Button>
-                  <Button className="w-full h-9 sm:h-10 font-semibold text-xs sm:text-sm rounded-xl" variant="outline" asChild>
-                    <Link to={`/flashcards/shared-decks/${id}/change-request`}>
-                      <FileDiff className="mr-1.5 size-4" />
-                      Đóng góp chỉnh sửa
-                    </Link>
-                  </Button>
-                  {deck.installed_deck_id ? (
-                    <Button className="w-full h-10 sm:h-11 font-bold text-xs sm:text-sm shadow-xs bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl transition-all" asChild>
-                      <Link to={`/study?deck_id=${deck.installed_deck_id}`}>
-                        <BookOpen className="mr-1.5 size-4" />
-                        Bắt đầu học ngay
-                      </Link>
-                    </Button>
-                  ) : null}
-                </div>
-              ) : (
-                <>
-                  <div className="rounded-xl border border-border/80 bg-muted/20 p-3 text-xs space-y-1.5 shadow-2xs">
-                    <div className="flex items-center justify-between text-muted-foreground font-medium">
-                      <span className="flex items-center gap-1.5">
-                        <BookOpen className="size-3.5 text-primary" />
-                        Số bài học:
-                      </span>
-                      <span className="font-bold text-foreground">
-                        {deck.lesson_count ? `${deck.lesson_count} bài` : '1 bài'}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between text-muted-foreground font-medium">
-                      <span className="flex items-center gap-1.5">
-                        <Layers className="size-3.5 text-primary" />
-                        Tổng số từ vựng:
-                      </span>
-                      <span className="font-bold text-foreground">
-                        {(deck.note_count || samples.length).toLocaleString('vi-VN')} từ
-                      </span>
-                    </div>
-                  </div>
-
-                  <Button
-                    className="w-full h-11 sm:h-12 font-bold text-sm sm:text-base shadow-xs bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl transition-all"
-                    size="lg"
-                    onClick={() => installMutation.mutate()}
-                    disabled={installMutation.isPending}
-                  >
-                    {installMutation.isPending ? (
-                      <>
-                        <Loader2 className="mr-2 size-5 animate-spin" />
-                        {deck.pricing_mode === 'paid' ? 'Đang tạo thanh toán…' : 'Đang cài đặt bộ thẻ…'}
-                      </>
-                    ) : (
-                      <>
-                        <Download className="mr-2 size-5" />
-                        {deck.pricing_mode === 'paid' ? 'Mua bộ deck' : 'Tải xuống & Cài đặt'}
-                      </>
-                    )}
-                  </Button>
-                </>
-              )}
-
-              {!deck.is_owner ? (
-                <Button
-                  className="w-full h-9 sm:h-10 font-semibold text-xs sm:text-sm rounded-xl"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => saveMutation.mutate(deck.is_saved)}
-                  disabled={saveMutation.isPending}
-                >
-                  <Heart
-                    className={`mr-1.5 size-4 ${
-                      deck.is_saved ? 'fill-primary text-primary' : ''
-                    }`}
-                  />
-                  {deck.is_saved ? 'Đã lưu vào danh sách' : 'Lưu bộ deck'}
-                </Button>
-              ) : null}
-
-              <div className="pt-3 border-t border-border/60 text-xs text-muted-foreground space-y-2">
-                <div className="flex items-center gap-2">
-                  <User className="size-4 text-primary" />
-                  <span>Tác giả: <strong className="text-foreground">{authorName}</strong></span>
-                </div>
-                {deck.author_profile?.published_count ? (
-                  <div className="text-muted-foreground pl-6">
-                    Đã xuất bản: <strong className="text-foreground">{deck.author_profile.published_count}</strong> bộ deck
-                  </div>
-                ) : null}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Related Items Sidebar */}
+          {/* Related Items Section */}
           {deck.related_items && deck.related_items.length > 0 ? (
-            <Card className="border-border shadow-2xs">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-bold">Bộ deck liên quan</CardTitle>
+            <Card className="border-border shadow-xs rounded-2xl overflow-hidden">
+              <CardHeader className="p-4 sm:p-5 pb-3 border-b bg-muted/20">
+                <CardTitle className="text-sm sm:text-base font-bold flex items-center gap-2">
+                  <Layers className="size-4 text-primary" />
+                  <span>Bộ thẻ liên quan khác</span>
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  Khám phá thêm các bộ thẻ cùng chủ đề trên Flama Marketplace
+                </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-2">
-                {deck.related_items.map((item) => (
-                  <Link
-                    key={item.id}
-                    to={`/marketplace/decks/${item.id}`}
-                    className="group block rounded-2xl border border-border p-3 hover:bg-muted/40 hover:border-primary/40 transition-all"
-                  >
-                    <div className="font-bold text-xs text-foreground group-hover:text-primary transition-colors line-clamp-1">
-                      {item.title || item.name || 'Bộ thẻ liên quan'}
-                    </div>
-                    <div className="flex items-center justify-between text-[11px] text-muted-foreground mt-1.5">
-                      <span className="font-semibold text-primary">
-                        {item.price_display || 'Miễn phí'}
-                      </span>
-                      <span className="flex items-center gap-0.5 font-bold text-amber-500">
-                        <Star className="size-3 fill-amber-400" />
-                        {(item.rating_avg || 0).toFixed(1)}
-                      </span>
-                    </div>
-                  </Link>
-                ))}
+              <CardContent className="p-4 sm:p-5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                  {deck.related_items.map((item) => (
+                    <Link
+                      key={item.id}
+                      to={`/marketplace/decks/${item.id}`}
+                      className="group block rounded-xl border border-border/80 bg-card p-3.5 hover:bg-muted/30 hover:border-primary/40 transition-all shadow-2xs"
+                    >
+                      <div className="font-bold text-xs sm:text-sm text-foreground group-hover:text-primary transition-colors line-clamp-1">
+                        {item.title || item.name || 'Bộ thẻ liên quan'}
+                      </div>
+                      <div className="flex items-center justify-between text-xs text-muted-foreground mt-2">
+                        <span className="font-bold text-primary">
+                          {item.price_display || 'Miễn phí'}
+                        </span>
+                        <span className="flex items-center gap-1 font-bold text-amber-500">
+                          <Star className="size-3.5 fill-amber-400" />
+                          {(item.rating_avg || 0).toFixed(1)}
+                        </span>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
               </CardContent>
             </Card>
           ) : null}
         </div>
-      </div>
-    </Page>
+      </Page>
   )
 }
