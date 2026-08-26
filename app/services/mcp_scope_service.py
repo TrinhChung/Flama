@@ -7,6 +7,8 @@ from typing import Any, Iterable
 # --- Granular Functional Scopes ---
 SCOPE_DECK_READ = "deck:read"
 SCOPE_DECK_WRITE = "deck:write"
+SCOPE_DECK_SHARE_READ = "deck-share:read"
+SCOPE_DECK_SHARE_WRITE = "deck-share:write"
 SCOPE_NOTE_TYPE_READ = "note-type:read"
 SCOPE_NOTE_TYPE_WRITE = "note-type:write"
 SCOPE_NOTE_CHECK = "note:check"
@@ -26,6 +28,8 @@ ALL_GRANULAR_SCOPES: frozenset[str] = frozenset(
     {
         SCOPE_DECK_READ,
         SCOPE_DECK_WRITE,
+        SCOPE_DECK_SHARE_READ,
+        SCOPE_DECK_SHARE_WRITE,
         SCOPE_NOTE_TYPE_READ,
         SCOPE_NOTE_TYPE_WRITE,
         SCOPE_NOTE_CHECK,
@@ -83,6 +87,8 @@ ALLOWED_MCP_SCOPES: frozenset[str] = frozenset(
 DEFAULT_SCOPES: tuple[str, ...] = (
     SCOPE_DECK_READ,
     SCOPE_DECK_WRITE,
+    SCOPE_DECK_SHARE_READ,
+    SCOPE_DECK_SHARE_WRITE,
     SCOPE_NOTE_TYPE_READ,
     SCOPE_NOTE_TYPE_WRITE,
     SCOPE_NOTE_CHECK,
@@ -102,6 +108,7 @@ DEFAULT_SCOPES: tuple[str, ...] = (
 READ_ONLY_GRANULAR_SCOPES: frozenset[str] = frozenset(
     {
         SCOPE_DECK_READ,
+        SCOPE_DECK_SHARE_READ,
         SCOPE_NOTE_TYPE_READ,
         SCOPE_NOTE_CHECK,
         SCOPE_NOTE_READ,
@@ -115,6 +122,7 @@ READ_ONLY_GRANULAR_SCOPES: frozenset[str] = frozenset(
 WRITE_GRANULAR_SCOPES: frozenset[str] = frozenset(
     {
         SCOPE_DECK_WRITE,
+        SCOPE_DECK_SHARE_WRITE,
         SCOPE_NOTE_TYPE_WRITE,
         SCOPE_NOTE_CREATE,
         SCOPE_NOTE_UPDATE,
@@ -140,6 +148,20 @@ SCOPE_METADATA: dict[str, dict[str, str]] = {
         "desc": "Tạo bộ thẻ mới, đổi tên, cập nhật mô tả và tổ chức cây thư mục bộ bài.",
         "category": "Bộ thẻ (Decks)",
         "icon": "folder-plus",
+    },
+    SCOPE_DECK_SHARE_READ: {
+        "id": SCOPE_DECK_SHARE_READ,
+        "title": "Xem bộ thẻ chia sẻ & Marketplace",
+        "desc": "Duyệt tìm bộ thẻ chia sẻ trên chợ Flama, xem chi tiết nội dung thẻ đã chia sẻ và lịch sử phát hành.",
+        "category": "Chia sẻ bộ thẻ (Shared Decks)",
+        "icon": "share-2",
+    },
+    SCOPE_DECK_SHARE_WRITE: {
+        "id": SCOPE_DECK_SHARE_WRITE,
+        "title": "Đăng tải & quản lý chia sẻ bộ thẻ",
+        "desc": "Chia sẻ bộ thẻ lên Marketplace, cập nhật mô tả/thông tin chia sẻ và phát hành phiên bản mới.",
+        "category": "Chia sẻ bộ thẻ (Shared Decks)",
+        "icon": "upload-cloud",
     },
     SCOPE_NOTE_READ: {
         "id": SCOPE_NOTE_READ,
