@@ -95,14 +95,22 @@ def build_app_config(overrides: Mapping[str, Any] | None = None) -> dict[str, An
         else build_database_uri_from_env()
     )
 
+    engine_options: dict[str, Any] = {
+        "pool_pre_ping": True,
+        "pool_recycle": coerce_int_env("DB_POOL_RECYCLE_SECONDS", default=1800),
+    }
+    if str(database_uri).startswith(("mysql:", "mysql+")):
+        engine_options.update(
+            pool_size=coerce_int_env("DB_POOL_SIZE", default=4),
+            max_overflow=coerce_int_env("DB_MAX_OVERFLOW", default=1),
+            pool_timeout=coerce_int_env("DB_POOL_TIMEOUT_SECONDS", default=5),
+        )
+
     config: dict[str, Any] = {
         "SECRET_KEY": os.getenv("SECRET_KEY", "change-me"),
         "SQLALCHEMY_DATABASE_URI": database_uri,
         "SQLALCHEMY_TRACK_MODIFICATIONS": False,
-        "SQLALCHEMY_ENGINE_OPTIONS": {
-            "pool_pre_ping": True,
-            "pool_recycle": 1800,
-        },
+        "SQLALCHEMY_ENGINE_OPTIONS": engine_options,
         "CORS_ALLOWED_ORIGINS": comma_separated_env("CORS_ALLOWED_ORIGINS"),
         "FRONTEND_URL": os.getenv("FRONTEND_URL", "").strip().rstrip("/"),
         # Browser-driven Anki imports now terminate on the canonical Flask API.
@@ -186,6 +194,31 @@ def build_app_config(overrides: Mapping[str, Any] | None = None) -> dict[str, An
             "MCP_TOKEN_RATE_LIMIT_MAX_REQUESTS",
             default=100_000,
         ),
+        "REDIS_URL": os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0").strip(),
+        "REDIS_SOCKET_CONNECT_TIMEOUT_SECONDS": coerce_int_env(
+            "REDIS_SOCKET_CONNECT_TIMEOUT_SECONDS", default=1
+        ),
+        "REDIS_SOCKET_TIMEOUT_SECONDS": coerce_int_env(
+            "REDIS_SOCKET_TIMEOUT_SECONDS", default=1
+        ),
+        "RATE_LIMIT_BACKEND": os.getenv("RATE_LIMIT_BACKEND", "local").strip().lower(),
+        "RATE_LIMIT_KEY_PREFIX": os.getenv("RATE_LIMIT_KEY_PREFIX", "flama:v1").strip(),
+        "RATE_LIMIT_HMAC_KEY": os.getenv("RATE_LIMIT_HMAC_KEY", "").strip(),
+        "MCP_PREVIEW_BACKEND": os.getenv("MCP_PREVIEW_BACKEND", "local").strip().lower(),
+        "MCP_PREVIEW_TTL_SECONDS": coerce_int_env("MCP_PREVIEW_TTL_SECONDS", default=600),
+        "SHARED_DECK_TREE_CLONE_MODE": os.getenv(
+            "SHARED_DECK_TREE_CLONE_MODE", "batched"
+        ).strip().lower(),
+        "DECK_SOURCE_NOTETYPE_GUARD_MODE": os.getenv(
+            "DECK_SOURCE_NOTETYPE_GUARD_MODE", "shadow"
+        ).strip().lower(),
+        "MARKETPLACE_SAMPLE_MODE": os.getenv(
+            "MARKETPLACE_SAMPLE_MODE", "shadow_cache"
+        ).strip().lower(),
+        "MARKETPLACE_SAMPLE_SCHEMA_VERSION": 1,
+        "FLASHCARD_RENDER_PREVIEW_CACHE_MAX_ENTRIES": coerce_int_env(
+            "FLASHCARD_RENDER_PREVIEW_CACHE_MAX_ENTRIES", default=512
+        ),
 
 
         "PAYOS_CLIENT_ID": os.getenv("PAYOS_CLIENT_ID", "").strip(),
@@ -253,10 +286,22 @@ def _apply_startup_defaults(config: dict[str, Any]) -> None:
     config.setdefault("CSRF_EXEMPT_ENDPOINTS", {"payments.payos_webhook"})
     config.setdefault("SESSION_COOKIE_HTTPONLY", True)
     config.setdefault("SESSION_COOKIE_SAMESITE", "Lax")
-    config.setdefault("LOGIN_RATE_LIMIT_ENABLED", not testing)
-    config.setdefault("LOGIN_RATE_LIMIT_WINDOW_SECONDS", 60)
-    config.setdefault("LOGIN_RATE_LIMIT_MAX_ATTEMPTS", 5)
-    config.setdefault("LOGIN_RATE_LIMIT_LOCKOUT_SECONDS", 5 * 60)
+    config.setdefault(
+        "LOGIN_RATE_LIMIT_ENABLED",
+        coerce_bool_env("LOGIN_RATE_LIMIT_ENABLED", default=not testing),
+    )
+    config.setdefault(
+        "LOGIN_RATE_LIMIT_WINDOW_SECONDS",
+        coerce_int_env("LOGIN_RATE_LIMIT_WINDOW_SECONDS", default=60),
+    )
+    config.setdefault(
+        "LOGIN_RATE_LIMIT_MAX_ATTEMPTS",
+        coerce_int_env("LOGIN_RATE_LIMIT_MAX_ATTEMPTS", default=5),
+    )
+    config.setdefault(
+        "LOGIN_RATE_LIMIT_LOCKOUT_SECONDS",
+        coerce_int_env("LOGIN_RATE_LIMIT_LOCKOUT_SECONDS", default=5 * 60),
+    )
 
 
 def _startup_cutover_fail_on_mismatch_default(default: bool) -> bool:

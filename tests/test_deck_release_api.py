@@ -5,7 +5,11 @@ from unittest.mock import patch
 
 from app import create_app
 from app.repositories import deck_release_repository
-from app.services import deck_release_service, deck_working_tree_service
+from app.services import (
+    deck_release_service,
+    deck_working_tree_service,
+    marketplace_query_service,
+)
 from models import db
 from models.deck import Deck
 from models.deck_install import DeckInstall
@@ -163,6 +167,39 @@ class DeckReleaseApiTests(unittest.TestCase):
                 "expected_working_revision": expected_working_revision,
             },
         )
+
+    def test_publish_stores_release_bound_samples_that_ignore_live_mutation(self):
+        response = self._publish(
+            version_label="1.0.0",
+            expected_release_id=None,
+            expected_working_revision=0,
+            key="release-sample-cache",
+        )
+        self.assertEqual(response.status_code, 201)
+
+        with self.app.app_context():
+            item = db.session.get(DeckMarketplaceItem, self.deck_item_id)
+            cached = marketplace_query_service.build_shared_deck_test_samples(
+                item,
+                limit=5,
+            )
+            self.assertEqual(item.preview_samples_release_id, item.current_release_id)
+            self.assertEqual(item.preview_samples_schema_version, 1)
+            self.assertTrue(cached)
+
+            original_word = cached[0]["word"]
+            cached_note = db.session.get(Note, cached[0]["note_id"])
+            cached_note.field_values = {
+                **dict(cached_note.field_values or {}),
+                "Word": "live-working-copy-only",
+            }
+            db.session.flush()
+
+            after_live_mutation = marketplace_query_service.build_shared_deck_test_samples(
+                item,
+                limit=5,
+            )
+            self.assertEqual(after_live_mutation[0]["word"], original_word)
 
     def test_owner_preview_is_atomic_cursor_paginated_and_owner_only(self):
         with patch.object(

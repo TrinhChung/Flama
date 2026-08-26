@@ -9,6 +9,7 @@ from pathlib import Path
 
 from app import create_app
 from app.services import flashcards_share as share_ctrl
+from app.services import flashcards_share_service
 from app.services.anki_scheduler import _day_index, _day_index_to_datetime, default_deck_options
 from models import db
 from models.flashcard import (
@@ -505,7 +506,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             deck_item = DeckMarketplaceItem(
                 owner_user_id=self.user_id,
                 source_deck_id=self.deck_id,
-                source_note_type_id=None,
+                source_note_type_id=note_type_id,
                 title="Shared Deck A",
                 description="Deck description",
                 primary_category="General",
@@ -1414,6 +1415,8 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
                 publish_status="published",
             )
             db.session.add(deck_item)
+            db.session.flush()
+            flashcards_share_service._stage_initial_release_if_visible(deck_item)
             db.session.commit()
             deck_item_id = deck_item.id
 
@@ -1471,7 +1474,10 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             json={},
         )
         self.assertEqual(preview_resp.status_code, 409)
-        self.assertIn("no notes", (preview_resp.get_json() or {}).get("message", "").lower())
+        self.assertIn(
+            "source note type",
+            (preview_resp.get_json() or {}).get("message", "").lower(),
+        )
 
     def test_shared_deck_install_creates_pointer_clone_without_note_copy(self):
         note_type = self._create_note_type()
@@ -1520,6 +1526,8 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
                 publish_status="published",
             )
             db.session.add(deck_item)
+            db.session.flush()
+            flashcards_share_service._stage_initial_release_if_visible(deck_item)
             db.session.commit()
             deck_item_id = deck_item.id
 
@@ -1565,6 +1573,58 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         next_payload = next_resp.get_json()
         self.assertIsNotNone(next_payload.get("card_id"))
         self.assertIn("\u72ac", next_payload.get("rendered_front_html", ""))
+
+    def test_shared_deck_install_fails_fast_when_release_not_ready(self):
+        note_type = self._create_note_type()
+        note_type_id = note_type["id"]
+
+        with self.app.app_context():
+            learner = User(username="unreleased-learner", email="unreleased-learner@example.com", is_admin=False)
+            learner.set_password("password")
+            db.session.add(learner)
+            db.session.flush()
+
+            # Create unversioned visible listing (current_release_id is None)
+            unversioned_item = DeckMarketplaceItem(
+                owner_user_id=self.user_id,
+                source_deck_id=self.deck_id,
+                source_note_type_id=note_type_id,
+                title="Unreleased Deck Listing",
+                description="Unreleased deck description",
+                primary_category="General",
+                tags=[],
+                preview_text="Preview",
+                pricing_mode="free",
+                price_amount_minor=0,
+                version="1.0.0",
+                publish_status="published",
+            )
+            db.session.add(unversioned_item)
+            db.session.commit()
+            unversioned_item_id = unversioned_item.id
+
+        learner_client = self.app.test_client()
+        learner_client.post(
+            "/login",
+            data={"email": "unreleased-learner@example.com", "password": "password"},
+            follow_redirects=True,
+        )
+
+        install_resp = learner_client.post(f"/api/shared/decks/{unversioned_item_id}/install")
+        self.assertEqual(install_resp.status_code, 503)
+        error_payload = install_resp.get_json() or {}
+        self.assertEqual(error_payload.get("error"), "DECK_RELEASE_NOT_READY")
+
+        with self.app.app_context():
+            # Invariant: zero install rows and zero releases created
+            self.assertEqual(
+                DeckInstall.query.filter_by(deck_item_id=unversioned_item_id).count(),
+                0,
+            )
+            self.assertEqual(
+                DeckRelease.query.filter_by(deck_item_id=unversioned_item_id).count(),
+                0,
+            )
 
     def test_shared_deck_install_clone_cards_visible_in_browse_api(self):
         note_type = self._create_note_type()
@@ -1613,6 +1673,8 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
                 publish_status="published",
             )
             db.session.add(deck_item)
+            db.session.flush()
+            flashcards_share_service._stage_initial_release_if_visible(deck_item)
             db.session.commit()
             deck_item_id = deck_item.id
 
@@ -1770,6 +1832,8 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
                 publish_status="published",
             )
             db.session.add(deck_item)
+            db.session.flush()
+            flashcards_share_service._stage_initial_release_if_visible(deck_item)
             db.session.commit()
             deck_item_id = deck_item.id
 
@@ -1848,6 +1912,8 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
                 publish_status="published",
             )
             db.session.add(deck_item)
+            db.session.flush()
+            flashcards_share_service._stage_initial_release_if_visible(deck_item)
             db.session.commit()
             deck_item_id = deck_item.id
 
@@ -2113,6 +2179,8 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
                 publish_status="published",
             )
             db.session.add(deck_item)
+            db.session.flush()
+            flashcards_share_service._stage_initial_release_if_visible(deck_item)
             db.session.commit()
             deck_item_id = deck_item.id
 
@@ -2233,6 +2301,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             )
             db.session.add(deck_item)
             db.session.flush()
+            flashcards_share_service._stage_initial_release_if_visible(deck_item)
             deck_item_id = deck_item.id
 
             learner_specs: list[tuple[str, str]] = []
@@ -2259,6 +2328,10 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         with self.app.app_context():
             install_count = DeckInstall.query.filter_by(deck_item_id=deck_item_id).count()
             self.assertEqual(install_count, len(learner_ids))
+            deck_item = db.session.get(DeckMarketplaceItem, deck_item_id)
+            self.assertEqual(deck_item.install_count, install_count)
+            source_note_type = db.session.get(NoteType, note_type_id)
+            self.assertEqual(source_note_type.install_count, install_count)
 
             source_note_count = Note.query.filter_by(user_id=self.user_id, deck_id=self.deck_id).count()
             self.assertEqual(source_note_count, 30)
@@ -2387,6 +2460,8 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
                 publish_status="published",
             )
             db.session.add(deck_item)
+            db.session.flush()
+            flashcards_share_service._stage_initial_release_if_visible(deck_item)
             db.session.commit()
             deck_item_id = deck_item.id
 

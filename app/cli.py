@@ -32,9 +32,18 @@ from app.services.tts_provider_service import (
     ensure_default_tts_providers,
 )
 from app.services import flashcards_share
+from app.services import flashcards_share_service
 from app.utils.bootstrap_admin import resolve_bootstrap_admin_credentials
 from models import db
-from models.flashcard import Card, DeckMarketplaceItem, Note, NoteType, Template
+from models.flashcard import (
+    Card,
+    DeckInstall,
+    DeckMarketplaceItem,
+    Note,
+    NoteType,
+    NoteTypeInstall,
+    Template,
+)
 from models.user import User
 from models.user_role import UserRole
 from models.deck import Deck
@@ -316,6 +325,141 @@ def register_cli_commands(app: Flask) -> None:
             raise click.ClickException(
                 f"{len(failures)} deck listing(s) could not be bootstrapped."
             )
+
+    @app.cli.command("market-stats-reconcile")
+    @click.option(
+        "--kind",
+        type=click.Choice(["all", "deck", "note-type"]),
+        default="all",
+        show_default=True,
+    )
+    @click.option("--limit", type=click.IntRange(1, 100_000), default=10_000, show_default=True)
+    @click.option("--apply", is_flag=True, default=False)
+    def market_stats_reconcile(kind: str, limit: int, apply: bool) -> None:
+        """Re-evaluate per-install activity and repair parent counters."""
+        now = datetime.utcnow()
+        touched_note_types: set[str] = set()
+        touched_deck_items: set[str] = set()
+        evaluated = 0
+
+        if kind in {"all", "note-type"}:
+            installs = NoteTypeInstall.query.order_by(NoteTypeInstall.id.asc()).limit(limit).all()
+            for install in installs:
+                flashcards_share_service._update_note_type_install_market_activity(
+                    install,
+                    now=now,
+                )
+                touched_note_types.add(str(install.source_note_type_id))
+                evaluated += 1
+
+        remaining = max(limit - evaluated, 0) if kind == "all" else limit
+        if kind in {"all", "deck"} and remaining:
+            installs = DeckInstall.query.order_by(DeckInstall.id.asc()).limit(remaining).all()
+            for install in installs:
+                flashcards_share_service._update_deck_install_market_activity(
+                    install,
+                    now=now,
+                )
+                touched_deck_items.add(str(install.deck_item_id))
+                evaluated += 1
+
+        for note_type in NoteType.query.filter(NoteType.id.in_(touched_note_types)).all():
+            flashcards_share_service.recompute_note_type_market_stats(note_type)
+        for deck_item in DeckMarketplaceItem.query.filter(
+            DeckMarketplaceItem.id.in_(touched_deck_items)
+        ).all():
+            flashcards_share_service.recompute_deck_item_market_stats(deck_item)
+
+        if apply:
+            db.session.commit()
+        else:
+            db.session.rollback()
+        click.echo(
+            f"Market stats {'applied' if apply else 'dry run'}: "
+            f"evaluated={evaluated}, note_types={len(touched_note_types)}, "
+            f"deck_items={len(touched_deck_items)}"
+        )
+
+    @app.cli.command("marketplace-samples-backfill")
+    @click.option("--limit", type=click.IntRange(1, 10_000), default=100, show_default=True)
+    @click.option("--apply", is_flag=True, default=False)
+    def marketplace_samples_backfill(limit: int, apply: bool) -> None:
+        """Backfill deterministic samples from each listing's immutable release."""
+        from app.services import marketplace_query_service
+
+        items = (
+            DeckMarketplaceItem.query.filter(
+                DeckMarketplaceItem.current_release_id.isnot(None),
+                db.or_(
+                    DeckMarketplaceItem.preview_samples_release_id.is_(None),
+                    DeckMarketplaceItem.preview_samples_release_id
+                    != DeckMarketplaceItem.current_release_id,
+                    DeckMarketplaceItem.preview_samples_schema_version.is_(None),
+                    DeckMarketplaceItem.preview_samples_schema_version != 1,
+                    DeckMarketplaceItem.preview_samples_json.is_(None),
+                ),
+            )
+            .order_by(DeckMarketplaceItem.id.asc())
+            .limit(limit)
+            .all()
+        )
+        updated = 0
+        for item in items:
+            if item.current_release is None:
+                continue
+            item.preview_samples_json = (
+                marketplace_query_service.build_release_sample_cache_from_release(
+                    item,
+                    item.current_release,
+                    limit=5,
+                )
+            )
+            item.preview_samples_release_id = item.current_release_id
+            item.preview_samples_schema_version = 1
+            updated += 1
+        if apply:
+            db.session.commit()
+        else:
+            db.session.rollback()
+        click.echo(
+            f"Marketplace samples {'applied' if apply else 'dry run'}: updated={updated}"
+        )
+
+    @app.cli.command("deck-notetype-audit")
+    @click.option("--limit", type=click.IntRange(1, 10_000), default=1000, show_default=True)
+    @click.option("--apply", is_flag=True, default=False)
+    def deck_notetype_audit(limit: int, apply: bool) -> None:
+        """Audit pointers and fill only unambiguous missing source NoteTypes."""
+        counts = {"valid": 0, "backfilled": 0, "missing": 0, "ambiguous": 0, "mismatch": 0}
+        items = DeckMarketplaceItem.query.order_by(DeckMarketplaceItem.id.asc()).limit(limit).all()
+        for item in items:
+            if item.source_deck_id is None:
+                counts["missing"] += 1
+                continue
+            resolved_id, error = flashcards_share_service.resolve_single_note_type_for_deck(
+                deck_id=item.source_deck_id,
+                owner_user_id=item.owner_user_id,
+            )
+            pointer = str(item.source_note_type_id or "").strip()
+            if resolved_id and not pointer:
+                item.source_note_type_id = resolved_id
+                counts["backfilled"] += 1
+            elif error and "same template" in error:
+                counts["ambiguous"] += 1
+            elif error:
+                counts["missing"] += 1
+            elif pointer != str(resolved_id):
+                counts["mismatch"] += 1
+            else:
+                counts["valid"] += 1
+        if apply:
+            db.session.commit()
+        else:
+            db.session.rollback()
+        click.echo(
+            f"Deck NoteType audit {'applied' if apply else 'dry run'}: "
+            + ", ".join(f"{key}={value}" for key, value in counts.items())
+        )
 
     @app.cli.command("user-role-seed")
     def user_role_seed() -> None:
@@ -1291,27 +1435,38 @@ def _upsert_seeded_deck_marketplace_item(
         deck_item.is_official = True
         deck_item.published_at = deck_item.published_at or now
         deck_item.archived_at = None
+        db.session.flush()
+        release_error = flashcards_share_service._stage_initial_release_if_visible(deck_item)
+        if release_error:
+            raise click.ClickException(
+                f"Could not publish initial release for seeded deck '{deck.name}': {release_error}"
+            )
         return False
 
-    db.session.add(
-        DeckMarketplaceItem(
-            owner_user_id=owner_user_id,
-            source_deck_id=deck.id,
-            source_note_type_id=note_type_id,
-            title=deck.name,
-            description=deck.description or f"Seeded deck: {deck.name}",
-            primary_category="Japanese",
-            tags=["seeded", "default"],
-            preview_text=f"Default seeded deck: {deck.name}",
-            sample_cards_count=sample_cards_count,
-            pricing_mode="free",
-            price_amount_minor=0,
-            version="1.0.0",
-            publish_status="published",
-            is_official=True,
-            published_at=datetime.utcnow(),
-        )
+    new_item = DeckMarketplaceItem(
+        owner_user_id=owner_user_id,
+        source_deck_id=deck.id,
+        source_note_type_id=note_type_id,
+        title=deck.name,
+        description=deck.description or f"Seeded deck: {deck.name}",
+        primary_category="Japanese",
+        tags=["seeded", "default"],
+        preview_text=f"Default seeded deck: {deck.name}",
+        sample_cards_count=sample_cards_count,
+        pricing_mode="free",
+        price_amount_minor=0,
+        version="1.0.0",
+        publish_status="published",
+        is_official=True,
+        published_at=datetime.utcnow(),
     )
+    db.session.add(new_item)
+    db.session.flush()
+    release_error = flashcards_share_service._stage_initial_release_if_visible(new_item)
+    if release_error:
+        raise click.ClickException(
+            f"Could not publish initial release for seeded deck '{deck.name}': {release_error}"
+        )
     return True
 
 

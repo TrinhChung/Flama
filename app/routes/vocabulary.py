@@ -37,7 +37,7 @@ from app.repositories.study_repository import (
 from app.utils.deck_move_token import parse_deck_move_token
 from app.utils.permissions import is_admin_user
 from app.utils.redirects import resolve_safe_next_url
-from app.services import deck_management_service
+from app.services import deck_management_service, flashcards_share_service
 from app.services.anki_scheduler import (
     computeAnswerPreview,
 )
@@ -518,6 +518,15 @@ def move_deck(deck_id: int | None = None):
     if vocabulary_ctrl.deck_name_exists_under_parent(parent_id=new_parent_id, name=deck.name, exclude_deck_id=deck.id):
         parent_label = new_parent.name if new_parent else "Root"
         flash(f"Parent '{parent_label}' already has a deck named '{deck.name}'.", "danger")
+        return redirect(next_url)
+
+    guard_error = flashcards_share_service.validate_deck_subtree_move_to_parent(
+        deck_id=deck.id,
+        new_parent_id=new_parent_id,
+        user_id=deck.owner_user_id,
+    )
+    if guard_error:
+        flash(guard_error, "danger")
         return redirect(next_url)
 
     deck.parent_id = new_parent_id

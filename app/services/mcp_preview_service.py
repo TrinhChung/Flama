@@ -19,17 +19,8 @@ Architecture & Lifecycle:
 3. Consumption (`consume_preview_token`):
    Upon successful mutation, the preview token is immediately consumed (single-use).
 
-Operational Limitations & Multi-Worker Architecture Note:
----------------------------------------------------------
-- Current Implementation:
-  Preview tokens are stored in-process memory (`_PREVIEW_TOKENS` dict protected by a threading Lock).
-  This is optimized for single-worker processes or development/testing environments.
-
-- TODO / Future Shared Storage:
-  When scaling to multi-worker Gunicorn deployments (`gunicorn -w 4`) or multi-instance container
-  clusters, preview tokens must be persisted in a shared storage backend (such as Redis with native
-  TTL or a persistent database table `mcp_preview_tokens`) to ensure preview validation works across
-  arbitrary worker nodes.
+Storage is selected with MCP_PREVIEW_BACKEND. Redis mode uses native TTL and
+atomically validates/claims a token so it cannot execute in two workers.
 """
 
 from __future__ import annotations
@@ -42,8 +33,16 @@ import secrets
 import threading
 from typing import Any
 
+from flask import current_app
+
+from app.services import redis_state_service
+
 
 DEFAULT_PREVIEW_TTL_SECONDS = 600  # 10 minutes
+
+
+class PreviewStoreUnavailable(RuntimeError):
+    pass
 
 
 @dataclass(frozen=True)
@@ -90,12 +89,23 @@ def create_preview_token(
     resource_id: str | int,
     resource_version: str,
     impact_summary: dict[str, Any],
-    ttl_seconds: int = DEFAULT_PREVIEW_TTL_SECONDS,
+    ttl_seconds: int | None = None,
 ) -> tuple[str, str]:
     """Create a temporary preview token with TTL and return (preview_id, expires_at_iso)."""
+    effective_ttl = max(
+        int(
+            ttl_seconds
+            if ttl_seconds is not None
+            else current_app.config.get(
+                "MCP_PREVIEW_TTL_SECONDS",
+                DEFAULT_PREVIEW_TTL_SECONDS,
+            )
+        ),
+        1,
+    )
     now = _now_utc()
     preview_id = f"prev_{secrets.token_hex(12)}"
-    expires_at = now + timedelta(seconds=ttl_seconds)
+    expires_at = now + timedelta(seconds=effective_ttl)
 
     record = PreviewTokenRecord(
         preview_id=preview_id,
@@ -108,9 +118,40 @@ def create_preview_token(
         expires_at=expires_at,
     )
 
+    mode = redis_state_service.backend_mode("MCP_PREVIEW_BACKEND")
     with _LOCK:
         _cleanup_expired_tokens(now)
         _PREVIEW_TOKENS[preview_id] = record
+
+    if mode != "local":
+        payload = json.dumps(
+            {
+                "preview_id": record.preview_id,
+                "user_id": record.user_id,
+                "action": record.action,
+                "resource_id": record.resource_id,
+                "resource_version": record.resource_version,
+                "impact_summary": record.impact_summary,
+                "created_at": record.created_at.isoformat(),
+                "expires_at": record.expires_at.isoformat(),
+            },
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        try:
+            redis_state_service.redis_client().set(
+                _redis_key(preview_id),
+                payload,
+                ex=effective_ttl,
+            )
+        except Exception as exc:
+            if mode == "redis":
+                with _LOCK:
+                    _PREVIEW_TOKENS.pop(preview_id, None)
+                raise PreviewStoreUnavailable(
+                    "MCP preview store is temporarily unavailable"
+                ) from exc
+            current_app.logger.warning("Redis MCP preview shadow write failed: %s", exc)
 
     return preview_id, expires_at.isoformat()
 
@@ -132,6 +173,16 @@ def validate_preview_token(
 
     clean_preview_id = str(preview_id).strip()
     now = _now_utc()
+
+    mode = redis_state_service.backend_mode("MCP_PREVIEW_BACKEND")
+    if mode == "redis":
+        return _claim_redis_preview_token(
+            preview_id=clean_preview_id,
+            user_id=user_id,
+            action=action,
+            resource_id=str(resource_id),
+            current_resource_version=current_resource_version,
+        )
 
     with _LOCK:
         _cleanup_expired_tokens(now)
@@ -181,3 +232,65 @@ def consume_preview_token(preview_id: str) -> None:
     if clean_preview_id:
         with _LOCK:
             _PREVIEW_TOKENS.pop(clean_preview_id, None)
+        # Redis-authoritative validation already atomically claims/deletes the
+        # token before mutation. Only shadow mode needs post-mutation cleanup.
+        if redis_state_service.backend_mode("MCP_PREVIEW_BACKEND") == "shadow_redis":
+            try:
+                redis_state_service.redis_client().delete(_redis_key(clean_preview_id))
+            except Exception as exc:
+                current_app.logger.warning("Redis MCP preview shadow delete failed: %s", exc)
+
+
+def _redis_key(preview_id: str) -> str:
+    return redis_state_service.private_key("mcp-preview", preview_id)
+
+
+def _claim_redis_preview_token(
+    *,
+    preview_id: str,
+    user_id: int,
+    action: str,
+    resource_id: str,
+    current_resource_version: str,
+) -> tuple[bool, str | None, str | None]:
+    script = """
+    local raw = redis.call('GET', KEYS[1])
+    if not raw then return 'NOT_FOUND' end
+    local item = cjson.decode(raw)
+    if tostring(item.user_id) ~= ARGV[1] then return 'FORBIDDEN' end
+    if tostring(item.action) ~= ARGV[2] then return 'ACTION_MISMATCH' end
+    if tostring(item.resource_id) ~= ARGV[3] then return 'RESOURCE_MISMATCH' end
+    if tostring(item.resource_version) ~= ARGV[4] then return 'STALE' end
+    redis.call('DEL', KEYS[1])
+    return 'OK'
+    """
+    try:
+        result = str(
+            redis_state_service.redis_client().eval(
+                script,
+                1,
+                _redis_key(preview_id),
+                str(user_id),
+                str(action),
+                str(resource_id),
+                str(current_resource_version),
+            )
+        )
+    except Exception as exc:
+        current_app.logger.error("Redis MCP preview claim failed: %s", exc)
+        return False, "PREVIEW_STORE_UNAVAILABLE", "Preview store is temporarily unavailable."
+
+    errors = {
+        "NOT_FOUND": ("PREVIEW_TOKEN_NOT_FOUND", "Preview token does not exist or has expired."),
+        "FORBIDDEN": ("PREVIEW_TOKEN_FORBIDDEN", "Preview token belongs to another user."),
+        "ACTION_MISMATCH": ("PREVIEW_ACTION_MISMATCH", "Preview token action does not match."),
+        "RESOURCE_MISMATCH": ("PREVIEW_RESOURCE_MISMATCH", "Preview token resource does not match."),
+        "STALE": ("STALE_PREVIEW_ERROR", "Resource changed after preview; create a new preview."),
+    }
+    if result == "OK":
+        return True, None, None
+    code, message = errors.get(
+        result,
+        ("PREVIEW_TOKEN_NOT_FOUND", "Preview token does not exist or has expired."),
+    )
+    return False, code, message

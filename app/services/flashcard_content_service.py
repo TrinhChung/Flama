@@ -204,10 +204,15 @@ def delete_note_type(*, user_id: int, note_type_id: str, purge: bool = False, is
         DeckMarketplaceItem.query.filter(DeckMarketplaceItem.source_note_type_id == note_type_id).delete(synchronize_session=False)
 
         # 5. Delete all NoteTypeInstalls where this note type is source or installed
-        NoteTypeInstall.query.filter(
+        install_query = NoteTypeInstall.query.filter(
             (NoteTypeInstall.source_note_type_id == note_type_id) |
             (NoteTypeInstall.installed_note_type_id == note_type_id)
-        ).delete(synchronize_session=False)
+        )
+        install_rows = install_query.with_for_update().all()
+        flashcards_share_service.remove_note_type_install_market_counters(
+            install_rows
+        )
+        install_query.delete(synchronize_session=False)
 
         # 6. Delete NoteType itself, which cascades
         db.session.delete(note_type)
@@ -243,6 +248,10 @@ def delete_note_type(*, user_id: int, note_type_id: str, purge: bool = False, is
         db.session.commit()
         return {"success": True, "archived": True}
 
+    flashcards_share_service.deactivate_note_type_installs_for_deleted_copy(
+        user_id=user_id,
+        installed_note_type_id=note_type.id,
+    )
     db.session.delete(note_type)
     _audit(user_id, "note_type.delete", {"note_type_id": note_type.id})
     db.session.commit()

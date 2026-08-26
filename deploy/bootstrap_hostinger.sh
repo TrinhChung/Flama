@@ -6,7 +6,7 @@ if [ "$(id -u)" -ne 0 ]; then
   exit 1
 fi
 
-for command_name in mysql openssl python3; do
+for command_name in mysql openssl python3 redis-cli; do
   if ! command -v "$command_name" >/dev/null 2>&1; then
     echo "Missing required command: $command_name" >&2
     exit 1
@@ -51,6 +51,16 @@ PAYMENTS_PROVIDER=payos
 PAYMENTS_PAID_INSTALL_REQUIRED=0
 PAYMENTS_WEBHOOK_AUTO_GRANT_ENABLED=1
 PAYMENTS_ORDER_EXPIRY_SECONDS=1800
+REDIS_URL=redis://127.0.0.1:6379/0
+RATE_LIMIT_BACKEND=redis
+MCP_PREVIEW_BACKEND=redis
+SHARED_DECK_TREE_CLONE_MODE=batched
+DECK_SOURCE_NOTETYPE_GUARD_MODE=shadow
+MARKETPLACE_SAMPLE_MODE=shadow_cache
+DB_POOL_SIZE=4
+DB_MAX_OVERFLOW=1
+DB_POOL_TIMEOUT_SECONDS=5
+DB_POOL_RECYCLE_SECONDS=1800
 ENVIRONMENT
 fi
 
@@ -80,6 +90,12 @@ with open(environment_path, encoding="utf-8") as handle:
         raise SystemExit(f"Missing {requested_key} in {environment_path}.")
 PYTHON
 }
+
+if ! redis-cli -u "$(read_environment_value REDIS_URL 2>/dev/null || printf '%s' 'redis://127.0.0.1:6379/0')" ping \
+  | grep -qx 'PONG'; then
+  echo "Redis is not reachable; keep RATE_LIMIT_BACKEND/MCP_PREVIEW_BACKEND=local until fixed." >&2
+  exit 1
+fi
 
 database_host="$(read_environment_value DB_HOST)"
 database_user="$(read_environment_value DB_USER)"

@@ -26,9 +26,13 @@ The counts reconcile exactly:
 - `10,164 memberships = 10,148 Notes + 16 FieldDefs`.
 
 The first request exceeded Gunicorn's 120-second timeout and its worker was killed.
-A user retry rebuilt the same release and completed in about 105 seconds. Production
-currently has one synchronous Gunicorn worker, so the heavy request occupied the only
-web worker and made the whole application unavailable during the build.
+A user retry rebuilt the same release and completed in about 105 seconds. At incident
+time production had one synchronous Gunicorn worker, so the heavy request occupied the
+only web worker and made the whole application unavailable during the build.
+
+After the incident, production was promoted to release `d49dd871…` with two Gunicorn
+processes and four gthreads per process. The release-bootstrap backend path is unchanged,
+so this is an availability/concurrency change, not the root-cause fix described below.
 
 The market-stat N+1 behavior identified in the preliminary investigation is real, but
 it is a secondary scaling issue. With only four installs on this item, it cannot explain
@@ -36,13 +40,30 @@ the 162,448 release-change inserts or why this specific 10k deck triggered the i
 
 ## 2. Observed runtime and incident timeline
 
-Production is host-native, not Docker-managed:
+At incident time production was host-native, not Docker-managed, with:
 
 - active release at inspection: `873de2d47e2c7ad1cba5cb769ae9385a7c097e69`;
 - `flama.service` runs `/opt/flama/current`;
 - Gunicorn command: `--workers 1 --timeout 120 --bind 0.0.0.0:4789`;
 - MySQL and nginx run as host services;
 - normal startup maintenance and clone cutover are disabled.
+
+### 2.1 Post-incident deployment update
+
+Read-only verification on 2026-08-25 23:06 UTC found:
+
+- active release: `d49dd87192e620b3c04f03a298bcbedd370f4752`;
+- Gunicorn: `2 workers × 4 gthreads`, 120-second timeout;
+- two healthy application workers, no service restart or worker timeout since the
+  16:11 UTC deployment;
+- affected `語彙徹底N1` item remains versioned with four installs;
+- five other visible listings still have `current_release_id IS NULL`;
+- the initial-release fallback and other backend hot paths in this report are unchanged.
+
+This deployment reduces single-worker starvation for ordinary traffic. It also permits
+more heavy requests to enter Python/MySQL concurrently and makes process-local login
+rate-limit state non-global. It must therefore be treated as a canary/containment change,
+not evidence that install cost is bounded.
 
 The sanitized journal and database timestamps establish this sequence:
 
@@ -170,13 +191,16 @@ shells and `DeckCloneDeckMap` pointers, not learner copies of the source Notes/C
 
 ### 5.4 Single-worker deployment turns one slow request into an outage
 
-- **Observed**: production uses one default synchronous Gunicorn worker with a
-  120-second timeout.
-- **Evidence**: `deploy/flama.service:14`; sanitized production `systemctl` and journal
-  inspection; `docs/architecture/production-architecture-verification-2026-08-24.md`.
-- **Potential concern**: any slow request blocks all unrelated API traffic.
-- **Impact**: the app was unavailable while release generation occupied the worker;
-  timeout then discarded almost two minutes of work.
+- **Observed**: at incident time production used one default synchronous Gunicorn
+  worker with a 120-second timeout. The later `d49dd871…` deployment changed this to
+  two processes with four gthreads each without changing the heavy backend path.
+- **Evidence**: sanitized production `systemctl` and journal inspection; deployed
+  release fingerprints; `docs/architecture/production-architecture-verification-2026-08-24.md`.
+- **Potential concern**: at incident time one slow request blocked all unrelated API
+  traffic. Under the current topology, concurrent traffic can proceed, but CPU-heavy
+  Python work and MySQL write amplification can degrade both workers and multiple threads.
+- **Impact**: the app was unavailable during the incident while release generation
+  occupied the only worker; timeout then discarded almost two minutes of work.
 - **Unknowns**: request p95/p99 is not currently emitted by the default access-log
   format, and concurrency has not been load-tested against production-like data.
 
@@ -232,7 +256,7 @@ shells and `DeckCloneDeckMap` pointers, not learner copies of the source Notes/C
   again.
 - **Evidence**: `app/services/marketplace_query_service.py:341-372`,
   `app/routes/flashcards/share.py:438-478`, and
-  `frontend/src/features/marketplace/pages/SharedDeckDetailPage.tsx:186-208`.
+  `frontend/src/features/marketplace/pages/SharedDeckDetailPage.tsx:187-218`.
 - **Potential concern**: the visible “clone” interaction includes another `O(notes ×
   fields)` CPU/memory scan outside the POST transaction. Source NoteType inference is
   also repeated on the detail and install paths.
@@ -291,8 +315,8 @@ The successful retry left the affected item in a consistent, useful state:
 
 - one published release is now present and is the listing's current release;
 - persisted row counts match the release metadata;
-- three older installs remain `legacy_snapshot` and unpinned;
-- the new install is release-pinned;
+- two installs currently remain `legacy_snapshot`; two are release-pinned (there were
+  three legacy/unpinned installs when the incident release plan was built);
 - no building release remains for the item.
 
 Do not delete or roll back this immutable release merely to reduce table size. It is
@@ -370,14 +394,16 @@ Required focused tests:
 
 ### Phase 3 — worker availability
 
-Do not increase concurrency while unbounded release generation remains callable from
-HTTP; additional workers would allow multiple CPU/DB-heavy jobs to run simultaneously.
+Do not increase concurrency beyond the currently deployed `2 × 4 gthread` canary while
+unbounded release generation remains callable from HTTP; additional capacity would allow
+more CPU/DB-heavy jobs to run simultaneously.
 
-After Phase 1 and a production-like load test:
+The current concurrency deployment does not satisfy Phase 1. After the request boundary
+is fixed and a production-like load test is complete:
 
 1. externalize process-local login/MCP rate-limit state or explicitly accept and test
    its multi-process semantics;
-2. canary two synchronous workers on the two-vCPU VPS;
+2. compare the current gthread topology with two synchronous workers on the two-vCPU VPS;
 3. verify MySQL connection limits/pool sizing, memory, p95 latency, and error rate;
 4. retain the lower worker count if the canary increases CPU contention or tail latency.
 

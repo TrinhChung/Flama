@@ -10,12 +10,18 @@ from sqlalchemy import or_
 
 from app.repositories import study_repository, vocabulary_repository
 from app.repositories.deck_tree_query import collect_subtree_ids as _collect_deck_subtree_ids
-from app.services import flashcard_content_service, note_sync_service, stats_overview
+from app.services import (
+    flashcard_content_service,
+    flashcards_share_service,
+    note_sync_service,
+    stats_overview,
+)
 from app.services.anki_content_normalizer import normalize_anki_field_values
 from app.services.anki_scheduler import applyAnswer, computeAnswerPreview
 from app.services.deck_management_service import delete_deck_subtree
 from app.services.flashcard_renderer import TemplateCompileError, render_template_pair
 from app.services.mcp_preview_service import (
+    PreviewStoreUnavailable,
     compute_resource_version,
     consume_preview_token,
     create_preview_token,
@@ -449,6 +455,18 @@ def create_deck(
     resolved_note_type = None
     if default_note_type_id:
         resolved_note_type = _resolve_note_type_for_user(user_id=user_id, note_type_id=default_note_type_id)
+        guard_error = flashcards_share_service.validate_marketplace_note_type_for_deck(
+            deck_id=parent_id,
+            note_type_id=resolved_note_type.id,
+            user_id=user_id,
+        )
+        if guard_error:
+            raise RequestValidationError(
+                guard_error,
+                field="default_note_type_id",
+                status=409,
+                code="DECK_SOURCE_NOTETYPE_MISMATCH",
+            )
 
     cleaned_name = str(name).strip()
     if "::" in cleaned_name or "/" in cleaned_name:
@@ -573,12 +591,36 @@ def update_deck(
                     status=400,
                     code="CYCLIC_PARENT_ERROR",
                 )
+        guard_error = flashcards_share_service.validate_deck_subtree_move_to_parent(
+            deck_id=deck.id,
+            new_parent_id=parent_id,
+            user_id=user_id,
+        )
+        if guard_error:
+            raise RequestValidationError(
+                guard_error,
+                field="parent_id",
+                status=409,
+                code="DECK_SOURCE_NOTETYPE_MISMATCH",
+            )
         deck.parent_id = parent_id
         deck.position = vocabulary_repository.next_deck_position(parent_id)
 
     if update_default_note_type:
         if default_note_type_id is not None:
             resolved_nt = _resolve_note_type_for_user(user_id=user_id, note_type_id=default_note_type_id)
+            guard_error = flashcards_share_service.validate_marketplace_note_type_for_deck(
+                deck_id=deck.id,
+                note_type_id=resolved_nt.id,
+                user_id=user_id,
+            )
+            if guard_error:
+                raise RequestValidationError(
+                    guard_error,
+                    field="default_note_type_id",
+                    status=409,
+                    code="DECK_SOURCE_NOTETYPE_MISMATCH",
+                )
             deck.note_type_id = resolved_nt.id
         else:
             deck.note_type_id = None
@@ -2222,13 +2264,20 @@ def preview_note_type_update(
         "data_loss_possible": data_loss_possible,
     }
 
-    preview_id, expires_at = create_preview_token(
-        user_id=user_id,
-        action="update_note_type",
-        resource_id=nt.id,
-        resource_version=resource_version,
-        impact_summary=impact_summary,
-    )
+    try:
+        preview_id, expires_at = create_preview_token(
+            user_id=user_id,
+            action="update_note_type",
+            resource_id=nt.id,
+            resource_version=resource_version,
+            impact_summary=impact_summary,
+        )
+    except PreviewStoreUnavailable as exc:
+        raise RequestValidationError(
+            str(exc),
+            status=503,
+            code="PREVIEW_STORE_UNAVAILABLE",
+        ) from exc
 
     return {
         "preview_id": preview_id,
@@ -2414,10 +2463,17 @@ def update_note_type(
             current_resource_version=current_resource_version,
         )
         if not is_valid:
+            preview_error_status = (
+                503
+                if err_code == "PREVIEW_STORE_UNAVAILABLE"
+                else 409
+                if err_code == "STALE_PREVIEW_ERROR"
+                else 400
+            )
             raise RequestValidationError(
                 err_msg or "Preview token không hợp lệ hoặc đã hết hạn.",
                 field="preview_id",
-                status=400 if err_code != "STALE_PREVIEW_ERROR" else 409,
+                status=preview_error_status,
                 code=err_code or "INVALID_PREVIEW_TOKEN",
             )
 
@@ -2694,17 +2750,24 @@ def delete_note_type(
     )
 
     if not confirm:
-        preview_token_id, expires_at = create_preview_token(
-            user_id=user_id,
-            action="delete_note_type",
-            resource_id=nt.id,
-            resource_version=current_resource_version,
-            impact_summary={
-                "notes_count": notes_count,
-                "cards_count": cards_count,
-                "affected_decks": affected_decks,
-            },
-        )
+        try:
+            preview_token_id, expires_at = create_preview_token(
+                user_id=user_id,
+                action="delete_note_type",
+                resource_id=nt.id,
+                resource_version=current_resource_version,
+                impact_summary={
+                    "notes_count": notes_count,
+                    "cards_count": cards_count,
+                    "affected_decks": affected_decks,
+                },
+            )
+        except PreviewStoreUnavailable as exc:
+            raise RequestValidationError(
+                str(exc),
+                status=503,
+                code="PREVIEW_STORE_UNAVAILABLE",
+            ) from exc
 
         can_delete = (notes_count == 0)
         warning_msg = (
@@ -2744,10 +2807,17 @@ def delete_note_type(
             current_resource_version=current_resource_version,
         )
         if not is_valid:
+            preview_error_status = (
+                503
+                if err_code == "PREVIEW_STORE_UNAVAILABLE"
+                else 409
+                if err_code == "STALE_PREVIEW_ERROR"
+                else 400
+            )
             raise RequestValidationError(
                 err_msg or "Preview token không hợp lệ hoặc đã hết hạn.",
                 field="preview_id",
-                status=400 if err_code != "STALE_PREVIEW_ERROR" else 409,
+                status=preview_error_status,
                 code=err_code or "INVALID_PREVIEW_TOKEN",
             )
 

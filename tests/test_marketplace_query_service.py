@@ -1,5 +1,7 @@
 import unittest
 
+from sqlalchemy import event
+
 from app import create_app
 from app.services.marketplace_query_service import (
     batch_compute_deck_items_stats,
@@ -226,6 +228,64 @@ class MarketplaceDeckStatsTestCase(unittest.TestCase):
         l2 = next(item for item in lessons if item["name"] == "Bài 2")
         self.assertEqual(l2["note_count"], 10)
         self.assertEqual(l2["card_count"], 10)
+
+    def test_batch_stats_shares_tree_walk_across_overlapping_listings(self):
+        root = Deck(name="Root", owner_user_id=self.user.id)
+        db.session.add(root)
+        db.session.flush()
+        child = Deck(name="Child", parent_id=root.id, owner_user_id=self.user.id)
+        db.session.add(child)
+        db.session.flush()
+        grandchild = Deck(
+            name="Grandchild",
+            parent_id=child.id,
+            owner_user_id=self.user.id,
+        )
+        db.session.add(grandchild)
+        db.session.flush()
+
+        for deck in (root, child, grandchild):
+            note = Note(
+                note_type_id=self.nt.id,
+                user_id=self.user.id,
+                deck_id=deck.id,
+                field_values={"Front": deck.name},
+            )
+            db.session.add(note)
+            db.session.flush()
+            db.session.add(Card(note_id=note.id, template_id=self.template.id))
+
+        root_item = DeckMarketplaceItem(
+            owner_user_id=self.user.id,
+            source_deck_id=root.id,
+            title="Root listing",
+        )
+        child_item = DeckMarketplaceItem(
+            owner_user_id=self.user.id,
+            source_deck_id=child.id,
+            title="Child listing",
+        )
+        db.session.add_all([root_item, child_item])
+        db.session.flush()
+
+        select_statements: list[str] = []
+
+        def _capture_selects(_conn, _cursor, statement, _params, _context, _many):
+            if statement.lstrip().upper().startswith("SELECT"):
+                select_statements.append(statement)
+
+        event.listen(db.engine, "before_cursor_execute", _capture_selects)
+        try:
+            stats = batch_compute_deck_items_stats(
+                [root_item, child_item]
+            )
+        finally:
+            event.remove(db.engine, "before_cursor_execute", _capture_selects)
+
+        self.assertEqual(stats[root_item.id]["note_count"], 3)
+        self.assertEqual(stats[child_item.id]["note_count"], 2)
+        # Three BFS depth queries plus one aggregate each for notes and cards.
+        self.assertLessEqual(len(select_statements), 5)
 
 
 if __name__ == "__main__":

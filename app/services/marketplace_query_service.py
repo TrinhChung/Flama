@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import json
 import random
 import re
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from flask import current_app
+
 UTC = timezone.utc
+SHARED_DECK_SAMPLE_CACHE_MAX_BYTES = 16 * 1024
 
 from app.repositories.deck_tree_query import collect_subtree_ids
 from app.template_formatters import format_vnd
@@ -295,12 +299,12 @@ def batch_compute_deck_items_stats(
     if not all_source_deck_ids:
         return stats_by_item_id
 
-    deck_subtrees: dict[int, list[int]] = {}
-    all_subtree_ids: set[int] = set()
-    for source_id in item_by_source_deck:
-        sub_ids = collect_subtree_ids(source_id)
-        deck_subtrees[source_id] = sub_ids
-        all_subtree_ids.update(sub_ids)
+    deck_subtrees = _collect_subtree_ids_by_root(set(item_by_source_deck))
+    all_subtree_ids = {
+        deck_id
+        for subtree_ids in deck_subtrees.values()
+        for deck_id in subtree_ids
+    }
 
     if not all_subtree_ids:
         return stats_by_item_id
@@ -313,7 +317,10 @@ def batch_compute_deck_items_stats(
     )
     note_count_map: dict[tuple[int, int | None], int] = {}
     for d_id, u_id, count in note_counts_raw:
-        note_count_map[(int(d_id), int(u_id) if u_id is not None else None)] = int(count or 0)
+        deck_id = int(d_id)
+        normalized_user_id = int(u_id) if u_id is not None else None
+        normalized_count = int(count or 0)
+        note_count_map[(deck_id, normalized_user_id)] = normalized_count
 
     card_counts_raw = (
         db.session.query(Note.deck_id, Note.user_id, db.func.count(Card.id))
@@ -324,7 +331,10 @@ def batch_compute_deck_items_stats(
     )
     card_count_map: dict[tuple[int, int | None], int] = {}
     for d_id, u_id, count in card_counts_raw:
-        card_count_map[(int(d_id), int(u_id) if u_id is not None else None)] = int(count or 0)
+        deck_id = int(d_id)
+        normalized_user_id = int(u_id) if u_id is not None else None
+        normalized_count = int(count or 0)
+        card_count_map[(deck_id, normalized_user_id)] = normalized_count
 
     for source_id, items in item_by_source_deck.items():
         sub_ids = deck_subtrees.get(source_id, [])
@@ -352,6 +362,41 @@ def batch_compute_deck_items_stats(
             }
 
     return stats_by_item_id
+
+
+def _collect_subtree_ids_by_root(root_ids: set[int]) -> dict[int, list[int]]:
+    """Collect many deck subtrees with one SELECT per tree depth.
+
+    A deck can itself be the root of one listing and a descendant of another,
+    so the frontier carries every listing root that owns each discovered node.
+    """
+    normalized_roots = {int(root_id) for root_id in root_ids}
+    descendants = {root_id: {root_id} for root_id in normalized_roots}
+    frontier: dict[int, set[int]] = {
+        root_id: {root_id} for root_id in normalized_roots
+    }
+
+    while frontier:
+        child_rows = (
+            db.session.query(Deck.id, Deck.parent_id)
+            .filter(Deck.parent_id.in_(frontier))
+            .all()
+        )
+        next_frontier: dict[int, set[int]] = {}
+        for child_id_raw, parent_id_raw in child_rows:
+            child_id = int(child_id_raw)
+            parent_id = int(parent_id_raw)
+            for root_id in frontier.get(parent_id, set()):
+                if child_id in descendants[root_id]:
+                    continue
+                descendants[root_id].add(child_id)
+                next_frontier.setdefault(child_id, set()).add(root_id)
+        frontier = next_frontier
+
+    return {
+        root_id: sorted(subtree_ids)
+        for root_id, subtree_ids in descendants.items()
+    }
 
 
 def build_shared_deck_lessons_structure(deck_item: DeckMarketplaceItem) -> list[dict[str, Any]]:
@@ -529,6 +574,12 @@ def first_non_empty_field_text(field_values: dict[str, Any], keys: list[str]) ->
 
 def serialize_note_test_sample(note: Note) -> dict[str, Any] | None:
     field_values = note.field_values if isinstance(note.field_values, dict) else {}
+    return serialize_field_values_test_sample(note_id=note.id, field_values=field_values)
+
+
+def serialize_field_values_test_sample(
+    *, note_id: str, field_values: dict[str, Any]
+) -> dict[str, Any] | None:
 
     word = first_non_empty_field_text(
         field_values,
@@ -564,7 +615,7 @@ def serialize_note_test_sample(note: Note) -> dict[str, Any] | None:
     )
 
     return {
-        "note_id": note.id,
+        "note_id": str(note_id),
         "word": word,
         "reading": reading,
         "meaning": meaning,
@@ -578,6 +629,97 @@ def build_shared_deck_test_samples(
 ) -> list[dict[str, Any]]:
     if limit <= 0:
         return []
+    mode = str(current_app.config.get("MARKETPLACE_SAMPLE_MODE", "release_cache")).strip().lower()
+    schema_version = int(current_app.config.get("MARKETPLACE_SAMPLE_SCHEMA_VERSION", 1))
+    cached = _cached_release_samples(
+        deck_item,
+        limit=limit,
+        schema_version=schema_version,
+    )
+    if cached is not None:
+        if mode == "shadow_cache":
+            live = _build_live_deck_test_samples(deck_item, limit=limit, randomized=False)
+            if live != cached:
+                current_app.logger.info(
+                    "Marketplace sample cache shadow mismatch deck_item_id=%s",
+                    deck_item.id,
+                )
+        return cached
+    if mode == "release_cache":
+        return []
+    return _build_live_deck_test_samples(deck_item, limit=limit, randomized=True)
+
+
+def build_release_sample_cache(
+    deck_item: DeckMarketplaceItem,
+    *,
+    limit: int = 5,
+) -> list[dict[str, Any]]:
+    return _build_live_deck_test_samples(deck_item, limit=limit, randomized=False)
+
+
+def build_release_sample_cache_from_release(
+    deck_item: DeckMarketplaceItem,
+    release,
+    *,
+    limit: int = 5,
+) -> list[dict[str, Any]]:
+    from app.repositories import deck_release_repository
+    from app.services import deck_release_service
+
+    sequence_no = int(release.sequence_no or 0)
+    memberships = [
+        row
+        for row in deck_release_repository.list_memberships_for_entities(
+            deck_item_id=str(deck_item.id),
+            entity_kind="note",
+        )
+        if int(row.introduced_sequence or 0) <= sequence_no
+        and (row.removed_sequence is None or int(row.removed_sequence) > sequence_no)
+    ]
+    note_ids = sorted(str(row.entity_id) for row in memberships)[: max(limit * 4, 20)]
+    values_by_note = deck_release_service.get_note_values_for_ids_at_release(
+        release,
+        note_ids,
+    )
+    samples: list[dict[str, Any]] = []
+    for note_id in note_ids:
+        sample = serialize_field_values_test_sample(
+            note_id=note_id,
+            field_values=values_by_note.get(note_id, {}),
+        )
+        if sample is not None:
+            samples.append(_sanitize_sample_payload(sample))
+        if len(samples) >= limit:
+            break
+    return _bounded_sanitized_samples(samples, limit=limit)
+
+
+def _cached_release_samples(
+    deck_item: DeckMarketplaceItem,
+    *,
+    limit: int,
+    schema_version: int,
+) -> list[dict[str, Any]] | None:
+    if (
+        not deck_item.current_release_id
+        or str(deck_item.preview_samples_release_id or "") != str(deck_item.current_release_id)
+        or int(deck_item.preview_samples_schema_version or 0) != schema_version
+        or not isinstance(deck_item.preview_samples_json, list)
+    ):
+        return None
+    return _bounded_sanitized_samples(
+        deck_item.preview_samples_json,
+        limit=limit,
+    )
+
+
+def _build_live_deck_test_samples(
+    deck_item: DeckMarketplaceItem,
+    *,
+    limit: int,
+    randomized: bool,
+) -> list[dict[str, Any]]:
     if deck_item.source_deck_id is None:
         return []
 
@@ -594,16 +736,53 @@ def build_shared_deck_test_samples(
 
     note_candidates: list[dict[str, Any]] = []
     sample_pool_limit = max(limit * 4, 20)
-    for note in note_query.limit(sample_pool_limit).all():
+    for note in note_query.order_by(Note.id.asc()).limit(sample_pool_limit).all():
         sample = serialize_note_test_sample(note)
         if sample is not None:
-            note_candidates.append(sample)
+            note_candidates.append(_sanitize_sample_payload(sample))
 
     if not note_candidates:
         return []
 
-    random.shuffle(note_candidates)
-    return note_candidates[:limit]
+    if randomized:
+        random.shuffle(note_candidates)
+    return _bounded_sanitized_samples(note_candidates, limit=limit)
+
+
+def _sanitize_sample_payload(sample: dict[str, Any]) -> dict[str, str]:
+    limits = {"note_id": 64, "word": 240, "reading": 240, "meaning": 800}
+    return {
+        key: str(sample.get(key) or "")[:max_length]
+        for key, max_length in limits.items()
+    }
+
+
+def _bounded_sanitized_samples(
+    rows: list[Any],
+    *,
+    limit: int,
+) -> list[dict[str, str]]:
+    bounded: list[dict[str, str]] = []
+    total_bytes = 2  # JSON array brackets.
+    for row in rows:
+        if len(bounded) >= max(limit, 0):
+            break
+        if not isinstance(row, dict):
+            continue
+        sample = _sanitize_sample_payload(row)
+        encoded_bytes = len(
+            json.dumps(
+                sample,
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        )
+        separator_bytes = 1 if bounded else 0
+        if total_bytes + separator_bytes + encoded_bytes > SHARED_DECK_SAMPLE_CACHE_MAX_BYTES:
+            break
+        bounded.append(sample)
+        total_bytes += separator_bytes + encoded_bytes
+    return bounded
 
 
 def item_matches_search(query_text: str, *values: str | None) -> bool:

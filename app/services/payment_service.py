@@ -1021,14 +1021,10 @@ def _validate_note_type_for_checkout(source_note_type: NoteType, *, user_id: int
 
 
 def _validate_deck_item_for_checkout(deck_item: DeckMarketplaceItem, *, user_id: int) -> dict[str, Any]:
-    bind_error, _ = flashcards_share_service.sync_deck_item_source_note_type(
-        deck_item,
-        require_source_note_type=True,
-    )
-    if bind_error:
+    if not str(deck_item.source_note_type_id or "").strip():
         raise PaymentServiceError(
             "VALIDATION_ERROR",
-            bind_error,
+            "source_note_type_id is required for checkout.",
             status=409,
             field="source_note_type_id",
         )

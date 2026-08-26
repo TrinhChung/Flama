@@ -405,6 +405,22 @@ def run_batch_import_request(
         or flashcards_import_repository.default_uniqueness_fields(note_type)
     )
 
+    guarded_deck_ids = {parent_deck_id} if parent_deck_id is not None else set()
+    guarded_deck_ids.update(
+        int(row["target_deck_id"])
+        for row in file_configs
+        if isinstance(row, dict)
+        and str(row.get("target_deck_id") or "").strip().isdigit()
+    )
+    for guarded_deck_id in guarded_deck_ids:
+        guard_error = flashcards_share_service.validate_marketplace_note_type_for_deck(
+            deck_id=guarded_deck_id,
+            note_type_id=note_type.id,
+            user_id=user_id,
+        )
+        if guard_error:
+            raise ImportApiError(guard_error, field="note_type_id", status=409)
+
     try:
         report = run_batch_import(
             user_id=user_id,

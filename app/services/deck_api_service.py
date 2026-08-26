@@ -8,7 +8,7 @@ from typing import Any
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.repositories import vocabulary_repository
-from app.services import deck_management_service
+from app.services import deck_management_service, flashcards_share_service
 from models import db
 from models.deck import Deck
 
@@ -176,6 +176,20 @@ def update_deck(
                 field="parent_id",
             )
         if deck.parent_id != new_parent_id:
+            guard_error = (
+                flashcards_share_service.validate_deck_subtree_move_to_parent(
+                    deck_id=deck.id,
+                    new_parent_id=new_parent_id,
+                    user_id=deck.owner_user_id,
+                )
+            )
+            if guard_error:
+                raise DeckApiError(
+                    "CONFLICT",
+                    guard_error,
+                    status=409,
+                    field="parent_id",
+                )
             deck.parent_id = new_parent_id
             deck.position = vocabulary_repository.next_deck_position(
                 new_parent_id

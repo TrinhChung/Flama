@@ -12,6 +12,8 @@ from datetime import datetime, timedelta
 from html.parser import HTMLParser
 from typing import Any
 
+from flask import current_app, has_app_context
+
 import bleach
 import chevron
 from bleach.css_sanitizer import CSSSanitizer
@@ -122,7 +124,7 @@ elif mistune is not None:
     # Fallback renderer when markdown-it-py is missing in runtime env.
     _markdown_parser = mistune.create_markdown(escape=True)
 _template_cache: OrderedDict[str, str] = OrderedDict()
-_preview_cache: dict[str, tuple[datetime, dict[str, Any]]] = {}
+_preview_cache: OrderedDict[str, tuple[datetime, dict[str, Any]]] = OrderedDict()
 _cache_lock = threading.Lock()
 _MAX_TEMPLATE_CACHE = 512
 _PREVIEW_TTL = timedelta(seconds=30)
@@ -872,9 +874,13 @@ def render_template_pair(
             ).encode("utf-8")
         ).hexdigest()
         preview_key = preview_hash
-        cached = _preview_cache.get(preview_hash)
-        if cached and datetime.utcnow() - cached[0] <= _PREVIEW_TTL:
-            return cached[1]
+        with _cache_lock:
+            cached = _preview_cache.get(preview_hash)
+            if cached and datetime.utcnow() - cached[0] <= _PREVIEW_TTL:
+                _preview_cache.move_to_end(preview_hash)
+                return cached[1]
+            if cached:
+                _preview_cache.pop(preview_hash, None)
 
     template_updated = str(getattr(template, "updated_at", ""))
     front_source_raw = getattr(template, "front_html", "")
@@ -936,5 +942,15 @@ def render_template_pair(
     }
 
     if preview_key:
-        _preview_cache[preview_key] = (datetime.utcnow(), result)
+        max_entries = 512
+        if has_app_context():
+            max_entries = max(
+                int(current_app.config.get("FLASHCARD_RENDER_PREVIEW_CACHE_MAX_ENTRIES", 512)),
+                1,
+            )
+        with _cache_lock:
+            _preview_cache[preview_key] = (datetime.utcnow(), result)
+            _preview_cache.move_to_end(preview_key)
+            while len(_preview_cache) > max_entries:
+                _preview_cache.popitem(last=False)
     return result

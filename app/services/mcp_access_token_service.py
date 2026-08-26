@@ -17,6 +17,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.repositories import mcp_access_token_repository
 from app.services import mcp_scope_service
+from app.services import redis_state_service
 from models import db
 from models.mcp_access_token import McpAccessToken
 from models.user import User
@@ -494,6 +495,56 @@ def enforce_rate_limit(*, bucket_key: str) -> None:
 
     max_requests = _rate_limit_max_requests()
     window_seconds = _rate_limit_window_seconds()
+    mode = redis_state_service.backend_mode("RATE_LIMIT_BACKEND")
+    local_limited = _local_rate_limit_exceeded(
+        bucket_key=bucket_key,
+        max_requests=max_requests,
+        window_seconds=window_seconds,
+    )
+    if mode == "local":
+        if local_limited:
+            _raise_rate_limited()
+        return
+
+    try:
+        client = redis_state_service.redis_client()
+        redis_key = redis_state_service.private_key("mcp-rate", bucket_key)
+        count = int(
+            client.eval(
+                """
+                local count = redis.call('INCR', KEYS[1])
+                if count == 1 then redis.call('EXPIRE', KEYS[1], ARGV[1]) end
+                return count
+                """,
+                1,
+                redis_key,
+                window_seconds,
+            )
+        )
+        redis_limited = count > max_requests
+    except Exception as exc:
+        if mode == "redis":
+            raise McpAccessTokenError(
+                "MCP shared rate limiter is temporarily unavailable.",
+                status=503,
+                code="MCP_RATE_LIMIT_UNAVAILABLE",
+            ) from exc
+        current_app.logger.warning("Redis MCP limiter shadow write failed: %s", exc)
+        redis_limited = False
+
+    if mode == "shadow_redis" and redis_limited != local_limited:
+        current_app.logger.info(
+            "MCP limiter shadow mismatch local_limited=%s redis_limited=%s",
+            local_limited,
+            redis_limited,
+        )
+    if (redis_limited if mode == "redis" else local_limited):
+        _raise_rate_limited()
+
+
+def _local_rate_limit_exceeded(
+    *, bucket_key: str, max_requests: int, window_seconds: int
+) -> bool:
     now_ts = time.monotonic()
 
     with _RATE_LIMIT_LOCK:
@@ -502,12 +553,17 @@ def enforce_rate_limit(*, bucket_key: str) -> None:
         while bucket and bucket[0] <= cutoff:
             bucket.popleft()
         if len(bucket) >= max_requests:
-            raise McpAccessTokenError(
-                "Too many MCP requests. Please wait a moment and try again.",
-                status=429,
-                code="MCP_RATE_LIMIT_EXCEEDED",
-            )
+            return True
         bucket.append(now_ts)
+    return False
+
+
+def _raise_rate_limited() -> None:
+    raise McpAccessTokenError(
+        "Too many MCP requests. Please wait a moment and try again.",
+        status=429,
+        code="MCP_RATE_LIMIT_EXCEEDED",
+    )
 
 
 
@@ -577,9 +633,17 @@ def authenticate_bearer_token(
 
     enforce_rate_limit(bucket_key=f"mcp-token:{row.id}")
 
-    row.used_requests = int(row.used_requests or 0) + 1
-    row.last_used_at = now
-    db.session.add(row)
+    consumed = mcp_access_token_repository.consume_request_quota(
+        token_id=int(row.id),
+        now=now,
+    )
+    if not consumed:
+        db.session.rollback()
+        raise McpAccessTokenError(
+            "MCP token request limit has been reached.",
+            status=429,
+            code="MCP_TOKEN_REQUEST_LIMIT_EXCEEDED",
+        )
     try:
         db.session.commit()
     except SQLAlchemyError as exc:
@@ -589,5 +653,7 @@ def authenticate_bearer_token(
             status=500,
             code="MCP_TOKEN_USAGE_UPDATE_FAILED",
         ) from exc
+
+    db.session.refresh(row)
 
     return AuthenticatedMcpToken(user=user, token_row=row, scopes=scopes)

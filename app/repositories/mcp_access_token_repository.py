@@ -5,6 +5,7 @@ from __future__ import annotations
 from models import db
 from models.mcp_access_token import McpAccessToken
 from models.user import User
+from sqlalchemy import or_
 
 
 def create_access_token(
@@ -50,6 +51,29 @@ def get_token_for_user(*, token_id: int, user_id: int) -> McpAccessToken | None:
 
 def get_user_by_id(user_id: int) -> User | None:
     return db.session.get(User, int(user_id)) if user_id else None
+
+
+def consume_request_quota(*, token_id: int, now) -> bool:
+    """Atomically consume one lifetime request slot for an active token."""
+    updated = (
+        McpAccessToken.query.filter(
+            McpAccessToken.id == int(token_id),
+            McpAccessToken.revoked.is_(False),
+            or_(
+                McpAccessToken.expires_at.is_(None),
+                McpAccessToken.expires_at > now,
+            ),
+            McpAccessToken.used_requests < McpAccessToken.max_requests,
+        )
+        .update(
+            {
+                McpAccessToken.used_requests: McpAccessToken.used_requests + 1,
+                McpAccessToken.last_used_at: now,
+            },
+            synchronize_session=False,
+        )
+    )
+    return int(updated or 0) == 1
 
 
 def update_token(

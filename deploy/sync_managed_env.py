@@ -27,6 +27,10 @@ MANAGED_VARIABLE_KEYS = (
     "CORS_ALLOWED_ORIGINS",
     "FLASK_APP",
     "DB_PORT",
+    "DB_POOL_SIZE",
+    "DB_MAX_OVERFLOW",
+    "DB_POOL_TIMEOUT_SECONDS",
+    "DB_POOL_RECYCLE_SECONDS",
     "FLASHCARDS_SHARE_CUTOVER_FAIL_ON_MISMATCH",
     "FLASHCARD_MEDIA_MAX_BYTES",
     "FLASHCARD_MEDIA_SCAN_ENABLED",
@@ -35,8 +39,26 @@ MANAGED_VARIABLE_KEYS = (
     "PAYMENTS_PAID_INSTALL_REQUIRED",
     "PAYMENTS_PROVIDER",
     "PAYMENTS_WEBHOOK_AUTO_GRANT_ENABLED",
+    "REDIS_URL",
+    "RATE_LIMIT_BACKEND",
+    "MCP_PREVIEW_BACKEND",
+    "SHARED_DECK_TREE_CLONE_MODE",
+    "DECK_SOURCE_NOTETYPE_GUARD_MODE",
+    "MARKETPLACE_SAMPLE_MODE",
 )
 MANAGED_ENV_KEYS = MANAGED_SECRET_KEYS + MANAGED_VARIABLE_KEYS
+MANAGED_VARIABLE_DEFAULTS = {
+    "DB_POOL_SIZE": "4",
+    "DB_MAX_OVERFLOW": "1",
+    "DB_POOL_TIMEOUT_SECONDS": "5",
+    "DB_POOL_RECYCLE_SECONDS": "1800",
+    "REDIS_URL": "redis://127.0.0.1:6379/0",
+    "RATE_LIMIT_BACKEND": "redis",
+    "MCP_PREVIEW_BACKEND": "redis",
+    "SHARED_DECK_TREE_CLONE_MODE": "batched",
+    "DECK_SOURCE_NOTETYPE_GUARD_MODE": "shadow",
+    "MARKETPLACE_SAMPLE_MODE": "shadow_cache",
+}
 _ENV_ASSIGNMENT_RE = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=")
 
 
@@ -74,7 +96,7 @@ def build_payload(output_path: Path) -> None:
     missing_keys: list[str] = []
 
     for key in MANAGED_ENV_KEYS:
-        value = os.environ.get(key, "")
+        value = os.environ.get(key, "") or MANAGED_VARIABLE_DEFAULTS.get(key, "")
         if not value:
             missing_keys.append(key)
             continue
