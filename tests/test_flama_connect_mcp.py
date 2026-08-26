@@ -276,9 +276,20 @@ class FlamaConnectMcpTests(unittest.TestCase):
             "import_image",
             "search_images",
             "get_image",
+            # Shared Decks & Releases
+            "list_shared_decks",
+            "get_shared_deck",
+            "list_shared_deck_notes",
+            "get_deck_publish_options",
+            "share_deck",
+            "update_shared_deck",
+            "preview_deck_release",
+            "publish_deck_release",
+            "list_deck_releases",
+            "list_installed_decks",
         }
         self.assertEqual(tool_names, expected_tools)
-        self.assertEqual(len(tools), 38)
+        self.assertEqual(len(tools), 48)
 
     # -----------------------------------------------------------------------
     # Deck Tests
@@ -1481,6 +1492,298 @@ class FlamaConnectMcpTests(unittest.TestCase):
 
             res_inv = serialize_mcp_image_asset(asset_invalid_str)
             self.assertEqual(res_inv["tags"], [])
+
+    # -----------------------------------------------------------------------
+    # Shared Decks & Releases Tests
+    # -----------------------------------------------------------------------
+
+    def test_shared_deck_full_lifecycle(self):
+        # 1. Create a deck with notes
+        with self.app.app_context():
+            deck = Deck(name="N3 Kanji Master", owner_user_id=self.user_id, note_type_id=self.note_type_id)
+            db.session.add(deck)
+            db.session.flush()
+            deck_id = deck.id
+
+            note1 = Note(
+                user_id=self.user_id,
+                deck_id=deck_id,
+                note_type_id=self.note_type_id,
+                field_values={"Word": "約束", "Reading": "やくそく", "Meaning": "Promise"},
+                tags=["n3", "kanji"],
+            )
+            note2 = Note(
+                user_id=self.user_id,
+                deck_id=deck_id,
+                note_type_id=self.note_type_id,
+                field_values={"Word": "未来", "Reading": "みらい", "Meaning": "Future"},
+                tags=["n3", "kanji"],
+            )
+            db.session.add_all([note1, note2])
+            db.session.flush()
+            card1 = Card(note_id=note1.id, template_id=Template.query.filter_by(note_type_id=self.note_type_id).first().id)
+            card2 = Card(note_id=note2.id, template_id=Template.query.filter_by(note_type_id=self.note_type_id).first().id)
+            db.session.add_all([card1, card2])
+            db.session.commit()
+
+        # 2. Check publish options
+        resp = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 200,
+                "method": "tools/call",
+                "params": {
+                    "name": "get_deck_publish_options",
+                    "arguments": {"deck_id": deck_id},
+                },
+            },
+            token=self.api_token_str,
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.get_json()["result"]["structuredContent"]
+        self.assertIn("categories", data)
+        self.assertIn("selected_deck", data)
+        self.assertEqual(data["selected_deck"]["deck_id"], deck_id)
+
+        # 3. Share deck to marketplace
+        resp = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 201,
+                "method": "tools/call",
+                "params": {
+                    "name": "share_deck",
+                    "arguments": {
+                        "deck_id": deck_id,
+                        "title": "JLPT N3 Kanji Vocabulary",
+                        "description": "Comprehensive N3 Kanji list with detailed explanations and example sentences.",
+                        "primary_category": "japanese",
+                        "tags": ["n3", "kanji", "jlpt"],
+                        "pricing_mode": "free",
+                    },
+                },
+            },
+            token=self.api_token_str,
+        )
+        self.assertEqual(resp.status_code, 200)
+        share_data = resp.get_json()["result"]["structuredContent"]
+        deck_item_id = share_data["id"]
+        self.assertEqual(share_data["title"], "JLPT N3 Kanji Vocabulary")
+
+        # 4. List shared decks and verify presence
+        resp = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 202,
+                "method": "tools/call",
+                "params": {
+                    "name": "list_shared_decks",
+                    "arguments": {"query": "Kanji", "only_mine": True},
+                },
+            },
+            token=self.api_token_str,
+        )
+        self.assertEqual(resp.status_code, 200)
+        list_data = resp.get_json()["result"]["structuredContent"]
+        self.assertGreaterEqual(list_data["total"], 1)
+        self.assertTrue(any(d["id"] == deck_item_id for d in list_data["items"]))
+
+        # 5. Get shared deck detail
+        resp = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 203,
+                "method": "tools/call",
+                "params": {
+                    "name": "get_shared_deck",
+                    "arguments": {"deck_item_id": deck_item_id},
+                },
+            },
+            token=self.api_token_str,
+        )
+        self.assertEqual(resp.status_code, 200)
+        detail_data = resp.get_json()["result"]["structuredContent"]
+        self.assertEqual(detail_data["id"], deck_item_id)
+        self.assertEqual(detail_data["title"], "JLPT N3 Kanji Vocabulary")
+
+        # 6. List notes in shared deck to verify & inspect content
+        resp = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 204,
+                "method": "tools/call",
+                "params": {
+                    "name": "list_shared_deck_notes",
+                    "arguments": {"deck_item_id": deck_item_id},
+                },
+            },
+            token=self.api_token_str,
+        )
+        self.assertEqual(resp.status_code, 200)
+        notes_data = resp.get_json()["result"]["structuredContent"]
+        self.assertEqual(notes_data["total"], 2)
+        self.assertEqual(len(notes_data["notes"]), 2)
+        note_words = {n["fields"].get("Word") for n in notes_data["notes"]}
+        self.assertIn("約束", note_words)
+        self.assertIn("未来", note_words)
+
+        # 7. Update shared deck metadata
+        resp = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 205,
+                "method": "tools/call",
+                "params": {
+                    "name": "update_shared_deck",
+                    "arguments": {
+                        "deck_item_id": deck_item_id,
+                        "description": "Updated N3 Kanji list with enhanced mnemonics.",
+                        "tags": ["n3", "kanji", "jlpt", "grammar"],
+                    },
+                },
+            },
+            token=self.api_token_str,
+        )
+        self.assertEqual(resp.status_code, 200)
+        updated_data = resp.get_json()["result"]["structuredContent"]
+        self.assertEqual(updated_data["description"], "Updated N3 Kanji list with enhanced mnemonics.")
+
+        # 8. Update a note in the deck (improving description / meaning)
+        with self.app.app_context():
+            n1 = Note.query.filter_by(deck_id=deck_id).first()
+            note1_id = n1.id
+
+        resp = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 206,
+                "method": "tools/call",
+                "params": {
+                    "name": "update_note",
+                    "arguments": {
+                        "note_id": note1_id,
+                        "fields": {"Word": "約束", "Reading": "やくそく", "Meaning": "Promise, Appointment (Chi tiết hơn)"},
+                    },
+                },
+            },
+            token=self.api_token_str,
+        )
+        self.assertEqual(resp.status_code, 200)
+
+        # 9. Preview deck release diff
+        resp = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 207,
+                "method": "tools/call",
+                "params": {
+                    "name": "preview_deck_release",
+                    "arguments": {"deck_item_id": deck_item_id},
+                },
+            },
+            token=self.api_token_str,
+        )
+        self.assertEqual(resp.status_code, 200)
+        preview_data = resp.get_json()["result"]["structuredContent"]
+        self.assertIn("summary", preview_data)
+        self.assertIn("items", preview_data)
+
+        # 10. Publish new deck release
+        resp = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 208,
+                "method": "tools/call",
+                "params": {
+                    "name": "publish_deck_release",
+                    "arguments": {
+                        "deck_item_id": deck_item_id,
+                        "version_label": "1.1.0",
+                        "changelog": "Cải thiện định nghĩa và bổ sung giải thích chi tiết cho từ vựng.",
+                    },
+                },
+            },
+            token=self.api_token_str,
+        )
+        self.assertEqual(resp.status_code, 200)
+        pub_data = resp.get_json()["result"]["structuredContent"]
+        self.assertEqual(pub_data["release"]["version_label"], "1.1.0")
+
+        # 11. List deck releases
+        resp = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 209,
+                "method": "tools/call",
+                "params": {
+                    "name": "list_deck_releases",
+                    "arguments": {"deck_item_id": deck_item_id},
+                },
+            },
+            token=self.api_token_str,
+        )
+        self.assertEqual(resp.status_code, 200)
+        releases_data = resp.get_json()["result"]["structuredContent"]
+        self.assertGreaterEqual(len(releases_data["items"]), 1)
+
+        # 12. List installed decks
+        resp = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 210,
+                "method": "tools/call",
+                "params": {
+                    "name": "list_installed_decks",
+                    "arguments": {},
+                },
+            },
+            token=self.api_token_str,
+        )
+        self.assertEqual(resp.status_code, 200)
+        installed_data = resp.get_json()["result"]["structuredContent"]
+        self.assertIn("installed_decks", installed_data)
+
+    def test_deck_share_scope_enforcement(self):
+        with self.app.app_context():
+            issued_token = mcp_access_token_service.issue_token_and_commit(
+                user_id=self.user_id,
+                name="Deck Share Read Token",
+                scopes=["deck-share:read"],
+            )
+            read_token_str = issued_token.token
+
+        # Can call list_shared_decks with read scope
+        resp = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 211,
+                "method": "tools/call",
+                "params": {
+                    "name": "list_shared_decks",
+                    "arguments": {},
+                },
+            },
+            token=read_token_str,
+        )
+        self.assertEqual(resp.status_code, 200)
+
+        # Cannot call share_deck (requires deck-share:write)
+        resp = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 212,
+                "method": "tools/call",
+                "params": {
+                    "name": "share_deck",
+                    "arguments": {"deck_id": 1},
+                },
+            },
+            token=read_token_str,
+        )
+        self.assertEqual(resp.status_code, 403)
+        data = resp.get_json()
+        self.assertEqual(data["error"]["code"], -32003)
+        self.assertEqual(data["error"]["data"]["code"], "MCP_SCOPE_FORBIDDEN")
 
 
 if __name__ == "__main__":

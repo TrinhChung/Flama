@@ -44,6 +44,16 @@ from app.validators.mcp import (
     validate_resolve_deck_arguments,
     validate_submit_review_arguments,
     validate_sync_notes_arguments,
+    validate_get_deck_publish_options_arguments,
+    validate_get_shared_deck_arguments,
+    validate_list_deck_releases_arguments,
+    validate_list_installed_decks_arguments,
+    validate_list_shared_deck_notes_arguments,
+    validate_list_shared_decks_arguments,
+    validate_preview_deck_release_arguments,
+    validate_publish_deck_release_arguments,
+    validate_share_deck_arguments,
+    validate_update_shared_deck_arguments,
     validate_update_deck_arguments,
     validate_update_note_arguments,
     validate_update_note_type_arguments,
@@ -1401,6 +1411,339 @@ GET_IMAGE_TOOL = McpToolDefinition(
     arguments_validator=validate_get_image_arguments,
 )
 
+# ---------------------------------------------------------------------------
+# 8. Shared Decks & Releases Tools
+# ---------------------------------------------------------------------------
+
+
+def _call_list_shared_decks(*, user_id: int, arguments: dict[str, Any]) -> dict[str, Any]:
+    return mcp_tool_service._wrap_tool_result(
+        mcp_tool_service.list_shared_decks(
+            user_id=user_id,
+            query=arguments.get("query"),
+            category=arguments.get("category"),
+            tags=arguments.get("tags"),
+            pricing_mode=arguments.get("pricing_mode"),
+            sort_by=arguments.get("sort_by", "popular"),
+            only_mine=bool(arguments.get("only_mine", False)),
+            limit=arguments.get("limit", 20),
+            offset=arguments.get("offset", 0),
+        )
+    )
+
+
+LIST_SHARED_DECKS_TOOL = McpToolDefinition(
+    name=mcp_tool_service.LIST_SHARED_DECKS_TOOL_NAME,
+    title="List Shared Decks",
+    description="Browse and search shared flashcard decks on the Flama Marketplace with keyword, tag, category, and pricing filters, or view decks shared by yourself.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "query": {"type": ["string", "null"], "description": "Search keyword for deck title or description"},
+            "category": {"type": ["string", "null"], "description": "Category slug (e.g. 'japanese', 'kanji', 'vocabulary')"},
+            "tags": {"type": "array", "items": {"type": "string"}, "description": "Filter by tags (e.g. ['n3', 'jlpt'])"},
+            "pricing_mode": {"type": ["string", "null"], "enum": [None, "free", "paid"], "description": "Filter by pricing mode ('free' or 'paid')"},
+            "sort_by": {"type": "string", "enum": ["popular", "recently_updated", "rating", "newest", "price_asc", "price_desc"], "default": "popular", "description": "Sort order"},
+            "only_mine": {"type": "boolean", "default": False, "description": "Set to true to only list decks shared by the authenticated user"},
+            "limit": {"type": "integer", "description": "Max results to return (default 20, max 100)"},
+            "offset": {"type": "integer", "description": "Pagination offset (default 0)"},
+        },
+        "additionalProperties": False,
+    },
+    required_scope="deck-share:read",
+    annotations={"readOnly": True},
+    handler=_call_list_shared_decks,
+    arguments_validator=validate_list_shared_decks_arguments,
+)
+
+
+def _call_get_shared_deck(*, user_id: int, arguments: dict[str, Any]) -> dict[str, Any]:
+    return mcp_tool_service._wrap_tool_result(
+        mcp_tool_service.get_shared_deck(user_id=user_id, deck_item_id=arguments["deck_item_id"])
+    )
+
+
+GET_SHARED_DECK_TOOL = McpToolDefinition(
+    name=mcp_tool_service.GET_SHARED_DECK_TOOL_NAME,
+    title="Get Shared Deck Detail",
+    description="Get comprehensive details of a shared marketplace deck: title, description, categories, tags, source note type schema, sample cards, active stats, and current release version.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "deck_item_id": {"type": "string", "description": "UUID of the shared deck marketplace item"},
+        },
+        "required": ["deck_item_id"],
+        "additionalProperties": False,
+    },
+    required_scope="deck-share:read",
+    annotations={"readOnly": True},
+    handler=_call_get_shared_deck,
+    arguments_validator=validate_get_shared_deck_arguments,
+)
+
+
+def _call_list_shared_deck_notes(*, user_id: int, arguments: dict[str, Any]) -> dict[str, Any]:
+    return mcp_tool_service._wrap_tool_result(
+        mcp_tool_service.list_shared_deck_notes(
+            user_id=user_id,
+            deck_item_id=arguments["deck_item_id"],
+            query=arguments.get("query"),
+            limit=arguments.get("limit", 20),
+            offset=arguments.get("offset", 0),
+        )
+    )
+
+
+LIST_SHARED_DECK_NOTES_TOOL = McpToolDefinition(
+    name=mcp_tool_service.LIST_SHARED_DECK_NOTES_TOOL_NAME,
+    title="List Notes in Shared Deck",
+    description="Inspect and review notes, field values (words, readings, meanings, examples, descriptions), and cards inside a shared deck to verify accuracy and identify items needing improved explanations.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "deck_item_id": {"type": "string", "description": "UUID of the shared deck marketplace item"},
+            "query": {"type": ["string", "null"], "description": "Optional search keyword across note fields and tags"},
+            "limit": {"type": "integer", "description": "Number of notes to return (default 20, max 100)"},
+            "offset": {"type": "integer", "description": "Pagination offset (default 0)"},
+        },
+        "required": ["deck_item_id"],
+        "additionalProperties": False,
+    },
+    required_scope="deck-share:read",
+    annotations={"readOnly": True},
+    handler=_call_list_shared_deck_notes,
+    arguments_validator=validate_list_shared_deck_notes_arguments,
+)
+
+
+def _call_get_deck_publish_options(*, user_id: int, arguments: dict[str, Any]) -> dict[str, Any]:
+    return mcp_tool_service._wrap_tool_result(
+        mcp_tool_service.get_deck_publish_options(user_id=user_id, deck_id=arguments.get("deck_id"))
+    )
+
+
+GET_DECK_PUBLISH_OPTIONS_TOOL = McpToolDefinition(
+    name=mcp_tool_service.GET_DECK_PUBLISH_OPTIONS_TOOL_NAME,
+    title="Get Deck Publish Options & Eligibility",
+    description="Check publish eligibility for personal decks, and retrieve available marketplace categories and note types for sharing.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "deck_id": {"type": ["integer", "null"], "description": "Optional specific local deck ID to check publish eligibility for"},
+        },
+        "additionalProperties": False,
+    },
+    required_scope="deck-share:read",
+    annotations={"readOnly": True},
+    handler=_call_get_deck_publish_options,
+    arguments_validator=validate_get_deck_publish_options_arguments,
+)
+
+
+def _call_share_deck(*, user_id: int, arguments: dict[str, Any]) -> dict[str, Any]:
+    return mcp_tool_service._wrap_tool_result(
+        mcp_tool_service.share_deck(
+            user_id=user_id,
+            deck_id=arguments.get("deck_id"),
+            deck_path=arguments.get("deck_path"),
+            title=arguments.get("title"),
+            description=arguments.get("description"),
+            primary_category=arguments.get("primary_category"),
+            tags=arguments.get("tags"),
+            pricing_mode=arguments.get("pricing_mode", "free"),
+            price_amount_minor=arguments.get("price_amount_minor"),
+            is_unlisted=bool(arguments.get("is_unlisted", False)),
+        )
+    )
+
+
+SHARE_DECK_TOOL = McpToolDefinition(
+    name=mcp_tool_service.SHARE_DECK_TOOL_NAME,
+    title="Share Deck to Marketplace",
+    description="Publish and share a personal flashcard deck to the Flama Marketplace with title, rich description, category, tags, and pricing mode.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "deck_id": {"type": ["integer", "null"], "description": "ID of the local deck to share"},
+            "deck_path": {"type": ["string", "null"], "description": "Hierarchical path of the deck (e.g. 'Japanese::JLPT N3') if deck_id is not provided"},
+            "title": {"type": ["string", "null"], "description": "Marketplace listing title (defaults to deck name)"},
+            "description": {"type": ["string", "null"], "description": "Detailed description explaining what the deck covers, target level, and study tips"},
+            "primary_category": {"type": ["string", "null"], "description": "Category slug (e.g. 'japanese', 'kanji', 'grammar', 'vocabulary', 'english')"},
+            "tags": {"type": "array", "items": {"type": "string"}, "description": "List of tags (e.g. ['n3', 'jlpt', 'shadowing'])"},
+            "pricing_mode": {"type": "string", "enum": ["free", "paid"], "default": "free", "description": "Pricing mode ('free' or 'paid')"},
+            "price_amount_minor": {"type": ["integer", "null"], "description": "Price in minor units (e.g. VND) if pricing_mode is 'paid'"},
+            "is_unlisted": {"type": "boolean", "default": False, "description": "Whether to make the shared deck unlisted (accessible via link only)"},
+        },
+        "additionalProperties": False,
+    },
+    required_scope="deck-share:write",
+    handler=_call_share_deck,
+    arguments_validator=validate_share_deck_arguments,
+)
+
+
+def _call_update_shared_deck(*, user_id: int, arguments: dict[str, Any]) -> dict[str, Any]:
+    return mcp_tool_service._wrap_tool_result(
+        mcp_tool_service.update_shared_deck(
+            user_id=user_id,
+            deck_item_id=arguments["deck_item_id"],
+            title=arguments.get("title"),
+            description=arguments.get("description"),
+            primary_category=arguments.get("primary_category"),
+            tags=arguments.get("tags"),
+            pricing_mode=arguments.get("pricing_mode"),
+            price_amount_minor=arguments.get("price_amount_minor"),
+            publish_status=arguments.get("publish_status"),
+        )
+    )
+
+
+UPDATE_SHARED_DECK_TOOL = McpToolDefinition(
+    name=mcp_tool_service.UPDATE_SHARED_DECK_TOOL_NAME,
+    title="Update Shared Deck Listing",
+    description="Update metadata, description, category, tags, pricing, or publish status of an already shared deck.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "deck_item_id": {"type": "string", "description": "UUID of the shared deck marketplace item to update"},
+            "title": {"type": ["string", "null"], "description": "New title"},
+            "description": {"type": ["string", "null"], "description": "New detailed description"},
+            "primary_category": {"type": ["string", "null"], "description": "New primary category slug"},
+            "tags": {"type": "array", "items": {"type": "string"}, "description": "New tags list"},
+            "pricing_mode": {"type": ["string", "null"], "enum": [None, "free", "paid"], "description": "New pricing mode"},
+            "price_amount_minor": {"type": ["integer", "null"], "description": "New price in minor units"},
+            "publish_status": {"type": ["string", "null"], "enum": [None, "published", "unlisted", "archived", "draft"], "description": "New publish status"},
+        },
+        "required": ["deck_item_id"],
+        "additionalProperties": False,
+    },
+    required_scope="deck-share:write",
+    handler=_call_update_shared_deck,
+    arguments_validator=validate_update_shared_deck_arguments,
+)
+
+
+def _call_preview_deck_release(*, user_id: int, arguments: dict[str, Any]) -> dict[str, Any]:
+    return mcp_tool_service._wrap_tool_result(
+        mcp_tool_service.preview_deck_release(
+            user_id=user_id,
+            deck_item_id=arguments["deck_item_id"],
+            limit=arguments.get("limit", 50),
+            cursor=arguments.get("cursor"),
+        )
+    )
+
+
+PREVIEW_DECK_RELEASE_TOOL = McpToolDefinition(
+    name=mcp_tool_service.PREVIEW_DECK_RELEASE_TOOL_NAME,
+    title="Preview Deck Release Diff",
+    description="Preview the changes/diff between the working notes (after card descriptions/content have been updated) and the published release of a shared deck before releasing a new version.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "deck_item_id": {"type": "string", "description": "UUID of the shared deck marketplace item"},
+            "limit": {"type": "integer", "description": "Max changes to return (default 50, max 200)"},
+            "cursor": {"type": ["string", "null"], "description": "Pagination cursor for large diffs"},
+        },
+        "required": ["deck_item_id"],
+        "additionalProperties": False,
+    },
+    required_scope="deck-share:read",
+    annotations={"readOnly": True},
+    handler=_call_preview_deck_release,
+    arguments_validator=validate_preview_deck_release_arguments,
+)
+
+
+def _call_publish_deck_release(*, user_id: int, arguments: dict[str, Any]) -> dict[str, Any]:
+    return mcp_tool_service._wrap_tool_result(
+        mcp_tool_service.publish_deck_release(
+            user_id=user_id,
+            deck_item_id=arguments["deck_item_id"],
+            version_label=arguments["version_label"],
+            changelog=arguments.get("changelog"),
+            expected_current_release_id=arguments.get("expected_current_release_id"),
+            expected_working_revision=arguments.get("expected_working_revision"),
+        )
+    )
+
+
+PUBLISH_DECK_RELEASE_TOOL = McpToolDefinition(
+    name=mcp_tool_service.PUBLISH_DECK_RELEASE_TOOL_NAME,
+    title="Publish Deck Release",
+    description="Publish a new immutable version/release for a shared deck with a version label and changelog after improving notes, card descriptions, or examples, pushing the updates to all subscribers.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "deck_item_id": {"type": "string", "description": "UUID of the shared deck marketplace item"},
+            "version_label": {"type": "string", "description": "Version string (e.g. '1.1.0', '2.0.0')"},
+            "changelog": {"type": ["string", "null"], "description": "Changelog describing the improvements made (e.g. 'Bổ sung giải thích ngữ pháp và ví dụ thực tế cho các thẻ N2')"},
+            "expected_current_release_id": {"type": ["string", "null"], "description": "Optional expected current release UUID for optimistic locking"},
+            "expected_working_revision": {"type": ["integer", "null"], "description": "Optional expected working revision"},
+        },
+        "required": ["deck_item_id", "version_label"],
+        "additionalProperties": False,
+    },
+    required_scope="deck-share:write",
+    handler=_call_publish_deck_release,
+    arguments_validator=validate_publish_deck_release_arguments,
+)
+
+
+def _call_list_deck_releases(*, user_id: int, arguments: dict[str, Any]) -> dict[str, Any]:
+    return mcp_tool_service._wrap_tool_result(
+        mcp_tool_service.list_deck_releases(
+            user_id=user_id,
+            deck_item_id=arguments["deck_item_id"],
+            limit=arguments.get("limit", 20),
+            cursor=arguments.get("cursor"),
+        )
+    )
+
+
+LIST_DECK_RELEASES_TOOL = McpToolDefinition(
+    name=mcp_tool_service.LIST_DECK_RELEASES_TOOL_NAME,
+    title="List Deck Releases",
+    description="List the immutable release versions, dates, and changelogs of a shared deck.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "deck_item_id": {"type": "string", "description": "UUID of the shared deck marketplace item"},
+            "limit": {"type": "integer", "description": "Max results to return (default 20, max 100)"},
+            "cursor": {"type": ["string", "null"], "description": "Pagination cursor"},
+        },
+        "required": ["deck_item_id"],
+        "additionalProperties": False,
+    },
+    required_scope="deck-share:read",
+    annotations={"readOnly": True},
+    handler=_call_list_deck_releases,
+    arguments_validator=validate_list_deck_releases_arguments,
+)
+
+
+def _call_list_installed_decks(*, user_id: int, arguments: dict[str, Any]) -> dict[str, Any]:
+    del arguments
+    return mcp_tool_service._wrap_tool_result(
+        mcp_tool_service.list_installed_decks(user_id=user_id)
+    )
+
+
+LIST_INSTALLED_DECKS_TOOL = McpToolDefinition(
+    name=mcp_tool_service.LIST_INSTALLED_DECKS_TOOL_NAME,
+    title="List Installed Decks",
+    description="List all shared marketplace decks installed into the user's library, showing their local deck ID and whether upstream release updates are available.",
+    input_schema={
+        "type": "object",
+        "properties": {},
+        "additionalProperties": False,
+    },
+    required_scope="deck:read",
+    annotations={"readOnly": True},
+    handler=_call_list_installed_decks,
+    arguments_validator=validate_list_installed_decks_arguments,
+)
+
 # All Registered MCP Tools
 # ---------------------------------------------------------------------------
 
@@ -1451,6 +1794,17 @@ _MCP_TOOL_DEFINITIONS = (
     IMPORT_IMAGE_TOOL,
     SEARCH_IMAGES_TOOL,
     GET_IMAGE_TOOL,
+    # Shared Decks & Releases
+    LIST_SHARED_DECKS_TOOL,
+    GET_SHARED_DECK_TOOL,
+    LIST_SHARED_DECK_NOTES_TOOL,
+    GET_DECK_PUBLISH_OPTIONS_TOOL,
+    SHARE_DECK_TOOL,
+    UPDATE_SHARED_DECK_TOOL,
+    PREVIEW_DECK_RELEASE_TOOL,
+    PUBLISH_DECK_RELEASE_TOOL,
+    LIST_DECK_RELEASES_TOOL,
+    LIST_INSTALLED_DECKS_TOOL,
 )
 _MCP_TOOLS_BY_NAME = {tool.name: tool for tool in _MCP_TOOL_DEFINITIONS}
 _MCP_TOOLS_BY_LOWER_NAME = {tool.name.lower(): tool for tool in _MCP_TOOL_DEFINITIONS}

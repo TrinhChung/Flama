@@ -1063,3 +1063,311 @@ def validate_mcp_tool_call_params(params: Any) -> dict[str, Any]:
         "_meta": params.get("_meta"),
     }
 
+
+# ---------------------------------------------------------------------------
+# Shared Decks & Releases Validators
+# ---------------------------------------------------------------------------
+
+
+def _validate_positive_int(
+    val: Any,
+    field_name: str,
+    *,
+    default: int = 20,
+    max_val: int | None = None,
+    allow_zero: bool = False,
+) -> int:
+    if val is None:
+        return default
+    try:
+        parsed = int(val)
+    except (ValueError, TypeError):
+        raise RequestValidationError(
+            f"'{field_name}' phải là số nguyên.",
+            field=field_name,
+            status=400,
+            code="INVALID_PARAMS",
+        )
+    min_val = 0 if allow_zero else 1
+    if parsed < min_val:
+        return min_val
+    if max_val is not None and parsed > max_val:
+        return max_val
+    return parsed
+
+
+def validate_list_shared_decks_arguments(arguments: Any) -> dict[str, Any]:
+    """Validate arguments for list_shared_decks tool."""
+    if arguments is None:
+        arguments = {}
+    if not isinstance(arguments, dict):
+        raise RequestValidationError("arguments phải là JSON object.", field="arguments", status=400, code="INVALID_PARAMS")
+
+    query = str(arguments.get("query") or arguments.get("q") or "").strip() or None
+    category = str(arguments.get("category") or "").strip() or None
+    
+    raw_tags = arguments.get("tags")
+    tags: list[str] = []
+    if raw_tags is not None:
+        if isinstance(raw_tags, str):
+            tags = [t.strip() for t in raw_tags.split(",") if t.strip()]
+        elif isinstance(raw_tags, list):
+            tags = [str(t).strip() for t in raw_tags if str(t).strip()]
+        else:
+            raise RequestValidationError("tags phải là danh sách chuỗi hoặc chuỗi phân tách bởi dấu phẩy.", field="tags", status=400, code="INVALID_PARAMS")
+
+    pricing_mode = str(arguments.get("pricing_mode") or arguments.get("pricing") or "").strip().lower() or None
+    if pricing_mode is not None and pricing_mode not in ("free", "paid", "all"):
+        raise RequestValidationError("pricing_mode phải là 'free', 'paid' hoặc 'all'.", field="pricing_mode", status=400, code="INVALID_PARAMS")
+    if pricing_mode == "all":
+        pricing_mode = None
+
+    sort_by = str(arguments.get("sort_by") or arguments.get("sort") or "popular").strip().lower()
+    valid_sorts = {"popular", "recently_updated", "rating", "newest", "price_asc", "price_desc"}
+    if sort_by not in valid_sorts:
+        sort_by = "popular"
+
+    only_mine = bool(arguments.get("only_mine", False))
+    limit = _validate_positive_int(arguments.get("limit", 20), "limit", default=20, max_val=100)
+    offset = _validate_positive_int(arguments.get("offset", 0), "offset", default=0, allow_zero=True)
+
+    return {
+        "query": query,
+        "category": category,
+        "tags": tags,
+        "pricing_mode": pricing_mode,
+        "sort_by": sort_by,
+        "only_mine": only_mine,
+        "limit": limit,
+        "offset": offset,
+    }
+
+
+def validate_get_shared_deck_arguments(arguments: Any) -> dict[str, Any]:
+    """Validate arguments for get_shared_deck tool."""
+    if not isinstance(arguments, dict):
+        raise RequestValidationError("arguments phải là JSON object.", field="arguments", status=400, code="INVALID_PARAMS")
+    raw_id = arguments.get("deck_item_id") or arguments.get("id")
+    deck_item_id = str(raw_id).strip() if raw_id is not None else ""
+    if not deck_item_id:
+        raise RequestValidationError("deck_item_id là bắt buộc.", field="deck_item_id", status=400, code="INVALID_PARAMS")
+    return {"deck_item_id": deck_item_id}
+
+
+def validate_list_shared_deck_notes_arguments(arguments: Any) -> dict[str, Any]:
+    """Validate arguments for list_shared_deck_notes tool."""
+    if not isinstance(arguments, dict):
+        raise RequestValidationError("arguments phải là JSON object.", field="arguments", status=400, code="INVALID_PARAMS")
+    raw_id = arguments.get("deck_item_id") or arguments.get("id")
+    deck_item_id = str(raw_id).strip() if raw_id is not None else ""
+    if not deck_item_id:
+        raise RequestValidationError("deck_item_id là bắt buộc.", field="deck_item_id", status=400, code="INVALID_PARAMS")
+    query = str(arguments.get("query") or arguments.get("q") or "").strip() or None
+    limit = _validate_positive_int(arguments.get("limit", 20), "limit", default=20, max_val=100)
+    offset = _validate_positive_int(arguments.get("offset", 0), "offset", default=0, allow_zero=True)
+    return {
+        "deck_item_id": deck_item_id,
+        "query": query,
+        "limit": limit,
+        "offset": offset,
+    }
+
+
+def validate_get_deck_publish_options_arguments(arguments: Any) -> dict[str, Any]:
+    """Validate arguments for get_deck_publish_options tool."""
+    if arguments is None:
+        return {}
+    if not isinstance(arguments, dict):
+        raise RequestValidationError("arguments phải là JSON object.", field="arguments", status=400, code="INVALID_PARAMS")
+    raw_deck_id = arguments.get("deck_id")
+    deck_id = None
+    if raw_deck_id is not None:
+        try:
+            deck_id = int(raw_deck_id)
+        except (ValueError, TypeError):
+            raise RequestValidationError("deck_id phải là số nguyên.", field="deck_id", status=400, code="INVALID_PARAMS")
+    return {"deck_id": deck_id}
+
+
+def validate_share_deck_arguments(arguments: Any) -> dict[str, Any]:
+    """Validate arguments for share_deck tool."""
+    if not isinstance(arguments, dict):
+        raise RequestValidationError("arguments phải là JSON object.", field="arguments", status=400, code="INVALID_PARAMS")
+    raw_deck_id = arguments.get("deck_id")
+    deck_path = str(arguments.get("deck_path") or "").strip() or None
+    if raw_deck_id is None and not deck_path:
+        raise RequestValidationError("Cần cung cấp ít nhất 'deck_id' hoặc 'deck_path'.", field="deck_id", status=400, code="INVALID_PARAMS")
+    deck_id = None
+    if raw_deck_id is not None:
+        try:
+            deck_id = int(raw_deck_id)
+        except (ValueError, TypeError):
+            raise RequestValidationError("deck_id phải là số nguyên.", field="deck_id", status=400, code="INVALID_PARAMS")
+
+    title = str(arguments.get("title") or "").strip() or None
+    description = str(arguments.get("description")).strip() if arguments.get("description") is not None else None
+    primary_category = str(arguments.get("primary_category") or arguments.get("category") or "").strip() or None
+    
+    raw_tags = arguments.get("tags")
+    tags: list[str] = []
+    if raw_tags is not None:
+        if isinstance(raw_tags, str):
+            tags = [t.strip() for t in raw_tags.split(",") if t.strip()]
+        elif isinstance(raw_tags, list):
+            tags = [str(t).strip() for t in raw_tags if str(t).strip()]
+        else:
+            raise RequestValidationError("tags phải là danh sách chuỗi.", field="tags", status=400, code="INVALID_PARAMS")
+
+    pricing_mode = str(arguments.get("pricing_mode") or "free").strip().lower()
+    if pricing_mode not in ("free", "paid"):
+        raise RequestValidationError("pricing_mode phải là 'free' hoặc 'paid'.", field="pricing_mode", status=400, code="INVALID_PARAMS")
+    
+    price_amount_minor = None
+    if arguments.get("price_amount_minor") is not None:
+        try:
+            price_amount_minor = int(arguments.get("price_amount_minor"))
+            if price_amount_minor < 0:
+                raise ValueError()
+        except (ValueError, TypeError):
+            raise RequestValidationError("price_amount_minor phải là số nguyên không âm.", field="price_amount_minor", status=400, code="INVALID_PARAMS")
+
+    is_unlisted = bool(arguments.get("is_unlisted", False))
+
+    return {
+        "deck_id": deck_id,
+        "deck_path": deck_path,
+        "title": title,
+        "description": description,
+        "primary_category": primary_category,
+        "tags": tags,
+        "pricing_mode": pricing_mode,
+        "price_amount_minor": price_amount_minor,
+        "is_unlisted": is_unlisted,
+    }
+
+
+def validate_update_shared_deck_arguments(arguments: Any) -> dict[str, Any]:
+    """Validate arguments for update_shared_deck tool."""
+    if not isinstance(arguments, dict):
+        raise RequestValidationError("arguments phải là JSON object.", field="arguments", status=400, code="INVALID_PARAMS")
+    raw_id = arguments.get("deck_item_id") or arguments.get("id")
+    deck_item_id = str(raw_id).strip() if raw_id is not None else ""
+    if not deck_item_id:
+        raise RequestValidationError("deck_item_id là bắt buộc.", field="deck_item_id", status=400, code="INVALID_PARAMS")
+
+    title = str(arguments.get("title")).strip() if arguments.get("title") is not None else None
+    description = str(arguments.get("description")).strip() if arguments.get("description") is not None else None
+    primary_category = str(arguments.get("primary_category") or arguments.get("category")).strip() if (arguments.get("primary_category") or arguments.get("category")) is not None else None
+
+    raw_tags = arguments.get("tags")
+    tags: list[str] | None = None
+    if raw_tags is not None:
+        if isinstance(raw_tags, str):
+            tags = [t.strip() for t in raw_tags.split(",") if t.strip()]
+        elif isinstance(raw_tags, list):
+            tags = [str(t).strip() for t in raw_tags if str(t).strip()]
+        else:
+            raise RequestValidationError("tags phải là danh sách chuỗi.", field="tags", status=400, code="INVALID_PARAMS")
+
+    pricing_mode = str(arguments.get("pricing_mode")).strip().lower() if arguments.get("pricing_mode") is not None else None
+    if pricing_mode is not None and pricing_mode not in ("free", "paid"):
+        raise RequestValidationError("pricing_mode phải là 'free' hoặc 'paid'.", field="pricing_mode", status=400, code="INVALID_PARAMS")
+
+    price_amount_minor = None
+    if arguments.get("price_amount_minor") is not None:
+        try:
+            price_amount_minor = int(arguments.get("price_amount_minor"))
+            if price_amount_minor < 0:
+                raise ValueError()
+        except (ValueError, TypeError):
+            raise RequestValidationError("price_amount_minor phải là số nguyên không âm.", field="price_amount_minor", status=400, code="INVALID_PARAMS")
+
+    publish_status = str(arguments.get("publish_status")).strip().lower() if arguments.get("publish_status") is not None else None
+    if publish_status is not None and publish_status not in ("published", "unlisted", "archived", "draft"):
+        raise RequestValidationError("publish_status không hợp lệ.", field="publish_status", status=400, code="INVALID_PARAMS")
+
+    return {
+        "deck_item_id": deck_item_id,
+        "title": title,
+        "description": description,
+        "primary_category": primary_category,
+        "tags": tags,
+        "pricing_mode": pricing_mode,
+        "price_amount_minor": price_amount_minor,
+        "publish_status": publish_status,
+    }
+
+
+def validate_preview_deck_release_arguments(arguments: Any) -> dict[str, Any]:
+    """Validate arguments for preview_deck_release tool."""
+    if not isinstance(arguments, dict):
+        raise RequestValidationError("arguments phải là JSON object.", field="arguments", status=400, code="INVALID_PARAMS")
+    raw_id = arguments.get("deck_item_id") or arguments.get("id")
+    deck_item_id = str(raw_id).strip() if raw_id is not None else ""
+    if not deck_item_id:
+        raise RequestValidationError("deck_item_id là bắt buộc.", field="deck_item_id", status=400, code="INVALID_PARAMS")
+    limit = _validate_positive_int(arguments.get("limit", 50), "limit", default=50, max_val=200)
+    cursor = str(arguments.get("cursor")).strip() if arguments.get("cursor") is not None else None
+    return {
+        "deck_item_id": deck_item_id,
+        "limit": limit,
+        "cursor": cursor,
+    }
+
+
+def validate_publish_deck_release_arguments(arguments: Any) -> dict[str, Any]:
+    """Validate arguments for publish_deck_release tool."""
+    if not isinstance(arguments, dict):
+        raise RequestValidationError("arguments phải là JSON object.", field="arguments", status=400, code="INVALID_PARAMS")
+    raw_id = arguments.get("deck_item_id") or arguments.get("id")
+    deck_item_id = str(raw_id).strip() if raw_id is not None else ""
+    if not deck_item_id:
+        raise RequestValidationError("deck_item_id là bắt buộc.", field="deck_item_id", status=400, code="INVALID_PARAMS")
+
+    version_label = str(arguments.get("version_label") or arguments.get("version") or "").strip()
+    if not version_label:
+        raise RequestValidationError("version_label là bắt buộc.", field="version_label", status=400, code="INVALID_PARAMS")
+
+    changelog = str(arguments.get("changelog")).strip() if arguments.get("changelog") is not None else None
+    raw_expected_release_id = arguments.get("expected_current_release_id")
+    expected_current_release_id = str(raw_expected_release_id).strip() if raw_expected_release_id is not None and str(raw_expected_release_id).strip() else None
+
+    raw_revision = arguments.get("expected_working_revision")
+    expected_working_revision = None
+    if raw_revision is not None:
+        try:
+            expected_working_revision = int(raw_revision)
+        except (ValueError, TypeError):
+            raise RequestValidationError("expected_working_revision phải là số nguyên.", field="expected_working_revision", status=400, code="INVALID_PARAMS")
+
+    return {
+        "deck_item_id": deck_item_id,
+        "version_label": version_label,
+        "changelog": changelog,
+        "expected_current_release_id": expected_current_release_id,
+        "expected_working_revision": expected_working_revision,
+    }
+
+
+def validate_list_deck_releases_arguments(arguments: Any) -> dict[str, Any]:
+    """Validate arguments for list_deck_releases tool."""
+    if not isinstance(arguments, dict):
+        raise RequestValidationError("arguments phải là JSON object.", field="arguments", status=400, code="INVALID_PARAMS")
+    raw_id = arguments.get("deck_item_id") or arguments.get("id")
+    deck_item_id = str(raw_id).strip() if raw_id is not None else ""
+    if not deck_item_id:
+        raise RequestValidationError("deck_item_id là bắt buộc.", field="deck_item_id", status=400, code="INVALID_PARAMS")
+    limit = _validate_positive_int(arguments.get("limit", 20), "limit", default=20, max_val=100)
+    cursor = str(arguments.get("cursor")).strip() if arguments.get("cursor") is not None else None
+    return {
+        "deck_item_id": deck_item_id,
+        "limit": limit,
+        "cursor": cursor,
+    }
+
+
+def validate_list_installed_decks_arguments(arguments: Any) -> dict[str, Any]:
+    """Validate arguments for list_installed_decks tool."""
+    return validate_empty_arguments(arguments, tool_name="list_installed_decks")
+
+
