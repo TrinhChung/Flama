@@ -38,9 +38,7 @@ from app.utils.deck_move_token import parse_deck_move_token
 from app.utils.permissions import is_admin_user
 from app.utils.redirects import resolve_safe_next_url
 from app.services import deck_management_service, flashcards_share_service
-from app.services.anki_scheduler import (
-    computeAnswerPreview,
-)
+from app.services.study_action_runtime import compute_review_previews
 from app.services.scheduler_config_service import resolve_deck_options
 from app.services.flashcard_renderer import TemplateCompileError, render_template_pair
 from app.services.stats_overview import get_effective_timezone_name
@@ -799,10 +797,10 @@ def study_deck(deck_id: int):
             user_id=current_user.id,
             options=deck_options,
         )
-        next_intervals_preview = computeAnswerPreview(
-            card_state,
-            deck_options,
-            now,
+        next_intervals_preview = compute_review_previews(
+            state=card_state,
+            options=deck_options,
+            now=now,
             timezone_name=timezone_name,
         )
 

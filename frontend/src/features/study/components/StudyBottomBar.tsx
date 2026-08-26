@@ -1,7 +1,6 @@
 import { Eye, Maximize2, Minimize2, Pencil, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-
-type Rating = 'again' | 'hard' | 'good' | 'easy'
+import type { Rating } from '../types'
 
 type IntervalsPreview = Record<Rating, { label?: string }>
 

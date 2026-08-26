@@ -28,11 +28,6 @@ from app.services import marketplace_query_service
 
 from app.services import flashcards_share
 
-from app.services.anki_scheduler import (
-    applyAnswer,
-    computeAnswerPreview,
-)
-
 from app.services.flashcard_legacy import (
     ensure_legacy_note_type,
 )

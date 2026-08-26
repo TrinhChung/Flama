@@ -210,6 +210,29 @@ def register_cli_commands(app: Flask) -> None:
             f"scanned={result.scanned}, changed={result.changed}"
         )
 
+    @app.cli.command("study-architecture-audit")
+    @click.option(
+        "--compact",
+        is_flag=True,
+        default=False,
+        help="Emit compact JSON instead of indented JSON.",
+    )
+    def study_architecture_audit(compact: bool) -> None:
+        """Print read-only reconciliation gates for the study refactor."""
+        from app.services.study_architecture_audit_service import (
+            build_study_architecture_audit,
+        )
+
+        report = build_study_architecture_audit()
+        click.echo(
+            json.dumps(
+                report,
+                ensure_ascii=False,
+                sort_keys=True,
+                indent=None if compact else 2,
+            )
+        )
+
     @app.cli.command("clone-cutover-overlay")
     @click.option(
         "--no-fail-on-mismatch",

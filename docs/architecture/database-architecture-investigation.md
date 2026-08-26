@@ -198,6 +198,10 @@ sequenceDiagram
 
 **Evidence:** `app/routes/flashcards/study.py::study_answer`; `app/services/study_service.py::apply_study_answer_and_commit`; `app/services/mcp_tool_service.py::submit_review`; `tests/test_study_session_api.py::test_legacy_answer_invalidates_open_batch_session`.
 
+**Implementation update — 2026-08-27:** batch replay, direct REST, and MCP review now resolve the four semantic review Actions through `study_action_runtime` and the exact-key/version Python Algorithm registry. New direct and batch ReviewEvents record the effective Algorithm key/version and carry Action/Trigger/state-schema metadata under `_study_runtime`. Direct events still have no StudySession identity and still do not record the canonical scheduler-config hash, so the transaction/provenance paths are not yet fully unified.
+
+**Evidence:** `app/services/study_algorithm_registry.py`; `app/services/study_action_runtime.py`; `app/services/study_session_service.py::commit_study_session`; `app/services/study_service.py::apply_study_answer_and_commit`; `tests/test_study_action_runtime.py`; `tests/test_study_session_api.py`.
+
 ## 4. Field architecture investigation
 
 ### 4.1 What is a field's identity?

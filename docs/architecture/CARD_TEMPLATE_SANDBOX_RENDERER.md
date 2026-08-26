@@ -48,7 +48,9 @@
 
 ### Renderer data producers (Backend)
 - Compiler & sanitizer: `app/services/flashcard_renderer.py`
-- Study & preview endpoints: `app/api/flashcards/` & `app/api/learning/study.py`
+- Canonical v1 flashcard API: `app/api/v1/flashcards/`
+- Compatibility study routes: `app/routes/flashcards/study.py` and `app/routes/vocabulary.py`
+- Content/session orchestration: `app/services/flashcard_content_service.py`, `app/services/study_service.py`, and `app/services/study_session_service.py`
 - Media asset proxy: `/media/proxy/<asset_id>`
 
 ## Renderer Design
@@ -82,6 +84,7 @@
   - validate renderer messages
   - clamp iframe height updates
   - allow only approved audio requests
+  - refuse to translate sandbox-authored keyboard messages into parent-window events
 
 ### Renderer shell
 - Built into the iframe `srcdoc`.
@@ -100,20 +103,27 @@
   - `renderer_ready`
   - `resize_request`
   - `play_audio`
+  - `pause_audio`
   - `log_error`
 - Host to renderer:
   - `reveal`
+  - `patch_content`
+  - `audio_result`
+  - `audio_event`
+
+There is deliberately no generic `keydown_event` or progress-changing Action in this bridge. The 2026-08-27 study-runtime slice removed the former keyboard relay because Template code could synthesize the same message as a real key press. Study shortcuts continue to be owned by the React study host while focus is in the parent document. A replacement for shortcuts while focus is inside the iframe must use a reviewed trusted-gesture/capability design; it must not restore raw `KeyboardEvent` redispatch.
 
 ### Renderer CSP
 - `default-src 'none'`
-- `base-uri 'none'`
+- `base-uri <configured media origin>`
 - `form-action 'none'`
 - `frame-ancestors 'none'`
 - `connect-src 'none'`
 - `font-src 'none'`
 - `frame-src 'none'`
-- `img-src data: /media/proxy/`
-- `media-src blob: /media/proxy/`
+- `img-src <exact approved media proxy URLs>`
+- `media-src <exact approved media proxy URLs>`
+- `navigate-to 'none'`
 - `object-src 'none'`
 - `script-src 'unsafe-inline'`
 - `style-src 'unsafe-inline'`
@@ -135,36 +145,38 @@
 - `allow-same-origin` would collapse the isolation boundary.
 - Without it, template JS loses parent DOM access and authenticated same-origin fetch privileges.
 
-## Concrete Patch Plan
+## Implementation status
 
-1. Preserve template JS in renderer output, but only for sandbox consumption.
-2. Add renderer metadata so the host can validate audio requests.
-3. Introduce a shared sandbox iframe host layer.
-4. Replace direct parent-document injection in preview/study/shared flows.
-5. Add regression tests for:
+1. [x] Preserve Template JS in renderer output, but only for sandbox consumption.
+2. [x] Add renderer metadata so the host can validate audio requests.
+3. [x] Introduce a shared sandbox iframe host layer.
+4. [x] Use the shared renderer from React study, preview, and marketplace flows.
+5. [x] Remove the forgeable sandbox-to-parent keyboard relay.
+6. [ ] Design a trusted keyboard-command path for iframe focus without granting Template code a progress capability.
+7. [ ] Expand browser-level regression coverage for:
    - script-preserving render output
    - renderer payload metadata
    - study/preview payload contract
-   - vocabulary study page iframe contract
+   - parent-focus and iframe-focus shortcut behavior
+   - rejection of sandbox-authored progress Actions
 
 ## Affected Files
 
 - `app/services/flashcard_renderer.py`
 - `app/routes/flashcards/study.py`
 - `app/services/study_card_editor_service.py`
-- `app/repositories/vocabulary_repository.py`
-- `app/presenters/vocabulary_presenter.py`
 - `app/routes/vocabulary.py`
-- `templates/flashcards/note_type_detail.html`
-- `templates/flashcards/study.html`
-- `templates/flashcards/shared_note_type_detail.html`
-- `templates/flashcards/shared_deck_detail.html`
-- `templates/vocabulary_study.html`
+- `frontend/src/features/study/components/CardRendererFrame.tsx`
+- `frontend/src/features/study/components/CardDisplay.tsx`
+- `frontend/src/features/study/renderer/clientRenderer.ts`
+- `frontend/src/features/note-types/components/NoteTypeLivePreview.tsx`
+- `frontend/src/features/marketplace/pages/SharedNoteTypeDetailPage.tsx`
+- `frontend/src/features/marketplace/pages/SharedDeckDetailPage.tsx`
 - `static/js/card_renderer_host.js`
-- `static/js/pages/shared_note_type_detail/main.js`
-- `static/js/pages/shared_deck_detail/main.js`
 - `tests/test_flashcard_renderer.py`
-- `tests/test_flashcard_api_integration.py`
+- `tests/test_rest_only_runtime.py`
+- `frontend/src/features/study/components/CardRendererHost.test.ts`
+- `frontend/src/features/study/components/CardRendererFrame.test.tsx`
 
 ## Remaining Limitations
 
@@ -172,3 +184,4 @@
 - `FlamaCard.playAudio(...)` is limited to approved proxy asset refs. It does not allow arbitrary URLs.
 - Browser autoplay policy still applies. Host-triggered playback is best-effort and legacy local `<audio>` controls remain supported for compatibility.
 - This patch does not rely on SVG validation as a renderer boundary. SVG hardening remains defense in depth only.
+- Keyboard shortcuts are not forwarded while focus is inside the sandbox. This is the accepted secure interim behavior, not the final Phase 2 UX.

@@ -66,6 +66,38 @@ describe('card renderer host viewport modes', () => {
     controller.destroy()
   })
 
+  it('does not relay sandbox-authored keyboard events into host actions', () => {
+    const source = readFileSync(
+      resolve(process.cwd(), '../static/js/card_renderer_host.js'),
+      'utf8',
+    )
+    window.eval(source)
+
+    const iframe = document.createElement('iframe')
+    document.body.appendChild(iframe)
+    const controller = window.FlamaCardRendererHost!.createRendererFrameController(iframe)
+    controller.render({ html: '<script>/* untrusted template */</script>' })
+
+    const instanceId = iframe.srcdoc.match(/"instanceId":"([^"]+)"/)?.[1]
+    const hostKeydown = vi.fn()
+    window.addEventListener('keydown', hostKeydown)
+    window.dispatchEvent(new MessageEvent('message', {
+      source: iframe.contentWindow,
+      data: {
+        channel: 'flama-card-renderer',
+        direction: 'renderer_to_host',
+        instanceId,
+        action: 'keydown_event',
+        payload: { key: '3', code: 'Digit3' },
+      },
+    }))
+
+    expect(hostKeydown).not.toHaveBeenCalled()
+    expect(iframe.srcdoc).not.toContain("post('keydown_event'")
+    window.removeEventListener('keydown', hostKeydown)
+    controller.destroy()
+  })
+
   it('relays shared audio results and ended events to the originating iframe element', async () => {
     vi.spyOn(window.HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined)
     vi.spyOn(window.HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined)

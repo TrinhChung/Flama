@@ -13,6 +13,9 @@ Tài liệu mô tả kiến trúc hiện hành và các tiêu chuẩn kỹ thu�
 | [`SYSTEM_ARCHITECTURE.md`](architecture/SYSTEM_ARCHITECTURE.md) | **Tổng quan kiến trúc toàn hệ thống** (React SPA, Flask REST API, Flama Connect, Flama Audio). |
 | [`FLAMA_PAYMENT_ARCHITECTURE.md`](architecture/FLAMA_PAYMENT_ARCHITECTURE.md) | **Kiến trúc thanh toán payOS** (Orders, PaymentAttempts, Webhook, Entitlements). |
 | [`CARD_TEMPLATE_SANDBOX_RENDERER.md`](architecture/CARD_TEMPLATE_SANDBOX_RENDERER.md) | **Cơ chế render iframe sandbox an toàn** cho custom card templates. |
+| [`study-interaction-trigger-algorithm-plan.md`](architecture/study-interaction-trigger-algorithm-plan.md) | **Tracker canonical cho refactor Study/Interaction/Trigger/Algorithm/Progress**; Phase 0–2 đang triển khai một phần, Phase 3–9 chưa bắt đầu. |
+| [`production-architecture-verification-2026-08-24.md`](architecture/production-architecture-verification-2026-08-24.md) | Baseline production chỉ-đọc và lần kiểm tra bổ sung ngày 2026-08-27 cho các migration gate. |
+| [`template-notetype-decoupling-investigation.md`](architecture/template-notetype-decoupling-investigation.md) | Điều tra boundary Template/NoteType/Field và các lựa chọn tái sử dụng Template. |
 | [`TYPOGRAPHY_SYSTEM.md`](architecture/TYPOGRAPHY_SYSTEM.md) | **Hệ thống Design Tokens & Typography** của giao diện. |
 | [`MCP_LIST_MY_DECKS.md`](architecture/MCP_LIST_MY_DECKS.md) | **Đặc tả giao thức MCP (Model Context Protocol)** endpoint `POST /api/mcp`. |
 | [`REPEATCALL.md`](architecture/REPEATCALL.md) | **Nghiên cứu giải thuật Spaced Repetition** (Anki SM-2 vs FSRS). |

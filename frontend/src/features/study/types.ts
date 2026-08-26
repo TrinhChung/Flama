@@ -2,8 +2,9 @@ import type {
   SchedulerCardState,
   SchedulerOptions,
 } from './scheduler/types'
+import type { ReviewRating } from './interactions/reviewInteraction'
 
-export type Rating = 'again' | 'hard' | 'good' | 'easy'
+export type Rating = ReviewRating
 
 export type FieldDef = {
   id?: string
@@ -152,6 +153,9 @@ export type StudySessionEvent = {
   sequence: number
   card_id: string
   rating: Rating
+  action_key: `review.${Rating}`
+  trigger_key: `scheduler.review.${Rating}`
+  trigger_contract_version: '1'
   policy_key: string
   scheduler_offset_ms: number
   duration_ms: number

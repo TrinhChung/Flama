@@ -17,7 +17,10 @@ from app.services import (
     stats_overview,
 )
 from app.services.anki_content_normalizer import normalize_anki_field_values
-from app.services.anki_scheduler import applyAnswer, computeAnswerPreview
+from app.services.study_action_runtime import (
+    compute_review_previews,
+    execute_review_action,
+)
 from app.services.deck_management_service import delete_deck_subtree
 from app.services.flashcard_renderer import TemplateCompileError, render_template_pair
 from app.services.mcp_preview_service import (
@@ -1586,10 +1589,10 @@ def get_study_queue(*, user_id: int, deck_id: int | None = None, limit: int = 10
         if not is_actionable:
             continue
 
-        intervals_preview = computeAnswerPreview(
-            card_state,
-            deck_options,
-            now,
+        intervals_preview = compute_review_previews(
+            state=card_state,
+            options=deck_options,
+            now=now,
             timezone_name=timezone_name,
         )
 
@@ -1648,10 +1651,10 @@ def get_card(*, user_id: int, card_id: str) -> dict[str, Any]:
         user_id=user_id,
         options=deck_options,
     )
-    intervals_preview = computeAnswerPreview(
-        card_state,
-        deck_options,
-        now,
+    intervals_preview = compute_review_previews(
+        state=card_state,
+        options=deck_options,
+        now=now,
         timezone_name=timezone_name,
     )
     rendered = render_template_pair(
@@ -1733,13 +1736,14 @@ def submit_review(
         options=deck_options,
     )
     review_mode = stats_overview.normalize_review_mode(current_state.type)
-    updated_state = applyAnswer(
-        current_state,
-        deck_options,
-        now,
-        rating,
+    transition = execute_review_action(
+        state=current_state,
+        options=deck_options,
+        now=now,
+        action=rating,
         timezone_name=timezone_name,
     )
+    updated_state = transition.state
 
     service_payload = {
         "duration_ms": duration_ms,
@@ -1761,6 +1765,9 @@ def submit_review(
         requested_scope_id=card.note.deck_id,
         timezone_name=timezone_name,
         deck_options=deck_options,
+        scheduler_algorithm=transition.algorithm.key,
+        algorithm_version=transition.algorithm.version,
+        state_schema_version=transition.algorithm.state_schema_version,
     )
 
     return {

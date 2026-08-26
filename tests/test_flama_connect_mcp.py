@@ -19,6 +19,7 @@ from models.deck import Deck
 from models.field_def import FieldDef
 from models.note import Note
 from models.note_type import NoteType
+from models.review_event import ReviewEvent
 from models.template import Template
 from models.user import User
 from models.shared_image_asset import SharedImageAsset
@@ -855,6 +856,17 @@ class FlamaConnectMcpTests(unittest.TestCase):
         self.assertEqual(review_res["card_id"], target_card_id)
         self.assertEqual(review_res["rating"], "good")
         self.assertEqual(review_res["reps"], 1)
+        with self.app.app_context():
+            event = ReviewEvent.query.filter_by(
+                user_id=self.user_id,
+                card_id=target_card_id,
+            ).one()
+            self.assertEqual(event.scheduler_algorithm, "legacy-anki")
+            self.assertEqual(event.algorithm_version, "1.0.0")
+            self.assertEqual(
+                json.loads(event.payload_json)["_study_runtime"]["trigger_key"],
+                "scheduler.review.good",
+            )
 
     # -----------------------------------------------------------------------
     # Statistics Tests

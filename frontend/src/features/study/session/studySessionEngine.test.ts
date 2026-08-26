@@ -175,6 +175,12 @@ describe('local study session engine', () => {
       500,
     )
     expect(answered.events).toHaveLength(1)
+    expect(answered.events[0]).toMatchObject({
+      rating: 'good',
+      action_key: 'review.good',
+      trigger_key: 'scheduler.review.good',
+      trigger_contract_version: '1',
+    })
     expect(answered.snapshot.cards[0].state.type).toBe('learning')
 
     const prepared = prepareCommit(answered, {

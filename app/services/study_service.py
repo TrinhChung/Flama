@@ -11,6 +11,8 @@ from models.card_progress import CardProgress
 from models.deck import Deck
 from app.services import deck_working_tree_service
 from app.services.anki_scheduler import _day_index, DeckOptions, default_deck_options
+from app.services.study_action_runtime import resolve_review_action
+from app.services.study_algorithm_registry import DEFAULT_ALGORITHM_IDENTITY
 from app.repositories.study_repository import (
     apply_card_state_to_progress as _apply_card_state_to_progress,
 )
@@ -95,6 +97,9 @@ def apply_study_answer_and_commit(
     requested_scope_id: int | None,
     timezone_name: str,
     deck_options: DeckOptions | None = None,
+    scheduler_algorithm: str = DEFAULT_ALGORITHM_IDENTITY.key,
+    algorithm_version: str = DEFAULT_ALGORITHM_IDENTITY.version,
+    state_schema_version: str = DEFAULT_ALGORITHM_IDENTITY.state_schema_version,
 ) -> int | None:
     """Applies the new study state to the progress record and commits the transaction.
 
@@ -141,6 +146,17 @@ def apply_study_answer_and_commit(
         else None
     )
 
+    verified_action = resolve_review_action(rating)
+    event_payload = dict(payload or {})
+    event_payload["_study_runtime"] = {
+        "action_key": verified_action.action_key,
+        "trigger_key": verified_action.trigger_key,
+        "trigger_contract_version": verified_action.trigger_contract_version,
+        "algorithm_key": str(scheduler_algorithm),
+        "algorithm_version": str(algorithm_version),
+        "state_schema_version": str(state_schema_version),
+    }
+
     review_event = record_review_event(
         user_id=user.id,
         card_id=card.id,
@@ -152,6 +168,8 @@ def apply_study_answer_and_commit(
             and local_deck.scheduler_preset_id is not None
             else None
         ),
+        scheduler_algorithm=str(scheduler_algorithm),
+        algorithm_version=str(algorithm_version),
         reviewed_at=now,
         duration_ms=payload.get("duration_ms"),
         rating=rating,
@@ -189,7 +207,7 @@ def apply_study_answer_and_commit(
         ),
         leeched_after=bool(getattr(updated_state, "leeched", False)),
         suspended_after=bool(getattr(updated_state, "suspended", False)),
-        payload_json=_serialize_review_payload(payload),
+        payload_json=_serialize_review_payload(event_payload),
     )
     db.session.flush()
     if getattr(review_event, "id", None) is not None and hasattr(progress, "last_review_event_id"):

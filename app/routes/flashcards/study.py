@@ -51,6 +51,10 @@ from app.services.stats_overview import get_effective_timezone_name
 from app.services.scheduler_config_service import resolve_deck_options
 from app.services import study_artifact_service
 from app.services import study_session_service
+from app.services.study_action_runtime import (
+    compute_review_previews,
+    execute_review_action,
+)
 from app.presenters.vocabulary_presenter import note_field_values_as_strings
 
 
@@ -298,10 +302,10 @@ def _build_study_next_payload(
         user_id=current_user.id,
         options=deck_options,
     )
-    interval_preview = computeAnswerPreview(
-        card_state,
-        deck_options,
-        now,
+    interval_preview = compute_review_previews(
+        state=card_state,
+        options=deck_options,
+        now=now,
         timezone_name=timezone_name,
     )
     rendered = render_template_pair(
@@ -577,10 +581,10 @@ def study_intervals_preview(card_id: str):
         user_id=current_user.id,
         options=deck_options,
     )
-    preview = computeAnswerPreview(
-        card_state,
-        deck_options,
-        now,
+    preview = compute_review_previews(
+        state=card_state,
+        options=deck_options,
+        now=now,
         timezone_name=timezone_name,
     )
     return _no_store_json(
@@ -842,20 +846,21 @@ def study_answer(card_id: str):
         user_id=current_user.id,
         options=deck_options,
     )
-    answer_preview = computeAnswerPreview(
-        current_state,
-        deck_options,
-        now,
+    answer_preview = compute_review_previews(
+        state=current_state,
+        options=deck_options,
+        now=now,
         timezone_name=timezone_name,
     )
     review_mode = normalize_review_mode(current_state.type)
-    updated_state = applyAnswer(  # type: ignore[arg-type]
-        current_state,
-        deck_options,
-        now,
-        rating,
+    transition = execute_review_action(
+        state=current_state,
+        options=deck_options,
+        now=now,
+        action=rating,
         timezone_name=timezone_name,
     )
+    updated_state = transition.state
     from app.services.study_service import apply_study_answer_and_commit, ConcurrentReviewError
 
     try:
@@ -874,6 +879,9 @@ def study_answer(card_id: str):
             requested_scope_id=requested_scope_id,
             timezone_name=timezone_name,
             deck_options=deck_options,
+            scheduler_algorithm=transition.algorithm.key,
+            algorithm_version=transition.algorithm.version,
+            state_schema_version=transition.algorithm.state_schema_version,
         )
     except ConcurrentReviewError as exc:
         return _study_error("CONCURRENT_REVIEW", str(exc), status=409)
