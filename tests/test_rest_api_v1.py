@@ -1,6 +1,7 @@
 """Integration coverage for the REST API used by the SPA migration."""
 
 import unittest
+from unittest.mock import patch
 
 from app import create_app
 from app.services import login_rate_limit_service
@@ -67,6 +68,20 @@ class RestApiV1Tests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json(), {"status": "ok"})
+
+    def test_health_fails_when_authoritative_redis_is_unavailable(self):
+        self.app.config["RATE_LIMIT_BACKEND"] = "redis"
+        with patch(
+            "app.api.v1.health.redis_state_service.redis_client",
+            side_effect=RuntimeError("redis offline"),
+        ):
+            response = self.client.get("/api/health")
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(
+            response.get_json(),
+            {"status": "unavailable", "dependency": "redis"},
+        )
 
     def test_session_bootstrap_and_api_auth_failure_are_json(self):
         session_response = self.client.get("/api/session")

@@ -1,7 +1,7 @@
 [Unit]
 Description=Flama Nihongo Gunicorn application
-After=network-online.target mysql.service
-Wants=network-online.target
+After=network-online.target mysql.service redis-server.service
+Wants=network-online.target redis-server.service
 Requires=mysql.service
 
 [Service]
@@ -15,7 +15,7 @@ ExecStart=/opt/flama/venv/bin/gunicorn --workers 2 --threads 4 --worker-class gt
 Restart=on-failure
 RestartSec=5
 KillSignal=SIGQUIT
-TimeoutStopSec=30
+TimeoutStopSec=150
 PrivateTmp=true
 NoNewPrivileges=true
 ProtectSystem=full

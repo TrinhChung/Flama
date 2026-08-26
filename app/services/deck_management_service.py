@@ -67,6 +67,15 @@ def rename_deck(*, deck_obj: Deck, new_name: str) -> None:
 
 def move_deck(*, deck_obj: Deck, new_parent_id: Optional[int]) -> None:
     """Moves a deck under a new parent and commits the transaction."""
+    from app.services import flashcards_share_service
+
+    guard_error = flashcards_share_service.validate_deck_subtree_move_to_parent(
+        deck_id=deck_obj.id,
+        new_parent_id=new_parent_id,
+        user_id=deck_obj.owner_user_id,
+    )
+    if guard_error:
+        raise ValueError(guard_error)
     deck_obj.parent_id = new_parent_id
     deck_obj.position = vocabulary_ctrl.next_deck_position(new_parent_id)
     db.session.commit()
@@ -91,10 +100,18 @@ def delete_deck_subtree(*, deck_obj: Deck, user_id: int, is_admin: bool, purge: 
         ).delete(synchronize_session=False)
 
         # 2. Delete DeckInstalls referencing local_deck_id or source_deck_id in deck_ids_to_delete
-        DeckInstall.query.filter(
+        install_query = DeckInstall.query.filter(
             (DeckInstall.local_deck_id.in_(deck_ids_to_delete)) |
             (DeckInstall.source_deck_id.in_(deck_ids_to_delete))
-        ).delete(synchronize_session=False)
+        )
+        install_rows = install_query.with_for_update().all()
+        if install_rows:
+            from app.services import flashcards_share_service
+
+            flashcards_share_service.remove_deck_install_market_counters(
+                install_rows
+            )
+        install_query.delete(synchronize_session=False)
 
         # 3. Delete DeckMarketplaceItems referencing source_deck_id in deck_ids_to_delete
         DeckMarketplaceItem.query.filter(
@@ -171,6 +188,11 @@ def delete_deck_subtree(*, deck_obj: Deck, user_id: int, is_admin: bool, purge: 
     install_query = DeckInstall.query.filter(DeckInstall.local_deck_id.in_(deck_ids_to_delete))
     if not is_admin:
         install_query = install_query.filter(DeckInstall.user_id == user_id)
+    install_rows = install_query.all()
+    if install_rows:
+        from app.services import flashcards_share_service
+
+        flashcards_share_service.remove_deck_install_market_counters(install_rows)
     install_query.delete(synchronize_session=False)
 
     note_rows = db.session.query(Note.id).filter(Note.deck_id.in_(deck_ids_to_delete)).all()

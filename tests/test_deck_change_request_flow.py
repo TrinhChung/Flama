@@ -4,6 +4,7 @@ import unittest
 from datetime import datetime, timedelta
 
 from app import create_app
+from app.services import flashcards_share_service
 from models import db
 from models.deck import Deck
 from models.flashcard import (
@@ -129,6 +130,8 @@ class DeckChangeRequestFlowTests(unittest.TestCase):
                 publish_status="published",
             )
             db.session.add(deck_item)
+            db.session.flush()
+            flashcards_share_service._stage_initial_release_if_visible(deck_item)
             db.session.commit()
             deck_item_id = deck_item.id
 

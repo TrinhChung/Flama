@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import sys
 import time
 from dataclasses import dataclass
@@ -11,8 +12,9 @@ from typing import Any, Tuple
 
 UTC = timezone.utc
 
-from sqlalchemy import and_, exists, or_
+from sqlalchemy import and_, case, exists, or_
 from sqlalchemy.exc import IntegrityError, OperationalError
+from flask import current_app
 
 from app.repositories import flashcards_share_repository
 from app.repositories.deck_tree_query import collect_ancestor_ids, collect_subtree_ids
@@ -48,6 +50,10 @@ flashcards_share = sys.modules[__name__]
 FIELD_TYPES = {"text", "richtext", "markdown", "image", "audio", "diagram"}
 PUBLISH_STATUSES_VISIBLE = {"published", "unlisted"}
 DECK_ACTIVE_REVIEW_THRESHOLD = 3
+MARKET_ACTIVITY_POLICY_VERSION = 1
+NOTE_TYPE_ACTIVE_NOTE_THRESHOLD = 3
+NOTE_TYPE_ACTIVE_REVIEW_THRESHOLD = 3
+NOTE_TYPE_ACTIVE_DAYS_THRESHOLD = 3
 SHARED_DECK_TEST_SAMPLE_LIMIT = 5
 SHARED_DECK_INSTALL_MAX_RETRIES = 3
 SHARED_DECK_INSTALL_DEADLOCK_MESSAGE = "Hệ thống đang bận khi cài deck này. Vui lòng thử lại sau vài giây."
@@ -72,8 +78,8 @@ def _stage_initial_release_if_visible(
     """Pin visible legacy/new listings to an immutable initial release.
 
     The release service deliberately leaves transaction ownership to its
-    caller.  Keeping this helper inside the listing/install transaction means
-    an install can never be created against a live, mutable source snapshot.
+    caller. This helper is used only by listing publish/seed mutations and the
+    explicit bootstrap command; learner install paths must fail fast instead.
     """
 
     if deck_item.current_release_id is not None:
@@ -744,15 +750,13 @@ def install_shared_note_type(source_note_type: NoteType, user_id: int) -> tuple[
         purchase_amount_minor=purchase_amount_minor,
         installed_at=now,
         purchased_at=now if source_note_type.pricing_mode == "paid" else None,
+        market_active=False,
+        market_active_evaluated_at=now,
+        market_active_policy_version=MARKET_ACTIVITY_POLICY_VERSION,
     )
     db.session.add(install_row)
-    
-    flashcards_share.recompute_note_type_market_stats(
-        source_note_type,
-        note_type_active_note_threshold=5,
-        note_type_active_review_threshold=1,
-        note_type_active_days_threshold=7,
-    )
+    db.session.flush()
+    _increment_counter(NoteType, source_note_type.id, NoteType.install_count, 1)
     _audit(
         user_id,
         "market.note_type.install",
@@ -776,12 +780,7 @@ def rate_shared_note_type(note_type: NoteType, user_id: int, rating: int, commen
         review.rating = rating
         review.comment = comment
 
-    flashcards_share.recompute_note_type_market_stats(
-        note_type,
-        note_type_active_note_threshold=5,
-        note_type_active_review_threshold=1,
-        note_type_active_days_threshold=7,
-    )
+    flashcards_share.recompute_note_type_market_stats(note_type)
     _audit(user_id, "market.note_type.rate", {"note_type_id": note_type.id, "rating": rating})
     db.session.commit()
 
@@ -826,35 +825,21 @@ def upsert_shared_deck_clone_overlay(deck_item_id: str, install: DeckInstall, us
 
 
 def install_shared_deck_item(deck_item_id: str, user_id: int, publish_statuses_visible: set[str]) -> tuple[dict | None, str | None, str | None, int]:
+    request_started = time.perf_counter()
     for attempt in range(1, SHARED_DECK_INSTALL_MAX_RETRIES + 1):
         deck_item = db.session.get(DeckMarketplaceItem, deck_item_id)
         if not deck_item:
             return None, "Deck item not found.", None, 404
+        performance_deck_item_id = str(deck_item.id)
+        performance_release_id = str(deck_item.current_release_id or "")
 
-        bind_error, changed = flashcards_share.sync_deck_item_source_note_type(
-            deck_item,
-            require_source_note_type=True,
-        )
-        if bind_error:
-            return None, bind_error, None, 409
-
-        if changed:
-            try:
-                db.session.commit()
-            except OperationalError as exc:
-                db.session.rollback()
-                if flashcards_share._is_mysql_deadlock(exc) and attempt < SHARED_DECK_INSTALL_MAX_RETRIES:
-                    logger.warning(
-                        "Deadlock while syncing source note type for shared deck install "
-                        "(deck_item_id=%s, user_id=%s, attempt=%s/%s)",
-                        deck_item_id,
-                        user_id,
-                        attempt,
-                        SHARED_DECK_INSTALL_MAX_RETRIES,
-                    )
-                    time.sleep(0.05 * attempt)
-                    continue
-                raise
+        if not str(deck_item.source_note_type_id or "").strip():
+            return (
+                None,
+                "source_note_type_id is required for install.",
+                "source_note_type_id",
+                409,
+            )
 
         try:
             install_result = flashcards_share.install_shared_deck_item_for_user(
@@ -864,6 +849,15 @@ def install_shared_deck_item(deck_item_id: str, user_id: int, publish_statuses_v
             )
         except flashcards_share.ShareControllerError as exc:
             db.session.rollback()
+            _log_shared_deck_install_performance(
+                deck_item_id=performance_deck_item_id,
+                release_id=performance_release_id,
+                attempt=attempt,
+                created=False,
+                status=exc.status,
+                started_at=request_started,
+                phase_metrics={},
+            )
             return None, exc.message, exc.field, exc.status
         except IntegrityError:
             db.session.rollback()
@@ -898,9 +892,19 @@ def install_shared_deck_item(deck_item_id: str, user_id: int, publish_statuses_v
             raise
 
         if not install_result.get("created"):
+            _log_shared_deck_install_performance(
+                deck_item_id=performance_deck_item_id,
+                release_id=performance_release_id,
+                attempt=attempt,
+                created=False,
+                status=200,
+                started_at=request_started,
+                phase_metrics=install_result.get("performance") or {},
+            )
             return install_result.get("response") or {}, None, None, 200
 
         _audit(user_id, "market.deck_item.install", install_result.get("audit") or {})
+        commit_started = time.perf_counter()
         try:
             db.session.commit()
         except IntegrityError:
@@ -935,9 +939,53 @@ def install_shared_deck_item(deck_item_id: str, user_id: int, publish_statuses_v
                 return None, SHARED_DECK_INSTALL_DEADLOCK_MESSAGE, None, 409
             raise
 
+        phase_metrics = dict(install_result.get("performance") or {})
+        phase_metrics["commit_ms"] = _elapsed_ms(commit_started)
+        _log_shared_deck_install_performance(
+            deck_item_id=performance_deck_item_id,
+            release_id=performance_release_id,
+            attempt=attempt,
+            created=True,
+            status=201,
+            started_at=request_started,
+            phase_metrics=phase_metrics,
+        )
         return install_result.get("response") or {}, None, None, 201
 
     return None, SHARED_DECK_INSTALL_DEADLOCK_MESSAGE, None, 409
+
+
+def _elapsed_ms(started_at: float) -> float:
+    return round((time.perf_counter() - started_at) * 1000, 2)
+
+
+def _log_shared_deck_install_performance(
+    *,
+    deck_item_id: str,
+    release_id: str,
+    attempt: int,
+    created: bool,
+    status: int,
+    started_at: float,
+    phase_metrics: dict[str, Any],
+) -> None:
+    logger.info(
+        "shared_deck_install_perf deck_item_id=%s release_id=%s worker_pid=%s "
+        "attempt=%s status=%s created=%s total_ms=%.2f readiness_ms=%.2f "
+        "note_type_ms=%.2f tree_clone_ms=%.2f counter_ms=%.2f commit_ms=%.2f",
+        deck_item_id,
+        release_id,
+        os.getpid(),
+        attempt,
+        status,
+        created,
+        _elapsed_ms(started_at),
+        float(phase_metrics.get("readiness_ms") or 0),
+        float(phase_metrics.get("note_type_ms") or 0),
+        float(phase_metrics.get("tree_clone_ms") or 0),
+        float(phase_metrics.get("counter_ms") or 0),
+        float(phase_metrics.get("commit_ms") or 0),
+    )
 
 
 DEFAULT_VISIBLE_PUBLISH_STATUSES = {"published", "unlisted"}
@@ -1002,17 +1050,17 @@ def bind_deck_item_source_note_type(
     if deck_item.source_deck_id is None:
         return "source_deck_id is required."
 
-    if deck_item.source_deck_id is not None:
+    source_note_type_id = (deck_item.source_note_type_id or "").strip()
+    if not source_note_type_id and deck_item.source_deck_id is not None:
         inferred_note_type_id, infer_error = resolve_single_note_type_for_deck(
             deck_id=deck_item.source_deck_id,
             owner_user_id=deck_item.owner_user_id,
         )
-        if infer_error and require_source_note_type and not (deck_item.source_note_type_id or "").strip():
+        if infer_error and require_source_note_type:
             return infer_error
         if inferred_note_type_id:
-            if deck_item.source_note_type_id and deck_item.source_note_type_id != inferred_note_type_id:
-                return "source_note_type_id does not match notes inside source_deck_id."
             deck_item.source_note_type_id = inferred_note_type_id
+            source_note_type_id = inferred_note_type_id
 
     source_note_type_id = (deck_item.source_note_type_id or "").strip()
     if not source_note_type_id:
@@ -1043,6 +1091,14 @@ def validate_note_type_consistency_for_deck(
     if deck_id is None:
         return None
 
+    marketplace_error = validate_marketplace_note_type_for_deck(
+        deck_id=deck_id,
+        note_type_id=note_type_id,
+        user_id=user_id,
+    )
+    if marketplace_error:
+        return marketplace_error
+
     existing_note_type_ids = flashcards_share_repository.get_note_type_ids_for_user_deck_notes(
         deck_id, user_id, exclude_note_id
     )
@@ -1052,6 +1108,88 @@ def validate_note_type_consistency_for_deck(
     if existing_note_type_ids == {note_type_id}:
         return None
     return "All notes in one deck must use the same template (note type)."
+
+
+def validate_marketplace_note_type_for_deck(
+    *,
+    deck_id: int | None,
+    note_type_id: str,
+    user_id: int | None,
+    publish_backstop: bool = False,
+) -> str | None:
+    """Enforce the persisted listing pointer at mutation/publish boundaries."""
+    if deck_id is None or not str(note_type_id or "").strip():
+        return None
+    if publish_backstop:
+        deck_ids = collect_subtree_ids(deck_id)
+        query = Note.query.filter(
+            Note.deck_id.in_(deck_ids),
+            Note.note_type_id != str(note_type_id),
+        )
+        if user_id is not None:
+            query = query.filter(Note.user_id == user_id)
+        if query.first() is None:
+            return None
+        message = "Deck contains notes that do not match source_note_type_id."
+    else:
+        ancestor_ids = collect_ancestor_ids(deck_id)
+        listings = (
+            DeckMarketplaceItem.query.filter(
+                DeckMarketplaceItem.source_deck_id.in_(ancestor_ids),
+                DeckMarketplaceItem.publish_status.in_(PUBLISH_STATUSES_VISIBLE),
+            ).all()
+            if ancestor_ids
+            else []
+        )
+        mismatch = next(
+            (
+                item
+                for item in listings
+                if str(item.source_note_type_id or "").strip()
+                and str(item.source_note_type_id) != str(note_type_id)
+            ),
+            None,
+        )
+        if mismatch is None:
+            return None
+        message = "This shared deck requires its persisted source NoteType."
+
+    mode = str(
+        current_app.config.get("DECK_SOURCE_NOTETYPE_GUARD_MODE", "strict")
+    ).strip().lower()
+    if mode == "shadow" and not publish_backstop:
+        logger.warning(
+            "Deck source NoteType shadow mismatch deck_id=%s note_type_id=%s",
+            deck_id,
+            note_type_id,
+        )
+        return None
+    return message
+
+
+def validate_deck_subtree_move_to_parent(
+    *,
+    deck_id: int,
+    new_parent_id: int | None,
+    user_id: int | None,
+) -> str | None:
+    """Validate existing notes before attaching a subtree to a listed tree."""
+    if new_parent_id is None:
+        return None
+    subtree_ids = collect_subtree_ids(deck_id)
+    note_type_ids = flashcards_share_repository.get_note_type_ids_for_decks_notes(
+        subtree_ids,
+        user_id,
+    )
+    for note_type_id in note_type_ids:
+        error = validate_marketplace_note_type_for_deck(
+            deck_id=new_parent_id,
+            note_type_id=note_type_id,
+            user_id=user_id,
+        )
+        if error:
+            return error
+    return None
 
 def _next_deck_position(parent_deck_id: int | None) -> int:
     return flashcards_share_repository.get_next_deck_position(parent_deck_id)
@@ -1513,6 +1651,14 @@ def validate_deck_publish_requirements(deck_item: DeckMarketplaceItem) -> str | 
         return provenance_error
     if not source_note_type.templates:
         return "source_note_type_id must reference a note type that has at least one template."
+    mismatch_error = validate_marketplace_note_type_for_deck(
+        deck_id=deck_item.source_deck_id,
+        note_type_id=source_note_type_id,
+        user_id=deck_item.owner_user_id,
+        publish_backstop=True,
+    )
+    if mismatch_error:
+        return mismatch_error
     taxonomy_error = marketplace_taxonomy_service.validate_required_taxonomy(
         deck_item.taxonomy_metadata if isinstance(deck_item.taxonomy_metadata, dict) else {},
         content_type="deck_marketplace_item",
@@ -1706,8 +1852,21 @@ def touch_note_type_install_usage(
     installed_note_type_id: str,
     activity_at: datetime | None = None,
 ) -> None:
-    install = flashcards_share_repository.get_note_type_install_by_user_and_source(
-        user_id, installed_note_type_id
+    install = (
+        NoteTypeInstall.query.filter(
+            NoteTypeInstall.user_id == user_id,
+            or_(
+                NoteTypeInstall.installed_note_type_id == installed_note_type_id,
+                NoteTypeInstall.source_note_type_id == installed_note_type_id,
+            ),
+        )
+        .order_by(
+            (NoteTypeInstall.installed_note_type_id == installed_note_type_id).desc(),
+            NoteTypeInstall.installed_at.asc(),
+            NoteTypeInstall.id.asc(),
+        )
+        .with_for_update()
+        .first()
     )
     if not install:
         return
@@ -1715,6 +1874,7 @@ def touch_note_type_install_usage(
     if install.first_use_at is None:
         install.first_use_at = now
     install.last_activity_at = now
+    _update_note_type_install_market_activity(install, now=now)
 
 def note_type_reps_for_user(*, user_id: int, installed_note_type_id: str) -> int:
     return flashcards_share_repository.get_note_type_reps_for_user(user_id, installed_note_type_id)
@@ -1754,20 +1914,19 @@ def recompute_note_type_market_stats(
     note_type_active_review_threshold: int = 3,
     note_type_active_days_threshold: int = 3,
 ) -> None:
-    now = _utcnow()
-    installs = flashcards_share_repository.get_note_type_installs_by_source(note_type.id)
-    note_type.install_count = len(installs)
-    note_type.active_usage_count = sum(
-        1
-        for install in installs
-        if is_note_type_install_active(
-            install,
-            now=now,
-            note_type_active_note_threshold=note_type_active_note_threshold,
-            note_type_active_review_threshold=note_type_active_review_threshold,
-            note_type_active_days_threshold=note_type_active_days_threshold,
+    install_count, active_usage_count = (
+        db.session.query(
+            db.func.count(NoteTypeInstall.id),
+            db.func.coalesce(
+                db.func.sum(case((NoteTypeInstall.market_active.is_(True), 1), else_=0)),
+                0,
+            ),
         )
+        .filter(NoteTypeInstall.source_note_type_id == note_type.id)
+        .first()
     )
+    note_type.install_count = int(install_count or 0)
+    note_type.active_usage_count = int(active_usage_count or 0)
 
     rating_avg, rating_count = flashcards_share_repository.get_note_type_market_rating_stats(note_type.id)
     note_type.rating_avg = rating_avg
@@ -1805,9 +1964,15 @@ def touch_deck_install_usage(
         return
     now = activity_at or _utcnow()
     for install in installs:
+        install = (
+            DeckInstall.query.filter_by(id=install.id)
+            .with_for_update()
+            .first()
+        ) or install
         if install.first_use_at is None:
             install.first_use_at = now
         install.last_activity_at = now
+        _update_deck_install_market_activity(install, now=now)
 
 def deck_reps_for_user(*, user_id: int, local_deck_id: int) -> int:
     clone_scope = resolve_clone_scope_for_local_deck(
@@ -1840,16 +2005,19 @@ def recompute_deck_item_market_stats(
     *,
     deck_active_review_threshold: int = 3,
 ) -> None:
-    installs = flashcards_share_repository.get_deck_installs_by_item(deck_item.id)
-    deck_item.install_count = len(installs)
-    deck_item.active_usage_count = sum(
-        1
-        for install in installs
-        if is_deck_install_active(
-            install,
-            deck_active_review_threshold=deck_active_review_threshold,
+    install_count, active_usage_count = (
+        db.session.query(
+            db.func.count(DeckInstall.id),
+            db.func.coalesce(
+                db.func.sum(case((DeckInstall.market_active.is_(True), 1), else_=0)),
+                0,
+            ),
         )
+        .filter(DeckInstall.deck_item_id == deck_item.id)
+        .first()
     )
+    deck_item.install_count = int(install_count or 0)
+    deck_item.active_usage_count = int(active_usage_count or 0)
 
     rating_avg, rating_count = flashcards_share_repository.get_deck_market_rating_stats(deck_item.id)
     deck_item.rating_avg = rating_avg
@@ -1870,6 +2038,156 @@ def can_user_rate_deck(
         install,
         deck_active_review_threshold=deck_active_review_threshold,
     )
+
+
+def _increment_counter(model, row_id: str, column, delta: int) -> None:
+    if not delta:
+        return
+    next_value = column + int(delta)
+    db.session.query(model).filter(model.id == row_id).update(
+        {column: case((next_value < 0, 0), else_=next_value)},
+        synchronize_session=False,
+    )
+
+
+def _set_note_type_install_market_activity(
+    install: NoteTypeInstall,
+    *,
+    active: bool,
+    now: datetime,
+) -> None:
+    previous = bool(install.market_active)
+    install.market_active = bool(active)
+    install.market_active_evaluated_at = now
+    install.market_active_policy_version = MARKET_ACTIVITY_POLICY_VERSION
+    if previous != bool(active):
+        _increment_counter(
+            NoteType,
+            str(install.source_note_type_id),
+            NoteType.active_usage_count,
+            1 if active else -1,
+        )
+
+
+def _update_note_type_install_market_activity(
+    install: NoteTypeInstall,
+    *,
+    now: datetime,
+) -> None:
+    _set_note_type_install_market_activity(
+        install,
+        active=is_note_type_install_active(
+            install,
+            now=now,
+            note_type_active_note_threshold=NOTE_TYPE_ACTIVE_NOTE_THRESHOLD,
+            note_type_active_review_threshold=NOTE_TYPE_ACTIVE_REVIEW_THRESHOLD,
+            note_type_active_days_threshold=NOTE_TYPE_ACTIVE_DAYS_THRESHOLD,
+        ),
+        now=now,
+    )
+
+
+def _set_deck_install_market_activity(
+    install: DeckInstall,
+    *,
+    active: bool,
+    now: datetime,
+) -> None:
+    previous = bool(install.market_active)
+    install.market_active = bool(active)
+    install.market_active_evaluated_at = now
+    install.market_active_policy_version = MARKET_ACTIVITY_POLICY_VERSION
+    if previous != bool(active):
+        _increment_counter(
+            DeckMarketplaceItem,
+            str(install.deck_item_id),
+            DeckMarketplaceItem.active_usage_count,
+            1 if active else -1,
+        )
+
+
+def _update_deck_install_market_activity(
+    install: DeckInstall,
+    *,
+    now: datetime,
+) -> None:
+    _set_deck_install_market_activity(
+        install,
+        active=is_deck_install_active(
+            install,
+            deck_active_review_threshold=DECK_ACTIVE_REVIEW_THRESHOLD,
+        ),
+        now=now,
+    )
+
+
+def remove_deck_install_market_counters(installs: list[DeckInstall]) -> None:
+    grouped: dict[str, tuple[int, int]] = {}
+    for install in installs:
+        total, active = grouped.get(str(install.deck_item_id), (0, 0))
+        grouped[str(install.deck_item_id)] = (
+            total + 1,
+            active + (1 if bool(install.market_active) else 0),
+        )
+    for deck_item_id, (total, active) in grouped.items():
+        _increment_counter(
+            DeckMarketplaceItem,
+            deck_item_id,
+            DeckMarketplaceItem.install_count,
+            -total,
+        )
+        _increment_counter(
+            DeckMarketplaceItem,
+            deck_item_id,
+            DeckMarketplaceItem.active_usage_count,
+            -active,
+        )
+
+
+def remove_note_type_install_market_counters(
+    installs: list[NoteTypeInstall],
+) -> None:
+    grouped: dict[str, tuple[int, int]] = {}
+    for install in installs:
+        source_note_type_id = str(install.source_note_type_id or "").strip()
+        if not source_note_type_id:
+            continue
+        total, active = grouped.get(source_note_type_id, (0, 0))
+        grouped[source_note_type_id] = (
+            total + 1,
+            active + (1 if bool(install.market_active) else 0),
+        )
+    for source_note_type_id, (total, active) in grouped.items():
+        _increment_counter(
+            NoteType,
+            source_note_type_id,
+            NoteType.install_count,
+            -total,
+        )
+        _increment_counter(
+            NoteType,
+            source_note_type_id,
+            NoteType.active_usage_count,
+            -active,
+        )
+
+
+def deactivate_note_type_installs_for_deleted_copy(
+    *,
+    user_id: int,
+    installed_note_type_id: str,
+) -> None:
+    installs = (
+        NoteTypeInstall.query.filter_by(
+            user_id=user_id,
+            installed_note_type_id=installed_note_type_id,
+        )
+        .with_for_update()
+        .all()
+    )
+    now = _utcnow()
+    for install in installs:
+        _set_note_type_install_market_activity(install, active=False, now=now)
 
 
 def can_user_rate_deck_item(
@@ -2217,8 +2535,13 @@ def ensure_note_type_install_for_user(
             purchase_amount_minor=purchase_amount_minor,
             installed_at=now,
             purchased_at=now if source_note_type.pricing_mode == "paid" else None,
+            market_active=False,
+            market_active_evaluated_at=now,
+            market_active_policy_version=MARKET_ACTIVITY_POLICY_VERSION,
         )
         db.session.add(install_row)
+        db.session.flush()
+        _increment_counter(NoteType, source_note_type.id, NoteType.install_count, 1)
     else:
         install_row.installed_note_type_id = installed_copy.id
         install_row.purchase_amount_minor = purchase_amount_minor
@@ -2226,11 +2549,38 @@ def ensure_note_type_install_for_user(
             install_row.installed_at = now
         install_row.purchased_at = now if source_note_type.pricing_mode == "paid" else None
 
-    flashcards_share.recompute_note_type_market_stats(source_note_type)
     return install_row
 
 
 def clone_deck_subtree(
+    *,
+    source_deck_id: int,
+    parent_id: int | None,
+    deck_install_id: str | None = None,
+    owner_user_id: int | None = None,
+    note_type_id_map: dict[str, str] | None = None,
+) -> Deck:
+    mode = str(
+        current_app.config.get("SHARED_DECK_TREE_CLONE_MODE", "batched")
+    ).strip().lower()
+    if mode == "recursive":
+        return _clone_deck_subtree_recursive(
+            source_deck_id=source_deck_id,
+            parent_id=parent_id,
+            deck_install_id=deck_install_id,
+            owner_user_id=owner_user_id,
+            note_type_id_map=note_type_id_map,
+        )
+    return _clone_deck_subtree_batched(
+        source_deck_id=source_deck_id,
+        parent_id=parent_id,
+        deck_install_id=deck_install_id,
+        owner_user_id=owner_user_id,
+        note_type_id_map=note_type_id_map,
+    )
+
+
+def _clone_deck_subtree_recursive(
     *,
     source_deck_id: int,
     parent_id: int | None,
@@ -2275,7 +2625,7 @@ def clone_deck_subtree(
         .all()
     )
     for child in child_decks:
-        clone_deck_subtree(
+        _clone_deck_subtree_recursive(
             source_deck_id=child.id,
             parent_id=cloned_deck.id,
             deck_install_id=deck_install_id,
@@ -2284,6 +2634,110 @@ def clone_deck_subtree(
         )
 
     return cloned_deck
+
+
+def _clone_deck_subtree_batched(
+    *,
+    source_deck_id: int,
+    parent_id: int | None,
+    deck_install_id: str | None = None,
+    owner_user_id: int | None = None,
+    note_type_id_map: dict[str, str] | None = None,
+) -> Deck:
+    """Clone only deck shells/maps with query count proportional to tree depth."""
+    root = db.session.get(Deck, int(source_deck_id))
+    if root is None:
+        raise ValueError(f"Deck not found: {source_deck_id}")
+
+    source_by_id: dict[int, Deck] = {int(root.id): root}
+    levels: list[list[Deck]] = [[root]]
+    frontier = {int(root.id)}
+    while frontier:
+        children = (
+            Deck.query.filter(Deck.parent_id.in_(frontier))
+            .order_by(Deck.parent_id.asc(), Deck.position.asc(), Deck.id.asc())
+            .all()
+        )
+        if not children:
+            break
+        next_frontier: set[int] = set()
+        for child in children:
+            child_id = int(child.id)
+            if child_id in source_by_id:
+                raise ValueError(f"Deck tree cycle or duplicate detected at deck {child_id}")
+            if child.parent_id not in frontier:
+                raise ValueError(f"Deck tree parent missing for deck {child_id}")
+            if (
+                root.owner_user_id is not None
+                and child.owner_user_id is not None
+                and int(child.owner_user_id) != int(root.owner_user_id)
+            ):
+                raise ValueError(f"Deck tree crosses owner boundary at deck {child_id}")
+            source_by_id[child_id] = child
+            next_frontier.add(child_id)
+        levels.append(children)
+        frontier = next_frontier
+
+    if parent_id is None:
+        max_position = (
+            db.session.query(db.func.max(Deck.position))
+            .filter(
+                Deck.parent_id.is_(None),
+                Deck.owner_user_id == owner_user_id,
+            )
+            .scalar()
+        )
+        root_position = int(max_position or 0) + 1
+    else:
+        root_position = _next_deck_position(parent_id)
+
+    local_by_source: dict[int, Deck] = {}
+    for depth, source_level in enumerate(levels):
+        sibling_offsets: dict[int, int] = {}
+        for source in source_level:
+            source_id = int(source.id)
+            if depth == 0:
+                local_parent_id = parent_id
+                position = root_position
+            else:
+                source_parent_id = int(source.parent_id)
+                local_parent = local_by_source.get(source_parent_id)
+                if local_parent is None:
+                    raise ValueError(f"Deck tree parent missing for deck {source_id}")
+                local_parent_id = int(local_parent.id)
+                position = sibling_offsets.get(source_parent_id, 0)
+                sibling_offsets[source_parent_id] = position + 1
+
+            source_note_type_id = str(source.note_type_id or "").strip()
+            mapped_note_type_id = (
+                note_type_id_map.get(source_note_type_id)
+                if note_type_id_map and source_note_type_id
+                else None
+            )
+            clone = Deck(
+                parent_id=local_parent_id,
+                owner_user_id=owner_user_id,
+                note_type_id=mapped_note_type_id or source.note_type_id,
+                name=source.name,
+                description=source.description,
+                position=position,
+            )
+            db.session.add(clone)
+            local_by_source[source_id] = clone
+        db.session.flush()
+
+    if deck_install_id:
+        for source_id, clone in local_by_source.items():
+            db.session.add(
+                DeckCloneDeckMap(
+                    deck_install_id=deck_install_id,
+                    local_deck_id=int(clone.id),
+                    source_deck_id=source_id,
+                )
+            )
+        db.session.flush()
+
+    return local_by_source[int(root.id)]
 
 def _install_snapshot_at(install: DeckInstall) -> datetime | None:
     return install.base_snapshot_at or install.installed_at
@@ -3198,6 +3652,7 @@ def install_shared_deck_item_for_user(
     user_id: int,
     publish_statuses_visible: set[str] | None = None,
 ) -> dict[str, Any]:
+    readiness_started = time.perf_counter()
     visible_statuses = publish_statuses_visible or DEFAULT_VISIBLE_PUBLISH_STATUSES
 
     status = str(deck_item.publish_status or "").strip().lower()
@@ -3216,6 +3671,7 @@ def install_shared_deck_item_for_user(
     if existing:
         return {
             "created": False,
+            "performance": {"readiness_ms": _elapsed_ms(readiness_started)},
             "response": {
                 "deck_item_id": deck_item.id,
                 "installed_deck_id": existing.local_deck_id,
@@ -3223,11 +3679,19 @@ def install_shared_deck_item_for_user(
             },
         }
 
-    initial_release_error = _stage_initial_release_if_visible(deck_item)
-    if initial_release_error:
+    if deck_item.current_release_id is None:
         raise ShareControllerError(
-            f"Unable to create the initial deck release: {initial_release_error}",
+            "Deck listing is preparing its initial release and cannot be installed yet.",
+            status=503,
+            error="DECK_RELEASE_NOT_READY",
+        )
+
+    source_note_type_id = str(deck_item.source_note_type_id or "").strip()
+    if not source_note_type_id:
+        raise ShareControllerError(
+            "source_note_type_id is required for install.",
             status=409,
+            field="source_note_type_id",
         )
 
     now = _utcnow()
@@ -3247,34 +3711,35 @@ def install_shared_deck_item_for_user(
         )
 
     note_type_id_map: dict[str, str] = {}
-    source_note_type_id = (deck_item.source_note_type_id or "").strip()
-    if source_note_type_id:
-        source_note_type = db.session.get(NoteType, source_note_type_id)
-        if source_note_type is None:
-            raise ShareControllerError(
-                "source_note_type_id not found.",
-                status=409,
-                field="source_note_type_id",
-            )
-        provenance_error = validate_deck_source_note_type_provenance(
-            deck_item=deck_item,
-            source_note_type=source_note_type,
+    source_note_type = db.session.get(NoteType, source_note_type_id)
+    if source_note_type is None:
+        raise ShareControllerError(
+            "source_note_type_id not found.",
+            status=409,
+            field="source_note_type_id",
         )
-        if provenance_error:
-            raise ShareControllerError(
-                provenance_error,
-                status=404 if provenance_error == "source_note_type_id not found." else 409,
-                field="source_note_type_id",
-                error="FIELD_NOT_FOUND" if provenance_error == "source_note_type_id not found." else "CONFLICT",
-            )
-        note_type_install = ensure_note_type_install_for_user(
-            source_note_type=source_note_type,
-            user_id=user_id,
-            installed_at=now,
+    provenance_error = validate_deck_source_note_type_provenance(
+        deck_item=deck_item,
+        source_note_type=source_note_type,
+    )
+    if provenance_error:
+        raise ShareControllerError(
+            provenance_error,
+            status=404 if provenance_error == "source_note_type_id not found." else 409,
+            field="source_note_type_id",
+            error="FIELD_NOT_FOUND" if provenance_error == "source_note_type_id not found." else "CONFLICT",
         )
-        installed_note_type_id = (note_type_install.installed_note_type_id or "").strip()
-        if installed_note_type_id:
-            note_type_id_map[source_note_type_id] = installed_note_type_id
+    readiness_ms = _elapsed_ms(readiness_started)
+    note_type_started = time.perf_counter()
+    note_type_install = ensure_note_type_install_for_user(
+        source_note_type=source_note_type,
+        user_id=user_id,
+        installed_at=now,
+    )
+    installed_note_type_id = (note_type_install.installed_note_type_id or "").strip()
+    if installed_note_type_id:
+        note_type_id_map[source_note_type_id] = installed_note_type_id
+    note_type_ms = _elapsed_ms(note_type_started)
 
     purchase_amount_minor = int(deck_item.price_amount_minor or 0) if deck_item.pricing_mode == "paid" else 0
     install = DeckInstall(
@@ -3292,11 +3757,15 @@ def install_shared_deck_item_for_user(
         purchase_amount_minor=purchase_amount_minor,
         installed_at=now,
         purchased_at=now if deck_item.pricing_mode == "paid" else None,
+        market_active=False,
+        market_active_evaluated_at=now,
+        market_active_policy_version=MARKET_ACTIVITY_POLICY_VERSION,
     )
     db.session.add(install)
     db.session.flush()
 
     local_deck_id = None
+    tree_clone_started = time.perf_counter()
     cloned_root = clone_deck_subtree(
         source_deck_id=source_deck.id,
         parent_id=None,
@@ -3309,9 +3778,21 @@ def install_shared_deck_item_for_user(
     local_deck_id = cloned_root.id
     install.local_deck_id = local_deck_id
 
-    recompute_deck_item_market_stats(deck_item)
+    counter_started = time.perf_counter()
+    _increment_counter(
+        DeckMarketplaceItem,
+        deck_item.id,
+        DeckMarketplaceItem.install_count,
+        1,
+    )
     return {
         "created": True,
+        "performance": {
+            "readiness_ms": readiness_ms,
+            "note_type_ms": note_type_ms,
+            "tree_clone_ms": _elapsed_ms(tree_clone_started),
+            "counter_ms": _elapsed_ms(counter_started),
+        },
         "response": {
             "deck_item_id": deck_item.id,
             "installed_deck_id": local_deck_id,

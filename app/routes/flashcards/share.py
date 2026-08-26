@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-import logging
 from datetime import datetime, timezone
 
 UTC = timezone.utc
 from flask import jsonify, request, url_for
 from flask_login import current_user, login_required
 from app.spa import serve_react_spa
-from sqlalchemy.exc import OperationalError
 from models import db
 from models.flashcard import *
 from app.services import flashcards_share
@@ -21,7 +19,6 @@ from . import *
 
 # Backward-compatible alias used by tests and legacy patch targets.
 share_ctrl = flashcards_share
-logger = logging.getLogger(__name__)
 
 MAX_MARKET_REVIEW_SUBMISSIONS_PER_USER = 2
 
@@ -382,9 +379,10 @@ def list_shared_decks():
     sorted_items = _sort_deck_items(filtered, sort_key)
     installs = DeckInstall.query.filter_by(user_id=current_user.id).all()
     install_map = {row.deck_item_id: row for row in installs}
+    stats_map = marketplace_query_service.batch_compute_deck_items_stats(sorted_items)
     payload_items = []
     for item in sorted_items:
-        row = _serialize_deck_marketplace_item(item)
+        row = _serialize_deck_marketplace_item(item, stats=stats_map.get(item.id))
         install = install_map.get(item.id)
         row["is_installed"] = install is not None
         row["installed_deck_id"] = install.local_deck_id if install else None
@@ -442,13 +440,6 @@ def get_shared_deck_item(deck_item_id: str):
     if not deck_item:
         return _api_error("FIELD_NOT_FOUND", "Deck item not found.", status=404)
 
-    _, changed = flashcards_share.sync_deck_item_source_note_type(
-        deck_item,
-        require_source_note_type=False,
-    )
-    if changed:
-        db.session.commit()
-
     payload = flashcards_share.build_shared_deck_item_payload(
         deck_item,
         user_id=current_user.id,
@@ -474,6 +465,7 @@ def get_shared_deck_item(deck_item_id: str):
             user_id=current_user.id,
         )
     )
+    payload["lessons"] = marketplace_query_service.build_shared_deck_lessons_structure(deck_item)
 
     return jsonify(payload)
 
@@ -483,15 +475,6 @@ def preview_shared_deck_template(deck_item_id: str, template_id: str):
     deck_item = _get_shared_deck_item_for_view(deck_item_id)
     if not deck_item:
         return _api_error("FIELD_NOT_FOUND", "Deck item not found.", status=404)
-
-    bind_error, changed = flashcards_share.sync_deck_item_source_note_type(
-        deck_item,
-        require_source_note_type=True,
-    )
-    if bind_error:
-        return _api_error("VALIDATION_ERROR", bind_error, status=409)
-    if changed:
-        db.session.commit()
 
     source_note_type_id = (deck_item.source_note_type_id or "").strip()
     if not source_note_type_id:
@@ -573,33 +556,13 @@ def install_shared_deck_item(deck_item_id: str):
 
     if deck_item.pricing_mode == "paid":
         for attempt in range(1, SHARED_DECK_INSTALL_MAX_RETRIES + 1):
-            bind_error, changed = flashcards_share.sync_deck_item_source_note_type(
-                deck_item,
-                require_source_note_type=True,
-            )
-            if bind_error:
-                return _api_error("VALIDATION_ERROR", bind_error, status=409)
-
-            if changed:
-                try:
-                    db.session.commit()
-                except OperationalError as exc:
-                    db.session.rollback()
-                    if _is_mysql_deadlock(exc) and attempt < SHARED_DECK_INSTALL_MAX_RETRIES:
-                        logger.warning(
-                            "Deadlock while syncing source note type for shared deck install "
-                            "(deck_item_id=%s, user_id=%s, attempt=%s/%s)",
-                            deck_item_id,
-                            current_user.id,
-                            attempt,
-                            SHARED_DECK_INSTALL_MAX_RETRIES,
-                        )
-                        time.sleep(0.05 * attempt)
-                        deck_item = db.session.get(DeckMarketplaceItem, deck_item_id)
-                        if deck_item is None:
-                            return _api_error("FIELD_NOT_FOUND", "Deck item not found.", status=404)
-                        continue
-                    raise
+            if not str(deck_item.source_note_type_id or "").strip():
+                return _api_error(
+                    "VALIDATION_ERROR",
+                    "source_note_type_id is required for install.",
+                    status=409,
+                    field="source_note_type_id",
+                )
 
             from app.services import payment_service
 
@@ -642,9 +605,14 @@ def install_shared_deck_item(deck_item_id: str):
         publish_statuses_visible=PUBLISH_STATUSES_VISIBLE,
     )
     if error_message:
-        error_code = "DEADLOCK_RETRY_EXCEEDED" if error_message == flashcards_share.SHARED_DECK_INSTALL_DEADLOCK_MESSAGE else (
-            "FIELD_NOT_FOUND" if status_code == 404 else "VALIDATION_ERROR"
-        )
+        if status_code == 503:
+            error_code = "DECK_RELEASE_NOT_READY"
+        elif error_message == flashcards_share.SHARED_DECK_INSTALL_DEADLOCK_MESSAGE:
+            error_code = "DEADLOCK_RETRY_EXCEEDED"
+        elif status_code == 404:
+            error_code = "FIELD_NOT_FOUND"
+        else:
+            error_code = "VALIDATION_ERROR"
         return _api_error(
             error_code,
             error_message,

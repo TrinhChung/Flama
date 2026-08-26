@@ -45,6 +45,10 @@ jobs:
           CORS_ALLOWED_ORIGINS: ${{ vars.CORS_ALLOWED_ORIGINS }}
           FLASK_APP: ${{ vars.FLASK_APP }}
           DB_PORT: ${{ vars.DB_PORT }}
+          DB_POOL_SIZE: ${{ vars.DB_POOL_SIZE || '4' }}
+          DB_MAX_OVERFLOW: ${{ vars.DB_MAX_OVERFLOW || '1' }}
+          DB_POOL_TIMEOUT_SECONDS: ${{ vars.DB_POOL_TIMEOUT_SECONDS || '5' }}
+          DB_POOL_RECYCLE_SECONDS: ${{ vars.DB_POOL_RECYCLE_SECONDS || '1800' }}
           FLASHCARDS_SHARE_CUTOVER_FAIL_ON_MISMATCH: ${{ vars.FLASHCARDS_SHARE_CUTOVER_FAIL_ON_MISMATCH }}
           FLASHCARD_MEDIA_MAX_BYTES: ${{ vars.FLASHCARD_MEDIA_MAX_BYTES }}
           FLASHCARD_MEDIA_SCAN_ENABLED: ${{ vars.FLASHCARD_MEDIA_SCAN_ENABLED }}
@@ -53,6 +57,12 @@ jobs:
           PAYMENTS_PAID_INSTALL_REQUIRED: ${{ vars.PAYMENTS_PAID_INSTALL_REQUIRED }}
           PAYMENTS_PROVIDER: ${{ vars.PAYMENTS_PROVIDER }}
           PAYMENTS_WEBHOOK_AUTO_GRANT_ENABLED: ${{ vars.PAYMENTS_WEBHOOK_AUTO_GRANT_ENABLED || '1' }}
+          REDIS_URL: ${{ vars.REDIS_URL || 'redis://127.0.0.1:6379/0' }}
+          RATE_LIMIT_BACKEND: ${{ vars.RATE_LIMIT_BACKEND || 'redis' }}
+          MCP_PREVIEW_BACKEND: ${{ vars.MCP_PREVIEW_BACKEND || 'redis' }}
+          SHARED_DECK_TREE_CLONE_MODE: ${{ vars.SHARED_DECK_TREE_CLONE_MODE || 'batched' }}
+          DECK_SOURCE_NOTETYPE_GUARD_MODE: ${{ vars.DECK_SOURCE_NOTETYPE_GUARD_MODE || 'shadow' }}
+          MARKETPLACE_SAMPLE_MODE: ${{ vars.MARKETPLACE_SAMPLE_MODE || 'shadow_cache' }}
         run: |
           set -Eeuo pipefail
           managed_env_payload="$RUNNER_TEMP/flama-managed-${RELEASE_ID}.json"

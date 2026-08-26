@@ -79,6 +79,9 @@ class DeckInstall(db.Model):
     purchased_at = db.Column(db.DateTime, nullable=True)
     first_use_at = db.Column(db.DateTime, nullable=True)
     last_activity_at = db.Column(db.DateTime, nullable=True)
+    market_active = db.Column(db.Boolean, nullable=True)
+    market_active_evaluated_at = db.Column(db.DateTime, nullable=True)
+    market_active_policy_version = db.Column(db.SmallInteger, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
@@ -134,4 +137,5 @@ class DeckInstall(db.Model):
 
     __table_args__ = (
         UniqueConstraint("deck_item_id", "user_id", name="uq_deck_installs_item_user"),
+        db.Index("ix_deck_installs_item_market_active", "deck_item_id", "market_active"),
     )

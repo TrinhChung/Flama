@@ -58,6 +58,19 @@ class DeckMarketplaceItem(db.Model):
         nullable=True,
         index=True,
     )
+    preview_samples_release_id = db.Column(
+        db.String(36),
+        db.ForeignKey(
+            "deck_releases.id",
+            name="fk_deck_marketplace_items_preview_samples_release",
+            ondelete="SET NULL",
+            use_alter=True,
+        ),
+        nullable=True,
+        index=True,
+    )
+    preview_samples_schema_version = db.Column(db.SmallInteger, nullable=True)
+    preview_samples_json = db.Column(db.JSON, nullable=True)
     working_revision = db.Column(db.BigInteger, nullable=False, default=0)
     # Highest working revision for which every source mutation was recorded in
     # deck_working_dirty_entities.  A mismatch makes release preview/publish
@@ -86,6 +99,11 @@ class DeckMarketplaceItem(db.Model):
     current_release = db.relationship(
         "DeckRelease",
         foreign_keys=[current_release_id],
+        post_update=True,
+    )
+    preview_samples_release = db.relationship(
+        "DeckRelease",
+        foreign_keys=[preview_samples_release_id],
         post_update=True,
     )
     releases = db.relationship(

@@ -1861,6 +1861,15 @@ def publish_release(
     release.published_at = published_at
     item.current_release = release
     item.current_release_id = release.id
+    from app.services import marketplace_query_service
+
+    item.preview_samples_release_id = release.id
+    item.preview_samples_schema_version = 1
+    item.preview_samples_json = marketplace_query_service.build_release_sample_cache_from_release(
+        item,
+        release,
+        limit=5,
+    )
     item.version = normalized_version
     item.changelog = normalized_changelog
     item.published_at = published_at
