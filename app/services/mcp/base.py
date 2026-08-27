@@ -82,6 +82,7 @@ PREVIEW_DECK_RELEASE_TOOL_NAME = "preview_deck_release"
 PUBLISH_DECK_RELEASE_TOOL_NAME = "publish_deck_release"
 LIST_DECK_RELEASES_TOOL_NAME = "list_deck_releases"
 LIST_INSTALLED_DECKS_TOOL_NAME = "list_installed_decks"
+GET_TAXONOMY_SCHEMA_TOOL_NAME = "get_taxonomy_schema"
 
 
 def _resolve_deck_for_user(*, user_id: int, deck_id: int | None = None, deck_name: str | None = None) -> Deck:

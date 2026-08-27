@@ -227,6 +227,18 @@ def get_deck_publish_options(*, user_id: int, deck_id: int | None = None) -> dic
     return options
 
 
+def get_taxonomy_schema(
+    *,
+    user_id: int,
+    content_type: str = "deck_marketplace_item",
+) -> dict[str, Any]:
+    """Retrieve full hierarchical taxonomy schema (domains, subjects, frameworks, levels, topics, goals)."""
+    from app.services import marketplace_taxonomy_service
+
+    del user_id
+    return marketplace_taxonomy_service.build_taxonomy_schema(content_type=content_type)
+
+
 def share_deck(
     *,
     user_id: int,
@@ -239,6 +251,9 @@ def share_deck(
     pricing_mode: str = "free",
     price_amount_minor: int | None = None,
     is_unlisted: bool = False,
+    preview_text: str | None = None,
+    sample_cards_count: int | None = None,
+    taxonomy_metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Publish/share a personal deck to the marketplace."""
     resolved_deck_id = deck_id
@@ -272,6 +287,12 @@ def share_deck(
         "price_amount_minor": price_amount_minor or 0,
         "is_unlisted": is_unlisted,
     }
+    if preview_text is not None:
+        payload["preview_text"] = preview_text
+    if sample_cards_count is not None:
+        payload["sample_cards_count"] = sample_cards_count
+    if taxonomy_metadata is not None:
+        payload.update(taxonomy_metadata)
 
     user = db.session.get(User, user_id)
     is_admin = bool(user and user.is_admin)
@@ -303,6 +324,9 @@ def update_shared_deck(
     pricing_mode: str | None = None,
     price_amount_minor: int | None = None,
     publish_status: str | None = None,
+    preview_text: str | None = None,
+    sample_cards_count: int | None = None,
+    taxonomy_metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Update metadata, description, tags, and status of an already shared deck."""
     from models.deck_marketplace_item import DeckMarketplaceItem
@@ -343,6 +367,12 @@ def update_shared_deck(
         payload["price_amount_minor"] = price_amount_minor
     if publish_status is not None:
         payload["publish_status"] = publish_status
+    if preview_text is not None:
+        payload["preview_text"] = preview_text
+    if sample_cards_count is not None:
+        payload["sample_cards_count"] = sample_cards_count
+    if taxonomy_metadata is not None:
+        payload.update(taxonomy_metadata)
 
     _, val_err, err_field = flashcards_share_service.update_shared_deck_item(
         deck_item=deck_item,
@@ -356,6 +386,7 @@ def update_shared_deck(
 
     db.session.commit()
     return marketplace_query_service.serialize_deck_marketplace_item(deck_item)
+
 
 
 def preview_deck_release(

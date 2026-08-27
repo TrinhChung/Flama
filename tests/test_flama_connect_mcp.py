@@ -280,7 +280,8 @@ class FlamaConnectMcpTests(unittest.TestCase):
             "get_image",
             "crawl_note_media",
             "extract_page_images",
-            # Shared Decks & Releases
+            # Shared Decks & Releases & Taxonomy
+            "get_taxonomy_schema",
             "list_shared_decks",
             "get_shared_deck",
             "list_shared_deck_notes",
@@ -293,7 +294,8 @@ class FlamaConnectMcpTests(unittest.TestCase):
             "list_installed_decks",
         }
         self.assertEqual(tool_names, expected_tools)
-        self.assertEqual(len(tools), 50)
+        self.assertEqual(len(tools), 51)
+
 
     # -----------------------------------------------------------------------
     # Deck Tests

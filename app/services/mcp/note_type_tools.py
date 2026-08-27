@@ -28,6 +28,8 @@ from models.field_def import FieldDef
 from models.note import Note
 from models.note_type import NoteType
 from models.template import Template
+from models.user import User
+
 
 # ---------------------------------------------------------------------------
 
@@ -127,6 +129,14 @@ def get_note_type_schema(*, user_id: int, note_type_id: str | None = None, name:
         "id": str(nt.id),
         "name": nt.name,
         "description": nt.description,
+        "primary_category": nt.primary_category,
+        "tags": list(nt.tags or []),
+        "taxonomy_metadata": dict(nt.taxonomy_metadata or {}),
+        "preview_text": nt.preview_text,
+        "preview_image_url": nt.preview_image_url,
+        "pricing_mode": str(nt.pricing_mode or "free"),
+        "price_amount_minor": int(nt.price_amount_minor or 0),
+        "publish_status": str(nt.publish_status or "private"),
         "is_official": bool(nt.is_official),
         "is_owner": is_owner,
         "field_names": [f.name for f in sorted_field_defs],
@@ -141,6 +151,7 @@ def get_note_type_schema(*, user_id: int, note_type_id: str | None = None, name:
     }
 
 
+
 # (_owned_note_type_for_mutation imported from base)
 
 def create_note_type(
@@ -148,10 +159,15 @@ def create_note_type(
     user_id: int,
     name: str,
     description: str | None = None,
+    primary_category: str | None = None,
+    tags: list[str] | None = None,
+    taxonomy_metadata: dict[str, Any] | None = None,
+    preview_text: str | None = None,
+    preview_image_url: str | None = None,
     fields: list[dict[str, Any]] | None = None,
     templates: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """Create a new note type (model) with custom fields and templates."""
+    """Create a new note type (model) with custom fields, templates, metadata, and taxonomy."""
     cleaned_name = str(name or "").strip()
     if not cleaned_name:
         raise RequestValidationError("Tên NoteType là bắt buộc.", field="name", status=400, code="INVALID_PARAMS")
@@ -170,6 +186,28 @@ def create_note_type(
         name=cleaned_name,
         description=str(description).strip() if description is not None else None,
     )
+    if primary_category is not None:
+        note_type.primary_category = primary_category
+    if tags is not None:
+        note_type.tags = tags
+    if preview_text is not None:
+        note_type.preview_text = preview_text
+    if preview_image_url is not None:
+        note_type.preview_image_url = preview_image_url
+    if taxonomy_metadata is not None:
+        from app.services import marketplace_taxonomy_service
+        normalized_tax, tax_err = marketplace_taxonomy_service.normalize_taxonomy_payload(
+            taxonomy_metadata,
+            content_type="note_type",
+        )
+        if tax_err:
+            raise RequestValidationError(tax_err, field="taxonomy_metadata", status=400, code="TAXONOMY_VALIDATION_ERROR")
+        note_type.taxonomy_metadata = normalized_tax
+        if not primary_category:
+            suggested = marketplace_taxonomy_service.suggest_primary_category(normalized_tax)
+            if suggested:
+                note_type.primary_category = suggested
+
     db.session.add(note_type)
     db.session.flush()
 
@@ -537,6 +575,14 @@ def update_note_type(
     note_type_id: str,
     name: str | None = None,
     description: str | None = None,
+    primary_category: str | None = None,
+    tags: list[str] | None = None,
+    taxonomy_metadata: dict[str, Any] | None = None,
+    preview_text: str | None = None,
+    preview_image_url: str | None = None,
+    pricing_mode: str | None = None,
+    price_amount_minor: int | None = None,
+    publish_status: str | None = None,
     fields: list[dict[str, Any]] | dict[str, Any] | None = None,
     templates: list[dict[str, Any]] | dict[str, Any] | None = None,
     preview_id: str | None = None,
@@ -648,6 +694,39 @@ def update_note_type(
 
     if description is not None:
         nt.description = str(description).strip() or None
+
+    # Update Metadata, Taxonomy, Pricing, Publish Status
+    meta_payload: dict[str, Any] = {}
+    if primary_category is not None:
+        meta_payload["primary_category"] = primary_category
+    if tags is not None:
+        meta_payload["tags"] = tags
+    if preview_text is not None:
+        meta_payload["preview_text"] = preview_text
+    if preview_image_url is not None:
+        meta_payload["preview_image_url"] = preview_image_url
+    if pricing_mode is not None:
+        meta_payload["pricing_mode"] = pricing_mode
+    if price_amount_minor is not None:
+        meta_payload["price_amount_minor"] = price_amount_minor
+    if publish_status is not None:
+        meta_payload["publish_status"] = publish_status
+    if taxonomy_metadata is not None:
+        meta_payload.update(taxonomy_metadata)
+
+    if meta_payload:
+        from app.services import flashcards_share_service
+        user = db.session.get(User, user_id)
+        is_admin = bool(user and user.is_admin)
+        tax_err = flashcards_share_service.apply_note_type_marketplace_payload(
+            nt,
+            meta_payload,
+            allow_set_official=is_admin,
+            publish_statuses_visible=None,
+        )
+        if tax_err:
+            raise RequestValidationError(tax_err, field="taxonomy_metadata", status=400, code="METADATA_UPDATE_ERROR")
+
 
     # 2. Update Fields
     if fields is not None:

@@ -52,6 +52,7 @@ from app.services.mcp.base import (
     PUBLISH_DECK_RELEASE_TOOL_NAME,
     LIST_DECK_RELEASES_TOOL_NAME,
     LIST_INSTALLED_DECKS_TOOL_NAME,
+    GET_TAXONOMY_SCHEMA_TOOL_NAME,
     _compact_description,
     _wrap_tool_result,
     _wrap_tool_error,
@@ -115,6 +116,7 @@ from app.services.mcp.image_tools import (
     get_image,
 )
 from app.services.mcp.marketplace_tools import (
+    get_taxonomy_schema,
     list_shared_decks,
     get_shared_deck,
     list_shared_deck_notes,
@@ -126,3 +128,4 @@ from app.services.mcp.marketplace_tools import (
     list_deck_releases,
     list_installed_decks,
 )
+

@@ -129,6 +129,32 @@ def validate_get_note_type_schema_arguments(arguments: Any) -> dict[str, Any]:
 VALID_FIELD_TYPES = frozenset({"text", "richtext", "markdown", "image", "audio", "diagram"})
 
 
+def _extract_taxonomy_from_dict(arguments: dict[str, Any]) -> dict[str, Any]:
+    tax_payload: dict[str, Any] = {}
+    if isinstance(arguments.get("taxonomy_metadata"), dict):
+        tax_payload.update(arguments["taxonomy_metadata"])
+
+    taxonomy_field_names = (
+        "taxonomy_domain", "domain",
+        "taxonomy_subject", "subject",
+        "taxonomy_difficulty_band", "difficulty_band", "level_band",
+        "taxonomy_framework", "framework",
+        "taxonomy_framework_level", "framework_level",
+        "taxonomy_framework_track", "framework_track",
+        "taxonomy_learning_goals", "learning_goals",
+        "taxonomy_primary_topics", "primary_topics",
+        "taxonomy_format_features", "format_features",
+        "taxonomy_audience", "audience",
+        "taxonomy_best_used_for", "best_used_for",
+        "subcategory", "target_audience",
+    )
+    for key in taxonomy_field_names:
+        if key in arguments and arguments[key] is not None:
+            tax_payload[key] = arguments[key]
+
+    return tax_payload
+
+
 def validate_create_note_type_arguments(arguments: Any) -> dict[str, Any]:
     if not isinstance(arguments, dict):
         raise RequestValidationError("arguments phải là JSON object.", field="arguments", status=400, code="INVALID_PARAMS")
@@ -140,6 +166,26 @@ def validate_create_note_type_arguments(arguments: Any) -> dict[str, Any]:
         raise RequestValidationError("name không được vượt quá 255 ký tự.", field="name", status=400, code="INVALID_PARAMS")
 
     description = str(arguments.get("description")).strip() if arguments.get("description") is not None else None
+    primary_category = str(arguments.get("primary_category") or arguments.get("category") or "").strip() or None
+
+    raw_tags = arguments.get("tags")
+    tags: list[str] = []
+    if raw_tags is not None:
+        if isinstance(raw_tags, str):
+            tags = [t.strip() for t in raw_tags.split(",") if t.strip()]
+        elif isinstance(raw_tags, list):
+            tags = [str(t).strip() for t in raw_tags if str(t).strip()]
+        else:
+            raise RequestValidationError("tags phải là danh sách chuỗi.", field="tags", status=400, code="INVALID_PARAMS")
+
+    preview_text = str(arguments.get("preview_text")).strip() if arguments.get("preview_text") is not None else None
+    preview_image_url = str(arguments.get("preview_image_url")).strip() if arguments.get("preview_image_url") is not None else None
+
+    raw_tax = arguments.get("taxonomy_metadata")
+    if raw_tax is not None and not isinstance(raw_tax, dict):
+        raise RequestValidationError("taxonomy_metadata phải là JSON object.", field="taxonomy_metadata", status=400, code="INVALID_PARAMS")
+
+    taxonomy_payload = _extract_taxonomy_from_dict(arguments)
 
     raw_fields = arguments.get("fields")
     fields: list[dict[str, Any]] = []
@@ -216,6 +262,11 @@ def validate_create_note_type_arguments(arguments: Any) -> dict[str, Any]:
     return {
         "name": name,
         "description": description,
+        "primary_category": primary_category,
+        "tags": tags,
+        "preview_text": preview_text,
+        "preview_image_url": preview_image_url,
+        "taxonomy_metadata": taxonomy_payload if taxonomy_payload else (raw_tax if raw_tax is not None else None),
         "fields": fields if fields else None,
         "templates": templates if templates else None,
     }
@@ -251,6 +302,44 @@ def validate_update_note_type_arguments(arguments: Any) -> dict[str, Any]:
 
     name = str(arguments["name"]).strip() if arguments.get("name") is not None else None
     description = str(arguments["description"]).strip() if arguments.get("description") is not None else None
+    primary_category = str(arguments.get("primary_category") or arguments.get("category")).strip() if (arguments.get("primary_category") or arguments.get("category")) is not None else None
+
+    raw_tags = arguments.get("tags")
+    tags: list[str] | None = None
+    if raw_tags is not None:
+        if isinstance(raw_tags, str):
+            tags = [t.strip() for t in raw_tags.split(",") if t.strip()]
+        elif isinstance(raw_tags, list):
+            tags = [str(t).strip() for t in raw_tags if str(t).strip()]
+        else:
+            raise RequestValidationError("tags phải là danh sách chuỗi.", field="tags", status=400, code="INVALID_PARAMS")
+
+    preview_text = str(arguments["preview_text"]).strip() if arguments.get("preview_text") is not None else None
+    preview_image_url = str(arguments["preview_image_url"]).strip() if arguments.get("preview_image_url") is not None else None
+
+    pricing_mode = str(arguments["pricing_mode"]).strip().lower() if arguments.get("pricing_mode") is not None else None
+    if pricing_mode is not None and pricing_mode not in ("free", "paid"):
+        raise RequestValidationError("pricing_mode phải là 'free' hoặc 'paid'.", field="pricing_mode", status=400, code="INVALID_PARAMS")
+
+    price_amount_minor = None
+    if arguments.get("price_amount_minor") is not None:
+        try:
+            price_amount_minor = int(arguments.get("price_amount_minor"))
+            if price_amount_minor < 0:
+                raise ValueError()
+        except (ValueError, TypeError):
+            raise RequestValidationError("price_amount_minor phải là số nguyên không âm.", field="price_amount_minor", status=400, code="INVALID_PARAMS")
+
+    publish_status = str(arguments["publish_status"]).strip().lower() if arguments.get("publish_status") is not None else None
+    if publish_status is not None and publish_status not in ("published", "unlisted", "archived", "private"):
+        raise RequestValidationError("publish_status không hợp lệ.", field="publish_status", status=400, code="INVALID_PARAMS")
+
+    raw_tax = arguments.get("taxonomy_metadata")
+    if raw_tax is not None and not isinstance(raw_tax, dict):
+        raise RequestValidationError("taxonomy_metadata phải là JSON object.", field="taxonomy_metadata", status=400, code="INVALID_PARAMS")
+
+    taxonomy_payload = _extract_taxonomy_from_dict(arguments)
+
     preview_id = str(arguments["preview_id"]).strip() if arguments.get("preview_id") else None
     confirm = bool(arguments.get("confirm", False))
 
@@ -258,11 +347,20 @@ def validate_update_note_type_arguments(arguments: Any) -> dict[str, Any]:
         "note_type_id": str(note_type_id).strip(),
         "name": name,
         "description": description,
+        "primary_category": primary_category,
+        "tags": tags,
+        "preview_text": preview_text,
+        "preview_image_url": preview_image_url,
+        "pricing_mode": pricing_mode,
+        "price_amount_minor": price_amount_minor,
+        "publish_status": publish_status,
+        "taxonomy_metadata": taxonomy_payload if taxonomy_payload else (raw_tax if raw_tax is not None else None),
         "fields": arguments.get("fields"),
         "templates": arguments.get("templates"),
         "preview_id": preview_id,
         "confirm": confirm,
     }
+
 
 
 def validate_delete_note_type_arguments(arguments: Any) -> dict[str, Any]:
@@ -1257,7 +1355,7 @@ def validate_share_deck_arguments(arguments: Any) -> dict[str, Any]:
     title = str(arguments.get("title") or "").strip() or None
     description = str(arguments.get("description")).strip() if arguments.get("description") is not None else None
     primary_category = str(arguments.get("primary_category") or arguments.get("category") or "").strip() or None
-    
+
     raw_tags = arguments.get("tags")
     tags: list[str] = []
     if raw_tags is not None:
@@ -1271,7 +1369,7 @@ def validate_share_deck_arguments(arguments: Any) -> dict[str, Any]:
     pricing_mode = str(arguments.get("pricing_mode") or "free").strip().lower()
     if pricing_mode not in ("free", "paid"):
         raise RequestValidationError("pricing_mode phải là 'free' hoặc 'paid'.", field="pricing_mode", status=400, code="INVALID_PARAMS")
-    
+
     price_amount_minor = None
     if arguments.get("price_amount_minor") is not None:
         try:
@@ -1282,6 +1380,20 @@ def validate_share_deck_arguments(arguments: Any) -> dict[str, Any]:
             raise RequestValidationError("price_amount_minor phải là số nguyên không âm.", field="price_amount_minor", status=400, code="INVALID_PARAMS")
 
     is_unlisted = bool(arguments.get("is_unlisted", False))
+    preview_text = str(arguments.get("preview_text")).strip() if arguments.get("preview_text") is not None else None
+
+    sample_cards_count = None
+    if arguments.get("sample_cards_count") is not None:
+        try:
+            sample_cards_count = max(0, int(arguments.get("sample_cards_count")))
+        except (ValueError, TypeError):
+            raise RequestValidationError("sample_cards_count phải là số nguyên không âm.", field="sample_cards_count", status=400, code="INVALID_PARAMS")
+
+    raw_tax = arguments.get("taxonomy_metadata")
+    if raw_tax is not None and not isinstance(raw_tax, dict):
+        raise RequestValidationError("taxonomy_metadata phải là JSON object.", field="taxonomy_metadata", status=400, code="INVALID_PARAMS")
+
+    taxonomy_payload = _extract_taxonomy_from_dict(arguments)
 
     return {
         "deck_id": deck_id,
@@ -1293,6 +1405,9 @@ def validate_share_deck_arguments(arguments: Any) -> dict[str, Any]:
         "pricing_mode": pricing_mode,
         "price_amount_minor": price_amount_minor,
         "is_unlisted": is_unlisted,
+        "preview_text": preview_text,
+        "sample_cards_count": sample_cards_count,
+        "taxonomy_metadata": taxonomy_payload if taxonomy_payload else (raw_tax if raw_tax is not None else None),
     }
 
 
@@ -1333,8 +1448,23 @@ def validate_update_shared_deck_arguments(arguments: Any) -> dict[str, Any]:
             raise RequestValidationError("price_amount_minor phải là số nguyên không âm.", field="price_amount_minor", status=400, code="INVALID_PARAMS")
 
     publish_status = str(arguments.get("publish_status")).strip().lower() if arguments.get("publish_status") is not None else None
-    if publish_status is not None and publish_status not in ("published", "unlisted", "archived", "draft"):
+    if publish_status is not None and publish_status not in ("published", "unlisted", "archived", "draft", "private"):
         raise RequestValidationError("publish_status không hợp lệ.", field="publish_status", status=400, code="INVALID_PARAMS")
+
+    preview_text = str(arguments.get("preview_text")).strip() if arguments.get("preview_text") is not None else None
+
+    sample_cards_count = None
+    if arguments.get("sample_cards_count") is not None:
+        try:
+            sample_cards_count = max(0, int(arguments.get("sample_cards_count")))
+        except (ValueError, TypeError):
+            raise RequestValidationError("sample_cards_count phải là số nguyên không âm.", field="sample_cards_count", status=400, code="INVALID_PARAMS")
+
+    raw_tax = arguments.get("taxonomy_metadata")
+    if raw_tax is not None and not isinstance(raw_tax, dict):
+        raise RequestValidationError("taxonomy_metadata phải là JSON object.", field="taxonomy_metadata", status=400, code="INVALID_PARAMS")
+
+    taxonomy_payload = _extract_taxonomy_from_dict(arguments)
 
     return {
         "deck_item_id": deck_item_id,
@@ -1345,7 +1475,28 @@ def validate_update_shared_deck_arguments(arguments: Any) -> dict[str, Any]:
         "pricing_mode": pricing_mode,
         "price_amount_minor": price_amount_minor,
         "publish_status": publish_status,
+        "preview_text": preview_text,
+        "sample_cards_count": sample_cards_count,
+        "taxonomy_metadata": taxonomy_payload if taxonomy_payload else (raw_tax if raw_tax is not None else None),
     }
+
+
+def validate_get_taxonomy_schema_arguments(arguments: Any) -> dict[str, Any]:
+    """Validate arguments for get_taxonomy_schema tool."""
+    if arguments is None:
+        arguments = {}
+    if not isinstance(arguments, dict):
+        raise RequestValidationError("arguments phải là JSON object.", field="arguments", status=400, code="INVALID_PARAMS")
+    content_type = str(arguments.get("content_type") or "deck_marketplace_item").strip().lower()
+    if content_type not in ("deck_marketplace_item", "note_type"):
+        raise RequestValidationError(
+            "content_type phải là 'deck_marketplace_item' hoặc 'note_type'.",
+            field="content_type",
+            status=400,
+            code="INVALID_PARAMS",
+        )
+    return {"content_type": content_type}
+
 
 
 def validate_preview_deck_release_arguments(arguments: Any) -> dict[str, Any]:
