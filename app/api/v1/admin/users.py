@@ -44,10 +44,21 @@ def list_users():
     status_filter = admin_service.normalize_status_filter(
         request.args.get("status")
     )
+    user_ids = admin_service.parse_user_ids(
+        request.args.get("ids") or request.args.get("user_ids")
+    )
+    raw_role_id = request.args.get("role_id")
+    role_id = (
+        admin_service.coerce_int(raw_role_id, default=0, minimum=1)
+        if raw_role_id
+        else None
+    )
     return jsonify(
         admin_user_api_service.list_users(
             search_term=search_term,
             status_filter=status_filter,
+            user_ids=user_ids or None,
+            role_id=role_id,
             page=admin_service.coerce_int(
                 request.args.get("page"),
                 default=1,
@@ -57,7 +68,7 @@ def list_users():
                 request.args.get("per_page"),
                 default=10,
                 minimum=1,
-                maximum=50,
+                maximum=100,
             ),
         )
     )
