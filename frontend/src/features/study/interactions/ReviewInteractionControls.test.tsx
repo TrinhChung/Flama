@@ -10,7 +10,7 @@ describe('ReviewInteractionControls', () => {
     document.body.replaceChildren()
   })
 
-  it('renders reveal button and count badges when card is not revealed', async () => {
+  it('renders reveal button when card is not revealed', async () => {
     const container = document.createElement('div')
     document.body.appendChild(container)
     const root = createRoot(container)
@@ -20,18 +20,12 @@ describe('ReviewInteractionControls', () => {
       root.render(
         <ReviewInteractionControls
           revealed={false}
-          newCount={5}
-          learnCount={2}
-          dueCount={10}
           onReveal={onReveal}
         />,
       )
     })
 
     expect(container.textContent).toContain('Hiện đáp án')
-    expect(container.textContent).toContain('Mới 5')
-    expect(container.textContent).toContain('Học 2')
-    expect(container.textContent).toContain('Hạn 10')
 
     const button = container.querySelector('button')
     expect(button).not.toBeNull()

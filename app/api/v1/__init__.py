@@ -14,20 +14,24 @@ from app.services import daily_rate_limit_service
 from .analytics import analytics_bp
 from .admin import admin_bp
 from .billing import billing_bp
+from .creator import creator_deck_keys_bp
 from .decks import decks_bp
 from .flashcards import flashcards_v1_bp
 from .health import health_bp
 from .identity import identity_bp
 from .learning import learning_bp
 from .marketplace import (
+    marketplace_deck_keys_bp,
     marketplace_deck_releases_bp,
     marketplace_installations_bp,
     marketplace_note_types_bp,
     marketplace_taxonomy_bp,
 )
 from .download import download_bp
+from .profile import profile_bp
 from .settings import settings_bp
 from .tickets import tickets_bp
+
 
 api_v1_bp = Blueprint("api_v1", __name__, url_prefix="/api")
 
@@ -109,11 +113,15 @@ api_v1_bp.register_blueprint(
     marketplace_installations_bp,
     url_prefix="/marketplace",
 )
+api_v1_bp.register_blueprint(marketplace_deck_keys_bp)
 api_v1_bp.register_blueprint(marketplace_deck_releases_bp)
 api_v1_bp.register_blueprint(marketplace_note_types_bp)
 api_v1_bp.register_blueprint(marketplace_taxonomy_bp)
+api_v1_bp.register_blueprint(creator_deck_keys_bp)
+api_v1_bp.register_blueprint(profile_bp, url_prefix="/profile")
 api_v1_bp.register_blueprint(settings_bp)
 api_v1_bp.register_blueprint(tickets_bp)
+
 
 
 

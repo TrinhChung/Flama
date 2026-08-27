@@ -124,5 +124,6 @@ class DeckMarketplaceItem(db.Model):
         cascade="all, delete-orphan",
     )
     installs = db.relationship("DeckInstall", back_populates="deck_item", cascade="all, delete-orphan")
+    access_keys = db.relationship("DeckAccessKey", back_populates="deck_item", cascade="all, delete-orphan")
     change_requests = db.relationship("DeckChangeRequest", back_populates="deck_item")
     reviews = db.relationship("DeckReview", back_populates="deck_item", cascade="all, delete-orphan")

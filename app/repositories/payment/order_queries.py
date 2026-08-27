@@ -64,7 +64,13 @@ def _build_order_query(*, filters: OrderFilterInput, latest_attempt):
             selectinload(PaymentOrder.entitlements),
         )
         .join(User, User.id == PaymentOrder.user_id)
-        .outerjoin(latest_attempt, latest_attempt.id == latest_attempt_id)
+        .outerjoin(
+            latest_attempt,
+            and_(
+                latest_attempt.order_id == PaymentOrder.id,
+                latest_attempt.id == latest_attempt_id,
+            ),
+        )
     )
 
     if filters.q:

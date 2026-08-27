@@ -19,6 +19,8 @@ class User(UserMixin, db.Model):
     role_id = db.Column(db.Integer, db.ForeignKey("user_roles.id"), nullable=True, index=True)
     is_admin = db.Column(db.Boolean, nullable=False, default=False)
     is_disabled = db.Column(db.Boolean, nullable=False, default=False)
+    balance_amount_minor = db.Column(db.Integer, nullable=False, default=0)
+    custom_platform_fee_percent = db.Column(db.Float, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(
         db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
@@ -40,6 +42,13 @@ class User(UserMixin, db.Model):
         cascade="all, delete-orphan",
     )
     role = db.relationship("UserRole", back_populates="users")
+    balance_transactions = db.relationship(
+        "UserBalanceTransaction",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        foreign_keys="UserBalanceTransaction.user_id",
+        order_by="UserBalanceTransaction.created_at.desc()",
+    )
 
     @property
     def is_active(self) -> bool:

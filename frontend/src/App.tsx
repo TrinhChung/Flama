@@ -123,6 +123,11 @@ const AdminPaymentsPage = lazy(() =>
     default: module.AdminPaymentsPage,
   })),
 )
+const AdminFeesPage = lazy(() =>
+  import('./features/admin/pages/AdminFeesPage').then((module) => ({
+    default: module.AdminFeesPage,
+  })),
+)
 const AdminTtsPage = lazy(() =>
   import('./features/admin/pages/AdminTtsPage').then((module) => ({
     default: module.AdminTtsPage,
@@ -251,6 +256,11 @@ const CookiesPage = lazy(() =>
 const OAuthConsentPage = lazy(() =>
   import('./features/oauth/pages/OAuthConsentPage').then((module) => ({
     default: module.OAuthConsentPage,
+  })),
+)
+const ProfilePage = lazy(() =>
+  import('./features/profile/pages/ProfilePage').then((module) => ({
+    default: module.ProfilePage,
   })),
 )
 
@@ -488,6 +498,7 @@ const router = createBrowserRouter([
             element: deferred(<SharedNoteTypeDetailPage />),
           },
           { path: 'orders', element: deferred(<OrdersPage />) },
+          { path: 'profile', element: deferred(<ProfilePage />) },
           { path: 'admin', element: <Navigate to="/admin/analytics" replace /> },
           {
             path: 'admin/analytics',
@@ -497,6 +508,10 @@ const router = createBrowserRouter([
           {
             path: 'admin/payments',
             element: deferred(<AdminPaymentsPage />),
+          },
+          {
+            path: 'admin/fees',
+            element: deferred(<AdminFeesPage />),
           },
           { path: 'admin/tts', element: deferred(<AdminTtsPage />) },
           {

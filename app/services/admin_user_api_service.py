@@ -87,13 +87,13 @@ def update_user(
         )
     fields_present = {
         field_name
-        for field_name in ("role_id", "is_disabled")
+        for field_name in ("role_id", "is_disabled", "custom_platform_fee_percent")
         if field_name in payload
     }
     if len(fields_present) != 1:
         raise AdminUserApiError(
             "VALIDATION_ERROR",
-            "Provide exactly one of role_id or is_disabled.",
+            "Provide exactly one of role_id, is_disabled, or custom_platform_fee_percent.",
             status=400,
         )
 
@@ -145,6 +145,29 @@ def update_user(
                 status=409,
                 extras={"results": result_rows},
             )
+
+    if "custom_platform_fee_percent" in payload:
+        raw_fee = payload.get("custom_platform_fee_percent")
+        if raw_fee is None or raw_fee == "":
+            user.custom_platform_fee_percent = None
+            msg = "Đã đặt lại tỷ lệ phí nền tảng theo vai trò mặc định."
+        else:
+            try:
+                fee_val = float(raw_fee)
+                if fee_val < 0.0 or fee_val > 100.0:
+                    raise ValueError()
+                user.custom_platform_fee_percent = fee_val
+                msg = f"Đã cập nhật tỷ lệ phí nền tảng thành {fee_val}%."
+            except (TypeError, ValueError) as exc:
+                raise AdminUserApiError(
+                    "VALIDATION_ERROR",
+                    "custom_platform_fee_percent must be a number between 0 and 100, or null.",
+                    status=400,
+                    field="custom_platform_fee_percent",
+                ) from exc
+
+        admin_service.commit_transaction()
+        result_rows.append({"user_id": user.id, "status": "success", "message": msg})
 
     return {
         "item": admin_service.serialize_user_row(

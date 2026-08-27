@@ -9,6 +9,8 @@ export type FrontendUser = {
   username: string
   timezone: string
   is_admin: boolean
+  balance_amount_minor?: number
+  balance_amount_display?: string
   role: FrontendRole | null
 }
 
@@ -30,6 +32,7 @@ export type FrontendLinks = {
   shared_decks: string
   shared_note_types: string
   orders: string
+  profile?: string
   support: string
   terms: string
   privacy: string
@@ -38,6 +41,7 @@ export type FrontendLinks = {
   admin_users: string | null
   admin_payments: string | null
   admin_tts: string | null
+  admin_fees?: string | null
 }
 
 export type FrontendBootstrap = {

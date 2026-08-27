@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import {
+  BadgePercent,
   Check,
   CheckCircle2,
   Copy,
@@ -57,6 +58,9 @@ type AdminUser = {
   is_admin: boolean
   role_id: number | null
   role_name: string | null
+  balance_amount_minor?: number
+  custom_platform_fee_percent?: number | null
+  effective_platform_fee_percent?: number
   created_at?: string
   timezone?: string
 }
@@ -169,6 +173,8 @@ export function AdminUsersPage() {
   const [perPage, setPerPage] = useState(20)
   const [selectedIds, setSelectedIds] = useState<number[]>([])
   const [detailUser, setDetailUser] = useState<AdminUser | null>(null)
+  const [feeEditUser, setFeeEditUser] = useState<AdminUser | null>(null)
+  const [feeInputValue, setFeeInputValue] = useState<string>('')
   const [isBatchRoleModalOpen, setIsBatchRoleModalOpen] = useState(false)
   const [batchTargetRoleId, setBatchTargetRoleId] = useState<string>('')
   const [copiedEmail, setCopiedEmail] = useState(false)
@@ -200,11 +206,15 @@ export function AdminUsersPage() {
       payload,
     }: {
       userId: number
-      payload: { role_id: number } | { is_disabled: boolean }
+      payload:
+        | { role_id: number }
+        | { is_disabled: boolean }
+        | { custom_platform_fee_percent: number | null }
     }) => appApi.mutate(`/admin/users/${userId}`, 'PATCH', payload),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['admin', 'users'] })
       toast.success('Đã cập nhật thông tin người dùng.')
+      setFeeEditUser(null)
     },
     onError: (error: Error) => toast.error(error.message),
   })
@@ -406,6 +416,7 @@ export function AdminUsersPage() {
                   <TableHead>Người dùng</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Vai trò</TableHead>
+                  <TableHead>Phí nền tảng</TableHead>
                   <TableHead>Trạng thái</TableHead>
                   <TableHead className="text-right">Thao tác</TableHead>
                 </TableRow>
@@ -472,6 +483,40 @@ export function AdminUsersPage() {
                             </NativeSelect>
                           )}
                         </div>
+                      </TableCell>
+
+                      <TableCell>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFeeEditUser(user)
+                            setFeeInputValue(
+                              user.custom_platform_fee_percent !== null &&
+                                user.custom_platform_fee_percent !== undefined
+                                ? String(user.custom_platform_fee_percent)
+                                : ''
+                            )
+                          }}
+                          className="group flex items-center gap-1.5 rounded-md px-1.5 py-0.5 transition hover:bg-muted"
+                          title="Nhấp để cấu hình tỷ lệ phí nền tảng"
+                        >
+                          <Badge
+                            variant="outline"
+                            className={
+                              user.custom_platform_fee_percent !== null &&
+                              user.custom_platform_fee_percent !== undefined
+                                ? 'bg-amber-500/10 text-amber-600 border-amber-500/30 dark:text-amber-400 font-medium'
+                                : 'bg-muted/40 text-muted-foreground font-normal'
+                            }
+                          >
+                            <BadgePercent className="mr-1 size-3" />
+                            {user.effective_platform_fee_percent ?? 10}%
+                            {user.custom_platform_fee_percent !== null &&
+                            user.custom_platform_fee_percent !== undefined
+                              ? ' (Riêng)'
+                              : ''}
+                          </Badge>
+                        </button>
                       </TableCell>
 
                       <TableCell>
@@ -734,6 +779,104 @@ export function AdminUsersPage() {
               Cập nhật
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Platform Fee Edit Dialog */}
+      <Dialog
+        open={feeEditUser !== null}
+        onOpenChange={(open) => !open && setFeeEditUser(null)}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <BadgePercent className="size-5 text-primary" />
+              Cấu hình Phí nền tảng
+            </DialogTitle>
+            <DialogDescription>
+              Thiết lập tỷ lệ chiết khấu phí nền tảng khi người dùng này bán học liệu có phí trên Marketplace.
+            </DialogDescription>
+          </DialogHeader>
+
+          {feeEditUser && (
+            <div className="space-y-4 py-2">
+              <div className="rounded-lg border border-border/60 bg-muted/20 p-3 text-xs">
+                <p className="font-semibold text-foreground">{feeEditUser.username}</p>
+                <p className="text-muted-foreground">{feeEditUser.email}</p>
+                <div className="mt-2 flex items-center gap-2">
+                  <span className="text-muted-foreground">Vai trò:</span>
+                  <RoleBadge roleName={feeEditUser.role_name} isAdmin={feeEditUser.is_admin} />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="platformFeeInput" className="text-xs font-semibold">
+                  Tỷ lệ phí nền tảng tùy chỉnh (%)
+                </Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="platformFeeInput"
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.5"
+                    value={feeInputValue}
+                    onChange={(e) => setFeeInputValue(e.target.value)}
+                    placeholder="Ví dụ: 5.0 (hoặc để trống để dùng mặc định)"
+                    className="font-mono text-sm"
+                  />
+                  <span className="text-sm font-semibold text-muted-foreground">%</span>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Để trống hoặc bấm &quot;Dùng mặc định vai trò&quot; để áp dụng mức phí chuẩn ({feeEditUser.role_name?.includes('Nhà sáng tạo') ? '5%' : '10%'}).
+                </p>
+              </div>
+
+              <div className="flex items-center justify-between pt-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  disabled={mutation.isPending}
+                  onClick={() =>
+                    mutation.mutate({
+                      userId: feeEditUser.id,
+                      payload: { custom_platform_fee_percent: null },
+                    })
+                  }
+                >
+                  Dùng mặc định vai trò
+                </Button>
+
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setFeeEditUser(null)}
+                    disabled={mutation.isPending}
+                  >
+                    Hủy
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={mutation.isPending}
+                    className="bg-primary text-primary-foreground"
+                    onClick={() => {
+                      const val = feeInputValue.trim() ? Number(feeInputValue) : null
+                      mutation.mutate({
+                        userId: feeEditUser.id,
+                        payload: { custom_platform_fee_percent: val },
+                      })
+                    }}
+                  >
+                    {mutation.isPending ? 'Đang lưu…' : 'Lưu tỷ lệ'}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </Page>

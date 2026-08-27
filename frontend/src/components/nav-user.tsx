@@ -1,4 +1,4 @@
-import { ChevronsUpDown, CreditCard, Key, LogOut, NotebookTabs } from 'lucide-react'
+import { ChevronsUpDown, CreditCard, Key, LogOut, NotebookTabs, User as UserIcon } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import {
@@ -54,19 +54,34 @@ export function NavUser({
             </SidebarMenuButton>
           </DropdownMenuTrigger>
           <DropdownMenuContent
-            className="min-w-60"
+            className="min-w-64"
             side={isMobile ? 'bottom' : 'right'}
             align="end"
             sideOffset={4}
           >
             <DropdownMenuLabel>
-              <p className="font-medium">{user.username}</p>
-              <p className="text-xs font-normal text-muted-foreground">
-                {user.is_admin ? 'Quản trị viên' : user.role?.name || 'Người dùng'}
-              </p>
+              <div className="flex items-center justify-between gap-2">
+                <div className="truncate">
+                  <p className="font-medium truncate">{user.username}</p>
+                  <p className="text-xs font-normal text-muted-foreground truncate">
+                    {user.is_admin ? 'Quản trị viên' : user.role?.name || 'Người dùng'}
+                  </p>
+                </div>
+                {user.balance_amount_display ? (
+                  <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-bold text-primary">
+                    {user.balance_amount_display}
+                  </span>
+                ) : null}
+              </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
+              <DropdownMenuItem asChild>
+                <Link to="/profile">
+                  <UserIcon />
+                  Trang cá nhân & Ví
+                </Link>
+              </DropdownMenuItem>
               <DropdownMenuItem asChild>
                 <Link to={links.orders}>
                   <CreditCard />

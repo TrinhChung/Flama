@@ -4,6 +4,9 @@ from models.audit_log import AuditLog
 from models.card import Card
 from models.card_progress import CardProgress
 from models.deck import Deck
+from models.deck_access_key import DeckAccessKey
+from models.deck_access_key_redemption import DeckAccessKeyRedemption
+from models.creator_feature_policy import CreatorFeaturePolicy
 from models.deck_clone_added_field_def import DeckCloneAddedFieldDef
 from models.deck_clone_added_note import DeckCloneAddedNote
 from models.deck_clone_deck_map import DeckCloneDeckMap
@@ -41,7 +44,10 @@ __all__ = [
     "AuditLog",
     "Card",
     "CardProgress",
+    "CreatorFeaturePolicy",
     "Deck",
+    "DeckAccessKey",
+    "DeckAccessKeyRedemption",
     "DeckCloneAddedFieldDef",
     "DeckCloneAddedNote",
     "DeckCloneDeckMap",

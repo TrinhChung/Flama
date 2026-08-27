@@ -60,6 +60,7 @@ const links: FrontendLinks = {
   cookies: '/cookies',
   admin_analytics: '/admin/analytics',
   admin_users: '/admin/users',
+  admin_fees: '/admin/fees',
   admin_payments: '/admin/payments',
   admin_tts: '/admin/tts',
 }

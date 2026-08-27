@@ -64,6 +64,7 @@ def create_app(config: Optional[dict] = None) -> Flask:
     from models.user_scheduler_settings import UserSchedulerSettings  # noqa: F401  # register model
     from models.user_role import UserRole  # noqa: F401  # register model
     from models.user_permission_audit_log import UserPermissionAuditLog  # noqa: F401
+    from models.user_balance_transaction import UserBalanceTransaction  # noqa: F401  # register model
     from models.deck import Deck  # noqa: F401  # register model
     from models.scheduler_preset import SchedulerPreset  # noqa: F401  # register model
     from models.tts_provider_config import TtsProviderConfig  # noqa: F401  # register model
@@ -91,6 +92,9 @@ def create_app(config: Optional[dict] = None) -> Flask:
     from models.flashcard import (  # noqa: F401  # register model
         AuditLog,
         Card,
+        CreatorFeaturePolicy,
+        DeckAccessKey,
+        DeckAccessKeyRedemption,
         DeckCloneAddedFieldDef,
         DeckCloneAddedNote,
         DeckCloneDeckMap,
@@ -110,6 +114,7 @@ def create_app(config: Optional[dict] = None) -> Flask:
         ReviewEvent,
         Template,
     )
+
 
     @login_manager.user_loader
     def load_user(user_id: str) -> Optional[User]:

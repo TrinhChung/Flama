@@ -11,6 +11,7 @@ import {
   FileDiff,
   GitCompare,
   Heart,
+  KeyRound,
   Layers,
   Loader2,
   MessageSquare,
@@ -26,7 +27,10 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { DeckAccessKeysManager } from '../components/keys/DeckAccessKeysManager'
+import { RedeemDeckKeyModal } from '../components/keys/RedeemDeckKeyModal'
+
 import { appApi } from '@/app/api'
 import { AmbientBackground } from '@/components/ambient-background'
 import { Badge } from '@/components/ui/badge'
@@ -159,6 +163,12 @@ export function SharedDeckDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const [searchParams] = useSearchParams()
+  const urlCode = searchParams.get('code') || searchParams.get('key') || ''
+
+  // Key management and redemption states
+  const [isRedeemModalOpen, setIsRedeemModalOpen] = useState(false)
+  const [showKeyManager, setShowKeyManager] = useState(false)
 
   // Preview & sample state
   const [activeSampleIndex, setActiveSampleIndex] = useState<number>(0)
@@ -172,6 +182,7 @@ export function SharedDeckDetailPage() {
   const [ratingComment, setRatingComment] = useState<string>('')
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [submitSuccess, setSubmitSuccess] = useState<string | null>(null)
+
 
   // Detail Query
   const deckQuery = useQuery({
@@ -201,6 +212,14 @@ export function SharedDeckDetailPage() {
       setSelectedTemplateId(templates[0].id)
     }
   }, [templates, selectedTemplateId])
+
+  // Auto open redeem modal if URL contains key/code parameter
+  useEffect(() => {
+    if (urlCode && deck && !deck.is_owner && !deck.is_installed) {
+      setIsRedeemModalOpen(true)
+    }
+  }, [urlCode, deck])
+
 
   // Template Preview Query
   const previewQuery = useQuery({
@@ -584,6 +603,18 @@ export function SharedDeckDetailPage() {
                     </Link>
                   </Button>
 
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className={`h-10 sm:h-10 min-h-[40px] px-4 font-bold text-xs rounded-xl justify-center transition-all ${
+                      showKeyManager ? 'bg-primary/10 border-primary text-primary' : ''
+                    }`}
+                    onClick={() => setShowKeyManager(!showKeyManager)}
+                  >
+                    <KeyRound className="mr-1.5 size-3.5 text-primary" />
+                    {showKeyManager ? 'Ẩn Quản lý Mã' : 'Mã lớp học (Keys)'}
+                  </Button>
+
                   {deck.publish_status === 'published' || deck.publish_status === 'unlisted' ? (
                     <Button
                       variant="destructive"
@@ -661,7 +692,7 @@ export function SharedDeckDetailPage() {
                   </Button>
                 </div>
               ) : (
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-3">
                   <Button
                     className="h-11 sm:h-12 min-h-[44px] px-6 font-bold text-sm sm:text-base shadow-sm bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl transition-all justify-center"
                     size="lg"
@@ -684,6 +715,15 @@ export function SharedDeckDetailPage() {
                   </Button>
 
                   <Button
+                    className="h-11 sm:h-12 min-h-[44px] px-4 font-semibold text-xs sm:text-sm rounded-xl justify-center border-primary/30 hover:bg-primary/5"
+                    variant="outline"
+                    onClick={() => setIsRedeemModalOpen(true)}
+                  >
+                    <KeyRound className="mr-1.5 size-4 text-primary" />
+                    Nhập mã kích hoạt
+                  </Button>
+
+                  <Button
                     className="h-11 sm:h-12 min-h-[44px] px-4 font-semibold text-xs sm:text-sm rounded-xl justify-center"
                     variant="outline"
                     onClick={() => saveMutation.mutate(deck.is_saved)}
@@ -701,6 +741,15 @@ export function SharedDeckDetailPage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Creator Access Keys Management Section */}
+        {deck.is_owner && showKeyManager && (
+          <div className="animate-in fade-in slide-in-from-top-4 duration-300">
+            <DeckAccessKeysManager deckItemId={id!} deckTitle={deck.title || ''} />
+          </div>
+        )}
+
+
 
           {/* Section 1: Interactive Sample & Live Previewer */}
           <Card className="border-border shadow-xs overflow-hidden rounded-2xl">
@@ -1135,6 +1184,15 @@ export function SharedDeckDetailPage() {
             </Card>
           ) : null}
         </div>
+
+        {/* Redeem Deck Key Modal */}
+        <RedeemDeckKeyModal
+          isOpen={isRedeemModalOpen}
+          onClose={() => setIsRedeemModalOpen(false)}
+          initialKey={urlCode}
+          deckItemId={id}
+        />
       </Page>
   )
 }
+

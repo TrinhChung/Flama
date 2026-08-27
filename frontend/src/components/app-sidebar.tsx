@@ -1,5 +1,6 @@
 import {
   AudioLines,
+  BadgePercent,
   Bot,
   ChartNoAxesColumn,
   CreditCard,
@@ -19,6 +20,7 @@ import {
   Ticket,
   TrendingUp,
   Upload,
+  User,
   Users,
   Zap,
 } from 'lucide-react'
@@ -78,8 +80,11 @@ export function AppSidebar({
         ]
       : []),
     ...(bootstrap.links.admin_payments
-      ? [{ title: 'Thanh toán', url: bootstrap.links.admin_payments, icon: CreditCard }]
-      : []),
+      ? [
+          { title: 'Thanh toán', url: bootstrap.links.admin_payments, icon: CreditCard },
+          { title: 'Thiết lập phí', url: '/admin/fees', icon: BadgePercent },
+        ]
+      : [{ title: 'Thiết lập phí', url: '/admin/fees', icon: BadgePercent }]),
     ...(bootstrap.links.admin_tts
       ? [{ title: 'TTS Provider', url: bootstrap.links.admin_tts, icon: AudioLines }]
       : []),
@@ -90,6 +95,8 @@ export function AppSidebar({
   ]
 
   const settings: AppNavigationItem[] = [
+    { title: 'Trang cá nhân & Ví', url: '/profile', icon: User },
+    { title: 'Lịch sử đơn hàng', url: '/orders', icon: CreditCard },
     { title: 'Đóng góp ý kiến', url: '/feedback', icon: MessageSquareHeart },
   ]
 

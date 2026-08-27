@@ -20,9 +20,9 @@ export type ReviewInteractionControlsProps = {
 export function ReviewInteractionControls({
   revealed,
   submitting = false,
-  newCount = 0,
-  learnCount = 0,
-  dueCount = 0,
+  newCount: _newCount = 0,
+  learnCount: _learnCount = 0,
+  dueCount: _dueCount = 0,
   intervalsPreview,
   onReveal,
   onAnswer,
@@ -41,22 +41,6 @@ export function ReviewInteractionControls({
   if (!revealed) {
     return (
       <div className="flex items-center gap-2 sm:gap-3 w-full justify-center">
-        {/* Soft Pill Badge Counters (visible on XL screens) */}
-        <div className="study-counters-line hidden xl:flex items-center gap-1.5 text-xs whitespace-nowrap mr-2">
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-1 font-bold text-emerald-600 dark:text-emerald-400">
-            <span className="size-1.5 rounded-full bg-emerald-500" />
-            Mới {newCount}
-          </span>
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-2.5 py-1 font-bold text-amber-600 dark:text-amber-400">
-            <span className="size-1.5 rounded-full bg-amber-500" />
-            Học {learnCount}
-          </span>
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-500/10 px-2.5 py-1 font-bold text-rose-600 dark:text-rose-400">
-            <span className="size-1.5 rounded-full bg-rose-500" />
-            Hạn {dueCount}
-          </span>
-        </div>
-
         {/* Reveal Answer Button */}
         <Button
           type="button"

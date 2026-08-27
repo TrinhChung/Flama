@@ -317,7 +317,7 @@ export function InstalledDeckUpdatePage() {
     onMutate: () => {
       toast?.loading?.('Đang kiểm tra và chuẩn bị dữ liệu cập nhật…', {
         id: 'installed-deck-update',
-        description: 'Hệ thống đang đối soát các field và xung đột phiên bản.',
+        description: 'Hệ thống đang kiểm tra các trường dữ liệu và xung đột phiên bản.',
       })
     },
     onSuccess: (result) => {

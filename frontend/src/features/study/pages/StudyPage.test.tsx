@@ -321,7 +321,7 @@ describe('StudyPage quick edit interactions', () => {
     expect(document.body.textContent).toContain('Sửa nhanh thẻ')
   })
 
-  it('opens quick edit dialog via Sửa thẻ button in bottom bar', async () => {
+  it('opens quick edit dialog via Sửa thẻ button in header toolbar', async () => {
     setupActiveStudy()
     container = document.createElement('div')
     document.body.appendChild(container)
@@ -331,7 +331,7 @@ describe('StudyPage quick edit interactions', () => {
     })
 
     const editButtons = Array.from(container.querySelectorAll('button')).filter(
-      (button) => button.textContent?.includes('Sửa thẻ'),
+      (button) => button.textContent?.includes('Sửa thẻ') || button.getAttribute('aria-label')?.includes('Sửa nhanh thẻ'),
     )
     expect(editButtons.length).toBeGreaterThan(0)
 

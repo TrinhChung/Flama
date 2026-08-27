@@ -7,6 +7,7 @@ import {
   Eye,
   Flame,
   HelpCircle,
+  KeyRound,
   Layers,
   Loader2,
   Plus,
@@ -19,6 +20,8 @@ import {
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
+import { RedeemDeckKeyModal } from '../components/keys/RedeemDeckKeyModal'
+
 import { appApi } from '@/app/api'
 import { AmbientBackground } from '@/components/ambient-background'
 import { Badge } from '@/components/ui/badge'
@@ -238,7 +241,9 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
   const [pricingFilter, setPricingFilter] = useState<'all' | 'free' | 'paid'>('all')
   const [isFilterExpanded, setIsFilterExpanded] = useState(false)
   const [tourOpen, setTourOpen] = useState(false)
+  const [isRedeemModalOpen, setIsRedeemModalOpen] = useState(false)
   const searchInputRef = useRef<HTMLInputElement>(null)
+
 
   const {
     domains,
@@ -425,6 +430,16 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
             </Button>
 
             <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsRedeemModalOpen(true)}
+              className="h-8 sm:h-9 px-2.5 sm:px-3 text-xs font-semibold rounded-lg shrink-0 border-primary/30 text-primary hover:bg-primary/10"
+            >
+              <KeyRound className="size-3.5 mr-1.5 text-primary shrink-0" />
+              Nhập mã kích hoạt
+            </Button>
+
+            <Button
               variant="default"
               size="sm"
               asChild
@@ -442,6 +457,7 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
                 {mode === 'decks' ? 'Đăng tải bộ thẻ' : 'Tạo loại thẻ'}
               </Link>
             </Button>
+
           </div>
         }
       />
@@ -1062,7 +1078,14 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
           setTourOpen(false)
         }}
       />
+
+      {/* Redeem Deck Key Modal */}
+      <RedeemDeckKeyModal
+        isOpen={isRedeemModalOpen}
+        onClose={() => setIsRedeemModalOpen(false)}
+      />
     </Page>
+
   )
 }
 

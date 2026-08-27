@@ -1,13 +1,14 @@
-"""Marketplace REST API V1 resources."""
-
+from .deck_keys import marketplace_deck_keys_bp
 from .deck_releases import marketplace_deck_releases_bp
 from .installations import marketplace_installations_bp
 from .note_types import marketplace_note_types_bp
 from .taxonomy import marketplace_taxonomy_bp
 
 __all__ = [
+    "marketplace_deck_keys_bp",
     "marketplace_deck_releases_bp",
     "marketplace_installations_bp",
     "marketplace_note_types_bp",
     "marketplace_taxonomy_bp",
 ]
+

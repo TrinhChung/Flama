@@ -230,7 +230,7 @@ def _build_order_instructions(order: PaymentOrder, attempt: PaymentAttempt | Non
 
     return [
         "Mở ứng dụng ngân hàng hoặc ví điện tử hỗ trợ VietQR.",
-        "Quét mã QR hiển thị trên màn hình hoặc thanh toán qua liên kết PayOS.",
+        "Quét mã QR hiển thị trên màn hình hoặc mở trang thanh toán ngân hàng.",
         "Không thay đổi nội dung chuyển khoản để hệ thống tự động nhận diện giao dịch.",
         "Hệ thống sẽ cập nhật trạng thái ngay lập tức khi nhận được tiền.",
     ]
@@ -254,7 +254,7 @@ def _build_order_detail_lines(order: PaymentOrder, attempt: PaymentAttempt | Non
         })
     if attempt and attempt.provider_payment_link_id:
         lines.append({
-            "label": "Mã giao dịch PayOS",
+            "label": "Mã giao dịch",
             "value": attempt.provider_payment_link_id,
             "copyable": True,
         })

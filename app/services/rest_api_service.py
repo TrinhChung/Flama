@@ -31,6 +31,8 @@ def serialize_user(user) -> dict[str, Any] | None:
         return None
 
     role = getattr(user, "role", None)
+    balance = int(getattr(user, "balance_amount_minor", 0) or 0)
+    balance_display = f"{balance:,.0f} ₫".replace(",", ".")
     return {
         "id": int(user.id),
         "email": str(user.email or ""),
@@ -38,6 +40,8 @@ def serialize_user(user) -> dict[str, Any] | None:
         "timezone": str(getattr(user, "timezone", "UTC") or "UTC"),
         "is_admin": bool(is_admin_user(user)),
         "is_disabled": bool(getattr(user, "is_disabled", False)),
+        "balance_amount_minor": balance,
+        "balance_amount_display": balance_display,
         "role": (
             {
                 "id": int(role.id),
