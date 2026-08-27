@@ -23,6 +23,7 @@ from .marketplace import (
     marketplace_deck_releases_bp,
     marketplace_installations_bp,
     marketplace_note_types_bp,
+    marketplace_taxonomy_bp,
 )
 from .download import download_bp
 from .settings import settings_bp
@@ -110,6 +111,7 @@ api_v1_bp.register_blueprint(
 )
 api_v1_bp.register_blueprint(marketplace_deck_releases_bp)
 api_v1_bp.register_blueprint(marketplace_note_types_bp)
+api_v1_bp.register_blueprint(marketplace_taxonomy_bp)
 api_v1_bp.register_blueprint(settings_bp)
 api_v1_bp.register_blueprint(tickets_bp)
 

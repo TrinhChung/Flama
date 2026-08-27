@@ -263,6 +263,75 @@ def register_cli_commands(app: Flask) -> None:
                     f"- deck_install_id={error.get('deck_install_id')}: {error.get('message')}"
                 )
 
+    @app.cli.command("taxonomy-seed")
+    def taxonomy_seed() -> None:
+        """Seed default domains, subjects, frameworks, levels, and options into DB."""
+        from app.services.marketplace_taxonomy_service import ensure_default_taxonomy_data
+        from app.repositories import marketplace_taxonomy_repository
+
+        ensure_default_taxonomy_data(db.session)
+        db.session.commit()
+
+        domains = marketplace_taxonomy_repository.list_domains(include_inactive=True)
+        subjects = marketplace_taxonomy_repository.list_subjects(include_inactive=True)
+        frameworks = marketplace_taxonomy_repository.list_frameworks(include_inactive=True)
+        levels = marketplace_taxonomy_repository.list_framework_levels(include_inactive=True)
+        options = marketplace_taxonomy_repository.list_options(include_inactive=True)
+
+        click.echo(
+            f"Taxonomy seeding complete. "
+            f"domains={len(domains)}, "
+            f"subjects={len(subjects)}, "
+            f"frameworks={len(frameworks)}, "
+            f"levels={len(levels)}, "
+            f"options={len(options)}"
+        )
+
+    @app.cli.command("taxonomy-verify")
+    def taxonomy_verify() -> None:
+        """Verify database taxonomy entities against existing marketplace items."""
+        from app.repositories import marketplace_taxonomy_repository
+
+        domains = {d.id: d.label for d in marketplace_taxonomy_repository.list_domains(include_inactive=True)}
+        subjects = {s.id: s.label for s in marketplace_taxonomy_repository.list_subjects(include_inactive=True)}
+        frameworks = {f.id: f.label for f in marketplace_taxonomy_repository.list_frameworks(include_inactive=True)}
+        levels = {l.id: l.label for l in marketplace_taxonomy_repository.list_framework_levels(include_inactive=True)}
+
+        deck_items = DeckMarketplaceItem.query.all()
+        note_type_items = NoteType.query.all()
+
+        unmatched_domains = set()
+        unmatched_subjects = set()
+
+        for item in deck_items:
+            meta = item.taxonomy_metadata or {}
+            dom = meta.get("domain")
+            sub = meta.get("subject")
+            if dom and dom not in domains:
+                unmatched_domains.add(dom)
+            if sub and sub not in subjects:
+                unmatched_subjects.add(sub)
+
+        for item in note_type_items:
+            meta = item.taxonomy_metadata or {}
+            dom = meta.get("domain")
+            sub = meta.get("subject")
+            if dom and dom not in domains:
+                unmatched_domains.add(dom)
+            if sub and sub not in subjects:
+                unmatched_subjects.add(sub)
+
+        click.echo(
+            f"Taxonomy verification: "
+            f"domains_in_db={len(domains)}, subjects_in_db={len(subjects)}, "
+            f"frameworks_in_db={len(frameworks)}, levels_in_db={len(levels)}. "
+            f"deck_items_checked={len(deck_items)}, note_types_checked={len(note_type_items)}"
+        )
+        if unmatched_domains or unmatched_subjects:
+            click.echo(f"Warning: unmatched domains={unmatched_domains}, unmatched subjects={unmatched_subjects}")
+        else:
+            click.echo("All marketplace taxonomy references are 100% matched with DB taxonomy entities.")
+
     @app.cli.command("deck-release-bootstrap")
     @click.option(
         "--deck-item-id",

@@ -208,6 +208,11 @@ const AdminTicketDetailPage = lazy(() =>
     default: module.AdminTicketDetailPage,
   })),
 )
+const AdminTaxonomyPage = lazy(() =>
+  import('./features/admin/pages/AdminTaxonomyPage').then((module) => ({
+    default: module.AdminTaxonomyPage,
+  })),
+)
 const UserTicketDetailPage = lazy(() =>
   import('./features/support/pages/UserTicketDetailPage').then((module) => ({
     default: module.UserTicketDetailPage,
@@ -513,6 +518,10 @@ const router = createBrowserRouter([
           {
             path: 'admin/tickets/:id',
             element: deferred(<AdminTicketDetailPage />),
+          },
+          {
+            path: 'admin/taxonomy',
+            element: deferred(<AdminTaxonomyPage />),
           },
         ],
       },

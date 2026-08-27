@@ -38,6 +38,14 @@ def create_app(config: Optional[dict] = None) -> Flask:
         app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
     from models.user import User
+    from models.taxonomy import (  # noqa: F401
+        TaxonomyDomain,
+        TaxonomyFramework,
+        TaxonomyFrameworkLevel,
+        TaxonomyOption,
+        TaxonomySubject,
+        TaxonomySubjectOptionMap,
+    )
     from models.oauth_client import OAuthClient  # noqa: F401  # register model
     from models.oauth_authorization_code import OAuthAuthorizationCode  # noqa: F401  # register model
     from models.mcp_access_token import McpAccessToken  # noqa: F401  # register model
