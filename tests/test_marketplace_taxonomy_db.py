@@ -113,6 +113,96 @@ class MarketplaceTaxonomyDbTests(unittest.TestCase):
         subject_ids = [s["id"] for s in data["subjects"]]
         self.assertIn("space", subject_ids)
 
+    def test_admin_framework_and_level_crud(self):
+        self._login_admin()
+
+        # 1. Create Framework
+        resp_fw = self.client.post(
+            "/api/admin/taxonomy/frameworks",
+            json={"id": "space_cert", "subject_id": "japanese", "label": "Space Certification", "sort_order": 5},
+        )
+        self.assertEqual(resp_fw.status_code, 201)
+
+        # 2. Update Framework
+        resp_fw_up = self.client.put(
+            "/api/admin/taxonomy/frameworks/space_cert",
+            json={"label": "Space Certification Pro", "sort_order": 10},
+        )
+        self.assertEqual(resp_fw_up.status_code, 200)
+        self.assertEqual(resp_fw_up.get_json()["framework"]["label"], "Space Certification Pro")
+
+        # 3. Create Framework Level
+        resp_lvl = self.client.post(
+            "/api/admin/taxonomy/framework-levels",
+            json={
+                "id": "space_level_1",
+                "framework_id": "space_cert",
+                "subject_id": "japanese",
+                "label": "Space Cadet Level 1",
+                "difficulty_band": "beginner",
+                "sort_order": 1,
+            },
+        )
+        self.assertEqual(resp_lvl.status_code, 201)
+
+        # 4. Update Framework Level
+        resp_lvl_up = self.client.put(
+            "/api/admin/taxonomy/framework-levels/space_level_1",
+            json={"label": "Space Cadet Level 1 (Advanced)", "difficulty_band": "intermediate"},
+        )
+        self.assertEqual(resp_lvl_up.status_code, 200)
+        self.assertEqual(resp_lvl_up.get_json()["level"]["difficulty_band"], "intermediate")
+
+        # 5. Delete Framework Level
+        resp_lvl_del = self.client.delete("/api/admin/taxonomy/framework-levels/space_level_1")
+        self.assertEqual(resp_lvl_del.status_code, 200)
+
+        # 6. Delete Framework
+        resp_fw_del = self.client.delete("/api/admin/taxonomy/frameworks/space_cert")
+        self.assertEqual(resp_fw_del.status_code, 200)
+
+    def test_admin_option_crud_and_mappings(self):
+        self._login_admin()
+
+        # 1. Create Option
+        resp_opt = self.client.post(
+            "/api/admin/taxonomy/options",
+            json={
+                "id": "orbital_mechanics",
+                "option_type": "primary_topic",
+                "label": "Cơ học quỹ đạo",
+                "sub_label": "Học lực hút",
+            },
+        )
+        self.assertEqual(resp_opt.status_code, 201)
+
+        # 2. Update Option
+        resp_opt_up = self.client.put(
+            "/api/admin/taxonomy/options/orbital_mechanics",
+            json={"option_type": "primary_topic", "label": "Cơ học quỹ đạo nâng cao"},
+        )
+        self.assertEqual(resp_opt_up.status_code, 200)
+        self.assertEqual(resp_opt_up.get_json()["option"]["label"], "Cơ học quỹ đạo nâng cao")
+
+        # 3. Set Subject Mapping
+        resp_map = self.client.post(
+            "/api/admin/taxonomy/subject-mappings",
+            json={"subject_id": "japanese", "option_type": "primary_topic", "option_ids": ["orbital_mechanics"]},
+        )
+        self.assertEqual(resp_map.status_code, 200)
+
+        # 4. Get Subject Mappings
+        resp_get_maps = self.client.get("/api/admin/taxonomy/subject-mappings?subject_id=japanese&option_type=primary_topic")
+        self.assertEqual(resp_get_maps.status_code, 200)
+        maps = resp_get_maps.get_json()["mappings"]
+        self.assertEqual(len(maps), 1)
+        self.assertEqual(maps[0]["option_id"], "orbital_mechanics")
+
+        # 5. Delete Option
+        resp_opt_del = self.client.delete("/api/admin/taxonomy/options/orbital_mechanics?option_type=primary_topic")
+        self.assertEqual(resp_opt_del.status_code, 200)
+
 
 if __name__ == "__main__":
     unittest.main()
+

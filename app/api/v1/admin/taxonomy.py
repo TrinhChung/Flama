@@ -294,6 +294,51 @@ def create_framework():
     )
 
 
+@admin_taxonomy_bp.put("/frameworks/<framework_id>")
+@admin_required
+def update_framework(framework_id: str):
+    data = _payload()
+    framework = marketplace_taxonomy_repository.update_framework(
+        framework_id=framework_id,
+        subject_id=data.get("subject_id"),
+        label=data.get("label"),
+        sort_order=int(data["sort_order"]) if "sort_order" in data else None,
+        is_active=bool(data["is_active"]) if "is_active" in data else None,
+    )
+    if not framework:
+        return error_response("NOT_FOUND", "Framework not found.", status=404)
+
+    try:
+        db.session.commit()
+        marketplace_taxonomy_service.invalidate_taxonomy_cache()
+    except Exception as exc:
+        db.session.rollback()
+        return error_response("DATABASE_ERROR", str(exc), status=400)
+
+    return jsonify(
+        {
+            "framework": {
+                "id": framework.id,
+                "subject_id": framework.subject_id,
+                "label": framework.label,
+                "sort_order": framework.sort_order,
+                "is_active": framework.is_active,
+            }
+        }
+    )
+
+
+@admin_taxonomy_bp.delete("/frameworks/<framework_id>")
+@admin_required
+def delete_framework(framework_id: str):
+    success = marketplace_taxonomy_repository.delete_framework(framework_id)
+    if not success:
+        return error_response("NOT_FOUND", "Framework not found.", status=404)
+    db.session.commit()
+    marketplace_taxonomy_service.invalidate_taxonomy_cache()
+    return jsonify({"success": True})
+
+
 @admin_taxonomy_bp.get("/framework-levels")
 @admin_required
 def list_framework_levels():
@@ -366,6 +411,53 @@ def create_framework_level():
     )
 
 
+@admin_taxonomy_bp.put("/framework-levels/<level_id>")
+@admin_required
+def update_framework_level(level_id: str):
+    data = _payload()
+    level = marketplace_taxonomy_repository.update_framework_level(
+        level_id=level_id,
+        label=data.get("label"),
+        difficulty_band=data.get("difficulty_band"),
+        sort_order=int(data["sort_order"]) if "sort_order" in data else None,
+        is_active=bool(data["is_active"]) if "is_active" in data else None,
+    )
+    if not level:
+        return error_response("NOT_FOUND", "Framework level not found.", status=404)
+
+    try:
+        db.session.commit()
+        marketplace_taxonomy_service.invalidate_taxonomy_cache()
+    except Exception as exc:
+        db.session.rollback()
+        return error_response("DATABASE_ERROR", str(exc), status=400)
+
+    return jsonify(
+        {
+            "level": {
+                "id": level.id,
+                "framework_id": level.framework_id,
+                "subject_id": level.subject_id,
+                "label": level.label,
+                "difficulty_band": level.difficulty_band,
+                "sort_order": level.sort_order,
+                "is_active": level.is_active,
+            }
+        }
+    )
+
+
+@admin_taxonomy_bp.delete("/framework-levels/<level_id>")
+@admin_required
+def delete_framework_level(level_id: str):
+    success = marketplace_taxonomy_repository.delete_framework_level(level_id)
+    if not success:
+        return error_response("NOT_FOUND", "Framework level not found.", status=404)
+    db.session.commit()
+    marketplace_taxonomy_service.invalidate_taxonomy_cache()
+    return jsonify({"success": True})
+
+
 # --- OPTIONS ---
 @admin_taxonomy_bp.get("/options")
 @admin_required
@@ -434,6 +526,77 @@ def create_option():
     )
 
 
+@admin_taxonomy_bp.put("/options/<option_id>")
+@admin_required
+def update_option(option_id: str):
+    data = _payload()
+    option_type = data.get("option_type")
+    opt = marketplace_taxonomy_repository.update_option(
+        option_id=option_id,
+        option_type=option_type,
+        label=data.get("label"),
+        sub_label=data.get("sub_label"),
+        sort_order=int(data["sort_order"]) if "sort_order" in data else None,
+        is_active=bool(data["is_active"]) if "is_active" in data else None,
+    )
+    if not opt:
+        return error_response("NOT_FOUND", "Option not found.", status=404)
+
+    try:
+        db.session.commit()
+        marketplace_taxonomy_service.invalidate_taxonomy_cache()
+    except Exception as exc:
+        db.session.rollback()
+        return error_response("DATABASE_ERROR", str(exc), status=400)
+
+    return jsonify(
+        {
+            "option": {
+                "id": opt.id,
+                "option_type": opt.option_type,
+                "label": opt.label,
+                "sub_label": opt.sub_label,
+                "sort_order": opt.sort_order,
+                "is_active": opt.is_active,
+            }
+        }
+    )
+
+
+@admin_taxonomy_bp.delete("/options/<option_id>")
+@admin_required
+def delete_option(option_id: str):
+    option_type = request.args.get("option_type")
+    success = marketplace_taxonomy_repository.delete_option(option_id, option_type=option_type)
+    if not success:
+        return error_response("NOT_FOUND", "Option not found.", status=404)
+    db.session.commit()
+    marketplace_taxonomy_service.invalidate_taxonomy_cache()
+    return jsonify({"success": True})
+
+
+@admin_taxonomy_bp.get("/subject-mappings")
+@admin_required
+def get_subject_mappings():
+    subject_id = request.args.get("subject_id")
+    option_type = request.args.get("option_type")
+    mappings = marketplace_taxonomy_repository.list_subject_option_maps(
+        subject_id=subject_id, option_type=option_type
+    )
+    return jsonify(
+        {
+            "mappings": [
+                {
+                    "subject_id": m.subject_id,
+                    "option_id": m.option_id,
+                    "option_type": m.option_type,
+                }
+                for m in mappings
+            ]
+        }
+    )
+
+
 @admin_taxonomy_bp.post("/subject-mappings")
 @admin_required
 def set_subject_mappings():
@@ -457,3 +620,18 @@ def set_subject_mappings():
         return error_response("DATABASE_ERROR", str(exc), status=400)
 
     return jsonify({"success": True})
+
+
+@admin_taxonomy_bp.post("/reseed-defaults")
+@admin_required
+def reseed_defaults():
+    try:
+        marketplace_taxonomy_service.ensure_default_taxonomy_data(db.session)
+        db.session.commit()
+        marketplace_taxonomy_service.invalidate_taxonomy_cache()
+    except Exception as exc:
+        db.session.rollback()
+        return error_response("DATABASE_ERROR", str(exc), status=400)
+
+    return jsonify({"success": True, "message": "Default taxonomy data verified and seeded."})
+

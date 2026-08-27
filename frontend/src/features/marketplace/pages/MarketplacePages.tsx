@@ -133,28 +133,25 @@ type MarketplaceItem = {
 
 type SortView = 'recommended' | 'newest' | 'popular'
 
-const PRESET_CATEGORIES = [
+const DECK_MAJOR_CATEGORIES = [
   'Tiếng Nhật',
-  'JLPT N5',
-  'JLPT N4',
-  'JLPT N3',
-  'JLPT N2',
-  'JLPT N1',
   'Tiếng Anh',
-  'IELTS',
-  'TOEIC',
-  'VSTEP',
-  'Tiếng Hàn',
-  'TOPIK',
   'Tiếng Trung',
-  'HSK',
-  'IT / Công nghệ',
-  'AWS Cloud',
-  'THPT Quốc Gia',
-  'Y dược',
+  'Tiếng Hàn',
+  'Công nghệ & IT',
+  'Chứng chỉ',
+  'Học thuật',
+  'Tổng hợp',
+]
+
+const NOTETYPE_MAJOR_CATEGORIES = [
   'Từ vựng',
-  'Kanji',
-  'Giao tiếp',
+  'Ngữ pháp',
+  'Kanji / Hán tự',
+  'Đục lỗ (Cloze)',
+  'Code & IT',
+  'Hỏi đáp (Q&A)',
+  'Mẫu chuẩn',
 ]
 
 function getCategoryBadgeStyle(categoryName: string | null | undefined) {
@@ -169,7 +166,7 @@ function getCategoryBadgeStyle(categoryName: string | null | undefined) {
   if (lower.includes('hsk') || lower.includes('tiếng trung') || lower.includes('tocfl')) {
     return 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/20'
   }
-  if (lower.includes('aws') || lower.includes('azure') || lower.includes('it') || lower.includes('công nghệ')) {
+  if (lower.includes('aws') || lower.includes('azure') || lower.includes('it') || lower.includes('công nghệ') || lower.includes('code')) {
     return 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20'
   }
   if (lower.includes('n5') || lower.includes('n4')) {
@@ -186,6 +183,12 @@ function getCategoryBadgeStyle(categoryName: string | null | undefined) {
   }
   if (lower.includes('thpt') || lower.includes('y dược') || lower.includes('học thuật')) {
     return 'bg-teal-500/10 text-teal-700 dark:text-teal-400 border-teal-500/20'
+  }
+  if (lower.includes('ngữ pháp') || lower.includes('cloze') || lower.includes('đục lỗ')) {
+    return 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border-indigo-500/20'
+  }
+  if (lower.includes('hỏi đáp') || lower.includes('q&a') || lower.includes('mẫu chuẩn') || lower.includes('từ vựng')) {
+    return 'bg-cyan-500/10 text-cyan-700 dark:text-cyan-400 border-cyan-500/20'
   }
   return 'bg-muted text-muted-foreground border-border/60'
 }
@@ -315,22 +318,10 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
     return frameworks.flatMap((f) => f.levels)
   }, [selectedSubject, frameworksForSubject])
 
-  // Combine preset categories with discovered categories from schema & data
+  // Major categories selection based on mode (clean high-level topics only)
   const allCategories = useMemo(() => {
-    const fromSchemaSubjects = availableSubjects.map((s) => s.label)
-    const fromData = (marketQuery.data?.items || [])
-      .map((item) => item.primary_category)
-      .filter((item): item is string => Boolean(item))
-
-    const merged = Array.from(
-      new Set([
-        ...PRESET_CATEGORIES,
-        ...fromSchemaSubjects,
-        ...fromData,
-      ])
-    )
-    return merged
-  }, [availableSubjects, marketQuery.data?.items])
+    return mode === 'decks' ? DECK_MAJOR_CATEGORIES : NOTETYPE_MAJOR_CATEGORIES
+  }, [mode])
 
   const activeFilterCount = useMemo(() => {
     let count = 0
