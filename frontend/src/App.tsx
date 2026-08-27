@@ -253,6 +253,11 @@ const OAuthConsentPage = lazy(() =>
     default: module.OAuthConsentPage,
   })),
 )
+const ProfilePage = lazy(() =>
+  import('./features/profile/pages/ProfilePage').then((module) => ({
+    default: module.ProfilePage,
+  })),
+)
 
 function deferred(element: ReactNode) {
   return (
@@ -488,6 +493,7 @@ const router = createBrowserRouter([
             element: deferred(<SharedNoteTypeDetailPage />),
           },
           { path: 'orders', element: deferred(<OrdersPage />) },
+          { path: 'profile', element: deferred(<ProfilePage />) },
           { path: 'admin', element: <Navigate to="/admin/analytics" replace /> },
           {
             path: 'admin/analytics',

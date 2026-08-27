@@ -19,7 +19,7 @@ from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import joinedload
 
 from app.repositories import payment_repository
-from app.services import flashcards_share_service, support_donation_service
+from app.services import flashcards_share_service, support_donation_service, wallet_service
 from app.services.payment import config as payment_config
 from app.services.payment.provider import payos_provider
 from models import db
@@ -148,6 +148,13 @@ def _ensure_entitlements_for_confirmed_order(order: PaymentOrder, attempt: Payme
         entitlement.status = "active"
         entitlement.granted_at = now
         entitlement.effective_from = now
+
+        # Credit creator/author wallet for marketplace sales
+        wallet_service.credit_creator_for_deck_sale(
+            order=order,
+            order_item=order_item,
+            now=now,
+        )
 
     order.grant_status = "completed"
 

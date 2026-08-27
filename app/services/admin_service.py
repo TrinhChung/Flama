@@ -124,6 +124,8 @@ def load_user_summary() -> dict[str, int]:
     }
 
 def serialize_user_row(user: User) -> dict[str, Any]:
+    from app.services import wallet_service
+
     return {
         "id": user.id,
         "username": user.username,
@@ -134,6 +136,13 @@ def serialize_user_row(user: User) -> dict[str, Any]:
         "is_admin": bool(user.is_admin),
         "role_id": user.role_id,
         "role_name": user.role.name if user.role else None,
+        "balance_amount_minor": int(getattr(user, "balance_amount_minor", 0) or 0),
+        "custom_platform_fee_percent": (
+            float(user.custom_platform_fee_percent)
+            if getattr(user, "custom_platform_fee_percent", None) is not None
+            else None
+        ),
+        "effective_platform_fee_percent": wallet_service.get_user_platform_fee_percent(user),
     }
 
 def append_audit_log(

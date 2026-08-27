@@ -17,6 +17,7 @@ DEFAULT_USER_ROLES: tuple[dict[str, Any], ...] = (
         "description": "Tài khoản học viên với các quyền học tập cơ bản.",
         "is_admin": False,
         "position": 1,
+        "default_platform_fee_percent": 10.0,
     },
     {
         "code": "creator",
@@ -24,6 +25,7 @@ DEFAULT_USER_ROLES: tuple[dict[str, Any], ...] = (
         "description": "Tài khoản được mở rộng quyền tạo và chia sẻ nội dung.",
         "is_admin": False,
         "position": 2,
+        "default_platform_fee_percent": 5.0,
     },
     {
         "code": "enterprise",
@@ -31,6 +33,7 @@ DEFAULT_USER_ROLES: tuple[dict[str, Any], ...] = (
         "description": "Tài khoản dành cho tổ chức hoặc doanh nghiệp.",
         "is_admin": False,
         "position": 3,
+        "default_platform_fee_percent": 10.0,
     },
     {
         "code": "admin",
@@ -38,6 +41,7 @@ DEFAULT_USER_ROLES: tuple[dict[str, Any], ...] = (
         "description": "Toàn quyền quản trị hệ thống.",
         "is_admin": True,
         "position": 4,
+        "default_platform_fee_percent": 0.0,
     },
 )
 
@@ -66,9 +70,15 @@ def ensure_default_user_roles(session) -> dict[str, UserRole]:
     if not _role_schema_ready(session):
         return {}
 
+    bind = session.get_bind()
+    inspector = inspect(bind)
+    role_columns = {column["name"] for column in inspector.get_columns("user_roles")}
+    has_fee_col = "default_platform_fee_percent" in role_columns
+
     existing = {role.code: role for role in UserRole.query.all()}
     for row in DEFAULT_USER_ROLES:
         role = existing.get(row["code"])
+        fee_percent = float(row.get("default_platform_fee_percent", 10.0))
         if role is None:
             role = UserRole(
                 code=row["code"],
@@ -76,6 +86,7 @@ def ensure_default_user_roles(session) -> dict[str, UserRole]:
                 description=row["description"],
                 is_admin=bool(row["is_admin"]),
                 position=int(row["position"]),
+                default_platform_fee_percent=fee_percent,
             )
             session.add(role)
             existing[row["code"]] = role
@@ -84,6 +95,8 @@ def ensure_default_user_roles(session) -> dict[str, UserRole]:
             role.description = row["description"]
             role.is_admin = bool(row["is_admin"])
             role.position = int(row["position"])
+            if has_fee_col and getattr(role, "default_platform_fee_percent", None) is None:
+                role.default_platform_fee_percent = fee_percent
 
     session.flush()
 

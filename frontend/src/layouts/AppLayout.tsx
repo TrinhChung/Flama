@@ -50,6 +50,7 @@ const pageTitles: Record<string, string> = {
   '/marketplace/note-types': 'Loại thẻ',
   '/marketplace/note-types/publish': 'Đăng loại thẻ',
   '/orders': 'Đơn hàng',
+  '/profile': 'Trang cá nhân & Ví',
   '/settings/mcp-tokens': 'MCP Tokens',
   '/settings/yomitan': 'Kết nối Yomitan',
   '/guide/flama-audio': 'Tải Flama Audio',
