@@ -51,6 +51,10 @@ from app.services.stats_overview import get_effective_timezone_name
 from app.services.scheduler_config_service import resolve_deck_options
 from app.services import study_artifact_service
 from app.services import study_session_service
+from app.services.study_action_runtime import (
+    compute_review_previews,
+    execute_review_action,
+)
 from app.presenters.vocabulary_presenter import note_field_values_as_strings
 
 
@@ -298,10 +302,10 @@ def _build_study_next_payload(
         user_id=current_user.id,
         options=deck_options,
     )
-    interval_preview = computeAnswerPreview(
-        card_state,
-        deck_options,
-        now,
+    interval_preview = compute_review_previews(
+        state=card_state,
+        options=deck_options,
+        now=now,
         timezone_name=timezone_name,
     )
     rendered = render_template_pair(
@@ -577,10 +581,10 @@ def study_intervals_preview(card_id: str):
         user_id=current_user.id,
         options=deck_options,
     )
-    preview = computeAnswerPreview(
-        card_state,
-        deck_options,
-        now,
+    preview = compute_review_previews(
+        state=card_state,
+        options=deck_options,
+        now=now,
         timezone_name=timezone_name,
     )
     return _no_store_json(
@@ -592,6 +596,27 @@ def study_intervals_preview(card_id: str):
             "intervals_preview": preview,
         }
     )
+
+
+@flashcards_bp.route("/api/study/scopes/<scope_type>/<scope_id>/compositions", methods=["GET"])
+@login_required
+def study_scope_compositions(scope_type: str, scope_id: str):
+    from app.services.study_composition_service import list_available_compositions_for_scope
+    normalized_scope = scope_type.strip().lower()
+    if normalized_scope not in ("deck", "note_type"):
+        return _study_error("INVALID_SCOPE", "Scope must be deck or note_type.", status=400)
+
+    compositions = list_available_compositions_for_scope(
+        scope_type=normalized_scope,
+        scope_id=scope_id,
+        user_id=int(current_user.id),
+    )
+    return jsonify({
+        "schema_version": "study-scope-compositions.v1",
+        "scope_type": normalized_scope,
+        "scope_id": scope_id,
+        "compositions": [c.to_dict() for c in compositions],
+    })
 
 
 @flashcards_bp.route("/api/study/sessions", methods=["POST"])
@@ -799,84 +824,27 @@ def study_answer(card_id: str):
     )
     now = datetime.utcnow()
     timezone_name = get_effective_timezone_name(getattr(current_user, "timezone", "UTC"))
-    if client_render:
-        requested_state_version = str(payload.get("review_state_version") or "").strip()
-        current_state_version = study_artifact_service.review_state_version(
-            progress=progress,
-            deck_options=deck_options,
-            timezone_name=timezone_name,
-        )
-        if not requested_state_version or requested_state_version != current_state_version:
-            return _no_store_json(
-                {
-                    "error": "STALE_REVIEW_STATE",
-                    "message": "Review state changed; reload the study manifest.",
-                },
-                409,
-            )
-    if progress is None:
-        progress = CardProgress(
-            user_id=current_user.id,
-            card_id=card.id,
-            queue="new",
-            step_index=0,
-            due_at=None,
-            due_day=None,
-            interval_days=0,
-            ease_factor=deck_options.startingEase,
-            reps=0,
-            lapses=0,
-        )
-        db.session.add(progress)
-        db.session.flush()
-    elif _is_progress_suspended(progress):
-        return _study_error("CARD_SUSPENDED", "Card is suspended.", status=409)
-
-    # Capture for optimistic locking (detect concurrent reviews)
-    expected_last_reviewed_at = progress.last_reviewed_at
-
-    current_state = _card_state_from_progress(
-        progress,
-        now,
-        timezone_name=timezone_name,
-        user_id=current_user.id,
-        options=deck_options,
+    from app.services.study_service import (
+        StudyReviewError,
+        execute_native_review_command,
     )
-    answer_preview = computeAnswerPreview(
-        current_state,
-        deck_options,
-        now,
-        timezone_name=timezone_name,
-    )
-    review_mode = normalize_review_mode(current_state.type)
-    updated_state = applyAnswer(  # type: ignore[arg-type]
-        current_state,
-        deck_options,
-        now,
-        rating,
-        timezone_name=timezone_name,
-    )
-    from app.services.study_service import apply_study_answer_and_commit, ConcurrentReviewError
 
     try:
-        local_deck_id_for_usage = apply_study_answer_and_commit(
+        command_result = execute_native_review_command(
             user=current_user,
             card=card,
-            progress=progress,
-            expected_last_reviewed_at=expected_last_reviewed_at,
-            current_state=current_state,
-            updated_state=updated_state,
-            now=now,
-            rating=rating,
-            review_mode=review_mode,
+            action=rating,
             payload=service_payload,
             clone_scope=clone_scope,
             requested_scope_id=requested_scope_id,
             timezone_name=timezone_name,
-            deck_options=deck_options,
+            require_review_state_version=bool(client_render),
+            review_state_version=str(payload.get("review_state_version") or "").strip() or None,
+            now=now,
         )
-    except ConcurrentReviewError as exc:
-        return _study_error("CONCURRENT_REVIEW", str(exc), status=409)
+        local_deck_id_for_usage = command_result.local_deck_id
+    except StudyReviewError as exc:
+        return _study_error(exc.code, str(exc), status=exc.status)
 
     next_scope_id = requested_scope_id if requested_scope_id is not None else local_deck_id_for_usage
     next_card_url = None
@@ -912,13 +880,13 @@ def study_answer(card_id: str):
         "success": True,
         "next_url": next_url,
         "next_card_url": next_card_url,
-        "applied_interval": answer_preview.get(rating),
+        "applied_interval": command_result.intervals_preview.get(rating),
     }
     if client_render:
         response_payload["next_manifest"] = next_card_payload
     else:
         response_payload["next_card_payload"] = next_card_payload
-        response_payload["intervals_preview"] = answer_preview
+        response_payload["intervals_preview"] = command_result.intervals_preview
     return _no_store_json(response_payload)
 
 

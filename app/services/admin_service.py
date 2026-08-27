@@ -87,8 +87,17 @@ def resolve_account_name(user: User) -> str:
         return ""
     return account_name
 
-def build_users_query(search_term: str, status_filter: str):
+def build_users_query(
+    search_term: str,
+    status_filter: str,
+    user_ids: list[int] | None = None,
+    role_id: int | None = None,
+):
     query = User.query.options(selectinload(User.role))
+    if user_ids:
+        query = query.filter(User.id.in_(user_ids))
+    if role_id is not None and role_id > 0:
+        query = query.filter(User.role_id == role_id)
     if search_term:
         like_pattern = f"%{escape_like_pattern(search_term)}%"
         query = query.filter(

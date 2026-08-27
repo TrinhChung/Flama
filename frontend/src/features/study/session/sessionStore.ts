@@ -3,11 +3,17 @@ import type {
   StudySessionEvent,
   StudySessionSnapshot,
 } from '../types'
+import {
+  normalizePersistedStudySession,
+} from './sessionRestore'
+import type { StudySessionQuarantine } from './sessionRestore'
 
 const DB_NAME = 'flama-study'
-const DB_VERSION = 1
+const DB_VERSION = 2
 const STORE_NAME = 'sessions'
+const QUARANTINE_STORE_NAME = 'session-quarantine'
 const memoryFallback = new Map<string, PersistedStudySession>()
+const memoryQuarantine = new Map<string, QuarantinedStudySessionRow>()
 
 export type StudyCommitReason =
   | 'auto_finish'
@@ -35,71 +41,12 @@ export type PersistedStudySession = {
   updated_at_ms: number
 }
 
-const VALID_CARD_TYPES = new Set([
-  'new',
-  'learning',
-  'review',
-  'relearning',
-])
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function isFiniteTimestamp(value: unknown) {
-  return typeof value === 'string' && Number.isFinite(Date.parse(value))
-}
-
-export function isRestorableStudySession(
-  value: unknown,
-): value is PersistedStudySession {
-  if (!isRecord(value) || !isRecord(value.snapshot)) return false
-  const snapshot = value.snapshot
-  const policies = snapshot.policies
-  const templates = snapshot.templates
-  const contents = snapshot.contents
-  if (
-    snapshot.schema_version !== 'study-session.v2'
-    || !isFiniteTimestamp(snapshot.server_now_utc)
-    || !isFiniteTimestamp(snapshot.expires_at)
-    || typeof snapshot.learn_ahead_seconds !== 'number'
-    || !Number.isFinite(snapshot.learn_ahead_seconds)
-    || snapshot.learn_ahead_seconds < 0
-    || !Array.isArray(snapshot.cards)
-    || !isRecord(policies)
-    || !isRecord(templates)
-    || !isRecord(contents)
-  ) return false
-
-  if (!snapshot.cards.every((card) => {
-    if (!isRecord(card) || !isRecord(card.state)) return false
-    const policyKey = String(card.policy_key || '')
-    const templateKey = String(card.template_key || '')
-    const contentKey = String(card.content_key || '')
-    return (
-      typeof card.card_id === 'string'
-      && VALID_CARD_TYPES.has(String(card.state.type || ''))
-      && isRecord(policies[policyKey])
-      && isRecord(templates[templateKey])
-      && isRecord(contents[contentKey])
-    )
-  })) return false
-
-  const activeCardIdValid = (
-    value.active_card_id === undefined
-    || value.active_card_id === null
-    || typeof value.active_card_id === 'string'
-  )
-
-  return (
-    typeof value.scope_key === 'string'
-    && Array.isArray(value.events)
-    && Array.isArray(value.touched_card_ids)
-    && typeof value.opened_client_at_ms === 'number'
-    && Number.isFinite(value.opened_client_at_ms)
-    && (value.status === 'active' || value.status === 'pending_commit')
-    && activeCardIdValid
-  )
+type QuarantinedStudySessionRow = {
+  scope_key: string
+  quarantined_at_ms: number
+  reason: StudySessionQuarantine['reason']
+  message: string
+  raw_session: unknown
 }
 
 function openDatabase(): Promise<IDBDatabase> {
@@ -113,6 +60,12 @@ function openDatabase(): Promise<IDBDatabase> {
       const database = request.result
       if (!database.objectStoreNames.contains(STORE_NAME)) {
         database.createObjectStore(STORE_NAME, { keyPath: 'scope_key' })
+      }
+      if (!database.objectStoreNames.contains(QUARANTINE_STORE_NAME)) {
+        database.createObjectStore(
+          QUARANTINE_STORE_NAME,
+          { keyPath: 'scope_key' },
+        )
       }
     }
     request.onsuccess = () => resolve(request.result)
@@ -150,39 +103,104 @@ export function scopeKey(userId: number, scope: string, scopeId: string) {
 export type LoadedStudySession = {
   session: PersistedStudySession | null
   durable: boolean
+  quarantine?: StudySessionQuarantine
+}
+
+async function moveSessionToQuarantine(
+  key: string,
+  rawSession: unknown,
+  quarantine: StudySessionQuarantine,
+) {
+  const quarantinedAtMs = Date.now()
+  const row: QuarantinedStudySessionRow = {
+    scope_key: key,
+    quarantined_at_ms: quarantinedAtMs,
+    reason: quarantine.reason,
+    message: quarantine.message,
+    raw_session: rawSession,
+  }
+  memoryFallback.delete(key)
+  memoryQuarantine.set(key, row)
+
+  const database = await openDatabase()
+  await new Promise<void>((resolve, reject) => {
+    const transaction = database.transaction(
+      [STORE_NAME, QUARANTINE_STORE_NAME],
+      'readwrite',
+    )
+    transaction.objectStore(QUARANTINE_STORE_NAME).put(row)
+    transaction.objectStore(STORE_NAME).delete(key)
+    transaction.oncomplete = () => {
+      database.close()
+      resolve()
+    }
+    transaction.onabort = () => {
+      database.close()
+      reject(transaction.error)
+    }
+    transaction.onerror = () => reject(transaction.error)
+  })
 }
 
 export async function loadStudySessionWithDurability(
   key: string,
 ): Promise<LoadedStudySession> {
   try {
-    const row = await transact<PersistedStudySession | undefined>(
+    const row = await transact<unknown | undefined>(
       'readonly',
       (store) => store.get(key),
     )
     const restored = row ?? memoryFallback.get(key) ?? null
     if (!restored) return { session: null, durable: true }
-    if (!isRestorableStudySession(restored)) {
-      memoryFallback.delete(key)
+    const result = normalizePersistedStudySession(restored)
+    if (result.status === 'quarantine') {
       try {
-        await transact<undefined>('readwrite', (store) => store.delete(key))
+        await moveSessionToQuarantine(key, restored, result.quarantine)
       } catch {
-        // A malformed durable row is already ignored by the current tab.
+        // The invalid row is removed from the active in-memory store even if
+        // durable quarantine is temporarily unavailable.
       }
-      return { session: null, durable: true }
+      return {
+        session: null,
+        durable: Boolean(row),
+        quarantine: result.quarantine,
+      }
     }
-    const normalized = {
-      ...restored,
-      undo_history: Array.isArray(restored.undo_history) ? restored.undo_history : [],
-      commit_reason: restored.commit_reason ?? null,
-      resume_after_commit: Boolean(restored.resume_after_commit),
-    }
+    const normalized = result.session
     memoryFallback.set(key, normalized)
-    return { session: normalized, durable: Boolean(row) }
+    let durable = Boolean(row)
+    if (row && result.migrated) {
+      try {
+        await transact<IDBValidKey>('readwrite', (store) => store.put(normalized))
+      } catch {
+        durable = false
+      }
+    }
+    return { session: normalized, durable }
   } catch {
     const fallback = memoryFallback.get(key) ?? null
+    if (!fallback) return { session: null, durable: false }
+    const result = normalizePersistedStudySession(fallback)
+    if (result.status === 'quarantine') {
+      memoryFallback.delete(key)
+      const quarantinedAtMs = Date.now()
+      const row: QuarantinedStudySessionRow = {
+        scope_key: key,
+        quarantined_at_ms: quarantinedAtMs,
+        reason: result.quarantine.reason,
+        message: result.quarantine.message,
+        raw_session: fallback,
+      }
+      memoryQuarantine.set(key, row)
+      return {
+        session: null,
+        durable: false,
+        quarantine: result.quarantine,
+      }
+    }
+    memoryFallback.set(key, result.session)
     return {
-      session: isRestorableStudySession(fallback) ? fallback : null,
+      session: result.session,
       durable: false,
     }
   }
@@ -193,9 +211,16 @@ export async function loadStudySession(key: string) {
 }
 
 export async function saveStudySession(session: PersistedStudySession) {
-  memoryFallback.set(session.scope_key, session)
+  const result = normalizePersistedStudySession(session)
+  if (result.status === 'quarantine') {
+    throw new Error(
+      `Refusing to persist an invalid study session: ${result.quarantine.reason}.`,
+    )
+  }
+  const normalized = result.session
+  memoryFallback.set(normalized.scope_key, normalized)
   try {
-    await transact<IDBValidKey>('readwrite', (store) => store.put(session))
+    await transact<IDBValidKey>('readwrite', (store) => store.put(normalized))
     return true
   } catch {
     // In private or quota-constrained contexts the in-memory copy still keeps

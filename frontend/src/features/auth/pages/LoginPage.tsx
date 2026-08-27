@@ -24,7 +24,13 @@ export function LoginPage() {
 
   if (bootstrap?.user) {
     const next = searchParams.get('next') || ''
-    if (next.startsWith('/') && !next.startsWith('//')) {
+    if (
+      next.startsWith('/') &&
+      !next.startsWith('//') &&
+      next !== '/' &&
+      next !== '/login' &&
+      next !== '/register'
+    ) {
       return <Navigate to={next} replace />
     }
     return <Navigate to="/dashboard" replace />

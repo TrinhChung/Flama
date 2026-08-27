@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
+from sqlalchemy.orm import Session
+from app.repositories import marketplace_taxonomy_repository
 
+logger = logging.getLogger(__name__)
 
+# Static fallbacks / constants
 DOMAIN_OPTIONS = (
     {"id": "language_learning", "label": "Ngôn ngữ"},
     {"id": "certification", "label": "Chứng chỉ"},
@@ -85,27 +90,22 @@ TOPIC_OPTIONS = (
     {"id": "serverless", "label": "Serverless"},
     {"id": "monitoring", "label": "Monitoring"},
     {"id": "architecture_concepts", "label": "Khái niệm kiến trúc"},
-    # Tech & Coding
     {"id": "code_syntax", "label": "Cú pháp & Snippets"},
     {"id": "algorithms_dsa", "label": "Cấu trúc dữ liệu & Thuật toán"},
     {"id": "frontend_web", "label": "Frontend & Web"},
     {"id": "backend_api", "label": "Backend & API"},
     {"id": "devops_cloud", "label": "DevOps & Cloud"},
-    # Academic & THPT
     {"id": "math_formulas", "label": "Công thức Toán"},
     {"id": "physics_laws", "label": "Định luật Vật lý"},
     {"id": "chemistry_reactions", "label": "Phản ứng Hóa học"},
     {"id": "biology_genetics", "label": "Sinh học & Di truyền"},
     {"id": "history_events", "label": "Sự kiện Lịch sử"},
     {"id": "geography_facts", "label": "Địa lý"},
-    # Medical
     {"id": "medical_terms", "label": "Thuật ngữ Y khoa"},
     {"id": "anatomy", "label": "Giải phẫu học"},
     {"id": "pharmacology", "label": "Dược lý & Thuốc"},
-    # Law
     {"id": "law_clauses", "label": "Điều luật & Pháp điển"},
     {"id": "legal_cases", "label": "Án lệ & Tố tụng"},
-    # Business
     {"id": "project_management", "label": "Quản trị dự án / Agile"},
     {"id": "finance_accounting", "label": "Tài chính & Kế toán"},
     {"id": "marketing_sales", "label": "Marketing & Bán hàng"},
@@ -330,16 +330,6 @@ SUBJECT_PACKS = {
                     {"id": "professional", "label": "Professional (SAP / DOP)", "difficulty_band": "advanced"},
                     {"id": "specialty", "label": "Specialty (Security / Data / ML)", "difficulty_band": "advanced"},
                 ),
-                "tracks": (
-                    {"id": "ccp", "label": "CCP"},
-                    {"id": "saa", "label": "SAA"},
-                    {"id": "dva", "label": "DVA"},
-                    {"id": "soa", "label": "SOA"},
-                    {"id": "sap", "label": "SAP"},
-                    {"id": "security", "label": "Security"},
-                    {"id": "data", "label": "Data"},
-                    {"id": "ml", "label": "ML"},
-                ),
             },
         ),
         "learning_goals": ("concept_recall", "service_comparison", "scenario_practice", "architecture_review", "exam_prep"),
@@ -533,6 +523,126 @@ _TOPIC_MAP = {row["id"]: row["label"] for row in TOPIC_OPTIONS}
 _FEATURE_MAP = {row["id"]: row["label"] for row in FORMAT_FEATURE_OPTIONS}
 _BEST_USED_FOR_MAP = {row["id"]: row["label"] for row in NOTE_TYPE_BEST_USED_FOR_OPTIONS}
 
+_SCHEMA_CACHE: dict[str, Any] = {}
+
+
+def invalidate_taxonomy_cache() -> None:
+    """Clear cached taxonomy schema to force DB re-query."""
+    _SCHEMA_CACHE.clear()
+
+
+def ensure_default_taxonomy_data(session: Session) -> None:
+    """Seed initial taxonomy tables in database if empty."""
+    from models.taxonomy import TaxonomyDomain
+
+    existing = session.query(TaxonomyDomain).first()
+    if existing:
+        return
+
+    logger.info("Seeding initial Taxonomy Metadata tables in database...")
+    try:
+        # 1. Domains
+        for idx, dom in enumerate(DOMAIN_OPTIONS):
+            marketplace_taxonomy_repository.create_domain(
+                domain_id=dom["id"],
+                label=dom["label"],
+                sort_order=idx * 10,
+            )
+
+        # 2. Subjects
+        for idx, sub in enumerate(SUBJECT_OPTIONS):
+            marketplace_taxonomy_repository.create_subject(
+                subject_id=sub["id"],
+                domain_id=sub["domain"],
+                label=sub["label"],
+                sort_order=idx * 10,
+            )
+
+        # 3. Options
+        for idx, opt in enumerate(DIFFICULTY_OPTIONS):
+            marketplace_taxonomy_repository.create_option(
+                option_id=opt["id"],
+                option_type="difficulty_band",
+                label=opt["label"],
+                sort_order=idx * 10,
+            )
+        for idx, opt in enumerate(AUDIENCE_OPTIONS):
+            marketplace_taxonomy_repository.create_option(
+                option_id=opt["id"],
+                option_type="audience",
+                label=opt["label"],
+                sort_order=idx * 10,
+            )
+        for idx, opt in enumerate(LEARNING_GOAL_OPTIONS):
+            marketplace_taxonomy_repository.create_option(
+                option_id=opt["id"],
+                option_type="learning_goal",
+                label=opt["label"],
+                sort_order=idx * 10,
+            )
+        for idx, opt in enumerate(TOPIC_OPTIONS):
+            marketplace_taxonomy_repository.create_option(
+                option_id=opt["id"],
+                option_type="primary_topic",
+                label=opt["label"],
+                sort_order=idx * 10,
+            )
+        for idx, opt in enumerate(FORMAT_FEATURE_OPTIONS):
+            marketplace_taxonomy_repository.create_option(
+                option_id=opt["id"],
+                option_type="format_feature",
+                label=opt["label"],
+                sort_order=idx * 10,
+            )
+        for idx, opt in enumerate(NOTE_TYPE_BEST_USED_FOR_OPTIONS):
+            marketplace_taxonomy_repository.create_option(
+                option_id=opt["id"],
+                option_type="best_used_for",
+                label=opt["label"],
+                sort_order=idx * 10,
+            )
+
+        # 4. Subject Packs (Frameworks & Levels & Mappings)
+        for subject_id, pack in SUBJECT_PACKS.items():
+            frameworks = pack.get("frameworks", ())
+            for f_idx, fw in enumerate(frameworks):
+                marketplace_taxonomy_repository.create_framework(
+                    framework_id=fw["id"],
+                    subject_id=subject_id,
+                    label=fw["label"],
+                    sort_order=f_idx * 10,
+                )
+                for l_idx, lvl in enumerate(fw.get("levels", ())):
+                    marketplace_taxonomy_repository.create_framework_level(
+                        level_id=lvl["id"],
+                        framework_id=fw["id"],
+                        subject_id=subject_id,
+                        label=lvl["label"],
+                        difficulty_band=lvl.get("difficulty_band", "beginner"),
+                        sort_order=l_idx * 10,
+                    )
+            # Subject mappings
+            marketplace_taxonomy_repository.set_subject_option_maps(
+                subject_id=subject_id,
+                option_type="learning_goal",
+                option_ids=list(pack.get("learning_goals", ())),
+            )
+            marketplace_taxonomy_repository.set_subject_option_maps(
+                subject_id=subject_id,
+                option_type="primary_topic",
+                option_ids=list(pack.get("topics", ())),
+            )
+            marketplace_taxonomy_repository.set_subject_option_maps(
+                subject_id=subject_id,
+                option_type="format_feature",
+                option_ids=list(pack.get("features", ())),
+            )
+
+        session.flush()
+        logger.info("Successfully seeded Taxonomy Metadata database tables.")
+    except Exception as e:
+        logger.warning("Could not seed Taxonomy Metadata into DB: %s", e)
+
 
 def empty_taxonomy_metadata() -> dict[str, Any]:
     return {
@@ -553,44 +663,174 @@ def empty_taxonomy_metadata() -> dict[str, Any]:
 
 
 def build_taxonomy_schema(*, content_type: str) -> dict[str, Any]:
-    return {
-        "content_type": content_type,
-        "domains": list(DOMAIN_OPTIONS),
-        "subjects": list(SUBJECT_OPTIONS),
-        "difficulty_bands": list(DIFFICULTY_OPTIONS),
-        "audiences": list(AUDIENCE_OPTIONS),
-        "learning_goals": list(LEARNING_GOAL_OPTIONS),
-        "primary_topics": list(TOPIC_OPTIONS),
-        "format_features": list(FORMAT_FEATURE_OPTIONS),
-        "best_used_for": list(NOTE_TYPE_BEST_USED_FOR_OPTIONS) if content_type == "note_type" else [],
-        "subject_packs": {
-            subject_id: {
-                "frameworks": [dict(framework) for framework in pack.get("frameworks", ())],
-                "learning_goals": [dict(_goal_option(goal_id)) for goal_id in pack.get("learning_goals", ()) if _goal_option(goal_id)],
-                "primary_topics": [dict(_topic_option(topic_id)) for topic_id in pack.get("topics", ()) if _topic_option(topic_id)],
-                "format_features": [dict(_feature_option(feature_id)) for feature_id in pack.get("features", ()) if _feature_option(feature_id)],
+    cache_key = f"schema_{content_type}"
+    if cache_key in _SCHEMA_CACHE:
+        return _SCHEMA_CACHE[cache_key]
+
+    try:
+        tree = marketplace_taxonomy_repository.get_full_taxonomy_tree(include_inactive=False)
+        db_domains = tree["domains"]
+        db_subjects = tree["subjects"]
+        db_frameworks = tree["frameworks"]
+        db_levels = tree["levels"]
+        db_options = tree["options"]
+        db_mappings = tree["mappings"]
+    except Exception as e:
+        logger.debug("Failed fetching taxonomy from DB, using fallback: %s", e)
+        db_domains = []
+
+    if db_domains:
+        domains_list = [{"id": d.id, "label": d.label} for d in db_domains]
+        subjects_list = [
+            {"id": s.id, "label": s.label, "domain": s.domain_id} for s in db_subjects
+        ]
+
+        difficulty_bands = [
+            {"id": o.id, "label": o.label}
+            for o in db_options
+            if o.option_type == "difficulty_band"
+        ]
+        audiences = [
+            {"id": o.id, "label": o.label}
+            for o in db_options
+            if o.option_type == "audience"
+        ]
+        learning_goals = [
+            {"id": o.id, "label": o.label}
+            for o in db_options
+            if o.option_type == "learning_goal"
+        ]
+        primary_topics = [
+            {"id": o.id, "label": o.label}
+            for o in db_options
+            if o.option_type == "primary_topic"
+        ]
+        format_features = [
+            {"id": o.id, "label": o.label}
+            for o in db_options
+            if o.option_type == "format_feature"
+        ]
+        best_used_for = [
+            {"id": o.id, "label": o.label}
+            for o in db_options
+            if o.option_type == "best_used_for"
+        ]
+
+        # Group subject packs
+        opt_lookup = {o.id: {"id": o.id, "label": o.label} for o in db_options}
+
+        subject_packs = {}
+        for sub in db_subjects:
+            s_id = sub.id
+            sub_frameworks = []
+            for fw in [f for f in db_frameworks if f.subject_id == s_id]:
+                fw_levels = [
+                    {
+                        "id": l.id,
+                        "label": l.label,
+                        "difficulty_band": l.difficulty_band,
+                    }
+                    for l in db_levels
+                    if l.framework_id == fw.id
+                ]
+                sub_frameworks.append(
+                    {
+                        "id": fw.id,
+                        "label": fw.label,
+                        "levels": fw_levels,
+                    }
+                )
+
+            s_goals = [
+                opt_lookup[m.option_id]
+                for m in db_mappings
+                if m.subject_id == s_id and m.option_type == "learning_goal" and m.option_id in opt_lookup
+            ]
+            s_topics = [
+                opt_lookup[m.option_id]
+                for m in db_mappings
+                if m.subject_id == s_id and m.option_type == "primary_topic" and m.option_id in opt_lookup
+            ]
+            s_features = [
+                opt_lookup[m.option_id]
+                for m in db_mappings
+                if m.subject_id == s_id and m.option_type == "format_feature" and m.option_id in opt_lookup
+            ]
+
+            subject_packs[s_id] = {
+                "frameworks": sub_frameworks,
+                "learning_goals": s_goals,
+                "primary_topics": s_topics,
+                "format_features": s_features,
             }
-            for subject_id, pack in SUBJECT_PACKS.items()
-        },
-    }
+
+        result = {
+            "content_type": content_type,
+            "domains": domains_list,
+            "subjects": subjects_list,
+            "difficulty_bands": difficulty_bands,
+            "audiences": audiences,
+            "learning_goals": learning_goals,
+            "primary_topics": primary_topics,
+            "format_features": format_features,
+            "best_used_for": best_used_for if content_type == "note_type" else [],
+            "subject_packs": subject_packs,
+        }
+    else:
+        # Static Fallback
+        result = {
+            "content_type": content_type,
+            "domains": list(DOMAIN_OPTIONS),
+            "subjects": list(SUBJECT_OPTIONS),
+            "difficulty_bands": list(DIFFICULTY_OPTIONS),
+            "audiences": list(AUDIENCE_OPTIONS),
+            "learning_goals": list(LEARNING_GOAL_OPTIONS),
+            "primary_topics": list(TOPIC_OPTIONS),
+            "format_features": list(FORMAT_FEATURE_OPTIONS),
+            "best_used_for": list(NOTE_TYPE_BEST_USED_FOR_OPTIONS) if content_type == "note_type" else [],
+            "subject_packs": {
+                subject_id: {
+                    "frameworks": [dict(framework) for framework in pack.get("frameworks", ())],
+                    "learning_goals": [dict(_goal_option(goal_id)) for goal_id in pack.get("learning_goals", ()) if _goal_option(goal_id)],
+                    "primary_topics": [dict(_topic_option(topic_id)) for topic_id in pack.get("topics", ()) if _topic_option(topic_id)],
+                    "format_features": [dict(_feature_option(feature_id)) for feature_id in pack.get("features", ()) if _feature_option(feature_id)],
+                }
+                for subject_id, pack in SUBJECT_PACKS.items()
+            },
+        }
+
+    _SCHEMA_CACHE[cache_key] = result
+    return result
 
 
 def normalize_taxonomy_payload(payload: dict[str, Any] | None, *, content_type: str) -> tuple[dict[str, Any], str | None]:
     normalized = empty_taxonomy_metadata()
     source = payload or {}
 
-    subject = _normalize_choice(_get_value(source, "taxonomy_subject", "subject"), {row["id"] for row in SUBJECT_OPTIONS})
-    domain = _normalize_choice(_get_value(source, "taxonomy_domain", "domain"), {row["id"] for row in DOMAIN_OPTIONS})
+    schema = build_taxonomy_schema(content_type=content_type)
+    allowed_subjects = {s["id"] for s in schema["subjects"]}
+    allowed_domains = {d["id"] for d in schema["domains"]}
+    allowed_difficulties = {d["id"] for d in schema["difficulty_bands"]}
+    allowed_audiences = {a["id"] for a in schema["audiences"]}
+    allowed_goals = {g["id"] for g in schema["learning_goals"]}
+    allowed_topics = {t["id"] for t in schema["primary_topics"]}.union({"kanji"})
+    allowed_features = {f["id"] for f in schema["format_features"]}
+    allowed_best_used = {b["id"] for b in schema["best_used_for"]}
+
+    subject_map = {s["id"]: s for s in schema["subjects"]}
+
+    subject = _normalize_choice(_get_value(source, "taxonomy_subject", "subject"), allowed_subjects)
+    domain = _normalize_choice(_get_value(source, "taxonomy_domain", "domain"), allowed_domains)
     difficulty_band = _normalize_choice(
         _get_value(source, "taxonomy_difficulty_band", "difficulty_band", "level_band"),
-        {row["id"] for row in DIFFICULTY_OPTIONS},
+        allowed_difficulties,
     )
-    audience = _normalize_choice(_get_value(source, "taxonomy_audience", "audience"), {row["id"] for row in AUDIENCE_OPTIONS})
+    audience = _normalize_choice(_get_value(source, "taxonomy_audience", "audience"), allowed_audiences)
     subcategory = _normalize_free_text(_get_value(source, "subcategory"), max_length=120)
     target_audience = _normalize_free_text(_get_value(source, "target_audience"), max_length=255)
 
     if subject:
-        expected_domain = _SUBJECT_MAP.get(subject, {}).get("domain")
+        expected_domain = subject_map.get(subject, {}).get("domain")
         if domain and expected_domain and domain != expected_domain:
             return normalized, "subject does not match selected domain."
         domain = expected_domain or domain
@@ -604,17 +844,17 @@ def normalize_taxonomy_payload(payload: dict[str, Any] | None, *, content_type: 
 
     learning_goals = _normalize_multi_values(
         _get_multi_value(source, "taxonomy_learning_goals", "learning_goals"),
-        {row["id"] for row in LEARNING_GOAL_OPTIONS},
+        allowed_goals,
         max_items=3,
     )
     primary_topics = _normalize_multi_values(
         _get_multi_value(source, "taxonomy_primary_topics", "primary_topics"),
-        {row["id"] for row in TOPIC_OPTIONS}.union({"kanji"}),
+        allowed_topics,
         max_items=5,
     )
     format_features = _normalize_multi_values(
         _get_multi_value(source, "taxonomy_format_features", "format_features"),
-        {row["id"] for row in FORMAT_FEATURE_OPTIONS},
+        allowed_features,
         max_items=4,
     )
 
@@ -622,7 +862,7 @@ def normalize_taxonomy_payload(payload: dict[str, Any] | None, *, content_type: 
     if content_type == "note_type":
         best_used_for = _normalize_choice(
             _get_value(source, "taxonomy_best_used_for", "best_used_for"),
-            {row["id"] for row in NOTE_TYPE_BEST_USED_FOR_OPTIONS},
+            allowed_best_used,
         )
 
     if framework_level and difficulty_band is None:
@@ -790,42 +1030,125 @@ def suggest_primary_category(metadata: dict[str, Any] | None) -> str | None:
 
 
 def domain_label(value: str | None) -> str | None:
-    return _DOMAIN_MAP.get(str(value or "").strip())
+    val = str(value or "").strip()
+    if not val:
+        return None
+    try:
+        dom = marketplace_taxonomy_repository.get_domain(val)
+        if dom:
+            return dom.label
+    except Exception:
+        pass
+    return _DOMAIN_MAP.get(val)
 
 
 def subject_label(value: str | None) -> str | None:
-    option = _SUBJECT_MAP.get(str(value or "").strip())
+    val = str(value or "").strip()
+    if not val:
+        return None
+    try:
+        sub = marketplace_taxonomy_repository.get_subject(val)
+        if sub:
+            return sub.label
+    except Exception:
+        pass
+    option = _SUBJECT_MAP.get(val)
     return option.get("label") if option else None
 
 
 def difficulty_label(value: str | None) -> str | None:
-    return _DIFFICULTY_MAP.get(str(value or "").strip())
+    val = str(value or "").strip()
+    if not val:
+        return None
+    if val in _DIFFICULTY_MAP:
+        return _DIFFICULTY_MAP[val]
+    try:
+        opt = marketplace_taxonomy_repository.get_option(val)
+        if opt:
+            return opt.label
+    except Exception:
+        pass
+    return None
 
 
 def audience_label(value: str | None) -> str | None:
-    return _AUDIENCE_MAP.get(str(value or "").strip())
+    val = str(value or "").strip()
+    if not val:
+        return None
+    if val in _AUDIENCE_MAP:
+        return _AUDIENCE_MAP[val]
+    try:
+        opt = marketplace_taxonomy_repository.get_option(val)
+        if opt:
+            return opt.label
+    except Exception:
+        pass
+    return None
 
 
 def goal_labels(values: list[str]) -> list[str]:
-    return [_GOAL_MAP[item] for item in values if item in _GOAL_MAP]
+    labels: list[str] = []
+    for item in values:
+        lbl = _GOAL_MAP.get(item)
+        if not lbl:
+            try:
+                opt = marketplace_taxonomy_repository.get_option(item)
+                if opt:
+                    lbl = opt.label
+            except Exception:
+                pass
+        if lbl:
+            labels.append(lbl)
+    return labels
 
 
 def topic_labels(values: list[str]) -> list[str]:
     labels: list[str] = []
     for item in values:
-        if item in _TOPIC_MAP:
-            labels.append(_TOPIC_MAP[item])
-        elif item == "kanji":
-            labels.append("Kanji")
+        lbl = _TOPIC_MAP.get(item)
+        if not lbl and item == "kanji":
+            lbl = "Kanji"
+        if not lbl:
+            try:
+                opt = marketplace_taxonomy_repository.get_option(item)
+                if opt:
+                    lbl = opt.label
+            except Exception:
+                pass
+        if lbl:
+            labels.append(lbl)
     return labels
 
 
 def feature_labels(values: list[str]) -> list[str]:
-    return [_FEATURE_MAP[item] for item in values if item in _FEATURE_MAP]
+    labels: list[str] = []
+    for item in values:
+        lbl = _FEATURE_MAP.get(item)
+        if not lbl:
+            try:
+                opt = marketplace_taxonomy_repository.get_option(item)
+                if opt:
+                    lbl = opt.label
+            except Exception:
+                pass
+        if lbl:
+            labels.append(lbl)
+    return labels
 
 
 def best_used_for_label(value: str | None) -> str | None:
-    return _BEST_USED_FOR_MAP.get(str(value or "").strip())
+    val = str(value or "").strip()
+    if not val:
+        return None
+    if val in _BEST_USED_FOR_MAP:
+        return _BEST_USED_FOR_MAP[val]
+    try:
+        opt = marketplace_taxonomy_repository.get_option(val)
+        if opt:
+            return opt.label
+    except Exception:
+        pass
+    return None
 
 
 def framework_level_to_difficulty(*, subject: str | None, framework: str | None, framework_level: str | None) -> str | None:
@@ -834,6 +1157,12 @@ def framework_level_to_difficulty(*, subject: str | None, framework: str | None,
     for level in _framework_level_options(subject, framework):
         if level["id"] == framework_level:
             return level.get("difficulty_band")
+    try:
+        lvl = marketplace_taxonomy_repository.get_framework_level(framework_level)
+        if lvl:
+            return lvl.difficulty_band
+    except Exception:
+        pass
     return None
 
 
@@ -843,6 +1172,12 @@ def framework_label(*, subject: str | None, framework: str | None) -> str | None
     for option in _framework_options(subject):
         if option["id"] == framework:
             return option["label"]
+    try:
+        fw = marketplace_taxonomy_repository.get_framework(framework)
+        if fw:
+            return fw.label
+    except Exception:
+        pass
     return None
 
 
@@ -852,6 +1187,12 @@ def framework_level_label(*, subject: str | None, framework: str | None, framewo
     for option in _framework_level_options(subject, framework):
         if option["id"] == framework_level:
             return option["label"]
+    try:
+        lvl = marketplace_taxonomy_repository.get_framework_level(framework_level)
+        if lvl:
+            return lvl.label
+    except Exception:
+        pass
     return None
 
 
@@ -943,7 +1284,15 @@ def _infer_legacy_taxonomy(
 def _framework_options(subject: str | None) -> list[dict[str, Any]]:
     if not subject:
         return []
-    return [dict(option) for option in SUBJECT_PACKS.get(subject, {}).get("frameworks", ())]
+    if subject in SUBJECT_PACKS and "frameworks" in SUBJECT_PACKS[subject]:
+        return [dict(option) for option in SUBJECT_PACKS[subject]["frameworks"]]
+    try:
+        fws = marketplace_taxonomy_repository.list_frameworks(subject_id=subject)
+        if fws:
+            return [{"id": f.id, "label": f.label} for f in fws]
+    except Exception:
+        pass
+    return []
 
 
 def _framework_level_options(subject: str | None, framework: str | None) -> list[dict[str, Any]]:
@@ -952,6 +1301,12 @@ def _framework_level_options(subject: str | None, framework: str | None) -> list
     for option in SUBJECT_PACKS.get(subject, {}).get("frameworks", ()):
         if option["id"] == framework:
             return [dict(level) for level in option.get("levels", ())]
+    try:
+        lvls = marketplace_taxonomy_repository.list_framework_levels(framework_id=framework)
+        if lvls:
+            return [{"id": l.id, "label": l.label, "difficulty_band": l.difficulty_band} for l in lvls]
+    except Exception:
+        pass
     return []
 
 

@@ -9,7 +9,6 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from flask_login import current_user
 
-from app.repositories.stats_query_repository import query_today_review_summary
 from app.repositories.deck_tree_query import (
     collect_subtree_ids,
     query_accessible_stats_decks,
@@ -17,6 +16,8 @@ from app.repositories.deck_tree_query import (
 from app.repositories.stats_query_repository import (
     query_due_progress_rows,
     query_interval_days_rows,
+    query_today_review_summary,
+    query_user_daily_study_time,
 )
 from app.services.anki_scheduler import _day_index, _day_index_to_datetime
 from app.services.scheduler_config_service import resolve_day_boundary_hour_local
@@ -411,4 +412,163 @@ def build_today_future_stats(
             "due_tomorrow": int(due_tomorrow),
             "daily_load": daily_load,
         },
+    }
+
+
+def build_user_study_time_stats(
+    *,
+    user_id: int,
+    timezone_name: str | None = None,
+    scope: Any = "deck",
+    deck_id: Any = None,
+    range_preset: Any = "30d",
+    start_date_str: str | None = None,
+    end_date_str: str | None = None,
+    now_utc: datetime | None = None,
+) -> dict[str, Any]:
+    effective_scope = _normalize_scope(scope)
+    parsed_deck_id: int | None = None
+    if deck_id not in (None, ""):
+        try:
+            parsed_deck_id = int(deck_id)
+        except (TypeError, ValueError):
+            parsed_deck_id = None
+
+    timezone_effective = _effective_timezone_name(timezone_name)
+    now_utc_naive = _ensure_naive_utc(now_utc or datetime.utcnow())
+    day_boundary_hour = resolve_day_boundary_hour_local(user_id=user_id)
+    today_day_index = _day_index(
+        now_utc_naive,
+        day_boundary_hour,
+        timezone_name=timezone_effective,
+    )
+    today_local = date.fromordinal(today_day_index)
+
+    # Determine start_day_local and end_day_local
+    resolved_preset = str(range_preset or "30d").strip().lower()
+    if start_date_str and end_date_str:
+        try:
+            start_day_local = date.fromisoformat(start_date_str[:10])
+            end_day_local = date.fromisoformat(end_date_str[:10])
+            resolved_preset = "custom"
+        except (TypeError, ValueError):
+            start_day_local = today_local - timedelta(days=29)
+            end_day_local = today_local
+    elif resolved_preset == "today":
+        start_day_local = today_local
+        end_day_local = today_local
+    elif resolved_preset == "7d":
+        start_day_local = today_local - timedelta(days=6)
+        end_day_local = today_local
+    elif resolved_preset == "30d":
+        start_day_local = today_local - timedelta(days=29)
+        end_day_local = today_local
+    elif resolved_preset == "90d":
+        start_day_local = today_local - timedelta(days=89)
+        end_day_local = today_local
+    elif resolved_preset in {"12m", "365d"}:
+        start_day_local = today_local - timedelta(days=364)
+        end_day_local = today_local
+    elif resolved_preset == "all":
+        start_day_local = today_local - timedelta(days=364)
+        end_day_local = today_local
+    else:
+        start_day_local = today_local - timedelta(days=29)
+        end_day_local = today_local
+        resolved_preset = "30d"
+
+    if start_day_local > end_day_local:
+        start_day_local, end_day_local = end_day_local, start_day_local
+
+    start_utc = _day_index_to_datetime(
+        start_day_local.toordinal(),
+        day_boundary_hour,
+        timezone_name=timezone_effective,
+    )
+    end_utc = _day_index_to_datetime(
+        end_day_local.toordinal() + 1,
+        day_boundary_hour,
+        timezone_name=timezone_effective,
+    )
+
+    scope_deck_ids = _resolve_scope_deck_ids(scope=effective_scope, deck_id=parsed_deck_id)
+
+    day_map = query_user_daily_study_time(
+        user_id=user_id,
+        scope_deck_ids=scope_deck_ids,
+        timezone_name=timezone_effective,
+        start_utc=start_utc,
+        end_utc=end_utc,
+        day_boundary_hour_local=day_boundary_hour,
+    )
+
+    # Build continuous daily time series
+    daily_time_series: list[dict[str, Any]] = []
+    total_minutes = 0.0
+    total_reviews = 0
+    total_passed = 0
+    active_days_count = 0
+
+    curr = start_day_local
+    while curr <= end_day_local:
+        day_data = day_map.get(curr)
+        if day_data:
+            dur_min = float(day_data["total_duration_minutes"])
+            dur_hrs = float(day_data["total_duration_hours"])
+            revs = int(day_data["total_reviews"])
+            pass_rate = float(day_data["retention_pass_rate"])
+            passed = int(day_data.get("passed_reviews", 0))
+
+            total_minutes += dur_min
+            total_reviews += revs
+            total_passed += passed
+            if revs > 0 or dur_min > 0:
+                active_days_count += 1
+
+            daily_time_series.append({
+                "date": curr.isoformat(),
+                "total_reviews": revs,
+                "total_duration_minutes": dur_min,
+                "total_duration_hours": dur_hrs,
+                "avg_study_minutes_per_user": dur_min,
+                "retention_pass_rate": pass_rate,
+            })
+        else:
+            daily_time_series.append({
+                "date": curr.isoformat(),
+                "total_reviews": 0,
+                "total_duration_minutes": 0.0,
+                "total_duration_hours": 0.0,
+                "avg_study_minutes_per_user": 0.0,
+                "retention_pass_rate": 0.0,
+            })
+        curr += timedelta(days=1)
+
+    total_days = (end_day_local - start_day_local).days + 1
+    avg_daily_minutes = round(total_minutes / max(1, total_days), 1) if total_days > 0 else 0.0
+    avg_study_minutes_active_day = (
+        round(total_minutes / max(1, active_days_count), 1) if active_days_count > 0 else 0.0
+    )
+    overall_pass_rate = (
+        round((total_passed / float(total_reviews)) * 100.0, 1) if total_reviews > 0 else 0.0
+    )
+
+    return {
+        "range_preset": resolved_preset,
+        "start_date": start_day_local.isoformat(),
+        "end_date": end_day_local.isoformat(),
+        "scope": effective_scope,
+        "deck_id": parsed_deck_id,
+        "timezone": timezone_effective,
+        "summary": {
+            "total_study_minutes": round(total_minutes, 1),
+            "total_study_hours": round(total_minutes / 60.0, 2),
+            "total_reviews": total_reviews,
+            "avg_daily_minutes_system": avg_daily_minutes,
+            "avg_daily_minutes": avg_daily_minutes,
+            "avg_study_minutes_active_day": avg_study_minutes_active_day,
+            "active_days_count": active_days_count,
+            "retention_pass_rate": overall_pass_rate,
+        },
+        "daily_time_series": daily_time_series,
     }

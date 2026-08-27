@@ -33,7 +33,7 @@ from app.validators import (
 from models import db
 from models.card_progress import CardProgress
 from models.deck import Deck
-from models.flashcard import Card, DeckInstall, Note
+from models.flashcard import Card, DeckInstall, Note, NoteType
 
 
 class BrowseCardUpdateError(ValueError):
@@ -269,7 +269,7 @@ def list_browse_cards(
         Card.query.join(Note, Card.note_id == Note.id)
         .outerjoin(progress_alias, progress_join)
         .options(
-            selectinload(Card.note).selectinload(Note.note_type),
+            selectinload(Card.note).selectinload(Note.note_type).selectinload(NoteType.field_defs),
             selectinload(Card.template),
         )
     )
@@ -628,6 +628,8 @@ def list_browse_cards(
     clone_scope_by_card_id: dict[str, Any] = {}
     release_note_ids: dict[str, set[str]] = {}
     release_install_by_id: dict[str, Any] = {}
+    clone_install_ids: set[str] = set()
+    clone_source_note_ids: set[str] = set()
     if not admin_mode and clone_scopes:
         for card_obj in pagination.items:
             note_obj = card_obj.note
@@ -648,10 +650,21 @@ def list_browse_cards(
             if matching_scope is None:
                 continue
             clone_scope_by_card_id[str(card_obj.id)] = matching_scope
+            clone_install_ids.add(str(matching_scope.install.id))
+            clone_source_note_ids.add(str(note_obj.id))
             release_id = str(matching_scope.install.applied_release_id or "")
             if matching_scope.install.version_mode == "release" and release_id:
                 release_note_ids.setdefault(release_id, set()).add(str(note_obj.id))
                 release_install_by_id[release_id] = matching_scope.install
+
+    batch_overrides: dict[tuple[str, str], list] = {}
+    if clone_install_ids and clone_source_note_ids:
+        from app.repositories import flashcards_share_repository
+
+        batch_overrides = flashcards_share_repository.get_clone_note_field_overrides_batch(
+            list(clone_install_ids),
+            list(clone_source_note_ids),
+        )
 
     release_values_by_note: dict[tuple[str, str], dict[str, Any]] = {}
     if release_note_ids:
@@ -678,6 +691,7 @@ def list_browse_cards(
             clone_scope = clone_scope_by_card_id.get(str(card_obj.id))
             if clone_scope is not None:
                 release_id = str(clone_scope.install.applied_release_id or "")
+                override_key = (str(clone_scope.install.id), str(card_obj.note.id))
                 adjusted_payload = _apply_clone_overlay_to_browse_payload(
                     payload={"card": row_payload, "note": {}, "fields": []},
                     card_obj=card_obj,
@@ -686,6 +700,7 @@ def list_browse_cards(
                     base_field_values=release_values_by_note.get(
                         (release_id, str(card_obj.note.id))
                     ),
+                    note_override_rows=batch_overrides.get(override_key),
                 )
                 row_payload = adjusted_payload.get("card") or row_payload
         rows.append(row_payload)
@@ -1126,6 +1141,7 @@ def _apply_clone_overlay_to_browse_payload(
     clone_scope,
     deck_lookup: dict[int, str],
     base_field_values: dict[str, Any] | None = None,
+    note_override_rows: list[Any] | None = None,
 ) -> dict[str, Any]:
     from app.services import flashcards_share as share_ctrl
 
@@ -1145,6 +1161,7 @@ def _apply_clone_overlay_to_browse_payload(
             source_note=note_obj,
             schema_view=schema_view,
             base_field_values=base_field_values,
+            note_override_rows=note_override_rows,
         )
     else:
         overlay_field_defs = note_obj.note_type.field_defs if note_obj.note_type else []

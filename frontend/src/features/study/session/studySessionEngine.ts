@@ -7,13 +7,17 @@ import type {
   StudySessionSnapshot,
   StudyTemplateArtifact,
 } from '../types'
-import { computeDecision } from '../scheduler/legacyEngine'
+import {
+  resolveCardAlgorithm,
+  validateSnapshotAlgorithmContract,
+} from '../scheduler/algorithmRegistry'
 import {
   queueCounts,
   selectNextCard,
   summarizePendingIntradayLearning,
 } from '../scheduler/queue'
 import type { SchedulerDecision } from '../scheduler/types'
+import { resolveReviewAction } from '../interactions/reviewInteraction'
 import type {
   PersistedStudySession,
   StudyCommitReason,
@@ -53,6 +57,7 @@ function cloneSnapshot(snapshot: StudySessionSnapshot): StudySessionSnapshot {
 export function createPersistedSession(
   snapshot: StudySessionSnapshot,
 ): PersistedStudySession {
+  validateSnapshotAlgorithmContract(snapshot)
   const cloned = cloneSnapshot(snapshot)
   const cards = cloned.cards.map((card) => ({
     card_id: card.card_id,
@@ -155,11 +160,10 @@ export function decisionForCard(
 ) {
   const card = session.snapshot.cards.find((row) => row.card_id === cardId)
   if (!card) throw new Error('Card is not part of the active session.')
-  const policy = session.snapshot.policies[card.policy_key]
-  if (!policy) throw new Error('Scheduler policy is missing.')
-  return computeDecision(
-    card.state,
-    policy.config,
+  const { algorithm, policy } = resolveCardAlgorithm(session.snapshot, card)
+  return algorithm.computeDecision(
+    card,
+    policy,
     schedulerAtMs,
     session.snapshot.timezone,
   )
@@ -184,11 +188,15 @@ export function applyLocalAnswer(
     0,
     Math.round(decision.scheduler_at_ms - serverAnchor),
   )
+  const action = resolveReviewAction(rating)
   const event: StudySessionEvent = {
     event_id: crypto.randomUUID(),
     sequence: session.events.length + 1,
     card_id: card.card_id,
     rating,
+    action_key: action.actionKey,
+    trigger_key: action.triggerKey,
+    trigger_contract_version: action.triggerContractVersion,
     policy_key: card.policy_key,
     scheduler_offset_ms: schedulerOffset,
     duration_ms: Math.max(0, Math.min(3_600_000, Math.round(durationMs))),

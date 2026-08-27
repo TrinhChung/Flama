@@ -14,6 +14,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { appApi } from '@/app/api'
+import { resolveBackendUrl } from '@/config/env'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -250,7 +251,12 @@ export function AdminImageLibraryPage() {
         <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
           {assets.map((asset) => {
             const assetId = asset.id || asset.asset_id || ''
-            const imageUrl = asset.url || `/media/proxy/${assetId}`
+            const rawUrl =
+              asset.url ||
+              (asset.image_key || asset.name
+                ? `/media/library/${asset.image_key || asset.name}`
+                : `/media/proxy/${assetId}`)
+            const imageUrl = resolveBackendUrl(rawUrl)
             return (
               <Card key={assetId} className="group relative overflow-hidden flex flex-col justify-between">
                 <div className="relative aspect-video w-full overflow-hidden bg-muted">
@@ -258,8 +264,11 @@ export function AdminImageLibraryPage() {
                     src={imageUrl}
                     alt={asset.name}
                     className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                    loading="lazy"
                     onError={(e) => {
-                      ;(e.target as HTMLElement).style.display = 'none'
+                      const target = e.target as HTMLImageElement
+                      target.onerror = null
+                      target.src = resolveBackendUrl('/static/images/image-library-fallback.svg')
                     }}
                   />
                   <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity group-hover:opacity-100 gap-2">
@@ -497,7 +506,16 @@ export function AdminImageLibraryPage() {
         <DialogContent className="sm:max-w-xl p-2">
           {previewModalUrl && (
             <div className="flex items-center justify-center p-2">
-              <img src={previewModalUrl} alt="Preview" className="max-h-[70vh] rounded-md object-contain" />
+              <img
+                src={previewModalUrl}
+                alt="Preview"
+                className="max-h-[70vh] rounded-md object-contain"
+                onError={(e) => {
+                  const target = e.target as HTMLImageElement
+                  target.onerror = null
+                  target.src = resolveBackendUrl('/static/images/image-library-fallback.svg')
+                }}
+              />
             </div>
           )}
         </DialogContent>

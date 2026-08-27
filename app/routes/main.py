@@ -22,7 +22,10 @@ from app.services.support_checkout_service import (
     prepare_support_checkout,
 )
 from app.services.stats_overview import build_stats_overview
-from app.services.stats_today_future import build_today_future_stats
+from app.services.stats_today_future import (
+    build_today_future_stats,
+    build_user_study_time_stats,
+)
 from app.utils.permissions import is_admin_user
 from app.validators import RequestValidationError
 from sqlalchemy.exc import SQLAlchemyError
@@ -300,6 +303,33 @@ def stats_today_future():
         history_range=history_range,
         future_range=future_range,
         backlog=backlog,
+    )
+    return jsonify(payload)
+
+
+@main_bp.route("/api/stats/study-time", methods=["GET"])
+@login_required
+def stats_study_time():
+    scope = (request.args.get("scope") or "deck").strip().lower()
+    range_preset = (request.args.get("range") or "30d").strip().lower()
+    start_date = request.args.get("start_date")
+    end_date = request.args.get("end_date")
+    deck_id_raw = (request.args.get("deck_id") or "").strip()
+    deck_id = None
+    if deck_id_raw:
+        try:
+            deck_id = int(deck_id_raw)
+        except (TypeError, ValueError):
+            deck_id = None
+
+    payload = build_user_study_time_stats(
+        user_id=current_user.id,
+        timezone_name=getattr(current_user, "timezone", "UTC"),
+        scope=scope,
+        deck_id=deck_id,
+        range_preset=range_preset,
+        start_date_str=start_date,
+        end_date_str=end_date,
     )
     return jsonify(payload)
 

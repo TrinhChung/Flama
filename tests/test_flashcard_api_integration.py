@@ -1169,6 +1169,9 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
                     for index in range(15)
                 ]
             )
+            from app.services import marketplace_taxonomy_service
+            marketplace_taxonomy_service.ensure_default_taxonomy_data(db.session)
+            marketplace_taxonomy_service.build_taxonomy_schema(content_type="note_type")
             db.session.commit()
             engine = db.engine
 

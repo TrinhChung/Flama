@@ -15,6 +15,7 @@ import {
   X,
 } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import { appApi } from '@/app/api'
 import { Badge } from '@/components/ui/badge'
@@ -564,14 +565,26 @@ export function AdminUsersPage() {
 
           <div className="flex items-center gap-1.5">
             {roles.length > 0 && (
-              <Button
-                size="sm"
-                variant="secondary"
-                className="h-8 text-xs font-medium"
-                onClick={() => setIsBatchRoleModalOpen(true)}
-              >
-                <ShieldUser className="mr-1 size-3.5" /> Đổi vai trò
-              </Button>
+              <>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="h-8 text-xs font-medium"
+                  onClick={() => setIsBatchRoleModalOpen(true)}
+                >
+                  <ShieldUser className="mr-1 size-3.5" /> Đổi vai trò
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 text-xs font-medium border-white/30 text-white hover:bg-white/10 hover:text-white"
+                  asChild
+                >
+                  <Link to={`/admin/permissions?selected_ids=${selectedIds.join(',')}`}>
+                    Phân quyền chi tiết
+                  </Link>
+                </Button>
+              </>
             )}
 
             <Button

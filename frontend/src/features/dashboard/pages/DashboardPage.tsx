@@ -49,7 +49,6 @@ export function DashboardPage() {
   const dashboard = dashboardQuery.data
   const selectedDeck = findDeck(dashboard.decks, selectedDeckId)
 
-  const studyUrl = selectedDeck?.study_url || bootstrap.links.study
   const statsUrl = selectedDeck ? `/statistics?deck_id=${selectedDeck.id}` : '/statistics'
   const browseUrl = selectedDeck ? `/browse?deck_id=${selectedDeck.id}` : bootstrap.links.browse
   const importUrl = selectedDeck
@@ -70,12 +69,23 @@ export function DashboardPage() {
             <Collection className="size-3.5 sm:size-4" /> Decks
           </Link>
 
-          <Link
-            to={studyUrl}
-            className="dash-tab inline-flex items-center gap-1.5 rounded-lg px-2.5 sm:px-3.5 py-1.5 sm:py-2 text-[11px] sm:text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground transition shrink-0"
-          >
-            <PlayCircle className="size-3.5 sm:size-4" /> Study
-          </Link>
+          {selectedDeck ? (
+            <Link
+              to={selectedDeck.study_url}
+              className="dash-tab inline-flex items-center gap-1.5 rounded-lg px-2.5 sm:px-3.5 py-1.5 sm:py-2 text-[11px] sm:text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground transition shrink-0"
+            >
+              <PlayCircle className="size-3.5 sm:size-4" /> Study
+            </Link>
+          ) : (
+            <button
+              type="button"
+              disabled
+              title="Vui lòng chọn một deck để học"
+              className="dash-tab inline-flex items-center gap-1.5 rounded-lg px-2.5 sm:px-3.5 py-1.5 sm:py-2 text-[11px] sm:text-xs font-semibold text-muted-foreground/40 cursor-not-allowed opacity-50 shrink-0 select-none"
+            >
+              <PlayCircle className="size-3.5 sm:size-4" /> Study
+            </button>
+          )}
 
           <Link
             to={statsUrl}

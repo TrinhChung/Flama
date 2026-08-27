@@ -7,6 +7,7 @@ import {
   Heart,
   Image as ImageIcon,
   Key,
+  Layers,
   LayoutDashboard,
   MessageSquareHeart,
   NotebookTabs,
@@ -83,6 +84,7 @@ export function AppSidebar({
       ? [{ title: 'TTS Provider', url: bootstrap.links.admin_tts, icon: AudioLines }]
       : []),
     { title: 'Thư viện ảnh', url: '/admin/image-library', icon: ImageIcon },
+    { title: 'Phân loại & Metadata', url: '/admin/taxonomy', icon: Layers },
     { title: 'Quản lý Ticket', url: '/admin/tickets', icon: Ticket },
     { title: 'Cấu hình Ủng hộ', url: '/admin/support', icon: Heart },
   ]

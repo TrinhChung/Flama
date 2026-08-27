@@ -31,14 +31,22 @@ export function useLoginForm() {
       )
       void queryClient.invalidateQueries({ queryKey: bootstrapQueryKey })
       toast.success('Đăng nhập thành công.')
-      if (next.startsWith('/') && !next.startsWith('//')) {
+      const isValidTarget = (target: string) =>
+        target.startsWith('/') &&
+        !target.startsWith('//') &&
+        target !== '/' &&
+        target !== '/login' &&
+        target !== '/register'
+
+      if (isValidTarget(next)) {
         navigate(next, { replace: true })
       } else if (next.startsWith('http://') || next.startsWith('https://')) {
         try {
           const parsed = new URL(next, window.location.origin)
           if (
-            parsed.origin === window.location.origin ||
-            (BACKEND_ORIGIN && parsed.origin === BACKEND_ORIGIN)
+            (parsed.origin === window.location.origin ||
+              (BACKEND_ORIGIN && parsed.origin === BACKEND_ORIGIN)) &&
+            isValidTarget(parsed.pathname)
           ) {
             window.location.href = next
             return
@@ -47,8 +55,11 @@ export function useLoginForm() {
           // ignore
         }
         navigate('/dashboard', { replace: true })
-      } else if (result.redirect_to.startsWith('/app/')) {
-        navigate(result.redirect_to.slice('/app'.length), { replace: true })
+      } else if (result.redirect_to?.startsWith('/app/')) {
+        const sliced = result.redirect_to.slice('/app'.length)
+        navigate(isValidTarget(sliced) ? sliced : '/dashboard', { replace: true })
+      } else if (result.redirect_to && isValidTarget(result.redirect_to)) {
+        navigate(result.redirect_to, { replace: true })
       } else {
         navigate('/dashboard', { replace: true })
       }

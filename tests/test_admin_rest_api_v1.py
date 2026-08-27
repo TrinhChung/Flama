@@ -171,6 +171,28 @@ class AdminRestApiV1Tests(unittest.TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertEqual(response.get_json()["error"], "FORBIDDEN")
 
+    def test_admin_users_api_with_ids_and_role_filter(self):
+        self._login("rest-admin@example.com")
+        with self.app.app_context():
+            admin = User.query.filter_by(username="rest-admin").first()
+            regular = User.query.filter_by(username="rest-regular").first()
+            admin_id = admin.id
+            regular_id = regular.id
+
+        # Query all with per_page 100
+        res = self.client.get("/api/admin/users?per_page=100")
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertGreaterEqual(data["total"], 2)
+        self.assertEqual(data["per_page"], 100)
+
+        # Query by specific ids
+        res_ids = self.client.get(f"/api/admin/users?ids={regular_id}")
+        self.assertEqual(res_ids.status_code, 200)
+        data_ids = res_ids.get_json()
+        self.assertEqual(len(data_ids["items"]), 1)
+        self.assertEqual(data_ids["items"][0]["id"], regular_id)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -54,3 +54,44 @@ export type StatisticsFilters = {
   futureRange: '30' | '90' | '365' | 'all'
   backlog: boolean
 }
+
+export type UserStudyTimePreset = 'today' | '7d' | '30d' | '90d' | '12m' | 'all' | 'custom'
+
+export type UserDailyStudyTimeItem = {
+  date: string
+  total_reviews: number
+  total_duration_minutes: number
+  total_duration_hours: number
+  avg_study_minutes_per_user: number
+  retention_pass_rate: number
+}
+
+export type UserStudyTimeSummary = {
+  total_study_minutes: number
+  total_study_hours: number
+  total_reviews: number
+  avg_daily_minutes_system: number
+  avg_daily_minutes: number
+  avg_study_minutes_active_day: number
+  active_days_count: number
+  retention_pass_rate: number
+}
+
+export type UserStudyTimeResponse = {
+  range_preset: string
+  start_date: string
+  end_date: string
+  scope: 'deck' | 'collection'
+  deck_id: number | null
+  timezone: string
+  summary: UserStudyTimeSummary
+  daily_time_series: UserDailyStudyTimeItem[]
+}
+
+export type UserStudyTimeFilters = {
+  scope: 'deck' | 'collection'
+  deckId: number | null
+  range: UserStudyTimePreset
+  startDate?: string
+  endDate?: string
+}

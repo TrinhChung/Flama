@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   holdLease: vi.fn(),
   invalidateQueries: vi.fn(),
   loadSession: vi.fn(),
+  loadQuarantine: null as null | { reason: string; message: string },
   saveSession: vi.fn(),
   removeSession: vi.fn(),
   removeSessionIfMatches: vi.fn(),
@@ -50,6 +51,7 @@ vi.mock('../session/sessionStore', () => ({
   loadStudySessionWithDurability: async (key: string) => ({
     session: await mocks.loadSession(key),
     durable: true,
+    quarantine: mocks.loadQuarantine ?? undefined,
   }),
   saveStudySession: mocks.saveSession,
   removeStudySession: mocks.removeSession,
@@ -173,6 +175,7 @@ function snapshot(): StudySessionSnapshot {
       base_revision: 0,
       base_state_hash: 'base',
       can_edit_card: true,
+      composition_id: 'comp:notetype:type-1:template:template-1',
       state: {
         type: 'new',
         step_index: 0,
@@ -215,6 +218,21 @@ function snapshot(): StudySessionSnapshot {
         field_values: { Word: 'cat' },
         render_context: { Word: 'cat' },
         media: [],
+      },
+    },
+    compositions: {
+      'comp:notetype:type-1:template:template-1': {
+        composition_id: 'comp:notetype:type-1:template:template-1',
+        mode_key: 'flashcard',
+        note_type_id: 'type-1',
+        template_id: 'template-1',
+        template_name: 'Front -> Back',
+        is_default: true,
+        interaction_key: 'review.four-rating',
+        trigger_key: 'scheduler.review',
+        trigger_contract_version: '1',
+        algorithm_key: 'legacy-anki',
+        algorithm_version: '1.0.0',
       },
     },
   }
@@ -300,6 +318,7 @@ beforeEach(() => {
   mocks.mutateKeepalive.mockReset().mockResolvedValue(receipt())
   mocks.invalidateQueries.mockReset().mockResolvedValue(undefined)
   mocks.loadSession.mockReset().mockResolvedValue(null)
+  mocks.loadQuarantine = null
   mocks.saveSession.mockReset().mockResolvedValue(true)
   mocks.removeSession.mockReset().mockResolvedValue(undefined)
   mocks.removeSessionIfMatches.mockReset().mockResolvedValue(undefined)
@@ -343,6 +362,22 @@ afterEach(async () => {
 })
 
 describe('useStudySession cross-tab ownership', () => {
+  it('blocks opening a replacement session when restored data was quarantined', async () => {
+    mocks.loadQuarantine = {
+      reason: 'EVENT_CONTRACT_MISMATCH',
+      message: 'Stored event mismatch.',
+    }
+    mocks.bootstrap = { data: { user: { id: 7 } } }
+
+    await renderHarness()
+
+    await waitFor(() => expect(latest.error).toBeInstanceOf(Error))
+    expect(latest.session).toBeNull()
+    expect(String(latest.error)).toContain('EVENT_CONTRACT_MISMATCH')
+    expect(mocks.mutate).not.toHaveBeenCalled()
+    expect(mocks.saveSession).not.toHaveBeenCalled()
+  })
+
   it('waits for bootstrap identity before acquiring or opening a session', async () => {
     await renderHarness()
 

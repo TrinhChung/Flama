@@ -35,10 +35,14 @@ def list_users(
     status_filter: str,
     page: int,
     per_page: int,
+    user_ids: list[int] | None = None,
+    role_id: int | None = None,
 ) -> dict[str, Any]:
     pagination = admin_service.build_users_query(
         search_term=search_term,
         status_filter=status_filter,
+        user_ids=user_ids,
+        role_id=role_id,
     ).paginate(
         page=page,
         per_page=per_page,
@@ -61,6 +65,8 @@ def list_users(
         "filters": {
             "q": search_term,
             "status": status_filter,
+            "user_ids": user_ids or [],
+            "role_id": role_id,
         },
         "roles": [_serialize_role(role) for role in roles],
     }

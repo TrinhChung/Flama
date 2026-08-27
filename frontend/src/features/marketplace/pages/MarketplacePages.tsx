@@ -12,6 +12,7 @@ import {
   Plus,
   RotateCcw,
   Search,
+  SlidersHorizontal,
   Sparkles,
   Star,
   X,
@@ -25,11 +26,19 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Page, PageHeader } from '@/shared/components/Page'
 import { EmptyState, PageError } from '@/shared/components/PageState'
 import { SpotlightTour, type TourStep } from '@/shared/components/SpotlightTour'
+import { useTaxonomySchema } from '../hooks/useTaxonomySchema'
 
 const MARKET_STORAGE_KEY = 'flama_marketplace_spotlight_tour_v1'
 
@@ -124,28 +133,25 @@ type MarketplaceItem = {
 
 type SortView = 'recommended' | 'newest' | 'popular'
 
-const PRESET_CATEGORIES = [
+const DECK_MAJOR_CATEGORIES = [
   'Tiếng Nhật',
-  'JLPT N5',
-  'JLPT N4',
-  'JLPT N3',
-  'JLPT N2',
-  'JLPT N1',
   'Tiếng Anh',
-  'IELTS',
-  'TOEIC',
-  'VSTEP',
-  'Tiếng Hàn',
-  'TOPIK',
   'Tiếng Trung',
-  'HSK',
-  'IT / Công nghệ',
-  'AWS Cloud',
-  'THPT Quốc Gia',
-  'Y dược',
+  'Tiếng Hàn',
+  'Công nghệ & IT',
+  'Chứng chỉ',
+  'Học thuật',
+  'Tổng hợp',
+]
+
+const NOTETYPE_MAJOR_CATEGORIES = [
   'Từ vựng',
-  'Kanji',
-  'Giao tiếp',
+  'Ngữ pháp',
+  'Kanji / Hán tự',
+  'Đục lỗ (Cloze)',
+  'Code & IT',
+  'Hỏi đáp (Q&A)',
+  'Mẫu chuẩn',
 ]
 
 function getCategoryBadgeStyle(categoryName: string | null | undefined) {
@@ -160,7 +166,7 @@ function getCategoryBadgeStyle(categoryName: string | null | undefined) {
   if (lower.includes('hsk') || lower.includes('tiếng trung') || lower.includes('tocfl')) {
     return 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/20'
   }
-  if (lower.includes('aws') || lower.includes('azure') || lower.includes('it') || lower.includes('công nghệ')) {
+  if (lower.includes('aws') || lower.includes('azure') || lower.includes('it') || lower.includes('công nghệ') || lower.includes('code')) {
     return 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20'
   }
   if (lower.includes('n5') || lower.includes('n4')) {
@@ -177,6 +183,12 @@ function getCategoryBadgeStyle(categoryName: string | null | undefined) {
   }
   if (lower.includes('thpt') || lower.includes('y dược') || lower.includes('học thuật')) {
     return 'bg-teal-500/10 text-teal-700 dark:text-teal-400 border-teal-500/20'
+  }
+  if (lower.includes('ngữ pháp') || lower.includes('cloze') || lower.includes('đục lỗ')) {
+    return 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border-indigo-500/20'
+  }
+  if (lower.includes('hỏi đáp') || lower.includes('q&a') || lower.includes('mẫu chuẩn') || lower.includes('từ vựng')) {
+    return 'bg-cyan-500/10 text-cyan-700 dark:text-cyan-400 border-cyan-500/20'
   }
   return 'bg-muted text-muted-foreground border-border/60'
 }
@@ -219,8 +231,21 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
   const [queryText, setQueryText] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
   const [category, setCategory] = useState('')
+  const [selectedDomain, setSelectedDomain] = useState('')
+  const [selectedSubject, setSelectedSubject] = useState('')
+  const [selectedFrameworkLevel, setSelectedFrameworkLevel] = useState('')
+  const [selectedDifficulty, setSelectedDifficulty] = useState('')
+  const [pricingFilter, setPricingFilter] = useState<'all' | 'free' | 'paid'>('all')
+  const [isFilterExpanded, setIsFilterExpanded] = useState(false)
   const [tourOpen, setTourOpen] = useState(false)
   const searchInputRef = useRef<HTMLInputElement>(null)
+
+  const {
+    domains,
+    subjectsByDomain,
+    frameworksForSubject,
+    difficulties,
+  } = useTaxonomySchema(mode === 'decks' ? 'deck_marketplace_item' : 'note_type')
 
   const endpoint =
     mode === 'decks' ? '/api/shared/decks' : '/api/shared/note-types'
@@ -250,24 +275,76 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
   }, [])
 
   const marketQuery = useQuery({
-    queryKey: ['marketplace', mode, debouncedQuery, category, sort],
+    queryKey: [
+      'marketplace',
+      mode,
+      debouncedQuery,
+      category,
+      selectedDomain,
+      selectedSubject,
+      selectedFrameworkLevel,
+      selectedDifficulty,
+      pricingFilter,
+      sort,
+    ],
     queryFn: () =>
       appApi.get<{ items: MarketplaceItem[] }>(endpoint, {
         q: debouncedQuery,
-        category,
+        category: category || undefined,
+        domain: selectedDomain || undefined,
+        subject: selectedSubject || undefined,
+        framework_level: selectedFrameworkLevel || undefined,
+        difficulty_band: selectedDifficulty || undefined,
+        pricing_mode: pricingFilter !== 'all' ? pricingFilter : undefined,
         sort,
       }),
   })
 
-  // Combine preset categories with discovered categories from data
-  const allCategories = useMemo(() => {
-    const fromData = (marketQuery.data?.items || [])
-      .map((item) => item.primary_category)
-      .filter((item): item is string => Boolean(item))
+  // Subjects available under currently selected domain
+  const availableSubjects = useMemo(() => {
+    if (!selectedDomain) {
+      return domains.flatMap((d) => subjectsByDomain(d.id))
+    }
+    return subjectsByDomain(selectedDomain)
+  }, [selectedDomain, domains, subjectsByDomain])
 
-    const merged = Array.from(new Set([...PRESET_CATEGORIES, ...fromData]))
-    return merged
-  }, [marketQuery.data?.items])
+  // Frameworks & levels available under currently selected subject
+  const availableFrameworkLevels = useMemo(() => {
+    if (!selectedSubject) {
+      const jpFrameworks = frameworksForSubject('japanese')
+      return jpFrameworks.flatMap((f) => f.levels)
+    }
+    const frameworks = frameworksForSubject(selectedSubject)
+    return frameworks.flatMap((f) => f.levels)
+  }, [selectedSubject, frameworksForSubject])
+
+  // Major categories selection based on mode (clean high-level topics only)
+  const allCategories = useMemo(() => {
+    return mode === 'decks' ? DECK_MAJOR_CATEGORIES : NOTETYPE_MAJOR_CATEGORIES
+  }, [mode])
+
+  const activeFilterCount = useMemo(() => {
+    let count = 0
+    if (selectedDomain) count++
+    if (selectedSubject) count++
+    if (selectedFrameworkLevel) count++
+    if (selectedDifficulty) count++
+    if (pricingFilter !== 'all') count++
+    return count
+  }, [selectedDomain, selectedSubject, selectedFrameworkLevel, selectedDifficulty, pricingFilter])
+
+  const isFiltered = Boolean(queryText || category || activeFilterCount > 0)
+  const totalCount = marketQuery.data?.items.length ?? 0
+
+  const handleResetFilters = () => {
+    setQueryText('')
+    setCategory('')
+    setSelectedDomain('')
+    setSelectedSubject('')
+    setSelectedFrameworkLevel('')
+    setSelectedDifficulty('')
+    setPricingFilter('all')
+  }
 
   const tourSteps = useMemo(
     () => getMarketTourSteps(mode, (marketQuery.data?.items.length ?? 0) > 0),
@@ -286,9 +363,6 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
       }
     }
   }, [marketQuery.isSuccess])
-
-  const isFiltered = Boolean(queryText || category)
-  const totalCount = marketQuery.data?.items.length ?? 0
 
   return (
     <Page className="space-y-6 relative px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
@@ -375,7 +449,7 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
       {/* Streamlined Search & Filter Bar */}
       <Card className="border-border/80 bg-card/95 backdrop-blur-xs shadow-xs rounded-xl overflow-hidden">
         <CardContent className="p-3.5 sm:p-5 space-y-3.5">
-          {/* Top Row: Search Input + Sorting Tabs */}
+          {/* Top Row: Search Input + Filter Toggle + Sorting Tabs */}
           <div className="flex flex-col sm:flex-row gap-3 sm:items-center justify-between">
             {/* Search Box with Kbd shortcut & Loader */}
             <div data-tour="market-search-box" className="relative flex-1">
@@ -418,8 +492,23 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
               </div>
             </div>
 
-            {/* Sort Tabs & Reset Button */}
+            {/* Filter Toggle, Sort Tabs & Reset Button */}
             <div data-tour="market-sort-tabs" className="flex items-center gap-2 shrink-0">
+              <Button
+                variant={isFilterExpanded || activeFilterCount > 0 ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setIsFilterExpanded((prev) => !prev)}
+                className="h-10 px-3 text-xs font-semibold rounded-lg gap-1.5 shrink-0"
+              >
+                <SlidersHorizontal className="size-3.5" />
+                <span>Bộ lọc</span>
+                {activeFilterCount > 0 && (
+                  <span className="ml-0.5 inline-flex items-center justify-center size-4 text-[10px] font-bold rounded-full bg-primary-foreground text-primary">
+                    {activeFilterCount}
+                  </span>
+                )}
+              </Button>
+
               <Tabs
                 value={view}
                 onValueChange={(value) => setView(value as SortView)}
@@ -454,10 +543,7 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
                   variant="ghost"
                   size="sm"
                   className="h-10 px-2.5 text-xs text-muted-foreground hover:text-foreground rounded-lg shrink-0"
-                  onClick={() => {
-                    setQueryText('')
-                    setCategory('')
-                  }}
+                  onClick={handleResetFilters}
                   title="Xóa toàn bộ bộ lọc"
                   aria-label="Xóa toàn bộ bộ lọc"
                 >
@@ -467,6 +553,206 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
               ) : null}
             </div>
           </div>
+
+          {/* Expandable Advanced Taxonomy Filters Panel */}
+          {isFilterExpanded && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2.5 p-3 rounded-xl bg-muted/30 border border-border/60 transition-all">
+              {/* Domain Filter */}
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-muted-foreground">Lĩnh vực (Domain)</label>
+                <Select
+                  value={selectedDomain || 'all'}
+                  onValueChange={(val) => {
+                    setSelectedDomain(val === 'all' ? '' : val)
+                    setSelectedSubject('')
+                    setSelectedFrameworkLevel('')
+                  }}
+                >
+                  <SelectTrigger className="h-8.5 text-xs bg-background">
+                    <SelectValue placeholder="Tất cả lĩnh vực" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Tất cả lĩnh vực</SelectItem>
+                    {domains.map((d) => (
+                      <SelectItem key={d.id} value={d.id}>
+                        {d.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Subject Filter */}
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-muted-foreground">Môn học (Subject)</label>
+                <Select
+                  value={selectedSubject || 'all'}
+                  onValueChange={(val) => {
+                    setSelectedSubject(val === 'all' ? '' : val)
+                    setSelectedFrameworkLevel('')
+                  }}
+                >
+                  <SelectTrigger className="h-8.5 text-xs bg-background">
+                    <SelectValue placeholder="Tất cả môn học" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Tất cả môn học</SelectItem>
+                    {availableSubjects.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>
+                        {s.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Framework Level Filter */}
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-muted-foreground">Trình độ / Khung</label>
+                <Select
+                  value={selectedFrameworkLevel || 'all'}
+                  onValueChange={(val) => setSelectedFrameworkLevel(val === 'all' ? '' : val)}
+                >
+                  <SelectTrigger className="h-8.5 text-xs bg-background">
+                    <SelectValue placeholder="Tất cả trình độ" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Tất cả trình độ</SelectItem>
+                    {availableFrameworkLevels.map((l) => (
+                      <SelectItem key={l.id} value={l.id}>
+                        {l.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Difficulty Filter */}
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-muted-foreground">Độ khó</label>
+                <Select
+                  value={selectedDifficulty || 'all'}
+                  onValueChange={(val) => setSelectedDifficulty(val === 'all' ? '' : val)}
+                >
+                  <SelectTrigger className="h-8.5 text-xs bg-background">
+                    <SelectValue placeholder="Tất cả độ khó" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Tất cả độ khó</SelectItem>
+                    {difficulties.map((diff) => (
+                      <SelectItem key={diff.id} value={diff.id}>
+                        {diff.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Pricing Filter */}
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-muted-foreground">Giá bán</label>
+                <Select
+                  value={pricingFilter}
+                  onValueChange={(val) => setPricingFilter(val as 'all' | 'free' | 'paid')}
+                >
+                  <SelectTrigger className="h-8.5 text-xs bg-background">
+                    <SelectValue placeholder="Tất cả giá" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Tất cả</SelectItem>
+                    <SelectItem value="free">Miễn phí</SelectItem>
+                    <SelectItem value="paid">Trả phí</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+
+          {/* Active Filter Badges */}
+          {isFiltered && (
+            <div className="flex flex-wrap items-center gap-1.5 pt-1">
+              <span className="text-[11px] font-medium text-muted-foreground mr-1">Bộ lọc đang áp dụng:</span>
+              {queryText && (
+                <Badge variant="secondary" className="gap-1 text-xs py-0.5 px-2">
+                  <span>Từ khóa: "{queryText}"</span>
+                  <button type="button" onClick={() => setQueryText('')} className="hover:text-destructive cursor-pointer">
+                    <X className="size-3" />
+                  </button>
+                </Badge>
+              )}
+              {category && (
+                <Badge variant="secondary" className="gap-1 text-xs py-0.5 px-2">
+                  <span>Chủ đề: {category}</span>
+                  <button type="button" onClick={() => setCategory('')} className="hover:text-destructive cursor-pointer">
+                    <X className="size-3" />
+                  </button>
+                </Badge>
+              )}
+              {selectedDomain && (
+                <Badge variant="secondary" className="gap-1 text-xs py-0.5 px-2">
+                  <span>Lĩnh vực: {domains.find((d) => d.id === selectedDomain)?.label || selectedDomain}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedDomain('')
+                      setSelectedSubject('')
+                      setSelectedFrameworkLevel('')
+                    }}
+                    className="hover:text-destructive cursor-pointer"
+                  >
+                    <X className="size-3" />
+                  </button>
+                </Badge>
+              )}
+              {selectedSubject && (
+                <Badge variant="secondary" className="gap-1 text-xs py-0.5 px-2">
+                  <span>Môn: {availableSubjects.find((s) => s.id === selectedSubject)?.label || selectedSubject}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedSubject('')
+                      setSelectedFrameworkLevel('')
+                    }}
+                    className="hover:text-destructive cursor-pointer"
+                  >
+                    <X className="size-3" />
+                  </button>
+                </Badge>
+              )}
+              {selectedFrameworkLevel && (
+                <Badge variant="secondary" className="gap-1 text-xs py-0.5 px-2">
+                  <span>Trình độ: {availableFrameworkLevels.find((l) => l.id === selectedFrameworkLevel)?.label || selectedFrameworkLevel}</span>
+                  <button type="button" onClick={() => setSelectedFrameworkLevel('')} className="hover:text-destructive cursor-pointer">
+                    <X className="size-3" />
+                  </button>
+                </Badge>
+              )}
+              {selectedDifficulty && (
+                <Badge variant="secondary" className="gap-1 text-xs py-0.5 px-2">
+                  <span>Độ khó: {difficulties.find((d) => d.id === selectedDifficulty)?.label || selectedDifficulty}</span>
+                  <button type="button" onClick={() => setSelectedDifficulty('')} className="hover:text-destructive cursor-pointer">
+                    <X className="size-3" />
+                  </button>
+                </Badge>
+              )}
+              {pricingFilter !== 'all' && (
+                <Badge variant="secondary" className="gap-1 text-xs py-0.5 px-2">
+                  <span>Giá: {pricingFilter === 'free' ? 'Miễn phí' : 'Trả phí'}</span>
+                  <button type="button" onClick={() => setPricingFilter('all')} className="hover:text-destructive cursor-pointer">
+                    <X className="size-3" />
+                  </button>
+                </Badge>
+              )}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleResetFilters}
+                className="h-6 px-2 text-[11px] text-muted-foreground hover:text-destructive font-medium cursor-pointer"
+              >
+                Xóa tất cả
+              </Button>
+            </div>
+          )}
 
           {/* Bottom Row: Quick Category Pills with Horizontal Scroll & ARIA */}
           <div data-tour="market-categories" className="relative pt-2 border-t border-border/40">

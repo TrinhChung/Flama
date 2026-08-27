@@ -16,6 +16,7 @@ from sqlalchemy.exc import IntegrityError
 from app.repositories.study_repository import (
     apply_card_state_to_progress,
     card_state_from_progress,
+    is_progress_suspended,
     load_card_progress_map,
 )
 from app.services import (
@@ -30,8 +31,18 @@ from app.services.anki_scheduler import (
     FsrsMemoryState,
     FsrsNextStates,
     _day_index,
-    applyAnswer,
 )
+from app.services.study_action_runtime import (
+    REVIEW_RATINGS,
+    ReviewTransitionResult,
+    execute_review_action,
+    resolve_review_action,
+)
+from app.services.study_algorithm_registry import (
+    DEFAULT_ALGORITHM_IDENTITY,
+    StudyAlgorithmNotFoundError,
+)
+from app.services.study_composition_service import build_compatibility_composition
 from app.services.scheduler_config_service import (
     resolve_deck_options,
     resolve_scheduler_runtime_settings,
@@ -53,13 +64,13 @@ from models.study_session_commit import StudySessionCommit
 
 WIRE_SCHEMA_VERSION = "study-session.v2"
 COMMIT_SCHEMA_VERSION = "study-commit.v1"
-SCHEDULER_ALGORITHM = "legacy-anki"
-ALGORITHM_VERSION = "1.0.0"
+SCHEDULER_ALGORITHM = DEFAULT_ALGORITHM_IDENTITY.key
+ALGORITHM_VERSION = DEFAULT_ALGORITHM_IDENTITY.version
 MAX_SESSION_CARDS = 5000
 MAX_COMMIT_EVENTS = 5000
 MAX_COMMIT_BYTES = 5 * 1024 * 1024
 SESSION_TTL = timedelta(hours=24)
-VALID_RATINGS = {"again", "hard", "good", "easy"}
+VALID_RATINGS = set(REVIEW_RATINGS)
 VALID_COMMIT_REASONS = {
     "auto_finish",
     "manual_exit",
@@ -467,6 +478,7 @@ def open_study_session(
     policies: dict[str, Any] = {}
     templates: dict[str, Any] = {}
     contents: dict[str, Any] = {}
+    compositions: dict[str, Any] = {}
     card_payloads: list[dict[str, Any]] = []
     session_card_rows: list[StudySessionCard] = []
 
@@ -524,6 +536,8 @@ def open_study_session(
         content_key = f"{content['id']}:{content['version']}"
         templates.setdefault(template_key, template)
         contents.setdefault(content_key, content)
+        composition = build_compatibility_composition(card.template)
+        compositions.setdefault(composition.composition_id, composition.to_dict())
         base_revision = int(getattr(progress, "revision", 0) or 0)
         created_at = getattr(card, "created_at", None) or opened_at
 
@@ -532,6 +546,7 @@ def open_study_session(
                 "card_id": str(card.id),
                 "note_id": str(note.id),
                 "template_id": str(card.template_id),
+                "composition_id": composition.composition_id,
                 "source_deck_id": (
                     int(note.deck_id) if note.deck_id is not None else None
                 ),
@@ -595,6 +610,7 @@ def open_study_session(
         "cards": card_payloads,
         "templates": templates,
         "contents": contents,
+        "compositions": compositions,
     }
     snapshot_hash = study_artifact_service.canonical_digest(snapshot_material)
     expires_at = opened_at + SESSION_TTL
@@ -847,7 +863,15 @@ def commit_study_session(
         for row in session_cards
     }
     replayed_events: list[
-        tuple[dict[str, Any], StudySessionCard, CardState, CardState, datetime, DeckOptions]
+        tuple[
+            dict[str, Any],
+            StudySessionCard,
+            CardState,
+            CardState,
+            datetime,
+            DeckOptions,
+            ReviewTransitionResult,
+        ]
     ] = []
     last_offset = -1
     touched_ids: set[str] = set()
@@ -898,6 +922,25 @@ def commit_study_session(
                 f"Event {index} has an invalid rating.",
                 status=422,
             )
+        action_contract = resolve_review_action(rating)
+        supplied_contract = {
+            "action_key": action_contract.action_key,
+            "trigger_key": action_contract.trigger_key,
+            "trigger_contract_version": (
+                action_contract.trigger_contract_version
+            ),
+        }
+        for contract_key, expected_value in supplied_contract.items():
+            if (
+                contract_key in raw_event
+                and str(raw_event.get(contract_key) or "").strip()
+                != expected_value
+            ):
+                raise StudySessionError(
+                    "ACTION_CONTRACT_MISMATCH",
+                    f"Event {index} has inconsistent {contract_key}.",
+                    status=422,
+                )
         try:
             offset_ms = int(raw_event.get("scheduler_offset_ms") or 0)
         except (TypeError, ValueError) as exc:
@@ -953,13 +996,23 @@ def commit_study_session(
                 f"Event {index} before-state does not match server replay.",
                 status=422,
             )
-        after = applyAnswer(
-            before,
-            options,
-            answer_at,
-            rating,  # type: ignore[arg-type]
-            timezone_name=session.timezone,
-        )
+        try:
+            transition = execute_review_action(
+                state=before,
+                options=options,
+                now=answer_at,
+                action=rating,
+                timezone_name=session.timezone,
+                algorithm_key=session.scheduler_algorithm,
+                algorithm_version=session.algorithm_version,
+            )
+        except StudyAlgorithmNotFoundError as exc:
+            raise StudySessionError(
+                "ALGORITHM_UNAVAILABLE",
+                str(exc),
+                status=409,
+            ) from exc
+        after = transition.state
         requested_after_hash = str(
             raw_event.get("after_state_hash") or ""
         ).strip()
@@ -973,7 +1026,15 @@ def commit_study_session(
                 status=422,
             )
         replayed_events.append(
-            (raw_event, session_card, before, after, answer_at, options)
+            (
+                raw_event,
+                session_card,
+                before,
+                after,
+                answer_at,
+                options,
+                transition,
+            )
         )
         states[card_id] = after
         touched_ids.add(card_id)
@@ -1162,6 +1223,12 @@ def commit_study_session(
                 status=409,
             )
         progress = progress_map.get(card_id)
+        if progress is not None and is_progress_suspended(progress):
+            raise StudySessionError(
+                "CARD_SUSPENDED",
+                f"Card {card_id} is suspended.",
+                status=409,
+            )
         if progress is None:
             progress = CardProgress(
                 user_id=int(user.id),
@@ -1180,16 +1247,25 @@ def commit_study_session(
         after,
         answer_at,
         options,
+        transition,
     ) in replayed_events:
         card = card_rows[session_card.card_id]
         rating = str(raw_event["rating"]).lower()
         rating_counts[rating] += 1
+        event_payload = dict(raw_event)
+        event_payload["_study_runtime"] = {
+            **transition.metadata(),
+            "scheduler_config_hash": session_card.scheduler_config_hash,
+        }
         review_event = record_review_event(
             user_id=int(user.id),
             card_id=session_card.card_id,
             deck_id=session_card.local_deck_id,
             note_type_id=session_card.note_type_id,
             scheduler_preset_id=session_card.scheduler_preset_id,
+            scheduler_algorithm=transition.algorithm.key,
+            algorithm_version=transition.algorithm.version,
+            scheduler_config_hash=session_card.scheduler_config_hash,
             reviewed_at=answer_at,
             duration_ms=_normalized_duration(raw_event.get("duration_ms")),
             rating=rating,
@@ -1232,14 +1308,11 @@ def commit_study_session(
             ),
             leeched_after=bool(after.leeched),
             suspended_after=bool(after.suspended),
-            payload_json=_json_dumps(raw_event),
+            payload_json=_json_dumps(event_payload),
         )
         review_event.study_session_id = session.id
         review_event.client_event_id = str(raw_event["event_id"])
         review_event.sequence_no = int(raw_event["sequence"])
-        review_event.scheduler_algorithm = session.scheduler_algorithm
-        review_event.algorithm_version = session.algorithm_version
-        review_event.scheduler_config_hash = session_card.scheduler_config_hash
         last_review_event_by_card[session_card.card_id] = review_event
 
         if after.leeched and card.note.user_id == user.id:

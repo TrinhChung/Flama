@@ -23,7 +23,7 @@ import {
   Upload,
   Zap,
 } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { Link, Navigate } from 'react-router-dom'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -570,8 +570,13 @@ function SponsorLane({
 export function LandingPage() {
   const { data } = useBootstrap()
   const authenticated = Boolean(data?.user)
-  const primaryTo = authenticated ? '/dashboard' : '/register'
-  const secondaryTo = authenticated ? '/statistics' : '/login'
+
+  if (authenticated) {
+    return <Navigate to="/dashboard" replace />
+  }
+
+  const primaryTo = '/register'
+  const secondaryTo = '/login'
 
   return (
     <div className="overflow-hidden">

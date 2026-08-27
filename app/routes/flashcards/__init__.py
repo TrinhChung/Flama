@@ -28,11 +28,6 @@ from app.services import marketplace_query_service
 
 from app.services import flashcards_share
 
-from app.services.anki_scheduler import (
-    applyAnswer,
-    computeAnswerPreview,
-)
-
 from app.services.flashcard_legacy import (
     ensure_legacy_note_type,
 )
@@ -351,12 +346,20 @@ def _filter_note_type_items(
 def _filter_deck_items(
     deck_items: list[DeckMarketplaceItem],
     *,
-    query_text: str,
-    category: str,
-    tags: set[str],
-    pricing_mode: str,
-    min_price_amount_minor: int | None,
-    max_price_amount_minor: int | None,
+    query_text: str = "",
+    category: str = "",
+    tags: set[str] | None = None,
+    pricing_mode: str = "",
+    min_price_amount_minor: int | None = None,
+    max_price_amount_minor: int | None = None,
+    domain: str = "",
+    subject: str = "",
+    framework: str = "",
+    framework_level: str = "",
+    difficulty_band: str = "",
+    learning_goals: set[str] | None = None,
+    primary_topics: set[str] | None = None,
+    format_features: set[str] | None = None,
 ) -> list[DeckMarketplaceItem]:
     return marketplace_query_service.filter_deck_items(
         deck_items,
@@ -366,6 +369,14 @@ def _filter_deck_items(
         pricing_mode=pricing_mode,
         min_price_amount_minor=min_price_amount_minor,
         max_price_amount_minor=max_price_amount_minor,
+        domain=domain,
+        subject=subject,
+        framework=framework,
+        framework_level=framework_level,
+        difficulty_band=difficulty_band,
+        learning_goals=learning_goals,
+        primary_topics=primary_topics,
+        format_features=format_features,
     )
 
 def _sort_note_type_items(items: list[NoteType], sort_key: str) -> list[NoteType]:

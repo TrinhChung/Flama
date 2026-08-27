@@ -24,6 +24,8 @@ from app.validators.mcp import (
     validate_find_notes_arguments,
     validate_get_image_arguments,
     validate_import_image_arguments,
+    validate_crawl_note_media_arguments,
+    validate_extract_page_images_arguments,
     validate_search_images_arguments,
     validate_get_card_arguments,
     validate_get_deck_arguments,
@@ -57,7 +59,9 @@ from app.validators.mcp import (
     validate_update_deck_arguments,
     validate_update_note_arguments,
     validate_update_note_type_arguments,
+    validate_get_taxonomy_schema_arguments,
 )
+
 
 
 McpToolHandler = Callable[..., dict[str, Any]]
@@ -1087,6 +1091,11 @@ def _call_create_note_type(*, user_id: int, arguments: dict[str, Any]) -> dict[s
             user_id=user_id,
             name=arguments["name"],
             description=arguments.get("description"),
+            primary_category=arguments.get("primary_category"),
+            tags=arguments.get("tags"),
+            taxonomy_metadata=arguments.get("taxonomy_metadata"),
+            preview_text=arguments.get("preview_text"),
+            preview_image_url=arguments.get("preview_image_url"),
             fields=arguments.get("fields"),
             templates=arguments.get("templates"),
         )
@@ -1096,12 +1105,17 @@ def _call_create_note_type(*, user_id: int, arguments: dict[str, Any]) -> dict[s
 CREATE_NOTE_TYPE_TOOL = McpToolDefinition(
     name=mcp_tool_service.CREATE_NOTE_TYPE_TOOL_NAME,
     title="Create Note Type",
-    description="Create a new flashcard note type (model) with custom fields and card templates.",
+    description="Create a new flashcard note type (model) with custom fields, card templates, metadata, and taxonomy.",
     input_schema={
         "type": "object",
         "properties": {
             "name": {"type": "string", "description": "Unique name of the new note type"},
             "description": {"type": ["string", "null"], "description": "Optional description"},
+            "primary_category": {"type": ["string", "null"], "description": "Primary subject/category (e.g. 'japanese', 'english', 'it_coding')"},
+            "tags": {"type": "array", "items": {"type": "string"}, "description": "Tags describing the note type"},
+            "taxonomy_metadata": {"type": ["object", "null"], "description": "Structured taxonomy metadata (domain, subject, difficulty_band, framework, framework_level, best_used_for, format_features)"},
+            "preview_text": {"type": ["string", "null"], "description": "Brief preview summary text"},
+            "preview_image_url": {"type": ["string", "null"], "description": "Preview banner or icon image URL"},
             "fields": {
                 "type": "array",
                 "items": {
@@ -1192,6 +1206,14 @@ def _call_update_note_type(*, user_id: int, arguments: dict[str, Any]) -> dict[s
             note_type_id=arguments["note_type_id"],
             name=arguments.get("name"),
             description=arguments.get("description"),
+            primary_category=arguments.get("primary_category"),
+            tags=arguments.get("tags"),
+            taxonomy_metadata=arguments.get("taxonomy_metadata"),
+            preview_text=arguments.get("preview_text"),
+            preview_image_url=arguments.get("preview_image_url"),
+            pricing_mode=arguments.get("pricing_mode"),
+            price_amount_minor=arguments.get("price_amount_minor"),
+            publish_status=arguments.get("publish_status"),
             fields=arguments.get("fields"),
             templates=arguments.get("templates"),
             preview_id=arguments.get("preview_id"),
@@ -1203,13 +1225,21 @@ def _call_update_note_type(*, user_id: int, arguments: dict[str, Any]) -> dict[s
 UPDATE_NOTE_TYPE_TOOL = McpToolDefinition(
     name=mcp_tool_service.UPDATE_NOTE_TYPE_TOOL_NAME,
     title="Update Note Type",
-    description="Update a note type's name, description, fields, or templates with automatic data preservation when renaming fields.",
+    description="Update a note type's name, description, fields, templates, metadata, taxonomy, or publish status with automatic data preservation when renaming fields.",
     input_schema={
         "type": "object",
         "properties": {
             "note_type_id": {"type": "string", "description": "UUID of the note type to update"},
             "name": {"type": "string", "description": "New note type name"},
             "description": {"type": ["string", "null"], "description": "New description"},
+            "primary_category": {"type": ["string", "null"], "description": "Primary subject/category (e.g. 'japanese', 'english', 'it_coding')"},
+            "tags": {"type": "array", "items": {"type": "string"}, "description": "Tags list"},
+            "taxonomy_metadata": {"type": ["object", "null"], "description": "Structured taxonomy metadata (domain, subject, difficulty_band, framework, framework_level, best_used_for, format_features)"},
+            "preview_text": {"type": ["string", "null"], "description": "Brief preview summary text"},
+            "preview_image_url": {"type": ["string", "null"], "description": "Preview banner or icon image URL"},
+            "pricing_mode": {"type": ["string", "null"], "enum": [None, "free", "paid"], "description": "Pricing mode ('free' or 'paid')"},
+            "price_amount_minor": {"type": ["integer", "null"], "description": "Price in minor units"},
+            "publish_status": {"type": ["string", "null"], "enum": [None, "published", "unlisted", "archived", "private"], "description": "Publish status"},
             "fields": {"description": "Updated fields list or delta"},
             "templates": {"description": "Updated templates list or delta"},
             "preview_id": {"type": ["string", "null"], "description": "Preview token from preview_note_type_update for stale protection"},
@@ -1222,6 +1252,7 @@ UPDATE_NOTE_TYPE_TOOL = McpToolDefinition(
     handler=_call_update_note_type,
     arguments_validator=validate_update_note_type_arguments,
 )
+
 
 
 def _call_delete_note_type(*, user_id: int, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -1328,6 +1359,85 @@ IMPORT_IMAGE_TOOL = McpToolDefinition(
     handler=_call_import_image,
     arguments_validator=validate_import_image_arguments,
 )
+
+
+def _call_crawl_note_media(*, user_id: int, arguments: dict[str, Any]) -> dict[str, Any]:
+    return mcp_tool_service._wrap_tool_result(
+        mcp_tool_service.crawl_note_media(
+            user_id=user_id,
+            note_id=arguments["note_id"],
+            field_name=arguments["field_name"],
+            url=arguments["url"],
+            markdown_inline=arguments.get("markdown_inline", False),
+        )
+    )
+
+
+CRAWL_NOTE_MEDIA_TOOL = McpToolDefinition(
+    name=mcp_tool_service.CRAWL_NOTE_MEDIA_TOOL_NAME,
+    title="Crawl Image for Note",
+    description="Crawl and download an image from a remote URL, sanitize and convert to WebP, and attach it to a specific note's field as a local media asset.",
+    required_scope="media:write",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "note_id": {
+                "type": "string",
+                "description": "ID of the target Note.",
+            },
+            "field_name": {
+                "type": "string",
+                "description": "Name of the target field (image, diagram, or markdown).",
+            },
+            "url": {
+                "type": "string",
+                "description": "Public HTTP/HTTPS URL of the image to crawl.",
+            },
+            "markdown_inline": {
+                "type": "boolean",
+                "description": "Set to true if this media is an inline image inside markdown content. Defaults to false.",
+            },
+        },
+        "required": ["note_id", "field_name", "url"],
+    },
+    handler=_call_crawl_note_media,
+    arguments_validator=validate_crawl_note_media_arguments,
+)
+
+
+def _call_extract_page_images(*, user_id: int, arguments: dict[str, Any]) -> dict[str, Any]:
+    return mcp_tool_service._wrap_tool_result(
+        mcp_tool_service.extract_page_images(
+            user_id=user_id,
+            page_url=arguments["page_url"],
+            max_images=arguments.get("max_images", 20),
+        )
+    )
+
+
+EXTRACT_PAGE_IMAGES_TOOL = McpToolDefinition(
+    name=mcp_tool_service.EXTRACT_PAGE_IMAGES_TOOL_NAME,
+    title="Extract Images from Webpage",
+    description="Fetch a remote webpage safely with SSRF protection and extract candidate image URLs (OpenGraph, Twitter Cards, and img tags).",
+    required_scope="media:read",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "page_url": {
+                "type": "string",
+                "description": "Public HTTP/HTTPS URL of the webpage to crawl.",
+            },
+            "max_images": {
+                "type": "integer",
+                "description": "Maximum number of candidate images to return (default 20, max 50).",
+            },
+        },
+        "required": ["page_url"],
+    },
+    handler=_call_extract_page_images,
+    arguments_validator=validate_extract_page_images_arguments,
+)
+
 
 
 def _call_search_images(*, user_id: int, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -1540,6 +1650,38 @@ GET_DECK_PUBLISH_OPTIONS_TOOL = McpToolDefinition(
 )
 
 
+def _call_get_taxonomy_schema(*, user_id: int, arguments: dict[str, Any]) -> dict[str, Any]:
+    return mcp_tool_service._wrap_tool_result(
+        mcp_tool_service.get_taxonomy_schema(
+            user_id=user_id,
+            content_type=arguments.get("content_type", "deck_marketplace_item"),
+        )
+    )
+
+
+GET_TAXONOMY_SCHEMA_TOOL = McpToolDefinition(
+    name=mcp_tool_service.GET_TAXONOMY_SCHEMA_TOOL_NAME,
+    title="Get Taxonomy Schema",
+    description="Retrieve the complete hierarchical taxonomy schema including domains, subjects, frameworks (JLPT, CEFR, TOEIC, HSK, AWS, etc.), levels, learning goals, topics, format features, and best_used_for options.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "content_type": {
+                "type": "string",
+                "enum": ["deck_marketplace_item", "note_type"],
+                "default": "deck_marketplace_item",
+                "description": "Content type to retrieve taxonomy schema for ('deck_marketplace_item' or 'note_type').",
+            },
+        },
+        "additionalProperties": False,
+    },
+    required_scope="deck-share:read",
+    annotations={"readOnly": True},
+    handler=_call_get_taxonomy_schema,
+    arguments_validator=validate_get_taxonomy_schema_arguments,
+)
+
+
 def _call_share_deck(*, user_id: int, arguments: dict[str, Any]) -> dict[str, Any]:
     return mcp_tool_service._wrap_tool_result(
         mcp_tool_service.share_deck(
@@ -1553,6 +1695,9 @@ def _call_share_deck(*, user_id: int, arguments: dict[str, Any]) -> dict[str, An
             pricing_mode=arguments.get("pricing_mode", "free"),
             price_amount_minor=arguments.get("price_amount_minor"),
             is_unlisted=bool(arguments.get("is_unlisted", False)),
+            preview_text=arguments.get("preview_text"),
+            sample_cards_count=arguments.get("sample_cards_count"),
+            taxonomy_metadata=arguments.get("taxonomy_metadata"),
         )
     )
 
@@ -1560,7 +1705,7 @@ def _call_share_deck(*, user_id: int, arguments: dict[str, Any]) -> dict[str, An
 SHARE_DECK_TOOL = McpToolDefinition(
     name=mcp_tool_service.SHARE_DECK_TOOL_NAME,
     title="Share Deck to Marketplace",
-    description="Publish and share a personal flashcard deck to the Flama Marketplace with title, rich description, category, tags, and pricing mode.",
+    description="Publish and share a personal flashcard deck to the Flama Marketplace with title, rich description, category, tags, pricing mode, preview metadata, and taxonomy.",
     input_schema={
         "type": "object",
         "properties": {
@@ -1573,6 +1718,9 @@ SHARE_DECK_TOOL = McpToolDefinition(
             "pricing_mode": {"type": "string", "enum": ["free", "paid"], "default": "free", "description": "Pricing mode ('free' or 'paid')"},
             "price_amount_minor": {"type": ["integer", "null"], "description": "Price in minor units (e.g. VND) if pricing_mode is 'paid'"},
             "is_unlisted": {"type": "boolean", "default": False, "description": "Whether to make the shared deck unlisted (accessible via link only)"},
+            "preview_text": {"type": ["string", "null"], "description": "Brief preview summary text"},
+            "sample_cards_count": {"type": ["integer", "null"], "description": "Number of sample cards to show on marketplace"},
+            "taxonomy_metadata": {"type": ["object", "null"], "description": "Structured taxonomy metadata (domain, subject, difficulty_band, framework, framework_level, framework_track, learning_goals, primary_topics, format_features, audience)"},
         },
         "additionalProperties": False,
     },
@@ -1594,6 +1742,9 @@ def _call_update_shared_deck(*, user_id: int, arguments: dict[str, Any]) -> dict
             pricing_mode=arguments.get("pricing_mode"),
             price_amount_minor=arguments.get("price_amount_minor"),
             publish_status=arguments.get("publish_status"),
+            preview_text=arguments.get("preview_text"),
+            sample_cards_count=arguments.get("sample_cards_count"),
+            taxonomy_metadata=arguments.get("taxonomy_metadata"),
         )
     )
 
@@ -1601,7 +1752,7 @@ def _call_update_shared_deck(*, user_id: int, arguments: dict[str, Any]) -> dict
 UPDATE_SHARED_DECK_TOOL = McpToolDefinition(
     name=mcp_tool_service.UPDATE_SHARED_DECK_TOOL_NAME,
     title="Update Shared Deck Listing",
-    description="Update metadata, description, category, tags, pricing, or publish status of an already shared deck.",
+    description="Update metadata, description, category, tags, pricing, taxonomy, preview, or publish status of an already shared deck.",
     input_schema={
         "type": "object",
         "properties": {
@@ -1612,7 +1763,10 @@ UPDATE_SHARED_DECK_TOOL = McpToolDefinition(
             "tags": {"type": "array", "items": {"type": "string"}, "description": "New tags list"},
             "pricing_mode": {"type": ["string", "null"], "enum": [None, "free", "paid"], "description": "New pricing mode"},
             "price_amount_minor": {"type": ["integer", "null"], "description": "New price in minor units"},
-            "publish_status": {"type": ["string", "null"], "enum": [None, "published", "unlisted", "archived", "draft"], "description": "New publish status"},
+            "publish_status": {"type": ["string", "null"], "enum": [None, "published", "unlisted", "archived", "draft", "private"], "description": "New publish status"},
+            "preview_text": {"type": ["string", "null"], "description": "New brief preview summary text"},
+            "sample_cards_count": {"type": ["integer", "null"], "description": "New number of sample cards to show"},
+            "taxonomy_metadata": {"type": ["object", "null"], "description": "New structured taxonomy metadata (domain, subject, difficulty_band, framework, framework_level, framework_track, learning_goals, primary_topics, format_features, audience)"},
         },
         "required": ["deck_item_id"],
         "additionalProperties": False,
@@ -1621,6 +1775,7 @@ UPDATE_SHARED_DECK_TOOL = McpToolDefinition(
     handler=_call_update_shared_deck,
     arguments_validator=validate_update_shared_deck_arguments,
 )
+
 
 
 def _call_preview_deck_release(*, user_id: int, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -1790,11 +1945,14 @@ _MCP_TOOL_DEFINITIONS = (
     PREVIEW_NOTE_TYPE_UPDATE_TOOL,
     UPDATE_NOTE_TYPE_TOOL,
     DELETE_NOTE_TYPE_TOOL,
-    # Image Library
+    # Image Library & Crawling
     IMPORT_IMAGE_TOOL,
     SEARCH_IMAGES_TOOL,
     GET_IMAGE_TOOL,
-    # Shared Decks & Releases
+    CRAWL_NOTE_MEDIA_TOOL,
+    EXTRACT_PAGE_IMAGES_TOOL,
+    # Shared Decks & Releases & Taxonomy
+    GET_TAXONOMY_SCHEMA_TOOL,
     LIST_SHARED_DECKS_TOOL,
     GET_SHARED_DECK_TOOL,
     LIST_SHARED_DECK_NOTES_TOOL,
@@ -1806,6 +1964,7 @@ _MCP_TOOL_DEFINITIONS = (
     LIST_DECK_RELEASES_TOOL,
     LIST_INSTALLED_DECKS_TOOL,
 )
+
 _MCP_TOOLS_BY_NAME = {tool.name: tool for tool in _MCP_TOOL_DEFINITIONS}
 _MCP_TOOLS_BY_LOWER_NAME = {tool.name.lower(): tool for tool in _MCP_TOOL_DEFINITIONS}
 

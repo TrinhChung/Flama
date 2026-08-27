@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Rating, StudySessionSnapshot } from '../types'
 import {
+  ClientAlgorithmContractError,
+  ClientAlgorithmUnavailableError,
+} from '../scheduler/algorithmRegistry'
+import {
   applyLocalAnswer,
   automaticCommitMode,
   buildSessionView,
@@ -65,6 +69,7 @@ function snapshot(): StudySessionSnapshot {
         template_id: 'template-1',
         source_deck_id: 12,
         local_deck_id: 12,
+        composition_id: 'standard',
         note_type_id: 'type-1',
         created_at: '2026-02-01T00:00:00.000Z',
         policy_key: 'policy',
@@ -118,6 +123,7 @@ function snapshot(): StudySessionSnapshot {
         media: [],
       },
     },
+    compositions: {},
   }
 }
 
@@ -157,6 +163,26 @@ describe('local study session engine', () => {
     vi.unstubAllGlobals()
   })
 
+  it('fails before opening a session whose Algorithm is unavailable', () => {
+    const unsupported = snapshot()
+    unsupported.algorithm_version = '2.0.0'
+    unsupported.policies.policy.algorithm_version = '2.0.0'
+
+    expect(() => createPersistedSession(unsupported))
+      .toThrow(ClientAlgorithmUnavailableError)
+  })
+
+  it('fails before answering when a restored policy identity drifts', () => {
+    const local = createPersistedSession(snapshot())
+    local.snapshot.policies.policy.algorithm_version = '2.0.0'
+
+    expect(() => decisionForCard(
+      local,
+      'card-1',
+      Date.parse(local.snapshot.server_now_utc),
+    )).toThrow(ClientAlgorithmContractError)
+  })
+
   it('answers locally and builds a delta batch', () => {
     vi.stubGlobal('crypto', {
       randomUUID: () => '00000000-0000-4000-8000-000000000001',
@@ -175,6 +201,12 @@ describe('local study session engine', () => {
       500,
     )
     expect(answered.events).toHaveLength(1)
+    expect(answered.events[0]).toMatchObject({
+      rating: 'good',
+      action_key: 'review.good',
+      trigger_key: 'scheduler.review.good',
+      trigger_contract_version: '1',
+    })
     expect(answered.snapshot.cards[0].state.type).toBe('learning')
 
     const prepared = prepareCommit(answered, {

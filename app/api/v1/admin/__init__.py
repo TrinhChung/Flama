@@ -6,6 +6,7 @@ from .analytics import admin_analytics_bp
 from .image_library import admin_image_library_bp
 from .payments import admin_payments_bp
 from .support import admin_support_bp
+from .taxonomy import admin_taxonomy_bp
 from .tts import admin_tts_bp
 from .users import admin_users_bp
 
@@ -17,3 +18,5 @@ admin_bp.register_blueprint(admin_tts_bp, url_prefix="/tts-providers")
 admin_bp.register_blueprint(admin_support_bp, url_prefix="/support-donation")
 admin_bp.register_blueprint(admin_image_library_bp, url_prefix="/image-library")
 admin_bp.register_blueprint(admin_payments_bp, url_prefix="/payments")
+admin_bp.register_blueprint(admin_taxonomy_bp, url_prefix="/taxonomy")
+

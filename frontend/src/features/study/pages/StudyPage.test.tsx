@@ -17,18 +17,19 @@ const mocks = vi.hoisted(() => ({
   undo: vi.fn(),
   commit: vi.fn(),
   prepareDecision: vi.fn(),
+  updateCardContent: vi.fn(),
   getBootstrap: vi.fn(),
   sessionHookData: {
-    session: null as any,
-    view: null as any,
-    receipt: null as any,
-    error: null as any,
+    session: null,
+    view: null,
+    receipt: null,
+    error: null,
     leaseConflict: true,
     takeoverState: 'idle' as const,
     isLoading: false,
     isBusy: false,
     canUndo: false,
-  },
+  } as any,
 }))
 
 vi.mock('@/app/api', () => ({
@@ -54,6 +55,7 @@ vi.mock('../hooks/useStudySession', () => ({
     undo: mocks.undo,
     commit: mocks.commit,
     requestTakeover: mocks.requestTakeover,
+    updateCardContent: mocks.updateCardContent,
   }),
 }))
 
@@ -96,6 +98,7 @@ beforeEach(() => {
     isLoading: false,
     isBusy: false,
     canUndo: false,
+    updateCardContent: mocks.updateCardContent,
   }
   mocks.requestFullscreen.mockResolvedValue(undefined)
   Object.defineProperty(document.documentElement, 'requestFullscreen', {
@@ -259,3 +262,84 @@ describe('StudyPage undo interactions', () => {
     expect(mocks.undo).toHaveBeenCalledOnce()
   })
 })
+
+describe('StudyPage quick edit interactions', () => {
+  function setupActiveStudy() {
+    mocks.sessionHookData = {
+      session: {
+        snapshot: {
+          session_id: 'session-1',
+          scope: { name: 'Test Deck' },
+        },
+        events: [{ event_id: 'e1' }],
+      } as any,
+      view: {
+        card: { card_id: 'card-2', note_id: '10', can_edit_card: true },
+        template: {
+          front_source: 'front',
+          back_source: 'back',
+          field_defs: [{ name: 'Word', field_type: 'text', required: true }],
+        },
+        content: { field_values: { Word: '日本語' } },
+        counts: { new: 5, learning: 1, due: 2 },
+        session_state: 'active',
+      } as any,
+      receipt: null,
+      error: null,
+      leaseConflict: false,
+      takeoverState: 'idle',
+      isLoading: false,
+      isBusy: false,
+      canUndo: false,
+    }
+    mocks.prepareDecision.mockReturnValue({ previews: {} })
+  }
+
+  it('opens quick edit dialog via E key shortcut', async () => {
+    setupActiveStudy()
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+    await act(async () => {
+      root?.render(renderWithClient(<StudyPage />))
+    })
+
+    const eEvent = new KeyboardEvent('keydown', {
+      key: 'e',
+      code: 'KeyE',
+      bubbles: true,
+      cancelable: true,
+    })
+
+    await act(async () => {
+      window.dispatchEvent(eEvent)
+    })
+
+    expect(eEvent.defaultPrevented).toBe(true)
+    const dialogTitle = document.querySelector('[data-slot="dialog-content"]')
+    expect(dialogTitle).not.toBeNull()
+    expect(document.body.textContent).toContain('Sửa nhanh thẻ')
+  })
+
+  it('opens quick edit dialog via Sửa thẻ button in bottom bar', async () => {
+    setupActiveStudy()
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+    await act(async () => {
+      root?.render(renderWithClient(<StudyPage />))
+    })
+
+    const editButtons = Array.from(container.querySelectorAll('button')).filter(
+      (button) => button.textContent?.includes('Sửa thẻ'),
+    )
+    expect(editButtons.length).toBeGreaterThan(0)
+
+    await act(async () => {
+      editButtons[0].click()
+    })
+
+    expect(document.body.textContent).toContain('Sửa nhanh thẻ')
+  })
+})
+

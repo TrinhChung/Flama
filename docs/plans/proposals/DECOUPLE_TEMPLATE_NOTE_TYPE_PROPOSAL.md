@@ -4,6 +4,8 @@
 > **Trạng thái:** Bản thảo đề xuất kỹ thuật (Technical Proposal & Architecture Specification)  
 > **Phạm vi tác động:** Backend Data Models (`models/`), Render Engine (`flashcard_renderer.py`, `study_artifact_service.py`), Sync Engine (`flama_connect_service.py`, `anki_sync_service.py`), Share/Marketplace (`flashcards_share_service.py`), Frontend React (`frontend/src/features/note-types/`, `frontend/src/features/study/`).
 
+> **Mốc triển khai 2026-08-27:** Schema tách Template/NoteType, các binding table, thay đổi Card và migration dữ liệu trong proposal này **chưa được triển khai**. Chỉ compatibility slice không đổi schema của Phase 0–2 trong [`study-interaction-trigger-algorithm-plan.md`](../../architecture/study-interaction-trigger-algorithm-plan.md#implementation-progress-snapshot--2026-08-27) đã được triển khai một phần. Tài liệu kiến trúc đó là tracker tiến độ canonical; không duy trì một bản trạng thái phase trùng lặp trong proposal này.
+
 ---
 
 ## 1. Tổng quan & Đặt vấn đề

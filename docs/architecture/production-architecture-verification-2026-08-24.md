@@ -336,7 +336,7 @@ The current production schema already satisfies this boundary. Target normalized
 
 - The original pre-Alembic core baseline mechanism cannot be proven from the current production DB/release.
 - Production has not exercised multi-Template NoteTypes or multiple Cards/progress rows per Note.
-- Exact cross-NoteType Card pairing and Template default/name/position anomalies were not queried; equal Note/Card counts and one Template per NoteType do not prove those separate invariants.
+- Exact cross-NoteType Card pairing and Template default/name/position anomalies were not queried in the original 2026-08-24 snapshot. The 2026-08-27 follow-up in section 15 closed this specific evidence gap for the then-current production state.
 - The only rename job processed zero Notes, so production history does not validate bulk rename failure/recovery.
 - No production row is old enough to demonstrate 30-day session aggregation/cleanup.
 - Aggregate SQL does not fully reproduce logical-overlay clone study resolution.
@@ -344,3 +344,34 @@ The current production schema already satisfies this boundary. Target normalized
 - DB data confirms presets/settings are unused but cannot prove whether an out-of-repository management tool ever existed.
 
 These limits should remain explicit rather than being converted into assumptions.
+
+## 15. Follow-up read-only verification — 2026-08-27
+
+This follow-up was performed through the configured SSH alias `chung_hostinger_vps` after the first study-runtime compatibility slice. It used aggregate SQL through a standalone SQLAlchemy connection and did not import the Flask application, run a migration, invoke startup maintenance, or modify production.
+
+The active release had advanced since the original snapshot, and production Alembic contained one head row at `20260826_000021`.
+
+| Gate | Result |
+|---|---:|
+| NoteTypes without a Template | 0 |
+| NoteTypes with multiple Templates | 0 |
+| NoteTypes whose default-Template count is not exactly one | 0 |
+| Duplicate `(NoteType, Template.name)` groups | 0 |
+| Duplicate `(NoteType, Template.position)` groups | 0 |
+| Cards whose Note and Template belong to different NoteTypes | 0 |
+| Notes without Cards | 0 |
+| Notes with multiple Cards | 0 |
+| CardProgress rows with NULL Card ID | 0 |
+| CardProgress rows with a non-NULL missing Card | 0 |
+| `(learner, Note)` groups fed by multiple CardProgress rows | 0 |
+| `(learner, Note)` history groups containing multiple Card IDs | 0 |
+| `open` StudySessions already past `expires_at` | 41 |
+| StudySessions older than 30 days by `created_at` | 0 |
+
+### Interpretation
+
+- The additive learner/Note progress migration remains collision-free in this production snapshot, but the future migration must still quarantine rather than silently merge collisions found in another environment or created before cutover.
+- Template/Card structural anomaly gates are currently clean. They are point-in-time data evidence, not database constraints and not proof that multi-Template behavior is implemented.
+- Expired sessions increased from 39 in the 2026-08-24 snapshot to 41. This confirms the missing expired-session lifecycle remains active; no rows were closed or deleted during verification.
+- No row is old enough to validate the approved 30-day aggregation and cleanup process. That process remains unimplemented.
+- These physical-table checks do not reproduce every logical-overlay clone resolution path. Overlay compatibility still requires service-level acceptance tests and migration reconciliation.

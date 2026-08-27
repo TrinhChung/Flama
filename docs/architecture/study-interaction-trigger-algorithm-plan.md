@@ -1,8 +1,10 @@
 # Study, Interaction, Trigger, Algorithm, and Progress Architecture Plan
 
-Status: architecture investigation and staged refactor plan with product decisions approved on 2026-08-24; no implementation is authorized by this document.
+Status: active staged refactor. Product decisions were approved on 2026-08-24. The first compatibility slice of Phases 0-2 and cleanup orders 1-3 were implemented and reviewed on 2026-08-27; the phase exit gates are still partial. Phases 3-9 have not started.
 
 Last investigated: 2026-08-24
+
+Last implementation review: 2026-08-27
 
 ## Scope and evidence discipline
 
@@ -14,7 +16,7 @@ This document continues the repository investigations in:
 - [`CARD_TEMPLATE_SANDBOX_RENDERER.md`](./CARD_TEMPLATE_SANDBOX_RENDERER.md), for the renderer security boundary;
 - [`CLONE_CUTOVER_REPORT.md`](../plans/completed/CLONE_CUTOVER_REPORT.md), for the overlay-only clone invariant.
 
-The repository implementation is the primary source. Existing documents are context, not assumed ground truth. This investigation made no application, model, migration, API, test, or database changes.
+The repository implementation is the primary source. Existing documents are context, not assumed ground truth. The original investigation made no application, model, migration, API, test, or database changes. A later user-authorized implementation slice changed application/runtime/test code only; it did not add models, migrations, or a second progress store.
 
 Statements are labelled as follows:
 
@@ -25,17 +27,51 @@ Statements are labelled as follows:
 
 This plan intentionally stops before detailed SQL. It follows the requested order: responsibility, identity, ownership, runtime flow, state ownership, lifecycle, extensibility, compatibility, migration, then physical storage.
 
+## Implementation progress snapshot — 2026-08-27
+
+`Partial` means that reviewed code exists and its focused tests pass, but every exit condition written for the phase has not yet been satisfied. This avoids treating an adapter seam as the completed target architecture.
+
+| Phase | Status | Implemented evidence | Exit-gate work still open |
+|---|---|---|---|
+| Phase 0 — evidence and invariants | **Partial** | Read-only aggregate audit service and CLI; SQLite anomaly tests; production follow-up checked Template/Card/progress fan-in gates and Alembic head; one immutable fixture now verifies 40 transitions/previews plus Action identity in both Python and TypeScript | MySQL execution of the checked-in audit command; complete clone/import/provenance/version inventory; operational startup-safety contract for the CLI |
+| Phase 1 — runtime boundaries | **Partial** | exact-key/version Python and TypeScript Algorithm registries; compatibility adapter for the current scheduler; semantic review Action contracts; REST/MCP use one locked native review command; batch shares canonical event persistence, side effects, and scheduler policy identity; all native ReviewEvents record effective Algorithm/version/config hash | retained executable/version and state-decoder retirement lifecycle; external import/cutover revision alignment |
+| Phase 2 — built-in Interaction/Trigger compatibility | **Partial** | React review Action/Trigger contract; client events carry action and trigger identity; server validates supplied identity while accepting old v2 events; restored valid legacy events are normalized and mismatches quarantined; sandbox-authored `keydown_event` relay removed; current labels/layout/previews/local undo retained | extract the visual four-button component from `StudyBottomBar`; versioned required wire contract after v2; a trusted keyboard UX for focus inside the sandbox; generic Trigger Runtime beyond the four-rating adapter |
+| Phase 3 — composition/StudyMode | **Not started** | none | Priority-0 decisions and Field/Template binding prerequisites |
+| Phase 4 — learner/Note progress and Algorithm State | **Not started** | none; `CardProgress` remains authoritative | approved state/availability/history contracts, additive schema, backfill and shadow reconciliation |
+| Phases 5-9 — authority cutover through contract cleanup | **Not started** | none | all earlier exit gates plus explicit production migration approval |
+
+### Current authority and compatibility
+
+- `CardProgress` remains the only operational source of truth. No dual progress table, migration, or production write was introduced.
+- Existing `study-session.v2` commits remain accepted. New clients add `action_key`, `trigger_key`, and `trigger_contract_version`; when supplied, the server rejects inconsistent values.
+- The server dispatches batch replay by the exact Algorithm key/version frozen in `StudySession`. An unavailable pinned version fails with `ALGORITHM_UNAVAILABLE` instead of silently executing current code.
+- The client now resolves the same exact Algorithm key/version before opening or answering a session. It upgrades valid legacy v2 events with canonical Action metadata and moves incompatible persisted rows from the active IndexedDB store to a bounded one-row-per-scope quarantine store.
+- Direct REST and MCP reviews now run through one locked command and stamp Algorithm/version plus the same canonical scheduler-config hash used by batch sessions. They intentionally have no StudySession identity because they are immediate commits rather than leased batches.
+- Template JavaScript can no longer synthesize a parent-window keyboard event that reaches progress-changing React handlers. No generic progress-affecting Template API has been enabled.
+
+### Verification evidence
+
+- Latest cleanup-order-2 backend set: 68 tests passed (`study_action_runtime`, immutable Algorithm vectors, session API, MCP, and owner/clone dirty tracking). The previous broader compatibility set also passed 68 tests.
+- Scheduler/schema/artifact/audit/study/flashcard API regression set: 103 tests passed after the command refactor.
+- Renderer REST-only regression set: 5 tests passed.
+- React/Vitest suite: 159 tests passed across 30 files.
+- Frontend production build completed successfully; lint completed with pre-existing warnings and no errors.
+- Shared fixture `tests/fixtures/study/legacy-anki-1.0.0-golden-vectors.json` is consumed independently by `tests/test_study_algorithm_golden_vectors.py` and `legacyEngine.golden.test.ts`; expected results are not calculated by the implementation under test at test runtime.
+- Read-only production follow-up through `chung_hostinger_vps`: Alembic `20260826_000021`; zero cross-NoteType Cards, zero missing/multiple Cards per Note, zero Template default/name/position anomalies, zero NULL/orphan progress rows, and zero learner/Note progress/history fan-in groups. Forty-one `open` sessions were expired by timestamp; no session row was older than 30 days. No production mutation was performed.
+
+Detailed production evidence and its limits are recorded in [`production-architecture-verification-2026-08-24.md`](./production-architecture-verification-2026-08-24.md#15-follow-up-read-only-verification--2026-08-27).
+
 ## Executive findings
 
-1. **Observed:** the current four-button review flow is not an Interaction system. It is a fixed `Rating` union implemented independently in React, Python validation, session replay, direct REST, MCP, analytics, and Anki import adapters.
+1. **Observed:** the current four-button review flow now has a first compatibility Interaction metadata contract, but it is not yet a reusable Interaction system. React controls, Python validation, session replay, direct REST, MCP, analytics, and Anki import adapters remain substantially shaped around the fixed four-value `Rating` protocol.
 2. **Observed:** the primary React study path already has useful runtime primitives: a self-contained session snapshot, policy hashes, IndexedDB/Web Lock durability mechanisms, optimistic local scheduling, server-authoritative replay, progress revisions, idempotency receipts, and one database transaction per batch commit. Its fallback is not fully durable, as detailed below.
-3. **Observed:** algorithm identity is descriptive rather than executable. Sessions are labelled `legacy-anki` version `1.0.0`, but both client and server always call the currently deployed scheduler implementation instead of dispatching a retained implementation by that key and version.
+3. **Observed:** Algorithm identity is now executable and fail-closed on both server and client compatibility paths. Server replay, immediate native review, and React decisions resolve exact `legacy-anki` / `1.0.0`; restored snapshots whose session/policy identity disagrees are quarantined before an answer can be produced.
 4. **Observed:** `CardProgress` is the current operational source of truth. `ReviewEvent` is an analytics/audit fact plus a partial transition record and cannot reconstruct exact progress.
 5. **Observed:** `CardProgress` mixes generic concurrency/lifecycle concerns, Anki-shaped availability and scheduling state, FSRS fields, user controls, leech outcome/provenance, and query projections. Adding a materially different algorithm would require new fixed columns or misuse of existing ones.
 6. **Observed:** `Card` is presentation-bound because its identity is `Note + Template`, and it is also the current durable learning identity because progress and external Anki card references attach to it. **Approved target:** learner progress moves to one shared learning subject per `(learner, Note)`; Card remains a presentation/integration compatibility projection.
 7. **Observed:** no existing durable entity cleanly represents the requested composition. `StudySession` is a good resolved runtime snapshot, but it is ephemeral and user-specific; it is not the reusable authoring authority.
 8. **Proposed:** preserve distinct responsibilities for Template, Interaction Component, Action, Trigger, Trigger Runtime, Algorithm, Algorithm State, and an applied composition responsibility using the approved domain term **StudyMode**.
-9. **Proposed:** the first compatibility implementation should express the existing four ratings as semantic actions/triggers handled by a versioned adapter around the current scheduler, while preserving Card IDs, current `CardProgress` behavior, queue ordering, interval previews, offline commits, and clone identity during migration.
+9. **Partially implemented:** the first compatibility slice expresses the existing four ratings as semantic Action/Trigger metadata handled by a versioned server adapter around the current scheduler while preserving Card IDs, current `CardProgress` behavior, queue ordering, interval previews, offline commits, and clone identity. The remaining Phase 0-2 closure work is tracked below.
 10. **Approved:** all Templates/interactions for one Note update the same learner/Note progress; Template edits/deletion preserve progress; Algorithm switching initializes from available review history; the learner chooses an attached Template/application when Study starts; client evaluation is immediate but provisional and the server verifies/replays at batch commit.
 
 ## Approved product decisions — 2026-08-24
@@ -187,7 +223,7 @@ There is not one canonical review entry boundary today.
 | Path | Input | State transition | Concurrency/idempotency | Event behavior |
 |---|---|---|---|---|
 | React batch session | event batch of four ratings | server replay of Python `applyAnswer` | session lock, token/hash, progress revision, receipt | one event per answer with session/version/config metadata |
-| Direct REST answer | one four-value rating | current Python `applyAnswer` | single transaction; weaker `last_reviewed_at` comparison | event lacks session and normally lacks algorithm/config identity |
+| Direct REST answer | one four-value rating normalized to a semantic review Action | exact-version server compatibility adapter | single transaction; weaker `last_reviewed_at` comparison | event records Algorithm/Action/Trigger identity but lacks session and canonical config hash |
 | MCP `submit_review` | Card ID, four-value rating, duration | shares the direct transaction service | shares its concurrency/event limitations, but omits route-only suspended-state and client render-version checks | same direct event shape |
 | Anki progress import | external state snapshot | writes fixed `CardProgress` fields | source provenance and row handling | may update progress without a matching review event |
 | Anki revlog import | Anki ease/history | maps ease 1-4 to four ratings | per-card savepoint behavior | writes partial historical events separately from progress snapshot |
@@ -241,9 +277,9 @@ The batch server validates event sequence, UUIDs, session Card membership, ratin
 
 This is current behavior, not automatically a defect. A future Trigger Runtime must make early, out-of-order, and repeated Action policy explicit per contract/mode rather than silently adding an ordering restriction during boundary extraction.
 
-#### Algorithm labels do not select implementations
+#### Algorithm selection is only partially executable
 
-`StudySession.scheduler_algorithm` and `algorithm_version` are fixed to `legacy-anki` / `1.0.0`. Commit always calls the current `applyAnswer`, and restore checks the wire schema rather than ensuring an executable algorithm version is available. A deployment during a 24-hour session can change behavior while retaining the same stored label.
+`StudySession.scheduler_algorithm` and `algorithm_version` are fixed to `legacy-anki` / `1.0.0`. Server commit now resolves that exact pair through `study_algorithm_registry` and fails with `ALGORITHM_UNAVAILABLE` when it cannot execute the pinned version. React restore and optimistic preview still check the wire schema and call the bundled `legacyEngine` directly rather than proving that the snapshot's exact Algorithm version is executable client-side. A deployment can therefore preserve server replay while changing or losing client preview behavior unless the retained TypeScript implementation is version-dispatched too.
 
 #### Algorithm selection and configuration are misleading
 
@@ -1039,7 +1075,7 @@ The batch path's token, snapshot, sequence, revision, and receipt semantics are 
 
 The editor eventually needs to show abstract Template inputs, compatible Interaction properties, Action contracts, applied Field bindings, and mode-level trigger configuration. It should preview with representative resolved input data without writing study progress.
 
-The renderer should receive minimum resolved inputs rather than all Note fields by default. Existing full-context scripts use the explicit legacy capability/ABI during migration, are instrumented, and cannot use that compatibility access to mutate progress. Its bridge must remove the synthetic-key progress side channel and expose typed, authorized Actions. Current media proxy/CSP restrictions remain. SharedImage URL/key inputs remain generic values with no relational FK or cascade to Note. The current client only checks that Template and content ABI strings equal each other, not that the value is a supported ABI (`frontend/src/features/study/renderer/clientRenderer.ts:100-105`); the target must validate an allowlisted/supported ABI and pinned runtime version.
+The renderer should receive minimum resolved inputs rather than all Note fields by default. Existing full-context scripts use the explicit legacy capability/ABI during migration, are instrumented, and cannot use that compatibility access to mutate progress. The forgeable synthetic-key progress side channel was removed on 2026-08-27; exposing typed, authorized Actions and restoring secure shortcuts while iframe content owns focus remain open. Current media proxy/CSP restrictions remain. SharedImage URL/key inputs remain generic values with no relational FK or cascade to Note. The current client only checks that Template and content ABI strings equal each other, not that the value is a supported ABI (`frontend/src/features/study/renderer/clientRenderer.ts:100-105`); the target must validate an allowlisted/supported ABI and pinned runtime version.
 
 ### 14.5 Scheduler and study selection
 
@@ -1130,16 +1166,20 @@ Each phase should be reviewable and reversible. “Dual write” below means tem
 
 ### Phase 0 — Freeze evidence and invariants
 
+**Implementation status (2026-08-27): Partial.** Production anomaly checks, an aggregate audit seam, and immutable shared Python/TypeScript golden vectors exist; the complete migration inventory and operational audit gates remain open.
+
 **Work:**
 
-- retain the 2026-08-24 read-only production snapshot as the initial baseline, complete the still-unqueried cross-NoteType Card-pair and Template default/name/position anomaly checks, then rerun the full inventory immediately before migration to detect drift: progress counts, NULL Card IDs, actual FK enforcement and potential non-NULL orphans, cross-NoteType Note/Template Card mismatches, duplicate/ambiguous Template positions, duplicate logical subjects, scheduler labels, FSRS fields, revision distributions, open sessions, imported provenance, clone source/local Card mixtures;
-- capture current four-rating scheduler behavior as shared golden vectors;
+- retain the 2026-08-24 baseline plus the 2026-08-27 follow-up that closed the cross-NoteType Card-pair and Template default/name/position query gap; complete the still-open FK/revision/import/clone/version inventory; then rerun the full inventory immediately before migration to detect drift: progress counts, NULL Card IDs, actual FK enforcement and potential non-NULL orphans, cross-NoteType Note/Template Card mismatches, duplicate/ambiguous Template positions, duplicate logical subjects, scheduler labels, FSRS fields, revision distributions, open sessions, imported provenance, clone source/local Card mixtures;
+- **completed 2026-08-27:** capture current four-rating scheduler behavior as shared golden vectors covering 10 scenarios and all four Actions;
 - lock clone, import, due-count, direct/MCP, batch idempotency, and keyboard behavior in acceptance tests;
 - define metrics and reconciliation reports.
 
 **Exit gate:** the team can explain every existing progress category and measure migration completeness. No state changes.
 
 ### Phase 1 — Extract runtime boundaries without changing storage
+
+**Implementation status (2026-08-27): Partial.** Exact-version server/client dispatch, semantic Action metadata, canonical native ReviewEvent persistence, a locked REST/MCP transaction owner, and shared scheduler-config identity are implemented. The retained executable/state-decoder retirement lifecycle remains open.
 
 **Work:**
 
@@ -1157,6 +1197,8 @@ Each phase should be reviewable and reversible. “Dual write” below means tem
 
 ### Phase 2 — Introduce the built-in Interaction and Trigger Runtime compatibility path
 
+**Implementation status (2026-08-27): Partial.** The built-in metadata contract, compatibility mapping, optional v2 validation, and synthetic keyboard-path closure are implemented. Reusable UI ownership, a real Trigger dispatcher, restored-event normalization, and secure iframe-focus shortcuts remain open.
+
 **Work:**
 
 - represent the four-button UI as the first reusable Interaction contract;
@@ -1171,7 +1213,91 @@ Each phase should be reviewable and reversible. “Dual write” below means tem
 
 **Exit gate:** no user-visible scheduling or clone behavior changes, and custom Template JS cannot bypass the Action boundary.
 
+### Phase 0-2 implementation review and cleanup backlog — 2026-08-27
+
+The following findings were re-derived from the implementation diff after the focused suites passed. They define the cleanup needed before Phase 0-2 can be closed; they are not authorization to begin the Phase 3 or Phase 4 schema work.
+
+#### Finding C1 — Resolved 2026-08-27: client Algorithm dispatch is exact and fail-closed
+
+- **Original concern:** Python replay resolved exact `(algorithm_key, algorithm_version)`, while React imported the legacy engine directly and treated snapshot/policy identity as descriptive metadata.
+- **Resolution:** `algorithmRegistry.ts` owns the retained client executable registry. Session creation validates the top-level and every policy identity/config-schema/timezone/hash relationship; `decisionForCard` resolves through the registry again immediately before calculating previews/outcomes. Unknown versions raise `ALGORITHM_UNAVAILABLE`, and identity drift raises `ALGORITHM_CONTRACT_MISMATCH` before any local answer is appended.
+- **Restore compatibility:** valid legacy `study-session.v2` events with all three Action metadata fields absent are normalized from their rating. Partial or inconsistent Action metadata, unavailable Algorithms, and session/policy identity mismatches are quarantined rather than committed or silently discarded.
+- **Quarantine lifecycle:** IndexedDB is upgraded additively to version 2. The raw incompatible row is atomically moved out of `sessions` into `session-quarantine`, keyed by scope so repeated failures cannot accumulate duplicate rows. The current bootstrap is blocked and reports an actionable error; a reload may open a fresh session while the quarantined evidence remains available for diagnosis.
+- **Evidence:** `frontend/src/features/study/scheduler/algorithmRegistry.ts`; `session/studySessionEngine.ts`; `session/sessionRestore.ts`; `session/sessionStore.ts`; `hooks/useStudySession.ts`; `session/sessionRestore.test.ts`; `session/studySessionEngine.test.ts`; `hooks/useStudySession.test.tsx`.
+- **Migration implications:** no server database or API migration. Existing valid v2 leases remain executable under retained `legacy-anki/1.0.0`; the browser performs an additive IndexedDB schema upgrade and writes normalized active rows back canonically.
+- **Still open:** an explicit support/retirement policy for old client executables and state decoders remains part of Phase 1 lifecycle work.
+
+#### Finding C2 — The compatibility runtime records Trigger metadata but does not yet execute a Trigger boundary
+
+- **Observed:** `execute_review_action` resolves an Action and invokes the Algorithm adapter immediately. `trigger_key` is recorded as metadata; there is no exact-version Trigger handler registry, payload schema, or independent authorization/dispatch step.
+- **Evidence:** `app/services/study_action_runtime.py::execute_review_action`; `ReviewActionContract`; `_study_runtime` event metadata.
+- **Potential concern:** calling this the final Trigger Runtime would hide the remaining direct `Action -> Algorithm` coupling.
+- **Impact:** new evaluation, analytics, XP, or automation consumers would be added as conditionals around the scheduler instead of through an explicit primary/secondary behavior contract.
+- **Unknowns:** the primary/follow-up transaction semantics remain a Priority-0 decision in section 16.
+- **Alternatives considered:** keep the four-rating adapter as the permanent runtime, or introduce an internal exact-version Trigger dispatcher before generic external triggers.
+- **Trade-offs:** the permanent adapter is simpler but not extensible; an internal dispatcher adds versioning without exposing arbitrary user automation.
+- **Recommendation:** keep the current module explicitly labelled a compatibility runtime, then add a fail-closed built-in Trigger dispatcher only after primary/follow-up semantics are approved.
+- **Migration implications:** no schema is required for the internal dispatcher. A required wire Trigger version belongs in the post-v2 contract phase.
+
+#### Finding C3 — Resolved 2026-08-27: native review writes share command, policy, and event boundaries
+
+- **Original concern:** batch used locked revisions and a scheduler-config hash, while REST/MCP calculated outside the persistence service, compared timestamps, omitted parts of provenance, and differed on suspension and first-insert behavior.
+- **Resolution:** REST and MCP now adapt into `execute_native_review_command`, which resolves policy, locks the progress row, checks stale/suspended state, executes the exact Algorithm adapter, applies state, records the event and side effects, audits, and commits atomically. Batch retains its necessary lease/idempotency/replay transaction, but calls the same `record_native_review_transition` boundary and hashes the same serialized policy material through `study_policy_service`.
+- **Concurrency behavior:** existing rows are locked; batch additionally verifies its frozen base revision. A concurrent first insert is mapped to typed `CONCURRENT_REVIEW` for immediate review or `CARD_PROGRESS_CONFLICT` for batch instead of leaking an integrity error. This removes lost-update and untyped-race behavior without inventing permanent dual state.
+- **Provenance behavior:** REST, MCP, and batch persist the actual Algorithm key/version, Action/Trigger/state-schema metadata, and canonical scheduler-config hash. Only batch events carry StudySession/client-event/sequence identity because only batch owns that lease/idempotency contract.
+- **Boundary cleanup:** `study_service` no longer imports route helpers; install usage, clone scope resolution, audit creation, and native ReviewEvent construction are service-owned. The obsolete `apply_study_answer_and_commit` timestamp orchestration was deleted rather than retained as a second path.
+- **Evidence:** `app/services/study_service.py::execute_native_review_command`, `record_native_review_transition`; `app/services/study_policy_service.py`; `app/services/study_session_service.py::commit_study_session`; `app/routes/flashcards/study.py::study_answer`; `app/services/mcp_tool_service.py::submit_review`; `tests/test_study_session_api.py`; `tests/test_flama_connect_mcp.py`; `tests/test_owner_note_dirty_tracking_services.py`.
+- **Still outside this finding:** external Anki snapshot/revlog authority, native/offline conflict priority, and cross-path revision semantics remain tracked separately.
+
+#### Finding C4 — Resolved 2026-08-27: scheduler parity now uses frozen cross-language vectors
+
+- **Original concern:** the adapter parity test calculated its expected state with the same `applyAnswer` implementation that it wrapped, while Python and TypeScript had separate scenario assertions.
+- **Resolution:** one immutable JSON fixture now freezes 10 source scenarios × four Actions. It covers new, learning, relearning, on-time/early/late review, the Tokyo day boundary, leech suspension, deterministic fuzz, the current FSRS hook, previews, and Action/Trigger identity.
+- **Evidence:** `tests/fixtures/study/legacy-anki-1.0.0-golden-vectors.json`; `tests/test_study_algorithm_golden_vectors.py`; `frontend/src/features/study/scheduler/legacyEngine.golden.test.ts`. The tautological adapter-equals-wrapped-function test was removed from `tests/test_study_action_runtime.py`.
+- **Verification:** both focused contract suites pass; the wider regression set passes 68 backend tests and 151 frontend tests, and the production frontend build succeeds.
+- **Guardrail:** fixture expectations are static and neither test computes expected values through the implementation under test. Any intentional behavior change requires a new Algorithm/contract version and a separately reviewed fixture rather than overwriting `legacy-anki/1.0.0` expectations.
+- **Migration implications:** no database, persistence authority, or runtime API changed.
+
+#### Finding C5 — Partially resolved 2026-08-27: restore is canonical, but Interaction UI is not yet reusable
+
+- **Observed:** `reviewInteraction.ts` defines stable metadata, while `StudyBottomBar` and `StudyPage` still emit hard-coded raw ratings. The wire type declares rating/action/trigger as independent unions, so newly constructed ad-hoc objects are not yet a discriminated Action type. Restored IndexedDB events are now normalized or quarantined before becoming typed runtime data. Removing the forgeable iframe keyboard relay also means parent shortcuts no longer work while focus is inside the iframe. The renderer cache revision is named `typed-actions-v1` even though no typed Action bridge exists yet.
+- **Evidence:** `frontend/src/features/study/interactions/reviewInteraction.ts`; `components/StudyBottomBar.tsx`; `pages/StudyPage.tsx`; `session/sessionStore.ts::isRestorableStudySession`; `components/CardRendererFrame.tsx`; `static/js/card_renderer_host.js`; `components/CardRendererHost.test.ts`.
+- **Potential concern:** future modes must edit page-specific rating code, and compatibility sessions remain type-unsound after restore.
+- **Impact:** Interaction reuse remains shallow; contract drift reaches the server late; keyboard UX does not yet satisfy the Phase 2 preservation gate.
+- **Unknowns:** a browser-enforceable trusted-gesture bridge that untrusted Template code cannot forge still needs a focused security design.
+- **Alternatives considered:** preserve raw rating callbacks, or make a built-in Review Interaction own descriptors/shortcuts and emit a discriminated Action object.
+- **Trade-offs:** raw ratings minimize the initial diff; canonical Action objects remove invalid combinations and make alternate render layouts reusable. A raw keyboard relay is rejected because it restores the original security flaw.
+- **Recommendation:** extract a zero-visual-regression `ReviewInteractionControls`, emit one discriminated `ReviewAction`, and add a browser acceptance matrix for parent/iframe focus. Design a capability-scoped trusted keyboard command before restoring iframe-focus shortcuts. Rename the current cache revision to a neutral renderer-security revision until a typed Action bridge actually ships.
+- **Migration implications:** IndexedDB normalization is complete for the compatibility contract. The server must continue accepting valid legacy v2 events through the lease window.
+
+#### Finding C6 — Audit and event validation are useful but not yet migration-grade
+
+- **Observed:** the aggregate audit covers important Template/Card/current-progress gates, but detached ReviewEvents are excluded by its inner join to current Cards. It does not yet account for FK enforcement, revision distributions, missing runtime/config metadata, imported provenance, clone source/local mixtures, or active sessions whose Algorithm executable is unavailable. Multiple Cards/Templates are reported under `gates` even though they can be valid inventory requiring fan-in analysis. Batch/direct validation still copies broad untrusted payloads into history, and some ad-hoc numeric casts can escape typed errors. Anki revlog import creates an event and then mutates its Algorithm/version to `anki` / `revlog-v1`, instead of constructing one explicit external-import provenance record atomically. The Flask CLI's query service is read-only, but invoking a Flask CLI still inherits environment-controlled app-startup maintenance behavior.
+- **Evidence:** `app/services/study_architecture_audit_service.py`; `app/cli.py::study_architecture_audit`; `app/services/study_session_service.py::commit_study_session`; `app/routes/flashcards/study.py::study_answer`; `app/services/anki_sync_service.py::_import_review`.
+- **Potential concern:** a green audit can omit detached/provenance categories, and malformed or oversized legacy properties can be retained unnecessarily.
+- **Impact:** false migration confidence, noisy history, and dialect/startup surprises when operators run the audit.
+- **Unknowns:** logical-overlay resolution cannot be reproduced completely by the current physical aggregate queries.
+- **Alternatives considered:** keep one informational report, or split integrity failures, migration inventory, and operational warnings with a machine-readable verdict.
+- **Trade-offs:** one report is concise; categorized output is safer for automated cutover gates and avoids treating supported multi-Template data as corruption.
+- **Recommendation:** expand accounting for detached/imported/clone/version categories; add MySQL integration coverage; normalize and allowlist persisted event fields with typed size/cast errors; construct native-runtime and external-import provenance explicitly and atomically; document or enforce maintenance-disabled audit startup; publish explicit `pass`, `warn`, and `block` categories.
+- **Migration implications:** still read-only. The audit must be rerun immediately before every future backfill/cutover and must never repair data implicitly.
+
+#### Cleanup execution order
+
+| Order | Work package | Completion gate |
+|---:|---|---|
+| 1 | **Complete 2026-08-27:** frozen cross-language scheduler and Action contract fixture | Python and TypeScript pass the same 40 immutable transition/preview vectors; a behavior change requires a new Algorithm/contract version |
+| 2 | **Complete 2026-08-27:** canonical native review command and policy identity | REST/MCP share one locked command; batch shares canonical transition persistence and policy identity; all three stamp config provenance, reject suspended progress, and map first-create races to typed conflicts |
+| 3 | **Complete 2026-08-27:** client Algorithm registry and restored-event normalization | exact key/version resolves before opening and answering; valid legacy v2 events restore canonically; mismatches move out of the active store into bounded per-scope quarantine |
+| 4 | Reusable built-in Interaction controls and keyboard security/UX | unchanged visual snapshots; full shortcut/reveal matrix passes in a real browser for parent and approved iframe-focus behavior; sandbox scripts cannot submit progress |
+| 5 | Audit/event hardening | MySQL and SQLite reports categorize integrity/inventory/warnings; detached/import/clone/version accounting reconciles; canonical event payloads enforce limits |
+| 6 | Trigger dispatcher design | approved primary/follow-up semantics; exact Trigger version dispatch fails closed; no arbitrary Template code capability |
+
+Orders 4-6 remain open. Only after all six orders pass should Phase 0-2 be marked complete. If Trigger dispatch is intentionally deferred to later generic Trigger work, Phase 2 must remain partial and the current module must stay named and documented as a compatibility runtime.
+
 ### Phase 3 — Establish the composition responsibility
+
+**Implementation status (2026-08-27): Partially complete.** Compatibility composition service (`study_composition_service.py`), session freeze (`compositions` dict + per-card `composition_id`), scope compositions API, recursive deck resolution, and pre-session selector (`StudyModeSelector`) are implemented. FieldDef-based bindings deferred pending Field normalization plan. Exit gate verified by automated tests (`test_study_composition_exit_gate.py`).
 
 **Work:**
 
@@ -1189,6 +1315,8 @@ Each phase should be reviewable and reversible. “Dual write” below means tem
 **Exit gate:** every effective Card/application context resolves unambiguously to one behaviorally equivalent compatibility composition. A source Card reused through different install/clone overlays may require context-specific application resolution; this gate does not assume one global composition per physical Card.
 
 ### Phase 4 — Add generic progress envelope, availability projection, and versioned Algorithm State
+
+**Implementation status (2026-08-27): Not started.** No additive progress/state schema or mirror exists; `CardProgress` is still the sole authority.
 
 **Work:**
 
@@ -1355,13 +1483,13 @@ Resolve Priority 0 items 1–7 before finalizing the progress/history physical d
 
 These code-backed issues were discovered while tracing the architecture. They should become implementation tickets or acceptance tests, not be silently mixed into the domain refactor:
 
-1. synthetic sandbox key events can reach progress-changing keyboard handlers;
+1. **Resolved 2026-08-27:** synthetic sandbox key events could reach progress-changing keyboard handlers; the forgeable relay was removed. Secure shortcuts while iframe content owns focus remain tracked in Finding C5;
 2. IndexedDB failure can degrade to non-durable memory without blocking exit;
 3. pending commit recovery lacks a permanent conflict resolution UX;
-4. first-ever progress creation has a concurrent insert edge that may surface an untyped integrity error;
+4. **Resolved 2026-08-27 for native REST/MCP/batch review:** first-ever progress insert races are translated to typed conflict errors; external import/cutover mutation paths remain covered by item 9;
 5. some malformed numeric commit fields can escape ad-hoc casts as server errors;
-6. session algorithm/version labels do not select retained executable code;
-7. client/server schedulers lack one shared golden-vector parity harness;
+6. **Resolved 2026-08-27:** session Algorithm/version selects exact retained executable code for both server replay and client preview/optimistic decisions;
+7. **Resolved 2026-08-27:** client/server schedulers now consume one immutable `legacy-anki/1.0.0` golden-vector fixture;
 8. FSRS mode can be labelled while legacy transition math executes;
 9. several progress mutation/import/cutover paths do not participate consistently in revision semantics;
 10. expired/abandoned StudySession rows have no discovered cleanup lifecycle;

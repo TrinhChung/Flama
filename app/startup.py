@@ -10,6 +10,7 @@ from sqlalchemy import text
 from models import db
 
 from .services import flashcards_share
+from .services.marketplace_taxonomy_service import ensure_default_taxonomy_data
 from .services.tts_provider_service import ensure_default_tts_providers
 from .services.user_management_schema import ensure_user_management_schema
 from .services.user_roles import ensure_default_user_roles
@@ -66,6 +67,10 @@ def run_startup_maintenance(
             if bool(runtime_config.get("STARTUP_RUN_DEFAULT_USER_ROLE_SEED", bool(app.config.get("TESTING")))):
                 ensure_default_user_roles(db.session)
                 completed_tasks.append("ensure_default_user_roles")
+
+            if bool(runtime_config.get("STARTUP_RUN_DEFAULT_TAXONOMY_SEED", True)):
+                ensure_default_taxonomy_data(db.session)
+                completed_tasks.append("ensure_default_taxonomy_data")
 
             if bool(runtime_config.get("STARTUP_RUN_DEFAULT_TTS_PROVIDER_SEED", False)):
                 ensure_default_tts_providers(db.session)

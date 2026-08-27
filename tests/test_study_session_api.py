@@ -1,5 +1,6 @@
 """Integration coverage for frontend-driven study sessions."""
 
+import json
 import unittest
 from datetime import datetime, timedelta
 from uuid import uuid4
@@ -131,12 +132,47 @@ class StudySessionApiTests(unittest.TestCase):
         self.assertIn(card["policy_key"], snapshot["policies"])
         self.assertIn(card["template_key"], snapshot["templates"])
         self.assertIn(card["content_key"], snapshot["contents"])
+        self.assertIn("compositions", snapshot)
+        self.assertIn("composition_id", card)
+        comp_id = card["composition_id"]
+        self.assertIn(comp_id, snapshot["compositions"])
+        self.assertEqual(snapshot["compositions"][comp_id]["mode_key"], "flashcard")
         self.assertEqual(card["base_revision"], 0)
 
         with self.app.app_context():
             session = db.session.get(StudySession, snapshot["session_id"])
             self.assertIsNotNone(session)
             self.assertEqual(session.status, "open")
+
+    def test_commit_accepts_action_contract_and_rejects_mismatch(self):
+        snapshot = self._open_session()
+        payload = self._commit_payload(snapshot)
+        event = payload["events"][0]
+        event.update(
+            {
+                "action_key": "review.good",
+                "trigger_key": "scheduler.review.good",
+                "trigger_contract_version": "1",
+            }
+        )
+        response = self.client.post(
+            f"/api/study/sessions/{snapshot['session_id']}/commit",
+            json=payload,
+        )
+        self.assertEqual(response.status_code, 200, response.get_json())
+
+        mismatch_snapshot = self._open_session()
+        mismatch_payload = self._commit_payload(mismatch_snapshot)
+        mismatch_payload["events"][0]["action_key"] = "review.easy"
+        mismatch = self.client.post(
+            f"/api/study/sessions/{mismatch_snapshot['session_id']}/commit",
+            json=mismatch_payload,
+        )
+        self.assertEqual(mismatch.status_code, 422, mismatch.get_json())
+        self.assertEqual(
+            mismatch.get_json()["error"],
+            "ACTION_CONTRACT_MISMATCH",
+        )
 
     def test_status_reports_open_committed_and_expired_sessions(self):
         committed_snapshot = self._open_session()
@@ -292,7 +328,15 @@ class StudySessionApiTests(unittest.TestCase):
             self.assertEqual(len(events), 1)
             self.assertEqual(events[0].study_session_id, snapshot["session_id"])
             self.assertEqual(events[0].sequence_no, 1)
+            self.assertEqual(events[0].scheduler_algorithm, "legacy-anki")
             self.assertEqual(events[0].algorithm_version, "1.0.0")
+            runtime_metadata = json.loads(events[0].payload_json)["_study_runtime"]
+            self.assertEqual(runtime_metadata["action_key"], "review.good")
+            self.assertEqual(
+                runtime_metadata["trigger_key"],
+                "scheduler.review.good",
+            )
+            self.assertEqual(runtime_metadata["state_schema_version"], "anki-card-state.v1")
 
     def test_committed_batch_can_roll_into_fresh_session(self):
         first = self._open_session()
@@ -373,6 +417,17 @@ class StudySessionApiTests(unittest.TestCase):
             json={"rating": "good"},
         )
         self.assertEqual(legacy.status_code, 200, legacy.get_json())
+        with self.app.app_context():
+            event = ReviewEvent.query.filter_by(
+                user_id=self.user_id,
+                card_id=card_id,
+            ).one()
+            self.assertEqual(event.scheduler_algorithm, "legacy-anki")
+            self.assertEqual(event.algorithm_version, "1.0.0")
+            self.assertEqual(
+                json.loads(event.payload_json)["_study_runtime"]["action_key"],
+                "review.good",
+            )
         batch = self.client.post(
             f"/api/study/sessions/{snapshot['session_id']}/commit",
             json=self._commit_payload(snapshot),
@@ -382,6 +437,21 @@ class StudySessionApiTests(unittest.TestCase):
             batch.get_json()["error"],
             "CARD_PROGRESS_CONFLICT",
         )
+
+    def test_commit_rejects_unavailable_pinned_algorithm_version(self):
+        snapshot = self._open_session()
+        with self.app.app_context():
+            session = db.session.get(StudySession, snapshot["session_id"])
+            session.algorithm_version = "missing"
+            db.session.commit()
+
+        response = self.client.post(
+            f"/api/study/sessions/{snapshot['session_id']}/commit",
+            json=self._commit_payload(snapshot),
+        )
+
+        self.assertEqual(response.status_code, 409, response.get_json())
+        self.assertEqual(response.get_json()["error"], "ALGORITHM_UNAVAILABLE")
 
     def test_commit_rejects_tampered_final_state(self):
         snapshot = self._open_session()
@@ -563,6 +633,18 @@ class StudySessionApiTests(unittest.TestCase):
                 card_id=source_card_id,
             ).one()
             self.assertTrue(progress.is_suspended)
+
+    def test_scope_compositions_endpoint(self):
+        response = self.client.get(f"/api/study/scopes/deck/{self.deck_id}/compositions")
+        self.assertEqual(response.status_code, 200, response.get_json())
+        data = response.get_json()
+        self.assertEqual(data["schema_version"], "study-scope-compositions.v1")
+        self.assertEqual(data["scope_type"], "deck")
+        self.assertEqual(data["scope_id"], str(self.deck_id))
+        self.assertGreaterEqual(len(data["compositions"]), 1)
+        comp = data["compositions"][0]
+        self.assertEqual(comp["mode_key"], "flashcard")
+        self.assertEqual(comp["algorithm_key"], "legacy-anki")
 
 
 if __name__ == "__main__":

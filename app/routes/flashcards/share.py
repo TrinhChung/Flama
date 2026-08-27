@@ -362,6 +362,14 @@ def list_shared_decks():
     sort_key = (request.args.get("sort") or "popular").strip().lower()
     min_price_amount_minor = _parse_query_price_amount_minor("min_price")
     max_price_amount_minor = _parse_query_price_amount_minor("max_price")
+    domain = (request.args.get("domain") or "").strip()
+    subject = (request.args.get("subject") or "").strip()
+    framework = (request.args.get("framework") or "").strip()
+    framework_level = (request.args.get("framework_level") or "").strip()
+    difficulty_band = (request.args.get("difficulty_band") or request.args.get("level") or "").strip()
+    learning_goals = {item.lower() for item in _normalize_marketplace_tags(request.args.get("learning_goals") or request.args.get("goal") or request.args.get("goals"))}
+    primary_topics = {item.lower() for item in _normalize_marketplace_tags(request.args.get("primary_topics") or request.args.get("topic") or request.args.get("topics"))}
+    format_features = {item.lower() for item in _normalize_marketplace_tags(request.args.get("format_features") or request.args.get("feature") or request.args.get("features"))}
 
     visible_items = [
         item for item in DeckMarketplaceItem.query.order_by(DeckMarketplaceItem.updated_at.desc()).all()
@@ -375,6 +383,14 @@ def list_shared_decks():
         pricing_mode=pricing_mode,
         min_price_amount_minor=min_price_amount_minor,
         max_price_amount_minor=max_price_amount_minor,
+        domain=domain,
+        subject=subject,
+        framework=framework,
+        framework_level=framework_level,
+        difficulty_band=difficulty_band,
+        learning_goals=learning_goals,
+        primary_topics=primary_topics,
+        format_features=format_features,
     )
     sorted_items = _sort_deck_items(filtered, sort_key)
     installs = DeckInstall.query.filter_by(user_id=current_user.id).all()

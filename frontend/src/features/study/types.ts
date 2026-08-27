@@ -2,8 +2,9 @@ import type {
   SchedulerCardState,
   SchedulerOptions,
 } from './scheduler/types'
+import type { ReviewRating } from './interactions/reviewInteraction'
 
-export type Rating = 'again' | 'hard' | 'good' | 'easy'
+export type Rating = ReviewRating
 
 export type FieldDef = {
   id?: string
@@ -109,6 +110,20 @@ export type StudySessionPolicy = {
   preset_id: number | null
 }
 
+export type AppliedComposition = {
+  composition_id: string
+  mode_key: string
+  note_type_id: string
+  template_id: string
+  template_name: string
+  is_default: boolean
+  interaction_key: string
+  trigger_key: string
+  trigger_contract_version: string
+  algorithm_key: string
+  algorithm_version: string
+}
+
 export type StudySessionCard = {
   card_id: string
   note_id: string
@@ -120,6 +135,7 @@ export type StudySessionCard = {
   policy_key: string
   template_key: string
   content_key: string
+  composition_id: string
   base_revision: number
   base_state_hash: string
   state: SchedulerCardState
@@ -145,6 +161,7 @@ export type StudySessionSnapshot = {
   cards: StudySessionCard[]
   templates: Record<string, StudyTemplateArtifact>
   contents: Record<string, StudyContentArtifact>
+  compositions: Record<string, AppliedComposition>
 }
 
 export type StudySessionEvent = {
@@ -152,6 +169,9 @@ export type StudySessionEvent = {
   sequence: number
   card_id: string
   rating: Rating
+  action_key: `review.${Rating}`
+  trigger_key: `scheduler.review.${Rating}`
+  trigger_contract_version: '1'
   policy_key: string
   scheduler_offset_ms: number
   duration_ms: number

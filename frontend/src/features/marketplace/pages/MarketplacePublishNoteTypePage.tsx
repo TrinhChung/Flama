@@ -25,14 +25,10 @@ import { Textarea } from '@/components/ui/textarea'
 import { Page } from '@/shared/components/Page'
 import { PageError, PageLoading } from '@/shared/components/PageState'
 
+import { useTaxonomySchema } from '../hooks/useTaxonomySchema'
 import {
   NOTE_TYPE_CATEGORY_PRESETS,
-  TAXONOMY_DOMAINS,
-  TAXONOMY_SUBJECTS,
   TAXONOMY_DIFFICULTIES,
-  TAXONOMY_FRAMEWORKS,
-  getTopicsForSubject,
-  getGoalsForSubject,
   getDefaultGoalsForSubject,
   getDefaultTopicsForSubject,
 } from '../utils/publishTaxonomyConstants'
@@ -335,22 +331,25 @@ export function MarketplacePublishNoteTypePage() {
     }
   }
 
-  const availableSubjects = TAXONOMY_SUBJECTS[taxonomyDomain] || TAXONOMY_SUBJECTS.other
+  const taxonomySchema = useTaxonomySchema('note_type')
+
+  const availableDomains = taxonomySchema.domains
+  const availableSubjects = taxonomySchema.subjectsByDomain(taxonomyDomain)
   const availableFrameworks = useMemo(
-    () => TAXONOMY_FRAMEWORKS[taxonomySubject] || [],
-    [taxonomySubject],
+    () => taxonomySchema.frameworksForSubject(taxonomySubject),
+    [taxonomySchema, taxonomySubject],
   )
   const activeFramework = useMemo(
     () => availableFrameworks.find((f) => f.id === taxonomyFramework) || availableFrameworks[0] || null,
     [availableFrameworks, taxonomyFramework],
   )
   const availableGoals = useMemo(
-    () => getGoalsForSubject(taxonomySubject, taxonomyDomain),
-    [taxonomySubject, taxonomyDomain],
+    () => taxonomySchema.goalsForSubject(taxonomySubject, taxonomyDomain),
+    [taxonomySchema, taxonomySubject, taxonomyDomain],
   )
   const availableTopics = useMemo(
-    () => getTopicsForSubject(taxonomySubject, taxonomyDomain),
-    [taxonomySubject, taxonomyDomain],
+    () => taxonomySchema.topicsForSubject(taxonomySubject, taxonomyDomain),
+    [taxonomySchema, taxonomySubject, taxonomyDomain],
   )
 
   if (noteTypesQuery.isPending || (isEditMode && selectedNoteTypeDetailQuery.isPending)) return <PageLoading label="Đang tải dữ liệu..." />
@@ -709,12 +708,12 @@ export function MarketplacePublishNoteTypePage() {
                           const newDomain = e.target.value
                           setTaxonomyDomain(newDomain)
                           clearFieldError('taxonomyDomain')
-                          const subs = TAXONOMY_SUBJECTS[newDomain] || TAXONOMY_SUBJECTS.other
+                          const subs = taxonomySchema.subjectsByDomain(newDomain)
                           const newSub = subs.length > 0 ? subs[0].id : 'other'
                           setTaxonomySubject(newSub)
                           clearFieldError('taxonomySubject')
 
-                          const nextFrameworks = TAXONOMY_FRAMEWORKS[newSub] || []
+                          const nextFrameworks = taxonomySchema.frameworksForSubject(newSub)
                           if (nextFrameworks.length > 0) {
                             setTaxonomyFramework(nextFrameworks[0].id)
                             setTaxonomyFrameworkLevel('')
@@ -730,7 +729,7 @@ export function MarketplacePublishNoteTypePage() {
                           fieldErrors.taxonomyDomain ? 'border-destructive bg-destructive/5' : ''
                         }`}
                       >
-                        {TAXONOMY_DOMAINS.map((d) => (
+                        {availableDomains.map((d) => (
                           <NativeSelectOption key={d.id} value={d.id}>
                             {d.label}
                           </NativeSelectOption>
@@ -750,7 +749,7 @@ export function MarketplacePublishNoteTypePage() {
                           const newSub = e.target.value
                           setTaxonomySubject(newSub)
                           clearFieldError('taxonomySubject')
-                          const nextFrameworks = TAXONOMY_FRAMEWORKS[newSub] || []
+                          const nextFrameworks = taxonomySchema.frameworksForSubject(newSub)
                           if (nextFrameworks.length > 0) {
                             setTaxonomyFramework(nextFrameworks[0].id)
                             setTaxonomyFrameworkLevel('')
@@ -950,7 +949,7 @@ export function MarketplacePublishNoteTypePage() {
                       </div>
                     </div>
                     <Badge variant="secondary" className="text-[10px] bg-card border-border/80 text-foreground font-semibold">
-                      {TAXONOMY_DOMAINS.find((d) => d.id === taxonomyDomain)?.label.split('(')[0].trim() || 'Lĩnh vực'}
+                      {availableDomains.find((d) => d.id === taxonomyDomain)?.label.split('(')[0].trim() || 'Lĩnh vực'}
                     </Badge>
                   </div>
 

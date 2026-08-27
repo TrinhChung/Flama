@@ -3068,6 +3068,7 @@ def apply_clone_note_field_overrides(
     source_note: Note,
     schema_view: CloneSchemaView,
     base_field_values: dict[str, Any] | None = None,
+    note_override_rows: list[DeckCloneNoteFieldOverride] | None = None,
 ) -> dict[str, Any]:
     if base_field_values is not None:
         values = dict(base_field_values)
@@ -3112,7 +3113,8 @@ def apply_clone_note_field_overrides(
             values[new_name] = values.get(old_name)
         values.pop(old_name, None)
 
-    note_override_rows = flashcards_share_repository.get_clone_note_field_overrides(install.id, source_note.id)
+    if note_override_rows is None:
+        note_override_rows = flashcards_share_repository.get_clone_note_field_overrides(install.id, source_note.id)
     active_field_names_by_id = {
         str(field_def.id): str(field_def.name)
         for field_def in schema_view.field_defs
