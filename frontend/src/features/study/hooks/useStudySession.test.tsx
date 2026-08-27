@@ -175,6 +175,7 @@ function snapshot(): StudySessionSnapshot {
       base_revision: 0,
       base_state_hash: 'base',
       can_edit_card: true,
+      composition_id: 'comp:notetype:type-1:template:template-1',
       state: {
         type: 'new',
         step_index: 0,
@@ -217,6 +218,21 @@ function snapshot(): StudySessionSnapshot {
         field_values: { Word: 'cat' },
         render_context: { Word: 'cat' },
         media: [],
+      },
+    },
+    compositions: {
+      'comp:notetype:type-1:template:template-1': {
+        composition_id: 'comp:notetype:type-1:template:template-1',
+        mode_key: 'flashcard',
+        note_type_id: 'type-1',
+        template_id: 'template-1',
+        template_name: 'Front -> Back',
+        is_default: true,
+        interaction_key: 'review.four-rating',
+        trigger_key: 'scheduler.review',
+        trigger_contract_version: '1',
+        algorithm_key: 'legacy-anki',
+        algorithm_version: '1.0.0',
       },
     },
   }

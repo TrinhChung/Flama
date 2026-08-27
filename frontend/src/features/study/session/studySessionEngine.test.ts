@@ -69,6 +69,7 @@ function snapshot(): StudySessionSnapshot {
         template_id: 'template-1',
         source_deck_id: 12,
         local_deck_id: 12,
+        composition_id: 'standard',
         note_type_id: 'type-1',
         created_at: '2026-02-01T00:00:00.000Z',
         policy_key: 'policy',
@@ -122,6 +123,7 @@ function snapshot(): StudySessionSnapshot {
         media: [],
       },
     },
+    compositions: {},
   }
 }
 

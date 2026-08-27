@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { holdStudyScopeLease } from '../session/studySessionLease'
 import type { PersistedStudySession } from '../session/sessionStore'
 

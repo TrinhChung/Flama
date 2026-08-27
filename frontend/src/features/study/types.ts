@@ -135,7 +135,7 @@ export type StudySessionCard = {
   policy_key: string
   template_key: string
   content_key: string
-  composition_id?: string | null
+  composition_id: string
   base_revision: number
   base_state_hash: string
   state: SchedulerCardState
@@ -161,7 +161,7 @@ export type StudySessionSnapshot = {
   cards: StudySessionCard[]
   templates: Record<string, StudyTemplateArtifact>
   contents: Record<string, StudyContentArtifact>
-  compositions?: Record<string, AppliedComposition>
+  compositions: Record<string, AppliedComposition>
 }
 
 export type StudySessionEvent = {

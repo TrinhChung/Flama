@@ -266,7 +266,37 @@ def _auto_crawl_note_fields(
     return changed
 
 
-def create_note(*, user_id: int, note_data: dict[str, Any]) -> dict[str, Any]:
+def _auto_assign_sequence_field_if_needed(
+    *,
+    user_id: int,
+    deck_id: int,
+    note_type: NoteType,
+    normalized_fields: dict[str, Any],
+) -> None:
+    """Auto-assign next sequential integer for ordinal fields (STT, No, Index, etc.) if missing."""
+    sequence_field_names = {"stt", "no", "order", "index", "position", "stt_number"}
+    for f in note_type.field_defs:
+        if f.name.strip().lower() in sequence_field_names:
+            current_val = str(normalized_fields.get(f.name) or "").strip()
+            if not current_val:
+                existing_notes = Note.query.filter_by(user_id=user_id, deck_id=deck_id).all()
+                max_seq = 0
+                for ex in existing_notes:
+                    val_str = str((ex.field_values or {}).get(f.name) or "").strip()
+                    if val_str.isdigit():
+                        try:
+                            max_seq = max(max_seq, int(val_str))
+                        except ValueError:
+                            pass
+                normalized_fields[f.name] = str(max_seq + 1)
+
+
+def create_note(
+    *,
+    user_id: int,
+    note_data: dict[str, Any],
+    auto_commit: bool = True,
+) -> dict[str, Any]:
     """Create a single flashcard note with cards for the user."""
     deck = _resolve_deck_for_user(
         user_id=user_id,
@@ -284,6 +314,14 @@ def create_note(*, user_id: int, note_data: dict[str, Any]) -> dict[str, Any]:
     tags = list(note_data.get("tags") or [])
     allow_duplicate = bool(note_data.get("allow_duplicate", False))
 
+    # Auto-assign sequence field (STT, No, etc.) if not provided by client
+    _auto_assign_sequence_field_if_needed(
+        user_id=user_id,
+        deck_id=deck.id,
+        note_type=note_type,
+        normalized_fields=normalized_fields,
+    )
+
     # Check for duplicate if primary identity field exists
     identity_field = next((f for f in note_type.field_defs if f.identity_role == "primary"), None)
     if not allow_duplicate and identity_field:
@@ -292,30 +330,12 @@ def create_note(*, user_id: int, note_data: dict[str, Any]) -> dict[str, Any]:
             existing = Note.query.filter_by(user_id=user_id, deck_id=deck.id).all()
             for ex in existing:
                 if str((ex.field_values or {}).get(identity_field.name) or "").strip().lower() == identity_val:
-                    # Update fields and return existing note
-                    changed_field_names: set[str] = set()
-                    fvals = dict(ex.field_values or {})
-                    for k, v in normalized_fields.items():
-                        if v and fvals.get(k) != v:
-                            fvals[k] = v
-                            changed_field_names.add(k)
-                    if changed_field_names:
-                        ex.field_values = fvals
-                        _auto_crawl_note_fields(user_id=user_id, note=ex, field_defs=note_type.field_defs)
-                        from app.services import deck_working_tree_service
-
-                        deck_working_tree_service.mark_note_fields_changed(
-                            note=ex,
-                            field_names=changed_field_names,
-                        )
-                        db.session.commit()
-                    return {
-                        "note_id": str(ex.id),
-                        "deck_id": int(deck.id),
-                        "deck_name": deck.name,
-                        "updated_existing": True,
-                        "cards": [{"id": str(c.id), "template_id": str(c.template_id)} for c in ex.cards],
-                    }
+                    raise RequestValidationError(
+                        f"Thẻ với trường định danh '{identity_field.name}' có giá trị '{normalized_fields.get(identity_field.name)}' đã tồn tại trong deck '{deck.name}'. Vui lòng sử dụng update_note nếu muốn cập nhật thẻ.",
+                        field=identity_field.name,
+                        status=409,
+                        code="NOTE_IDENTITY_CONFLICT",
+                    )
 
     note = Note(
         note_type_id=note_type.id,
@@ -358,7 +378,8 @@ def create_note(*, user_id: int, note_data: dict[str, Any]) -> dict[str, Any]:
         field_names=(note.field_values or {}).keys(),
         operation="add",
     )
-    db.session.commit()
+    if auto_commit:
+        db.session.commit()
     return {
         "note_id": str(note.id),
         "deck_id": int(deck.id),
@@ -647,11 +668,22 @@ def remove_tags(*, user_id: int, note_ids: list[str], tags: list[str]) -> dict[s
 
 
 def batch_create_notes(*, user_id: int, notes: list[dict[str, Any]]) -> dict[str, Any]:
-    """Create multiple flashcard notes in a single batch."""
+    """Create multiple flashcard notes in a single atomic batch transaction."""
+    if not notes:
+        return {
+            "created_count": 0,
+            "note_ids": [],
+        }
+
     created_note_ids: list[str] = []
-    for item in notes:
-        result = create_note(user_id=user_id, note_data=item)
-        created_note_ids.append(str(result["note_id"]))
+    try:
+        for item in notes:
+            result = create_note(user_id=user_id, note_data=item, auto_commit=False)
+            created_note_ids.append(str(result["note_id"]))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
 
     return {
         "created_count": len(created_note_ids),

@@ -1297,7 +1297,7 @@ Orders 4-6 remain open. Only after all six orders pass should Phase 0-2 be marke
 
 ### Phase 3 — Establish the composition responsibility
 
-**Implementation status (2026-08-27): Not started.** No StudyMode/composition model, migration, binding, selector, or API has been added.
+**Implementation status (2026-08-27): Partially complete.** Compatibility composition service (`study_composition_service.py`), session freeze (`compositions` dict + per-card `composition_id`), scope compositions API, recursive deck resolution, and pre-session selector (`StudyModeSelector`) are implemented. FieldDef-based bindings deferred pending Field normalization plan. Exit gate verified by automated tests (`test_study_composition_exit_gate.py`).
 
 **Work:**
 

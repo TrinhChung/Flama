@@ -297,7 +297,6 @@ export function useStudySession(deckId: string | null) {
         rating,
         decision,
         durationMs,
-        now(),
       )
       activateSession(next)
       sessionDurableRef.current = await saveStudySession(next)
@@ -305,9 +304,9 @@ export function useStudySession(deckId: string | null) {
       operationRef.current = false
       endLeaseWork(controller)
     }
-  }, [activateSession, beginLeaseWork, endLeaseWork, hasLeaseRef, leaseControllerRef, now])
+  }, [activateSession, beginLeaseWork, endLeaseWork, hasLeaseRef, leaseControllerRef])
 
-  const undo = useCallback(async () => {
+  const undo = useCallback(async (): Promise<string | null> => {
     const active = sessionRef.current
     const controller = leaseControllerRef.current
     if (!active || !controller || controller.signal.aborted || !hasLeaseRef.current) {
@@ -316,14 +315,16 @@ export function useStudySession(deckId: string | null) {
     operationRef.current = true
     beginLeaseWork(controller)
     try {
-      const next = undoLocalAnswer(active, now())
-      activateSession(next)
-      sessionDurableRef.current = await saveStudySession(next)
+      const undoResult = undoLocalAnswer(active)
+      if (!undoResult) return null
+      activateSession(undoResult.session)
+      sessionDurableRef.current = await saveStudySession(undoResult.session)
+      return undoResult.undoneCardId
     } finally {
       operationRef.current = false
       endLeaseWork(controller)
     }
-  }, [activateSession, beginLeaseWork, endLeaseWork, hasLeaseRef, leaseControllerRef, now])
+  }, [activateSession, beginLeaseWork, endLeaseWork, hasLeaseRef, leaseControllerRef])
 
   const commit = useCallback(async (options?: {
     reason?: StudyCommitReason
