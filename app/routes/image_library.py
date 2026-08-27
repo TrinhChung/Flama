@@ -286,7 +286,6 @@ def resolve_api(image_key: str):
 
 
 @image_library_bp.route("/media/library/<image_key>", methods=["GET"])
-@login_required
 def image_content(image_key: str):
     normalized_key = ""
     try:

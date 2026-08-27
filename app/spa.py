@@ -39,7 +39,7 @@ def init_spa_delivery(app) -> None:
                 return None
             return _legacy_adapter_removed()
 
-        if request.method == "GET":
+        if request.method in ("GET", "HEAD"):
             if path.startswith(_BINARY_PATH_PREFIXES):
                 return None
             if path == "/support-donation/qr":

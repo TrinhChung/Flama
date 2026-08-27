@@ -185,6 +185,13 @@ class ImageLibraryTests(unittest.TestCase):
         self.assertEqual(image.headers["X-Content-Type-Options"], "nosniff")
         self.assertIn("no-cache", image.headers["Cache-Control"])
 
+        # Unauthenticated client (such as cross-origin <img> subresource) must also load successfully
+        unauth_client = self.app.test_client()
+        unauth_image = unauth_client.get(payload["url"])
+        self.assertEqual(unauth_image.status_code, 200)
+        self.assertEqual(unauth_image.data[:4], b"RIFF")
+        self.assertEqual(unauth_image.headers["X-Flama-Image-Fallback"], "0")
+
     def test_replacing_file_keeps_stable_url_and_removes_old_file(self):
         self._login()
         self.assertEqual(self._create_asset().status_code, 302)
