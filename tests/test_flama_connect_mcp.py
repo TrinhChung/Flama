@@ -15,6 +15,7 @@ from app.connect import create_connect_app
 from app.services import mcp_access_token_service, user_api_token_service
 from models import db
 from models.card import Card
+from models.card_progress import CardProgress
 from models.deck import Deck
 from models.field_def import FieldDef
 from models.note import Note
@@ -277,6 +278,8 @@ class FlamaConnectMcpTests(unittest.TestCase):
             "import_image",
             "search_images",
             "get_image",
+            "crawl_note_media",
+            "extract_page_images",
             # Shared Decks & Releases
             "list_shared_decks",
             "get_shared_deck",
@@ -290,7 +293,7 @@ class FlamaConnectMcpTests(unittest.TestCase):
             "list_installed_decks",
         }
         self.assertEqual(tool_names, expected_tools)
-        self.assertEqual(len(tools), 48)
+        self.assertEqual(len(tools), 50)
 
     # -----------------------------------------------------------------------
     # Deck Tests
@@ -863,9 +866,60 @@ class FlamaConnectMcpTests(unittest.TestCase):
             ).one()
             self.assertEqual(event.scheduler_algorithm, "legacy-anki")
             self.assertEqual(event.algorithm_version, "1.0.0")
+            self.assertIsNotNone(event.scheduler_config_hash)
+            runtime_metadata = json.loads(event.payload_json)["_study_runtime"]
             self.assertEqual(
-                json.loads(event.payload_json)["_study_runtime"]["trigger_key"],
+                runtime_metadata["trigger_key"],
                 "scheduler.review.good",
+            )
+            self.assertEqual(
+                runtime_metadata["scheduler_config_hash"],
+                event.scheduler_config_hash,
+            )
+
+    def test_submit_review_rejects_suspended_card(self):
+        with self.app.app_context():
+            db.session.add(
+                CardProgress(
+                    user_id=self.user_id,
+                    card_id=str(self.card_id),
+                    is_suspended=True,
+                    revision=0,
+                )
+            )
+            db.session.commit()
+
+        response = self._post_mcp(
+            {
+                "jsonrpc": "2.0",
+                "id": 270,
+                "method": "tools/call",
+                "params": {
+                    "name": "submit_review",
+                    "arguments": {
+                        "card_id": str(self.card_id),
+                        "rating": "good",
+                    },
+                },
+            },
+            token=self.api_token_str,
+        )
+
+        self.assertEqual(response.status_code, 409, response.get_json())
+        error = response.get_json()["error"]
+        self.assertEqual(error["data"]["code"], "CARD_SUSPENDED")
+        with self.app.app_context():
+            progress = CardProgress.query.filter_by(
+                user_id=self.user_id,
+                card_id=str(self.card_id),
+            ).one()
+            self.assertEqual(progress.revision, 0)
+            self.assertEqual(
+                ReviewEvent.query.filter_by(
+                    user_id=self.user_id,
+                    card_id=str(self.card_id),
+                ).count(),
+                0,
             )
 
     # -----------------------------------------------------------------------

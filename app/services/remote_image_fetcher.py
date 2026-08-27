@@ -173,6 +173,79 @@ def fetch_remote_image(
             connection.close()
 
 
+def fetch_remote_html(
+    raw_url: str,
+    *,
+    max_bytes: int = 512 * 1024,
+    timeout_seconds: float = 6.0,
+    max_redirects: int = 3,
+) -> str:
+    """Fetch HTML content from a remote webpage with DNS pinning and SSRF protection."""
+    current_url = _normalize_remote_url(raw_url)
+    redirect_count = 0
+
+    while True:
+        target = _resolve_remote_target(current_url)
+        connection, response = _request_target(
+            target,
+            timeout_seconds=timeout_seconds,
+            accept_header="text/html, application/xhtml+xml, application/xml;q=0.9, */*;q=0.8",
+        )
+        try:
+            if response.status in REDIRECT_STATUS_CODES:
+                if redirect_count >= int(max_redirects):
+                    raise _remote_error(
+                        "Link trang web chuyển hướng quá nhiều lần.",
+                        code="IMAGE_REMOTE_TOO_MANY_REDIRECTS",
+                    )
+                location = (response.getheader("Location") or "").strip()
+                if not location:
+                    raise _remote_error(
+                        "Link trang web trả về chuyển hướng không hợp lệ.",
+                        code="IMAGE_REMOTE_FETCH_FAILED",
+                    )
+                next_url = _normalize_remote_url(urljoin(target.url, location))
+                next_scheme = urlsplit(next_url).scheme.lower()
+                if target.scheme == "https" and next_scheme != "https":
+                    raise _remote_error(
+                        "Không cho phép chuyển hướng từ HTTPS xuống HTTP.",
+                        code="IMAGE_REMOTE_REDIRECT_DOWNGRADE",
+                    )
+                current_url = next_url
+                redirect_count += 1
+                continue
+
+            if response.status != 200:
+                raise _remote_error(
+                    f"Không thể tải nội dung trang web (HTTP {response.status}).",
+                    code="IMAGE_REMOTE_FETCH_FAILED",
+                )
+
+            content_length = _parse_content_length(
+                response.getheader("Content-Length")
+            )
+            if content_length is not None and content_length > int(max_bytes):
+                raise _remote_error(
+                    f"Nội dung trang web vượt quá {int(max_bytes)} bytes.",
+                    code="MEDIA_TOO_LARGE",
+                    status=413,
+                )
+
+            content = _read_bounded(response, max_bytes=int(max_bytes))
+            content_type = (response.getheader("Content-Type") or "").lower()
+            encoding = "utf-8"
+            if "charset=" in content_type:
+                encoding = content_type.split("charset=", 1)[1].split(";", 1)[0].strip()
+            try:
+                return content.decode(encoding, errors="replace")
+            except Exception:
+                return content.decode("utf-8", errors="replace")
+        finally:
+            response.close()
+            connection.close()
+
+
+
 def _normalize_remote_url(raw_url: str) -> str:
     value = str(raw_url or "").strip()
     if not value:
@@ -318,8 +391,10 @@ def _request_target(
     target: _ResolvedRemoteTarget,
     *,
     timeout_seconds: float,
+    accept_header: str | None = None,
 ) -> tuple[http.client.HTTPConnection, http.client.HTTPResponse]:
     last_error: Exception | None = None
+    accept = accept_header or ", ".join(MIME_TO_EXTENSION)
     for address in target.addresses:
         connection: http.client.HTTPConnection
         if target.scheme == "https":
@@ -340,9 +415,9 @@ def _request_target(
                 "GET",
                 target.request_target,
                 headers={
-                    "Accept": ", ".join(MIME_TO_EXTENSION),
+                    "Accept": accept,
                     "Host": target.host_header,
-                    "User-Agent": "Flama-Image-Library/1.0",
+                    "User-Agent": "Flama-Image-Crawler/1.0",
                     "Connection": "close",
                 },
             )

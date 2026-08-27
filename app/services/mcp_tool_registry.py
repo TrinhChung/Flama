@@ -24,6 +24,8 @@ from app.validators.mcp import (
     validate_find_notes_arguments,
     validate_get_image_arguments,
     validate_import_image_arguments,
+    validate_crawl_note_media_arguments,
+    validate_extract_page_images_arguments,
     validate_search_images_arguments,
     validate_get_card_arguments,
     validate_get_deck_arguments,
@@ -1330,6 +1332,85 @@ IMPORT_IMAGE_TOOL = McpToolDefinition(
 )
 
 
+def _call_crawl_note_media(*, user_id: int, arguments: dict[str, Any]) -> dict[str, Any]:
+    return mcp_tool_service._wrap_tool_result(
+        mcp_tool_service.crawl_note_media(
+            user_id=user_id,
+            note_id=arguments["note_id"],
+            field_name=arguments["field_name"],
+            url=arguments["url"],
+            markdown_inline=arguments.get("markdown_inline", False),
+        )
+    )
+
+
+CRAWL_NOTE_MEDIA_TOOL = McpToolDefinition(
+    name=mcp_tool_service.CRAWL_NOTE_MEDIA_TOOL_NAME,
+    title="Crawl Image for Note",
+    description="Crawl and download an image from a remote URL, sanitize and convert to WebP, and attach it to a specific note's field as a local media asset.",
+    required_scope="media:write",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "note_id": {
+                "type": "string",
+                "description": "ID of the target Note.",
+            },
+            "field_name": {
+                "type": "string",
+                "description": "Name of the target field (image, diagram, or markdown).",
+            },
+            "url": {
+                "type": "string",
+                "description": "Public HTTP/HTTPS URL of the image to crawl.",
+            },
+            "markdown_inline": {
+                "type": "boolean",
+                "description": "Set to true if this media is an inline image inside markdown content. Defaults to false.",
+            },
+        },
+        "required": ["note_id", "field_name", "url"],
+    },
+    handler=_call_crawl_note_media,
+    arguments_validator=validate_crawl_note_media_arguments,
+)
+
+
+def _call_extract_page_images(*, user_id: int, arguments: dict[str, Any]) -> dict[str, Any]:
+    return mcp_tool_service._wrap_tool_result(
+        mcp_tool_service.extract_page_images(
+            user_id=user_id,
+            page_url=arguments["page_url"],
+            max_images=arguments.get("max_images", 20),
+        )
+    )
+
+
+EXTRACT_PAGE_IMAGES_TOOL = McpToolDefinition(
+    name=mcp_tool_service.EXTRACT_PAGE_IMAGES_TOOL_NAME,
+    title="Extract Images from Webpage",
+    description="Fetch a remote webpage safely with SSRF protection and extract candidate image URLs (OpenGraph, Twitter Cards, and img tags).",
+    required_scope="media:read",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "page_url": {
+                "type": "string",
+                "description": "Public HTTP/HTTPS URL of the webpage to crawl.",
+            },
+            "max_images": {
+                "type": "integer",
+                "description": "Maximum number of candidate images to return (default 20, max 50).",
+            },
+        },
+        "required": ["page_url"],
+    },
+    handler=_call_extract_page_images,
+    arguments_validator=validate_extract_page_images_arguments,
+)
+
+
+
 def _call_search_images(*, user_id: int, arguments: dict[str, Any]) -> dict[str, Any]:
     return mcp_tool_service._wrap_tool_result(
         mcp_tool_service.search_images(
@@ -1790,10 +1871,12 @@ _MCP_TOOL_DEFINITIONS = (
     PREVIEW_NOTE_TYPE_UPDATE_TOOL,
     UPDATE_NOTE_TYPE_TOOL,
     DELETE_NOTE_TYPE_TOOL,
-    # Image Library
+    # Image Library & Crawling
     IMPORT_IMAGE_TOOL,
     SEARCH_IMAGES_TOOL,
     GET_IMAGE_TOOL,
+    CRAWL_NOTE_MEDIA_TOOL,
+    EXTRACT_PAGE_IMAGES_TOOL,
     # Shared Decks & Releases
     LIST_SHARED_DECKS_TOOL,
     GET_SHARED_DECK_TOOL,

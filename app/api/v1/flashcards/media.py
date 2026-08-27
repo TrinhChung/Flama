@@ -5,17 +5,25 @@ from pathlib import Path
 from flask import Blueprint, current_app, jsonify, request
 from flask_login import current_user, login_required
 
-from app.services import flashcard_media_api_service
+from app.services import flashcard_media_api_service, image_crawl_service
+from app.validators.flashcard_input import RequestValidationError
+from app.validators.image_crawl import (
+    validate_batch_media_crawl_request,
+    validate_markdown_crawl_request,
+    validate_note_media_crawl_request,
+    validate_page_crawl_request,
+)
 
 
 media_bp = Blueprint("api_v1_flashcard_media", __name__)
 
 
-def _error(exc: flashcard_media_api_service.MediaApiError):
-    payload = {"error": exc.error, "message": str(exc)}
-    if exc.field is not None:
+def _error(exc: flashcard_media_api_service.MediaApiError | image_crawl_service.ImageCrawlError | RequestValidationError):
+    error_code = getattr(exc, "error", getattr(exc, "code", "VALIDATION_ERROR"))
+    payload = {"error": error_code, "message": str(exc)}
+    if getattr(exc, "field", None) is not None:
         payload["field"] = exc.field
-    return jsonify(payload), exc.status
+    return jsonify(payload), getattr(exc, "status", 400)
 
 
 def _upload(note_id: str, *, markdown_inline: bool):
@@ -43,7 +51,7 @@ def _upload(note_id: str, *, markdown_inline: bool):
             ),
             markdown_inline=markdown_inline,
         )
-    except flashcard_media_api_service.MediaApiError as exc:
+    except (flashcard_media_api_service.MediaApiError, image_crawl_service.ImageCrawlError, RequestValidationError) as exc:
         return _error(exc)
     return jsonify(payload), status
 
@@ -58,6 +66,91 @@ def upload_note_media(note_id: str):
 @login_required
 def upload_markdown_media(note_id: str):
     return _upload(note_id, markdown_inline=True)
+
+
+@media_bp.post("/notes/<note_id>/media/crawl")
+@login_required
+def crawl_note_media(note_id: str):
+    """Crawl a remote image by URL and attach it to a note field."""
+    try:
+        raw_payload = request.get_json(silent=True) or request.form.to_dict()
+        req_data = validate_note_media_crawl_request(raw_payload)
+        payload, status = image_crawl_service.crawl_and_save_note_media(
+            user_id=current_user.id,
+            note_id=note_id,
+            field_name=req_data["field_name"],
+            url=req_data["url"],
+            upload_root=Path(current_app.config["FLASHCARD_MEDIA_UPLOAD_ROOT"]),
+            max_bytes=int(current_app.config.get("FLASHCARD_MEDIA_MAX_BYTES", 10 * 1024 * 1024)),
+            scanner=current_app.config.get("FLASHCARD_MEDIA_SCANNER"),
+            scan_enabled=bool(current_app.config.get("FLASHCARD_MEDIA_SCAN_ENABLED", False)),
+            markdown_inline=req_data["markdown_inline"],
+        )
+    except (image_crawl_service.ImageCrawlError, RequestValidationError) as exc:
+        return _error(exc)
+    return jsonify(payload), status
+
+
+@media_bp.post("/notes/media/crawl-batch")
+@login_required
+def crawl_notes_media_batch():
+    """Crawl multiple remote images by URL for multiple notes in batch."""
+    try:
+        raw_payload = request.get_json(silent=True) or request.form.to_dict()
+        items = validate_batch_media_crawl_request(raw_payload)
+        payload = image_crawl_service.crawl_note_media_batch(
+            user_id=current_user.id,
+            items=items,
+            upload_root=Path(current_app.config["FLASHCARD_MEDIA_UPLOAD_ROOT"]),
+            max_bytes=int(current_app.config.get("FLASHCARD_MEDIA_MAX_BYTES", 10 * 1024 * 1024)),
+            scanner=current_app.config.get("FLASHCARD_MEDIA_SCANNER"),
+            scan_enabled=bool(current_app.config.get("FLASHCARD_MEDIA_SCAN_ENABLED", False)),
+        )
+    except (image_crawl_service.ImageCrawlError, RequestValidationError) as exc:
+        return _error(exc)
+    return jsonify(payload), 200
+
+
+@media_bp.post("/notes/<note_id>/markdown/crawl-images")
+@login_required
+def crawl_and_rewrite_markdown(note_id: str):
+    """Find all remote image URLs in markdown, download & save as note media, and rewrite markdown."""
+    try:
+        raw_payload = request.get_json(silent=True) or request.form.to_dict()
+        req_data = validate_markdown_crawl_request(raw_payload)
+        field_name = str(raw_payload.get("field_name") or "").strip()
+        if not field_name:
+            return jsonify({"error": "VALIDATION_ERROR", "message": "field_name is required.", "field": "field_name"}), 400
+
+        payload = image_crawl_service.crawl_and_rewrite_markdown_media(
+            user_id=current_user.id,
+            note_id=note_id,
+            markdown_text=req_data["markdown"],
+            field_name=field_name,
+            upload_root=Path(current_app.config["FLASHCARD_MEDIA_UPLOAD_ROOT"]),
+            max_bytes=int(current_app.config.get("FLASHCARD_MEDIA_MAX_BYTES", 10 * 1024 * 1024)),
+            scanner=current_app.config.get("FLASHCARD_MEDIA_SCANNER"),
+            scan_enabled=bool(current_app.config.get("FLASHCARD_MEDIA_SCAN_ENABLED", False)),
+        )
+    except (image_crawl_service.ImageCrawlError, RequestValidationError) as exc:
+        return _error(exc)
+    return jsonify(payload), 200
+
+
+@media_bp.post("/media/crawl-page")
+@login_required
+def crawl_page_images():
+    """Extract all candidate images from a webpage HTML safely."""
+    try:
+        raw_payload = request.get_json(silent=True) or request.form.to_dict()
+        req_data = validate_page_crawl_request(raw_payload)
+        payload = image_crawl_service.extract_images_from_page(
+            page_url=req_data["page_url"],
+            max_images=req_data["max_images"],
+        )
+    except (image_crawl_service.ImageCrawlError, RequestValidationError) as exc:
+        return _error(exc)
+    return jsonify(payload), 200
 
 
 @media_bp.post("/notes/media/batch")
@@ -128,3 +221,4 @@ def delete_media(asset_id: str):
     except flashcard_media_api_service.MediaApiError as exc:
         return _error(exc)
     return jsonify(payload)
+

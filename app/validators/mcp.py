@@ -940,6 +940,56 @@ def validate_import_image_arguments(arguments: Any) -> dict[str, Any]:
     }
 
 
+def validate_crawl_note_media_arguments(arguments: Any) -> dict[str, Any]:
+    if not isinstance(arguments, dict):
+        raise RequestValidationError("arguments phải là JSON object.", field="arguments", status=400, code="INVALID_PARAMS")
+    if "user_id" in arguments or "userId" in arguments:
+        raise RequestValidationError("user_id không được phép truyền trong arguments.", field="arguments", status=400, code="INVALID_PARAMS")
+
+    note_id = str(arguments.get("note_id") or "").strip()
+    if not note_id:
+        raise RequestValidationError("note_id là bắt buộc.", field="note_id", status=400, code="INVALID_PARAMS")
+
+    field_name = str(arguments.get("field_name") or "").strip()
+    if not field_name:
+        raise RequestValidationError("field_name là bắt buộc.", field="field_name", status=400, code="INVALID_PARAMS")
+
+    url = str(arguments.get("url") or arguments.get("source_url") or "").strip()
+    if not url:
+        raise RequestValidationError("url là bắt buộc.", field="url", status=400, code="INVALID_PARAMS")
+
+    markdown_inline = bool(arguments.get("markdown_inline", False))
+
+    return {
+        "note_id": note_id,
+        "field_name": field_name,
+        "url": url,
+        "markdown_inline": markdown_inline,
+    }
+
+
+def validate_extract_page_images_arguments(arguments: Any) -> dict[str, Any]:
+    if not isinstance(arguments, dict):
+        raise RequestValidationError("arguments phải là JSON object.", field="arguments", status=400, code="INVALID_PARAMS")
+    if "user_id" in arguments or "userId" in arguments:
+        raise RequestValidationError("user_id không được phép truyền trong arguments.", field="arguments", status=400, code="INVALID_PARAMS")
+
+    page_url = str(arguments.get("page_url") or arguments.get("url") or "").strip()
+    if not page_url:
+        raise RequestValidationError("page_url là bắt buộc.", field="page_url", status=400, code="INVALID_PARAMS")
+
+    max_images = arguments.get("max_images", 20)
+    try:
+        max_images_int = int(max_images)
+    except (TypeError, ValueError):
+        max_images_int = 20
+
+    return {
+        "page_url": page_url,
+        "max_images": max(1, min(max_images_int, 50)),
+    }
+
+
 def validate_search_images_arguments(arguments: Any) -> dict[str, Any]:
     if arguments is None:
         arguments = {}
