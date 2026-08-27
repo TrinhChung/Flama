@@ -9,7 +9,7 @@ from flask import request, url_for
 
 def resolve_safe_next_url(raw_value: str | None, *, default_endpoint: str = "main.dashboard") -> str:
     candidate = str(raw_value or "").strip()
-    if not candidate:
+    if not candidate or candidate in {"/", "/login", "/register"}:
         return url_for(default_endpoint)
 
     if candidate.startswith("/") and not candidate.startswith("//"):
