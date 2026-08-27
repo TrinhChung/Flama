@@ -31,7 +31,10 @@ from app.services.mcp_preview_service import (
     validate_preview_token,
 )
 from app.services.scheduler_config_service import resolve_deck_options
-from app.services.study_service import apply_study_answer_and_commit
+from app.services.study_service import (
+    StudyReviewError,
+    execute_native_review_command,
+)
 from app.validators.flashcard_input import RequestValidationError
 from models import db
 from models.card import Card
@@ -91,6 +94,8 @@ DELETE_NOTE_TYPE_TOOL_NAME = "delete_note_type"
 IMPORT_IMAGE_TOOL_NAME = "import_image"
 SEARCH_IMAGES_TOOL_NAME = "search_images"
 GET_IMAGE_TOOL_NAME = "get_image"
+CRAWL_NOTE_MEDIA_TOOL_NAME = "crawl_note_media"
+EXTRACT_PAGE_IMAGES_TOOL_NAME = "extract_page_images"
 
 # Shared Decks & Releases Tool Names
 LIST_SHARED_DECKS_TOOL_NAME = "list_shared_decks"
@@ -876,6 +881,77 @@ def find_notes(
 # ---------------------------------------------------------------------------
 
 
+def _auto_crawl_note_fields(
+    *,
+    user_id: int,
+    note: Note,
+    field_defs: list[FieldDef] | tuple[FieldDef, ...],
+) -> bool:
+    """Detect external image URLs in image/diagram/markdown fields and crawl them into local MediaAssets."""
+    from app.services import image_crawl_service
+    from flask import current_app
+    from pathlib import Path
+
+    upload_root_cfg = current_app.config.get("FLASHCARD_MEDIA_UPLOAD_ROOT")
+    if not upload_root_cfg:
+        return False
+    upload_root = Path(upload_root_cfg).resolve()
+    max_bytes = int(current_app.config.get("FLASHCARD_MEDIA_MAX_BYTES", 10 * 1024 * 1024))
+    scanner = current_app.config.get("FLASHCARD_MEDIA_SCANNER")
+    scan_enabled = bool(current_app.config.get("FLASHCARD_MEDIA_SCAN_ENABLED", False))
+
+    field_map = {f.name: f for f in field_defs}
+    current_values = dict(note.field_values or {})
+    changed = False
+
+    for field_name, value in list(current_values.items()):
+        f_def = field_map.get(field_name)
+        if not f_def or not isinstance(value, str) or not value.strip():
+            continue
+        val_str = value.strip()
+        f_type = str(f_def.field_type or "text").strip().lower()
+
+        if f_type in {"image", "diagram"} and val_str.startswith(("http://", "https://")):
+            try:
+                payload, _ = image_crawl_service.crawl_and_save_note_media(
+                    user_id=user_id,
+                    note_id=note.id,
+                    field_name=field_name,
+                    url=val_str,
+                    upload_root=upload_root,
+                    max_bytes=max_bytes,
+                    scanner=scanner,
+                    scan_enabled=scan_enabled,
+                    markdown_inline=False,
+                )
+                current_values[field_name] = payload["asset_id"]
+                changed = True
+            except Exception as exc:
+                logger.warning("MCP auto-crawl image failed for note %s field %s: %s", note.id, field_name, exc)
+
+        elif f_type == "markdown" and ("http://" in val_str or "https://" in val_str):
+            try:
+                result = image_crawl_service.crawl_and_rewrite_markdown_media(
+                    user_id=user_id,
+                    note_id=note.id,
+                    markdown_text=val_str,
+                    field_name=field_name,
+                    upload_root=upload_root,
+                    max_bytes=max_bytes,
+                    scanner=scanner,
+                    scan_enabled=scan_enabled,
+                )
+                if result.get("crawled_count", 0) > 0:
+                    current_values[field_name] = result["rewritten_markdown"]
+                    changed = True
+            except Exception as exc:
+                logger.warning("MCP auto-crawl markdown failed for note %s field %s: %s", note.id, field_name, exc)
+
+    if changed:
+        note.field_values = current_values
+    return changed
+
+
 def create_note(*, user_id: int, note_data: dict[str, Any]) -> dict[str, Any]:
     """Create a single flashcard note with cards for the user."""
     deck = _resolve_deck_for_user(
@@ -911,6 +987,7 @@ def create_note(*, user_id: int, note_data: dict[str, Any]) -> dict[str, Any]:
                             changed_field_names.add(k)
                     if changed_field_names:
                         ex.field_values = fvals
+                        _auto_crawl_note_fields(user_id=user_id, note=ex, field_defs=note_type.field_defs)
                         from app.services import deck_working_tree_service
 
                         deck_working_tree_service.mark_note_fields_changed(
@@ -935,6 +1012,8 @@ def create_note(*, user_id: int, note_data: dict[str, Any]) -> dict[str, Any]:
     )
     db.session.add(note)
     db.session.flush()
+
+    _auto_crawl_note_fields(user_id=user_id, note=note, field_defs=note_type.field_defs)
 
     templates = list(note_type.templates)
     if not templates:
@@ -1030,6 +1109,7 @@ def update_note(
         if note_type:
             normalized = normalize_anki_field_values(current_fields, tuple(note_type.field_defs))
             note.field_values = normalized
+            _auto_crawl_note_fields(user_id=user_id, note=note, field_defs=note_type.field_defs)
         else:
             note.field_values = current_fields
 
@@ -1707,68 +1787,30 @@ def submit_review(
 
     user = db.session.get(User, user_id)
     timezone_name = stats_overview.get_effective_timezone_name(getattr(user, "timezone", "UTC"))
-    now = datetime.utcnow()
-    progress = CardProgress.query.filter_by(user_id=user_id, card_id=card.id).first()
-    deck_options = resolve_deck_options(user_id=user_id, deck_id=card.note.deck_id)
-
-    if progress is None:
-        progress = CardProgress(
-            user_id=user_id,
-            card_id=card.id,
-            queue="new",
-            step_index=0,
-            due_at=None,
-            due_day=None,
-            interval_days=0,
-            ease_factor=deck_options.startingEase,
-            reps=0,
-            lapses=0,
-        )
-        db.session.add(progress)
-        db.session.flush()
-
-    expected_last_reviewed_at = progress.last_reviewed_at
-    current_state = study_repository.card_state_from_progress(
-        progress,
-        now,
-        timezone_name=timezone_name,
-        user_id=user_id,
-        options=deck_options,
-    )
-    review_mode = stats_overview.normalize_review_mode(current_state.type)
-    transition = execute_review_action(
-        state=current_state,
-        options=deck_options,
-        now=now,
-        action=rating,
-        timezone_name=timezone_name,
-    )
-    updated_state = transition.state
-
     service_payload = {
         "duration_ms": duration_ms,
         "timezone": timezone_name,
     }
+    try:
+        command_result = execute_native_review_command(
+            user=user,
+            card=card,
+            action=rating,
+            payload=service_payload,
+            clone_scope=None,
+            requested_scope_id=card.note.deck_id,
+            timezone_name=timezone_name,
+        )
+    except StudyReviewError as exc:
+        raise RequestValidationError(
+            str(exc),
+            field="card_id",
+            status=exc.status,
+            code=exc.code,
+        ) from exc
 
-    apply_study_answer_and_commit(
-        user=user,
-        card=card,
-        progress=progress,
-        expected_last_reviewed_at=expected_last_reviewed_at,
-        current_state=current_state,
-        updated_state=updated_state,
-        now=now,
-        rating=rating,
-        review_mode=review_mode,
-        payload=service_payload,
-        clone_scope=None,
-        requested_scope_id=card.note.deck_id,
-        timezone_name=timezone_name,
-        deck_options=deck_options,
-        scheduler_algorithm=transition.algorithm.key,
-        algorithm_version=transition.algorithm.version,
-        state_schema_version=transition.algorithm.state_schema_version,
-    )
+    current_state = command_result.current_state
+    updated_state = command_result.transition.state
 
     return {
         "success": True,
@@ -2995,6 +3037,80 @@ def import_image(
         "image": serialize_mcp_image_asset(row),
         "is_deduplicated": getattr(row, "_is_deduplicated", False),
     }
+
+
+def crawl_note_media(
+    *,
+    user_id: int,
+    note_id: str,
+    field_name: str,
+    url: str,
+    markdown_inline: bool = False,
+) -> dict[str, Any]:
+    """Crawl a remote image from URL and attach it to a note's field with SSRF protection."""
+    from app.services import image_crawl_service
+    from flask import current_app
+    from pathlib import Path
+
+    upload_root = Path(current_app.config["FLASHCARD_MEDIA_UPLOAD_ROOT"]).resolve()
+    max_bytes = int(current_app.config.get("FLASHCARD_MEDIA_MAX_BYTES", 10 * 1024 * 1024))
+    scanner = current_app.config.get("FLASHCARD_MEDIA_SCANNER")
+    scan_enabled = bool(current_app.config.get("FLASHCARD_MEDIA_SCAN_ENABLED", False))
+
+    try:
+        payload, status = image_crawl_service.crawl_and_save_note_media(
+            user_id=user_id,
+            note_id=note_id,
+            field_name=field_name,
+            url=url,
+            upload_root=upload_root,
+            max_bytes=max_bytes,
+            scanner=scanner,
+            scan_enabled=scan_enabled,
+            markdown_inline=markdown_inline,
+        )
+    except image_crawl_service.ImageCrawlError as exc:
+        raise RequestValidationError(
+            str(exc),
+            field=exc.field or "url",
+            status=exc.status,
+            code=exc.error,
+        ) from exc
+
+    return {
+        "success": True,
+        "note_id": note_id,
+        "field_name": field_name,
+        "asset_id": payload.get("asset_id"),
+        "url": payload.get("url"),
+        "sha256": payload.get("sha256"),
+    }
+
+
+def extract_page_images(
+    *,
+    user_id: int,
+    page_url: str,
+    max_images: int = 20,
+) -> dict[str, Any]:
+    """Crawl a webpage HTML safely and extract candidate image URLs (OpenGraph, Twitter, img tags)."""
+    from app.services import image_crawl_service
+
+    try:
+        result = image_crawl_service.extract_images_from_page(
+            page_url=page_url,
+            max_images=max_images,
+        )
+    except image_crawl_service.ImageCrawlError as exc:
+        raise RequestValidationError(
+            str(exc),
+            field=exc.field or "page_url",
+            status=exc.status,
+            code=exc.error,
+        ) from exc
+
+    return result
+
 
 
 def search_images(

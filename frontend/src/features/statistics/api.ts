@@ -4,6 +4,8 @@ import type {
   StatisticsConfig,
   StatisticsFilters,
   TodayFutureStats,
+  UserStudyTimeFilters,
+  UserStudyTimeResponse,
 } from './types'
 
 export function useStatisticsConfig() {
@@ -21,3 +23,13 @@ export function useTodayFutureStats(filters: StatisticsFilters) {
     enabled: filters.scope === 'collection' || filters.deckId !== null,
   })
 }
+
+export function useUserStudyTimeStats(filters: UserStudyTimeFilters) {
+  return useQuery({
+    queryKey: ['stats', 'study-time', filters],
+    queryFn: () =>
+      appApi.getUserStudyTimeStats(filters) as Promise<UserStudyTimeResponse>,
+    enabled: filters.scope === 'collection' || filters.deckId !== null,
+  })
+}
+

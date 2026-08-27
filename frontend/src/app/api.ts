@@ -14,6 +14,8 @@ import type {
   StatisticsConfig,
   StatisticsFilters,
   TodayFutureStats,
+  UserStudyTimeFilters,
+  UserStudyTimeResponse,
 } from '../features/statistics/types'
 import {
   apiJson,
@@ -322,6 +324,29 @@ export const appApi = {
     }
     return apiRequest<TodayFutureStats>(
       `${API_BASE}/statistics/today-future?${params.toString()}`,
+    )
+  },
+
+  async getUserStudyTimeStats(
+    filters: UserStudyTimeFilters,
+  ): Promise<UserStudyTimeResponse> {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+    const params = new URLSearchParams({
+      scope: filters.scope,
+      range: filters.range,
+      timezone: tz,
+    })
+    if (filters.deckId !== null) {
+      params.set('deck_id', String(filters.deckId))
+    }
+    if (filters.startDate) {
+      params.set('start_date', filters.startDate)
+    }
+    if (filters.endDate) {
+      params.set('end_date', filters.endDate)
+    }
+    return apiRequest<UserStudyTimeResponse>(
+      `${API_BASE}/statistics/study-time?${params.toString()}`,
     )
   },
 }

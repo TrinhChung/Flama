@@ -16,9 +16,10 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { StudyHeatmap } from '@/shared/components/StudyHeatmap'
 import { Page, PageHeader, SectionCard } from '@/shared/components/Page'
 import { PageError, PageLoading } from '@/shared/components/PageState'
-import { useStatisticsConfig, useTodayFutureStats } from '../api'
+import { useStatisticsConfig, useTodayFutureStats, useUserStudyTimeStats } from '../api'
 import { FutureDueChart } from '../components/FutureDueChart'
-import type { StatisticsFilters } from '../types'
+import { UserStudyTimeChart } from '../components/UserStudyTimeChart'
+import type { StatisticsFilters, UserStudyTimePreset } from '../types'
 
 function ChoiceTabs<T extends string>({
   value,
@@ -53,6 +54,8 @@ export function StatisticsPage() {
     backlog: true,
   })
 
+  const [studyTimeRange, setStudyTimeRange] = useState<UserStudyTimePreset>('30d')
+
   useEffect(() => {
     if (configQuery.data && filters.deckId === null) {
       setFilters((current) => ({ ...current, deckId: configQuery.data.initial_deck_id }))
@@ -60,6 +63,11 @@ export function StatisticsPage() {
   }, [configQuery.data, filters.deckId])
 
   const statsQuery = useTodayFutureStats(filters)
+  const studyTimeQuery = useUserStudyTimeStats({
+    scope: filters.scope,
+    deckId: filters.deckId,
+    range: studyTimeRange,
+  })
   const overviewQuery = useQuery({
     queryKey: ['frontend', 'statistics', 'overview', currentYear],
     queryFn: () => appApi.getDashboardOverview(currentYear),
@@ -212,6 +220,16 @@ export function StatisticsPage() {
               </div>
             </div>
           </div>
+
+          {/* Average Study Time & Total Hours Chart */}
+          {studyTimeQuery.data ? (
+            <UserStudyTimeChart
+              data={studyTimeQuery.data}
+              range={studyTimeRange}
+              onRangeChange={setStudyTimeRange}
+              isLoading={studyTimeQuery.isFetching}
+            />
+          ) : null}
 
           {/* Yearly Heatmap Component */}
           <StudyHeatmap

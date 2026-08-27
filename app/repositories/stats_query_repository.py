@@ -646,3 +646,184 @@ def query_due_progress_rows(
         db.or_(CardProgress.is_suspended.is_(False), CardProgress.is_suspended.is_(None)),
     )
     return query.with_entities(CardProgress.due_at, CardProgress.due_day, CardProgress.queue).all()
+
+
+def _query_user_daily_study_time_mysql(
+    *,
+    user_id: int,
+    scope_deck_ids: list[int] | None,
+    timezone_name: str,
+    start_utc: datetime,
+    end_utc: datetime,
+    day_boundary_hour_local: int,
+) -> dict[date, dict[str, Any]]:
+    local_day_expr = db.func.date(
+        db.func.date_sub(
+            _mysql_local_timestamp(timezone_name),
+            db.text(f"INTERVAL {int(day_boundary_hour_local)} HOUR"),
+        )
+    )
+    duration_expr = db.func.coalesce(
+        db.func.sum(
+            db.case(
+                (
+                    db.and_(
+                        ReviewEvent.duration_ms.isnot(None),
+                        ReviewEvent.duration_ms > 0,
+                    ),
+                    ReviewEvent.duration_ms,
+                ),
+                else_=0,
+            )
+        ),
+        0,
+    )
+    passed_expr = db.func.coalesce(
+        db.func.sum(
+            db.case(
+                (ReviewEvent.rating.in_(["good", "easy", "3", "4"]), 1),
+                else_=0,
+            )
+        ),
+        0,
+    )
+
+    query = (
+        db.session.query(
+            local_day_expr.label("local_day"),
+            db.func.count(ReviewEvent.id).label("total_reviews"),
+            duration_expr.label("total_duration_ms"),
+            passed_expr.label("passed_reviews"),
+        )
+        .filter(
+            ReviewEvent.user_id == user_id,
+            ReviewEvent.reviewed_at >= start_utc,
+            ReviewEvent.reviewed_at < end_utc,
+        )
+    )
+
+    if scope_deck_ids is not None:
+        if not scope_deck_ids:
+            return {}
+        query = query.filter(ReviewEvent.deck_id.in_(scope_deck_ids))
+
+    rows = query.group_by(local_day_expr).all()
+
+    by_day: dict[date, dict[str, Any]] = {}
+    for local_day, total_reviews, total_duration_ms, passed_reviews in rows:
+        parsed_day = _parse_sql_day(local_day)
+        if not parsed_day:
+            continue
+        tot_rev = _safe_int(total_reviews)
+        dur_ms = max(0, _safe_int(total_duration_ms))
+        pass_rev = _safe_int(passed_reviews)
+        dur_min = round(dur_ms / 60000.0, 1)
+        dur_hrs = round(dur_ms / 3600000.0, 2)
+        pass_rate = round((pass_rev / float(tot_rev)) * 100.0, 1) if tot_rev > 0 else 0.0
+
+        by_day[parsed_day] = {
+            "total_reviews": tot_rev,
+            "total_duration_ms": dur_ms,
+            "total_duration_minutes": dur_min,
+            "total_duration_hours": dur_hrs,
+            "avg_study_minutes": dur_min,
+            "passed_reviews": pass_rev,
+            "retention_pass_rate": pass_rate,
+        }
+    return by_day
+
+
+def _query_user_daily_study_time_python(
+    *,
+    user_id: int,
+    scope_deck_ids: list[int] | None,
+    timezone_name: str,
+    start_utc: datetime,
+    end_utc: datetime,
+    day_boundary_hour_local: int,
+) -> dict[date, dict[str, Any]]:
+    query = db.session.query(
+        ReviewEvent.reviewed_at,
+        ReviewEvent.duration_ms,
+        ReviewEvent.rating,
+        ReviewEvent.deck_id,
+    ).filter(
+        ReviewEvent.user_id == user_id,
+        ReviewEvent.reviewed_at >= start_utc,
+        ReviewEvent.reviewed_at < end_utc,
+    )
+
+    if scope_deck_ids is not None:
+        if not scope_deck_ids:
+            return {}
+        query = query.filter(ReviewEvent.deck_id.in_(scope_deck_ids))
+
+    rows = query.all()
+
+    temp_by_day: dict[date, dict[str, int]] = {}
+    for reviewed_at, duration_ms, rating, _ in rows:
+        if reviewed_at is None:
+            continue
+        local_day = _utc_to_business_day(
+            reviewed_at,
+            timezone_name=timezone_name,
+            day_boundary_hour_local=day_boundary_hour_local,
+        )
+        bucket = temp_by_day.setdefault(
+            local_day,
+            {"total_reviews": 0, "total_duration_ms": 0, "passed_reviews": 0},
+        )
+        bucket["total_reviews"] += 1
+        dur = _safe_int(duration_ms)
+        if dur > 0:
+            bucket["total_duration_ms"] += dur
+        if str(rating or "").strip().lower() in {"good", "easy", "3", "4"}:
+            bucket["passed_reviews"] += 1
+
+    by_day: dict[date, dict[str, Any]] = {}
+    for day, data in temp_by_day.items():
+        tot_rev = data["total_reviews"]
+        dur_ms = data["total_duration_ms"]
+        pass_rev = data["passed_reviews"]
+        dur_min = round(dur_ms / 60000.0, 1)
+        dur_hrs = round(dur_ms / 3600000.0, 2)
+        pass_rate = round((pass_rev / float(tot_rev)) * 100.0, 1) if tot_rev > 0 else 0.0
+
+        by_day[day] = {
+            "total_reviews": tot_rev,
+            "total_duration_ms": dur_ms,
+            "total_duration_minutes": dur_min,
+            "total_duration_hours": dur_hrs,
+            "avg_study_minutes": dur_min,
+            "passed_reviews": pass_rev,
+            "retention_pass_rate": pass_rate,
+        }
+    return by_day
+
+
+def query_user_daily_study_time(
+    *,
+    user_id: int,
+    scope_deck_ids: list[int] | None,
+    timezone_name: str,
+    start_utc: datetime,
+    end_utc: datetime,
+    day_boundary_hour_local: int,
+) -> dict[date, dict[str, Any]]:
+    if can_use_mysql_local_day_sql(timezone_name=timezone_name):
+        return _query_user_daily_study_time_mysql(
+            user_id=user_id,
+            scope_deck_ids=scope_deck_ids,
+            timezone_name=timezone_name,
+            start_utc=start_utc,
+            end_utc=end_utc,
+            day_boundary_hour_local=day_boundary_hour_local,
+        )
+    return _query_user_daily_study_time_python(
+        user_id=user_id,
+        scope_deck_ids=scope_deck_ids,
+        timezone_name=timezone_name,
+        start_utc=start_utc,
+        end_utc=end_utc,
+        day_boundary_hour_local=day_boundary_hour_local,
+    )

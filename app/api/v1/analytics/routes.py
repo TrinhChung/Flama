@@ -16,7 +16,10 @@ from app.services.stats_overview import (
     get_effective_timezone_name,
     update_user_timezone,
 )
-from app.services.stats_today_future import build_today_future_stats
+from app.services.stats_today_future import (
+    build_today_future_stats,
+    build_user_study_time_stats,
+)
 
 
 analytics_bp = Blueprint("api_v1_analytics", __name__)
@@ -123,5 +126,38 @@ def statistics_today_future():
             history_range=history_range,
             future_range=future_range,
             backlog=backlog,
+        )
+    )
+
+
+@analytics_bp.get("/statistics/study-time")
+@login_required
+def statistics_study_time():
+    scope = str(request.args.get("scope") or "deck").strip().lower()
+    range_preset = str(request.args.get("range") or "30d").strip().lower()
+    start_date = request.args.get("start_date")
+    end_date = request.args.get("end_date")
+    deck_id, query_error = optional_int_query("deck_id")
+    if query_error is not None:
+        return query_error
+
+    if scope not in {"deck", "collection"}:
+        return error_response(
+            "VALIDATION_ERROR",
+            "Invalid scope.",
+            status=400,
+            field="scope",
+        )
+
+    resolved_tz = _resolve_request_timezone()
+    return jsonify(
+        build_user_study_time_stats(
+            user_id=current_user.id,
+            timezone_name=resolved_tz,
+            scope=scope,
+            deck_id=deck_id,
+            range_preset=range_preset,
+            start_date_str=start_date,
+            end_date_str=end_date,
         )
     )
