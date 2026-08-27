@@ -25,6 +25,7 @@ import {
   removeStudySessionIfMatches,
   saveStudySession,
   scopeKey,
+  updateCardFieldValuesInSessions,
 } from '../session/sessionStore'
 import type {
   PersistedStudySession,
@@ -535,6 +536,11 @@ export function useStudySession(deckId: string | null) {
         const restored = loaded.session
         sessionDurableRef.current = loaded.durable
         if (!isCurrentLease()) return
+        if (loaded.quarantine) {
+          throw new Error(
+            `Phiên học đã lưu không tương thích (${loaded.quarantine.reason}) và đã được cách ly. Tải lại trang để mở một phiên mới; dữ liệu cũ vẫn được giữ để chẩn đoán.`,
+          )
+        }
         const expiresAt = restored
           ? Date.parse(restored.snapshot.expires_at)
           : 0
@@ -996,6 +1002,45 @@ export function useStudySession(deckId: string | null) {
     && (session.undo_history?.length ?? 0) > 0,
   )
 
+  const updateCardContent = useCallback(async (
+    cardId: string,
+    updatedFieldValues: Record<string, string>,
+  ) => {
+    const current = sessionRef.current
+    if (!current) return
+    const card = current.snapshot.cards.find((c) => c.card_id === cardId)
+    if (!card) return
+    const contentKey = card.content_key
+    const existingContent = current.snapshot.contents[contentKey]
+    if (!existingContent) return
+
+    const nextSession: PersistedStudySession = {
+      ...current,
+      snapshot: {
+        ...current.snapshot,
+        contents: {
+          ...current.snapshot.contents,
+          [contentKey]: {
+            ...existingContent,
+            field_values: {
+              ...existingContent.field_values,
+              ...updatedFieldValues,
+            },
+          },
+        },
+      },
+      updated_at_ms: Date.now(),
+    }
+
+    activateSession(nextSession)
+    try {
+      sessionDurableRef.current = await saveStudySession(nextSession)
+    } catch {
+      // Retain in-memory copy
+    }
+    await updateCardFieldValuesInSessions(cardId, updatedFieldValues)
+  }, [activateSession])
+
   return {
     session,
     view,
@@ -1018,5 +1063,6 @@ export function useStudySession(deckId: string | null) {
     answer,
     commit,
     requestTakeover,
+    updateCardContent,
   }
 }

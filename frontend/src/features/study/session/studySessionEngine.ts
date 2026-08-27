@@ -7,7 +7,10 @@ import type {
   StudySessionSnapshot,
   StudyTemplateArtifact,
 } from '../types'
-import { computeDecision } from '../scheduler/legacyEngine'
+import {
+  resolveCardAlgorithm,
+  validateSnapshotAlgorithmContract,
+} from '../scheduler/algorithmRegistry'
 import {
   queueCounts,
   selectNextCard,
@@ -54,6 +57,7 @@ function cloneSnapshot(snapshot: StudySessionSnapshot): StudySessionSnapshot {
 export function createPersistedSession(
   snapshot: StudySessionSnapshot,
 ): PersistedStudySession {
+  validateSnapshotAlgorithmContract(snapshot)
   const cloned = cloneSnapshot(snapshot)
   const cards = cloned.cards.map((card) => ({
     card_id: card.card_id,
@@ -156,11 +160,10 @@ export function decisionForCard(
 ) {
   const card = session.snapshot.cards.find((row) => row.card_id === cardId)
   if (!card) throw new Error('Card is not part of the active session.')
-  const policy = session.snapshot.policies[card.policy_key]
-  if (!policy) throw new Error('Scheduler policy is missing.')
-  return computeDecision(
-    card.state,
-    policy.config,
+  const { algorithm, policy } = resolveCardAlgorithm(session.snapshot, card)
+  return algorithm.computeDecision(
+    card,
+    policy,
     schedulerAtMs,
     session.snapshot.timezone,
   )

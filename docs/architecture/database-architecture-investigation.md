@@ -194,13 +194,13 @@ sequenceDiagram
 
 **Evidence:** `app/routes/flashcards/study.py::study_session_open`, `study_session_commit`; `app/services/study_session_service.py::open_study_session`, `commit_study_session`; `frontend/src/features/study/session/studySessionEngine.ts`, `sessionStore.ts`; `tests/test_study_session_api.py::test_commit_replays_events_and_is_idempotent`, `::test_commit_rejects_tampered_final_state`, `::test_second_session_detects_progress_conflict`.
 
-**Observed:** a direct per-answer path also remains: `/api/study/cards/<card_id>/answer` and MCP `submit_review` calculate on the server, update CardProgress, create one ReviewEvent, and commit immediately. Direct events do not receive a StudySession identity or its algorithm/config hashes. A direct answer invalidates a conflicting open batch via progress revision checks.
+**Observed:** a direct per-answer path also remains: `/api/study/cards/<card_id>/answer` and MCP `submit_review` adapt into one server command that locks and updates CardProgress, creates one ReviewEvent, and commits immediately. Direct events do not receive a StudySession identity because they do not belong to a leased batch, but they record the same Algorithm and canonical scheduler-config identity as session events. A direct answer invalidates a conflicting open batch via progress revision checks.
 
-**Evidence:** `app/routes/flashcards/study.py::study_answer`; `app/services/study_service.py::apply_study_answer_and_commit`; `app/services/mcp_tool_service.py::submit_review`; `tests/test_study_session_api.py::test_legacy_answer_invalidates_open_batch_session`.
+**Evidence:** `app/routes/flashcards/study.py::study_answer`; `app/services/study_service.py::execute_native_review_command`; `app/services/mcp_tool_service.py::submit_review`; `tests/test_study_session_api.py::test_legacy_answer_invalidates_open_batch_session`.
 
-**Implementation update — 2026-08-27:** batch replay, direct REST, and MCP review now resolve the four semantic review Actions through `study_action_runtime` and the exact-key/version Python Algorithm registry. New direct and batch ReviewEvents record the effective Algorithm key/version and carry Action/Trigger/state-schema metadata under `_study_runtime`. Direct events still have no StudySession identity and still do not record the canonical scheduler-config hash, so the transaction/provenance paths are not yet fully unified.
+**Implementation update — 2026-08-27:** batch replay, direct REST, and MCP review resolve the four semantic review Actions through `study_action_runtime` and the exact-key/version Python Algorithm registry. REST/MCP now use one locked command; batch uses its separate lease/idempotency transaction while sharing canonical event persistence and scheduler policy serialization. New native ReviewEvents record the effective Algorithm key/version/config hash and carry Action/Trigger/state-schema/config metadata under `_study_runtime`. Suspension and first-progress insert races now produce typed conflicts across these native paths.
 
-**Evidence:** `app/services/study_algorithm_registry.py`; `app/services/study_action_runtime.py`; `app/services/study_session_service.py::commit_study_session`; `app/services/study_service.py::apply_study_answer_and_commit`; `tests/test_study_action_runtime.py`; `tests/test_study_session_api.py`.
+**Evidence:** `app/services/study_algorithm_registry.py`; `app/services/study_action_runtime.py`; `app/services/study_policy_service.py`; `app/services/study_session_service.py::commit_study_session`; `app/services/study_service.py::execute_native_review_command`, `record_native_review_transition`; `tests/test_study_action_runtime.py`; `tests/test_study_session_api.py`; `tests/test_flama_connect_mcp.py`.
 
 ## 4. Field architecture investigation
 
@@ -349,9 +349,9 @@ This is not merely duplicate metadata: the current implementation translates bet
 
 ### 6.4 StudySession algorithm/version semantics
 
-**Observed:** every current frontend StudySession is stamped `scheduler_algorithm="legacy-anki"`, `algorithm_version="1.0.0"`, and wire schema `study-session.v2`. Per-card config snapshots still contain `scheduler_mode` and possible FSRS next-state structures. The top-level algorithm/version is copied onto ReviewEvents during session commit and is used to freeze/replay the contract, not to dynamically choose a Python scheduler implementation.
+**Observed:** every current frontend StudySession is stamped `scheduler_algorithm="legacy-anki"`, `algorithm_version="1.0.0"`, and wire schema `study-session.v2`. Per-card config snapshots still contain `scheduler_mode` and possible FSRS next-state structures. The top-level Algorithm/version now selects exact retained executables in both Python replay and the TypeScript preview/optimistic path; a missing executable fails closed.
 
-**Evidence:** `study_session_service.SCHEDULER_ALGORITHM`, `ALGORITHM_VERSION`, `WIRE_SCHEMA_VERSION`; `open_study_session`, `commit_study_session`; `models/study_session.py`; `tests/test_study_session_api.py::test_commit_replays_events_and_is_idempotent`.
+**Evidence:** `study_session_service.SCHEDULER_ALGORITHM`, `ALGORITHM_VERSION`, `WIRE_SCHEMA_VERSION`; `study_algorithm_registry.py`; `frontend/src/features/study/scheduler/algorithmRegistry.ts`; `session/studySessionEngine.ts`; `session/sessionRestore.ts`; `open_study_session`, `commit_study_session`; `models/study_session.py`; `tests/test_study_session_api.py::test_commit_replays_events_and_is_idempotent`; `session/sessionRestore.test.ts`.
 
 **Potential concern:** the top-level algorithm label and per-card scheduler mode are separate representations and can describe different levels of the execution contract. Consumers should not infer FSRS/legacy solely from one of them.
 
@@ -359,7 +359,7 @@ This is not merely duplicate metadata: the current implementation translates bet
 
 **Observed:** opening a session serializes each card's resolved options, hashes them, and stores the session-wide config snapshot plus per-card config hashes and initial states. Later preset changes do not affect that open session. New sessions and direct answers resolve the then-current preset. Existing CardProgress is not proactively rescheduled by any checked-in preset mutation path; it transitions under the newly resolved options on a later answer.
 
-**Evidence:** `study_session_service.open_study_session`, `serialize_deck_options`, `commit_study_session`; `StudySession.config_snapshot_json`; `StudySessionCard.scheduler_config_hash`.
+**Evidence:** `study_session_service.open_study_session`, `commit_study_session`; `study_policy_service.serialize_deck_options`, `build_scheduler_policy`; `StudySession.config_snapshot_json`; `StudySessionCard.scheduler_config_hash`.
 
 **Needs verification:** intended semantics for `fsrs_reschedule_on_change`, since it is stored but not consumed by current services.
 
@@ -374,7 +374,7 @@ This is not merely duplicate metadata: the current implementation translates bet
 
 Direct study and session commit populate before/after values from `CardState`. Anki import populates the subset available from revlog (`interval`, `lastIvl`, `factor`, rating/type/time), stamps `scheduler_algorithm="anki"` and `algorithm_version="revlog-v1"`, and keeps a durable external identity in `ConnectReviewEventRef`.
 
-**Evidence:** `models/review_event.py`; `study_service.apply_study_answer_and_commit`; `study_session_service.commit_study_session`; `anki_sync_service._import_review`; `tests/test_anki_import_api.py::test_progress_and_full_revlog_are_separate_idempotent_sync_streams`.
+**Evidence:** `models/review_event.py`; `study_service.execute_native_review_command`, `record_native_review_transition`; `study_session_service.commit_study_session`; `anki_sync_service._import_review`; `tests/test_anki_import_api.py::test_progress_and_full_revlog_are_separate_idempotent_sync_streams`.
 
 **Observed consumption:** current user/admin analytics query reviewed time, duration, rating, mode, deck, and `scheduler_mode`. No checked-in production query was found reading queue-before/after, interval/ease/memory before/after, due-day transition, algorithm version/config hash, or parsing `ReviewEvent.payload_json`. Those fields are currently written and tested as audit/history data; `CardProgress.last_review_event_id` references the latest event.
 

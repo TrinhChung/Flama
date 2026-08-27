@@ -132,6 +132,11 @@ class StudySessionApiTests(unittest.TestCase):
         self.assertIn(card["policy_key"], snapshot["policies"])
         self.assertIn(card["template_key"], snapshot["templates"])
         self.assertIn(card["content_key"], snapshot["contents"])
+        self.assertIn("compositions", snapshot)
+        self.assertIn("composition_id", card)
+        comp_id = card["composition_id"]
+        self.assertIn(comp_id, snapshot["compositions"])
+        self.assertEqual(snapshot["compositions"][comp_id]["mode_key"], "flashcard")
         self.assertEqual(card["base_revision"], 0)
 
         with self.app.app_context():
@@ -628,6 +633,18 @@ class StudySessionApiTests(unittest.TestCase):
                 card_id=source_card_id,
             ).one()
             self.assertTrue(progress.is_suspended)
+
+    def test_scope_compositions_endpoint(self):
+        response = self.client.get(f"/api/study/scopes/deck/{self.deck_id}/compositions")
+        self.assertEqual(response.status_code, 200, response.get_json())
+        data = response.get_json()
+        self.assertEqual(data["schema_version"], "study-scope-compositions.v1")
+        self.assertEqual(data["scope_type"], "deck")
+        self.assertEqual(data["scope_id"], str(self.deck_id))
+        self.assertGreaterEqual(len(data["compositions"]), 1)
+        comp = data["compositions"][0]
+        self.assertEqual(comp["mode_key"], "flashcard")
+        self.assertEqual(comp["algorithm_key"], "legacy-anki")
 
 
 if __name__ == "__main__":

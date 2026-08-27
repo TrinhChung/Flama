@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { PageError, PageLoading } from '@/shared/components/PageState'
@@ -8,6 +8,7 @@ import { StudyBottomBar } from '../components/StudyBottomBar'
 import { StudyCompletionCard } from '../components/StudyCompletionCard'
 import { StudySessionConflict } from '../components/StudySessionConflict'
 import { StudyWaitingCard } from '../components/StudyWaitingCard'
+import { StudyQuickEditDialog } from '../components/StudyQuickEditDialog'
 import { useStudySession } from '../hooks/useStudySession'
 import { isBackgroundRolloverCommit } from '../session/studySessionEngine'
 import type { Rating } from '../types'
@@ -24,8 +25,15 @@ export function StudyPage() {
     cardKey: string
     value: SchedulerDecision
   } | null>(null)
+  const [selectedCompositionId, setSelectedCompositionId] = useState<string | null>(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
+  const [isQuickEditOpen, setIsQuickEditOpen] = useState(false)
   const startedAtRef = useRef(performance.now())
+
+  const compositionsList = useMemo(() => {
+    const comps = study.session?.snapshot.compositions
+    return comps ? Object.values(comps) : []
+  }, [study.session?.snapshot.compositions])
 
   const card = study.view?.card ?? null
   const template = study.view?.template ?? null
@@ -39,6 +47,12 @@ export function StudyPage() {
   const decision = decisionState && decisionState.cardKey === activeCardKey
     ? decisionState.value
     : null
+
+  const handleOpenEdit = useCallback(() => {
+    if (card?.card_id && card?.can_edit_card !== false && !study.isBusy) {
+      setIsQuickEditOpen(true)
+    }
+  }, [card?.card_id, card?.can_edit_card, study.isBusy])
 
   useEffect(() => {
     startedAtRef.current = performance.now()
@@ -137,7 +151,7 @@ export function StudyPage() {
   }, [])
 
   useEffect(() => {
-    if (study.leaseConflict) return
+    if (study.leaseConflict || isQuickEditOpen) return
 
     const handleKeyDown = (event: KeyboardEvent) => {
       const activeEl = document.activeElement
@@ -173,6 +187,13 @@ export function StudyPage() {
         || activeTag === 'button'
         || activeTag === 'a'
       ) return
+
+      const isEditKey = key === 'e' || key === 'E' || code === 'KeyE'
+      if (isEditKey) {
+        event.preventDefault()
+        handleOpenEdit()
+        return
+      }
 
       const isSpaceOrEnter = code === 'Space' || key === ' ' || key === 'Spacebar' || code === 'Enter' || key === 'Enter'
       const isOne = key === '1' || code === 'Digit1' || code === 'Numpad1'
@@ -222,9 +243,11 @@ export function StudyPage() {
   }, [
     card?.card_id,
     handleAnswer,
+    handleOpenEdit,
     handleReveal,
     handleToggleFullscreen,
     handleUndo,
+    isQuickEditOpen,
     revealed,
     study.leaseConflict,
   ])
@@ -304,6 +327,11 @@ export function StudyPage() {
             deckName={deckName}
             deckId={deckIdRaw}
             cardId={card?.card_id}
+            canEdit={Boolean(card?.card_id && card?.can_edit_card !== false)}
+            onEdit={handleOpenEdit}
+            compositions={compositionsList}
+            selectedCompositionId={selectedCompositionId}
+            onSelectComposition={setSelectedCompositionId}
           />
           <div className="px-2 py-1 text-xs text-muted-foreground">
             {study.session?.events.length || 0} trả lời chưa đồng bộ
@@ -369,7 +397,7 @@ export function StudyPage() {
         <StudyBottomBar
           cardId={card.card_id}
           revealed={revealed}
-          canEdit={false}
+          canEdit={Boolean(card.can_edit_card !== false)}
           canUndo={study.canUndo}
           newCount={counts.new}
           learnCount={counts.learning}
@@ -384,10 +412,21 @@ export function StudyPage() {
           onUndo={() => {
             void handleUndo()
           }}
-          onEdit={() => {}}
+          onEdit={handleOpenEdit}
           onToggleFullscreen={handleToggleFullscreen}
         />
       ) : null}
+
+      <StudyQuickEditDialog
+        open={isQuickEditOpen}
+        onOpenChange={setIsQuickEditOpen}
+        cardId={card?.card_id}
+        noteId={card?.note_id}
+        deckName={deckName}
+        template={template}
+        content={content}
+        onCardUpdated={study.updateCardContent}
+      />
     </div>
   )
 }

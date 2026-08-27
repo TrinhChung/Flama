@@ -3,56 +3,30 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import {
-  AlertCircle,
   ArrowLeft,
   ArrowRight,
-  BookOpen,
   Check,
   CheckCircle2,
-  DollarSign,
-  GitCompare,
   Sparkles,
-  Target
 } from 'lucide-react'
 import { appApi } from '@/app/api'
 import { AmbientBackground } from '@/components/ambient-background'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
-import { Textarea } from '@/components/ui/textarea'
 import { Page } from '@/shared/components/Page'
 import { PageError, PageLoading } from '@/shared/components/PageState'
-import { PublishDeckTree } from '../components/PublishDeckTree'
-import { loadDeckOptionsForPublish, type PublishDeckOption } from '../publishApi'
-
+import { loadDeckOptionsForPublish } from '../publishApi'
 import { useTaxonomySchema } from '../hooks/useTaxonomySchema'
 import {
   CATEGORY_PRESETS,
   TAXONOMY_DIFFICULTIES,
-  getDefaultGoalsForSubject,
-  getDefaultTopicsForSubject,
 } from '../utils/publishTaxonomyConstants'
-
-const WIZARD_STEPS = [
-  { id: 1, title: 'Học liệu & Tiêu đề', sub: 'Chọn bộ thẻ và mô tả', icon: BookOpen },
-  { id: 2, title: 'Phân loại & Trình độ', sub: 'Chứng chỉ & Môn học', icon: Sparkles },
-  { id: 3, title: 'Mục tiêu & Kỹ năng', sub: 'Goals & Chủ đề trọng tâm', icon: Target },
-  { id: 4, title: 'Giá bán & Đăng tải', sub: 'Thiết lập giá và xuất bản', icon: DollarSign },
-]
-
-function FieldErrorMessage({ error }: { error?: string }) {
-  if (!error) return null
-  return (
-    <p className="text-xs font-semibold text-destructive mt-1.5 flex items-center gap-1.5 animate-in fade-in">
-      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-      <span>{error}</span>
-    </p>
-  )
-}
-
+import { WIZARD_STEPS } from '../components/publish/PublishWizardTypes'
+import { PublishStep1BasicInfo } from '../components/publish/PublishStep1BasicInfo'
+import { PublishStep2Taxonomy } from '../components/publish/PublishStep2Taxonomy'
+import { PublishStep3Goals } from '../components/publish/PublishStep3Goals'
+import { PublishStep4Pricing } from '../components/publish/PublishStep4Pricing'
 
 export function MarketplacePublishDeckPage() {
   const navigate = useNavigate()
@@ -178,215 +152,38 @@ export function MarketplacePublishDeckPage() {
         pricing_mode: pricingMode,
         price_amount_minor: pricingMode === 'paid' ? priceAmountMinor : 0,
         tags: tags ? tags.split(',').map((t) => t.trim()).filter(Boolean) : [],
-        ...releaseMetadata,
         primary_category: effectiveCategory,
-        subcategory: subcategory.trim(),
-        target_audience: targetAudience.trim(),
         taxonomy_domain: taxonomyDomain,
         taxonomy_subject: taxonomySubject,
         taxonomy_framework: taxonomyFramework || undefined,
         taxonomy_framework_level: taxonomyFrameworkLevel || undefined,
-        taxonomy_difficulty_band: taxonomyDifficulty,
-        taxonomy_learning_goals: taxonomyGoals,
-        taxonomy_primary_topics: taxonomyTopics,
-        publish_status: isEditMode ? undefined : 'published',
+        difficulty_band: taxonomyDifficulty,
+        subcategory: subcategory.trim() || undefined,
+        target_audience: targetAudience.trim() || undefined,
+        learning_goals: taxonomyGoals,
+        primary_topics: taxonomyTopics,
+        ...releaseMetadata,
       })
     },
     onSuccess: (data: any) => {
-      const targetId = isEditMode ? deckItemId : data?.id || data?.deck_item_id || data?.item?.id
+      const publishedId = data?.deck_marketplace_item?.id || data?.shared_deck?.id || deckItemId
       toast.success(
         isEditMode
-          ? 'Đã cập nhật cấu hình chia sẻ Bộ thẻ thành công!'
-          : 'Đã xuất bản Bộ thẻ lên Marketplace thành công!'
+          ? 'Đã cập nhật thông tin bộ thẻ trên Marketplace!'
+          : 'Xuất bản bộ thẻ thành công! Bạn có thể quản lý release và phiên bản tại đây.',
       )
-      if (targetId) {
-        navigate(`/marketplace/decks/${targetId}`)
+      if (publishedId) {
+        navigate(`/marketplace/decks/${publishedId}`)
       } else {
         navigate('/marketplace/decks')
       }
     },
-    onError: (error: any) => {
-      const msg = error?.message || 'Có lỗi xảy ra khi xuất bản bộ thẻ.'
-      const details = error?.details || {}
-      const field = error?.field || ''
-      const serverErrs: Record<string, string> = {}
-
-      if (field === 'source_deck_id' || details?.source_deck_id) {
-        serverErrs.sourceDeckId = details?.source_deck_id || 'Bộ thẻ nguồn không hợp lệ hoặc đã được chia sẻ.'
-      }
-      if (field === 'title' || details?.title) {
-        serverErrs.title = details?.title || 'Tiêu đề không hợp lệ.'
-      }
-      if (field === 'preview_text' || details?.preview_text) {
-        serverErrs.previewText = details?.preview_text || 'Mô tả ngắn không hợp lệ.'
-      }
-      if (field === 'description' || details?.description) {
-        serverErrs.description = details?.description || 'Mô tả chi tiết không hợp lệ.'
-      }
-      if (field === 'taxonomy_domain' || msg.includes('taxonomy_domain')) {
-        serverErrs.taxonomyDomain = 'Vui lòng chọn Lĩnh vực học tập.'
-      }
-      if (field === 'taxonomy_subject' || msg.includes('taxonomy_subject')) {
-        serverErrs.taxonomySubject = 'Vui lòng chọn Ngôn ngữ / Môn học.'
-      }
-      if (field === 'taxonomy_difficulty_band' || msg.includes('taxonomy_difficulty_band')) {
-        serverErrs.taxonomyDifficulty = 'Vui lòng chọn Trình độ / Mức độ khó.'
-      }
-      if (field === 'taxonomy_learning_goals' || msg.includes('learning goal')) {
-        serverErrs.taxonomyGoals = 'Vui lòng chọn ít nhất 1 Mục tiêu học tập.'
-      }
-      if (field === 'taxonomy_primary_topics' || msg.includes('primary topic')) {
-        serverErrs.taxonomyTopics = 'Vui lòng chọn ít nhất 1 Chủ đề chính.'
-      }
-
-      if (Object.keys(serverErrs).length > 0) {
-        setFieldErrors((prev) => ({ ...prev, ...serverErrs }))
-        toast.error('Có thông tin bị thiếu hoặc không hợp lệ. Vui lòng kiểm tra các vị trí báo đỏ.')
-      } else {
-        toast.error(msg || 'Không thể xuất bản. Vui lòng kiểm tra lại thông tin.')
-      }
+    onError: (err: any) => {
+      toast.error(err?.message || 'Không thể đăng tải bộ thẻ. Vui lòng kiểm tra lại thông tin.')
     },
   })
 
-  const decks = useMemo(() => decksQuery.data?.items || [], [decksQuery.data?.items])
-
-  const validateStep = (stepNumber: number): boolean => {
-    const errs: Record<string, string> = {}
-    if (stepNumber === 1) {
-      const selectedSourceDeck = decks.find((deck) => String(deck.id) === sourceDeckId)
-      if (!isEditMode) {
-        if (!sourceDeckId || !selectedSourceDeck) {
-          errs.sourceDeckId = 'Vui lòng chọn bộ thẻ cần chia sẻ từ tài khoản của bạn.'
-        } else if (!selectedSourceDeck.is_selectable) {
-          errs.sourceDeckId = selectedSourceDeck.block_reason || 'Bộ thẻ này không thể chia sẻ.'
-        }
-      }
-      if (!title.trim()) {
-        errs.title = 'Vui lòng nhập tiêu đề xuất bản.'
-      }
-      if (!previewText.trim()) {
-        errs.previewText = 'Vui lòng nhập tóm tắt xem trước ngắn (Preview Text) để người học xem nhanh.'
-      }
-      if (!description.trim()) {
-        errs.description = 'Vui lòng nhập mô tả chi tiết giới thiệu học liệu.'
-      }
-    } else if (stepNumber === 2) {
-      if (!taxonomyDomain) {
-        errs.taxonomyDomain = 'Vui lòng chọn Lĩnh vực học tập.'
-      }
-      if (!taxonomySubject) {
-        errs.taxonomySubject = 'Vui lòng chọn Ngôn ngữ / Môn học.'
-      }
-      if (!taxonomyDifficulty) {
-        errs.taxonomyDifficulty = 'Vui lòng chọn Trình độ / Mức độ khó.'
-      }
-      if (primaryCategory === 'Custom' && !customCategory.trim()) {
-        errs.customCategory = 'Vui lòng nhập tên danh mục tùy chỉnh.'
-      }
-    } else if (stepNumber === 3) {
-      if (taxonomyGoals.length === 0) {
-        errs.taxonomyGoals = 'Vui lòng chọn ít nhất 1 Mục tiêu học tập.'
-      }
-      if (taxonomyTopics.length === 0) {
-        errs.taxonomyTopics = 'Vui lòng chọn ít nhất 1 Chủ đề chính.'
-      }
-    } else if (stepNumber === 4) {
-      if (pricingMode === 'paid' && (!priceAmountMinor || priceAmountMinor <= 0)) {
-        errs.priceAmountMinor = 'Vui lòng nhập giá bán hợp lệ (> 0 VND).'
-      }
-    }
-
-    setFieldErrors(errs)
-    if (Object.keys(errs).length > 0) {
-      toast.error('Vui lòng hoàn thiện các trường bắt buộc trong bước này.')
-      return false
-    }
-    return true
-  }
-
-  const validateForm = (): boolean => {
-    for (let s = 1; s <= 4; s++) {
-      if (!validateStep(s)) {
-        setCurrentStep(s)
-        return false
-      }
-    }
-    return true
-  }
-
-  const handlePublish = () => {
-    if (currentStep !== 4) return
-    if (validateForm()) {
-      publishMutation.mutate()
-    }
-  }
-
-  const handleNextStep = () => {
-    if (validateStep(currentStep)) {
-      setCurrentStep((prev) => Math.min(prev + 1, 4))
-    }
-  }
-
-  const handlePrevStep = () => {
-    setCurrentStep((prev) => Math.max(prev - 1, 1))
-  }
-
-  const goToStep = (targetStep: number) => {
-    if (targetStep < currentStep) {
-      setCurrentStep(targetStep)
-      return
-    }
-    if (validateStep(currentStep)) {
-      setCurrentStep(targetStep)
-    }
-  }
-
-  // Sync search param ID if passed in URL (create mode only)
-  useEffect(() => {
-    if (isEditMode) return
-    if (!queryParamDeckId || sourceDeckId || decks.length === 0) return
-    const queryDeck = decks.find((deck) => String(deck.id) === queryParamDeckId)
-    if (queryDeck?.is_selectable) {
-      setSourceDeckId(queryParamDeckId)
-      if (!isTitleManuallyEdited && !title) {
-        setTitle(queryDeck.name)
-      }
-      return
-    }
-    if (queryDeck) {
-      setFieldErrors((current) => ({
-        ...current,
-        sourceDeckId: queryDeck.block_reason || 'Bộ thẻ này không thể chia sẻ.',
-      }))
-    }
-  }, [decks, queryParamDeckId, sourceDeckId, isEditMode, isTitleManuallyEdited, title])
-
-  // Validate sourceDeckId in create mode
-  useEffect(() => {
-    if (isEditMode) return
-    if (!sourceDeckId || decks.length === 0) return
-    const found = decks.find((deck) => String(deck.id) === sourceDeckId)
-    if (!found || found.is_selectable) return
-    setSourceDeckId('')
-    setFieldErrors((current) => ({
-      ...current,
-      sourceDeckId: found.block_reason || 'Bộ thẻ này không thể chia sẻ.',
-    }))
-  }, [decks, sourceDeckId, isEditMode])
-
-  // Auto set title if title is empty or not manually edited when selected deck changes in create mode
-  useEffect(() => {
-    if (isEditMode || isTitleManuallyEdited) return
-    if (sourceDeckId && decks.length > 0) {
-      const found = decks.find((d) => String(d.id) === sourceDeckId)
-      if (found?.is_selectable && !title) {
-        setTitle(found.name)
-      }
-    }
-  }, [decks, sourceDeckId, title, isEditMode, isTitleManuallyEdited])
-
   const taxonomySchema = useTaxonomySchema('deck_marketplace_item')
-
   const availableDomains = taxonomySchema.domains
   const availableSubjects = taxonomySchema.subjectsByDomain(taxonomyDomain)
   const availableFrameworks = useMemo(
@@ -406,17 +203,152 @@ export function MarketplacePublishDeckPage() {
     [taxonomySchema, taxonomySubject, taxonomyDomain],
   )
 
-  if (decksQuery.isPending || (isEditMode && deckItemQuery.isPending)) return <PageLoading label="Đang tải dữ liệu..." />
-  if (decksQuery.error) return <Page><PageError error={decksQuery.error} /></Page>
-  if (isEditMode && deckItemQuery.error) return <Page><PageError error={deckItemQuery.error} /></Page>
+  const decks = useMemo(() => decksQuery.data?.items || [], [decksQuery.data])
 
-  const selectedDeck = decks.find((d) => String(d.id) === sourceDeckId)
+  useEffect(() => {
+    if (!sourceDeckId && decks.length > 0 && !isEditMode) {
+      setSourceDeckId(String(decks[0].id))
+      if (!isTitleManuallyEdited) {
+        setTitle(decks[0].name)
+      }
+    }
+  }, [decks, sourceDeckId, isTitleManuallyEdited, isEditMode])
+
+  const selectedDeck = useMemo(
+    () => decks.find((d) => String(d.id) === String(sourceDeckId)),
+    [decks, sourceDeckId],
+  )
+
+  // Wizard Step Validation
+  const validateStep = (stepNumber: number): boolean => {
+    const errors: Record<string, string> = {}
+
+    if (stepNumber === 1) {
+      if (!sourceDeckId && !isEditMode) {
+        errors.sourceDeckId = 'Vui lòng chọn một bộ thẻ nguồn để chia sẻ'
+      }
+      if (!title.trim()) {
+        errors.title = 'Vui lòng nhập tiêu đề hiển thị cho bộ thẻ'
+      } else if (title.trim().length < 3) {
+        errors.title = 'Tiêu đề quá ngắn (tối thiểu 3 ký tự)'
+      }
+      if (!previewText.trim()) {
+        errors.previewText = 'Vui lòng nhập tóm tắt xem trước ngắn (Preview text)'
+      } else if (previewText.trim().length < 10) {
+        errors.previewText = 'Tóm tắt quá ngắn (tối thiểu 10 ký tự)'
+      }
+      if (!description.trim()) {
+        errors.description = 'Vui lòng nhập mô tả chi tiết cho bộ thẻ'
+      }
+    }
+
+    if (stepNumber === 2) {
+      if (!taxonomyDomain) {
+        errors.taxonomyDomain = 'Vui lòng chọn lĩnh vực học tập'
+      }
+      if (!taxonomySubject) {
+        errors.taxonomySubject = 'Vui lòng chọn môn học / ngôn ngữ'
+      }
+      if (!taxonomyDifficulty) {
+        errors.taxonomyDifficulty = 'Vui lòng chọn mức độ khó'
+      }
+      if (primaryCategory === 'Custom' && !customCategory.trim()) {
+        errors.customCategory = 'Vui lòng nhập tên danh mục tùy chỉnh'
+      }
+    }
+
+    if (stepNumber === 3) {
+      if (taxonomyGoals.length === 0) {
+        errors.taxonomyGoals = 'Vui lòng chọn ít nhất 1 mục tiêu học tập'
+      }
+      if (taxonomyTopics.length === 0) {
+        errors.taxonomyTopics = 'Vui lòng chọn ít nhất 1 chủ đề trọng tâm'
+      }
+    }
+
+    if (stepNumber === 4) {
+      if (pricingMode === 'paid') {
+        if (!priceAmountMinor || priceAmountMinor < 1000) {
+          errors.price = 'Giá bán phải tối thiểu từ 1.000 VNĐ'
+        }
+      }
+    }
+
+    setFieldErrors(errors)
+    return Object.keys(errors).length === 0
+  }
+
+  const handlePublish = () => {
+    for (let step = 1; step <= 4; step++) {
+      if (!validateStep(step)) {
+        setCurrentStep(step)
+        toast.error(`Vui lòng hoàn thành các thông tin bắt buộc tại Bước ${step}`)
+        return
+      }
+    }
+    publishMutation.mutate()
+  }
+
+  const handleNextStep = () => {
+    if (validateStep(currentStep)) {
+      setCurrentStep((prev) => Math.min(prev + 1, 4))
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    } else {
+      toast.error('Vui lòng kiểm tra và điền đủ thông tin trước khi chuyển bước')
+    }
+  }
+
+  const handlePrevStep = () => {
+    setCurrentStep((prev) => Math.max(prev - 1, 1))
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const goToStep = (targetStep: number) => {
+    if (targetStep < currentStep) {
+      setCurrentStep(targetStep)
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    } else if (targetStep > currentStep) {
+      let canProceed = true
+      for (let s = currentStep; s < targetStep; s++) {
+        if (!validateStep(s)) {
+          canProceed = false
+          setCurrentStep(s)
+          toast.error(`Vui lòng hoàn thiện Bước ${s} trước`)
+          break
+        }
+      }
+      if (canProceed) {
+        setCurrentStep(targetStep)
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+      }
+    }
+  }
+
+  if (decksQuery.isPending || (isEditMode && deckItemQuery.isPending)) {
+    return <PageLoading label="Đang tải dữ liệu..." />
+  }
+
+  if (decksQuery.error) {
+    return (
+      <Page>
+        <PageError error={decksQuery.error} />
+      </Page>
+    )
+  }
+
+  if (isEditMode && deckItemQuery.error) {
+    return (
+      <Page>
+        <PageError error={deckItemQuery.error} />
+      </Page>
+    )
+  }
 
   return (
     <Page className="space-y-6 relative px-3 sm:px-6 lg:px-8 py-4 sm:py-6 max-w-7xl mx-auto">
       <AmbientBackground intensity="subtle" />
 
-      {/* Hero Header Banner */}
+      {/* Header Banner */}
       <div className="relative overflow-hidden rounded-2xl border border-border/80 bg-card/60 p-4 sm:p-6 shadow-xs backdrop-blur-xl">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="space-y-1.5">
@@ -529,628 +461,95 @@ export function MarketplacePublishDeckPage() {
 
             {/* Step Body */}
             <CardContent className="p-4 sm:p-6 space-y-5 flex-1">
-              {/* STEP 1: Học liệu nguồn & Thông tin hiển thị */}
               {currentStep === 1 && (
-                <div className="space-y-5 animate-in fade-in duration-200">
-                  <div className="space-y-2">
-                    <Label className="text-xs font-semibold flex items-center justify-between">
-                      <span>Bộ thẻ nguồn chia sẻ <span className="text-destructive">*</span></span>
-                    </Label>
-                    {isEditMode ? (
-                      <div className="p-3.5 rounded-xl border border-border/80 bg-muted/30 text-xs font-semibold text-foreground flex items-center justify-between">
-                        <span>
-                          {decks.find((d) => String(d.id) === String(sourceDeckId || deckItem?.source_deck_id))?.name ||
-                            deckItem?.title ||
-                            title ||
-                            'Bộ thẻ nguồn'}
-                        </span>
-                        <span className="text-[10px] text-muted-foreground font-mono">
-                          ID: {sourceDeckId || deckItem?.source_deck_id}
-                        </span>
-                      </div>
-                    ) : (
-                      <PublishDeckTree
-                        decks={decks}
-                        selectedDeckId={sourceDeckId}
-                        onSelectDeck={(deck: PublishDeckOption) => {
-                          setSourceDeckId(String(deck.id))
-                          clearFieldError('sourceDeckId')
-                          if (!isTitleManuallyEdited) {
-                            setTitle(deck.name)
-                          }
-                        }}
-                      />
-                    )}
-                    <FieldErrorMessage error={fieldErrors.sourceDeckId} />
-                  </div>
-
-                  {/* Title */}
-                  <div className="space-y-2">
-                    <Label htmlFor="title" className="text-xs font-semibold flex items-center justify-between">
-                      <span>Tiêu đề hiển thị trên Marketplace <span className="text-destructive">*</span></span>
-                    </Label>
-                    <Input
-                      id="title"
-                      placeholder="Ví dụ: 2000 Từ vựng JLPT N3 Đọc - Hiểu Thực chiến, Flashcard Tiếng Anh Y Khoa..."
-                      value={title}
-                      onChange={(e) => {
-                        setTitle(e.target.value)
-                        setIsTitleManuallyEdited(true)
-                        clearFieldError('title')
-                      }}
-                      className={`h-10 text-xs sm:text-sm rounded-xl font-medium ${
-                        fieldErrors.title ? 'border-destructive focus-visible:ring-destructive bg-destructive/5' : ''
-                      }`}
-                    />
-                    <FieldErrorMessage error={fieldErrors.title} />
-                  </div>
-
-                  {/* Preview Text */}
-                  <div className="space-y-2">
-                    <Label htmlFor="preview_text" className="text-xs font-semibold flex items-center justify-between">
-                      <span>Tóm tắt xem trước ngắn (Preview Text) <span className="text-destructive">*</span></span>
-                    </Label>
-                    <Input
-                      id="preview_text"
-                      placeholder="1-2 câu tóm tắt nội dung hấp dẫn để người học nắm bắt nhanh khi lướt danh sách"
-                      value={previewText}
-                      onChange={(e) => {
-                        setPreviewText(e.target.value)
-                        clearFieldError('previewText')
-                      }}
-                      className={`h-10 text-xs sm:text-sm rounded-xl ${
-                        fieldErrors.previewText ? 'border-destructive focus-visible:ring-destructive bg-destructive/5' : ''
-                      }`}
-                      maxLength={160}
-                    />
-                    <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-                      <div><FieldErrorMessage error={fieldErrors.previewText} /></div>
-                      <div>{previewText.length}/160 ký tự</div>
-                    </div>
-                  </div>
-
-                  {/* Description */}
-                  <div className="space-y-2">
-                    <Label htmlFor="description" className="text-xs font-semibold flex items-center justify-between">
-                      <span>Mô tả chi tiết bộ thẻ <span className="text-destructive">*</span></span>
-                    </Label>
-                    <Textarea
-                      id="description"
-                      rows={5}
-                      placeholder="Giới thiệu chi tiết lộ trình, phương pháp ghi nhớ, các trường dữ liệu và điểm đặc sắc của bộ flashcard…"
-                      value={description}
-                      onChange={(e) => {
-                        setDescription(e.target.value)
-                        clearFieldError('description')
-                      }}
-                      className={`text-xs sm:text-sm rounded-xl leading-relaxed ${
-                        fieldErrors.description ? 'border-destructive focus-visible:ring-destructive bg-destructive/5' : ''
-                      }`}
-                    />
-                    <FieldErrorMessage error={fieldErrors.description} />
-                  </div>
-
-                  {/* Tags & Changelog in 2 columns */}
-                  <div className="grid gap-4 sm:grid-cols-2 pt-2 border-t border-border/40">
-                    <div className="space-y-1.5">
-                      <Label htmlFor="tags" className="text-xs font-semibold">Thẻ Tags (cách nhau dấu phẩy)</Label>
-                      <Input
-                        id="tags"
-                        placeholder="n3, tu-vung, y-khoa, audio"
-                        value={tags}
-                        onChange={(e) => setTags(e.target.value)}
-                        className="h-10 text-xs sm:text-sm rounded-xl"
-                      />
-                    </div>
-                    {isReleaseVersioned ? (
-                      <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs">
-                        <p className="font-semibold text-foreground">Changelog được quản lý theo release</p>
-                        <p className="mt-1 leading-relaxed text-muted-foreground">
-                          Lưu cấu hình listing tại đây; ghi chú nội dung thay đổi khi tạo phiên bản mới.
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="space-y-1.5">
-                        <Label htmlFor="changelog" className="text-xs font-semibold">Ghi chú phát hành (Changelog)</Label>
-                        <Input
-                          id="changelog"
-                          placeholder="Ví dụ: Bổ sung 50 ví dụ thực tế và audio tự nhiên..."
-                          value={changelog}
-                          onChange={(e) => setChangelog(e.target.value)}
-                          className="h-10 text-xs sm:text-sm rounded-xl"
-                        />
-                      </div>
-                    )}
-                  </div>
-                </div>
+                <PublishStep1BasicInfo
+                  isEditMode={isEditMode}
+                  decks={decks}
+                  sourceDeckId={sourceDeckId}
+                  deckItem={deckItem}
+                  title={title}
+                  isTitleManuallyEdited={isTitleManuallyEdited}
+                  previewText={previewText}
+                  description={description}
+                  tags={tags}
+                  changelog={changelog}
+                  isReleaseVersioned={isReleaseVersioned}
+                  fieldErrors={fieldErrors}
+                  setSourceDeckId={setSourceDeckId}
+                  setTitle={setTitle}
+                  setIsTitleManuallyEdited={setIsTitleManuallyEdited}
+                  setPreviewText={setPreviewText}
+                  setDescription={setDescription}
+                  setTags={setTags}
+                  setChangelog={setChangelog}
+                  clearFieldError={clearFieldError}
+                />
               )}
 
-              {/* STEP 2: Phân loại Môn học & Trình độ */}
               {currentStep === 2 && (
-                <div className="space-y-5 animate-in fade-in duration-200">
-                  {/* Domain & Subject in 2 columns */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="tax-domain" className="text-xs font-semibold">
-                        Lĩnh vực học tập (Domain) <span className="text-destructive">*</span>
-                      </Label>
-                      <NativeSelect
-                        id="tax-domain"
-                        value={taxonomyDomain}
-                        onChange={(e) => {
-                          const newDomain = e.target.value
-                          setTaxonomyDomain(newDomain)
-                          clearFieldError('taxonomyDomain')
-                          const subs = taxonomySchema.subjectsByDomain(newDomain)
-                          const newSub = subs.length > 0 ? subs[0].id : 'other'
-                          setTaxonomySubject(newSub)
-                          clearFieldError('taxonomySubject')
-
-                          const nextFrameworks = taxonomySchema.frameworksForSubject(newSub)
-                          if (nextFrameworks.length > 0) {
-                            setTaxonomyFramework(nextFrameworks[0].id)
-                            setTaxonomyFrameworkLevel('')
-                          } else {
-                            setTaxonomyFramework('')
-                            setTaxonomyFrameworkLevel('')
-                          }
-
-                          setTaxonomyGoals(getDefaultGoalsForSubject(newSub))
-                          setTaxonomyTopics(getDefaultTopicsForSubject(newSub))
-                        }}
-                        className={`h-10 text-xs sm:text-sm rounded-xl font-medium ${
-                          fieldErrors.taxonomyDomain ? 'border-destructive bg-destructive/5' : ''
-                        }`}
-                      >
-                        {availableDomains.map((d) => (
-                          <NativeSelectOption key={d.id} value={d.id}>
-                            {d.label}
-                          </NativeSelectOption>
-                        ))}
-                      </NativeSelect>
-                      <FieldErrorMessage error={fieldErrors.taxonomyDomain} />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="tax-subject" className="text-xs font-semibold">
-                        Ngôn ngữ / Môn học (Subject) <span className="text-destructive">*</span>
-                      </Label>
-                      <NativeSelect
-                        id="tax-subject"
-                        value={taxonomySubject}
-                        onChange={(e) => {
-                          const newSub = e.target.value
-                          setTaxonomySubject(newSub)
-                          clearFieldError('taxonomySubject')
-                          const nextFrameworks = taxonomySchema.frameworksForSubject(newSub)
-                          if (nextFrameworks.length > 0) {
-                            setTaxonomyFramework(nextFrameworks[0].id)
-                            setTaxonomyFrameworkLevel('')
-                          } else {
-                            setTaxonomyFramework('')
-                            setTaxonomyFrameworkLevel('')
-                          }
-
-                          setTaxonomyGoals(getDefaultGoalsForSubject(newSub))
-                          setTaxonomyTopics(getDefaultTopicsForSubject(newSub))
-                        }}
-                        className={`h-10 text-xs sm:text-sm rounded-xl font-medium ${
-                          fieldErrors.taxonomySubject ? 'border-destructive bg-destructive/5' : ''
-                        }`}
-                      >
-                        {availableSubjects.map((s) => (
-                          <NativeSelectOption key={s.id} value={s.id}>
-                            {s.label}
-                          </NativeSelectOption>
-                        ))}
-                      </NativeSelect>
-                      <FieldErrorMessage error={fieldErrors.taxonomySubject} />
-                    </div>
-                  </div>
-
-                  {/* 1-Click Framework & Level Selection */}
-                  {availableFrameworks.length > 0 && (
-                    <div className="space-y-3.5 p-4 rounded-2xl bg-muted/30 border border-border/80">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <div className="p-1 rounded-lg bg-muted text-foreground">
-                            <Sparkles className="w-4 h-4" />
-                          </div>
-                          <div>
-                            <Label className="text-xs font-bold text-foreground">
-                              Khung chứng chỉ & Trình độ (Chọn nhanh 1 chạm)
-                            </Label>
-                            <p className="text-[11px] text-muted-foreground">
-                              Tự động điền độ khó và thẻ tìm kiếm
-                            </p>
-                          </div>
-                        </div>
-                        {taxonomyFrameworkLevel && (
-                          <button
-                            type="button"
-                            onClick={() => setTaxonomyFrameworkLevel('')}
-                            className="text-xs text-muted-foreground hover:text-foreground font-medium underline transition-colors"
-                          >
-                            Bỏ chọn
-                          </button>
-                        )}
-                      </div>
-
-                      {/* Framework Tabs */}
-                      {availableFrameworks.length > 1 && (
-                        <div className="flex flex-wrap gap-1.5 pt-1">
-                          {availableFrameworks.map((fw) => {
-                            const isFwActive = activeFramework?.id === fw.id
-                            return (
-                              <Button
-                                key={fw.id}
-                                type="button"
-                                size="sm"
-                                variant={isFwActive ? 'default' : 'outline'}
-                                className={`h-8 px-3.5 text-xs rounded-xl font-semibold transition-all ${
-                                  isFwActive
-                                    ? 'bg-foreground text-background shadow-xs'
-                                    : 'bg-card hover:bg-muted text-muted-foreground'
-                                }`}
-                                onClick={() => setTaxonomyFramework(fw.id)}
-                              >
-                                {fw.label}
-                              </Button>
-                            )
-                          })}
-                        </div>
-                      )}
-
-                      {/* Level Cards */}
-                      {activeFramework && (
-                        <div className="space-y-2 pt-1">
-                          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-                            {activeFramework.levels.map((lvl) => {
-                              const isSelected = taxonomyFrameworkLevel === lvl.id
-                              return (
-                                <div
-                                  key={lvl.id}
-                                  onClick={() => {
-                                    setTaxonomyFramework(activeFramework.id)
-                                    setTaxonomyFrameworkLevel(lvl.id)
-                                    setTaxonomyDifficulty(lvl.difficulty_band)
-                                    clearFieldError('taxonomyDifficulty')
-
-                                    if (lvl.suggestedTags && lvl.suggestedTags.length > 0) {
-                                      setTags((prev) => {
-                                        const currentList = prev.split(',').map((t) => t.trim()).filter(Boolean)
-                                        const merged = Array.from(new Set([...currentList, ...(lvl.suggestedTags || [])]))
-                                        return merged.join(', ')
-                                      })
-                                    }
-                                  }}
-                                  className={`p-2.5 rounded-xl border text-xs font-medium cursor-pointer transition-all flex items-center justify-between select-none ${
-                                    isSelected
-                                      ? 'bg-card border-primary text-foreground font-bold shadow-xs ring-1 ring-primary/30 scale-[1.01]'
-                                      : 'bg-card hover:bg-muted/70 text-foreground border-border/80'
-                                  }`}
-                                >
-                                  <span className="truncate">{lvl.label}</span>
-                                  {isSelected && <Check className="w-3.5 h-3.5 text-primary shrink-0 ml-1" />}
-                                </div>
-                              )
-                            })}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Difficulty & Subcategory in 2 columns */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="tax-diff" className="text-xs font-semibold">
-                        Mức độ khó (Difficulty) <span className="text-destructive">*</span>
-                      </Label>
-                      <NativeSelect
-                        id="tax-diff"
-                        value={taxonomyDifficulty}
-                        onChange={(e) => {
-                          setTaxonomyDifficulty(e.target.value)
-                          clearFieldError('taxonomyDifficulty')
-                        }}
-                        className={`h-10 text-xs sm:text-sm rounded-xl font-medium ${
-                          fieldErrors.taxonomyDifficulty ? 'border-destructive bg-destructive/5' : ''
-                        }`}
-                      >
-                        {TAXONOMY_DIFFICULTIES.map((d) => (
-                          <NativeSelectOption key={d.id} value={d.id}>
-                            {d.label}
-                          </NativeSelectOption>
-                        ))}
-                      </NativeSelect>
-                      <FieldErrorMessage error={fieldErrors.taxonomyDifficulty} />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="subcategory" className="text-xs font-semibold">
-                        Trình độ / Chứng chỉ chi tiết
-                      </Label>
-                      <Input
-                        id="subcategory"
-                        placeholder="Ví dụ: JLPT N3, HSK 4, IELTS 6.5, AWS SAA..."
-                        value={subcategory}
-                        onChange={(e) => setSubcategory(e.target.value)}
-                        className="h-10 text-xs sm:text-sm rounded-xl"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Category Presets & Target Audience in 2 columns */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="category" className="text-xs font-semibold">Danh mục Marketplace</Label>
-                      <NativeSelect
-                        id="category"
-                        value={primaryCategory}
-                        onChange={(e) => setPrimaryCategory(e.target.value)}
-                        className="h-10 text-xs sm:text-sm rounded-xl font-medium"
-                      >
-                        {CATEGORY_PRESETS.map((cat) => (
-                          <NativeSelectOption key={cat.id} value={cat.id}>
-                            {cat.label} — {cat.sub}
-                          </NativeSelectOption>
-                        ))}
-                      </NativeSelect>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="target_audience" className="text-xs font-semibold">Đối tượng người học phù hợp</Label>
-                      <Input
-                        id="target_audience"
-                        placeholder="Ví dụ: Người chuẩn bị thi JLPT N3, Kỹ sư IT..."
-                        value={targetAudience}
-                        onChange={(e) => setTargetAudience(e.target.value)}
-                        className="h-10 text-xs sm:text-sm rounded-xl"
-                      />
-                    </div>
-                  </div>
-
-                  {primaryCategory === 'Custom' && (
-                    <div className="space-y-1.5 animate-in fade-in duration-200">
-                      <Label htmlFor="custom-category" className="text-xs font-semibold">Tên danh mục tùy chỉnh <span className="text-destructive">*</span></Label>
-                      <Input
-                        id="custom-category"
-                        placeholder="Ví dụ: JLPT N2 Đọc hiểu, Tiếng Anh giao tiếp..."
-                        value={customCategory}
-                        onChange={(e) => {
-                          setCustomCategory(e.target.value)
-                          clearFieldError('customCategory')
-                        }}
-                        className={`h-10 text-xs sm:text-sm rounded-xl ${
-                          fieldErrors.customCategory ? 'border-destructive bg-destructive/5' : ''
-                        }`}
-                      />
-                      <FieldErrorMessage error={fieldErrors.customCategory} />
-                    </div>
-                  )}
-                </div>
+                <PublishStep2Taxonomy
+                  taxonomyDomain={taxonomyDomain}
+                  taxonomySubject={taxonomySubject}
+                  taxonomyFramework={taxonomyFramework}
+                  taxonomyFrameworkLevel={taxonomyFrameworkLevel}
+                  taxonomyDifficulty={taxonomyDifficulty}
+                  subcategory={subcategory}
+                  primaryCategory={primaryCategory}
+                  customCategory={customCategory}
+                  targetAudience={targetAudience}
+                  fieldErrors={fieldErrors}
+                  availableDomains={availableDomains}
+                  availableSubjects={availableSubjects}
+                  availableFrameworks={availableFrameworks}
+                  activeFramework={activeFramework}
+                  taxonomySchema={taxonomySchema}
+                  setTaxonomyDomain={setTaxonomyDomain}
+                  setTaxonomySubject={setTaxonomySubject}
+                  setTaxonomyFramework={setTaxonomyFramework}
+                  setTaxonomyFrameworkLevel={setTaxonomyFrameworkLevel}
+                  setTaxonomyDifficulty={setTaxonomyDifficulty}
+                  setSubcategory={setSubcategory}
+                  setPrimaryCategory={setPrimaryCategory}
+                  setCustomCategory={setCustomCategory}
+                  setTargetAudience={setTargetAudience}
+                  setTaxonomyGoals={setTaxonomyGoals}
+                  setTaxonomyTopics={setTaxonomyTopics}
+                  setTags={setTags}
+                  clearFieldError={clearFieldError}
+                />
               )}
 
-              {/* STEP 3: Mục tiêu học tập & Kỹ năng trọng tâm */}
               {currentStep === 3 && (
-                <div className="space-y-6 animate-in fade-in duration-200">
-                  {/* Contextual Subject Banner */}
-                  <div className="flex items-center justify-between p-3.5 rounded-xl border border-border/80 bg-muted/30 text-xs">
-                    <div className="flex items-center gap-2">
-                      <Sparkles className="w-4 h-4 text-muted-foreground shrink-0" />
-                      <div>
-                        <span className="text-muted-foreground">Môn học đang chọn: </span>
-                        <strong className="text-foreground">
-                          {availableSubjects.find((s) => s.id === taxonomySubject)?.label || taxonomySubject}
-                        </strong>
-                      </div>
-                    </div>
-                    <Badge variant="secondary" className="text-[10px] bg-card border-border/80 text-foreground font-semibold">
-                      {availableDomains.find((d) => d.id === taxonomyDomain)?.label.split('(')[0].trim() || 'Lĩnh vực'}
-                    </Badge>
-                  </div>
-
-                  {/* Learning Goals */}
-                  <div className="space-y-2.5">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <Label className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                          <span>Mục tiêu học tập (Learning Goals)</span>
-                          <span className="text-destructive">*</span>
-                        </Label>
-                        <p className="text-[11px] text-muted-foreground">
-                          Chọn các mục tiêu người học sẽ đạt được khi học bộ thẻ này
-                        </p>
-                      </div>
-                      <Badge variant="secondary" className="text-[10px] font-mono shrink-0">
-                        Đã chọn: {taxonomyGoals.length}
-                      </Badge>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
-                      {availableGoals.map((g) => {
-                        const isSelected = taxonomyGoals.includes(g.id)
-                        return (
-                          <div
-                            key={g.id}
-                            onClick={() => {
-                              clearFieldError('taxonomyGoals')
-                              setTaxonomyGoals((prev) =>
-                                isSelected ? prev.filter((id) => id !== g.id) : [...prev, g.id]
-                              )
-                            }}
-                            className={`p-3 rounded-xl border transition-all cursor-pointer select-none flex flex-col justify-between gap-1 min-h-[56px] ${
-                              isSelected
-                                ? 'bg-card border-primary text-foreground font-semibold shadow-xs ring-1 ring-primary/30'
-                                : 'bg-card border-border/70 text-muted-foreground hover:text-foreground hover:border-border hover:bg-muted/30'
-                            }`}
-                          >
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="text-xs font-semibold leading-tight text-foreground">{g.label}</span>
-                              {isSelected ? (
-                                <CheckCircle2 className="w-4 h-4 text-primary shrink-0" />
-                              ) : (
-                                <div className="w-4 h-4 rounded-full border border-border shrink-0" />
-                              )}
-                            </div>
-                            {g.sub && (
-                              <span className="text-[10px] font-normal leading-tight text-muted-foreground">
-                                {g.sub}
-                              </span>
-                            )}
-                          </div>
-                        )
-                      })}
-                    </div>
-                    <FieldErrorMessage error={fieldErrors.taxonomyGoals} />
-                  </div>
-
-                  {/* Primary Topics */}
-                  <div className="space-y-2.5 pt-4 border-t border-border/40">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <Label className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                          <span>Chủ đề chính liên kết (Primary Topics)</span>
-                          <span className="text-destructive">*</span>
-                        </Label>
-                        <p className="text-[11px] text-muted-foreground">
-                          Chủ đề được tối ưu hóa riêng theo môn học <strong>{availableSubjects.find((s) => s.id === taxonomySubject)?.label || taxonomySubject}</strong>
-                        </p>
-                      </div>
-                      <Badge variant="secondary" className="text-[10px] font-mono shrink-0">
-                        Đã chọn: {taxonomyTopics.length}
-                      </Badge>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
-                      {availableTopics.map((t) => {
-                        const isSelected = taxonomyTopics.includes(t.id)
-                        return (
-                          <div
-                            key={t.id}
-                            onClick={() => {
-                              clearFieldError('taxonomyTopics')
-                              setTaxonomyTopics((prev) =>
-                                isSelected ? prev.filter((id) => id !== t.id) : [...prev, t.id]
-                              )
-                            }}
-                            className={`p-3 rounded-xl border transition-all cursor-pointer select-none flex flex-col justify-between gap-1 min-h-[56px] ${
-                              isSelected
-                                ? 'bg-card border-primary text-foreground font-semibold shadow-xs ring-1 ring-primary/30'
-                                : 'bg-card border-border/70 text-muted-foreground hover:text-foreground hover:border-border hover:bg-muted/30'
-                            }`}
-                          >
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="text-xs font-semibold leading-tight text-foreground">{t.label}</span>
-                              {isSelected ? (
-                                <CheckCircle2 className="w-4 h-4 text-primary shrink-0" />
-                              ) : (
-                                <div className="w-4 h-4 rounded-full border border-border shrink-0" />
-                              )}
-                            </div>
-                            {t.sub && (
-                              <span className="text-[10px] font-normal leading-tight text-muted-foreground">
-                                {t.sub}
-                              </span>
-                            )}
-                          </div>
-                        )
-                      })}
-                    </div>
-                    <FieldErrorMessage error={fieldErrors.taxonomyTopics} />
-                  </div>
-                </div>
+                <PublishStep3Goals
+                  taxonomyDomain={taxonomyDomain}
+                  taxonomySubject={taxonomySubject}
+                  taxonomyGoals={taxonomyGoals}
+                  taxonomyTopics={taxonomyTopics}
+                  availableDomains={availableDomains}
+                  availableSubjects={availableSubjects}
+                  availableGoals={availableGoals}
+                  availableTopics={availableTopics}
+                  fieldErrors={fieldErrors}
+                  setTaxonomyGoals={setTaxonomyGoals}
+                  setTaxonomyTopics={setTaxonomyTopics}
+                  clearFieldError={clearFieldError}
+                />
               )}
 
-              {/* STEP 4: Giá bán & Xác nhận */}
               {currentStep === 4 && (
                 <div className="space-y-5 animate-in fade-in duration-200">
-                  {/* Pricing Selector Cards */}
-                  <div className="space-y-2">
-                    <Label className="text-xs font-semibold">Mô hình phân phối & Giá bán</Label>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div
-                        onClick={() => setPricingMode('free')}
-                        className={`p-4 rounded-xl border cursor-pointer transition-all text-center select-none ${
-                          pricingMode === 'free'
-                            ? 'border-primary bg-primary/10 text-foreground font-bold ring-2 ring-primary/30'
-                            : 'border-border bg-card hover:bg-muted/50 text-muted-foreground'
-                        }`}
-                      >
-                        <div className="font-bold text-sm sm:text-base">Miễn phí (Free)</div>
-                        <div className="text-xs opacity-80 mt-0.5">Chia sẻ tự do tới mọi người</div>
-                      </div>
-
-                      <div
-                        onClick={() => setPricingMode('paid')}
-                        className={`p-4 rounded-xl border cursor-pointer transition-all text-center select-none ${
-                          pricingMode === 'paid'
-                            ? 'border-primary bg-primary/10 text-foreground font-bold ring-2 ring-primary/30'
-                            : 'border-border bg-card hover:bg-muted/50 text-muted-foreground'
-                        }`}
-                      >
-                        <div className="font-bold text-sm sm:text-base">Có phí (Paid)</div>
-                        <div className="text-xs opacity-80 mt-0.5">Nhận thu nhập qua payOS</div>
-                      </div>
-                    </div>
-
-                    {pricingMode === 'paid' && (
-                      <div className="space-y-1.5 animate-in fade-in duration-200">
-                        <Label htmlFor="price" className="text-xs font-semibold">
-                          Giá bán niêm yết (VNĐ) <span className="text-destructive">*</span>
-                        </Label>
-                        <div className="relative">
-                          <Input
-                            id="price"
-                            type="number"
-                            min="1000"
-                            step="1000"
-                            value={priceAmountMinor || ''}
-                            onChange={(e) => {
-                              setPriceAmountMinor(Number(e.target.value))
-                              clearFieldError('price')
-                            }}
-                            className={`h-11 sm:h-10 text-sm rounded-xl pr-14 font-mono font-semibold ${
-                              fieldErrors.price ? 'border-destructive bg-destructive/5' : ''
-                            }`}
-                          />
-                          <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground font-bold">
-                            VND
-                          </span>
-                        </div>
-                        <FieldErrorMessage error={fieldErrors.price} />
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Version */}
-                  {isReleaseVersioned ? (
-                    <div className="flex flex-col gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4 sm:flex-row sm:items-center sm:justify-between">
-                      <div>
-                        <p className="text-xs font-semibold text-foreground">
-                          Phiên bản {version || 'hiện tại'} được khóa theo immutable release
-                        </p>
-                        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                          Cập nhật listing không phát hành dữ liệu mới tới những người đã clone deck.
-                        </p>
-                      </div>
-                      <Button type="button" variant="outline" size="sm" asChild>
-                        <Link to={`/creator/decks/${deckItemId}/releases/new`}>
-                          <GitCompare className="size-3.5" />
-                          Tạo release mới
-                        </Link>
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="space-y-1.5">
-                      <Label htmlFor="version" className="text-xs font-semibold">Phiên bản phát hành</Label>
-                      <Input
-                        id="version"
-                        value={version}
-                        onChange={(e) => setVersion(e.target.value)}
-                        className="h-10 text-xs sm:text-sm rounded-xl font-mono"
-                      />
-                    </div>
-                  )}
+                  <PublishStep4Pricing
+                    pricingMode={pricingMode}
+                    priceAmountMinor={priceAmountMinor}
+                    version={version}
+                    isReleaseVersioned={isReleaseVersioned}
+                    deckItemId={deckItemId}
+                    fieldErrors={fieldErrors}
+                    setPricingMode={setPricingMode}
+                    setPriceAmountMinor={setPriceAmountMinor}
+                    setVersion={setVersion}
+                    clearFieldError={clearFieldError}
+                  />
 
                   {/* Summary Checklist before Submit */}
                   <div className="p-4 rounded-xl border border-border/80 bg-muted/30 space-y-2.5 text-xs">
@@ -1309,4 +708,3 @@ export function MarketplacePublishDeckPage() {
     </Page>
   )
 }
-

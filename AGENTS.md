@@ -71,12 +71,15 @@
 - If you touch clone overlay flows, validate both direct source ownership cases and installed-clone cases.
 - SQLite tests are useful, but MySQL-specific schema behavior still matters for startup and migrations.
 
-## Agent Files
+## Agent Files & Multi-Agent Framework
+- Multi-Agent Orchestration Architecture documentation: `docs/architecture/MULTI_AGENT_COLLABORATION.md`.
+- Use `$flama-agent-orchestrator` when managing complex full-stack features requiring cross-layer coordination across Frontend, Backend, and Database subagents.
+- Use `$flama-frontend-architecture` when refactoring, decomposing, or building React SPA components in `frontend/src/`, enforcing Feature-Sliced Design (FSD), extracting custom hooks, consolidating reusable UI primitives, and preserving Zero Visual Regression.
+- Use `$flama-backend-architecture` when building or refactoring Flask REST APIs (`app/api/`), service logic (`app/services/`), repositories (`app/repositories/`), validators (`app/validators/`), Anki scheduling, or Flama Connect protocol.
+- Use `$flama-database-architecture` when reviewing, investigating, analyzing, or evolving the Flama MySQL database schema (`models/`), ORM entity boundaries, marketplace clone overlay models, or planning zero-data-loss Alembic migrations (`migrations/`).
 - Use `$docs-architect` when the task is to create or update repository documentation such as `README.md`, `README_SETUP.md`, `docs/*.md`, troubleshooting notes, or operational runbooks.
 - Use `$nihongo-agent-architect` when the task is to create or update repo-local agent guidance such as `AGENTS.md`, skill folders under `skills/`, or `agents/openai.yaml`.
-- Use `$flama-database-architecture` when reviewing, investigating, analyzing, or evolving the Flama MySQL database schema, entity boundaries, Field/Note/Template/Card modeling, scheduler persistence, marketplace release/clone overlay models, Flama Connect sync provenance, or planning zero-data-loss migrations.
 - Use `$impeccable` when designing, reviewing, auditing, critiquing, styling, or polishing frontend UI/UX in `frontend/src/`.
-- Use `$frontend-architecture` when refactoring, decomposing, or building React components, enforcing Feature-Sliced Design, extracting custom hooks, consolidating reusable components, and eliminating UI duplication.
 - Use `$stitch-skills` (bao gồm `$generate-design`, `$react-components`, `$shadcn-ui`, `$manage-design-system`, `$extract-design-md`, `$code-to-design`) khi cần tương tác với Google Stitch MCP để sinh màn hình, quản lý design system, trích xuất HTML sang Stitch, hoặc tạo React component từ thiết kế Stitch.
 - Use `$chrome-devtools` khi cần profiling hiệu năng, đo lường Core Web Vitals, kiểm tra render cycles, rò rỉ bộ nhớ (memory leaks), phân tích network waterfall, hoặc debug giao diện chuyên sâu qua Chrome DevTools MCP.
 - Keep agent guidance short, repo-specific, and workflow-oriented. Avoid generic Flask or prompt-engineering tutorials.

@@ -16,6 +16,7 @@ from sqlalchemy.exc import IntegrityError
 from app.repositories.study_repository import (
     apply_card_state_to_progress,
     card_state_from_progress,
+    is_progress_suspended,
     load_card_progress_map,
 )
 from app.services import (
@@ -41,6 +42,7 @@ from app.services.study_algorithm_registry import (
     DEFAULT_ALGORITHM_IDENTITY,
     StudyAlgorithmNotFoundError,
 )
+from app.services.study_composition_service import build_compatibility_composition
 from app.services.scheduler_config_service import (
     resolve_deck_options,
     resolve_scheduler_runtime_settings,
@@ -476,6 +478,7 @@ def open_study_session(
     policies: dict[str, Any] = {}
     templates: dict[str, Any] = {}
     contents: dict[str, Any] = {}
+    compositions: dict[str, Any] = {}
     card_payloads: list[dict[str, Any]] = []
     session_card_rows: list[StudySessionCard] = []
 
@@ -533,6 +536,8 @@ def open_study_session(
         content_key = f"{content['id']}:{content['version']}"
         templates.setdefault(template_key, template)
         contents.setdefault(content_key, content)
+        composition = build_compatibility_composition(card.template)
+        compositions.setdefault(composition.composition_id, composition.to_dict())
         base_revision = int(getattr(progress, "revision", 0) or 0)
         created_at = getattr(card, "created_at", None) or opened_at
 
@@ -541,6 +546,7 @@ def open_study_session(
                 "card_id": str(card.id),
                 "note_id": str(note.id),
                 "template_id": str(card.template_id),
+                "composition_id": composition.composition_id,
                 "source_deck_id": (
                     int(note.deck_id) if note.deck_id is not None else None
                 ),
@@ -604,6 +610,7 @@ def open_study_session(
         "cards": card_payloads,
         "templates": templates,
         "contents": contents,
+        "compositions": compositions,
     }
     snapshot_hash = study_artifact_service.canonical_digest(snapshot_material)
     expires_at = opened_at + SESSION_TTL
@@ -1216,6 +1223,12 @@ def commit_study_session(
                 status=409,
             )
         progress = progress_map.get(card_id)
+        if progress is not None and is_progress_suspended(progress):
+            raise StudySessionError(
+                "CARD_SUSPENDED",
+                f"Card {card_id} is suspended.",
+                status=409,
+            )
         if progress is None:
             progress = CardProgress(
                 user_id=int(user.id),
@@ -1240,7 +1253,10 @@ def commit_study_session(
         rating = str(raw_event["rating"]).lower()
         rating_counts[rating] += 1
         event_payload = dict(raw_event)
-        event_payload["_study_runtime"] = transition.metadata()
+        event_payload["_study_runtime"] = {
+            **transition.metadata(),
+            "scheduler_config_hash": session_card.scheduler_config_hash,
+        }
         review_event = record_review_event(
             user_id=int(user.id),
             card_id=session_card.card_id,

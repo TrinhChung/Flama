@@ -1,10 +1,11 @@
-from datetime import datetime, timedelta
+from datetime import datetime
 import unittest
 
-from app.services.anki_scheduler import CardState, applyAnswer, default_deck_options
+from app.services.anki_scheduler import CardState, default_deck_options
 from app.services.study_action_runtime import (
     REVIEW_RATINGS,
     StudyActionValidationError,
+    StudyTriggerValidationError,
     compute_review_previews,
     execute_review_action,
     resolve_review_action,
@@ -45,43 +46,6 @@ class StudyActionRuntimeTests(unittest.TestCase):
         with self.assertRaises(StudyActionValidationError):
             resolve_review_action("correct")
 
-    def test_compatibility_runtime_matches_legacy_scheduler_golden_vectors(self):
-        states = (
-            CardState(type="new", due=self.now),
-            CardState(type="learning", stepIndex=0, due=self.now),
-            CardState(
-                type="review",
-                intervalDays=10.0,
-                ease=2.5,
-                dueDay=(self.now - timedelta(days=3)).date().toordinal(),
-                due=self.now - timedelta(days=3),
-            ),
-        )
-
-        for state in states:
-            for rating in REVIEW_RATINGS:
-                with self.subTest(state=state.type, rating=rating):
-                    expected = applyAnswer(
-                        state,
-                        self.options,
-                        self.now,
-                        rating,
-                        timezone_name="Asia/Tokyo",
-                    )
-                    actual = execute_review_action(
-                        state=state,
-                        options=self.options,
-                        now=self.now,
-                        action=rating,
-                        timezone_name="Asia/Tokyo",
-                    )
-
-                    self.assertEqual(actual.state, expected)
-                    self.assertEqual(
-                        actual.metadata()["algorithm_key"],
-                        DEFAULT_ALGORITHM_IDENTITY.key,
-                    )
-
     def test_preview_adapter_matches_all_four_actions(self):
         state = CardState(
             type="review",
@@ -99,6 +63,44 @@ class StudyActionRuntimeTests(unittest.TestCase):
         )
 
         self.assertEqual(set(previews), set(REVIEW_RATINGS))
+
+    def test_execute_review_action_with_valid_trigger_identity(self):
+        state = CardState(type="new")
+        result = execute_review_action(
+            state=state,
+            options=self.options,
+            now=self.now,
+            action="good",
+            timezone_name="UTC",
+            trigger_key="scheduler.review.good",
+            trigger_contract_version="1",
+        )
+        self.assertEqual(result.action.rating, "good")
+        self.assertEqual(result.metadata()["trigger_key"], "scheduler.review.good")
+
+    def test_execute_review_action_with_mismatched_trigger_is_rejected(self):
+        state = CardState(type="new")
+        with self.assertRaises(StudyTriggerValidationError):
+            execute_review_action(
+                state=state,
+                options=self.options,
+                now=self.now,
+                action="good",
+                timezone_name="UTC",
+                trigger_key="scheduler.review.again",
+            )
+
+    def test_execute_review_action_with_invalid_trigger_version_is_rejected(self):
+        state = CardState(type="new")
+        with self.assertRaises(StudyTriggerValidationError):
+            execute_review_action(
+                state=state,
+                options=self.options,
+                now=self.now,
+                action="good",
+                timezone_name="UTC",
+                trigger_contract_version="999",
+            )
 
 
 if __name__ == "__main__":

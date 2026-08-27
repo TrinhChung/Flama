@@ -24,6 +24,13 @@ from app.repositories import (
     study_repository,
     vocabulary_repository,
 )
+from app.services import (
+    anki_scheduler,
+    flashcard_content_service,
+    flashcards_share,
+    flashcards_share_service,
+    study_service,
+)
 import click
 from app.services.flashcard_import import ImportValidationError, read_delimited_rows
 from app.services.flashcard_legacy import (
@@ -434,7 +441,7 @@ def _resolve_seed_path(seed_path: str) -> Path:
     candidate = Path(seed_path)
     if candidate.is_absolute():
         return candidate
-    return Path(__file__).resolve().parent.parent / candidate
+    return Path(__file__).resolve().parents[2] / candidate
 
 
 def _resolve_seed_root(root_input: Path) -> Path:
@@ -1161,7 +1168,7 @@ def _seed_row_to_field_values(row: Dict[str, str | None]) -> Dict[str, str | Non
 
 
 def _resolve_quiz_dump_paths() -> tuple[Path, Path]:
-    root = Path(__file__).resolve().parent.parent / QUIZ_DUMP_DIR
+    root = Path(__file__).resolve().parents[2] / QUIZ_DUMP_DIR
     return root, root / QUIZ_DUMP_MANIFEST
 
 

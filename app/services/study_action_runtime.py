@@ -55,6 +55,11 @@ class StudyActionValidationError(ValueError):
         self.value = value
 
 
+class StudyTriggerValidationError(ValueError):
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+
+
 _REVIEW_ACTIONS: dict[str, ReviewActionContract] = {
     rating: ReviewActionContract(
         rating=rating,
@@ -75,6 +80,24 @@ def resolve_review_action(value: Any) -> ReviewActionContract:
     return action
 
 
+def verify_review_trigger(
+    action: ReviewActionContract,
+    trigger_key: str | None = None,
+    trigger_contract_version: str | None = None,
+) -> None:
+    if trigger_key is not None and trigger_key != action.trigger_key:
+        raise StudyTriggerValidationError(
+            f"Trigger key '{trigger_key}' does not match action trigger '{action.trigger_key}'."
+        )
+    if (
+        trigger_contract_version is not None
+        and trigger_contract_version != action.trigger_contract_version
+    ):
+        raise StudyTriggerValidationError(
+            f"Trigger contract version '{trigger_contract_version}' is not supported. Expected '{action.trigger_contract_version}'."
+        )
+
+
 def execute_review_action(
     *,
     state: CardState,
@@ -84,8 +107,15 @@ def execute_review_action(
     timezone_name: str,
     algorithm_key: str = DEFAULT_ALGORITHM_IDENTITY.key,
     algorithm_version: str = DEFAULT_ALGORITHM_IDENTITY.version,
+    trigger_key: str | None = None,
+    trigger_contract_version: str | None = None,
 ) -> ReviewTransitionResult:
     verified_action = resolve_review_action(action)
+    verify_review_trigger(
+        verified_action,
+        trigger_key=trigger_key,
+        trigger_contract_version=trigger_contract_version,
+    )
     adapter = resolve_study_algorithm(algorithm_key, algorithm_version)
     updated_state = adapter.transition(
         state,

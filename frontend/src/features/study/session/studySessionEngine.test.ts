@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Rating, StudySessionSnapshot } from '../types'
 import {
+  ClientAlgorithmContractError,
+  ClientAlgorithmUnavailableError,
+} from '../scheduler/algorithmRegistry'
+import {
   applyLocalAnswer,
   automaticCommitMode,
   buildSessionView,
@@ -155,6 +159,26 @@ function snapshotWithCards(cardCount: number): StudySessionSnapshot {
 describe('local study session engine', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
+  })
+
+  it('fails before opening a session whose Algorithm is unavailable', () => {
+    const unsupported = snapshot()
+    unsupported.algorithm_version = '2.0.0'
+    unsupported.policies.policy.algorithm_version = '2.0.0'
+
+    expect(() => createPersistedSession(unsupported))
+      .toThrow(ClientAlgorithmUnavailableError)
+  })
+
+  it('fails before answering when a restored policy identity drifts', () => {
+    const local = createPersistedSession(snapshot())
+    local.snapshot.policies.policy.algorithm_version = '2.0.0'
+
+    expect(() => decisionForCard(
+      local,
+      'card-1',
+      Date.parse(local.snapshot.server_now_utc),
+    )).toThrow(ClientAlgorithmContractError)
   })
 
   it('answers locally and builds a delta batch', () => {

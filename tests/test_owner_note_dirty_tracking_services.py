@@ -14,7 +14,6 @@ from uuid import uuid4
 from werkzeug.datastructures import FileStorage
 
 from app import create_app
-from app.repositories.study_repository import card_state_from_progress
 from app.services import (
     anki_content_normalizer,
     browse_voicevox_service,
@@ -26,7 +25,7 @@ from app.services import (
     study_service,
     tts_provider_service,
 )
-from app.services.anki_scheduler import _day_index, applyAnswer, default_deck_options
+from app.services.anki_scheduler import _day_index
 from app.validators.flashcard_input import RequestValidationError
 from models import db
 from models.card import Card
@@ -610,14 +609,14 @@ class OwnerNoteDirtyTrackingServiceTests(unittest.TestCase):
             "record_review_event",
             return_value=SimpleNamespace(id=None),
         ), patch.object(
-            study_service,
-            "_touch_note_type_install_usage",
+            study_service.flashcards_share_service,
+            "touch_note_type_install_usage",
+        ), patch.object(
+            study_service.flashcards_share_service,
+            "touch_deck_install_usage",
         ), patch.object(
             study_service,
-            "_touch_deck_install_usage",
-        ), patch.object(
-            study_service,
-            "_audit",
+            "_append_audit",
         ):
             user = db.session.get(User, self.owner_id)
             now = datetime.utcnow()
@@ -639,39 +638,17 @@ class OwnerNoteDirtyTrackingServiceTests(unittest.TestCase):
                 )
                 db.session.add(progress)
                 db.session.commit()
-                options = default_deck_options()
-                current_state = card_state_from_progress(
-                    progress,
-                    now,
-                    timezone_name="UTC",
-                    user_id=self.owner_id,
-                    options=options,
-                )
-                updated_state = applyAnswer(
-                    current_state,
-                    options,
-                    now,
-                    "again",
-                    timezone_name="UTC",
-                )
-                self.assertTrue(updated_state.leeched)
-
-                study_service.apply_study_answer_and_commit(
+                result = study_service.execute_native_review_command(
                     user=user,
                     card=db.session.get(Card, card_id),
-                    progress=progress,
-                    expected_last_reviewed_at=None,
-                    current_state=current_state,
-                    updated_state=updated_state,
                     now=now,
-                    rating="again",
-                    review_mode="review",
+                    action="again",
                     payload={},
                     clone_scope=None,
                     requested_scope_id=self.root_deck_id,
                     timezone_name="UTC",
-                    deck_options=options,
                 )
+                self.assertTrue(result.transition.state.leeched)
 
                 stored_progress = CardProgress.query.filter_by(
                     user_id=self.owner_id,
