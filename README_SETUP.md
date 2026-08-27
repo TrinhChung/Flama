@@ -316,6 +316,12 @@ Tai lieu payment canonical:
 # Chay migration
 flask --app wsgi.py db upgrade
 
+# Seed taxonomy & metadata vao DB
+flask --app wsgi.py taxonomy-seed
+
+# Kiem tra tinh toan ven cua taxonomy
+flask --app wsgi.py taxonomy-verify
+
 # Chay app web (Port 4789)
 flask --app wsgi.py run --host=0.0.0.0 --port=4789
 
@@ -339,6 +345,22 @@ powershell -ExecutionPolicy Bypass -File .\scripts\reseed_db.ps1
 REM Windows Command Prompt
 scripts\reseed_db.bat
 ```
+
+> **Ghi chú**: Xem tài liệu hướng dẫn seeding chi tiết và toàn diện tại [docs/guides/SEEDING_GUIDE.md](docs/guides/SEEDING_GUIDE.md).
+
+### Seed Taxonomy & Metadata
+
+Để nạp hoặc đồng bộ cấu trúc phân loại học liệu (Domains, Subjects, Frameworks, Levels, Options, Mappings):
+
+```bash
+# Nạp dữ liệu taxonomy
+flask --app wsgi.py taxonomy-seed
+
+# Kiểm tra dữ liệu taxonomy
+flask --app wsgi.py taxonomy-verify
+```
+
+Ngoài ra, Admin có thể quản lý trực quan và nạp lại dữ liệu mẫu tại: `http://127.0.0.1:4789/admin/taxonomy` (Nút **"Nạp dữ liệu mẫu"**).
 
 ### Seed Vocabulary Data
 

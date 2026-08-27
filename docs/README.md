@@ -50,7 +50,18 @@ Các đề xuất kỹ thuật và lộ trình nâng cấp kiến trúc đang tr
 
 ---
 
-## 🚀 3. Hướng Dẫn Vận Hành & Release (`docs/runbooks/`)
+## 📖 3. Hướng Dẫn Kỹ Thuật (`docs/guides/`)
+
+Các hướng dẫn chi tiết về cấu hình, dữ liệu và mẫu thẻ trong Flama:
+
+| Tài liệu | Mô tả |
+|---|---|
+| [`SEEDING_GUIDE.md`](guides/SEEDING_GUIDE.md) | **Cẩm nang Seeding & Dữ liệu mẫu toàn diện** (Quy trình Reseed, CLI commands, cấu trúc `static/seed_data/`, Admin UI). |
+| [`NOTE_TYPE_TEMPLATE_GUIDE.md`](guides/NOTE_TYPE_TEMPLATE_GUIDE.md) | Hướng dẫn định dạng & cú pháp xây dựng Note Type và Card Template. |
+
+---
+
+## 🚀 4. Hướng Dẫn Vận Hành & Release (`docs/runbooks/`)
 
 Các tài liệu hướng dẫn quy trình vận hành, phát hành và công cụ:
 
@@ -62,7 +73,7 @@ Các tài liệu hướng dẫn quy trình vận hành, phát hành và công c�
 
 ---
 
-## 📜 4. Tài Liệu Lịch Sử & Đã Thay Thế (`docs/historical/`)
+## 📜 5. Tài Liệu Lịch Sử & Đã Thay Thế (`docs/historical/`)
 
 Các tài liệu đánh giá hoặc kế hoạch giai đoạn trước, được lưu trữ để tra cứu bối cảnh:
 
@@ -77,7 +88,7 @@ Các tài liệu đánh giá hoặc kế hoạch giai đoạn trước, được
 
 ---
 
-## 🛠️ 5. Agent Skills & Quy Trình Làm Việc (`docs/skills/`)
+## 🛠️ 6. Agent Skills & Quy Trình Làm Việc (`docs/skills/`)
 
 Các quy chuẩn và kỹ năng dành cho các AI Coding Agent (Antigravity, Codex, Tri, San, v.v.):
 
@@ -88,11 +99,10 @@ Các quy chuẩn và kỹ năng dành cho các AI Coding Agent (Antigravity, Cod
 
 ---
 
-## 🔍 6. Code Review (`docs/reviews/`)
+## 🔍 7. Code Review (`docs/reviews/`)
 
 Các báo cáo review code/tài liệu để tra cứu lại:
 
 | Tài liệu | Mô tả |
 |---|---|
 | [`code-review-c2c5902-decoupling-docs-2026-08-25.md`](reviews/code-review-c2c5902-decoupling-docs-2026-08-25.md) | Review commit `c2c5902` (bộ tài liệu decoupling + skill database-architecture): 6 phát hiện + danh sách claim đã kiểm chứng. |
-
