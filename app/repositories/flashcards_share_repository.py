@@ -121,6 +121,26 @@ def get_clone_note_field_overrides(install_id: str, source_note_id: str) -> List
         .all()
     )
 
+def get_clone_note_field_overrides_batch(
+    install_ids: List[str], source_note_ids: List[str]
+) -> Dict[Tuple[str, str], List[DeckCloneNoteFieldOverride]]:
+    """Batch retrieve note field overrides for multiple (install_id, source_note_id) pairs in one query."""
+    if not install_ids or not source_note_ids:
+        return {}
+    rows = (
+        DeckCloneNoteFieldOverride.query.filter(
+            DeckCloneNoteFieldOverride.deck_install_id.in_(install_ids),
+            DeckCloneNoteFieldOverride.source_note_id.in_(source_note_ids),
+        )
+        .order_by(DeckCloneNoteFieldOverride.created_at.asc(), DeckCloneNoteFieldOverride.id.asc())
+        .all()
+    )
+    result: Dict[Tuple[str, str], List[DeckCloneNoteFieldOverride]] = {}
+    for row in rows:
+        key = (str(row.deck_install_id), str(row.source_note_id))
+        result.setdefault(key, []).append(row)
+    return result
+
 def get_clone_note_field_override(install_id: str, source_note_id: str, field_name: str) -> Optional[DeckCloneNoteFieldOverride]:
     """Retrieve a specific note field override."""
     return DeckCloneNoteFieldOverride.query.filter_by(

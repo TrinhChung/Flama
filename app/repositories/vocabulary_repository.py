@@ -450,14 +450,28 @@ def build_browse_card_detail(
 
 
 def collect_accessible_browse_decks(*, user_id: int, admin_mode: bool) -> list[Deck]:
+    try:
+        from flask import g, has_request_context
+
+        if has_request_context():
+            cache = getattr(g, "_accessible_browse_decks_cache", None)
+            if cache is None:
+                cache = {}
+                setattr(g, "_accessible_browse_decks_cache", cache)
+            cache_key = (user_id, admin_mode)
+            if cache_key in cache:
+                return cache[cache_key]
+    except (ImportError, RuntimeError):
+        has_request_context = None
+
     if admin_mode:
-        return (
+        result = (
             Deck.query.filter(
                 Deck.deleted_at.is_(None),
                 db.or_(
                     Deck.owner_user_id == user_id,
                     Deck.owner_user_id.is_(None),
-                )
+                ),
             )
             .order_by(
                 Deck.parent_id.isnot(None),
@@ -467,15 +481,34 @@ def collect_accessible_browse_decks(*, user_id: int, admin_mode: bool) -> list[D
             )
             .all()
         )
+        try:
+            from flask import g, has_request_context
 
-    all_decks = Deck.query.filter(Deck.deleted_at.is_(None)).order_by(
-        Deck.parent_id.isnot(None),
-        Deck.position,
-        Deck.created_at,
-        Deck.id,
-    ).all()
+            if has_request_context():
+                cache = getattr(g, "_accessible_browse_decks_cache", None)
+                if cache is not None:
+                    cache[(user_id, admin_mode)] = result
+        except (ImportError, RuntimeError):
+            pass
+        return result
+
+    all_decks = (
+        Deck.query.filter(Deck.deleted_at.is_(None))
+        .order_by(
+            Deck.parent_id.isnot(None),
+            Deck.position,
+            Deck.created_at,
+            Deck.id,
+        )
+        .all()
+    )
 
     deck_map = {deck.id: deck for deck in all_decks}
+    children_by_parent_all: dict[int, list[int]] = {}
+    for deck in all_decks:
+        if deck.parent_id is not None:
+            children_by_parent_all.setdefault(deck.parent_id, []).append(deck.id)
+
     visible_ids: set[int] = set()
 
     owned_deck_rows = (
@@ -507,21 +540,14 @@ def collect_accessible_browse_decks(*, user_id: int, admin_mode: bool) -> list[D
     )
     install_root_ids = {int(row[0]) for row in install_root_rows if row and row[0] is not None}
     if install_root_ids:
-        frontier: set[int] = set(install_root_ids)
+        frontier = list(install_root_ids)
         while frontier:
-            current = {deck_id for deck_id in frontier if deck_id not in visible_ids}
-            if not current:
-                break
-            visible_ids.update(current)
-            child_rows = (
-                db.session.query(Deck.id)
-                .filter(
-                    Deck.parent_id.in_(current),
-                    Deck.deleted_at.is_(None),
-                )
-                .all()
-            )
-            frontier = {int(row[0]) for row in child_rows if row and row[0] is not None}
+            current_id = frontier.pop()
+            if current_id not in visible_ids:
+                visible_ids.add(current_id)
+            for child_id in children_by_parent_all.get(current_id, []):
+                if child_id not in visible_ids:
+                    frontier.append(child_id)
 
     if not visible_ids:
         return []
@@ -537,7 +563,17 @@ def collect_accessible_browse_decks(*, user_id: int, admin_mode: bool) -> list[D
         visible_ids.add(deck_obj.parent_id)
         stack.append(deck_obj.parent_id)
 
-    return [deck for deck in all_decks if deck.id in visible_ids]
+    result = [deck for deck in all_decks if deck.id in visible_ids]
+    try:
+        from flask import g, has_request_context
+
+        if has_request_context():
+            cache = getattr(g, "_accessible_browse_decks_cache", None)
+            if cache is not None:
+                cache[(user_id, admin_mode)] = result
+    except (ImportError, RuntimeError):
+        pass
+    return result
 
 
 def deck_children_map(deck_list: list[Deck]) -> dict[int | None, list[Deck]]:
@@ -571,6 +607,14 @@ def build_browse_deck_tree_payload(
     admin_mode: bool,
     timezone_name: str = "UTC",
 ) -> list[dict[str, Any]]:
+    from app.repositories.study_repository import (
+        _today_day_index,
+        active_progress_expr,
+        normalized_queue_expr,
+        review_due_expr,
+    )
+    from app.services.scheduler_config_service import resolve_scheduler_runtime_settings
+
     now = _utcnow()
     scoped_decks = collect_accessible_browse_decks(user_id=user_id, admin_mode=admin_mode)
     if not scoped_decks:
@@ -585,48 +629,62 @@ def build_browse_deck_tree_payload(
         for deck_id in scoped_ids
     }
 
-    progress_join = db.and_(
-        CardProgress.card_id == Card.id,
-        CardProgress.user_id == user_id,
+    runtime = resolve_scheduler_runtime_settings(user_id=user_id if not admin_mode else None)
+    day_boundary_hour = int(runtime.day_boundary_hour_local)
+    today_day_index = _today_day_index(
+        now=now,
+        timezone_name=timezone_name,
+        day_boundary_hour_local=day_boundary_hour,
     )
-    state_query = (
+
+    progress_alias = CardProgress
+    progress_join = db.and_(
+        progress_alias.card_id == Card.id,
+        progress_alias.user_id == user_id,
+    )
+    active_expr = active_progress_expr(progress_alias, today_day_index=today_day_index)
+    norm_queue = normalized_queue_expr(progress_alias)
+    is_new = db.and_(active_expr, db.or_(progress_alias.id.is_(None), norm_queue == NEW_QUEUE))
+    is_learn = db.and_(active_expr, norm_queue.in_([LEARNING_QUEUE, RELEARNING_QUEUE]))
+    is_due_review = db.and_(
+        active_expr,
+        norm_queue == REVIEW_QUEUE,
+        review_due_expr(
+            progress_alias,
+            now=now,
+            timezone_name=timezone_name,
+            day_boundary_hour_local=day_boundary_hour,
+        ),
+    )
+
+    counts_query = (
         db.session.query(
             Note.deck_id,
-            CardProgress.queue,
-            CardProgress.due_at,
-            CardProgress.due_day,
-            CardProgress.is_suspended,
+            db.func.count(Card.id).label("total"),
+            db.func.sum(db.case((is_new, 1), else_=0)).label("new"),
+            db.func.sum(db.case((is_learn, 1), else_=0)).label("learn"),
+            db.func.sum(db.case((is_due_review, 1), else_=0)).label("due"),
         )
         .select_from(Card)
         .join(Note, Card.note_id == Note.id)
-        .outerjoin(CardProgress, progress_join)
+        .outerjoin(progress_alias, progress_join)
         .filter(Note.deck_id.in_(scoped_ids))
     )
     if not admin_mode:
-        state_query = state_query.filter(Note.user_id == user_id)
+        counts_query = counts_query.filter(Note.user_id == user_id)
+    counts_query = counts_query.group_by(Note.deck_id)
 
-    for deck_id, progress_queue, progress_due_at, progress_due_day, progress_is_suspended in state_query.all():
-        if not deck_id:
+    for row in counts_query.all():
+        deck_id = row[0]
+        if deck_id is None:
             continue
         bucket = direct_counts.setdefault(
             int(deck_id), {"total": 0, "new": 0, "learn": 0, "due": 0}
         )
-        bucket["total"] += 1
-
-        count_bucket = counter_bucket_for_progress_values(
-            queue=progress_queue,
-            due_at=progress_due_at,
-            due_day=progress_due_day,
-            is_suspended=progress_is_suspended,
-            now=now,
-            timezone_name=timezone_name,
-        )
-        if count_bucket == NEW_QUEUE:
-            bucket["new"] += 1
-        elif count_bucket == LEARNING_QUEUE:
-            bucket["learn"] += 1
-        elif count_bucket == REVIEW_QUEUE:
-            bucket["due"] += 1
+        bucket["total"] += int(row[1] or 0)
+        bucket["new"] += int(row[2] or 0)
+        bucket["learn"] += int(row[3] or 0)
+        bucket["due"] += int(row[4] or 0)
 
     if not admin_mode:
         logical_installs = (
@@ -656,35 +714,31 @@ def build_browse_deck_tree_payload(
             if not source_to_local:
                 continue
 
-            clone_query = (
+            clone_counts_query = (
                 db.session.query(
                     Note.deck_id,
-                    CardProgress.queue,
-                    CardProgress.due_at,
-                    CardProgress.due_day,
-                    CardProgress.is_suspended,
+                    db.func.count(Card.id).label("total"),
+                    db.func.sum(db.case((is_new, 1), else_=0)).label("new"),
+                    db.func.sum(db.case((is_learn, 1), else_=0)).label("learn"),
+                    db.func.sum(db.case((is_due_review, 1), else_=0)).label("due"),
                 )
                 .select_from(Card)
                 .join(Note, Card.note_id == Note.id)
-                .outerjoin(CardProgress, progress_join)
+                .outerjoin(progress_alias, progress_join)
                 .filter(Note.deck_id.in_(source_to_local.keys()))
             )
             if install.source_owner_user_id is not None:
-                clone_query = clone_query.filter(Note.user_id == install.source_owner_user_id)
+                clone_counts_query = clone_counts_query.filter(Note.user_id == install.source_owner_user_id)
             snapshot_at = install.base_snapshot_at or install.installed_at
             if snapshot_at is not None:
-                clone_query = clone_query.filter(
+                clone_counts_query = clone_counts_query.filter(
                     Note.created_at <= snapshot_at,
                     Card.created_at <= snapshot_at,
                 )
+            clone_counts_query = clone_counts_query.group_by(Note.deck_id)
 
-            for (
-                source_deck_id,
-                progress_queue,
-                progress_due_at,
-                progress_due_day,
-                progress_is_suspended,
-            ) in clone_query.all():
+            for row in clone_counts_query.all():
+                source_deck_id = row[0]
                 if source_deck_id is None:
                     continue
                 local_deck_id = source_to_local.get(int(source_deck_id))
@@ -694,22 +748,10 @@ def build_browse_deck_tree_payload(
                     int(local_deck_id),
                     {"total": 0, "new": 0, "learn": 0, "due": 0},
                 )
-                bucket["total"] += 1
-
-                count_bucket = counter_bucket_for_progress_values(
-                    queue=progress_queue,
-                    due_at=progress_due_at,
-                    due_day=progress_due_day,
-                    is_suspended=progress_is_suspended,
-                    now=now,
-                    timezone_name=timezone_name,
-                )
-                if count_bucket == NEW_QUEUE:
-                    bucket["new"] += 1
-                elif count_bucket == LEARNING_QUEUE:
-                    bucket["learn"] += 1
-                elif count_bucket == REVIEW_QUEUE:
-                    bucket["due"] += 1
+                bucket["total"] += int(row[1] or 0)
+                bucket["new"] += int(row[2] or 0)
+                bucket["learn"] += int(row[3] or 0)
+                bucket["due"] += int(row[4] or 0)
 
     def _build_node(deck_obj: Deck) -> dict[str, Any]:
         direct = direct_counts.get(deck_obj.id, {"total": 0, "new": 0, "learn": 0, "due": 0})

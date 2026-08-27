@@ -167,7 +167,7 @@ export function useBrowseState() {
     const timer = window.setTimeout(() => {
       setDebouncedQuery(queryText.trim())
       setPage(1)
-    }, 250)
+    }, 400)
     return () => window.clearTimeout(timer)
   }, [queryText])
 
