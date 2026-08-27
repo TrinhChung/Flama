@@ -146,6 +146,29 @@ def list_shared_note_types(
             args.get("max_price")
         )
     )
+    domain = (args.get("domain") or "").strip()
+    subject = (args.get("subject") or "").strip()
+    framework = (args.get("framework") or "").strip()
+    framework_level = (args.get("framework_level") or "").strip()
+    difficulty_band = (args.get("difficulty_band") or args.get("level") or "").strip()
+    learning_goals = {
+        item.lower()
+        for item in marketplace_query_service.normalize_marketplace_tags(
+            args.get("learning_goals") or args.get("goal") or args.get("goals")
+        )
+    }
+    primary_topics = {
+        item.lower()
+        for item in marketplace_query_service.normalize_marketplace_tags(
+            args.get("primary_topics") or args.get("topic") or args.get("topics")
+        )
+    }
+    format_features = {
+        item.lower()
+        for item in marketplace_query_service.normalize_marketplace_tags(
+            args.get("format_features") or args.get("feature") or args.get("features")
+        )
+    }
 
     visible_note_types = [
         item
@@ -160,6 +183,14 @@ def list_shared_note_types(
         pricing_mode=pricing_mode,
         min_price_amount_minor=min_price_amount_minor,
         max_price_amount_minor=max_price_amount_minor,
+        domain=domain,
+        subject=subject,
+        framework=framework,
+        framework_level=framework_level,
+        difficulty_band=difficulty_band,
+        learning_goals=learning_goals,
+        primary_topics=primary_topics,
+        format_features=format_features,
     )
     sorted_items = marketplace_query_service.sort_note_type_items(
         filtered, sort_key

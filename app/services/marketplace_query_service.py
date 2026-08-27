@@ -795,24 +795,172 @@ def item_matches_search(query_text: str, *values: str | None) -> bool:
     return False
 
 
+def _item_matches_category_or_taxonomy(
+    *,
+    item_category: str | None,
+    item_tags: list[str] | None,
+    taxonomy: dict[str, Any],
+    category_filter: str,
+    content_type: str = "deck_marketplace_item",
+) -> bool:
+    cat_lower = category_filter.strip().lower()
+    if not cat_lower:
+        return True
+
+    # 1. Exact or case-insensitive match on primary_category
+    if item_category and item_category.strip().lower() == cat_lower:
+        return True
+
+    # 2. Match domain or domain_label
+    if (taxonomy.get("domain") or "").strip().lower() == cat_lower:
+        return True
+    if (taxonomy.get("domain_label") or "").strip().lower() == cat_lower:
+        return True
+
+    # 3. Match subject or subject_label
+    if (taxonomy.get("subject") or "").strip().lower() == cat_lower:
+        return True
+    if (taxonomy.get("subject_label") or "").strip().lower() == cat_lower:
+        return True
+
+    # 4. Match framework or framework_label
+    if (taxonomy.get("framework") or "").strip().lower() == cat_lower:
+        return True
+    if (taxonomy.get("framework_label") or "").strip().lower() == cat_lower:
+        return True
+
+    # 5. Match framework_level or framework_level_label
+    if (taxonomy.get("framework_level") or "").strip().lower() == cat_lower:
+        return True
+    if (taxonomy.get("framework_level_label") or "").strip().lower() == cat_lower:
+        return True
+
+    # 6. Composite JLPT / framework matching (e.g. "jlpt n5", "jlpt_n5", "n5")
+    fw = (taxonomy.get("framework") or "").strip().lower()
+    fw_lvl = (taxonomy.get("framework_level") or "").strip().lower()
+    if fw and fw_lvl:
+        if cat_lower in {f"{fw} {fw_lvl}", f"{fw}_{fw_lvl}", f"{fw}{fw_lvl}"}:
+            return True
+        fw_lbl = (taxonomy.get("framework_label") or "").strip().lower()
+        if cat_lower in {f"{fw_lbl} {fw_lvl}", f"{fw_lbl}_{fw_lvl}", f"{fw_lbl}{fw_lvl}"}:
+            return True
+
+    # 7. Match learning goals (ids and labels)
+    goals = {str(g).strip().lower() for g in (taxonomy.get("learning_goals") or []) if str(g).strip()}
+    goal_labels = {str(l).strip().lower() for l in (taxonomy.get("learning_goal_labels") or []) if str(l).strip()}
+    if cat_lower in goals or cat_lower in goal_labels:
+        return True
+
+    # 8. Match primary topics (ids and labels)
+    topics = {str(t).strip().lower() for t in (taxonomy.get("primary_topics") or []) if str(t).strip()}
+    topic_labels = {str(l).strip().lower() for l in (taxonomy.get("primary_topic_labels") or []) if str(l).strip()}
+    if cat_lower in topics or cat_lower in topic_labels:
+        return True
+
+    # 9. Match format features (ids and labels)
+    features = {str(f).strip().lower() for f in (taxonomy.get("format_features") or []) if str(f).strip()}
+    feature_labels = {str(l).strip().lower() for l in (taxonomy.get("format_feature_labels") or []) if str(l).strip()}
+    if cat_lower in features or cat_lower in feature_labels:
+        return True
+
+    # 10. Match difficulty band / level
+    if (taxonomy.get("difficulty_band") or "").strip().lower() == cat_lower:
+        return True
+    if (taxonomy.get("difficulty_band_label") or "").strip().lower() == cat_lower:
+        return True
+
+    # 11. Match catalog tags & chips
+    catalog_tags = {str(t).strip().lower() for t in (taxonomy.get("catalog_tags") or []) if str(t).strip()}
+    catalog_chips = {str(c).strip().lower() for c in (taxonomy.get("catalog_chips") or []) if str(c).strip()}
+    if cat_lower in catalog_tags or cat_lower in catalog_chips:
+        return True
+
+    # 12. Match item tags
+    tags = {str(t).strip().lower() for t in (item_tags or []) if str(t).strip()}
+    if cat_lower in tags:
+        return True
+
+    # 13. Substring matching in combined searchable taxonomy text
+    taxonomy_text = marketplace_taxonomy_service.build_searchable_taxonomy_text(
+        taxonomy,
+        content_type=content_type,
+    ).lower()
+    if cat_lower in taxonomy_text:
+        return True
+
+    return False
+
+
 def filter_note_type_items(
     note_types: list[NoteType],
     *,
-    query_text: str,
-    category: str,
-    tags: set[str],
-    pricing_mode: str,
-    min_price_amount_minor: int | None,
-    max_price_amount_minor: int | None,
+    query_text: str = "",
+    category: str = "",
+    tags: set[str] | None = None,
+    pricing_mode: str = "",
+    min_price_amount_minor: int | None = None,
+    max_price_amount_minor: int | None = None,
+    domain: str = "",
+    subject: str = "",
+    framework: str = "",
+    framework_level: str = "",
+    difficulty_band: str = "",
+    learning_goals: set[str] | None = None,
+    primary_topics: set[str] | None = None,
+    format_features: set[str] | None = None,
 ) -> list[NoteType]:
     filtered: list[NoteType] = []
     for note_type in note_types:
-        if not item_matches_search(query_text, note_type.name, note_type.description):
+        taxonomy = marketplace_taxonomy_service.get_item_taxonomy(
+            note_type,
+            content_type="note_type",
+        )
+        taxonomy_text = marketplace_taxonomy_service.build_searchable_taxonomy_text(
+            taxonomy,
+            content_type="note_type",
+        )
+        if not item_matches_search(
+            query_text,
+            note_type.name,
+            note_type.description,
+            note_type.primary_category,
+            " ".join(note_type.tags or []),
+            taxonomy_text,
+        ):
             continue
-        if category and (note_type.primary_category or "").strip().lower() != category.lower():
+        if category and not _item_matches_category_or_taxonomy(
+            item_category=note_type.primary_category,
+            item_tags=note_type.tags,
+            taxonomy=taxonomy,
+            category_filter=category,
+            content_type="note_type",
+        ):
             continue
+        if domain and (taxonomy.get("domain") or "").strip().lower() != domain.strip().lower():
+            continue
+        if subject and (taxonomy.get("subject") or "").strip().lower() != subject.strip().lower():
+            continue
+        if framework and (taxonomy.get("framework") or "").strip().lower() != framework.strip().lower():
+            continue
+        if framework_level and (taxonomy.get("framework_level") or "").strip().lower() != framework_level.strip().lower():
+            continue
+        if difficulty_band and (taxonomy.get("difficulty_band") or "").strip().lower() != difficulty_band.strip().lower():
+            continue
+        if learning_goals:
+            item_goals = {str(g).strip().lower() for g in (taxonomy.get("learning_goals") or []) if str(g).strip()}
+            if not item_goals.intersection({str(g).strip().lower() for g in learning_goals if str(g).strip()}):
+                continue
+        if primary_topics:
+            item_topics = {str(t).strip().lower() for t in (taxonomy.get("primary_topics") or []) if str(t).strip()}
+            if not item_topics.intersection({str(t).strip().lower() for t in primary_topics if str(t).strip()}):
+                continue
+        if format_features:
+            item_features = {str(f).strip().lower() for f in (taxonomy.get("format_features") or []) if str(f).strip()}
+            if not item_features.intersection({str(f).strip().lower() for f in format_features if str(f).strip()}):
+                continue
         item_tags = {tag.lower() for tag in (note_type.tags or [])}
-        if tags and not tags.intersection(item_tags):
+        catalog_tags = {str(t).strip().lower() for t in (taxonomy.get("catalog_tags") or []) if str(t).strip()}
+        if tags and not tags.intersection(item_tags) and not tags.intersection(catalog_tags):
             continue
         if pricing_mode in {"free", "paid"} and note_type.pricing_mode != pricing_mode:
             continue
@@ -828,21 +976,73 @@ def filter_note_type_items(
 def filter_deck_items(
     deck_items: list[DeckMarketplaceItem],
     *,
-    query_text: str,
-    category: str,
-    tags: set[str],
-    pricing_mode: str,
-    min_price_amount_minor: int | None,
-    max_price_amount_minor: int | None,
+    query_text: str = "",
+    category: str = "",
+    tags: set[str] | None = None,
+    pricing_mode: str = "",
+    min_price_amount_minor: int | None = None,
+    max_price_amount_minor: int | None = None,
+    domain: str = "",
+    subject: str = "",
+    framework: str = "",
+    framework_level: str = "",
+    difficulty_band: str = "",
+    learning_goals: set[str] | None = None,
+    primary_topics: set[str] | None = None,
+    format_features: set[str] | None = None,
 ) -> list[DeckMarketplaceItem]:
     filtered: list[DeckMarketplaceItem] = []
     for deck_item in deck_items:
-        if not item_matches_search(query_text, deck_item.title, deck_item.description):
+        taxonomy = marketplace_taxonomy_service.get_item_taxonomy(
+            deck_item,
+            content_type="deck_marketplace_item",
+        )
+        taxonomy_text = marketplace_taxonomy_service.build_searchable_taxonomy_text(
+            taxonomy,
+            content_type="deck_marketplace_item",
+        )
+        if not item_matches_search(
+            query_text,
+            deck_item.title,
+            deck_item.description,
+            deck_item.primary_category,
+            " ".join(deck_item.tags or []),
+            taxonomy_text,
+        ):
             continue
-        if category and (deck_item.primary_category or "").strip().lower() != category.lower():
+        if category and not _item_matches_category_or_taxonomy(
+            item_category=deck_item.primary_category,
+            item_tags=deck_item.tags,
+            taxonomy=taxonomy,
+            category_filter=category,
+            content_type="deck_marketplace_item",
+        ):
             continue
+        if domain and (taxonomy.get("domain") or "").strip().lower() != domain.strip().lower():
+            continue
+        if subject and (taxonomy.get("subject") or "").strip().lower() != subject.strip().lower():
+            continue
+        if framework and (taxonomy.get("framework") or "").strip().lower() != framework.strip().lower():
+            continue
+        if framework_level and (taxonomy.get("framework_level") or "").strip().lower() != framework_level.strip().lower():
+            continue
+        if difficulty_band and (taxonomy.get("difficulty_band") or "").strip().lower() != difficulty_band.strip().lower():
+            continue
+        if learning_goals:
+            item_goals = {str(g).strip().lower() for g in (taxonomy.get("learning_goals") or []) if str(g).strip()}
+            if not item_goals.intersection({str(g).strip().lower() for g in learning_goals if str(g).strip()}):
+                continue
+        if primary_topics:
+            item_topics = {str(t).strip().lower() for t in (taxonomy.get("primary_topics") or []) if str(t).strip()}
+            if not item_topics.intersection({str(t).strip().lower() for t in primary_topics if str(t).strip()}):
+                continue
+        if format_features:
+            item_features = {str(f).strip().lower() for f in (taxonomy.get("format_features") or []) if str(f).strip()}
+            if not item_features.intersection({str(f).strip().lower() for f in format_features if str(f).strip()}):
+                continue
         item_tags = {tag.lower() for tag in (deck_item.tags or [])}
-        if tags and not tags.intersection(item_tags):
+        catalog_tags = {str(t).strip().lower() for t in (taxonomy.get("catalog_tags") or []) if str(t).strip()}
+        if tags and not tags.intersection(item_tags) and not tags.intersection(catalog_tags):
             continue
         if pricing_mode in {"free", "paid"} and deck_item.pricing_mode != pricing_mode:
             continue
