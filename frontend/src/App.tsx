@@ -123,6 +123,11 @@ const AdminPaymentsPage = lazy(() =>
     default: module.AdminPaymentsPage,
   })),
 )
+const AdminFeesPage = lazy(() =>
+  import('./features/admin/pages/AdminFeesPage').then((module) => ({
+    default: module.AdminFeesPage,
+  })),
+)
 const AdminTtsPage = lazy(() =>
   import('./features/admin/pages/AdminTtsPage').then((module) => ({
     default: module.AdminTtsPage,
@@ -503,6 +508,10 @@ const router = createBrowserRouter([
           {
             path: 'admin/payments',
             element: deferred(<AdminPaymentsPage />),
+          },
+          {
+            path: 'admin/fees',
+            element: deferred(<AdminFeesPage />),
           },
           { path: 'admin/tts', element: deferred(<AdminTtsPage />) },
           {

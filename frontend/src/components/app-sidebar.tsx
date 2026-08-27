@@ -1,5 +1,6 @@
 import {
   AudioLines,
+  BadgePercent,
   Bot,
   ChartNoAxesColumn,
   CreditCard,
@@ -79,8 +80,11 @@ export function AppSidebar({
         ]
       : []),
     ...(bootstrap.links.admin_payments
-      ? [{ title: 'Thanh toán', url: bootstrap.links.admin_payments, icon: CreditCard }]
-      : []),
+      ? [
+          { title: 'Thanh toán', url: bootstrap.links.admin_payments, icon: CreditCard },
+          { title: 'Thiết lập phí', url: '/admin/fees', icon: BadgePercent },
+        ]
+      : [{ title: 'Thiết lập phí', url: '/admin/fees', icon: BadgePercent }]),
     ...(bootstrap.links.admin_tts
       ? [{ title: 'TTS Provider', url: bootstrap.links.admin_tts, icon: AudioLines }]
       : []),

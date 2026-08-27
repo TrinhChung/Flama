@@ -41,6 +41,7 @@ export type FrontendLinks = {
   admin_users: string | null
   admin_payments: string | null
   admin_tts: string | null
+  admin_fees?: string | null
 }
 
 export type FrontendBootstrap = {
