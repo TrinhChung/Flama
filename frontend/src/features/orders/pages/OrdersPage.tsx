@@ -82,7 +82,7 @@ export function OrdersPage() {
       await appApi.get(`/api/payments/orders/${orderId}`)
       void queryClient.invalidateQueries({ queryKey: ['orders'] })
       void queryClient.invalidateQueries({ queryKey: ['order-detail', orderId] })
-      toast.success('Đã cập nhật và đối soát đơn hàng từ PayOS!')
+      toast.success('Đã cập nhật trạng thái đơn hàng!')
     } catch (err: any) {
       toast.error('Không thể cập nhật trạng thái', {
         description: err?.message || 'Vui lòng thử lại sau.',
@@ -149,7 +149,7 @@ export function OrdersPage() {
                               <RefreshCw
                                 className={`size-3 mr-1 ${syncingOrderId === order.id ? 'animate-spin' : ''}`}
                               />
-                              Đối soát
+                              Kiểm tra
                             </Button>
                           ) : null}
 
@@ -244,11 +244,11 @@ export function OrdersPage() {
                 <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 text-xs flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2 text-amber-700 dark:text-amber-300">
                     <Clock className="size-4 shrink-0 animate-pulse" />
-                    <span>Đơn hàng đang chờ thanh toán qua PayOS</span>
+                    <span>Đơn hàng đang chờ thanh toán</span>
                   </div>
                   <Button size="sm" asChild className="h-7 text-xs font-bold rounded-lg shrink-0">
                     <a href={orderDetailQuery.data.active_attempt.checkout_url} target="_blank" rel="noreferrer">
-                      <ExternalLink className="size-3 mr-1" /> Mở PayOS
+                      <ExternalLink className="size-3 mr-1" /> Thanh toán ngay
                     </a>
                   </Button>
                 </div>
@@ -265,7 +265,7 @@ export function OrdersPage() {
                 disabled={syncingOrderId === selectedOrderId}
               >
                 <RefreshCw className={`size-3.5 mr-1.5 ${syncingOrderId === selectedOrderId ? 'animate-spin' : ''}`} />
-                Kiểm tra lại với PayOS
+                Kiểm tra lại trạng thái
               </Button>
             )}
             <Button variant="default" size="sm" onClick={() => setSelectedOrderId(null)}>

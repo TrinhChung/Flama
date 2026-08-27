@@ -104,7 +104,7 @@ def _maybe_expire_order(order: PaymentOrder, *, now: datetime | None = None) -> 
     attempt.status = "expired"
     attempt.failed_at = attempt.failed_at or current_time
     attempt.failure_code = attempt.failure_code or "expired"
-    attempt.failure_message = attempt.failure_message or "Lượt thanh toán đã hết hạn trước khi PayOS xác nhận thành công."
+    attempt.failure_message = attempt.failure_message or "Lượt thanh toán đã hết hạn trước khi giao dịch được xác nhận thành công."
 
     other_non_terminal_attempts = any(
         row.id != attempt.id and row.status in ACTIVE_ATTEMPT_STATUSES.union({"manual_review"})

@@ -153,7 +153,7 @@ export const BatchFileTable: React.FC<BatchFileTableProps> = ({
               <TableHead className="min-w-44">Tệp dữ liệu</TableHead>
               <TableHead className="w-24 text-center">Số dòng</TableHead>
               <TableHead className="min-w-48">Tên Deck con tạo mới</TableHead>
-              <TableHead className="min-w-44">Trạng thái đối soát</TableHead>
+              <TableHead className="min-w-44">Kiểm tra trùng lặp</TableHead>
               <TableHead className="min-w-36">Hành động xử lý</TableHead>
             </TableRow>
           </TableHeader>

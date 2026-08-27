@@ -1091,7 +1091,7 @@ export function MarketplacePublishNoteTypePage() {
                         }`}
                       >
                         <div className="font-bold text-sm sm:text-base">Có phí (Paid)</div>
-                        <div className="text-xs opacity-80 mt-0.5">Nhận thu nhập qua payOS</div>
+                        <div className="text-xs opacity-80 mt-0.5">Bán nội dung có thu phí</div>
                       </div>
                     </div>
 

@@ -242,7 +242,7 @@ def _build_checkout_attempt(
     if not return_url or not cancel_url:
         raise PaymentServiceError(
             "PAYMENT_RETURN_URL_REQUIRED",
-            "Không thể tạo đơn thanh toán vì thiếu liên kết quay lại sau khi rời PayOS.",
+            "Không thể tạo đơn thanh toán vì thiếu liên kết quay lại sau khi thanh toán.",
             status=400,
         )
     now = _utcnow()
@@ -328,7 +328,7 @@ def _sync_attempt_with_payos(order: PaymentOrder, attempt: PaymentAttempt, *, no
             attempt.status = "failed"
             attempt.failed_at = now
             attempt.failure_code = "provider_link_unavailable"
-            attempt.failure_message = "Liên kết thanh toán cũ không còn khả dụng trên PayOS nên hệ thống sẽ tạo đơn mới."
+            attempt.failure_message = "Liên kết thanh toán cũ không còn khả dụng nên hệ thống sẽ tạo đơn mới."
             order.status = "failed"
             order.closed_at = now
             return "recreate"
@@ -355,7 +355,7 @@ def _sync_attempt_with_payos(order: PaymentOrder, attempt: PaymentAttempt, *, no
         attempt.status = "expired"
         attempt.failed_at = attempt.failed_at or now
         attempt.failure_code = "expired"
-        attempt.failure_message = "Lượt thanh toán cũ đã hết hạn trên PayOS."
+        attempt.failure_message = "Lượt thanh toán cũ đã hết hạn."
         order.status = "expired"
         order.closed_at = now
         return "recreate"
@@ -366,7 +366,7 @@ def _sync_attempt_with_payos(order: PaymentOrder, attempt: PaymentAttempt, *, no
         attempt.failure_code = "canceled"
         attempt.failure_message = (
             _clean_text(provider_state.get("cancellation_reason"))
-            or "Phiên thanh toán cũ đã bị hủy hoặc đóng trên PayOS."
+            or "Phiên thanh toán cũ đã bị hủy hoặc đóng."
         )
         order.status = "canceled"
         order.closed_at = now
@@ -376,14 +376,14 @@ def _sync_attempt_with_payos(order: PaymentOrder, attempt: PaymentAttempt, *, no
         attempt.status = "failed"
         attempt.failed_at = attempt.failed_at or now
         attempt.failure_code = "provider_failed"
-        attempt.failure_message = "PayOS báo phiên thanh toán cũ không còn xử lý được."
+        attempt.failure_message = "Cổng thanh toán báo phiên giao dịch cũ không còn xử lý được."
         order.status = "failed"
         order.closed_at = now
         return "recreate"
 
     if provider_status == "UNDERPAID":
         attempt.status = "manual_review"
-        attempt.manual_review_reason = "PayOS ghi nhận giao dịch chưa đủ số tiền nên cần kiểm tra thủ công."
+        attempt.manual_review_reason = "Giao dịch ghi nhận chưa đủ số tiền nên cần kiểm tra thủ công."
         order.status = "under_review"
         order.closed_at = None
         return "block"
@@ -394,7 +394,7 @@ def _sync_attempt_with_payos(order: PaymentOrder, attempt: PaymentAttempt, *, no
         if provider_amount_minor and provider_amount_minor != int(attempt.amount_minor or 0):
             attempt.status = "manual_review"
             attempt.manual_review_reason = (
-                "PayOS xác nhận thanh toán thành công nhưng số tiền trên PayOS không khớp với đơn hàng."
+                "Giao dịch thành công nhưng số tiền ghi nhận không khớp với đơn hàng."
             )
             order.status = "under_review"
             order.closed_at = None
@@ -402,7 +402,7 @@ def _sync_attempt_with_payos(order: PaymentOrder, attempt: PaymentAttempt, *, no
         if provider_amount_paid_minor and provider_amount_paid_minor != int(attempt.amount_minor or 0):
             attempt.status = "manual_review"
             attempt.manual_review_reason = (
-                "PayOS xác nhận thanh toán thành công nhưng số tiền thực nhận không khớp với đơn hàng."
+                "Giao dịch thành công nhưng số tiền thực nhận không khớp với đơn hàng."
             )
             order.status = "under_review"
             order.closed_at = None
@@ -422,7 +422,7 @@ def _sync_attempt_with_payos(order: PaymentOrder, attempt: PaymentAttempt, *, no
 
     attempt.status = "manual_review"
     attempt.manual_review_reason = (
-        f"PayOS trả về trạng thái '{provider_status or 'UNKNOWN'}' nên hệ thống không tự động tái sử dụng lượt thanh toán này."
+        f"Cổng thanh toán trả về trạng thái '{provider_status or 'UNKNOWN'}' nên hệ thống không tự động tái sử dụng lượt thanh toán này."
     )
     order.status = "under_review"
     order.closed_at = None

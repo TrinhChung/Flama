@@ -28,7 +28,7 @@ export function ProfilePage() {
     <Page>
       <PageHeader
         title="Trang cá nhân & Ví doanh thu"
-        description="Quản lý thông tin tài khoản, theo dõi số dư và doanh thu từ các bộ thẻ bạn đã chia sẻ."
+        description=""
       />
 
       <div className="space-y-6">

@@ -156,7 +156,7 @@ export function PaymentResultPage() {
   if (query.isPending) {
     return (
       <Page>
-        <PageLoading label="Đang kiểm tra và đối soát kết quả thanh toán từ PayOS…" />
+        <PageLoading label="Đang kiểm tra kết quả thanh toán…" />
       </Page>
     )
   }
@@ -367,7 +367,7 @@ export function PaymentResultPage() {
                 {order.active_attempt?.checkout_url ? (
                   <Button asChild size="lg" className="flex-1 font-bold rounded-xl bg-gradient-to-r from-primary to-orange-500 shadow-md">
                     <a href={order.active_attempt.checkout_url} target="_blank" rel="noreferrer">
-                      <ExternalLink className="size-4 mr-1.5" /> Mở lại trang thanh toán PayOS
+                      <ExternalLink className="size-4 mr-1.5" /> Mở lại trang thanh toán
                     </a>
                   </Button>
                 ) : null}

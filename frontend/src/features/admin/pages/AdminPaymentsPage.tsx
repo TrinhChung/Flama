@@ -163,7 +163,7 @@ export function AdminPaymentsPage() {
     <Page>
       <AdminHeader
         title="Quản lý Thanh toán & Đơn hàng"
-        description="Tổng quan giao dịch, danh sách đơn hàng payOS và lịch sử giao dịch."
+        description="Tổng quan giao dịch, danh sách đơn hàng và lịch sử thanh toán."
       />
 
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>

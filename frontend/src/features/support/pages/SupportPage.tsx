@@ -120,7 +120,7 @@ export function SupportPage() {
       }),
     onSuccess: (result) => {
       if (result.checkout_url) {
-        toast.success('Đang chuyển hướng tới cổng thanh toán PayOS…')
+        toast.success('Đang chuyển hướng tới trang thanh toán…')
         window.location.href = result.checkout_url
       } else {
         toast.error(result.message || 'Không thể khởi tạo thanh toán.')
@@ -244,7 +244,7 @@ export function SupportPage() {
                   <HeartHandshake className="size-5" />
                 </span>
                 <div>
-                  <CardTitle className="text-lg sm:text-xl">Ủng hộ qua PayOS</CardTitle>
+                  <CardTitle className="text-lg sm:text-xl">Ủng hộ trực tuyến (QR Code / Ngân hàng)</CardTitle>
                   <CardDescription className="text-xs">
                     Thanh toán online an toàn qua mã QR Ngân hàng / Napas247
                   </CardDescription>
@@ -358,7 +358,7 @@ export function SupportPage() {
                   ) : (
                     <span className="flex items-center justify-center gap-1.5 min-w-0 max-w-full">
                       <CreditCard className="size-4 sm:size-5 shrink-0" />
-                      <span className="truncate">Thanh toán {amount > 0 ? `${amount.toLocaleString('vi-VN')} VND` : ''} qua PayOS</span>
+                      <span className="truncate">Thanh toán {amount > 0 ? `${amount.toLocaleString('vi-VN')} VND` : ''} qua mã QR</span>
                       <ArrowRight className="size-3.5 sm:size-4 shrink-0" />
                     </span>
                   )}

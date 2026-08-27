@@ -148,7 +148,7 @@ def _process_webhook_event(event_id: str, normalized_payload: dict[str, Any], *,
             order=order,
             attempt=attempt,
             event=event,
-            reason="Webhook từ PayOS không vượt qua bước xác minh chữ ký nên cần kiểm tra thủ công.",
+            reason="Giao dịch không vượt qua bước xác minh chữ ký nên cần kiểm tra thủ công.",
             now=now,
         )
         db.session.commit()
@@ -167,7 +167,7 @@ def _process_webhook_event(event_id: str, normalized_payload: dict[str, Any], *,
             attempt=attempt,
             event=event,
             reason=(
-                "PayOS trả về trạng thái không thành công"
+                "Cổng thanh toán trả về trạng thái không thành công"
                 f" ('{normalized_payload.get('status') or 'unknown'}') cho đơn hàng này."
             ),
             now=now,
@@ -180,7 +180,7 @@ def _process_webhook_event(event_id: str, normalized_payload: dict[str, Any], *,
             order=order,
             attempt=attempt,
             event=event,
-            reason="Số tiền PayOS gửi về không khớp với số tiền của đơn hàng nên cần kiểm tra thủ công.",
+            reason="Số tiền chuyển khoản không khớp với số tiền của đơn hàng nên cần kiểm tra thủ công.",
             now=now,
         )
         db.session.commit()
@@ -193,7 +193,7 @@ def _process_webhook_event(event_id: str, normalized_payload: dict[str, Any], *,
             order=order,
             attempt=attempt,
             event=event,
-            reason="Nội dung chuyển khoản PayOS gửi về không khớp với mã tham chiếu của đơn hàng.",
+            reason="Nội dung chuyển khoản không khớp với mã tham chiếu của đơn hàng.",
             now=now,
         )
         db.session.commit()

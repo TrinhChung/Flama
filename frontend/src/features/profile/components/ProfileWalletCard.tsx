@@ -128,7 +128,7 @@ export function ProfileWalletCard({
           Chính sách quản lý số dư và rút tiền
         </AlertTitle>
         <AlertDescription className="text-xs text-muted-foreground">
-          {wallet.payout_status_message} Khi có người dùng mua bộ thẻ của bạn qua PayOS, tiền thực nhận (sau khi trừ {wallet.platform_fee_percent}% phí nền tảng) sẽ được cộng ngay lập tức vào số dư này.
+          {wallet.payout_status_message} Khi có người dùng mua bộ thẻ của bạn, tiền thực nhận (sau khi trừ {wallet.platform_fee_percent}% phí nền tảng) sẽ được cộng ngay lập tức vào số dư này.
         </AlertDescription>
       </Alert>
     </div>

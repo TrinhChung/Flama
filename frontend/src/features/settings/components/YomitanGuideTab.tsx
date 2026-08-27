@@ -108,7 +108,7 @@ export function YomitanGuideTab() {
                 <strong>Âm thanh phát âm (Audio):</strong> Flama Connect tự động tiếp nhận file MP3 phát âm dung lượng tối đa <strong>1 MB</strong> gửi từ Yomitan.
               </li>
               <li>
-                <strong>Hình ảnh & Video:</strong> Hiện chưa hỗ trợ nhúng tự động ảnh chụp/video qua webhook Flama Connect.
+                <strong>Hình ảnh & Video:</strong> Hiện chưa hỗ trợ nhúng tự động ảnh chụp/video qua Flama Connect.
               </li>
               <li>
                 <strong>Bảo mật Token:</strong> Server URL chứa token riêng tư của bạn. Hãy bảo vệ URL và thu hồi ngay nếu nghi ngờ lộ URL.
