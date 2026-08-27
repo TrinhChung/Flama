@@ -329,6 +329,9 @@ export function StudyPage() {
             cardId={card?.card_id}
             canEdit={Boolean(card?.card_id && card?.can_edit_card !== false)}
             onEdit={handleOpenEdit}
+            newCount={counts.new}
+            learnCount={counts.learning}
+            dueCount={counts.due}
             compositions={compositionsList}
             selectedCompositionId={selectedCompositionId}
             onSelectComposition={setSelectedCompositionId}
@@ -397,7 +400,6 @@ export function StudyPage() {
         <StudyBottomBar
           cardId={card.card_id}
           revealed={revealed}
-          canEdit={Boolean(card.can_edit_card !== false)}
           canUndo={study.canUndo}
           newCount={counts.new}
           learnCount={counts.learning}
@@ -412,7 +414,6 @@ export function StudyPage() {
           onUndo={() => {
             void handleUndo()
           }}
-          onEdit={handleOpenEdit}
           onToggleFullscreen={handleToggleFullscreen}
         />
       ) : null}
