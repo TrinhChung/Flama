@@ -288,6 +288,7 @@ export function useStudySession(deckId: string | null) {
     if (!active || !controller || controller.signal.aborted || !hasLeaseRef.current) {
       throw new Error('Study session lease is not held by this window.')
     }
+    setBusy(true)
     operationRef.current = true
     beginLeaseWork(controller)
     try {
@@ -303,6 +304,7 @@ export function useStudySession(deckId: string | null) {
     } finally {
       operationRef.current = false
       endLeaseWork(controller)
+      setBusy(false)
     }
   }, [activateSession, beginLeaseWork, endLeaseWork, hasLeaseRef, leaseControllerRef])
 
@@ -312,6 +314,7 @@ export function useStudySession(deckId: string | null) {
     if (!active || !controller || controller.signal.aborted || !hasLeaseRef.current) {
       throw new Error('Study session lease is not held by this window.')
     }
+    setBusy(true)
     operationRef.current = true
     beginLeaseWork(controller)
     try {
@@ -323,6 +326,7 @@ export function useStudySession(deckId: string | null) {
     } finally {
       operationRef.current = false
       endLeaseWork(controller)
+      setBusy(false)
     }
   }, [activateSession, beginLeaseWork, endLeaseWork, hasLeaseRef, leaseControllerRef])
 
