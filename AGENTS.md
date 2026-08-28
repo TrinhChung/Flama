@@ -77,6 +77,10 @@
 - Use `$flama-frontend-architecture` when refactoring, decomposing, or building React SPA components in `frontend/src/`, enforcing Feature-Sliced Design (FSD), extracting custom hooks, consolidating reusable UI primitives, and preserving Zero Visual Regression.
 - Use `$flama-backend-architecture` when building or refactoring Flask REST APIs (`app/api/`), service logic (`app/services/`), repositories (`app/repositories/`), validators (`app/validators/`), Anki scheduling, or Flama Connect protocol.
 - Use `$flama-database-architecture` when reviewing, investigating, analyzing, or evolving the Flama MySQL database schema (`models/`), ORM entity boundaries, marketplace clone overlay models, or planning zero-data-loss Alembic migrations (`migrations/`).
+- Use `$antigravity-cli` when installing, verifying, or operating the local `agy` command, including restoring its PATH shim and selecting safe versus full-access execution.
+- Use `$antigravity-manager-api` when checking or operating the local Antigravity Manager HTTP API for account status, quota refresh, or explicit account switching. Never store its API key in the repository.
+- The user authorizes `agy` as an implementation worker for assigned tasks. Follow `$antigravity-cli` worker orchestration: isolate file ownership, review every diff, and rotate only the `agy` account through Manager when the applicable quota is at or below the documented threshold.
+- Use `$codex-cli` when discovering, verifying, running, or delegating tasks/reviews to the local OpenAI Codex CLI (`codex.exe`).
 - Use `$docs-architect` when the task is to create or update repository documentation such as `README.md`, `README_SETUP.md`, `docs/*.md`, troubleshooting notes, or operational runbooks.
 - Use `$nihongo-agent-architect` when the task is to create or update repo-local agent guidance such as `AGENTS.md`, skill folders under `skills/`, or `agents/openai.yaml`.
 - Use `$impeccable` when designing, reviewing, auditing, critiquing, styling, or polishing frontend UI/UX in `frontend/src/`.

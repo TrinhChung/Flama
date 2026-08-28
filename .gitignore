@@ -61,6 +61,8 @@ skills/*
 !skills/docs-architect/
 !skills/nihongo-agent-architect/
 !skills/flama-database-architecture/
+!skills/antigravity-cli/
+!skills/antigravity-manager-api/
 
 
 # OS / Editor files
