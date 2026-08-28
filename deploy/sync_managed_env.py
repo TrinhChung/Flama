@@ -22,6 +22,8 @@ MANAGED_SECRET_KEYS = (
     "PAYOS_API_KEY",
     "PAYOS_CHECKSUM_KEY",
     "PAYOS_CLIENT_ID",
+    "EMAIL_SMTP_PASSWORD",
+    "EMAIL_RESEND_API_KEY",
 )
 MANAGED_VARIABLE_KEYS = (
     "CORS_ALLOWED_ORIGINS",
@@ -62,6 +64,17 @@ MANAGED_VARIABLE_KEYS = (
     "DECK_SOURCE_NOTETYPE_GUARD_MODE",
     "MARKETPLACE_SAMPLE_MODE",
     "FLASHCARD_RENDER_PREVIEW_CACHE_MAX_ENTRIES",
+    "EMAIL_ENABLED",
+    "EMAIL_PROVIDER",
+    "EMAIL_ENVIRONMENT",
+    "EMAIL_FROM_ADDRESS",
+    "EMAIL_FROM_NAME",
+    "EMAIL_SMTP_HOST",
+    "EMAIL_SMTP_PORT",
+    "EMAIL_SMTP_USER",
+    "EMAIL_SMTP_USE_TLS",
+    "EMAIL_SMTP_USE_SSL",
+    "PUBLIC_APP_URL",
 )
 MANAGED_ENV_KEYS = MANAGED_SECRET_KEYS + MANAGED_VARIABLE_KEYS
 MANAGED_VARIABLE_DEFAULTS = {
@@ -92,6 +105,13 @@ MANAGED_VARIABLE_DEFAULTS = {
     "DECK_SOURCE_NOTETYPE_GUARD_MODE": "shadow",
     "MARKETPLACE_SAMPLE_MODE": "shadow_cache",
     "FLASHCARD_RENDER_PREVIEW_CACHE_MAX_ENTRIES": "512",
+    "EMAIL_ENABLED": "true",
+    "EMAIL_PROVIDER": "smtp",
+    "EMAIL_ENVIRONMENT": "production",
+    "EMAIL_FROM_NAME": "Flama",
+    "EMAIL_SMTP_PORT": "587",
+    "EMAIL_SMTP_USE_TLS": "true",
+    "EMAIL_SMTP_USE_SSL": "false",
 }
 _ENV_ASSIGNMENT_RE = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=")
 
@@ -125,6 +145,12 @@ def _write_private_text(path: Path, content: str) -> None:
     os.chmod(path, 0o600)
 
 
+OPTIONAL_MANAGED_KEYS = (
+    "EMAIL_SMTP_PASSWORD",
+    "EMAIL_RESEND_API_KEY",
+)
+
+
 def build_payload(output_path: Path) -> None:
     values: dict[str, str] = {}
     missing_keys: list[str] = []
@@ -132,7 +158,8 @@ def build_payload(output_path: Path) -> None:
     for key in MANAGED_ENV_KEYS:
         value = os.environ.get(key, "") or MANAGED_VARIABLE_DEFAULTS.get(key, "")
         if not value:
-            missing_keys.append(key)
+            if key not in OPTIONAL_MANAGED_KEYS:
+                missing_keys.append(key)
             continue
         validated_value = _validate_value(key, value)
         values[key] = base64.b64encode(validated_value.encode("utf-8")).decode("ascii")

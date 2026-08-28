@@ -9,6 +9,7 @@ from .flashcards import flashcards_bp
 from .image_library import image_library_bp
 from .main import main_bp
 from .mcp import mcp_bp
+from .media_asset_routes import media_asset_bp
 from .oauth import oauth_bp
 from .payments import payments_bp
 from .spa_routes import spa_routes_bp
@@ -35,3 +36,4 @@ def register_blueprints(app: Flask) -> None:
     app.register_blueprint(vocabulary_bp)
     app.register_blueprint(flashcards_bp)
     app.register_blueprint(image_library_bp)
+    app.register_blueprint(media_asset_bp)

@@ -1709,12 +1709,14 @@ def publish_release(
     expected_current_release_id: str | None,
     expected_working_revision: Any,
     idempotency_key: Any,
+    publish_mode: str = "manual",
 ) -> PublishReleaseResult:
     """Build and stage an immutable release in the caller's transaction."""
 
     normalized_version = _normalize_version_label(version_label)
     normalized_key = _normalize_idempotency_key(idempotency_key)
     normalized_changelog = str(changelog).strip() if changelog is not None else None
+    normalized_publish_mode = "automatic" if str(publish_mode).strip().lower() == "automatic" else "manual"
     normalized_expected_revision = _normalize_expected_working_revision(
         expected_working_revision
     )
@@ -1806,6 +1808,7 @@ def publish_release(
         version_label=normalized_version,
         parent_release_id=current_head_id,
         status="building",
+        publish_mode=normalized_publish_mode,
         source_working_revision=int(item.working_revision or 0),
         manifest_hash=_release_manifest_hash(changes),
         changelog=normalized_changelog,
@@ -1891,6 +1894,7 @@ def serialize_release(release: DeckRelease | None) -> dict[str, Any] | None:
         "version_label": release.version_label,
         "parent_release_id": release.parent_release_id,
         "status": release.status,
+        "publish_mode": getattr(release, "publish_mode", "manual") or "manual",
         "source_working_revision": int(release.source_working_revision or 0),
         "manifest_hash": release.manifest_hash,
         "change_count": int(release.change_count or 0),

@@ -15,6 +15,7 @@ from models import db
 from models.card import Card
 from models.deck import Deck
 from models.note import Note
+from models.note_type import NoteType
 from models.template import Template
 from app.repositories.deck_tree_query import collect_subtree_ids
 from app.services.study_action_runtime import REVIEW_TRIGGER_CONTRACT_VERSION
@@ -100,6 +101,9 @@ def list_available_compositions_for_scope(
 ) -> list[AppliedComposition]:
     """List distinct applicable compositions for a deck or note_type study entry."""
     if scope_type == "note_type":
+        nt = db.session.get(NoteType, str(scope_id))
+        if nt is None or nt.user_id != user_id:
+            return []
         return resolve_compatibility_compositions_for_note_type(scope_id)
 
     if scope_type == "deck":
@@ -119,7 +123,11 @@ def list_available_compositions_for_scope(
         )
         if not note_type_ids:
             deck = db.session.get(Deck, deck_id)
-            if deck is not None and deck.note_type_id is not None:
+            if (
+                deck is not None
+                and deck.note_type_id is not None
+                and deck.owner_user_id == user_id
+            ):
                 return resolve_compatibility_compositions_for_note_type(
                     str(deck.note_type_id)
                 )

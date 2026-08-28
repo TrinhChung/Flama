@@ -134,7 +134,20 @@ def mark_note_fields_changed(
             )
         if tracking_was_complete:
             item.dirty_tracking_revision = int(item.working_revision or 0)
+    _trigger_auto_publish_for_items(items)
     return len(items)
+
+
+def _trigger_auto_publish_for_items(items: Iterable[DeckMarketplaceItem]) -> None:
+    for item in items:
+        if bool(getattr(item, "auto_publish_enabled", False)):
+            try:
+                from app.services import deck_auto_publish_service
+                deck_auto_publish_service.trigger_auto_publish_for_deck_item(
+                    deck_item_id=str(item.id),
+                )
+            except Exception:
+                pass
 
 
 def mark_field_def_changed(
@@ -177,6 +190,7 @@ def mark_field_def_changed(
             )
         if tracking_was_complete:
             item.dirty_tracking_revision = int(item.working_revision or 0)
+    _trigger_auto_publish_for_items(items)
     return len(items)
 
 
@@ -398,6 +412,7 @@ def mark_deck_item_batch_changed(
         )
     if tracking_was_complete:
         item.dirty_tracking_revision = int(item.working_revision or 0)
+    _trigger_auto_publish_for_items([item])
     return len(normalized)
 
 

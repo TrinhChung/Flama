@@ -336,14 +336,14 @@ def _import_review(
             rating={1: "again", 2: "hard", 3: "good", 4: "easy"}[ease],
             mode=mode,
             scheduler_mode="anki",
+            scheduler_algorithm="anki",
+            algorithm_version="revlog-v1",
             review_kind=review_kind,
             interval_days_before=_interval_days(last_interval),
             interval_days_after=_interval_days(interval),
             ease_factor_after=float(factor) / 1000.0,
             payload_json=payload_json,
         )
-        event.scheduler_algorithm = "anki"
-        event.algorithm_version = "revlog-v1"
         db.session.flush()
         ref.review_event_id = event.id
         ref.status = "imported"

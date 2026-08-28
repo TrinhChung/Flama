@@ -6,13 +6,28 @@ from flask import Blueprint, jsonify, request
 from flask_login import current_user, login_required
 
 from app.api.common import error_response, json_object
-from app.services import identity_api_service
+from app.services import (
+    email_verification_service,
+    identity_api_service,
+    student_verification_service,
+)
 
 
 identity_bp = Blueprint("api_v1_identity", __name__)
 
 
 def _service_error(error: identity_api_service.IdentityApiError):
+    payload = {
+        "error": error.code,
+        "message": str(error),
+        **error.extras,
+    }
+    if error.field:
+        payload["field"] = error.field
+    return jsonify(payload), error.status
+
+
+def _email_verification_error(error: email_verification_service.EmailVerificationError):
     payload = {
         "error": error.code,
         "message": str(error),
@@ -32,6 +47,42 @@ def get_session():
 @login_required
 def delete_session():
     return jsonify(identity_api_service.logout_session())
+
+
+@identity_bp.get("/student-status")
+@identity_bp.get("/identity/student-status")
+def get_student_status():
+    return jsonify(student_verification_service.serialize_student_profile(current_user))
+
+
+@identity_bp.post("/email/request-verification")
+@identity_bp.post("/identity/email/request-verification")
+@login_required
+def request_email_verification():
+    try:
+        result = email_verification_service.request_email_verification(
+            user=current_user,
+            remote_addr=request.remote_addr,
+        )
+    except email_verification_service.EmailVerificationError as exc:
+        return _email_verification_error(exc)
+    return jsonify(result)
+
+
+@identity_bp.post("/email/verify")
+@identity_bp.post("/identity/email/verify")
+@login_required
+def verify_email():
+    payload = json_object() or {}
+    code = payload.get("code") or payload.get("token") or ""
+    try:
+        result = email_verification_service.verify_email_with_code(
+            user=current_user,
+            code_or_token=str(code),
+        )
+    except email_verification_service.EmailVerificationError as exc:
+        return _email_verification_error(exc)
+    return jsonify(result)
 
 
 @identity_bp.post("/auth/register")
@@ -71,3 +122,55 @@ def login():
     except identity_api_service.IdentityApiError as exc:
         return _service_error(exc)
     return jsonify(result)
+
+
+@identity_bp.post("/auth/forgot-password")
+def forgot_password():
+    payload = json_object()
+    if payload is None:
+        return error_response(
+            "VALIDATION_ERROR",
+            "Payload must be a JSON object.",
+            status=400,
+        )
+    try:
+        result = identity_api_service.request_password_reset(
+            payload=payload,
+            remote_addr=request.remote_addr,
+        )
+    except identity_api_service.IdentityApiError as exc:
+        return _service_error(exc)
+    return jsonify(result)
+
+
+@identity_bp.post("/auth/reset-password")
+def reset_password():
+    payload = json_object()
+    if payload is None:
+        return error_response(
+            "VALIDATION_ERROR",
+            "Payload must be a JSON object.",
+            status=400,
+        )
+    try:
+        result = identity_api_service.reset_password_with_token(payload=payload)
+    except identity_api_service.IdentityApiError as exc:
+        return _service_error(exc)
+    return jsonify(result)
+
+
+@identity_bp.get("/auth/google/url")
+def get_google_auth_url():
+    from flask import session
+    from app.services.google_auth_service import build_google_auth_url, GoogleAuthError
+
+    next_param = request.args.get("next")
+    try:
+        auth_url, state, nonce = build_google_auth_url(next_url=next_param)
+        session["google_auth_state"] = state
+        session["google_auth_nonce"] = nonce
+        session["google_auth_next"] = next_param
+        return jsonify({"url": auth_url, "state": state})
+    except GoogleAuthError as exc:
+        return jsonify({"error": exc.code, "message": str(exc)}), exc.status
+

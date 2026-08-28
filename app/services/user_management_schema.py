@@ -31,6 +31,33 @@ def ensure_user_management_schema(session) -> None:
                 text("ALTER TABLE users ADD COLUMN custom_platform_fee_percent FLOAT NULL")
             )
             session.flush()
+        if "display_name" not in user_columns:
+            session.execute(
+                text("ALTER TABLE users ADD COLUMN display_name VARCHAR(150) NULL")
+            )
+            session.flush()
+        if "avatar_url" not in user_columns:
+            session.execute(
+                text("ALTER TABLE users ADD COLUMN avatar_url VARCHAR(512) NULL")
+            )
+            session.flush()
+        if "bio" not in user_columns:
+            session.execute(
+                text("ALTER TABLE users ADD COLUMN bio TEXT NULL")
+            )
+            session.flush()
+        if "social_links" not in user_columns:
+            is_mysql = str(bind.dialect.name).lower().startswith("mysql")
+            ddl = (
+                "ALTER TABLE users ADD COLUMN social_links JSON NULL"
+                if is_mysql
+                else "ALTER TABLE users ADD COLUMN social_links TEXT NULL"
+            )
+            session.execute(text(ddl))
+            session.execute(
+                text("UPDATE users SET social_links = '[]' WHERE social_links IS NULL OR social_links = ''")
+            )
+            session.flush()
 
     if inspector.has_table("user_roles"):
         role_columns = {column["name"] for column in inspector.get_columns("user_roles")}

@@ -40,8 +40,15 @@ export function MarketplacePublishDeckPage() {
   const [isTitleManuallyEdited, setIsTitleManuallyEdited] = useState(false)
   const [previewText, setPreviewText] = useState('')
   const [description, setDescription] = useState('')
+  const [distributionMode, setDistributionMode] = useState<'free' | 'paid' | 'course_key'>('free')
   const [pricingMode, setPricingMode] = useState<'free' | 'paid'>('free')
   const [priceAmountMinor, setPriceAmountMinor] = useState<number>(10000)
+  const [studentOfferMode, setStudentOfferMode] = useState<'none' | 'free' | 'percent_discount'>('none')
+  const [studentDiscountPercent, setStudentDiscountPercent] = useState<number | null>(null)
+  const [courseTitle, setCourseTitle] = useState('')
+  const [courseDescription, setCourseDescription] = useState('')
+  const [courseUrl, setCourseUrl] = useState('')
+  const [courseInstructions, setCourseInstructions] = useState('')
   const [version, setVersion] = useState('1.0.0')
   const [tags, setTags] = useState('')
   const [changelog, setChangelog] = useState('')
@@ -99,8 +106,21 @@ export function MarketplacePublishDeckPage() {
       setTitle(deckItem.title || '')
       setPreviewText(deckItem.preview_text || '')
       setDescription(deckItem.description || '')
+      if (deckItem.distribution_mode) {
+        setDistributionMode(deckItem.distribution_mode)
+      } else if (deckItem.pricing_mode === 'paid') {
+        setDistributionMode('paid')
+      } else {
+        setDistributionMode('free')
+      }
+      setCourseTitle(deckItem.course_title || '')
+      setCourseDescription(deckItem.course_description || '')
+      setCourseUrl(deckItem.course_url || '')
+      setCourseInstructions(deckItem.course_instructions || '')
       setPricingMode(deckItem.pricing_mode || 'free')
       setPriceAmountMinor(deckItem.price_amount_minor || 10000)
+      setStudentOfferMode(deckItem.student_offer_mode || 'none')
+      setStudentDiscountPercent(deckItem.student_discount_percent || null)
       setVersion(deckItem.version || '1.0.0')
       setTags(deckItem.tags ? deckItem.tags.join(', ') : '')
       setChangelog(deckItem.changelog || '')
@@ -149,8 +169,18 @@ export function MarketplacePublishDeckPage() {
         title: title.trim(),
         preview_text: previewText.trim(),
         description: description.trim(),
-        pricing_mode: pricingMode,
-        price_amount_minor: pricingMode === 'paid' ? priceAmountMinor : 0,
+        distribution_mode: distributionMode,
+        pricing_mode: distributionMode === 'course_key' ? 'free' : pricingMode,
+        price_amount_minor: distributionMode === 'paid' ? priceAmountMinor : 0,
+        student_offer_mode: distributionMode === 'paid' ? studentOfferMode : 'none',
+        student_discount_percent:
+          distributionMode === 'paid' && studentOfferMode === 'percent_discount'
+            ? studentDiscountPercent
+            : null,
+        course_title: distributionMode === 'course_key' ? courseTitle.trim() || undefined : undefined,
+        course_description: distributionMode === 'course_key' ? courseDescription.trim() || undefined : undefined,
+        course_url: distributionMode === 'course_key' ? courseUrl.trim() || undefined : undefined,
+        course_instructions: distributionMode === 'course_key' ? courseInstructions.trim() || undefined : undefined,
         tags: tags ? tags.split(',').map((t) => t.trim()).filter(Boolean) : [],
         primary_category: effectiveCategory,
         taxonomy_domain: taxonomyDomain,
@@ -267,9 +297,15 @@ export function MarketplacePublishDeckPage() {
     }
 
     if (stepNumber === 4) {
-      if (pricingMode === 'paid') {
+      if (distributionMode === 'paid') {
         if (!priceAmountMinor || priceAmountMinor < 1000) {
           errors.price = 'Giá bán phải tối thiểu từ 1.000 VNĐ'
+        }
+        if (
+          studentOfferMode === 'percent_discount' &&
+          (!studentDiscountPercent || studentDiscountPercent < 1 || studentDiscountPercent > 99)
+        ) {
+          errors.student_discount_percent = 'Vui lòng nhập phần trăm giảm giá hợp lệ (1-99%)'
         }
       }
     }
@@ -539,14 +575,28 @@ export function MarketplacePublishDeckPage() {
               {currentStep === 4 && (
                 <div className="space-y-5 animate-in fade-in duration-200">
                   <PublishStep4Pricing
+                    distributionMode={distributionMode}
                     pricingMode={pricingMode}
                     priceAmountMinor={priceAmountMinor}
+                    studentOfferMode={studentOfferMode}
+                    studentDiscountPercent={studentDiscountPercent}
+                    courseTitle={courseTitle}
+                    courseDescription={courseDescription}
+                    courseUrl={courseUrl}
+                    courseInstructions={courseInstructions}
                     version={version}
                     isReleaseVersioned={isReleaseVersioned}
                     deckItemId={deckItemId}
                     fieldErrors={fieldErrors}
+                    setDistributionMode={setDistributionMode}
                     setPricingMode={setPricingMode}
                     setPriceAmountMinor={setPriceAmountMinor}
+                    setStudentOfferMode={setStudentOfferMode}
+                    setStudentDiscountPercent={setStudentDiscountPercent}
+                    setCourseTitle={setCourseTitle}
+                    setCourseDescription={setCourseDescription}
+                    setCourseUrl={setCourseUrl}
+                    setCourseInstructions={setCourseInstructions}
                     setVersion={setVersion}
                     clearFieldError={clearFieldError}
                   />
@@ -561,7 +611,16 @@ export function MarketplacePublishDeckPage() {
                       <div>Tiêu đề: <strong className="text-foreground">{title || 'Chưa đặt'}</strong></div>
                       <div>Môn học: <strong className="text-foreground">{availableSubjects.find(s => s.id === taxonomySubject)?.label || taxonomySubject}</strong></div>
                       <div>Độ khó: <strong className="text-foreground">{TAXONOMY_DIFFICULTIES.find(d => d.id === taxonomyDifficulty)?.label || taxonomyDifficulty}</strong></div>
-                      <div>Mô hình: <strong className="text-foreground">{pricingMode === 'paid' ? `${priceAmountMinor.toLocaleString('vi-VN')} đ` : 'Miễn phí'}</strong></div>
+                      <div>
+                        Mô hình:{' '}
+                        <strong className="text-foreground">
+                          {distributionMode === 'course_key'
+                            ? 'Mã lớp học (Keys)'
+                            : distributionMode === 'paid'
+                              ? `${priceAmountMinor.toLocaleString('vi-VN')} đ`
+                              : 'Miễn phí'}
+                        </strong>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -638,8 +697,25 @@ export function MarketplacePublishDeckPage() {
                       {previewText.trim() || 'Mô tả ngắn hiển thị tại đây khi người học duyệt danh sách Marketplace...'}
                     </div>
                   </div>
-                  <Badge variant={pricingMode === 'paid' ? 'default' : 'secondary'} className="shrink-0 text-xs font-bold">
-                    {pricingMode === 'paid' ? `${priceAmountMinor.toLocaleString('vi-VN')} đ` : 'Miễn phí'}
+                  <Badge
+                    variant={
+                      distributionMode === 'course_key'
+                        ? 'outline'
+                        : distributionMode === 'paid'
+                          ? 'default'
+                          : 'secondary'
+                    }
+                    className={`shrink-0 text-xs font-bold ${
+                      distributionMode === 'course_key'
+                        ? 'border-purple-500/30 text-purple-600 dark:text-purple-400 bg-purple-500/10'
+                        : ''
+                    }`}
+                  >
+                    {distributionMode === 'course_key'
+                      ? 'Mã khóa học'
+                      : distributionMode === 'paid'
+                        ? `${priceAmountMinor.toLocaleString('vi-VN')} đ`
+                        : 'Miễn phí'}
                   </Badge>
                 </div>
 

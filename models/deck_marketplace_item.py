@@ -45,6 +45,23 @@ class DeckMarketplaceItem(db.Model):
     )
     price_amount_minor = db.Column(db.Integer, nullable=False, default=0)
     price_cents = synonym("price_amount_minor")
+    distribution_mode = db.Column(
+        db.String(32),
+        nullable=False,
+        default="free",
+        index=True,
+    )
+    course_title = db.Column(db.String(255), nullable=True)
+    course_description = db.Column(db.Text, nullable=True)
+    course_url = db.Column(db.String(500), nullable=True)
+    course_instructions = db.Column(db.Text, nullable=True)
+    student_offer_mode = db.Column(
+        db.Enum("none", "free", "percent_discount", name="deck_marketplace_student_offer_mode_enum", native_enum=False),
+        nullable=False,
+        default="none",
+        index=True,
+    )
+    student_discount_percent = db.Column(db.Integer, nullable=True)
     version = db.Column(db.String(50), nullable=False, default="1.0.0")
     changelog = db.Column(db.Text, nullable=True)
     current_release_id = db.Column(
@@ -90,6 +107,9 @@ class DeckMarketplaceItem(db.Model):
     active_usage_count = db.Column(db.Integer, nullable=False, default=0)
     rating_avg = db.Column(db.Float, nullable=False, default=0.0)
     rating_count = db.Column(db.Integer, nullable=False, default=0)
+    auto_publish_enabled = db.Column(db.Boolean, nullable=False, default=False, index=True)
+    last_auto_published_at = db.Column(db.DateTime, nullable=True)
+    last_auto_publish_error = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 

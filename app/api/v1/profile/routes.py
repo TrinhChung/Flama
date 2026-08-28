@@ -1,4 +1,4 @@
-"""User Profile and Balance REST API routes."""
+﻿"""User Profile and Creator Portfolio REST API routes."""
 
 from __future__ import annotations
 
@@ -38,7 +38,42 @@ def update_profile():
             status=400,
         )
     try:
-        result = profile_service.update_profile(current_user, payload)
+        result = profile_service.update_profile(
+            current_user,
+            payload,
+            remote_addr=request.remote_addr,
+        )
+    except profile_service.ProfileServiceError as exc:
+        return _service_error(exc)
+    return jsonify(result)
+
+
+@profile_bp.post("/avatar")
+@login_required
+def upload_avatar():
+    file_storage = request.files.get("file") or request.files.get("avatar")
+    try:
+        result = profile_service.upload_avatar(current_user, file_storage)
+    except profile_service.ProfileServiceError as exc:
+        return _service_error(exc)
+    return jsonify(result)
+
+
+@profile_bp.delete("/avatar")
+@login_required
+def delete_avatar():
+    try:
+        result = profile_service.delete_avatar(current_user)
+    except profile_service.ProfileServiceError as exc:
+        return _service_error(exc)
+    return jsonify(result)
+
+
+@profile_bp.get("/u/<username>")
+def get_public_profile(username: str):
+    current_uid = current_user.id if getattr(current_user, "is_authenticated", False) else None
+    try:
+        result = profile_service.get_public_profile(username, current_user_id=current_uid)
     except profile_service.ProfileServiceError as exc:
         return _service_error(exc)
     return jsonify(result)
@@ -47,6 +82,7 @@ def update_profile():
 @profile_bp.get("/transactions")
 @login_required
 def list_transactions():
+    """Backward-compatible endpoint delegating to wallet transaction query."""
     page = coerce_int(request.args.get("page"), default=1, minimum=1)
     per_page = coerce_int(request.args.get("per_page"), default=10, minimum=1, maximum=100)
     tx_type = str(request.args.get("type") or "").strip() or None

@@ -323,12 +323,24 @@ export function SharedNoteTypeDetailPage() {
               </CardTitle>
 
               <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                <div className="flex items-center gap-1.5">
-                  <div className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary font-bold text-[10px]">
-                    {authorName.charAt(0).toUpperCase()}
+                {noteType.author_profile?.username || noteType.author?.username ? (
+                  <Link
+                    to={`/profile/${noteType.author_profile?.username || noteType.author?.username}`}
+                    className="flex items-center gap-1.5 hover:text-primary transition-colors group/author"
+                  >
+                    <div className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary font-bold text-[10px] ring-1 ring-primary/20 group-hover/author:ring-primary">
+                      {authorName.charAt(0).toUpperCase()}
+                    </div>
+                    <span className="font-semibold text-foreground group-hover/author:text-primary">{authorName}</span>
+                  </Link>
+                ) : (
+                  <div className="flex items-center gap-1.5">
+                    <div className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary font-bold text-[10px]">
+                      {authorName.charAt(0).toUpperCase()}
+                    </div>
+                    <span className="font-semibold text-foreground">{authorName}</span>
                   </div>
-                  <span className="font-semibold text-foreground">{authorName}</span>
-                </div>
+                )}
                 <span>•</span>
                 <span className="flex items-center gap-1 font-medium text-emerald-600 dark:text-emerald-400">
                   <CheckCircle className="size-3.5" /> Flama Marketplace

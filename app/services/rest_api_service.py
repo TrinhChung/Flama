@@ -33,15 +33,28 @@ def serialize_user(user) -> dict[str, Any] | None:
     role = getattr(user, "role", None)
     balance = int(getattr(user, "balance_amount_minor", 0) or 0)
     balance_display = f"{balance:,.0f} ₫".replace(",", ".")
+    from app.services.student_verification_service import serialize_student_profile
+
+    student_data = serialize_student_profile(user)
     return {
         "id": int(user.id),
         "email": str(user.email or ""),
         "username": str(user.username or ""),
+        "display_name": getattr(user, "display_name", None) or str(user.username or ""),
+        "avatar_url": getattr(user, "avatar_url", None),
+        "bio": getattr(user, "bio", None) or "",
+        "social_links": getattr(user, "social_links", None) or [],
         "timezone": str(getattr(user, "timezone", "UTC") or "UTC"),
         "is_admin": bool(is_admin_user(user)),
         "is_disabled": bool(getattr(user, "is_disabled", False)),
         "balance_amount_minor": balance,
         "balance_amount_display": balance_display,
+        "email_verified": bool(student_data["email_verified"]),
+        "email_verified_at": student_data["email_verified_at"],
+        "email_verification_source": student_data["email_verification_source"],
+        "student_status": student_data["student_status"],
+        "is_verified_student": bool(student_data["is_verified_student"]),
+        "is_edu_email": bool(student_data["is_edu_email"]),
         "role": (
             {
                 "id": int(role.id),

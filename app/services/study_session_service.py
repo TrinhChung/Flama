@@ -452,6 +452,7 @@ def open_study_session(
     scope_id: str,
     timezone_name: str,
     now: datetime | None = None,
+    composition_ids: list[str] | None = None,
 ) -> dict[str, Any]:
     # MySQL DATETIME (without an explicit fsp) truncates sub-second precision.
     # Use the same durable anchor in the snapshot and during commit replay.
@@ -467,6 +468,13 @@ def open_study_session(
             f"A study session is limited to {MAX_SESSION_CARDS} cards.",
             status=413,
         )
+
+    if composition_ids is not None:
+        allowed = set(composition_ids)
+        cards = [
+            card for card in cards
+            if build_compatibility_composition(card.template).composition_id in allowed
+        ]
 
     progress_map = load_card_progress_map(
         user_id=int(user.id),

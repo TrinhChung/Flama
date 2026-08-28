@@ -271,16 +271,104 @@ def get_update_status(*, install_id: str, user_id: int) -> dict[str, Any]:
                     through_sequence=_release_sequence(current_release),
                 )["change_count"]
             )
+    active_rebase = (
+        DeckInstallRebase.query.filter_by(
+            deck_install_id=install.id,
+            status="has_conflict",
+        )
+        .order_by(DeckInstallRebase.created_at.desc())
+        .first()
+    )
     return {
         "install_id": install.id,
         "deck_item_id": install.deck_item_id,
         "version_mode": install.version_mode,
         "overlay_revision": int(install.overlay_revision or 0),
+        "auto_update_enabled": bool(install.auto_update_enabled),
+        "sync_mode": install.sync_mode or "manual",
+        "last_auto_updated_at": (
+            install.last_auto_updated_at.isoformat()
+            if install.last_auto_updated_at
+            else None
+        ),
+        "last_sync_status": install.last_sync_status,
+        "pending_conflict_count": int(install.pending_conflict_count or 0),
+        "active_rebase_id": active_rebase.id if active_rebase else None,
         "applied_release": _serialize_release(applied_release),
         "available_release": _serialize_release(current_release),
         "update_available": available,
         "unread_update": unread,
         "change_count": change_count,
+    }
+
+
+def get_install_settings(*, install_id: str, user_id: int) -> dict[str, Any]:
+    install = _require_install(install_id, user_id=user_id)
+    return {
+        "install_id": install.id,
+        "deck_item_id": install.deck_item_id,
+        "auto_update_enabled": bool(install.auto_update_enabled),
+        "sync_mode": install.sync_mode or "manual",
+        "last_auto_updated_at": (
+            install.last_auto_updated_at.isoformat()
+            if install.last_auto_updated_at
+            else None
+        ),
+        "last_sync_status": install.last_sync_status,
+        "pending_conflict_count": int(install.pending_conflict_count or 0),
+        "version_mode": install.version_mode,
+    }
+
+
+def update_install_settings(
+    *,
+    install_id: str,
+    user_id: int,
+    auto_update_enabled: bool,
+) -> dict[str, Any]:
+    install = _require_install(install_id, user_id=user_id, for_update=True)
+    install.auto_update_enabled = bool(auto_update_enabled)
+    install.sync_mode = "automatic" if auto_update_enabled else "manual"
+    db.session.flush()
+
+    if install.auto_update_enabled:
+        # Check if there is an update available to auto-apply immediately
+        current_release = install.deck_item.current_release if install.deck_item else None
+        applied_release = install.applied_release
+        if (
+            current_release is not None
+            and _release_sequence(current_release) > _release_sequence(applied_release)
+        ):
+            try:
+                rebase = prepare_update(
+                    install_id=install.id,
+                    release_id=current_release.id,
+                    user_id=user_id,
+                    mode="automatic",
+                )
+                if rebase.status == "ready":
+                    apply_prepared_update(rebase_id=rebase.id, user_id=user_id)
+                elif rebase.status == "has_conflict":
+                    install.last_sync_status = "conflict"
+                    install.pending_conflict_count = int(rebase.conflict_count or 0)
+                    db.session.flush()
+            except Exception:
+                pass
+
+    return get_update_status(install_id=install.id, user_id=user_id)
+
+
+def detach_installed_deck(*, install_id: str, user_id: int) -> dict[str, Any]:
+    install = _require_install(install_id, user_id=user_id, for_update=True)
+    install.version_mode = "detached"
+    install.auto_update_enabled = False
+    install.sync_mode = "detached"
+    install.last_sync_status = "detached"
+    db.session.flush()
+    return {
+        "install_id": install.id,
+        "version_mode": "detached",
+        "status": "detached",
     }
 
 
@@ -551,6 +639,7 @@ def prepare_update(
     expected_applied_release_id: str | None = None,
     expected_overlay_revision: int | None = None,
     idempotency_key: str | None = None,
+    mode: str = "manual",
 ) -> DeckInstallRebase:
     install = _require_install(install_id, user_id=user_id, for_update=True)
     target = _require_target_release(install, release_id)
@@ -614,6 +703,7 @@ def prepare_update(
         from_release_id=install.applied_release_id,
         to_release_id=target.id,
         status="prepared",
+        mode="automatic" if str(mode).strip().lower() == "automatic" else "manual",
         expected_overlay_revision=int(install.overlay_revision or 0),
         idempotency_key=clean_idempotency_key,
         change_count=total_changes,
@@ -753,6 +843,7 @@ def serialize_rebase(
         "id": rebase.id,
         "install_id": rebase.deck_install_id,
         "status": rebase.status,
+        "mode": getattr(rebase, "mode", "manual") or "manual",
         "from_release": _serialize_release(rebase.from_release),
         "to_release": _serialize_release(rebase.to_release),
         "expected_overlay_revision": int(rebase.expected_overlay_revision or 0),
@@ -853,6 +944,38 @@ def resolve_conflict(
         )
     rebase.resolved_conflict_count = resolved_count
     rebase.status = "ready" if resolved_count >= int(rebase.conflict_count or 0) else "has_conflict"
+    db.session.flush()
+    return rebase
+
+
+def resolve_all_conflicts(
+    *,
+    rebase_id: str,
+    user_id: int,
+    resolution_mode: str,
+) -> DeckInstallRebase:
+    rebase = deck_install_rebase_repository.get_rebase_for_user(
+        rebase_id,
+        user_id=user_id,
+        for_update=True,
+    )
+    if rebase is None:
+        raise DeckInstallUpdateError("Update preparation not found.", status=404, error="FIELD_NOT_FOUND")
+    if rebase.status not in {"has_conflict", "ready"}:
+        raise DeckInstallUpdateError("This update preparation is no longer editable.", status=409, error="REBASE_NOT_EDITABLE")
+    mode = str(resolution_mode or "").strip().lower()
+    if mode not in {"keep_mine", "keep_upstream"}:
+        raise DeckInstallUpdateError("resolution_mode must be keep_mine or keep_upstream for batch resolution.", field="resolution_mode")
+
+    now = _utcnow()
+    for conflict in rebase.conflicts:
+        conflict.resolution_mode = mode
+        conflict.resolved_value = None
+        conflict.resolved_by_user_id = user_id
+        conflict.resolved_at = now
+
+    rebase.resolved_conflict_count = int(rebase.conflict_count or 0)
+    rebase.status = "ready"
     db.session.flush()
     return rebase
 
@@ -994,6 +1117,7 @@ def prepare_and_apply_update(
     expected_applied_release_id: str | None = None,
     expected_overlay_revision: int | None = None,
     idempotency_key: str | None = None,
+    mode: str = "manual",
 ) -> DeckInstallRebase:
     rebase = prepare_update(
         install_id=install_id,
@@ -1002,6 +1126,7 @@ def prepare_and_apply_update(
         expected_applied_release_id=expected_applied_release_id,
         expected_overlay_revision=expected_overlay_revision,
         idempotency_key=idempotency_key,
+        mode=mode,
     )
     if rebase.status == "has_conflict":
         raise DeckInstallUpdateError(
@@ -1019,3 +1144,52 @@ def mark_update_seen(*, install_id: str, release_id: str, user_id: int) -> dict[
     install.seen_release_id = target.id
     db.session.flush()
     return get_update_status(install_id=install.id, user_id=user_id)
+
+
+def process_subscriber_auto_updates(
+    *,
+    deck_item_id: str,
+    release_id: str,
+) -> list[dict[str, Any]]:
+    """Process automated updates for all subscribers with auto_update_enabled."""
+    installs = (
+        DeckInstall.query.filter_by(
+            deck_item_id=deck_item_id,
+            auto_update_enabled=True,
+        )
+        .filter(DeckInstall.version_mode != "detached")
+        .all()
+    )
+    results: list[dict[str, Any]] = []
+    for install in installs:
+        if str(install.applied_release_id or "") == str(release_id or ""):
+            continue
+        try:
+            rebase = prepare_update(
+                install_id=install.id,
+                release_id=release_id,
+                user_id=install.user_id,
+                mode="automatic",
+            )
+            if rebase.status == "ready":
+                apply_prepared_update(rebase_id=rebase.id, user_id=install.user_id)
+                install.last_sync_status = "synced"
+                install.last_auto_updated_at = _utcnow()
+                install.pending_conflict_count = 0
+                results.append({"install_id": install.id, "status": "applied"})
+            elif rebase.status == "has_conflict":
+                install.last_sync_status = "conflict"
+                install.pending_conflict_count = int(rebase.conflict_count or 0)
+                results.append(
+                    {
+                        "install_id": install.id,
+                        "status": "has_conflict",
+                        "conflicts": int(rebase.conflict_count or 0),
+                    }
+                )
+            db.session.flush()
+        except Exception as exc:
+            install.last_sync_status = "error"
+            db.session.flush()
+            results.append({"install_id": install.id, "status": "error", "message": str(exc)})
+    return results

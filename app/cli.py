@@ -796,6 +796,123 @@ def register_cli_commands(app: Flask) -> None:
                 f"- [{c.id}] client_id={c.client_id} name='{c.client_name}' confidential={c.is_confidential} redirect_uris={c.get_redirect_uris()}"
             )
 
+    @app.cli.command("email-test")
+    @click.argument("recipient", type=str)
+    def email_test_cmd(recipient: str) -> None:
+        """Send a test transactional email to verify delivery configuration."""
+        from datetime import datetime, timezone
+        from app.email import (
+            EmailCategory,
+            TemplateKey,
+            TransactionalEmailRequest,
+            get_email_service,
+        )
+
+        service = get_email_service(app.config)
+        now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+
+        click.echo(f"Testing email delivery to: {recipient}")
+        click.echo(f"- EMAIL_ENABLED: {service.config.enabled}")
+        click.echo(f"- EMAIL_PROVIDER: {service.config.provider}")
+        click.echo(f"- EMAIL_ENVIRONMENT: {service.config.environment}")
+        click.echo(f"- EMAIL_FROM_ADDRESS: {service.config.from_address}")
+
+        req = TransactionalEmailRequest(
+            template_key=TemplateKey.SYSTEM_DELIVERY_TEST,
+            recipient=recipient.strip(),
+            variables={"checked_at": now_str},
+            category=EmailCategory.SYSTEM_NOTIFICATION,
+            correlation_id=f"cli-test-{int(datetime.now(timezone.utc).timestamp())}",
+        )
+
+        try:
+            result = service.send(req)
+            click.echo(f"\n[Result]")
+            click.echo(f"- success: {result.success}")
+            click.echo(f"- status: {result.status}")
+            click.echo(f"- provider: {result.provider}")
+            click.echo(f"- provider_message_id: {result.provider_message_id}")
+            click.echo(f"- recipient_masked: {result.recipient_masked}")
+            click.echo(f"- sent_at: {result.sent_at}")
+            click.echo(f"- extra: {result.extra}")
+        except Exception as exc:
+            click.echo(f"\n[Delivery Error] {type(exc).__name__}: {exc}", err=True)
+            raise click.ClickException(str(exc))
+
+    @app.cli.group("images")
+    def images_group() -> None:
+        """Manage secure image pipeline queues and background workers."""
+        pass
+
+    @images_group.command("process-queue")
+    @click.option("--max-jobs", default=100, help="Maximum number of jobs to process.")
+    def process_queue_cmd(max_jobs: int) -> None:
+        """Drain and process pending image jobs from the queue."""
+        from pathlib import Path
+        from app.services.image_worker_service import drain_image_queue
+
+        upload_root = Path(app.config["FLASHCARD_MEDIA_UPLOAD_ROOT"]).resolve()
+        click.echo(f"Processing image queue (max {max_jobs} jobs)...")
+        results = drain_image_queue(upload_root=upload_root, max_jobs=max_jobs)
+        click.echo(f"Done! Processed: {results['processed_count']}, Failed: {results['failed_count']}, Rejected: {results['rejected_count']}")
+
+    @images_group.command("clear-queue")
+    def clear_queue_cmd() -> None:
+        """Clear all pending jobs from the image queue."""
+        from app.services.image_queue_service import clear_image_queue
+
+        clear_image_queue()
+        click.echo("Image queue cleared.")
+
+    @app.cli.group("strokes")
+    def strokes_group() -> None:
+        """Manage Kanji and Hanzi SVG stroke datasets."""
+        pass
+
+    @strokes_group.command("build-dataset")
+    @click.option("--locale", default="ja", type=click.Choice(["ja", "zh", "zh-hant"], case_sensitive=False), help="Locale dataset to build.")
+    @click.option("--source", required=True, help="Path to directory containing KanjiVG or MakeMeAHanzi SVG files.")
+    def build_dataset_cmd(locale: str, source: str) -> None:
+        """Build and standardize SVG stroke dataset from source directory."""
+        from pathlib import Path
+        from app.services.strokes.dataset_builder import build_dataset_from_directory
+
+        static_root = Path(app.static_folder or "static")
+        target_dir = static_root / "strokes" / locale.lower()
+        click.echo(f"Building stroke dataset for '{locale}' from {source} into {target_dir}...")
+        res = build_dataset_from_directory(source_dir=source, target_dir=target_dir, locale=locale)
+        click.echo(f"Done! Processed: {res.get('processed', 0)}, Skipped: {res.get('skipped', 0)}")
+
+    @strokes_group.command("seed-starter")
+    def seed_starter_cmd() -> None:
+        """Seed starter set of common Kanji and Hanzi SVG stroke diagrams."""
+        from pathlib import Path
+        from app.services.strokes.dataset_builder import populate_starter_strokes
+
+        static_root = Path(app.static_folder or "static")
+        res = populate_starter_strokes(static_root)
+        click.echo(f"Starter stroke SVGs seeded: {res}")
+
+    @strokes_group.command("status")
+    def status_cmd() -> None:
+        """Show current stroke dataset file counts."""
+        from pathlib import Path
+        static_root = Path(app.static_folder or "static")
+        ja_dir = static_root / "strokes" / "ja"
+        zh_dir = static_root / "strokes" / "zh"
+        zh_hant_dir = static_root / "strokes" / "zh-hant"
+
+        ja_count = len(list(ja_dir.glob("*.svg"))) if ja_dir.exists() else 0
+        zh_count = len(list(zh_dir.glob("*.svg"))) if zh_dir.exists() else 0
+        zh_hant_count = len(list(zh_hant_dir.glob("*.svg"))) if zh_hant_dir.exists() else 0
+
+        click.echo("Stroke Dataset Status:")
+        click.echo(f"  - Japanese (ja): {ja_count} SVGs ({ja_dir})")
+        click.echo(f"  - Chinese Simplified/General (zh): {zh_count} SVGs ({zh_dir})")
+        click.echo(f"  - Chinese Traditional (zh-hant): {zh_hant_count} SVGs ({zh_hant_dir})")
+
+
+
 
 
 

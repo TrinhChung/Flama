@@ -481,6 +481,9 @@ def get_shared_deck_item(deck_item_id: str):
             user_id=current_user.id,
         )
     )
+    from app.services.marketplace_pricing_service import serialize_item_student_offer
+
+    payload.update(serialize_item_student_offer(deck_item, current_user))
     payload["lessons"] = marketplace_query_service.build_shared_deck_lessons_structure(deck_item)
 
     return jsonify(payload)
@@ -570,7 +573,10 @@ def install_shared_deck_item(deck_item_id: str):
     if not deck_item:
         return _api_error("FIELD_NOT_FOUND", "Deck item not found.", status=404)
 
-    if deck_item.pricing_mode == "paid":
+    from app.services.marketplace_pricing_service import calculate_pricing_breakdown
+
+    pricing_breakdown = calculate_pricing_breakdown(deck_item, current_user)
+    if deck_item.pricing_mode == "paid" and pricing_breakdown.is_payment_required:
         for attempt in range(1, SHARED_DECK_INSTALL_MAX_RETRIES + 1):
             if not str(deck_item.source_note_type_id or "").strip():
                 return _api_error(

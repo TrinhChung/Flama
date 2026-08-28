@@ -13,6 +13,10 @@ import {
   LoaderCircle,
   RefreshCcw,
   ShieldAlert,
+  ShieldCheck,
+  Zap,
+  Unlink,
+  Sparkles,
 } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -20,17 +24,21 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
 import { Page, PageHeader } from '@/shared/components/Page'
 import { PageError, PageLoading } from '@/shared/components/PageState'
 import {
   applyPreparedInstalledUpdate,
+  detachInstalledDeck,
   getInstalledDeckUpdate,
   getInstalledUpdateConflicts,
   getInstalledDeckUpdates,
   markInstalledDeckUpdateSeen,
   prepareInstalledDeckUpdate,
+  resolveAllInstalledUpdateConflicts,
   resolveInstalledUpdateConflict,
+  updateInstalledDeckSettings,
 } from '../api'
 import { DiffWorkspace } from '../components/DiffWorkspace'
 import type {
@@ -105,6 +113,8 @@ function ConflictCard({
     ? conflict.resolution_mode
     : undefined
   const isResolved = Boolean(resolution && conflict.resolved_at)
+  const hasBase = conflict.base_value !== undefined
+
   return (
     <Card className={cn(
       'overflow-hidden',
@@ -113,70 +123,97 @@ function ConflictCard({
       <CardHeader className={isResolved ? 'bg-emerald-500/8' : 'bg-amber-500/8'}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <CardTitle className="text-sm">
+            <CardTitle className="text-sm font-bold">
               {conflict.note_label || 'Note'} / {conflict.field_name || 'Field'}
             </CardTitle>
-            <CardDescription>
-              Bản local và release mới cùng sửa field này.
+            <CardDescription className="text-xs">
+              Bản sửa đổi cá nhân (Local) và phiên bản mới từ tác giả (Upstream) cùng thay đổi trường này so với snapshot gốc.
             </CardDescription>
           </div>
           <Badge
             variant="outline"
             className={cn(
               isResolved
-                ? 'border-emerald-500/40 text-emerald-700 dark:text-emerald-300'
-                : 'border-amber-500/40 text-amber-700 dark:text-amber-300',
+                ? 'border-emerald-500/40 text-emerald-700 dark:text-emerald-300 bg-emerald-500/10'
+                : 'border-amber-500/40 text-amber-700 dark:text-amber-300 bg-amber-500/10',
             )}
           >
-            {isResolved ? <Check /> : <ShieldAlert />}
-            {isResolved ? 'Đã xử lý' : 'Xung đột'}
+            {isResolved ? <Check className="size-3 mr-1" /> : <ShieldAlert className="size-3 mr-1" />}
+            {isResolved ? 'Đã xử lý' : 'Xung đột 3-Way'}
           </Badge>
         </div>
       </CardHeader>
       <CardContent className="space-y-3 pt-4">
-        <div className="grid gap-3 md:grid-cols-2">
-          <div className="overflow-hidden rounded-lg border border-blue-500/25 bg-blue-500/6">
-            <div className="border-b border-blue-500/20 px-3 py-2 text-xs font-semibold text-blue-700 dark:text-blue-300">
-              Bản chỉnh sửa của tôi
+        <div className={cn('grid gap-3', hasBase ? 'grid-cols-1 md:grid-cols-3' : 'grid-cols-1 md:grid-cols-2')}>
+          {hasBase ? (
+            <div className="overflow-hidden rounded-lg border border-border/70 bg-muted/40">
+              <div className="border-b border-border/70 px-3 py-2 text-xs font-semibold text-muted-foreground flex items-center justify-between">
+                <span>1. Giá trị ban đầu (Base)</span>
+                <span className="text-[10px] text-muted-foreground/70">Snapshot trước</span>
+              </div>
+              <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words p-3 text-xs text-muted-foreground font-mono">
+                {valuePreview(conflict.base_value)}
+              </pre>
             </div>
-            <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words p-3 text-xs">
+          ) : null}
+
+          <div className="overflow-hidden rounded-lg border border-blue-500/25 bg-blue-500/6">
+            <div className="border-b border-blue-500/20 px-3 py-2 text-xs font-semibold text-blue-700 dark:text-blue-300 flex items-center justify-between">
+              <span>{hasBase ? '2. Bản sửa của bạn (Local)' : 'Bản chỉnh sửa của tôi'}</span>
+              <span className="text-[10px] text-blue-600/70">Máy của bạn</span>
+            </div>
+            <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words p-3 text-xs font-mono">
               {valuePreview(conflict.local_value)}
             </pre>
           </div>
+
           <div className="overflow-hidden rounded-lg border border-emerald-500/25 bg-emerald-500/6">
-            <div className="border-b border-emerald-500/20 px-3 py-2 text-xs font-semibold text-emerald-700 dark:text-emerald-300">
-              Bản cập nhật từ owner
+            <div className="border-b border-emerald-500/20 px-3 py-2 text-xs font-semibold text-emerald-700 dark:text-emerald-300 flex items-center justify-between">
+              <span>{hasBase ? '3. Bản phát hành mới (Upstream)' : 'Bản cập nhật từ tác giả'}</span>
+              <span className="text-[10px] text-emerald-600/70">Tác giả deck</span>
             </div>
-            <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words p-3 text-xs">
+            <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words p-3 text-xs font-mono">
               {valuePreview(conflict.upstream_value)}
             </pre>
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            variant={resolution === 'keep_mine' ? 'default' : 'outline'}
-            disabled={isSaving}
-            aria-pressed={resolution === 'keep_mine'}
-            onClick={() => onResolve('keep_mine')}
-          >
-            {isSaving && pendingResolution === 'keep_mine'
-              ? <LoaderCircle className="animate-spin" />
-              : resolution === 'keep_mine' ? <Check /> : null}
-            Giữ bản của tôi
-          </Button>
-          <Button
-            type="button"
-            variant={resolution === 'keep_upstream' ? 'default' : 'outline'}
-            disabled={isSaving}
-            aria-pressed={resolution === 'keep_upstream'}
-            onClick={() => onResolve('keep_upstream')}
-          >
-            {isSaving && pendingResolution === 'keep_upstream'
-              ? <LoaderCircle className="animate-spin" />
-              : resolution === 'keep_upstream' ? <Check /> : null}
-            Nhận bản cập nhật
-          </Button>
+
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant={resolution === 'keep_mine' ? 'default' : 'outline'}
+              size="sm"
+              disabled={isSaving}
+              aria-pressed={resolution === 'keep_mine'}
+              onClick={() => onResolve('keep_mine')}
+              className={resolution === 'keep_mine' ? 'bg-blue-600 hover:bg-blue-700 text-white' : ''}
+            >
+              {isSaving && pendingResolution === 'keep_mine'
+                ? <LoaderCircle className="animate-spin size-3.5 mr-1" />
+                : resolution === 'keep_mine' ? <Check className="size-3.5 mr-1" /> : null}
+              Giữ bản của tôi
+            </Button>
+            <Button
+              type="button"
+              variant={resolution === 'keep_upstream' ? 'default' : 'outline'}
+              size="sm"
+              disabled={isSaving}
+              aria-pressed={resolution === 'keep_upstream'}
+              onClick={() => onResolve('keep_upstream')}
+              className={resolution === 'keep_upstream' ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : ''}
+            >
+              {isSaving && pendingResolution === 'keep_upstream'
+                ? <LoaderCircle className="animate-spin size-3.5 mr-1" />
+                : resolution === 'keep_upstream' ? <Check className="size-3.5 mr-1" /> : null}
+              Nhận bản cập nhật
+            </Button>
+          </div>
+          {isResolved ? (
+            <span className="text-xs text-muted-foreground">
+              Đã chọn: <strong className="text-foreground">{resolution === 'keep_mine' ? 'Giữ bản của tôi' : 'Dùng bản tác giả'}</strong>
+            </span>
+          ) : null}
         </div>
       </CardContent>
     </Card>
@@ -401,6 +438,82 @@ export function InstalledDeckUpdatePage() {
     },
   })
 
+  const resolveAllMutation = useMutation({
+    mutationFn: (resolutionMode: 'keep_mine' | 'keep_upstream') => {
+      if (!prepared) throw new Error('Phiên kiểm tra xung đột không còn khả dụng.')
+      return resolveAllInstalledUpdateConflicts(prepared.rebase_id, resolutionMode)
+    },
+    onSuccess: (result, resolutionMode) => {
+      const resolvedAt = new Date().toISOString()
+      setPrepared((current) => {
+        if (!current || current.rebase_id !== result.rebase_id) return current
+        return {
+          ...current,
+          status: result.status,
+          conflict_count: result.conflict_count,
+          resolved_conflict_count: result.resolved_conflict_count,
+          conflicts: current.conflicts.map((conflict) =>
+            resolvedConflict(conflict, resolutionMode, resolvedAt),
+          ),
+        }
+      })
+      queryClient.setQueryData<InfiniteData<InstalledUpdateConflictPage, string | null>>(
+        ['installed-update-conflicts', result.rebase_id],
+        (current) => current
+          ? {
+              ...current,
+              pages: current.pages.map((page) => ({
+                ...page,
+                status: result.status,
+                conflict_count: result.conflict_count,
+                resolved_conflict_count: result.resolved_conflict_count,
+                items: page.items.map((conflict) =>
+                  resolvedConflict(conflict, resolutionMode, resolvedAt),
+                ),
+              })),
+            }
+          : current,
+      )
+      toast.success(
+        resolutionMode === 'keep_mine'
+          ? 'Đã chọn giữ bản của bạn cho tất cả xung đột.'
+          : 'Đã chọn nhận bản từ tác giả cho tất cả xung đột.',
+      )
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : 'Không thể áp dụng xử lý hàng loạt.')
+    },
+  })
+
+  const autoUpdateMutation = useMutation({
+    mutationFn: (enabled: boolean) => updateInstalledDeckSettings(installId, enabled),
+    onSuccess: (updates) => {
+      queryClient.setQueryData(['installed-deck-updates', installId], updates)
+      void queryClient.invalidateQueries({ queryKey: ['installed-decks'] })
+      toast.success(
+        updates.auto_update_enabled
+          ? 'Đã bật tự động cập nhật cho deck này.'
+          : 'Đã tắt tự động cập nhật.',
+      )
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : 'Không thể cập nhật tùy chọn tự động cập nhật.')
+    },
+  })
+
+  const detachMutation = useMutation({
+    mutationFn: () => detachInstalledDeck(installId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['installed-decks'] })
+      queryClient.invalidateQueries({ queryKey: ['installed-deck-updates', installId] })
+      toast.success('Đã tách deck thành công. Deck này hiện là bản sao cá nhân độc lập của bạn.')
+      navigate('/installed-decks')
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : 'Không thể tách deck.')
+    },
+  })
+
   const applyMutation = useMutation({
     mutationFn: () => {
       if (!prepared) throw new Error('Hãy kiểm tra xung đột trước khi cập nhật.')
@@ -465,76 +578,110 @@ export function InstalledDeckUpdatePage() {
       />
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
-        <Card>
-          <CardHeader>
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="outline">
-                <GitCompare />
-                {firstPage.from_release?.version_label || 'Bản gốc'}
-                <span aria-hidden="true">→</span>
-                {firstPage.target_release.version_label}
-              </Badge>
-              {updatesQuery.data.unread_update ? (
-                <Badge>Bản cập nhật mới</Badge>
-              ) : null}
+        <div className="space-y-4">
+          <Card>
+            <CardHeader>
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="outline">
+                  <GitCompare className="mr-1.5 size-3.5" />
+                  {firstPage.from_release?.version_label || 'Bản gốc'}
+                  <span aria-hidden="true" className="mx-1">→</span>
+                  {firstPage.target_release.version_label}
+                </Badge>
+                {updatesQuery.data.unread_update ? (
+                  <Badge>Bản cập nhật mới</Badge>
+                ) : null}
+              </div>
+              <CardTitle className="text-base font-bold">Ghi chú phát hành</CardTitle>
+              <CardDescription className="whitespace-pre-wrap text-xs">
+                {firstPage.changelog || 'Tác giả không thêm ghi chú chi tiết cho phiên bản này.'}
+              </CardDescription>
+            </CardHeader>
+          </Card>
+
+          {/* Learning Progress Preservation Guarantee */}
+          <div className="flex items-start gap-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-3.5 text-xs text-emerald-900 dark:text-emerald-200">
+            <ShieldCheck className="size-5 shrink-0 text-emerald-600 dark:text-emerald-400 mt-0.5" />
+            <div className="space-y-0.5">
+              <span className="font-bold text-emerald-800 dark:text-emerald-300">
+                Tiến độ học tập luôn được bảo toàn 100%
+              </span>
+              <p className="text-[11px] text-emerald-700/90 dark:text-emerald-300/90 leading-relaxed">
+                Lịch sử ôn tập, thuật toán lặp lại ngắt quãng (SRS/FSRS/SM-2) và trạng thái thẻ học của bạn gắn liền với tài khoản và không bao giờ bị ghi đè khi cập nhật nội dung deck.
+              </p>
             </div>
-            <CardTitle>Ghi chú phát hành</CardTitle>
-            <CardDescription className="whitespace-pre-wrap">
-              {firstPage.changelog || 'Owner không thêm ghi chú cho phiên bản này.'}
-            </CardDescription>
-          </CardHeader>
-        </Card>
+          </div>
+        </div>
 
         <Card className="h-fit lg:sticky lg:top-4">
           <CardHeader>
             <CardTitle className="text-base">Cập nhật có kiểm soát</CardTitle>
-            <CardDescription>
-              Hệ thống kiểm tra overlap với các field bạn đã sửa trước khi áp dụng.
+            <CardDescription className="text-xs">
+              Hệ thống 3-Way Merge tự động bảo vệ các trường bạn đã tự chỉnh sửa.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="space-y-3.5">
+            {/* Auto-update subscriber setting toggle */}
+            <div className="flex items-center justify-between gap-2.5 rounded-xl border border-primary/20 bg-primary/5 p-3">
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-foreground">
+                  <Zap className="size-3.5 text-primary shrink-0" />
+                  <span>Tự động cập nhật deck</span>
+                </div>
+                <p className="text-[11px] text-muted-foreground leading-tight">
+                  Tự động nhận release mới khi tác giả phát hành (nếu không xung đột).
+                </p>
+              </div>
+              <Switch
+                checked={Boolean(updatesQuery.data.installation.auto_update_enabled)}
+                disabled={autoUpdateMutation.isPending}
+                onCheckedChange={(checked) => autoUpdateMutation.mutate(checked)}
+                aria-label="Tự động cập nhật deck này"
+              />
+            </div>
+
             {!updatesQuery.data.update_available || firstPage.already_applied ? (
               <Alert>
-                <Check />
+                <Check className="size-4" />
                 <AlertTitle>Deck đã ở phiên bản này</AlertTitle>
-                <AlertDescription>Không còn nội dung mới cần áp dụng.</AlertDescription>
+                <AlertDescription className="text-xs">Không còn nội dung mới cần áp dụng.</AlertDescription>
               </Alert>
             ) : null}
 
             {!prepared ? (
               <Button
-                className="w-full"
+                className="w-full h-10 font-bold text-xs rounded-xl"
                 size="lg"
                 disabled={prepareMutation.isPending || !updatesQuery.data.update_available}
                 onClick={() => prepareMutation.mutate()}
               >
                 {prepareMutation.isPending ? (
                   <>
-                    <LoaderCircle className="animate-spin" />
-                    Đang kiểm tra xung đột…
+                    <LoaderCircle className="animate-spin mr-1.5 size-4" />
+                    Đang kiểm tra 3-way merge…
                   </>
                 ) : (
                   <>
-                    <RefreshCcw />
+                    <RefreshCcw className="mr-1.5 size-4" />
                     Kiểm tra xung đột
                   </>
                 )}
               </Button>
             ) : (
               <Button
-                className="w-full"
+                className="w-full h-10 font-bold text-xs rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground"
                 size="lg"
-                disabled={!canApply || applyMutation.isPending || resolveMutation.isPending}
+                disabled={!canApply || applyMutation.isPending || resolveMutation.isPending || resolveAllMutation.isPending}
                 onClick={() => applyMutation.mutate()}
               >
                 {applyMutation.isPending ? (
                   <>
-                    <LoaderCircle className="animate-spin" />
+                    <LoaderCircle className="animate-spin mr-1.5 size-4" />
                     Đang áp dụng cập nhật…
                   </>
                 ) : (
                   <>
-                    <Check />
+                    <Check className="mr-1.5 size-4" />
                     Áp dụng phiên bản {firstPage.target_release.version_label}
                   </>
                 )}
@@ -543,15 +690,34 @@ export function InstalledDeckUpdatePage() {
 
             {prepared && prepared.conflict_count > 0 ? (
               <p className={cn(
-                'text-xs leading-relaxed tabular-nums',
+                'text-xs leading-relaxed tabular-nums font-semibold',
                 allConflictsResolved ? 'text-emerald-700 dark:text-emerald-300' : 'text-amber-700 dark:text-amber-300',
               )} aria-live="polite">
                 {prepared.resolved_conflict_count}/{prepared.conflict_count} xung đột đã được lưu.
               </p>
             ) : null}
-            <p className="text-xs leading-relaxed text-muted-foreground">
-              Apply chỉ rebase overlay và nâng release pointer; không tạo lại tiến độ học.
-            </p>
+
+            {/* Detach Deck Action */}
+            <div className="pt-2 border-t border-border/60">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/10 justify-center h-8"
+                disabled={detachMutation.isPending}
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      'Bạn có chắc chắn muốn tách bộ deck này khỏi Marketplace?\n\nSau khi tách, deck sẽ trở thành bộ thẻ cá nhân độc lập của bạn, không còn liên kết cập nhật từ tác giả nữa. Tiến độ học và toàn bộ thẻ từ vựng vẫn được bảo toàn 100%.'
+                    )
+                  ) {
+                    detachMutation.mutate()
+                  }
+                }}
+              >
+                <Unlink className="size-3.5 mr-1.5" />
+                {detachMutation.isPending ? 'Đang tách deck…' : 'Tách thành deck độc lập (Detach)'}
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -560,16 +726,53 @@ export function InstalledDeckUpdatePage() {
         <section className="space-y-3" aria-labelledby="update-conflicts-title">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div className="max-w-3xl">
-              <h2 id="update-conflicts-title" className="text-lg font-semibold">
-                Xử lý xung đột
+              <h2 id="update-conflicts-title" className="text-lg font-bold flex items-center gap-2">
+                <ShieldAlert className="size-5 text-amber-500" />
+                Xử lý xung đột 3-Way Merge
               </h2>
-              <p className="text-sm text-muted-foreground">
-                Mỗi lựa chọn được lưu ngay. Chọn “Giữ bản của tôi” sẽ tiếp tục lưu field đó trong overlay local.
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Mỗi lựa chọn được lưu ngay vào bản chuẩn bị rebase.
               </p>
             </div>
-            <p className="text-sm text-muted-foreground tabular-nums" aria-live="polite">
+            <p className="text-xs font-bold text-muted-foreground tabular-nums" aria-live="polite">
               Đã xử lý {prepared.resolved_conflict_count}/{prepared.conflict_count}
             </p>
+          </div>
+
+          {/* Batch Resolution Bar */}
+          <div className="flex flex-wrap items-center justify-between gap-2.5 rounded-2xl border border-primary/25 bg-primary/5 p-3.5">
+            <div className="flex items-center gap-2 text-xs font-bold text-foreground">
+              <Sparkles className="size-4 text-primary shrink-0" />
+              <span>Giải quyết nhanh toàn bộ {prepared.conflict_count} xung đột:</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs font-bold hover:bg-blue-500/10 hover:border-blue-500/40 hover:text-blue-600 rounded-xl"
+                disabled={resolveAllMutation.isPending}
+                onClick={() => resolveAllMutation.mutate('keep_mine')}
+              >
+                {resolveAllMutation.isPending && resolveAllMutation.variables === 'keep_mine' ? (
+                  <LoaderCircle className="size-3.5 mr-1 animate-spin" />
+                ) : null}
+                Giữ tất cả bản của tôi
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs font-bold hover:bg-emerald-500/10 hover:border-emerald-500/40 hover:text-emerald-600 rounded-xl"
+                disabled={resolveAllMutation.isPending}
+                onClick={() => resolveAllMutation.mutate('keep_upstream')}
+              >
+                {resolveAllMutation.isPending && resolveAllMutation.variables === 'keep_upstream' ? (
+                  <LoaderCircle className="size-3.5 mr-1 animate-spin" />
+                ) : null}
+                Dùng tất cả bản tác giả
+              </Button>
+            </div>
           </div>
 
           {conflictQuery.isPending ? (

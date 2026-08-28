@@ -258,6 +258,68 @@ class CompositionExitGateTests(unittest.TestCase):
         self.assertEqual(comp_1.algorithm_key, comp_2.algorithm_key)
         self.assertEqual(comp_1.algorithm_version, comp_2.algorithm_version)
 
+    # ------------------------------------------------------------------
+    # Gate 6: note_type scope returns owned compositions
+    # ------------------------------------------------------------------
+
+    def test_note_type_scope_returns_compositions(self):
+        """list_available_compositions_for_scope('note_type', ...) returns
+        all Templates for the owned NoteType."""
+        nt, (tpl_a, tpl_b) = self._make_note_type(
+            templates=[("Forward", True), ("Reverse", False)]
+        )
+
+        comps = list_available_compositions_for_scope(
+            "note_type", nt.id, self.user.id
+        )
+        comp_ids = {c.composition_id for c in comps}
+        expected = {
+            make_compatibility_composition_id(nt.id, tpl_a.id),
+            make_compatibility_composition_id(nt.id, tpl_b.id),
+        }
+        self.assertEqual(comp_ids, expected)
+
+    # ------------------------------------------------------------------
+    # Gate 7: Empty deck falls back to deck.note_type_id
+    # ------------------------------------------------------------------
+
+    def test_empty_deck_fallback_to_note_type(self):
+        """A deck with no notes falls back to deck.note_type_id for
+        composition resolution."""
+        nt, (tpl,) = self._make_note_type(templates=[("Solo", True)])
+        deck = self._make_deck("EmptyDeck", note_type=nt)
+
+        comps = list_available_compositions_for_scope(
+            "deck", deck.id, self.user.id
+        )
+        self.assertEqual(len(comps), 1)
+        self.assertEqual(comps[0].template_id, str(tpl.id))
+        self.assertEqual(comps[0].note_type_id, str(nt.id))
+
+    # ------------------------------------------------------------------
+    # Gate 8: Permission check rejects foreign NoteType
+    # ------------------------------------------------------------------
+
+    def test_scope_permission_rejects_foreign_note_type(self):
+        """list_available_compositions_for_scope('note_type', ...) returns
+        empty list when the NoteType belongs to a different user."""
+        nt, _ = self._make_note_type(templates=[("Private", True)])
+
+        other_uid = uuid4().hex[:8]
+        other_user = User(
+            username=f"other_{other_uid}",
+            email=f"other_{other_uid}@example.com",
+        )
+        other_user.set_password("pass")
+        db.session.add(other_user)
+        db.session.commit()
+
+        # Other user should get empty list for this NoteType
+        comps = list_available_compositions_for_scope(
+            "note_type", nt.id, other_user.id
+        )
+        self.assertEqual(comps, [])
+
 
 if __name__ == "__main__":
     unittest.main()

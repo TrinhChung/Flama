@@ -19,6 +19,104 @@ def _group_count(query) -> int:
     return int(db.session.query(db.func.count()).select_from(query.subquery()).scalar() or 0)
 
 
+def _categorize_verdicts(metrics: dict[str, Any]) -> dict[str, list[str]]:
+    """Return pass/warn/block categories based on metric thresholds.
+
+    Block = data corruption requiring investigation before cutover.
+    Warn  = anomalies that may be valid but need operator review.
+    Pass  = healthy or informational metric.
+    """
+    verdicts: dict[str, list[str]] = {"pass": [], "warn": [], "block": []}
+
+    # Template gates
+    tg = metrics["template_gates"]
+    if tg["cross_note_type_cards"] > 0:
+        verdicts["block"].append(
+            f"cross_note_type_cards: {tg['cross_note_type_cards']} card(s) reference"
+            " a Template from a different NoteType than their Note"
+        )
+    else:
+        verdicts["pass"].append("cross_note_type_cards: 0")
+
+    if tg["default_count_anomalies"] > 0:
+        verdicts["warn"].append(
+            f"default_count_anomalies: {tg['default_count_anomalies']} NoteType(s)"
+            " have != 1 default Template"
+        )
+    else:
+        verdicts["pass"].append("default_count_anomalies: 0")
+
+    if tg["note_types_without_templates"] > 0:
+        verdicts["warn"].append(
+            f"note_types_without_templates: {tg['note_types_without_templates']}"
+        )
+    else:
+        verdicts["pass"].append("note_types_without_templates: 0")
+
+    # Card gates
+    cg = metrics["card_gates"]
+    if cg["notes_without_cards"] > 0:
+        verdicts["warn"].append(
+            f"notes_without_cards: {cg['notes_without_cards']}"
+        )
+    else:
+        verdicts["pass"].append("notes_without_cards: 0")
+
+    # Progress gates
+    pg = metrics["progress_gates"]
+    if pg["null_card_id_rows"] > 0:
+        verdicts["block"].append(
+            f"null_card_id_rows: {pg['null_card_id_rows']} CardProgress row(s)"
+            " with NULL card_id"
+        )
+    else:
+        verdicts["pass"].append("null_card_id_rows: 0")
+
+    if pg["orphan_card_id_rows"] > 0:
+        verdicts["block"].append(
+            f"orphan_card_id_rows: {pg['orphan_card_id_rows']} CardProgress row(s)"
+            " reference deleted Card"
+        )
+    else:
+        verdicts["pass"].append("orphan_card_id_rows: 0")
+
+    if pg["partial_fsrs_state_rows"] > 0:
+        verdicts["warn"].append(
+            f"partial_fsrs_state_rows: {pg['partial_fsrs_state_rows']}"
+        )
+    else:
+        verdicts["pass"].append("partial_fsrs_state_rows: 0")
+
+    # ReviewEvent gates
+    rg = metrics["review_event_gates"]
+    if rg["orphan_card_id_events"] > 0:
+        verdicts["warn"].append(
+            f"orphan_card_id_events: {rg['orphan_card_id_events']} ReviewEvent(s)"
+            " reference deleted Card"
+        )
+    else:
+        verdicts["pass"].append("orphan_card_id_events: 0")
+
+    if rg["null_algorithm_events"] > 0:
+        verdicts["warn"].append(
+            f"null_algorithm_events: {rg['null_algorithm_events']} ReviewEvent(s)"
+            " with NULL scheduler_algorithm"
+        )
+    else:
+        verdicts["pass"].append("null_algorithm_events: 0")
+
+    # Session gates
+    sg = metrics["session_gates"]
+    if sg["expired_open_sessions"] > 0:
+        verdicts["warn"].append(
+            f"expired_open_sessions: {sg['expired_open_sessions']}"
+        )
+    else:
+        verdicts["pass"].append("expired_open_sessions: 0")
+
+    return verdicts
+
+
 def build_study_architecture_audit(*, now: datetime | None = None) -> dict[str, Any]:
     """Return aggregate-only rollout gates without mutating or exposing user content."""
 
@@ -113,6 +211,21 @@ def build_study_architecture_audit(*, now: datetime | None = None) -> dict[str, 
         .having(db.func.count(db.distinct(ReviewEvent.card_id)) > 1)
     )
 
+    # --- ReviewEvent detached/orphan accounting (Cleanup Order 5) ---
+    orphan_review_events = int(
+        db.session.query(db.func.count(ReviewEvent.id))
+        .outerjoin(Card, Card.id == ReviewEvent.card_id)
+        .filter(ReviewEvent.card_id.isnot(None), Card.id.is_(None))
+        .scalar()
+        or 0
+    )
+    null_session_review_events = int(
+        ReviewEvent.query.filter(ReviewEvent.study_session_id.is_(None)).count()
+    )
+    null_algorithm_events = int(
+        ReviewEvent.query.filter(ReviewEvent.scheduler_algorithm.is_(None)).count()
+    )
+
     expired_open_sessions = int(
         StudySession.query.filter(
             StudySession.status == "open",
@@ -139,6 +252,7 @@ def build_study_architecture_audit(*, now: datetime | None = None) -> dict[str, 
         ).count()
     )
 
+    # --- Algorithm distribution with native/import provenance ---
     algorithm_rows = (
         db.session.query(
             ReviewEvent.scheduler_mode,
@@ -159,8 +273,21 @@ def build_study_architecture_audit(*, now: datetime | None = None) -> dict[str, 
         .all()
     )
 
-    return {
-        "schema_version": "study-architecture-audit.v1",
+    algorithm_distribution = []
+    for scheduler_mode, algorithm_key, algorithm_version, count in algorithm_rows:
+        provenance = "native"
+        if scheduler_mode == "anki" and algorithm_key == "anki":
+            provenance = "import"
+        algorithm_distribution.append({
+            "scheduler_mode": scheduler_mode,
+            "algorithm_key": algorithm_key,
+            "algorithm_version": algorithm_version,
+            "provenance": provenance,
+            "count": int(count or 0),
+        })
+
+    metrics = {
+        "schema_version": "study-architecture-audit.v2",
         "observed_at": observed_at.isoformat(timespec="seconds"),
         "counts": {
             "note_types": int(NoteType.query.count()),
@@ -177,9 +304,9 @@ def build_study_architecture_audit(*, now: datetime | None = None) -> dict[str, 
             "default_count_anomalies": template_default_anomalies,
             "duplicate_name_groups": duplicate_template_names,
             "duplicate_position_groups": duplicate_template_positions,
+            "cross_note_type_cards": cross_note_type_cards,
         },
         "card_gates": {
-            "cross_note_type_cards": cross_note_type_cards,
             "notes_without_cards": notes_without_cards,
             "notes_with_multiple_cards": notes_with_multiple_cards,
         },
@@ -191,17 +318,18 @@ def build_study_architecture_audit(*, now: datetime | None = None) -> dict[str, 
             "fsrs_rows": fsrs_progress_rows,
             "partial_fsrs_state_rows": partial_fsrs_state_rows,
         },
+        "review_event_gates": {
+            "orphan_card_id_events": orphan_review_events,
+            "null_session_id_events": null_session_review_events,
+            "null_algorithm_events": null_algorithm_events,
+        },
         "session_gates": {
             "expired_open_sessions": expired_open_sessions,
         },
-        "review_event_algorithm_distribution": [
-            {
-                "scheduler_mode": scheduler_mode,
-                "algorithm_key": algorithm_key,
-                "algorithm_version": algorithm_version,
-                "count": int(count or 0),
-            }
-            for scheduler_mode, algorithm_key, algorithm_version, count in algorithm_rows
-        ],
+        "review_event_algorithm_distribution": algorithm_distribution,
     }
+
+    metrics["verdicts"] = _categorize_verdicts(metrics)
+
+    return metrics
 

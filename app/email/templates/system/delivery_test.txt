@@ -1,0 +1,12 @@
+{% extends "base/base.txt" %}
+
+{% block content %}
+Hệ thống gửi email Flama hoạt động
+
+Đây là email kiểm tra tự động từ Flama.
+
+Backend đã render thành công cả nội dung HTML và plain text, sau đó chuyển email qua provider đã cấu hình.
+{% if checked_at %}
+Thời điểm kiểm tra: {{ checked_at }}
+{% endif %}
+{% endblock %}

@@ -2,6 +2,7 @@ import {
   ArrowLeft,
   ChevronDown,
   Layers,
+  PenTool,
   Volume2,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
@@ -26,6 +27,7 @@ import { BrowseToolbar } from '../components/BrowseToolbar'
 import { BrowseCardTable } from '../components/BrowseCardTable'
 import { BrowseCardEditor } from '../components/BrowseCardEditor'
 import { BrowseTtsModal } from '../components/BrowseTtsModal'
+import { BrowseStrokeModal } from '../components/BrowseStrokeModal'
 
 export function BrowsePage() {
   const navigate = useNavigate()
@@ -76,6 +78,19 @@ export function BrowsePage() {
         </div>
 
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 sm:h-8 rounded-full text-[11px] sm:text-xs px-2 sm:px-3 gap-1 bg-background hover:bg-muted border-border"
+            onClick={() => {
+              browse.setStrokeModalMode('batch')
+              browse.setIsStrokeModalOpen(true)
+            }}
+          >
+            <PenTool className="size-3.5 text-primary" />
+            <span className="hidden sm:inline">Tạo nét SVG</span>
+          </Button>
+
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
@@ -290,6 +305,15 @@ export function BrowsePage() {
 
       {/* VoiceVox TTS Generation Modal Dialog popup */}
       <BrowseTtsModal browse={browse} />
+
+      {/* Kanji/Hanzi Stroke Diagram Generation Modal */}
+      <BrowseStrokeModal
+        browse={browse}
+        isOpen={browse.isStrokeModalOpen}
+        onClose={() => browse.setIsStrokeModalOpen(false)}
+        mode={browse.strokeModalMode}
+        cardId={browse.strokeModalCardId}
+      />
 
       {/* Local Offline TTS Audio Generation modal */}
       {isLocalAudioModalOpen && (

@@ -15,6 +15,8 @@ static/tmp/
 !/static/uploads/.gitignore
 /static/downloads/*
 !/static/downloads/.gitignore
+static/strokes/**/*.svg
+static/strokes/*.svg
 /flama_media_storage/
 /output/
 /.playwright-cli/
@@ -61,6 +63,8 @@ skills/*
 !skills/docs-architect/
 !skills/nihongo-agent-architect/
 !skills/flama-database-architecture/
+!skills/antigravity-cli/
+!skills/antigravity-manager-api/
 
 
 # OS / Editor files

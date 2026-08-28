@@ -24,3 +24,28 @@ export function login(payload: LoginPayload) {
 export function register(payload: RegisterPayload) {
   return appApi.register(payload)
 }
+
+export type ForgotPasswordPayload = {
+  email: string
+}
+
+export type ResetPasswordPayload = {
+  token: string
+  new_password: string
+  confirm_password?: string
+}
+
+export function forgotPassword(payload: ForgotPasswordPayload) {
+  return appApi.forgotPassword(payload) as Promise<{
+    success: boolean
+    message: string
+  }>
+}
+
+export function resetPassword(payload: ResetPasswordPayload) {
+  return appApi.resetPassword(payload) as Promise<{
+    success: boolean
+    message: string
+  }>
+}
+

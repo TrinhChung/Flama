@@ -826,23 +826,23 @@ Flask-Login session
 
 # Definition of Done
 
-- [ ] Đã đọc auth implementation hiện tại trên `develop`.
-- [ ] Đã đọc Google Identity/OIDC docs mới nhất.
-- [ ] Đã chọn data model cho external identity.
-- [ ] Đã quyết định strategy cho nullable/non-null `password_hash`.
-- [ ] Đã chốt account-linking policy.
-- [ ] Đã implement state/nonce/token validation đúng chuẩn.
-- [ ] Không lưu Google token nếu không có requirement.
-- [ ] Google login tạo được Flama session đúng user.
-- [ ] Safe `next` được preserve qua Google round trip.
-- [ ] Password login không regression.
-- [ ] Disabled user không thể bypass bằng Google.
-- [ ] ChatGPT/Claude OAuth authorize vẫn chạy sau Google login.
-- [ ] Backend tests xanh.
-- [ ] Frontend tests/build xanh.
-- [ ] Migration chạy sạch trên DB hiện tại.
-- [ ] Không leak secret/token vào logs/docs.
-- [ ] Documentation được cập nhật.
+- [x] Đã đọc auth implementation hiện tại trên `develop`.
+- [x] Đã đọc Google Identity/OIDC docs mới nhất.
+- [x] Đã chọn data model cho external identity.
+- [x] Đã quyết định strategy cho nullable/non-null `password_hash`.
+- [x] Đã chốt account-linking policy.
+- [x] Đã implement state/nonce/token validation đúng chuẩn.
+- [x] Không lưu Google token nếu không có requirement.
+- [x] Google login tạo được Flama session đúng user.
+- [x] Safe `next` được preserve qua Google round trip.
+- [x] Password login không regression.
+- [x] Disabled user không thể bypass bằng Google.
+- [x] ChatGPT/Claude OAuth authorize vẫn chạy sau Google login.
+- [x] Backend tests xanh.
+- [x] Frontend tests/build xanh.
+- [x] Migration chạy sạch trên DB hiện tại.
+- [x] Không leak secret/token vào logs/docs.
+- [x] Documentation được cập nhật.
 
 ---
 

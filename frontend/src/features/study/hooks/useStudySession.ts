@@ -63,7 +63,7 @@ function openSnapshot(userId: number, deckId: string) {
   return request
 }
 
-export function useStudySession(deckId: string | null) {
+export function useStudySession(deckId: string | null, compositionFilter?: string | null) {
   const queryClient = useQueryClient()
   const bootstrapQuery = useBootstrap()
   const userId = bootstrapQuery.data?.user?.id ?? null
@@ -255,8 +255,8 @@ export function useStudySession(deckId: string | null) {
   const view = useMemo(() => {
     // `tick` advances waiting learning cards without a network request.
     void tick
-    return session ? buildSessionView(session, now()) : null
-  }, [now, session, tick])
+    return session ? buildSessionView(session, now(), compositionFilter) : null
+  }, [compositionFilter, now, session, tick])
 
   useEffect(() => {
     if (!session || !view?.card?.card_id) return

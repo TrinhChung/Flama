@@ -22,6 +22,7 @@ import {
   Upload,
   User,
   Users,
+  Wallet,
   Zap,
 } from 'lucide-react'
 import { NavMain, type AppNavigationItem } from '@/components/nav-main'
@@ -95,7 +96,8 @@ export function AppSidebar({
   ]
 
   const settings: AppNavigationItem[] = [
-    { title: 'Trang cá nhân & Ví', url: '/profile', icon: User },
+    { title: 'Trang cá nhân', url: '/profile', icon: User },
+    { title: 'Ví & Doanh thu', url: '/wallet', icon: Wallet },
     { title: 'Lịch sử đơn hàng', url: '/orders', icon: CreditCard },
     { title: 'Đóng góp ý kiến', url: '/feedback', icon: MessageSquareHeart },
   ]

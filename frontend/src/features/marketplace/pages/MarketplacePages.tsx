@@ -2,12 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowRight,
   BookOpen,
-  CheckCircle,
   Download,
   Eye,
   Flame,
   HelpCircle,
-  KeyRound,
   Layers,
   Loader2,
   Plus,
@@ -20,7 +18,7 @@ import {
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { RedeemDeckKeyModal } from '../components/keys/RedeemDeckKeyModal'
+import { DeckCard } from '../components/DeckCard'
 
 import { appApi } from '@/app/api'
 import { AmbientBackground } from '@/components/ambient-background'
@@ -241,7 +239,6 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
   const [pricingFilter, setPricingFilter] = useState<'all' | 'free' | 'paid'>('all')
   const [isFilterExpanded, setIsFilterExpanded] = useState(false)
   const [tourOpen, setTourOpen] = useState(false)
-  const [isRedeemModalOpen, setIsRedeemModalOpen] = useState(false)
   const searchInputRef = useRef<HTMLInputElement>(null)
 
 
@@ -356,6 +353,45 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
     [mode, marketQuery.data?.items.length],
   )
 
+  // Curated section grouping when browsing all items without active filters
+  const curatedSections = useMemo(() => {
+    if (isFiltered || mode !== 'decks' || !marketQuery.data?.items) {
+      return null
+    }
+    const items = marketQuery.data.items
+    if (items.length < 5) {
+      return null
+    }
+
+    const groups: Record<string, MarketplaceItem[]> = {}
+    items.forEach((it) => {
+      const cat = it.primary_category || 'Tổng hợp'
+      if (!groups[cat]) groups[cat] = []
+      groups[cat].push(it)
+    })
+
+    const SECTION_THRESHOLD = 3
+    const majorSections: { category: string; items: MarketplaceItem[] }[] = []
+    const otherItems: MarketplaceItem[] = []
+
+    Object.entries(groups).forEach(([cat, catItems]) => {
+      if (catItems.length >= SECTION_THRESHOLD) {
+        majorSections.push({ category: cat, items: catItems })
+      } else {
+        otherItems.push(...catItems)
+      }
+    })
+
+    if (majorSections.length === 0) {
+      return null
+    }
+
+    return {
+      majorSections,
+      otherItems,
+    }
+  }, [isFiltered, mode, marketQuery.data?.items])
+
   // Auto-launch marketplace spotlight tour for first-time visitors
   useEffect(() => {
     if (marketQuery.isSuccess) {
@@ -427,16 +463,6 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
               <Link to={mode === 'decks' ? '/installed-decks' : '/note-types'}>
                 {mode === 'decks' ? 'Deck đã cài' : 'Loại thẻ của tôi'}
               </Link>
-            </Button>
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setIsRedeemModalOpen(true)}
-              className="h-8 sm:h-9 px-2.5 sm:px-3 text-xs font-semibold rounded-lg shrink-0 border-primary/30 text-primary hover:bg-primary/10"
-            >
-              <KeyRound className="size-3.5 mr-1.5 text-primary shrink-0" />
-              Nhập mã kích hoạt
             </Button>
 
             <Button
@@ -899,157 +925,190 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
         </div>
       ) : null}
 
-      {/* Item Card Grid */}
+      {/* Item Card Grid / Section Blocks */}
       {marketQuery.data?.items.length ? (
-        <div className="grid gap-4 sm:gap-5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {marketQuery.data.items.map((item, index) => {
-            const itemTitle = item.title || item.name || 'Học liệu không tên'
-            const detailUrl =
-              mode === 'decks'
-                ? `/marketplace/decks/${item.id}`
-                : `/marketplace/note-types/${item.id}`
-            const authorName =
-              item.author?.account_name || item.author?.username || 'Cộng đồng Flama'
-            const authorInitial = authorName.charAt(0).toUpperCase()
-            const cardCount = item.card_count || item.note_count
-
-            return (
-              <Card
-                key={item.id}
-                data-tour={index === 0 ? 'market-card-first' : undefined}
-                className="group relative flex flex-col justify-between overflow-hidden border-border/80 bg-card p-4 sm:p-5 transition-all duration-200 hover:-translate-y-1 hover:border-primary/40 hover:shadow-md rounded-xl"
-              >
-                {/* Card Main Info Block */}
-                <div className="flex flex-col flex-1 space-y-3">
-                  {/* Category & Price Badge Row */}
-                  <div className="flex items-center justify-between gap-1.5">
-                    <Badge
-                      variant="outline"
-                      className={`px-2.5 py-0.5 text-xs font-semibold rounded-md truncate max-w-[65%] border ${getCategoryBadgeStyle(
-                        item.primary_category,
-                      )}`}
-                    >
-                      {item.primary_category || 'Chung'}
-                    </Badge>
-
-                    <span
-                      className={`inline-flex items-center gap-1 rounded-md px-2.5 py-0.5 text-xs font-semibold ${
-                        item.pricing_mode === 'free'
-                          ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20'
-                          : 'bg-primary/10 text-primary border border-primary/20'
-                      }`}
-                    >
-                      {item.pricing_mode === 'free' ? (
-                        <Sparkles className="size-3" />
-                      ) : null}
-                      {item.price_display}
-                    </span>
-                  </div>
-
-                  {/* Title with Accessible Focus Visible */}
-                  <h3 className="text-sm sm:text-base font-bold tracking-tight text-foreground line-clamp-2 leading-snug">
-                    <Link
-                      to={detailUrl}
-                      className="hover:text-primary hover:underline transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary rounded-xs"
-                    >
-                      {itemTitle}
-                    </Link>
-                  </h3>
-
-                  {/* Author Row */}
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <div className="flex size-5 sm:size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary font-bold text-[10px] ring-1 ring-primary/20">
-                      {authorInitial}
-                    </div>
-                    <span className="font-medium text-foreground/80 truncate">
-                      {authorName}
-                    </span>
-                  </div>
-
-                  {/* Description */}
-                  <p className="line-clamp-2 text-xs leading-relaxed text-muted-foreground font-normal">
-                    {item.description || 'Chưa có mô tả chi tiết cho học liệu này.'}
-                  </p>
-                </div>
-
-                {/* Card Bottom Block */}
-                <div className="mt-4 pt-3.5 border-t border-border/60 space-y-3">
-                  {/* Rating, Lesson/Card Count & Install Stats */}
-                  <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <span className="inline-flex items-center gap-1 font-semibold text-foreground">
-                      <Star className="size-3.5 fill-amber-400 text-amber-500" />
-                      <span className="tabular-nums">
-                        {item.rating_avg.toFixed(1)}
-                        {item.rating_count ? (
-                          <span className="text-[11px] font-normal text-muted-foreground ml-0.5">
-                            ({item.rating_count})
-                          </span>
-                        ) : null}
+        mode === 'decks' ? (
+          curatedSections ? (
+            <div className="space-y-8">
+              {curatedSections.majorSections.map((section) => (
+                <div key={section.category} className="space-y-3.5">
+                  <div className="flex items-center justify-between border-b border-border/50 pb-2">
+                    <div className="flex items-center gap-2">
+                      <Badge
+                        variant="outline"
+                        className={`px-2.5 py-0.5 text-xs font-bold rounded-md ${getCategoryBadgeStyle(
+                          section.category,
+                        )}`}
+                      >
+                        {section.category}
+                      </Badge>
+                      <span className="text-xs font-semibold text-muted-foreground">
+                        ({section.items.length} bộ thẻ)
                       </span>
-                    </span>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setCategory(section.category)}
+                      className="h-8 text-xs font-semibold text-primary hover:text-primary hover:bg-primary/10 gap-1 rounded-lg cursor-pointer"
+                    >
+                      <span>Xem tất cả {section.category}</span>
+                      <ArrowRight className="size-3.5" />
+                    </Button>
+                  </div>
+                  <div className="grid gap-4 sm:gap-5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                    {section.items.slice(0, 4).map((item, index) => (
+                      <DeckCard
+                        key={item.id}
+                        item={item}
+                        variant="marketplace"
+                        dataTour={index === 0 ? 'market-card-first' : undefined}
+                        actionDataTour={index === 0 ? 'market-action-btn' : undefined}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ))}
 
-                    <div className="flex items-center gap-2 font-medium">
-                      {mode === 'decks' && item.lesson_count ? (
-                        <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
-                          <BookOpen className="size-3 text-primary" />
-                          <span className="tabular-nums">{item.lesson_count} bài</span>
-                        </span>
-                      ) : null}
+              {curatedSections.otherItems.length > 0 && (
+                <div className="space-y-3.5">
+                  <div className="flex items-center justify-between border-b border-border/50 pb-2">
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm font-bold text-foreground">Học liệu & Chủ đề khác</h3>
+                      <span className="text-xs font-semibold text-muted-foreground">
+                        ({curatedSections.otherItems.length} bộ thẻ)
+                      </span>
+                    </div>
+                  </div>
+                  <div className="grid gap-4 sm:gap-5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                    {curatedSections.otherItems.map((item) => (
+                      <DeckCard
+                        key={item.id}
+                        item={item}
+                        variant="marketplace"
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="grid gap-4 sm:gap-5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {marketQuery.data.items.map((item, index) => (
+                <DeckCard
+                  key={item.id}
+                  item={item}
+                  variant="marketplace"
+                  dataTour={index === 0 ? 'market-card-first' : undefined}
+                  actionDataTour={index === 0 ? 'market-action-btn' : undefined}
+                />
+              ))}
+            </div>
+          )
+        ) : (
+          <div className="grid gap-4 sm:gap-5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {marketQuery.data.items.map((item, index) => {
+              const itemTitle = item.name || item.title || 'Mẫu thẻ không tên'
+              const detailUrl = `/marketplace/note-types/${item.id}`
+              const authorName =
+                item.author?.account_name || item.author?.username || 'Cộng đồng Flama'
+              const authorInitial = authorName.charAt(0).toUpperCase()
 
-                      {item.note_count ? (
-                        <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
-                          <Layers className="size-3 text-primary" />
-                          <span className="tabular-nums">{item.note_count.toLocaleString('vi-VN')} từ</span>
+              return (
+                <Card
+                  key={item.id}
+                  data-tour={index === 0 ? 'market-card-first' : undefined}
+                  className="group relative flex flex-col justify-between overflow-hidden border-border/80 bg-card p-4 sm:p-5 transition-all duration-200 hover:-translate-y-1 hover:border-primary/40 hover:shadow-md rounded-2xl"
+                >
+                  <div className="flex flex-col flex-1 space-y-3">
+                    <div className="flex items-center justify-between gap-1.5">
+                      <Badge
+                        variant="outline"
+                        className={`px-2.5 py-0.5 text-xs font-semibold rounded-md truncate max-w-[65%] border ${getCategoryBadgeStyle(
+                          item.primary_category,
+                        )}`}
+                      >
+                        {item.primary_category || 'Chung'}
+                      </Badge>
+                      <span
+                        className={`inline-flex items-center gap-1 rounded-md px-2.5 py-0.5 text-xs font-semibold ${
+                          item.pricing_mode === 'free'
+                            ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20'
+                            : 'bg-primary/10 text-primary border border-primary/20'
+                        }`}
+                      >
+                        {item.pricing_mode === 'free' ? (
+                          <Sparkles className="size-3" />
+                        ) : null}
+                        {item.price_display}
+                      </span>
+                    </div>
+
+                    <h3 className="text-sm sm:text-base font-bold tracking-tight text-foreground line-clamp-2 leading-snug">
+                      <Link
+                        to={detailUrl}
+                        className="hover:text-primary hover:underline transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary rounded-xs"
+                      >
+                        {itemTitle}
+                      </Link>
+                    </h3>
+
+                    {item.author?.username ? (
+                      <Link
+                        to={`/profile/${item.author.username}`}
+                        className="inline-flex items-center gap-2 text-xs text-muted-foreground hover:text-primary transition-colors group/author"
+                      >
+                        <div className="flex size-5 sm:size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary font-bold text-[10px] ring-1 ring-primary/20 group-hover/author:ring-primary">
+                          {authorInitial}
+                        </div>
+                        <span className="font-medium text-foreground/80 group-hover/author:text-primary truncate">
+                          {authorName}
                         </span>
-                      ) : cardCount ? (
-                        <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
-                          <Layers className="size-3 text-primary" />
-                          <span className="tabular-nums">{cardCount} thẻ</span>
+                      </Link>
+                    ) : (
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <div className="flex size-5 sm:size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary font-bold text-[10px] ring-1 ring-primary/20">
+                          {authorInitial}
+                        </div>
+                        <span className="font-medium text-foreground/80 truncate">
+                          {authorName}
                         </span>
-                      ) : null}
+                      </div>
+                    )}
+
+                    <p className="line-clamp-2 text-xs leading-relaxed text-muted-foreground font-normal">
+                      {item.description || 'Chưa có mô tả chi tiết cho loại thẻ này.'}
+                    </p>
+                  </div>
+
+                  <div className="mt-4 pt-3.5 border-t border-border/60 space-y-3">
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <span className="inline-flex items-center gap-1 font-semibold text-foreground">
+                        <Star className="size-3.5 fill-amber-400 text-amber-500" />
+                        <span className="tabular-nums">
+                          {(item.rating_avg || 0).toFixed(1)}
+                          {item.rating_count ? (
+                            <span className="text-[11px] font-normal text-muted-foreground ml-0.5">
+                              ({item.rating_count})
+                            </span>
+                          ) : null}
+                        </span>
+                      </span>
 
                       <span className="inline-flex items-center gap-1">
                         <Download className="size-3.5 text-primary" />
                         <span className="tabular-nums">
-                          {item.install_count.toLocaleString('vi-VN')} lượt
+                          {(item.install_count || 0).toLocaleString('vi-VN')} lượt
                         </span>
                       </span>
                     </div>
-                  </div>
 
-                  {/* Action Button */}
-                  {mode === 'decks' && item.installed_deck_id ? (
-                    <Button
-                      size="sm"
-                      asChild
-                      data-tour={index === 0 ? 'market-action-btn' : undefined}
-                      className="w-full h-9 text-xs font-semibold rounded-lg shadow-xs"
-                    >
-                      <Link to={`/study?deck_id=${item.installed_deck_id}`}>
-                        <BookOpen className="mr-1.5 size-3.5" />
-                        Học ngay
-                      </Link>
-                    </Button>
-                  ) : item.is_installed ? (
                     <Button
                       variant="outline"
                       size="sm"
                       asChild
                       data-tour={index === 0 ? 'market-action-btn' : undefined}
-                      className="w-full h-9 text-xs font-semibold rounded-lg border-emerald-500/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10"
-                    >
-                      <Link to={detailUrl}>
-                        <CheckCircle className="mr-1.5 size-3.5 text-emerald-500" />
-                        Đã cài đặt
-                      </Link>
-                    </Button>
-                  ) : (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      asChild
-                      data-tour={index === 0 ? 'market-action-btn' : undefined}
-                      className="w-full h-9 text-xs font-semibold rounded-lg hover:bg-primary hover:text-primary-foreground hover:border-primary transition-all"
+                      className="w-full h-9 text-xs font-semibold rounded-xl hover:bg-primary hover:text-primary-foreground hover:border-primary transition-all"
                     >
                       <Link to={detailUrl}>
                         <Eye className="mr-1.5 size-3.5" />
@@ -1057,12 +1116,12 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
                         <ArrowRight className="ml-1 size-3.5 transition-transform group-hover:translate-x-0.5" />
                       </Link>
                     </Button>
-                  )}
-                </div>
-              </Card>
-            )
-          })}
-        </div>
+                  </div>
+                </Card>
+              )
+            })}
+          </div>
+        )
       ) : null}
 
       {/* Interactive Spotlight Tour for Marketplace */}
@@ -1077,12 +1136,6 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
           localStorage.setItem(MARKET_STORAGE_KEY, 'true')
           setTourOpen(false)
         }}
-      />
-
-      {/* Redeem Deck Key Modal */}
-      <RedeemDeckKeyModal
-        isOpen={isRedeemModalOpen}
-        onClose={() => setIsRedeemModalOpen(false)}
       />
     </Page>
 

@@ -678,6 +678,14 @@ def study_session_open():
     timezone_name = get_effective_timezone_name(
         getattr(current_user, "timezone", "UTC")
     )
+    raw_composition_ids = payload.get("composition_ids")
+    composition_ids = None
+    if isinstance(raw_composition_ids, list) and raw_composition_ids:
+        composition_ids = [
+            str(cid).strip()
+            for cid in raw_composition_ids[:100]
+            if isinstance(cid, str) and cid.strip()
+        ] or None
     try:
         result = study_session_service.open_study_session(
             user=current_user,
@@ -686,6 +694,7 @@ def study_session_open():
             scope_type=validated_query.scope,
             scope_id=validated_query.scope_id_raw,
             timezone_name=timezone_name,
+            composition_ids=composition_ids,
         )
     except study_session_service.StudySessionError as exc:
         db.session.rollback()

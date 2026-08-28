@@ -282,6 +282,13 @@ export function NoteTypeAiGuideModal({ open, onOpenChange }: NoteTypeAiGuideModa
                   Ở mặt trước, dùng Flexbox căn giữa: <code className="font-mono">style="min-height: 200px; display: flex; align-items: center; justify-content: center;"</code> để co giãn mượt trên mọi kích thước màn hình.
                 </p>
               </div>
+
+              <div className="p-3 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-900 dark:text-purple-200 space-y-1.5">
+                <span className="font-bold block">4. Sơ đồ thứ tự nét Kanji & Hanzi:</span>
+                <p className="text-[11px] leading-relaxed">
+                  Nhúng trường chứa sơ đồ nét bằng 3 dấu ngoặc nhọn <code className="font-mono">{`{{{StrokeDiagram}}}`}</code> vào Back Template (bọc trong <code className="font-mono">{`{{#StrokeDiagram}}...{{/StrokeDiagram}}`}</code>). Bạn có thể định dạng CSS <code className="font-mono">.flama-stroke-diagram img &#123; width: 72px; height: 72px; border-radius: 8px; &#125;</code> tùy ý!
+                </p>
+              </div>
             </TabsContent>
           </Tabs>
         </div>

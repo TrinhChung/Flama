@@ -22,6 +22,17 @@ const RegisterPage = lazy(() =>
     default: module.RegisterPage,
   })),
 )
+const ForgotPasswordPage = lazy(() =>
+  import('./features/auth/pages/ForgotPasswordPage').then((module) => ({
+    default: module.ForgotPasswordPage,
+  })),
+)
+const ResetPasswordPage = lazy(() =>
+  import('./features/auth/pages/ResetPasswordPage').then((module) => ({
+    default: module.ResetPasswordPage,
+  })),
+)
+
 const DashboardPage = lazy(() =>
   import('./features/dashboard/pages/DashboardPage').then((module) => ({
     default: module.DashboardPage,
@@ -263,6 +274,11 @@ const ProfilePage = lazy(() =>
     default: module.ProfilePage,
   })),
 )
+const WalletPage = lazy(() =>
+  import('./features/wallet/pages/WalletPage').then((module) => ({
+    default: module.WalletPage,
+  })),
+)
 
 function deferred(element: ReactNode) {
   return (
@@ -294,6 +310,9 @@ const router = createBrowserRouter([
       { index: true, element: <LandingPage /> },
       { path: 'login', element: deferred(<LoginPage />) },
       { path: 'register', element: deferred(<RegisterPage />) },
+      { path: 'forgot-password', element: deferred(<ForgotPasswordPage />) },
+      { path: 'reset-password', element: deferred(<ResetPasswordPage />) },
+
       { path: 'support', element: deferred(<SupportPage />) },
       {
         path: 'support-donation',
@@ -499,6 +518,8 @@ const router = createBrowserRouter([
           },
           { path: 'orders', element: deferred(<OrdersPage />) },
           { path: 'profile', element: deferred(<ProfilePage />) },
+          { path: 'profile/:username', element: deferred(<ProfilePage />) },
+          { path: 'wallet', element: deferred(<WalletPage />) },
           { path: 'admin', element: <Navigate to="/admin/analytics" replace /> },
           {
             path: 'admin/analytics',

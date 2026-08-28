@@ -1,0 +1,12 @@
+============================================================
+🔥 FLAMA - GIỮ NGỌN LỬA HỌC TẬP CHO MỌI KIẾN THỨC
+============================================================
+
+{% block content %}{% endblock %}
+
+============================================================
+© Flama Study Platform • Spaced Repetition
+Email này được gửi tự động từ hệ thống Flama.
+{% if support_email %}Hỗ trợ: {{ support_email }}{% endif %}
+============================================================
+

@@ -8,7 +8,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Search, Sliders, ChevronDown, Trash2, Volume2 } from 'lucide-react'
+import { Search, Sliders, ChevronDown, Trash2, Volume2, PenTool } from 'lucide-react'
 import type { useBrowseState } from '../hooks/useBrowseState'
 
 interface BrowseToolbarProps {
@@ -28,6 +28,8 @@ export function BrowseToolbar({ browse }: BrowseToolbarProps) {
     setLocalAudioDefaultVoiceId,
     setLocalAudioTargetCardIds,
     setIsLocalAudioModalOpen,
+    setIsStrokeModalOpen,
+    setStrokeModalMode,
   } = browse
 
   return (
@@ -73,7 +75,19 @@ export function BrowseToolbar({ browse }: BrowseToolbarProps) {
                   <ChevronDown className="size-3 opacity-60" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-52">
+              <DropdownMenuContent align="end" className="w-56">
+                {/* Stroke Diagram Generation Trigger */}
+                <DropdownMenuItem
+                  onClick={() => {
+                    setStrokeModalMode('batch')
+                    setIsStrokeModalOpen(true)
+                  }}
+                  className="flex items-center gap-2 font-medium cursor-pointer"
+                >
+                  <PenTool className="size-4 text-primary shrink-0" />
+                  <span>Tạo nét Kanji/Hanzi</span>
+                </DropdownMenuItem>
+
                 {/* Voice Generation Trigger */}
                 <DropdownMenuItem
                   onClick={() => setIsTtsModalOpen(true)}

@@ -1,7 +1,6 @@
 # PayOS Donation Migration Regression Investigation
-
-Status: active investigation plan
-
+> **Trạng thái:** [x] ĐÃ HOÀN THÀNH (Completed)  
+> **Ngày hoàn thành:** 2026-08-20  
 ## 1. Problem statement
 
 A user can complete a donation through PayOS successfully, but Flama may still show the saved donation order as `pending_payment` / `Đang chờ thanh toán` afterward.

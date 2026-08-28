@@ -95,16 +95,43 @@ class StudyArchitectureAuditServiceTests(unittest.TestCase):
                 now=datetime(2026, 8, 27, 12, 0, 0)
             )
 
-        self.assertEqual(report["schema_version"], "study-architecture-audit.v1")
+        self.assertEqual(report["schema_version"], "study-architecture-audit.v2")
         self.assertEqual(report["template_gates"]["note_types_with_multiple_templates"], 1)
         self.assertEqual(report["template_gates"]["default_count_anomalies"], 1)
         self.assertEqual(report["template_gates"]["duplicate_name_groups"], 1)
         self.assertEqual(report["template_gates"]["duplicate_position_groups"], 1)
-        self.assertEqual(report["card_gates"]["cross_note_type_cards"], 1)
+        self.assertEqual(report["template_gates"]["cross_note_type_cards"], 1)
         self.assertEqual(report["card_gates"]["notes_with_multiple_cards"], 1)
         self.assertEqual(report["progress_gates"]["learner_note_fan_in_groups"], 1)
         self.assertEqual(report["session_gates"]["expired_open_sessions"], 1)
 
+        # v2: review_event_gates exists
+        self.assertIn("review_event_gates", report)
+        self.assertIn("orphan_card_id_events", report["review_event_gates"])
+        self.assertIn("null_session_id_events", report["review_event_gates"])
+        self.assertIn("null_algorithm_events", report["review_event_gates"])
+
+        # v2: verdicts categorization
+        self.assertIn("verdicts", report)
+        verdicts = report["verdicts"]
+        self.assertIsInstance(verdicts["pass"], list)
+        self.assertIsInstance(verdicts["warn"], list)
+        self.assertIsInstance(verdicts["block"], list)
+
+        # cross_note_type_cards > 0 should be a block
+        block_texts = " ".join(verdicts["block"])
+        self.assertIn("cross_note_type_cards", block_texts)
+
+        # expired_open_sessions > 0 should be a warn
+        warn_texts = " ".join(verdicts["warn"])
+        self.assertIn("expired_open_sessions", warn_texts)
+
+        # v2: algorithm distribution has provenance field
+        for entry in report["review_event_algorithm_distribution"]:
+            self.assertIn("provenance", entry)
+            self.assertIn(entry["provenance"], ("native", "import"))
+
 
 if __name__ == "__main__":
     unittest.main()
+

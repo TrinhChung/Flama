@@ -1,4 +1,10 @@
-import type { LoginPayload, RegisterPayload } from '../features/auth/api'
+import type {
+  ForgotPasswordPayload,
+  LoginPayload,
+  RegisterPayload,
+  ResetPasswordPayload,
+} from '../features/auth/api'
+
 import type {
   CreateDeckForm,
   MoveDeckForm,
@@ -249,6 +255,23 @@ export const appApi = {
     }
   },
 
+  async forgotPassword(payload: ForgotPasswordPayload) {
+    return apiJson<{ success: boolean; message: string }>(
+      `${API_BASE}/auth/forgot-password`,
+      'POST',
+      payload,
+    )
+  },
+
+  async resetPassword(payload: ResetPasswordPayload) {
+    return apiJson<{ success: boolean; message: string }>(
+      `${API_BASE}/auth/reset-password`,
+      'POST',
+      payload,
+    )
+  },
+
+
   async logout() {
     const result = await apiJson<SessionResponse>(
       `${API_BASE}/session`,
@@ -350,4 +373,56 @@ export const appApi = {
       `${API_BASE}/statistics/study-time?${params.toString()}`,
     )
   },
+
+  async generateStrokes(payload: GenerateStrokesPayload): Promise<GenerateStrokesResponse> {
+    return apiJson<GenerateStrokesResponse>(`${API_BASE}/strokes/generate`, 'POST', payload)
+  },
+
+  async batchGenerateStrokes(payload: BatchGenerateStrokesPayload): Promise<BatchGenerateStrokesResponse> {
+    return apiJson<BatchGenerateStrokesResponse>(`${API_BASE}/strokes/batch-generate`, 'POST', payload)
+  },
 }
+
+export type GenerateStrokesPayload = {
+  text: string
+  locale?: string
+  format?: 'html' | 'urls' | 'raw'
+  deduplicate?: boolean
+  max_characters?: number
+}
+
+export type StrokeItem = {
+  char: string
+  hex: string
+  url: string
+  available: boolean
+}
+
+export type GenerateStrokesResponse = {
+  locale: string
+  characters: string[]
+  items: StrokeItem[]
+  output: string
+  missing_count: number
+  missing_characters: string[]
+}
+
+export type BatchGenerateStrokesPayload = {
+  source_field: string
+  target_field: string
+  locale?: string
+  deck_id?: number | null
+  note_ids?: string[]
+  card_ids?: string[]
+  format?: 'html' | 'urls'
+  overwrite?: boolean
+  max_characters?: number
+}
+
+export type BatchGenerateStrokesResponse = {
+  total_processed: number
+  updated: number
+  skipped: number
+  missing_characters: string[]
+}
+
