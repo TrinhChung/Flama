@@ -118,5 +118,70 @@ class SyncManagedEnvironmentTests(unittest.TestCase):
             self.assertFalse(payload_path.exists())
 
 
+    def test_build_and_apply_with_missing_optional_keys(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            temp_path = Path(temporary_directory)
+            payload_path = temp_path / "managed.json"
+            environment_path = temp_path / "flama.env"
+            environment_path.write_text("DB_HOST=127.0.0.1\n", encoding="utf-8")
+
+            values = self._managed_values()
+            values.pop("EMAIL_SMTP_PASSWORD", None)
+            values.pop("EMAIL_RESEND_API_KEY", None)
+
+            with patch.dict(os.environ, values, clear=True):
+                sync_managed_env.build_payload(payload_path)
+
+            changed_keys = sync_managed_env.apply_payload(
+                environment_path=environment_path,
+                payload_path=payload_path,
+            )
+            content = environment_path.read_text(encoding="utf-8")
+
+            expected_keys = set(sync_managed_env.MANAGED_ENV_KEYS) - set(sync_managed_env.OPTIONAL_MANAGED_KEYS)
+            self.assertEqual(set(changed_keys), expected_keys)
+            self.assertIn("DB_HOST=127.0.0.1\n", content)
+            self.assertNotIn("EMAIL_SMTP_PASSWORD=", content)
+            self.assertNotIn("EMAIL_RESEND_API_KEY=", content)
+
+    def test_apply_rejects_missing_required_keys(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            temp_path = Path(temporary_directory)
+            payload_path = temp_path / "managed.json"
+            environment_path = temp_path / "flama.env"
+            environment_path.write_text("DB_HOST=127.0.0.1\n", encoding="utf-8")
+
+            # Missing required ADMIN_EMAIL key in payload
+            payload_path.write_text('{"version": 1, "values": {}}', encoding="utf-8")
+
+            with self.assertRaises(sync_managed_env.ManagedEnvironmentError):
+                sync_managed_env.apply_payload(
+                    environment_path=environment_path,
+                    payload_path=payload_path,
+                )
+
+    def test_apply_rejects_unknown_extra_keys(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            temp_path = Path(temporary_directory)
+            payload_path = temp_path / "managed.json"
+            environment_path = temp_path / "flama.env"
+            environment_path.write_text("DB_HOST=127.0.0.1\n", encoding="utf-8")
+
+            values = self._managed_values()
+            with patch.dict(os.environ, values, clear=False):
+                sync_managed_env.build_payload(payload_path)
+
+            import json, base64
+            data = json.loads(payload_path.read_text(encoding="utf-8"))
+            data["values"]["UNKNOWN_EXTRA_KEY"] = base64.b64encode(b"invalid").decode("ascii")
+            payload_path.write_text(json.dumps(data), encoding="utf-8")
+
+            with self.assertRaises(sync_managed_env.ManagedEnvironmentError):
+                sync_managed_env.apply_payload(
+                    environment_path=environment_path,
+                    payload_path=payload_path,
+                )
+
+
 if __name__ == "__main__":
     unittest.main()

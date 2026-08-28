@@ -190,12 +190,18 @@ def _load_payload(payload_path: Path) -> dict[str, str]:
         raise ManagedEnvironmentError("Unsupported managed environment payload version.")
 
     encoded_values = payload.get("values")
-    if not isinstance(encoded_values, dict) or set(encoded_values) != set(MANAGED_ENV_KEYS):
+    if not isinstance(encoded_values, dict):
+        raise ManagedEnvironmentError("Managed environment payload values are invalid.")
+
+    payload_keys = set(encoded_values)
+    allowed_keys = set(MANAGED_ENV_KEYS)
+    required_keys = set(MANAGED_ENV_KEYS) - set(OPTIONAL_MANAGED_KEYS)
+
+    if not payload_keys.issubset(allowed_keys) or not required_keys.issubset(payload_keys):
         raise ManagedEnvironmentError("Managed environment payload keys do not match the allowed key set.")
 
     values: dict[str, str] = {}
-    for key in MANAGED_ENV_KEYS:
-        encoded_value = encoded_values.get(key)
+    for key, encoded_value in encoded_values.items():
         if not isinstance(encoded_value, str):
             raise ManagedEnvironmentError(f"Managed environment payload value is invalid: {key}")
         try:
@@ -236,8 +242,8 @@ def apply_payload(*, environment_path: Path, payload_path: Path) -> list[str]:
 
     values = _load_payload(payload_path)
     desired_lines = {
-        key: _format_environment_assignment(key, values[key])
-        for key in MANAGED_ENV_KEYS
+        key: _format_environment_assignment(key, value)
+        for key, value in values.items()
     }
 
     output_lines: list[str] = []
@@ -260,10 +266,10 @@ def apply_payload(*, environment_path: Path, payload_path: Path) -> list[str]:
         if line != desired_line:
             changed_keys.add(key)
 
-    for key in MANAGED_ENV_KEYS:
+    for key, desired_line in desired_lines.items():
         if key in seen_keys:
             continue
-        output_lines.append(desired_lines[key])
+        output_lines.append(desired_line)
         changed_keys.add(key)
 
     if not changed_keys:
