@@ -300,7 +300,11 @@ def request_password_reset(
             )
             return {"success": True, "message": PASSWORD_RESET_GENERIC_MESSAGE}
 
-        public_url = str(current_app.config.get("PUBLIC_APP_URL") or "").rstrip("/")
+        public_url = str(
+            current_app.config.get("PUBLIC_APP_URL")
+            or current_app.config.get("FRONTEND_URL")
+            or ""
+        ).rstrip("/")
         if not public_url:
             current_app.logger.error(
                 "Password reset email skipped because PUBLIC_APP_URL is not configured; recipient=%s",
