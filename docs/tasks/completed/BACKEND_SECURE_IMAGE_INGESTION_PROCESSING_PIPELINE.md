@@ -1,5 +1,10 @@
 # Task: Backend pipeline xử lý ảnh an toàn, tối ưu và đồng bộ qua Redis
 
+> **Trạng thái:** [x] ĐÃ HOÀN THÀNH (Completed)  
+> **Ngày hoàn thành:** 2026-08-28  
+> **Target branch:** `develop`  
+> **Commit:** `e86c7d1`
+
 ## Mục tiêu
 
 Thiết kế và triển khai một **pipeline backend dùng chung cho toàn bộ ảnh được người dùng đưa vào Flama**, bất kể ảnh được thêm từ màn nào, ví dụ:
@@ -549,3 +554,30 @@ Không cần big-bang migration nếu ảnh hưởng quá nhiều feature.
 - giữ nguyên file upload gốc để public trực tiếp.
 
 Các nội dung trên có thể được tách thành task riêng sau khi pipeline ảnh cơ bản đã ổn định.
+
+---
+
+## Implementation Summary (2026-08-28)
+
+### 1. Database & Migration
+- **`models/image_asset.py`**: Model `ImageAsset` theo dõi toàn bộ thuộc tính và trạng thái xử lý ảnh.
+- **`models/admin_security_alert.py`**: Model `AdminSecurityAlert` ghi nhận các sự kiện bảo mật (SSRF, Decompression Bomb, Disguised File, Unsafe SVG).
+- **`migrations/versions/20260831_000028_add_image_assets_and_security_alerts.py`**: Linear migration cho DB schema.
+
+### 2. Services & Architecture
+- **`app/services/image_security_service.py`**: Kiểm tra signature/magic bytes, phát hiện decompression bomb, polyglot header, ghi nhận threat alert.
+- **`app/services/image_processor.py`**: Auto-orient EXIF, resize theo preset (`avatar`, `deck_cover`, `note_image`, `image_library`, `thumbnail`), bảo toàn alpha channel, strip metadata và convert sang WebP.
+- **`app/services/image_queue_service.py`**: Quản trị hàng đợi Redis (`flama:images:queue`) với fallback in-memory.
+- **`app/services/image_worker_service.py`**: Worker download an toàn (Anti-SSRF & DNS pinning), validate, optimize WebP và thay thế atomic `display_url = managed_url` (`/media/asset/<id>`).
+- **`app/services/image_ingestion_service.py`**: Entrypoint thống nhất cho toàn bộ hệ thống Flama (hỗ trợ temporary display URL cho public images).
+
+### 3. API, Routes & CLI
+- **`app/api/v1/images.py`**: `POST /api/v1/images/ingest` & `GET /api/v1/images/<asset_id>/status`.
+- **`app/api/v1/admin/security_alerts.py`**: `GET /api/v1/admin/security-alerts` & `PATCH /api/v1/admin/security-alerts/<alert_id>`.
+- **`app/routes/media_asset_routes.py`**: `GET /media/asset/<asset_id>` phục vụ WebP kèm CSP sandbox, nosniff, immutable cache.
+- **`app/cli.py`**: CLI command `flask images process-queue` & `flask images clear-queue`.
+
+### 4. Verification Results
+- **`tests/test_secure_image_pipeline.py`**: 14/14 tests Passed (`OK`).
+- **Regression tests (`test_image*.py`, `test_remote_image_fetcher.py`)**: 34/34 tests Passed (`OK`).
+
