@@ -1,5 +1,9 @@
 # Task: Đổi mật khẩu với xác thực mật khẩu hiện tại và xác nhận mật khẩu mới
 
+> **Trạng thái:** [x] ĐÃ HOÀN THÀNH (Completed)  
+> **Ngày hoàn thành:** 2026-08-28  
+> **Target branch:** `develop`  
+
 ## Mục tiêu
 
 Thiết kế và triển khai lại màn **Đổi mật khẩu** theo flow an toàn, yêu cầu người dùng xác thực mật khẩu hiện tại trước khi thay đổi mật khẩu.

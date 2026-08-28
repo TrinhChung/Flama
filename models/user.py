@@ -14,6 +14,10 @@ class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(255), unique=True, nullable=False, index=True)
     username = db.Column(db.String(150), unique=True, nullable=False)
+    display_name = db.Column(db.String(150), nullable=True)
+    avatar_url = db.Column(db.String(512), nullable=True)
+    bio = db.Column(db.Text, nullable=True)
+    social_links = db.Column(db.JSON, nullable=False, default=list)
     password_hash = db.Column(db.String(255), nullable=False)
     timezone = db.Column(db.String(64), nullable=False, default="UTC")
     role_id = db.Column(db.Integer, db.ForeignKey("user_roles.id"), nullable=True, index=True)
@@ -57,10 +61,18 @@ class User(UserMixin, db.Model):
         """Flask-Login hook: disabled users cannot authenticate."""
         return not bool(self.is_disabled)
 
+    @property
+    def has_password(self) -> bool:
+        """Check if user has a configured local password hash."""
+        return bool(self.password_hash and str(self.password_hash).strip())
+
     def set_password(self, password: str) -> None:
         """Hash and store the provided password."""
         self.password_hash = generate_password_hash(password)
 
     def check_password(self, password: str) -> bool:
         """Validate a plaintext password against the stored hash."""
+        if not self.has_password:
+            return False
         return check_password_hash(self.password_hash, password)
+

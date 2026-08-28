@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { KeyRound, LoaderCircle, Settings2 } from 'lucide-react'
+import { Eye, EyeOff, KeyRound, LoaderCircle, Settings2 } from 'lucide-react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -50,6 +50,9 @@ export function ProfileEditDialog({
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false)
+  const [showNewPassword, setShowNewPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [fieldErrors, setFieldErrors] = useState<PasswordFieldErrors>({})
   const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false)
 
@@ -57,6 +60,9 @@ export function ProfileEditDialog({
     setCurrentPassword('')
     setNewPassword('')
     setConfirmPassword('')
+    setShowCurrentPassword(false)
+    setShowNewPassword(false)
+    setShowConfirmPassword(false)
     setFieldErrors({})
     setHasAttemptedSubmit(false)
   }
@@ -276,21 +282,60 @@ export function ProfileEditDialog({
               </Button>
             </DialogFooter>
           </form>
+        ) : user.has_password === false ? (
+          <div className="space-y-4 pt-2">
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 text-xs text-amber-900 dark:text-amber-200">
+              <div className="flex items-start gap-2.5">
+                <KeyRound className="mt-0.5 size-4 text-amber-600 shrink-0 dark:text-amber-400" />
+                <div className="space-y-1">
+                  <p className="font-semibold">Tài khoản đăng nhập qua dịch vụ liên kết</p>
+                  <p className="text-muted-foreground text-xs leading-relaxed">
+                    Tài khoản này được đăng ký qua Google hoặc OAuth và chưa thiết lập mật khẩu trực tiếp. Để tạo mật khẩu mới cho tài khoản, bạn có thể sử dụng chức năng <span className="font-medium text-foreground">Quên mật khẩu</span> khi đăng xuất.
+                  </p>
+                </div>
+              </div>
+            </div>
+            <DialogFooter className="pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => handleOpenChange(false)}
+              >
+                Đóng
+              </Button>
+            </DialogFooter>
+          </div>
         ) : (
           <form noValidate onSubmit={handleSavePassword} className="space-y-4 pt-2">
             <div className="space-y-1.5">
               <Label htmlFor="profile-cur-pw" className="text-xs">
                 Mật khẩu hiện tại <span className="text-destructive">*</span>
               </Label>
-              <Input
-                id="profile-cur-pw"
-                type="password"
-                value={currentPassword}
-                onChange={(e) => handleCurrentPasswordChange(e.target.value)}
-                placeholder="Nhập mật khẩu hiện tại để xác thực"
-                aria-invalid={Boolean(fieldErrors.current_password)}
-                required
-              />
+              <div className="relative">
+                <Input
+                  id="profile-cur-pw"
+                  type={showCurrentPassword ? 'text' : 'password'}
+                  value={currentPassword}
+                  onChange={(e) => handleCurrentPasswordChange(e.target.value)}
+                  placeholder="Nhập mật khẩu hiện tại để xác thực"
+                  aria-invalid={Boolean(fieldErrors.current_password)}
+                  className="pr-10"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowCurrentPassword((prev) => !prev)}
+                  className="absolute right-0 top-0 flex h-full items-center px-3 text-muted-foreground hover:text-foreground transition-colors"
+                  tabIndex={-1}
+                  aria-label={showCurrentPassword ? 'Ẩn mật khẩu hiện tại' : 'Hiện mật khẩu hiện tại'}
+                >
+                  {showCurrentPassword ? (
+                    <EyeOff className="size-4" />
+                  ) : (
+                    <Eye className="size-4" />
+                  )}
+                </button>
+              </div>
               {fieldErrors.current_password ? (
                 <p className="text-[11px] font-medium text-destructive">
                   {fieldErrors.current_password}
@@ -302,15 +347,31 @@ export function ProfileEditDialog({
               <Label htmlFor="profile-new-pw" className="text-xs">
                 Mật khẩu mới <span className="text-destructive">*</span>
               </Label>
-              <Input
-                id="profile-new-pw"
-                type="password"
-                value={newPassword}
-                onChange={(e) => handleNewPasswordChange(e.target.value)}
-                placeholder="Ít nhất 8 ký tự"
-                aria-invalid={Boolean(fieldErrors.new_password)}
-                required
-              />
+              <div className="relative">
+                <Input
+                  id="profile-new-pw"
+                  type={showNewPassword ? 'text' : 'password'}
+                  value={newPassword}
+                  onChange={(e) => handleNewPasswordChange(e.target.value)}
+                  placeholder="Ít nhất 8 ký tự"
+                  aria-invalid={Boolean(fieldErrors.new_password)}
+                  className="pr-10"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowNewPassword((prev) => !prev)}
+                  className="absolute right-0 top-0 flex h-full items-center px-3 text-muted-foreground hover:text-foreground transition-colors"
+                  tabIndex={-1}
+                  aria-label={showNewPassword ? 'Ẩn mật khẩu mới' : 'Hiện mật khẩu mới'}
+                >
+                  {showNewPassword ? (
+                    <EyeOff className="size-4" />
+                  ) : (
+                    <Eye className="size-4" />
+                  )}
+                </button>
+              </div>
               {fieldErrors.new_password ? (
                 <p className="text-[11px] font-medium text-destructive">
                   {fieldErrors.new_password}
@@ -322,15 +383,31 @@ export function ProfileEditDialog({
               <Label htmlFor="profile-conf-pw" className="text-xs">
                 Xác nhận mật khẩu mới <span className="text-destructive">*</span>
               </Label>
-              <Input
-                id="profile-conf-pw"
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => handleConfirmPasswordChange(e.target.value)}
-                placeholder="Nhập lại mật khẩu mới"
-                aria-invalid={Boolean(fieldErrors.confirm_password)}
-                required
-              />
+              <div className="relative">
+                <Input
+                  id="profile-conf-pw"
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  value={confirmPassword}
+                  onChange={(e) => handleConfirmPasswordChange(e.target.value)}
+                  placeholder="Nhập lại mật khẩu mới"
+                  aria-invalid={Boolean(fieldErrors.confirm_password)}
+                  className="pr-10"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword((prev) => !prev)}
+                  className="absolute right-0 top-0 flex h-full items-center px-3 text-muted-foreground hover:text-foreground transition-colors"
+                  tabIndex={-1}
+                  aria-label={showConfirmPassword ? 'Ẩn xác nhận mật khẩu' : 'Hiện xác nhận mật khẩu'}
+                >
+                  {showConfirmPassword ? (
+                    <EyeOff className="size-4" />
+                  ) : (
+                    <Eye className="size-4" />
+                  )}
+                </button>
+              </div>
               {fieldErrors.confirm_password ? (
                 <p className="text-[11px] font-medium text-destructive">
                   {fieldErrors.confirm_password}
@@ -373,3 +450,4 @@ export function ProfileEditDialog({
     </Dialog>
   )
 }
+
