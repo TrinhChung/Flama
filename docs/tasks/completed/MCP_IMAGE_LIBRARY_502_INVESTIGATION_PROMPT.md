@@ -1,5 +1,10 @@
 # Prompt — Điều tra lỗi MCP Image Library 502
 
+> **Trạng thái:** [x] ĐÃ HOÀN THÀNH (Completed)  
+> **Ngày hoàn thành:** 2026-08-28  
+> **Target branch:** `develop`  
+> **Commits:** `6adfbdb`, `51b871f`, `a6bd3a3`, `a2082a2`  
+
 Hãy điều tra và sửa lỗi hiện tại của các MCP tool liên quan đến **Flama Image Library** trên branch `develop`.
 
 ## Bối cảnh hiện tại
