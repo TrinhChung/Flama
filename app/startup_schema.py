@@ -893,16 +893,26 @@ def ensure_backward_compatible_schema() -> None:
             schema_changed = True
 
     if "users" in table_names:
-        _ensure_column(
+        added_verified = _ensure_column(
             "users",
             "email_verified_at",
             "ALTER TABLE users ADD COLUMN email_verified_at DATETIME NULL",
         )
-        _ensure_column(
+        added_source = _ensure_column(
             "users",
             "email_verification_source",
             "ALTER TABLE users ADD COLUMN email_verification_source VARCHAR(32) NULL",
         )
+        if added_verified or added_source:
+            db.session.execute(
+                sa.text(
+                    "UPDATE users SET "
+                    "email_verified_at = COALESCE(created_at, CURRENT_TIMESTAMP), "
+                    "email_verification_source = 'legacy' "
+                    "WHERE email_verified_at IS NULL"
+                )
+            )
+            schema_changed = True
 
     if "email_verification_tokens" not in table_names:
         from models.email_verification_token import EmailVerificationToken
