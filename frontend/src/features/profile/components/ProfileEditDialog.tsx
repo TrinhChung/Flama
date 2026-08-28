@@ -1,5 +1,12 @@
 import { useEffect, useState } from 'react'
-import { Eye, EyeOff, KeyRound, LoaderCircle, Settings2 } from 'lucide-react'
+import {
+  KeyRound,
+  Link2,
+  LoaderCircle,
+  Plus,
+  Settings2,
+  Trash2,
+} from 'lucide-react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -14,13 +21,14 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
+import { Textarea } from '@/components/ui/textarea'
 import { profileApi } from '../api/profileApi'
 import {
   type PasswordFieldErrors,
   mapApiErrorToFieldErrors,
   validateChangePasswordForm,
 } from '../schemas'
-import type { ProfileUser } from '../types/profile'
+import type { ProfileUser, SocialLink } from '../types/profile'
 
 const COMMON_TIMEZONES = [
   'Asia/Ho_Chi_Minh',
@@ -35,6 +43,17 @@ const COMMON_TIMEZONES = [
   'Europe/Paris',
 ]
 
+const SOCIAL_PLATFORMS = [
+  { value: 'website', label: 'Website cá nhân' },
+  { value: 'github', label: 'GitHub' },
+  { value: 'youtube', label: 'YouTube' },
+  { value: 'facebook', label: 'Facebook' },
+  { value: 'x', label: 'X (Twitter)' },
+  { value: 'linkedin', label: 'LinkedIn' },
+  { value: 'discord', label: 'Discord' },
+  { value: 'other', label: 'Khác' },
+]
+
 export function ProfileEditDialog({
   user,
   open,
@@ -45,37 +64,47 @@ export function ProfileEditDialog({
   onOpenChange: (open: boolean) => void
 }) {
   const queryClient = useQueryClient()
-  const [activeTab, setActiveTab] = useState<'info' | 'password'>('info')
+  const [activeTab, setActiveTab] = useState<'info' | 'links' | 'password'>('info')
+
+  // Form states
+  const [displayName, setDisplayName] = useState(user.display_name || user.username || '')
+  const [bio, setBio] = useState(user.bio || '')
   const [timezone, setTimezone] = useState(user.timezone || 'Asia/Ho_Chi_Minh')
+  const [socialLinks, setSocialLinks] = useState<SocialLink[]>(
+    Array.isArray(user.social_links) ? [...user.social_links] : []
+  )
+
+  // Password change states
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
-  const [showCurrentPassword, setShowCurrentPassword] = useState(false)
-  const [showNewPassword, setShowNewPassword] = useState(false)
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [fieldErrors, setFieldErrors] = useState<PasswordFieldErrors>({})
   const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false)
+
+  // Sync state whenever dialog opens
+  useEffect(() => {
+    if (open) {
+      setDisplayName(user.display_name || user.username || '')
+      setBio(user.bio || '')
+      setTimezone(user.timezone || 'Asia/Ho_Chi_Minh')
+      setSocialLinks(Array.isArray(user.social_links) ? [...user.social_links] : [])
+      resetPasswordState()
+    }
+  }, [open, user])
 
   const resetPasswordState = () => {
     setCurrentPassword('')
     setNewPassword('')
     setConfirmPassword('')
-    setShowCurrentPassword(false)
-    setShowNewPassword(false)
-    setShowConfirmPassword(false)
     setFieldErrors({})
     setHasAttemptedSubmit(false)
   }
 
-  // Clear credentials and errors whenever the dialog closes/reopens
-  useEffect(() => {
-    if (!open) {
-      resetPasswordState()
-    }
-  }, [open])
-
   const mutation = useMutation({
     mutationFn: (payload: {
+      display_name?: string
+      bio?: string
+      social_links?: SocialLink[]
       timezone?: string
       current_password?: string
       new_password?: string
@@ -83,11 +112,12 @@ export function ProfileEditDialog({
     }) => profileApi.updateProfile(payload),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['profile'] })
+      void queryClient.invalidateQueries({ queryKey: ['public-profile'] })
       void queryClient.invalidateQueries({ queryKey: ['bootstrap'] })
       toast.success(
         activeTab === 'password'
           ? 'Mật khẩu đã được thay đổi thành công.'
-          : 'Đã cập nhật thông tin cá nhân thành công!',
+          : 'Đã cập nhật hồ sơ cá nhân thành công!'
       )
       resetPasswordState()
       onOpenChange(false)
@@ -110,10 +140,48 @@ export function ProfileEditDialog({
 
   const handleSaveInfo = (e: React.FormEvent) => {
     e.preventDefault()
-    mutation.mutate({ timezone })
+    mutation.mutate({
+      display_name: displayName.trim(),
+      bio: bio.trim(),
+      timezone,
+    })
   }
 
-  const isFormValid = validateChangePasswordForm({
+  const handleSaveLinks = (e: React.FormEvent) => {
+    e.preventDefault()
+    mutation.mutate({
+      social_links: socialLinks.filter((l) => Boolean(l.url.trim())),
+    })
+  }
+
+  const handleAddSocialLink = () => {
+    if (socialLinks.length >= 10) {
+      toast.warning('Tối đa 10 liên kết mạng xã hội.')
+      return
+    }
+    setSocialLinks((prev) => [
+      ...prev,
+      { type: 'website', url: '', label: '' },
+    ])
+  }
+
+  const handleUpdateSocialLink = (
+    index: number,
+    field: keyof SocialLink,
+    value: string
+  ) => {
+    setSocialLinks((prev) => {
+      const copy = [...prev]
+      copy[index] = { ...copy[index], [field]: value }
+      return copy
+    })
+  }
+
+  const handleRemoveSocialLink = (index: number) => {
+    setSocialLinks((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  const isPasswordFormValid = validateChangePasswordForm({
     current_password: currentPassword,
     new_password: newPassword,
     confirm_password: confirmPassword,
@@ -142,70 +210,54 @@ export function ProfileEditDialog({
     })
   }
 
-  const handleTabChange = (tab: 'info' | 'password') => {
+  const handleTabChange = (tab: 'info' | 'links' | 'password') => {
     setActiveTab(tab)
-    if (tab === 'info') {
+    if (tab !== 'password') {
       resetPasswordState()
-    }
-  }
-
-  const handleOpenChange = (nextOpen: boolean) => {
-    if (!nextOpen) {
-      resetPasswordState()
-    }
-    onOpenChange(nextOpen)
-  }
-
-  const handleCurrentPasswordChange = (val: string) => {
-    setCurrentPassword(val)
-    if (fieldErrors.current_password) {
-      setFieldErrors((prev) => ({ ...prev, current_password: undefined }))
-    }
-  }
-
-  const handleNewPasswordChange = (val: string) => {
-    setNewPassword(val)
-    if (fieldErrors.new_password) {
-      setFieldErrors((prev) => ({ ...prev, new_password: undefined }))
-    }
-  }
-
-  const handleConfirmPasswordChange = (val: string) => {
-    setConfirmPassword(val)
-    if (fieldErrors.confirm_password) {
-      setFieldErrors((prev) => ({ ...prev, confirm_password: undefined }))
     }
   }
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-[480px]">
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[540px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Settings2 className="size-5 text-primary" />
-            Chỉnh sửa thông tin cá nhân
+            Chỉnh sửa hồ sơ cá nhân
           </DialogTitle>
           <DialogDescription>
-            Cập nhật múi giờ hiển thị hoặc đổi mật khẩu đăng nhập của bạn.
+            Cập nhật tên hiển thị, bio giới thiệu, liên kết và cài đặt tài khoản của bạn.
           </DialogDescription>
         </DialogHeader>
 
+        {/* Tab navigation */}
         <div className="flex border-b border-border/60">
           <button
             type="button"
             onClick={() => handleTabChange('info')}
-            className={`border-b-2 px-4 py-2 text-xs font-semibold transition ${
+            className={`border-b-2 px-4 py-2 text-xs font-semibold transition cursor-pointer ${
               activeTab === 'info'
                 ? 'border-primary text-primary'
                 : 'border-transparent text-muted-foreground hover:text-foreground'
             }`}
           >
-            Thông tin & Múi giờ
+            Thông tin & Bio
+          </button>
+          <button
+            type="button"
+            onClick={() => handleTabChange('links')}
+            className={`border-b-2 px-4 py-2 text-xs font-semibold transition cursor-pointer ${
+              activeTab === 'links'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            Liên kết ({socialLinks.length})
           </button>
           <button
             type="button"
             onClick={() => handleTabChange('password')}
-            className={`border-b-2 px-4 py-2 text-xs font-semibold transition ${
+            className={`border-b-2 px-4 py-2 text-xs font-semibold transition cursor-pointer ${
               activeTab === 'password'
                 ? 'border-primary text-primary'
                 : 'border-transparent text-muted-foreground hover:text-foreground'
@@ -215,32 +267,42 @@ export function ProfileEditDialog({
           </button>
         </div>
 
+        {/* Tab 1: Info & Bio */}
         {activeTab === 'info' ? (
           <form onSubmit={handleSaveInfo} className="space-y-4 pt-2">
             <div className="space-y-1.5">
-              <Label htmlFor="profile-username" className="text-xs">
-                Tên người dùng
+              <Label htmlFor="profile-display-name" className="text-xs">
+                Tên hiển thị (Display Name)
               </Label>
               <Input
-                id="profile-username"
-                value={user.username}
-                disabled
-                className="bg-muted/40 text-muted-foreground"
+                id="profile-display-name"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                placeholder="Ví dụ: Sensei Tanaka, Minh Triết..."
+                maxLength={100}
               />
               <p className="text-[11px] text-muted-foreground">
-                Tên đăng nhập không thể thay đổi sau khi đăng ký.
+                Tên đại diện xuất hiện công khai trên Marketplace và hồ sơ của bạn.
               </p>
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="profile-email" className="text-xs">
-                Địa chỉ Email
-              </Label>
-              <Input
-                id="profile-email"
-                value={user.email}
-                disabled
-                className="bg-muted/40 text-muted-foreground"
+              <div className="flex items-center justify-between">
+                <Label htmlFor="profile-bio" className="text-xs">
+                  Giới thiệu ngắn (Bio)
+                </Label>
+                <span className="text-[11px] text-muted-foreground">
+                  {bio.length}/500
+                </span>
+              </div>
+              <Textarea
+                id="profile-bio"
+                value={bio}
+                onChange={(e) => setBio(e.target.value)}
+                placeholder="Chia sẻ về mục tiêu học tập, kinh nghiệm giảng dạy tiếng Nhật hoặc các dự án bộ thẻ của bạn..."
+                rows={3}
+                maxLength={500}
+                className="resize-none text-xs leading-relaxed"
               />
             </div>
 
@@ -265,7 +327,7 @@ export function ProfileEditDialog({
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => handleOpenChange(false)}
+                onClick={() => onOpenChange(false)}
                 disabled={mutation.isPending}
               >
                 Hủy
@@ -277,65 +339,136 @@ export function ProfileEditDialog({
                     Đang lưu…
                   </>
                 ) : (
-                  'Lưu thay đổi'
+                  'Lưu thông tin'
                 )}
               </Button>
             </DialogFooter>
           </form>
-        ) : user.has_password === false ? (
-          <div className="space-y-4 pt-2">
-            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 text-xs text-amber-900 dark:text-amber-200">
-              <div className="flex items-start gap-2.5">
-                <KeyRound className="mt-0.5 size-4 text-amber-600 shrink-0 dark:text-amber-400" />
-                <div className="space-y-1">
-                  <p className="font-semibold">Tài khoản đăng nhập qua dịch vụ liên kết</p>
-                  <p className="text-muted-foreground text-xs leading-relaxed">
-                    Tài khoản này được đăng ký qua Google hoặc OAuth và chưa thiết lập mật khẩu trực tiếp. Để tạo mật khẩu mới cho tài khoản, bạn có thể sử dụng chức năng <span className="font-medium text-foreground">Quên mật khẩu</span> khi đăng xuất.
-                  </p>
-                </div>
-              </div>
+        ) : null}
+
+        {/* Tab 2: Social Links */}
+        {activeTab === 'links' ? (
+          <form onSubmit={handleSaveLinks} className="space-y-4 pt-2">
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-muted-foreground">
+                Thêm các liên kết website, kênh YouTube, trang GitHub hoặc trang cá nhân của bạn.
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleAddSocialLink}
+                className="h-7 gap-1 text-xs font-semibold"
+              >
+                <Plus className="size-3.5" />
+                Thêm link
+              </Button>
             </div>
+
+            {socialLinks.length === 0 ? (
+              <div className="py-8 text-center rounded-xl border border-dashed border-border/80">
+                <Link2 className="size-8 mx-auto text-muted-foreground/40 mb-2" />
+                <p className="text-xs text-muted-foreground">
+                  Chưa có liên kết nào. Nhấn 'Thêm link' để bổ sung liên kết mạng xã hội.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2.5 max-h-[300px] overflow-y-auto pr-1">
+                {socialLinks.map((link, idx) => (
+                  <div
+                    key={idx}
+                    className="flex items-center gap-2 rounded-lg border border-border/60 p-2.5 bg-muted/20"
+                  >
+                    <NativeSelect
+                      value={link.type}
+                      onChange={(e) =>
+                        handleUpdateSocialLink(idx, 'type', e.target.value)
+                      }
+                      className="w-32 shrink-0 text-xs"
+                    >
+                      {SOCIAL_PLATFORMS.map((p) => (
+                        <NativeSelectOption key={p.value} value={p.value}>
+                          {p.label}
+                        </NativeSelectOption>
+                      ))}
+                    </NativeSelect>
+
+                    <Input
+                      value={link.url}
+                      onChange={(e) =>
+                        handleUpdateSocialLink(idx, 'url', e.target.value)
+                      }
+                      placeholder="https://..."
+                      className="text-xs"
+                    />
+
+                    <Input
+                      value={link.label || ''}
+                      onChange={(e) =>
+                        handleUpdateSocialLink(idx, 'label', e.target.value)
+                      }
+                      placeholder="Nhãn (tùy chọn)"
+                      className="w-28 shrink-0 text-xs hidden sm:block"
+                    />
+
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleRemoveSocialLink(idx)}
+                      className="size-8 p-0 text-destructive hover:bg-destructive/10 shrink-0"
+                    >
+                      <Trash2 className="size-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+
             <DialogFooter className="pt-2">
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => handleOpenChange(false)}
+                onClick={() => onOpenChange(false)}
+                disabled={mutation.isPending}
               >
-                Đóng
+                Hủy
+              </Button>
+              <Button type="submit" disabled={mutation.isPending}>
+                {mutation.isPending ? (
+                  <>
+                    <LoaderCircle className="mr-2 size-4 animate-spin" />
+                    Đang lưu…
+                  </>
+                ) : (
+                  'Lưu liên kết'
+                )}
               </Button>
             </DialogFooter>
-          </div>
-        ) : (
+          </form>
+        ) : null}
+
+        {/* Tab 3: Password Change */}
+        {activeTab === 'password' ? (
           <form noValidate onSubmit={handleSavePassword} className="space-y-4 pt-2">
             <div className="space-y-1.5">
               <Label htmlFor="profile-cur-pw" className="text-xs">
                 Mật khẩu hiện tại <span className="text-destructive">*</span>
               </Label>
-              <div className="relative">
-                <Input
-                  id="profile-cur-pw"
-                  type={showCurrentPassword ? 'text' : 'password'}
-                  value={currentPassword}
-                  onChange={(e) => handleCurrentPasswordChange(e.target.value)}
-                  placeholder="Nhập mật khẩu hiện tại để xác thực"
-                  aria-invalid={Boolean(fieldErrors.current_password)}
-                  className="pr-10"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowCurrentPassword((prev) => !prev)}
-                  className="absolute right-0 top-0 flex h-full items-center px-3 text-muted-foreground hover:text-foreground transition-colors"
-                  tabIndex={-1}
-                  aria-label={showCurrentPassword ? 'Ẩn mật khẩu hiện tại' : 'Hiện mật khẩu hiện tại'}
-                >
-                  {showCurrentPassword ? (
-                    <EyeOff className="size-4" />
-                  ) : (
-                    <Eye className="size-4" />
-                  )}
-                </button>
-              </div>
+              <Input
+                id="profile-cur-pw"
+                type="password"
+                value={currentPassword}
+                onChange={(e) => {
+                  setCurrentPassword(e.target.value)
+                  if (fieldErrors.current_password) {
+                    setFieldErrors((prev) => ({ ...prev, current_password: undefined }))
+                  }
+                }}
+                placeholder="Nhập mật khẩu hiện tại để xác thực"
+                aria-invalid={Boolean(fieldErrors.current_password)}
+                required
+              />
               {fieldErrors.current_password ? (
                 <p className="text-[11px] font-medium text-destructive">
                   {fieldErrors.current_password}
@@ -347,31 +480,20 @@ export function ProfileEditDialog({
               <Label htmlFor="profile-new-pw" className="text-xs">
                 Mật khẩu mới <span className="text-destructive">*</span>
               </Label>
-              <div className="relative">
-                <Input
-                  id="profile-new-pw"
-                  type={showNewPassword ? 'text' : 'password'}
-                  value={newPassword}
-                  onChange={(e) => handleNewPasswordChange(e.target.value)}
-                  placeholder="Ít nhất 8 ký tự"
-                  aria-invalid={Boolean(fieldErrors.new_password)}
-                  className="pr-10"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowNewPassword((prev) => !prev)}
-                  className="absolute right-0 top-0 flex h-full items-center px-3 text-muted-foreground hover:text-foreground transition-colors"
-                  tabIndex={-1}
-                  aria-label={showNewPassword ? 'Ẩn mật khẩu mới' : 'Hiện mật khẩu mới'}
-                >
-                  {showNewPassword ? (
-                    <EyeOff className="size-4" />
-                  ) : (
-                    <Eye className="size-4" />
-                  )}
-                </button>
-              </div>
+              <Input
+                id="profile-new-pw"
+                type="password"
+                value={newPassword}
+                onChange={(e) => {
+                  setNewPassword(e.target.value)
+                  if (fieldErrors.new_password) {
+                    setFieldErrors((prev) => ({ ...prev, new_password: undefined }))
+                  }
+                }}
+                placeholder="Ít nhất 8 ký tự"
+                aria-invalid={Boolean(fieldErrors.new_password)}
+                required
+              />
               {fieldErrors.new_password ? (
                 <p className="text-[11px] font-medium text-destructive">
                   {fieldErrors.new_password}
@@ -383,31 +505,20 @@ export function ProfileEditDialog({
               <Label htmlFor="profile-conf-pw" className="text-xs">
                 Xác nhận mật khẩu mới <span className="text-destructive">*</span>
               </Label>
-              <div className="relative">
-                <Input
-                  id="profile-conf-pw"
-                  type={showConfirmPassword ? 'text' : 'password'}
-                  value={confirmPassword}
-                  onChange={(e) => handleConfirmPasswordChange(e.target.value)}
-                  placeholder="Nhập lại mật khẩu mới"
-                  aria-invalid={Boolean(fieldErrors.confirm_password)}
-                  className="pr-10"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowConfirmPassword((prev) => !prev)}
-                  className="absolute right-0 top-0 flex h-full items-center px-3 text-muted-foreground hover:text-foreground transition-colors"
-                  tabIndex={-1}
-                  aria-label={showConfirmPassword ? 'Ẩn xác nhận mật khẩu' : 'Hiện xác nhận mật khẩu'}
-                >
-                  {showConfirmPassword ? (
-                    <EyeOff className="size-4" />
-                  ) : (
-                    <Eye className="size-4" />
-                  )}
-                </button>
-              </div>
+              <Input
+                id="profile-conf-pw"
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => {
+                  setConfirmPassword(e.target.value)
+                  if (fieldErrors.confirm_password) {
+                    setFieldErrors((prev) => ({ ...prev, confirm_password: undefined }))
+                  }
+                }}
+                placeholder="Nhập lại mật khẩu mới"
+                aria-invalid={Boolean(fieldErrors.confirm_password)}
+                required
+              />
               {fieldErrors.confirm_password ? (
                 <p className="text-[11px] font-medium text-destructive">
                   {fieldErrors.confirm_password}
@@ -419,7 +530,7 @@ export function ProfileEditDialog({
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => handleOpenChange(false)}
+                onClick={() => onOpenChange(false)}
                 disabled={mutation.isPending}
               >
                 Hủy
@@ -427,7 +538,7 @@ export function ProfileEditDialog({
               <Button
                 type="submit"
                 disabled={
-                  mutation.isPending || (hasAttemptedSubmit && !isFormValid)
+                  mutation.isPending || (hasAttemptedSubmit && !isPasswordFormValid)
                 }
                 className="bg-gradient-to-r from-primary to-orange-500 font-semibold text-primary-foreground hover:opacity-95"
               >
@@ -445,9 +556,8 @@ export function ProfileEditDialog({
               </Button>
             </DialogFooter>
           </form>
-        )}
+        ) : null}
       </DialogContent>
     </Dialog>
   )
 }
-

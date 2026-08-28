@@ -274,6 +274,11 @@ const ProfilePage = lazy(() =>
     default: module.ProfilePage,
   })),
 )
+const WalletPage = lazy(() =>
+  import('./features/wallet/pages/WalletPage').then((module) => ({
+    default: module.WalletPage,
+  })),
+)
 
 function deferred(element: ReactNode) {
   return (
@@ -513,6 +518,8 @@ const router = createBrowserRouter([
           },
           { path: 'orders', element: deferred(<OrdersPage />) },
           { path: 'profile', element: deferred(<ProfilePage />) },
+          { path: 'profile/:username', element: deferred(<ProfilePage />) },
+          { path: 'wallet', element: deferred(<WalletPage />) },
           { path: 'admin', element: <Navigate to="/admin/analytics" replace /> },
           {
             path: 'admin/analytics',

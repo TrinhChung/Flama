@@ -531,17 +531,34 @@ export function SharedDeckDetailPage() {
             </CardTitle>
 
             <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs text-muted-foreground pt-0.5">
-              <div className="flex items-center gap-2">
-                <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary font-bold text-xs ring-1 ring-primary/20">
-                  {authorName.charAt(0).toUpperCase()}
+              {deck.author?.username || deck.author_profile?.username ? (
+                <Link
+                  to={`/profile/${deck.author?.username || deck.author_profile?.username}`}
+                  className="flex items-center gap-2 hover:text-primary transition-colors group/author"
+                >
+                  <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary font-bold text-xs ring-1 ring-primary/20 group-hover/author:ring-primary">
+                    {authorName.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="flex items-center gap-1.5 font-semibold text-foreground group-hover/author:text-primary">
+                    <span>{authorName}</span>
+                    <span className="text-muted-foreground font-normal hidden sm:inline">
+                      ({deck.author_profile?.published_count || 1} bộ thẻ đã xuất bản)
+                    </span>
+                  </div>
+                </Link>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary font-bold text-xs ring-1 ring-primary/20">
+                    {authorName.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="flex items-center gap-1.5 font-semibold text-foreground">
+                    <span>{authorName}</span>
+                    <span className="text-muted-foreground font-normal hidden sm:inline">
+                      ({deck.author_profile?.published_count || 1} bộ thẻ đã xuất bản)
+                    </span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-1.5 font-semibold text-foreground">
-                  <span>{authorName}</span>
-                  <span className="text-muted-foreground font-normal hidden sm:inline">
-                    ({deck.author_profile?.published_count || 1} bộ thẻ đã xuất bản)
-                  </span>
-                </div>
-              </div>
+              )}
               <span className="text-muted-foreground/40 hidden sm:inline">•</span>
               <span className="inline-flex items-center gap-1 font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md text-[11px]">
                 <CheckCircle className="size-3" /> Flama Marketplace

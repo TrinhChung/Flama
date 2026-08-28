@@ -957,14 +957,28 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
                   </h3>
 
                   {/* Author Row */}
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <div className="flex size-5 sm:size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary font-bold text-[10px] ring-1 ring-primary/20">
-                      {authorInitial}
+                  {item.author?.username ? (
+                    <Link
+                      to={`/profile/${item.author.username}`}
+                      className="inline-flex items-center gap-2 text-xs text-muted-foreground hover:text-primary transition-colors group/author"
+                    >
+                      <div className="flex size-5 sm:size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary font-bold text-[10px] ring-1 ring-primary/20 group-hover/author:ring-primary">
+                        {authorInitial}
+                      </div>
+                      <span className="font-medium text-foreground/80 group-hover/author:text-primary truncate">
+                        {authorName}
+                      </span>
+                    </Link>
+                  ) : (
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <div className="flex size-5 sm:size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary font-bold text-[10px] ring-1 ring-primary/20">
+                        {authorInitial}
+                      </div>
+                      <span className="font-medium text-foreground/80 truncate">
+                        {authorName}
+                      </span>
                     </div>
-                    <span className="font-medium text-foreground/80 truncate">
-                      {authorName}
-                    </span>
-                  </div>
+                  )}
 
                   {/* Description */}
                   <p className="line-clamp-2 text-xs leading-relaxed text-muted-foreground font-normal">

@@ -1,68 +1,59 @@
 import { appApi } from '@/app/api'
 import type {
-  ProfileResponse,
-  ProfileTransactionsResponse,
+  PrivateProfileResponse,
+  PublicProfileResponse,
+  SocialLink,
 } from '../types/profile'
 
 export const profileApi = {
-  getProfile(): Promise<ProfileResponse> {
-    return appApi.get<ProfileResponse>('/api/profile')
+  getProfile(): Promise<PrivateProfileResponse> {
+    return appApi.get<PrivateProfileResponse>('/api/profile')
+  },
+
+  getPublicProfile(username: string): Promise<PublicProfileResponse> {
+    return appApi.get<PublicProfileResponse>(`/api/profile/u/${encodeURIComponent(username)}`)
   },
 
   updateProfile(payload: {
+    display_name?: string
+    bio?: string
+    social_links?: SocialLink[]
     timezone?: string
+    email?: string
     current_password?: string
     new_password?: string
     confirm_password?: string
-  }): Promise<ProfileResponse> {
-    return appApi.mutate<ProfileResponse>('/api/profile', 'PATCH', payload)
+  }): Promise<PrivateProfileResponse> {
+    return appApi.mutate<PrivateProfileResponse>('/api/profile', 'PATCH', payload)
   },
 
-  listTransactions(params?: {
-    page?: number
-    per_page?: number
-    type?: string
-  }): Promise<ProfileTransactionsResponse> {
-    const searchParams = new URLSearchParams()
-    if (params?.page) searchParams.set('page', String(params.page))
-    if (params?.per_page) searchParams.set('per_page', String(params.per_page))
-    if (params?.type) searchParams.set('type', params.type)
+  async uploadAvatar(file: File): Promise<{ avatar_url: string }> {
+    const formData = new FormData()
+    formData.append('file', file)
 
-    const qs = searchParams.toString()
-    return appApi.get<ProfileTransactionsResponse>(
-      `/api/profile/transactions${qs ? `?${qs}` : ''}`
+    return appApi.mutateFormData<{ avatar_url: string }>(
+      '/api/profile/avatar',
+      'POST',
+      formData,
     )
   },
 
-  requestEmailVerification(): Promise<{
-    success: boolean
-    already_verified: boolean
-    message: string
-    expires_in_minutes?: number
-  }> {
-    return appApi.mutate('/api/identity/email/request-verification', 'POST')
+  deleteAvatar(): Promise<{ avatar_url: null }> {
+    return appApi.mutate<{ avatar_url: null }>('/api/profile/avatar', 'DELETE')
   },
 
-  verifyEmail(code: string): Promise<{
-    success: boolean
-    message: string
-    email_verified: boolean
-    email_verified_at: string
-    student_status: string
-    is_verified_student: boolean
-  }> {
-    return appApi.mutate('/api/identity/email/verify', 'POST', { code })
+  requestEmailVerification(): Promise<{ already_verified?: boolean; message?: string }> {
+    return appApi.mutate<{ already_verified?: boolean; message?: string }>(
+      '/api/profile/verify-email/request',
+      'POST',
+    )
   },
 
-  getStudentStatus(): Promise<{
-    email_verified: boolean
-    email_verified_at: string | null
-    email_verification_source: string | null
-    student_status: string
-    is_verified_student: boolean
-    is_edu_email: boolean
-    institution_domain: string | null
-  }> {
-    return appApi.get('/api/identity/student-status')
+  verifyEmail(code: string): Promise<{ message?: string; is_verified_student?: boolean }> {
+    return appApi.mutate<{ message?: string; is_verified_student?: boolean }>(
+      '/api/profile/verify-email/confirm',
+      'POST',
+      { code },
+    )
   },
 }

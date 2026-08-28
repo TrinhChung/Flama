@@ -7,6 +7,10 @@ export type FrontendUser = {
   id: number
   email: string
   username: string
+  display_name?: string | null
+  avatar_url?: string | null
+  bio?: string | null
+  social_links?: Array<{ type: string; url: string; label?: string }>
   timezone: string
   is_admin: boolean
   balance_amount_minor?: number
@@ -33,6 +37,7 @@ export type FrontendLinks = {
   shared_note_types: string
   orders: string
   profile?: string
+  wallet?: string
   support: string
   terms: string
   privacy: string

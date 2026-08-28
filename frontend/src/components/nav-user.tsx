@@ -1,6 +1,14 @@
-import { ChevronsUpDown, CreditCard, Key, LogOut, NotebookTabs, User as UserIcon } from 'lucide-react'
+﻿import {
+  ChevronsUpDown,
+  CreditCard,
+  Key,
+  LogOut,
+  NotebookTabs,
+  User as UserIcon,
+  Wallet,
+} from 'lucide-react'
 import { Link } from 'react-router-dom'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -30,7 +38,8 @@ export function NavUser({
   logoutPending: boolean
 }) {
   const { isMobile } = useSidebar()
-  const initials = user.username.slice(0, 2).toUpperCase()
+  const displayName = user.display_name || user.username
+  const initials = displayName.slice(0, 2).toUpperCase()
 
   return (
     <SidebarMenu>
@@ -42,12 +51,19 @@ export function NavUser({
               className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
             >
               <Avatar className="size-8 rounded-lg">
-                <AvatarFallback className="rounded-lg bg-primary/10 text-primary">
+                {user.avatar_url ? (
+                  <AvatarImage
+                    src={user.avatar_url}
+                    alt={displayName}
+                    className="rounded-lg object-cover"
+                  />
+                ) : null}
+                <AvatarFallback className="rounded-lg bg-primary/10 font-bold text-primary">
                   {initials}
                 </AvatarFallback>
               </Avatar>
               <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-medium">{user.username}</span>
+                <span className="truncate font-medium">{displayName}</span>
                 <span className="truncate text-xs text-muted-foreground">{user.email}</span>
               </div>
               <ChevronsUpDown className="ml-auto size-4" />
@@ -62,7 +78,7 @@ export function NavUser({
             <DropdownMenuLabel>
               <div className="flex items-center justify-between gap-2">
                 <div className="truncate">
-                  <p className="font-medium truncate">{user.username}</p>
+                  <p className="font-medium truncate">{displayName}</p>
                   <p className="text-xs font-normal text-muted-foreground truncate">
                     {user.is_admin ? 'Quản trị viên' : user.role?.name || 'Người dùng'}
                   </p>
@@ -79,7 +95,13 @@ export function NavUser({
               <DropdownMenuItem asChild>
                 <Link to="/profile">
                   <UserIcon />
-                  Trang cá nhân & Ví
+                  Trang cá nhân
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link to="/wallet">
+                  <Wallet />
+                  Ví & Doanh thu
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>

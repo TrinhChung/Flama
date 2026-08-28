@@ -26,10 +26,12 @@ def _utcnow() -> datetime:
 
 def serialize_author(user_obj: Any) -> dict[str, Any]:
     if not user_obj:
-        return {"id": None, "username": "Unknown"}
+        return {"id": None, "username": "Unknown", "display_name": "Unknown", "avatar_url": None}
     return {
         "id": user_obj.id,
         "username": user_obj.username,
+        "display_name": getattr(user_obj, "display_name", None) or user_obj.username,
+        "avatar_url": getattr(user_obj, "avatar_url", None),
     }
 
 

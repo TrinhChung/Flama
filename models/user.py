@@ -17,7 +17,7 @@ class User(UserMixin, db.Model):
     display_name = db.Column(db.String(150), nullable=True)
     avatar_url = db.Column(db.String(512), nullable=True)
     bio = db.Column(db.Text, nullable=True)
-    social_links = db.Column(db.JSON, nullable=False, default=list)
+    social_links = db.Column(db.JSON, nullable=True, default=list)
     password_hash = db.Column(db.String(255), nullable=False)
     timezone = db.Column(db.String(64), nullable=False, default="UTC")
     role_id = db.Column(db.Integer, db.ForeignKey("user_roles.id"), nullable=True, index=True)

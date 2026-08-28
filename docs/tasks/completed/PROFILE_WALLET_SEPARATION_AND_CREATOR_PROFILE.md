@@ -1,5 +1,9 @@
 # Task: Tách trang cá nhân và ví, thiết kế lại Profile theo hướng creator/contributor
 
+> **Trạng thái:** [x] ĐÃ HOÀN THÀNH (Completed)  
+> **Ngày hoàn thành:** 2026-08-28  
+> **Target branch:** `develop`  
+
 ## Mục tiêu
 
 Tách chức năng **Ví** khỏi **Trang cá nhân** để giảm độ rối của UI và làm rõ trách nhiệm của từng màn.

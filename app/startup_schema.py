@@ -82,6 +82,32 @@ def ensure_backward_compatible_schema() -> None:
                 sa.text("UPDATE users SET timezone = 'UTC' WHERE timezone IS NULL OR timezone = ''")
             )
             schema_changed = True
+        if "display_name" not in user_columns:
+            db.session.execute(
+                sa.text("ALTER TABLE users ADD COLUMN display_name VARCHAR(150) NULL")
+            )
+            schema_changed = True
+        if "avatar_url" not in user_columns:
+            db.session.execute(
+                sa.text("ALTER TABLE users ADD COLUMN avatar_url VARCHAR(512) NULL")
+            )
+            schema_changed = True
+        if "bio" not in user_columns:
+            db.session.execute(
+                sa.text("ALTER TABLE users ADD COLUMN bio TEXT NULL")
+            )
+            schema_changed = True
+        if "social_links" not in user_columns:
+            social_links_ddl = (
+                "ALTER TABLE users ADD COLUMN social_links JSON NULL"
+                if is_mysql
+                else "ALTER TABLE users ADD COLUMN social_links TEXT NULL"
+            )
+            db.session.execute(sa.text(social_links_ddl))
+            db.session.execute(
+                sa.text("UPDATE users SET social_links = '[]' WHERE social_links IS NULL OR social_links = ''")
+            )
+            schema_changed = True
 
     _rename_int_column_if_present("note_types", "price_cents", "price_amount_minor")
     _rename_int_column_if_present("deck_marketplace_items", "price_cents", "price_amount_minor")
