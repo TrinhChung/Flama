@@ -275,6 +275,9 @@ def build_app_config(overrides: Mapping[str, Any] | None = None) -> dict[str, An
         "PASSWORD_RESET_RATE_LIMIT_MAX_REQUESTS": coerce_int_env(
             "PASSWORD_RESET_RATE_LIMIT_MAX_REQUESTS", default=3
         ),
+        "GOOGLE_OAUTH_CLIENT_ID": os.getenv("GOOGLE_OAUTH_CLIENT_ID", "").strip(),
+        "GOOGLE_OAUTH_CLIENT_SECRET": os.getenv("GOOGLE_OAUTH_CLIENT_SECRET", "").strip(),
+        "GOOGLE_OAUTH_REDIRECT_URI": os.getenv("GOOGLE_OAUTH_REDIRECT_URI", "").strip(),
     }
     config["PAYMENTS_V1_ENABLED"] = config["PAYMENTS_ENABLED"]
 

@@ -24,6 +24,7 @@ MANAGED_SECRET_KEYS = (
     "PAYOS_CLIENT_ID",
     "EMAIL_SMTP_PASSWORD",
     "EMAIL_RESEND_API_KEY",
+    "GOOGLE_OAUTH_CLIENT_SECRET",
 )
 MANAGED_VARIABLE_KEYS = (
     "CORS_ALLOWED_ORIGINS",
@@ -75,6 +76,10 @@ MANAGED_VARIABLE_KEYS = (
     "EMAIL_SMTP_USE_TLS",
     "EMAIL_SMTP_USE_SSL",
     "PUBLIC_APP_URL",
+    "FRONTEND_URL",
+    "TRUST_PROXY",
+    "GOOGLE_OAUTH_CLIENT_ID",
+    "GOOGLE_OAUTH_REDIRECT_URI",
 )
 MANAGED_ENV_KEYS = MANAGED_SECRET_KEYS + MANAGED_VARIABLE_KEYS
 MANAGED_VARIABLE_DEFAULTS = {
@@ -112,6 +117,9 @@ MANAGED_VARIABLE_DEFAULTS = {
     "EMAIL_SMTP_PORT": "587",
     "EMAIL_SMTP_USE_TLS": "true",
     "EMAIL_SMTP_USE_SSL": "false",
+    "TRUST_PROXY": "1",
+    "FRONTEND_URL": "https://flama.stmtp.com",
+    "GOOGLE_OAUTH_REDIRECT_URI": "https://be-flama.stmtp.com/auth/google/callback",
 }
 _ENV_ASSIGNMENT_RE = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=")
 
@@ -148,6 +156,8 @@ def _write_private_text(path: Path, content: str) -> None:
 OPTIONAL_MANAGED_KEYS = (
     "EMAIL_SMTP_PASSWORD",
     "EMAIL_RESEND_API_KEY",
+    "GOOGLE_OAUTH_CLIENT_ID",
+    "GOOGLE_OAUTH_CLIENT_SECRET",
 )
 
 
