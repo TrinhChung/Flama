@@ -76,9 +76,7 @@ export function LoginPage() {
 
         {/* Password field with Show/Hide toggle */}
         <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label htmlFor="password">Mật khẩu</Label>
-          </div>
+          <Label htmlFor="password">Mật khẩu</Label>
           <div className="relative">
             <Lock className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
             <Input
@@ -103,7 +101,14 @@ export function LoginPage() {
           {form.formState.errors.password?.message ? (
             <p className="text-xs font-medium text-destructive">{form.formState.errors.password.message}</p>
           ) : null}
+
+          <div className="flex justify-end pt-1">
+            <a href="/forgot-password" className="text-xs font-medium text-primary hover:underline transition-colors">
+              Quên mật khẩu?
+            </a>
+          </div>
         </div>
+
 
         <Button
           className="w-full font-bold bg-gradient-to-r from-primary via-orange-500 to-amber-500 hover:opacity-95 text-primary-foreground shadow-md shadow-primary/20 transition-all hover:shadow-lg hover:shadow-primary/30 active:scale-[0.98]"

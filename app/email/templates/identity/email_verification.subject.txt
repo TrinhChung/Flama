@@ -1,0 +1,1 @@
+[Flama] Mã xác thực địa chỉ email của bạn: {{ verification_code }}

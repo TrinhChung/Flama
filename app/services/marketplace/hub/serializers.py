@@ -198,6 +198,10 @@ def _serialize_deck_card(
             "display_tags": payload.get("display_tags") or [],
         }
     )
+    from app.services.marketplace_pricing_service import serialize_item_student_offer
+
+    user_obj = db.session.get(User, user_id) if user_id else None
+    payload.update(serialize_item_student_offer(deck_item, user_obj))
     return payload
 
 
@@ -234,6 +238,14 @@ def _serialize_deck_install_library_row(
     payload.update(
         {
             "deck_install_id": install.id,
+            "auto_update_enabled": bool(getattr(install, "auto_update_enabled", False)),
+            "sync_mode": getattr(install, "sync_mode", "manual") or "manual",
+            "last_auto_updated_at": (
+                install.last_auto_updated_at.isoformat()
+                if getattr(install, "last_auto_updated_at", None)
+                else None
+            ),
+            "pending_conflict_count": int(getattr(install, "pending_conflict_count", 0) or 0),
             "last_sync_status": str(install.last_sync_status or "").strip().lower() or None,
             "version_mode": install.version_mode,
             "overlay_revision": int(install.overlay_revision or 0),

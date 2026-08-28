@@ -173,3 +173,60 @@ def list_deck_release_changes(deck_item_id: str, release_id: str):
     except DeckReleaseError as exc:
         return _handle_release_error(exc)
     return jsonify(payload)
+
+
+@marketplace_deck_releases_bp.get(
+    "/marketplace/decks/<deck_item_id>/auto-publish"
+)
+@login_required
+def get_deck_auto_publish_status(deck_item_id: str):
+    from app.services import deck_auto_publish_service
+
+    try:
+        payload = deck_auto_publish_service.get_auto_publish_status(
+            deck_item_id=deck_item_id,
+            user_id=current_user.id,
+        )
+    except DeckReleaseError as exc:
+        return _handle_release_error(exc)
+    return jsonify(payload)
+
+
+@marketplace_deck_releases_bp.post(
+    "/marketplace/decks/<deck_item_id>/auto-publish"
+)
+@login_required
+def update_deck_auto_publish_setting(deck_item_id: str):
+    from app.services import deck_auto_publish_service
+
+    request_payload = request.get_json(silent=True)
+    if not isinstance(request_payload, dict):
+        return error_response(
+            "VALIDATION_ERROR",
+            "Payload must be a JSON object.",
+            status=400,
+        )
+    if "auto_publish_enabled" not in request_payload:
+        return error_response(
+            "VALIDATION_ERROR",
+            "auto_publish_enabled is required.",
+            status=400,
+            field="auto_publish_enabled",
+        )
+
+    try:
+        payload = deck_auto_publish_service.update_auto_publish_setting(
+            deck_item_id=deck_item_id,
+            user_id=current_user.id,
+            auto_publish_enabled=bool(request_payload.get("auto_publish_enabled")),
+        )
+        db.session.commit()
+    except DeckReleaseError as exc:
+        db.session.rollback()
+        return _handle_release_error(exc)
+    except Exception:
+        db.session.rollback()
+        raise
+
+    return jsonify(payload)
+

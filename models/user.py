@@ -21,6 +21,8 @@ class User(UserMixin, db.Model):
     is_disabled = db.Column(db.Boolean, nullable=False, default=False)
     balance_amount_minor = db.Column(db.Integer, nullable=False, default=0)
     custom_platform_fee_percent = db.Column(db.Float, nullable=True)
+    email_verified_at = db.Column(db.DateTime, nullable=True)
+    email_verification_source = db.Column(db.String(32), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(
         db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False

@@ -1,4 +1,10 @@
-import type { LoginPayload, RegisterPayload } from '../features/auth/api'
+import type {
+  ForgotPasswordPayload,
+  LoginPayload,
+  RegisterPayload,
+  ResetPasswordPayload,
+} from '../features/auth/api'
+
 import type {
   CreateDeckForm,
   MoveDeckForm,
@@ -248,6 +254,23 @@ export const appApi = {
       redirect_to: '/login',
     }
   },
+
+  async forgotPassword(payload: ForgotPasswordPayload) {
+    return apiJson<{ success: boolean; message: string }>(
+      `${API_BASE}/auth/forgot-password`,
+      'POST',
+      payload,
+    )
+  },
+
+  async resetPassword(payload: ResetPasswordPayload) {
+    return apiJson<{ success: boolean; message: string }>(
+      `${API_BASE}/auth/reset-password`,
+      'POST',
+      payload,
+    )
+  },
+
 
   async logout() {
     const result = await apiJson<SessionResponse>(

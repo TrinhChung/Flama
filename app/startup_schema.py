@@ -866,6 +866,87 @@ def ensure_backward_compatible_schema() -> None:
             )
             schema_changed = True
 
+    if "users" in table_names:
+        _ensure_column(
+            "users",
+            "email_verified_at",
+            "ALTER TABLE users ADD COLUMN email_verified_at DATETIME NULL",
+        )
+        _ensure_column(
+            "users",
+            "email_verification_source",
+            "ALTER TABLE users ADD COLUMN email_verification_source VARCHAR(32) NULL",
+        )
+
+    if "email_verification_tokens" not in table_names:
+        from models.email_verification_token import EmailVerificationToken
+
+        EmailVerificationToken.__table__.create(bind=db.engine, checkfirst=True)
+        schema_changed = True
+
+    if "deck_marketplace_items" in table_names:
+        _ensure_column(
+            "deck_marketplace_items",
+            "student_offer_mode",
+            "ALTER TABLE deck_marketplace_items ADD COLUMN student_offer_mode VARCHAR(32) NOT NULL DEFAULT 'none'",
+        )
+        _ensure_column(
+            "deck_marketplace_items",
+            "student_discount_percent",
+            "ALTER TABLE deck_marketplace_items ADD COLUMN student_discount_percent INT NULL",
+        )
+        _ensure_column(
+            "deck_marketplace_items",
+            "auto_publish_enabled",
+            "ALTER TABLE deck_marketplace_items ADD COLUMN auto_publish_enabled BOOLEAN NOT NULL DEFAULT 0",
+        )
+        _ensure_column(
+            "deck_marketplace_items",
+            "last_auto_published_at",
+            "ALTER TABLE deck_marketplace_items ADD COLUMN last_auto_published_at DATETIME NULL",
+        )
+        _ensure_column(
+            "deck_marketplace_items",
+            "last_auto_publish_error",
+            "ALTER TABLE deck_marketplace_items ADD COLUMN last_auto_publish_error TEXT NULL",
+        )
+
+    if "deck_installs" in table_names:
+        _ensure_column(
+            "deck_installs",
+            "auto_update_enabled",
+            "ALTER TABLE deck_installs ADD COLUMN auto_update_enabled BOOLEAN NOT NULL DEFAULT 0",
+        )
+        _ensure_column(
+            "deck_installs",
+            "sync_mode",
+            "ALTER TABLE deck_installs ADD COLUMN sync_mode VARCHAR(32) NOT NULL DEFAULT 'manual'",
+        )
+        _ensure_column(
+            "deck_installs",
+            "last_auto_updated_at",
+            "ALTER TABLE deck_installs ADD COLUMN last_auto_updated_at DATETIME NULL",
+        )
+        _ensure_column(
+            "deck_installs",
+            "pending_conflict_count",
+            "ALTER TABLE deck_installs ADD COLUMN pending_conflict_count INT NOT NULL DEFAULT 0",
+        )
+
+    if "deck_install_rebases" in table_names:
+        _ensure_column(
+            "deck_install_rebases",
+            "mode",
+            "ALTER TABLE deck_install_rebases ADD COLUMN mode VARCHAR(32) NOT NULL DEFAULT 'manual'",
+        )
+
+    if "deck_releases" in table_names:
+        _ensure_column(
+            "deck_releases",
+            "publish_mode",
+            "ALTER TABLE deck_releases ADD COLUMN publish_mode VARCHAR(32) NOT NULL DEFAULT 'manual'",
+        )
+
     if schema_changed:
         db.session.commit()
 

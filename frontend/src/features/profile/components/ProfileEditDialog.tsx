@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { KeyRound, LoaderCircle, Settings2 } from 'lucide-react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -15,6 +15,11 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { profileApi } from '../api/profileApi'
+import {
+  type PasswordFieldErrors,
+  mapApiErrorToFieldErrors,
+  validateChangePasswordForm,
+} from '../schemas'
 import type { ProfileUser } from '../types/profile'
 
 const COMMON_TIMEZONES = [
@@ -45,6 +50,23 @@ export function ProfileEditDialog({
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [fieldErrors, setFieldErrors] = useState<PasswordFieldErrors>({})
+  const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false)
+
+  const resetPasswordState = () => {
+    setCurrentPassword('')
+    setNewPassword('')
+    setConfirmPassword('')
+    setFieldErrors({})
+    setHasAttemptedSubmit(false)
+  }
+
+  // Clear credentials and errors whenever the dialog closes/reopens
+  useEffect(() => {
+    if (!open) {
+      resetPasswordState()
+    }
+  }, [open])
 
   const mutation = useMutation({
     mutationFn: (payload: {
@@ -56,16 +78,27 @@ export function ProfileEditDialog({
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['profile'] })
       void queryClient.invalidateQueries({ queryKey: ['bootstrap'] })
-      toast.success('Đã cập nhật thông tin cá nhân thành công!')
-      setCurrentPassword('')
-      setNewPassword('')
-      setConfirmPassword('')
+      toast.success(
+        activeTab === 'password'
+          ? 'Mật khẩu đã được thay đổi thành công.'
+          : 'Đã cập nhật thông tin cá nhân thành công!',
+      )
+      resetPasswordState()
       onOpenChange(false)
     },
-    onError: (err: any) => {
-      toast.error('Không thể cập nhật thông tin', {
-        description: err?.message || 'Vui lòng kiểm tra lại dữ liệu nhập vào.',
-      })
+    onError: (err: unknown) => {
+      const { fieldErrors: apiFieldErrors, unscopedMessage } =
+        mapApiErrorToFieldErrors(err)
+
+      if (Object.keys(apiFieldErrors).length > 0) {
+        setFieldErrors((prev) => ({ ...prev, ...apiFieldErrors }))
+      }
+
+      if (unscopedMessage) {
+        toast.error('Không thể cập nhật thông tin', {
+          description: unscopedMessage,
+        })
+      }
     },
   })
 
@@ -74,20 +107,28 @@ export function ProfileEditDialog({
     mutation.mutate({ timezone })
   }
 
+  const isFormValid = validateChangePasswordForm({
+    current_password: currentPassword,
+    new_password: newPassword,
+    confirm_password: confirmPassword,
+  }).success
+
   const handleSavePassword = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!currentPassword) {
-      toast.error('Vui lòng nhập mật khẩu hiện tại.')
+    setHasAttemptedSubmit(true)
+
+    const validation = validateChangePasswordForm({
+      current_password: currentPassword,
+      new_password: newPassword,
+      confirm_password: confirmPassword,
+    })
+
+    if (!validation.success) {
+      setFieldErrors(validation.errors)
       return
     }
-    if (newPassword.length < 6) {
-      toast.error('Mật khẩu mới phải có ít nhất 6 ký tự.')
-      return
-    }
-    if (newPassword !== confirmPassword) {
-      toast.error('Xác nhận mật khẩu mới không khớp.')
-      return
-    }
+
+    setFieldErrors({})
     mutation.mutate({
       current_password: currentPassword,
       new_password: newPassword,
@@ -95,8 +136,43 @@ export function ProfileEditDialog({
     })
   }
 
+  const handleTabChange = (tab: 'info' | 'password') => {
+    setActiveTab(tab)
+    if (tab === 'info') {
+      resetPasswordState()
+    }
+  }
+
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) {
+      resetPasswordState()
+    }
+    onOpenChange(nextOpen)
+  }
+
+  const handleCurrentPasswordChange = (val: string) => {
+    setCurrentPassword(val)
+    if (fieldErrors.current_password) {
+      setFieldErrors((prev) => ({ ...prev, current_password: undefined }))
+    }
+  }
+
+  const handleNewPasswordChange = (val: string) => {
+    setNewPassword(val)
+    if (fieldErrors.new_password) {
+      setFieldErrors((prev) => ({ ...prev, new_password: undefined }))
+    }
+  }
+
+  const handleConfirmPasswordChange = (val: string) => {
+    setConfirmPassword(val)
+    if (fieldErrors.confirm_password) {
+      setFieldErrors((prev) => ({ ...prev, confirm_password: undefined }))
+    }
+  }
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-[480px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -111,7 +187,7 @@ export function ProfileEditDialog({
         <div className="flex border-b border-border/60">
           <button
             type="button"
-            onClick={() => setActiveTab('info')}
+            onClick={() => handleTabChange('info')}
             className={`border-b-2 px-4 py-2 text-xs font-semibold transition ${
               activeTab === 'info'
                 ? 'border-primary text-primary'
@@ -122,7 +198,7 @@ export function ProfileEditDialog({
           </button>
           <button
             type="button"
-            onClick={() => setActiveTab('password')}
+            onClick={() => handleTabChange('password')}
             className={`border-b-2 px-4 py-2 text-xs font-semibold transition ${
               activeTab === 'password'
                 ? 'border-primary text-primary'
@@ -183,7 +259,7 @@ export function ProfileEditDialog({
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => onOpenChange(false)}
+                onClick={() => handleOpenChange(false)}
                 disabled={mutation.isPending}
               >
                 Hủy
@@ -201,7 +277,7 @@ export function ProfileEditDialog({
             </DialogFooter>
           </form>
         ) : (
-          <form onSubmit={handleSavePassword} className="space-y-4 pt-2">
+          <form noValidate onSubmit={handleSavePassword} className="space-y-4 pt-2">
             <div className="space-y-1.5">
               <Label htmlFor="profile-cur-pw" className="text-xs">
                 Mật khẩu hiện tại <span className="text-destructive">*</span>
@@ -210,10 +286,16 @@ export function ProfileEditDialog({
                 id="profile-cur-pw"
                 type="password"
                 value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
+                onChange={(e) => handleCurrentPasswordChange(e.target.value)}
                 placeholder="Nhập mật khẩu hiện tại để xác thực"
+                aria-invalid={Boolean(fieldErrors.current_password)}
                 required
               />
+              {fieldErrors.current_password ? (
+                <p className="text-[11px] font-medium text-destructive">
+                  {fieldErrors.current_password}
+                </p>
+              ) : null}
             </div>
 
             <div className="space-y-1.5">
@@ -224,10 +306,16 @@ export function ProfileEditDialog({
                 id="profile-new-pw"
                 type="password"
                 value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="Ít nhất 6 ký tự"
+                onChange={(e) => handleNewPasswordChange(e.target.value)}
+                placeholder="Ít nhất 8 ký tự"
+                aria-invalid={Boolean(fieldErrors.new_password)}
                 required
               />
+              {fieldErrors.new_password ? (
+                <p className="text-[11px] font-medium text-destructive">
+                  {fieldErrors.new_password}
+                </p>
+              ) : null}
             </div>
 
             <div className="space-y-1.5">
@@ -238,24 +326,32 @@ export function ProfileEditDialog({
                 id="profile-conf-pw"
                 type="password"
                 value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
+                onChange={(e) => handleConfirmPasswordChange(e.target.value)}
                 placeholder="Nhập lại mật khẩu mới"
+                aria-invalid={Boolean(fieldErrors.confirm_password)}
                 required
               />
+              {fieldErrors.confirm_password ? (
+                <p className="text-[11px] font-medium text-destructive">
+                  {fieldErrors.confirm_password}
+                </p>
+              ) : null}
             </div>
 
             <DialogFooter className="pt-2">
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => onOpenChange(false)}
+                onClick={() => handleOpenChange(false)}
                 disabled={mutation.isPending}
               >
                 Hủy
               </Button>
               <Button
                 type="submit"
-                disabled={mutation.isPending}
+                disabled={
+                  mutation.isPending || (hasAttemptedSubmit && !isFormValid)
+                }
                 className="bg-gradient-to-r from-primary to-orange-500 font-semibold text-primary-foreground hover:opacity-95"
               >
                 {mutation.isPending ? (

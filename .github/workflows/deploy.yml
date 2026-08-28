@@ -42,6 +42,19 @@ jobs:
           PAYOS_API_KEY: ${{ secrets.PAYOS_API_KEY }}
           PAYOS_CHECKSUM_KEY: ${{ secrets.PAYOS_CHECKSUM_KEY }}
           PAYOS_CLIENT_ID: ${{ secrets.PAYOS_CLIENT_ID }}
+          EMAIL_SMTP_PASSWORD: ${{ secrets.EMAIL_SMTP_PASSWORD }}
+          EMAIL_RESEND_API_KEY: ${{ secrets.EMAIL_RESEND_API_KEY }}
+          EMAIL_ENABLED: ${{ vars.EMAIL_ENABLED || 'true' }}
+          EMAIL_PROVIDER: ${{ vars.EMAIL_PROVIDER || 'smtp' }}
+          EMAIL_ENVIRONMENT: ${{ vars.EMAIL_ENVIRONMENT || 'production' }}
+          EMAIL_FROM_ADDRESS: ${{ vars.EMAIL_FROM_ADDRESS || 'chungtrinh2k2@gmail.com' }}
+          EMAIL_FROM_NAME: ${{ vars.EMAIL_FROM_NAME || 'Flama' }}
+          EMAIL_SMTP_HOST: ${{ vars.EMAIL_SMTP_HOST || 'smtp.gmail.com' }}
+          EMAIL_SMTP_PORT: ${{ vars.EMAIL_SMTP_PORT || '587' }}
+          EMAIL_SMTP_USER: ${{ vars.EMAIL_SMTP_USER || 'chungtrinh2k2@gmail.com' }}
+          EMAIL_SMTP_USE_TLS: ${{ vars.EMAIL_SMTP_USE_TLS || 'true' }}
+          EMAIL_SMTP_USE_SSL: ${{ vars.EMAIL_SMTP_USE_SSL || 'false' }}
+          PUBLIC_APP_URL: ${{ vars.PUBLIC_APP_URL || 'https://flama.vn' }}
           CORS_ALLOWED_ORIGINS: ${{ vars.CORS_ALLOWED_ORIGINS }}
           FLASK_APP: ${{ vars.FLASK_APP }}
           DB_PORT: ${{ vars.DB_PORT }}

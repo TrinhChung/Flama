@@ -249,3 +249,116 @@ def apply_prepared_installed_deck_update(rebase_id: str):
             )
         }
     )
+
+
+@marketplace_installations_bp.get("/installations/<install_id>/settings")
+@login_required
+def get_installed_deck_settings(install_id: str):
+    try:
+        payload = deck_install_rebase_service.get_install_settings(
+            install_id=install_id,
+            user_id=current_user.id,
+        )
+    except DeckInstallUpdateError as exc:
+        return _handle_update_error(exc)
+    return jsonify(payload)
+
+
+@marketplace_installations_bp.post("/installations/<install_id>/settings")
+@login_required
+def update_installed_deck_settings(install_id: str):
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return error_response(
+            "VALIDATION_ERROR",
+            "Payload must be a JSON object.",
+            status=400,
+        )
+    if "auto_update_enabled" not in body:
+        return error_response(
+            "VALIDATION_ERROR",
+            "auto_update_enabled is required.",
+            status=400,
+            field="auto_update_enabled",
+        )
+
+    try:
+        payload = deck_install_rebase_service.update_install_settings(
+            install_id=install_id,
+            user_id=current_user.id,
+            auto_update_enabled=bool(body.get("auto_update_enabled")),
+        )
+        db.session.commit()
+    except DeckInstallUpdateError as exc:
+        db.session.rollback()
+        return _handle_update_error(exc)
+    except Exception:
+        db.session.rollback()
+        raise
+
+    return jsonify(payload)
+
+
+@marketplace_installations_bp.post("/installations/<install_id>/detach")
+@login_required
+def detach_installed_deck(install_id: str):
+    try:
+        payload = deck_install_rebase_service.detach_installed_deck(
+            install_id=install_id,
+            user_id=current_user.id,
+        )
+        db.session.commit()
+    except DeckInstallUpdateError as exc:
+        db.session.rollback()
+        return _handle_update_error(exc)
+    except Exception:
+        db.session.rollback()
+        raise
+
+    return jsonify(payload)
+
+
+@marketplace_installations_bp.post(
+    "/rebases/<rebase_id>/conflicts/resolve-all"
+)
+@login_required
+def resolve_all_installed_deck_conflicts(rebase_id: str):
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return error_response(
+            "VALIDATION_ERROR",
+            "Payload must be a JSON object.",
+            status=400,
+        )
+    resolution_mode = body.get("resolution_mode")
+    if not resolution_mode or resolution_mode not in {"keep_mine", "keep_upstream"}:
+        return error_response(
+            "VALIDATION_ERROR",
+            "resolution_mode must be 'keep_mine' or 'keep_upstream'.",
+            status=400,
+            field="resolution_mode",
+        )
+
+    try:
+        rebase = deck_install_rebase_service.resolve_all_conflicts(
+            rebase_id=rebase_id,
+            user_id=current_user.id,
+            resolution_mode=resolution_mode,
+        )
+        db.session.commit()
+    except DeckInstallUpdateError as exc:
+        db.session.rollback()
+        return _handle_update_error(exc)
+    except Exception:
+        db.session.rollback()
+        raise
+
+    return jsonify(
+        {
+            "rebase": deck_install_rebase_service.serialize_rebase(
+                rebase,
+                include_conflicts=False,
+            )
+        }
+    )
+

@@ -796,6 +796,49 @@ def register_cli_commands(app: Flask) -> None:
                 f"- [{c.id}] client_id={c.client_id} name='{c.client_name}' confidential={c.is_confidential} redirect_uris={c.get_redirect_uris()}"
             )
 
+    @app.cli.command("email-test")
+    @click.argument("recipient", type=str)
+    def email_test_cmd(recipient: str) -> None:
+        """Send a test transactional email to verify delivery configuration."""
+        from datetime import datetime, timezone
+        from app.email import (
+            EmailCategory,
+            TemplateKey,
+            TransactionalEmailRequest,
+            get_email_service,
+        )
+
+        service = get_email_service(app.config)
+        now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+
+        click.echo(f"Testing email delivery to: {recipient}")
+        click.echo(f"- EMAIL_ENABLED: {service.config.enabled}")
+        click.echo(f"- EMAIL_PROVIDER: {service.config.provider}")
+        click.echo(f"- EMAIL_ENVIRONMENT: {service.config.environment}")
+        click.echo(f"- EMAIL_FROM_ADDRESS: {service.config.from_address}")
+
+        req = TransactionalEmailRequest(
+            template_key=TemplateKey.SYSTEM_DELIVERY_TEST,
+            recipient=recipient.strip(),
+            variables={"checked_at": now_str},
+            category=EmailCategory.SYSTEM_NOTIFICATION,
+            correlation_id=f"cli-test-{int(datetime.now(timezone.utc).timestamp())}",
+        )
+
+        try:
+            result = service.send(req)
+            click.echo(f"\n[Result]")
+            click.echo(f"- success: {result.success}")
+            click.echo(f"- status: {result.status}")
+            click.echo(f"- provider: {result.provider}")
+            click.echo(f"- provider_message_id: {result.provider_message_id}")
+            click.echo(f"- recipient_masked: {result.recipient_masked}")
+            click.echo(f"- sent_at: {result.sent_at}")
+            click.echo(f"- extra: {result.extra}")
+        except Exception as exc:
+            click.echo(f"\n[Delivery Error] {type(exc).__name__}: {exc}", err=True)
+            raise click.ClickException(str(exc))
+
 
 
 

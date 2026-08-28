@@ -41,6 +41,7 @@ class DeckInstallRebase(db.Model):
         index=True,
     )
     status = db.Column(db.String(32), nullable=False, default="prepared", index=True)
+    mode = db.Column(db.String(32), nullable=False, default="manual", index=True)
     expected_overlay_revision = db.Column(db.BigInteger, nullable=False)
     idempotency_key = db.Column(db.String(64), nullable=True)
     change_count = db.Column(db.Integer, nullable=False, default=0)

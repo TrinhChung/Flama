@@ -38,6 +38,11 @@ from .payout_input import (
     ValidatedPayoutBatchItemInput,
     validate_create_payout_batch_request,
 )
+from .password import (
+    MAX_PASSWORD_LENGTH,
+    MIN_PASSWORD_LENGTH,
+    validate_password_policy,
+)
 from .mcp import (
     McpJsonRpcRequest,
     validate_list_my_decks_arguments,
@@ -51,6 +56,8 @@ __all__ = [
     "ChangeRequestConflictResolutionInput",
     "ChangeRequestDraftInput",
     "ChangeRequestReviewInput",
+    "MAX_PASSWORD_LENGTH",
+    "MIN_PASSWORD_LENGTH",
     "MediaUploadValidationResult",
     "McpJsonRpcRequest",
     "NoteMutationInput",
@@ -78,6 +85,7 @@ __all__ = [
     "validate_mcp_tool_call_params",
     "validate_note_create_request",
     "validate_note_patch_request",
+    "validate_password_policy",
     "validate_create_payout_batch_request",
     "validate_study_answer_request",
     "validate_study_card_edit_request",

@@ -535,6 +535,16 @@ def serialize_deck_marketplace_item(
             str(deck_item.pricing_mode or "free"),
             price_amount_minor,
         ),
+        "student_offer_mode": str(deck_item.student_offer_mode or "none"),
+        "student_discount_percent": (
+            int(deck_item.student_discount_percent)
+            if deck_item.student_discount_percent is not None
+            else None
+        ),
+        "has_student_offer": (
+            deck_item.pricing_mode == "paid"
+            and str(deck_item.student_offer_mode or "none") in {"free", "percent_discount"}
+        ),
         "version": deck_item.version,
         "changelog": deck_item.changelog,
         "current_release_id": (

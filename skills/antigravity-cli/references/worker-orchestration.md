@@ -47,6 +47,11 @@ Use `$antigravity-manager-api` to read the active `agy` account and quota before
 
 Do not rotate merely because another account has more quota. Do not refresh quota automatically unless cached data is clearly stale and the user has authorized refresh.
 
+Before estimating batch cost or choosing a reasoning tier, read
+[`quota-benchmark.md`](quota-benchmark.md). It contains the dated Flama benchmark, model-routing
+baseline, historical masked-account snapshot, and the ledger fields to record for future
+representative runs. Never treat its account percentages as live quota.
+
 ## Automatic `agy` account rotation
 
 The user has authorized account switching for the `agy` target when the active account reaches the near-exhaustion condition above.

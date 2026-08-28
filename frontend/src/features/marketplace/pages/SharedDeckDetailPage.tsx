@@ -24,12 +24,18 @@ import {
   Globe,
   Lock,
   Search,
+  Zap,
+  Clock,
+  AlertCircle,
+  GraduationCap,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { DeckAccessKeysManager } from '../components/keys/DeckAccessKeysManager'
 import { RedeemDeckKeyModal } from '../components/keys/RedeemDeckKeyModal'
+import { getAutoPublishStatus, updateAutoPublishSetting } from '@/features/deck-collaboration/api'
+import { Switch } from '@/components/ui/switch'
 
 import { appApi } from '@/app/api'
 import { AmbientBackground } from '@/components/ambient-background'
@@ -138,6 +144,16 @@ type SharedDeckDetail = {
   is_saved: boolean
   can_rate: boolean
   review_submission_count?: number
+  student_offer_mode?: string
+  student_discount_percent?: number | null
+  has_student_offer?: boolean
+  student_preview_display?: string
+  student_preview_price_minor?: number
+  effective_price_amount_minor?: number
+  effective_price_display?: string
+  discount_amount_minor?: number
+  student_discount_applied?: boolean
+  user_student_status?: string
   review_submissions_remaining?: number
   my_review?: ReviewItem | null
   author?: { id: number; username: string } | null
@@ -220,6 +236,30 @@ export function SharedDeckDetailPage() {
     }
   }, [urlCode, deck])
 
+
+  // Auto-Publish Query & Mutation for Deck Owner
+  const autoPublishQuery = useQuery({
+    queryKey: ['shared-deck-auto-publish', id],
+    queryFn: ({ signal }) => getAutoPublishStatus(id, signal),
+    enabled: Boolean(id && deck?.is_owner),
+  })
+
+  const autoPublishMutation = useMutation({
+    mutationFn: (enabled: boolean) => updateAutoPublishSetting(id, enabled),
+    onSuccess: (status) => {
+      queryClient.setQueryData(['shared-deck-auto-publish', id], status)
+      queryClient.invalidateQueries({ queryKey: ['shared-deck-detail', id] })
+      queryClient.invalidateQueries({ queryKey: ['deck-releases', id] })
+      toast.success(
+        status.auto_publish_enabled
+          ? 'Đã bật chế độ tự động phát hành phiên bản mới.'
+          : 'Đã tắt chế độ tự động phát hành.',
+      )
+    },
+    onError: (err) => {
+      toast.error(err instanceof Error ? err.message : 'Không thể cập nhật cấu hình tự động phát hành.')
+    },
+  })
 
   // Template Preview Query
   const previewQuery = useQuery({
@@ -449,20 +489,40 @@ export function SharedDeckDetailPage() {
                     )}
                   </Badge>
                 )}
+                {deck.has_student_offer && (
+                  <Badge className="bg-emerald-500/15 text-emerald-700 border-emerald-500/30 dark:text-emerald-400 font-semibold shadow-xs">
+                    <GraduationCap className="mr-1 size-3 text-emerald-600 dark:text-emerald-400" />
+                    {deck.student_offer_mode === 'free'
+                      ? 'Miễn phí cho SV'
+                      : `Giảm ${deck.student_discount_percent}% SV`}
+                  </Badge>
+                )}
               </div>
 
-              <span
-                className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-extrabold border ${
-                  deck.pricing_mode === 'free'
-                    ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30'
-                    : 'bg-primary/10 text-primary border-primary/30'
-                }`}
-              >
-                {deck.pricing_mode === 'free' ? (
-                  <Sparkles className="mr-1 size-3" />
-                ) : null}
-                {deck.price_display || 'Miễn phí'}
-              </span>
+              {deck.student_discount_applied ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground line-through font-semibold">
+                    {deck.price_display}
+                  </span>
+                  <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-extrabold border bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30">
+                    <GraduationCap className="mr-1 size-3.5 text-emerald-600 dark:text-emerald-400" />
+                    {deck.effective_price_display || 'Miễn phí'}
+                  </span>
+                </div>
+              ) : (
+                <span
+                  className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-extrabold border ${
+                    deck.pricing_mode === 'free'
+                      ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30'
+                      : 'bg-primary/10 text-primary border-primary/30'
+                  }`}
+                >
+                  {deck.pricing_mode === 'free' ? (
+                    <Sparkles className="mr-1 size-3" />
+                  ) : null}
+                  {deck.price_display || 'Miễn phí'}
+                </span>
+              )}
             </div>
 
             <CardTitle className="text-2xl font-black tracking-tight text-foreground sm:text-3xl lg:text-4xl leading-tight">
@@ -647,7 +707,75 @@ export function SharedDeckDetailPage() {
                     </Button>
                   )}
                 </div>
-              ) : deck.is_installed ? (
+
+                {/* Creator Auto-Publish Management Panel */}
+                {autoPublishQuery.data ? (
+                  <div className="mt-4 rounded-2xl border border-primary/20 bg-primary/5 p-4 sm:p-4.5 space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                          <Zap className="size-4" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h4 className="text-xs sm:text-sm font-bold text-foreground">
+                              Tự động phát hành (Auto-Publish)
+                            </h4>
+                            <Badge
+                              variant={autoPublishQuery.data.auto_publish_enabled ? 'default' : 'secondary'}
+                              className="text-[10px] px-1.5 py-0 font-bold"
+                            >
+                              {autoPublishQuery.data.auto_publish_enabled ? 'BẬT' : 'TẮT'}
+                            </Badge>
+                          </div>
+                          <p className="text-[11px] sm:text-xs text-muted-foreground leading-normal mt-0.5">
+                            Khi bật, các thay đổi từ deck gốc sẽ tự động đóng gói thành release mới và thông báo đến người học.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold text-muted-foreground">
+                          {autoPublishQuery.data.auto_publish_enabled ? 'Đang bật' : 'Đang tắt'}
+                        </span>
+                        <Switch
+                          checked={autoPublishQuery.data.auto_publish_enabled}
+                          disabled={autoPublishMutation.isPending}
+                          onCheckedChange={(checked) => autoPublishMutation.mutate(checked)}
+                          aria-label="Bật hoặc tắt tự động phát hành"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-2.5 border-t border-primary/15 text-xs">
+                      <div className="flex items-center gap-1.5 text-muted-foreground">
+                        <Clock className="size-3.5 text-primary shrink-0" />
+                        <span>
+                          Phiên bản: <strong className="text-foreground">{autoPublishQuery.data.current_release?.version_label || deck.version || '1.0.0'}</strong>
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-muted-foreground">
+                        <GitCompare className="size-3.5 text-primary shrink-0" />
+                        <span>
+                          Đang chờ: <strong className="text-foreground">{autoPublishQuery.data.pending_changes_count} thay đổi</strong>
+                        </span>
+                      </div>
+                      {autoPublishQuery.data.last_auto_published_at ? (
+                        <div className="flex items-center gap-1.5 text-muted-foreground truncate">
+                          <span>Đã phát hành: <strong className="text-foreground">{new Date(autoPublishQuery.data.last_auto_published_at).toLocaleString('vi-VN')}</strong></span>
+                        </div>
+                      ) : null}
+                    </div>
+
+                    {autoPublishQuery.data.last_auto_publish_error ? (
+                      <div className="flex items-center gap-1.5 rounded-lg border border-destructive/30 bg-destructive/10 p-2.5 text-xs text-destructive">
+                        <AlertCircle className="size-3.5 shrink-0" />
+                        <span>Lỗi phát hành gần nhất: {autoPublishQuery.data.last_auto_publish_error}</span>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            ) : deck.is_installed ? (
                 <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2.5">
                   {deck.installed_deck_id ? (
                     <Button
@@ -692,27 +820,47 @@ export function SharedDeckDetailPage() {
                   </Button>
                 </div>
               ) : (
-                <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-3">
-                  <Button
-                    className="h-11 sm:h-12 min-h-[44px] px-6 font-bold text-sm sm:text-base shadow-sm bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl transition-all justify-center"
-                    size="lg"
-                    onClick={() => installMutation.mutate()}
-                    disabled={installMutation.isPending}
-                  >
-                    {installMutation.isPending ? (
-                      <>
-                        <Loader2 className="mr-2 size-5 animate-spin" />
-                        {deck.pricing_mode === 'paid' ? 'Đang tạo thanh toán…' : 'Đang cài đặt bộ thẻ…'}
-                      </>
-                    ) : (
-                      <>
-                        <Download className="mr-2 size-5" />
-                        {deck.pricing_mode === 'paid'
-                          ? `Mua bộ deck • ${deck.price_display}`
-                          : 'Tải xuống & Cài đặt miễn phí'}
-                      </>
-                    )}
-                  </Button>
+                <div className="flex flex-col gap-3">
+                  {deck.has_student_offer && deck.user_student_status === 'eligible_unverified_email' && (
+                    <div className="w-full rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-900 dark:text-amber-300 flex items-start gap-2">
+                      <GraduationCap className="size-4 shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
+                      <div className="flex-1 leading-relaxed">
+                        <span>Bạn đang sử dụng email trường học (.edu.vn). </span>
+                        <Link to="/profile" className="font-bold underline hover:opacity-80">
+                          Xác thực email trong trang Hồ sơ
+                        </Link>
+                        <span> để nhận ưu đãi {deck.student_offer_mode === 'free' ? 'miễn phí bộ thẻ này' : `giảm ${deck.student_discount_percent}%`}!</span>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-3">
+                    <Button
+                      className="h-11 sm:h-12 min-h-[44px] px-6 font-bold text-sm sm:text-base shadow-sm bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl transition-all justify-center"
+                      size="lg"
+                      onClick={() => installMutation.mutate()}
+                      disabled={installMutation.isPending}
+                    >
+                      {installMutation.isPending ? (
+                        <>
+                          <Loader2 className="mr-2 size-5 animate-spin" />
+                          {deck.pricing_mode === 'paid' && (!deck.student_discount_applied || deck.effective_price_amount_minor !== 0)
+                            ? 'Đang tạo thanh toán…'
+                            : 'Đang cài đặt bộ thẻ…'}
+                        </>
+                      ) : (
+                        <>
+                          <Download className="mr-2 size-5" />
+                          {deck.pricing_mode === 'paid'
+                            ? deck.student_discount_applied && deck.effective_price_amount_minor === 0
+                              ? 'Tải xuống miễn phí (Ưu đãi Sinh viên)'
+                              : deck.student_discount_applied
+                              ? `Mua bộ deck • ${deck.effective_price_display} (Đã giảm ${deck.student_discount_percent}%)`
+                              : `Mua bộ deck • ${deck.price_display}`
+                            : 'Tải xuống & Cài đặt miễn phí'}
+                        </>
+                      )}
+                    </Button>
 
                   <Button
                     className="h-11 sm:h-12 min-h-[44px] px-4 font-semibold text-xs sm:text-sm rounded-xl justify-center border-primary/30 hover:bg-primary/5"

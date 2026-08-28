@@ -3,6 +3,7 @@ import { apiRequest } from '@/shared/api/client'
 import type {
   AppliedInstalledUpdate,
   ApplyInstalledUpdateInput,
+  AutoPublishStatus,
   ChangeRequestInbox,
   ChangeRequestItem,
   ConflictResolutionInput,
@@ -15,6 +16,7 @@ import type {
   DiffFilters,
   DiffItem,
   DiffSummary,
+  InstalledDeckSettings,
   InstalledDeckUpdatePage,
   InstalledDeckUpdates,
   InstalledUpdateConflictPage,
@@ -99,6 +101,12 @@ type RawInstalledDeckUpdates = {
   deck_item_id?: string | number | null
   version_mode?: string | null
   overlay_revision?: string | number | null
+  auto_update_enabled?: boolean
+  sync_mode?: string | null
+  last_auto_updated_at?: string | null
+  last_sync_status?: string | null
+  pending_conflict_count?: number
+  active_rebase_id?: string | number | null
   applied_release: RawRelease | null
   available_release: RawRelease | null
   update_available: boolean
@@ -286,6 +294,27 @@ export function createDeckRelease(
   ).then((payload) => normalizeRelease(payload.release))
 }
 
+export function getAutoPublishStatus(
+  itemId: string,
+  signal?: AbortSignal,
+): Promise<AutoPublishStatus> {
+  return apiRequest<AutoPublishStatus>(
+    `/api/marketplace/decks/${encodeSegment(itemId)}/auto-publish`,
+    { signal },
+  )
+}
+
+export function updateAutoPublishSetting(
+  itemId: string,
+  autoPublishEnabled: boolean,
+): Promise<AutoPublishStatus> {
+  return appApi.mutate<AutoPublishStatus>(
+    `/api/marketplace/decks/${encodeSegment(itemId)}/auto-publish`,
+    'POST',
+    { auto_publish_enabled: autoPublishEnabled },
+  )
+}
+
 export function getReleaseChanges(
   itemId: string,
   releaseId: string,
@@ -377,6 +406,11 @@ function normalizeInstalledDeckUpdates(payload: RawInstalledDeckUpdates) {
         ? null
         : String(payload.deck_item_id),
       version_mode: payload.version_mode,
+      auto_update_enabled: payload.auto_update_enabled,
+      sync_mode: payload.sync_mode,
+      last_auto_updated_at: payload.last_auto_updated_at,
+      pending_conflict_count: payload.pending_conflict_count,
+      active_rebase_id: payload.active_rebase_id ? String(payload.active_rebase_id) : null,
       applied_release: appliedRelease,
       available_release: availableRelease,
       overlay_revision: payload.overlay_revision,
@@ -385,6 +419,11 @@ function normalizeInstalledDeckUpdates(payload: RawInstalledDeckUpdates) {
     update_available: payload.update_available,
     unread_update: payload.unread_update,
     change_count: payload.change_count || availableRelease?.change_count || 0,
+    auto_update_enabled: payload.auto_update_enabled,
+    sync_mode: payload.sync_mode,
+    last_auto_updated_at: payload.last_auto_updated_at,
+    pending_conflict_count: payload.pending_conflict_count,
+    active_rebase_id: payload.active_rebase_id ? String(payload.active_rebase_id) : null,
   } satisfies InstalledDeckUpdates
 }
 
@@ -524,6 +563,48 @@ export function applyPreparedInstalledUpdate(rebaseId: string) {
       applied_release: normalizeRelease(rebase.to_release),
     } satisfies AppliedInstalledUpdate
   })
+}
+
+export function getInstalledDeckSettings(
+  installId: string,
+  signal?: AbortSignal,
+): Promise<InstalledDeckSettings> {
+  return apiRequest<InstalledDeckSettings>(
+    `/api/marketplace/installations/${encodeSegment(installId)}/settings`,
+    { signal },
+  )
+}
+
+export function updateInstalledDeckSettings(
+  installId: string,
+  autoUpdateEnabled: boolean,
+): Promise<InstalledDeckUpdates> {
+  return appApi.mutate<RawInstalledDeckUpdates>(
+    `/api/marketplace/installations/${encodeSegment(installId)}/settings`,
+    'POST',
+    { auto_update_enabled: autoUpdateEnabled },
+  ).then(normalizeInstalledDeckUpdates)
+}
+
+export function detachInstalledDeck(
+  installId: string,
+): Promise<{ install_id: string; version_mode: string; status: string }> {
+  return appApi.mutate<{ install_id: string; version_mode: string; status: string }>(
+    `/api/marketplace/installations/${encodeSegment(installId)}/detach`,
+    'POST',
+    {},
+  )
+}
+
+export function resolveAllInstalledUpdateConflicts(
+  rebaseId: string,
+  resolutionMode: 'keep_mine' | 'keep_upstream',
+) {
+  return appApi.mutate<RawPreparedInstalledUpdateEnvelope>(
+    `/api/marketplace/rebases/${encodeSegment(rebaseId)}/conflicts/resolve-all`,
+    'POST',
+    { resolution_mode: resolutionMode },
+  ).then(({ rebase }) => normalizePreparedInstalledUpdate(rebase))
 }
 
 function contributionChangeType(changeType: string) {

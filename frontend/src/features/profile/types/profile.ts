@@ -14,6 +14,13 @@ export type ProfileUser = {
   is_admin: boolean
   is_disabled: boolean
   created_at: string | null
+  email_verified?: boolean
+  email_verified_at?: string | null
+  email_verification_source?: string | null
+  student_status?: 'not_eligible' | 'eligible_unverified_email' | 'verified_student' | string
+  is_verified_student?: boolean
+  is_edu_email?: boolean
+  institution_domain?: string | null
   role: ProfileUserRole | null
 }
 

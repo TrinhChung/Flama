@@ -1,0 +1,26 @@
+{% extends "base/base.html" %}
+
+{% block content %}
+<h2 style="margin: 0 0 16px; font-size: 20px; font-weight: 800; color: #0f172a; letter-spacing: -0.3px;">Kiểm tra hệ thống gửi Email</h2>
+
+<p style="margin: 0 0 16px; color: #334155;">Xin chào ban quản trị,</p>
+
+<p style="margin: 0 0 16px; color: #334155; line-height: 1.6;">
+  Đây là email kiểm tra tự động từ hệ thống <strong>Flama Spaced Repetition Platform</strong>.
+</p>
+
+<div class="callout-box callout-success">
+  <p style="margin: 0; font-size: 14px; font-weight: 600; line-height: 1.6;">
+    🎉 Chúc mừng! Cấu hình gửi email của bạn đang hoạt động hoàn hảo.
+  </p>
+  <p style="margin: 6px 0 0; font-size: 13px; font-weight: 400; color: #065f46;">
+    Backend đã render thành công cả nội dung HTML và plain text, sau đó chuyển email qua provider đã cấu hình.
+  </p>
+</div>
+
+{% if checked_at %}
+<p style="margin: 20px 0 0; font-size: 13px; color: #64748b;">
+  🕒 <strong>Thời điểm kiểm tra:</strong> {{ checked_at }}
+</p>
+{% endif %}
+{% endblock %}

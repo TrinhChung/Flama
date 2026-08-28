@@ -33,6 +33,7 @@ class DeckRelease(db.Model):
         index=True,
     )
     status = db.Column(db.String(32), nullable=False, default="building", index=True)
+    publish_mode = db.Column(db.String(32), nullable=False, default="manual", index=True)
     source_working_revision = db.Column(db.BigInteger, nullable=False, default=0)
     manifest_hash = db.Column(db.String(64), nullable=True)
     change_count = db.Column(db.Integer, nullable=False, default=0)

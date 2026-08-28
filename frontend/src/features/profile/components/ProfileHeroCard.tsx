@@ -1,10 +1,13 @@
 import { useState } from 'react'
 import {
   Calendar,
+  CheckCircle2,
   Clock,
   Edit3,
+  GraduationCap,
   Mail,
   Shield,
+  ShieldAlert,
   Sparkles,
   User,
 } from 'lucide-react'
@@ -12,11 +15,13 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { EmailVerificationDialog } from './EmailVerificationDialog'
 import { ProfileEditDialog } from './ProfileEditDialog'
 import type { ProfileUser } from '../types/profile'
 
 export function ProfileHeroCard({ user }: { user: ProfileUser }) {
   const [editOpen, setEditOpen] = useState(false)
+  const [verifyOpen, setVerifyOpen] = useState(false)
   const initials = (user.username || 'U').slice(0, 2).toUpperCase()
 
   const formattedDate = user.created_at
@@ -26,6 +31,13 @@ export function ProfileHeroCard({ user }: { user: ProfileUser }) {
         day: 'numeric',
       })
     : 'Thành viên mới'
+
+  const isVerifiedStudent = Boolean(user.is_verified_student)
+  const isEmailVerified = Boolean(user.email_verified)
+  const isEdu = Boolean(
+    user.is_edu_email ||
+      (user.email && user.email.toLowerCase().endsWith('.edu.vn'))
+  )
 
   return (
     <>
@@ -78,6 +90,37 @@ export function ProfileHeroCard({ user }: { user: ProfileUser }) {
                       {user.role?.name || 'Học viên'}
                     </Badge>
                   )}
+
+                  {/* Student / Email Verification Badges */}
+                  {isVerifiedStudent ? (
+                    <Badge className="bg-emerald-500/15 text-emerald-700 border-emerald-500/30 dark:text-emerald-400 font-semibold shadow-xs">
+                      <GraduationCap className="mr-1 size-3.5 text-emerald-600 dark:text-emerald-400" />
+                      Sinh viên đã xác thực
+                    </Badge>
+                  ) : isEmailVerified ? (
+                    <Badge className="bg-blue-500/15 text-blue-700 border-blue-500/30 dark:text-blue-400 font-semibold">
+                      <CheckCircle2 className="mr-1 size-3 text-blue-600 dark:text-blue-400" />
+                      Email đã xác thực
+                    </Badge>
+                  ) : (
+                    <div className="inline-flex items-center gap-1.5">
+                      <Badge
+                        variant="outline"
+                        className="border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400 text-xs font-semibold"
+                      >
+                        <ShieldAlert className="mr-1 size-3 text-amber-600 dark:text-amber-400" />
+                        {isEdu ? 'Chưa xác thực SV' : 'Chưa xác thực email'}
+                      </Badge>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setVerifyOpen(true)}
+                        className="h-6 px-2 text-[11px] font-bold text-primary hover:bg-primary/10 hover:text-primary rounded-md cursor-pointer"
+                      >
+                        Xác thực ngay
+                      </Button>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
@@ -115,6 +158,13 @@ export function ProfileHeroCard({ user }: { user: ProfileUser }) {
         open={editOpen}
         onOpenChange={setEditOpen}
       />
+
+      <EmailVerificationDialog
+        user={user}
+        open={verifyOpen}
+        onOpenChange={setVerifyOpen}
+      />
     </>
   )
 }
+

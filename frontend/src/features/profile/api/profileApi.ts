@@ -33,4 +33,36 @@ export const profileApi = {
       `/api/profile/transactions${qs ? `?${qs}` : ''}`
     )
   },
+
+  requestEmailVerification(): Promise<{
+    success: boolean
+    already_verified: boolean
+    message: string
+    expires_in_minutes?: number
+  }> {
+    return appApi.mutate('/api/identity/email/request-verification', 'POST')
+  },
+
+  verifyEmail(code: string): Promise<{
+    success: boolean
+    message: string
+    email_verified: boolean
+    email_verified_at: string
+    student_status: string
+    is_verified_student: boolean
+  }> {
+    return appApi.mutate('/api/identity/email/verify', 'POST', { code })
+  },
+
+  getStudentStatus(): Promise<{
+    email_verified: boolean
+    email_verified_at: string | null
+    email_verification_source: string | null
+    student_status: string
+    is_verified_student: boolean
+    is_edu_email: boolean
+    institution_domain: string | null
+  }> {
+    return appApi.get('/api/identity/student-status')
+  },
 }

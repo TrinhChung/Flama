@@ -42,6 +42,8 @@ export function MarketplacePublishDeckPage() {
   const [description, setDescription] = useState('')
   const [pricingMode, setPricingMode] = useState<'free' | 'paid'>('free')
   const [priceAmountMinor, setPriceAmountMinor] = useState<number>(10000)
+  const [studentOfferMode, setStudentOfferMode] = useState<'none' | 'free' | 'percent_discount'>('none')
+  const [studentDiscountPercent, setStudentDiscountPercent] = useState<number | null>(null)
   const [version, setVersion] = useState('1.0.0')
   const [tags, setTags] = useState('')
   const [changelog, setChangelog] = useState('')
@@ -101,6 +103,8 @@ export function MarketplacePublishDeckPage() {
       setDescription(deckItem.description || '')
       setPricingMode(deckItem.pricing_mode || 'free')
       setPriceAmountMinor(deckItem.price_amount_minor || 10000)
+      setStudentOfferMode(deckItem.student_offer_mode || 'none')
+      setStudentDiscountPercent(deckItem.student_discount_percent || null)
       setVersion(deckItem.version || '1.0.0')
       setTags(deckItem.tags ? deckItem.tags.join(', ') : '')
       setChangelog(deckItem.changelog || '')
@@ -151,6 +155,11 @@ export function MarketplacePublishDeckPage() {
         description: description.trim(),
         pricing_mode: pricingMode,
         price_amount_minor: pricingMode === 'paid' ? priceAmountMinor : 0,
+        student_offer_mode: pricingMode === 'paid' ? studentOfferMode : 'none',
+        student_discount_percent:
+          pricingMode === 'paid' && studentOfferMode === 'percent_discount'
+            ? studentDiscountPercent
+            : null,
         tags: tags ? tags.split(',').map((t) => t.trim()).filter(Boolean) : [],
         primary_category: effectiveCategory,
         taxonomy_domain: taxonomyDomain,
@@ -541,12 +550,16 @@ export function MarketplacePublishDeckPage() {
                   <PublishStep4Pricing
                     pricingMode={pricingMode}
                     priceAmountMinor={priceAmountMinor}
+                    studentOfferMode={studentOfferMode}
+                    studentDiscountPercent={studentDiscountPercent}
                     version={version}
                     isReleaseVersioned={isReleaseVersioned}
                     deckItemId={deckItemId}
                     fieldErrors={fieldErrors}
                     setPricingMode={setPricingMode}
                     setPriceAmountMinor={setPriceAmountMinor}
+                    setStudentOfferMode={setStudentOfferMode}
+                    setStudentDiscountPercent={setStudentDiscountPercent}
                     setVersion={setVersion}
                     clearFieldError={clearFieldError}
                   />

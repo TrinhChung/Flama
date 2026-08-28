@@ -1,0 +1,38 @@
+{% extends "base/base.html" %}
+
+{% block content %}
+<h2 style="margin: 0 0 16px; font-size: 20px; font-weight: 800; color: #0f172a; letter-spacing: -0.3px;">Xác thực địa chỉ email</h2>
+
+<p style="margin: 0 0 16px; color: #334155;">Xin chào <strong>{{ recipient_name|default('bạn') }}</strong>,</p>
+
+<p style="margin: 0 0 20px; color: #334155; line-height: 1.6;">
+  Cảm ơn bạn đã sử dụng Flama. Để kích hoạt đầy đủ các tính năng tài khoản và nhận các ưu đãi sinh viên (nếu sử dụng email trường học), vui lòng nhập mã xác thực gồm 6 chữ số dưới đây:
+</p>
+
+<div style="text-align: center; margin: 28px 0;">
+  <div style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%); border: 2px dashed #f97316; border-radius: 12px; font-family: 'Courier New', Courier, monospace; font-size: 32px; font-weight: 800; letter-spacing: 8px; color: #ea580c;">
+    {{ verification_code }}
+  </div>
+</div>
+
+{% if verification_url %}
+<p style="margin: 0 0 16px; color: #334155; text-align: center; font-size: 14px;">
+  Hoặc bạn có thể bấm trực tiếp vào nút dưới đây để xác thực ngay:
+</p>
+<div class="button-container" style="text-align: center; margin-bottom: 24px;">
+  <a href="{{ verification_url }}" class="btn-primary" target="_blank" rel="noopener noreferrer">Xác thực email ngay</a>
+</div>
+{% endif %}
+
+<div class="callout-box callout-info" style="margin: 24px 0 20px;">
+  <p style="margin: 0; font-size: 14px; font-weight: 500; line-height: 1.5;">
+    Mã xác thực này có hiệu lực trong vòng <strong>{{ expires_in_minutes|default(15) }} phút</strong>. Tuyệt đối không chia sẻ mã này cho bất kỳ ai.
+  </p>
+</div>
+
+<hr style="border: 0; border-top: 1px solid #f1f5f9; margin: 28px 0 20px;">
+
+<p style="margin: 0; font-size: 13px; color: #94a3b8; line-height: 1.5;">
+  🛡️ Nếu bạn không thực hiện yêu cầu này, vui lòng bỏ qua email. Tài khoản của bạn sẽ không bị ảnh hưởng.
+</p>
+{% endblock %}

@@ -237,6 +237,44 @@ def build_app_config(overrides: Mapping[str, Any] | None = None) -> dict[str, An
             "TRUST_PROXY",
             default=coerce_bool_env("FLAMA_TRUST_PROXY", default=False),
         ),
+        "EMAIL_ENABLED": coerce_bool_env("EMAIL_ENABLED", default=False),
+        "EMAIL_PROVIDER": (os.getenv("EMAIL_PROVIDER", "disabled").strip().lower() or "disabled"),
+        "EMAIL_ENVIRONMENT": (os.getenv("EMAIL_ENVIRONMENT", "local").strip().lower() or "local"),
+        "EMAIL_FROM_ADDRESS": os.getenv("EMAIL_FROM_ADDRESS", "no-reply@flama.local").strip(),
+        "EMAIL_FROM_NAME": os.getenv("EMAIL_FROM_NAME", "Flama").strip() or "Flama",
+        "EMAIL_REPLY_TO": os.getenv("EMAIL_REPLY_TO", "").strip(),
+        "EMAIL_RECIPIENT_ALLOWLIST": comma_separated_env("EMAIL_RECIPIENT_ALLOWLIST"),
+        "EMAIL_REDIRECT_ALL_TO": os.getenv("EMAIL_REDIRECT_ALL_TO", "").strip(),
+        "EMAIL_RESEND_API_KEY": os.getenv("EMAIL_RESEND_API_KEY", "").strip(),
+        "EMAIL_SMTP_HOST": os.getenv("EMAIL_SMTP_HOST", "").strip(),
+        "EMAIL_SMTP_PORT": coerce_int_env("EMAIL_SMTP_PORT", default=587),
+        "EMAIL_SMTP_USER": os.getenv("EMAIL_SMTP_USER", "").strip(),
+        "EMAIL_SMTP_PASSWORD": os.getenv("EMAIL_SMTP_PASSWORD", ""),
+        "EMAIL_SMTP_USE_TLS": coerce_bool_env("EMAIL_SMTP_USE_TLS", default=True),
+        "EMAIL_SMTP_USE_SSL": coerce_bool_env("EMAIL_SMTP_USE_SSL", default=False),
+        "EMAIL_PROVIDER_TIMEOUT_SECONDS": coerce_int_env(
+            "EMAIL_PROVIDER_TIMEOUT_SECONDS",
+            default=10,
+        ),
+        "EMAIL_PROVIDER_MAX_ATTEMPTS": coerce_int_env(
+            "EMAIL_PROVIDER_MAX_ATTEMPTS", default=2
+        ),
+        "EMAIL_PROVIDER_RETRY_BACKOFF_SECONDS": float(
+            os.getenv("EMAIL_PROVIDER_RETRY_BACKOFF_SECONDS", "0.25") or "0.25"
+        ),
+        "PUBLIC_APP_URL": (
+            os.getenv("PUBLIC_APP_URL", "").strip().rstrip("/")
+            or os.getenv("FRONTEND_URL", "").strip().rstrip("/")
+        ),
+        "PASSWORD_RESET_TOKEN_TTL_MINUTES": coerce_int_env(
+            "PASSWORD_RESET_TOKEN_TTL_MINUTES", default=30
+        ),
+        "PASSWORD_RESET_RATE_LIMIT_WINDOW_SECONDS": coerce_int_env(
+            "PASSWORD_RESET_RATE_LIMIT_WINDOW_SECONDS", default=900
+        ),
+        "PASSWORD_RESET_RATE_LIMIT_MAX_REQUESTS": coerce_int_env(
+            "PASSWORD_RESET_RATE_LIMIT_MAX_REQUESTS", default=3
+        ),
     }
     config["PAYMENTS_V1_ENABLED"] = config["PAYMENTS_ENABLED"]
 
@@ -307,6 +345,9 @@ def _apply_startup_defaults(config: dict[str, Any]) -> None:
         "LOGIN_RATE_LIMIT_LOCKOUT_SECONDS",
         coerce_int_env("LOGIN_RATE_LIMIT_LOCKOUT_SECONDS", default=5 * 60),
     )
+    if testing:
+        config.setdefault("EMAIL_PROVIDER", "memory")
+        config.setdefault("EMAIL_ENVIRONMENT", "test")
 
 
 def _startup_cutover_fail_on_mismatch_default(default: bool) -> bool:

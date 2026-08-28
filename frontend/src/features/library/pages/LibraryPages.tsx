@@ -7,7 +7,9 @@ import {
   HelpCircle,
   Layers,
   RefreshCcw,
+  ShieldAlert,
   Sparkles,
+  Zap,
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
@@ -42,17 +44,23 @@ type MarketplaceAuthor = {
 
 type InstalledDeckItem = {
   id: string
-  deck_install_id?: string | null
   title: string
-  description: string | null
-  author: MarketplaceAuthor | null
-  installed_deck_id: number | null
-  install_bucket: 'using_now' | 'installed' | 'owned'
-  last_sync_status: string | null
-  applied_release?: { id: string; version_label: string } | null
-  available_release?: { id: string; version_label: string } | null
+  description?: string | null
+  install_bucket?: string
+  installed_deck_id?: number | null
+  deck_install_id?: string | null
+  last_sync_status?: string | null
+  auto_update_enabled?: boolean
+  pending_conflict_count?: number
   update_available?: boolean
   unread_update?: boolean
+  available_release?: {
+    id: string
+    sequence_no: number
+    version_label: string
+    published_at?: string | null
+  } | null
+  author?: MarketplaceAuthor | null
 }
 
 function formatUpdatedAt(value: string | null) {
@@ -63,11 +71,23 @@ function formatUpdatedAt(value: string | null) {
   }).format(new Date(value))
 }
 
+function formatDate(value: string | null | undefined) {
+  if (!value) return 'Chưa có'
+  return new Intl.DateTimeFormat('vi-VN', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(new Date(value))
+}
+
 function formatSyncStatus(value: string) {
   const labels: Record<string, string> = {
     needs_sync: 'Đóng góp cần đồng bộ',
     draft: 'Đóng góp bản nháp',
-    has_conflict: 'Đóng góp có xung đột',
+    has_conflict: 'Có xung đột',
+    conflict: 'Có xung đột cần xử lý',
+    synced: 'Đã cập nhật',
+    detached: 'Đã tách độc lập',
+    error: 'Lỗi đồng bộ',
     pending_review: 'Đang chờ duyệt',
     rejected: 'Đóng góp bị từ chối',
     merged: 'Đóng góp đã merge',
@@ -259,27 +279,50 @@ export function InstalledDecksPage() {
             const authorName = item.author?.account_name || item.author?.username || 'Cộng đồng'
             const authorInitial = authorName.charAt(0).toUpperCase()
 
+            const hasConflict =
+              item.last_sync_status === 'conflict' ||
+              Boolean(item.pending_conflict_count && item.pending_conflict_count > 0)
+            const targetReleaseId = item.available_release?.id || 'conflict'
+
             return (
               <Card
                 key={item.id}
                 data-tour={index === 0 ? 'deck-card-first' : undefined}
-                className="group relative flex flex-col justify-between overflow-hidden border-border/80 bg-card p-4 sm:p-5 transition-all duration-200 hover:-translate-y-1 hover:border-primary/50 hover:shadow-md rounded-2xl"
+                className={`group relative flex flex-col justify-between overflow-hidden border-border/80 bg-card p-4 sm:p-5 transition-all duration-200 hover:-translate-y-1 hover:border-primary/50 hover:shadow-md rounded-2xl ${
+                  hasConflict ? 'border-amber-500/50 bg-amber-500/5 ring-1 ring-amber-500/20' : ''
+                }`}
               >
                 <div className="flex flex-col flex-1 space-y-2">
                   {/* Status Badge Row */}
-                  <div className="flex items-center justify-between gap-1.5">
-                    <Badge
-                      variant={item.install_bucket === 'using_now' ? 'default' : 'secondary'}
-                      className="px-2 py-0.5 text-xs font-semibold rounded-md truncate"
-                    >
-                      {item.install_bucket === 'using_now'
-                        ? 'Đang sử dụng'
-                        : item.install_bucket === 'owned'
-                          ? 'Deck của bạn'
-                          : 'Đã cài'}
-                    </Badge>
+                  <div className="flex items-center justify-between gap-1.5 flex-wrap">
+                    <div className="flex items-center gap-1.5">
+                      <Badge
+                        variant={item.install_bucket === 'using_now' ? 'default' : 'secondary'}
+                        className="px-2 py-0.5 text-xs font-semibold rounded-md truncate"
+                      >
+                        {item.install_bucket === 'using_now'
+                          ? 'Đang sử dụng'
+                          : item.install_bucket === 'owned'
+                            ? 'Deck của bạn'
+                            : 'Đã cài'}
+                      </Badge>
+                      {item.auto_update_enabled ? (
+                        <Badge
+                          variant="outline"
+                          className="px-1.5 py-0 text-[10px] font-semibold border-primary/30 text-primary bg-primary/5"
+                        >
+                          <Zap className="mr-0.5 size-2.5 inline" />
+                          Auto
+                        </Badge>
+                      ) : null}
+                    </div>
 
-                    {item.update_available ? (
+                    {hasConflict ? (
+                      <span className="truncate text-xs font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                        <ShieldAlert className="size-3 shrink-0" />
+                        {item.pending_conflict_count ? `${item.pending_conflict_count} xung đột` : 'Có xung đột'}
+                      </span>
+                    ) : item.update_available ? (
                       <span className="truncate text-xs font-semibold text-primary">
                         Có bản {item.available_release?.version_label || 'mới'}
                       </span>
@@ -315,7 +358,18 @@ export function InstalledDecksPage() {
 
                 {/* Bottom Action */}
                 <div className="mt-4 space-y-2 border-t border-border/60 pt-3">
-                  {item.update_available && item.deck_install_id && item.available_release ? (
+                  {hasConflict && item.deck_install_id ? (
+                    <Button
+                      size="sm"
+                      asChild
+                      className="h-8 w-full rounded-xl text-xs font-bold sm:h-9 bg-amber-600 hover:bg-amber-700 text-white shadow-xs"
+                    >
+                      <Link to={`/installed-decks/${item.deck_install_id}/updates/${targetReleaseId}`}>
+                        <ShieldAlert className="mr-1.5 size-3.5" />
+                        Xử lý xung đột ({item.pending_conflict_count || '!'})
+                      </Link>
+                    </Button>
+                  ) : item.update_available && item.deck_install_id && item.available_release ? (
                     <Button size="sm" asChild className="h-8 w-full rounded-xl text-xs font-bold sm:h-9">
                       <Link to={`/installed-decks/${item.deck_install_id}/updates/${item.available_release.id}`}>
                         <RefreshCcw className="mr-1.5 size-3.5" />
@@ -323,7 +377,7 @@ export function InstalledDecksPage() {
                       </Link>
                     </Button>
                   ) : null}
-                  {item.deck_install_id && item.install_bucket !== 'owned' ? (
+                  {item.deck_install_id && item.install_bucket !== 'owned' && !hasConflict ? (
                     <Button variant="outline" size="sm" asChild className="h-8 w-full rounded-xl text-xs font-semibold sm:h-9">
                       <Link to={`/flashcards/shared-decks/${item.id}/change-request`}>
                         <FileDiff className="mr-1.5 size-3.5" />

@@ -80,6 +80,7 @@ export type ReleasePreviewPage = CursorDiffPage & {
 export type DeckRelease = ReleaseRef & {
   deck_item_id: string
   status: 'building' | 'published' | 'failed'
+  publish_mode?: 'manual' | 'automatic' | null
   parent_release_id?: string | null
   source_working_revision?: number | null
   manifest_hash?: string | null
@@ -90,6 +91,16 @@ export type DeckRelease = ReleaseRef & {
   created_by_user_id?: number | null
   created_at?: string | null
   summary?: DiffSummary
+}
+
+export type AutoPublishStatus = {
+  deck_item_id: string
+  auto_publish_enabled: boolean
+  last_auto_published_at?: string | null
+  last_auto_publish_error?: string | null
+  current_release?: DeckRelease | null
+  pending_changes_count: number
+  working_revision: number
 }
 
 export type DeckReleaseList = {
@@ -104,11 +115,27 @@ export type CreateDeckReleaseInput = {
   expected_working_revision?: number | null
 }
 
+export type InstalledDeckSettings = {
+  install_id: string
+  deck_item_id?: string | null
+  auto_update_enabled: boolean
+  sync_mode: string
+  last_auto_updated_at?: string | null
+  last_sync_status?: string | null
+  pending_conflict_count: number
+  version_mode?: string | null
+}
+
 export type InstalledDeckRef = {
   id: string
   deck_item_id?: string | null
   title?: string | null
   version_mode?: string | null
+  auto_update_enabled?: boolean
+  sync_mode?: string | null
+  last_auto_updated_at?: string | null
+  pending_conflict_count?: number
+  active_rebase_id?: string | null
   applied_release: ReleaseRef | null
   available_release?: ReleaseRef | null
   overlay_revision?: string | number | null
@@ -120,6 +147,11 @@ export type InstalledDeckUpdates = {
   update_available: boolean
   unread_update: boolean
   change_count: number
+  auto_update_enabled?: boolean
+  sync_mode?: string | null
+  last_auto_updated_at?: string | null
+  pending_conflict_count?: number
+  active_rebase_id?: string | null
 }
 
 export type InstalledDeckUpdatePage = CursorDiffPage & {
@@ -163,6 +195,7 @@ export type InstalledUpdateConflictPage = {
 export type PreparedInstalledUpdate = {
   rebase_id: string
   status: 'ready' | 'conflicts' | 'applied'
+  mode?: 'manual' | 'automatic' | null
   conflict_count: number
   resolved_conflict_count: number
   conflicts: UpdateConflict[]

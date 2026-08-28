@@ -1762,6 +1762,22 @@ def apply_deck_marketplace_payload(
     deck_item.pricing_mode = pricing_mode
     deck_item.price_amount_minor = price_amount_minor
 
+    from app.services.marketplace_pricing_service import validate_student_offer
+
+    student_offer_mode_raw = payload.get("student_offer_mode", deck_item.student_offer_mode)
+    student_discount_percent_raw = payload.get(
+        "student_discount_percent", deck_item.student_discount_percent
+    )
+    st_mode, st_percent, st_err = validate_student_offer(
+        pricing_mode=deck_item.pricing_mode,
+        student_offer_mode=student_offer_mode_raw,
+        student_discount_percent=student_discount_percent_raw,
+    )
+    if st_err:
+        return st_err
+    deck_item.student_offer_mode = st_mode
+    deck_item.student_discount_percent = st_percent
+
     if "is_official" in payload:
         if not allow_set_official:
             return "Only admin can set official flag."

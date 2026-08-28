@@ -47,11 +47,16 @@ def _enforce_daily_rate_limit():
             "/api/identity/login",
             "/api/identity/register",
             "/api/identity/logout",
+            "/api/auth/login",
+            "/api/auth/register",
+            "/api/auth/forgot-password",
+            "/api/auth/reset-password",
             "/api/billing/webhook",
             "/media/proxy",
         )
     ):
         return None
+
 
     if not getattr(current_user, "is_authenticated", False):
         return None

@@ -145,6 +145,33 @@ class RestApiV1Tests(unittest.TestCase):
         self.assertEqual(logout_response.status_code, 200)
         self.assertFalse(logout_response.get_json()["authenticated"])
 
+    def test_register_password_policy_bounds(self):
+        short_response = self.client.post(
+            "/api/auth/register",
+            json={
+                "email": "short@example.com",
+                "username": "shortpass",
+                "password": "short",
+                "confirm_password": "short",
+            },
+        )
+        self.assertEqual(short_response.status_code, 400)
+        self.assertEqual(short_response.get_json()["error"], "VALIDATION_ERROR")
+        self.assertEqual(short_response.get_json()["field"], "password")
+
+        long_response = self.client.post(
+            "/api/auth/register",
+            json={
+                "email": "long@example.com",
+                "username": "longpass",
+                "password": "a" * 256,
+                "confirm_password": "a" * 256,
+            },
+        )
+        self.assertEqual(long_response.status_code, 400)
+        self.assertEqual(long_response.get_json()["error"], "VALIDATION_ERROR")
+        self.assertEqual(long_response.get_json()["field"], "password")
+
     def test_dashboard_and_statistics_read_models(self):
         self._login_admin()
 

@@ -26,6 +26,9 @@ export function AuthCard({
   const location = useLocation()
   const isLogin = location.pathname.startsWith('/login')
   const isRegister = location.pathname.startsWith('/register')
+  const isForgotPassword = location.pathname.startsWith('/forgot-password')
+  const isResetPassword = location.pathname.startsWith('/reset-password')
+  const isRecoveryMode = isForgotPassword || isResetPassword
 
   return (
     <div className="relative flex min-h-[calc(100svh-4rem)] items-center justify-center overflow-hidden px-4 py-10 lg:py-16">
@@ -103,34 +106,72 @@ export function AuthCard({
             {/* Header with Segmented Pill Controller */}
             <div className="flex flex-col items-center space-y-4 border-b border-border/50 bg-muted/20 px-6 pt-6 pb-5 text-center">
               {/* Premium Pill Segmented Tab Controller */}
-              <div className="relative flex w-full max-w-[260px] items-center rounded-full border border-border/60 bg-muted/60 p-1 shadow-inner dark:bg-muted/40">
-                <Link
-                  to="/login"
-                  className={`relative z-10 flex-1 rounded-full py-2 text-xs font-bold text-center transition-all duration-300 ${
-                    isLogin
-                      ? 'text-primary-foreground shadow-md shadow-primary/25'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  {isLogin && (
-                    <span className="absolute inset-0 -z-10 rounded-full bg-gradient-to-r from-primary via-orange-500 to-amber-500 transition-all duration-300 animate-in fade-in-50" />
-                  )}
-                  Đăng nhập
-                </Link>
+              <div
+                className={`relative flex w-full items-center rounded-full border border-border/60 bg-muted/60 p-1 shadow-inner dark:bg-muted/40 ${
+                  isRecoveryMode ? 'max-w-[290px]' : 'max-w-[260px]'
+                }`}
+              >
+                {isRecoveryMode ? (
+                  <>
+                    <Link
+                      to="/forgot-password"
+                      className={`relative z-10 flex-1 rounded-full py-2 text-xs font-bold text-center transition-all duration-300 ${
+                        isForgotPassword
+                          ? 'text-primary-foreground shadow-md shadow-primary/25'
+                          : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      {isForgotPassword && (
+                        <span className="absolute inset-0 -z-10 rounded-full bg-gradient-to-r from-primary via-orange-500 to-amber-500 transition-all duration-300 animate-in fade-in-50" />
+                      )}
+                      Quên mật khẩu
+                    </Link>
 
-                <Link
-                  to="/register"
-                  className={`relative z-10 flex-1 rounded-full py-2 text-xs font-bold text-center transition-all duration-300 ${
-                    isRegister
-                      ? 'text-primary-foreground shadow-md shadow-primary/25'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  {isRegister && (
-                    <span className="absolute inset-0 -z-10 rounded-full bg-gradient-to-r from-primary via-orange-500 to-amber-500 transition-all duration-300 animate-in fade-in-50" />
-                  )}
-                  Đăng ký
-                </Link>
+                    <Link
+                      to={{ pathname: '/reset-password', search: location.search }}
+                      className={`relative z-10 flex-1 rounded-full py-2 text-xs font-bold text-center transition-all duration-300 ${
+                        isResetPassword
+                          ? 'text-primary-foreground shadow-md shadow-primary/25'
+                          : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      {isResetPassword && (
+                        <span className="absolute inset-0 -z-10 rounded-full bg-gradient-to-r from-primary via-orange-500 to-amber-500 transition-all duration-300 animate-in fade-in-50" />
+                      )}
+                      Đặt lại mật khẩu
+                    </Link>
+                  </>
+                ) : (
+                  <>
+                    <Link
+                      to="/login"
+                      className={`relative z-10 flex-1 rounded-full py-2 text-xs font-bold text-center transition-all duration-300 ${
+                        isLogin
+                          ? 'text-primary-foreground shadow-md shadow-primary/25'
+                          : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      {isLogin && (
+                        <span className="absolute inset-0 -z-10 rounded-full bg-gradient-to-r from-primary via-orange-500 to-amber-500 transition-all duration-300 animate-in fade-in-50" />
+                      )}
+                      Đăng nhập
+                    </Link>
+
+                    <Link
+                      to="/register"
+                      className={`relative z-10 flex-1 rounded-full py-2 text-xs font-bold text-center transition-all duration-300 ${
+                        isRegister
+                          ? 'text-primary-foreground shadow-md shadow-primary/25'
+                          : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      {isRegister && (
+                        <span className="absolute inset-0 -z-10 rounded-full bg-gradient-to-r from-primary via-orange-500 to-amber-500 transition-all duration-300 animate-in fade-in-50" />
+                      )}
+                      Đăng ký
+                    </Link>
+                  </>
+                )}
               </div>
             </div>
 

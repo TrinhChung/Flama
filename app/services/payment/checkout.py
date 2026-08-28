@@ -95,6 +95,8 @@ def _validate_note_type_for_checkout(source_note_type: NoteType, *, user_id: int
         "product_ref_id": source_note_type.id,
         "title_snapshot": source_note_type.name,
         "amount_minor": int(source_note_type.price_amount_minor or 0),
+        "subtotal_amount_minor": int(source_note_type.price_amount_minor or 0),
+        "discount_amount_minor": 0,
         "product_snapshot": {
             "title": source_note_type.name,
             "pricing_mode": source_note_type.pricing_mode,
@@ -137,10 +139,14 @@ def _validate_deck_item_for_checkout(deck_item: DeckMarketplaceItem, *, user_id:
             "Bạn không thể mua chính deck do mình phát hành.",
             status=409,
         )
-    if deck_item.pricing_mode != "paid" or int(deck_item.price_amount_minor or 0) <= 0:
+    user = db.session.get(User, user_id)
+    from app.services.marketplace_pricing_service import calculate_pricing_breakdown
+
+    pricing_breakdown = calculate_pricing_breakdown(deck_item, user)
+    if not pricing_breakdown.is_payment_required:
         raise PaymentServiceError(
             "PAYMENT_NOT_REQUIRED",
-            "Deck này hiện không yêu cầu thanh toán.",
+            "Deck này hiện không yêu cầu thanh toán đối với tài khoản của bạn.",
             status=409,
         )
 
@@ -149,12 +155,18 @@ def _validate_deck_item_for_checkout(deck_item: DeckMarketplaceItem, *, user_id:
         "product_type": "deck_marketplace_item",
         "product_ref_id": deck_item.id,
         "title_snapshot": deck_item.title,
-        "amount_minor": int(deck_item.price_amount_minor or 0),
+        "amount_minor": pricing_breakdown.effective_price_minor,
+        "subtotal_amount_minor": pricing_breakdown.base_price_minor,
+        "discount_amount_minor": pricing_breakdown.discount_amount_minor,
         "product_snapshot": {
             "title": deck_item.title,
             "pricing_mode": deck_item.pricing_mode,
             "source_price_amount_minor": int(deck_item.price_amount_minor or 0),
             "source_price_integer": int(deck_item.price_amount_minor or 0),
+            "student_offer_mode": str(deck_item.student_offer_mode or "none"),
+            "student_discount_percent": deck_item.student_discount_percent,
+            "student_discount_applied": pricing_breakdown.student_discount_applied,
+            "discount_amount_minor": pricing_breakdown.discount_amount_minor,
             "version": deck_item.version,
             "owner_user_id": deck_item.owner_user_id,
             "source_deck_id": deck_item.source_deck_id,
@@ -468,8 +480,8 @@ def _create_or_reuse_order_for_context(
         status="pending_payment",
         grant_status="pending",
         currency_code="VND",
-        subtotal_amount_minor=context["amount_minor"],
-        discount_amount_minor=0,
+        subtotal_amount_minor=int(context.get("subtotal_amount_minor", context["amount_minor"])),
+        discount_amount_minor=int(context.get("discount_amount_minor", 0)),
         total_amount_minor=context["amount_minor"],
     )
     db.session.add(order)

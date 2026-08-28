@@ -1,4 +1,4 @@
-import { AlertCircle, ArrowRight, Check, Eye, EyeOff, Lock, Mail, User, LoaderCircle, X } from 'lucide-react'
+import { AlertCircle, ArrowRight, Check, Eye, EyeOff, GraduationCap, Lock, Mail, User, LoaderCircle, X } from 'lucide-react'
 import { Navigate } from 'react-router-dom'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -71,6 +71,10 @@ export function RegisterPage() {
               {...form.register('email')}
             />
           </div>
+          <p className="text-[11px] leading-relaxed text-muted-foreground/85 flex items-start gap-1.5 pt-0.5">
+            <GraduationCap className="size-3.5 shrink-0 text-primary/80 mt-0.5" />
+            <span>Sinh viên? Hãy sử dụng email trường có đuôi <code className="text-[10px] font-semibold bg-muted px-1 py-0.5 rounded text-foreground">.edu.vn</code> để có thể nhận các ưu đãi dành cho sinh viên trên Flama.</span>
+          </p>
           {form.formState.errors.email?.message ? (
             <p className="text-xs font-medium text-destructive">{form.formState.errors.email.message}</p>
           ) : null}
