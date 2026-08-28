@@ -8,6 +8,7 @@ import type {
 
 const LINEBREAK_TOKEN = '__FC_LINEBREAK_TOKEN__'
 const PROXY_MEDIA_RE = /^\/media\/proxy\/[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/
+const STATIC_STROKE_RE = /^\/static\/strokes\/[a-zA-Z0-9_-]+\/[a-fA-F0-9]+\.svg$/
 const SAFE_BUTTON_ONCLICK_RE =
   /^\s*document\.getElementById\(\s*['"][A-Za-z0-9_-]+['"]\s*\)\.play\(\)\s*;?\s*$/
 
@@ -21,7 +22,7 @@ const ALLOWED_TAGS = [
 const ALLOWED_ATTR = [
   'class', 'id', 'style', 'alt', 'title', 'role', 'dir', 'controls', 'loop',
   'muted', 'playsinline', 'autoplay', 'preload', 'poster', 'width', 'height',
-  'colspan', 'rowspan', 'src', 'href', 'auto-split', 'onclick',
+  'colspan', 'rowspan', 'src', 'href', 'auto-split', 'onclick', 'loading',
 ]
 
 function sanitizeRenderedMarkup(rawHtml: string, allowedMediaUrls: Set<string>): string {
@@ -39,6 +40,7 @@ function sanitizeRenderedMarkup(rawHtml: string, allowedMediaUrls: Set<string>):
     if (attrName === 'src' || attrName === 'href' || attrName === 'poster') {
       data.keepAttr = (
         (PROXY_MEDIA_RE.test(attrValue) && allowedMediaUrls.has(attrValue))
+        || STATIC_STROKE_RE.test(attrValue)
         || (attrName === 'href' && attrValue.startsWith('https://'))
       )
       return

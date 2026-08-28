@@ -31,6 +31,7 @@ from .download import download_bp
 from .images import images_bp
 from .profile import profile_bp
 from .settings import settings_bp
+from .strokes import strokes_bp
 from .tickets import tickets_bp
 from .wallet import wallet_bp
 
@@ -53,6 +54,8 @@ def _enforce_daily_rate_limit():
             "/api/auth/register",
             "/api/auth/forgot-password",
             "/api/auth/reset-password",
+            "/api/auth/google",
+            "/api/identity/auth/google",
             "/api/billing/webhook",
             "/media/proxy",
         )
@@ -128,5 +131,6 @@ api_v1_bp.register_blueprint(creator_deck_keys_bp)
 api_v1_bp.register_blueprint(profile_bp, url_prefix="/profile")
 api_v1_bp.register_blueprint(wallet_bp, url_prefix="/wallet")
 api_v1_bp.register_blueprint(settings_bp)
+api_v1_bp.register_blueprint(strokes_bp)
 api_v1_bp.register_blueprint(images_bp, url_prefix="/images")
 api_v1_bp.register_blueprint(tickets_bp)

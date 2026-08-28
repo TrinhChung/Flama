@@ -8,6 +8,7 @@ import { Textarea } from '@/components/ui/textarea'
 import {
   Layers,
   LoaderCircle,
+  PenTool,
   Plus,
   RotateCcw,
   Save,
@@ -43,6 +44,9 @@ export function BrowseCardEditor({ browse }: BrowseCardEditorProps) {
     deleteMutation,
     mobileTab,
     setMobileTab,
+    setIsStrokeModalOpen,
+    setStrokeModalMode,
+    setStrokeModalCardId,
   } = browse
 
   const [editorWidth, setEditWidth] = useState(() => {
@@ -173,12 +177,28 @@ export function BrowseCardEditor({ browse }: BrowseCardEditorProps) {
           </Badge>
           <span className="text-xs font-bold text-foreground">Chi tiết Note</span>
         </div>
-        <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full" onClick={() => {
-          setActiveCardId(null)
-          setMobileTab('cards')
-        }}>
-          <X className="size-4" />
-        </Button>
+        <div className="flex items-center gap-1.5">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 px-2 text-[11px] font-semibold gap-1 rounded-lg bg-muted/40 hover:bg-muted"
+            title="Tạo sơ đồ thứ tự nét Kanji & Hanzi cho thẻ này"
+            onClick={() => {
+              setStrokeModalMode('single')
+              setStrokeModalCardId(activeCardId)
+              setIsStrokeModalOpen(true)
+            }}
+          >
+            <PenTool className="size-3 text-primary" />
+            <span className="hidden sm:inline">Tạo nét</span>
+          </Button>
+          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full" onClick={() => {
+            setActiveCardId(null)
+            setMobileTab('cards')
+          }}>
+            <X className="size-4" />
+          </Button>
+        </div>
       </div>
 
       {/* Editor Body Fields Scrollable */}

@@ -373,4 +373,56 @@ export const appApi = {
       `${API_BASE}/statistics/study-time?${params.toString()}`,
     )
   },
+
+  async generateStrokes(payload: GenerateStrokesPayload): Promise<GenerateStrokesResponse> {
+    return apiJson<GenerateStrokesResponse>(`${API_BASE}/strokes/generate`, 'POST', payload)
+  },
+
+  async batchGenerateStrokes(payload: BatchGenerateStrokesPayload): Promise<BatchGenerateStrokesResponse> {
+    return apiJson<BatchGenerateStrokesResponse>(`${API_BASE}/strokes/batch-generate`, 'POST', payload)
+  },
 }
+
+export type GenerateStrokesPayload = {
+  text: string
+  locale?: string
+  format?: 'html' | 'urls' | 'raw'
+  deduplicate?: boolean
+  max_characters?: number
+}
+
+export type StrokeItem = {
+  char: string
+  hex: string
+  url: string
+  available: boolean
+}
+
+export type GenerateStrokesResponse = {
+  locale: string
+  characters: string[]
+  items: StrokeItem[]
+  output: string
+  missing_count: number
+  missing_characters: string[]
+}
+
+export type BatchGenerateStrokesPayload = {
+  source_field: string
+  target_field: string
+  locale?: string
+  deck_id?: number | null
+  note_ids?: string[]
+  card_ids?: string[]
+  format?: 'html' | 'urls'
+  overwrite?: boolean
+  max_characters?: number
+}
+
+export type BatchGenerateStrokesResponse = {
+  total_processed: number
+  updated: number
+  skipped: number
+  missing_characters: string[]
+}
+

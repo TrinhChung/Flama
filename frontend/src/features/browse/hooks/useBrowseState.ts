@@ -109,6 +109,9 @@ export function useBrowseState() {
   // VoiceVox TTS Audio Generation Modal State
   const [isTtsModalOpen, setIsTtsModalOpen] = useState(false)
   const [isLocalAudioModalOpen, setIsLocalAudioModalOpen] = useState(false)
+  const [isStrokeModalOpen, setIsStrokeModalOpen] = useState(false)
+  const [strokeModalMode, setStrokeModalMode] = useState<'single' | 'batch'>('batch')
+  const [strokeModalCardId, setStrokeModalCardId] = useState<string | null>(null)
   const [localAudioEngineId, setLocalAudioEngineId] = useState<'voicevox' | 'kokoro'>('voicevox')
   const [localAudioDefaultVoiceId, setLocalAudioDefaultVoiceId] = useState<string | undefined>(undefined)
   const [localAudioTargetCardIds, setLocalAudioTargetCardIds] = useState<string[]>([])
@@ -609,6 +612,12 @@ export function useBrowseState() {
     setIsTtsModalOpen,
     isLocalAudioModalOpen,
     setIsLocalAudioModalOpen,
+    isStrokeModalOpen,
+    setIsStrokeModalOpen,
+    strokeModalMode,
+    setStrokeModalMode,
+    strokeModalCardId,
+    setStrokeModalCardId,
     localAudioEngineId,
     setLocalAudioEngineId,
     localAudioDefaultVoiceId,

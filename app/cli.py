@@ -864,6 +864,54 @@ def register_cli_commands(app: Flask) -> None:
         clear_image_queue()
         click.echo("Image queue cleared.")
 
+    @app.cli.group("strokes")
+    def strokes_group() -> None:
+        """Manage Kanji and Hanzi SVG stroke datasets."""
+        pass
+
+    @strokes_group.command("build-dataset")
+    @click.option("--locale", default="ja", type=click.Choice(["ja", "zh", "zh-hant"], case_sensitive=False), help="Locale dataset to build.")
+    @click.option("--source", required=True, help="Path to directory containing KanjiVG or MakeMeAHanzi SVG files.")
+    def build_dataset_cmd(locale: str, source: str) -> None:
+        """Build and standardize SVG stroke dataset from source directory."""
+        from pathlib import Path
+        from app.services.strokes.dataset_builder import build_dataset_from_directory
+
+        static_root = Path(app.static_folder or "static")
+        target_dir = static_root / "strokes" / locale.lower()
+        click.echo(f"Building stroke dataset for '{locale}' from {source} into {target_dir}...")
+        res = build_dataset_from_directory(source_dir=source, target_dir=target_dir, locale=locale)
+        click.echo(f"Done! Processed: {res.get('processed', 0)}, Skipped: {res.get('skipped', 0)}")
+
+    @strokes_group.command("seed-starter")
+    def seed_starter_cmd() -> None:
+        """Seed starter set of common Kanji and Hanzi SVG stroke diagrams."""
+        from pathlib import Path
+        from app.services.strokes.dataset_builder import populate_starter_strokes
+
+        static_root = Path(app.static_folder or "static")
+        res = populate_starter_strokes(static_root)
+        click.echo(f"Starter stroke SVGs seeded: {res}")
+
+    @strokes_group.command("status")
+    def status_cmd() -> None:
+        """Show current stroke dataset file counts."""
+        from pathlib import Path
+        static_root = Path(app.static_folder or "static")
+        ja_dir = static_root / "strokes" / "ja"
+        zh_dir = static_root / "strokes" / "zh"
+        zh_hant_dir = static_root / "strokes" / "zh-hant"
+
+        ja_count = len(list(ja_dir.glob("*.svg"))) if ja_dir.exists() else 0
+        zh_count = len(list(zh_dir.glob("*.svg"))) if zh_dir.exists() else 0
+        zh_hant_count = len(list(zh_hant_dir.glob("*.svg"))) if zh_hant_dir.exists() else 0
+
+        click.echo("Stroke Dataset Status:")
+        click.echo(f"  - Japanese (ja): {ja_count} SVGs ({ja_dir})")
+        click.echo(f"  - Chinese Simplified/General (zh): {zh_count} SVGs ({zh_dir})")
+        click.echo(f"  - Chinese Traditional (zh-hant): {zh_hant_count} SVGs ({zh_hant_dir})")
+
+
 
 
 

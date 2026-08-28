@@ -138,4 +138,26 @@ describe('renderStudySide', () => {
 
     expect(result.html).not.toContain('src=')
   })
+
+  it('preserves static stroke diagram SVG images in rich HTML content', () => {
+    const strokeDiagramHtml = (
+      '<div class="flama-stroke-diagram" data-locale="ja">'
+      + '<img src="/static/strokes/ja/52c9.svg" alt="勉" title="勉" class="stroke-svg" loading="lazy" />'
+      + '<img src="/static/strokes/ja/5f37.svg" alt="強" title="強" class="stroke-svg" loading="lazy" />'
+      + '</div>'
+    )
+    const result = renderStudySide(
+      template({ back_source: '<div class="strokes">{{{StrokeDiagram}}}</div>' }),
+      content({
+        render_context: { StrokeDiagram: strokeDiagramHtml },
+      }),
+      'back',
+    )
+
+    expect(result.html).toContain('src="/static/strokes/ja/52c9.svg"')
+    expect(result.html).toContain('src="/static/strokes/ja/5f37.svg"')
+    expect(result.html).toContain('alt="勉"')
+    expect(result.html).toContain('class="stroke-svg"')
+  })
 })
+
