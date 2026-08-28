@@ -943,6 +943,31 @@ def ensure_backward_compatible_schema() -> None:
         )
         _ensure_column(
             "deck_marketplace_items",
+            "distribution_mode",
+            "ALTER TABLE deck_marketplace_items ADD COLUMN distribution_mode VARCHAR(32) NOT NULL DEFAULT 'free'",
+        )
+        _ensure_column(
+            "deck_marketplace_items",
+            "course_title",
+            "ALTER TABLE deck_marketplace_items ADD COLUMN course_title VARCHAR(255) NULL",
+        )
+        _ensure_column(
+            "deck_marketplace_items",
+            "course_description",
+            "ALTER TABLE deck_marketplace_items ADD COLUMN course_description TEXT NULL",
+        )
+        _ensure_column(
+            "deck_marketplace_items",
+            "course_url",
+            "ALTER TABLE deck_marketplace_items ADD COLUMN course_url VARCHAR(500) NULL",
+        )
+        _ensure_column(
+            "deck_marketplace_items",
+            "course_instructions",
+            "ALTER TABLE deck_marketplace_items ADD COLUMN course_instructions TEXT NULL",
+        )
+        _ensure_column(
+            "deck_marketplace_items",
             "last_auto_publish_error",
             "ALTER TABLE deck_marketplace_items ADD COLUMN last_auto_publish_error TEXT NULL",
         )

@@ -209,7 +209,10 @@ def normalize_pricing(
 
 
 def _format_marketplace_price_display(pricing_mode: str, amount_minor: int) -> str:
-    if pricing_mode == "free":
+    mode = str(pricing_mode or "free").strip().lower()
+    if mode == "course_key":
+        return "Mã khóa học"
+    if mode == "free":
         return "Miễn phí"
     return format_vnd(amount_minor)
 
@@ -530,11 +533,21 @@ def serialize_deck_marketplace_item(
         "has_subdecks": bool(stats.get("has_subdecks", False)),
         "source_deck_id": deck_item.source_deck_id,
         "source_note_type_id": deck_item.source_note_type_id,
+        "distribution_mode": getattr(deck_item, "distribution_mode", "free") or "free",
+        "requires_access_key": bool(
+            getattr(deck_item, "distribution_mode", "free") == "course_key"
+        ),
+        "course_title": getattr(deck_item, "course_title", None),
+        "course_description": getattr(deck_item, "course_description", None),
+        "course_url": getattr(deck_item, "course_url", None),
+        "course_instructions": getattr(deck_item, "course_instructions", None),
         "pricing_mode": deck_item.pricing_mode,
         "price_amount_minor": price_amount_minor,
         "price_cents": price_amount_minor,
         "price_display": _format_marketplace_price_display(
-            str(deck_item.pricing_mode or "free"),
+            "course_key"
+            if getattr(deck_item, "distribution_mode", "free") == "course_key"
+            else str(deck_item.pricing_mode or "free"),
             price_amount_minor,
         ),
         "student_offer_mode": str(deck_item.student_offer_mode or "none"),

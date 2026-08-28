@@ -145,6 +145,12 @@ type SharedDeckDetail = {
   is_saved: boolean
   can_rate: boolean
   review_submission_count?: number
+  distribution_mode?: 'free' | 'paid' | 'course_key'
+  requires_access_key?: boolean
+  course_title?: string | null
+  course_description?: string | null
+  course_url?: string | null
+  course_instructions?: string | null
   student_offer_mode?: string
   student_discount_percent?: number | null
   has_student_offer?: boolean
@@ -498,9 +504,20 @@ export function SharedDeckDetailPage() {
                       : `Giảm ${deck.student_discount_percent}% SV`}
                   </Badge>
                 )}
+                {deck.distribution_mode === 'course_key' || deck.requires_access_key ? (
+                  <Badge className="bg-purple-500/15 text-purple-700 border-purple-500/30 dark:text-purple-300 font-bold shadow-xs">
+                    <KeyRound className="mr-1 size-3 text-purple-600 dark:text-purple-400" />
+                    Mã khóa học
+                  </Badge>
+                ) : null}
               </div>
 
-              {deck.student_discount_applied ? (
+              {deck.distribution_mode === 'course_key' || deck.requires_access_key ? (
+                <span className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-extrabold border bg-purple-500/10 text-purple-700 dark:text-purple-300 border-purple-500/30">
+                  <KeyRound className="size-3.5 text-purple-600 dark:text-purple-400" />
+                  Mã khóa học
+                </span>
+              ) : deck.student_discount_applied ? (
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-muted-foreground line-through font-semibold">
                     {deck.price_display}
@@ -840,6 +857,49 @@ export function SharedDeckDetailPage() {
                 </div>
               ) : (
                 <div className="flex flex-col gap-3">
+                  {(deck.distribution_mode === 'course_key' || deck.requires_access_key) && (
+                    <div className="w-full rounded-xl border border-purple-500/30 bg-purple-500/10 p-3.5 sm:p-4 text-xs sm:text-sm text-purple-900 dark:text-purple-300 space-y-2">
+                      <div className="flex items-center gap-2 font-bold text-sm sm:text-base text-purple-800 dark:text-purple-200">
+                        <GraduationCap className="size-5 text-purple-600 dark:text-purple-400" />
+                        <span>Học liệu độc quyền dành cho Khóa học</span>
+                      </div>
+                      <p className="text-xs leading-relaxed text-purple-800/90 dark:text-purple-300/90">
+                        Bộ thẻ này được thiết kế và quản lý bởi giảng viên cho lớp học cụ thể. Học viên cần có <strong>Mã kích hoạt (Access Key)</strong> từ giảng viên hoặc trung tâm để mở khóa và học tập.
+                      </p>
+                      {deck.course_title && (
+                        <div className="pt-2 border-t border-purple-500/20 text-xs">
+                          <span className="font-semibold">Khóa học: </span>
+                          <strong className="font-bold text-purple-900 dark:text-purple-100">{deck.course_title}</strong>
+                        </div>
+                      )}
+                      {deck.course_description && (
+                        <p className="text-xs italic text-purple-800/80 dark:text-purple-300/80">
+                          {deck.course_description}
+                        </p>
+                      )}
+                      {deck.course_url && (
+                        <div className="pt-1 flex items-center gap-1.5 text-xs">
+                          <span className="font-semibold">Trang thông tin khóa học:</span>
+                          <a
+                            href={deck.course_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 font-bold text-purple-700 dark:text-purple-300 underline hover:text-purple-900 dark:hover:text-purple-100"
+                          >
+                            <span>{deck.course_url}</span>
+                            <ExternalLink className="size-3" />
+                          </a>
+                        </div>
+                      )}
+                      {deck.course_instructions && (
+                        <div className="pt-2 border-t border-purple-500/20 text-xs">
+                          <span className="font-semibold">Hướng dẫn nhận mã: </span>
+                          <span>{deck.course_instructions}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {deck.has_student_offer && deck.user_student_status === 'eligible_unverified_email' && (
                     <div className="w-full rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-900 dark:text-amber-300 flex items-start gap-2">
                       <GraduationCap className="size-4 shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
@@ -854,41 +914,54 @@ export function SharedDeckDetailPage() {
                   )}
 
                   <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-3">
-                    <Button
-                      className="h-11 sm:h-12 min-h-[44px] px-6 font-bold text-sm sm:text-base shadow-sm bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl transition-all justify-center"
-                      size="lg"
-                      onClick={() => installMutation.mutate()}
-                      disabled={installMutation.isPending}
-                    >
-                      {installMutation.isPending ? (
-                        <>
-                          <Loader2 className="mr-2 size-5 animate-spin" />
-                          {deck.pricing_mode === 'paid' && (!deck.student_discount_applied || deck.effective_price_amount_minor !== 0)
-                            ? 'Đang tạo thanh toán…'
-                            : 'Đang cài đặt bộ thẻ…'}
-                        </>
-                      ) : (
-                        <>
-                          <Download className="mr-2 size-5" />
-                          {deck.pricing_mode === 'paid'
-                            ? deck.student_discount_applied && deck.effective_price_amount_minor === 0
-                              ? 'Tải xuống miễn phí (Ưu đãi Sinh viên)'
-                              : deck.student_discount_applied
-                              ? `Mua bộ deck • ${deck.effective_price_display} (Đã giảm ${deck.student_discount_percent}%)`
-                              : `Mua bộ deck • ${deck.price_display}`
-                            : 'Tải xuống & Cài đặt miễn phí'}
-                        </>
-                      )}
-                    </Button>
+                    {deck.distribution_mode === 'course_key' || deck.requires_access_key ? (
+                      <Button
+                        className="h-11 sm:h-12 min-h-[44px] px-6 font-bold text-sm sm:text-base shadow-sm bg-purple-600 hover:bg-purple-700 text-white rounded-xl transition-all justify-center"
+                        size="lg"
+                        onClick={() => setIsRedeemModalOpen(true)}
+                      >
+                        <KeyRound className="mr-2 size-5" />
+                        Nhập mã kích hoạt khóa học
+                      </Button>
+                    ) : (
+                      <>
+                        <Button
+                          className="h-11 sm:h-12 min-h-[44px] px-6 font-bold text-sm sm:text-base shadow-sm bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl transition-all justify-center"
+                          size="lg"
+                          onClick={() => installMutation.mutate()}
+                          disabled={installMutation.isPending}
+                        >
+                          {installMutation.isPending ? (
+                            <>
+                              <Loader2 className="mr-2 size-5 animate-spin" />
+                              {deck.pricing_mode === 'paid' && (!deck.student_discount_applied || deck.effective_price_amount_minor !== 0)
+                                ? 'Đang tạo thanh toán…'
+                                : 'Đang cài đặt bộ thẻ…'}
+                            </>
+                          ) : (
+                            <>
+                              <Download className="mr-2 size-5" />
+                              {deck.pricing_mode === 'paid'
+                                ? deck.student_discount_applied && deck.effective_price_amount_minor === 0
+                                ? 'Tải xuống miễn phí (Ưu đãi Sinh viên)'
+                                : deck.student_discount_applied
+                                ? `Mua bộ deck • ${deck.effective_price_display} (Đã giảm ${deck.student_discount_percent}%)`
+                                : `Mua bộ deck • ${deck.price_display}`
+                                : 'Tải xuống & Cài đặt miễn phí'}
+                            </>
+                          )}
+                        </Button>
 
-                  <Button
-                    className="h-11 sm:h-12 min-h-[44px] px-4 font-semibold text-xs sm:text-sm rounded-xl justify-center border-primary/30 hover:bg-primary/5"
-                    variant="outline"
-                    onClick={() => setIsRedeemModalOpen(true)}
-                  >
-                    <KeyRound className="mr-1.5 size-4 text-primary" />
-                    Nhập mã kích hoạt
-                  </Button>
+                        <Button
+                          className="h-11 sm:h-12 min-h-[44px] px-4 font-semibold text-xs sm:text-sm rounded-xl justify-center border-primary/30 hover:bg-primary/5"
+                          variant="outline"
+                          onClick={() => setIsRedeemModalOpen(true)}
+                        >
+                          <KeyRound className="mr-1.5 size-4 text-primary" />
+                          Nhập mã kích hoạt
+                        </Button>
+                      </>
+                    )}
 
                     <Button
                       className="h-11 sm:h-12 min-h-[44px] px-4 font-semibold text-xs sm:text-sm rounded-xl justify-center"

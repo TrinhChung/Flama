@@ -45,6 +45,16 @@ class DeckMarketplaceItem(db.Model):
     )
     price_amount_minor = db.Column(db.Integer, nullable=False, default=0)
     price_cents = synonym("price_amount_minor")
+    distribution_mode = db.Column(
+        db.String(32),
+        nullable=False,
+        default="free",
+        index=True,
+    )
+    course_title = db.Column(db.String(255), nullable=True)
+    course_description = db.Column(db.Text, nullable=True)
+    course_url = db.Column(db.String(500), nullable=True)
+    course_instructions = db.Column(db.Text, nullable=True)
     student_offer_mode = db.Column(
         db.Enum("none", "free", "percent_discount", name="deck_marketplace_student_offer_mode_enum", native_enum=False),
         nullable=False,

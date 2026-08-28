@@ -1752,31 +1752,52 @@ def apply_deck_marketplace_payload(
     if "changelog" in payload:
         deck_item.changelog = (payload.get("changelog") or "").strip() or None
 
-    pricing_mode, price_amount_minor, pricing_error = marketplace_query_service.normalize_pricing(
-        payload,
-        current_mode=str(deck_item.pricing_mode or "free"),
-        current_price_amount_minor=int(deck_item.price_amount_minor or 0),
-    )
-    if pricing_error:
-        return pricing_error
-    deck_item.pricing_mode = pricing_mode
-    deck_item.price_amount_minor = price_amount_minor
+    if "distribution_mode" in payload:
+        dist_mode = str(payload.get("distribution_mode") or "").strip().lower()
+        if dist_mode not in {"free", "paid", "course_key"}:
+            return "distribution_mode must be 'free', 'paid', or 'course_key'."
+        deck_item.distribution_mode = dist_mode
 
-    from app.services.marketplace_pricing_service import validate_student_offer
+    if "course_title" in payload:
+        deck_item.course_title = (payload.get("course_title") or "").strip() or None
+    if "course_description" in payload:
+        deck_item.course_description = (payload.get("course_description") or "").strip() or None
+    if "course_url" in payload:
+        deck_item.course_url = (payload.get("course_url") or "").strip() or None
+    if "course_instructions" in payload:
+        deck_item.course_instructions = (payload.get("course_instructions") or "").strip() or None
 
-    student_offer_mode_raw = payload.get("student_offer_mode", deck_item.student_offer_mode)
-    student_discount_percent_raw = payload.get(
-        "student_discount_percent", deck_item.student_discount_percent
-    )
-    st_mode, st_percent, st_err = validate_student_offer(
-        pricing_mode=deck_item.pricing_mode,
-        student_offer_mode=student_offer_mode_raw,
-        student_discount_percent=student_discount_percent_raw,
-    )
-    if st_err:
-        return st_err
-    deck_item.student_offer_mode = st_mode
-    deck_item.student_discount_percent = st_percent
+    if getattr(deck_item, "distribution_mode", "free") == "course_key":
+        deck_item.pricing_mode = "free"
+        deck_item.price_amount_minor = 0
+        deck_item.student_offer_mode = "none"
+        deck_item.student_discount_percent = None
+    else:
+        pricing_mode, price_amount_minor, pricing_error = marketplace_query_service.normalize_pricing(
+            payload,
+            current_mode=str(deck_item.pricing_mode or "free"),
+            current_price_amount_minor=int(deck_item.price_amount_minor or 0),
+        )
+        if pricing_error:
+            return pricing_error
+        deck_item.pricing_mode = pricing_mode
+        deck_item.price_amount_minor = price_amount_minor
+
+        from app.services.marketplace_pricing_service import validate_student_offer
+
+        student_offer_mode_raw = payload.get("student_offer_mode", deck_item.student_offer_mode)
+        student_discount_percent_raw = payload.get(
+            "student_discount_percent", deck_item.student_discount_percent
+        )
+        st_mode, st_percent, st_err = validate_student_offer(
+            pricing_mode=deck_item.pricing_mode,
+            student_offer_mode=student_offer_mode_raw,
+            student_discount_percent=student_discount_percent_raw,
+        )
+        if st_err:
+            return st_err
+        deck_item.student_offer_mode = st_mode
+        deck_item.student_discount_percent = st_percent
 
     if "is_official" in payload:
         if not allow_set_official:

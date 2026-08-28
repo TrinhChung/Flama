@@ -19,14 +19,16 @@ SPEC.loader.exec_module(sync_managed_env)
 
 class SyncManagedEnvironmentTests(unittest.TestCase):
     def _managed_values(self) -> dict[str, str]:
-        return {
+        values = {
             "ADMIN_EMAIL": "admin@example.com",
-            "ADMIN_PASSWORD": "password with spaces and \"quotes\"",
+            "ADMIN_PASSWORD": 'password with spaces and "quotes"',
             "ADMIN_USER": "admin",
             "DB_PASSWORD": "debuggable-database-password",
             "PAYOS_API_KEY": "payos-api-key",
             "PAYOS_CHECKSUM_KEY": "payos-checksum-key",
             "PAYOS_CLIENT_ID": "payos-client-id",
+            "EMAIL_SMTP_PASSWORD": "smtp-password",
+            "EMAIL_RESEND_API_KEY": "resend-api-key",
             "CORS_ALLOWED_ORIGINS": "https://flama.stmtp.com",
             "FLASK_APP": "wsgi.py",
             "DB_PORT": "3306",
@@ -39,6 +41,10 @@ class SyncManagedEnvironmentTests(unittest.TestCase):
             "PAYMENTS_PROVIDER": "payos",
             "PAYMENTS_WEBHOOK_AUTO_GRANT_ENABLED": "1",
         }
+        for key in sync_managed_env.MANAGED_ENV_KEYS:
+            if key not in values:
+                values[key] = sync_managed_env.MANAGED_VARIABLE_DEFAULTS.get(key, f"mock-{key.lower()}")
+        return values
 
     def test_build_and_apply_updates_only_managed_keys(self):
         with tempfile.TemporaryDirectory() as temporary_directory:

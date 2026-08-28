@@ -1,40 +1,60 @@
-import { GitCompare, GraduationCap } from 'lucide-react'
+import { DollarSign, GitCompare, GraduationCap, KeyRound, Sparkles } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import { FieldErrorMessage } from './PublishWizardTypes'
 
 interface PublishStep4PricingProps {
+  distributionMode: 'free' | 'paid' | 'course_key'
   pricingMode: 'free' | 'paid'
   priceAmountMinor: number
   studentOfferMode: 'none' | 'free' | 'percent_discount'
   studentDiscountPercent: number | null
+  courseTitle: string
+  courseDescription: string
+  courseUrl: string
+  courseInstructions: string
   version: string
   isReleaseVersioned: boolean
   deckItemId: string
   fieldErrors: Record<string, string>
+  setDistributionMode: (mode: 'free' | 'paid' | 'course_key') => void
   setPricingMode: (mode: 'free' | 'paid') => void
   setPriceAmountMinor: (amount: number) => void
   setStudentOfferMode: (mode: 'none' | 'free' | 'percent_discount') => void
   setStudentDiscountPercent: (percent: number | null) => void
+  setCourseTitle: (title: string) => void
+  setCourseDescription: (desc: string) => void
+  setCourseUrl: (url: string) => void
+  setCourseInstructions: (inst: string) => void
   setVersion: (ver: string) => void
   clearFieldError: (name: string) => void
 }
 
 export function PublishStep4Pricing({
-  pricingMode,
+  distributionMode,
   priceAmountMinor,
   studentOfferMode,
   studentDiscountPercent,
+  courseTitle,
+  courseDescription,
+  courseUrl,
+  courseInstructions,
   version,
   isReleaseVersioned,
   deckItemId,
   fieldErrors,
+  setDistributionMode,
   setPricingMode,
   setPriceAmountMinor,
   setStudentOfferMode,
   setStudentDiscountPercent,
+  setCourseTitle,
+  setCourseDescription,
+  setCourseUrl,
+  setCourseInstructions,
   setVersion,
   clearFieldError,
 }: PublishStep4PricingProps) {
@@ -45,40 +65,74 @@ export function PublishStep4Pricing({
 
   return (
     <div className="space-y-5 animate-in fade-in duration-200">
-      {/* Pricing Selector Cards */}
+      {/* Distribution Mode Selector Cards */}
       <div className="space-y-3">
         <Label className="text-xs font-semibold">Mô hình phân phối & Giá bán</Label>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {/* Free Option */}
           <div
             onClick={() => {
+              setDistributionMode('free')
               setPricingMode('free')
               setStudentOfferMode('none')
               setStudentDiscountPercent(null)
             }}
             className={`p-4 rounded-xl border cursor-pointer transition-all text-center select-none ${
-              pricingMode === 'free'
-                ? 'border-primary bg-primary/10 text-foreground font-bold ring-2 ring-primary/30'
+              distributionMode === 'free'
+                ? 'border-emerald-500 bg-emerald-500/10 text-foreground font-bold ring-2 ring-emerald-500/30'
                 : 'border-border bg-card hover:bg-muted/50 text-muted-foreground'
             }`}
           >
+            <div className="flex items-center justify-center mb-1 text-emerald-600 dark:text-emerald-400">
+              <Sparkles className="size-5" />
+            </div>
             <div className="font-bold text-sm sm:text-base">Miễn phí (Free)</div>
             <div className="text-xs opacity-80 mt-0.5">Chia sẻ tự do tới mọi người</div>
           </div>
 
+          {/* Paid Option */}
           <div
-            onClick={() => setPricingMode('paid')}
+            onClick={() => {
+              setDistributionMode('paid')
+              setPricingMode('paid')
+            }}
             className={`p-4 rounded-xl border cursor-pointer transition-all text-center select-none ${
-              pricingMode === 'paid'
+              distributionMode === 'paid'
                 ? 'border-primary bg-primary/10 text-foreground font-bold ring-2 ring-primary/30'
                 : 'border-border bg-card hover:bg-muted/50 text-muted-foreground'
             }`}
           >
+            <div className="flex items-center justify-center mb-1 text-primary">
+              <DollarSign className="size-5" />
+            </div>
             <div className="font-bold text-sm sm:text-base">Có phí (Paid)</div>
-            <div className="text-xs opacity-80 mt-0.5">Bán nội dung có thu phí</div>
+            <div className="text-xs opacity-80 mt-0.5">Bán qua cổng payOS</div>
+          </div>
+
+          {/* Course Key Option */}
+          <div
+            onClick={() => {
+              setDistributionMode('course_key')
+              setPricingMode('free')
+              setStudentOfferMode('none')
+              setStudentDiscountPercent(null)
+            }}
+            className={`p-4 rounded-xl border cursor-pointer transition-all text-center select-none ${
+              distributionMode === 'course_key'
+                ? 'border-purple-500 bg-purple-500/10 text-foreground font-bold ring-2 ring-purple-500/30'
+                : 'border-border bg-card hover:bg-muted/50 text-muted-foreground'
+            }`}
+          >
+            <div className="flex items-center justify-center mb-1 text-purple-600 dark:text-purple-400">
+              <KeyRound className="size-5" />
+            </div>
+            <div className="font-bold text-sm sm:text-base">Mã lớp học (Keys)</div>
+            <div className="text-xs opacity-80 mt-0.5">Kích hoạt qua Access Keys</div>
           </div>
         </div>
 
-        {pricingMode === 'paid' && (
+        {/* Paid Form Fields */}
+        {distributionMode === 'paid' && (
           <div className="space-y-4 pt-1 animate-in fade-in duration-200">
             {/* Listed Base Price */}
             <div className="space-y-1.5">
@@ -195,6 +249,83 @@ export function PublishStep4Pricing({
 
               <p className="text-[11px] leading-relaxed text-muted-foreground/80 pt-1">
                 Flama chỉ áp dụng ưu đãi này cho tài khoản đã được xác thực là sinh viên thông qua email trường có đuôi <code className="text-[10px] font-semibold bg-muted px-1 py-0.5 rounded text-foreground">.edu.vn</code>.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Course Key Form Fields */}
+        {distributionMode === 'course_key' && (
+          <div className="space-y-4 pt-1 animate-in fade-in duration-200">
+            <div className="rounded-xl border border-purple-500/30 bg-purple-500/5 p-4 space-y-3.5">
+              <div className="flex items-center gap-2">
+                <GraduationCap className="size-4 text-purple-600 dark:text-purple-400" />
+                <Label className="text-xs font-bold text-foreground">
+                  Thông tin khóa học & Hướng dẫn nhận mã
+                </Label>
+              </div>
+
+              {/* Course Title */}
+              <div className="space-y-1.5">
+                <Label htmlFor="course_title" className="text-xs font-semibold">
+                  Tên khóa học / Lớp học
+                </Label>
+                <Input
+                  id="course_title"
+                  value={courseTitle}
+                  onChange={(e) => setCourseTitle(e.target.value)}
+                  placeholder="VD: Khóa Luyện thi JLPT N2 Cấp tốc 2026"
+                  className="h-10 text-xs sm:text-sm rounded-xl"
+                />
+              </div>
+
+              {/* Course Description */}
+              <div className="space-y-1.5">
+                <Label htmlFor="course_description" className="text-xs font-semibold">
+                  Mô tả ngắn về khóa học
+                </Label>
+                <Textarea
+                  id="course_description"
+                  value={courseDescription}
+                  onChange={(e) => setCourseDescription(e.target.value)}
+                  placeholder="VD: Dành riêng cho học viên lớp N2 Online K15. Bao gồm toàn bộ từ vựng và Kanji trọng tâm."
+                  rows={2}
+                  className="text-xs sm:text-sm rounded-xl resize-none"
+                />
+              </div>
+
+              {/* Course URL */}
+              <div className="space-y-1.5">
+                <Label htmlFor="course_url" className="text-xs font-semibold">
+                  Link trang web / Khóa học (nếu có)
+                </Label>
+                <Input
+                  id="course_url"
+                  type="url"
+                  value={courseUrl}
+                  onChange={(e) => setCourseUrl(e.target.value)}
+                  placeholder="https://example.com/courses/n2-intensive"
+                  className="h-10 text-xs sm:text-sm rounded-xl"
+                />
+              </div>
+
+              {/* Course Instructions */}
+              <div className="space-y-1.5">
+                <Label htmlFor="course_instructions" className="text-xs font-semibold">
+                  Hướng dẫn học viên nhận mã kích hoạt
+                </Label>
+                <Textarea
+                  id="course_instructions"
+                  value={courseInstructions}
+                  onChange={(e) => setCourseInstructions(e.target.value)}
+                  placeholder="VD: Học viên liên hệ trợ giảng lớp qua nhóm Zalo hoặc kiểm tra email đăng ký khóa học để lấy mã kích hoạt."
+                  rows={2}
+                  className="text-xs sm:text-sm rounded-xl resize-none"
+                />
+              </div>
+
+              <p className="text-[11px] leading-relaxed text-purple-700 dark:text-purple-300 pt-1">
+                💡 <strong>Gợi ý:</strong> Sau khi đăng tải deck, bạn có thể tạo hàng loạt <strong>Mã kích hoạt (Access Keys)</strong> và theo dõi danh sách học viên đã kích hoạt trong trang chi tiết của bộ deck.
               </p>
             </div>
           </div>
