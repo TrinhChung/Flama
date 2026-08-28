@@ -13,19 +13,20 @@ import { useStudySession } from '../hooks/useStudySession'
 import { isBackgroundRolloverCommit } from '../session/studySessionEngine'
 import type { Rating } from '../types'
 import type { SchedulerDecision } from '../scheduler/types'
+import { resolveReviewAction, type ReviewRating } from '../interactions/reviewInteraction'
 
 export function StudyPage() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const deckIdRaw = searchParams.get('deck_id')
-  const study = useStudySession(deckIdRaw)
+  const [selectedCompositionId, setSelectedCompositionId] = useState<string | null>(null)
+  const study = useStudySession(deckIdRaw, selectedCompositionId)
 
   const [revealedCardKey, setRevealedCardKey] = useState<string | null>(null)
   const [decisionState, setDecisionState] = useState<{
     cardKey: string
     value: SchedulerDecision
   } | null>(null)
-  const [selectedCompositionId, setSelectedCompositionId] = useState<string | null>(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [isQuickEditOpen, setIsQuickEditOpen] = useState(false)
   const startedAtRef = useRef(performance.now())
@@ -196,10 +197,6 @@ export function StudyPage() {
       }
 
       const isSpaceOrEnter = code === 'Space' || key === ' ' || key === 'Spacebar' || code === 'Enter' || key === 'Enter'
-      const isOne = key === '1' || code === 'Digit1' || code === 'Numpad1'
-      const isTwo = key === '2' || code === 'Digit2' || code === 'Numpad2'
-      const isThree = key === '3' || code === 'Digit3' || code === 'Numpad3'
-      const isFour = key === '4' || code === 'Digit4' || code === 'Numpad4'
       const isFullscreenKey = key === 'f' || key === 'F' || code === 'KeyF'
 
       if (isSpaceOrEnter) {
@@ -207,18 +204,26 @@ export function StudyPage() {
         if (!card?.card_id) return
         if (!revealed) handleReveal()
         else void handleAnswer('good')
-      } else if (isOne && revealed) {
-        event.preventDefault()
-        void handleAnswer('again')
-      } else if (isTwo && revealed) {
-        event.preventDefault()
-        void handleAnswer('hard')
-      } else if (isThree && revealed) {
-        event.preventDefault()
-        void handleAnswer('good')
-      } else if (isFour && revealed) {
-        event.preventDefault()
-        void handleAnswer('easy')
+      } else if (revealed) {
+        const ratingByKey: Record<string, ReviewRating> = {
+          '1': 'again', '2': 'hard', '3': 'good', '4': 'easy',
+        }
+        const codeMap: Record<string, string> = {
+          Digit1: '1', Numpad1: '1',
+          Digit2: '2', Numpad2: '2',
+          Digit3: '3', Numpad3: '3',
+          Digit4: '4', Numpad4: '4',
+        }
+        const mappedKey = codeMap[code] ?? key
+        const rating = ratingByKey[mappedKey]
+        if (rating) {
+          event.preventDefault()
+          resolveReviewAction(rating) // validate action identity
+          void handleAnswer(rating)
+        } else if (isFullscreenKey) {
+          event.preventDefault()
+          handleToggleFullscreen()
+        }
       } else if (isFullscreenKey) {
         event.preventDefault()
         handleToggleFullscreen()

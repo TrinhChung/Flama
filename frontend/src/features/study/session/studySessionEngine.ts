@@ -99,12 +99,20 @@ function queueCards(session: PersistedStudySession) {
 export function buildSessionView(
   session: PersistedStudySession,
   nowMs: number,
+  compositionFilter?: string | null,
 ): StudySessionView {
   const snapshot = session.snapshot
-  const cards = queueCards(session)
+  const allCards = queueCards(session)
+  const cards = compositionFilter
+    ? allCards.filter((c) => {
+        const full = snapshot.cards.find((row) => row.card_id === c.card_id)
+        return full?.composition_id === compositionFilter
+      })
+    : allCards
   const activeCard = session.active_card_id
     ? snapshot.cards.find(
-        (row) => row.card_id === session.active_card_id && !row.state.suspended,
+        (row) => row.card_id === session.active_card_id && !row.state.suspended
+          && (!compositionFilter || row.composition_id === compositionFilter),
       ) ?? null
     : null
 
