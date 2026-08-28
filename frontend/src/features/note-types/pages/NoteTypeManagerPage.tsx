@@ -35,6 +35,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Page, PageHeader } from '@/shared/components/Page'
 import { EmptyState, PageError, PageLoading } from '@/shared/components/PageState'
+import { ContextHelpButton } from '@/features/guide'
 import { SpotlightTour, type TourStep } from '../components/SpotlightTour'
 
 const TOUR_STORAGE_KEY = 'flama_notetype_spotlight_tour_v1'
@@ -242,6 +243,13 @@ export function NoteTypeManagerPage() {
                 Kho Mẫu
               </Link>
             </Button>
+            <ContextHelpButton
+              guidePath="/guide/note-types/concept"
+              guideTitle="Kiến trúc 1 Note sinh nhiều Cards"
+              troubleshootPath="/guide/troubleshooting/import-csv"
+              troubleshootTitle="Khắc phục lỗi trường & mẫu thẻ"
+              label="Tài liệu"
+            />
           </div>
         }
       />

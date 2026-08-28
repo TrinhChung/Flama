@@ -49,3 +49,22 @@ export function resetPassword(payload: ResetPasswordPayload) {
   }>
 }
 
+export function requestEmailVerification() {
+  return appApi.mutate<{
+    success: boolean
+    already_verified?: boolean
+    message?: string
+    expires_in_minutes?: number
+  }>('/api/profile/verify-email/request', 'POST')
+}
+
+export function verifyEmail(codeOrToken: string) {
+  return appApi.mutate<{
+    success: boolean
+    message?: string
+    email_verified?: boolean
+    is_verified_student?: boolean
+    student_status?: string
+  }>('/api/profile/verify-email/confirm', 'POST', { code: codeOrToken })
+}
+

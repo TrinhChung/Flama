@@ -19,12 +19,14 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
+import { Printer } from 'lucide-react'
 import type { DeckNode, SelectedDeckAction } from '../types'
 
 export interface DeckRowProps {
   node: DeckNode
   adminMode: boolean
   selectedDeckId?: number | null
+  dataTour?: string
   onSelect?: (deck: DeckNode) => void
   onActivate?: (deck: DeckNode) => void
   onAction: (action: SelectedDeckAction) => void
@@ -46,6 +48,7 @@ export function DeckRow({
   node,
   adminMode,
   selectedDeckId,
+  dataTour,
   onSelect,
   onActivate,
   onAction,
@@ -110,6 +113,7 @@ export function DeckRow({
     <>
       <div
         data-node-id={node.id}
+        data-tour={dataTour}
         role="button"
         tabIndex={0}
         aria-selected={isSelected}
@@ -254,6 +258,14 @@ export function DeckRow({
                 >
                   <Upload className="size-4 text-muted-foreground" />
                   <span>Import thẻ</span>
+                </DropdownMenuItem>
+
+                <DropdownMenuItem
+                  className="cursor-pointer text-sm py-2 px-2.5 font-medium flex items-center gap-2"
+                  onSelect={() => onAction({ type: 'worksheet', deck: node })}
+                >
+                  <Printer className="size-4 text-orange-600" />
+                  <span>Xuất bài tập / Worksheet</span>
                 </DropdownMenuItem>
 
                 <DropdownMenuSeparator className="my-1" />

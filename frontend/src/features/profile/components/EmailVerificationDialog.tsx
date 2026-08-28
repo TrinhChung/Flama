@@ -131,7 +131,7 @@ export function EmailVerificationDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto p-4 sm:p-6">
         <DialogHeader>
           <div className="mx-auto mb-2 flex size-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
             {isEdu ? (
@@ -140,12 +140,12 @@ export function EmailVerificationDialog({
               <ShieldCheck className="size-6 text-primary" />
             )}
           </div>
-          <DialogTitle className="text-center text-xl font-bold">
+          <DialogTitle className="text-center text-lg sm:text-xl font-bold">
             {isEdu ? 'Xác thực Email Sinh viên' : 'Xác thực Địa chỉ Email'}
           </DialogTitle>
           <DialogDescription className="text-center text-xs">
             Mã xác thực 6 chữ số sẽ được gửi tới hòm thư:{' '}
-            <strong className="text-foreground">{user.email}</strong>
+            <strong className="text-foreground break-all">{user.email}</strong>
           </DialogDescription>
         </DialogHeader>
 
@@ -186,7 +186,7 @@ export function EmailVerificationDialog({
             </p>
             <Button
               type="button"
-              className="w-full font-bold cursor-pointer rounded-xl"
+              className="w-full font-bold cursor-pointer rounded-xl h-11 active:scale-[0.98]"
               onClick={handleSendCode}
               disabled={sendCodeMutation.isPending}
             >
@@ -210,24 +210,26 @@ export function EmailVerificationDialog({
                 Nhập mã xác thực (6 chữ số)
               </Label>
               <div className="relative">
-                <Mail className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                <Mail className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
                 <Input
                   id="otp_code"
                   type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
                   maxLength={10}
                   placeholder="123456"
                   autoFocus
                   autoComplete="one-time-code"
                   value={code}
                   onChange={(e) => setCode(e.target.value.replace(/\s+/g, ''))}
-                  className="pl-9 text-center font-mono text-lg font-bold tracking-widest rounded-xl"
+                  className="pl-10 text-center font-mono text-xl font-bold tracking-widest rounded-xl h-12"
                 />
               </div>
             </div>
 
             <Button
               type="submit"
-              className="w-full font-bold rounded-xl cursor-pointer"
+              className="w-full font-bold rounded-xl cursor-pointer h-11 active:scale-[0.98]"
               disabled={verifyMutation.isPending || !code.trim()}
             >
               {verifyMutation.isPending ? (

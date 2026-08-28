@@ -83,6 +83,7 @@
   ["POST", "/api/decks/<int:deck_id>/audio-scan"],
   ["POST", "/api/decks/<int:deck_id>/progress-reset"],
   ["POST", "/api/decks/<int:deck_id>/strokes/batch-generate"],
+  ["GET", "/api/decks/<int:deck_id>/worksheets/meta"],
   ["GET", "/api/download/flama-audio"],
   ["GET", "/api/download/flama-audio.sha256"],
   ["POST", "/api/email/request-verification"],
@@ -193,6 +194,8 @@
   ["POST", "/api/profile/avatar"],
   ["GET", "/api/profile/transactions"],
   ["GET", "/api/profile/u/<username>"],
+  ["POST", "/api/profile/verify-email/confirm"],
+  ["POST", "/api/profile/verify-email/request"],
   ["DELETE", "/api/session"],
   ["GET", "/api/session"],
   ["GET", "/api/shared/note-types"],
@@ -221,5 +224,8 @@
   ["GET", "/api/tickets/my"],
   ["POST", "/api/tickets/upload-image"],
   ["GET", "/api/wallet"],
-  ["GET", "/api/wallet/transactions"]
+  ["GET", "/api/wallet/transactions"],
+  ["POST", "/api/worksheets/preview"],
+  ["POST", "/api/worksheets/render-html"],
+  ["GET", "/api/worksheets/templates"]
 ]

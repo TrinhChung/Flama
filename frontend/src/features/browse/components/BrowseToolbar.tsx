@@ -8,7 +8,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Search, Sliders, ChevronDown, Trash2, Volume2, PenTool } from 'lucide-react'
+import { Search, Sliders, ChevronDown, Trash2, Volume2, PenTool, Printer } from 'lucide-react'
 import type { useBrowseState } from '../hooks/useBrowseState'
 
 interface BrowseToolbarProps {
@@ -30,6 +30,11 @@ export function BrowseToolbar({ browse }: BrowseToolbarProps) {
     setIsLocalAudioModalOpen,
     setIsStrokeModalOpen,
     setStrokeModalMode,
+    setIsWorksheetModalOpen,
+    setWorksheetTargetDeckId,
+    setWorksheetTargetCardIds,
+    selectedDeckId,
+    cardsQuery,
   } = browse
 
   return (
@@ -88,6 +93,21 @@ export function BrowseToolbar({ browse }: BrowseToolbarProps) {
                   <span>Tạo nét Kanji/Hanzi</span>
                 </DropdownMenuItem>
 
+                {/* Worksheet Generator Trigger */}
+                <DropdownMenuItem
+                  onClick={() => {
+                    const firstDeckId = cardsQuery.data?.items[0]?.deck_id
+                    const targetDeckId = selectedDeckId || firstDeckId || 1
+                    setWorksheetTargetDeckId(targetDeckId)
+                    setWorksheetTargetCardIds(selectedCards)
+                    setIsWorksheetModalOpen(true)
+                  }}
+                  className="flex items-center gap-2 font-medium cursor-pointer"
+                >
+                  <Printer className="size-4 text-orange-600 shrink-0" />
+                  <span>Xuất bài tập in ấn (Worksheet)</span>
+                </DropdownMenuItem>
+
                 {/* Voice Generation Trigger */}
                 <DropdownMenuItem
                   onClick={() => setIsTtsModalOpen(true)}
@@ -109,7 +129,7 @@ export function BrowseToolbar({ browse }: BrowseToolbarProps) {
                     <Volume2 className="size-4 text-emerald-600 shrink-0" />
                     <span>Tạo audio local</span>
                   </div>
-                  <Badge variant="outline" className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200">
+                  <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30">
                     Local
                   </Badge>
                 </DropdownMenuItem>

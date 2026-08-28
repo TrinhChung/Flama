@@ -134,6 +134,11 @@ export function useBrowseState() {
   const [ttsFinalSilence, setTtsFinalSilence] = useState(0.1)
   const [isPreviewing, setIsPreviewing] = useState(false)
 
+  // Worksheet Generator Modal State
+  const [isWorksheetModalOpen, setIsWorksheetModalOpen] = useState(false)
+  const [worksheetTargetDeckId, setWorksheetTargetDeckId] = useState<number | null>(null)
+  const [worksheetTargetCardIds, setWorksheetTargetCardIds] = useState<string[]>([])
+
   // Right Pane: Active Card Selection & Editor State
   const [activeCardId, setActiveCardId] = useState<string | null>(
     urlCardId ? urlCardId : null,
@@ -618,6 +623,12 @@ export function useBrowseState() {
     setStrokeModalMode,
     strokeModalCardId,
     setStrokeModalCardId,
+    isWorksheetModalOpen,
+    setIsWorksheetModalOpen,
+    worksheetTargetDeckId,
+    setWorksheetTargetDeckId,
+    worksheetTargetCardIds,
+    setWorksheetTargetCardIds,
     localAudioEngineId,
     setLocalAudioEngineId,
     localAudioDefaultVoiceId,

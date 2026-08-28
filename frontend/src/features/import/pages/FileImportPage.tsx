@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import { Page, PageHeader } from '@/shared/components/Page'
 import { PageError, PageLoading } from '@/shared/components/PageState'
+import { ContextHelpButton } from '@/features/guide'
 
 import { useFileImportWizard } from '../hooks/useFileImportWizard'
 import { ImportOptionsStep } from '../components/ImportOptionsStep'
@@ -26,6 +27,15 @@ export function FileImportPage() {
       <PageHeader
         title="Import Note & Thẻ Flashcard"
         description="Nhập dữ liệu flashcard hàng loạt từ tệp CSV, TSV hoặc định dạng phân tách tùy chỉnh với quy trình rà soát an toàn."
+        actions={
+          <ContextHelpButton
+            guidePath="/guide/import-sync/csv-wizard"
+            guideTitle="Hướng dẫn nạp tệp CSV qua Wizard"
+            troubleshootPath="/guide/troubleshooting/import-csv"
+            troubleshootTitle="Khắc phục lỗi nạp file CSV"
+            label="Hướng dẫn nạp file"
+          />
+        }
       />
 
       {/* Modern Stepper Indicator */}

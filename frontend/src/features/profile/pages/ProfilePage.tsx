@@ -60,33 +60,45 @@ export function ProfilePage() {
     )
   }
 
-  const profileData = isPublicRoute
-    ? publicQuery.data!
-    : ownPortfolioQuery.data || {
-        user: privateQuery.data!.user,
-        stats: privateQuery.data!.creator_stats,
-        badges: privateQuery.data!.badges,
-        published_decks: [],
-        published_note_types: [],
-        contributions: [],
-        is_own_profile: true,
-      }
+  const isOwnProfile = isPublicRoute ? Boolean(publicQuery.data?.is_own_profile) : true
 
-  const user = profileData.user
-  const stats = profileData.stats || {
-    created_decks_count: profileData.published_decks?.length || 0,
-    created_note_types_count: profileData.published_note_types?.length || 0,
-    total_installs_count: 0,
-    rating_count: 0,
-    rating_avg: 0,
-    contributions_merged_count: profileData.contributions?.length || 0,
-    total_contributions_count: 0,
-  }
-  const badges = profileData.badges || []
-  const publishedDecks = profileData.published_decks || []
-  const publishedNoteTypes = profileData.published_note_types || []
-  const contributions = profileData.contributions || []
-  const isOwnProfile = isPublicRoute ? profileData.is_own_profile : true
+  const user = !isPublicRoute
+    ? privateQuery.data!.user
+    : (isOwnProfile && privateQuery.data?.user)
+      ? { ...publicQuery.data!.user, ...privateQuery.data.user }
+      : publicQuery.data!.user
+
+  const stats =
+    (!isPublicRoute ? ownPortfolioQuery.data?.stats : publicQuery.data?.stats) ||
+    privateQuery.data?.creator_stats || {
+      created_decks_count: 0,
+      created_note_types_count: 0,
+      total_installs_count: 0,
+      rating_count: 0,
+      rating_avg: 0,
+      contributions_merged_count: 0,
+      total_contributions_count: 0,
+    }
+
+  const badges =
+    (!isPublicRoute ? ownPortfolioQuery.data?.badges : publicQuery.data?.badges) ||
+    privateQuery.data?.badges ||
+    []
+
+  const publishedDecks =
+    (!isPublicRoute
+      ? ownPortfolioQuery.data?.published_decks
+      : publicQuery.data?.published_decks) || []
+
+  const publishedNoteTypes =
+    (!isPublicRoute
+      ? ownPortfolioQuery.data?.published_note_types
+      : publicQuery.data?.published_note_types) || []
+
+  const contributions =
+    (!isPublicRoute
+      ? ownPortfolioQuery.data?.contributions
+      : publicQuery.data?.contributions) || []
 
   return (
     <Page>
@@ -107,11 +119,11 @@ export function ProfilePage() {
 
         {/* Portfolio Tabs Header */}
         <div className="space-y-4 pt-2">
-          <div className="flex border-b border-border/60">
+          <div className="flex border-b border-border/60 overflow-x-auto scrollbar-none whitespace-nowrap -mx-4 px-4 sm:mx-0 sm:px-0">
             <button
               type="button"
               onClick={() => setActiveTab('decks')}
-              className={`flex items-center gap-2 border-b-2 px-4 py-2.5 text-xs font-semibold transition cursor-pointer ${
+              className={`flex shrink-0 items-center gap-2 border-b-2 px-4 py-2.5 text-xs font-semibold transition cursor-pointer ${
                 activeTab === 'decks'
                   ? 'border-primary text-primary'
                   : 'border-transparent text-muted-foreground hover:text-foreground'
@@ -124,7 +136,7 @@ export function ProfilePage() {
             <button
               type="button"
               onClick={() => setActiveTab('noteTypes')}
-              className={`flex items-center gap-2 border-b-2 px-4 py-2.5 text-xs font-semibold transition cursor-pointer ${
+              className={`flex shrink-0 items-center gap-2 border-b-2 px-4 py-2.5 text-xs font-semibold transition cursor-pointer ${
                 activeTab === 'noteTypes'
                   ? 'border-primary text-primary'
                   : 'border-transparent text-muted-foreground hover:text-foreground'
@@ -137,7 +149,7 @@ export function ProfilePage() {
             <button
               type="button"
               onClick={() => setActiveTab('contributions')}
-              className={`flex items-center gap-2 border-b-2 px-4 py-2.5 text-xs font-semibold transition cursor-pointer ${
+              className={`flex shrink-0 items-center gap-2 border-b-2 px-4 py-2.5 text-xs font-semibold transition cursor-pointer ${
                 activeTab === 'contributions'
                   ? 'border-primary text-primary'
                   : 'border-transparent text-muted-foreground hover:text-foreground'

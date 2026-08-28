@@ -32,6 +32,7 @@ import {
   PageLoading,
 } from '@/shared/components/PageState'
 import { SpotlightTour, type TourStep } from '@/shared/components/SpotlightTour'
+import { ContextHelpButton } from '@/features/guide'
 import { DeckCard, getCategoryBadgeStyle, type DeckCardItem } from '@/features/marketplace/components/DeckCard'
 import { useTaxonomySchema } from '@/features/marketplace/hooks/useTaxonomySchema'
 
@@ -431,6 +432,11 @@ export function InstalledDecksPage() {
                 <HelpCircle className="size-3.5 mr-1.5 text-primary" />
                 Tour Hướng Dẫn
               </Button>
+              <ContextHelpButton
+                guidePath="/guide/marketplace/installed-overlay"
+                guideTitle="Cơ chế Clone Overlay & Cập nhật Deck"
+                label="Trợ giúp"
+              />
               <Button
                 size="sm"
                 data-tour="marketplace-explore-btn"

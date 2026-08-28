@@ -28,6 +28,8 @@ import { BrowseCardTable } from '../components/BrowseCardTable'
 import { BrowseCardEditor } from '../components/BrowseCardEditor'
 import { BrowseTtsModal } from '../components/BrowseTtsModal'
 import { BrowseStrokeModal } from '../components/BrowseStrokeModal'
+import { DeckWorksheetModal } from '@/features/worksheets'
+import { ContextHelpButton } from '@/features/guide'
 
 export function BrowsePage() {
   const navigate = useNavigate()
@@ -122,7 +124,7 @@ export function BrowsePage() {
                     className="flex items-center justify-between font-medium cursor-pointer"
                   >
                     <span>VoiceVox Local</span>
-                    <Badge variant="outline" className="text-[10px] py-0 px-1 font-normal bg-emerald-50 text-emerald-700 border-emerald-300">
+                    <Badge variant="outline" className="text-[10px] py-0 px-1 font-normal bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30">
                       Local
                     </Badge>
                   </DropdownMenuItem>
@@ -139,7 +141,7 @@ export function BrowsePage() {
                 className="flex items-center justify-between font-medium cursor-pointer"
               >
                 <span>🇺🇸/🇬🇧 Tiếng Anh Local</span>
-                <Badge variant="outline" className="text-[10px] py-0 px-1 font-normal bg-emerald-50 text-emerald-700 border-emerald-300">
+                <Badge variant="outline" className="text-[10px] py-0 px-1 font-normal bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30">
                   Local
                 </Badge>
               </DropdownMenuItem>
@@ -154,7 +156,7 @@ export function BrowsePage() {
                 className="flex items-center justify-between font-medium cursor-pointer"
               >
                 <span>🇨🇳 Tiếng Trung Local</span>
-                <Badge variant="outline" className="text-[10px] py-0 px-1 font-normal bg-emerald-50 text-emerald-700 border-emerald-300">
+                <Badge variant="outline" className="text-[10px] py-0 px-1 font-normal bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30">
                   Local
                 </Badge>
               </DropdownMenuItem>
@@ -169,7 +171,7 @@ export function BrowsePage() {
                 className="flex items-center justify-between font-medium cursor-pointer"
               >
                 <span>🇪🇸 Tiếng Tây Ban Nha</span>
-                <Badge variant="outline" className="text-[10px] py-0 px-1 font-normal bg-emerald-50 text-emerald-700 border-emerald-300">
+                <Badge variant="outline" className="text-[10px] py-0 px-1 font-normal bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30">
                   Local
                 </Badge>
               </DropdownMenuItem>
@@ -184,7 +186,7 @@ export function BrowsePage() {
                 className="flex items-center justify-between font-medium cursor-pointer"
               >
                 <span>🇫🇷 Tiếng Pháp Local</span>
-                <Badge variant="outline" className="text-[10px] py-0 px-1 font-normal bg-emerald-50 text-emerald-700 border-emerald-300">
+                <Badge variant="outline" className="text-[10px] py-0 px-1 font-normal bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30">
                   Local
                 </Badge>
               </DropdownMenuItem>
@@ -199,7 +201,7 @@ export function BrowsePage() {
                 className="flex items-center justify-between font-medium cursor-pointer"
               >
                 <span>🇮🇹 Tiếng Ý Local</span>
-                <Badge variant="outline" className="text-[10px] py-0 px-1 font-normal bg-emerald-50 text-emerald-700 border-emerald-300">
+                <Badge variant="outline" className="text-[10px] py-0 px-1 font-normal bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30">
                   Local
                 </Badge>
               </DropdownMenuItem>
@@ -214,12 +216,22 @@ export function BrowsePage() {
                 className="flex items-center justify-between font-medium cursor-pointer"
               >
                 <span>🇧🇷 Tiếng Bồ Đào Nha</span>
-                <Badge variant="outline" className="text-[10px] py-0 px-1 font-normal bg-emerald-50 text-emerald-700 border-emerald-300">
+                <Badge variant="outline" className="text-[10px] py-0 px-1 font-normal bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30">
                   Local
                 </Badge>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+
+          <ContextHelpButton
+            guidePath="/guide/browse/search-syntax"
+            guideTitle="Mẹo tìm kiếm & Lọc thẻ"
+            troubleshootPath="/guide/troubleshooting/dashboard-study"
+            troubleshootTitle="Thẻ không hiển thị đúng?"
+            label="Trợ giúp"
+            variant="outline"
+            size="xs"
+          />
         </div>
       </header>
 
@@ -307,13 +319,23 @@ export function BrowsePage() {
       <BrowseTtsModal browse={browse} />
 
       {/* Kanji/Hanzi Stroke Diagram Generation Modal */}
-      <BrowseStrokeModal
+        <BrowseStrokeModal
         browse={browse}
         isOpen={browse.isStrokeModalOpen}
         onClose={() => browse.setIsStrokeModalOpen(false)}
         mode={browse.strokeModalMode}
         cardId={browse.strokeModalCardId}
       />
+
+      {/* Printable Worksheet Generator Modal */}
+      {browse.isWorksheetModalOpen && (
+        <DeckWorksheetModal
+          open={browse.isWorksheetModalOpen}
+          onOpenChange={browse.setIsWorksheetModalOpen}
+          deckId={browse.worksheetTargetDeckId || browse.selectedDeckId || 1}
+          initialCardIds={browse.worksheetTargetCardIds}
+        />
+      )}
 
       {/* Local Offline TTS Audio Generation modal */}
       {isLocalAudioModalOpen && (

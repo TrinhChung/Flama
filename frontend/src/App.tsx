@@ -32,6 +32,11 @@ const ResetPasswordPage = lazy(() =>
     default: module.ResetPasswordPage,
   })),
 )
+const VerifyEmailPage = lazy(() =>
+  import('./features/auth/pages/VerifyEmailPage').then((module) => ({
+    default: module.VerifyEmailPage,
+  })),
+)
 
 const DashboardPage = lazy(() =>
   import('./features/dashboard/pages/DashboardPage').then((module) => ({
@@ -239,14 +244,14 @@ const SupportPage = lazy(() =>
     default: module.SupportPage,
   })),
 )
-const TtsKeyGuidePage = lazy(() =>
-  import('./pages/StaticPages').then((module) => ({
-    default: module.TtsKeyGuidePage,
-  })),
-)
 const FlamaAudioGuidePage = lazy(() =>
   import('./pages/StaticPages').then((module) => ({
     default: module.FlamaAudioGuidePage,
+  })),
+)
+const GuidePage = lazy(() =>
+  import('./features/guide/pages/GuidePage').then((module) => ({
+    default: module.GuidePage,
   })),
 )
 const TermsPage = lazy(() =>
@@ -312,6 +317,11 @@ const router = createBrowserRouter([
       { path: 'register', element: deferred(<RegisterPage />) },
       { path: 'forgot-password', element: deferred(<ForgotPasswordPage />) },
       { path: 'reset-password', element: deferred(<ResetPasswordPage />) },
+      { path: 'verify-email', element: deferred(<VerifyEmailPage />) },
+      {
+        path: 'auth/verify-email',
+        element: <Navigate to="/verify-email" replace />,
+      },
 
       { path: 'support', element: deferred(<SupportPage />) },
       {
@@ -330,14 +340,19 @@ const router = createBrowserRouter([
         path: 'payments/result',
         element: deferred(<PaymentResultPage />),
       },
-      { path: 'guide/tts-key', element: deferred(<TtsKeyGuidePage />) },
+      { path: 'guide', element: deferred(<GuidePage />) },
+      { path: 'guide/:categorySlug', element: deferred(<GuidePage />) },
+      { path: 'guide/:categorySlug/:articleSlug', element: deferred(<GuidePage />) },
+      { path: 'help', element: <Navigate to="/guide" replace /> },
+      { path: 'guides', element: <Navigate to="/guide" replace /> },
+      { path: 'guide/tts-key', element: <Navigate to="/guide/audio/cloud-tts-keys" replace /> },
       {
         path: 'guides/tts-key',
-        element: <Navigate to="/guide/tts-key" replace />,
+        element: <Navigate to="/guide/audio/cloud-tts-keys" replace />,
       },
       {
         path: 'help/tts-key',
-        element: <Navigate to="/guide/tts-key" replace />,
+        element: <Navigate to="/guide/audio/cloud-tts-keys" replace />,
       },
       { path: 'guide/flama-audio', element: deferred(<FlamaAudioGuidePage />) },
       {

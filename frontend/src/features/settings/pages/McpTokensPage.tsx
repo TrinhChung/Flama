@@ -11,6 +11,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Page, PageHeader } from '@/shared/components/Page'
 import { PageError, PageLoading } from '@/shared/components/PageState'
+import { ContextHelpButton } from '@/features/guide'
 
 import { useMcpTokenCRUD } from '../hooks/useMcpTokenCRUD'
 import { McpAboutTab } from '../components/McpAboutTab'
@@ -34,6 +35,13 @@ export function McpTokensPage() {
         <PageHeader
           title="Kết nối AI qua Model Context Protocol (MCP)"
           description="Tích hợp ChatGPT, Claude Desktop, Cursor và các trợ lý AI với kho Flashcard Flama để tự động tra cứu, tạo thẻ và ôn tập."
+          actions={
+            <ContextHelpButton
+              guidePath="/guide/integrations/mcp-ai"
+              guideTitle="Hướng dẫn kết nối trợ lý AI qua MCP"
+              label="Hướng dẫn kết nối"
+            />
+          }
         />
 
         {/* Quick Highlights Bar */}

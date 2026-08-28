@@ -71,13 +71,13 @@ export function ProfileHeroCard({
   return (
     <>
       <Card className="relative overflow-hidden border-border/60 bg-gradient-to-br from-background via-muted/20 to-background shadow-xs">
-        <div className="absolute top-0 right-0 h-40 w-80 bg-radial from-primary/10 via-amber-500/5 to-transparent blur-2xl" />
-        <CardContent className="p-6 md:p-8">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-            <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
+        <div className="absolute top-0 right-0 h-40 w-80 bg-radial from-primary/10 via-amber-500/5 to-transparent blur-2xl pointer-events-none" />
+        <CardContent className="p-4 sm:p-6 md:p-8">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:gap-5">
               {/* Avatar with Upload trigger */}
-              <div className="relative group self-start">
-                <Avatar className="size-24 border-2 border-primary/30 shadow-md ring-4 ring-primary/10">
+              <div className="relative group self-center sm:self-start">
+                <Avatar className="size-20 sm:size-24 border-2 border-primary/30 shadow-md ring-4 ring-primary/10">
                   {user.avatar_url ? (
                     <AvatarImage
                       src={user.avatar_url}
@@ -85,34 +85,48 @@ export function ProfileHeroCard({
                       className="object-cover"
                     />
                   ) : null}
-                  <AvatarFallback className="bg-gradient-to-tr from-primary via-orange-500 to-amber-500 text-3xl font-bold text-primary-foreground">
+                  <AvatarFallback className="bg-gradient-to-tr from-primary via-orange-500 to-amber-500 text-2xl sm:text-3xl font-bold text-primary-foreground">
                     {initials}
                   </AvatarFallback>
                 </Avatar>
 
                 {isOwnProfile ? (
-                  <button
-                    type="button"
-                    onClick={() => setAvatarOpen(true)}
-                    title="Đổi ảnh đại diện"
-                    className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50 text-white opacity-0 transition-opacity group-hover:opacity-100 cursor-pointer"
-                  >
-                    <Camera className="size-6" />
-                  </button>
+                  <>
+                    {/* Desktop hover overlay */}
+                    <button
+                      type="button"
+                      onClick={() => setAvatarOpen(true)}
+                      title="Đổi ảnh đại diện"
+                      className="absolute inset-0 hidden sm:flex items-center justify-center rounded-full bg-black/50 text-white opacity-0 transition-opacity group-hover:opacity-100 cursor-pointer"
+                      aria-label="Đổi ảnh đại diện"
+                    >
+                      <Camera className="size-6" />
+                    </button>
+                    {/* Mobile touch camera badge */}
+                    <button
+                      type="button"
+                      onClick={() => setAvatarOpen(true)}
+                      title="Đổi ảnh đại diện"
+                      className="absolute -bottom-1 -right-1 flex sm:hidden size-7 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-md ring-2 ring-background active:scale-95 cursor-pointer z-10"
+                      aria-label="Đổi ảnh đại diện"
+                    >
+                      <Camera className="size-3.5" />
+                    </button>
+                  </>
                 ) : null}
 
                 {/* Role / Creator Badge Tag on Avatar */}
                 {user.is_admin ? (
                   <span
                     title="Quản trị viên hệ thống"
-                    className="absolute -right-1 -bottom-1 flex size-6 items-center justify-center rounded-full bg-amber-500 text-amber-950 shadow-xs ring-2 ring-background"
+                    className="absolute -right-1 -top-1 sm:-bottom-1 sm:top-auto flex size-6 items-center justify-center rounded-full bg-amber-500 text-amber-950 shadow-xs ring-2 ring-background"
                   >
                     <Shield className="size-3.5 fill-current" />
                   </span>
                 ) : user.role?.code === 'creator' ? (
                   <span
                     title="Nhà sáng tạo nội dung"
-                    className="absolute -right-1 -bottom-1 flex size-6 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-xs ring-2 ring-background"
+                    className="absolute -right-1 -top-1 sm:-bottom-1 sm:top-auto flex size-6 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-xs ring-2 ring-background"
                   >
                     <Sparkles className="size-3.5 fill-current" />
                   </span>
@@ -120,13 +134,13 @@ export function ProfileHeroCard({
               </div>
 
               {/* User Information */}
-              <div className="space-y-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h1 className="text-2xl font-extrabold tracking-tight text-foreground sm:text-3xl">
+              <div className="space-y-2 text-center sm:text-left flex-1 min-w-0">
+                <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
+                  <h1 className="text-xl sm:text-2xl lg:text-3xl font-extrabold tracking-tight text-foreground truncate max-w-full">
                     {displayName}
                   </h1>
                   {user.display_name && user.display_name !== user.username ? (
-                    <span className="text-sm font-medium text-muted-foreground">
+                    <span className="text-xs sm:text-sm font-medium text-muted-foreground truncate">
                       @{user.username}
                     </span>
                   ) : null}
@@ -192,7 +206,7 @@ export function ProfileHeroCard({
 
                 {/* Social Links row */}
                 {socialLinks.length > 0 ? (
-                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                  <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 pt-1">
                     {socialLinks.map((link, idx) => (
                       <a
                         key={idx}
@@ -210,7 +224,7 @@ export function ProfileHeroCard({
                 ) : null}
 
                 {/* Meta details */}
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground pt-1">
+                <div className="flex flex-wrap items-center justify-center sm:justify-start gap-x-4 gap-y-1.5 text-xs text-muted-foreground pt-1">
                   {isOwnProfile && user.email ? (
                     <span className="inline-flex items-center gap-1.5">
                       <Mail className="size-3.5" />
@@ -233,12 +247,12 @@ export function ProfileHeroCard({
 
             {/* Actions for Profile Owner */}
             {isOwnProfile ? (
-              <div className="flex flex-wrap items-center gap-2 self-start lg:self-start">
+              <div className="flex w-full sm:w-auto items-center justify-center sm:justify-end gap-2 self-stretch sm:self-start pt-2 sm:pt-0">
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => setEditOpen(true)}
-                  className="gap-1.5 rounded-full px-4 text-xs font-semibold"
+                  className="w-full sm:w-auto gap-1.5 rounded-full px-5 py-2 text-xs font-semibold shadow-2xs hover:bg-muted/80 active:scale-98 cursor-pointer"
                 >
                   <Edit3 className="size-3.5" />
                   Chỉnh sửa hồ sơ

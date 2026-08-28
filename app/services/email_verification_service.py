@@ -44,6 +44,7 @@ class EmailVerificationError(RuntimeError):
     ) -> None:
         super().__init__(message)
         self.code = code
+        self.message = message
         self.status = status
         self.field = field
         self.extras = extras or {}

@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import {
+  Eye,
+  EyeOff,
   KeyRound,
   Link2,
   LoaderCircle,
@@ -69,6 +71,7 @@ export function ProfileEditDialog({
   // Form states
   const [displayName, setDisplayName] = useState(user.display_name || user.username || '')
   const [bio, setBio] = useState(user.bio || '')
+  const [email, setEmail] = useState(user.email || '')
   const [timezone, setTimezone] = useState(user.timezone || 'Asia/Ho_Chi_Minh')
   const [socialLinks, setSocialLinks] = useState<SocialLink[]>(
     Array.isArray(user.social_links) ? [...user.social_links] : []
@@ -78,6 +81,9 @@ export function ProfileEditDialog({
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [showCurrentPw, setShowCurrentPw] = useState(false)
+  const [showNewPw, setShowNewPw] = useState(false)
+  const [showConfirmPw, setShowConfirmPw] = useState(false)
   const [fieldErrors, setFieldErrors] = useState<PasswordFieldErrors>({})
   const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false)
 
@@ -86,6 +92,7 @@ export function ProfileEditDialog({
     if (open) {
       setDisplayName(user.display_name || user.username || '')
       setBio(user.bio || '')
+      setEmail(user.email || '')
       setTimezone(user.timezone || 'Asia/Ho_Chi_Minh')
       setSocialLinks(Array.isArray(user.social_links) ? [...user.social_links] : [])
       resetPasswordState()
@@ -96,6 +103,9 @@ export function ProfileEditDialog({
     setCurrentPassword('')
     setNewPassword('')
     setConfirmPassword('')
+    setShowCurrentPw(false)
+    setShowNewPw(false)
+    setShowConfirmPw(false)
     setFieldErrors({})
     setHasAttemptedSubmit(false)
   }
@@ -104,6 +114,7 @@ export function ProfileEditDialog({
     mutationFn: (payload: {
       display_name?: string
       bio?: string
+      email?: string
       social_links?: SocialLink[]
       timezone?: string
       current_password?: string
@@ -140,11 +151,20 @@ export function ProfileEditDialog({
 
   const handleSaveInfo = (e: React.FormEvent) => {
     e.preventDefault()
-    mutation.mutate({
+    const payload: {
+      display_name?: string
+      bio?: string
+      email?: string
+      timezone?: string
+    } = {
       display_name: displayName.trim(),
       bio: bio.trim(),
       timezone,
-    })
+    }
+    if (email.trim() && email.trim().toLowerCase() !== (user.email || '').toLowerCase()) {
+      payload.email = email.trim().toLowerCase()
+    }
+    mutation.mutate(payload)
   }
 
   const handleSaveLinks = (e: React.FormEvent) => {
@@ -219,23 +239,23 @@ export function ProfileEditDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[540px]">
+      <DialogContent className="sm:max-w-[540px] max-h-[90vh] overflow-y-auto p-4 sm:p-6">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+          <DialogTitle className="flex items-center gap-2 text-base sm:text-lg font-bold">
             <Settings2 className="size-5 text-primary" />
             Chỉnh sửa hồ sơ cá nhân
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="text-xs sm:text-sm">
             Cập nhật tên hiển thị, bio giới thiệu, liên kết và cài đặt tài khoản của bạn.
           </DialogDescription>
         </DialogHeader>
 
         {/* Tab navigation */}
-        <div className="flex border-b border-border/60">
+        <div className="flex border-b border-border/60 overflow-x-auto scrollbar-none whitespace-nowrap -mx-4 px-4 sm:mx-0 sm:px-0">
           <button
             type="button"
             onClick={() => handleTabChange('info')}
-            className={`border-b-2 px-4 py-2 text-xs font-semibold transition cursor-pointer ${
+            className={`shrink-0 border-b-2 px-4 py-2 text-xs font-semibold transition cursor-pointer ${
               activeTab === 'info'
                 ? 'border-primary text-primary'
                 : 'border-transparent text-muted-foreground hover:text-foreground'
@@ -246,7 +266,7 @@ export function ProfileEditDialog({
           <button
             type="button"
             onClick={() => handleTabChange('links')}
-            className={`border-b-2 px-4 py-2 text-xs font-semibold transition cursor-pointer ${
+            className={`shrink-0 border-b-2 px-4 py-2 text-xs font-semibold transition cursor-pointer ${
               activeTab === 'links'
                 ? 'border-primary text-primary'
                 : 'border-transparent text-muted-foreground hover:text-foreground'
@@ -257,7 +277,7 @@ export function ProfileEditDialog({
           <button
             type="button"
             onClick={() => handleTabChange('password')}
-            className={`border-b-2 px-4 py-2 text-xs font-semibold transition cursor-pointer ${
+            className={`shrink-0 border-b-2 px-4 py-2 text-xs font-semibold transition cursor-pointer ${
               activeTab === 'password'
                 ? 'border-primary text-primary'
                 : 'border-transparent text-muted-foreground hover:text-foreground'
@@ -278,37 +298,63 @@ export function ProfileEditDialog({
                 id="profile-display-name"
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
-                placeholder="Ví dụ: Sensei Tanaka, Minh Triết..."
-                maxLength={100}
+                placeholder="Tên bạn muốn hiển thị"
+                maxLength={80}
               />
               <p className="text-[11px] text-muted-foreground">
-                Tên đại diện xuất hiện công khai trên Marketplace và hồ sơ của bạn.
+                Tên này sẽ hiển thị trên trang cá nhân và các bài đăng marketplace.
               </p>
             </div>
 
             <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="profile-bio" className="text-xs">
-                  Giới thiệu ngắn (Bio)
-                </Label>
-                <span className="text-[11px] text-muted-foreground">
-                  {bio.length}/500
-                </span>
-              </div>
+              <Label htmlFor="profile-email" className="text-xs">
+                Địa chỉ Email
+              </Label>
+              <Input
+                id="profile-email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="email@example.com"
+              />
+              <p className="text-[11px] text-muted-foreground">
+                {user.is_verified_student ? (
+                  <span className="text-blue-600 dark:text-blue-400 font-medium">
+                    Email sinh viên ({user.email}) đã được kích hoạt ưu đãi.
+                  </span>
+                ) : user.email_verified ? (
+                  <span>
+                    Thay đổi địa chỉ email sẽ yêu cầu bạn xác thực lại email mới.
+                  </span>
+                ) : (
+                  <span>
+                    Email dùng để nhận thông báo và xác thực tài khoản.
+                  </span>
+                )}
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="profile-bio" className="text-xs">
+                Giới thiệu bản thân (Bio)
+              </Label>
               <Textarea
                 id="profile-bio"
                 value={bio}
                 onChange={(e) => setBio(e.target.value)}
-                placeholder="Chia sẻ về mục tiêu học tập, kinh nghiệm giảng dạy tiếng Nhật hoặc các dự án bộ thẻ của bạn..."
+                placeholder="Chia sẻ đôi nét về bạn, mục tiêu học tiếng Nhật hoặc các bộ thẻ bạn tạo..."
                 rows={3}
                 maxLength={500}
-                className="resize-none text-xs leading-relaxed"
               />
+              <div className="flex justify-between text-[11px] text-muted-foreground">
+                <span>Tối đa 500 ký tự</span>
+                <span>{bio.length}/500</span>
+              </div>
             </div>
 
             <div className="space-y-1.5">
               <Label htmlFor="profile-timezone" className="text-xs">
-                Múi giờ hoạt động
+                Múi giờ học tập
               </Label>
               <NativeSelect
                 id="profile-timezone"
@@ -323,16 +369,17 @@ export function ProfileEditDialog({
               </NativeSelect>
             </div>
 
-            <DialogFooter className="pt-2">
+            <DialogFooter className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-2">
               <Button
                 type="button"
                 variant="outline"
                 onClick={() => onOpenChange(false)}
                 disabled={mutation.isPending}
+                className="w-full sm:w-auto"
               >
                 Hủy
               </Button>
-              <Button type="submit" disabled={mutation.isPending}>
+              <Button type="submit" disabled={mutation.isPending} className="w-full sm:w-auto">
                 {mutation.isPending ? (
                   <>
                     <LoaderCircle className="mr-2 size-4 animate-spin" />
@@ -349,7 +396,7 @@ export function ProfileEditDialog({
         {/* Tab 2: Social Links */}
         {activeTab === 'links' ? (
           <form onSubmit={handleSaveLinks} className="space-y-4 pt-2">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <p className="text-xs text-muted-foreground">
                 Thêm các liên kết website, kênh YouTube, trang GitHub hoặc trang cá nhân của bạn.
               </p>
@@ -358,7 +405,7 @@ export function ProfileEditDialog({
                 variant="outline"
                 size="sm"
                 onClick={handleAddSocialLink}
-                className="h-7 gap-1 text-xs font-semibold"
+                className="h-8 gap-1 text-xs font-semibold self-start sm:self-auto shrink-0 cursor-pointer"
               >
                 <Plus className="size-3.5" />
                 Thêm link
@@ -377,21 +424,33 @@ export function ProfileEditDialog({
                 {socialLinks.map((link, idx) => (
                   <div
                     key={idx}
-                    className="flex items-center gap-2 rounded-lg border border-border/60 p-2.5 bg-muted/20"
+                    className="flex flex-col sm:flex-row sm:items-center gap-2 rounded-lg border border-border/60 p-2.5 bg-muted/20"
                   >
-                    <NativeSelect
-                      value={link.type}
-                      onChange={(e) =>
-                        handleUpdateSocialLink(idx, 'type', e.target.value)
-                      }
-                      className="w-32 shrink-0 text-xs"
-                    >
-                      {SOCIAL_PLATFORMS.map((p) => (
-                        <NativeSelectOption key={p.value} value={p.value}>
-                          {p.label}
-                        </NativeSelectOption>
-                      ))}
-                    </NativeSelect>
+                    <div className="flex items-center gap-2 w-full sm:w-auto">
+                      <NativeSelect
+                        value={link.type}
+                        onChange={(e) =>
+                          handleUpdateSocialLink(idx, 'type', e.target.value)
+                        }
+                        className="w-full sm:w-32 shrink-0 text-xs"
+                      >
+                        {SOCIAL_PLATFORMS.map((p) => (
+                          <NativeSelectOption key={p.value} value={p.value}>
+                            {p.label}
+                          </NativeSelectOption>
+                        ))}
+                      </NativeSelect>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleRemoveSocialLink(idx)}
+                        className="size-8 p-0 text-destructive hover:bg-destructive/10 shrink-0 sm:hidden cursor-pointer"
+                        title="Xóa link"
+                      >
+                        <Trash2 className="size-4" />
+                      </Button>
+                    </div>
 
                     <Input
                       value={link.url}
@@ -399,7 +458,7 @@ export function ProfileEditDialog({
                         handleUpdateSocialLink(idx, 'url', e.target.value)
                       }
                       placeholder="https://..."
-                      className="text-xs"
+                      className="text-xs flex-1"
                     />
 
                     <Input
@@ -408,7 +467,7 @@ export function ProfileEditDialog({
                         handleUpdateSocialLink(idx, 'label', e.target.value)
                       }
                       placeholder="Nhãn (tùy chọn)"
-                      className="w-28 shrink-0 text-xs hidden sm:block"
+                      className="w-full sm:w-28 shrink-0 text-xs"
                     />
 
                     <Button
@@ -416,7 +475,8 @@ export function ProfileEditDialog({
                       variant="ghost"
                       size="sm"
                       onClick={() => handleRemoveSocialLink(idx)}
-                      className="size-8 p-0 text-destructive hover:bg-destructive/10 shrink-0"
+                      className="size-8 p-0 text-destructive hover:bg-destructive/10 shrink-0 hidden sm:flex cursor-pointer"
+                      title="Xóa link"
                     >
                       <Trash2 className="size-4" />
                     </Button>
@@ -425,16 +485,17 @@ export function ProfileEditDialog({
               </div>
             )}
 
-            <DialogFooter className="pt-2">
+            <DialogFooter className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-2">
               <Button
                 type="button"
                 variant="outline"
                 onClick={() => onOpenChange(false)}
                 disabled={mutation.isPending}
+                className="w-full sm:w-auto"
               >
                 Hủy
               </Button>
-              <Button type="submit" disabled={mutation.isPending}>
+              <Button type="submit" disabled={mutation.isPending} className="w-full sm:w-auto">
                 {mutation.isPending ? (
                   <>
                     <LoaderCircle className="mr-2 size-4 animate-spin" />
@@ -455,20 +516,32 @@ export function ProfileEditDialog({
               <Label htmlFor="profile-cur-pw" className="text-xs">
                 Mật khẩu hiện tại <span className="text-destructive">*</span>
               </Label>
-              <Input
-                id="profile-cur-pw"
-                type="password"
-                value={currentPassword}
-                onChange={(e) => {
-                  setCurrentPassword(e.target.value)
-                  if (fieldErrors.current_password) {
-                    setFieldErrors((prev) => ({ ...prev, current_password: undefined }))
-                  }
-                }}
-                placeholder="Nhập mật khẩu hiện tại để xác thực"
-                aria-invalid={Boolean(fieldErrors.current_password)}
-                required
-              />
+              <div className="relative">
+                <Input
+                  id="profile-cur-pw"
+                  type={showCurrentPw ? 'text' : 'password'}
+                  value={currentPassword}
+                  onChange={(e) => {
+                    setCurrentPassword(e.target.value)
+                    if (fieldErrors.current_password) {
+                      setFieldErrors((prev) => ({ ...prev, current_password: undefined }))
+                    }
+                  }}
+                  placeholder="Nhập mật khẩu hiện tại để xác thực"
+                  aria-invalid={Boolean(fieldErrors.current_password)}
+                  className="pr-10"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowCurrentPw(!showCurrentPw)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-1 rounded-md cursor-pointer transition-colors"
+                  tabIndex={-1}
+                  aria-label={showCurrentPw ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                >
+                  {showCurrentPw ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                </button>
+              </div>
               {fieldErrors.current_password ? (
                 <p className="text-[11px] font-medium text-destructive">
                   {fieldErrors.current_password}
@@ -480,20 +553,32 @@ export function ProfileEditDialog({
               <Label htmlFor="profile-new-pw" className="text-xs">
                 Mật khẩu mới <span className="text-destructive">*</span>
               </Label>
-              <Input
-                id="profile-new-pw"
-                type="password"
-                value={newPassword}
-                onChange={(e) => {
-                  setNewPassword(e.target.value)
-                  if (fieldErrors.new_password) {
-                    setFieldErrors((prev) => ({ ...prev, new_password: undefined }))
-                  }
-                }}
-                placeholder="Ít nhất 8 ký tự"
-                aria-invalid={Boolean(fieldErrors.new_password)}
-                required
-              />
+              <div className="relative">
+                <Input
+                  id="profile-new-pw"
+                  type={showNewPw ? 'text' : 'password'}
+                  value={newPassword}
+                  onChange={(e) => {
+                    setNewPassword(e.target.value)
+                    if (fieldErrors.new_password) {
+                      setFieldErrors((prev) => ({ ...prev, new_password: undefined }))
+                    }
+                  }}
+                  placeholder="Ít nhất 8 ký tự"
+                  aria-invalid={Boolean(fieldErrors.new_password)}
+                  className="pr-10"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowNewPw(!showNewPw)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-1 rounded-md cursor-pointer transition-colors"
+                  tabIndex={-1}
+                  aria-label={showNewPw ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                >
+                  {showNewPw ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                </button>
+              </div>
               {fieldErrors.new_password ? (
                 <p className="text-[11px] font-medium text-destructive">
                   {fieldErrors.new_password}
@@ -505,20 +590,32 @@ export function ProfileEditDialog({
               <Label htmlFor="profile-conf-pw" className="text-xs">
                 Xác nhận mật khẩu mới <span className="text-destructive">*</span>
               </Label>
-              <Input
-                id="profile-conf-pw"
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => {
-                  setConfirmPassword(e.target.value)
-                  if (fieldErrors.confirm_password) {
-                    setFieldErrors((prev) => ({ ...prev, confirm_password: undefined }))
-                  }
-                }}
-                placeholder="Nhập lại mật khẩu mới"
-                aria-invalid={Boolean(fieldErrors.confirm_password)}
-                required
-              />
+              <div className="relative">
+                <Input
+                  id="profile-conf-pw"
+                  type={showConfirmPw ? 'text' : 'password'}
+                  value={confirmPassword}
+                  onChange={(e) => {
+                    setConfirmPassword(e.target.value)
+                    if (fieldErrors.confirm_password) {
+                      setFieldErrors((prev) => ({ ...prev, confirm_password: undefined }))
+                    }
+                  }}
+                  placeholder="Nhập lại mật khẩu mới"
+                  aria-invalid={Boolean(fieldErrors.confirm_password)}
+                  className="pr-10"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPw(!showConfirmPw)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-1 rounded-md cursor-pointer transition-colors"
+                  tabIndex={-1}
+                  aria-label={showConfirmPw ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                >
+                  {showConfirmPw ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                </button>
+              </div>
               {fieldErrors.confirm_password ? (
                 <p className="text-[11px] font-medium text-destructive">
                   {fieldErrors.confirm_password}
@@ -526,12 +623,13 @@ export function ProfileEditDialog({
               ) : null}
             </div>
 
-            <DialogFooter className="pt-2">
+            <DialogFooter className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-2">
               <Button
                 type="button"
                 variant="outline"
                 onClick={() => onOpenChange(false)}
                 disabled={mutation.isPending}
+                className="w-full sm:w-auto"
               >
                 Hủy
               </Button>
@@ -540,7 +638,7 @@ export function ProfileEditDialog({
                 disabled={
                   mutation.isPending || (hasAttemptedSubmit && !isPasswordFormValid)
                 }
-                className="bg-gradient-to-r from-primary to-orange-500 font-semibold text-primary-foreground hover:opacity-95"
+                className="w-full sm:w-auto bg-gradient-to-r from-primary to-orange-500 font-semibold text-primary-foreground hover:opacity-95"
               >
                 {mutation.isPending ? (
                   <>
@@ -550,7 +648,7 @@ export function ProfileEditDialog({
                 ) : (
                   <>
                     <KeyRound className="mr-1.5 size-4" />
-                    Cập nhật mật khẩu
+                    Đổi mật khẩu
                   </>
                 )}
               </Button>

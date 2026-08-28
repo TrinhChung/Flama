@@ -1,4 +1,4 @@
-﻿import {
+import {
   Award,
   GitPullRequest,
   GraduationCap,
@@ -23,13 +23,13 @@ export function BadgesList({ badges }: { badges: ProfileBadge[] }) {
 
   return (
     <Card className="border-border/60 bg-gradient-to-r from-background via-muted/20 to-background shadow-xs">
-      <CardHeader className="pb-3 pt-4 px-5">
-        <CardTitle className="flex items-center gap-2 text-sm font-bold tracking-tight text-foreground">
+      <CardHeader className="pb-2.5 pt-3.5 px-4 sm:px-5">
+        <CardTitle className="flex items-center gap-2 text-xs sm:text-sm font-bold tracking-tight text-foreground">
           <Trophy className="size-4 text-amber-500" />
           Huy hiệu & Thành tích trên Flama
         </CardTitle>
       </CardHeader>
-      <CardContent className="px-5 pb-4">
+      <CardContent className="px-4 sm:px-5 pb-4">
         <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
           {badges.map((b) => {
             const IconComp = ICON_MAP[b.icon] || Award

@@ -1,4 +1,4 @@
-﻿"""User Profile and Creator Portfolio REST API routes."""
+"""User Profile and Creator Portfolio REST API routes."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from flask import Blueprint, jsonify, request
 from flask_login import current_user, login_required
 
 from app.api.common import error_response, json_object
-from app.services import profile_service
+from app.services import email_verification_service, profile_service
 from app.services.admin_service import coerce_int
 
 profile_bp = Blueprint("api_v1_profile", __name__)
@@ -19,6 +19,17 @@ def _service_error(error: profile_service.ProfileServiceError):
         status=error.status,
         field=error.field,
     )
+
+
+def _email_verification_error(error: email_verification_service.EmailVerificationError):
+    payload = {
+        "error": error.code,
+        "message": str(error),
+        **error.extras,
+    }
+    if error.field:
+        payload["field"] = error.field
+    return jsonify(payload), error.status
 
 
 @profile_bp.get("")
@@ -93,4 +104,44 @@ def list_transactions():
         per_page=per_page,
         transaction_type=tx_type,
     )
+    return jsonify(result)
+
+
+@profile_bp.post("/verify-email/request")
+@login_required
+def request_email_verification():
+    try:
+        result = email_verification_service.request_email_verification(
+            user=current_user,
+            remote_addr=request.remote_addr,
+        )
+    except email_verification_service.EmailVerificationError as exc:
+        return error_response(
+            exc.code,
+            str(exc),
+            status=exc.status,
+            field=exc.field,
+            **exc.extras,
+        )
+    return jsonify(result)
+
+
+@profile_bp.post("/verify-email/confirm")
+@login_required
+def verify_email():
+    payload = json_object() or {}
+    code = payload.get("code") or payload.get("token") or ""
+    try:
+        result = email_verification_service.verify_email_with_code(
+            user=current_user,
+            code_or_token=str(code),
+        )
+    except email_verification_service.EmailVerificationError as exc:
+        return error_response(
+            exc.code,
+            str(exc),
+            status=exc.status,
+            field=exc.field,
+            **exc.extras,
+        )
     return jsonify(result)

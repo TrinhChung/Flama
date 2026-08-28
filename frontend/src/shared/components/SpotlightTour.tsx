@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
-import { ArrowLeft, ArrowRight, Check, Sparkles, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, Compass, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 
@@ -52,9 +52,9 @@ export function SpotlightTour({ steps, isOpen, onClose, onComplete }: SpotlightT
 
     setRect(elementRect)
 
-    // Calculate tooltip position
-    const tooltipWidth = 360
-    const tooltipHeight = 200
+    // Calculate tooltip position with actual or fallback measured width
+    const tooltipWidth = tooltipRef.current?.offsetWidth || 360
+    const tooltipHeight = tooltipRef.current?.offsetHeight || 200
     const margin = 16
 
     let top = 0
@@ -64,15 +64,15 @@ export function SpotlightTour({ steps, isOpen, onClose, onComplete }: SpotlightT
 
     if (placement === 'bottom') {
       top = elementRect.top + elementRect.height + margin
-      left = elementRect.left + (elementRect.width / 2) - (tooltipWidth / 2)
+      left = elementRect.left + elementRect.width / 2 - tooltipWidth / 2
     } else if (placement === 'top') {
       top = elementRect.top - tooltipHeight - margin
-      left = elementRect.left + (elementRect.width / 2) - (tooltipWidth / 2)
+      left = elementRect.left + elementRect.width / 2 - tooltipWidth / 2
     } else if (placement === 'left') {
-      top = elementRect.top + (elementRect.height / 2) - (tooltipHeight / 2)
+      top = elementRect.top + elementRect.height / 2 - tooltipHeight / 2
       left = elementRect.left - tooltipWidth - margin
     } else {
-      top = elementRect.top + (elementRect.height / 2) - (tooltipHeight / 2)
+      top = elementRect.top + elementRect.height / 2 - tooltipHeight / 2
       left = elementRect.left + elementRect.width + margin
     }
 
@@ -115,7 +115,7 @@ export function SpotlightTour({ steps, isOpen, onClose, onComplete }: SpotlightT
     // Allow time for smooth scroll to settle before computing rect
     const timer = setTimeout(() => {
       updatePosition()
-    }, 250)
+    }, 200)
 
     window.addEventListener('resize', updatePosition)
     window.addEventListener('scroll', updatePosition, true)
@@ -127,22 +127,40 @@ export function SpotlightTour({ steps, isOpen, onClose, onComplete }: SpotlightT
     }
   }, [isOpen, currentStepIndex, currentStep, updatePosition])
 
-  if (!isOpen || !currentStep) return null
-
-  const handleNext = () => {
+  const handleNext = useCallback(() => {
     if (currentStepIndex < steps.length - 1) {
       setCurrentStepIndex((prev) => prev + 1)
     } else {
       if (onComplete) onComplete()
       onClose()
     }
-  }
+  }, [currentStepIndex, steps.length, onComplete, onClose])
 
-  const handlePrev = () => {
+  const handlePrev = useCallback(() => {
     if (currentStepIndex > 0) {
       setCurrentStepIndex((prev) => prev - 1)
     }
-  }
+  }, [currentStepIndex])
+
+  // Keyboard navigation
+  useEffect(() => {
+    if (!isOpen) return
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose()
+      } else if (e.key === 'ArrowRight') {
+        handleNext()
+      } else if (e.key === 'ArrowLeft') {
+        handlePrev()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isOpen, onClose, handleNext, handlePrev])
+
+  if (!isOpen || !currentStep) return null
 
   return (
     <div className="fixed inset-0 z-50 pointer-events-auto">
@@ -203,13 +221,14 @@ export function SpotlightTour({ steps, isOpen, onClose, onComplete }: SpotlightT
               Bước {currentStepIndex + 1}/{steps.length}
             </Badge>
             <span className="text-[11px] text-muted-foreground font-semibold flex items-center gap-1">
-              <Sparkles className="size-3 text-primary" /> Hướng Dẫn Trực Quan
+              <Compass className="size-3 text-primary" /> Hướng Dẫn Trực Quan
             </span>
           </div>
           <button
             type="button"
             onClick={onClose}
             className="size-6 rounded-lg text-muted-foreground hover:text-foreground flex items-center justify-center hover:bg-muted transition-colors"
+            title="Đóng tour"
           >
             <X className="size-4" />
           </button>

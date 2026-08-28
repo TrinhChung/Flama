@@ -20,7 +20,6 @@ import {
   Languages,
   LoaderCircle,
   PenTool,
-  Sparkles,
 } from 'lucide-react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -356,7 +355,7 @@ export function BrowseStrokeModal({
               {batchMutation.isPending ? (
                 <LoaderCircle className="size-3.5 animate-spin" />
               ) : (
-                <Sparkles className="size-3.5" />
+                <PenTool className="size-3.5" />
               )}
               <span>Tạo hàng loạt ({typeof targetCount === 'number' ? targetCount : 'Deck'})</span>
             </Button>

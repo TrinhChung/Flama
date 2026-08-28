@@ -53,6 +53,7 @@ const pageTitles: Record<string, string> = {
   '/profile': 'Trang cá nhân & Ví',
   '/settings/mcp-tokens': 'MCP Tokens',
   '/settings/yomitan': 'Kết nối Yomitan',
+  '/guide': 'Trung tâm Trợ giúp',
   '/guide/flama-audio': 'Tải Flama Audio',
   '/feedback': 'Đóng góp ý kiến',
   '/tickets': 'Báo lỗi & Góp ý',

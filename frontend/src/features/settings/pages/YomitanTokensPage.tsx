@@ -12,6 +12,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Page, PageHeader } from '@/shared/components/Page'
 import { PageError, PageLoading } from '@/shared/components/PageState'
+import { ContextHelpButton } from '@/features/guide'
 
 import { useYomitanTokenCRUD } from '../hooks/useYomitanTokenCRUD'
 import { YomitanAboutTab } from '../components/YomitanAboutTab'
@@ -34,6 +35,15 @@ export function YomitanTokensPage() {
         <PageHeader
           title="Kết nối Yomitan & Flama Connect"
           description="Tích hợp tiện ích tra từ Yomitan trên trình duyệt với Flama để tự động tạo Flashcard chỉ với 1 cú nhấp chuột."
+          actions={
+            <ContextHelpButton
+              guidePath="/guide/integrations/yomitan"
+              guideTitle="Hướng dẫn kết nối Yomitan"
+              troubleshootPath="/guide/troubleshooting/yomitan"
+              troubleshootTitle="Khắc phục lỗi Yomitan"
+              label="Hướng dẫn kết nối"
+            />
+          }
         />
 
         {/* Quick Highlights Bar */}

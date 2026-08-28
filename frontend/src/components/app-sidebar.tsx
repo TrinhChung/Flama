@@ -10,6 +10,7 @@ import {
   Key,
   Layers,
   LayoutDashboard,
+  LifeBuoy,
   MessageSquareHeart,
   NotebookTabs,
   PackageCheck,
@@ -99,6 +100,7 @@ export function AppSidebar({
     { title: 'Trang cá nhân', url: '/profile', icon: User },
     { title: 'Ví & Doanh thu', url: '/wallet', icon: Wallet },
     { title: 'Lịch sử đơn hàng', url: '/orders', icon: CreditCard },
+    { title: 'Trung tâm Trợ giúp', url: '/guide', icon: LifeBuoy },
     { title: 'Đóng góp ý kiến', url: '/feedback', icon: MessageSquareHeart },
   ]
 

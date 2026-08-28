@@ -11,8 +11,8 @@ export function ContributionsTab({
 }) {
   if (!contributions || contributions.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border/80 p-12 text-center">
-        <GitPullRequest className="size-10 text-muted-foreground/40 mb-3" />
+      <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border/80 p-8 sm:p-12 text-center">
+        <GitPullRequest className="size-8 sm:size-10 text-muted-foreground/40 mb-3" />
         <p className="text-sm font-semibold text-foreground">
           Chưa có đóng góp nào được ghi nhận
         </p>
