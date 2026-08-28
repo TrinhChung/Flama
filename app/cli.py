@@ -839,6 +839,32 @@ def register_cli_commands(app: Flask) -> None:
             click.echo(f"\n[Delivery Error] {type(exc).__name__}: {exc}", err=True)
             raise click.ClickException(str(exc))
 
+    @app.cli.group("images")
+    def images_group() -> None:
+        """Manage secure image pipeline queues and background workers."""
+        pass
+
+    @images_group.command("process-queue")
+    @click.option("--max-jobs", default=100, help="Maximum number of jobs to process.")
+    def process_queue_cmd(max_jobs: int) -> None:
+        """Drain and process pending image jobs from the queue."""
+        from pathlib import Path
+        from app.services.image_worker_service import drain_image_queue
+
+        upload_root = Path(app.config["FLASHCARD_MEDIA_UPLOAD_ROOT"]).resolve()
+        click.echo(f"Processing image queue (max {max_jobs} jobs)...")
+        results = drain_image_queue(upload_root=upload_root, max_jobs=max_jobs)
+        click.echo(f"Done! Processed: {results['processed_count']}, Failed: {results['failed_count']}, Rejected: {results['rejected_count']}")
+
+    @images_group.command("clear-queue")
+    def clear_queue_cmd() -> None:
+        """Clear all pending jobs from the image queue."""
+        from app.services.image_queue_service import clear_image_queue
+
+        clear_image_queue()
+        click.echo("Image queue cleared.")
+
+
 
 
 

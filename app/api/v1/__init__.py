@@ -28,9 +28,11 @@ from .marketplace import (
     marketplace_taxonomy_bp,
 )
 from .download import download_bp
+from .images import images_bp
 from .profile import profile_bp
 from .settings import settings_bp
 from .tickets import tickets_bp
+from .wallet import wallet_bp
 
 
 api_v1_bp = Blueprint("api_v1", __name__, url_prefix="/api")
@@ -124,9 +126,7 @@ api_v1_bp.register_blueprint(marketplace_note_types_bp)
 api_v1_bp.register_blueprint(marketplace_taxonomy_bp)
 api_v1_bp.register_blueprint(creator_deck_keys_bp)
 api_v1_bp.register_blueprint(profile_bp, url_prefix="/profile")
+api_v1_bp.register_blueprint(wallet_bp, url_prefix="/wallet")
 api_v1_bp.register_blueprint(settings_bp)
+api_v1_bp.register_blueprint(images_bp, url_prefix="/images")
 api_v1_bp.register_blueprint(tickets_bp)
-
-
-
-

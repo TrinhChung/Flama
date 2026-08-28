@@ -86,6 +86,8 @@ def create_app(config: Optional[dict] = None) -> Flask:
     )  # noqa: F401  # register model
     from models.marketplace_saved_item import MarketplaceSavedItem  # noqa: F401  # register model
     from models.shared_image_asset import SharedImageAsset  # noqa: F401  # register model
+    from models.image_asset import ImageAsset  # noqa: F401  # register model
+    from models.admin_security_alert import AdminSecurityAlert  # noqa: F401  # register model
     from models.payout_batch import PayoutBatch  # noqa: F401  # register model
     from models.payout_batch_item import PayoutBatchItem  # noqa: F401  # register model
     from models.deck_change_request import DeckChangeRequest  # noqa: F401
@@ -162,7 +164,7 @@ def create_app(config: Optional[dict] = None) -> Flask:
     @app.errorhandler(404)
     def page_not_found(error):
         """Handle 404 errors."""
-        if request.path.startswith("/api/"):
+        if request.path.startswith(("/api/", "/media/")):
             return jsonify({"error": "NOT_FOUND", "message": "Resource not found."}), 404
         from app.spa import serve_react_spa
 
