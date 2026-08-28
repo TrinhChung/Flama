@@ -128,9 +128,13 @@ def get_base_url(req: Request | None = None) -> str:
 
 def get_frontend_base_url(req: Request | None = None) -> str:
     """Return the base URL of the frontend application (e.g. https://flama.stmtp.com)."""
-    # 1. Explicit FRONTEND_URL
+    # 1. Explicit FRONTEND_URL or PUBLIC_APP_URL
     try:
-        frontend_url = str(current_app.config.get("FRONTEND_URL") or "").strip().rstrip("/")
+        frontend_url = str(
+            current_app.config.get("FRONTEND_URL")
+            or current_app.config.get("PUBLIC_APP_URL")
+            or ""
+        ).strip().rstrip("/")
         if frontend_url:
             return frontend_url
     except RuntimeError:
