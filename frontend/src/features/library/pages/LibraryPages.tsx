@@ -71,14 +71,6 @@ function formatUpdatedAt(value: string | null) {
   }).format(new Date(value))
 }
 
-function formatDate(value: string | null | undefined) {
-  if (!value) return 'Chưa có'
-  return new Intl.DateTimeFormat('vi-VN', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(new Date(value))
-}
-
 function formatSyncStatus(value: string) {
   const labels: Record<string, string> = {
     needs_sync: 'Đóng góp cần đồng bộ',

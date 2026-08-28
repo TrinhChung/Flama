@@ -122,6 +122,7 @@ type SharedDeckDetail = {
   description?: string | null
   preview_text?: string | null
   primary_category?: string | null
+  version?: string
   price_display?: string
   pricing_mode?: string
   rating_avg: number
@@ -240,12 +241,12 @@ export function SharedDeckDetailPage() {
   // Auto-Publish Query & Mutation for Deck Owner
   const autoPublishQuery = useQuery({
     queryKey: ['shared-deck-auto-publish', id],
-    queryFn: ({ signal }) => getAutoPublishStatus(id, signal),
+    queryFn: ({ signal }) => getAutoPublishStatus(id!, signal),
     enabled: Boolean(id && deck?.is_owner),
   })
 
   const autoPublishMutation = useMutation({
-    mutationFn: (enabled: boolean) => updateAutoPublishSetting(id, enabled),
+    mutationFn: (enabled: boolean) => updateAutoPublishSetting(id!, enabled),
     onSuccess: (status) => {
       queryClient.setQueryData(['shared-deck-auto-publish', id], status)
       queryClient.invalidateQueries({ queryKey: ['shared-deck-detail', id] })
@@ -626,7 +627,8 @@ export function SharedDeckDetailPage() {
             {/* Integrated Primary Action Area */}
             <div className="pt-3 border-t border-border/60">
               {deck.is_owner ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex lg:flex-wrap items-center gap-2 sm:gap-2.5">
+                <div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex lg:flex-wrap items-center gap-2 sm:gap-2.5">
                   <Button
                     variant="secondary"
                     size="sm"
@@ -871,19 +873,20 @@ export function SharedDeckDetailPage() {
                     Nhập mã kích hoạt
                   </Button>
 
-                  <Button
-                    className="h-11 sm:h-12 min-h-[44px] px-4 font-semibold text-xs sm:text-sm rounded-xl justify-center"
-                    variant="outline"
-                    onClick={() => saveMutation.mutate(deck.is_saved)}
-                    disabled={saveMutation.isPending}
-                  >
-                    <Heart
-                      className={`mr-1.5 size-4 ${
-                        deck.is_saved ? 'fill-primary text-primary' : ''
-                      }`}
-                    />
-                    {deck.is_saved ? 'Đã lưu vào danh sách' : 'Lưu bộ deck'}
-                  </Button>
+                    <Button
+                      className="h-11 sm:h-12 min-h-[44px] px-4 font-semibold text-xs sm:text-sm rounded-xl justify-center"
+                      variant="outline"
+                      onClick={() => saveMutation.mutate(deck.is_saved)}
+                      disabled={saveMutation.isPending}
+                    >
+                      <Heart
+                        className={`mr-1.5 size-4 ${
+                          deck.is_saved ? 'fill-primary text-primary' : ''
+                        }`}
+                      />
+                      {deck.is_saved ? 'Đã lưu vào danh sách' : 'Lưu bộ deck'}
+                    </Button>
+                  </div>
                 </div>
               )}
             </div>

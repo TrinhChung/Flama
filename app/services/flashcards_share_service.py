@@ -3758,8 +3758,12 @@ def install_shared_deck_item_for_user(
     if installed_note_type_id:
         note_type_id_map[source_note_type_id] = installed_note_type_id
     note_type_ms = _elapsed_ms(note_type_started)
+    from app.services.marketplace_pricing_service import calculate_pricing_breakdown
+    from models.user import User
 
-    purchase_amount_minor = int(deck_item.price_amount_minor or 0) if deck_item.pricing_mode == "paid" else 0
+    user_obj = db.session.get(User, user_id)
+    pricing_breakdown = calculate_pricing_breakdown(deck_item, user_obj)
+    purchase_amount_minor = pricing_breakdown.effective_price_minor
     install = DeckInstall(
         deck_item_id=deck_item.id,
         user_id=user_id,

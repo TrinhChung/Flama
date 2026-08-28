@@ -50,11 +50,13 @@ def delete_session():
 
 
 @identity_bp.get("/student-status")
+@identity_bp.get("/identity/student-status")
 def get_student_status():
     return jsonify(student_verification_service.serialize_student_profile(current_user))
 
 
 @identity_bp.post("/email/request-verification")
+@identity_bp.post("/identity/email/request-verification")
 @login_required
 def request_email_verification():
     try:
@@ -68,6 +70,7 @@ def request_email_verification():
 
 
 @identity_bp.post("/email/verify")
+@identity_bp.post("/identity/email/verify")
 @login_required
 def verify_email():
     payload = json_object() or {}
