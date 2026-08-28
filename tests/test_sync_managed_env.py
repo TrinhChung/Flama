@@ -126,8 +126,8 @@ class SyncManagedEnvironmentTests(unittest.TestCase):
             environment_path.write_text("DB_HOST=127.0.0.1\n", encoding="utf-8")
 
             values = self._managed_values()
-            values.pop("EMAIL_SMTP_PASSWORD", None)
-            values.pop("EMAIL_RESEND_API_KEY", None)
+            for optional_key in sync_managed_env.OPTIONAL_MANAGED_KEYS:
+                values.pop(optional_key, None)
 
             with patch.dict(os.environ, values, clear=True):
                 sync_managed_env.build_payload(payload_path)
@@ -141,8 +141,8 @@ class SyncManagedEnvironmentTests(unittest.TestCase):
             expected_keys = set(sync_managed_env.MANAGED_ENV_KEYS) - set(sync_managed_env.OPTIONAL_MANAGED_KEYS)
             self.assertEqual(set(changed_keys), expected_keys)
             self.assertIn("DB_HOST=127.0.0.1\n", content)
-            self.assertNotIn("EMAIL_SMTP_PASSWORD=", content)
-            self.assertNotIn("EMAIL_RESEND_API_KEY=", content)
+            for optional_key in sync_managed_env.OPTIONAL_MANAGED_KEYS:
+                self.assertNotIn(f"{optional_key}=", content)
 
     def test_apply_rejects_missing_required_keys(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
