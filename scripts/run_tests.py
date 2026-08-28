@@ -1,0 +1,862 @@
+#!/usr/bin/env python3
+"""
+Flama Modular Test Runner
+=========================
+Fast, modular test execution engine that runs only the tests related to
+modified files or explicitly targeted modules.
+
+Usage:
+  python scripts/run_tests.py --changed               # Run tests for all git-modified files
+  python scripts/run_tests.py --module study          # Run tests for a specific domain module
+  python scripts/run_tests.py --module auth,payment   # Run tests for multiple modules
+  python scripts/run_tests.py --backend-only          # Limit to backend unittest
+  python scripts/run_tests.py --frontend-only         # Limit to frontend vitest
+  python scripts/run_tests.py --all                   # Run entire test suite
+  python scripts/run_tests.py --list-modules          # Inspect all modules & test files
+"""
+
+from __future__ import annotations
+
+import argparse
+import fnmatch
+import os
+import shutil
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+# Ensure UTF-8 output on Windows consoles
+if sys.platform == "win32":
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
+# Repo root directory
+ROOT_DIR = Path(__file__).resolve().parent.parent
+
+# -----------------------------------------------------------------------------
+# Module Mapping Definitions
+# -----------------------------------------------------------------------------
+
+MODULES: dict[str, dict[str, list[str]]] = {
+    "auth": {
+        "source_patterns": [
+            "app/api/v1/identity/**",
+            "app/api/v1/profile/**",
+            "app/services/*auth*.py",
+            "app/services/identity*.py",
+            "app/services/email_verification*.py",
+            "app/services/password_*.py",
+            "app/services/login_*.py",
+            "app/services/profile_service.py",
+            "app/services/student_verification_service.py",
+            "app/services/user_api_token_service.py",
+            "models/user.py",
+            "models/user_identity.py",
+            "models/email_verification_token.py",
+            "models/password_reset_token.py",
+            "models/user_api_token.py",
+            "frontend/src/features/profile/**",
+        ],
+        "backend_tests": [
+            "tests/test_auth_security.py",
+            "tests/test_google_auth.py",
+            "tests/test_password_reset_api.py",
+            "tests/test_student_email_verification.py",
+            "tests/test_transactional_email_service.py",
+            "tests/test_profile_api.py",
+            "tests/test_daily_rate_limit.py",
+        ],
+        "frontend_tests": [
+            "src/features/profile/schemas.test.ts",
+        ],
+    },
+    "study": {
+        "source_patterns": [
+            "app/api/v1/learning/**",
+            "app/services/anki_scheduler.py",
+            "app/services/study_*.py",
+            "app/services/scheduler_config_service.py",
+            "app/repositories/study_repository.py",
+            "models/study_session*.py",
+            "models/review_event.py",
+            "models/card_progress.py",
+            "models/scheduler_preset.py",
+            "models/user_scheduler_settings.py",
+            "frontend/src/features/study/**",
+        ],
+        "backend_tests": [
+            "tests/test_anki_scheduler.py",
+            "tests/test_study_action_runtime.py",
+            "tests/test_study_algorithm_golden_vectors.py",
+            "tests/test_study_architecture_audit_service.py",
+            "tests/test_study_artifact_service.py",
+            "tests/test_study_composition_exit_gate.py",
+            "tests/test_study_composition_service.py",
+            "tests/test_study_integration.py",
+            "tests/test_study_session_api.py",
+            "tests/test_scheduler_schema.py",
+            "tests/test_stats_study_time.py",
+        ],
+        "frontend_tests": [
+            "src/features/study/components/CardDisplay.test.tsx",
+            "src/features/study/components/CardRendererFrame.test.tsx",
+            "src/features/study/components/CardRendererHost.test.ts",
+            "src/features/study/components/StudyHeaderToolbar.test.tsx",
+            "src/features/study/components/StudyModeSelector.test.tsx",
+            "src/features/study/components/StudyQuickEditDialog.test.tsx",
+            "src/features/study/components/StudySessionConflict.test.tsx",
+            "src/features/study/components/StudyWaitingCard.test.tsx",
+            "src/features/study/hooks/useStudySession.test.tsx",
+            "src/features/study/interactions/ReviewInteractionControls.test.tsx",
+            "src/features/study/interactions/reviewInteraction.test.ts",
+            "src/features/study/pages/StudyPage.test.tsx",
+            "src/features/study/queries.test.ts",
+            "src/features/study/renderer/clientRenderer.test.ts",
+            "src/features/study/scheduler/legacyEngine.golden.test.ts",
+            "src/features/study/scheduler/legacyEngine.test.ts",
+            "src/features/study/session/sessionRestore.test.ts",
+            "src/features/study/session/studySessionEngine.test.ts",
+            "src/features/study/session/studySessionLease.test.ts",
+        ],
+    },
+    "flashcards": {
+        "source_patterns": [
+            "app/api/v1/flashcards/**",
+            "app/api/v1/strokes/**",
+            "app/api/v1/images.py",
+            "app/services/flashcard_*.py",
+            "app/services/anki_import_service.py",
+            "app/services/anki_content_normalizer.py",
+            "app/services/image_*.py",
+            "app/services/remote_image_fetcher.py",
+            "app/services/stroke*.py",
+            "app/repositories/flashcard*.py",
+            "models/flashcard.py",
+            "models/note*.py",
+            "models/field_def*.py",
+            "models/template.py",
+            "models/card.py",
+            "models/image_asset.py",
+            "models/shared_image_asset.py",
+            "models/media_asset.py",
+            "frontend/src/features/import/**",
+            "frontend/src/lib/ankiHtmlSanitizer*",
+        ],
+        "backend_tests": [
+            "tests/test_flashcard_api_integration.py",
+            "tests/test_flashcard_audio_scan.py",
+            "tests/test_flashcard_media_batch_api.py",
+            "tests/test_flashcard_renderer.py",
+            "tests/test_flashcard_renderer_strokes.py",
+            "tests/test_flashcard_validation_security.py",
+            "tests/test_batch_flashcard_import.py",
+            "tests/test_anki_import_api.py",
+            "tests/test_image_crawl_service.py",
+            "tests/test_image_library.py",
+            "tests/test_image_library_schema.py",
+            "tests/test_remote_image_fetcher.py",
+            "tests/test_secure_image_pipeline.py",
+            "tests/test_cjk_extractor.py",
+            "tests/test_counter_logic.py",
+            "tests/test_api_strokes.py",
+            "tests/test_stroke_service.py",
+        ],
+        "frontend_tests": [
+            "src/lib/ankiHtmlSanitizer.test.ts",
+            "src/features/import/components/DeckSelectionTreeView.test.tsx",
+        ],
+    },
+    "decks": {
+        "source_patterns": [
+            "app/api/v1/decks/**",
+            "app/api/v1/creator/**",
+            "app/services/deck_*.py",
+            "app/services/browse_card_service.py",
+            "app/repositories/vocabulary_repository.py",
+            "models/deck.py",
+            "models/deck_access_key*.py",
+            "models/deck_release*.py",
+            "models/deck_working_dirty_entity.py",
+            "frontend/src/features/dashboard/**",
+        ],
+        "backend_tests": [
+            "tests/test_deck_access_keys.py",
+            "tests/test_deck_api_hierarchical_create.py",
+            "tests/test_deck_auto_publish_and_auto_update.py",
+            "tests/test_deck_naming_service.py",
+            "tests/test_deck_notetype_guard.py",
+            "tests/test_deck_release_api.py",
+            "tests/test_deck_release_schema.py",
+            "tests/test_deck_settings_routes.py",
+            "tests/test_owner_note_dirty_tracking_services.py",
+            "tests/test_prune_releases.py",
+        ],
+        "frontend_tests": [
+            "src/features/dashboard/components/DeckModals.test.tsx",
+            "src/features/dashboard/components/DeckTree.test.tsx",
+            "src/features/dashboard/pages/DashboardPage.test.tsx",
+            "src/features/dashboard/utils/deckNaming.test.ts",
+        ],
+    },
+    "deck_collaboration": {
+        "source_patterns": [
+            "app/services/change_request/**",
+            "app/services/deck_change_request*.py",
+            "app/services/deck_install_rebase*.py",
+            "app/services/flashcards_share*.py",
+            "app/services/share/**",
+            "app/repositories/deck_change_request*.py",
+            "app/repositories/flashcards_share*.py",
+            "models/deck_change_request*.py",
+            "models/deck_install*.py",
+            "models/deck_clone*.py",
+            "models/note_type_install.py",
+            "frontend/src/features/deck-collaboration/**",
+        ],
+        "backend_tests": [
+            "tests/test_deck_change_request_flow.py",
+            "tests/test_deck_install_rebase_flow.py",
+            "tests/test_batched_deck_clone.py",
+            "tests/test_shared_deck_detail_ui.py",
+            "tests/test_shared_state_services.py",
+            "tests/test_vocab_seed_sharing.py",
+        ],
+        "frontend_tests": [
+            "src/features/deck-collaboration/api.test.ts",
+            "src/features/deck-collaboration/components/DiffWorkspace.test.tsx",
+            "src/features/deck-collaboration/pages/ChangeRequestInboxPage.test.tsx",
+            "src/features/deck-collaboration/pages/InstalledDeckUpdatePage.test.tsx",
+        ],
+    },
+    "marketplace": {
+        "source_patterns": [
+            "app/api/v1/marketplace/**",
+            "app/services/marketplace/**",
+            "app/services/marketplace*.py",
+            "models/deck_marketplace_item.py",
+            "models/marketplace_saved_item.py",
+            "models/taxonomy.py",
+            "models/deck_review.py",
+            "models/note_type_review.py",
+            "frontend/src/features/marketplace/**",
+        ],
+        "backend_tests": [
+            "tests/test_marketplace_filter_taxonomy.py",
+            "tests/test_marketplace_query_service.py",
+            "tests/test_marketplace_taxonomy_db.py",
+            "tests/test_marketplace_taxonomy_migration.py",
+            "tests/test_market_counter_deletion.py",
+            "tests/test_api_v1_marketplace_note_types.py",
+        ],
+        "frontend_tests": [
+            "src/features/marketplace/components/DeckCard.test.tsx",
+            "src/features/marketplace/components/PublishDeckTree.test.tsx",
+            "src/features/marketplace/publishApi.test.ts",
+        ],
+    },
+    "connect_mcp": {
+        "source_patterns": [
+            "connect_wsgi.py",
+            "app/connect/**",
+            "app/services/connect/**",
+            "app/services/mcp/**",
+            "app/services/flama_connect*.py",
+            "app/services/mcp_*.py",
+            "app/services/oauth_service.py",
+            "app/services/note_sync_service.py",
+            "models/connect_*.py",
+            "models/mcp_*.py",
+            "models/oauth_*.py",
+            "frontend/src/lib/ankiSync*",
+        ],
+        "backend_tests": [
+            "tests/test_flama_connect.py",
+            "tests/test_flama_connect_auth.py",
+            "tests/test_flama_connect_mcp.py",
+            "tests/test_mcp_access_tokens.py",
+            "tests/test_mcp_list_my_decks.py",
+            "tests/test_mcp_note_concurrency_identity.py",
+            "tests/test_mcp_note_type_capabilities.py",
+            "tests/test_mcp_production_handshake.py",
+            "tests/test_mcp_taxonomy_metadata.py",
+            "tests/test_note_sync_and_mcp.py",
+            "tests/test_oauth_mcp.py",
+            "tests/test_oauth_mcp_security_regression.py",
+            "tests/test_integration_tokens_api.py",
+        ],
+        "frontend_tests": [
+            "src/lib/ankiSyncEngine.test.ts",
+            "src/lib/ankiSyncPackages.test.ts",
+        ],
+    },
+    "payment": {
+        "source_patterns": [
+            "app/api/v1/billing/**",
+            "app/api/v1/wallet/**",
+            "app/services/payment/**",
+            "app/services/payment*.py",
+            "app/services/payos*.py",
+            "app/services/wallet*.py",
+            "app/services/payout*.py",
+            "app/services/support_checkout*.py",
+            "app/services/support_donation*.py",
+            "models/payment_*.py",
+            "models/payout_*.py",
+            "models/user_balance_transaction.py",
+            "models/support_donation_config.py",
+        ],
+        "backend_tests": [
+            "tests/test_payment_order_flow.py",
+            "tests/test_payment_management_views.py",
+            "tests/test_payos_provider.py",
+            "tests/test_payos_sdk_absence.py",
+            "tests/test_wallet_api.py",
+            "tests/test_wallet_revenue_flow.py",
+            "tests/test_support_donation_payment_flow.py",
+        ],
+        "frontend_tests": [],
+    },
+    "admin": {
+        "source_patterns": [
+            "app/api/v1/admin/**",
+            "app/services/admin_*.py",
+            "app/services/bootstrap_admin*.py",
+            "app/services/user_roles.py",
+            "models/user_role.py",
+            "models/admin_security_alert.py",
+            "models/user_permission_audit_log.py",
+        ],
+        "backend_tests": [
+            "tests/test_admin_analytics_api.py",
+            "tests/test_admin_fee_config.py",
+            "tests/test_admin_payouts_api.py",
+            "tests/test_admin_rest_api_v1.py",
+            "tests/test_admin_user_roles.py",
+            "tests/test_bootstrap_admin_credentials.py",
+            "tests/test_bootstrap_admin_sync.py",
+        ],
+        "frontend_tests": [],
+    },
+    "analytics": {
+        "source_patterns": [
+            "app/api/v1/analytics/**",
+            "app/services/stats_*.py",
+            "app/services/dashboard_service.py",
+        ],
+        "backend_tests": [
+            "tests/test_stats_overview.py",
+            "tests/test_stats_study_time.py",
+            "tests/test_stats_today_future.py",
+        ],
+        "frontend_tests": [],
+    },
+    "audio": {
+        "source_patterns": [
+            "flama-audio/**",
+            "app/services/browse_voicevox*.py",
+            "app/services/tts_*.py",
+            "models/tts_*.py",
+            "frontend/src/features/audio/**",
+        ],
+        "backend_tests": [
+            "tests/test_flama_audio_release_workflow.py",
+            "tests/test_tts_provider_seed.py",
+            "tests/test_tts_user_profile_api.py",
+        ],
+        "frontend_tests": [
+            "src/features/audio/audioGenerator.test.ts",
+        ],
+    },
+    "support": {
+        "source_patterns": [
+            "app/api/v1/tickets.py",
+            "app/services/support_ticket*.py",
+            "models/support_ticket*.py",
+        ],
+        "backend_tests": [
+            "tests/test_support_tickets.py",
+        ],
+        "frontend_tests": [],
+    },
+    "core": {
+        "source_patterns": [
+            "app/__init__.py",
+            "app/startup*.py",
+            "app/extensions.py",
+            "app/cors.py",
+            "app/csrf.py",
+            "app/spa.py",
+            "app/settings.py",
+            "app/template_formatters.py",
+            "app/api/v1/health.py",
+            "app/api/v1/download.py",
+            "app/api/v1/__init__.py",
+            "wsgi.py",
+            "frontend/src/shared/**",
+        ],
+        "backend_tests": [
+            "tests/test_app_startup.py",
+            "tests/test_api_v1_route_map.py",
+            "tests/test_cors.py",
+            "tests/test_deploy_workflow.py",
+            "tests/test_download_routes.py",
+            "tests/test_logging_redaction.py",
+            "tests/test_rest_api_v1.py",
+            "tests/test_rest_only_runtime.py",
+            "tests/test_spa_routes.py",
+            "tests/test_sync_managed_env.py",
+            "tests/test_template_formatters.py",
+        ],
+        "frontend_tests": [
+            "src/shared/api/client.test.ts",
+        ],
+    },
+}
+
+# -----------------------------------------------------------------------------
+# Runtime Helpers
+# -----------------------------------------------------------------------------
+
+def resolve_python_command() -> list[str]:
+    """Find a Python executable with dependencies installed."""
+    # 1. Virtual environments (.venv / venv)
+    venv_candidates = [
+        ROOT_DIR / ".venv" / "Scripts" / "python.exe",
+        ROOT_DIR / ".venv" / "bin" / "python",
+        ROOT_DIR / "venv" / "Scripts" / "python.exe",
+        ROOT_DIR / "venv" / "bin" / "python",
+    ]
+    for cand in venv_candidates:
+        if cand.exists():
+            return [str(cand)]
+
+    # 2. Check current sys.executable
+    try:
+        res = subprocess.run(
+            [sys.executable, "-c", "import flask, sqlalchemy"],
+            capture_output=True,
+            timeout=5,
+        )
+        if res.returncode == 0:
+            return [sys.executable]
+    except Exception:
+        pass
+
+    # 3. Windows py launcher check (e.g. py -3.12)
+    if sys.platform == "win32":
+        for version in ["-3.12", "-3.11", "-3.10"]:
+            try:
+                res = subprocess.run(
+                    ["py", version, "-c", "import flask, sqlalchemy"],
+                    capture_output=True,
+                    timeout=5,
+                )
+                if res.returncode == 0:
+                    return ["py", version]
+            except Exception:
+                continue
+
+    # Fallback to sys.executable
+    return [sys.executable]
+
+
+def get_git_modified_files() -> list[str]:
+    """Retrieve list of modified, added, or untracked files from git (supports local and CI)."""
+    files: set[str] = set()
+
+    # 1. Unstaged + Staged changes via git status (local dev / uncommitted changes)
+    try:
+        proc = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=str(ROOT_DIR),
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        for line in proc.stdout.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            # Status format is XY PATH or XY "PATH" or XY PATH -> PATH2
+            parts = line.split(maxsplit=1)
+            if len(parts) == 2:
+                path = parts[1].strip('"')
+                if " -> " in path:
+                    path = path.split(" -> ")[1].strip('"')
+                files.add(path.replace("\\", "/"))
+    except Exception as e:
+        print(f"[WARN] Failed to get git status: {e}", file=sys.stderr)
+
+    # 2. Working tree diffs (git diff HEAD)
+    try:
+        proc = subprocess.run(
+            ["git", "diff", "--name-only", "HEAD"],
+            cwd=str(ROOT_DIR),
+            capture_output=True,
+            text=True,
+        )
+        if proc.returncode == 0:
+            for path in proc.stdout.splitlines():
+                if path.strip():
+                    files.add(path.strip().replace("\\", "/"))
+    except Exception:
+        pass
+
+    # 3. If working tree is clean (e.g. CI runner right after checkout / commit), diff against base branch or previous commit
+    if not files:
+        diff_targets: list[list[str]] = []
+        base_ref = os.environ.get("GITHUB_BASE_REF")
+        if base_ref:
+            diff_targets.append([f"origin/{base_ref}...HEAD"])
+            diff_targets.append([f"{base_ref}...HEAD"])
+
+        # Check CI commit diffs
+        diff_targets.append(["HEAD~1", "HEAD"])
+        diff_targets.append(["origin/master...HEAD"])
+        diff_targets.append(["origin/develop...HEAD"])
+
+        for target in diff_targets:
+            try:
+                proc = subprocess.run(
+                    ["git", "diff", "--name-only"] + target,
+                    cwd=str(ROOT_DIR),
+                    capture_output=True,
+                    text=True,
+                )
+                if proc.returncode == 0:
+                    found = [p.strip().replace("\\", "/") for p in proc.stdout.splitlines() if p.strip()]
+                    if found:
+                        files.update(found)
+                        break
+            except Exception:
+                continue
+
+    return sorted(files)
+
+
+def map_files_to_modules(changed_files: list[str]) -> tuple[set[str], set[str], set[str]]:
+    """
+    Given a list of changed files, determine affected module names,
+    backend test files, and frontend test files.
+    """
+    matched_modules: set[str] = set()
+    backend_tests: set[str] = set()
+    frontend_tests: set[str] = set()
+
+    for file_path in changed_files:
+        norm_path = file_path.replace("\\", "/")
+
+        # If direct test file was modified, run it directly
+        if norm_path.startswith("tests/test_") and norm_path.endswith(".py"):
+            backend_tests.add(norm_path)
+            # Also find which module it belongs to
+            for mod_name, mod_info in MODULES.items():
+                if norm_path in mod_info["backend_tests"]:
+                    matched_modules.add(mod_name)
+            continue
+
+        if "frontend/src/" in norm_path and (".test." in norm_path or ".spec." in norm_path):
+            rel_fe_test = norm_path.replace("frontend/", "")
+            frontend_tests.add(rel_fe_test)
+            for mod_name, mod_info in MODULES.items():
+                if rel_fe_test in mod_info["frontend_tests"]:
+                    matched_modules.add(mod_name)
+            continue
+
+        # Match against module source patterns
+        matched = False
+        for mod_name, mod_info in MODULES.items():
+            for pattern in mod_info["source_patterns"]:
+                if fnmatch.fnmatch(norm_path, pattern):
+                    matched_modules.add(mod_name)
+                    matched = True
+                    break
+
+        if not matched:
+            # Fallback checks
+            if norm_path.startswith("app/") or norm_path.startswith("models/"):
+                matched_modules.add("core")
+            elif norm_path.startswith("frontend/src/"):
+                matched_modules.add("core")
+
+    # Collect all tests for matched modules
+    for mod_name in matched_modules:
+        if mod_name in MODULES:
+            backend_tests.update(MODULES[mod_name]["backend_tests"])
+            frontend_tests.update(MODULES[mod_name]["frontend_tests"])
+
+    return matched_modules, backend_tests, frontend_tests
+
+
+# -----------------------------------------------------------------------------
+# Test Execution
+# -----------------------------------------------------------------------------
+
+def run_backend_tests(
+    python_cmd: list[str],
+    test_files: list[str],
+    failfast: bool = False,
+    verbose: bool = False,
+) -> bool:
+    """Execute targeted Python backend tests using unittest."""
+    if not test_files:
+        return True
+
+    # Filter to files that actually exist on disk
+    existing_tests = [f for f in test_files if (ROOT_DIR / f).exists()]
+    if not existing_tests:
+        print("[BACKEND] No existing backend test files to run.")
+        return True
+
+    print("\n" + "=" * 60)
+    print(f"[*] Running {len(existing_tests)} Backend Test Suite(s)")
+    print("=" * 60)
+    for tf in existing_tests:
+        print(f"  * {tf}")
+    print("-" * 60)
+
+    cmd = list(python_cmd) + ["-m", "unittest"]
+    if failfast:
+        cmd.append("-f")
+    if verbose:
+        cmd.append("-v")
+    cmd.extend(existing_tests)
+
+    start_time = time.time()
+    res = subprocess.run(cmd, cwd=str(ROOT_DIR))
+    elapsed = time.time() - start_time
+
+    if res.returncode == 0:
+        print(f"\n[PASS] BACKEND PASSED ({len(existing_tests)} files in {elapsed:.2f}s)")
+        return True
+    else:
+        print(f"\n[FAIL] BACKEND FAILED ({len(existing_tests)} files in {elapsed:.2f}s, exit code {res.returncode})")
+        return False
+
+
+def run_frontend_tests(
+    test_files: list[str],
+    failfast: bool = False,
+    verbose: bool = False,
+) -> bool:
+    """Execute targeted Vitest frontend tests."""
+    if not test_files:
+        return True
+
+    fe_dir = ROOT_DIR / "frontend"
+    if not fe_dir.exists():
+        return True
+
+    # Filter to files that exist in frontend/
+    existing_tests = [f for f in test_files if (fe_dir / f).exists()]
+    if not existing_tests:
+        print("[FRONTEND] No existing frontend test files to run.")
+        return True
+
+    print("\n" + "=" * 60)
+    print(f"[*] Running {len(existing_tests)} Frontend Test Suite(s)")
+    print("=" * 60)
+    for tf in existing_tests:
+        print(f"  * {tf}")
+    print("-" * 60)
+
+    # Use npm run test -- <files>
+    cmd = ["npm", "--prefix", "frontend", "test", "--", "--run"]
+    if failfast:
+        cmd.append("--bail=1")
+    cmd.extend(existing_tests)
+
+    start_time = time.time()
+    # On Windows npm requires shell=True if run via standard PATH or npm.cmd
+    use_shell = sys.platform == "win32"
+    res = subprocess.run(cmd, cwd=str(ROOT_DIR), shell=use_shell)
+    elapsed = time.time() - start_time
+
+    if res.returncode == 0:
+        print(f"\n[PASS] FRONTEND PASSED ({len(existing_tests)} files in {elapsed:.2f}s)")
+        return True
+    else:
+        print(f"\n[FAIL] FRONTEND FAILED ({len(existing_tests)} files in {elapsed:.2f}s, exit code {res.returncode})")
+        return False
+
+
+# -----------------------------------------------------------------------------
+# CLI Entrypoint
+# -----------------------------------------------------------------------------
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Flama Modular Test Runner - Execute focused tests based on modules or git changes.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "-c", "--changed",
+        action="store_true",
+        help="Auto-detect modified/added files from git and run relevant tests only.",
+    )
+    parser.add_argument(
+        "-m", "--module",
+        type=str,
+        help="Comma-separated module names (e.g. 'study', 'auth,payment', 'decks').",
+    )
+    parser.add_argument(
+        "-f", "--file",
+        nargs="+",
+        help="Direct file paths (source or test files) to test.",
+    )
+    parser.add_argument(
+        "-a", "--all",
+        action="store_true",
+        help="Run entire test suite across all modules.",
+    )
+    parser.add_argument(
+        "-b", "--backend-only",
+        action="store_true",
+        help="Run only backend unittest suites.",
+    )
+    parser.add_argument(
+        "--frontend-only", "--fe",
+        action="store_true",
+        help="Run only frontend vitest suites.",
+    )
+    parser.add_argument(
+        "-l", "--list-modules",
+        action="store_true",
+        help="List all defined domain modules and their associated test counts.",
+    )
+    parser.add_argument(
+        "--failfast",
+        action="store_true",
+        help="Stop execution on the first test failure.",
+    )
+    parser.add_argument(
+        "-v", "--verbose",
+        action="store_true",
+        help="Verbose test execution output.",
+    )
+
+    args = parser.parse_args()
+
+    # List modules mode
+    if args.list_modules:
+        print("\n[MODULES] Flama Domain Test Modules:")
+        print(f"{'Module Name':<20} | {'Backend Tests':<15} | {'Frontend Tests':<15}")
+        print("-" * 56)
+        for mod, data in MODULES.items():
+            b_cnt = len(data["backend_tests"])
+            f_cnt = len(data["frontend_tests"])
+            print(f"{mod:<20} | {b_cnt:<15} | {f_cnt:<15}")
+        print("-" * 56)
+        total_b = sum(len(d["backend_tests"]) for d in MODULES.values())
+        total_f = sum(len(d["frontend_tests"]) for d in MODULES.values())
+        print(f"{'TOTAL (Mapped)':<20} | {total_b:<15} | {total_f:<15}\n")
+        return 0
+
+    # Determine Python executable
+    python_cmd = resolve_python_command()
+    if args.verbose:
+        print(f"[INFO] Using Python command: {' '.join(python_cmd)}")
+
+    selected_backend_tests: set[str] = set()
+    selected_frontend_tests: set[str] = set()
+    target_modules: set[str] = set()
+
+    if args.all:
+        print("[MODE] Running ALL test suites across all modules.")
+        for mod, data in MODULES.items():
+            target_modules.add(mod)
+            selected_backend_tests.update(data["backend_tests"])
+            selected_frontend_tests.update(data["frontend_tests"])
+
+    elif args.module:
+        requested = [m.strip().lower() for m in args.module.split(",") if m.strip()]
+        for req in requested:
+            if req not in MODULES:
+                print(f"[ERROR] Unknown module '{req}'. Use --list-modules to see valid names.", file=sys.stderr)
+                return 1
+            target_modules.add(req)
+            selected_backend_tests.update(MODULES[req]["backend_tests"])
+            selected_frontend_tests.update(MODULES[req]["frontend_tests"])
+        print(f"[TARGET] Modules: {', '.join(sorted(target_modules))}")
+
+    elif args.file:
+        mods, b_tests, f_tests = map_files_to_modules(args.file)
+        target_modules.update(mods)
+        selected_backend_tests.update(b_tests)
+        selected_frontend_tests.update(f_tests)
+        print(f"[TARGET] Files: {', '.join(args.file)}")
+        print(f"[TARGET] Resolved Modules: {', '.join(sorted(target_modules)) if target_modules else 'None'}")
+
+    elif args.changed or len(sys.argv) == 1:
+        # Default behavior: run changed files
+        changed = get_git_modified_files()
+        if not changed:
+            print("[INFO] No modified files detected by git. Everything is clean!")
+            print("[TIP] Use '--module <name>' or '--all' to run tests explicitly.")
+            return 0
+
+        print(f"[GIT] Detected {len(changed)} modified file(s):")
+        for ch in changed[:10]:
+            print(f"  * {ch}")
+        if len(changed) > 10:
+            print(f"  * ... and {len(changed) - 10} more")
+
+        mods, b_tests, f_tests = map_files_to_modules(changed)
+        target_modules.update(mods)
+        selected_backend_tests.update(b_tests)
+        selected_frontend_tests.update(f_tests)
+        print(f"[TARGET] Triggered Modules: {', '.join(sorted(target_modules)) if target_modules else 'None'}")
+
+    else:
+        parser.print_help()
+        return 0
+
+    # Layer filtering
+    run_backend = not args.frontend_only
+    run_frontend = not args.backend_only
+
+    total_start = time.time()
+    all_passed = True
+
+    if run_backend and selected_backend_tests:
+        backend_ok = run_backend_tests(
+            python_cmd=python_cmd,
+            test_files=sorted(selected_backend_tests),
+            failfast=args.failfast,
+            verbose=args.verbose,
+        )
+        if not backend_ok:
+            all_passed = False
+            if args.failfast:
+                return 1
+    elif run_backend and not selected_backend_tests:
+        print("\n[INFO] No backend tests required for selected target.")
+
+    if run_frontend and selected_frontend_tests:
+        frontend_ok = run_frontend_tests(
+            test_files=sorted(selected_frontend_tests),
+            failfast=args.failfast,
+            verbose=args.verbose,
+        )
+        if not frontend_ok:
+            all_passed = False
+    elif run_frontend and not selected_frontend_tests:
+        print("\n[INFO] No frontend tests required for selected target.")
+
+    total_time = time.time() - total_start
+    print("\n" + "=" * 60)
+    if all_passed:
+        print(f"[SUCCESS] ALL SELECTED TESTS PASSED in {total_time:.2f}s!")
+        print("=" * 60 + "\n")
+        return 0
+    else:
+        print(f"[FAILURE] SOME TESTS FAILED in {total_time:.2f}s.")
+        print("=" * 60 + "\n")
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

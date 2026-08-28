@@ -2,7 +2,18 @@ name: CI
 
 on:
   push:
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+      - '.vscode/**'
+      - 'flama-audio/**'
   pull_request:
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+      - '.vscode/**'
+      - 'flama-audio/**'
+  workflow_dispatch:
 
 jobs:
   frontend:
@@ -15,6 +26,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -35,7 +48,14 @@ jobs:
         run: npm run typecheck
 
       - name: Test
-        run: npm test
+        run: |
+          if [ "${{ github.ref_name }}" = "master" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "Running full frontend test suite on master..."
+            npm test
+          else
+            echo "Running targeted tests for changed files..."
+            npm run test:changed || npm test
+          fi
 
       - name: Build
         run: npm run build
@@ -65,6 +85,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Download React build
         uses: actions/download-artifact@v4
@@ -84,10 +106,17 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run tests
+      - name: Run backend tests
         env:
           DB_USER: ci
           DB_NAME: ci
           SECRET_KEY: ci-secret
           REDIS_URL: redis://127.0.0.1:6379/15
-        run: python -m unittest discover -s tests -v
+        run: |
+          if [ "${{ github.ref_name }}" = "master" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "Running full backend test suite on master..."
+            python scripts/run_tests.py --all --backend-only
+          else
+            echo "Running modular backend test suite for changed modules..."
+            python scripts/run_tests.py --changed --backend-only
+          fi

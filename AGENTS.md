@@ -65,6 +65,12 @@
 - **Chrome DevTools & Browser Profiling**: Mỗi khi khởi chạy hoặc kết nối Chrome để debug, test, profiling hiệu năng, hoặc dùng `chrome-devtools` MCP, **BẮT BUỘC phải dùng 1 profile riêng biệt** (isolated `--user-data-dir`, ví dụ: `C:\Users\chung\.gemini\chrome-profiles\flama-devtools`). **Tuyệt đối KHÔNG** can thiệp, mở remote debugging hay can thiệp vào profile cá nhân mặc định của người dùng nhằm tránh xung đột cookies/sessions và bảo vệ dữ liệu cá nhân.
 
 ## Testing
+- **Modular Test Execution**: To avoid long test runs across 100+ suites, use `python scripts/run_tests.py` instead of running full test suites:
+  - Run tests for modified/staged files: `python scripts/run_tests.py --changed` (or `npm run test:changed` in `frontend/`)
+  - Run specific domain modules: `python scripts/run_tests.py --module study,flashcards` (or `--module auth`, `--module payment`, `--module decks`, `--module connect_mcp`, etc.)
+  - Filter by layer: `python scripts/run_tests.py --module study --backend-only` or `--frontend-only`
+  - List available modules & test matrices: `python scripts/run_tests.py --list-modules`
+  - Run full suite only for CI/pre-release verification: `python scripts/run_tests.py --all`
 - Prefer the narrowest relevant test module first; most feature areas already have focused tests in `tests/`.
 - The suite is flat `unittest` with per-file app/database setup and no shared fixture layer. Copy the closest existing test file instead of inventing a new harness.
 - If you touch startup, config, media paths, or DB compatibility logic, verify against the real entry point (`wsgi.py` or Docker) instead of relying only on unit tests.
@@ -87,5 +93,3 @@
 - Use `$stitch-skills` (bao gồm `$generate-design`, `$react-components`, `$shadcn-ui`, `$manage-design-system`, `$extract-design-md`, `$code-to-design`) khi cần tương tác với Google Stitch MCP để sinh màn hình, quản lý design system, trích xuất HTML sang Stitch, hoặc tạo React component từ thiết kế Stitch.
 - Use `$chrome-devtools` khi cần profiling hiệu năng, đo lường Core Web Vitals, kiểm tra render cycles, rò rỉ bộ nhớ (memory leaks), phân tích network waterfall, hoặc debug giao diện chuyên sâu qua Chrome DevTools MCP.
 - Keep agent guidance short, repo-specific, and workflow-oriented. Avoid generic Flask or prompt-engineering tutorials.
-
-
