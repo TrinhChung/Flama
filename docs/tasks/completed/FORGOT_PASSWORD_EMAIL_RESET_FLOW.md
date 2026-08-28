@@ -1,5 +1,9 @@
 # Task: Forgot Password / Reset Password qua email
 
+> **Trạng thái:** [x] ĐÃ HOÀN THÀNH (Completed)  
+> **Ngày hoàn thành:** 2026-08-28  
+> **Target branch:** `develop`  
+
 ## Mục tiêu
 
 Thiết kế và triển khai flow **Quên mật khẩu** hoàn chỉnh cho Flama.

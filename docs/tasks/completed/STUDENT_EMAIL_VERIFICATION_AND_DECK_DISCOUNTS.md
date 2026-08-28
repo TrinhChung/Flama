@@ -1,7 +1,9 @@
 # Task — Student email verification and Marketplace student benefits
 
-**Target branch:** `develop`  
-**Type:** Product / Frontend / Backend / Marketplace / Account verification  
+> **Trạng thái:** [x] ĐÃ HOÀN THÀNH (Completed)  
+> **Ngày hoàn thành:** 2026-08-28  
+> **Target branch:** `develop`  
+> **Type:** Product / Frontend / Backend / Marketplace / Account verification  
 **Dependency:** Implement **after Google Login / Google Sign-In task** is completed.
 
 ## Goal

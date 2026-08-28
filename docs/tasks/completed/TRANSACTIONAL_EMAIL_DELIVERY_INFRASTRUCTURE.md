@@ -1,5 +1,9 @@
 # Task: Transactional Email Infrastructure cho Flama
 
+> **Trạng thái:** [x] ĐÃ HOÀN THÀNH (Completed)  
+> **Ngày hoàn thành:** 2026-08-28  
+> **Target branch:** `develop`  
+
 ## Mục tiêu
 
 Thiết kế một **hạ tầng gửi email transactional dùng chung** cho Flama thay vì mỗi chức năng tự kết nối SMTP hoặc tự gọi provider riêng.

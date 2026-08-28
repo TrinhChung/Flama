@@ -1,6 +1,8 @@
 # Task: Shared Deck auto-publish, subscriber auto-update, and conflict resolution
 
-**Target branch:** `develop`
+> **Trạng thái:** [x] ĐÃ HOÀN THÀNH (Completed)  
+> **Ngày hoàn thành:** 2026-08-28  
+> **Target branch:** `develop`  
 
 ## Goal
 
