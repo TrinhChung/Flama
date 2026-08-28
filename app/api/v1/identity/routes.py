@@ -157,3 +157,20 @@ def reset_password():
     except identity_api_service.IdentityApiError as exc:
         return _service_error(exc)
     return jsonify(result)
+
+
+@identity_bp.get("/auth/google/url")
+def get_google_auth_url():
+    from flask import session
+    from app.services.google_auth_service import build_google_auth_url, GoogleAuthError
+
+    next_param = request.args.get("next")
+    try:
+        auth_url, state, nonce = build_google_auth_url(next_url=next_param)
+        session["google_auth_state"] = state
+        session["google_auth_nonce"] = nonce
+        session["google_auth_next"] = next_param
+        return jsonify({"url": auth_url, "state": state})
+    except GoogleAuthError as exc:
+        return jsonify({"error": exc.code, "message": str(exc)}), exc.status
+

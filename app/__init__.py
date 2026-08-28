@@ -38,6 +38,7 @@ def create_app(config: Optional[dict] = None) -> Flask:
         app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
     from models.user import User
+    from models.user_identity import UserIdentity  # noqa: F401
     from models.password_reset_token import PasswordResetToken  # noqa: F401
     from models.email_verification_token import EmailVerificationToken  # noqa: F401
     from models.taxonomy import (  # noqa: F401

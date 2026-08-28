@@ -18,7 +18,7 @@ class User(UserMixin, db.Model):
     avatar_url = db.Column(db.String(512), nullable=True)
     bio = db.Column(db.Text, nullable=True)
     social_links = db.Column(db.JSON, nullable=True, default=list)
-    password_hash = db.Column(db.String(255), nullable=False)
+    password_hash = db.Column(db.String(255), nullable=True)
     timezone = db.Column(db.String(64), nullable=False, default="UTC")
     role_id = db.Column(db.Integer, db.ForeignKey("user_roles.id"), nullable=True, index=True)
     is_admin = db.Column(db.Boolean, nullable=False, default=False)
@@ -30,6 +30,11 @@ class User(UserMixin, db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(
         db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+    identities = db.relationship(
+        "UserIdentity",
+        back_populates="user",
+        cascade="all, delete-orphan",
     )
     card_progress = db.relationship(
         "CardProgress",

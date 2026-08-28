@@ -27,6 +27,7 @@ def init_spa_delivery(app) -> None:
             path == "/api"
             or path.startswith("/api/")
             or path.startswith("/.well-known/")
+            or path.startswith("/auth/")
             or (path.startswith("/oauth/") and path != "/oauth/consent")
         ):
             return None
