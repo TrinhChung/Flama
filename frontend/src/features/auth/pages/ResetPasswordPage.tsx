@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { AlertCircle, CheckCircle2, Eye, EyeOff, Lock, LoaderCircle } from 'lucide-react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -73,7 +73,7 @@ export function ResetPasswordPage() {
         </Alert>
 
         <Button asChild className="w-full mt-4" variant="outline">
-          <a href="/forgot-password">Gửi lại yêu cầu mới</a>
+          <Link to="/forgot-password">Gửi lại yêu cầu mới</Link>
         </Button>
       </AuthCard>
     )
@@ -102,7 +102,7 @@ export function ResetPasswordPage() {
             className="w-full font-bold bg-gradient-to-r from-primary via-orange-500 to-amber-500 hover:opacity-95 text-primary-foreground shadow-md"
             size="lg"
           >
-            <a href="/login">Đăng nhập ngay</a>
+            <Link to="/login">Đăng nhập ngay</Link>
           </Button>
         </div>
       ) : (

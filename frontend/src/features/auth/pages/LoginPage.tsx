@@ -1,5 +1,5 @@
 import { AlertCircle, ArrowRight, Eye, EyeOff, Lock, Mail, LoaderCircle } from 'lucide-react'
-import { Navigate, useSearchParams } from 'react-router-dom'
+import { Link, Navigate, useSearchParams } from 'react-router-dom'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -103,9 +103,9 @@ export function LoginPage() {
           ) : null}
 
           <div className="flex justify-end pt-1">
-            <a href="/forgot-password" className="text-xs font-medium text-primary hover:underline transition-colors">
+            <Link to="/forgot-password" className="text-xs font-medium text-primary hover:underline transition-colors">
               Quên mật khẩu?
-            </a>
+            </Link>
           </div>
         </div>
 

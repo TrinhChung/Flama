@@ -24,6 +24,10 @@ export function AuthCard({
   children,
 }: AuthCardProps) {
   const location = useLocation()
+  const searchParams = new URLSearchParams(location.search)
+  const token = searchParams.get('token') || ''
+  const hasToken = Boolean(token.trim())
+
   const isLogin = location.pathname.startsWith('/login')
   const isRegister = location.pathname.startsWith('/register')
   const isForgotPassword = location.pathname.startsWith('/forgot-password')
@@ -127,19 +131,34 @@ export function AuthCard({
                       Quên mật khẩu
                     </Link>
 
-                    <Link
-                      to={{ pathname: '/reset-password', search: location.search }}
-                      className={`relative z-10 flex-1 rounded-full py-2 text-xs font-bold text-center transition-all duration-300 ${
-                        isResetPassword
-                          ? 'text-primary-foreground shadow-md shadow-primary/25'
-                          : 'text-muted-foreground hover:text-foreground'
-                      }`}
-                    >
-                      {isResetPassword && (
+                    {hasToken ? (
+                      <Link
+                        to={{ pathname: '/reset-password', search: location.search }}
+                        className={`relative z-10 flex-1 rounded-full py-2 text-xs font-bold text-center transition-all duration-300 ${
+                          isResetPassword
+                            ? 'text-primary-foreground shadow-md shadow-primary/25'
+                            : 'text-muted-foreground hover:text-foreground'
+                        }`}
+                      >
+                        {isResetPassword && (
+                          <span className="absolute inset-0 -z-10 rounded-full bg-gradient-to-r from-primary via-orange-500 to-amber-500 transition-all duration-300 animate-in fade-in-50" />
+                        )}
+                        Đặt lại mật khẩu
+                      </Link>
+                    ) : isResetPassword ? (
+                      <div className="relative z-10 flex-1 rounded-full py-2 text-xs font-bold text-center text-primary-foreground shadow-md shadow-primary/25 select-none">
                         <span className="absolute inset-0 -z-10 rounded-full bg-gradient-to-r from-primary via-orange-500 to-amber-500 transition-all duration-300 animate-in fade-in-50" />
-                      )}
-                      Đặt lại mật khẩu
-                    </Link>
+                        Đặt lại mật khẩu
+                      </div>
+                    ) : (
+                      <span
+                        className="relative z-10 flex-1 rounded-full py-2 text-xs font-medium text-center text-muted-foreground/40 cursor-not-allowed select-none transition-colors"
+                        title="Chỉ khả dụng khi mở liên kết xác thực từ email"
+                        aria-disabled="true"
+                      >
+                        Đặt lại mật khẩu
+                      </span>
+                    )}
                   </>
                 ) : (
                   <>

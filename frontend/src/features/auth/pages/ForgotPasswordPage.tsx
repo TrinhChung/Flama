@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { AlertCircle, ArrowLeft, CheckCircle2, LoaderCircle, Mail } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -61,10 +62,10 @@ export function ForgotPasswordPage() {
             variant="outline"
             className="w-full mt-2"
           >
-            <a href="/login">
+            <Link to="/login">
               <ArrowLeft className="size-4 mr-1.5" />
               Quay lại trang Đăng nhập
-            </a>
+            </Link>
           </Button>
         </div>
       ) : (
