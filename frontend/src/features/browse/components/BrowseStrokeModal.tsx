@@ -530,30 +530,20 @@ export function BrowseStrokeModal({
                   {previewQuery.data.items.map((item) => (
                     <div
                       key={item.hex}
-                      className="group relative flex flex-col items-center bg-background border border-border/70 rounded-xl p-2.5 shadow-2xs hover:border-primary/50 transition-all"
+                      className="w-20 h-20 sm:w-24 sm:h-24 rounded-xl bg-white dark:bg-zinc-950 border border-border/70 p-1 flex items-center justify-center overflow-hidden shadow-2xs hover:border-primary/50 transition-all shrink-0"
                     >
-                      <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-xl bg-white dark:bg-zinc-950 border border-border/70 p-1 flex items-center justify-center overflow-hidden shadow-2xs">
-                        <img
-                          src={resolveBackendUrl(item.url)}
-                          alt={item.char}
-                          title={`${item.char} - Thứ tự nét`}
-                          className="w-full h-full object-contain"
-                          loading="lazy"
-                          onError={(e) => {
-                            const target = e.target as HTMLImageElement
-                            target.onerror = null
-                            target.src = resolveBackendUrl('/static/images/image-library-fallback.svg')
-                          }}
-                        />
-                      </div>
-                      <div className="flex items-center gap-1.5 mt-2">
-                        <span className="text-xs font-bold text-foreground">
-                          {item.char}
-                        </span>
-                        <span className="text-[10px] font-mono text-muted-foreground">
-                          U+{item.hex.toUpperCase()}
-                        </span>
-                      </div>
+                      <img
+                        src={resolveBackendUrl(item.url)}
+                        alt={item.char}
+                        title={`${item.char} - Thứ tự nét`}
+                        className="w-full h-full object-contain"
+                        loading="lazy"
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement
+                          target.onerror = null
+                          target.src = resolveBackendUrl('/static/images/image-library-fallback.svg')
+                        }}
+                      />
                     </div>
                   ))}
                 </div>
