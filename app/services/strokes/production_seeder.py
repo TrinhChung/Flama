@@ -95,7 +95,7 @@ def seed_production_strokes_dataset(
     limit_ja: int = 2500,
     limit_zh: int = 9000,
     limit_zh_hant: int = 9000,
-    workers: int = 12,
+    workers: int = 4,
     force: bool = False,
     progress_callback: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:

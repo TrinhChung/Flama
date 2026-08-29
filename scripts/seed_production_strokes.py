@@ -22,7 +22,7 @@ def main():
     parser.add_argument("--limit-ja", type=int, default=2500, help="Japanese Kanji count (default: 2500)")
     parser.add_argument("--limit-zh", type=int, default=9000, help="Simplified Chinese Hanzi count (default: 9000)")
     parser.add_argument("--limit-zh-hant", type=int, default=9000, help="Traditional Chinese Hanzi count (default: 9000)")
-    parser.add_argument("--workers", type=int, default=16, help="Concurrent worker threads (default: 16)")
+    parser.add_argument("--workers", type=int, default=4, help="Concurrent worker threads (default: 4)")
     parser.add_argument("--force", action="store_true", help="Force overwrite existing SVGs")
 
     args = parser.parse_args()
