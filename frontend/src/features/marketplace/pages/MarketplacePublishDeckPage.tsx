@@ -10,9 +10,8 @@ import {
 } from 'lucide-react'
 import { appApi } from '@/app/api'
 import { AmbientBackground } from '@/components/ambient-background'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Page } from '@/shared/components/Page'
 import { PageError, PageLoading } from '@/shared/components/PageState'
 import { loadDeckOptionsForPublish } from '../publishApi'
@@ -447,28 +446,6 @@ export function MarketplacePublishDeckPage() {
         className="space-y-6"
       >
         <Card className="shadow-xs rounded-2xl border-border/80 bg-card/90 backdrop-blur-sm overflow-hidden min-h-[480px] flex flex-col justify-between">
-            {/* Step Header */}
-            <CardHeader className="p-4 sm:p-6 pb-4 border-b border-border/40 bg-muted/20">
-              <div className="flex items-center justify-between gap-4">
-                <div className="flex items-center gap-2.5">
-                  <span className="flex items-center justify-center w-7 h-7 rounded-xl bg-foreground text-background text-xs font-bold shadow-2xs">
-                    {currentStep}
-                  </span>
-                  <div>
-                    <CardTitle className="text-base sm:text-lg font-bold">
-                      {WIZARD_STEPS[currentStep - 1].title}
-                    </CardTitle>
-                    <CardDescription className="text-xs">
-                      {WIZARD_STEPS[currentStep - 1].sub}
-                    </CardDescription>
-                  </div>
-                </div>
-                <Badge variant="secondary" className="text-xs font-semibold text-muted-foreground bg-muted/60 border-border/60 px-2.5 py-1 shrink-0">
-                  Bước {currentStep} / 4
-                </Badge>
-              </div>
-            </CardHeader>
-
             {/* Step Body */}
             <CardContent className="p-4 sm:p-6 space-y-5 flex-1">
               {currentStep === 1 && (
