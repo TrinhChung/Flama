@@ -12,7 +12,6 @@ import {
   RotateCcw,
   Search,
   SlidersHorizontal,
-  Sparkles,
   Star,
   X,
 } from 'lucide-react'
@@ -1037,9 +1036,6 @@ function MarketplacePage({ mode }: { mode: 'decks' | 'note-types' }) {
                             : 'bg-primary/10 text-primary border border-primary/20'
                         }`}
                       >
-                        {item.pricing_mode === 'free' ? (
-                          <Sparkles className="size-3" />
-                        ) : null}
                         {item.price_display}
                       </span>
                     </div>

@@ -16,7 +16,6 @@ export function PublishStepWizardNav({
       <CardContent className="p-3 sm:p-4">
         <nav className="flex flex-col sm:flex-row gap-2 sm:gap-4">
           {WIZARD_STEPS.map((s) => {
-            const Icon = s.icon
             const isActive = currentStep === s.id
             const isCompleted = currentStep > s.id
 
@@ -25,28 +24,28 @@ export function PublishStepWizardNav({
                 key={s.id}
                 type="button"
                 onClick={() => goToStep(s.id)}
-                className={`flex-1 flex items-center gap-3 p-2.5 sm:p-3 rounded-xl text-left transition-all cursor-pointer ${
+                className={`flex-1 flex items-center gap-2.5 p-2.5 sm:p-3 rounded-xl text-left transition-all cursor-pointer border ${
                   isActive
-                    ? 'bg-muted/80 text-foreground font-semibold ring-1 ring-border shadow-xs'
+                    ? 'border-primary/60 bg-primary/5 text-foreground font-semibold ring-1 ring-primary/20 shadow-2xs'
                     : isCompleted
-                    ? 'text-foreground/80 hover:bg-muted/50'
-                    : 'text-muted-foreground/60 hover:text-muted-foreground hover:bg-muted/30'
+                    ? 'border-border/70 bg-card hover:bg-muted/40 text-foreground font-medium'
+                    : 'border-border/40 bg-muted/20 text-muted-foreground hover:bg-muted/30 font-medium'
                 }`}
               >
                 <div
-                  className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-xs font-bold transition-all ${
+                  className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center shrink-0 text-xs font-bold transition-all ${
                     isActive
-                      ? 'bg-foreground text-background shadow-xs'
+                      ? 'bg-primary text-primary-foreground shadow-2xs'
                       : isCompleted
-                      ? 'bg-primary/15 text-primary'
+                      ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
                       : 'bg-muted text-muted-foreground'
                   }`}
                 >
-                  {isCompleted ? <Check className="w-4 h-4" /> : <Icon className="w-4 h-4" />}
+                  {isCompleted ? <Check className="w-3.5 h-3.5 stroke-[2.5]" /> : s.id}
                 </div>
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <div className="text-xs font-bold leading-tight truncate">
-                    {s.id}. {s.title}
+                    {s.title}
                   </div>
                   <div className="text-[10px] text-muted-foreground truncate hidden sm:block">
                     {s.sub}

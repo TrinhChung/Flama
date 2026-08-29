@@ -7,7 +7,6 @@ import {
   ArrowRight,
   Check,
   CheckCircle2,
-  Sparkles,
 } from 'lucide-react'
 import { appApi } from '@/app/api'
 import { AmbientBackground } from '@/components/ambient-background'
@@ -244,11 +243,6 @@ export function MarketplacePublishDeckPage() {
     }
   }, [decks, sourceDeckId, isTitleManuallyEdited, isEditMode])
 
-  const selectedDeck = useMemo(
-    () => decks.find((d) => String(d.id) === String(sourceDeckId)),
-    [decks, sourceDeckId],
-  )
-
   // Wizard Step Validation
   const validateStep = (stepNumber: number): boolean => {
     const errors: Record<string, string> = {}
@@ -381,44 +375,26 @@ export function MarketplacePublishDeckPage() {
   }
 
   return (
-    <Page className="space-y-6 relative px-3 sm:px-6 lg:px-8 py-4 sm:py-6 max-w-7xl mx-auto">
+    <Page className="space-y-6 relative px-3 sm:px-6 lg:px-8 py-4 sm:py-6 max-w-4xl mx-auto">
       <AmbientBackground intensity="subtle" />
 
-      {/* Header Banner */}
-      <div className="relative overflow-hidden rounded-2xl border border-border/80 bg-card/60 p-4 sm:p-6 shadow-xs backdrop-blur-xl">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-2">
-              <Badge variant="secondary" className="border-border/80 bg-muted font-bold text-[11px] px-2.5 py-0.5 text-foreground">
-                Flama Creator Hub
-              </Badge>
-              <Badge variant="outline" className="text-[11px] font-medium text-muted-foreground">
-                Đa môn học & Lĩnh vực
-              </Badge>
-            </div>
-            <h1 className="text-xl sm:text-2xl md:text-3xl font-black tracking-tight text-foreground">
-              {isEditMode ? 'Chỉnh sửa thông tin chia sẻ Bộ thẻ' : 'Chia sẻ Bộ thẻ vào Marketplace'}
-            </h1>
-            <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed max-w-3xl">
-              {isEditMode 
-                ? 'Cập nhật lại các thông tin mô tả chi tiết, phân loại học tập và giá bán của bộ thẻ đã xuất bản.'
-                : 'Đóng gói và phát hành học liệu Flashcard của bạn tới cộng đồng người học toàn quốc. Hỗ trợ mọi môn học từ Ngoại ngữ, CNTT, Y dược tới Thường thức.'}
-            </p>
-          </div>
-
-          <Button variant="outline" asChild className="h-9 px-3.5 text-xs font-semibold rounded-xl shrink-0 self-start sm:self-center">
-            <Link to={isEditMode ? `/marketplace/decks/${deckItemId}` : "/marketplace/decks"}>
-              {isEditMode ? 'Quay lại chi tiết' : 'Quay lại Marketplace'}
-            </Link>
-          </Button>
-        </div>
+      {/* Compact Header */}
+      <div className="flex items-center justify-between gap-4 pt-1">
+        <h1 className="text-lg sm:text-xl font-bold tracking-tight text-foreground">
+          {isEditMode ? 'Chỉnh sửa thông tin Bộ thẻ' : 'Chia sẻ Bộ thẻ vào Marketplace'}
+        </h1>
+        <Button variant="outline" size="sm" asChild className="h-8 px-3 text-xs font-semibold rounded-xl shrink-0">
+          <Link to={isEditMode ? `/marketplace/decks/${deckItemId}` : "/marketplace/decks"}>
+            <ArrowLeft className="w-3.5 h-3.5 mr-1.5" />
+            {isEditMode ? 'Quay lại chi tiết' : 'Quay lại Marketplace'}
+          </Link>
+        </Button>
       </div>
 
       {/* Wizard Stepper Progress Bar */}
-      <div className="rounded-2xl border border-border/80 bg-card/90 p-1.5 sm:p-3 shadow-xs backdrop-blur-md">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-1.5 sm:gap-2">
+      <div className="rounded-2xl border border-border/80 bg-card/90 p-1.5 sm:p-2.5 shadow-xs backdrop-blur-md">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
           {WIZARD_STEPS.map((s) => {
-            const StepIcon = s.icon
             const isActive = currentStep === s.id
             const isCompleted = currentStep > s.id
             return (
@@ -426,30 +402,30 @@ export function MarketplacePublishDeckPage() {
                 key={s.id}
                 type="button"
                 onClick={() => goToStep(s.id)}
-                className={`flex items-center gap-2 p-2 sm:p-3 rounded-xl text-left transition-all relative overflow-hidden select-none min-h-[46px] sm:min-h-[52px] ${
+                className={`flex items-center gap-2.5 p-2.5 sm:p-3 rounded-xl text-left transition-all relative overflow-hidden select-none min-h-[48px] sm:min-h-[52px] border ${
                   isActive
-                    ? 'bg-primary text-primary-foreground shadow-sm ring-2 ring-primary/20 font-bold scale-[1.01]'
+                    ? 'border-primary/60 bg-primary/5 text-foreground font-semibold ring-1 ring-primary/20 shadow-2xs'
                     : isCompleted
-                      ? 'bg-muted/60 hover:bg-muted/90 text-foreground font-semibold border border-border/80 cursor-pointer'
-                      : 'bg-muted/30 hover:bg-muted/60 text-muted-foreground font-medium border border-transparent cursor-pointer'
+                      ? 'border-border/70 bg-card hover:bg-muted/40 text-foreground font-medium cursor-pointer'
+                      : 'border-border/40 bg-muted/20 text-muted-foreground hover:bg-muted/30 font-medium cursor-pointer'
                 }`}
               >
                 <div
-                  className={`w-6 h-6 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center shrink-0 text-xs font-bold transition-all ${
+                  className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center shrink-0 text-xs font-bold transition-all ${
                     isActive
-                      ? 'bg-primary-foreground/20 text-primary-foreground'
+                      ? 'bg-primary text-primary-foreground shadow-2xs'
                       : isCompleted
                         ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
                         : 'bg-muted text-muted-foreground'
                   }`}
                 >
-                  {isCompleted ? <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : <StepIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
+                  {isCompleted ? <Check className="w-3.5 h-3.5 stroke-[2.5]" /> : s.id}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="text-[11px] sm:text-xs font-bold truncate">
-                    B{s.id}: {s.title}
+                  <div className="text-xs font-bold truncate">
+                    {s.title}
                   </div>
-                  <div className={`text-[10px] hidden xs:block truncate ${isActive ? 'text-primary-foreground/80' : 'text-muted-foreground'}`}>
+                  <div className="text-[10px] text-muted-foreground truncate hidden sm:block">
                     {s.sub}
                   </div>
                 </div>
@@ -468,11 +444,9 @@ export function MarketplacePublishDeckPage() {
             e.preventDefault()
           }
         }}
-        className="grid gap-6 lg:grid-cols-3 items-start"
+        className="space-y-6"
       >
-        {/* Active Step Content Card (2 spans) */}
-        <div className="lg:col-span-2 space-y-6">
-          <Card className="shadow-xs rounded-2xl border-border/80 bg-card/90 backdrop-blur-sm overflow-hidden min-h-[480px] flex flex-col justify-between">
+        <Card className="shadow-xs rounded-2xl border-border/80 bg-card/90 backdrop-blur-sm overflow-hidden min-h-[480px] flex flex-col justify-between">
             {/* Step Header */}
             <CardHeader className="p-4 sm:p-6 pb-4 border-b border-border/40 bg-muted/20">
               <div className="flex items-center justify-between gap-4">
@@ -604,7 +578,7 @@ export function MarketplacePublishDeckPage() {
                   {/* Summary Checklist before Submit */}
                   <div className="p-4 rounded-xl border border-border/80 bg-muted/30 space-y-2.5 text-xs">
                     <div className="font-bold text-foreground flex items-center gap-1.5">
-                      <Sparkles className="w-4 h-4 text-muted-foreground" />
+                      <CheckCircle2 className="w-4 h-4 text-muted-foreground" />
                       <span>Tóm tắt thông tin xuất bản:</span>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-muted-foreground">
@@ -669,117 +643,6 @@ export function MarketplacePublishDeckPage() {
               )}
             </div>
           </Card>
-        </div>
-
-        {/* Sidebar Column: Live Preview & Progress Checklist (1 span) */}
-        <div className="lg:col-span-1 space-y-6 lg:sticky lg:top-6 self-start">
-          {/* Live Marketplace Card Preview */}
-          <Card className="shadow-xs rounded-2xl border-border/80 bg-card/90 overflow-hidden">
-            <CardHeader className="p-4 sm:p-5 pb-2 border-b border-border/40 bg-muted/20">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-muted-foreground" />
-                  <span>Xem trước Marketplace</span>
-                </CardTitle>
-                <Badge variant="secondary" className="text-[10px]">
-                  Live Card
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="p-4 sm:p-5 space-y-3">
-              <div className="rounded-xl border bg-card/90 p-4 space-y-3 shadow-2xs">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="space-y-1 min-w-0">
-                    <div className="font-bold text-sm text-foreground line-clamp-1">
-                      {title.trim() || 'Tiêu đề Bộ thẻ của bạn'}
-                    </div>
-                    <div className="text-xs text-muted-foreground line-clamp-2">
-                      {previewText.trim() || 'Mô tả ngắn hiển thị tại đây khi người học duyệt danh sách Marketplace...'}
-                    </div>
-                  </div>
-                  <Badge
-                    variant={
-                      distributionMode === 'course_key'
-                        ? 'outline'
-                        : distributionMode === 'paid'
-                          ? 'default'
-                          : 'secondary'
-                    }
-                    className={`shrink-0 text-xs font-bold ${
-                      distributionMode === 'course_key'
-                        ? 'border-purple-500/30 text-purple-600 dark:text-purple-400 bg-purple-500/10'
-                        : ''
-                    }`}
-                  >
-                    {distributionMode === 'course_key'
-                      ? 'Mã khóa học'
-                      : distributionMode === 'paid'
-                        ? `${priceAmountMinor.toLocaleString('vi-VN')} đ`
-                        : 'Miễn phí'}
-                  </Badge>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                  <Badge variant="secondary" className="text-[10px] bg-muted/60 text-foreground border-border/60 font-semibold">
-                    {effectiveCategory}
-                  </Badge>
-                  {selectedDeck ? (
-                    <Badge variant="outline" className="text-[10px] text-muted-foreground">
-                      {selectedDeck.card_count} thẻ
-                    </Badge>
-                  ) : null}
-                  <Badge variant="outline" className="text-[10px] text-muted-foreground font-mono">
-                    v{version}
-                  </Badge>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Step Progress Checklist (Desktop only - mobile already has top Stepper) */}
-          <Card className="hidden lg:block shadow-xs rounded-2xl border-border/80 bg-card/90 backdrop-blur-sm overflow-hidden">
-            <CardHeader className="p-4 sm:p-5 pb-3 border-b border-border/40 bg-muted/20">
-              <CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                Tiến trình hoàn thiện
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-4 sm:p-5 space-y-2.5 text-xs">
-              {WIZARD_STEPS.map((s) => {
-                const isCurrent = currentStep === s.id
-                const isDone = currentStep > s.id
-                return (
-                  <div
-                    key={s.id}
-                    onClick={() => goToStep(s.id)}
-                    className={`p-2.5 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
-                      isCurrent
-                        ? 'border-primary/50 bg-primary/5 font-semibold text-foreground ring-1 ring-primary/20'
-                        : isDone
-                          ? 'border-border/60 bg-card hover:bg-muted/40 font-medium text-muted-foreground'
-                          : 'border-border/40 bg-muted/20 text-muted-foreground'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <div
-                        className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
-                          isDone
-                            ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
-                            : isCurrent
-                              ? 'bg-primary/20 text-primary'
-                              : 'bg-muted text-muted-foreground'
-                        }`}
-                      >
-                        {isDone ? <Check className="w-3 h-3" /> : s.id}
-                      </div>
-                      <span>{s.title}</span>
-                    </div>
-                    {isDone && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />}
-                  </div>
-                )
-              })}
-            </CardContent>
-          </Card>
-        </div>
       </form>
     </Page>
   )

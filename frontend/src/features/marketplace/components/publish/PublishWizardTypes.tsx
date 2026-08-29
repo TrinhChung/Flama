@@ -1,10 +1,10 @@
-import { BookOpen, DollarSign, Sparkles, Target, AlertCircle } from 'lucide-react'
+import { AlertCircle } from 'lucide-react'
 
 export const WIZARD_STEPS = [
-  { id: 1, title: 'Học liệu & Tiêu đề', sub: 'Chọn bộ thẻ và mô tả', icon: BookOpen },
-  { id: 2, title: 'Phân loại & Trình độ', sub: 'Chứng chỉ & Môn học', icon: Sparkles },
-  { id: 3, title: 'Mục tiêu & Kỹ năng', sub: 'Goals & Chủ đề trọng tâm', icon: Target },
-  { id: 4, title: 'Giá bán & Đăng tải', sub: 'Thiết lập giá và xuất bản', icon: DollarSign },
+  { id: 1, title: 'Học liệu & Tiêu đề', sub: 'Chọn bộ thẻ và mô tả' },
+  { id: 2, title: 'Phân loại & Trình độ', sub: 'Chứng chỉ & Môn học' },
+  { id: 3, title: 'Mục tiêu & Kỹ năng', sub: 'Goals & Chủ đề trọng tâm' },
+  { id: 4, title: 'Giá bán & Đăng tải', sub: 'Thiết lập giá và xuất bản' },
 ]
 
 export function FieldErrorMessage({ error }: { error?: string }) {
