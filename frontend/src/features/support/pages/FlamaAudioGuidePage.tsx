@@ -4,16 +4,19 @@ import {
   faArrowRight,
   faArrowUpRightFromSquare,
   faBolt,
+  faBookOpen,
   faCircleCheck,
   faCircleQuestion,
   faCircleXmark,
   faDesktop,
   faDownload,
+  faLifeRing,
   faRotateRight,
   faShieldHalved,
   faSliders,
   faTriangleExclamation,
   faVolumeHigh,
+  faWrench,
 } from '@fortawesome/free-solid-svg-icons'
 import { LoaderCircle } from 'lucide-react'
 import { Link } from 'react-router-dom'
@@ -22,6 +25,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Page, PageHeader } from '@/shared/components/Page'
+import { ContextHelpButton } from '@/features/guide'
 import { resolveBackendUrl } from '@/config/env'
 import { flamaAudioClient } from '@/lib/flamaAudioClient'
 
@@ -61,6 +65,13 @@ export function FlamaAudioGuidePage() {
                 <span>SHA-256</span>
               </a>
             </Button>
+            <ContextHelpButton
+              guidePath="/guide/audio/flama-audio"
+              guideTitle="Cẩm nang Flama Audio Desktop"
+              troubleshootPath="/guide/troubleshooting/flama-audio"
+              troubleshootTitle="Khắc phục sự cố không nghe thấy tiếng"
+              label="Tài liệu & Sửa lỗi"
+            />
           </div>
         }
       />
@@ -114,6 +125,14 @@ export function FlamaAudioGuidePage() {
               </div>
               <p className="text-xs text-muted-foreground mt-0.5">
                 Cổng dịch vụ máy trạm: <code className="text-primary font-mono font-bold">127.0.0.1:4791</code>
+                {serviceStatus === 'offline' && (
+                  <span className="ml-2 text-rose-600 dark:text-rose-400 font-medium">
+                    &bull; Gặp sự cố?{' '}
+                    <Link to="/guide/troubleshooting/flama-audio" className="underline hover:text-rose-700">
+                      Xem hướng dẫn sửa lỗi
+                    </Link>
+                  </span>
+                )}
               </p>
             </div>
           </div>
@@ -284,7 +303,10 @@ export function FlamaAudioGuidePage() {
               <span>Ứng dụng báo lỗi "Không thể kết nối Flama Audio Service (port 4791)"?</span>
             </h5>
             <p className="pl-5 text-muted-foreground">
-              Hãy đảm bảo bạn đã mở ứng dụng <strong>Flama Audio Desktop</strong> (<code className="font-mono text-[11px] font-semibold text-foreground">FlamaAudio-Portable.exe</code>). Nếu bị Windows Firewall chặn, hãy chọn "Allow access" cho mạng Private.
+              Hãy đảm bảo bạn đã mở ứng dụng <strong>Flama Audio Desktop</strong> (<code className="font-mono text-[11px] font-semibold text-foreground">FlamaAudio-Portable.exe</code>). Nếu bị Windows Firewall chặn, hãy chọn "Allow access" cho mạng Private.{' '}
+              <Link to="/guide/troubleshooting/flama-audio" className="text-primary font-semibold hover:underline inline-flex items-center gap-1">
+                Xem cẩm nang sửa lỗi kết nối <FontAwesomeIcon icon={faArrowUpRightFromSquare} className="text-[9px]" />
+              </Link>
             </p>
           </div>
 
@@ -296,6 +318,34 @@ export function FlamaAudioGuidePage() {
             <p className="pl-5 text-muted-foreground">
               Flama Audio Desktop đã tích hợp sẵn cơ chế tải và quản lý VOICEVOX Engine tự động. Bạn chỉ cần nhấn nút <strong>"Tải &amp; Cài Engine"</strong> trực tiếp ngay trên giao diện ứng dụng Desktop khi được nhắc.
             </p>
+          </div>
+
+          {/* Quick Hub Links */}
+          <div className="pt-2 border-t border-border/60">
+            <p className="text-[11px] font-semibold text-foreground mb-2">Tài liệu &amp; Hướng dẫn liên quan:</p>
+            <div className="grid gap-2 sm:grid-cols-3">
+              <Link
+                to="/guide/audio/batch-generation"
+                className="flex items-center gap-2 p-2.5 rounded-xl border border-border/70 bg-muted/20 hover:border-primary/50 hover:bg-primary/5 transition-all text-xs font-semibold text-foreground"
+              >
+                <FontAwesomeIcon icon={faBookOpen} className="text-primary text-xs shrink-0" />
+                <span className="truncate">Tạo âm thanh hàng loạt</span>
+              </Link>
+              <Link
+                to="/guide/audio/cloud-tts-keys"
+                className="flex items-center gap-2 p-2.5 rounded-xl border border-border/70 bg-muted/20 hover:border-primary/50 hover:bg-primary/5 transition-all text-xs font-semibold text-foreground"
+              >
+                <FontAwesomeIcon icon={faSliders} className="text-primary text-xs shrink-0" />
+                <span className="truncate">Cấu hình Cloud TTS</span>
+              </Link>
+              <Link
+                to="/guide/troubleshooting/flama-audio"
+                className="flex items-center gap-2 p-2.5 rounded-xl border border-border/70 bg-muted/20 hover:border-primary/50 hover:bg-primary/5 transition-all text-xs font-semibold text-foreground"
+              >
+                <FontAwesomeIcon icon={faWrench} className="text-amber-500 text-xs shrink-0" />
+                <span className="truncate">Khắc phục lỗi phát âm</span>
+              </Link>
+            </div>
           </div>
         </CardContent>
       </Card>
