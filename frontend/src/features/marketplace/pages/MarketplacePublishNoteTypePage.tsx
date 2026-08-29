@@ -24,6 +24,7 @@ import { Page } from '@/shared/components/Page'
 import { PageError, PageLoading } from '@/shared/components/PageState'
 
 import { useTaxonomySchema } from '../hooks/useTaxonomySchema'
+import { PublishNoteTypeSelector, type PublishNoteTypeOption } from '../components/PublishNoteTypeSelector'
 import {
   NOTE_TYPE_CATEGORY_PRESETS,
   TAXONOMY_DIFFICULTIES,
@@ -497,31 +498,16 @@ export function MarketplacePublishNoteTypePage() {
                         <span className="text-[10px] text-muted-foreground font-mono">ID: {sourceNoteTypeId}</span>
                       </div>
                     ) : (
-                      <NativeSelect
-                        id="source-nt"
-                        value={sourceNoteTypeId}
-                        onChange={(e) => {
-                          setSourceNoteTypeId(e.target.value)
+                      <PublishNoteTypeSelector
+                        noteTypes={noteTypes}
+                        selectedNoteTypeId={sourceNoteTypeId}
+                        onSelectNoteType={(nt) => {
+                          setSourceNoteTypeId(nt.id)
                           clearFieldError('sourceNoteTypeId')
-                          const found = noteTypes.find((nt) => nt.id === e.target.value)
-                          if (found && !title) setTitle(found.name)
+                          if (!title) setTitle(nt.name)
                         }}
-                        className={`h-10 text-xs sm:text-sm rounded-xl font-medium ${
-                          fieldErrors.sourceNoteTypeId ? 'border-destructive focus-visible:ring-destructive bg-destructive/5' : ''
-                        }`}
-                        required
-                      >
-                        <NativeSelectOption value="">-- Chọn loại thẻ chưa xuất bản --</NativeSelectOption>
-                        {noteTypes.map((nt) => {
-                          const isPublished = nt.publish_status === 'published' || nt.publish_status === 'unlisted'
-                          const isBlocked = isPublished || Boolean(nt.is_marketplace_install)
-                          return (
-                            <NativeSelectOption key={nt.id} value={nt.id} disabled={isBlocked}>
-                              {nt.name} {nt.is_marketplace_install ? '(Từ Marketplace)' : isPublished ? '(Đã xuất bản)' : ''}
-                            </NativeSelectOption>
-                          )
-                        })}
-                      </NativeSelect>
+                        hasError={Boolean(fieldErrors.sourceNoteTypeId)}
+                      />
                     )}
                     <FieldErrorMessage error={fieldErrors.sourceNoteTypeId} />
                   </div>
