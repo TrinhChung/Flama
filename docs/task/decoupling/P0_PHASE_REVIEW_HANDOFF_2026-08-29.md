@@ -1,20 +1,36 @@
 # Phase 0 review handoff — P0-01 đến P0-04 — 2026-08-29
 
-> Gate verdict: **NO-GO — Phase 0 chưa đóng**
+> Gate verdict: **GO — Phase 0 đã đóng bằng replacement SELECT-only bundle**
 >
-> Task status sau independent review round 5: `P0-01 COMPLETED`, `P0-02 COMPLETED`, `P0-03 BLOCKED`, `P0-04 COMPLETED`.
+> Current task status: `P0-01 COMPLETED`, `P0-02 COMPLETED`, `P0-03 COMPLETED`, `P0-04 COMPLETED`.
 >
-> Scope: review implementation, test coverage, MySQL audit evidence và artifact integrity. Review này không sửa production data, không chạy migration và không phê duyệt Phase 1/Phase 4.
+> Scope: review implementation, test coverage, MySQL audit evidence and artifact integrity. This closeout changed no database data/schema and does not authorize Phase 4.
+
+## Authoritative Phase 0 closeout — 2026-08-29
+
+The blocked Round 5 state was resolved with the dedicated `flama_audit`@`localhost` principal. Grant preflight confirmed SELECT-only access to `nihongo`; both current-code audit runs returned `61 PASS / 6 WARN / 0 BLOCK`, exit code `1`, with no semantic difference outside `observed_at`.
+
+| Evidence | Result |
+|---|---|
+| Audit code manifest | All listed file hashes and canonical manifest digest verified |
+| MySQL/Alembic | MySQL `8.0.40`; revision `20260902_000031` |
+| Run timestamps | `08:05:08` and `08:05:17` UTC |
+| Determinism | `true`; semantic diff count `0` |
+| Inventory/reconciliation | 67 categories; 11/11 formulas valid |
+| Primary SHA-256 | `8b7c7f36fa6f2049bda0a82f8f0de10ca5b68a4c54c31ccf995b06c47e0d4484` |
+| Required regression | 33 focused audit/baseline, 97 Study backend and 161 Connect/MCP tests passed |
+
+The six warnings are assigned to P1-01, P1-02, P1-03, P1-04, P2-02 and P3-04. They are downstream correctness/lifecycle work, not blocking anomalies. Phase 1 may start at P1-01.2; Phase 4 remains out of scope.
 
 ## 1. Kết luận bàn giao
 
-Round 5 đã đóng P0-02: canonical session policy/hash validation chặn malformed/fake digest và toàn bộ focused/study regression đều xanh. Phase 0 vẫn chưa đóng vì P0-03 chưa có replacement two-run bundle từ principal `SELECT-only`; stored 5-warning bundle vẫn superseded. Không dùng report `CONDITIONAL PASS / GO` lịch sử làm approval để mở phase tiếp theo.
+Round 5 previously blocked P0-03 because the stored five-warning bundle was superseded. The authoritative closeout above replaces it with the current six-warning SELECT-only bundle.
 
 | Task | Verdict | Trạng thái | Blocker chính |
 |---|---|---|---|
 | P0-01 | Đạt | `COMPLETED` | Audit/normal command surfaces đã tách; audit app không đăng ký mutator và không gọi startup maintenance; failure contract pass executable tests |
 | P0-02 | Đạt | `COMPLETED` | Canonical material/schema/digest validation và 9 malformed fixtures đã qua executable review; MySQL strict validator trả `invalid_config_snapshot_sessions=0` |
-| P0-03 | Evidence superseded | `BLOCKED` | Exact code đã có file-digest manifest và current result là `6 WARN`; execution environment chưa có credential cho authorized `SELECT-only` principal để sinh replacement bundle |
+| P0-03 | Đạt có warning đã phân công | `COMPLETED` | Replacement two-run bundle, checksum manifest, spot checks and required regressions passed |
 | P0-04 | Đạt | `COMPLETED` | Rollback sau ORM flush, direct/MCP parity, import/overlay và frontend containment đã có executable evidence; runtime contract changes đã được khai báo |
 
 ## 2. Evidence đã xác minh
@@ -92,7 +108,7 @@ Các mục handoff round 1 ở phần 3–7 được giữ làm lịch sử revi
 
 - [`P0-01_AUDIT_COMMAND_SAFETY.md`](./completed/P0-01_AUDIT_COMMAND_SAFETY.md): `PASSED`; canonical audit-only factory/command surface đã được xác minh.
 - [`P0-02_AUDIT_COVERAGE_AND_DISPOSITION.md`](./completed/P0-02_AUDIT_COVERAGE_AND_DISPOSITION.md): `PASSED`; strict canonical policy/hash validation và negative fixtures đã đạt.
-- [`P0-03_MYSQL_BASELINE_VERIFICATION.md`](./P0-03_MYSQL_BASELINE_VERIFICATION.md): `BLOCKED`; bundle 5-warning đã stale, exact code đã freeze nhưng còn thiếu credential `SELECT-only` để rerun.
+- [`P0-03_MYSQL_BASELINE_VERIFICATION.md`](./completed/P0-03_MYSQL_BASELINE_VERIFICATION.md): `COMPLETED`; current six-warning SELECT-only replacement bundle passed.
 - [`P0-04_BEHAVIOR_ACCEPTANCE_BASELINE.md`](./completed/P0-04_BEHAVIOR_ACCEPTANCE_BASELINE.md): `PASSED`; write-phase rollback và parity evidence đạt gate.
 
 Output tối thiểu khi giao review lần kế tiếp:
@@ -249,7 +265,7 @@ Kế hoạch chi tiết hiện hành nằm tại [`PHASE_0_3_NEXT_EXECUTION_PLAN
 - First runtime task after Phase 0 closes: P1-01 canonical native review transaction.
 - Frontend correctness order: P2-02 → P2-03 → P2-04 → P2-05.
 - Composition decisions P3-05/P3-07 are documentation-only and begin only after authoritative P0-03 evidence exists.
-- No Phase 1–3 implementation is cleared while this handoff remains `NO-GO`.
+- Phase 0 is `GO`; begin P1-01.2 while preserving all downstream dependency gates.
 
 ## 9. Handoff completion template
 

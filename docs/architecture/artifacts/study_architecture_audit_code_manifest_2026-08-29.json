@@ -1,17 +1,17 @@
 {
   "schema_version": "study-architecture-audit-code-manifest.v1",
-  "base_git_commit": "a1d904d38f28a7596e65deaae3f5fe871f762e9f",
-  "worktree_state": "dirty-explicit-file-digest",
+  "base_git_commit": "24c505fdf988c547b7887e3a917069c6393de64a",
+  "worktree_state": "audit-files-clean-unrelated-worktree-dirty",
   "manifest_digest_algorithm": "sha256 of UTF-8 canonical JSON excluding manifest_sha256 (sort_keys=true, separators=[comma,colon])",
-  "manifest_sha256": "c2683814deb57d42804f8d9668c911c338c21bf00333c51c969285c022a24b1d",
+  "manifest_sha256": "51d54a34c5b6f64aa4a058a5ab7637132373cf4a6734bb069d079aa6e3549967",
   "files": [
     {
       "path": "app/__init__.py",
-      "sha256": "0f45cb91c74bc8a36e7005ed3dabed8757100ee1b98974f5f2318e898d7cd97a"
+      "sha256": "8b4f94f087abbc627118ac2a1c5261c4d2a141129563af6173f1f337302673dc"
     },
     {
       "path": "app/cli.py",
-      "sha256": "127c8ee579d6d19c526ec5f0fff226fc735ecc35a149f53777c093e217644378"
+      "sha256": "48e6e35f1e11418da2fa91b5d09784a2b8d298429f579f1a04b37f347235a419"
     },
     {
       "path": "app/services/study_algorithm_registry.py",

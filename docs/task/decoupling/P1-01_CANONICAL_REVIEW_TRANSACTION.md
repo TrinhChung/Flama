@@ -10,7 +10,7 @@
 >
 > Primary lane: Backend Study
 >
-> Preparation status: P1-01.1 read-only investigation COMPLETED on 2026-08-29; runtime work remains gated by P0-03.
+> Preparation status: P1-01.1 read-only investigation COMPLETED on 2026-08-29; P0-03 is closed and P1-01.2 is ready.
 
 ## Mục tiêu
 

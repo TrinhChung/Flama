@@ -1,8 +1,8 @@
 # Phase 0–3 next execution plan — after independent review round 5
 
-> Status: READY FOR HANDOFF; execution remains gated by P0-03
+> Status: PHASE 0 CLOSED; P1-01.2 is the next runtime task
 >
-> Current gate: `P0-01 COMPLETED`, `P0-02 COMPLETED`, `P0-03 BLOCKED`, `P0-04 COMPLETED`, Phase 0 `NO-GO`
+> Current gate: `P0-01 COMPLETED`, `P0-02 COMPLETED`, `P0-03 COMPLETED`, `P0-04 COMPLETED`, Phase 0 `GO`
 >
 > Scope: close P0-03, then sequence the remaining runtime-correctness and composition-contract tasks through INT-01
 >
@@ -10,7 +10,7 @@
 
 ## 1. Outcome and ordering rule
 
-The next executable outcome is not a Phase 1 refactor. It is a replacement P0-03 evidence bundle produced by an authorized `SELECT-only` principal on the exact reviewed audit code state. Until that bundle passes review, Phase 1–3 work below is planning/ownership preparation only.
+The replacement P0-03 evidence bundle has passed review. The next executable outcome is P1-01.2, using the completed P1-01.1 ownership map. Phase 4 remains outside this plan.
 
 After Phase 0 closes, use this order:
 
@@ -82,6 +82,8 @@ To avoid idle time, P1-01.1 may be performed as a read-only draft: map every pro
 Update 2026-08-29: P1-01.1 read-only preparation is complete in `P1-01_CANONICAL_REVIEW_TRANSACTION.md`. It confirms direct REST and MCP share `execute_native_review_command`, while session commit remains the second authoritative native event/side-effect writer and must retain its outer lease/idempotency/atomic transaction boundary during extraction. No runtime or schema change was made.
 
 Update 2026-08-29: P3-05 and P3-07 repository evidence/open-question inventories are also complete. Both remain `TODO`: production distribution, mixed-scope cardinality and applied-composition lifecycle decisions require the accepted P0-03 bundle before ADR approval.
+
+Closeout update 2026-08-29: the SELECT-only replacement bundle passed with 67 categories, 11/11 formulas, 61 PASS, 6 WARN, 0 BLOCK and deterministic two-run output. Step 0 is complete; activate P1-01.2 next and use the assigned warnings as downstream task inputs.
 
 ## 3. Step 1 — P1-01 canonical native review transaction
 
@@ -204,8 +206,8 @@ Do not implement Trigger dispatch before P2-06 is approved. Do not remove v2 dec
 
 ## 10. Immediate handoff
 
-1. Operator exposes the audit-only `SQLALCHEMY_DATABASE_URI` safely to the execution process.
-2. Execute only Step 0 and review the replacement P0-03 bundle.
-3. The credential is still unavailable and the permitted read-only P1-01.1 producer/call graph draft is now complete; do not start runtime extraction under the blocked gate.
-4. If Phase 0 becomes `GO`, review the completed graph and begin P1-01.2; do not extract code before transaction ownership is approved.
-5. Keep frontend and composition implementation lanes queued; activate them only after the Phase 0 closeout update.
+1. P0-03 is complete; retain its six warning classes as explicit downstream inputs.
+2. Review the completed P1-01.1 transaction graph and begin P1-01.2 typed core contract.
+3. Implement P1-01.3–P1-01.7 sequentially and preserve the session outer transaction boundary.
+4. Keep frontend correctness work ordered P2-02 → P2-03 → P2-04 → P2-05.
+5. Review P3-05/P3-07 decisions against the accepted production distribution before P3 implementation.

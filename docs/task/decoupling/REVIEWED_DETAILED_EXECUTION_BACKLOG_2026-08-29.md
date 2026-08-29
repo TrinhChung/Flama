@@ -2,9 +2,9 @@
 
 > Review date: 2026-08-29
 >
-> Status: READY; runtime execution BLOCKED at P0-03
+> Status: ACTIVE; Phase 0 closed and P1-01.2 is next
 >
-> Scope: 19 remaining tasks from P0-03 through INT-01
+> Scope: 18 remaining parent tasks from P1-01 through INT-01
 >
 > Hard boundary: no Phase 4 model, migration, second progress authority, physical clone fallback or source Note/Card mutation
 
@@ -13,10 +13,10 @@
 | State | Tasks | Evidence/next action |
 |---|---|---|
 | Completed and moved to `completed/` | P0-01, P0-02, P0-04, P2-01 | Code, task handoff and focused tests were reviewed and committed. |
-| Blocked | P0-03 | `SQLALCHEMY_DATABASE_URI` and `FLAMA_AUDIT_DATABASE_URI` are absent. Operator must provide an authorized SELECT-only URI through process environment. |
+| Completed | P0-03 | Current SELECT-only two-run bundle, comparison, checksums, spot checks and regressions passed; moved to `completed/`. |
 | Preparation complete; runtime not started | P1-01.1 | Producer/call graph and transaction ownership are documented. |
-| Pre-decision inventory complete; ADR not approved | P3-05, P3-07 | Repository evidence/open questions are documented; production distribution still depends on P0-03. |
-| Queued | P1-01.2–P1-04, P2-02–P2-07, P3-01–P3-06, INT-01 | Execute only in the waves below. |
+| Pre-decision inventory complete; ADR not approved | P3-05, P3-07 | Repository evidence/open questions are documented; the accepted P0-03 distribution is now available for decision review. |
+| Queued | P1-01.2–P1-04, P2-02–P2-07, P3-01–P3-06, INT-01 | Begin with P1-01.2 and execute in the waves below. |
 
 Latest local gate verification:
 
@@ -25,7 +25,7 @@ python -m unittest tests.test_study_architecture_audit_cli tests.test_study_arch
 Result: 33 tests passed
 ```
 
-This does not replace the required MySQL SELECT-only evidence.
+The MySQL SELECT-only evidence is recorded separately in the completed P0-03 bundle.
 
 ## 2. Execution waves
 

@@ -94,7 +94,7 @@
     "note_types": 9,
     "notes": 21822,
     "review_events": 61806,
-    "study_sessions": 34,
+    "study_sessions": 35,
     "templates": 18
   },
   "inventory": [
@@ -629,22 +629,11 @@
     },
     {
       "category": "native_direct_events",
-      "count": 35,
+      "count": 0,
       "description": "ReviewEvents executed directly via native review actions outside sessions.",
       "disposition": "native_direct_reviews",
       "gate_group": "review_event",
-      "sample_ids": [
-        1,
-        2,
-        3,
-        4,
-        5,
-        6,
-        7,
-        8,
-        9,
-        10
-      ],
+      "sample_ids": [],
       "severity": "pass"
     },
     {
@@ -676,16 +665,27 @@
     },
     {
       "category": "unknown_provenance_events",
-      "count": 0,
+      "count": 35,
       "description": "ReviewEvents with unclassifiable or ambiguous provenance markers.",
       "disposition": "needs_verification_provenance",
       "gate_group": "review_event",
-      "sample_ids": [],
-      "severity": "pass"
+      "sample_ids": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "severity": "warn"
     },
     {
       "category": "open_sessions",
-      "count": 18,
+      "count": 19,
       "description": "Total study sessions in open status.",
       "disposition": "total_open_sessions",
       "gate_group": "session",
@@ -694,11 +694,13 @@
     },
     {
       "category": "active_open_sessions",
-      "count": 0,
+      "count": 1,
       "description": "StudySession records open and currently within expiration lease.",
       "disposition": "active_open_sessions",
       "gate_group": "session",
-      "sample_ids": [],
+      "sample_ids": [
+        "2d3145d2-7d2a-42c3-8036-1cca7bf5e4a9"
+      ],
       "severity": "pass"
     },
     {
@@ -879,7 +881,7 @@
       "severity": "pass"
     }
   ],
-  "observed_at": "2026-08-29T05:09:32",
+  "observed_at": "2026-08-29T08:05:17",
   "progress_gates": {
     "divergent_fan_in_groups": 0,
     "divergent_fan_in_samples": [],
@@ -996,19 +998,8 @@
     "missing_session_sequence_events": 0,
     "native_batch_events": 0,
     "native_batch_samples": [],
-    "native_direct_events": 35,
-    "native_direct_samples": [
-      1,
-      2,
-      3,
-      4,
-      5,
-      6,
-      7,
-      8,
-      9,
-      10
-    ],
+    "native_direct_events": 0,
+    "native_direct_samples": [],
     "native_mcp_events": 0,
     "native_mcp_samples": [],
     "native_session_events": 126,
@@ -1063,8 +1054,19 @@
       9,
       10
     ],
-    "unknown_provenance_events": 0,
-    "unknown_provenance_samples": []
+    "unknown_provenance_events": 35,
+    "unknown_provenance_samples": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
+    ]
   },
   "revision_gates": {
     "active_revision_rows": 11247,
@@ -1102,8 +1104,10 @@
   "schema_version": "study-architecture-audit.v3",
   "session_gates": {
     "abandoned_sessions": 0,
-    "active_open_sessions": 0,
-    "active_open_sessions_samples": [],
+    "active_open_sessions": 1,
+    "active_open_sessions_samples": [
+      "2d3145d2-7d2a-42c3-8036-1cca7bf5e4a9"
+    ],
     "active_session_unavailable_algo_samples": [],
     "active_session_unavailable_algorithm_sessions": 0,
     "cancelled_sessions": 0,
@@ -1127,7 +1131,7 @@
     "invalid_config_snapshot_sessions": 0,
     "missing_snapshot_samples": [],
     "missing_snapshot_sessions": 0,
-    "open_sessions": 18,
+    "open_sessions": 19,
     "unavailable_session_algorithm_sessions": 0,
     "unknown_status_sessions": 0,
     "unknown_status_sessions_samples": []
@@ -1222,13 +1226,12 @@
       "missing_session_sequence_events: 0",
       "anki_import_events: 61645",
       "native_session_events: 126",
-      "native_direct_events: 35",
+      "native_direct_events: 0",
       "native_mcp_events: 0",
       "native_batch_events: 0",
       "conflicting_provenance_events: 0",
-      "unknown_provenance_events: 0",
-      "open_sessions: 18",
-      "active_open_sessions: 0",
+      "open_sessions: 19",
+      "active_open_sessions: 1",
       "committed_sessions: 16",
       "cancelled_sessions: 0",
       "abandoned_sessions: 0",
@@ -1250,6 +1253,7 @@
       "open_session_stale_revisions: StudySessionCards in open sessions whose base revision has drifted. (751 item(s))",
       "orphan_card_id_events: ReviewEvent records referencing detached or deleted Cards. (40 item(s))",
       "null_algorithm_events: ReviewEvent records with NULL scheduler_algorithm. (35 item(s))",
+      "unknown_provenance_events: ReviewEvents with unclassifiable or ambiguous provenance markers. (35 item(s))",
       "expired_open_sessions: StudySession records open past their expiration timestamp. (18 item(s))"
     ]
   }

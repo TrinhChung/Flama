@@ -10,7 +10,7 @@
 >
 > Primary lane: Product architecture / Backend + Frontend contract
 >
-> Preparation status: repository evidence and blocking questions collected on 2026-08-29; decision remains gated by P0-03.
+> Preparation status: repository evidence and blocking questions collected on 2026-08-29; P0-03 evidence is now available for the decision review.
 
 ## Mục tiêu
 

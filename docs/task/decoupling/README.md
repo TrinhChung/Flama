@@ -1,16 +1,16 @@
 # Phase 0–3 Decoupling Task Backlog
 
-> Status: ACTIVE backlog; runtime execution is blocked at P0-03
+> Status: ACTIVE backlog; Phase 0 closed, next task P1-01.2
 >
 > Source of truth: `docs/architecture/study-interaction-trigger-algorithm-plan.md`
 >
 > Progress review: `docs/architecture/decoupling-progress-review-2026-08-29.md`
 >
-> Latest Phase 0 gate review/handoff: [`P0_PHASE_REVIEW_HANDOFF_2026-08-29.md`](./P0_PHASE_REVIEW_HANDOFF_2026-08-29.md) — **NO-GO; P0-01/P0-02/P0-04 COMPLETED, P0-03 BLOCKED pending SELECT-only rerun**.
+> Latest Phase 0 gate review/handoff: [`P0_PHASE_REVIEW_HANDOFF_2026-08-29.md`](./P0_PHASE_REVIEW_HANDOFF_2026-08-29.md) — **GO; P0-01 through P0-04 COMPLETED**.
 >
 > Next execution plan: [`PHASE_0_3_NEXT_EXECUTION_PLAN_2026-08-29.md`](./PHASE_0_3_NEXT_EXECUTION_PLAN_2026-08-29.md) — close P0-03 first, then P1-01 as the first runtime refactor.
 >
-> Reviewed detailed backlog: [`REVIEWED_DETAILED_EXECUTION_BACKLOG_2026-08-29.md`](./REVIEWED_DETAILED_EXECUTION_BACKLOG_2026-08-29.md) — 19 remaining tasks with execution slices, required outputs and gates.
+> Reviewed detailed backlog: [`REVIEWED_DETAILED_EXECUTION_BACKLOG_2026-08-29.md`](./REVIEWED_DETAILED_EXECUTION_BACKLOG_2026-08-29.md) — 18 remaining parent tasks with execution slices, required outputs and gates.
 >
 > Scope boundary: chỉ đóng các phần còn thiếu của Phase 0–3. Không tạo model, migration, progress store hoặc physical Template/NoteType schema mới.
 
@@ -81,7 +81,7 @@ Historical dependency note: `P2-01` has been merged, but the current reviewed ex
 |---|---|---|---|
 | P0-01 | [Audit command safety and machine-readable contract](./completed/P0-01_AUDIT_COMMAND_SAFETY.md) | P2-01 | entrypoint read-only, exit code, schema output, tests |
 | P0-02 | [Audit coverage and disposition inventory](./completed/P0-02_AUDIT_COVERAGE_AND_DISPOSITION.md) | P0-01 | đầy đủ anomaly categories, counts/samples/dispositions |
-| P0-03 | [MySQL baseline verification and drift snapshot](./P0-03_MYSQL_BASELINE_VERIFICATION.md) | P0-02 + P0-04 + operator authorization | production-like evidence report và go/no-go verdict |
+| P0-03 | [MySQL baseline verification and drift snapshot](./completed/P0-03_MYSQL_BASELINE_VERIFICATION.md) | P0-02 + P0-04 + operator authorization | `COMPLETED`; current SELECT-only evidence bundle and Phase 0 GO verdict |
 | P0-04 | [Behavior acceptance baseline](./completed/P0-04_BEHAVIOR_ACCEPTANCE_BASELINE.md) | P2-01 | characterization matrix cho clone/import/due/direct/MCP/batch/keyboard |
 
 ### Phase 1 — Runtime boundaries without storage change

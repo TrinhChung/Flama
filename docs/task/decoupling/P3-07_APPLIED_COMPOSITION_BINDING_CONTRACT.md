@@ -10,7 +10,7 @@
 >
 > Primary lane: Architecture / Template / Study
 >
-> Preparation status: current responsibility map and deferred decision questions collected on 2026-08-29; ADR remains gated by P0-03.
+> Preparation status: current responsibility map and deferred decision questions collected on 2026-08-29; P0-03 evidence is now available for the ADR review.
 
 ## Mục tiêu
 

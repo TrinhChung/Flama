@@ -4,13 +4,52 @@
 >
 > Priority: P0
 >
-> Status: BLOCKED
+> Status: COMPLETED
 >
-> Review verdict round 5 — 2026-08-29: BLOCKED / AWAITING SELECT-ONLY CREDENTIAL. P0-02 đã đạt và exact dirty code state đã được freeze bằng file-digest manifest; stored 5-warning bundle vẫn superseded và chưa thể sinh lại bằng principal kiểm toán vì credential `flama_audit_ro` không có trong execution environment.
+> Replacement bundle verdict — 2026-08-29: PASS / CONDITIONAL GO. Two current runs were produced by `flama_audit`@`localhost` with SELECT-only grants; 67 categories, 11/11 formulas, 61 PASS, 6 WARN, 0 BLOCK and zero semantic two-run drift.
 >
-> Dependency: P0-01, P0-02 and P0-04 completed; operator must expose an authorized SELECT-only audit URI
+> Dependency: P0-01, P0-02 and P0-04 completed; SELECT-only execution completed
 >
 > Primary lane: Operations / Data architecture
+
+## Authoritative replacement closeout — 2026-08-29
+
+- Principal preflight: `flama_audit`@`localhost`, database `nihongo`, MySQL `8.0.40`; SELECT present and INSERT/UPDATE/DELETE/CREATE/ALTER/DROP/GRANT OPTION absent.
+- Code identity: base commit `24c505fdf988c547b7887e3a917069c6393de64a`; all audit-runtime files verified by `study_architecture_audit_code_manifest_2026-08-29.json`.
+- Run 1: `2026-08-29T08:05:08`, exit `1` (`WARN`).
+- Run 2: `2026-08-29T08:05:17`, exit `1` (`WARN`).
+- Determinism: only `$.observed_at` differs; semantic diff count `0`.
+- Inventory: 67 categories; 61 pass, 6 warn, 0 block.
+- Reconciliation: 11/11 formula checks valid.
+- Primary artifact SHA-256: `8b7c7f36fa6f2049bda0a82f8f0de10ca5b68a4c54c31ccf995b06c47e0d4484`.
+- Alembic revision: `20260902_000031`.
+- Independent SELECT-only spot checks confirmed duplicate template positions, three stale session-card revisions, three detached review events, NULL algorithm samples, an expired open session and 61,645 historical Anki revlog events.
+
+Warning ownership:
+
+| Warning | Count | Disposition | Downstream owner |
+|---|---:|---|---|
+| `duplicate_position_groups` | 1 | Review deterministic Template ordering | P1-01 |
+| `open_session_stale_revisions` | 751 | Enforce external/session revision contract | P1-02 / P2-02 |
+| `orphan_card_id_events` | 40 | Retain immutable history and classify detached references | P1-03 |
+| `null_algorithm_events` | 35 | Define legacy decoder/retirement behavior | P1-04 |
+| `unknown_provenance_events` | 35 | Classify without inventing provenance | P1-03 |
+| `expired_open_sessions` | 18 | Define cleanup/restore lifecycle | P2-02 / P3-04 |
+
+Verification:
+
+```text
+.venv\Scripts\python.exe -m unittest tests.test_study_architecture_audit_cli tests.test_study_architecture_audit_service tests.test_study_behavior_acceptance_baseline
+PASS — 33 tests
+
+.venv\Scripts\python.exe scripts/run_tests.py --module study --backend-only
+PASS — 13 files / 97 tests
+
+.venv\Scripts\python.exe scripts/run_tests.py --module connect_mcp --backend-only
+PASS — 13 files / 161 tests
+```
+
+Primary outcome: current redacted SELECT-only MySQL evidence replaces the superseded five-warning bundle and clears Phase 0. No DDL/DML, application runtime or schema change was made. Historical review sections below are retained as audit history; this section and the status header are authoritative.
 
 ## Mục tiêu
 
@@ -389,4 +428,4 @@ Follow-up task IDs: P1-01, P1-02, P1-03, P1-04, P2-02, P3-04.
 Reviewer gate result: PASS (Conditional GO — Phase 0 Ready for Closeout).
 ```
 
-> **Authoritative status after the historical Round 4 handoff:** use the document header and `Independent review round 5 — 2026-08-29`. P0-03 is `BLOCKED`; the historical conditional pass above is superseded and cannot close Phase 0.
+> **Historical note:** the Round 4/5 verdicts above were superseded by `Authoritative replacement closeout — 2026-08-29` and the `COMPLETED` status header.

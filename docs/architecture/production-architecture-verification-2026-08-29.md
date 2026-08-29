@@ -1,50 +1,49 @@
 # Production Architecture Verification & Baseline Snapshot — 2026-08-29
 
-> **Task Reference**: [P0-03 — MySQL baseline verification and drift snapshot](../task/decoupling/P0-03_MYSQL_BASELINE_VERIFICATION.md)
-> **Status**: **SUPERSEDED / NOT APPROVED — Independent review round 5**
+> **Task Reference**: [P0-03 — MySQL baseline verification and drift snapshot](../task/decoupling/completed/P0-03_MYSQL_BASELINE_VERIFICATION.md)
+> **Status**: **APPROVED — Replacement SELECT-only bundle**
 > **Schema Version**: `study-architecture-audit.v3`
 > **Alembic Revision**: `20260902_000031`
 > **MySQL Engine Version**: `8.0.40` (InnoDB UTF8mb4)
-> **App Commit**: `a1d904d38f28a7596e65deaae3f5fe871f762e9f` (+ working-tree decoupling audit bundle)
-> **Observed Timestamp**: `2026-08-29T05:09:22 UTC` (Run 1) / `2026-08-29T05:09:32 UTC` (Run 2)
-> **Principal Identity**: SELECT-only (`flama_audit_ro`@`localhost`, rotated credentials)
-> **Historical Audit CLI Exit Code**: `1` (`WARN` — 0 BLOCK, 5 WARN / 5 Non-pass Inventory Items)
-> **Phase 0 Gate Readiness**: **NO-GO — P0-02 is `COMPLETED`; P0-03 remains `BLOCKED` pending a SELECT-only rerun**
+> **App Commit**: `24c505fdf988c547b7887e3a917069c6393de64a` with audit-file digest manifest
+> **Observed Timestamp**: `2026-08-29T08:05:08 UTC` (Run 1) / `2026-08-29T08:05:17 UTC` (Run 2)
+> **Principal Identity**: SELECT-only (`flama_audit`@`localhost`; credential redacted)
+> **Audit CLI Exit Code**: `1` (`WARN` — 0 BLOCK, 6 WARN / 6 Non-pass Inventory Items)
+> **Phase 0 Gate Readiness**: **GO — P0-01 through P0-04 completed; warnings assigned to downstream tasks**
 
-## Independent review round 5 supersession notice
+## Replacement bundle approval — 2026-08-29
 
-This report preserves a valid two-run snapshot of the pre-final audit code, but it is not the current Phase 0 approval bundle. The authoritative task verdict is [P0_PHASE_REVIEW_HANDOFF_2026-08-29.md](../task/decoupling/P0_PHASE_REVIEW_HANDOFF_2026-08-29.md).
+The former five-warning bundle was replaced after the SELECT-only credential became available. This report and the linked artifacts now describe the exact reviewed audit code identified by the code manifest.
 
-- Stored artifacts contain `67` categories, `11/11` valid formulas and `62 PASS / 5 WARN / 0 BLOCK`.
-- Canonical audit rerun on current code/MySQL contains `67` categories, `11/11` valid formulas and `61 PASS / 6 WARN / 0 BLOCK` because tightened provenance classification now reports `unknown_provenance_events=35`.
-- The audit service was modified after the stored runs. The current exact dirty state is now identified by `artifacts/study_architecture_audit_code_manifest_2026-08-29.json`, but the stored runs still predate that state.
-- P0-02 fixed the session-policy false negative and passed strict canonical digest/schema negative coverage.
-- P0-01 and P0-04 passed independent review; they do not make this stale P0-03 bundle current.
-- SELECT-only grants were independently confirmed. Credential rotation remains an external operational assertion and no secret is included in this report.
+- Both canonical runs contain `67` categories, `11/11` valid formulas and `61 PASS / 6 WARN / 0 BLOCK`.
+- The only two-run difference is the declared top-level `observed_at`; semantic diff is empty.
+- The principal has `SELECT` on `nihongo.*` and no INSERT/UPDATE/DELETE/CREATE/ALTER/DROP/GRANT OPTION privilege.
+- The replacement bundle includes raw runs, baseline, comparison, code manifest and a SHA-256 checksum manifest.
+- All six warnings are non-blocking, have bounded samples/dispositions and are assigned to P1/P2 follow-up tasks.
 
 ---
 
-## 1. Historical Scope, Environment Metadata & Safety Verification
+## 1. Scope, Environment Metadata & Safety Verification
 
 ### 1.1 Environment & Execution Metadata
 | Key | Captured Value | Verification Notes |
 |---|---|---|
 | **Environment Name** | Local MySQL Development / Staging Baseline | Host: `localhost:3306`, Database: `nihongo` |
-| **App Git Commit** | `a1d904d38f28a7596e65deaae3f5fe871f762e9f` | Base commit via `git rev-parse HEAD` |
+| **App Git Commit** | `24c505fdf988c547b7887e3a917069c6393de64a` | Audit files verified by SHA-256 manifest; unrelated worktree changes excluded |
 | **Alembic Head** | `20260902_000031` | Verified via `alembic_version` table |
 | **Database Server** | MySQL `8.0.40` (InnoDB UTF8mb4) | Query: `SELECT VERSION()` |
 | **Audit Schema** | `study-architecture-audit.v3` | Migration-grade machine-readable schema |
-| **Observed At** | `2026-08-29T05:09:22 UTC` (Run 1) / `2026-08-29T05:09:32 UTC` (Run 2) | Deterministic timestamp snapshots |
+| **Observed At** | `2026-08-29T08:05:08 UTC` (Run 1) / `2026-08-29T08:05:17 UTC` (Run 2) | Deterministic timestamp snapshots |
 | **Two-Run Determinism** | `True` (100% identical payloads, 0 diffs excluding timestamp) | Comparison artifact saved to `docs/architecture/artifacts/study_architecture_audit_determinism_comparison_2026-08-29.json` |
 | **Execution Entrypoint** | Dedicated `wsgi_audit.py` | Maintenance-disabled factory (`create_audit_app`) |
 
 ### 1.2 Redacted SELECT-Only Principal Grant Proof
-The audit execution was executed strictly under a dedicated, unprivileged read-only database principal (`flama_audit_ro`@`localhost`) with freshly rotated credentials.
+The audit execution ran strictly under the dedicated, unprivileged read-only database principal `flama_audit`@`localhost`.
 
 ```sql
--- Query: SHOW GRANTS FOR 'flama_audit_ro'@'localhost';
-GRANT USAGE ON *.* TO `flama_audit_ro`@`localhost`;
-GRANT SELECT ON `nihongo`.* TO `flama_audit_ro`@`localhost`;
+-- Query: SHOW GRANTS FOR 'flama_audit'@'localhost';
+GRANT USAGE ON *.* TO `flama_audit`@`localhost`;
+GRANT SELECT ON `nihongo`.* TO `flama_audit`@`localhost`;
 ```
 
 ### 1.3 Read-Only Invariant Enforcement
@@ -55,9 +54,9 @@ GRANT SELECT ON `nihongo`.* TO `flama_audit_ro`@`localhost`;
 
 ---
 
-## 2. Historical Executive Verification Summary
+## 2. Executive Verification Summary
 
-The PASS cells below describe the stored Round 4 snapshot and are superseded as Phase 0 approval evidence.
+The PASS cells below describe the approved replacement bundle.
 
 | Dimension | Verification Finding | Verdict |
 |---|---|---|
@@ -70,7 +69,7 @@ The PASS cells below describe the stored Round 4 snapshot and are superseded as 
 
 ---
 
-## 3. Stored Audit Gate Metrics & Disposition Inventory (`v3`)
+## 3. Audit Gate Metrics & Disposition Inventory (`v3`)
 
 ### 3.1 Entity Accounting Summary
 | Entity | Monitored Table | Captured Count | State / Authority |
@@ -80,8 +79,8 @@ The PASS cells below describe the stored Round 4 snapshot and are superseded as 
 | **Notes** | `notes` | `21,822` | Content source of truth |
 | **Cards** | `cards` | `21,822` | Generated study targets |
 | **CardProgress** | `card_progress` | `11,247` | **Sole progress authority** (0 nulls, 0 orphans, 0 divergent fan-ins) |
-| **ReviewEvents** | `review_events` | `61,806` | Historical provenance tracked (61,645 Anki import + 126 session + 35 direct) |
-| **StudySessions** | `study_sessions` | `34` | Leases bounded (16 committed, 18 expired open, 0 active) |
+| **ReviewEvents** | `review_events` | `61,806` | Historical provenance tracked (61,645 Anki import + 126 session + 35 legacy unknown) |
+| **StudySessions** | `study_sessions` | `35` | Leases bounded (16 committed, 18 expired open, 1 active open) |
 | **DeckInstalls** | `deck_installs` | `3` | Overlay pointer mode (`logical_overlay`) |
 
 ### 3.2 Complete 67-Category Inventory & Disposition Matrix
@@ -131,13 +130,13 @@ The PASS cells below describe the stored Round 4 snapshot and are superseded as 
 | 42 | `missing_session_sequence_events` | review_event | 0 | **PASS** | `[]` | `review_session_events_missing_sequence` | ReviewEvents in session lacking sequence_no. |
 | 43 | `anki_import_events` | review_event | 61,645 | **PASS** | `[623, 624, 625, 626, 627, 628, 629, 630, ...]` | `anki_import_reviews` | ReviewEvents imported from Anki revlogs. |
 | 44 | `native_session_events` | review_event | 126 | **PASS** | `[135, 136, 137, 138, 139, 140, 141, 142, ...]` | `native_session_reviews` | ReviewEvents completed in native frontend study sessions. |
-| 45 | `native_direct_events` | review_event | 35 | **PASS** | `[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]` | `native_direct_reviews` | ReviewEvents executed directly outside sessions. |
+| 45 | `native_direct_events` | review_event | 0 | **PASS** | `[]` | `native_direct_reviews` | ReviewEvents executed directly outside sessions with sufficient native provenance. |
 | 46 | `native_mcp_events` | review_event | 0 | **PASS** | `[]` | `native_mcp_reviews` | ReviewEvents initiated via Flama MCP connect tools. |
 | 47 | `native_batch_events` | review_event | 0 | **PASS** | `[]` | `native_batch_reviews` | ReviewEvents processed in bulk batch review operations. |
 | 48 | `conflicting_provenance_events` | review_event | 0 | **PASS** | `[]` | `quarantine_conflicting_provenance` | ReviewEvents with mutually contradictory provenance signals. |
-| 49 | `unknown_provenance_events` | review_event | 0 | **PASS** | `[]` | `needs_verification_provenance` | ReviewEvents with unclassifiable provenance markers. |
-| 50 | `open_sessions` | session | 18 | **PASS** | `[]` | `total_open_sessions` | Total study sessions in open status. |
-| 51 | `active_open_sessions` | session | 0 | **PASS** | `[]` | `active_open_sessions` | StudySession records open and currently active within lease. |
+| 49 | `unknown_provenance_events` | review_event | 35 | **WARN** | `[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]` | `needs_verification_provenance` | Legacy ReviewEvents with insufficient evidence for a native/external classification. (**P1-03**) |
+| 50 | `open_sessions` | session | 19 | **PASS** | `[]` | `total_open_sessions` | Total study sessions in open status. |
+| 51 | `active_open_sessions` | session | 1 | **PASS** | `[]` | `active_open_sessions` | StudySession records open and currently active within lease. |
 | 52 | `expired_open_sessions` | session | 18 | **WARN** | `["10dbb26e-...", "20b37a1f-..."]` | `expire_stale_sessions` | StudySession records open past expiration. (**P2-02 / P3-04**) |
 | 53 | `committed_sessions` | session | 16 | **PASS** | `[]` | `committed_sessions` | StudySession records successfully committed. |
 | 54 | `cancelled_sessions` | session | 0 | **PASS** | `[]` | `cancelled_sessions` | StudySession records explicitly cancelled. |
@@ -166,6 +165,7 @@ The PASS cells below describe the stored Round 4 snapshot and are superseded as 
 | **WARN** | `open_session_stale_revisions` | 751 | `[249, 619, 620, 621, 622, 623, 624, 625, 626, 627]` | Stale base revisions in uncommitted historical sessions | **P1-02 / P2-02** | Backend & Frontend Study Session |
 | **WARN** | `orphan_card_id_events` | 40 | `[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]` | Historical review events retained after card deletion | **P1-03** | Operations / Analytics Data |
 | **WARN** | `null_algorithm_events` | 35 | `[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]` | Early native direct reviews with NULL scheduler_algorithm | **P1-04** | Backend / Scheduler Engine |
+| **WARN** | `unknown_provenance_events` | 35 | `[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]` | Legacy events lack sufficient channel evidence; no provenance is invented | **P1-03** | Backend Study / Audit |
 | **WARN** | `expired_open_sessions` | 18 | `["10dbb26e-74b7-4050-9b95-d6551b30ace4", ...]` | Open sessions whose lease expired prior to commit | **P2-02 / P3-04** | Backend & Frontend Study Session |
 
 ---
@@ -175,7 +175,7 @@ The PASS cells below describe the stored Round 4 snapshot and are superseded as 
 |---|---|---|---|---:|---:|
 | `anki` | `anki` | `revlog-v1` | **import** (Yomitan / Anki Connect bridge) | `61,645` | 99.74% |
 | `legacy` | `legacy-anki` | `1.0.0` | **native** (Native Flama Study Engine) | `126` | 0.20% |
-| `legacy` | `NULL` | `NULL` | **native** (Early Native Direct Reviews) | `35` | 0.06% |
+| `legacy` | `NULL` | `NULL` | **unknown legacy provenance** | `35` | 0.06% |
 | **Total** | | | | **61,806** | **100.00%** |
 
 ---
@@ -188,13 +188,13 @@ The PASS cells below describe the stored Round 4 snapshot and are superseded as 
 | 2 | `card_progress_fan_in_consistency` | $\text{equivalent\_fan\_in} + \text{divergent\_fan\_in} == \text{fan\_in\_groups}$ | $0 + 0 == 0$ | **VALID** |
 | 3 | `card_progress_revision_accounting` | $\text{zero\_rev\_rows} + \text{active\_rev\_rows} + \text{invalid\_rev\_rows} == \text{total\_cp}$ | $0 + 11247 + 0 == 11247$ | **VALID** |
 | 4 | `review_events_attached_accounting` | $\text{attached\_events} + \text{orphan\_events} == \text{total\_events}$ | $61766 + 40 == 61806$ | **VALID** |
-| 5 | `review_events_provenance_accounting` | $\text{anki\_import} + \text{session} + \text{mcp} + \text{batch} + \text{direct} + \text{conflict} + \text{unknown} == \text{total}$ | $61645 + 126 + 0 + 0 + 35 + 0 + 0 == 61806$ | **VALID** |
+| 5 | `review_events_provenance_accounting` | $\text{anki\_import} + \text{session} + \text{mcp} + \text{batch} + \text{direct} + \text{conflict} + \text{unknown} == \text{total}$ | $61645 + 126 + 0 + 0 + 0 + 0 + 35 == 61806$ | **VALID** |
 | 6 | `review_events_algorithm_accounting` | $\text{registered} + \text{historical\_import} + \text{unregistered\_native} + \text{missing\_version} + \text{null\_algo} == \text{total}$ | $126 + 61645 + 0 + 0 + 35 == 61806$ | **VALID** |
-| 7 | `study_sessions_status_accounting` | $\text{open} + \text{committed} + \text{cancelled} + \text{abandoned} + \text{unknown} == \text{total\_sessions}$ | $18 + 16 + 0 + 0 + 0 == 34$ | **VALID** |
-| 8 | `study_sessions_open_accounting` | $\text{active\_open\_sessions} + \text{expired\_open\_sessions} == \text{open\_sessions}$ | $0 + 18 == 18$ | **VALID** |
+| 7 | `study_sessions_status_accounting` | $\text{open} + \text{committed} + \text{cancelled} + \text{abandoned} + \text{unknown} == \text{total\_sessions}$ | $19 + 16 + 0 + 0 + 0 == 35$ | **VALID** |
+| 8 | `study_sessions_open_accounting` | $\text{active\_open\_sessions} + \text{expired\_open\_sessions} == \text{open\_sessions}$ | $1 + 18 == 19$ | **VALID** |
 | 9 | `note_types_template_accounting` | $\text{no\_template} + \text{single\_default} + \text{multi\_default} + \text{zero\_default} == \text{total\_nt}$ | $0 + 9 + 0 + 0 == 9$ | **VALID** |
 | 10 | `cards_clone_overlay_accounting` | $\text{installed\_cards} + \text{clone\_added\_cards} + \text{local\_cards} + \text{unassigned} + \text{orphan} == \text{total}$ | $39 + 0 + 21783 + 0 + 0 == 21822$ | **VALID** |
-| 11 | `inventory_verdict_accounting` | $\text{len}(\{i \in \text{inventory} \mid i.\text{severity} \neq \text{'pass'}\}) == \text{len}(\text{verdicts.warn}) + \text{len}(\text{verdicts.block})$ | $5 == 5 + 0$ | **VALID** |
+| 11 | `inventory_verdict_accounting` | $\text{len}(\{i \in \text{inventory} \mid i.\text{severity} \neq \text{'pass'}\}) == \text{len}(\text{verdicts.warn}) + \text{len}(\text{verdicts.block})$ | $6 == 6 + 0$ | **VALID** |
 
 ---
 
@@ -207,7 +207,7 @@ The PASS cells below describe the stored Round 4 snapshot and are superseded as 
    - Historical Anki revlog imported events (61,645 rows) are partitioned cleanly into `historical_imported_algorithm_events` (`severity: pass`), eliminating historical false warnings and double-counting anomalies.
 3. **Dedicated Entrypoint & Principal Security**:
    - Executed strictly via dedicated `wsgi_audit.py` with maintenance-disabled factory `create_audit_app()`.
-   - Principal credentials rotated; SELECT-only grant proof verified.
+   - SELECT-only grant proof verified for `flama_audit`@`localhost`.
 4. **Determinism Verification**:
    - Consecutive audit executions (Run 1 and Run 2) produce 100% byte-for-byte identical payloads (0 differences excluding timestamp), saved in machine-readable comparison artifact.
 
@@ -218,13 +218,14 @@ The PASS cells below describe the stored Round 4 snapshot and are superseded as 
 The audit artifacts generated from the verified MySQL execution contain zero credentials, learner answers, or user PII.
 
 - **Primary Baseline Artifact**: [`docs/architecture/artifacts/study_architecture_audit_baseline_2026-08-29.json`](./artifacts/study_architecture_audit_baseline_2026-08-29.json)
-  - **File Size**: `40,678 bytes` (1,256 lines)
-  - **SHA-256 Checksum**: `3eaa6123c5bf02bffb27db3c1a32ee172fe5b8212fb60a0fbecd39c16f4fd511`
+  - **File Size**: `40,862 bytes` (1,260 lines)
+  - **SHA-256 Checksum**: `8b7c7f36fa6f2049bda0a82f8f0de10ca5b68a4c54c31ccf995b06c47e0d4484`
 - **Two-Run Comparison Artifact**: [`docs/architecture/artifacts/study_architecture_audit_determinism_comparison_2026-08-29.json`](./artifacts/study_architecture_audit_determinism_comparison_2026-08-29.json)
   - **Determinism Status**: `deterministic_excluding_timestamp: true`
   - **Differences Found**: `[]` (0 differences)
 - **Raw Run 1 Output**: [`docs/architecture/artifacts/study_architecture_audit_run1_2026-08-29.json`](./artifacts/study_architecture_audit_run1_2026-08-29.json)
 - **Raw Run 2 Output**: [`docs/architecture/artifacts/study_architecture_audit_run2_2026-08-29.json`](./artifacts/study_architecture_audit_run2_2026-08-29.json)
+- **Bundle Checksum Manifest**: [`docs/architecture/artifacts/study_architecture_audit_bundle_checksums_2026-08-29.json`](./artifacts/study_architecture_audit_bundle_checksums_2026-08-29.json)
 
 ---
 
@@ -232,7 +233,7 @@ The audit artifacts generated from the verified MySQL execution contain zero cre
 
 ### 6.1 Audit Execution with SELECT-Only Principal
 ```powershell
-$env:SQLALCHEMY_DATABASE_URI = "mysql+pymysql://flama_audit_ro:<REDACTED>@localhost:3306/nihongo?charset=utf8mb4"
+$env:SQLALCHEMY_DATABASE_URI = "mysql+pymysql://flama_audit:<REDACTED>@localhost:3306/nihongo?charset=utf8mb4"
 $env:STARTUP_RUN_MAINTENANCE = "False"
 
 # Run 1:
@@ -249,7 +250,7 @@ $env:STARTUP_RUN_MAINTENANCE = "False"
 # Direct verification of bounded sample IDs via independent read-only queries with SELECT-only principal
 .venv\Scripts\python.exe -c "
 import os
-os.environ['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://flama_audit_ro:<REDACTED>@localhost:3306/nihongo?charset=utf8mb4'
+os.environ['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://flama_audit:<REDACTED>@localhost:3306/nihongo?charset=utf8mb4'
 os.environ['STARTUP_RUN_MAINTENANCE'] = 'False'
 from wsgi_audit import create_app
 from models import db
@@ -308,20 +309,25 @@ with app.app_context():
 
 ### 6.3 Automated Domain Test Suite Evidence
 ```powershell
-.venv\Scripts\python.exe scripts/run_tests.py --module study,connect_mcp --backend-only
+.venv\Scripts\python.exe -m unittest tests.test_study_architecture_audit_cli tests.test_study_architecture_audit_service tests.test_study_behavior_acceptance_baseline
+# Result: 33 tests passed in 54.005s
 
-# Result: 26 test files (257 tests) passed in 163.62s (100% green)
+.venv\Scripts\python.exe scripts/run_tests.py --module study --backend-only
+# Result: 13 files / 97 tests passed in 91.28s
+
+.venv\Scripts\python.exe scripts/run_tests.py --module connect_mcp --backend-only
+# Result: 13 files / 161 tests passed in 139.88s
 ```
 
 ---
 
 ## 7. Phase 0 Exit Gate Decision
 
-> **Verdict**: **NO-GO — stored evidence is superseded and Phase 0 is not ready for closeout.**
+> **Verdict**: **GO — replacement evidence is current and Phase 0 is closed.**
 
-1. P0-02 is `COMPLETED`: strict canonical policy/hash validation and malformed snapshot fixtures pass.
-2. P0-03 is `BLOCKED`: stored output has 5 warnings while current code/MySQL has 6, including `unknown_provenance_events=35`.
-3. Current audit code is identified by the explicit file-digest manifest, but the stored two-run output was generated from an earlier state.
-4. The replacement bundle still requires an authorized `SELECT-only` URI that is not available in the current execution environment.
+1. P0-01, P0-02 and P0-04 remain `COMPLETED` and their focused regression suites pass.
+2. P0-03 replacement output contains the current six-warning classification, including `unknown_provenance_events=35`.
+3. The current audit code is identified by the verified file-digest manifest; both runs were generated from that state.
+4. SELECT-only preflight, two-run determinism, independent spot checks, artifact checksums and required regression suites all pass.
 
-Phase 1 is not cleared by this report. P0-01, P0-02 and P0-04 are independently accepted; expose the audit URI through a safe secret/environment mechanism, then create and review the replacement P0-03 evidence bundle.
+Phase 1 planning may now proceed with P1-01.2. The six warnings remain explicit downstream work and are not claims that the affected data was repaired during this read-only task.

@@ -1,6 +1,6 @@
 {
-  "run1_timestamp": "2026-08-29T05:09:22",
-  "run2_timestamp": "2026-08-29T05:09:32",
+  "run1_timestamp": "2026-08-29T08:05:08",
+  "run2_timestamp": "2026-08-29T08:05:17",
   "run1_exit_code": 1,
   "run2_exit_code": 1,
   "schema_version": "study-architecture-audit.v3",
@@ -8,9 +8,9 @@
   "reconciliation_formulas_count": 11,
   "reconciliation_status": "VALID",
   "overall_status": "WARN",
-  "warnings_count": 5,
+  "warnings_count": 6,
   "blockers_count": 0,
   "deterministic_excluding_timestamp": true,
   "differences_found": [],
-  "primary_artifact_sha256": "3eaa6123c5bf02bffb27db3c1a32ee172fe5b8212fb60a0fbecd39c16f4fd511"
+  "primary_artifact_sha256": "8b7c7f36fa6f2049bda0a82f8f0de10ca5b68a4c54c31ccf995b06c47e0d4484"
 }

@@ -1,0 +1,12 @@
+{
+  "schema_version": "study-architecture-audit-bundle-checksums.v1",
+  "generated_at": "2026-08-29T08:05:17",
+  "algorithm": "sha256",
+  "files": {
+    "study_architecture_audit_baseline_2026-08-29.json": "8b7c7f36fa6f2049bda0a82f8f0de10ca5b68a4c54c31ccf995b06c47e0d4484",
+    "study_architecture_audit_run1_2026-08-29.json": "8b7c7f36fa6f2049bda0a82f8f0de10ca5b68a4c54c31ccf995b06c47e0d4484",
+    "study_architecture_audit_run2_2026-08-29.json": "ff3625504eea08303734a907240e8acf857695d887a48d6eb7efa067873c7a4c",
+    "study_architecture_audit_determinism_comparison_2026-08-29.json": "25a6136658ecd9a43c89f065198d8be640063b18d39e8d06047cca9fdcafc95d",
+    "study_architecture_audit_code_manifest_2026-08-29.json": "feb5e9bc58e5eb4d18f2a62dfd912b4ab0ccd27d201105d389e91ce2169f5d30"
+  }
+}
