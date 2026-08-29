@@ -9,6 +9,8 @@
 > Dependency: Phase 0 evidence
 >
 > Primary lane: Architecture / Template / Study
+>
+> Preparation status: current responsibility map and deferred decision questions collected on 2026-08-29; ADR remains gated by P0-03.
 
 ## Mục tiêu
 
@@ -75,6 +77,60 @@ Design-only cho Phase 3. Task này không định nghĩa final SQL, không tạo
 - Template unpublish/delete không được cascade progress.
 - Phase 3 có đủ logical contract để P3-01/P3-04 implement mà không phát minh SQL.
 - Ít nhất hai alternatives và trade-offs được ghi.
+
+## Pre-decision responsibility map — 2026-08-29
+
+This is repository-grounded preparation only. It defines neither final logical policy nor physical schema.
+
+### Current authority and compatibility scaffold
+
+| Concept | Current authority | Observed lifecycle/identity constraint |
+|---|---|---|
+| Note schema | `NoteType` plus ordered `FieldDef` rows | `FieldDef.id` is stable identity; name is unique only inside a NoteType and is still used by legacy template syntax. |
+| Presentation definition | `Template` row owned by exactly one `NoteType` | Mutable HTML/CSS and position; deleting a Template cascades its Cards under current foreign-key semantics. |
+| Progress subject | `Card(note_id, template_id)` with unique pair | `CardProgress` belongs to Card; compatibility work must not create a second progress history merely because an application/binding changes. |
+| Runtime rendering | `study_artifact_service` resolves effective clone schema/content and freezes versioned template/content artifacts | Overlay field schema/value resolution is release-pinned; Template layout itself is currently a known fail-closed release limitation. |
+| Compatibility composition | Derived from current `Template.note_type_id` and `Template.id` | One current Template projects to one `comp:notetype:...:template:...` identity; there is no separate application occurrence identity. |
+| NoteType marketplace install | Copies NoteType, FieldDefs and Templates for installer paths | Source/local Template identity mapping is positional in legacy cutover paths, which is insufficient as a future general binding identity. |
+| Logical deck overlay | Retains source Note/Card identity and stores field overrides by `source_field_def_id` | Any future application must preserve overlay-only behavior and must not regenerate Cards or mutate source Notes. |
+| Session freeze | Stores template/content/policy artifacts and composition references in `study-session.v2` | Future effective application version, binding map and source/local provenance need explicit frozen material before P3-04 can rely on them. |
+
+### Compatibility facts that constrain the ADR
+
+- `Template.note_type_id` cannot be detached in Phase 3; current Card addressing and renderer paths depend on it.
+- Current Card uniqueness allows one Card per Note and Template, not repeated applications of the same Template with different bindings.
+- Therefore repeated future application cannot be represented by silently creating duplicate current Cards or reusing the same compatibility composition ID without an occurrence discriminator.
+- Field rename-safe overlay behavior already uses stable `FieldDef.id`; the target binding contract must preserve that property.
+- Existing template authoring may reference field names, so name-to-ID resolution is a compatibility compile/import concern, not the durable binding identity.
+- Template/card layout is not yet atomic in deck releases; the ADR must not claim release guarantees that runtime does not provide.
+
+### Questions the ADR must answer
+
+1. What immutable identifier distinguishes reusable definition, definition version, scoped application and repeated binding occurrence?
+2. How is the Phase 3 compatibility composition ID derived without inventing a database identity, and when must it remain equal to the existing Template-based ID?
+3. Can two applications reference the same definition version in one NoteType, and which application properties must differ to be meaningful?
+4. What is the minimum binding value: direct `FieldDef.id` only, or are constants allowed initially? Computed/media transformations should remain explicitly deferred unless required.
+5. Which validation errors cover missing required input, wrong NoteType, deleted field, duplicate cardinality, incompatible field type and unresolved legacy name?
+6. When a definition is updated, who selects/pins the version, and does editing an installed definition create a private fork before mutation?
+7. What happens to active and historical sessions on unpublish, detach or delete, given Card/Template IDs must remain addressable?
+8. How are source definition/application IDs projected into an installed overlay while local-added content remains locally owned?
+9. Which exact effective material must P3-04 freeze: definition/version, application occurrence, binding IDs, template/content hashes, interaction/trigger and algorithm identities?
+10. How do Anki import/export and Flama Connect map current card ordinals/templates without Card regeneration?
+
+### Explicitly deferred physical questions
+
+- Table layout, foreign keys, indexes and Alembic/backfill design.
+- Whether definition versions are full snapshots or structural deltas.
+- Storage format for binding values and future computed transformations.
+- Garbage collection/retention mechanics for unpublished definitions and detached applications.
+- Phase 4 migration from compatibility Template/Card projection to any new physical representation.
+
+### Evidence required before ADR approval
+
+- Accepted P0-03 inventory reconciled with current Template/Card/FieldDef and mixed-scope counts.
+- Owned, installed-overlay, local-added, import and Connect examples with stable identities traced end to end.
+- P3-05 cardinality decision and P3-04 frozen-material requirements.
+- At least two alternatives with lifecycle, compatibility and rollback trade-offs; no schema proposal in the Phase 3 decision.
 
 ## Verification
 

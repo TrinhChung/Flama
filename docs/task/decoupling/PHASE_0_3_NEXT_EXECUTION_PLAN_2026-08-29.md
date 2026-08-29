@@ -81,6 +81,8 @@ To avoid idle time, P1-01.1 may be performed as a read-only draft: map every pro
 
 Update 2026-08-29: P1-01.1 read-only preparation is complete in `P1-01_CANONICAL_REVIEW_TRANSACTION.md`. It confirms direct REST and MCP share `execute_native_review_command`, while session commit remains the second authoritative native event/side-effect writer and must retain its outer lease/idempotency/atomic transaction boundary during extraction. No runtime or schema change was made.
 
+Update 2026-08-29: P3-05 and P3-07 repository evidence/open-question inventories are also complete. Both remain `TODO`: production distribution, mixed-scope cardinality and applied-composition lifecycle decisions require the accepted P0-03 bundle before ADR approval.
+
 ## 3. Step 1 — P1-01 canonical native review transaction
 
 P1-01 is the first code task after Phase 0 because P1-02, P1-03 and P1-04 all depend on it. Current executable seams show two authoritative builders: direct/MCP enters `study_service.execute_native_review_command()`, while session commit constructs and persists its own transition/event flow in `study_session_service.commit_study_session()`.
