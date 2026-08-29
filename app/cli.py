@@ -1049,8 +1049,9 @@ def register_cli_commands(app: Flask) -> None:
     @click.option("--limit-zh", default=9000, type=int, help="Number of Simplified Chinese Hanzi to generate (default: 9000).")
     @click.option("--limit-zh-hant", default=9000, type=int, help="Number of Traditional Chinese Hanzi to generate (default: 9000).")
     @click.option("--workers", default=4, type=int, help="Concurrent download threads (default: 4).")
+    @click.option("--delay", default=0.0, type=float, help="Pacing delay in seconds per request (default: 0.0).")
     @click.option("--force", is_flag=True, help="Force regenerate existing SVG files.")
-    def seed_production_strokes_command(locale: str, limit_ja: int, limit_zh: int, limit_zh_hant: int, workers: int, force: bool):
+    def seed_production_strokes_command(locale: str, limit_ja: int, limit_zh: int, limit_zh_hant: int, workers: int, delay: float, force: bool):
         """Batch pre-generate 2,500+ Japanese Kanji & 9,000+ Chinese Hanzi for Production."""
         from app.services.strokes.production_seeder import seed_production_strokes_dataset
         import time
@@ -1062,7 +1063,7 @@ def register_cli_commands(app: Flask) -> None:
         click.echo(f"  JA limit      : {limit_ja}")
         click.echo(f"  ZH limit      : {limit_zh}")
         click.echo(f"  ZH-HANT limit : {limit_zh_hant}")
-        click.echo(f"  Concurrency   : {workers} workers")
+        click.echo(f"  Concurrency   : {workers} workers (delay: {delay}s)")
         click.echo(f"  Force overwrite: {force}")
         click.echo("----------------------------------------------------------")
 
@@ -1082,6 +1083,7 @@ def register_cli_commands(app: Flask) -> None:
             limit_zh=limit_zh,
             limit_zh_hant=limit_zh_hant,
             workers=workers,
+            delay=delay,
             force=force,
             progress_callback=on_progress,
         )

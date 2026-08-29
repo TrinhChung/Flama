@@ -33,10 +33,14 @@ def _process_single_character(
     upload_dir: Path,
     static_dir: Path,
     force: bool = False,
+    delay: float = 0.0,
 ) -> dict[str, Any]:
     """Download, sanitize and write stroke SVG files for a single character."""
     if not is_cjk_ideograph(char):
         return {"char": char, "status": "skipped", "reason": "not_cjk"}
+
+    if delay > 0:
+        time.sleep(delay)
 
     hex_code = CjkExtractor.char_to_hex(char)
     hex_padded = hex_code.zfill(5)
@@ -97,6 +101,7 @@ def seed_production_strokes_dataset(
     limit_zh_hant: int = 9000,
     workers: int = 4,
     force: bool = False,
+    delay: float = 0.0,
     progress_callback: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     """Concurrent production seeder for 2,500+ Japanese Kanji & 9,000+ Chinese Hanzi."""
@@ -142,6 +147,7 @@ def seed_production_strokes_dataset(
                     upload_dir,
                     static_dir,
                     force,
+                    delay,
                 ): char
                 for char in char_list
             }

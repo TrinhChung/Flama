@@ -23,6 +23,7 @@ def main():
     parser.add_argument("--limit-zh", type=int, default=9000, help="Simplified Chinese Hanzi count (default: 9000)")
     parser.add_argument("--limit-zh-hant", type=int, default=9000, help="Traditional Chinese Hanzi count (default: 9000)")
     parser.add_argument("--workers", type=int, default=4, help="Concurrent worker threads (default: 4)")
+    parser.add_argument("--delay", type=float, default=0.0, help="Delay in seconds between requests (default: 0.0)")
     parser.add_argument("--force", action="store_true", help="Force overwrite existing SVGs")
 
     args = parser.parse_args()
@@ -34,7 +35,7 @@ def main():
     print(f"  JA limit      : {args.limit_ja}")
     print(f"  ZH limit      : {args.limit_zh}")
     print(f"  ZH-HANT limit : {args.limit_zh_hant}")
-    print(f"  Concurrency   : {args.workers} worker threads")
+    print(f"  Concurrency   : {args.workers} worker threads (delay: {args.delay}s)")
     print(f"  Force rewrite : {args.force}")
     print("-" * 60)
 
@@ -55,6 +56,7 @@ def main():
             limit_zh=args.limit_zh,
             limit_zh_hant=args.limit_zh_hant,
             workers=args.workers,
+            delay=args.delay,
             force=args.force,
             progress_callback=on_progress,
         )
