@@ -1,6 +1,6 @@
 # Phase 0–3 Decoupling Task Backlog
 
-> Status: TODO backlog
+> Status: ACTIVE backlog; runtime execution is blocked at P0-03
 >
 > Source of truth: `docs/architecture/study-interaction-trigger-algorithm-plan.md`
 >
@@ -9,6 +9,8 @@
 > Latest Phase 0 gate review/handoff: [`P0_PHASE_REVIEW_HANDOFF_2026-08-29.md`](./P0_PHASE_REVIEW_HANDOFF_2026-08-29.md) — **NO-GO; P0-01/P0-02/P0-04 COMPLETED, P0-03 BLOCKED pending SELECT-only rerun**.
 >
 > Next execution plan: [`PHASE_0_3_NEXT_EXECUTION_PLAN_2026-08-29.md`](./PHASE_0_3_NEXT_EXECUTION_PLAN_2026-08-29.md) — close P0-03 first, then P1-01 as the first runtime refactor.
+>
+> Reviewed detailed backlog: [`REVIEWED_DETAILED_EXECUTION_BACKLOG_2026-08-29.md`](./REVIEWED_DETAILED_EXECUTION_BACKLOG_2026-08-29.md) — 19 remaining tasks with execution slices, required outputs and gates.
 >
 > Scope boundary: chỉ đóng các phần còn thiếu của Phase 0–3. Không tạo model, migration, progress store hoặc physical Template/NoteType schema mới.
 
@@ -69,7 +71,7 @@ P1/P2 correctness gates + P3-05/P3-07 decisions
 All tasks --> INT-01 integration and tracker closeout
 ```
 
-`P0-01`, `P1-01`, `P2-02`, `P2-03` có thể triển khai song song sau khi `P2-01` được merge. Các task chạm cùng file phải tuần tự hoặc thống nhất ownership trước khi code.
+Historical dependency note: `P2-01` has been merged, but the current reviewed execution gate requires P0-03 to close before any remaining Phase 1–3 runtime change. After that gate, use the wave ordering in `REVIEWED_DETAILED_EXECUTION_BACKLOG_2026-08-29.md`; tasks touching the same files must remain sequential.
 
 ## 4. Danh sách task
 
