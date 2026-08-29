@@ -6,6 +6,7 @@ import {
   faClock,
   faKeyboard,
   faLightbulb,
+  faListUl,
   faSliders,
   faTriangleExclamation,
   faWrench,
@@ -27,9 +28,17 @@ export function GuideArticleRenderer({ article, category }: GuideArticleRenderer
   const { prevArticle, nextArticle } = getAdjacentArticles(category?.slug, article.slug)
 
   return (
-    <article className="space-y-8 animate-in fade-in-50 duration-200">
-      {/* Breadcrumb */}
-      <GuideBreadcrumb category={category} article={article} />
+    <article className="max-w-4xl mx-auto space-y-8 animate-in fade-in-50 duration-200">
+      {/* Breadcrumb & Quick TOC Action */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 pb-3">
+        <GuideBreadcrumb category={category} article={article} />
+        <Button asChild variant="outline" size="sm" className="h-8 gap-2 text-xs font-bold rounded-xl border-border/80 shadow-2xs">
+          <Link to="/guide">
+            <FontAwesomeIcon icon={faListUl} className="text-xs text-primary" />
+            <span>Mục Lục Cẩm Nang</span>
+          </Link>
+        </Button>
+      </div>
 
       {/* Article Header */}
       <div className="space-y-3 pb-6 border-b border-border/80">
@@ -47,7 +56,7 @@ export function GuideArticleRenderer({ article, category }: GuideArticleRenderer
           )}
         </div>
 
-        <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground leading-tight">
+        <h1 className="text-2xl sm:text-3.5xl font-extrabold tracking-tight text-foreground leading-tight">
           {article.title}
         </h1>
 
@@ -73,7 +82,7 @@ export function GuideArticleRenderer({ article, category }: GuideArticleRenderer
 
       {/* Intro section */}
       {article.intro && (
-        <div className="text-sm text-foreground/90 leading-relaxed">
+        <div className="text-sm sm:text-base text-foreground/90 leading-relaxed">
           {article.intro}
         </div>
       )}
@@ -97,7 +106,7 @@ export function GuideArticleRenderer({ article, category }: GuideArticleRenderer
                     <div className="flex size-7 items-center justify-center rounded-xl bg-primary text-primary-foreground text-xs font-bold shrink-0 shadow-xs">
                       {idx + 1}
                     </div>
-                    <h3 className="font-bold text-sm text-foreground">
+                    <h3 className="font-bold text-sm sm:text-base text-foreground">
                       {step.title}
                     </h3>
                   </div>
@@ -295,9 +304,9 @@ export function GuideArticleRenderer({ article, category }: GuideArticleRenderer
         </div>
       )}
 
-      {/* Next / Previous Article Navigation */}
-      {(prevArticle || nextArticle) && (
-        <div className="pt-6 border-t border-border/80 grid gap-3 sm:grid-cols-2">
+      {/* Next / Previous / Return to TOC Navigation */}
+      <div className="pt-6 border-t border-border/80 space-y-3">
+        <div className="grid gap-3 sm:grid-cols-2">
           {prevArticle ? (
             <Link
               to={prevArticle.url}
@@ -305,7 +314,7 @@ export function GuideArticleRenderer({ article, category }: GuideArticleRenderer
             >
               <span className="text-[11px] font-semibold text-muted-foreground flex items-center gap-1.5 group-hover:text-primary transition-colors">
                 <FontAwesomeIcon icon={faArrowLeft} className="text-[10px]" />
-                <span>Bài trước</span>
+                <span>Bài trước ({prevArticle.categoryTitle})</span>
               </span>
               <span className="font-bold text-xs sm:text-sm text-foreground mt-1 line-clamp-1">
                 {prevArticle.title}
@@ -321,7 +330,7 @@ export function GuideArticleRenderer({ article, category }: GuideArticleRenderer
               className="flex flex-col items-end text-right p-4 rounded-2xl border border-border/80 bg-card hover:border-primary/50 hover:bg-muted/20 transition-all group"
             >
               <span className="text-[11px] font-semibold text-muted-foreground flex items-center gap-1.5 group-hover:text-primary transition-colors">
-                <span>Bài tiếp theo</span>
+                <span>Bài tiếp theo ({nextArticle.categoryTitle})</span>
                 <FontAwesomeIcon icon={faArrowRight} className="text-[10px]" />
               </span>
               <span className="font-bold text-xs sm:text-sm text-foreground mt-1 line-clamp-1">
@@ -330,8 +339,18 @@ export function GuideArticleRenderer({ article, category }: GuideArticleRenderer
             </Link>
           )}
         </div>
-      )}
+
+        <div className="flex justify-center pt-2">
+          <Button asChild variant="ghost" size="sm" className="gap-2 text-xs font-bold text-muted-foreground hover:text-primary rounded-xl">
+            <Link to="/guide">
+              <FontAwesomeIcon icon={faListUl} className="text-xs" />
+              <span>Quay lại Toàn Bộ Mục Lục Hướng Dẫn</span>
+            </Link>
+          </Button>
+        </div>
+      </div>
     </article>
   )
 }
+
 

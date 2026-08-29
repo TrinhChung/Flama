@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import {
   faArrowRight,
@@ -5,8 +6,10 @@ import {
   faBook,
   faBookBookmark,
   faChevronRight,
+  faClock,
   faGraduationCap,
   faLifeRing,
+  faListUl,
   faMagnifyingGlass,
   faRightLeft,
   faRobot,
@@ -15,6 +18,7 @@ import {
   faTriangleExclamation,
   faVolumeHigh,
   faWallet,
+  faXmark,
 } from '@fortawesome/free-solid-svg-icons'
 import type { IconDefinition } from '@fortawesome/free-solid-svg-icons'
 import { Link } from 'react-router-dom'
@@ -39,11 +43,15 @@ const CATEGORY_FA_ICONS: Record<string, IconDefinition> = {
 }
 
 interface GuideHomePageProps {
-  searchQuery: string
-  onSearchChange: (q: string) => void
+  searchQuery?: string
+  onSearchChange?: (q: string) => void
 }
 
-export function GuideHomePage({ searchQuery, onSearchChange }: GuideHomePageProps) {
+export function GuideHomePage({ searchQuery: externalQuery, onSearchChange: externalOnChange }: GuideHomePageProps) {
+  const [localQuery, setLocalQuery] = useState('')
+  const searchQuery = externalQuery !== undefined ? externalQuery : localQuery
+  const onSearchChange = externalOnChange || setLocalQuery
+
   const searchResults = searchQuery ? searchArticles(searchQuery) : []
 
   return (
@@ -52,14 +60,14 @@ export function GuideHomePage({ searchQuery, onSearchChange }: GuideHomePageProp
       <div className="relative overflow-hidden rounded-3xl border border-border/80 bg-card p-6 sm:p-8 shadow-xs">
         <div className="relative z-10 max-w-2xl space-y-3">
           <Badge className="bg-primary/10 text-primary border-primary/20 px-3 py-1 font-semibold text-xs rounded-full gap-1.5">
-            <FontAwesomeIcon icon={faLifeRing} className="text-xs" />
-            <span>Trung Tâm Trợ Giúp &amp; Hướng Dẫn Flama</span>
+            <FontAwesomeIcon icon={faListUl} className="text-xs" />
+            <span>Mục Lục &amp; Cẩm Nang Hướng Dẫn Flama</span>
           </Badge>
           <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-foreground">
-            Học tập hiệu quả &amp; Làm chủ toàn diện Flama
+            Trung Tâm Hướng Dẫn &amp; Làm Chủ Flama
           </h1>
           <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
-            Khám phá tài liệu hướng dẫn quy trình từng bước, mẹo học tập thông minh và ma trận chẩn đoán sự cố theo hiện tượng thực tế.
+            Tra cứu cẩm nang thao tác từng bước, mẹo học tập thông minh và danh mục giải quyết sự cố theo từng tính năng cụ thể.
           </p>
 
           {/* Quick Search */}
@@ -74,8 +82,17 @@ export function GuideHomePage({ searchQuery, onSearchChange }: GuideHomePageProp
                 placeholder="Tìm kiếm: gom nhóm deck, phím tắt, Yomitan, sửa lỗi..."
                 value={searchQuery}
                 onChange={(e) => onSearchChange(e.target.value)}
-                className="pl-10 pr-4 h-11 text-xs sm:text-sm rounded-2xl bg-background border-border/80 shadow-xs focus-visible:ring-primary"
+                className="pl-10 pr-9 h-11 text-xs sm:text-sm rounded-2xl bg-background border-border/80 shadow-xs focus-visible:ring-primary"
               />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => onSearchChange('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-1"
+                >
+                  <FontAwesomeIcon icon={faXmark} className="text-xs" />
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -164,15 +181,15 @@ export function GuideHomePage({ searchQuery, onSearchChange }: GuideHomePageProp
             </Button>
           </div>
 
-          {/* Categories Grid */}
-          <div className="space-y-4">
+          {/* Full Table of Contents Directory Grid */}
+          <div className="space-y-5">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold tracking-tight text-foreground flex items-center gap-2">
+              <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
                 <FontAwesomeIcon icon={faBook} className="text-primary text-base" />
-                <span>Danh Mục Chuyên Đề Hướng Dẫn</span>
+                <span>Toàn Bộ Mục Lục &amp; Các Trang Chuyên Đề</span>
               </h2>
               <span className="text-xs text-muted-foreground font-medium">
-                {GUIDE_CATEGORIES.length} chuyên mục tài liệu
+                {GUIDE_CATEGORIES.length} chuyên mục &bull; 17 trang hướng dẫn
               </span>
             </div>
 
@@ -207,7 +224,7 @@ export function GuideHomePage({ searchQuery, onSearchChange }: GuideHomePageProp
                       </div>
 
                       <div>
-                        <h3 className="font-bold text-sm text-foreground">
+                        <h3 className="font-bold text-sm sm:text-base text-foreground">
                           {cat.title}
                         </h3>
                         <p className="text-xs text-muted-foreground mt-1 leading-relaxed line-clamp-2">
@@ -215,9 +232,9 @@ export function GuideHomePage({ searchQuery, onSearchChange }: GuideHomePageProp
                         </p>
                       </div>
 
-                      {/* Subarticles previews */}
-                      <ul className="space-y-1.5 pt-1">
-                        {cat.articles.slice(0, 3).map((art) => {
+                      {/* Full List of sub-articles */}
+                      <ul className="space-y-2 pt-1 border-t border-border/60">
+                        {cat.articles.map((art) => {
                           const targetUrl =
                             cat.slug === 'getting-started' &&
                             (art.slug === 'getting-started' || art.slug === 'core-concepts')
@@ -228,23 +245,26 @@ export function GuideHomePage({ searchQuery, onSearchChange }: GuideHomePageProp
                             <li key={art.slug}>
                               <Link
                                 to={targetUrl}
-                                className="text-xs text-muted-foreground hover:text-primary transition-colors flex items-center gap-1.5 truncate group"
+                                className="text-xs text-muted-foreground hover:text-primary transition-colors flex items-start gap-2 group py-0.5"
                               >
-                                <span className="size-1.5 rounded-full bg-border group-hover:bg-primary shrink-0 transition-colors" />
-                                <span className="truncate font-medium">{art.title}</span>
+                                <span className="size-1.5 rounded-full bg-border group-hover:bg-primary shrink-0 transition-colors mt-1.5" />
+                                <div className="min-w-0">
+                                  <span className="font-semibold text-foreground/90 group-hover:text-primary transition-colors line-clamp-1">
+                                    {art.title}
+                                  </span>
+                                  {art.readTimeMinutes && (
+                                    <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                                      <FontAwesomeIcon icon={faClock} className="text-[9px]" />
+                                      {art.readTimeMinutes} phút đọc
+                                    </span>
+                                  )}
+                                </div>
                               </Link>
                             </li>
                           )
                         })}
                       </ul>
                     </div>
-
-                    <Button asChild variant="ghost" size="sm" className="w-full justify-between text-xs font-semibold h-8 rounded-xl hover:bg-primary/10 hover:text-primary">
-                      <Link to={`/guide/${cat.slug}/${cat.articles[0]?.slug || ''}`}>
-                        <span>Xem chuyên mục</span>
-                        <FontAwesomeIcon icon={faChevronRight} className="text-[10px]" />
-                      </Link>
-                    </Button>
                   </div>
                 )
               })}
@@ -255,4 +275,5 @@ export function GuideHomePage({ searchQuery, onSearchChange }: GuideHomePageProp
     </div>
   )
 }
+
 

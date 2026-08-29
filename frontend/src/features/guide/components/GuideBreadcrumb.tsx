@@ -1,5 +1,5 @@
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faChevronRight, faHouse } from '@fortawesome/free-solid-svg-icons'
+import { faChevronRight, faListUl } from '@fortawesome/free-solid-svg-icons'
 import { Link } from 'react-router-dom'
 import type { GuideCategory, GuideArticle } from '../types'
 
@@ -13,10 +13,10 @@ export function GuideBreadcrumb({ category, article }: GuideBreadcrumbProps) {
     <nav className="flex items-center gap-1.5 text-xs text-muted-foreground mb-4 flex-wrap" aria-label="Breadcrumb">
       <Link
         to="/guide"
-        className="flex items-center gap-1.5 hover:text-primary transition-colors py-0.5 font-medium"
+        className="flex items-center gap-1.5 hover:text-primary transition-colors py-0.5 font-semibold text-foreground/80 hover:text-foreground"
       >
-        <FontAwesomeIcon icon={faHouse} className="text-[11px]" />
-        <span>Trợ giúp</span>
+        <FontAwesomeIcon icon={faListUl} className="text-[11px] text-primary" />
+        <span>Mục Lục Hướng Dẫn</span>
       </Link>
 
       {category && (
@@ -34,7 +34,7 @@ export function GuideBreadcrumb({ category, article }: GuideBreadcrumbProps) {
       {article && (
         <>
           <FontAwesomeIcon icon={faChevronRight} className="text-[9px] text-muted-foreground/50 shrink-0" />
-          <span className="font-semibold text-foreground max-w-[260px] truncate py-0.5">
+          <span className="font-bold text-foreground max-w-[320px] truncate py-0.5">
             {article.title}
           </span>
         </>
@@ -42,4 +42,5 @@ export function GuideBreadcrumb({ category, article }: GuideBreadcrumbProps) {
     </nav>
   )
 }
+
 
