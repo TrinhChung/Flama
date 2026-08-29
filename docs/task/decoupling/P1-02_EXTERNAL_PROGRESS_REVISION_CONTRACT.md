@@ -4,13 +4,13 @@
 >
 > Priority: P1
 >
-> Status: IN PROGRESS — P1-02.1 inventory completed; P1-02.2 conflict matrix is next
+> Status: IN PROGRESS — P1-02.1 and P1-02.2 completed; P1-02.3 implementation is next
 >
 > Dependency: P1-01
 >
 > Primary lane: Backend Connect / Import / Share
 >
-> Preparation status: P1-01 dependency is satisfied. P1-02.1 closed on 2026-08-29 with no runtime change; P1-02.2 is the next executable task.
+> Preparation status: P1-01 dependency is satisfied. P1-02.1 inventory and P1-02.2 conflict decisions closed on 2026-08-29; P1-02.3 is the next executable task.
 
 ## Mục tiêu
 
@@ -163,6 +163,78 @@ Verification: Markdown relative-link check and git diff check.
 Rollback path: revert the documentation-only commit.
 Known limitations: conflict/priority decisions are intentionally deferred to P1-02.2; no MySQL write probe was executed.
 Follow-up task IDs: P1-02.2, P1-02.3, P1-02.4, P1-03, P3 cleanup for share-service duplication.
+```
+
+## P1-02.2 — Conflict/priority matrix đã chốt
+
+### Rule set bắt buộc
+
+1. **Material progress write** là thay đổi scheduler/current-state field của `CardProgress`. Writer phải lock row hiện có và tăng revision đúng một lần; row mới bắt đầu ở revision `1` sau material write.
+2. **Idempotent/no-op** không tạo `CardProgress`, không tăng revision và không tạo duplicate event.
+3. **Native direct/MCP** tiếp tục dùng canonical transaction P1-01. Nếu external snapshot commit trước, native command đọc state mới dưới lock; nếu native commit trước, external optimistic check trả conflict.
+4. **Open batch session** không bị writer bên ngoài sửa trực tiếp. Mọi material external write tăng revision để commit session trả `CARD_PROGRESS_CONFLICT` theo `base_revision` đã freeze.
+5. **Modern Anki snapshot** dùng hai optimistic token độc lập:
+   - `applied_local_revision` phát hiện native/local write kể từ snapshot Anki cuối;
+   - optional `baseSnapshotHash` phát hiện hai external snapshots đến sai thứ tự. First-party sync phải gửi hash server trả từ note-status; client cũ thiếu field vẫn được nhận trong compatibility window nhưng result phải ghi `legacy_unversioned=true`.
+6. `force=true` chỉ là explicit authenticated resync override. Nó được phép vượt local/base conflict nhưng vẫn lock, tăng revision và trả code `FORCED_PROGRESS_APPLIED`; không được gọi native Action semantics.
+7. **Anki revlog** chỉ append/repair immutable history và provenance. Nó không sửa `CardProgress.last_reviewed_at`/`last_review_event_id`, không tăng revision; current state do snapshot/native writer sở hữu.
+8. **Legacy `cardsProgress`** không có durable snapshot token nên dùng fail-closed timestamp rule:
+   - incoming mới hơn: apply và tăng revision;
+   - incoming cũ hơn hoặc identical: no-op;
+   - timestamp bằng nhau nhưng state khác, hoặc không đủ timestamp để order một existing material row: typed conflict;
+   - row mới materialized ở revision `1` và gắn scheduler provenance `anki`.
+9. **Clone cutover** là maintenance repair: lock local/source rows theo thứ tự ổn định; rekey/merge đặt revision thành `max(local, source) + 1`; mỗi install dùng savepoint khi non-strict; active compatibility shim phải delegate modular cutover.
+10. **Explicit progress reset** hủy mọi open Study Session chứa card bị reset trước khi bulk-delete progress. Entity deletion tiếp tục dựa vào card/scope revalidation và không được tái tạo progress cho Card đã mất.
+
+### Priority matrix
+
+| Writer A | Writer B / trạng thái hiện hữu | Kết quả đã chốt |
+|---|---|---|
+| Native direct/MCP | Native direct/MCP | Row lock serialize; command sau tính từ state đã commit của command trước |
+| Native direct/MCP | Open batch session | Native tăng revision; batch cũ fail `CARD_PROGRESS_CONFLICT` |
+| Native direct/MCP | Modern snapshot | Snapshot chỉ apply nếu `applied_local_revision` còn khớp, nếu không trả `LOCAL_PROGRESS_CHANGED`; `force` là explicit override |
+| Native direct/MCP | Legacy `cardsProgress` | Lock serialize; external chỉ thay nếu timestamp chứng minh mới hơn, ambiguous/equal-different trả conflict |
+| Open batch session | Bất kỳ material snapshot/cutover write | External write tăng revision; batch cũ fail, không merge hai scheduler states |
+| Modern snapshot | Modern snapshot cùng hash | `PROGRESS_UNCHANGED`; không row/event/revision side effect |
+| Modern snapshot | Modern snapshot khác hash | Source-ref lock serialize; `baseSnapshotHash` mismatch trả `SOURCE_SNAPSHOT_CHANGED`; matching base được apply |
+| Modern snapshot | Anki revlog | Snapshot sở hữu current state; revlog chỉ append history/provenance |
+| Anki revlog | Native review | Hai immutable events cùng tồn tại theo provenance; revlog không overwrite native current state |
+| Clone cutover | Existing local + source progress | Merge theo existing `updated_at` rule, giữ max counters, revision `max + 1`; local progress row bị xóa trong cùng savepoint |
+| Progress reset | Open batch session | Session chuyển `cancelled`, commit trả `SESSION_NOT_OPEN`; progress rows sau đó bị xóa |
+| Entity delete | Open batch session | Card/scope revalidation trả conflict; không recreate missing Card/progress |
+
+### Typed result contract
+
+| Code | State tương thích | Ý nghĩa |
+|---|---|---|
+| `PROGRESS_APPLIED` | `applied` | Snapshot material đã commit candidate state và bump revision |
+| `FORCED_PROGRESS_APPLIED` | `applied` | Explicit resync override đã apply và bump revision |
+| `PROGRESS_UNCHANGED` | `unchanged` | Hash/state giống nhau; zero progress side effect |
+| `PROGRESS_STALE` | `stale` | Legacy snapshot cũ hơn state hiện tại; no-op |
+| `LOCAL_PROGRESS_CHANGED` | `local_conflict` | Native/local revision lệch snapshot base |
+| `SOURCE_SNAPSHOT_CHANGED` | `source_conflict` | External base hash không còn là current hash |
+| `AMBIGUOUS_PROGRESS_ORDER` | `conflict` | Legacy timestamp thiếu/bằng nhau nhưng payload khác nên không thể order an toàn |
+| `CONCURRENT_PROGRESS_WRITE` | `conflict` | Race tạo first progress row/unique key |
+| `ANKI_DUE_UNRESOLVED` | `due_unresolved` | Không map được source day; toàn progress mutation của record là no-op |
+
+### Compatibility decision
+
+- Không đổi URL, HTTP method, package envelope hoặc field hiện có.
+- `baseSnapshotHash`, `serverSnapshotHash`, `code`, `legacy_unversioned` và legacy `progressResults` là additive.
+- First-party React sync gửi base hash ngay trong P1-02.3. Client cũ vẫn chạy nhưng server đánh dấu result unversioned; hard-require base hash chỉ được xem xét trong P2-07 wire-version policy.
+- Không thêm model/migration/tombstone trong Phase 1.
+
+### Output bàn giao P1-02.2
+
+```text
+Task ID: P1-02.2
+Primary outcome: Approved pairwise priority, revision, idempotency and typed-result contract for all inventoried writers.
+Runtime change: none
+Contract/API behavior changed: additive fields/codes approved for implementation; no endpoint removal or required-field break.
+Verification: every G1–G9 inventory gap has an explicit rule above.
+Rollback path: revert the documentation-only decision commit before P1-02.3 lands.
+Known limitations: legacy clients without baseSnapshotHash remain compatibility-unversioned until the P2-07 wire decision.
+Follow-up task IDs: P1-02.3, P1-02.4, P1-03, P2-07.
 ```
 
 ## Output đầu ra bắt buộc
