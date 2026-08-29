@@ -1043,6 +1043,60 @@ def register_cli_commands(app: Flask) -> None:
         click.echo(f"  - Chinese Traditional (zh-hant): {zh_hant_count} SVGs ({lib_zh_hant})")
         click.echo(f"  - Total Registered Image Library Stroke Assets: {total_assets}")
 
+    @app.cli.command("seed-production-strokes")
+    @click.option("--locale", default="all", type=click.Choice(["all", "ja", "zh", "zh-hant"]), help="Language locale to pre-generate.")
+    @click.option("--limit-ja", default=2500, type=int, help="Number of Japanese Kanji to generate (default: 2500).")
+    @click.option("--limit-zh", default=9000, type=int, help="Number of Simplified Chinese Hanzi to generate (default: 9000).")
+    @click.option("--limit-zh-hant", default=9000, type=int, help="Number of Traditional Chinese Hanzi to generate (default: 9000).")
+    @click.option("--workers", default=12, type=int, help="Concurrent download threads (default: 12).")
+    @click.option("--force", is_flag=True, help="Force regenerate existing SVG files.")
+    def seed_production_strokes_command(locale: str, limit_ja: int, limit_zh: int, limit_zh_hant: int, workers: int, force: bool):
+        """Batch pre-generate 2,500+ Japanese Kanji & 9,000+ Chinese Hanzi for Production."""
+        from app.services.strokes.production_seeder import seed_production_strokes_dataset
+        import time
+
+        click.echo("==========================================================")
+        click.echo(" FLAMA PRODUCTION STROKE PRE-GENERATOR & SEEDER")
+        click.echo("==========================================================")
+        click.echo(f"  Locale target : {locale}")
+        click.echo(f"  JA limit      : {limit_ja}")
+        click.echo(f"  ZH limit      : {limit_zh}")
+        click.echo(f"  ZH-HANT limit : {limit_zh_hant}")
+        click.echo(f"  Concurrency   : {workers} workers")
+        click.echo(f"  Force overwrite: {force}")
+        click.echo("----------------------------------------------------------")
+
+        start_time = time.time()
+        
+        def on_progress(p: dict):
+            completed = p["completed"]
+            total = p["total"]
+            loc = p["locale"]
+            if completed % 100 == 0 or completed == total:
+                pct = (completed / total) * 100 if total else 100
+                click.echo(f"[{loc.upper()}] Progress: {completed}/{total} ({pct:.1f}%) - U+{ord(p['char']):04X}")
+
+        stats = seed_production_strokes_dataset(
+            locales=(locale,) if locale != "all" else ("ja", "zh", "zh-hant"),
+            limit_ja=limit_ja,
+            limit_zh=limit_zh,
+            limit_zh_hant=limit_zh_hant,
+            workers=workers,
+            force=force,
+            progress_callback=on_progress,
+        )
+
+        elapsed = time.time() - start_time
+        click.echo("----------------------------------------------------------")
+        click.echo(" PRODUCTION STROKE SEEDING COMPLETED!")
+        click.echo(f"  Total targets processed : {stats['total_targets']}")
+        click.echo(f"  Newly Generated SVGs    : {stats['generated']}")
+        click.echo(f"  Cached / Skipped        : {stats['cached']}")
+        click.echo(f"  Failed / Fallback       : {stats['failed']}")
+        click.echo(f"  Database Records Synced : {stats['db_updated']}")
+        click.echo(f"  Elapsed Time            : {elapsed:.2f}s")
+        click.echo("==========================================================")
+
 
 
 
