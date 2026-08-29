@@ -1002,31 +1002,46 @@ def register_cli_commands(app: Flask) -> None:
 
     @strokes_group.command("seed-starter")
     def seed_starter_cmd() -> None:
-        """Seed starter set of common Kanji and Hanzi SVG stroke diagrams."""
+        """Seed starter set of common Kanji and Hanzi SVG stroke diagrams into Image Library."""
         from pathlib import Path
-        from app.services.strokes.dataset_builder import populate_starter_strokes
+        from app.services.strokes.dataset_builder import (
+            JA_STARTER_KANJI,
+            ZH_STARTER_HANZI,
+            ZH_HANT_STARTER_HANZI,
+            populate_starter_strokes,
+        )
+        from app.services.strokes.stroke_service import resolve_stroke_items
 
         static_root = Path(app.static_folder or "static")
         res = populate_starter_strokes(static_root)
-        click.echo(f"Starter stroke SVGs seeded: {res}")
+        
+        resolve_stroke_items("".join(JA_STARTER_KANJI), locale="ja", max_characters=len(JA_STARTER_KANJI))
+        resolve_stroke_items("".join(ZH_STARTER_HANZI), locale="zh", max_characters=len(ZH_STARTER_HANZI))
+        resolve_stroke_items("".join(ZH_HANT_STARTER_HANZI), locale="zh-hant", max_characters=len(ZH_HANT_STARTER_HANZI))
+        click.echo(f"Starter stroke SVGs seeded into Image Library: {res}")
 
     @strokes_group.command("status")
     def status_cmd() -> None:
-        """Show current stroke dataset file counts."""
+        """Show current stroke dataset and Image Library file counts."""
         from pathlib import Path
-        static_root = Path(app.static_folder or "static")
-        ja_dir = static_root / "strokes" / "ja"
-        zh_dir = static_root / "strokes" / "zh"
-        zh_hant_dir = static_root / "strokes" / "zh-hant"
+        from models.shared_image_asset import SharedImageAsset
 
-        ja_count = len(list(ja_dir.glob("*.svg"))) if ja_dir.exists() else 0
-        zh_count = len(list(zh_dir.glob("*.svg"))) if zh_dir.exists() else 0
-        zh_hant_count = len(list(zh_hant_dir.glob("*.svg"))) if zh_hant_dir.exists() else 0
+        upload_root = Path(app.config.get("FLASHCARD_MEDIA_UPLOAD_ROOT", "media")).resolve()
+        
+        lib_ja = upload_root / "library" / "strokes" / "ja"
+        lib_zh = upload_root / "library" / "strokes" / "zh"
+        lib_zh_hant = upload_root / "library" / "strokes" / "zh_hant"
 
-        click.echo("Stroke Dataset Status:")
-        click.echo(f"  - Japanese (ja): {ja_count} SVGs ({ja_dir})")
-        click.echo(f"  - Chinese Simplified/General (zh): {zh_count} SVGs ({zh_dir})")
-        click.echo(f"  - Chinese Traditional (zh-hant): {zh_hant_count} SVGs ({zh_hant_dir})")
+        ja_count = len(list(lib_ja.glob("*.svg"))) if lib_ja.exists() else 0
+        zh_count = len(list(lib_zh.glob("*.svg"))) if lib_zh.exists() else 0
+        zh_hant_count = len(list(lib_zh_hant.glob("*.svg"))) if lib_zh_hant.exists() else 0
+        total_assets = SharedImageAsset.query.filter(SharedImageAsset.image_key.like("stroke_%")).count()
+
+        click.echo("Stroke Dataset Status (Image Library):")
+        click.echo(f"  - Japanese (ja): {ja_count} SVGs ({lib_ja})")
+        click.echo(f"  - Chinese Simplified (zh): {zh_count} SVGs ({lib_zh})")
+        click.echo(f"  - Chinese Traditional (zh-hant): {zh_hant_count} SVGs ({lib_zh_hant})")
+        click.echo(f"  - Total Registered Image Library Stroke Assets: {total_assets}")
 
 
 

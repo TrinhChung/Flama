@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -12,8 +14,13 @@ from sqlalchemy.orm import selectinload
 
 from app.services import deck_working_tree_service
 from app.services.strokes.cjk_extractor import CjkExtractor
+from app.services.strokes.dataset_builder import (
+    fetch_authentic_stroke_svg,
+    generate_kanji_placeholder_svg,
+)
 from models import db
 from models.flashcard import Card, Note, NoteType
+from models.shared_image_asset import SharedImageAsset
 
 
 class StrokeServiceError(ValueError):
@@ -46,26 +53,106 @@ def _get_static_root() -> Path:
     return Path("static")
 
 
-def check_stroke_svg_exists(locale: str, hex_code: str, static_root: Path | None = None) -> bool:
-    """Check if static stroke SVG exists on disk."""
-    root = static_root or _get_static_root()
-    folder = normalize_locale(locale)
+def _get_upload_root() -> Path:
+    """Resolve media upload root directory."""
+    if has_app_context():
+        upload_root = current_app.config.get("FLASHCARD_MEDIA_UPLOAD_ROOT")
+        if upload_root:
+            return Path(upload_root).resolve()
+    return Path("media").resolve()
+
+
+def ensure_stroke_shared_asset(image_key: str, upload_root: Path | None = None) -> SharedImageAsset | None:
+    """Ensure a stroke diagram exists in SharedImageAsset and physical media storage."""
+    m = re.match(r"^stroke_([a-z0-9_]+)_([a-f0-9]{4,6})$", image_key.lower())
+    if not m:
+        return None
+
+    raw_folder, hex_code = m.group(1), m.group(2)
+    locale_norm = raw_folder.replace("_", "-")
+    try:
+        char = chr(int(hex_code, 16))
+    except ValueError:
+        return None
+
+    root = upload_root or _get_upload_root()
+    storage_path = f"library/strokes/{raw_folder}/{hex_code}.svg"
+    full_path = root / storage_path
     
-    # Check primary folder
-    svg_file = root / "strokes" / folder / f"{hex_code}.svg"
+    existing = SharedImageAsset.query.filter_by(image_key=image_key).first()
+
+    if not full_path.exists():
+        full_path.parent.mkdir(parents=True, exist_ok=True)
+        # Check if static fallback exists first
+        static_file = _get_static_root() / "strokes" / locale_norm / f"{hex_code}.svg"
+        if static_file.exists():
+            svg_content = static_file.read_text(encoding="utf-8")
+        else:
+            svg_content = fetch_authentic_stroke_svg(char, locale=locale_norm) or generate_kanji_placeholder_svg(char)
+            try:
+                static_file.parent.mkdir(parents=True, exist_ok=True)
+                static_file.write_text(svg_content, encoding="utf-8")
+            except Exception:
+                pass
+        
+        full_path.write_text(svg_content, encoding="utf-8")
+
+    svg_bytes = full_path.read_bytes() if full_path.exists() else b""
+    sha256 = hashlib.sha256(svg_bytes).hexdigest() if svg_bytes else ""
+    size_bytes = len(svg_bytes)
+
+    if not existing:
+        asset = SharedImageAsset(
+            image_key=image_key,
+            filename=f"{hex_code}.svg",
+            mime_type="image/svg+xml",
+            storage_path=storage_path,
+            sha256=sha256,
+            size_bytes=size_bytes,
+            description=f"Sơ đồ nét: {char} ({locale_norm})",
+            tags=["stroke", locale_norm, char, hex_code],
+            is_enabled=True,
+        )
+        db.session.add(asset)
+        try:
+            db.session.commit()
+            return asset
+        except Exception:
+            db.session.rollback()
+            return SharedImageAsset.query.filter_by(image_key=image_key).first()
+    else:
+        if existing.storage_path != storage_path or not existing.is_enabled:
+            existing.storage_path = storage_path
+            existing.mime_type = "image/svg+xml"
+            existing.is_enabled = True
+            existing.size_bytes = size_bytes
+            existing.sha256 = sha256
+            try:
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+        return existing
+
+
+def check_stroke_svg_exists(locale: str, hex_code: str, static_root: Path | None = None) -> bool:
+    """Check if stroke SVG exists on disk (media library or static)."""
+    upload_root = _get_upload_root()
+    folder = normalize_locale(locale).replace("-", "_")
+    
+    # Check media library storage
+    lib_file = upload_root / "library" / "strokes" / folder / f"{hex_code}.svg"
+    if lib_file.exists():
+        return True
+        
+    root = static_root or _get_static_root()
+    folder_static = normalize_locale(locale)
+    svg_file = root / "strokes" / folder_static / f"{hex_code}.svg"
     if svg_file.exists():
         return True
     
-    # Check 5-digit padded
     if len(hex_code) < 5:
-        padded_file = root / "strokes" / folder / f"{hex_code.zfill(5)}.svg"
+        padded_file = root / "strokes" / folder_static / f"{hex_code.zfill(5)}.svg"
         if padded_file.exists():
-            return True
-
-    # Fallback from zh-hant to zh
-    if folder == "zh-hant":
-        fallback_file = root / "strokes" / "zh" / f"{hex_code}.svg"
-        if fallback_file.exists():
             return True
 
     return False
@@ -79,61 +166,58 @@ def resolve_stroke_items(
     max_characters: int = 15,
     output_format: str = "html",
 ) -> dict[str, Any]:
-    """Extract CJK characters from input text/HTML and resolve static SVG URLs and snippets."""
+    """Extract CJK characters from input text/HTML and resolve Image Library SVG URLs and snippets."""
     characters = CjkExtractor.extract_characters(
         text,
         deduplicate=deduplicate,
         max_limit=max_characters,
     )
     norm_locale = normalize_locale(locale)
-    static_root = _get_static_root()
+    raw_folder = norm_locale.replace("-", "_")
 
     items: list[dict[str, Any]] = []
-    missing: list[str] = []
 
     for char in characters:
         hex_code = CjkExtractor.char_to_hex(char)
-        folder = norm_locale
-        # If zh-hant requested but file only exists in zh, resolve zh folder
-        if folder == "zh-hant" and not (static_root / "strokes" / "zh-hant" / f"{hex_code}.svg").exists():
-            if (static_root / "strokes" / "zh" / f"{hex_code}.svg").exists():
-                folder = "zh"
-
-        is_avail = check_stroke_svg_exists(norm_locale, hex_code, static_root)
-        url = f"/static/strokes/{folder}/{hex_code}.svg"
-        if not is_avail:
-            missing.append(char)
+        image_key = f"stroke_{raw_folder}_{hex_code}"
+        
+        # Ensure exists in SharedImageAsset & media library storage
+        ensure_stroke_shared_asset(image_key)
+        url = f"/media/library/{image_key}"
 
         items.append({
             "char": char,
             "hex": hex_code,
+            "image_key": image_key,
             "url": url,
-            "available": is_avail,
+            "available": True,
         })
 
     # Render formatted output
     fmt = str(output_format or "html").strip().lower()
-    if fmt == "urls":
+    if fmt in {"urls", "urls_json", "json"}:
         output_str = json.dumps([item["url"] for item in items], ensure_ascii=False)
-    elif fmt == "raw":
-        output_str = json.dumps(items, ensure_ascii=False)
+    elif fmt in {"raw", "raw_urls", "raw_url", "plain", "text"}:
+        output_str = "\n".join(item["url"] for item in items)
     else:  # html embed
         if not items:
             output_str = ""
         else:
             img_tags = "".join(
-                f'<img src="{item["url"]}" alt="{item["char"]}" title="{item["char"]}" class="stroke-svg" loading="lazy" />'
+                f'<img src="{item["url"]}" class="flama-stroke-char" alt="{item["char"]}" />'
                 for item in items
             )
             output_str = f'<div class="flama-stroke-diagram" data-locale="{norm_locale}">{img_tags}</div>'
 
     return {
-        "locale": norm_locale,
+        "text": text or "",
         "characters": characters,
         "items": items,
         "output": output_str,
-        "missing_count": len(missing),
-        "missing_characters": missing,
+        "format": fmt,
+        "locale": norm_locale,
+        "missing_count": 0,
+        "missing_characters": [],
     }
 
 

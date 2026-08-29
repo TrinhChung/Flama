@@ -139,6 +139,7 @@ _SCRIPT_TYPE_RE = re.compile(
 )
 _SCRIPT_SRC_RE = re.compile(r"""(?is)\bsrc\s*=""")
 _PROXY_MEDIA_URL_RE = re.compile(r"^/media/proxy/([A-Za-z0-9][A-Za-z0-9_-]{0,127})$")
+_LIBRARY_MEDIA_URL_RE = re.compile(r"^/media/library/([A-Za-z0-9][A-Za-z0-9_.-]{0,127})$")
 _STATIC_STROKE_URL_RE = re.compile(r"^/static/strokes/([a-zA-Z0-9_-]+)/([a-fA-F0-9]+)\.svg$")
 _SCRIPT_TOKEN_PREFIX = "__FC_INLINE_SCRIPT_BLOCK_"
 _ALLOWED_INLINE_SCRIPT_TYPES = {
@@ -174,7 +175,11 @@ def _strict_allowed_attr(tag: str, name: str, value: str) -> bool:
         return tag == "audio"
     if lowered in {"src", "href"}:
         val = (value or "").strip()
-        if _PROXY_MEDIA_URL_RE.match(val) or _STATIC_STROKE_URL_RE.match(val):
+        if (
+            _PROXY_MEDIA_URL_RE.match(val)
+            or _LIBRARY_MEDIA_URL_RE.match(val)
+            or _STATIC_STROKE_URL_RE.match(val)
+        ):
             return True
         if lowered == "href" and val.startswith("https://"):
             return True
@@ -204,7 +209,11 @@ def _template_allowed_attr(tag: str, name: str, value: str) -> bool:
         return tag in {"th", "td"}
     if lowered in {"src", "href"}:
         val = (value or "").strip()
-        if _PROXY_MEDIA_URL_RE.match(val) or _STATIC_STROKE_URL_RE.match(val):
+        if (
+            _PROXY_MEDIA_URL_RE.match(val)
+            or _LIBRARY_MEDIA_URL_RE.match(val)
+            or _STATIC_STROKE_URL_RE.match(val)
+        ):
             return True
         if lowered == "href" and val.startswith("https://"):
             return True

@@ -71,7 +71,7 @@ class TestApiStrokes(unittest.TestCase):
         data = res.get_json()
         self.assertEqual(data["characters"], ["日", "本", "語", "勉", "強"])
         self.assertIn("flama-stroke-diagram", data["output"])
-        self.assertIn("/static/strokes/ja/52c9.svg", data["output"])
+        self.assertIn("/media/library/stroke_ja_52c9", data["output"])
 
     def test_generate_strokes_chinese_api(self):
         self._login()
@@ -86,7 +86,7 @@ class TestApiStrokes(unittest.TestCase):
         self.assertEqual(res.status_code, 200)
         data = res.get_json()
         self.assertEqual(data["characters"], ["学", "习", "中", "文"])
-        self.assertIn("/static/strokes/zh/5b66.svg", data["output"])
+        self.assertIn("/media/library/stroke_zh_5b66", data["output"])
 
     def test_batch_generate_strokes_api(self):
         self._login()
@@ -105,7 +105,7 @@ class TestApiStrokes(unittest.TestCase):
         self.assertEqual(data["updated"], 1)
 
         db.session.refresh(self.note)
-        self.assertIn("/static/strokes/ja/52c9.svg", self.note.field_values.get("StrokeDiagram", ""))
+        self.assertIn("/media/library/stroke_ja_52c9", self.note.field_values.get("StrokeDiagram", ""))
 
 
 if __name__ == "__main__":

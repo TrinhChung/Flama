@@ -76,8 +76,8 @@ ALLOWED_MEDIA_MIME_TYPES = set(VALIDATOR_ALLOWED_MEDIA_MIME_TYPES)
 CSP_CARD_POLICY = (
     "default-src 'none'; "
     "style-src 'unsafe-inline'; "
-    "img-src /media/proxy/; "
-    "media-src /media/proxy/; "
+    "img-src /media/proxy/ /media/library/ /static/strokes/; "
+    "media-src /media/proxy/ /media/library/; "
     "frame-ancestors 'self'"
 )
 
