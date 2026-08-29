@@ -2,17 +2,18 @@ import { useEffect, useRef, useState } from 'react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import {
   faArrowLeft,
-  faCheck,
   faCode,
-  faGripVertical,
   faPlus,
-  faTrashCan,
 } from '@fortawesome/free-solid-svg-icons'
 import {
+  Check,
   ChevronDown,
   ChevronUp,
+  GripVertical,
   Info,
   LoaderCircle,
+  Plus,
+  Trash2,
 } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useParams } from 'react-router-dom'

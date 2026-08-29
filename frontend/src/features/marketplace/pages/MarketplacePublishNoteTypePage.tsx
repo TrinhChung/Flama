@@ -24,7 +24,7 @@ import { Page } from '@/shared/components/Page'
 import { PageError, PageLoading } from '@/shared/components/PageState'
 
 import { useTaxonomySchema } from '../hooks/useTaxonomySchema'
-import { PublishNoteTypeSelector, type PublishNoteTypeOption } from '../components/PublishNoteTypeSelector'
+import { PublishNoteTypeSelector } from '../components/PublishNoteTypeSelector'
 import {
   NOTE_TYPE_CATEGORY_PRESETS,
   TAXONOMY_DIFFICULTIES,

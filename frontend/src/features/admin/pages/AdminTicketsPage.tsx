@@ -50,6 +50,7 @@ export type TicketItem = {
   created_at: string
   updated_at: string
   resolved_at?: string
+  replies_count?: number
   replies?: ReplyItem[]
 }
 

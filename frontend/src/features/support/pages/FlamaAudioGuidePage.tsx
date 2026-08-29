@@ -10,7 +10,6 @@ import {
   faCircleXmark,
   faDesktop,
   faDownload,
-  faLifeRing,
   faRotateRight,
   faShieldHalved,
   faSliders,

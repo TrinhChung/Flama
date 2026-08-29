@@ -94,6 +94,7 @@ class SupportTicket(db.Model):
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
             "resolved_at": self.resolved_at.isoformat() if self.resolved_at else None,
+            "replies_count": len(self.replies) if self.replies else 0,
         }
         if include_replies:
             data["replies"] = [reply.to_dict() for reply in self.replies]
