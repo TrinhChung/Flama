@@ -1,6 +1,6 @@
 # Phase 0–3 Decoupling Task Backlog
 
-> Status: ACTIVE backlog; Phase 0 and P1-01 closed, next task P1-02.1
+> Status: ACTIVE backlog; Phase 0, P1-01 and P1-02.1 closed, next task P1-02.2
 >
 > Source of truth: `docs/architecture/study-interaction-trigger-algorithm-plan.md`
 >
@@ -8,7 +8,7 @@
 >
 > Latest Phase 0 gate review/handoff: [`P0_PHASE_REVIEW_HANDOFF_2026-08-29.md`](./P0_PHASE_REVIEW_HANDOFF_2026-08-29.md) — **GO; P0-01 through P0-04 COMPLETED**.
 >
-> Next execution plan: [`PHASE_0_3_NEXT_EXECUTION_PLAN_2026-08-29.md`](./PHASE_0_3_NEXT_EXECUTION_PLAN_2026-08-29.md) — P1-01 is complete; continue with the P1-02 external mutation inventory and conflict contract.
+> Next execution plan: [`PHASE_0_3_NEXT_EXECUTION_PLAN_2026-08-29.md`](./PHASE_0_3_NEXT_EXECUTION_PLAN_2026-08-29.md) — P1-02.1 inventory is complete; continue with the P1-02.2 conflict matrix.
 >
 > Reviewed detailed backlog: [`REVIEWED_DETAILED_EXECUTION_BACKLOG_2026-08-29.md`](./REVIEWED_DETAILED_EXECUTION_BACKLOG_2026-08-29.md) — 17 remaining parent tasks with execution slices, required outputs and gates.
 >

@@ -2,7 +2,7 @@
 
 > Review date: 2026-08-29
 >
-> Status: ACTIVE; Phase 0 and P1-01 closed, P1-02.1 is next
+> Status: ACTIVE; Phase 0, P1-01 and P1-02.1 closed, P1-02.2 is next
 >
 > Scope: 17 remaining parent tasks from P1-02 through INT-01
 >
@@ -14,7 +14,7 @@
 |---|---|---|
 | Completed and moved to `completed/` | P0-01, P0-02, P0-03, P0-04, P1-01, P2-01 | Code, handoffs and focused gates passed; P1-01 Study 98/98 and Connect/MCP 161/161 are green. |
 | Pre-decision inventory complete; ADR not approved | P3-05, P3-07 | Repository evidence/open questions are documented; the accepted P0-03 distribution is now available for decision review. |
-| Queued | P1-02–P1-04, P2-02–P2-07, P3-01–P3-06, INT-01 | Begin with P1-02.1 and execute in the waves below. |
+| Queued | P1-02.2–P1-02.4, P1-03–P1-04, P2-02–P2-07, P3-01–P3-06, INT-01 | Begin with P1-02.2 and execute in the waves below. |
 
 Latest local gate verification:
 
@@ -86,7 +86,7 @@ Gate: REST, MCP and batch produce equivalent progress/canonical metadata; batch 
 
 | Slice | Detailed work | Required output |
 |---|---|---|
-| P1-02.1 | Inventory snapshot, revlog, Connect, import, cutover and repair progress mutators including locks, revisions, events and commit owner | Complete mutation table |
+| P1-02.1 | **COMPLETED 2026-08-29** — inventoried snapshot, revlog, Connect, import, cutover, reset and repair mutators including locks, revisions, events and commit owner | Complete mutation table in the P1-02 task file |
 | P1-02.2 | Approve conflict matrix against direct/MCP/open batch sessions | Priority and typed-error matrix |
 | P1-02.3 | Apply lock/revision/idempotency rules without disguising state sync as native action | Updated mutation paths and provenance mapping |
 | P1-02.4 | Test stale/newer snapshots, idempotent replay, concurrent native review and overlay identities | No silent last-write-wins proof |

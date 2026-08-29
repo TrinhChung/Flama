@@ -1,8 +1,8 @@
 # Phase 0–3 next execution plan — after independent review round 5
 
-> Status: PHASE 0 AND P1-01 CLOSED; P1-02.1 is the next runtime task
+> Status: PHASE 0, P1-01 AND P1-02.1 CLOSED; P1-02.2 is the next task
 >
-> Current gate: `P0-01..P0-04 COMPLETED`, Phase 0 `GO`, `P1-01 COMPLETED`
+> Current gate: `P0-01..P0-04 COMPLETED`, Phase 0 `GO`, `P1-01 COMPLETED`, `P1-02.1 COMPLETED`
 >
 > Scope: close P0-03, then sequence the remaining runtime-correctness and composition-contract tasks through INT-01
 >
@@ -10,7 +10,7 @@
 
 ## 1. Outcome and ordering rule
 
-The replacement P0-03 evidence bundle and P1-01 canonical native review transaction have passed their gates. The next executable outcome is P1-02.1, starting with the external progress mutation inventory. Phase 4 remains outside this plan.
+The replacement P0-03 evidence bundle and P1-01 canonical native review transaction have passed their gates. P1-02.1 has completed the external progress mutation inventory; the next executable outcome is the P1-02.2 conflict/priority matrix. Phase 4 remains outside this plan.
 
 After Phase 0 closes, use this order:
 
@@ -83,7 +83,7 @@ Historical preparation update: P1-01.1 mapped direct, MCP and session transactio
 
 Update 2026-08-29: P3-05 and P3-07 repository evidence/open-question inventories are also complete. Both remain `TODO`: production distribution, mixed-scope cardinality and applied-composition lifecycle decisions require the accepted P0-03 bundle before ADR approval.
 
-Closeout update 2026-08-29: the SELECT-only replacement bundle passed with 67 categories, 11/11 formulas, 61 PASS, 6 WARN, 0 BLOCK and deterministic two-run output. Step 0 and P1-01 are complete; activate P1-02.1 next and use the assigned warnings as downstream task inputs.
+Closeout update 2026-08-29: the SELECT-only replacement bundle passed with 67 categories, 11/11 formulas, 61 PASS, 6 WARN, 0 BLOCK and deterministic two-run output. Step 0, P1-01 and the P1-02.1 read-only inventory are complete; activate P1-02.2 next and use the assigned warnings as downstream task inputs.
 
 ## 3. Step 1 — P1-01 canonical native review transaction
 
@@ -208,6 +208,6 @@ Do not implement Trigger dispatch before P2-06 is approved. Do not remove v2 dec
 
 1. P0-03 is complete; retain its six warning classes as explicit downstream inputs.
 2. Treat the completed P1-01 typed core and session outer transaction as the fixed native-write boundary.
-3. Begin P1-02.1 by inventorying snapshot, revlog, Connect, import, cutover and repair progress mutators before approving the conflict matrix.
+3. P1-02.1 completed: snapshot, revlog, Connect, import, cutover, reset and repair mutators are inventoried. Continue with P1-02.2 to approve the conflict matrix before runtime edits.
 4. Keep frontend correctness work ordered P2-02 → P2-03 → P2-04 → P2-05.
 5. Review P3-05/P3-07 decisions against the accepted production distribution before P3 implementation.
