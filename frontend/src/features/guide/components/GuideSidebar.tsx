@@ -11,10 +11,10 @@ import {
   LayoutDashboard,
   NotebookTabs,
   Search,
-  Sparkles,
   Store,
   Wallet,
   X,
+  Zap,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Badge } from '@/components/ui/badge'
@@ -23,7 +23,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { GUIDE_CATEGORIES } from '../guideData'
 
 const CATEGORY_ICONS: Record<string, React.ElementType> = {
-  Sparkles,
+  Zap,
   LayoutDashboard,
   GraduationCap,
   Search,

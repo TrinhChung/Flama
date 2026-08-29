@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import {
+  Award,
   BadgePercent,
   Calculator,
   CheckCircle2,
@@ -12,7 +13,6 @@ import {
   Search,
   Shield,
   ShieldCheck,
-  Sparkles,
   User,
   Users,
   X,
@@ -143,8 +143,8 @@ function RoleBadge({ roleName, isAdmin }: { roleName?: string | null; isAdmin?: 
   }
   if (roleName?.toLowerCase().includes('sáng tạo') || roleName?.toLowerCase() === 'creator') {
     return (
-      <Badge className="bg-amber-500/15 text-amber-800 dark:text-amber-300 hover:bg-amber-500/25 gap-1 border-amber-500/30">
-        <Sparkles className="size-3.5" />
+      <Badge variant="outline" className="bg-muted text-foreground border-border/80 gap-1 font-medium">
+        <Award className="size-3.5" />
         Creator
       </Badge>
     )
@@ -159,7 +159,7 @@ function RoleBadge({ roleName, isAdmin }: { roleName?: string | null; isAdmin?: 
   }
   return (
     <Badge variant="outline" className="gap-1 text-muted-foreground">
-      <Users className="size-3.5" />
+      <User className="size-3.5" />
       {roleName || 'User'}
     </Badge>
   )
@@ -360,7 +360,7 @@ export function AdminFeesPage() {
             Biểu phí vai trò
           </TabsTrigger>
           <TabsTrigger value="creator-policy" className="gap-2">
-            <Sparkles className="size-4" />
+            <Award className="size-4" />
             Tính năng Creator
           </TabsTrigger>
           <TabsTrigger value="user-overrides" className="gap-2">
@@ -929,7 +929,7 @@ export function AdminFeesPage() {
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Sparkles className="size-5 text-amber-500" />
+              <BadgePercent className="size-5 text-primary" />
               {selectedUserForOverride
                 ? `Cập nhật mức phí cho ${selectedUserForOverride.username}`
                 : 'Thiết lập mức phí riêng cho người dùng'}

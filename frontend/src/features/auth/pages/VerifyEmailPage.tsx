@@ -9,7 +9,6 @@ import {
   RefreshCw,
   Send,
   ShieldCheck,
-  Sparkles,
   User as UserIcon,
 } from 'lucide-react'
 import { Link, useSearchParams } from 'react-router-dom'
@@ -226,10 +225,10 @@ export function VerifyEmailPage() {
             </Button>
             <Button
               asChild
-              className="w-full font-bold bg-gradient-to-r from-primary via-orange-500 to-amber-500 hover:opacity-95 text-primary-foreground shadow-md text-xs"
+              className="w-full font-bold bg-primary text-primary-foreground hover:bg-primary/90 shadow-xs text-xs"
             >
               <Link to="/dashboard">
-                <Sparkles className="mr-1.5 size-3.5" />
+                <ArrowRight className="mr-1.5 size-3.5" />
                 Đến Bảng điều khiển
               </Link>
             </Button>

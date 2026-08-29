@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import {
   ArrowLeft,
+  Bot,
   Check,
   Code2,
   Copy,
@@ -8,7 +9,6 @@ import {
   Layers,
   Lightbulb,
   Plus,
-  Sparkles,
   Volume2,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
@@ -210,7 +210,7 @@ export function NoteTypeGuidePage() {
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="space-y-1">
                   <CardTitle className="text-base sm:text-lg font-bold text-foreground flex items-center gap-2">
-                    <Sparkles className="size-4 text-primary" /> Master Prompt Chuẩn Hóa
+                    <Bot className="size-4 text-primary" /> Master Prompt Chuẩn Hóa
                   </CardTitle>
                   <CardDescription className="text-xs sm:text-sm text-muted-foreground">
                     Sao chép khung lệnh dưới đây, điền mong muốn của bạn vào cuối rồi gửi cho ChatGPT / Claude / Gemini.

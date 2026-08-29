@@ -7,7 +7,6 @@ import {
   Layers,
   Search,
   ShieldCheck,
-  Sparkles,
   Zap,
 } from 'lucide-react'
 
@@ -19,7 +18,7 @@ export function McpAboutTab() {
         <CardHeader className="p-4 sm:p-6 pb-2">
           <div className="flex items-center gap-2">
             <Badge variant="default" className="gap-1 px-2.5 py-0.5 text-xs font-semibold">
-              <Sparkles className="size-3" /> Model Context Protocol
+              <Cpu className="size-3" /> Model Context Protocol
             </Badge>
             <Badge variant="outline" className="text-xs">
               JSON-RPC 2.0

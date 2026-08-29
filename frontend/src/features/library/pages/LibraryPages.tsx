@@ -6,7 +6,7 @@ import {
   RotateCcw,
   Search,
   SlidersHorizontal,
-  Sparkles,
+  Store,
   X,
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
@@ -444,7 +444,7 @@ export function InstalledDecksPage() {
                 asChild
               >
                 <Link to="/marketplace/decks" className="inline-flex items-center gap-1.5">
-                  <Sparkles className="size-3.5" />
+                  <Store className="size-3.5" />
                   <span>Khám phá Marketplace</span>
                   <ArrowRight className="size-3.5" />
                 </Link>

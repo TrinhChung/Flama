@@ -16,7 +16,6 @@ import {
   Copy,
   FileSpreadsheet,
   Layers,
-  Sparkles,
   Info,
 } from 'lucide-react'
 import type {
@@ -63,7 +62,7 @@ export const BatchFileTable: React.FC<BatchFileTableProps> = ({
       <div className="p-3.5 rounded-2xl border border-border/80 bg-muted/20 space-y-3">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <Sparkles className="size-4 text-primary" />
+            <FileSpreadsheet className="size-4 text-muted-foreground" />
             <span className="text-xs font-semibold text-foreground">
               Quy tắc đặt tên bài học ({batchFiles.length} tệp)
             </span>

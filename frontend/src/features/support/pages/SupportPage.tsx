@@ -11,7 +11,6 @@ import {
   HeartHandshake,
   LoaderCircle,
   QrCode,
-  Sparkles,
 } from 'lucide-react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Link, useSearchParams } from 'react-router-dom'
@@ -299,12 +298,11 @@ export function SupportPage() {
                       size="sm"
                       className={`rounded-full font-semibold transition-all text-xs px-2.5 sm:px-3 h-8 sm:h-9 justify-center ${
                         amount === preset
-                          ? 'bg-gradient-to-r from-primary to-orange-500 text-primary-foreground shadow-sm'
+                          ? 'bg-primary text-primary-foreground shadow-sm'
                           : 'hover:border-primary/50'
                       }`}
                       onClick={() => setAmount(preset)}
                     >
-                      <Sparkles className="size-3 mr-1 shrink-0" />
                       <span className="truncate">{preset.toLocaleString('vi-VN')} VND</span>
                     </Button>
                   ))}

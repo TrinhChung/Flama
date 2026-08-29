@@ -12,10 +12,10 @@ import {
   Loader2,
   MessageSquare,
   MessageSquareHeart,
+  Palette,
   Plus,
   RefreshCw,
   Send,
-  Sparkles,
   Ticket,
   Upload,
   X,
@@ -253,7 +253,7 @@ export function FeedbackPage() {
                 onClick={() => setCategory('bug')}
                 className={`flex items-center gap-2 px-4 py-2.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
                   category === 'bug'
-                    ? 'bg-red-500 text-white shadow-xs'
+                    ? 'bg-primary text-primary-foreground shadow-xs'
                     : 'bg-muted/60 hover:bg-muted text-muted-foreground'
                 }`}
               >
@@ -265,7 +265,7 @@ export function FeedbackPage() {
                 onClick={() => setCategory('feature')}
                 className={`flex items-center gap-2 px-4 py-2.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
                   category === 'feature'
-                    ? 'bg-amber-500 text-white shadow-xs'
+                    ? 'bg-primary text-primary-foreground shadow-xs'
                     : 'bg-muted/60 hover:bg-muted text-muted-foreground'
                 }`}
               >
@@ -277,11 +277,11 @@ export function FeedbackPage() {
                 onClick={() => setCategory('ui')}
                 className={`flex items-center gap-2 px-4 py-2.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
                   category === 'ui'
-                    ? 'bg-sky-500 text-white shadow-xs'
+                    ? 'bg-primary text-primary-foreground shadow-xs'
                     : 'bg-muted/60 hover:bg-muted text-muted-foreground'
                 }`}
               >
-                <Sparkles className="size-4" /> Giao diện (UI/UX)
+                <Palette className="size-4" /> Giao diện (UI/UX)
               </button>
 
               <button
@@ -289,7 +289,7 @@ export function FeedbackPage() {
                 onClick={() => setCategory('other')}
                 className={`flex items-center gap-2 px-4 py-2.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
                   category === 'other'
-                    ? 'bg-purple-500 text-white shadow-xs'
+                    ? 'bg-primary text-primary-foreground shadow-xs'
                     : 'bg-muted/60 hover:bg-muted text-muted-foreground'
                 }`}
               >
@@ -314,8 +314,8 @@ export function FeedbackPage() {
               onChange={(e) => setUrlPath(e.target.value)}
               className="rounded-xl font-mono text-xs"
             />
-            <div className="text-xs text-muted-foreground flex items-center gap-1.5 bg-muted/30 p-2.5 rounded-xl border">
-              <Sparkles className="size-3.5 text-primary shrink-0" />
+            <div className="text-xs text-muted-foreground flex items-center gap-1.5 bg-muted/30 p-2.5 rounded-xl border border-border/80">
+              <Info className="size-3.5 text-muted-foreground shrink-0" />
               <span>Tên màn hình nhận diện: <strong className="text-foreground font-semibold">{resolvedScreenName}</strong></span>
             </div>
           </div>

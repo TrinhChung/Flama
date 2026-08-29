@@ -38,7 +38,6 @@ import {
   Shield,
   ShieldAlert,
   ShieldCheck,
-  Sparkles,
   Trash2,
   Zap,
 } from 'lucide-react'
@@ -265,7 +264,7 @@ export function McpTokensTab({ hookResult }: McpTokensTabProps) {
                       }`}
                       onClick={() => applyCreatePreset(preset.key)}
                     >
-                      {preset.key === 'all' && <Sparkles className="size-3" />}
+                      {preset.key === 'all' && <ShieldCheck className="size-3" />}
                       {preset.key === 'readonly' && <BookOpen className="size-3" />}
                       {preset.key === 'manager' && <FolderTree className="size-3" />}
                       {preset.key === 'study' && <Brain className="size-3" />}
@@ -504,7 +503,7 @@ export function McpTokensTab({ hookResult }: McpTokensTabProps) {
                           >
                             {isFullAccess ? (
                               <Badge className="bg-primary/10 text-primary border-primary/30 font-medium text-[11px] gap-1 hover:bg-primary/20 transition-colors">
-                                <Sparkles className="size-3 text-primary" />
+                                <ShieldCheck className="size-3 text-primary" />
                                 Toàn quyền ({tokenScopes.length}/{ALL_MCP_SCOPES.length})
                               </Badge>
                             ) : isReadOnly ? (

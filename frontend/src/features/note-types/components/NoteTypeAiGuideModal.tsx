@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import {
+  Bot,
   Check,
   Code2,
   Copy,
   Lightbulb,
-  Sparkles,
   Volume2,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -87,7 +87,7 @@ export function NoteTypeAiGuideModal({ open, onOpenChange }: NoteTypeAiGuideModa
         <DialogHeader className="p-5 pb-3 border-b border-border/80 bg-muted/20">
           <div className="flex items-center gap-2.5">
             <div className="p-2 rounded-xl bg-primary/10 text-primary shrink-0">
-              <Sparkles className="size-5" />
+              <Bot className="size-5" />
             </div>
             <div>
               <DialogTitle className="text-base sm:text-lg font-bold text-foreground">
@@ -303,7 +303,7 @@ export function NoteTypeAiGuideBanner({ onOpenGuide }: { onOpenGuide: () => void
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-start sm:items-center gap-3">
           <div className="p-2.5 rounded-xl bg-primary/20 text-primary shrink-0 mt-0.5 sm:mt-0">
-            <Sparkles className="size-5 animate-pulse" />
+            <Bot className="size-5" />
           </div>
           <div className="space-y-0.5">
             <h4 className="text-sm font-bold text-foreground flex items-center gap-1.5">
@@ -323,7 +323,7 @@ export function NoteTypeAiGuideBanner({ onOpenGuide }: { onOpenGuide: () => void
           size="sm"
           className="h-8 sm:h-9 px-3.5 text-xs font-bold rounded-xl shadow-xs shrink-0 bg-primary text-primary-foreground hover:bg-primary/90"
         >
-          <Sparkles className="size-3.5 mr-1.5" />
+          <Bot className="size-3.5 mr-1.5" />
           Mở Hướng Dẫn & Prompt AI
         </Button>
       </div>

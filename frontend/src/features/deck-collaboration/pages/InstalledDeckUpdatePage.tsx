@@ -16,7 +16,6 @@ import {
   ShieldCheck,
   Zap,
   Unlink,
-  Sparkles,
 } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -742,7 +741,7 @@ export function InstalledDeckUpdatePage() {
           {/* Batch Resolution Bar */}
           <div className="flex flex-wrap items-center justify-between gap-2.5 rounded-2xl border border-primary/25 bg-primary/5 p-3.5">
             <div className="flex items-center gap-2 text-xs font-bold text-foreground">
-              <Sparkles className="size-4 text-primary shrink-0" />
+              <Zap className="size-4 text-primary shrink-0" />
               <span>Giải quyết nhanh toàn bộ {prepared.conflict_count} xung đột:</span>
             </div>
             <div className="flex flex-wrap gap-2">

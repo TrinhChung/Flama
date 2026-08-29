@@ -8,7 +8,6 @@ import {
   Plus,
   RefreshCw,
   ShieldCheck,
-  Sparkles,
   Trash2,
   Zap,
 } from 'lucide-react'
@@ -171,7 +170,7 @@ export function McpOAuthTab() {
                           className="h-6 text-[11px] text-primary gap-1 px-1.5"
                           onClick={() => setClientSecret(generateRandomKey())}
                         >
-                          <Sparkles className="size-3" />
+                          <RefreshCw className="size-3" />
                           Tạo Secret ngẫu nhiên
                         </Button>
                       </div>
@@ -601,7 +600,7 @@ export function McpOAuthTab() {
                   className="h-6 text-[11px] text-primary gap-1 px-1.5"
                   onClick={() => setEditClientSecret(generateRandomKey())}
                 >
-                  <Sparkles className="size-3" />
+                  <RefreshCw className="size-3" />
                   Tạo ngẫu nhiên
                 </Button>
               </div>
@@ -670,7 +669,7 @@ export function McpOAuthTab() {
                   className="h-6 text-[11px] text-primary gap-1 px-1.5"
                   onClick={() => setCustomRotateSecret(generateRandomKey())}
                 >
-                  <Sparkles className="size-3" />
+                  <RefreshCw className="size-3" />
                   Sinh ngẫu nhiên
                 </Button>
               </div>

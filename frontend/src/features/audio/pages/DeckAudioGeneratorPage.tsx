@@ -11,7 +11,6 @@ import {
   Plus,
   Radio,
   RefreshCw,
-  Sparkles,
   Volume2,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -218,7 +217,7 @@ export function DeckAudioGeneratorPage() {
                     {/* Needs Audio */}
                     <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 space-y-0.5">
                       <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-300 flex items-center gap-1">
-                        <Sparkles className="size-2.5" />
+                        <AudioLines className="size-2.5" />
                         Cần tạo âm
                       </span>
                       <p className="text-base font-black text-amber-700 dark:text-amber-300 font-mono">

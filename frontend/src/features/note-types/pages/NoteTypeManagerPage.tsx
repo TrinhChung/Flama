@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   AlertCircle,
+  Bot,
   CheckCircle,
   Code2,
   ExternalLink,
@@ -10,7 +11,7 @@ import {
   Plus,
   Share2,
   SlidersHorizontal,
-  Sparkles,
+  Store,
   Trash2,
 } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -226,7 +227,7 @@ export function NoteTypeManagerPage() {
               className="h-8 sm:h-9 px-2.5 sm:px-3 text-xs font-semibold rounded-xl border-primary/30 text-primary hover:bg-primary/10 shrink-0"
             >
               <Link to="/flashcards/note-types/guide" target="_blank" rel="noopener noreferrer">
-                <Sparkles className="size-3.5 mr-1.5 text-primary shrink-0" />
+                <Bot className="size-3.5 mr-1.5 text-primary shrink-0" />
                 Prompt AI
                 <ExternalLink className="size-3 ml-1 opacity-70 shrink-0" />
               </Link>
@@ -239,7 +240,7 @@ export function NoteTypeManagerPage() {
               className="h-8 sm:h-9 px-2.5 sm:px-3 text-xs font-semibold rounded-xl shrink-0"
             >
               <Link to="/marketplace/note-types">
-                <Sparkles className="size-3.5 mr-1.5 text-primary shrink-0" />
+                <Store className="size-3.5 mr-1.5 text-primary shrink-0" />
                 Kho Mẫu
               </Link>
             </Button>
@@ -262,7 +263,7 @@ export function NoteTypeManagerPage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-start sm:items-center gap-3">
             <div className="p-2.5 rounded-xl bg-primary/20 text-primary shrink-0 mt-0.5 sm:mt-0">
-              <Sparkles className="size-5 animate-pulse" />
+              <Bot className="size-5" />
             </div>
             <div className="space-y-0.5">
               <h4 className="text-sm font-bold text-foreground flex items-center gap-1.5">
@@ -283,7 +284,7 @@ export function NoteTypeManagerPage() {
             className="h-8 sm:h-9 px-3.5 text-xs font-bold rounded-xl shadow-xs shrink-0 self-start sm:self-auto bg-primary text-primary-foreground hover:bg-primary/90"
           >
             <Link to="/flashcards/note-types/guide" target="_blank" rel="noopener noreferrer">
-              <Sparkles className="size-3.5 mr-1.5" />
+              <Bot className="size-3.5 mr-1.5" />
               Mở Trang Hướng Dẫn AI
               <ExternalLink className="size-3.5 ml-1.5" />
             </Link>

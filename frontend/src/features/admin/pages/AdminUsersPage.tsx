@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import {
+  Award,
   BadgePercent,
   Check,
   CheckCircle2,
@@ -11,7 +12,6 @@ import {
   ShieldCheck,
   ShieldUser,
   Slash,
-  Sparkles,
   Users,
   X,
 } from 'lucide-react'
@@ -123,8 +123,8 @@ function RoleBadge({ roleName, isAdmin }: { roleName?: string | null; isAdmin?: 
   }
   if (roleName?.toLowerCase() === 'creator') {
     return (
-      <Badge className="bg-amber-500/15 text-amber-800 dark:text-amber-300 hover:bg-amber-500/25 gap-1 border-amber-500/30">
-        <Sparkles className="size-3.5" />
+      <Badge variant="outline" className="bg-muted text-foreground border-border/80 gap-1 font-medium">
+        <Award className="size-3.5" />
         Creator
       </Badge>
     )

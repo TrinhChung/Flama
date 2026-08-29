@@ -5,7 +5,7 @@ export const GUIDE_CATEGORIES: GuideCategory[] = [
     slug: 'getting-started',
     title: 'Bắt đầu Nhanh',
     description: 'Quy trình 3 phút làm quen và bắt đầu phiên học Flashcard đầu tiên.',
-    iconName: 'Sparkles',
+    iconName: 'Zap',
     articles: [
       {
         slug: 'getting-started',
@@ -592,33 +592,146 @@ export const GUIDE_CATEGORIES: GuideCategory[] = [
     articles: [
       {
         slug: 'yomitan',
-        title: 'Khai Thác Từ Vựng 1-Click Với Tiện Ích Yomitan',
+        title: 'Khai Thác Từ Vựng 1-Click Với Tiện Ích Yomitan & Flama Connect',
         shortDescription: 'Rê chuột tra từ khi đọc báo, manga trên web và bấm dấu (+) để từ vựng tự động được tạo thành Flashcard trong Flama.',
         categorySlug: 'integrations',
-        readTimeMinutes: 4,
-        updatedAt: '2026-08-28',
-        intro: 'Dịch vụ Flama Connect là dịch vụ cầu nối được tích hợp sẵn ở máy chủ backend của Flama. Bạn KHÔNG CẦN tải về hay cài đặt bất kỳ phần mềm Flama Connect nào trên máy tính. Bạn chỉ cần thực hiện 3 bước cấu hình đơn giản.',
+        readTimeMinutes: 5,
+        updatedAt: '2026-08-29',
+        intro: 'Yomitan là tiện ích mở rộng (browser extension) tra từ pop-up tốc độ cao trên trình duyệt web, kế thừa và nâng cấp từ Yomichan huyền thoại. Dịch vụ Flama Connect được tích hợp sẵn ở máy chủ backend của Flama, giúp bạn tự động gửi từ vựng, Kana, nghĩa, âm thanh MP3 và câu ví dụ từ Yomitan trực tiếp vào bộ thẻ Flama của bạn mà KHÔNG CẦN cài đặt bất kỳ phần mềm trung gian nào trên máy tính.',
         steps: [
           {
-            title: 'Bước 1: Tạo Token kết nối trên Flama',
-            description: 'Truy cập trang Cài đặt Yomitan (/settings/yomitan) trên Flama. Bấm nút "Tạo Token mới", sau đó bấm Sao chép đường dẫn kết nối (Server URL).',
+            title: 'Bước 1: Tạo API Token kết nối trên Flama',
+            description: 'Truy cập trang Quản lý Token Yomitan (/settings/yomitan) trên Flama. Nhập tên thiết bị (vd: Chrome PC hoặc Kiwi Mobile), chọn thời hạn và bấm "Tạo token mới". Sau đó bấm Sao chép đường dẫn Server URL.',
             badge: 'Web Flama',
+            tip: 'Mỗi thiết bị hoặc trình duyệt nên tạo một Token riêng để dễ dàng theo dõi và thu hồi bảo mật khi cần.',
           },
           {
-            title: 'Bước 2: Dán Server URL vào tiện ích Yomitan',
-            description: 'Mở Cài đặt (Settings) của tiện ích Yomitan trên trình duyệt ➔ Chọn mục "Anki / Connect" ➔ Bật kích hoạt (Enable Anki integration) ➔ Dán đường dẫn Server URL vừa sao chép vào ô "Server".',
+            title: 'Bước 2: Cài đặt tiện ích Yomitan trên trình duyệt',
+            description: 'Cài đặt tiện ích Yomitan chính thức từ cửa hàng ứng dụng trình duyệt của bạn (Chrome Web Store hoặc Firefox Add-ons).',
+            badge: 'Trình duyệt',
+            tip: 'Hỗ trợ Google Chrome, Microsoft Edge, Brave, Cốc Cốc, Kiwi Browser (Android) và Firefox (PC & Mobile).',
+          },
+          {
+            title: 'Bước 3: Dán Server URL vào cài đặt Yomitan',
+            description: 'Mở Cài đặt (Settings) của tiện ích Yomitan trên trình duyệt ➔ Cuộn xuống mục "Anki / Connect" (hoặc "Integration") ➔ Bật kích hoạt (Enable Anki integration) ➔ Dán đường dẫn Server URL vừa sao chép vào ô "Server URL" (không cần nhập API key riêng).',
             badge: 'Yomitan',
           },
           {
-            title: 'Bước 3: Cấu hình ánh xạ các trường từ vựng',
-            description: 'Chọn bộ thẻ đích và cấu hình ánh xạ: {expression} ➔ Kanji, {reading} ➔ Reading, {glossary} ➔ Meaning, {audio} ➔ Audio.',
-            badge: 'Ánh xạ',
+            title: 'Bước 4: Cấu hình Mẫu Thẻ (Card Templates) & Tạo thẻ',
+            description: 'Trong cài đặt Yomitan, mở "Configure card templates..." để gán các Field Markers (như {expression}, {reading}, {glossary}, {audio}) vào các trường tương ứng của Loại ghi chú trong Deck. Khi tra từ trên web, chỉ cần bấm dấu (+) để tạo thẻ lập tức!',
+            badge: 'Tạo thẻ',
+            tip: 'Xem bài viết "Bảng Tra Cứu Toàn Bộ 55 Field Markers" để nắm rõ cách gán từng trường dữ liệu.',
+          },
+        ],
+        detailedSections: [
+          {
+            title: '1. Link Tải Tiện Ích Yomitan Chính Thức',
+            content: '• Chrome / Edge / Brave / Cốc Cốc / Kiwi Browser (Android): https://chromewebstore.google.com/detail/yomitan/gkgemgainhhaloainhgfppmadnhpikan\n• Mozilla Firefox (PC & Firefox Android): https://addons.mozilla.org/en-US/firefox/addon/yomitan/\n• Mã nguồn mở & Bản phát hành GitHub: https://github.com/yomitan-dev/yomitan',
+          },
+          {
+            title: '2. Hướng Dẫn Sử Dụng Yomitan Trên Điện Thoại Android (Kiwi Browser / Firefox Android)',
+            content: 'Bạn hoàn toàn có thể tra từ và bắn Flashcard sang Flama ngay trên điện thoại di động:\n1. Tải ứng dụng Kiwi Browser hoặc Firefox từ Google Play Store trên điện thoại.\n2. Mở cửa hàng tiện ích (Chrome Web Store hoặc Firefox Add-ons) trong trình duyệt di động và cài đặt Yomitan.\n3. Vào Cài đặt Yomitan ➔ phần Integration / Connect ➔ dán Server URL Flama Connect đã tạo.\n4. Bắt đầu đọc báo tiếng Nhật, manga hay light novel trên di động và chạm từ vựng để tạo thẻ Flama tức thì!',
+          },
+          {
+            title: '3. Quy Tắc Trường Đầu Tiên (Unique First Field Requirement)',
+            content: 'Hệ thống yêu cầu trường đầu tiên (First Field) của mẫu thẻ phải chứa giá trị duy nhất để phòng tránh tạo các thẻ ghi nhớ trùng lặp:\n• Đối với thẻ từ vựng (Terms): Khuyên dùng marker {expression} cho trường đầu tiên.\n• Đối với thẻ chữ Hán (Kanji): Khuyên dùng marker {character} cho trường đầu tiên.',
+          },
+          {
+            title: '4. Lưu Ý Về Âm Thanh & An Toàn Bảo Mật',
+            content: '• Âm thanh phát âm (Audio): Flama Connect tự động tiếp nhận file MP3 phát âm dung lượng tối đa 1 MB gửi từ Yomitan.\n• Bảo mật Token: Server URL chứa mã xác thực cá nhân của bạn. Không chia sẻ URL này cho người khác và hãy thu hồi ngay trên trang /settings/yomitan nếu nghi ngờ bị lộ.',
           },
         ],
         keyTakeaways: [
-          'Sau khi kết nối, mỗi khi rê chuột tra từ trên web và bấm dấu (+), Flashcard sẽ được nạp thẳng vào bộ thẻ bạn chọn.',
+          'Tra từ siêu tốc 0.1s khi rê chuột/chạm từ và tạo Flashcard 1-Click có sẵn Kanji, Furigana, Nghĩa và Âm thanh MP3.',
+          'Flama Connect hoạt động trực tiếp qua máy chủ đám mây, không cần cài đặt phần mềm cầu nối AnkiConnect trên máy.',
+          'Xem bảng tra cứu 55 Field Markers để tùy biến chính xác từng trường thông tin.',
         ],
+        relatedArticleSlugs: ['yomitan-markers', 'mcp-ai'],
         troubleshootingSlug: 'yomitan',
+      },
+      {
+        slug: 'yomitan-markers',
+        title: 'Bảng Tra Cứu Toàn Bộ 55 Field Markers Yomitan & Flama',
+        shortDescription: 'Danh mục chi tiết 55 Field Markers để tự động ánh xạ Kanji, Furigana, Pitch Accent, Nghĩa, Âm thanh và Câu ví dụ vào mẫu thẻ.',
+        categorySlug: 'integrations',
+        readTimeMinutes: 5,
+        updatedAt: '2026-08-29',
+        intro: 'Khi bạn bấm nút (+) để thêm thẻ từ tiện ích Yomitan, hệ thống sẽ tự động thế các Field Marker (đặt trong dấu ngoặc nhọn {}) bằng thông tin thực tế từ từ điển đã cài đặt vào các trường tương ứng của Loại ghi chú trong Flama.',
+        params: [
+          {
+            name: '{expression}',
+            defaultValue: '日本語',
+            description: 'Từ vựng biểu diễn bằng Kanji (hoặc Kana nếu không có Kanji). Khuyên dùng làm trường đầu tiên cho thẻ từ vựng.',
+          },
+          {
+            name: '{reading}',
+            defaultValue: 'にほんご',
+            description: 'Cách đọc Kana cho từ vựng.',
+          },
+          {
+            name: '{furigana}',
+            defaultValue: '日本語[にほんご]',
+            description: 'Từ dạng Kanji có hiển thị Furigana phía trên (HTML ruby).',
+          },
+          {
+            name: '{glossary}',
+            defaultValue: 'Danh sách nghĩa',
+            description: 'Danh sách đầy đủ các nghĩa và định nghĩa của từ vựng từ các từ điển đã cài đặt.',
+          },
+          {
+            name: '{audio}',
+            defaultValue: 'MP3 file',
+            description: 'File âm thanh phát âm bản xứ của từ vựng (tự động nạp vào Flama tối đa 1 MB).',
+          },
+          {
+            name: '{sentence}',
+            defaultValue: 'Câu ví dụ',
+            description: 'Câu văn hoặc đoạn trích chứa từ vựng trên trang web đang đọc.',
+          },
+          {
+            name: '{sentence-furigana}',
+            defaultValue: 'Câu ví dụ + Furigana',
+            description: 'Câu văn chứa từ vựng có thêm Furigana dạng HTML ruby.',
+          },
+          {
+            name: '{character}',
+            defaultValue: '日',
+            description: 'Ký tự chữ Hán (Kanji). Khuyên dùng làm trường đầu tiên cho thẻ Kanji.',
+          },
+          {
+            name: '{kunyomi}',
+            defaultValue: 'ひ, び, か',
+            description: 'Cách đọc âm Nhật (Kunyomi) của chữ Hán bằng Hiragana.',
+          },
+          {
+            name: '{onyomi}',
+            defaultValue: 'ニチ, ジツ',
+            description: 'Cách đọc âm Hán (Onyomi) của chữ Hán bằng Katakana.',
+          },
+        ],
+        detailedSections: [
+          {
+            title: '1. Nhóm Field Markers Cho Thẻ Từ Vựng (Term Markers - 27 markers)',
+            content: '• {expression}: Từ vựng biểu diễn bằng Kanji (nếu không có Kanji sẽ sử dụng Kana). Khuyên dùng cho trường đầu tiên.\n• {reading}: Cách đọc Kana cho từ vựng.\n• {furigana}: Từ dạng Kanji có hiển thị Furigana phía trên dạng HTML ruby.\n• {furigana-plain}: Từ dạng Kanji có hiển thị Furigana bên cạnh trong ngoặc vuông (vd: 日本語[にほんご]).\n• {glossary}: Danh sách đầy đủ các nghĩa / định nghĩa của từ.\n• {glossary-brief}: Danh sách định nghĩa ngắn gọn hơn.\n• {glossary-no-dictionary}: Danh sách định nghĩa, ẩn nhãn tên từ điển.\n• {glossary-first}: Chỉ lấy định nghĩa đầu tiên của từ.\n• {glossary-plain}: Danh sách định nghĩa chỉ dùng ngắt dòng văn bản.\n• {glossary-plain-no-dictionary}: {glossary-plain} ẩn nhãn từ điển.\n• {glossary-first-brief}: Định nghĩa đầu tiên ở dạng ngắn gọn.\n• {glossary-first-no-dictionary}: Định nghĩa đầu tiên, ẩn nhãn từ điển.\n• {audio}: File âm thanh phát âm của từ vựng từ các nguồn audio khả dụng.\n• {part-of-speech}: Từ loại của từ (Danh từ, Động từ, Tính từ,...).\n• {pitch-accents}: Ký hiệu hạ giọng trọng âm (downstep notations).\n• {pitch-accent-graphs}: Biểu đồ trọng âm pitch accent.\n• {pitch-accent-graphs-jj}: Biểu đồ trọng âm phong cách Jidoujisho.\n• {pitch-accent-positions}: Vị trí hạ giọng trọng âm ở dạng số.\n• {pitch-accent-categories}: Nhóm trọng âm (heiban, kifuku, atamadaka, odaka, nakadaka).\n• {phonetic-transcriptions}: Phiên âm ngữ âm học.\n• {conjugation}: Chuỗi chia từ (conjugation path) từ thể inflected về dạng từ điển nguyên thể.\n• {cloze-body-kana}: Cách đọc Kana cho từ thể cloze ({cloze-body}).\n• {tags}: Thẻ ngữ pháp và cách sử dụng.\n• {single-glossary-DICT-NAME}: Chỉ lấy định nghĩa từ một từ điển duy nhất chỉ định.\n• {single-glossary-DICT-NAME-brief}: Định nghĩa ngắn gọn từ 1 từ điển.\n• {single-glossary-DICT-NAME-no-dictionary}: Định nghĩa từ 1 từ điển ẩn nhãn.\n• {single-glossary-DICT-NAME-plain}: Định nghĩa văn bản thuần từ 1 từ điển.',
+          },
+          {
+            title: '2. Nhóm Field Markers Cho Thẻ Chữ Hán (Kanji Markers - 6 markers)',
+            content: '• {character}: Ký tự Unicode chữ Hán (Kanji). Khuyên dùng làm marker cho trường đầu tiên của thẻ Kanji.\n• {glossary}: Danh sách nghĩa / định nghĩa của chữ Hán.\n• {kunyomi}: Cách đọc Kunyomi (âm Nhật) bằng Hiragana (vd: ひ, び, か).\n• {onyomi}: Cách đọc Onyomi (âm Hán) bằng Katakana (vd: ニチ, ジツ).\n• {onyomi-hiragana}: Cách đọc Onyomi bằng Hiragana (vd: にち, じつ).\n• {stroke-count}: Số nét vẽ của ký tự chữ Hán (vd: 4).',
+          },
+          {
+            title: '3. Nhóm Field Markers Dùng Chung & Ngữ Cảnh (Context & General Markers - 22 markers)',
+            content: '• {sentence}: Câu văn, đoạn trích hoặc cụm từ chứa từ vựng/chữ Hán từ nội dung trang web đang đọc.\n• {sentence-furigana}: Câu văn có chèn Furigana dạng HTML ruby.\n• {sentence-furigana-plain}: Câu văn có chèn Furigana trong ngoặc vuông [...].\n• {document-title}: Tiêu đề trang web nơi từ vựng hoặc chữ Hán xuất hiện.\n• {url}: Địa chỉ liên kết URL của trang web đang đọc.\n• {url-plain}: Địa chỉ URL thô không chứa HTML.\n• {screenshot}: Ảnh chụp màn hình tại thời điểm thêm từ.\n• {clipboard-text}: Đoạn văn bản trong bộ nhớ tạm clipboard.\n• {clipboard-image}: Hình ảnh trong bộ nhớ tạm clipboard.\n• {search-query}: Truy vấn tìm kiếm đầy đủ trong cửa sổ popup.\n• {popup-selection-text}: Đoạn văn bản đang được bôi đen.\n• {dictionary}: Tên gốc của từ điển tạo nên thẻ.\n• {dictionary-alias}: Tên hiển thị của từ điển.\n• {frequencies}: Thông tin tần suất xuất hiện / độ phổ biến.\n• {frequency-harmonic-rank}: Thứ hạng trung bình điều hòa về độ phổ biến.\n• {frequency-harmonic-occurrence}: Số lần xuất hiện trung bình điều hòa.\n• {frequency-average-rank}: Thứ hạng trung bình cộng về độ phổ biến.\n• {frequency-average-occurrence}: Số lần xuất hiện trung bình cộng.\n• {single-frequency-DICT-NAME}: Dữ liệu tần suất từ từ điển chỉ định.\n• {single-frequency-number-DICT-NAME}: Con số tần suất đơn thuần từ từ điển chỉ định.\n• {cloze-body}: Từ vựng dạng biến đổi ban đầu trước khi về dạng từ điển.\n• {cloze-prefix} / {cloze-suffix}: Trích đoạn câu trước và sau cloze-body.',
+          },
+          {
+            title: '4. Cấu Hình Ánh Xạ Khuyên Dùng Cho Mẫu Thẻ Cơ Bản',
+            content: 'Khi mở Yomitan Settings ➔ Configure card templates, bạn nên ánh xạ như sau:\n• Trường 1 (Kanji / Biểu thức): {expression}\n• Trường 2 (Cách đọc): {furigana}\n• Trường 3 (Ý nghĩa): {glossary}\n• Trường 4 (Âm thanh): {audio}\n• Trường 5 (Câu ví dụ): {sentence}',
+          },
+        ],
+        keyTakeaways: [
+          'Luôn đặt marker duy nhất như {expression} hoặc {character} ở trường đầu tiên của mẫu thẻ.',
+          'Có thể tự do kết hợp các markers và văn bản trong cùng một trường theo nhu cầu học tập.',
+        ],
+        relatedArticleSlugs: ['yomitan', 'fields'],
       },
       {
         slug: 'mcp-ai',

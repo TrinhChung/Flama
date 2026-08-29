@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import {
+  Award,
   Calendar,
   Camera,
   CheckCircle2,
@@ -12,7 +13,6 @@ import {
   MessageSquare,
   Shield,
   ShieldAlert,
-  Sparkles,
   User as UserIcon,
 } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -128,7 +128,7 @@ export function ProfileHeroCard({
                     title="Nhà sáng tạo nội dung"
                     className="absolute -right-1 -top-1 sm:-bottom-1 sm:top-auto flex size-6 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-xs ring-2 ring-background"
                   >
-                    <Sparkles className="size-3.5 fill-current" />
+                    <Award className="size-3.5 fill-current" />
                   </span>
                 ) : null}
               </div>
@@ -151,8 +151,8 @@ export function ProfileHeroCard({
                       Admin
                     </Badge>
                   ) : user.role?.code === 'creator' ? (
-                    <Badge className="bg-primary/15 text-primary border-primary/30">
-                      <Sparkles className="mr-1 size-3" />
+                    <Badge variant="outline" className="bg-muted text-foreground border-border/80">
+                      <Award className="mr-1 size-3" />
                       Nhà sáng tạo
                     </Badge>
                   ) : (

@@ -16,13 +16,13 @@ import {
   ChevronLeft,
   ChevronRight,
   Download,
+  Eye,
   FileText,
   HelpCircle,
   Layers,
   Loader2,
   PenTool,
   Printer,
-  Sparkles,
   Table as TableIcon,
   ZoomIn,
   ZoomOut,
@@ -907,7 +907,7 @@ export function DeckWorksheetModal({
                   </>
                 ) : (
                   <>
-                    <Sparkles className="size-4" />
+                    <Eye className="size-4" />
                     Xem trước bài tập
                   </>
                 )}

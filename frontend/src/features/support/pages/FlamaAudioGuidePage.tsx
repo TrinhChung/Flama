@@ -10,7 +10,6 @@ import {
   RefreshCw,
   ShieldCheck,
   Sliders,
-  Sparkles,
   Volume2,
   Zap,
 } from 'lucide-react'
@@ -167,10 +166,10 @@ export function FlamaAudioGuidePage() {
       </div>
 
       {/* Step by Step Setup Guide */}
-      <Card className="border-2 border-primary/30 shadow-md">
-        <CardHeader className="bg-gradient-to-r from-primary/10 via-amber-500/10 to-transparent pb-4">
-          <CardTitle className="text-xl font-bold flex items-center gap-2">
-            <Sparkles className="size-5 text-primary" />
+      <Card className="border border-border/80 shadow-xs">
+        <CardHeader className="bg-muted/20 pb-4 border-b border-border/40">
+          <CardTitle className="text-lg font-bold flex items-center gap-2">
+            <Volume2 className="size-5 text-primary" />
             <span>Các bước khởi chạy &amp; Ghép nối Flama Audio</span>
           </CardTitle>
           <CardDescription className="text-xs">

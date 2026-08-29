@@ -11,9 +11,9 @@ import {
   LifeBuoy,
   NotebookTabs,
   Search,
-  Sparkles,
   Store,
   Wallet,
+  Zap,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Badge } from '@/components/ui/badge'
@@ -23,7 +23,7 @@ import { Input } from '@/components/ui/input'
 import { GUIDE_CATEGORIES, searchArticles } from '../guideData'
 
 const CATEGORY_ICONS: Record<string, React.ElementType> = {
-  Sparkles,
+  Zap,
   LayoutDashboard,
   GraduationCap,
   Search,
@@ -131,7 +131,7 @@ export function GuideHomePage({ searchQuery, onSearchChange }: GuideHomePageProp
           <div className="rounded-2xl border-2 border-primary/30 bg-gradient-to-r from-primary/10 to-card p-5 sm:p-6 flex flex-wrap items-center justify-between gap-4 shadow-sm">
             <div className="flex items-center gap-3.5 min-w-0">
               <div className="size-12 rounded-2xl bg-primary text-primary-foreground flex items-center justify-center shrink-0 shadow-sm">
-                <Sparkles className="size-6" />
+                <Zap className="size-6" />
               </div>
               <div className="space-y-1 min-w-0">
                 <div className="flex items-center gap-2">

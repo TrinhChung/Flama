@@ -2,9 +2,9 @@ import { useState } from 'react'
 import {
   BookOpen,
   Bot,
+  Cpu,
   Flame,
   KeyRound,
-  Sparkles,
   Wrench,
   Zap,
 } from 'lucide-react'
@@ -77,7 +77,7 @@ export function McpTokensPage() {
           </div>
 
           <div className="flex items-center gap-2.5 sm:gap-3 p-3 sm:p-3.5 rounded-xl border bg-card/60 backdrop-blur-xs shadow-2xs">
-            <div className="p-2 sm:p-2.5 rounded-lg bg-sky-500/10 text-sky-600 dark:text-sky-400 shrink-0">
+            <div className="p-2 sm:p-2.5 rounded-lg bg-muted text-muted-foreground shrink-0">
               <Flame className="size-4.5 sm:size-5" />
             </div>
             <div className="min-w-0">
@@ -96,7 +96,7 @@ export function McpTokensPage() {
               value="tokens"
               className="flex-1 sm:flex-none px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium rounded-xl gap-1.5 transition-all"
             >
-              <KeyRound className="size-4 text-primary shrink-0" />
+              <KeyRound className="size-4 shrink-0" />
               <span className="hidden sm:inline">Quản lý Token (Claude / Cursor)</span>
               <span className="sm:hidden">Token</span>
             </TabsTrigger>
@@ -104,7 +104,7 @@ export function McpTokensPage() {
               value="oauth"
               className="flex-1 sm:flex-none px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium rounded-xl gap-1.5 transition-all"
             >
-              <Bot className="size-4 text-purple-500 shrink-0" />
+              <Bot className="size-4 shrink-0" />
               <span className="hidden sm:inline">ChatGPT & OAuth 2.1 (Mới)</span>
               <span className="sm:hidden">ChatGPT</span>
             </TabsTrigger>
@@ -112,7 +112,7 @@ export function McpTokensPage() {
               value="about"
               className="flex-1 sm:flex-none px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium rounded-xl gap-1.5 transition-all"
             >
-              <Sparkles className="size-4 text-amber-500 shrink-0" />
+              <Cpu className="size-4 shrink-0" />
               <span className="hidden sm:inline">MCP là gì?</span>
               <span className="sm:hidden">Tổng quan</span>
             </TabsTrigger>
@@ -120,7 +120,7 @@ export function McpTokensPage() {
               value="guide"
               className="flex-1 sm:flex-none px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium rounded-xl gap-1.5 transition-all"
             >
-              <BookOpen className="size-4 text-sky-500 shrink-0" />
+              <BookOpen className="size-4 shrink-0" />
               <span className="hidden sm:inline">Hướng dẫn Cài đặt</span>
               <span className="sm:hidden">Hướng dẫn</span>
             </TabsTrigger>
@@ -128,7 +128,7 @@ export function McpTokensPage() {
               value="tools"
               className="flex-1 sm:flex-none px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium rounded-xl gap-1.5 transition-all"
             >
-              <Wrench className="size-4 text-emerald-500 shrink-0" />
+              <Wrench className="size-4 shrink-0" />
               <span className="hidden sm:inline">Danh mục 8 Công cụ & Prompts</span>
               <span className="sm:hidden">Công cụ</span>
             </TabsTrigger>

@@ -3,7 +3,7 @@ import {
   GitPullRequest,
   GraduationCap,
   Shield,
-  Sparkles,
+  Star,
   Trophy,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -11,7 +11,7 @@ import type { ProfileBadge } from '../types/profile'
 
 const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   Shield,
-  Sparkles,
+  Star,
   Award,
   GitPullRequest,
   GraduationCap,

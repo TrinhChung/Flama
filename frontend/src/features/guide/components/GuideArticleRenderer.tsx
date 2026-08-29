@@ -3,10 +3,10 @@ import {
   ArrowRight,
   CheckCircle2,
   Clock,
+  Info,
   Keyboard,
   Lightbulb,
   Sliders,
-  Sparkles,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Badge } from '@/components/ui/badge'
@@ -53,9 +53,9 @@ export function GuideArticleRenderer({ article, category }: GuideArticleRenderer
 
       {/* Key Takeaways / Tip banner */}
       {article.keyTakeaways && article.keyTakeaways.length > 0 && (
-        <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 sm:p-5 space-y-2">
-          <div className="flex items-center gap-2 text-primary font-bold text-xs uppercase tracking-wider">
-            <Sparkles className="size-4" />
+        <div className="rounded-2xl border border-border/80 bg-muted/30 p-4 sm:p-5 space-y-2">
+          <div className="flex items-center gap-2 text-foreground font-bold text-xs uppercase tracking-wider">
+            <CheckCircle2 className="size-4 text-primary" />
             <span>Điểm Cốt Lõi Cần Nhớ</span>
           </div>
           <ul className="space-y-1.5 text-xs sm:text-sm text-foreground/90 leading-relaxed list-disc list-inside">

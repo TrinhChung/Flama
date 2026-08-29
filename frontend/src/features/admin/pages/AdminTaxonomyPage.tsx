@@ -5,13 +5,13 @@ import {
   Check,
   Database,
   Edit2,
+  GraduationCap,
   Layers,
   Link2,
   Loader2,
   Plus,
   RefreshCw,
   Search,
-  Sparkles,
   Tag,
   Trash2,
   X,
@@ -610,21 +610,21 @@ export function AdminTaxonomyPage() {
         <Card className="rounded-xl border border-border/70 p-3.5 shadow-2xs">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-semibold text-muted-foreground uppercase">Khung thi</span>
-            <Sparkles className="size-4 text-amber-500" />
+            <GraduationCap className="size-4 text-muted-foreground" />
           </div>
           <p className="text-2xl font-bold mt-1 tabular-nums">{frameworks.length}</p>
         </Card>
         <Card className="rounded-xl border border-border/70 p-3.5 shadow-2xs">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-semibold text-muted-foreground uppercase">Cấp độ</span>
-            <Award className="size-4 text-purple-500" />
+            <Award className="size-4 text-muted-foreground" />
           </div>
           <p className="text-2xl font-bold mt-1 tabular-nums">{levels.length}</p>
         </Card>
         <Card className="rounded-xl border border-border/70 p-3.5 shadow-2xs">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-semibold text-muted-foreground uppercase">Metadata</span>
-            <Tag className="size-4 text-pink-500" />
+            <Tag className="size-4 text-muted-foreground" />
           </div>
           <p className="text-2xl font-bold mt-1 tabular-nums">{options.length}</p>
         </Card>
@@ -643,7 +643,7 @@ export function AdminTaxonomyPage() {
               <span className="hidden sm:inline">Môn học</span> ({subjects.length})
             </TabsTrigger>
             <TabsTrigger value="frameworks" className="rounded-lg text-xs font-bold gap-1.5">
-              <Sparkles className="size-3.5" />
+              <GraduationCap className="size-3.5" />
               <span className="hidden sm:inline">Khung & Cấp</span> ({frameworks.length})
             </TabsTrigger>
             <TabsTrigger value="options" className="rounded-lg text-xs font-bold gap-1.5">
@@ -818,7 +818,7 @@ export function AdminTaxonomyPage() {
                 <Card key={fw.id} className="rounded-xl border border-border/80 shadow-2xs overflow-hidden">
                   <div className="bg-muted/40 p-3.5 flex items-center justify-between border-b border-border/60">
                     <div className="flex items-center gap-2.5">
-                      <Sparkles className="size-4 text-amber-500 shrink-0" />
+                      <GraduationCap className="size-4 text-muted-foreground shrink-0" />
                       <div>
                         <h4 className="text-sm font-bold text-foreground flex items-center gap-2">
                           {fw.label}
