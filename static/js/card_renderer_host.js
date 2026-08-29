@@ -659,21 +659,6 @@
       "    var message = reason && reason.message ? reason.message : String(reason || 'Sandbox renderer promise rejection.');",
       "    post('log_error', { message: message });",
       "  });",
-      "  var HOST_KEY_COMMANDS = {",
-      "    '1': 'rate_again', '2': 'rate_hard', '3': 'rate_good', '4': 'rate_easy',",
-      "    ' ': 'reveal_or_good', 'Enter': 'reveal_or_good',",
-      "    'z': 'undo', 'Z': 'undo',",
-      "    'f': 'toggle_fullscreen', 'F': 'toggle_fullscreen'",
-      "  };",
-      "  document.addEventListener('keydown', function (event) {",
-      "    if (event.ctrlKey || event.metaKey || event.altKey) return;",
-      "    var command = HOST_KEY_COMMANDS[event.key];",
-      "    if (command) {",
-      "      event.preventDefault();",
-      "      event.stopPropagation();",
-      "      post('host_command', { command: command });",
-      "    }",
-      "  }, true);",
       "  if (typeof ResizeObserver === 'function') {",
       "    var resizeObserver = new ResizeObserver(function () {",
       "      window.requestAnimationFrame(notifyHeight);",
@@ -1037,18 +1022,6 @@
           global.console.warn("Flama card renderer:", message);
         }
         return;
-      }
-      if (action === "host_command") {
-        const ALLOWED_COMMANDS = {
-          rate_again: true, rate_hard: true, rate_good: true, rate_easy: true,
-          reveal_or_good: true, undo: true, toggle_fullscreen: true,
-        };
-        const command = typeof payload.command === "string" ? payload.command : "";
-        if (ALLOWED_COMMANDS[command]) {
-          global.dispatchEvent(new CustomEvent("flama:host-command", {
-            detail: { command: command, instanceId: instanceId },
-          }));
-        }
       }
     }
 

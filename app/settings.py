@@ -92,7 +92,7 @@ def build_app_config(overrides: Mapping[str, Any] | None = None) -> dict[str, An
     database_uri = (
         overrides.get("SQLALCHEMY_DATABASE_URI")
         if overrides and overrides.get("SQLALCHEMY_DATABASE_URI")
-        else build_database_uri_from_env()
+        else (os.getenv("SQLALCHEMY_DATABASE_URI") or build_database_uri_from_env())
     )
 
     engine_options: dict[str, Any] = {

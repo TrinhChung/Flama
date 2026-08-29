@@ -1,0 +1,16 @@
+{
+  "run1_timestamp": "2026-08-29T05:09:22",
+  "run2_timestamp": "2026-08-29T05:09:32",
+  "run1_exit_code": 1,
+  "run2_exit_code": 1,
+  "schema_version": "study-architecture-audit.v3",
+  "inventory_categories_count": 67,
+  "reconciliation_formulas_count": 11,
+  "reconciliation_status": "VALID",
+  "overall_status": "WARN",
+  "warnings_count": 5,
+  "blockers_count": 0,
+  "deterministic_excluding_timestamp": true,
+  "differences_found": [],
+  "primary_artifact_sha256": "3eaa6123c5bf02bffb27db3c1a32ee172fe5b8212fb60a0fbecd39c16f4fd511"
+}

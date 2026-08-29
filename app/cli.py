@@ -126,6 +126,146 @@ class SeedStats:
     shared_decks: int = 0
 
 
+def run_study_architecture_audit_command(
+    app: Flask | None = None,
+    compact: bool = False,
+    output_path: str | None = None,
+) -> int:
+    """Run read-only reconciliation gates for the study refactor and return exit code.
+
+    Guarantees:
+    - PASS: 0
+    - WARN: 1
+    - BLOCK / Error: 2
+    - Read-only by construction; does not mutate schema or data.
+    - Fails closed on output path errors or startup config errors.
+    - Sanitizes DB credentials / secrets from error output.
+    """
+    import json
+    import re
+    from pathlib import Path
+    from app.services.study_architecture_audit_service import (
+        SCHEMA_VERSION,
+        build_study_architecture_audit,
+    )
+
+    def _sanitize_error(err: Exception | str) -> str:
+        msg = str(err)
+        # Redact credentials in URLs: scheme://user:pass@host and scheme://:pass@host
+        msg = re.sub(r"://([^:@\s]*):([^@\s]+)@", r"://\1:***@", msg)
+        # Redact password parameters in connection strings/queries
+        msg = re.sub(r"(password|pwd)=([^;&\s]+)", r"\1=***", msg, flags=re.IGNORECASE)
+        # Redact secrets, tokens, api keys
+        msg = re.sub(r"(secret|api_key|token)=([^;&\s]+)", r"\1=***", msg, flags=re.IGNORECASE)
+        return msg
+
+    def _write_output_file(path_str: str, payload_str: str) -> None:
+        out_p = Path(path_str)
+        out_p.parent.mkdir(parents=True, exist_ok=True)
+        out_p.write_text(payload_str, encoding="utf-8")
+
+    try:
+        if app is None:
+            from app import create_audit_app
+
+            app = create_audit_app()
+        else:
+            # Guard: ensure the app instance has not enabled startup maintenance mutators
+            if (
+                app.config.get("STARTUP_RUN_MAINTENANCE")
+                or app.config.get("STARTUP_RUN_DB_CREATE_ALL")
+                or app.config.get("STARTUP_RUN_USER_MANAGEMENT_SCHEMA")
+                or app.config.get("STARTUP_RUN_BACKWARD_COMPAT_SCHEMA")
+                or app.config.get("STARTUP_RUN_DEFAULT_USER_ROLE_SEED")
+                or app.config.get("STARTUP_RUN_DEFAULT_TAXONOMY_SEED")
+                or app.config.get("STARTUP_RUN_DEFAULT_TTS_PROVIDER_SEED")
+                or app.config.get("STARTUP_RUN_CLONE_CUTOVER")
+            ):
+                raise RuntimeError(
+                    "Unsafe audit execution: cannot run audit on an app instance with startup maintenance enabled. "
+                    "Use wsgi_audit.py or create_audit_app()."
+                )
+
+        with app.app_context():
+            report = build_study_architecture_audit()
+            payload = json.dumps(
+                report,
+                ensure_ascii=False,
+                sort_keys=True,
+                indent=None if compact else 2,
+            )
+            exit_code = int(report.get("verdicts", {}).get("exit_code", 0))
+
+            if output_path:
+                try:
+                    _write_output_file(output_path, payload)
+                except Exception as write_err:
+                    clean_write_err = _sanitize_error(write_err)
+                    raise RuntimeError(
+                        f"Failed to write audit output file '{output_path}': {clean_write_err}"
+                    ) from write_err
+
+            click.echo(payload)
+            return exit_code
+    except Exception as err:
+        clean_error = _sanitize_error(err)
+        error_report = {
+            "schema_version": SCHEMA_VERSION,
+            "error": clean_error,
+            "verdicts": {
+                "pass": [],
+                "warn": [],
+                "block": [f"Audit execution error: {clean_error}"],
+                "overall_status": "BLOCK",
+                "exit_code": 2,
+            },
+        }
+        error_payload = json.dumps(
+            error_report,
+            ensure_ascii=False,
+            sort_keys=True,
+            indent=None if compact else 2,
+        )
+        if output_path:
+            try:
+                _write_output_file(output_path, error_payload)
+            except Exception:
+                pass
+        click.echo(error_payload)
+        return 2
+
+
+
+def register_audit_cli_commands(app: Flask) -> None:
+    """Register ONLY read-only audit commands on audit Flask app instances."""
+
+    @app.cli.command("study-architecture-audit")
+    @click.option(
+        "--compact",
+        is_flag=True,
+        default=False,
+        help="Emit compact JSON instead of indented JSON.",
+    )
+    @click.option(
+        "--output",
+        "output_path",
+        type=str,
+        default=None,
+        help="Optional file path to write audit JSON.",
+    )
+    def study_architecture_audit(compact: bool, output_path: str | None) -> None:
+        """Print read-only reconciliation gates for the study refactor."""
+        import sys
+
+        exit_code = run_study_architecture_audit_command(
+            app=app,
+            compact=compact,
+            output_path=output_path,
+        )
+        if exit_code != 0:
+            sys.exit(exit_code)
+
+
 def register_cli_commands(app: Flask) -> None:
     """Register custom Flask CLI commands."""
 
@@ -208,29 +348,6 @@ def register_cli_commands(app: Flask) -> None:
         click.echo(
             f"Anki entity normalization {'applied' if apply else 'dry run'}. "
             f"scanned={result.scanned}, changed={result.changed}"
-        )
-
-    @app.cli.command("study-architecture-audit")
-    @click.option(
-        "--compact",
-        is_flag=True,
-        default=False,
-        help="Emit compact JSON instead of indented JSON.",
-    )
-    def study_architecture_audit(compact: bool) -> None:
-        """Print read-only reconciliation gates for the study refactor."""
-        from app.services.study_architecture_audit_service import (
-            build_study_architecture_audit,
-        )
-
-        report = build_study_architecture_audit()
-        click.echo(
-            json.dumps(
-                report,
-                ensure_ascii=False,
-                sort_keys=True,
-                indent=None if compact else 2,
-            )
         )
 
     @app.cli.command("clone-cutover-overlay")

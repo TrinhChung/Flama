@@ -280,6 +280,10 @@ def execute_native_review_command(
     now: datetime | None = None,
     algorithm_key: str = DEFAULT_ALGORITHM_IDENTITY.key,
     algorithm_version: str = DEFAULT_ALGORITHM_IDENTITY.version,
+    client_event_id: str | None = None,
+    study_session_id: str | None = None,
+    sequence_no: int | None = None,
+    review_mode: str | None = None,
 ) -> NativeReviewCommandResult:
     """Execute and commit one native review under one locked transaction."""
 
@@ -390,6 +394,10 @@ def execute_native_review_command(
             options=options,
         )
         progress.revision = int(progress.revision or 0) + 1
+        effective_client_event_id = client_event_id or (payload or {}).get("client_event_id")
+        effective_study_session_id = study_session_id or (payload or {}).get("study_session_id")
+        effective_sequence_no = sequence_no if sequence_no is not None else (payload or {}).get("sequence_no")
+        effective_review_mode = review_mode or normalize_review_mode(current_state.type)
         review_event = record_native_review_transition(
             user_id=int(user.id),
             card=card,
@@ -397,7 +405,7 @@ def execute_native_review_command(
             transition=transition,
             reviewed_at=reviewed_at,
             duration_ms=(payload or {}).get("duration_ms"),
-            review_mode=normalize_review_mode(current_state.type),
+            review_mode=effective_review_mode,
             payload=payload,
             local_deck_id=local_deck_id,
             scheduler_preset_id=(
@@ -409,6 +417,9 @@ def execute_native_review_command(
             scheduler_config_hash=policy["config_hash"],
             timezone_name=timezone_name,
             deck_options=options,
+            study_session_id=effective_study_session_id,
+            client_event_id=effective_client_event_id,
+            sequence_no=effective_sequence_no,
         )
         db.session.flush()
         if review_event.id is not None:

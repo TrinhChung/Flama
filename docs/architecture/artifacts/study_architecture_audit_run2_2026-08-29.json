@@ -1,0 +1,1256 @@
+{
+  "algorithm_gates": {
+    "active_registry_executables": [
+      {
+        "key": "legacy-anki",
+        "state_schema_version": "anki-card-state.v1",
+        "version": "1.0.0"
+      }
+    ],
+    "historical_imported_algo_samples": [
+      "id:623/algo:anki/ver:revlog-v1",
+      "id:624/algo:anki/ver:revlog-v1",
+      "id:625/algo:anki/ver:revlog-v1",
+      "id:626/algo:anki/ver:revlog-v1",
+      "id:627/algo:anki/ver:revlog-v1",
+      "id:628/algo:anki/ver:revlog-v1",
+      "id:629/algo:anki/ver:revlog-v1",
+      "id:630/algo:anki/ver:revlog-v1",
+      "id:631/algo:anki/ver:revlog-v1",
+      "id:632/algo:anki/ver:revlog-v1"
+    ],
+    "historical_imported_algorithm_events": 61645,
+    "missing_algo_version_samples": [],
+    "missing_algorithm_version_events": 0,
+    "registered_algorithm_count": 1,
+    "registered_algorithm_events": 126,
+    "unprovenanced_fsrs_rows": 0,
+    "unprovenanced_fsrs_samples": [],
+    "unregistered_algorithm_events": 0,
+    "unregistered_native_algo_samples": [],
+    "unregistered_native_algorithm_events": 0
+  },
+  "card_gates": {
+    "notes_with_multiple_cards": 0,
+    "notes_with_multiple_cards_samples": [],
+    "notes_with_single_card": 21822,
+    "notes_with_single_card_samples": [
+      "00008792-cf65-4b4a-afb7-548f42df3235",
+      "0000f66b-083c-45d3-94bb-cc92dce4a757",
+      "00093c0a-e090-47ea-9aaf-4aef9541713f",
+      "00113498-aca4-4014-b5b6-f40b1044bdab",
+      "00120017-3ca4-45f4-a0e2-72570974a0e7",
+      "00133c63-6ff2-4901-b866-cd3684daf8a7",
+      "0015d0dc-0ce6-4ebe-97b5-f3d81eb8ed3a",
+      "001ac0b5-1375-4165-a543-55fbcb274af0",
+      "001d3039-4e4c-4b13-b01c-48e499375776",
+      "001e2649-c132-4ad7-bdfd-06711615b892"
+    ],
+    "notes_without_cards": 0,
+    "notes_without_cards_samples": [],
+    "orphan_cards": 0,
+    "orphan_cards_samples": []
+  },
+  "clone_overlay_gates": {
+    "deck_installs_count": 3,
+    "installed_deck_cards": 39,
+    "installed_deck_cards_samples": [
+      "011efc28-6975-4ff2-830e-8c02bca5105b",
+      "0cdfeac1-f11f-4cdc-8bac-e70b2ed0c728",
+      "0ce888fb-023d-4b37-9974-5609f1ad7aef",
+      "13f2b1ad-749f-4769-b9be-a2fa42d7c40c",
+      "16de6727-3061-414c-8ee5-984c9a7fb179",
+      "1baf265a-dd09-4f12-822f-5b17b0d6e8a4",
+      "1e8b08eb-be05-401a-a562-ad441bcff0ec",
+      "1fd50fe9-7f64-49fb-be6a-702a2a95a416",
+      "21a030cd-1e30-47d5-b8ee-8e863d502e47",
+      "2a35e935-367f-43f3-bc91-6ba0d9c9b2de"
+    ],
+    "installed_notetypes_count": 3,
+    "local_authored_cards": 21783,
+    "local_authored_cards_samples": [
+      "00048829-c484-4377-be8b-b429104721fd",
+      "0008f587-ca2f-4a12-9220-54ce4dd6ef90",
+      "0009244c-e606-4c9f-b1a4-d14abadd1910",
+      "000b0daf-6aae-41b0-b0be-1655724ead26",
+      "000ea427-9aae-42b8-ab43-1910c8d291ee",
+      "00119796-92cc-4ae4-83ca-65de9b5f99a3",
+      "001253f6-8e5a-41e2-a394-2a057c82dae6",
+      "001421eb-ee48-4e87-83e8-6b27635fd7c5",
+      "00156706-a519-4e0a-801d-1a38acf4a022",
+      "001788e7-ca3a-41cc-ac5f-a740ef2975c9"
+    ],
+    "local_clone_added_cards": 0,
+    "local_clone_added_cards_samples": [],
+    "overlay_ambiguity_count": 0,
+    "overlay_ambiguity_samples": [],
+    "unassigned_deck_cards": 0,
+    "unassigned_deck_cards_samples": []
+  },
+  "counts": {
+    "card_progress": 11247,
+    "cards": 21822,
+    "deck_installs": 3,
+    "note_types": 9,
+    "notes": 21822,
+    "review_events": 61806,
+    "study_sessions": 34,
+    "templates": 18
+  },
+  "inventory": [
+    {
+      "category": "note_types_without_templates",
+      "count": 0,
+      "description": "NoteTypes without any Template definitions.",
+      "disposition": "investigate_empty_notetypes",
+      "gate_group": "template",
+      "sample_ids": [],
+      "severity": "pass"
+    },
+    {
+      "category": "note_types_with_single_template",
+      "count": 7,
+      "description": "NoteTypes with exactly one Template definition.",
+      "disposition": "valid_single_template",
+      "gate_group": "template",
+      "sample_ids": [
+        "1fbae49e-8f0e-4a61-8bfc-eaac79362a8b",
+        "2b170bed-ff9c-4e8b-b437-73559c0fab9c",
+        "50cae62f-45bf-4e97-82a8-9e79221b8040",
+        "7676c613-fb05-48bd-a37a-68acd056efa6",
+        "default-flama-vocab-000000000000",
+        "e11e221c-6318-45f5-a327-0d8f29531911",
+        "e31fecac-c7a7-4c1c-8eb4-c93c568da504"
+      ],
+      "severity": "pass"
+    },
+    {
+      "category": "note_types_with_multiple_templates",
+      "count": 2,
+      "description": "NoteTypes with multiple Templates (valid multi-card design).",
+      "disposition": "valid_multi_template",
+      "gate_group": "template",
+      "sample_ids": [
+        "4525f529-f5d5-4c58-9bb3-b191e318fd28",
+        "48dc0b44-e748-4c8d-aca8-9aa74544a84e"
+      ],
+      "severity": "pass"
+    },
+    {
+      "category": "note_types_with_zero_defaults",
+      "count": 0,
+      "description": "NoteTypes with templates but zero default templates designated.",
+      "disposition": "investigate_missing_default_template",
+      "gate_group": "template",
+      "sample_ids": [],
+      "severity": "pass"
+    },
+    {
+      "category": "note_types_with_single_default",
+      "count": 9,
+      "description": "NoteTypes with exactly one default Template designated.",
+      "disposition": "valid_single_default_template",
+      "gate_group": "template",
+      "sample_ids": [
+        "1fbae49e-8f0e-4a61-8bfc-eaac79362a8b",
+        "2b170bed-ff9c-4e8b-b437-73559c0fab9c",
+        "4525f529-f5d5-4c58-9bb3-b191e318fd28",
+        "48dc0b44-e748-4c8d-aca8-9aa74544a84e",
+        "50cae62f-45bf-4e97-82a8-9e79221b8040",
+        "7676c613-fb05-48bd-a37a-68acd056efa6",
+        "default-flama-vocab-000000000000",
+        "e11e221c-6318-45f5-a327-0d8f29531911",
+        "e31fecac-c7a7-4c1c-8eb4-c93c568da504"
+      ],
+      "severity": "pass"
+    },
+    {
+      "category": "note_types_with_multiple_defaults",
+      "count": 0,
+      "description": "NoteTypes with more than one default Template designated.",
+      "disposition": "reconcile_multiple_default_templates",
+      "gate_group": "template",
+      "sample_ids": [],
+      "severity": "pass"
+    },
+    {
+      "category": "default_count_anomalies",
+      "count": 0,
+      "description": "NoteTypes with default template count not equal to 1.",
+      "disposition": "reconcile_default_templates",
+      "gate_group": "template",
+      "sample_ids": [],
+      "severity": "pass"
+    },
+    {
+      "category": "duplicate_name_groups",
+      "count": 0,
+      "description": "Template name collisions within the same NoteType.",
+      "disposition": "review_duplicate_names",
+      "gate_group": "template",
+      "sample_ids": [],
+      "severity": "pass"
+    },
+    {
+      "category": "duplicate_position_groups",
+      "count": 1,
+      "description": "Template position collisions within the same NoteType.",
+      "disposition": "review_duplicate_positions",
+      "gate_group": "template",
+      "sample_ids": [
+        "notetype:4525f529-f5d5-4c58-9bb3-b191e318fd28/pos:0"
+      ],
+      "severity": "warn"
+    },
+    {
+      "category": "cross_note_type_cards",
+      "count": 0,
+      "description": "Cards referencing a Template from a different NoteType than their Note.",
+      "disposition": "quarantine_cross_notetype_cards",
+      "gate_group": "template",
+      "sample_ids": [],
+      "severity": "pass"
+    },
+    {
+      "category": "notes_without_cards",
+      "count": 0,
+      "description": "Notes without any generated Cards.",
+      "disposition": "review_orphan_notes",
+      "gate_group": "card",
+      "sample_ids": [],
+      "severity": "pass"
+    },
+    {
+      "category": "notes_with_single_card",
+      "count": 21822,
+      "description": "Notes with exactly one generated Card.",
+      "disposition": "valid_single_card_notes",
+      "gate_group": "card",
+      "sample_ids": [
+        "00008792-cf65-4b4a-afb7-548f42df3235",
+        "0000f66b-083c-45d3-94bb-cc92dce4a757",
+        "00093c0a-e090-47ea-9aaf-4aef9541713f",
+        "00113498-aca4-4014-b5b6-f40b1044bdab",
+        "00120017-3ca4-45f4-a0e2-72570974a0e7",
+        "00133c63-6ff2-4901-b866-cd3684daf8a7",
+        "0015d0dc-0ce6-4ebe-97b5-f3d81eb8ed3a",
+        "001ac0b5-1375-4165-a543-55fbcb274af0",
+        "001d3039-4e4c-4b13-b01c-48e499375776",
+        "001e2649-c132-4ad7-bdfd-06711615b892"
+      ],
+      "severity": "pass"
+    },
+    {
+      "category": "notes_with_multiple_cards",
+      "count": 0,
+      "description": "Notes with multiple Cards generated across Templates.",
+      "disposition": "valid_multi_card_notes",
+      "gate_group": "card",
+      "sample_ids": [],
+      "severity": "pass"
+    },
+    {
+      "category": "orphan_cards",
+      "count": 0,
+      "description": "Cards referencing missing Note or missing Template records.",
+      "disposition": "quarantine_orphan_cards",
+      "gate_group": "card",
+      "sample_ids": [],
+      "severity": "pass"
+    },
+    {
+      "category": "null_card_id_rows",
+      "count": 0,
+      "description": "CardProgress records with NULL card_id.",
+      "disposition": "quarantine_null_card_progress",
+      "gate_group": "progress",
+      "sample_ids": [],
+      "severity": "pass"
+    },
+    {
+      "category": "orphan_card_id_rows",
+      "count": 0,
+      "description": "CardProgress records referencing deleted or non-existent Cards.",
+      "disposition": "quarantine_orphan_card_progress",
+      "gate_group": "progress",
+      "sample_ids": [],
+      "severity": "pass"
+    },
+    {
+      "category": "orphan_note_id_rows",
+      "count": 0,
+      "description": "CardProgress records whose Card references a missing or deleted Note.",
+      "disposition": "quarantine_orphan_note_progress",
+      "gate_group": "progress",
+      "sample_ids": [],
+      "severity": "pass"
+    },
+    {
+      "category": "unresolvable_progress_subjects",
+      "count": 0,
+      "description": "CardProgress rows with unresolvable subject (missing card or missing note).",
+      "disposition": "quarantine_unresolvable_progress_subjects",
+      "gate_group": "progress",
+      "sample_ids": [],
+      "severity": "pass"
+    },
+    {
+      "category": "single_card_progress_groups",
+      "count": 11247,
+      "description": "Learner-Note pairs with exactly one CardProgress record.",
+      "disposition": "single_card_progress",
+      "gate_group": "progress",
+      "sample_ids": [
+        "user:1/note:00008792-cf65-4b4a-afb7-548f42df3235",
+        "user:1/note:0000f66b-083c-45d3-94bb-cc92dce4a757",
+        "user:1/note:0015d0dc-0ce6-4ebe-97b5-f3d81eb8ed3a",
+        "user:1/note:001d3039-4e4c-4b13-b01c-48e499375776",
+        "user:1/note:002abb02-65f4-4b80-bd8b-b557bb9fffa2",
+        "user:1/note:002e7da6-6057-4dde-8759-143448663d65",
+        "user:1/note:002f5e97-ed50-4ddc-aebf-b9fcf62117d5",
+        "user:1/note:0031117c-59b9-4498-b885-f9f3e157abb0",
+        "user:1/note:00316c50-496b-43ab-977d-d5a8455fecd8",
+        "user:1/note:003ea0c9-41db-4296-91b8-fa4dd80088e7"
+      ],
+      "severity": "pass"
+    },
+    {
+      "category": "learner_note_fan_in_groups",
+      "count": 0,
+      "description": "Learner-Note pairs with multiple CardProgress records.",
+      "disposition": "learner_note_fan_in",
+      "gate_group": "progress",
+      "sample_ids": [],
+      "severity": "pass"
+    },
+    {
+      "category": "equivalent_fan_in_groups",
+      "count": 0,
+      "description": "Learner-Note fan-in groups where all cards share equivalent scheduler state.",
+      "disposition": "equivalent_fan_in",
+      "gate_group": "progress",
+      "sample_ids": [],
+      "severity": "pass"
+    },
+    {
+      "category": "divergent_fan_in_groups",
+      "count": 0,
+      "description": "Learner-Note fan-in groups with conflicting scheduler states.",
+      "disposition": "quarantine_divergent_progress_fan_in",
+      "gate_group": "progress",
+      "sample_ids": [],
+      "severity": "pass"
+    },
+    {
+      "category": "learner_note_history_fan_in_groups",
+      "count": 0,
+      "description": "Learner-Note pairs with review history across multiple Cards.",
+      "disposition": "review_history_fan_in",
+      "gate_group": "progress",
+      "sample_ids": [],
+      "severity": "pass"
+    },
+    {
+      "category": "fsrs_rows",
+      "count": 0,
+      "description": "CardProgress rows configured with FSRS scheduler mode.",
+      "disposition": "fsrs_progress_state",
+      "gate_group": "progress",
+      "sample_ids": [],
+      "severity": "pass"
+    },
+    {
+      "category": "partial_fsrs_state_rows",
+      "count": 0,
+      "description": "CardProgress rows with incomplete FSRS stability/difficulty fields.",
+      "disposition": "reconcile_fsrs_memory_state",
+      "gate_group": "progress",
+      "sample_ids": [],
+      "severity": "pass"
+    },
+    {
+      "category": "zero_revision_rows",
+      "count": 0,
+      "description": "CardProgress rows at baseline initial revision zero.",
+      "disposition": "initial_revision_state",
+      "gate_group": "revision",
+      "sample_ids": [],
+      "severity": "pass"
+    },
+    {
+      "category": "active_revision_rows",
+      "count": 11247,
+      "description": "CardProgress rows with incremented active revisions.",
+      "disposition": "active_revision_state",
+      "gate_group": "revision",
+      "sample_ids": [
+        16,
+        57,
+        75,
+        76,
+        77,
+        78,
+        79,
+        80,
+        81,
+        82
+      ],
+      "severity": "pass"
+    },
+    {
+      "category": "invalid_revision_rows",
+      "count": 0,
+      "description": "CardProgress rows with NULL or negative revision counters.",
+      "disposition": "quarantine_invalid_revisions",
+      "gate_group": "revision",
+      "sample_ids": [],
+      "severity": "pass"
+    },
+    {
+      "category": "open_session_stale_revisions",
+      "count": 751,
+      "description": "StudySessionCards in open sessions whose base revision has drifted.",
+      "disposition": "flag_session_revision_drift",
+      "gate_group": "revision",
+      "sample_ids": [
+        249,
+        619,
+        620,
+        621,
+        622,
+        623,
+        624,
+        625,
+        626,
+        627
+      ],
+      "severity": "warn"
+    },
+    {
+      "category": "registered_algorithm_count",
+      "count": 1,
+      "description": "Number of executable Study Algorithm adapters currently registered in memory.",
+      "disposition": "active_registered_executables",
+      "gate_group": "algorithm",
+      "sample_ids": [],
+      "severity": "pass"
+    },
+    {
+      "category": "registered_algorithm_events",
+      "count": 126,
+      "description": "ReviewEvents matching an active registered Study Algorithm executable in memory.",
+      "disposition": "active_registered_algorithm_events",
+      "gate_group": "algorithm",
+      "sample_ids": [],
+      "severity": "pass"
+    },
+    {
+      "category": "historical_imported_algorithm_events",
+      "count": 61645,
+      "description": "ReviewEvents imported from Anki or external sources carrying historical scheduler algorithm identities.",
+      "disposition": "historical_imported_algorithm",
+      "gate_group": "algorithm",
+      "sample_ids": [
+        "id:623/algo:anki/ver:revlog-v1",
+        "id:624/algo:anki/ver:revlog-v1",
+        "id:625/algo:anki/ver:revlog-v1",
+        "id:626/algo:anki/ver:revlog-v1",
+        "id:627/algo:anki/ver:revlog-v1",
+        "id:628/algo:anki/ver:revlog-v1",
+        "id:629/algo:anki/ver:revlog-v1",
+        "id:630/algo:anki/ver:revlog-v1",
+        "id:631/algo:anki/ver:revlog-v1",
+        "id:632/algo:anki/ver:revlog-v1"
+      ],
+      "severity": "pass"
+    },
+    {
+      "category": "unregistered_native_algorithm_events",
+      "count": 0,
+      "description": "Native ReviewEvents with scheduler_algorithm/version not registered in active executable registry.",
+      "disposition": "classify_unregistered_algorithm",
+      "gate_group": "algorithm",
+      "sample_ids": [],
+      "severity": "pass"
+    },
+    {
+      "category": "missing_algorithm_version_events",
+      "count": 0,
+      "description": "Native ReviewEvents with scheduler_algorithm specified but missing algorithm_version.",
+      "disposition": "classify_missing_algorithm_version",
+      "gate_group": "algorithm",
+      "sample_ids": [],
+      "severity": "pass"
+    },
+    {
+      "category": "unprovenanced_fsrs_rows",
+      "count": 0,
+      "description": "CardProgress rows marked FSRS without corresponding FSRS review history.",
+      "disposition": "verify_fsrs_provenance",
+      "gate_group": "algorithm",
+      "sample_ids": [],
+      "severity": "pass"
+    },
+    {
+      "category": "orphan_card_id_events",
+      "count": 40,
+      "description": "ReviewEvent records referencing detached or deleted Cards.",
+      "disposition": "retain_detached_review_events",
+      "gate_group": "review_event",
+      "sample_ids": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "severity": "warn"
+    },
+    {
+      "category": "attached_review_events",
+      "count": 61766,
+      "description": "ReviewEvent records referencing existing Cards.",
+      "disposition": "attached_review_events",
+      "gate_group": "review_event",
+      "sample_ids": [],
+      "severity": "pass"
+    },
+    {
+      "category": "null_session_id_events",
+      "count": 61680,
+      "description": "ReviewEvent records without study_session_id (legacy or direct review).",
+      "disposition": "legacy_or_direct_reviews",
+      "gate_group": "review_event",
+      "sample_ids": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "severity": "pass"
+    },
+    {
+      "category": "null_algorithm_events",
+      "count": 35,
+      "description": "ReviewEvent records with NULL scheduler_algorithm.",
+      "disposition": "classify_unversioned_algorithm",
+      "gate_group": "review_event",
+      "sample_ids": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "severity": "warn"
+    },
+    {
+      "category": "duplicate_client_event_id_groups",
+      "count": 0,
+      "description": "ReviewEvents with duplicate client_event_id for the same user.",
+      "disposition": "quarantine_duplicate_client_events",
+      "gate_group": "review_event",
+      "sample_ids": [],
+      "severity": "pass"
+    },
+    {
+      "category": "duplicate_session_sequence_groups",
+      "count": 0,
+      "description": "ReviewEvents with colliding sequence_no within the same study session.",
+      "disposition": "quarantine_duplicate_session_sequences",
+      "gate_group": "review_event",
+      "sample_ids": [],
+      "severity": "pass"
+    },
+    {
+      "category": "missing_session_sequence_events",
+      "count": 0,
+      "description": "ReviewEvents attached to a study session but lacking sequence_no.",
+      "disposition": "review_session_events_missing_sequence",
+      "gate_group": "review_event",
+      "sample_ids": [],
+      "severity": "pass"
+    },
+    {
+      "category": "anki_import_events",
+      "count": 61645,
+      "description": "ReviewEvents imported from Anki revlogs or connect import sessions.",
+      "disposition": "anki_import_reviews",
+      "gate_group": "review_event",
+      "sample_ids": [
+        623,
+        624,
+        625,
+        626,
+        627,
+        628,
+        629,
+        630,
+        631,
+        632
+      ],
+      "severity": "pass"
+    },
+    {
+      "category": "native_session_events",
+      "count": 126,
+      "description": "ReviewEvents completed within native frontend study sessions.",
+      "disposition": "native_session_reviews",
+      "gate_group": "review_event",
+      "sample_ids": [
+        135,
+        136,
+        137,
+        138,
+        139,
+        140,
+        141,
+        142,
+        143,
+        144
+      ],
+      "severity": "pass"
+    },
+    {
+      "category": "native_direct_events",
+      "count": 35,
+      "description": "ReviewEvents executed directly via native review actions outside sessions.",
+      "disposition": "native_direct_reviews",
+      "gate_group": "review_event",
+      "sample_ids": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "severity": "pass"
+    },
+    {
+      "category": "native_mcp_events",
+      "count": 0,
+      "description": "ReviewEvents initiated via Flama MCP connect tools.",
+      "disposition": "native_mcp_reviews",
+      "gate_group": "review_event",
+      "sample_ids": [],
+      "severity": "pass"
+    },
+    {
+      "category": "native_batch_events",
+      "count": 0,
+      "description": "ReviewEvents processed in bulk batch review operations.",
+      "disposition": "native_batch_reviews",
+      "gate_group": "review_event",
+      "sample_ids": [],
+      "severity": "pass"
+    },
+    {
+      "category": "conflicting_provenance_events",
+      "count": 0,
+      "description": "ReviewEvents with mutually contradictory provenance signals.",
+      "disposition": "quarantine_conflicting_provenance",
+      "gate_group": "review_event",
+      "sample_ids": [],
+      "severity": "pass"
+    },
+    {
+      "category": "unknown_provenance_events",
+      "count": 0,
+      "description": "ReviewEvents with unclassifiable or ambiguous provenance markers.",
+      "disposition": "needs_verification_provenance",
+      "gate_group": "review_event",
+      "sample_ids": [],
+      "severity": "pass"
+    },
+    {
+      "category": "open_sessions",
+      "count": 18,
+      "description": "Total study sessions in open status.",
+      "disposition": "total_open_sessions",
+      "gate_group": "session",
+      "sample_ids": [],
+      "severity": "pass"
+    },
+    {
+      "category": "active_open_sessions",
+      "count": 0,
+      "description": "StudySession records open and currently within expiration lease.",
+      "disposition": "active_open_sessions",
+      "gate_group": "session",
+      "sample_ids": [],
+      "severity": "pass"
+    },
+    {
+      "category": "expired_open_sessions",
+      "count": 18,
+      "description": "StudySession records open past their expiration timestamp.",
+      "disposition": "expire_stale_sessions",
+      "gate_group": "session",
+      "sample_ids": [
+        "10dbb26e-74b7-4050-9b95-d6551b30ace4",
+        "20b37a1f-42ed-406f-958a-4ea0d68433c5",
+        "30e3bc69-c593-4650-ba8d-8ef67fec8e2c",
+        "38103d51-f0b2-489e-8d49-eefbfd4e279d",
+        "3ad57353-368e-49e0-8dac-7b635186be25",
+        "3c5cf277-6368-4476-b117-9edb782e0983",
+        "4bb6bed5-7471-459e-94a9-54202e55069c",
+        "6e1debe5-be92-4398-af82-8fa22fd54919",
+        "73bb7d99-72b9-49fb-81d8-9302fba67b25",
+        "7f766c10-8cb2-4a8f-887a-c9bc45ca1eac"
+      ],
+      "severity": "warn"
+    },
+    {
+      "category": "committed_sessions",
+      "count": 16,
+      "description": "StudySession records successfully committed.",
+      "disposition": "committed_sessions",
+      "gate_group": "session",
+      "sample_ids": [],
+      "severity": "pass"
+    },
+    {
+      "category": "cancelled_sessions",
+      "count": 0,
+      "description": "StudySession records explicitly cancelled.",
+      "disposition": "cancelled_sessions",
+      "gate_group": "session",
+      "sample_ids": [],
+      "severity": "pass"
+    },
+    {
+      "category": "abandoned_sessions",
+      "count": 0,
+      "description": "StudySession records explicitly marked abandoned.",
+      "disposition": "abandoned_sessions",
+      "gate_group": "session",
+      "sample_ids": [],
+      "severity": "pass"
+    },
+    {
+      "category": "unknown_status_sessions",
+      "count": 0,
+      "description": "StudySession records with unrecognized lifecycle status.",
+      "disposition": "quarantine_unknown_session_status",
+      "gate_group": "session",
+      "sample_ids": [],
+      "severity": "pass"
+    },
+    {
+      "category": "missing_snapshot_sessions",
+      "count": 0,
+      "description": "StudySession records missing snapshot_hash or configuration metadata.",
+      "disposition": "reconstruct_session_snapshot",
+      "gate_group": "session",
+      "sample_ids": [],
+      "severity": "pass"
+    },
+    {
+      "category": "invalid_config_snapshot_sessions",
+      "count": 0,
+      "description": "StudySession records containing malformed config_snapshot_json.",
+      "disposition": "repair_invalid_config_snapshot",
+      "gate_group": "session",
+      "sample_ids": [],
+      "severity": "pass"
+    },
+    {
+      "category": "active_session_unavailable_algorithm_sessions",
+      "count": 0,
+      "description": "Active open StudySession records referencing unregistered scheduler algorithms.",
+      "disposition": "quarantine_unavailable_session_algorithm",
+      "gate_group": "session",
+      "sample_ids": [],
+      "severity": "pass"
+    },
+    {
+      "category": "historical_session_retired_algorithm_sessions",
+      "count": 0,
+      "description": "Historical or inactive StudySession records referencing retired scheduler algorithms.",
+      "disposition": "historical_session_retired_algorithm",
+      "gate_group": "session",
+      "sample_ids": [],
+      "severity": "pass"
+    },
+    {
+      "category": "deck_installs",
+      "count": 3,
+      "description": "Active DeckInstall pointer overlay records.",
+      "disposition": "installed_shared_decks",
+      "gate_group": "clone_overlay",
+      "sample_ids": [],
+      "severity": "pass"
+    },
+    {
+      "category": "installed_notetypes",
+      "count": 3,
+      "description": "Active NoteTypeInstall records referencing marketplace note types.",
+      "disposition": "installed_note_types",
+      "gate_group": "clone_overlay",
+      "sample_ids": [],
+      "severity": "pass"
+    },
+    {
+      "category": "installed_deck_cards",
+      "count": 39,
+      "description": "Cards referenced via shared deck installation overlays.",
+      "disposition": "installed_source_cards",
+      "gate_group": "clone_overlay",
+      "sample_ids": [
+        "011efc28-6975-4ff2-830e-8c02bca5105b",
+        "0cdfeac1-f11f-4cdc-8bac-e70b2ed0c728",
+        "0ce888fb-023d-4b37-9974-5609f1ad7aef",
+        "13f2b1ad-749f-4769-b9be-a2fa42d7c40c",
+        "16de6727-3061-414c-8ee5-984c9a7fb179",
+        "1baf265a-dd09-4f12-822f-5b17b0d6e8a4",
+        "1e8b08eb-be05-401a-a562-ad441bcff0ec",
+        "1fd50fe9-7f64-49fb-be6a-702a2a95a416",
+        "21a030cd-1e30-47d5-b8ee-8e863d502e47",
+        "2a35e935-367f-43f3-bc91-6ba0d9c9b2de"
+      ],
+      "severity": "pass"
+    },
+    {
+      "category": "local_clone_added_cards",
+      "count": 0,
+      "description": "Cards generated from notes locally added to installed decks.",
+      "disposition": "local_clone_added_cards",
+      "gate_group": "clone_overlay",
+      "sample_ids": [],
+      "severity": "pass"
+    },
+    {
+      "category": "local_authored_cards",
+      "count": 21783,
+      "description": "Cards belonging to native local author decks.",
+      "disposition": "local_authored_cards",
+      "gate_group": "clone_overlay",
+      "sample_ids": [
+        "00048829-c484-4377-be8b-b429104721fd",
+        "0008f587-ca2f-4a12-9220-54ce4dd6ef90",
+        "0009244c-e606-4c9f-b1a4-d14abadd1910",
+        "000b0daf-6aae-41b0-b0be-1655724ead26",
+        "000ea427-9aae-42b8-ab43-1910c8d291ee",
+        "00119796-92cc-4ae4-83ca-65de9b5f99a3",
+        "001253f6-8e5a-41e2-a394-2a057c82dae6",
+        "001421eb-ee48-4e87-83e8-6b27635fd7c5",
+        "00156706-a519-4e0a-801d-1a38acf4a022",
+        "001788e7-ca3a-41cc-ac5f-a740ef2975c9"
+      ],
+      "severity": "pass"
+    },
+    {
+      "category": "unassigned_deck_cards",
+      "count": 0,
+      "description": "Cards belonging to notes without an explicit deck assignment.",
+      "disposition": "unassigned_deck_cards",
+      "gate_group": "clone_overlay",
+      "sample_ids": [],
+      "severity": "pass"
+    },
+    {
+      "category": "overlay_ambiguities",
+      "count": 0,
+      "description": "DeckCloneAddedNote records with ambiguous or drifted note associations.",
+      "disposition": "investigate_overlay_ambiguities",
+      "gate_group": "clone_overlay",
+      "sample_ids": [],
+      "severity": "pass"
+    }
+  ],
+  "observed_at": "2026-08-29T05:09:32",
+  "progress_gates": {
+    "divergent_fan_in_groups": 0,
+    "divergent_fan_in_samples": [],
+    "equivalent_fan_in_groups": 0,
+    "equivalent_fan_in_samples": [],
+    "fan_in_card_progress_rows": 0,
+    "fsrs_rows": 0,
+    "fsrs_samples": [],
+    "learner_note_fan_in_groups": 0,
+    "learner_note_fan_in_samples": [],
+    "learner_note_history_fan_in_groups": 0,
+    "learner_note_history_fan_in_samples": [],
+    "null_card_id_rows": 0,
+    "null_card_id_samples": [],
+    "orphan_card_id_rows": 0,
+    "orphan_card_id_samples": [],
+    "orphan_note_id_rows": 0,
+    "orphan_note_id_samples": [],
+    "partial_fsrs_samples": [],
+    "partial_fsrs_state_rows": 0,
+    "single_card_progress_groups": 11247,
+    "single_card_progress_rows": 11247,
+    "single_card_progress_samples": [
+      "user:1/note:00008792-cf65-4b4a-afb7-548f42df3235",
+      "user:1/note:0000f66b-083c-45d3-94bb-cc92dce4a757",
+      "user:1/note:0015d0dc-0ce6-4ebe-97b5-f3d81eb8ed3a",
+      "user:1/note:001d3039-4e4c-4b13-b01c-48e499375776",
+      "user:1/note:002abb02-65f4-4b80-bd8b-b557bb9fffa2",
+      "user:1/note:002e7da6-6057-4dde-8759-143448663d65",
+      "user:1/note:002f5e97-ed50-4ddc-aebf-b9fcf62117d5",
+      "user:1/note:0031117c-59b9-4498-b885-f9f3e157abb0",
+      "user:1/note:00316c50-496b-43ab-977d-d5a8455fecd8",
+      "user:1/note:003ea0c9-41db-4296-91b8-fa4dd80088e7"
+    ],
+    "unresolvable_progress_samples": [],
+    "unresolvable_progress_subjects": 0
+  },
+  "reconciliation": {
+    "formula_checks": {
+      "card_progress_accounting": true,
+      "card_progress_fan_in_consistency": true,
+      "card_progress_revision_accounting": true,
+      "cards_clone_overlay_accounting": true,
+      "inventory_verdict_accounting": true,
+      "note_types_template_accounting": true,
+      "review_events_algorithm_accounting": true,
+      "review_events_attached_accounting": true,
+      "review_events_provenance_accounting": true,
+      "study_sessions_open_accounting": true,
+      "study_sessions_status_accounting": true
+    },
+    "status": "VALID",
+    "verified_tables": [
+      "note_types",
+      "templates",
+      "notes",
+      "cards",
+      "card_progress",
+      "review_events",
+      "study_sessions",
+      "study_session_cards",
+      "deck_installs",
+      "deck_marketplace_items",
+      "deck_clone_added_notes",
+      "note_type_installs",
+      "connect_review_event_refs"
+    ]
+  },
+  "review_event_algorithm_distribution": [
+    {
+      "algorithm_key": "anki",
+      "algorithm_version": "revlog-v1",
+      "count": 61645,
+      "provenance": "import",
+      "scheduler_mode": "anki"
+    },
+    {
+      "algorithm_key": null,
+      "algorithm_version": null,
+      "count": 35,
+      "provenance": "native",
+      "scheduler_mode": "legacy"
+    },
+    {
+      "algorithm_key": "legacy-anki",
+      "algorithm_version": "1.0.0",
+      "count": 126,
+      "provenance": "native",
+      "scheduler_mode": "legacy"
+    }
+  ],
+  "review_event_gates": {
+    "anki_import_events": 61645,
+    "anki_import_samples": [
+      623,
+      624,
+      625,
+      626,
+      627,
+      628,
+      629,
+      630,
+      631,
+      632
+    ],
+    "attached_review_events": 61766,
+    "conflicting_provenance_events": 0,
+    "conflicting_provenance_samples": [],
+    "duplicate_client_event_id_groups": 0,
+    "duplicate_client_samples": [],
+    "duplicate_seq_samples": [],
+    "duplicate_session_sequence_groups": 0,
+    "missing_seq_samples": [],
+    "missing_session_sequence_events": 0,
+    "native_batch_events": 0,
+    "native_batch_samples": [],
+    "native_direct_events": 35,
+    "native_direct_samples": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
+    ],
+    "native_mcp_events": 0,
+    "native_mcp_samples": [],
+    "native_session_events": 126,
+    "native_session_samples": [
+      135,
+      136,
+      137,
+      138,
+      139,
+      140,
+      141,
+      142,
+      143,
+      144
+    ],
+    "null_algorithm_events": 35,
+    "null_algorithm_samples": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
+    ],
+    "null_session_id_events": 61680,
+    "null_session_id_samples": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
+    ],
+    "orphan_card_id_events": 40,
+    "orphan_card_id_samples": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
+    ],
+    "unknown_provenance_events": 0,
+    "unknown_provenance_samples": []
+  },
+  "revision_gates": {
+    "active_revision_rows": 11247,
+    "active_revision_samples": [
+      16,
+      57,
+      75,
+      76,
+      77,
+      78,
+      79,
+      80,
+      81,
+      82
+    ],
+    "invalid_revision_rows": 0,
+    "invalid_revision_samples": [],
+    "max_observed_revision": 3,
+    "open_session_stale_revisions": 751,
+    "open_session_stale_samples": [
+      249,
+      619,
+      620,
+      621,
+      622,
+      623,
+      624,
+      625,
+      626,
+      627
+    ],
+    "zero_revision_rows": 0,
+    "zero_revision_samples": []
+  },
+  "schema_version": "study-architecture-audit.v3",
+  "session_gates": {
+    "abandoned_sessions": 0,
+    "active_open_sessions": 0,
+    "active_open_sessions_samples": [],
+    "active_session_unavailable_algo_samples": [],
+    "active_session_unavailable_algorithm_sessions": 0,
+    "cancelled_sessions": 0,
+    "committed_sessions": 16,
+    "expired_open_sessions": 18,
+    "expired_open_sessions_samples": [
+      "10dbb26e-74b7-4050-9b95-d6551b30ace4",
+      "20b37a1f-42ed-406f-958a-4ea0d68433c5",
+      "30e3bc69-c593-4650-ba8d-8ef67fec8e2c",
+      "38103d51-f0b2-489e-8d49-eefbfd4e279d",
+      "3ad57353-368e-49e0-8dac-7b635186be25",
+      "3c5cf277-6368-4476-b117-9edb782e0983",
+      "4bb6bed5-7471-459e-94a9-54202e55069c",
+      "6e1debe5-be92-4398-af82-8fa22fd54919",
+      "73bb7d99-72b9-49fb-81d8-9302fba67b25",
+      "7f766c10-8cb2-4a8f-887a-c9bc45ca1eac"
+    ],
+    "historical_session_retired_algo_samples": [],
+    "historical_session_retired_algorithm_sessions": 0,
+    "invalid_config_snapshot_samples": [],
+    "invalid_config_snapshot_sessions": 0,
+    "missing_snapshot_samples": [],
+    "missing_snapshot_sessions": 0,
+    "open_sessions": 18,
+    "unavailable_session_algorithm_sessions": 0,
+    "unknown_status_sessions": 0,
+    "unknown_status_sessions_samples": []
+  },
+  "template_gates": {
+    "cross_note_type_cards": 0,
+    "cross_note_type_cards_samples": [],
+    "default_count_anomalies": 0,
+    "default_count_anomalies_samples": [],
+    "duplicate_name_groups": 0,
+    "duplicate_name_samples": [],
+    "duplicate_position_groups": 1,
+    "duplicate_position_samples": [
+      "notetype:4525f529-f5d5-4c58-9bb3-b191e318fd28/pos:0"
+    ],
+    "note_types_with_multiple_defaults": 0,
+    "note_types_with_multiple_defaults_samples": [],
+    "note_types_with_multiple_templates": 2,
+    "note_types_with_multiple_templates_samples": [
+      "4525f529-f5d5-4c58-9bb3-b191e318fd28",
+      "48dc0b44-e748-4c8d-aca8-9aa74544a84e"
+    ],
+    "note_types_with_single_default": 9,
+    "note_types_with_single_default_samples": [
+      "1fbae49e-8f0e-4a61-8bfc-eaac79362a8b",
+      "2b170bed-ff9c-4e8b-b437-73559c0fab9c",
+      "4525f529-f5d5-4c58-9bb3-b191e318fd28",
+      "48dc0b44-e748-4c8d-aca8-9aa74544a84e",
+      "50cae62f-45bf-4e97-82a8-9e79221b8040",
+      "7676c613-fb05-48bd-a37a-68acd056efa6",
+      "default-flama-vocab-000000000000",
+      "e11e221c-6318-45f5-a327-0d8f29531911",
+      "e31fecac-c7a7-4c1c-8eb4-c93c568da504"
+    ],
+    "note_types_with_single_template": 7,
+    "note_types_with_single_template_samples": [
+      "1fbae49e-8f0e-4a61-8bfc-eaac79362a8b",
+      "2b170bed-ff9c-4e8b-b437-73559c0fab9c",
+      "50cae62f-45bf-4e97-82a8-9e79221b8040",
+      "7676c613-fb05-48bd-a37a-68acd056efa6",
+      "default-flama-vocab-000000000000",
+      "e11e221c-6318-45f5-a327-0d8f29531911",
+      "e31fecac-c7a7-4c1c-8eb4-c93c568da504"
+    ],
+    "note_types_with_zero_defaults": 0,
+    "note_types_with_zero_defaults_samples": [],
+    "note_types_without_templates": 0,
+    "note_types_without_templates_samples": []
+  },
+  "verdicts": {
+    "block": [],
+    "exit_code": 1,
+    "overall_status": "WARN",
+    "pass": [
+      "note_types_without_templates: 0",
+      "note_types_with_single_template: 7",
+      "note_types_with_multiple_templates: 2",
+      "note_types_with_zero_defaults: 0",
+      "note_types_with_single_default: 9",
+      "note_types_with_multiple_defaults: 0",
+      "default_count_anomalies: 0",
+      "duplicate_name_groups: 0",
+      "cross_note_type_cards: 0",
+      "notes_without_cards: 0",
+      "notes_with_single_card: 21822",
+      "notes_with_multiple_cards: 0",
+      "orphan_cards: 0",
+      "null_card_id_rows: 0",
+      "orphan_card_id_rows: 0",
+      "orphan_note_id_rows: 0",
+      "unresolvable_progress_subjects: 0",
+      "single_card_progress_groups: 11247",
+      "learner_note_fan_in_groups: 0",
+      "equivalent_fan_in_groups: 0",
+      "divergent_fan_in_groups: 0",
+      "learner_note_history_fan_in_groups: 0",
+      "fsrs_rows: 0",
+      "partial_fsrs_state_rows: 0",
+      "zero_revision_rows: 0",
+      "active_revision_rows: 11247",
+      "invalid_revision_rows: 0",
+      "registered_algorithm_count: 1",
+      "registered_algorithm_events: 126",
+      "historical_imported_algorithm_events: 61645",
+      "unregistered_native_algorithm_events: 0",
+      "missing_algorithm_version_events: 0",
+      "unprovenanced_fsrs_rows: 0",
+      "attached_review_events: 61766",
+      "null_session_id_events: 61680",
+      "duplicate_client_event_id_groups: 0",
+      "duplicate_session_sequence_groups: 0",
+      "missing_session_sequence_events: 0",
+      "anki_import_events: 61645",
+      "native_session_events: 126",
+      "native_direct_events: 35",
+      "native_mcp_events: 0",
+      "native_batch_events: 0",
+      "conflicting_provenance_events: 0",
+      "unknown_provenance_events: 0",
+      "open_sessions: 18",
+      "active_open_sessions: 0",
+      "committed_sessions: 16",
+      "cancelled_sessions: 0",
+      "abandoned_sessions: 0",
+      "unknown_status_sessions: 0",
+      "missing_snapshot_sessions: 0",
+      "invalid_config_snapshot_sessions: 0",
+      "active_session_unavailable_algorithm_sessions: 0",
+      "historical_session_retired_algorithm_sessions: 0",
+      "deck_installs: 3",
+      "installed_notetypes: 3",
+      "installed_deck_cards: 39",
+      "local_clone_added_cards: 0",
+      "local_authored_cards: 21783",
+      "unassigned_deck_cards: 0",
+      "overlay_ambiguities: 0"
+    ],
+    "warn": [
+      "duplicate_position_groups: Template position collisions within the same NoteType. (1 item(s))",
+      "open_session_stale_revisions: StudySessionCards in open sessions whose base revision has drifted. (751 item(s))",
+      "orphan_card_id_events: ReviewEvent records referencing detached or deleted Cards. (40 item(s))",
+      "null_algorithm_events: ReviewEvent records with NULL scheduler_algorithm. (35 item(s))",
+      "expired_open_sessions: StudySession records open past their expiration timestamp. (18 item(s))"
+    ]
+  }
+}

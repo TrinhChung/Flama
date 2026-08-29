@@ -261,6 +261,27 @@ describe('StudyPage undo interactions', () => {
 
     expect(mocks.undo).toHaveBeenCalledOnce()
   })
+
+  it('ignores forged flama:host-command events without modifying study state', async () => {
+    setupActiveStudy()
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+    await act(async () => {
+      root?.render(renderWithClient(<StudyPage />))
+    })
+
+    await act(async () => {
+      window.dispatchEvent(
+        new CustomEvent('flama:host-command', {
+          detail: { command: 'rate_good', instanceId: 'test-inst' },
+        }),
+      )
+    })
+
+    expect(mocks.answer).not.toHaveBeenCalled()
+    expect(mocks.undo).not.toHaveBeenCalled()
+  })
 })
 
 describe('StudyPage quick edit interactions', () => {

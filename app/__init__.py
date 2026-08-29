@@ -5,7 +5,7 @@ from models import db
 
 from .cors import init_cors
 from .csrf import init_csrf_protection
-from .cli import register_cli_commands
+from .cli import register_cli_commands, register_audit_cli_commands
 from .extensions import login_manager, migrate
 from .routes import register_blueprints
 from .settings import BASE_DIR, build_app_config
@@ -13,7 +13,7 @@ from .spa import init_spa_delivery
 from .startup import run_startup_maintenance
 
 
-def create_app(config: Optional[dict] = None) -> Flask:
+def create_app(config: Optional[dict] = None, audit_mode: bool = False) -> Flask:
     """Application factory that sets up Flask, database, and authentication."""
     app = Flask(
         __name__,
@@ -21,6 +21,21 @@ def create_app(config: Optional[dict] = None) -> Flask:
         static_folder=str(BASE_DIR / "static"),
     )
     app.config.update(build_app_config(config))
+    if audit_mode:
+        app.config.update(
+            {
+                "STARTUP_RUN_MAINTENANCE": False,
+                "STARTUP_RUN_DB_CREATE_ALL": False,
+                "STARTUP_RUN_USER_MANAGEMENT_SCHEMA": False,
+                "STARTUP_RUN_BACKWARD_COMPAT_SCHEMA": False,
+                "STARTUP_RUN_DEFAULT_USER_ROLE_SEED": False,
+                "STARTUP_RUN_DEFAULT_TAXONOMY_SEED": False,
+                "STARTUP_RUN_DEFAULT_TTS_PROVIDER_SEED": False,
+                "STARTUP_RUN_CLONE_CUTOVER": False,
+                "STARTUP_CHECK_DB_CONNECTIVITY": False,
+                "WTF_CSRF_ENABLED": False,
+            }
+        )
     app.config.setdefault(
         "LEGACY_HTTP_ADAPTERS_ENABLED",
         bool(app.config.get("TESTING")),
@@ -152,8 +167,11 @@ def create_app(config: Optional[dict] = None) -> Flask:
             401,
         )
 
-    register_blueprints(app)
-    register_cli_commands(app)
+    if audit_mode:
+        register_audit_cli_commands(app)
+    else:
+        register_blueprints(app)
+        register_cli_commands(app)
 
     def _rollback_failed_session() -> None:
         try:
@@ -165,7 +183,7 @@ def create_app(config: Optional[dict] = None) -> Flask:
     @app.errorhandler(404)
     def page_not_found(error):
         """Handle 404 errors."""
-        if request.path.startswith(("/api/", "/media/")):
+        if request.path.startswith(("/api/", "/media/", "/static/")):
             return jsonify({"error": "NOT_FOUND", "message": "Resource not found."}), 404
         from app.spa import serve_react_spa
 
@@ -199,6 +217,17 @@ def create_app(config: Optional[dict] = None) -> Flask:
         )
         return jsonify({"error": "INTERNAL_ERROR", "message": "Internal server error."}), 500
 
-    run_startup_maintenance(app)
+    if not audit_mode:
+        run_startup_maintenance(app)
 
     return app
+
+
+def create_audit_app(config: Optional[dict] = None) -> Flask:
+    """Application factory that sets up a read-only audit Flask app.
+
+    Enforces that all startup maintenance, schema mutations, cutovers,
+    and seed mutators are strictly disabled prior to and during bootstrap.
+    Exposes ONLY read-only audit CLI commands on the command surface.
+    """
+    return create_app(config=config, audit_mode=True)
