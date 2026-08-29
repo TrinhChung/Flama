@@ -29,6 +29,7 @@ import {
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { appApi, type GenerateStrokesResponse } from '@/app/api'
+import { resolveBackendUrl } from '@/config/env'
 import type { useBrowseState, CardDetailResponse } from '../hooks/useBrowseState'
 
 interface BrowseStrokeModalProps {
@@ -51,6 +52,7 @@ export function BrowseStrokeModal({
     selectedDeckId,
     activeCardId,
     cards,
+    decksQuery,
     cardDetailQuery,
     editFieldValues,
     setEditFieldValues,
@@ -131,12 +133,6 @@ export function BrowseStrokeModal({
     }
   }, [defaultSource, defaultTarget, noteFieldNames, isCustomTarget])
 
-  const [locale, setLocale] = useState('ja')
-  const [outputFormat, setOutputFormat] = useState<'html' | 'raw' | 'urls'>('html')
-  const [overwrite, setOverwrite] = useState(false)
-  const [maxChars] = useState(15)
-  const [copiedCode, setCopiedCode] = useState(false)
-
   // Resolve actual text content from the selected sourceField across active/target card data
   const resolvedSourceValue = useMemo(() => {
     // 1. From active sidebar edits
@@ -174,6 +170,42 @@ export function BrowseStrokeModal({
     cards,
     targetCardId,
   ])
+
+  // Auto-detect initial locale based on deck name or character composition
+  const detectedLocale = useMemo(() => {
+    const deckName = (
+      decksQuery?.data?.decks?.find((d) => d.id === selectedDeckId)?.name ||
+      cardDetailQuery.data?.note?.deck_name ||
+      cards.find((c) => c.card_id === targetCardId)?.deck_name ||
+      ''
+    ).toLowerCase()
+    if (/hsk|trung|chinese|hán|zh/i.test(deckName)) {
+      return 'zh-CN'
+    }
+    if (/kanji|n[1-5]|nhật|japanese|ja/i.test(deckName)) {
+      return 'ja'
+    }
+    if (/[汉语话书买卖时间门关开钱鸡车电习爱国难易简单红蓝绿颜]/i.test(resolvedSourceValue)) {
+      return 'zh-CN'
+    }
+    if (/[漢語話書買賣門關開錢雞車電習愛國]/i.test(resolvedSourceValue)) {
+      return 'zh-TW'
+    }
+    return 'ja'
+  }, [decksQuery?.data?.decks, cardDetailQuery.data, cards, selectedDeckId, targetCardId, resolvedSourceValue])
+
+  const [locale, setLocale] = useState('ja')
+
+  useEffect(() => {
+    if (detectedLocale) {
+      setLocale(detectedLocale)
+    }
+  }, [detectedLocale])
+
+  const [outputFormat, setOutputFormat] = useState<'html' | 'raw' | 'urls'>('html')
+  const [overwrite, setOverwrite] = useState(false)
+  const [maxChars] = useState(15)
+  const [copiedCode, setCopiedCode] = useState(false)
 
   const [sampleText, setSampleText] = useState(resolvedSourceValue)
 
@@ -500,13 +532,18 @@ export function BrowseStrokeModal({
                       key={item.hex}
                       className="group relative flex flex-col items-center bg-background border border-border/70 rounded-xl p-2.5 shadow-2xs hover:border-primary/50 transition-all"
                     >
-                      <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-lg bg-white dark:bg-zinc-900 border border-border/50 p-1 flex items-center justify-center overflow-hidden">
+                      <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-xl bg-white dark:bg-zinc-950 border border-border/70 p-1 flex items-center justify-center overflow-hidden shadow-2xs">
                         <img
-                          src={item.url}
+                          src={resolveBackendUrl(item.url)}
                           alt={item.char}
                           title={`${item.char} - Thứ tự nét`}
                           className="w-full h-full object-contain"
                           loading="lazy"
+                          onError={(e) => {
+                            const target = e.target as HTMLImageElement
+                            target.onerror = null
+                            target.src = resolveBackendUrl('/static/images/image-library-fallback.svg')
+                          }}
                         />
                       </div>
                       <div className="flex items-center gap-1.5 mt-2">
