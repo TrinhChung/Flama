@@ -1,18 +1,21 @@
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import {
-  AlertTriangle,
-  ArrowRight,
-  CheckCircle2,
-  Clock,
-  Info,
-  Keyboard,
-  Lightbulb,
-  Sliders,
-} from 'lucide-react'
+  faArrowLeft,
+  faArrowRight,
+  faCircleCheck,
+  faClock,
+  faKeyboard,
+  faLightbulb,
+  faSliders,
+  faTriangleExclamation,
+  faWrench,
+} from '@fortawesome/free-solid-svg-icons'
 import { Link } from 'react-router-dom'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { GuideBreadcrumb } from './GuideBreadcrumb'
+import { getAdjacentArticles } from '../guideData'
 import type { GuideArticle, GuideCategory } from '../types'
 
 interface GuideArticleRendererProps {
@@ -21,22 +24,24 @@ interface GuideArticleRendererProps {
 }
 
 export function GuideArticleRenderer({ article, category }: GuideArticleRendererProps) {
+  const { prevArticle, nextArticle } = getAdjacentArticles(category?.slug, article.slug)
+
   return (
     <article className="space-y-8 animate-in fade-in-50 duration-200">
       {/* Breadcrumb */}
       <GuideBreadcrumb category={category} article={article} />
 
       {/* Article Header */}
-      <div className="space-y-3 pb-6 border-b border-border/70">
+      <div className="space-y-3 pb-6 border-b border-border/80">
         <div className="flex flex-wrap items-center gap-2">
           {category && (
-            <Badge variant="secondary" className="text-xs font-semibold">
+            <Badge variant="secondary" className="text-xs font-semibold rounded-lg">
               {category.title}
             </Badge>
           )}
           {article.readTimeMinutes && (
-            <span className="flex items-center gap-1 text-xs text-muted-foreground">
-              <Clock className="size-3.5" />
+            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <FontAwesomeIcon icon={faClock} className="text-[11px]" />
               <span>{article.readTimeMinutes} phút đọc</span>
             </span>
           )}
@@ -53,9 +58,9 @@ export function GuideArticleRenderer({ article, category }: GuideArticleRenderer
 
       {/* Key Takeaways / Tip banner */}
       {article.keyTakeaways && article.keyTakeaways.length > 0 && (
-        <div className="rounded-2xl border border-border/80 bg-muted/30 p-4 sm:p-5 space-y-2">
+        <div className="rounded-2xl border border-border/80 bg-card p-4 sm:p-5 space-y-2.5 shadow-2xs">
           <div className="flex items-center gap-2 text-foreground font-bold text-xs uppercase tracking-wider">
-            <CheckCircle2 className="size-4 text-primary" />
+            <FontAwesomeIcon icon={faCircleCheck} className="text-primary text-sm" />
             <span>Điểm Cốt Lõi Cần Nhớ</span>
           </div>
           <ul className="space-y-1.5 text-xs sm:text-sm text-foreground/90 leading-relaxed list-disc list-inside">
@@ -76,16 +81,16 @@ export function GuideArticleRenderer({ article, category }: GuideArticleRenderer
       {/* Step-by-step instructions */}
       {article.steps && article.steps.length > 0 && (
         <div className="space-y-4">
-          <h2 className="text-lg font-bold tracking-tight text-foreground flex items-center gap-2">
-            <CheckCircle2 className="size-5 text-primary" />
+          <h2 className="text-base sm:text-lg font-bold tracking-tight text-foreground flex items-center gap-2">
+            <FontAwesomeIcon icon={faCircleCheck} className="text-primary text-sm" />
             <span>Quy Trình Thao Tác Từng Bước</span>
           </h2>
 
-          <div className="space-y-4">
+          <div className="space-y-3.5">
             {article.steps.map((step, idx) => (
               <div
                 key={idx}
-                className="p-4 sm:p-5 rounded-2xl border border-border/80 bg-card/60 shadow-xs space-y-2 transition-all hover:border-primary/40"
+                className="p-4 sm:p-5 rounded-2xl border border-border/80 bg-card shadow-2xs space-y-2.5 transition-all hover:border-primary/40"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-2.5">
@@ -108,8 +113,8 @@ export function GuideArticleRenderer({ article, category }: GuideArticleRenderer
                 </p>
 
                 {step.tip && (
-                  <div className="ml-9 mt-2 flex items-start gap-2 rounded-xl bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300">
-                    <Lightbulb className="size-4 shrink-0 mt-0.5" />
+                  <div className="ml-9 mt-2 flex items-start gap-2 rounded-xl bg-amber-500/10 border border-amber-500/20 p-3 text-xs text-amber-800 dark:text-amber-300">
+                    <FontAwesomeIcon icon={faLightbulb} className="text-amber-500 text-xs shrink-0 mt-0.5" />
                     <span className="leading-relaxed">
                       <strong>Mẹo:</strong> {step.tip}
                     </span>
@@ -125,13 +130,13 @@ export function GuideArticleRenderer({ article, category }: GuideArticleRenderer
       {article.detailedSections && article.detailedSections.length > 0 && (
         <div className="space-y-4">
           {article.detailedSections.map((sec, idx) => (
-            <Card key={idx} className="border-border/80 bg-card/60">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base font-bold text-foreground">
+            <Card key={idx} className="border-border/80 bg-card rounded-2xl shadow-2xs">
+              <CardHeader className="p-4 sm:p-5 pb-2">
+                <CardTitle className="text-sm sm:text-base font-bold text-foreground">
                   {sec.title}
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-2 text-xs sm:text-sm text-muted-foreground leading-relaxed whitespace-pre-line">
+              <CardContent className="p-4 sm:p-5 pt-0 space-y-2 text-xs sm:text-sm text-muted-foreground leading-relaxed whitespace-pre-line">
                 {sec.content}
                 {sec.subitems && (
                   <ul className="list-disc list-inside space-y-1 pt-2">
@@ -149,16 +154,16 @@ export function GuideArticleRenderer({ article, category }: GuideArticleRenderer
       {/* Keyboard shortcuts table */}
       {article.shortcuts && article.shortcuts.length > 0 && (
         <div className="space-y-4">
-          <h2 className="text-lg font-bold tracking-tight text-foreground flex items-center gap-2">
-            <Keyboard className="size-5 text-primary" />
+          <h2 className="text-base sm:text-lg font-bold tracking-tight text-foreground flex items-center gap-2">
+            <FontAwesomeIcon icon={faKeyboard} className="text-primary text-sm" />
             <span>Bảng Tra Cứu Phím Tắt Bàn Phím</span>
           </h2>
 
-          <div className="overflow-hidden rounded-2xl border border-border/80 bg-card/50">
+          <div className="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-2xs">
             <div className="overflow-x-auto">
               <table className="w-full text-xs text-left border-collapse">
                 <thead>
-                  <tr className="border-b border-border/80 bg-muted/50 text-foreground font-bold">
+                  <tr className="border-b border-border/80 bg-muted/40 text-foreground font-bold">
                     <th className="py-3 px-4 w-36">Phím Tắt</th>
                     <th className="py-3 px-4 w-44">Tác Vụ</th>
                     <th className="py-3 px-4">Chi Tiết Hoạt Động</th>
@@ -168,7 +173,7 @@ export function GuideArticleRenderer({ article, category }: GuideArticleRenderer
                   {article.shortcuts.map((sc, idx) => (
                     <tr key={idx} className="hover:bg-muted/30 transition-colors">
                       <td className="py-2.5 px-4 font-mono font-bold text-primary whitespace-nowrap">
-                        <kbd className="px-2 py-1 rounded bg-muted border border-border/80 shadow-2xs text-[11px]">
+                        <kbd className="px-2 py-1 rounded-md bg-muted border border-border/80 shadow-2xs text-[11px]">
                           {sc.key}
                         </kbd>
                       </td>
@@ -190,19 +195,19 @@ export function GuideArticleRenderer({ article, category }: GuideArticleRenderer
       {/* Parameters Table */}
       {article.params && article.params.length > 0 && (
         <div className="space-y-4">
-          <h2 className="text-lg font-bold tracking-tight text-foreground flex items-center gap-2">
-            <Sliders className="size-5 text-primary" />
-            <span>Bảng Tham Số & Tùy Chọn Cấu Hình</span>
+          <h2 className="text-base sm:text-lg font-bold tracking-tight text-foreground flex items-center gap-2">
+            <FontAwesomeIcon icon={faSliders} className="text-primary text-sm" />
+            <span>Bảng Tham Số &amp; Tùy Chọn Cấu Hình</span>
           </h2>
 
-          <div className="overflow-hidden rounded-2xl border border-border/80 bg-card/50">
+          <div className="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-2xs">
             <div className="overflow-x-auto">
               <table className="w-full text-xs text-left border-collapse">
                 <thead>
-                  <tr className="border-b border-border/80 bg-muted/50 text-foreground font-bold">
+                  <tr className="border-b border-border/80 bg-muted/40 text-foreground font-bold">
                     <th className="py-3 px-4 w-48">Tên Tham Số</th>
                     <th className="py-3 px-4 w-28">Mặc Định</th>
-                    <th className="py-3 px-4">Ý Nghĩa & Khuyến Nghị</th>
+                    <th className="py-3 px-4">Ý Nghĩa &amp; Khuyến Nghị</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/60">
@@ -229,16 +234,16 @@ export function GuideArticleRenderer({ article, category }: GuideArticleRenderer
       {/* Troubleshooting Items */}
       {article.troubleshoot && article.troubleshoot.length > 0 && (
         <div className="space-y-4">
-          <h2 className="text-lg font-bold tracking-tight text-foreground flex items-center gap-2">
-            <AlertTriangle className="size-5 text-amber-500" />
-            <span>Hiện Tượng Quan Sát & Quy Trình Khắc Phục</span>
+          <h2 className="text-base sm:text-lg font-bold tracking-tight text-foreground flex items-center gap-2">
+            <FontAwesomeIcon icon={faTriangleExclamation} className="text-amber-500 text-sm" />
+            <span>Hiện Tượng Quan Sát &amp; Quy Trình Khắc Phục</span>
           </h2>
 
-          <div className="space-y-4">
+          <div className="space-y-3.5">
             {article.troubleshoot.map((item, idx) => (
               <div
                 key={idx}
-                className="p-4 sm:p-5 rounded-2xl border border-amber-500/30 bg-amber-500/5 dark:bg-amber-950/10 space-y-3"
+                className="p-4 sm:p-5 rounded-2xl border border-amber-500/30 bg-amber-500/10 space-y-3"
               >
                 <div>
                   <h3 className="font-bold text-sm text-foreground flex items-start gap-2">
@@ -250,7 +255,7 @@ export function GuideArticleRenderer({ article, category }: GuideArticleRenderer
                   </p>
                 </div>
 
-                <div className="rounded-xl bg-card/80 border border-border/60 p-3.5 space-y-1.5 ml-4">
+                <div className="rounded-xl bg-card border border-border/80 p-3.5 space-y-1.5 ml-4">
                   <div className="text-xs font-bold text-primary">Các bước xử lý:</div>
                   <ol className="list-decimal list-inside space-y-1 text-xs text-foreground/90">
                     {item.solution.map((sol, sIdx) => (
@@ -266,10 +271,10 @@ export function GuideArticleRenderer({ article, category }: GuideArticleRenderer
 
       {/* Contextual Link to Troubleshooting Hub if applicable */}
       {article.troubleshootingSlug && (
-        <div className="flex flex-wrap items-center justify-between gap-4 p-4 sm:p-5 rounded-2xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/10">
+        <div className="flex flex-wrap items-center justify-between gap-4 p-4 sm:p-5 rounded-2xl border border-amber-500/30 bg-amber-500/10">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="size-9 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
-              <AlertTriangle className="size-5" />
+            <div className="size-9 rounded-xl bg-amber-500/20 text-amber-700 dark:text-amber-300 flex items-center justify-center shrink-0">
+              <FontAwesomeIcon icon={faWrench} className="text-sm" />
             </div>
             <div>
               <h4 className="font-bold text-xs sm:text-sm text-foreground">
@@ -281,14 +286,52 @@ export function GuideArticleRenderer({ article, category }: GuideArticleRenderer
             </div>
           </div>
 
-          <Button asChild variant="outline" size="sm" className="gap-1.5 font-semibold shrink-0">
+          <Button asChild variant="outline" size="sm" className="gap-1.5 font-semibold shrink-0 rounded-xl">
             <Link to={`/guide/troubleshooting/${article.troubleshootingSlug}`}>
               <span>Xem bài sửa lỗi</span>
-              <ArrowRight className="size-3.5" />
+              <FontAwesomeIcon icon={faArrowRight} className="text-xs" />
             </Link>
           </Button>
+        </div>
+      )}
+
+      {/* Next / Previous Article Navigation */}
+      {(prevArticle || nextArticle) && (
+        <div className="pt-6 border-t border-border/80 grid gap-3 sm:grid-cols-2">
+          {prevArticle ? (
+            <Link
+              to={prevArticle.url}
+              className="flex flex-col p-4 rounded-2xl border border-border/80 bg-card hover:border-primary/50 hover:bg-muted/20 transition-all group"
+            >
+              <span className="text-[11px] font-semibold text-muted-foreground flex items-center gap-1.5 group-hover:text-primary transition-colors">
+                <FontAwesomeIcon icon={faArrowLeft} className="text-[10px]" />
+                <span>Bài trước</span>
+              </span>
+              <span className="font-bold text-xs sm:text-sm text-foreground mt-1 line-clamp-1">
+                {prevArticle.title}
+              </span>
+            </Link>
+          ) : (
+            <div />
+          )}
+
+          {nextArticle && (
+            <Link
+              to={nextArticle.url}
+              className="flex flex-col items-end text-right p-4 rounded-2xl border border-border/80 bg-card hover:border-primary/50 hover:bg-muted/20 transition-all group"
+            >
+              <span className="text-[11px] font-semibold text-muted-foreground flex items-center gap-1.5 group-hover:text-primary transition-colors">
+                <span>Bài tiếp theo</span>
+                <FontAwesomeIcon icon={faArrowRight} className="text-[10px]" />
+              </span>
+              <span className="font-bold text-xs sm:text-sm text-foreground mt-1 line-clamp-1">
+                {nextArticle.title}
+              </span>
+            </Link>
+          )}
         </div>
       )}
     </article>
   )
 }
+

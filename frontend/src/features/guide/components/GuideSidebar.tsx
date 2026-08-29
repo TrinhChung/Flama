@@ -1,39 +1,41 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import {
-  AlertTriangle,
-  ArrowRightLeft,
-  AudioLines,
-  BookOpen,
-  Bot,
-  ChevronDown,
-  ChevronRight,
-  GraduationCap,
-  LayoutDashboard,
-  NotebookTabs,
-  Search,
-  Store,
-  Wallet,
-  X,
-  Zap,
-} from 'lucide-react'
+  faBolt,
+  faBook,
+  faBookBookmark,
+  faChevronDown,
+  faChevronRight,
+  faGraduationCap,
+  faMagnifyingGlass,
+  faRightLeft,
+  faRobot,
+  faStore,
+  faTableColumns,
+  faTriangleExclamation,
+  faVolumeHigh,
+  faWallet,
+  faXmark,
+} from '@fortawesome/free-solid-svg-icons'
+import type { IconDefinition } from '@fortawesome/free-solid-svg-icons'
 import { Link } from 'react-router-dom'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { GUIDE_CATEGORIES } from '../guideData'
 
-const CATEGORY_ICONS: Record<string, React.ElementType> = {
-  Zap,
-  LayoutDashboard,
-  GraduationCap,
-  Search,
-  NotebookTabs,
-  Store,
-  ArrowRightLeft,
-  Bot,
-  AudioLines,
-  Wallet,
-  AlertTriangle,
+const CATEGORY_FA_ICONS: Record<string, IconDefinition> = {
+  Zap: faBolt,
+  LayoutDashboard: faTableColumns,
+  GraduationCap: faGraduationCap,
+  Search: faMagnifyingGlass,
+  NotebookTabs: faBookBookmark,
+  Store: faStore,
+  ArrowRightLeft: faRightLeft,
+  Bot: faRobot,
+  AudioLines: faVolumeHigh,
+  Wallet: faWallet,
+  AlertTriangle: faTriangleExclamation,
 }
 
 interface GuideSidebarProps {
@@ -54,11 +56,25 @@ export function GuideSidebar({
   const [openCategories, setOpenCategories] = useState<Record<string, boolean>>(() => {
     const initial: Record<string, boolean> = {}
     GUIDE_CATEGORIES.forEach((c) => {
-      // Default open if active category, or open the first few
       initial[c.slug] = c.slug === activeCategorySlug || c.slug === 'getting-started' || c.slug === 'dashboard'
     })
     return initial
   })
+
+  // When searching, auto open all categories with matching articles
+  const filteredCategories = useMemo(() => {
+    if (!searchQuery.trim()) return GUIDE_CATEGORIES
+    const query = searchQuery.trim().toLowerCase()
+    return GUIDE_CATEGORIES.map((cat) => ({
+      ...cat,
+      articles: cat.articles.filter(
+        (art) =>
+          art.title.toLowerCase().includes(query) ||
+          art.shortDescription.toLowerCase().includes(query) ||
+          cat.title.toLowerCase().includes(query),
+      ),
+    })).filter((cat) => cat.articles.length > 0)
+  }, [searchQuery])
 
   const toggleCategory = (slug: string) => {
     setOpenCategories((prev) => ({
@@ -68,48 +84,51 @@ export function GuideSidebar({
   }
 
   return (
-    <aside className="flex flex-col h-full bg-card/40 rounded-2xl border border-border/70 p-3.5 space-y-3">
+    <aside className="flex flex-col h-full bg-card rounded-2xl border border-border/80 p-3.5 space-y-3 shadow-2xs">
       {/* Search Bar */}
       <div className="relative">
-        <Search className="size-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+        <FontAwesomeIcon
+          icon={faMagnifyingGlass}
+          className="text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2 text-xs"
+        />
         <Input
           type="search"
-          placeholder="Tìm kiếm tài liệu..."
+          placeholder="Tìm trong mục lục..."
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
-          className="pl-9 pr-8 h-9 text-xs rounded-xl bg-background/80 focus-visible:ring-primary"
+          className="pl-8 pr-7 h-9 text-xs rounded-xl bg-background border-border/80 focus-visible:ring-primary"
         />
         {searchQuery && (
           <button
             type="button"
             onClick={() => onSearchChange('')}
-            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-0.5"
           >
-            <X className="size-3.5" />
+            <FontAwesomeIcon icon={faXmark} className="text-xs" />
           </button>
         )}
       </div>
 
-      {/* Categories Navigation */}
-      <ScrollArea className="flex-1 pr-1 -mr-1">
+      {/* Categories TOC Navigation */}
+      <ScrollArea className="flex-1 pr-1 -mr-1 max-h-[calc(100vh-180px)]">
         <div className="space-y-1 pb-4">
           <Link
             to="/guide"
             onClick={onItemClick}
-            className={`flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all mb-2 ${
+            className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold transition-all mb-2 ${
               !activeCategorySlug && !activeArticleSlug
                 ? 'bg-primary text-primary-foreground shadow-xs'
                 : 'text-foreground hover:bg-muted/70'
             }`}
           >
-            <BookOpen className="size-4 shrink-0" />
-            <span>Trang Chủ Trợ Giúp</span>
+            <FontAwesomeIcon icon={faBook} className="text-xs shrink-0" />
+            <span>Mục Lục &amp; Trang Chủ</span>
           </Link>
 
-          {GUIDE_CATEGORIES.map((cat) => {
-            const IconComp = CATEGORY_ICONS[cat.iconName] || BookOpen
+          {filteredCategories.map((cat) => {
+            const iconDef = CATEGORY_FA_ICONS[cat.iconName] || faBook
             const isCatActive = activeCategorySlug === cat.slug
-            const isOpen = openCategories[cat.slug] ?? isCatActive
+            const isOpen = Boolean(searchQuery.trim()) || (openCategories[cat.slug] ?? isCatActive)
             const isTrouble = cat.slug === 'troubleshooting'
 
             return (
@@ -118,51 +137,57 @@ export function GuideSidebar({
                 <button
                   type="button"
                   onClick={() => toggleCategory(cat.slug)}
-                  className={`w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all text-left group ${
+                  className={`w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all text-left cursor-pointer group ${
                     isCatActive
                       ? 'text-primary bg-primary/10'
                       : isTrouble
                       ? 'text-amber-700 dark:text-amber-400 hover:bg-amber-500/10'
-                      : 'text-foreground/80 hover:bg-muted/60'
+                      : 'text-foreground/90 hover:bg-muted/60'
                   }`}
                 >
                   <div className="flex items-center gap-2 min-w-0">
-                    <IconComp className={`size-3.5 shrink-0 ${isTrouble ? 'text-amber-500' : 'text-primary/80'}`} />
+                    <FontAwesomeIcon
+                      icon={iconDef}
+                      className={`text-xs shrink-0 ${isTrouble ? 'text-amber-500' : 'text-primary'}`}
+                    />
                     <span className="truncate">{cat.title}</span>
                   </div>
-                  <div className="flex items-center gap-1 shrink-0">
+                  <div className="flex items-center gap-1.5 shrink-0">
                     <Badge
                       variant="outline"
                       className="text-[10px] h-4 px-1 font-semibold text-muted-foreground border-border/60"
                     >
                       {cat.articles.length}
                     </Badge>
-                    {isOpen ? (
-                      <ChevronDown className="size-3.5 text-muted-foreground transition-transform" />
-                    ) : (
-                      <ChevronRight className="size-3.5 text-muted-foreground transition-transform" />
-                    )}
+                    <FontAwesomeIcon
+                      icon={isOpen ? faChevronDown : faChevronRight}
+                      className="text-[9px] text-muted-foreground transition-transform"
+                    />
                   </div>
                 </button>
 
                 {/* Sub-articles List */}
                 {isOpen && (
-                  <div className="pl-4 space-y-0.5 ml-2 border-l border-border/60 py-1">
+                  <div className="pl-3.5 space-y-0.5 ml-2 border-l border-border/60 py-1">
                     {cat.articles.map((art) => {
-                      const isArtActive = activeArticleSlug === art.slug || (isCatActive && !activeArticleSlug && art.slug === cat.articles[0]?.slug)
-                      const targetUrl = cat.slug === 'getting-started' && (art.slug === 'getting-started' || art.slug === 'core-concepts')
-                        ? `/guide/${art.slug}`
-                        : `/guide/${cat.slug}/${art.slug}`
+                      const isArtActive =
+                        activeArticleSlug === art.slug ||
+                        (isCatActive && !activeArticleSlug && art.slug === cat.articles[0]?.slug)
+                      const targetUrl =
+                        cat.slug === 'getting-started' &&
+                        (art.slug === 'getting-started' || art.slug === 'core-concepts')
+                          ? `/guide/${art.slug}`
+                          : `/guide/${cat.slug}/${art.slug}`
 
                       return (
                         <Link
                           key={art.slug}
                           to={targetUrl}
                           onClick={onItemClick}
-                          className={`block px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition-all truncate ${
+                          className={`block px-2.5 py-1.5 rounded-lg text-[11px] transition-all truncate ${
                             isArtActive
-                              ? 'bg-primary text-primary-foreground font-semibold shadow-xs'
-                              : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                              ? 'bg-primary text-primary-foreground font-bold shadow-2xs'
+                              : 'text-muted-foreground hover:text-foreground hover:bg-muted/50 font-medium'
                           }`}
                         >
                           {art.title}
@@ -179,3 +204,4 @@ export function GuideSidebar({
     </aside>
   )
 }
+

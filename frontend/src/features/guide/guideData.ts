@@ -1076,3 +1076,41 @@ export function searchArticles(query: string): GuideArticle[] {
     return titleMatch || descMatch || introMatch || stepsMatch || troubleshootMatch
   })
 }
+
+export function getAdjacentArticles(categorySlug?: string, articleSlug?: string): {
+  prevArticle?: { title: string; url: string; categoryTitle?: string }
+  nextArticle?: { title: string; url: string; categoryTitle?: string }
+} {
+  if (!articleSlug) return {}
+
+  const all = getAllArticles()
+  const idx = all.findIndex((a) => a.slug === articleSlug || (categorySlug && a.categorySlug === categorySlug && a.slug === articleSlug))
+  if (idx < 0) return {}
+
+  const getUrl = (art: GuideArticle) => {
+    return art.categorySlug === 'getting-started' && (art.slug === 'getting-started' || art.slug === 'core-concepts')
+      ? `/guide/${art.slug}`
+      : `/guide/${art.categorySlug}/${art.slug}`
+  }
+
+  const prev = idx > 0 ? all[idx - 1] : undefined
+  const next = idx < all.length - 1 ? all[idx + 1] : undefined
+
+  return {
+    prevArticle: prev
+      ? {
+          title: prev.title,
+          url: getUrl(prev),
+          categoryTitle: GUIDE_CATEGORIES.find((c) => c.slug === prev.categorySlug)?.title,
+        }
+      : undefined,
+    nextArticle: next
+      ? {
+          title: next.title,
+          url: getUrl(next),
+          categoryTitle: GUIDE_CATEGORIES.find((c) => c.slug === next.categorySlug)?.title,
+        }
+      : undefined,
+  }
+}
+
