@@ -137,17 +137,50 @@ export function BrowseStrokeModal({
   const [maxChars] = useState(15)
   const [copiedCode, setCopiedCode] = useState(false)
 
-  // Single card preview / sample text
-  const currentCardValue = editFieldValues[sourceField] || ''
-  const [sampleText, setSampleText] = useState(
-    mode === 'single' && currentCardValue ? currentCardValue : '日本語を勉強する (学习中文)',
-  )
-
-  useEffect(() => {
-    if (mode === 'single' && editFieldValues[sourceField]) {
-      setSampleText(editFieldValues[sourceField])
+  // Resolve actual text content from the selected sourceField across active/target card data
+  const resolvedSourceValue = useMemo(() => {
+    // 1. From active sidebar edits
+    if (editFieldValues[sourceField] !== undefined && editFieldValues[sourceField] !== null && String(editFieldValues[sourceField]).trim()) {
+      return String(editFieldValues[sourceField]).trim()
     }
-  }, [mode, sourceField, editFieldValues])
+    // 2. From active card note field_values
+    if (cardDetailQuery.data?.note?.field_values?.[sourceField] !== undefined && String(cardDetailQuery.data.note.field_values[sourceField]).trim()) {
+      return String(cardDetailQuery.data.note.field_values[sourceField]).trim()
+    }
+    // 3. From target card query note field_values
+    if (targetCardQuery.data?.note?.field_values?.[sourceField] !== undefined && String(targetCardQuery.data.note.field_values[sourceField]).trim()) {
+      return String(targetCardQuery.data.note.field_values[sourceField]).trim()
+    }
+    // 4. Fallback from card row
+    const matchingCard = cards.find((c) => c.card_id === targetCardId) || cards[0]
+    if (matchingCard) {
+      const lower = sourceField.toLowerCase()
+      if (['expression', 'word', 'kanji', 'hanzi', 'vocab', 'vocabulary', 'front'].includes(lower) && matchingCard.word) {
+        return matchingCard.word.trim()
+      }
+      if (['reading', 'kana', 'pinyin'].includes(lower) && matchingCard.reading) {
+        return matchingCard.reading.trim()
+      }
+      if (['meaning', 'vietnamese', 'definition', 'back'].includes(lower) && matchingCard.meaning) {
+        return matchingCard.meaning.trim()
+      }
+    }
+    return ''
+  }, [
+    sourceField,
+    editFieldValues,
+    cardDetailQuery.data,
+    targetCardQuery.data,
+    cards,
+    targetCardId,
+  ])
+
+  const [sampleText, setSampleText] = useState(resolvedSourceValue)
+
+  // Automatically update sampleText whenever sourceField, target card, or card data changes
+  useEffect(() => {
+    setSampleText(resolvedSourceValue)
+  }, [resolvedSourceValue, sourceField])
 
   // Stroke preview query
   const previewQuery = useQuery<GenerateStrokesResponse>({
@@ -423,7 +456,7 @@ export function BrowseStrokeModal({
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
                 <Eye className="size-3.5 text-primary" />
-                <span>Xem trước kết quả trích xuất</span>
+                <span>Xem trước kết quả trích xuất từ trường "{sourceField}"</span>
               </span>
               {previewQuery.isFetching && (
                 <span className="text-[11px] text-primary flex items-center gap-1 font-medium">
@@ -432,13 +465,18 @@ export function BrowseStrokeModal({
               )}
             </div>
 
-            <div className="space-y-1.5">
+            <div className="space-y-1">
               <Input
                 value={sampleText}
                 onChange={(e) => setSampleText(e.target.value)}
-                placeholder="Nhập văn bản thử nghiệm..."
-                className="h-8 text-xs bg-muted/40"
+                placeholder={`Nhập văn bản hoặc nội dung trường "${sourceField}"...`}
+                className="h-8 text-xs bg-muted/40 font-medium"
               />
+              {!sampleText && (
+                <p className="text-[11px] text-muted-foreground italic">
+                  Trường "{sourceField}" của thẻ đang chọn chưa có nội dung. Bạn có thể gõ chữ trực tiếp vào ô trên để xem thử.
+                </p>
+              )}
             </div>
 
             {/* Extracted characters badges */}
