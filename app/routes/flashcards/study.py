@@ -826,11 +826,6 @@ def study_answer(card_id: str):
         if not _is_card_visible_in_clone_scope(scope=clone_scope, card_obj=card):
             return _study_error("FIELD_NOT_FOUND", "Card not found.", status=404)
 
-    progress = CardProgress.query.filter_by(user_id=current_user.id, card_id=card.id).first()
-    deck_options = resolve_deck_options(
-        user_id=current_user.id,
-        deck_id=_effective_scheduler_deck_id(card, clone_scope),
-    )
     now = datetime.utcnow()
     timezone_name = get_effective_timezone_name(getattr(current_user, "timezone", "UTC"))
     from app.services.study_service import (

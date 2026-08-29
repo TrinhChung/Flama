@@ -4,13 +4,13 @@
 >
 > Priority: P0
 >
-> Status: TODO
+> Status: COMPLETED
 >
 > Dependency: P0-04
 >
 > Primary lane: Backend Study
 >
-> Preparation status: P1-01.1 read-only investigation COMPLETED on 2026-08-29; P0-03 is closed and P1-01.2 is ready.
+> Completion status: P1-01.1 through P1-01.7 completed on 2026-08-29; next task is P1-02.1.
 
 ## Mục tiêu
 
@@ -157,6 +157,106 @@ Session POST /api/study/sessions/<session_id>/commit
 ### Investigation verdict
 
 P1-01.1 is complete as read-only preparation. The implementation boundary is sufficiently mapped for P1-01.2, but no runtime refactor is authorized until P0-03 produces accepted SELECT-only evidence and Phase 0 receives a GO verdict.
+
+That historical gate was satisfied by the completed P0-03 evidence bundle before the runtime implementation below began.
+
+## P1-01.2-P1-01.7 implementation handoff — 2026-08-29
+
+### Primary outcome
+
+REST, MCP and durable session review now share the same typed scheduler-transition and non-committing mutation core in `app/services/study_service.py`. The durable session service retains its lease, replay validation, ordered locks, idempotency receipt and one outer commit, but no longer builds native policy identity, `ReviewEvent`, progress fields or required review side effects independently.
+
+### Typed core contract
+
+| Contract | Responsibility | Transaction behavior |
+|---|---|---|
+| `NativeReviewTransitionInput` / `execute_native_review_transition` | Exact algorithm key/version transition for one state/action/policy | Pure scheduler execution; no persistence |
+| `NativeReviewProvenance` | Optional session, client-event and sequence identity | Only session supplies all three fields; MCP supplies its server-owned client-event ID |
+| `NativeReviewProgressInput` | Final `CardProgress` state and caller-approved revision | Applied by the core; no commit/rollback |
+| `NativeReviewMutationInput` / `apply_native_review_mutation` | Progress application, canonical native `ReviewEvent`, duration/mode normalization, leech handling and install-usage touches | Never calls commit or rollback; outer wrapper owns the transaction |
+| `NativeReviewMutationResult` | Created event and mutated progress/revision | Caller flushes, links `last_review_event_id` and commits or rolls back |
+
+Session batches with multiple events for one card invoke the canonical mutation for every event and attach `NativeReviewProgressInput` only to that card's last replayed event. This preserves the existing one-revision-per-batch contract while using one event/side-effect authority.
+
+### Post-change call graph
+
+```text
+REST answer
+  -> execute_native_review_command [lock + direct transaction owner]
+     -> execute_native_review_transition
+     -> build_scheduler_policy
+     -> apply_native_review_mutation
+        -> apply CardProgress state/revision
+        -> one native ReviewEvent builder
+        -> leech + install-usage side effects
+     -> flush + last_review_event_id + AuditLog
+     -> commit / rollback
+
+MCP submit_review
+  -> execute_native_review_command
+  -> same direct path, with MCP client_event_id provenance
+
+Durable session commit
+  -> validate lease/token/snapshot/sequence/idempotency
+  -> execute_native_review_transition for replay + hash checks
+  -> ordered CardProgress locks and frozen revision/scope checks
+  -> apply_native_review_mutation for every event
+  -> flush + last_review_event_id + receipt + AuditLog
+  -> one outer commit / rollback
+```
+
+### Concurrency and rollback contract
+
+- Direct first-progress insert maps `IntegrityError` to `StudyReviewError(code="CONCURRENT_REVIEW", status=409)`.
+- Batch first-progress insert is explicitly flushed before event writes and maps the same race to `StudySessionError(code="CARD_PROGRESS_CONFLICT", status=409)`.
+- Direct stale manifest remains `STALE_REVIEW_STATE`; durable-session stale base revision remains `CARD_PROGRESS_CONFLICT` because it reports a frozen session conflict.
+- Suspended cards remain `CARD_SUSPENDED` in both wrappers.
+- Failure injection after canonical progress/event/side-effect mutation proves rollback of `ReviewEvent`, `CardProgress`, note side effects, `AuditLog`, `StudySessionCommit` and session lifecycle state.
+
+### Search proof
+
+Repository search after migration shows:
+
+- one native `record_review_event(...)` call, in `study_service.py`;
+- one direct `execute_review_action(...)` call for native review, behind `execute_native_review_transition`;
+- both direct and session policy creation call `build_scheduler_policy(...)`;
+- `study_session_service.py` contains no native event builder, deck-option serializer, duration normalizer, days-late calculator, leech handler or direct progress-field application.
+
+`anki_sync_service.py` remains a separate external/import producer by design and is owned by P1-02/P1-03; it is not a native user-action writer.
+
+### Verification evidence
+
+```text
+py -3 -m py_compile app/services/study_service.py app/services/study_session_service.py app/routes/flashcards/study.py tests/test_study_behavior_acceptance_baseline.py
+PASS
+
+py -3 scripts/run_tests.py --module study --backend-only
+PASS — 13 files, 98 tests, 80.46s
+
+py -3 scripts/run_tests.py --module connect_mcp --backend-only
+PASS — 13 files, 161 tests, 152.37s
+```
+
+The parity matrix now compares REST, MCP and durable session `CardProgress`, canonical `ReviewEvent` fields, runtime metadata and transport-specific provenance at the same fixed time and policy. Batch delegation, idempotent replay, stale conflict, first-insert races and rollback after canonical side effects are executable assertions.
+
+### P0 duplicate-template-position warning disposition
+
+The accepted P0-03 bundle found one legacy NoteType with nine Templates at `position=0`. Native review mutation does not select a Template by position: it reviews the stable Card/Template identity already selected by the query/session snapshot. No data repair or schema rewrite belongs in this no-storage-change task. Deterministic application/ordinal identity for this legacy condition is carried into P3-07's compatibility binding decision.
+
+### Handoff report
+
+```text
+Task ID: P1-01
+Primary outcome: One typed native transition/mutation authority for REST, MCP and durable session review.
+Files changed: app/services/study_service.py; app/services/study_session_service.py; app/routes/flashcards/study.py; tests/test_study_behavior_acceptance_baseline.py; decoupling tracker/task Markdown.
+Contract/API behavior changed: External REST/MCP/session response shapes are unchanged. Batch first-progress insert races now return typed CARD_PROGRESS_CONFLICT instead of leaking raw IntegrityError. Session ReviewEvent payload JSON uses the shared canonical serializer; semantic JSON fields are unchanged although insignificant whitespace may differ.
+Tests added or updated: REST/MCP/session parity, canonical-core delegation, first-progress race mapping, idempotency, stale conflict and rollback after event/progress/note-side-effect mutation.
+Commands run: py_compile; study backend module; connect_mcp backend module; search proof; git diff/check.
+Test results: Study 98/98 PASS; Connect/MCP 161/161 PASS.
+Rollback path: Revert the core and both call-site adaptations together; never leave native writers split across services.
+Known limitations: External snapshot/revlog/import conflicts remain P1-02; bounded/versioned event provenance remains P1-03; executable/decoder retirement remains P1-04; MySQL driver-level deadlock/connection-loss fault injection was not added.
+Follow-up task IDs: P1-02, P1-03, P1-04, P3-07.
+```
 
 ## Verification
 

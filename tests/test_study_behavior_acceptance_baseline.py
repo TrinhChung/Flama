@@ -9,6 +9,8 @@ from datetime import date, datetime, time, timedelta, timezone
 import unittest
 from uuid import uuid4
 
+from sqlalchemy.exc import IntegrityError
+
 from app import create_app
 from app.services import (
     anki_import_service,
@@ -26,6 +28,7 @@ from app.repositories.study_repository import (
     query_study_queue_counts,
 )
 from models import db
+from models.audit_log import AuditLog
 from models.card import Card
 from models.card_progress import CardProgress
 from models.deck import Deck
@@ -155,10 +158,10 @@ class StudyBehaviorAcceptanceBaselineTests(unittest.TestCase):
             db.drop_all()
 
     # -------------------------------------------------------------------------
-    # 1. Direct REST vs MCP Parity
+    # 1. Direct REST vs MCP vs durable session parity
     # -------------------------------------------------------------------------
     def test_direct_native_review_and_mcp_parity(self):
-        """Cross-entrypoint parity: REST and MCP review invocations produce matching scheduler state across all authoritative fields, algorithm identity, and distinct provenance."""
+        """REST, MCP and durable sessions share state and event semantics."""
         from unittest.mock import patch
 
         fixed_now = datetime(2026, 8, 29, 10, 0, 0)
@@ -166,7 +169,20 @@ class StudyBehaviorAcceptanceBaselineTests(unittest.TestCase):
         expected_due_day_after = today_day + 13
 
         with self.app.app_context():
-            # Initial identical state for both Card A and Card B
+            note_c = Note(
+                user_id=self.author_id,
+                note_type_id=self.note_type_id,
+                deck_id=self.deck_id,
+                field_values={"Word": "bird", "Meaning": "Bird"},
+            )
+            db.session.add(note_c)
+            db.session.flush()
+            card_c = Card(note_id=note_c.id, template_id=self.template_id)
+            db.session.add(card_c)
+            db.session.flush()
+            card_c_id = card_c.id
+
+            # Initial identical state for all three transports.
             p_a = CardProgress(
                 user_id=self.author_id,
                 card_id=self.card_a_id,
@@ -191,7 +207,19 @@ class StudyBehaviorAcceptanceBaselineTests(unittest.TestCase):
                 step_index=0,
                 revision=0,
             )
-            db.session.add_all([p_a, p_b])
+            p_c = CardProgress(
+                user_id=self.author_id,
+                card_id=card_c_id,
+                queue="review",
+                interval_days=5,
+                ease_factor=2.5,
+                reps=3,
+                lapses=0,
+                due_day=today_day,
+                step_index=0,
+                revision=0,
+            )
+            db.session.add_all([p_a, p_b, p_c])
             db.session.commit()
 
         # 1. Execute review via direct REST endpoint for Card A with fixed reference time
@@ -231,13 +259,85 @@ class StudyBehaviorAcceptanceBaselineTests(unittest.TestCase):
                 self.assertTrue(mcp_result["success"])
                 self.assertEqual(mcp_result["rating"], "good")
 
-                # 3. Comprehensive Parity Assertions across all authoritative CardProgress fields
+                # 3. Execute the equivalent review through a durable session.
+                author_user = db.session.get(User, self.author_id)
+                snapshot = study_session_service.open_study_session(
+                    user=author_user,
+                    query=Card.query.filter(Card.id == card_c_id),
+                    clone_scope=None,
+                    scope_type="deck",
+                    scope_id=str(self.deck_id),
+                    timezone_name="Asia/Ho_Chi_Minh",
+                    now=fixed_now,
+                )
+                session_card = snapshot["cards"][0]
+                session_event_id = str(uuid4())
+                session_result = study_session_service.commit_study_session(
+                    user=author_user,
+                    session_id=snapshot["session_id"],
+                    payload={
+                        "schema_version": "study-commit.v1",
+                        "commit_id": "commit-transport-parity-01",
+                        "session_token": snapshot["session_token"],
+                        "snapshot_hash": snapshot["snapshot_hash"],
+                        "commit_reason": "manual_exit",
+                        "events": [
+                            {
+                                "event_id": session_event_id,
+                                "sequence": 1,
+                                "card_id": card_c_id,
+                                "rating": "good",
+                                "policy_key": session_card["policy_key"],
+                                "scheduler_offset_ms": 0,
+                                "duration_ms": 2500,
+                            }
+                        ],
+                        "final_states": [],
+                    },
+                    now=fixed_now,
+                )
+                self.assertTrue(session_result["success"])
+
+                # 4. Comprehensive parity across authoritative CardProgress fields.
                 updated_pa = CardProgress.query.filter_by(
                     user_id=self.author_id, card_id=self.card_a_id
                 ).one()
                 updated_pb = CardProgress.query.filter_by(
                     user_id=self.author_id, card_id=self.card_b_id
                 ).one()
+                updated_pc = CardProgress.query.filter_by(
+                    user_id=self.author_id, card_id=card_c_id
+                ).one()
+
+                progress_parity_fields = (
+                    "reps",
+                    "interval_days",
+                    "interval_days_raw",
+                    "ease_factor",
+                    "lapses",
+                    "queue",
+                    "step_index",
+                    "due_day",
+                    "due_at",
+                    "revision",
+                    "is_suspended",
+                    "is_buried",
+                    "buried_until_day",
+                    "review_kind",
+                    "scheduler_mode",
+                    "memory_stability",
+                    "memory_difficulty",
+                    "suspension_reason",
+                    "last_leech_at",
+                    "last_leech_lapses",
+                    "last_reviewed_at",
+                )
+                for field_name in progress_parity_fields:
+                    self.assertEqual(
+                        getattr(updated_pa, field_name),
+                        getattr(updated_pc, field_name),
+                        field_name,
+                    )
 
                 self.assertEqual(updated_pa.reps, 4)
                 self.assertEqual(updated_pb.reps, 4)
@@ -286,18 +386,60 @@ class StudyBehaviorAcceptanceBaselineTests(unittest.TestCase):
                 self.assertEqual(updated_pa.card_id, self.card_a_id)
                 self.assertEqual(updated_pb.card_id, self.card_b_id)
 
-                # 4. Comprehensive Parity Assertions across all authoritative ReviewEvent fields
+                # 5. Comprehensive parity across authoritative ReviewEvent fields.
                 event_a = ReviewEvent.query.filter_by(
                     user_id=self.author_id, card_id=self.card_a_id
                 ).order_by(ReviewEvent.id.desc()).first()
                 event_b = ReviewEvent.query.filter_by(
                     user_id=self.author_id, card_id=self.card_b_id
                 ).order_by(ReviewEvent.id.desc()).first()
+                event_c = ReviewEvent.query.filter_by(
+                    user_id=self.author_id, card_id=card_c_id
+                ).order_by(ReviewEvent.id.desc()).first()
 
                 self.assertIsNotNone(event_a)
                 self.assertIsNotNone(event_b)
+                self.assertIsNotNone(event_c)
                 self.assertEqual(updated_pa.last_review_event_id, event_a.id)
                 self.assertEqual(updated_pb.last_review_event_id, event_b.id)
+                self.assertEqual(updated_pc.last_review_event_id, event_c.id)
+
+                event_parity_fields = (
+                    "user_id",
+                    "deck_id",
+                    "note_type_id",
+                    "scheduler_preset_id",
+                    "scheduler_algorithm",
+                    "algorithm_version",
+                    "scheduler_config_hash",
+                    "reviewed_at",
+                    "duration_ms",
+                    "rating",
+                    "mode",
+                    "scheduler_mode",
+                    "review_kind",
+                    "queue_before",
+                    "queue_after",
+                    "interval_days_before",
+                    "interval_days_after",
+                    "due_day_before",
+                    "due_day_after",
+                    "days_late",
+                    "ease_factor_before",
+                    "ease_factor_after",
+                    "memory_stability_before",
+                    "memory_stability_after",
+                    "memory_difficulty_before",
+                    "memory_difficulty_after",
+                    "leeched_after",
+                    "suspended_after",
+                )
+                for field_name in event_parity_fields:
+                    self.assertEqual(
+                        getattr(event_a, field_name),
+                        getattr(event_c, field_name),
+                        field_name,
+                    )
 
                 self.assertEqual(event_a.user_id, self.author_id)
                 self.assertEqual(event_b.user_id, self.author_id)
@@ -353,15 +495,23 @@ class StudyBehaviorAcceptanceBaselineTests(unittest.TestCase):
                 self.assertFalse(event_a.suspended_after)
                 self.assertFalse(event_b.suspended_after)
 
-                # 5. Documented Provenance Differentiation on ReviewEvent
+                # 6. Only session transport carries session/sequence provenance.
                 self.assertEqual(event_a.card_id, str(self.card_a_id))
                 self.assertEqual(event_b.card_id, str(self.card_b_id))
                 self.assertIsNone(event_a.client_event_id)
                 self.assertIsNotNone(event_b.client_event_id)
                 self.assertTrue(str(event_b.client_event_id).startswith("mcp-review-"))
+                self.assertEqual(event_c.study_session_id, snapshot["session_id"])
+                self.assertEqual(event_c.client_event_id, session_event_id)
+                self.assertEqual(event_c.sequence_no, 1)
+                self.assertIsNone(event_a.study_session_id)
+                self.assertIsNone(event_a.sequence_no)
+                self.assertIsNone(event_b.study_session_id)
+                self.assertIsNone(event_b.sequence_no)
 
                 payload_a = json.loads(event_a.payload_json)
                 payload_b = json.loads(event_b.payload_json)
+                payload_c = json.loads(event_c.payload_json)
                 self.assertNotIn("source", payload_a)
                 self.assertEqual(payload_b.get("source"), "mcp")
                 self.assertEqual(payload_b.get("client_event_id"), str(event_b.client_event_id))
@@ -369,6 +519,7 @@ class StudyBehaviorAcceptanceBaselineTests(unittest.TestCase):
                 # Shared semantic trigger metadata in runtime payload
                 runtime_a = payload_a["_study_runtime"]
                 runtime_b = payload_b["_study_runtime"]
+                runtime_c = payload_c["_study_runtime"]
                 self.assertEqual(runtime_a["action_key"], "review.good")
                 self.assertEqual(runtime_b["action_key"], "review.good")
                 self.assertEqual(runtime_a["trigger_key"], "scheduler.review.good")
@@ -382,12 +533,14 @@ class StudyBehaviorAcceptanceBaselineTests(unittest.TestCase):
                 self.assertEqual(runtime_a["state_schema_version"], "anki-card-state.v1")
                 self.assertEqual(runtime_b["state_schema_version"], "anki-card-state.v1")
                 self.assertEqual(runtime_a["scheduler_config_hash"], runtime_b["scheduler_config_hash"])
+                self.assertEqual(runtime_a, runtime_c)
 
-                # 6. Audit engine recognizes distinct provenance without conflict
+                # 7. Audit engine recognizes all native transports without conflict.
                 audit = build_study_architecture_audit()
                 rg = audit["review_event_gates"]
                 self.assertEqual(rg["native_direct_events"], 1)
                 self.assertEqual(rg["native_mcp_events"], 1)
+                self.assertEqual(rg["native_session_events"], 1)
                 self.assertEqual(rg["conflicting_provenance_events"], 0)
                 self.assertEqual(rg["unknown_provenance_events"], 0)
 
@@ -434,12 +587,23 @@ class StudyBehaviorAcceptanceBaselineTests(unittest.TestCase):
                 "final_states": [],
             }
 
-            # First commit
-            result1 = study_session_service.commit_study_session(
-                user=author_user,
-                session_id=snapshot["session_id"],
-                payload=commit_payload,
-                now=now,
+            # First commit delegates its authoritative mutation to the shared core.
+            real_mutation = study_service.apply_native_review_mutation
+            with patch(
+                "app.services.study_service.apply_native_review_mutation",
+                wraps=real_mutation,
+            ) as mutation_spy:
+                result1 = study_session_service.commit_study_session(
+                    user=author_user,
+                    session_id=snapshot["session_id"],
+                    payload=commit_payload,
+                    now=now,
+                )
+            self.assertEqual(mutation_spy.call_count, 1)
+            delegated_input = mutation_spy.call_args.args[0]
+            self.assertEqual(
+                delegated_input.provenance.study_session_id,
+                snapshot["session_id"],
             )
             self.assertTrue(result1.get("success"))
             self.assertEqual(result1.get("applied_event_count"), 1)
@@ -580,16 +744,25 @@ class StudyBehaviorAcceptanceBaselineTests(unittest.TestCase):
                 "final_states": [],
             }
 
-            # Test seam: inject failure during write phase when applying state for Card B (after Event 1 ReviewEvent has been created & flushed)
-            from app.services import study_session_service as sss
-            real_apply = sss.apply_card_state_to_progress
+            # Inject failure after canonical event/progress/side-effect mutation.
+            real_mutation = study_service.apply_native_review_mutation
 
-            def _failing_apply(prog, state, last_rev, timezone_name="UTC", options=None):
-                if prog.card_id == self.card_b_id:
-                    raise RuntimeError("Simulated mid-write database failure during card B progress update")
-                return real_apply(prog, state, last_rev, timezone_name=timezone_name, options=options)
+            def _failing_mutation(command):
+                result = real_mutation(command)
+                command.card.note.tags = list(command.card.note.tags or []) + [
+                    "rollback-sentinel"
+                ]
+                if command.card.id == self.card_b_id:
+                    raise RuntimeError(
+                        "Simulated mid-write database failure after canonical mutation"
+                    )
+                return result
 
-            with patch("app.services.study_session_service.apply_card_state_to_progress", side_effect=_failing_apply):
+            audit_count_before = AuditLog.query.count()
+            with patch(
+                "app.services.study_service.apply_native_review_mutation",
+                side_effect=_failing_mutation,
+            ):
                 with self.assertRaises(RuntimeError) as cm_write_err:
                     study_session_service.commit_study_session(
                         user=author_user,
@@ -616,6 +789,16 @@ class StudyBehaviorAcceptanceBaselineTests(unittest.TestCase):
             session_row_b2 = db.session.get(StudySession, snapshot_write_err["session_id"])
             self.assertEqual(session_row_b2.status, "open", "Session must remain open after mid-write rollback")
             self.assertIsNone(session_row_b2.committed_at, "Session committed_at must remain None after mid-write rollback")
+            self.assertEqual(AuditLog.query.count(), audit_count_before)
+            db.session.expire_all()
+            self.assertNotIn(
+                "rollback-sentinel",
+                db.session.get(Note, self.note_a_id).tags or [],
+            )
+            self.assertNotIn(
+                "rollback-sentinel",
+                db.session.get(Note, self.note_b_id).tags or [],
+            )
 
             # Part C: Stale Revision Conflict
             # Open Session S1 and Session S2 on Card A
@@ -699,6 +882,106 @@ class StudyBehaviorAcceptanceBaselineTests(unittest.TestCase):
             # Assert zero partial writes from S2
             s2_events = ReviewEvent.query.filter_by(study_session_id=s2["session_id"]).count()
             self.assertEqual(s2_events, 0)
+
+    def test_first_progress_insert_races_return_typed_conflicts(self):
+        """Direct and batch first-write races never leak raw IntegrityError."""
+        from unittest.mock import patch
+
+        with self.app.app_context():
+            now = datetime(2026, 8, 29, 10, 0, 0)
+            author = db.session.get(User, self.author_id)
+            card_a = db.session.get(Card, self.card_a_id)
+            duplicate_error = IntegrityError(
+                "INSERT INTO card_progress",
+                {},
+                RuntimeError("duplicate progress row"),
+            )
+
+            with patch(
+                "app.services.study_service.db.session.flush",
+                side_effect=duplicate_error,
+            ):
+                with self.assertRaises(study_service.StudyReviewError) as direct_cm:
+                    study_service.execute_native_review_command(
+                        user=author,
+                        card=card_a,
+                        action="good",
+                        payload={"duration_ms": 500},
+                        clone_scope=None,
+                        requested_scope_id=self.deck_id,
+                        timezone_name="Asia/Ho_Chi_Minh",
+                        now=now,
+                    )
+            self.assertEqual(direct_cm.exception.code, "CONCURRENT_REVIEW")
+            self.assertEqual(direct_cm.exception.status, 409)
+            self.assertIsNone(
+                CardProgress.query.filter_by(
+                    user_id=self.author_id,
+                    card_id=self.card_a_id,
+                ).first()
+            )
+
+            snapshot = study_session_service.open_study_session(
+                user=author,
+                query=Card.query.filter(Card.id == self.card_b_id),
+                clone_scope=None,
+                scope_type="deck",
+                scope_id=str(self.deck_id),
+                timezone_name="Asia/Ho_Chi_Minh",
+                now=now,
+            )
+            session_card = snapshot["cards"][0]
+            payload = {
+                "schema_version": "study-commit.v1",
+                "commit_id": "commit-first-progress-race-01",
+                "session_token": snapshot["session_token"],
+                "snapshot_hash": snapshot["snapshot_hash"],
+                "commit_reason": "manual_exit",
+                "events": [
+                    {
+                        "event_id": str(uuid4()),
+                        "sequence": 1,
+                        "card_id": self.card_b_id,
+                        "rating": "good",
+                        "policy_key": session_card["policy_key"],
+                        "scheduler_offset_ms": 0,
+                        "duration_ms": 500,
+                    }
+                ],
+                "final_states": [],
+            }
+            batch_duplicate_error = IntegrityError(
+                "INSERT INTO card_progress",
+                {},
+                RuntimeError("duplicate progress row"),
+            )
+            with patch(
+                "app.services.study_session_service.db.session.flush",
+                side_effect=batch_duplicate_error,
+            ):
+                with self.assertRaises(
+                    study_session_service.StudySessionError
+                ) as batch_cm:
+                    study_session_service.commit_study_session(
+                        user=author,
+                        session_id=snapshot["session_id"],
+                        payload=payload,
+                        now=now,
+                    )
+            self.assertEqual(batch_cm.exception.code, "CARD_PROGRESS_CONFLICT")
+            self.assertEqual(batch_cm.exception.status, 409)
+            self.assertIsNone(
+                CardProgress.query.filter_by(
+                    user_id=self.author_id,
+                    card_id=self.card_b_id,
+                ).first()
+            )
+            self.assertEqual(
+                ReviewEvent.query.filter_by(
+                    study_session_id=snapshot["session_id"]
+                ).count(),
+                0,
+            )
 
     # -------------------------------------------------------------------------
     # 3. Due Selection & Multi-Timezone Day Boundary Invariants

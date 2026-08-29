@@ -16,7 +16,7 @@
 
 ## Bối cảnh
 
-- Native producers hiện chưa hoàn toàn hội tụ cho tới khi P1-01 hoàn thành.
+- Native REST, MCP and session producers converged in completed P1-01; external/import producers remain intentionally separate and require this task's versioned provenance contract.
 - Anki revlog path có behavior mutate Algorithm/version sau khi tạo event thay vì xây event external provenance atomic ngay từ đầu.
 - Broad client payload có nguy cơ đưa field dư, malformed hoặc oversized vào history.
 - ReviewEvent là audit/analytics fact, không phải current-state source of truth.

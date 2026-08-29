@@ -103,6 +103,7 @@ This is repository-grounded preparation only. It defines neither final logical p
 - Field rename-safe overlay behavior already uses stable `FieldDef.id`; the target binding contract must preserve that property.
 - Existing template authoring may reference field names, so name-to-ID resolution is a compatibility compile/import concern, not the durable binding identity.
 - Template/card layout is not yet atomic in deck releases; the ADR must not claim release guarantees that runtime does not provide.
+- The accepted P0-03 MySQL baseline contains one NoteType with nine Templates sharing `position=0`. Review mutation is stable because it uses Card/Template identity, but P3-07 must define deterministic legacy ordinal/application projection without rewriting this production data in Phase 3.
 
 ### Questions the ADR must answer
 

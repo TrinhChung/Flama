@@ -2,13 +2,15 @@
 
 > Status: evidence-backed architecture review and execution proposal. This document does not authorize a schema migration, production write, or source-of-truth cutover.
 >
-> Follow-up Phase 0 gate review: [`docs/task/decoupling/P0_PHASE_REVIEW_HANDOFF_2026-08-29.md`](../task/decoupling/P0_PHASE_REVIEW_HANDOFF_2026-08-29.md). Independent review round 5 is authoritative for P0-01..P0-04: **NO-GO; P0-01/P0-02/P0-04 COMPLETED, P0-03 BLOCKED pending SELECT-only rerun**.
+> Current superseding status: [`docs/task/decoupling/P0_PHASE_REVIEW_HANDOFF_2026-08-29.md`](../task/decoupling/P0_PHASE_REVIEW_HANDOFF_2026-08-29.md) records Phase 0 **GO** with P0-01..P0-04 completed. P1-01 is also completed; the next task is P1-02.1.
 >
 > Next execution plan: [`docs/task/decoupling/PHASE_0_3_NEXT_EXECUTION_PLAN_2026-08-29.md`](../task/decoupling/PHASE_0_3_NEXT_EXECUTION_PLAN_2026-08-29.md).
 >
 > Scope: Study/Interaction/Trigger/Algorithm/Progress, Template/NoteType/applied composition, renderer trust boundary, shared-deck overlay compatibility, and migration readiness.
 >
 > Execution backlog: [`docs/task/decoupling/`](../task/decoupling/README.md)
+
+> Historical note: sections below preserve the original evidence snapshot at commit `b01fcfb`. The status table and backend-duplication finding are superseded by the current update above and the completed P1-01 handoff.
 
 ## 1. Kết luận điều hành
 
@@ -63,8 +65,8 @@ Các suite xanh chỉ xác nhận regression matrix hiện tại. Chúng chưa c
 
 | Track | Trạng thái | Đã có | Exit gate còn thiếu |
 |---|---|---|---|
-| Phase 0 — evidence/invariants | **Partial, gate chưa đạt** | audit v2, anomaly tests trên SQLite, golden vectors Python/TypeScript | audit an toàn khi chạy production, MySQL proof, đầy đủ clone/import/version provenance, machine-readable failure |
-| Phase 1 — runtime boundaries | **Partial, cần hardening lại** | exact Algorithm registry, direct REST/MCP command, event metadata | batch vẫn lặp authoritative work; policy serialization lặp; first-row/concurrency parity và version retirement chưa đóng |
+| Phase 0 — evidence/invariants | **Completed, GO** | safe audit contract, accepted SELECT-only MySQL bundle, behavior baseline and checksums | downstream warning owners only; no Phase 0 blocker |
+| Phase 1 — runtime boundaries | **Partial; P1-01 completed** | one typed native transition/mutation core for REST/MCP/session, canonical policy/event builder, race/rollback tests | P1-02 external conflicts, P1-03 provenance hardening and P1-04 retirement lifecycle |
 | Phase 2 — Interaction/Trigger compatibility | **Partial, có security blocker** | semantic action metadata, extracted controls, legacy restore normalization | raw rating callback vẫn rò ra UI; ref chưa là mutex; restore validation thiếu; iframe `host_command` forgeable; chưa có Trigger dispatcher thật |
 | Phase 3 — StudyMode/composition | **Partial scaffold, exit gate thất bại** | compositions API, compatibility IDs, optional server filter, snapshot metadata, selector UI | chọn trước khi mở session; exactly-one authorization; query-first filtering; immutable selection; mixed NoteType rule; overlay-only clone proof |
 | Phase 4 — learner/Note progress + Algorithm State | **Not started** | conceptual split trong architecture plan | Priority-0 ADR, additive schema, backfill, mirror, shadow comparison |
@@ -94,16 +96,11 @@ Template JavaScript trong iframe
 
 Biện pháp containment an toàn là loại bỏ mọi progress-affecting `host_command`. Shortcut có thể tạm không hoạt động khi focus nằm trong iframe; đây là trade-off phù hợp hơn việc giữ một write side channel giả mạo được. Thiết kế khôi phục shortcut phải có threat model riêng và không dựa vào một nonce bị lộ cho untrusted realm.
 
-### 4.2 Backend chưa có một transaction owner thật sự cho mọi native write
+### 4.2 Resolved by P1-01 — canonical native transaction boundary
 
-`study_service.record_native_review_transition` đã là seam tốt cho direct REST/MCP, nhưng batch commit trong `study_session_service.py` vẫn tự dựng `ReviewEvent`, policy material và side effects. Kết quả là tài liệu đang tuyên bố mức canonicalization cao hơn code.
+P1-01 replaced the duplicated batch writer with `execute_native_review_transition` and `apply_native_review_mutation` in `study_service.py`. REST/MCP keep their direct transaction wrapper; batch keeps lease/idempotency/bulk locks and one outer transaction while delegating policy identity, transition execution, progress application, `ReviewEvent` construction and required side effects.
 
-Rủi ro:
-
-- metadata hoặc side effect khác nhau giữa direct, MCP và batch;
-- bug fix chỉ được áp dụng cho một path;
-- retry/idempotency và first-progress race có semantics khác nhau;
-- khó mirror sang Phase 4 trong một transaction duy nhất.
+Closure evidence: fixed-time REST/MCP/session parity, canonical-core delegation, batch idempotency, stale conflicts, typed first-progress races and rollback after progress/event/note-side-effect mutation all pass. External snapshot/revlog/import writers remain intentionally separate and are the next P1-02/P1-03 scope.
 
 ### 4.3 Frontend operation guard chưa phải mutex
 

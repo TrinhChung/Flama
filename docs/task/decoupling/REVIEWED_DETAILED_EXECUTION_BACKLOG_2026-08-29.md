@@ -2,9 +2,9 @@
 
 > Review date: 2026-08-29
 >
-> Status: ACTIVE; Phase 0 closed and P1-01.2 is next
+> Status: ACTIVE; Phase 0 and P1-01 closed, P1-02.1 is next
 >
-> Scope: 18 remaining parent tasks from P1-01 through INT-01
+> Scope: 17 remaining parent tasks from P1-02 through INT-01
 >
 > Hard boundary: no Phase 4 model, migration, second progress authority, physical clone fallback or source Note/Card mutation
 
@@ -12,11 +12,9 @@
 
 | State | Tasks | Evidence/next action |
 |---|---|---|
-| Completed and moved to `completed/` | P0-01, P0-02, P0-04, P2-01 | Code, task handoff and focused tests were reviewed and committed. |
-| Completed | P0-03 | Current SELECT-only two-run bundle, comparison, checksums, spot checks and regressions passed; moved to `completed/`. |
-| Preparation complete; runtime not started | P1-01.1 | Producer/call graph and transaction ownership are documented. |
+| Completed and moved to `completed/` | P0-01, P0-02, P0-03, P0-04, P1-01, P2-01 | Code, handoffs and focused gates passed; P1-01 Study 98/98 and Connect/MCP 161/161 are green. |
 | Pre-decision inventory complete; ADR not approved | P3-05, P3-07 | Repository evidence/open questions are documented; the accepted P0-03 distribution is now available for decision review. |
-| Queued | P1-01.2–P1-04, P2-02–P2-07, P3-01–P3-06, INT-01 | Begin with P1-01.2 and execute in the waves below. |
+| Queued | P1-02–P1-04, P2-02–P2-07, P3-01–P3-06, INT-01 | Begin with P1-02.1 and execute in the waves below. |
 
 Latest local gate verification:
 
@@ -51,7 +49,7 @@ Tasks sharing `study_session_service.py`, `useStudySession.ts` or composition co
 
 ### P0-03 — MySQL baseline verification
 
-Status: `BLOCKED`; first executable task after credential delivery.
+Status: `COMPLETED`; retained below as historical execution evidence.
 
 | Slice | Detailed work | Required output |
 |---|---|---|
@@ -69,7 +67,7 @@ Stop on missing/unsafe grants, unexpected schema, audit `BLOCK`, non-timestamp d
 
 ### P1-01 — Canonical native review transaction
 
-Current preparation: P1-01.1 complete. Runtime slices:
+Status: `COMPLETED`; P1-01.1 through P1-01.7 passed their output gate and the task moved to `completed/`.
 
 | Slice | Detailed work | Required output |
 |---|---|---|

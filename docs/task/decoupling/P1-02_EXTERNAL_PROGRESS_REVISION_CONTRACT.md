@@ -9,6 +9,8 @@
 > Dependency: P1-01
 >
 > Primary lane: Backend Connect / Import / Share
+>
+> Preparation status: P1-01 dependency is satisfied; P1-02.1 producer/mutator inventory is the next executable task.
 
 ## Mục tiêu
 

@@ -1,8 +1,8 @@
 # Phase 0–3 next execution plan — after independent review round 5
 
-> Status: PHASE 0 CLOSED; P1-01.2 is the next runtime task
+> Status: PHASE 0 AND P1-01 CLOSED; P1-02.1 is the next runtime task
 >
-> Current gate: `P0-01 COMPLETED`, `P0-02 COMPLETED`, `P0-03 COMPLETED`, `P0-04 COMPLETED`, Phase 0 `GO`
+> Current gate: `P0-01..P0-04 COMPLETED`, Phase 0 `GO`, `P1-01 COMPLETED`
 >
 > Scope: close P0-03, then sequence the remaining runtime-correctness and composition-contract tasks through INT-01
 >
@@ -10,7 +10,7 @@
 
 ## 1. Outcome and ordering rule
 
-The replacement P0-03 evidence bundle has passed review. The next executable outcome is P1-01.2, using the completed P1-01.1 ownership map. Phase 4 remains outside this plan.
+The replacement P0-03 evidence bundle and P1-01 canonical native review transaction have passed their gates. The next executable outcome is P1-02.1, starting with the external progress mutation inventory. Phase 4 remains outside this plan.
 
 After Phase 0 closes, use this order:
 
@@ -79,15 +79,15 @@ The audit command itself must receive the URI through process environment. Do no
 
 To avoid idle time, P1-01.1 may be performed as a read-only draft: map every producer, lock/revision check, event builder, side effect and commit/rollback owner. The draft must be labeled non-authoritative and must not extract code, change runtime behavior or mark Phase 1 started. P3-05/P3-07 may collect open questions, but cannot approve a decision without the authoritative P0-03 evidence.
 
-Update 2026-08-29: P1-01.1 read-only preparation is complete in `P1-01_CANONICAL_REVIEW_TRANSACTION.md`. It confirms direct REST and MCP share `execute_native_review_command`, while session commit remains the second authoritative native event/side-effect writer and must retain its outer lease/idempotency/atomic transaction boundary during extraction. No runtime or schema change was made.
+Historical preparation update: P1-01.1 mapped direct, MCP and session transaction ownership before implementation. The completed P1-01 handoff now supersedes the former two-writer observation.
 
 Update 2026-08-29: P3-05 and P3-07 repository evidence/open-question inventories are also complete. Both remain `TODO`: production distribution, mixed-scope cardinality and applied-composition lifecycle decisions require the accepted P0-03 bundle before ADR approval.
 
-Closeout update 2026-08-29: the SELECT-only replacement bundle passed with 67 categories, 11/11 formulas, 61 PASS, 6 WARN, 0 BLOCK and deterministic two-run output. Step 0 is complete; activate P1-01.2 next and use the assigned warnings as downstream task inputs.
+Closeout update 2026-08-29: the SELECT-only replacement bundle passed with 67 categories, 11/11 formulas, 61 PASS, 6 WARN, 0 BLOCK and deterministic two-run output. Step 0 and P1-01 are complete; activate P1-02.1 next and use the assigned warnings as downstream task inputs.
 
 ## 3. Step 1 — P1-01 canonical native review transaction
 
-P1-01 is the first code task after Phase 0 because P1-02, P1-03 and P1-04 all depend on it. Current executable seams show two authoritative builders: direct/MCP enters `study_service.execute_native_review_command()`, while session commit constructs and persists its own transition/event flow in `study_session_service.commit_study_session()`.
+P1-01 is completed and has unlocked P1-02, P1-03 and P1-04. The table below is retained as the executed slice plan; the completed task handoff contains the post-change call graph and evidence.
 
 ### 3.1 Delivery slices
 
@@ -207,7 +207,7 @@ Do not implement Trigger dispatch before P2-06 is approved. Do not remove v2 dec
 ## 10. Immediate handoff
 
 1. P0-03 is complete; retain its six warning classes as explicit downstream inputs.
-2. Review the completed P1-01.1 transaction graph and begin P1-01.2 typed core contract.
-3. Implement P1-01.3–P1-01.7 sequentially and preserve the session outer transaction boundary.
+2. Treat the completed P1-01 typed core and session outer transaction as the fixed native-write boundary.
+3. Begin P1-02.1 by inventorying snapshot, revlog, Connect, import, cutover and repair progress mutators before approving the conflict matrix.
 4. Keep frontend correctness work ordered P2-02 → P2-03 → P2-04 → P2-05.
 5. Review P3-05/P3-07 decisions against the accepted production distribution before P3 implementation.

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 import json
 from typing import Any
@@ -34,6 +34,7 @@ from models.audit_log import AuditLog
 from models.card import Card
 from models.card_progress import CardProgress
 from models.deck import Deck
+from models.review_event import ReviewEvent
 
 
 class StudyReviewError(ValueError):
@@ -55,6 +56,71 @@ class NativeReviewCommandResult:
     scheduler_config_hash: str
 
 
+@dataclass(frozen=True)
+class NativeReviewProvenance:
+    """Transport provenance attached to a canonical native review event."""
+
+    study_session_id: str | None = None
+    client_event_id: str | None = None
+    sequence_no: int | None = None
+
+
+@dataclass(frozen=True)
+class NativeReviewProgressInput:
+    """Final progress state applied by the non-committing mutation core."""
+
+    progress: CardProgress
+    state: CardState
+    last_reviewed_at: datetime
+    revision: int
+
+
+@dataclass(frozen=True)
+class NativeReviewTransitionInput:
+    """Executable scheduler input shared by direct and durable review paths."""
+
+    state: CardState
+    deck_options: DeckOptions
+    reviewed_at: datetime
+    action: Any
+    timezone_name: str
+    algorithm_key: str = DEFAULT_ALGORITHM_IDENTITY.key
+    algorithm_version: str = DEFAULT_ALGORITHM_IDENTITY.version
+
+
+@dataclass(frozen=True)
+class NativeReviewMutationInput:
+    """Transport-neutral input for one canonical native review mutation."""
+
+    user_id: int
+    card: Card
+    current_state: CardState
+    transition: ReviewTransitionResult
+    reviewed_at: datetime
+    duration_ms: int | None
+    payload: dict[str, Any] | None
+    local_deck_id: int | None
+    scheduler_preset_id: int | None
+    scheduler_config_hash: str
+    timezone_name: str
+    deck_options: DeckOptions
+    review_mode: str | None = None
+    note_type_id: str | None = None
+    provenance: NativeReviewProvenance = field(
+        default_factory=NativeReviewProvenance
+    )
+    progress_input: NativeReviewProgressInput | None = None
+
+
+@dataclass(frozen=True)
+class NativeReviewMutationResult:
+    """Objects mutated by the core; the caller still owns flush/commit/rollback."""
+
+    review_event: ReviewEvent
+    progress: CardProgress | None
+    progress_revision: int | None
+
+
 def _serialize_review_payload(payload: dict[str, Any] | None) -> str:
     try:
         return json.dumps(
@@ -65,6 +131,33 @@ def _serialize_review_payload(payload: dict[str, Any] | None) -> str:
         )
     except (TypeError, ValueError):
         return "{}"
+
+
+def normalize_review_duration(value: Any) -> int | None:
+    """Normalize native duration consistently across REST, MCP and sessions."""
+
+    if value is None:
+        return None
+    try:
+        return max(0, min(60 * 60 * 1000, int(value)))
+    except (TypeError, ValueError):
+        return None
+
+
+def execute_native_review_transition(
+    command: NativeReviewTransitionInput,
+) -> ReviewTransitionResult:
+    """Execute the exact-version native scheduler without persistence effects."""
+
+    return execute_review_action(
+        state=command.state,
+        options=command.deck_options,
+        now=command.reviewed_at,
+        action=command.action,
+        timezone_name=command.timezone_name,
+        algorithm_key=command.algorithm_key,
+        algorithm_version=command.algorithm_version,
+    )
 
 
 def _compute_days_late(
@@ -173,7 +266,7 @@ def _apply_review_side_effects(
         )
 
 
-def record_native_review_transition(
+def _record_native_review_transition(
     *,
     user_id: int,
     card: Card,
@@ -188,6 +281,7 @@ def record_native_review_transition(
     scheduler_config_hash: str,
     timezone_name: str,
     deck_options: DeckOptions,
+    note_type_id: str | None = None,
     study_session_id: str | None = None,
     client_event_id: str | None = None,
     sequence_no: int | None = None,
@@ -204,7 +298,7 @@ def record_native_review_transition(
         user_id=int(user_id),
         card_id=str(card.id),
         deck_id=local_deck_id,
-        note_type_id=str(card.note.note_type_id),
+        note_type_id=str(note_type_id or card.note.note_type_id),
         scheduler_preset_id=scheduler_preset_id,
         scheduler_algorithm=transition.algorithm.key,
         algorithm_version=transition.algorithm.version,
@@ -264,6 +358,60 @@ def record_native_review_transition(
         reviewed_at=reviewed_at,
     )
     return review_event
+
+
+def apply_native_review_mutation(
+    command: NativeReviewMutationInput,
+) -> NativeReviewMutationResult:
+    """Apply one native review mutation without commit or rollback.
+
+    Direct/MCP callers supply a progress input for every command. A durable
+    session may append multiple events for one card and supplies the final
+    progress input only on that card's last replayed event, preserving its
+    one-revision-per-batch contract.
+    """
+
+    progress = None
+    progress_revision = None
+    if command.progress_input is not None:
+        progress = command.progress_input.progress
+        apply_card_state_to_progress(
+            progress,
+            command.progress_input.state,
+            command.progress_input.last_reviewed_at,
+            timezone_name=command.timezone_name,
+            options=command.deck_options,
+        )
+        progress.revision = int(command.progress_input.revision)
+        progress_revision = int(progress.revision)
+
+    review_event = _record_native_review_transition(
+        user_id=int(command.user_id),
+        card=command.card,
+        current_state=command.current_state,
+        transition=command.transition,
+        reviewed_at=command.reviewed_at,
+        duration_ms=normalize_review_duration(command.duration_ms),
+        review_mode=(
+            command.review_mode
+            or normalize_review_mode(command.current_state.type)
+        ),
+        payload=command.payload,
+        local_deck_id=command.local_deck_id,
+        scheduler_preset_id=command.scheduler_preset_id,
+        scheduler_config_hash=command.scheduler_config_hash,
+        timezone_name=command.timezone_name,
+        deck_options=command.deck_options,
+        note_type_id=command.note_type_id,
+        study_session_id=command.provenance.study_session_id,
+        client_event_id=command.provenance.client_event_id,
+        sequence_no=command.provenance.sequence_no,
+    )
+    return NativeReviewMutationResult(
+        review_event=review_event,
+        progress=progress,
+        progress_revision=progress_revision,
+    )
 
 
 def execute_native_review_command(
@@ -371,14 +519,16 @@ def execute_native_review_command(
             algorithm_key=algorithm_key,
             algorithm_version=algorithm_version,
         )
-        transition = execute_review_action(
-            state=current_state,
-            options=options,
-            now=reviewed_at,
-            action=action,
-            timezone_name=timezone_name,
-            algorithm_key=algorithm_key,
-            algorithm_version=algorithm_version,
+        transition = execute_native_review_transition(
+            NativeReviewTransitionInput(
+                state=current_state,
+                deck_options=options,
+                reviewed_at=reviewed_at,
+                action=action,
+                timezone_name=timezone_name,
+                algorithm_key=algorithm_key,
+                algorithm_version=algorithm_version,
+            )
         )
         policy = build_scheduler_policy(
             options=options,
@@ -386,41 +536,46 @@ def execute_native_review_command(
             algorithm=transition.algorithm,
         )
 
-        apply_card_state_to_progress(
-            progress,
-            transition.state,
-            reviewed_at,
-            timezone_name=timezone_name,
-            options=options,
-        )
-        progress.revision = int(progress.revision or 0) + 1
         effective_client_event_id = client_event_id or (payload or {}).get("client_event_id")
         effective_study_session_id = study_session_id or (payload or {}).get("study_session_id")
         effective_sequence_no = sequence_no if sequence_no is not None else (payload or {}).get("sequence_no")
         effective_review_mode = review_mode or normalize_review_mode(current_state.type)
-        review_event = record_native_review_transition(
-            user_id=int(user.id),
-            card=card,
-            current_state=current_state,
-            transition=transition,
-            reviewed_at=reviewed_at,
-            duration_ms=(payload or {}).get("duration_ms"),
-            review_mode=effective_review_mode,
-            payload=payload,
-            local_deck_id=local_deck_id,
-            scheduler_preset_id=(
-                int(local_deck.scheduler_preset_id)
-                if local_deck is not None
-                and local_deck.scheduler_preset_id is not None
-                else None
-            ),
-            scheduler_config_hash=policy["config_hash"],
-            timezone_name=timezone_name,
-            deck_options=options,
-            study_session_id=effective_study_session_id,
-            client_event_id=effective_client_event_id,
-            sequence_no=effective_sequence_no,
+        mutation_result = apply_native_review_mutation(
+            NativeReviewMutationInput(
+                user_id=int(user.id),
+                card=card,
+                current_state=current_state,
+                transition=transition,
+                reviewed_at=reviewed_at,
+                duration_ms=normalize_review_duration(
+                    (payload or {}).get("duration_ms")
+                ),
+                review_mode=effective_review_mode,
+                payload=payload,
+                local_deck_id=local_deck_id,
+                scheduler_preset_id=(
+                    int(local_deck.scheduler_preset_id)
+                    if local_deck is not None
+                    and local_deck.scheduler_preset_id is not None
+                    else None
+                ),
+                scheduler_config_hash=policy["config_hash"],
+                timezone_name=timezone_name,
+                deck_options=options,
+                provenance=NativeReviewProvenance(
+                    study_session_id=effective_study_session_id,
+                    client_event_id=effective_client_event_id,
+                    sequence_no=effective_sequence_no,
+                ),
+                progress_input=NativeReviewProgressInput(
+                    progress=progress,
+                    state=transition.state,
+                    last_reviewed_at=reviewed_at,
+                    revision=int(progress.revision or 0) + 1,
+                ),
+            )
         )
+        review_event = mutation_result.review_event
         db.session.flush()
         if review_event.id is not None:
             progress.last_review_event_id = int(review_event.id)
