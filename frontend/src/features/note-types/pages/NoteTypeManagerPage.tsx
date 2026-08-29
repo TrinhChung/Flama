@@ -1,18 +1,20 @@
 import { useEffect, useMemo, useState } from 'react'
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
+import {
+  faArrowUpRightFromSquare,
+  faCircleCheck,
+  faCode,
+  faLayerGroup,
+  faPlus,
+  faRobot,
+  faRoute,
+  faShareNodes,
+  faSliders,
+  faTrashCan,
+} from '@fortawesome/free-solid-svg-icons'
 import {
   AlertCircle,
-  Bot,
-  CheckCircle,
-  Code2,
-  ExternalLink,
-  HelpCircle,
-  Layers,
   LoaderCircle,
-  Plus,
-  Share2,
-  SlidersHorizontal,
-  Store,
-  Trash2,
 } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from 'react-router-dom'
@@ -127,14 +129,8 @@ export function NoteTypeManagerPage() {
         placement: 'bottom',
       },
       {
-        target: '[data-tour="marketplace-btn"]',
-        title: '🛍️ 3. Khám Phá Kho NoteType',
-        content: 'Bạn cũng có thể khám phá và cài đặt nhanh các mẫu NoteType được chia sẻ sẵn bởi cộng đồng mà không cần tự tạo từ đầu.',
-        placement: 'bottom',
-      },
-      {
         target: '[data-tour="ai-prompt-btn"]',
-        title: '🤖 4. Hướng Dẫn & Prompt AI',
+        title: '🤖 3. Hướng Dẫn & Prompt AI',
         content:
           'Không cần biết lập trình! Bấm nút này để mở trang hướng dẫn và sao chép Master Prompt cho ChatGPT / Claude tự thiết kế mẫu thẻ cho bạn.',
         placement: 'bottom',
@@ -145,28 +141,28 @@ export function NoteTypeManagerPage() {
       steps.push(
         {
           target: '[data-tour="card-first"]',
-          title: '📇 5. Thẻ NoteType & Huy Hiệu Thông Số',
+          title: '📇 4. Thẻ NoteType & Huy Hiệu Thông Số',
           content:
             'Mỗi thẻ hiển thị tên loại thẻ cùng 2 huy hiệu quan trọng: số lượng Template (các mặt thẻ hiển thị) và số lượng Trường dữ liệu hiện có trong bộ thẻ.',
           placement: 'top',
         },
         {
           target: '[data-tour="card-fields-btn"]',
-          title: '⚙️ 6. Nút "Trường" (Quản Lý Cột Dữ Liệu)',
+          title: '⚙️ 5. Nút "Trường" (Quản Lý Cột Dữ Liệu)',
           content:
             'Bấm vào đây để thêm các trường như Word, Meaning, Audio, Example, Furigana... định hình cấu trúc dữ liệu lưu trữ cho thẻ.',
           placement: 'top',
         },
         {
           target: '[data-tour="card-template-btn"]',
-          title: '🎨 7. Nút "Templates" (Soạn Giao Diện & Xem Trước)',
+          title: '🎨 6. Nút "Templates" (Soạn Giao Diện & Xem Trước)',
           content:
             'Bấm vào đây để mở trình soạn thảo HTML/CSS Front & Back, dán mã code tạo bởi AI và xem mô phỏng thẻ mẫu (Live Preview) theo thời gian thực.',
           placement: 'top',
         },
         {
           target: '[data-tour="card-share-btn"]',
-          title: '🌐 8. Nút "Chia Sẻ" Lên Kho Cộng Đồng',
+          title: '🌐 7. Nút "Chia Sẻ" Lên Kho Cộng Đồng',
           content:
             'Khi đã thiết kế xong mẫu thẻ ưng ý, bạn có thể bấm nút này để xuất bản lên Marketplace cho cộng đồng Flama cùng sử dụng.',
           placement: 'top',
@@ -175,7 +171,7 @@ export function NoteTypeManagerPage() {
     } else {
       steps.push({
         target: '[data-tour="notetype-grid-area"]',
-        title: '📋 5. Khu Vực Danh Sách Loại Thẻ',
+        title: '📋 4. Khu Vực Danh Sách Loại Thẻ',
         content:
           'Sau khi tạo loại thẻ, các thẻ NoteType sẽ xuất hiện tại đây kèm các nút chức năng: Quản lý Trường (Fields), Tùy chỉnh Template (HTML/CSS), Xem trước Live Preview và Chia sẻ lên Kho Marketplace.',
         placement: 'top',
@@ -215,9 +211,9 @@ export function NoteTypeManagerPage() {
               variant="outline"
               size="sm"
               onClick={() => setTourOpen(true)}
-              className="h-8 sm:h-9 px-2.5 sm:px-3 text-xs font-semibold rounded-xl shrink-0"
+              className="h-8 sm:h-9 px-2.5 sm:px-3 text-xs font-semibold rounded-xl shrink-0 gap-1.5"
             >
-              <HelpCircle className="size-3.5 mr-1.5 text-primary shrink-0" />
+              <FontAwesomeIcon icon={faRoute} className="text-primary text-xs shrink-0" />
               <span className="hidden xs:inline">Tour </span>Hướng Dẫn
             </Button>
             <Button
@@ -225,24 +221,12 @@ export function NoteTypeManagerPage() {
               size="sm"
               asChild
               data-tour="ai-prompt-btn"
-              className="h-8 sm:h-9 px-2.5 sm:px-3 text-xs font-semibold rounded-xl border-primary/30 text-primary hover:bg-primary/10 shrink-0"
+              className="h-8 sm:h-9 px-2.5 sm:px-3 text-xs font-semibold rounded-xl border-primary/30 text-primary hover:bg-primary/10 shrink-0 gap-1.5"
             >
               <Link to="/flashcards/note-types/guide" target="_blank" rel="noopener noreferrer">
-                <Bot className="size-3.5 mr-1.5 text-primary shrink-0" />
+                <FontAwesomeIcon icon={faRobot} className="text-primary text-xs shrink-0" />
                 Prompt AI
-                <ExternalLink className="size-3 ml-1 opacity-70 shrink-0" />
-              </Link>
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              asChild
-              data-tour="marketplace-btn"
-              className="h-8 sm:h-9 px-2.5 sm:px-3 text-xs font-semibold rounded-xl shrink-0"
-            >
-              <Link to="/marketplace/note-types">
-                <Store className="size-3.5 mr-1.5 text-primary shrink-0" />
-                Kho Mẫu
+                <FontAwesomeIcon icon={faArrowUpRightFromSquare} className="opacity-70 text-[10px] shrink-0" />
               </Link>
             </Button>
             <ContextHelpButton
@@ -280,9 +264,9 @@ export function NoteTypeManagerPage() {
             type="submit"
             data-tour="create-button"
             disabled={createMutation.isPending}
-            className="h-9 sm:h-10 px-4 font-bold text-xs sm:text-sm shadow-xs shrink-0 rounded-xl"
+            className="h-9 sm:h-10 px-4 font-bold text-xs sm:text-sm shadow-xs shrink-0 rounded-xl gap-1.5"
           >
-            {createMutation.isPending ? <LoaderCircle className="animate-spin mr-1.5 size-4" /> : <Plus className="size-4 mr-1.5" />}
+            {createMutation.isPending ? <LoaderCircle className="animate-spin size-4" /> : <FontAwesomeIcon icon={faPlus} className="text-xs" />}
             Tạo NoteType
           </Button>
         </form>
@@ -293,7 +277,7 @@ export function NoteTypeManagerPage() {
         <div data-tour="notetype-grid-area">
           <EmptyState
             title="Chưa có Loại thẻ nào"
-            description="Nhập tên ở biểu mẫu trên để tạo NoteType mới hoặc cài đặt mẫu từ Marketplace."
+            description="Nhập tên ở biểu mẫu trên để tạo NoteType mới."
           />
         </div>
       ) : (
@@ -307,19 +291,19 @@ export function NoteTypeManagerPage() {
               <div className="space-y-3">
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-1.5">
-                    <Badge variant="secondary" className="px-2 py-0.5 text-xs font-semibold rounded-md">
-                      <Layers className="mr-1 size-3 text-primary" />
+                    <Badge variant="secondary" className="px-2 py-0.5 text-xs font-semibold rounded-md gap-1">
+                      <FontAwesomeIcon icon={faLayerGroup} className="text-primary text-[10px]" />
                       {item.templates?.length ?? 0} template
                     </Badge>
-                    <Badge variant="outline" className="px-2 py-0.5 text-xs font-semibold rounded-md">
-                      <SlidersHorizontal className="mr-1 size-3 text-muted-foreground" />
+                    <Badge variant="outline" className="px-2 py-0.5 text-xs font-semibold rounded-md gap-1">
+                      <FontAwesomeIcon icon={faSliders} className="text-muted-foreground text-[10px]" />
                       {item.field_defs?.length ?? 0} trường
                     </Badge>
                   </div>
 
                   {item.publish_status === 'published' || item.publish_status === 'unlisted' ? (
-                    <Badge variant="outline" className="text-xs font-semibold rounded-md border-emerald-500/40 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10">
-                      <CheckCircle className="size-3 mr-1 text-emerald-500" />
+                    <Badge variant="outline" className="text-xs font-semibold rounded-md border-emerald-500/40 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 gap-1">
+                      <FontAwesomeIcon icon={faCircleCheck} className="text-emerald-500 text-[10px]" />
                       Đã chia sẻ
                     </Badge>
                   ) : null}
@@ -344,10 +328,10 @@ export function NoteTypeManagerPage() {
                     size="sm"
                     asChild
                     data-tour={index === 0 ? 'card-fields-btn' : undefined}
-                    className="h-8 px-2 sm:px-2.5 text-xs font-semibold rounded-xl"
+                    className="h-8 px-2 sm:px-2.5 text-xs font-semibold rounded-xl gap-1"
                   >
                     <Link to={`/flashcards/note-types/${item.id}/fields`}>
-                      <SlidersHorizontal className="size-3.5 mr-1" />
+                      <FontAwesomeIcon icon={faSliders} className="text-xs" />
                       Trường
                     </Link>
                   </Button>
@@ -357,10 +341,10 @@ export function NoteTypeManagerPage() {
                     size="sm"
                     asChild
                     data-tour={index === 0 ? 'card-template-btn' : undefined}
-                    className="h-8 px-2 sm:px-2.5 text-xs font-semibold rounded-xl"
+                    className="h-8 px-2 sm:px-2.5 text-xs font-semibold rounded-xl gap-1"
                   >
                     <Link to={`/flashcards/note-types/${item.id}`}>
-                      <Code2 className="size-3.5 mr-1" />
+                      <FontAwesomeIcon icon={faCode} className="text-xs" />
                       Templates
                     </Link>
                   </Button>
@@ -371,10 +355,10 @@ export function NoteTypeManagerPage() {
                       size="sm"
                       asChild
                       data-tour={index === 0 ? 'card-share-btn' : undefined}
-                      className="h-8 px-2 sm:px-2.5 text-xs font-semibold rounded-xl text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10"
+                      className="h-8 px-2 sm:px-2.5 text-xs font-semibold rounded-xl text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 gap-1"
                     >
                       <Link to={`/marketplace/note-types/${item.id}`}>
-                        <Share2 className="size-3.5 mr-1" />
+                        <FontAwesomeIcon icon={faArrowUpRightFromSquare} className="text-xs" />
                         Xem
                       </Link>
                     </Button>
@@ -384,10 +368,10 @@ export function NoteTypeManagerPage() {
                       size="sm"
                       asChild
                       data-tour={index === 0 ? 'card-share-btn' : undefined}
-                      className="h-8 px-2 sm:px-2.5 text-xs font-semibold rounded-xl text-primary hover:text-primary hover:bg-primary/10"
+                      className="h-8 px-2 sm:px-2.5 text-xs font-semibold rounded-xl text-primary hover:text-primary hover:bg-primary/10 gap-1"
                     >
                       <Link to={`/marketplace/note-types/publish?id=${item.id}`}>
-                        <Share2 className="size-3.5 mr-1" />
+                        <FontAwesomeIcon icon={faShareNodes} className="text-xs" />
                         Chia sẻ
                       </Link>
                     </Button>
@@ -404,7 +388,7 @@ export function NoteTypeManagerPage() {
                   }}
                   title="Xóa NoteType"
                 >
-                  <Trash2 className="size-3.5" />
+                  <FontAwesomeIcon icon={faTrashCan} className="text-xs" />
                 </Button>
               </div>
             </Card>

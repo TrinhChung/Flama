@@ -1,15 +1,16 @@
 import { useEffect, useRef, useState, useMemo } from 'react'
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import {
-  ArrowLeft,
-  Bot,
-  Check,
-  CheckCircle,
-  ExternalLink,
-  Plus,
-  RotateCcw,
-  Share2,
-  SlidersHorizontal,
-} from 'lucide-react'
+  faArrowLeft,
+  faArrowUpRightFromSquare,
+  faCheck,
+  faCircleCheck,
+  faPlus,
+  faRobot,
+  faRotateLeft,
+  faShareNodes,
+  faSliders,
+} from '@fortawesome/free-solid-svg-icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -231,22 +232,22 @@ export function NoteTypeDetailPage() {
         description="Tùy chỉnh mã Front HTML, Back HTML, CSS và kiểm tra trực tiếp hiệu ứng hiển thị."
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <Button variant="outline" size="sm" asChild className="h-8 sm:h-9 px-3 text-xs font-semibold rounded-xl">
+            <Button variant="outline" size="sm" asChild className="h-8 sm:h-9 px-3 text-xs font-semibold rounded-xl gap-1.5">
               <Link to="/flashcards/note-types">
-                <ArrowLeft className="size-3.5 mr-1.5" /> Quay lại
+                <FontAwesomeIcon icon={faArrowLeft} className="text-xs" /> Quay lại
               </Link>
             </Button>
 
             {noteType?.publish_status === 'published' || noteType?.publish_status === 'unlisted' ? (
-              <Button variant="outline" size="sm" asChild className="h-8 sm:h-9 px-3 text-xs font-semibold border-emerald-500/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 rounded-xl">
+              <Button variant="outline" size="sm" asChild className="h-8 sm:h-9 px-3 text-xs font-semibold border-emerald-500/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 rounded-xl gap-1.5">
                 <Link to={`/marketplace/note-types/${noteTypeId}`}>
-                  <CheckCircle className="size-3.5 mr-1.5 text-emerald-500" /> Xem trên Marketplace
+                  <FontAwesomeIcon icon={faCircleCheck} className="text-emerald-500 text-xs" /> Xem trên Marketplace
                 </Link>
               </Button>
             ) : (
-              <Button size="sm" asChild className="h-8 sm:h-9 px-3 text-xs font-bold rounded-xl shadow-xs">
+              <Button size="sm" asChild className="h-8 sm:h-9 px-3 text-xs font-bold rounded-xl shadow-xs gap-1.5">
                 <Link to={`/marketplace/note-types/publish?id=${noteTypeId}`}>
-                  <Share2 className="size-3.5 mr-1.5" /> Chia sẻ lên Kho
+                  <FontAwesomeIcon icon={faShareNodes} className="text-xs" /> Chia sẻ lên Kho
                 </Link>
               </Button>
             )}
@@ -255,17 +256,17 @@ export function NoteTypeDetailPage() {
               variant="outline"
               size="sm"
               asChild
-              className="h-8 sm:h-9 px-3 text-xs font-semibold rounded-xl border-primary/30 text-primary hover:bg-primary/10"
+              className="h-8 sm:h-9 px-3 text-xs font-semibold rounded-xl border-primary/30 text-primary hover:bg-primary/10 gap-1.5"
             >
               <Link to="/flashcards/note-types/guide" target="_blank" rel="noopener noreferrer">
-                <Bot className="size-3.5 mr-1.5 text-primary" /> Hướng Dẫn & Prompt AI
-                <ExternalLink className="size-3 ml-1 opacity-70" />
+                <FontAwesomeIcon icon={faRobot} className="text-primary text-xs" /> Hướng Dẫn & Prompt AI
+                <FontAwesomeIcon icon={faArrowUpRightFromSquare} className="opacity-70 text-[10px]" />
               </Link>
             </Button>
 
-            <Button variant="outline" size="sm" asChild className="h-8 sm:h-9 px-3 text-xs font-semibold rounded-xl">
+            <Button variant="outline" size="sm" asChild className="h-8 sm:h-9 px-3 text-xs font-semibold rounded-xl gap-1.5">
               <Link to={`/flashcards/note-types/${noteTypeId}/fields`}>
-                <SlidersHorizontal className="size-3.5 mr-1.5" /> Quản lý Trường
+                <FontAwesomeIcon icon={faSliders} className="text-xs" /> Quản lý Trường
               </Link>
             </Button>
           </div>
@@ -294,16 +295,16 @@ export function NoteTypeDetailPage() {
                 <Button
                   size="sm"
                   variant="outline"
-                  className="h-8 sm:h-9 px-2.5 text-xs font-semibold rounded-xl shrink-0"
+                  className="h-8 sm:h-9 px-2.5 text-xs font-semibold rounded-xl shrink-0 gap-1.5"
                   onClick={() => createTemplateMutation.mutate()}
                 >
-                  <Plus className="size-3.5 mr-1" /> Mới
+                  <FontAwesomeIcon icon={faPlus} className="text-xs" /> Mới
                 </Button>
 
                 <Button
                   size="sm"
                   variant="ghost"
-                  className="h-8 sm:h-9 px-2.5 text-xs font-semibold text-destructive hover:bg-destructive/10 rounded-xl shrink-0"
+                  className="h-8 sm:h-9 px-2.5 text-xs font-semibold text-destructive hover:bg-destructive/10 rounded-xl shrink-0 gap-1.5"
                   onClick={() => {
                     if (window.confirm('Khôi phục template về mặc định ban đầu?')) {
                       resetTemplateMutation.mutate()
@@ -311,7 +312,7 @@ export function NoteTypeDetailPage() {
                   }}
                   title="Đặt lại template mặc định"
                 >
-                  <RotateCcw className="size-3.5 mr-1" /> Reset
+                  <FontAwesomeIcon icon={faRotateLeft} className="text-xs" /> Reset
                 </Button>
               </div>
             </div>
@@ -409,9 +410,9 @@ export function NoteTypeDetailPage() {
                     shared_css: sharedCss,
                   })
                 }
-                className="w-full sm:w-auto font-bold px-5 h-9 sm:h-10 text-xs sm:text-sm rounded-xl shadow-xs justify-center"
+                className="w-full sm:w-auto font-bold px-5 h-9 sm:h-10 text-xs sm:text-sm rounded-xl shadow-xs justify-center gap-1.5"
               >
-                <Check className="size-3.5 mr-1.5" /> Lưu Template
+                <FontAwesomeIcon icon={faCheck} className="text-xs" /> Lưu Template
               </Button>
             </div>
           </Card>
