@@ -9,6 +9,8 @@
 > Dependency: P0-04
 >
 > Primary lane: Backend Study
+>
+> Preparation status: P1-01.1 read-only investigation COMPLETED on 2026-08-29; runtime work remains gated by P0-03.
 
 ## Mục tiêu
 
@@ -72,6 +74,89 @@
 - Không service layer nào import helper từ route để hoàn thành command.
 - `CardProgress` vẫn là authority duy nhất.
 - Search/review xác nhận không còn second authoritative ReviewEvent builder cho native review.
+
+## P1-01.1 read-only producer and transaction investigation — 2026-08-29
+
+This section is a non-authoritative implementation draft. It records the current runtime boundaries without changing code, starting Phase 1, or approving extraction before P0-03 closes.
+
+### Current call graph
+
+```text
+REST POST /api/study[/cards]/<card_id>/answer
+  -> app/routes/flashcards/study.py::study_answer
+  -> app/services/study_service.py::execute_native_review_command
+     -> resolve deck/options/policy and lock CardProgress
+     -> execute_review_action
+     -> record_native_review_transition
+        -> stats_overview.record_review_event
+           -> review_event_repository.create_review_event_record [session.add only]
+        -> leech/owner-note and install-usage side effects
+     -> flush, attach last_review_event_id, append AuditLog
+     -> commit or rollback
+
+MCP submit_review
+  -> app/services/mcp/study_tools.py::submit_review
+  -> app/services/study_service.py::execute_native_review_command
+  -> same direct transaction path above
+
+Session POST /api/study/sessions/<session_id>/commit
+  -> app/routes/flashcards/study.py::study_session_commit
+  -> app/services/study_session_service.py::commit_study_session
+     -> lock/validate session, lease, snapshot, sequence and client events
+     -> replay transitions and validate final states
+     -> lock all CardProgress rows and validate frozen revisions/scope
+     -> independently build ReviewEvent and repeat review side effects per event
+     -> apply final progress, commit receipt, session status and AuditLog
+     -> one outer commit or rollback
+```
+
+### Producer and transaction ownership matrix
+
+| Producer | Progress/event writer | Commit/rollback owner | Finding |
+|---|---|---|---|
+| REST direct answer | `execute_native_review_command` | `study_service` | Route is an adapter; its pre-command progress/options reads are redundant and their local values are unused. |
+| MCP `submit_review` | `execute_native_review_command` | `study_service` | MCP owns provenance input/error mapping only; it does not commit. |
+| Session batch commit | `commit_study_session` | `study_session_service` | Required outer atomic transaction, but currently a second authoritative native event/side-effect writer. |
+| `record_review_event` repository path | `create_review_event_record` | Calling service | Adds the event to the session only; it does not flush or commit. |
+| Note-type/deck install usage helpers | Mutate locked install rows | Calling service | Both helper implementations mutate ORM state only; they do not flush or commit. |
+| Audit append | Adds `AuditLog` | Calling service | Participates in the same direct or batch transaction. |
+
+### Confirmed duplicated authoritative responsibilities
+
+- Session commit replays the scheduler transition itself instead of invoking the direct native core.
+- Session commit independently constructs the canonical `ReviewEvent` payload and attaches algorithm identity, state snapshots and session provenance.
+- Session commit duplicates leech-tag and install-usage side effects already grouped by `record_native_review_transition`.
+- Session open/commit retains policy serialization and digest logic that overlaps `study_policy_service.build_scheduler_policy` and `serialize_deck_options`.
+- Both paths apply `CardProgress` fields and revision changes, so parity currently depends on duplicated behavior remaining synchronized.
+
+### Boundaries that must remain outside the canonical non-committing core
+
+- REST request parsing, visibility lookup, response mapping and HTTP status selection.
+- MCP user/card lookup, server-created MCP event ID, transport provenance and MCP error mapping.
+- Session lease/token/snapshot validation, contiguous sequence checks, client-event idempotency, bounded replay timing and ordered bulk locks.
+- Session frozen base-revision and clone-scope revalidation, all-or-nothing transaction, `StudySessionCommit` receipt and session lifecycle.
+- Direct/MCP outer commit and rollback remain in the command wrapper; batch keeps its single outer transaction.
+
+### Proposed extraction slices after the P0-03 gate
+
+1. Define typed transport-neutral transition input/result/error and a transaction mode that cannot commit inside the core.
+2. Centralize scheduler policy serialization/identity in `study_policy_service`; session stores the same canonical output rather than rebuilding it.
+3. Extract one non-committing native mutation core for transition execution, progress application, event construction and required local side effects.
+4. Keep `execute_native_review_command` as the direct/MCP transaction wrapper around that core.
+5. Adapt session commit to retain validation and bulk transaction ownership while delegating each authoritative transition/event mutation to the core.
+6. Remove duplicated session builders only after direct/MCP/session parity, concurrency and rollback tests pass.
+
+### Required proof for P1-01.2–P1-01.7
+
+- Extend `tests/test_study_behavior_acceptance_baseline.py` direct/MCP parity to include session output on equivalent initial state and policy.
+- Preserve its batch idempotency, validation rollback and mid-write rollback assertions.
+- Cover first-progress concurrent insert, stale revision, suspension and clone overlay/source-owner cases with typed errors.
+- Verify ReviewEvent, CardProgress, install usage, leech/dirty tracking, audit and session receipt roll back together after an injected failure.
+- Search proof must show one canonical native event/policy builder after migration.
+
+### Investigation verdict
+
+P1-01.1 is complete as read-only preparation. The implementation boundary is sufficiently mapped for P1-01.2, but no runtime refactor is authorized until P0-03 produces accepted SELECT-only evidence and Phase 0 receives a GO verdict.
 
 ## Verification
 

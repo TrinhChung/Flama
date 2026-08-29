@@ -79,6 +79,8 @@ The audit command itself must receive the URI through process environment. Do no
 
 To avoid idle time, P1-01.1 may be performed as a read-only draft: map every producer, lock/revision check, event builder, side effect and commit/rollback owner. The draft must be labeled non-authoritative and must not extract code, change runtime behavior or mark Phase 1 started. P3-05/P3-07 may collect open questions, but cannot approve a decision without the authoritative P0-03 evidence.
 
+Update 2026-08-29: P1-01.1 read-only preparation is complete in `P1-01_CANONICAL_REVIEW_TRANSACTION.md`. It confirms direct REST and MCP share `execute_native_review_command`, while session commit remains the second authoritative native event/side-effect writer and must retain its outer lease/idempotency/atomic transaction boundary during extraction. No runtime or schema change was made.
+
 ## 3. Step 1 — P1-01 canonical native review transaction
 
 P1-01 is the first code task after Phase 0 because P1-02, P1-03 and P1-04 all depend on it. Current executable seams show two authoritative builders: direct/MCP enters `study_service.execute_native_review_command()`, while session commit constructs and persists its own transition/event flow in `study_session_service.commit_study_session()`.
@@ -202,6 +204,6 @@ Do not implement Trigger dispatch before P2-06 is approved. Do not remove v2 dec
 
 1. Operator exposes the audit-only `SQLALCHEMY_DATABASE_URI` safely to the execution process.
 2. Execute only Step 0 and review the replacement P0-03 bundle.
-3. If the credential is still unavailable, prepare only the read-only P1-01.1 producer/call graph draft.
-4. If Phase 0 becomes `GO`, review that graph and begin P1-01.2; do not extract code before transaction ownership is approved.
+3. The credential is still unavailable and the permitted read-only P1-01.1 producer/call graph draft is now complete; do not start runtime extraction under the blocked gate.
+4. If Phase 0 becomes `GO`, review the completed graph and begin P1-01.2; do not extract code before transaction ownership is approved.
 5. Keep frontend and composition implementation lanes queued; activate them only after the Phase 0 closeout update.
