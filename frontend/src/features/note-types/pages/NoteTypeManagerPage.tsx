@@ -23,7 +23,7 @@ import { AmbientBackground } from '@/components/ambient-background'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card } from '@/components/ui/card'
 import {
   Dialog,
   DialogContent,
@@ -115,28 +115,28 @@ export function NoteTypeManagerPage() {
   const tourSteps: TourStep[] = useMemo(() => {
     const steps: TourStep[] = [
       {
-        target: '[data-tour="guide-banner"]',
-        title: '✨ 1. Mở Hướng Dẫn & Prompt AI (Tab Mới)',
-        content:
-          'Không cần biết lập trình! Bấm nút này để mở trang hướng dẫn và sao chép Master Prompt cho ChatGPT / Claude tự thiết kế mẫu thẻ cho bạn.',
-        placement: 'bottom',
-      },
-      {
         target: '[data-tour="create-input"]',
-        title: '📝 2. Nhập Tên Loại Thẻ Mới',
+        title: '📝 1. Nhập Tên Loại Thẻ Mới',
         content: 'Nhập tên loại thẻ bạn muốn tạo (Ví dụ: Từ vựng N3, Ngữ pháp N2, Kanji Hán Tự) vào ô này.',
         placement: 'bottom',
       },
       {
         target: '[data-tour="create-button"]',
-        title: '🚀 3. Bấm Tạo NoteType',
+        title: '🚀 2. Bấm Tạo NoteType',
         content: 'Bấm nút này để khởi tạo loại thẻ. Hệ thống sẽ tự động chuyển bạn sang trang Quản lý Trường (Fields) để thêm cột dữ liệu.',
         placement: 'bottom',
       },
       {
         target: '[data-tour="marketplace-btn"]',
-        title: '🛍️ 4. Khám Phá Kho NoteType',
+        title: '🛍️ 3. Khám Phá Kho NoteType',
         content: 'Bạn cũng có thể khám phá và cài đặt nhanh các mẫu NoteType được chia sẻ sẵn bởi cộng đồng mà không cần tự tạo từ đầu.',
+        placement: 'bottom',
+      },
+      {
+        target: '[data-tour="ai-prompt-btn"]',
+        title: '🤖 4. Hướng Dẫn & Prompt AI',
+        content:
+          'Không cần biết lập trình! Bấm nút này để mở trang hướng dẫn và sao chép Master Prompt cho ChatGPT / Claude tự thiết kế mẫu thẻ cho bạn.',
         placement: 'bottom',
       },
     ]
@@ -224,6 +224,7 @@ export function NoteTypeManagerPage() {
               variant="outline"
               size="sm"
               asChild
+              data-tour="ai-prompt-btn"
               className="h-8 sm:h-9 px-2.5 sm:px-3 text-xs font-semibold rounded-xl border-primary/30 text-primary hover:bg-primary/10 shrink-0"
             >
               <Link to="/flashcards/note-types/guide" target="_blank" rel="noopener noreferrer">
@@ -255,75 +256,37 @@ export function NoteTypeManagerPage() {
         }
       />
 
-      {/* AI Template Prompt & Guide Banner */}
-      <div
-        data-tour="guide-banner"
-        className="relative overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent p-4 sm:p-5 shadow-xs"
-      >
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-start sm:items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-primary/20 text-primary shrink-0 mt-0.5 sm:mt-0">
-              <Bot className="size-5" />
-            </div>
-            <div className="space-y-0.5">
-              <h4 className="text-sm font-bold text-foreground flex items-center gap-1.5">
-                Tạo Template Bằng AI Trong 1 Phút
-                <Badge variant="secondary" className="text-[10px] py-0 px-1.5 bg-primary/10 text-primary border-primary/20">
-                  Mới
-                </Badge>
-              </h4>
-              <p className="text-xs text-muted-foreground">
-                Không cần biết lập trình! Xem trang hướng dẫn và dùng Master Prompt cho ChatGPT / Claude để tự thiết kế thẻ.
-              </p>
-            </div>
-          </div>
-
-          <Button
-            size="sm"
-            asChild
-            className="h-8 sm:h-9 px-3.5 text-xs font-bold rounded-xl shadow-xs shrink-0 self-start sm:self-auto bg-primary text-primary-foreground hover:bg-primary/90"
-          >
-            <Link to="/flashcards/note-types/guide" target="_blank" rel="noopener noreferrer">
-              <Bot className="size-3.5 mr-1.5" />
-              Mở Trang Hướng Dẫn AI
-              <ExternalLink className="size-3.5 ml-1.5" />
-            </Link>
-          </Button>
+      {/* Compact Create NoteType Bar */}
+      <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between p-3.5 sm:p-4 rounded-2xl border border-border/80 bg-card shadow-2xs">
+        <div className="space-y-0.5 sm:max-w-xs shrink-0">
+          <h2 className="text-xs sm:text-sm font-bold text-foreground">Tạo loại thẻ mới</h2>
+          <p className="text-[11px] text-muted-foreground">Khởi tạo cấu trúc dữ liệu và template tùy chỉnh.</p>
         </div>
+        <form onSubmit={handleCreate} className="flex-1 flex gap-2 items-center">
+          <div className="flex-1">
+            <Label htmlFor="note-type-name" className="sr-only">
+              Tên NoteType
+            </Label>
+            <Input
+              id="note-type-name"
+              data-tour="create-input"
+              placeholder="Ví dụ: Từ vựng Tiếng Nhật, Ngữ pháp JLPT N2, Kanji Hán Tự…"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="h-9 sm:h-10 text-xs sm:text-sm rounded-xl bg-background"
+            />
+          </div>
+          <Button
+            type="submit"
+            data-tour="create-button"
+            disabled={createMutation.isPending}
+            className="h-9 sm:h-10 px-4 font-bold text-xs sm:text-sm shadow-xs shrink-0 rounded-xl"
+          >
+            {createMutation.isPending ? <LoaderCircle className="animate-spin mr-1.5 size-4" /> : <Plus className="size-4 mr-1.5" />}
+            Tạo NoteType
+          </Button>
+        </form>
       </div>
-
-      {/* Create NoteType Card Form */}
-      <Card className="border-border/80 shadow-xs rounded-2xl bg-card">
-        <CardHeader className="p-4 sm:p-5 pb-2 sm:pb-2">
-          <CardTitle className="text-sm font-bold text-foreground">Tạo Loại Thẻ Mới</CardTitle>
-        </CardHeader>
-        <CardContent className="p-4 sm:p-5 pt-1">
-          <form onSubmit={handleCreate} className="flex flex-col sm:flex-row gap-3">
-            <div className="flex-1 space-y-1">
-              <Label htmlFor="note-type-name" className="sr-only">
-                Tên NoteType
-              </Label>
-              <Input
-                id="note-type-name"
-                data-tour="create-input"
-                placeholder="Ví dụ: Từ vựng Tiếng Nhật, Ngữ pháp JLPT N2, Kanji Hán Tự…"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="h-9 sm:h-10 text-xs sm:text-sm rounded-xl bg-background"
-              />
-            </div>
-            <Button
-              type="submit"
-              data-tour="create-button"
-              disabled={createMutation.isPending}
-              className="h-9 sm:h-10 px-4 font-bold text-xs sm:text-sm shadow-xs shrink-0 rounded-xl"
-            >
-              {createMutation.isPending ? <LoaderCircle className="animate-spin mr-1.5 size-4" /> : <Plus className="size-4 mr-1.5" />}
-              Tạo NoteType
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
 
       {/* NoteTypes Card Grid */}
       {!noteTypes.length ? (
