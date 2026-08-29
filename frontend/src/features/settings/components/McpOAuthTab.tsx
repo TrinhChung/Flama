@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import {
   Bot,
   Check,
@@ -116,7 +117,10 @@ export function McpOAuthTab() {
                 Tích hợp ChatGPT qua OAuth 2.1
               </CardTitle>
               <CardDescription className="text-xs sm:text-sm">
-                Cung cấp mã xác thực chuẩn để ChatGPT Actions & MCP Client kết nối trực tiếp, tự động đăng nhập và thao tác kho thẻ thay mặt bạn an toàn.
+                Cung cấp mã xác thực chuẩn để ChatGPT Actions & MCP Client kết nối trực tiếp, tự động đăng nhập và thao tác kho thẻ thay mặt bạn an toàn.{' '}
+                <Link to="/guide/integrations/mcp-ai" className="text-primary hover:underline font-medium inline-flex items-center gap-0.5">
+                  Xem hướng dẫn kết nối &rarr;
+                </Link>
               </CardDescription>
             </div>
 

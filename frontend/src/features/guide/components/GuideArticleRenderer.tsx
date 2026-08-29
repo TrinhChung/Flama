@@ -16,6 +16,10 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { GuideBreadcrumb } from './GuideBreadcrumb'
+import { YomitanInteractiveGuide } from './YomitanInteractiveGuide'
+import { YomitanMarkersExplorer } from './YomitanMarkersExplorer'
+import { McpInteractiveGuide } from './McpInteractiveGuide'
+import { McpToolsExplorer } from './McpToolsExplorer'
 import { getAdjacentArticles } from '../guideData'
 import type { GuideArticle, GuideCategory } from '../types'
 
@@ -26,6 +30,11 @@ interface GuideArticleRendererProps {
 
 export function GuideArticleRenderer({ article, category }: GuideArticleRendererProps) {
   const { prevArticle, nextArticle } = getAdjacentArticles(category?.slug, article.slug)
+  const isSpecializedArticle =
+    article.slug === 'yomitan' ||
+    article.slug === 'yomitan-markers' ||
+    article.slug === 'mcp-ai' ||
+    article.slug === 'mcp-tools'
 
   return (
     <article className="max-w-4xl mx-auto space-y-8 animate-in fade-in-50 duration-200">
@@ -80,8 +89,28 @@ export function GuideArticleRenderer({ article, category }: GuideArticleRenderer
         </div>
       )}
 
-      {/* Intro section */}
-      {article.intro && (
+      {/* Specialized Yomitan Interactive Overview */}
+      {article.slug === 'yomitan' && (
+        <YomitanInteractiveGuide />
+      )}
+
+      {/* Specialized Yomitan Markers Explorer */}
+      {article.slug === 'yomitan-markers' && (
+        <YomitanMarkersExplorer />
+      )}
+
+      {/* Specialized MCP Interactive Overview */}
+      {article.slug === 'mcp-ai' && (
+        <McpInteractiveGuide />
+      )}
+
+      {/* Specialized MCP Tools Explorer */}
+      {article.slug === 'mcp-tools' && (
+        <McpToolsExplorer />
+      )}
+
+      {/* Intro section (when not specialized) */}
+      {article.intro && !isSpecializedArticle && (
         <div className="text-sm sm:text-base text-foreground/90 leading-relaxed">
           {article.intro}
         </div>
@@ -136,7 +165,7 @@ export function GuideArticleRenderer({ article, category }: GuideArticleRenderer
       )}
 
       {/* Detailed Sections */}
-      {article.detailedSections && article.detailedSections.length > 0 && (
+      {article.detailedSections && article.detailedSections.length > 0 && !isSpecializedArticle && (
         <div className="space-y-4">
           {article.detailedSections.map((sec, idx) => (
             <Card key={idx} className="border-border/80 bg-card rounded-2xl shadow-2xs">
@@ -202,7 +231,7 @@ export function GuideArticleRenderer({ article, category }: GuideArticleRenderer
       )}
 
       {/* Parameters Table */}
-      {article.params && article.params.length > 0 && (
+      {article.params && article.params.length > 0 && article.slug !== 'yomitan-markers' && article.slug !== 'mcp-tools' && (
         <div className="space-y-4">
           <h2 className="text-base sm:text-lg font-bold tracking-tight text-foreground flex items-center gap-2">
             <FontAwesomeIcon icon={faSliders} className="text-primary text-sm" />

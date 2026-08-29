@@ -3,7 +3,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { TabsContent } from '@/components/ui/tabs'
+import { EmptyState } from '@/shared/components/PageState'
 import { toast } from 'sonner'
 import {
   BarChart,
@@ -27,17 +27,19 @@ import {
   Zap,
 } from 'lucide-react'
 
-type ToolItem = {
+export type ToolCategory = 'all' | 'decks' | 'shared' | 'notes' | 'note_types' | 'study' | 'media'
+
+export interface McpToolItem {
   name: string
   title: string
   scope: string
-  category: 'all' | 'decks' | 'shared' | 'notes' | 'note_types' | 'study' | 'media'
+  category: ToolCategory
   icon: typeof Wrench
   description: string
   samplePrompt: string
 }
 
-const MCP_TOOLS_CATALOG: ToolItem[] = [
+export const MCP_TOOLS_CATALOG: McpToolItem[] = [
   // Decks
   {
     name: 'list_my_decks',
@@ -45,7 +47,7 @@ const MCP_TOOLS_CATALOG: ToolItem[] = [
     scope: 'deck:read',
     category: 'decks',
     icon: FolderTree,
-    description: 'Liệt kê toàn bộ các bộ thẻ Flashcard mà bạn sở hữu hoặc đã cài đặt.',
+    description: 'Liệt kê toàn bộ các bộ thẻ Flashcard mà bạn sở hữu hoặc đã cài đặt trong tài khoản Flama.',
     samplePrompt: 'Hãy liệt kê cho tôi tất cả các bộ thẻ flashcard tiếng Nhật hiện có trong tài khoản của tôi.',
   },
   {
@@ -93,7 +95,7 @@ const MCP_TOOLS_CATALOG: ToolItem[] = [
     category: 'shared',
     icon: Share2,
     description: 'Xem chi tiết thông tin bộ thẻ chia sẻ, mô tả, đánh giá và cấu trúc các deck con.',
-    samplePrompt: 'Lấy thông tin chi tiết bộ thẻ chia sẻ ID 5 để xem đã phát hành phiên bản nào.',
+    samplePrompt: 'Lấy thông tin chi tiết bộ thẻ chia sẻ ID 5 để xem đã phát hành những phiên bản nào.',
   },
   {
     name: 'list_shared_deck_notes',
@@ -241,7 +243,7 @@ const CATEGORY_FILTERS = [
   { key: 'media', label: 'Thư viện ảnh' },
 ]
 
-export function McpToolsTab() {
+export function McpToolsExplorer() {
   const [copiedName, setCopiedName] = useState<string | null>(null)
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
   const [searchQuery, setSearchQuery] = useState('')
@@ -270,38 +272,41 @@ export function McpToolsTab() {
   })
 
   return (
-    <TabsContent value="tools" className="space-y-6">
-      <Card className="shadow-2xs">
-        <CardHeader className="p-4 sm:p-6 pb-3">
+    <div className="space-y-6 w-full min-w-0">
+      <Card className="rounded-2xl border shadow-2xs min-w-0 overflow-hidden">
+        <CardHeader className="p-4 sm:p-6 pb-3 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <CardTitle className="text-base sm:text-lg font-bold flex items-center gap-2">
                 <Wrench className="size-5 text-primary shrink-0" />
-                Danh mục 48 Công cụ MCP & Câu lệnh Prompt mẫu
+                <span>Danh Mục Toàn Bộ Công Cụ MCP & Prompts Mẫu</span>
               </CardTitle>
-              <CardDescription className="text-xs sm:text-sm">
+              <CardDescription className="text-xs sm:text-sm mt-1">
                 AI Assistant sẽ tự động gọi các công cụ này dựa trên câu hỏi hoặc yêu cầu tự nhiên của bạn.
               </CardDescription>
             </div>
             <div className="w-full sm:w-64">
-              <Input
-                placeholder="Tìm công cụ hoặc scope…"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="h-9 text-xs"
-              />
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
+                <Input
+                  placeholder="Tìm công cụ hoặc scope…"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9 h-9 text-xs rounded-xl"
+                />
+              </div>
             </div>
           </div>
 
           {/* Filter Pills */}
-          <div className="flex flex-wrap items-center gap-1.5 pt-3">
+          <div className="flex flex-wrap items-center gap-1.5 pt-1">
             {CATEGORY_FILTERS.map((filter) => (
               <Button
                 key={filter.key}
                 type="button"
                 variant={selectedCategory === filter.key ? 'default' : 'outline'}
-                size="xs"
-                className="text-xs h-7 px-2.5 rounded-lg"
+                size="sm"
+                className="text-xs h-7 px-2.5 rounded-lg font-medium"
                 onClick={() => setSelectedCategory(filter.key)}
               >
                 {filter.label}
@@ -311,64 +316,70 @@ export function McpToolsTab() {
         </CardHeader>
 
         <CardContent className="p-4 sm:p-6 pt-2 space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
-            {filteredTools.map((tool) => {
-              const Icon = tool.icon
-              return (
-                <div
-                  key={tool.name}
-                  className="rounded-2xl border bg-card p-4 sm:p-5 space-y-3 shadow-2xs hover:border-primary/40 transition-colors flex flex-col justify-between"
-                >
-                  <div className="space-y-2.5">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-2.5">
-                        <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary shrink-0">
-                          <Icon className="size-4" />
+          {!filteredTools.length ? (
+            <EmptyState
+              title="Không tìm thấy công cụ phù hợp"
+              description="Hãy thử đổi từ khóa tìm kiếm hoặc chọn danh mục khác."
+            />
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2">
+              {filteredTools.map((tool) => {
+                const Icon = tool.icon
+                return (
+                  <div
+                    key={tool.name}
+                    className="rounded-2xl border bg-card p-4 sm:p-5 space-y-3 shadow-2xs hover:border-primary/40 transition-colors flex flex-col justify-between"
+                  >
+                    <div className="space-y-2.5">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2.5">
+                          <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary shrink-0">
+                            <Icon className="size-4" />
+                          </div>
+                          <div>
+                            <div className="font-bold text-xs sm:text-sm text-foreground">{tool.title}</div>
+                            <div className="font-mono text-[11px] text-muted-foreground">{tool.name}</div>
+                          </div>
                         </div>
-                        <div>
-                          <div className="font-bold text-xs sm:text-sm text-foreground">{tool.title}</div>
-                          <div className="font-mono text-[11px] text-muted-foreground">{tool.name}</div>
-                        </div>
+                        <Badge variant="outline" className="font-mono text-[10px] shrink-0">
+                          {tool.scope}
+                        </Badge>
                       </div>
-                      <Badge variant="outline" className="font-mono text-[10px] shrink-0">
-                        {tool.scope}
-                      </Badge>
+
+                      <p className="text-xs text-muted-foreground leading-relaxed">
+                        {tool.description}
+                      </p>
                     </div>
 
-                    <p className="text-xs text-muted-foreground leading-relaxed">
-                      {tool.description}
-                    </p>
-                  </div>
-
-                  <div className="space-y-1.5 pt-2 border-t">
-                    <div className="text-[11px] font-semibold text-muted-foreground flex items-center gap-1">
-                      <MessageSquareCode className="size-3 text-primary" />
-                      Câu lệnh mẫu cho AI (Prompt):
-                    </div>
-                    <div className="flex items-center justify-between gap-2 bg-muted/40 p-2 rounded-lg border text-xs text-foreground/90 italic">
-                      <span className="line-clamp-2">"{tool.samplePrompt}"</span>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="shrink-0 h-7 px-2 text-[11px] gap-1"
-                        onClick={() => copyPrompt(tool.name, tool.samplePrompt)}
-                      >
-                        {copiedName === tool.name ? (
-                          <Check className="size-3 text-emerald-600" />
-                        ) : (
-                          <Copy className="size-3" />
-                        )}
-                        {copiedName === tool.name ? 'Đã chép' : 'Sao chép'}
-                      </Button>
+                    <div className="space-y-1.5 pt-2 border-t">
+                      <div className="text-[11px] font-semibold text-muted-foreground flex items-center gap-1">
+                        <MessageSquareCode className="size-3 text-primary" />
+                        <span>Câu lệnh mẫu cho AI (Prompt):</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-2 bg-muted/40 p-2 rounded-lg border text-xs text-foreground/90 italic">
+                        <span className="line-clamp-2">"{tool.samplePrompt}"</span>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="shrink-0 h-7 px-2 text-[11px] gap-1 hover:bg-background"
+                          onClick={() => copyPrompt(tool.name, tool.samplePrompt)}
+                        >
+                          {copiedName === tool.name ? (
+                            <Check className="size-3 text-emerald-600" />
+                          ) : (
+                            <Copy className="size-3" />
+                          )}
+                          <span>{copiedName === tool.name ? 'Đã chép' : 'Sao chép'}</span>
+                        </Button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              )
-            })}
-          </div>
+                )
+              })}
+            </div>
+          )}
         </CardContent>
       </Card>
-    </TabsContent>
+    </div>
   )
 }
-

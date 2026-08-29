@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -6,11 +7,11 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { TabsContent } from '@/components/ui/tabs'
 import { EmptyState } from '@/shared/components/PageState'
 import {
   Check,
   Copy,
+  ExternalLink,
   KeyRound,
   RefreshCw,
   ShieldAlert,
@@ -45,12 +46,12 @@ export function YomitanTokensTab({ hookResult }: YomitanTokensTabProps) {
   } = hookResult
 
   return (
-    <TabsContent value="tokens" className="space-y-6">
+    <div className="space-y-6">
       <Card className="shadow-2xs">
         <CardHeader className="p-4 sm:p-6">
           <CardTitle className="text-base sm:text-lg font-bold">Tạo API Token Flama Connect</CardTitle>
           <CardDescription className="text-xs sm:text-sm">
-            Mỗi thiết bị hoặc trình duyệt nên dùng 1 token riêng để dễ dàng theo dõi và thu hồi bảo mật khi cần thiết.
+            Mỗi thiết bị hoặc trình duyệt nên dùng 1 token riêng để dễ dàng theo dõi và thu hồi bảo mật khi cần thiết. Xem <Link to="/guide/integrations/yomitan" className="text-primary font-medium hover:underline inline-flex items-center gap-0.5">Hướng dẫn kết nối chi tiết <ExternalLink className="size-3 inline" /></Link> nếu bạn mới sử dụng lần đầu.
           </CardDescription>
         </CardHeader>
         <CardContent className="p-4 sm:p-6 pt-0 space-y-5 sm:space-y-6">
@@ -95,8 +96,13 @@ export function YomitanTokensTab({ hookResult }: YomitanTokensTabProps) {
             <ShieldAlert className="size-4 text-sky-600 dark:text-sky-400 shrink-0 mt-0.5" />
             <div>
               <AlertTitle className="text-sky-900 dark:text-sky-200 text-xs sm:text-sm font-semibold">Cấu hình nhanh trong Yomitan</AlertTitle>
-              <AlertDescription className="mt-1 text-xs text-sky-800 dark:text-sky-300 leading-relaxed">
-                Tạo token rồi dán toàn bộ URL được cấp vào ô <strong>Server URL</strong> trong phần tích hợp của Yomitan (không cần nhập API Key riêng). Xem hướng dẫn chi tiết tại tab <strong>Hướng dẫn Cài đặt</strong>.
+              <AlertDescription className="mt-1 text-xs text-sky-800 dark:text-sky-300 leading-relaxed space-y-1">
+                <p>
+                  Tạo token rồi dán toàn bộ URL được cấp vào ô <strong>Server URL</strong> trong mục Cài đặt (Settings ➔ Anki/Connect) của Yomitan (không cần nhập API Key riêng).
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  Tham khảo <Link to="/guide/integrations/yomitan" className="text-primary hover:underline font-medium">Hướng dẫn Cài đặt</Link> hoặc <Link to="/guide/integrations/yomitan-markers" className="text-primary hover:underline font-medium">Bảng tra cứu 55 Field Markers</Link> để gán trường dữ liệu vào mẫu thẻ.
+                </p>
               </AlertDescription>
             </div>
           </Alert>
@@ -286,6 +292,6 @@ export function YomitanTokensTab({ hookResult }: YomitanTokensTabProps) {
           )}
         </CardContent>
       </Card>
-    </TabsContent>
+    </div>
   )
 }
