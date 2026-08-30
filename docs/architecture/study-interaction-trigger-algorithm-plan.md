@@ -1,10 +1,12 @@
 # Study, Interaction, Trigger, Algorithm, and Progress Architecture Plan
 
-Status: active staged refactor. Product decisions were approved on 2026-08-24. The first compatibility slice of Phases 0-2 and cleanup orders 1-3 were implemented and reviewed on 2026-08-27; the phase exit gates are still partial. Phases 3-9 have not started.
+Status: active staged refactor. Product decisions were approved on 2026-08-24. Compatibility work for Phases 0-2 remains partial; cleanup orders 2-3 require renewed hardening. Phase 3 has a partial compatibility scaffold but has not met its exit gate. Phases 4-9 have not started. See the evidence-backed [2026-08-29 progress review](./decoupling-progress-review-2026-08-29.md).
+
+Detailed Phase 0-3 work items, dependencies, required outputs, and acceptance gates are maintained in [`docs/task/decoupling/`](../task/decoupling/README.md).
 
 Last investigated: 2026-08-24
 
-Last implementation review: 2026-08-27
+Last implementation review: 2026-08-29
 
 ## Scope and evidence discipline
 
@@ -27,16 +29,16 @@ Statements are labelled as follows:
 
 This plan intentionally stops before detailed SQL. It follows the requested order: responsibility, identity, ownership, runtime flow, state ownership, lifecycle, extensibility, compatibility, migration, then physical storage.
 
-## Implementation progress snapshot — 2026-08-27
+## Implementation progress snapshot — 2026-08-29
 
 `Partial` means that reviewed code exists and its focused tests pass, but every exit condition written for the phase has not yet been satisfied. This avoids treating an adapter seam as the completed target architecture.
 
 | Phase | Status | Implemented evidence | Exit-gate work still open |
 |---|---|---|---|
 | Phase 0 — evidence and invariants | **Partial** | Read-only aggregate audit service and CLI; SQLite anomaly tests; production follow-up checked Template/Card/progress fan-in gates and Alembic head; one immutable fixture now verifies 40 transitions/previews plus Action identity in both Python and TypeScript | MySQL execution of the checked-in audit command; complete clone/import/provenance/version inventory; operational startup-safety contract for the CLI |
-| Phase 1 — runtime boundaries | **Partial** | exact-key/version Python and TypeScript Algorithm registries; compatibility adapter for the current scheduler; semantic review Action contracts; REST/MCP use one locked native review command; batch shares canonical event persistence, side effects, and scheduler policy identity; all native ReviewEvents record effective Algorithm/version/config hash | retained executable/version and state-decoder retirement lifecycle; external import/cutover revision alignment |
-| Phase 2 — built-in Interaction/Trigger compatibility | **Partial** | React review Action/Trigger contract; client events carry action and trigger identity; server validates supplied identity while accepting old v2 events; restored valid legacy events are normalized and mismatches quarantined; sandbox-authored `keydown_event` relay removed; current labels/layout/previews/local undo retained | extract the visual four-button component from `StudyBottomBar`; versioned required wire contract after v2; a trusted keyboard UX for focus inside the sandbox; generic Trigger Runtime beyond the four-rating adapter |
-| Phase 3 — composition/StudyMode | **Not started** | none | Priority-0 decisions and Field/Template binding prerequisites |
+| Phase 1 — runtime boundaries | **Partial** | exact-key/version Python and TypeScript Algorithm registries; compatibility adapter for the current scheduler; semantic review Action contracts; REST/MCP use a locked native review command; native ReviewEvents record effective Algorithm/version/config hash | batch still duplicates authoritative event/side-effect/policy work; first-create/concurrency parity; retained executable/version and state-decoder retirement; external import/cutover revision alignment |
+| Phase 2 — built-in Interaction/Trigger compatibility | **Partial — security blocker** | React review Action/Trigger metadata; server validates supplied identity while accepting old v2 events; valid legacy restores are normalized and mismatches quarantined; extracted review controls preserve current presentation | raw rating and semantic callbacks coexist; session operation guard is not a true mutex; restore integrity validation is incomplete; current iframe `host_command` is forgeable; generic Trigger Runtime remains absent |
+| Phase 3 — composition/StudyMode | **Partial scaffold; exit gate not met** | compatibility composition service/API, optional server filtering, snapshot metadata, and selector UI | selection does not precede or control session open; exactly-one scope authorization and query-first filtering; immutable selected mode; mixed-NoteType rule; real overlay-only clone proof; Field/Template binding prerequisites |
 | Phase 4 — learner/Note progress and Algorithm State | **Not started** | none; `CardProgress` remains authoritative | approved state/availability/history contracts, additive schema, backfill and shadow reconciliation |
 | Phases 5-9 — authority cutover through contract cleanup | **Not started** | none | all earlier exit gates plus explicit production migration approval |
 
@@ -47,7 +49,7 @@ This plan intentionally stops before detailed SQL. It follows the requested orde
 - The server dispatches batch replay by the exact Algorithm key/version frozen in `StudySession`. An unavailable pinned version fails with `ALGORITHM_UNAVAILABLE` instead of silently executing current code.
 - The client now resolves the same exact Algorithm key/version before opening or answering a session. It upgrades valid legacy v2 events with canonical Action metadata and moves incompatible persisted rows from the active IndexedDB store to a bounded one-row-per-scope quarantine store.
 - Direct REST and MCP reviews now run through one locked command and stamp Algorithm/version plus the same canonical scheduler-config hash used by batch sessions. They intentionally have no StudySession identity because they are immediate commits rather than leased batches.
-- Template JavaScript can no longer synthesize a parent-window keyboard event that reaches progress-changing React handlers. No generic progress-affecting Template API has been enabled.
+- **Regression found 2026-08-29:** the old `keydown_event` name remains removed, but the current iframe `host_command` path can still reach reveal/answer/undo handlers and is forgeable by Template JavaScript in the iframe. It must be contained before further rollout.
 
 ### Verification evidence
 
@@ -1239,14 +1241,13 @@ The following findings were re-derived from the implementation diff after the fo
 - **Recommendation:** keep the current module explicitly labelled a compatibility runtime, then add a fail-closed built-in Trigger dispatcher only after primary/follow-up semantics are approved.
 - **Migration implications:** no schema is required for the internal dispatcher. A required wire Trigger version belongs in the post-v2 contract phase.
 
-#### Finding C3 — Resolved 2026-08-27: native review writes share command, policy, and event boundaries
+#### Finding C3 — Reopened 2026-08-29: direct and batch review paths still duplicate authoritative work
 
-- **Original concern:** batch used locked revisions and a scheduler-config hash, while REST/MCP calculated outside the persistence service, compared timestamps, omitted parts of provenance, and differed on suspension and first-insert behavior.
-- **Resolution:** REST and MCP now adapt into `execute_native_review_command`, which resolves policy, locks the progress row, checks stale/suspended state, executes the exact Algorithm adapter, applies state, records the event and side effects, audits, and commits atomically. Batch retains its necessary lease/idempotency/replay transaction, but calls the same `record_native_review_transition` boundary and hashes the same serialized policy material through `study_policy_service`.
-- **Concurrency behavior:** existing rows are locked; batch additionally verifies its frozen base revision. A concurrent first insert is mapped to typed `CONCURRENT_REVIEW` for immediate review or `CARD_PROGRESS_CONFLICT` for batch instead of leaking an integrity error. This removes lost-update and untyped-race behavior without inventing permanent dual state.
-- **Provenance behavior:** REST, MCP, and batch persist the actual Algorithm key/version, Action/Trigger/state-schema metadata, and canonical scheduler-config hash. Only batch events carry StudySession/client-event/sequence identity because only batch owns that lease/idempotency contract.
-- **Boundary cleanup:** `study_service` no longer imports route helpers; install usage, clone scope resolution, audit creation, and native ReviewEvent construction are service-owned. The obsolete `apply_study_answer_and_commit` timestamp orchestration was deleted rather than retained as a second path.
-- **Evidence:** `app/services/study_service.py::execute_native_review_command`, `record_native_review_transition`; `app/services/study_policy_service.py`; `app/services/study_session_service.py::commit_study_session`; `app/routes/flashcards/study.py::study_answer`; `app/services/mcp_tool_service.py::submit_review`; `tests/test_study_session_api.py`; `tests/test_flama_connect_mcp.py`; `tests/test_owner_note_dirty_tracking_services.py`.
+- **Improvement retained:** REST and MCP adapt into `execute_native_review_command`, which resolves policy, locks progress, checks stale/suspended state, executes the exact Algorithm adapter, applies state, records the event and side effects, audits, and commits atomically.
+- **Current mismatch:** batch correctly owns lease/idempotency/replay atomicity, but `study_session_service.py::commit_study_session` still reconstructs authoritative `ReviewEvent` material and required side effects instead of adapting each transition through the same persistence command/core. It also retains a local scheduler-policy serializer and policy hash construction beside `study_policy_service`.
+- **Impact:** native entry points can drift in provenance, side effects, validation, first-create behavior, and future Phase 4 mirror writes even while current compatibility tests pass.
+- **Recommendation:** retain batch's outer atomic transaction and idempotency contract, but make one lower-level transaction command/core own progress mutation, event construction, canonical policy identity, and required side effects for REST, MCP, and batch. Add parity tests that fail if any path independently rebuilds the authoritative event.
+- **Evidence:** `app/services/study_service.py::execute_native_review_command`, `record_native_review_transition`; `app/services/study_policy_service.py`; `app/services/study_session_service.py::commit_study_session`; `app/routes/flashcards/study.py::study_answer`; `app/services/mcp_tool_service.py::submit_review`; `tests/test_study_session_api.py`; `tests/test_flama_connect_mcp.py`.
 - **Still outside this finding:** external Anki snapshot/revlog authority, native/offline conflict priority, and cross-path revision semantics remain tracked separately.
 
 #### Finding C4 — Resolved 2026-08-27: scheduler parity now uses frozen cross-language vectors
@@ -1258,17 +1259,17 @@ The following findings were re-derived from the implementation diff after the fo
 - **Guardrail:** fixture expectations are static and neither test computes expected values through the implementation under test. Any intentional behavior change requires a new Algorithm/contract version and a separately reviewed fixture rather than overwriting `legacy-anki/1.0.0` expectations.
 - **Migration implications:** no database, persistence authority, or runtime API changed.
 
-#### Finding C5 — Partially resolved 2026-08-27: restore is canonical, but Interaction UI is not yet reusable
+#### Finding C5 — Reopened 2026-08-29: Interaction UI and iframe trust boundary remain incomplete
 
-- **Observed:** `reviewInteraction.ts` defines stable metadata, while `StudyBottomBar` and `StudyPage` still emit hard-coded raw ratings. The wire type declares rating/action/trigger as independent unions, so newly constructed ad-hoc objects are not yet a discriminated Action type. Restored IndexedDB events are now normalized or quarantined before becoming typed runtime data. Removing the forgeable iframe keyboard relay also means parent shortcuts no longer work while focus is inside the iframe. The renderer cache revision is named `typed-actions-v1` even though no typed Action bridge exists yet.
+- **Observed:** `reviewInteraction.ts` defines stable metadata, while `ReviewInteractionControls`, `StudyBottomBar`, and `StudyPage` still retain parallel raw-rating and semantic callback paths. Valid legacy IndexedDB events can be normalized and mismatches quarantined, but integrity validation is incomplete. A later `host_command` bridge reintroduced a forgeable path from iframe content to parent reveal/answer/undo handlers. The renderer cache revision is named `typed-actions-v1` even though no trusted typed Action bridge exists.
 - **Evidence:** `frontend/src/features/study/interactions/reviewInteraction.ts`; `components/StudyBottomBar.tsx`; `pages/StudyPage.tsx`; `session/sessionStore.ts::isRestorableStudySession`; `components/CardRendererFrame.tsx`; `static/js/card_renderer_host.js`; `components/CardRendererHost.test.ts`.
 - **Potential concern:** future modes must edit page-specific rating code, and compatibility sessions remain type-unsound after restore.
 - **Impact:** Interaction reuse remains shallow; contract drift reaches the server late; keyboard UX does not yet satisfy the Phase 2 preservation gate.
 - **Unknowns:** a browser-enforceable trusted-gesture bridge that untrusted Template code cannot forge still needs a focused security design.
 - **Alternatives considered:** preserve raw rating callbacks, or make a built-in Review Interaction own descriptors/shortcuts and emit a discriminated Action object.
 - **Trade-offs:** raw ratings minimize the initial diff; canonical Action objects remove invalid combinations and make alternate render layouts reusable. A raw keyboard relay is rejected because it restores the original security flaw.
-- **Recommendation:** extract a zero-visual-regression `ReviewInteractionControls`, emit one discriminated `ReviewAction`, and add a browser acceptance matrix for parent/iframe focus. Design a capability-scoped trusted keyboard command before restoring iframe-focus shortcuts. Rename the current cache revision to a neutral renderer-security revision until a typed Action bridge actually ships.
-- **Migration implications:** IndexedDB normalization is complete for the compatibility contract. The server must continue accepting valid legacy v2 events through the lease window.
+- **Recommendation:** first disable every progress-affecting iframe `host_command`. Then make the zero-visual-regression `ReviewInteractionControls` emit one discriminated `ReviewAction` and add a browser acceptance matrix for parent/iframe focus. Restore iframe-focus shortcuts only after a focused threat model proves that untrusted Template code cannot forge the intent. Rename the current cache revision to a neutral renderer-security revision until a trusted typed bridge actually ships.
+- **Migration implications:** IndexedDB compatibility normalization exists, but restored-event integrity hardening remains open. The server must continue accepting valid legacy v2 events through the lease window.
 
 #### Finding C6 — Audit and event validation are useful but not yet migration-grade
 
@@ -1287,17 +1288,17 @@ The following findings were re-derived from the implementation diff after the fo
 | Order | Work package | Completion gate |
 |---:|---|---|
 | 1 | **Complete 2026-08-27:** frozen cross-language scheduler and Action contract fixture | Python and TypeScript pass the same 40 immutable transition/preview vectors; a behavior change requires a new Algorithm/contract version |
-| 2 | **Complete 2026-08-27:** canonical native review command and policy identity | REST/MCP share one locked command; batch shares canonical transition persistence and policy identity; all three stamp config provenance, reject suspended progress, and map first-create races to typed conflicts |
-| 3 | **Complete 2026-08-27:** client Algorithm registry and restored-event normalization | exact key/version resolves before opening and answering; valid legacy v2 events restore canonically; mismatches move out of the active store into bounded per-scope quarantine |
+| 2 | **Partial; reopened 2026-08-29:** canonical native review command and policy identity | REST/MCP share one locked command; batch must stop independently constructing authoritative event/side-effect/policy work; all paths need one tested concurrency contract |
+| 3 | **Partial; reopened 2026-08-29:** client Algorithm registry and restored-event normalization | exact key/version resolution and legacy normalization exist; restore still needs UUID/uniqueness/contiguous-sequence/bounded-offset validation and the session mutation guard must become a true mutex |
 | 4 | Reusable built-in Interaction controls and keyboard security/UX | unchanged visual snapshots; full shortcut/reveal matrix passes in a real browser for parent and approved iframe-focus behavior; sandbox scripts cannot submit progress |
 | 5 | Audit/event hardening | MySQL and SQLite reports categorize integrity/inventory/warnings; detached/import/clone/version accounting reconciles; canonical event payloads enforce limits |
 | 6 | Trigger dispatcher design | approved primary/follow-up semantics; exact Trigger version dispatch fails closed; no arbitrary Template code capability |
 
-Orders 4-6 remain open. Only after all six orders pass should Phase 0-2 be marked complete. If Trigger dispatch is intentionally deferred to later generic Trigger work, Phase 2 must remain partial and the current module must stay named and documented as a compatibility runtime.
+Orders 2-6 remain open. Only after all six orders pass should Phase 0-2 be marked complete. If Trigger dispatch is intentionally deferred to later generic Trigger work, Phase 2 must remain partial and the current module must stay named and documented as a compatibility runtime.
 
 ### Phase 3 — Establish the composition responsibility
 
-**Implementation status (2026-08-27): Partially complete.** Compatibility composition service (`study_composition_service.py`), session freeze (`compositions` dict + per-card `composition_id`), scope compositions API, recursive deck resolution, and pre-session selector (`StudyModeSelector`) are implemented. FieldDef-based bindings deferred pending Field normalization plan. Exit gate verified by automated tests (`test_study_composition_exit_gate.py`).
+**Implementation status (reviewed 2026-08-29): Partial compatibility scaffold; exit gate not met.** The composition service/API, optional session filtering, snapshot metadata, and selector UI exist. The frontend still opens the session before selection and does not send the selected composition, the backend accepts ambiguous optional lists and filters after limiting the candidate set, and the current exit test simulates a physical clone Card instead of exercising the overlay-only DeckInstall path. FieldDef-based bindings remain deferred pending the Field normalization plan.
 
 **Work:**
 
@@ -1483,7 +1484,7 @@ Resolve Priority 0 items 1–7 before finalizing the progress/history physical d
 
 These code-backed issues were discovered while tracing the architecture. They should become implementation tickets or acceptance tests, not be silently mixed into the domain refactor:
 
-1. **Resolved 2026-08-27:** synthetic sandbox key events could reach progress-changing keyboard handlers; the forgeable relay was removed. Secure shortcuts while iframe content owns focus remain tracked in Finding C5;
+1. **Regression confirmed 2026-08-29:** the old synthetic `keydown_event` relay was removed, but a later `host_command` bridge again lets forgeable iframe messages reach progress-changing handlers. Containment and any future trusted shortcut design remain tracked in Finding C5;
 2. IndexedDB failure can degrade to non-durable memory without blocking exit;
 3. pending commit recovery lacks a permanent conflict resolution UX;
 4. **Resolved 2026-08-27 for native REST/MCP/batch review:** first-ever progress insert races are translated to typed conflict errors; external import/cutover mutation paths remain covered by item 9;

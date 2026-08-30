@@ -13,7 +13,8 @@ Tài liệu mô tả kiến trúc hiện hành và các tiêu chuẩn kỹ thu�
 | [`SYSTEM_ARCHITECTURE.md`](architecture/SYSTEM_ARCHITECTURE.md) | **Tổng quan kiến trúc toàn hệ thống** (React SPA, Flask REST API, Flama Connect, Flama Audio). |
 | [`FLAMA_PAYMENT_ARCHITECTURE.md`](architecture/FLAMA_PAYMENT_ARCHITECTURE.md) | **Kiến trúc thanh toán payOS** (Orders, PaymentAttempts, Webhook, Entitlements). |
 | [`CARD_TEMPLATE_SANDBOX_RENDERER.md`](architecture/CARD_TEMPLATE_SANDBOX_RENDERER.md) | **Cơ chế render iframe sandbox an toàn** cho custom card templates. |
-| [`study-interaction-trigger-algorithm-plan.md`](architecture/study-interaction-trigger-algorithm-plan.md) | **Tracker canonical cho refactor Study/Interaction/Trigger/Algorithm/Progress**; Phase 0–2 đang triển khai một phần, Phase 3–9 chưa bắt đầu. |
+| [`study-interaction-trigger-algorithm-plan.md`](architecture/study-interaction-trigger-algorithm-plan.md) | **Tracker canonical cho refactor Study/Interaction/Trigger/Algorithm/Progress**; Phase 0–2 và scaffold Phase 3 đang partial, Phase 4–9 chưa bắt đầu. |
+| [`decoupling-progress-review-2026-08-29.md`](architecture/decoupling-progress-review-2026-08-29.md) | Review tiến độ theo code/test/migration và roadmap tiếp tục có exit gate, rollback, security containment, cùng phương án Phase 4. |
 | [`production-architecture-verification-2026-08-24.md`](architecture/production-architecture-verification-2026-08-24.md) | Baseline production chỉ-đọc và lần kiểm tra bổ sung ngày 2026-08-27 cho các migration gate. |
 | [`template-notetype-decoupling-investigation.md`](architecture/template-notetype-decoupling-investigation.md) | Điều tra boundary Template/NoteType/Field và các lựa chọn tái sử dụng Template. |
 | [`TYPOGRAPHY_SYSTEM.md`](architecture/TYPOGRAPHY_SYSTEM.md) | **Hệ thống Design Tokens & Typography** của giao diện. |
@@ -46,7 +47,9 @@ Các đề xuất kỹ thuật và lộ trình nâng cấp kiến trúc đang tr
 |---|---|
 | [`ARCHITECTURE_HARDENING_ROADMAP.md`](plans/ARCHITECTURE_HARDENING_ROADMAP.md) | **Lộ trình củng cố kiến trúc Modular Monolith**: Vá quyền OAuth/MCP, Alembic schema ownership, CI MySQL 8, REST API boundaries. |
 | [`DECOUPLE_TEMPLATE_NOTE_TYPE_PROPOSAL.md`](plans/proposals/DECOUPLE_TEMPLATE_NOTE_TYPE_PROPOSAL.md) | Bản thảo đề xuất tách Template độc lập khỏi Note Type. |
+| [`Phase 0–3 Decoupling Task Backlog`](task/decoupling/README.md) | 23 task specs chi tiết để đóng các phần còn thiếu của Phase 0–3, gồm dependency, output, acceptance gate và rollback. |
 | [`FLASHCARD_FOR_KIDS_PLAN.md`](plans/proposals/FLASHCARD_FOR_KIDS_PLAN.md) | Ý tưởng phát triển bộ flashcard chuyên biệt cho trẻ em. |
+| [`LISTENING_TYPING_PHONETIC_CONFUSION_ANALYSIS_PLAN.md`](plans/proposals/LISTENING_TYPING_PHONETIC_CONFUSION_ANALYSIS_PLAN.md) | **Đề xuất phân tích & gợi ý âm nghe nhầm đa ngôn ngữ (P3 - Low Priority)**: Dựa trên lịch sử nhập từ và từ gốc trong chế độ Dictation để tìm ra ma trận âm người dùng hay nghe nhầm (Tiếng Nhật, Tiếng Anh, Tiếng Hàn, Tiếng Trung, Tiếng Việt...). |
 
 ---
 
