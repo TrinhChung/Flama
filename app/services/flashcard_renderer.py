@@ -719,6 +719,9 @@ def _render_media_html(field_type: str, value: Any, field_name: str, media_looku
         )
 
     # Backward compatibility and support for HTML / inline SVG in diagram/image fields.
+    if "<svg" in raw.lower() and "</svg>" in raw.lower():
+        return sanitize_html_fragment(raw)
+
     if (field_type in {"image", "diagram"} or "<svg" in raw.lower()) and (raw.startswith("<") or "<svg" in raw.lower()):
         return sanitize_html_fragment(raw)
 
@@ -730,10 +733,23 @@ def _render_media_html(field_type: str, value: Any, field_name: str, media_looku
     escaped_alt = html.escape(field_name, quote=True)
     escaped_field = html.escape(field_name, quote=True)
     asset_id = _extract_proxy_asset_id(media_url)
+    is_svg = (
+        field_type == "diagram"
+        or raw.lower().endswith(".svg")
+        or media_url.lower().endswith(".svg")
+        or "image/svg+xml" in raw.lower()
+        or "image/svg+xml" in media_url.lower()
+    )
     media_attrs = [
         f'data-flama-media-field="{escaped_field}"',
-        f'data-flama-media-kind="{html.escape(field_type, quote=True)}"',
+        f'data-flama-media-kind="{html.escape("svg" if is_svg else field_type, quote=True)}"',
     ]
+    if is_svg:
+        media_attrs.append('data-flama-is-svg="true"')
+        media_attrs.append('class="flama-media-image flama-svg-image"')
+    else:
+        media_attrs.append('class="flama-media-image"')
+
     if asset_id:
         media_attrs.append(f'data-flama-media-asset-id="{html.escape(asset_id, quote=True)}"')
     joined_attrs = " ".join(media_attrs)
@@ -753,11 +769,24 @@ class _RenderedMediaMetadataParser(HTMLParser):
         src = attr_map.get("src", "").strip()
         href = attr_map.get("href", "").strip()
         media_url = src if src else href
-        if _PROXY_MEDIA_URL_RE.match(media_url):
+        if (
+            _PROXY_MEDIA_URL_RE.match(media_url)
+            or _LIBRARY_MEDIA_URL_RE.match(media_url)
+            or _STATIC_STROKE_URL_RE.match(media_url)
+            or media_url.startswith("/media/")
+        ):
             self.allowed_media_urls.add(media_url)
-        if tag.lower() == "audio" and _PROXY_MEDIA_URL_RE.match(src):
+        if tag.lower() == "audio" and (
+            _PROXY_MEDIA_URL_RE.match(src)
+            or _LIBRARY_MEDIA_URL_RE.match(src)
+            or src.startswith("/media/")
+        ):
             self.allowed_audio_urls.add(src)
-        if tag.lower() == "source" and _PROXY_MEDIA_URL_RE.match(src):
+        if tag.lower() == "source" and (
+            _PROXY_MEDIA_URL_RE.match(src)
+            or _LIBRARY_MEDIA_URL_RE.match(src)
+            or src.startswith("/media/")
+        ):
             type_value = str(attr_map.get("type", "") or "").strip().lower()
             if type_value.startswith("audio/"):
                 self.allowed_audio_urls.add(src)

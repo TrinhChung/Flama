@@ -2,6 +2,7 @@ import { useEffect, useState, type ChangeEvent } from 'react'
 import { appApi } from '@/app/api'
 import { Button } from '@/components/ui/button'
 import { apiRequest } from '@/shared/api/client'
+import { updateCardFieldValuesInSessions } from '../session/sessionStore'
 import type { StudyCardEditResponse } from '../types'
 
 type FieldDef = {
@@ -280,6 +281,9 @@ export function EditCardModal({
         tags,
         render_contract: 'client_v1',
       })
+      if (cardId) {
+        void updateCardFieldValuesInSessions(cardId, fieldValues, { noteId })
+      }
       onSaved?.(result)
       onClose()
     } catch (err) {

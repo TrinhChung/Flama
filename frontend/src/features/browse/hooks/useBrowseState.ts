@@ -532,7 +532,8 @@ export function useBrowseState() {
       setInitialDeckId(editDeckId)
       setInitialTags(editTags)
       if (activeCardId) {
-        void updateCardFieldValuesInSessions(activeCardId, editFieldValues)
+        const noteId = cardDetailQuery.data?.note?.id ? String(cardDetailQuery.data.note.id) : null
+        void updateCardFieldValuesInSessions(activeCardId, editFieldValues, { noteId })
       }
       void queryClient.invalidateQueries({ queryKey: ['browse', 'cards'] })
       void queryClient.invalidateQueries({ queryKey: ['browse', 'card-detail', activeCardId] })

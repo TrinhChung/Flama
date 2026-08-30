@@ -7,6 +7,9 @@
   const DEFAULT_MIN_HEIGHT = 180;
   const MAX_FRAME_HEIGHT = 4096;
   const PROXY_MEDIA_RE = /^\/media\/proxy\/([A-Za-z0-9][A-Za-z0-9_-]{0,127})$/;
+  const LIBRARY_MEDIA_RE = /^\/media\/library\/([A-Za-z0-9][A-Za-z0-9_.-]{0,127})$/;
+  const STATIC_STROKE_RE = /^\/static\/strokes\/([a-zA-Z0-9_-]+\/[a-fA-F0-9]+\.svg)$/;
+  const SAFE_MEDIA_PATH_RE = /^\/media\/([a-zA-Z0-9_./-]+\.(?:svg|png|jpe?g|webp|gif|mp3|wav|ogg|webm))$/i;
 
   let sharedAudioEl = null;
   let sharedAudioPlayback = null;
@@ -55,6 +58,18 @@
     if (directMatch) {
       return "/media/proxy/" + directMatch[1];
     }
+    const libraryMatch = trimmed.match(LIBRARY_MEDIA_RE);
+    if (libraryMatch) {
+      return "/media/library/" + libraryMatch[1];
+    }
+    const strokeMatch = trimmed.match(STATIC_STROKE_RE);
+    if (strokeMatch) {
+      return "/static/strokes/" + strokeMatch[1];
+    }
+    const safeMediaMatch = trimmed.match(SAFE_MEDIA_PATH_RE);
+    if (safeMediaMatch) {
+      return "/media/" + safeMediaMatch[1];
+    }
     try {
       const parsed = new URL(trimmed, global.location.href);
       const normalizedPath = String(parsed.pathname || "").trim();
@@ -63,6 +78,14 @@
         // The origin is discarded deliberately.  A controller resolves the
         // approved opaque asset id against its trusted mediaBaseUrl below.
         return "/media/proxy/" + absoluteMatch[1];
+      }
+      const absoluteLibraryMatch = normalizedPath.match(LIBRARY_MEDIA_RE);
+      if (absoluteLibraryMatch) {
+        return "/media/library/" + absoluteLibraryMatch[1];
+      }
+      const absoluteStrokeMatch = normalizedPath.match(STATIC_STROKE_RE);
+      if (absoluteStrokeMatch) {
+        return "/static/strokes/" + absoluteStrokeMatch[1];
       }
     } catch (_error) {
       // Ignore URL parsing failures and keep checking other formats.
@@ -265,7 +288,14 @@
     const mediaBaseUrl = normalizeMediaBaseUrl(options.mediaBaseUrl);
     const mediaOrigin = new URL(mediaBaseUrl).origin;
     const allowedMediaSources = buildCspSourceList(options.allowedMediaUrls, mediaBaseUrl);
-    const imgSrc = allowedMediaSources.length ? allowedMediaSources.join(" ") : "'none'";
+    const defaultImgSources = [
+      mediaOrigin + "/media/library/",
+      mediaOrigin + "/static/strokes/",
+      "data:",
+      "blob:",
+    ];
+    const combinedImgSources = Array.from(new Set([...allowedMediaSources, ...defaultImgSources]));
+    const imgSrc = combinedImgSources.length ? combinedImgSources.join(" ") : "'none'";
     const mediaSrc = allowedMediaSources.length ? allowedMediaSources.join(" ") : "'none'";
     return [
       "default-src 'none'",
