@@ -1043,6 +1043,53 @@ def register_cli_commands(app: Flask) -> None:
         click.echo(f"  - Chinese Traditional (zh-hant): {zh_hant_count} SVGs ({lib_zh_hant})")
         click.echo(f"  - Total Registered Image Library Stroke Assets: {total_assets}")
 
+    @strokes_group.command("migrate-notes")
+    @click.option("--dry-run", is_flag=True, help="Preview migrations without committing changes.")
+    def migrate_notes_cmd(dry_run: bool) -> None:
+        """Migrate legacy stroke keys or URLs in notes to clean .svg URLs."""
+        from models.flashcard import Note
+
+        notes = Note.query.all()
+        updated_count = 0
+        for note in notes:
+            if not note.field_values:
+                continue
+            field_values = dict(note.field_values)
+            changed = False
+            for k, v in list(field_values.items()):
+                if not isinstance(v, str) or not v.strip():
+                    continue
+                val = v.strip()
+                # If raw key like stroke_ja_65e5
+                if re.match(r"^stroke_[a-z0-9_]+_[a-f0-9]{4,6}$", val, re.IGNORECASE):
+                    field_values[k] = f"/media/library/{val}.svg"
+                    changed = True
+                # If URL without extension like /media/library/stroke_ja_65e5
+                elif re.match(r"^/media/library/(stroke_[a-z0-9_]+_[a-f0-9]{4,6})$", val, re.IGNORECASE):
+                    m = re.match(r"^/media/library/(stroke_[a-z0-9_]+_[a-f0-9]{4,6})$", val, re.IGNORECASE)
+                    if m:
+                        field_values[k] = f"/media/library/{m.group(1)}.svg"
+                        changed = True
+                # If HTML snippet with src="/media/library/stroke_..." without .svg
+                elif "/media/library/stroke_" in val and ".svg" not in val:
+                    new_val = re.sub(
+                        r"/media/library/(stroke_[a-z0-9_]+_[a-f0-9]{4,6})(?!\.svg)",
+                        r"/media/library/\1.svg",
+                        val,
+                        flags=re.IGNORECASE,
+                    )
+                    if new_val != val:
+                        field_values[k] = new_val
+                        changed = True
+            if changed:
+                updated_count += 1
+                if not dry_run:
+                    note.field_values = field_values
+
+        if not dry_run and updated_count > 0:
+            db.session.commit()
+        click.echo(f"Notes stroke URL migration complete! Updated: {updated_count} notes. (dry-run={dry_run})")
+
     @app.cli.command("seed-production-strokes")
     @click.option("--locale", default="all", type=click.Choice(["all", "ja", "zh", "zh-hant"]), help="Language locale to pre-generate.")
     @click.option("--limit-ja", default=2500, type=int, help="Number of Japanese Kanji to generate (default: 2500).")

@@ -69,6 +69,17 @@ ALLOWED_HTML_TAGS = [
     "rp",
     "a",
     "style",
+    "svg",
+    "g",
+    "path",
+    "line",
+    "circle",
+    "rect",
+    "ellipse",
+    "polyline",
+    "polygon",
+    "text",
+    "tspan",
 ]
 
 ALLOWED_CSS_PROPERTIES = [
@@ -169,16 +180,24 @@ def _strict_allowed_attr(tag: str, name: str, value: str) -> bool:
         return tag in {"div", "p", "span", "li", "td"}
     if lowered in {"class", "id", "style", "alt", "title", "loading"}:
         return True
+    if lowered in {
+        "viewbox", "xmlns", "d", "fill", "stroke", "stroke-width",
+        "stroke-linecap", "stroke-linejoin", "stroke-dasharray", "stroke-dashoffset",
+        "cx", "cy", "r", "rx", "ry", "x", "y", "x1", "y1", "x2", "y2",
+        "transform", "points", "opacity", "text-anchor", "font-size", "font-family",
+    }:
+        return True
     if lowered == "controls":
         return tag in {"audio", "video"}
     if lowered == "autoplay":
         return tag == "audio"
-    if lowered in {"src", "href"}:
+    if lowered in {"src", "href", "poster"}:
         val = (value or "").strip()
         if (
             _PROXY_MEDIA_URL_RE.match(val)
             or _LIBRARY_MEDIA_URL_RE.match(val)
             or _STATIC_STROKE_URL_RE.match(val)
+            or val.startswith("/media/")
         ):
             return True
         if lowered == "href" and val.startswith("https://"):
@@ -197,6 +216,13 @@ def _template_allowed_attr(tag: str, name: str, value: str) -> bool:
         return tag in {"div", "p", "span", "li", "td"}
     if lowered in {"class", "id", "style", "alt", "title", "role", "dir", "loading"}:
         return True
+    if lowered in {
+        "viewbox", "xmlns", "d", "fill", "stroke", "stroke-width",
+        "stroke-linecap", "stroke-linejoin", "stroke-dasharray", "stroke-dashoffset",
+        "cx", "cy", "r", "rx", "ry", "x", "y", "x1", "y1", "x2", "y2",
+        "transform", "points", "opacity", "text-anchor", "font-size", "font-family",
+    }:
+        return True
     if lowered in {"controls", "loop", "muted", "playsinline"}:
         return tag in {"audio", "video"}
     if lowered == "autoplay":
@@ -204,18 +230,21 @@ def _template_allowed_attr(tag: str, name: str, value: str) -> bool:
     if lowered in {"preload", "poster"}:
         return tag in {"audio", "video"}
     if lowered in {"width", "height"}:
-        return tag in {"img", "video", "source", "audio", "table", "th", "td"}
+        return tag in {"img", "video", "source", "audio", "table", "th", "td", "svg", "rect", "circle", "line"}
     if lowered in {"colspan", "rowspan"}:
         return tag in {"th", "td"}
-    if lowered in {"src", "href"}:
+    if lowered in {"src", "href", "poster"}:
         val = (value or "").strip()
         if (
             _PROXY_MEDIA_URL_RE.match(val)
             or _LIBRARY_MEDIA_URL_RE.match(val)
             or _STATIC_STROKE_URL_RE.match(val)
+            or val.startswith("/media/")
         ):
             return True
         if lowered == "href" and val.startswith("https://"):
+            return True
+        if lowered in {"src", "poster"} and (val.startswith("https://") or val.startswith("http://")):
             return True
         return False
     return False
@@ -382,6 +411,14 @@ def _resolve_media_url(value: Any, media_lookup: dict[str, Any]) -> str:
         return f"/media/proxy/{asset.id}"
     if raw.startswith("/media/proxy/"):
         return raw
+    if (
+        raw.startswith("/media/library/")
+        or raw.startswith("/static/strokes/")
+        or raw.startswith("/media/")
+    ):
+        return raw
+    if raw.startswith("stroke_"):
+        return f"/media/library/{raw}.svg"
     return ""
 
 
@@ -681,14 +718,14 @@ def _render_media_html(field_type: str, value: Any, field_name: str, media_looku
             "</div>"
         )
 
-    # Backward compatibility for legacy HTML snippets in diagram/image fields.
-    if field_type in {"image", "diagram"} and raw.startswith("<"):
+    # Backward compatibility and support for HTML / inline SVG in diagram/image fields.
+    if (field_type in {"image", "diagram"} or "<svg" in raw.lower()) and (raw.startswith("<") or "<svg" in raw.lower()):
         return sanitize_html_fragment(raw)
 
     media_url = _resolve_media_url(raw, media_lookup)
 
     if not media_url:
-        return ""
+        return sanitize_html_fragment(raw) if (field_type in {"image", "diagram"} and "<" in raw) else ""
 
     escaped_alt = html.escape(field_name, quote=True)
     escaped_field = html.escape(field_name, quote=True)

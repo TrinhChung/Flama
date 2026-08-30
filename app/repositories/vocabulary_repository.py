@@ -753,6 +753,28 @@ def build_browse_deck_tree_payload(
                 bucket["learn"] += int(row[3] or 0)
                 bucket["due"] += int(row[4] or 0)
 
+    deck_note_type_rows = (
+        db.session.query(Note.deck_id, Note.note_type_id)
+        .filter(Note.deck_id.in_(scoped_ids))
+        .distinct()
+        .all()
+    )
+    deck_note_type_map: dict[int, str] = {
+        int(row[0]): str(row[1]) for row in deck_note_type_rows if row[0] and row[1]
+    }
+    if installs:
+        for install in installs:
+            source_to_local = {
+                int(row.source_deck_id): int(row.local_deck_id)
+                for row in install.deck_maps
+                if row.source_deck_id is not None
+                and row.local_deck_id is not None
+                and int(row.local_deck_id) in scoped_ids
+            }
+            if install.installed_note_type_id:
+                for local_id in source_to_local.values():
+                    deck_note_type_map.setdefault(local_id, str(install.installed_note_type_id))
+
     def _build_node(deck_obj: Deck) -> dict[str, Any]:
         direct = direct_counts.get(deck_obj.id, {"total": 0, "new": 0, "learn": 0, "due": 0})
         counts = {
@@ -770,10 +792,12 @@ def build_browse_deck_tree_payload(
             counts["new"] += int(child_counts["new"])
             counts["learn"] += int(child_counts["learn"])
             counts["due"] += int(child_counts["due"])
+        resolved_note_type_id = deck_obj.note_type_id or deck_note_type_map.get(deck_obj.id)
         return {
             "id": deck_obj.id,
             "name": deck_obj.name,
             "parent_id": deck_obj.parent_id,
+            "note_type_id": str(resolved_note_type_id) if resolved_note_type_id else None,
             "counts": counts,
             "children": children_payload,
         }

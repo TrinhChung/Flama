@@ -95,7 +95,7 @@ class TestStrokeService(unittest.TestCase):
     def test_resolve_stroke_items_raw(self):
         res = resolve_stroke_items("勉強", locale="ja", output_format="raw")
         self.assertEqual(res["characters"], ["勉", "強"])
-        self.assertEqual(res["output"], "/media/library/stroke_ja_52c9\n/media/library/stroke_ja_5f37")
+        self.assertEqual(res["output"], "/media/library/stroke_ja_52c9.svg\n/media/library/stroke_ja_5f37.svg")
 
     def test_batch_generate_strokes_deck(self):
         res = batch_generate_strokes(

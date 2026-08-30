@@ -116,9 +116,9 @@ def upload_media(
     ).first()
     if existing:
         if not markdown_inline:
-            values = dict(note.field_values or {})
-            if values.get(validated.field_name) != existing.id:
-                values[validated.field_name] = existing.id
+            target_val = existing.filename or existing.id
+            if values.get(validated.field_name) != target_val:
+                values[validated.field_name] = target_val
                 note.field_values = values
                 deck_working_tree_service.mark_note_field_batches_changed(
                     mutations=[
@@ -164,7 +164,7 @@ def upload_media(
         db.session.flush()
         if not markdown_inline:
             values = dict(note.field_values or {})
-            values[validated.field_name] = asset.id
+            values[validated.field_name] = asset.filename or asset.id
             note.field_values = values
             deck_working_tree_service.mark_note_field_batches_changed(
                 mutations=[
@@ -392,7 +392,7 @@ def upload_media_batch(
 
             if not markdown_inline:
                 values = dict(note.field_values or {})
-                values[validated.field_name] = asset.id
+                values[validated.field_name] = asset.filename or asset.id
                 note.field_values = values
                 dirty_field_names_by_note_id.setdefault(note.id, set()).add(
                     validated.field_name

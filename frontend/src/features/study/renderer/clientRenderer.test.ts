@@ -159,5 +159,39 @@ describe('renderStudySide', () => {
     expect(result.html).toContain('alt="勉"')
     expect(result.html).toContain('class="stroke-svg"')
   })
+
+  it('preserves library stroke diagram SVG images in rich HTML content', () => {
+    const strokeDiagramHtml = (
+      '<div class="flama-stroke-diagram" data-locale="ja">'
+      + '<img src="/media/library/stroke_ja_65e5.svg" alt="日" class="flama-stroke-char" />'
+      + '</div>'
+    )
+    const result = renderStudySide(
+      template({ back_source: '<div class="strokes">{{{StrokeDiagram}}}</div>' }),
+      content({
+        render_context: { StrokeDiagram: strokeDiagramHtml },
+      }),
+      'back',
+    )
+
+    expect(result.html).toContain('src="/media/library/stroke_ja_65e5.svg"')
+    expect(result.html).toContain('alt="日"')
+    expect(result.html).toContain('class="flama-stroke-char"')
+  })
+
+  it('preserves inline SVG markup in card render context', () => {
+    const svgMarkup = '<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="40" stroke="green" stroke-width="4" fill="yellow" /></svg>'
+    const result = renderStudySide(
+      template({ back_source: '<div class="diagram-container">{{{Diagram}}}</div>' }),
+      content({
+        render_context: { Diagram: svgMarkup },
+      }),
+      'back',
+    )
+
+    expect(result.html).toContain('<svg viewBox="0 0 100 100"')
+    expect(result.html).toContain('<circle cx="50" cy="50" r="40"')
+    expect(result.html).toContain('fill="yellow"')
+  })
 })
 

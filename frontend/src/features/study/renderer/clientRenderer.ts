@@ -8,7 +8,9 @@ import type {
 
 const LINEBREAK_TOKEN = '__FC_LINEBREAK_TOKEN__'
 const PROXY_MEDIA_RE = /^\/media\/proxy\/[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/
+const LIBRARY_MEDIA_RE = /^\/media\/library\/[A-Za-z0-9][A-Za-z0-9_.-]{0,127}(?:\.(?:svg|png|jpe?g|webp|gif|mp3|wav|ogg|webm))?$/i
 const STATIC_STROKE_RE = /^\/static\/strokes\/[a-zA-Z0-9_-]+\/[a-fA-F0-9]+\.svg$/
+const SAFE_MEDIA_PATH_RE = /^\/media\/[a-zA-Z0-9_./-]+\.(?:svg|png|jpe?g|webp|gif|mp3|wav|ogg|webm)$/i
 const SAFE_BUTTON_ONCLICK_RE =
   /^\s*document\.getElementById\(\s*['"][A-Za-z0-9_-]+['"]\s*\)\.play\(\)\s*;?\s*$/
 
@@ -17,12 +19,17 @@ const ALLOWED_TAGS = [
   'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'blockquote', 'pre',
   'code', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'img', 'audio', 'video',
   'source', 'button', 'ruby', 'rt', 'rp', 'a', 'style',
+  'svg', 'g', 'path', 'line', 'circle', 'rect', 'ellipse', 'polyline', 'polygon', 'text', 'tspan',
 ]
 
 const ALLOWED_ATTR = [
   'class', 'id', 'style', 'alt', 'title', 'role', 'dir', 'controls', 'loop',
   'muted', 'playsinline', 'autoplay', 'preload', 'poster', 'width', 'height',
   'colspan', 'rowspan', 'src', 'href', 'auto-split', 'onclick', 'loading',
+  'viewBox', 'viewbox', 'xmlns', 'd', 'fill', 'stroke', 'stroke-width',
+  'stroke-linecap', 'stroke-linejoin', 'stroke-dasharray', 'stroke-dashoffset',
+  'cx', 'cy', 'r', 'rx', 'ry', 'x', 'y', 'x1', 'y1', 'x2', 'y2',
+  'transform', 'points', 'opacity', 'font-size', 'font-family', 'text-anchor',
 ]
 
 function sanitizeRenderedMarkup(rawHtml: string, allowedMediaUrls: Set<string>): string {
@@ -40,7 +47,9 @@ function sanitizeRenderedMarkup(rawHtml: string, allowedMediaUrls: Set<string>):
     if (attrName === 'src' || attrName === 'href' || attrName === 'poster') {
       data.keepAttr = (
         (PROXY_MEDIA_RE.test(attrValue) && allowedMediaUrls.has(attrValue))
+        || LIBRARY_MEDIA_RE.test(attrValue)
         || STATIC_STROKE_RE.test(attrValue)
+        || SAFE_MEDIA_PATH_RE.test(attrValue)
         || (attrName === 'href' && attrValue.startsWith('https://'))
       )
       return
@@ -58,6 +67,7 @@ function sanitizeRenderedMarkup(rawHtml: string, allowedMediaUrls: Set<string>):
       ALLOWED_ATTR,
       ALLOW_ARIA_ATTR: true,
       ALLOW_DATA_ATTR: true,
+      USE_PROFILES: { html: true, svg: true, svgFilters: true },
     })
   } finally {
     DOMPurify.removeAllHooks()

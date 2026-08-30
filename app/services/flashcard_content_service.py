@@ -997,11 +997,16 @@ def create_note(
         "note.create",
         {"note_id": note.id, "note_type_id": note.note_type_id},
     )
+    db.session.flush()
+    card_ids = [card.id for card in (note.cards or [])]
     db.session.commit()
     return {
         "id": note.id,
+        "deck_id": note.deck_id,
+        "note_type_id": note.note_type_id,
         "field_values": note.field_values,
         "tags": note.tags,
+        "card_ids": card_ids,
     }
 
 

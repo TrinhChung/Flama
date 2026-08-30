@@ -179,6 +179,7 @@ def build_browse_decks(
                     "id": node["id"],
                     "name": node["name"],
                     "parent_id": node["parent_id"],
+                    "note_type_id": node.get("note_type_id"),
                     "counts": node.get("counts", {}),
                 }
             )

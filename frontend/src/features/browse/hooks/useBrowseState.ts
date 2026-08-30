@@ -37,6 +37,7 @@ export type BrowseDeck = {
   name: string
   parent_id?: number | null
   path?: string
+  note_type_id?: string | null
   counts?: {
     new?: number
     learn?: number
@@ -48,6 +49,19 @@ export type CardDetailField = {
   name: string
   position: number
   required?: boolean
+}
+
+export type NoteTypeFieldDef = {
+  name: string
+  position: number
+  required?: boolean
+}
+
+export type NoteTypeSummary = {
+  id: string
+  name: string
+  title?: string
+  field_defs?: NoteTypeFieldDef[]
 }
 
 export type CardDetailResponse = {
@@ -223,6 +237,8 @@ export function useBrowseState() {
   const [activeCardId, setActiveCardId] = useState<string | null>(
     urlCardId ? urlCardId : null,
   )
+  const [isCreatingCard, setIsCreatingCard] = useState(false)
+  const [createNoteTypeId, setCreateNoteTypeId] = useState<string | null>(null)
 
   // Mobile View Switcher Tab State: 'decks' | 'cards' | 'editor'
   const [mobileTab, setMobileTab] = useState<'decks' | 'cards' | 'editor'>(
@@ -236,6 +252,7 @@ export function useBrowseState() {
     }
     if (urlCardId) {
       setActiveCardId(urlCardId)
+      setIsCreatingCard(false)
       setMobileTab('editor')
     }
   }, [urlDeckId, urlCardId])
@@ -264,6 +281,18 @@ export function useBrowseState() {
     queryKey: ['browse', 'decks'],
     queryFn: () => appApi.get<{ decks: BrowseDeck[] }>('/browse/decks'),
   })
+
+  // Note Types Query for Card Creation
+  const noteTypesQuery = useQuery({
+    queryKey: ['note-types'],
+    queryFn: () => appApi.get<{ items: NoteTypeSummary[] }>('/note-types'),
+  })
+
+  useEffect(() => {
+    if (isCreatingCard && !createNoteTypeId && noteTypesQuery.data?.items?.length) {
+      setCreateNoteTypeId(noteTypesQuery.data.items[0].id)
+    }
+  }, [isCreatingCard, createNoteTypeId, noteTypesQuery.data?.items])
 
   // Cards List Query
   const cardsQuery = useQuery({
@@ -396,6 +425,72 @@ export function useBrowseState() {
     setEditDeckId(initialDeckId)
     setEditTags(initialTags)
   }
+
+  const handleStartCreateCard = () => {
+    setIsCreatingCard(true)
+    setActiveCardId(null)
+    setSelectedCards([])
+
+    const defaultDeckId = selectedDeckId ?? decksQuery.data?.decks?.[0]?.id ?? null
+    setEditDeckId(defaultDeckId)
+
+    const currentDeck = decksQuery.data?.decks?.find((d) => d.id === defaultDeckId)
+    const availableNoteTypes = noteTypesQuery.data?.items || []
+    const resolvedNoteTypeId =
+      currentDeck?.note_type_id ||
+      cardDetailQuery.data?.note?.note_type_id ||
+      availableNoteTypes.find((nt) => nt.field_defs?.some((f) => f.name.toLowerCase() === 'word'))?.id ||
+      availableNoteTypes.find((nt) => !nt.field_defs?.some((f) => f.name.toLowerCase() === 'stt'))?.id ||
+      availableNoteTypes[0]?.id
+
+    if (resolvedNoteTypeId) {
+      setCreateNoteTypeId(resolvedNoteTypeId)
+    }
+
+    setEditFieldValues({})
+    setEditTags([])
+    setNewTagInput('')
+    setMobileTab('editor')
+  }
+
+  const handleCancelCreate = () => {
+    setIsCreatingCard(false)
+    setEditFieldValues({})
+    setEditTags([])
+    setNewTagInput('')
+  }
+
+  // Create Card / Note Mutation
+  const createMutation = useMutation({
+    mutationFn: (payload: {
+      note_type_id: string
+      deck_id: number
+      field_values: Record<string, string>
+      tags?: string[]
+    }) => appApi.mutate<{ id: string; card_ids?: Array<string | number> }>('/notes', 'POST', payload),
+    onSuccess: async (data, variables) => {
+      toast.success('Đã tạo thẻ mới thành công.')
+      setIsCreatingCard(false)
+
+      if (variables.deck_id && selectedDeckId !== null && selectedDeckId !== variables.deck_id) {
+        setSelectedDeckId(variables.deck_id)
+      }
+
+      await queryClient.invalidateQueries({ queryKey: ['browse', 'cards'] })
+      await queryClient.invalidateQueries({ queryKey: ['browse', 'decks'] })
+      await queryClient.invalidateQueries({ queryKey: ['bootstrap'] })
+
+      const newCardId = data?.card_ids?.[0] !== undefined ? String(data.card_ids[0]) : null
+      if (newCardId) {
+        setActiveCardId(newCardId)
+        await queryClient.invalidateQueries({ queryKey: ['browse', 'card-detail', newCardId] })
+      }
+      setMobileTab('editor')
+    },
+    onError: (error: Error) => {
+      toast.error('Không thể tạo thẻ', { description: error.message })
+    },
+  })
 
   // Update Mutation
   const updateMutation = useMutation({
@@ -749,6 +844,11 @@ export function useBrowseState() {
     isPreviewing,
     activeCardId,
     setActiveCardId,
+    isCreatingCard,
+    setIsCreatingCard,
+    createNoteTypeId,
+    setCreateNoteTypeId,
+    noteTypesQuery,
     mobileTab,
     setMobileTab,
     editFieldValues,
@@ -773,6 +873,9 @@ export function useBrowseState() {
     ttsProfileQuery,
     ttsVoicesQuery,
     handleRevert,
+    handleStartCreateCard,
+    handleCancelCreate,
+    createMutation,
     updateMutation,
     deleteMutation,
     bulkDeleteMutation,

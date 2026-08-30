@@ -8,7 +8,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Search, Sliders, ChevronDown, Trash2, Volume2, PenTool, Printer } from 'lucide-react'
+import { Search, Sliders, ChevronDown, Trash2, Volume2, Printer, Plus } from 'lucide-react'
 import type { useBrowseState } from '../hooks/useBrowseState'
 
 interface BrowseToolbarProps {
@@ -28,13 +28,12 @@ export function BrowseToolbar({ browse }: BrowseToolbarProps) {
     setLocalAudioDefaultVoiceId,
     setLocalAudioTargetCardIds,
     setIsLocalAudioModalOpen,
-    setIsStrokeModalOpen,
-    setStrokeModalMode,
     setIsWorksheetModalOpen,
     setWorksheetTargetDeckId,
     setWorksheetTargetCardIds,
     selectedDeckId,
     cardsQuery,
+    handleStartCreateCard,
   } = browse
 
   return (
@@ -51,6 +50,17 @@ export function BrowseToolbar({ browse }: BrowseToolbarProps) {
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
+        {/* Add Card Button */}
+        <Button
+          type="button"
+          size="sm"
+          onClick={handleStartCreateCard}
+          className="h-8 rounded-lg text-xs font-bold gap-1 bg-primary text-primary-foreground hover:opacity-95 shadow-xs shrink-0"
+        >
+          <Plus className="size-3.5" />
+          <span>Thêm thẻ</span>
+        </Button>
+
         {/* Status filter dropdown mapping */}
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-semibold">
           <Sliders className="size-3.5 text-muted-foreground" />
@@ -81,18 +91,6 @@ export function BrowseToolbar({ browse }: BrowseToolbarProps) {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
-                {/* Stroke Diagram Generation Trigger */}
-                <DropdownMenuItem
-                  onClick={() => {
-                    setStrokeModalMode('batch')
-                    setIsStrokeModalOpen(true)
-                  }}
-                  className="flex items-center gap-2 font-medium cursor-pointer"
-                >
-                  <PenTool className="size-4 text-primary shrink-0" />
-                  <span>Tạo nét Kanji/Hanzi</span>
-                </DropdownMenuItem>
-
                 {/* Worksheet Generator Trigger */}
                 <DropdownMenuItem
                   onClick={() => {

@@ -26,6 +26,7 @@ export function BrowseCardTable({ browse }: BrowseCardTableProps) {
     setSelectedCards,
     activeCardId,
     setActiveCardId,
+    setIsCreatingCard,
     page,
     setPage,
     perPage,
@@ -111,8 +112,8 @@ export function BrowseCardTable({ browse }: BrowseCardTableProps) {
               </TableRow>
             ) : (
               cards.map((card) => {
-                const isSelected = selectedCards.includes(card.card_id)
-                const isActive = activeCardId === card.card_id
+                const isSelected = selectedCards.some((id) => String(id) === String(card.card_id))
+                const isActive = activeCardId !== null && String(activeCardId) === String(card.card_id)
 
                 return (
                   <TableRow
@@ -121,7 +122,8 @@ export function BrowseCardTable({ browse }: BrowseCardTableProps) {
                       isActive ? 'bg-primary/5 hover:bg-primary/10 border-l-2 border-l-primary' : ''
                     }`}
                     onClick={() => {
-                      setActiveCardId(card.card_id)
+                      setIsCreatingCard(false)
+                      setActiveCardId(String(card.card_id))
                       setMobileTab('editor')
                     }}
                   >
@@ -130,9 +132,9 @@ export function BrowseCardTable({ browse }: BrowseCardTableProps) {
                         checked={isSelected}
                         onCheckedChange={(checked) => {
                           if (checked) {
-                            setSelectedCards((prev) => [...prev, card.card_id])
+                            setSelectedCards((prev) => [...prev, String(card.card_id)])
                           } else {
-                            setSelectedCards((prev) => prev.filter((id) => id !== card.card_id))
+                            setSelectedCards((prev) => prev.filter((id) => String(id) !== String(card.card_id)))
                           }
                         }}
                       />

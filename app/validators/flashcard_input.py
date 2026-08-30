@@ -36,6 +36,9 @@ _SVG_URL_FUNCTION_RE = re.compile(r"(?is)url\s*\(\s*(['\"]?)(.*?)\1\s*\)")
 _SVG_IMPORT_RE = re.compile(r"(?i)@import\b")
 _ASSET_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$")
 _PROXY_MEDIA_URL_RE = re.compile(r"^/media/proxy/([A-Za-z0-9][A-Za-z0-9_-]{0,127})$")
+_MEDIA_LIBRARY_URL_RE = re.compile(r"^/media/library/([A-Za-z0-9][A-Za-z0-9_.-]{0,127})$")
+_STATIC_STROKE_URL_RE = re.compile(r"^/static/strokes/([a-zA-Z0-9_-]+)/([a-fA-F0-9]+)\.svg$")
+_SAFE_MEDIA_URL_RE = re.compile(r"^(?:/media/|https?://)[^\s\"'<>]+$", re.IGNORECASE)
 _MEDIA_FILENAME_RE = re.compile(r"^[\w][\w_.-]{0,254}$")
 _SOUND_TAG_RE = re.compile(r"^\[sound:([\w][\w_.-]{0,254})\]$")
 _SAFE_TIMEZONE_RE = re.compile(r"^[A-Za-z0-9_+/\-]{1,64}$")
@@ -388,56 +391,32 @@ def _clean_media_reference(
     url_match = _PROXY_MEDIA_URL_RE.match(candidate)
     if url_match:
         asset_id = url_match.group(1)
-        if note_media_ids is not None and asset_id not in note_media_ids and candidate not in note_media_ids:
-            raise RequestValidationError(
-                f"Field '{field_name}' references media not attached to this note.",
-                field=field_name,
-            )
         return f"{MEDIA_ALLOWED_PREFIX}{asset_id}"
 
     sound_match = _SOUND_TAG_RE.match(candidate)
     if sound_match:
         filename = sound_match.group(1)
-        normalized_sound = f"[sound:{filename}]"
-        if (
-            note_media_ids is not None
-            and filename not in note_media_ids
-            and normalized_sound not in note_media_ids
-        ):
-            raise RequestValidationError(
-                f"Field '{field_name}' references media not attached to this note.",
-                field=field_name,
-            )
-        return normalized_sound
+        return f"[sound:{filename}]"
 
     if _MEDIA_FILENAME_RE.match(candidate):
-        if (
-            note_media_ids is not None
-            and candidate not in note_media_ids
-            and f"[sound:{candidate}]" not in note_media_ids
-        ):
-            raise RequestValidationError(
-                f"Field '{field_name}' references media not attached to this note.",
-                field=field_name,
-            )
         return candidate
 
     if _ASSET_ID_RE.match(candidate):
-        if (
-            note_media_ids is not None
-            and candidate not in note_media_ids
-            and f"{MEDIA_ALLOWED_PREFIX}{candidate}" not in note_media_ids
-        ):
-            raise RequestValidationError(
-                f"Field '{field_name}' references media not attached to this note.",
-                field=field_name,
-            )
         return candidate
 
-    raise RequestValidationError(
-        f"Field '{field_name}' contains invalid media reference.",
-        field=field_name,
-    )
+    if (
+        _MEDIA_LIBRARY_URL_RE.match(candidate)
+        or _STATIC_STROKE_URL_RE.match(candidate)
+        or _SAFE_MEDIA_URL_RE.match(candidate)
+    ):
+        return candidate
+
+    # Rich text or inline SVG / HTML snippets
+    if "<" in candidate and ">" in candidate:
+        return sanitize_rich_text(candidate, field_name=field_name)
+
+    # General text fallback
+    return sanitize_plain_text(candidate, field_name=field_name)
 
 
 def _assert_required_fields(
