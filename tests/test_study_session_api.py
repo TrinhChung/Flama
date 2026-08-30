@@ -54,7 +54,7 @@ class StudySessionApiTests(unittest.TestCase):
         self.client.post(
             "/login",
             data={"email": "student@example.com", "password": "password"},
-            follow_redirects=True,
+            follow_redirects=False,
         )
         note_type_response = self.client.post(
             "/api/note-types",
@@ -645,6 +645,66 @@ class StudySessionApiTests(unittest.TestCase):
         comp = data["compositions"][0]
         self.assertEqual(comp["mode_key"], "flashcard")
         self.assertEqual(comp["algorithm_key"], "legacy-anki")
+
+    def test_open_session_non_existent_deck_returns_404_deck_not_found(self):
+        response = self.client.post(
+            "/api/study/sessions",
+            json={"scope": "deck", "scope_id": 999999},
+        )
+        self.assertEqual(response.status_code, 404)
+        payload = response.get_json()
+        self.assertEqual(payload.get("error"), "DECK_NOT_FOUND")
+        self.assertIn("không tồn tại", payload.get("message", ""))
+
+    def test_open_session_unauthorized_deck_returns_403_with_marketplace_details(self):
+        with self.app.app_context():
+            other_user = User(username="other_author", email="author@example.com")
+            other_user.set_password("password")
+            db.session.add(other_user)
+            db.session.flush()
+
+            other_deck = Deck(name="Published Deck", owner_user_id=other_user.id)
+            db.session.add(other_deck)
+            db.session.flush()
+
+            marketplace_item = DeckMarketplaceItem(
+                id="market-item-456",
+                owner_user_id=other_user.id,
+                source_deck_id=other_deck.id,
+                title="Published Deck Market Item",
+                description="Sample description",
+                primary_category="JLPT N5",
+            )
+            db.session.add(marketplace_item)
+            db.session.commit()
+            other_deck_id = other_deck.id
+
+        response = self.client.post(
+            "/api/study/sessions",
+            json={"scope": "deck", "scope_id": other_deck_id},
+        )
+        self.assertEqual(response.status_code, 403)
+        payload = response.get_json()
+        self.assertEqual(payload.get("error"), "DECK_ACCESS_DENIED")
+        self.assertIn("không thể truy cập", payload.get("message", ""))
+        self.assertIsNotNone(payload.get("details"))
+        self.assertEqual(payload["details"]["deck_name"], "Published Deck")
+        self.assertEqual(payload["details"]["marketplace_url"], "/marketplace/decks/market-item-456")
+
+    def test_study_next_empty_deck_returns_no_cards_payload(self):
+        with self.app.app_context():
+            empty_deck = Deck(name="Empty Deck", owner_user_id=self.user_id)
+            db.session.add(empty_deck)
+            db.session.commit()
+            empty_deck_id = empty_deck.id
+
+        response = self.client.get(
+            f"/api/study/next?scope=deck&scope_id={empty_deck_id}",
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertIsNone(payload.get("card_id"))
+        self.assertEqual(payload.get("error"), "NO_STUDY_CARDS")
 
 
 if __name__ == "__main__":

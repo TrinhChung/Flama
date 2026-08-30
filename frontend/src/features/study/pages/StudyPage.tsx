@@ -8,6 +8,7 @@ import { StudyBottomBar } from '../components/StudyBottomBar'
 import { StudyCompletionCard } from '../components/StudyCompletionCard'
 import { StudySessionConflict } from '../components/StudySessionConflict'
 import { StudyWaitingCard } from '../components/StudyWaitingCard'
+import { StudyScopeErrorCard } from '../components/StudyScopeErrorCard'
 import { StudyQuickEditDialog } from '../components/StudyQuickEditDialog'
 import { useStudySession } from '../hooks/useStudySession'
 import { isBackgroundRolloverCommit } from '../session/studySessionEngine'
@@ -294,8 +295,12 @@ export function StudyPage() {
 
   if (study.error && !study.session) {
     return (
-      <div className="h-screen h-[100dvh] w-full flex items-center justify-center p-6">
-        <PageError error={study.error} />
+      <div className="h-screen h-[100dvh] w-full flex items-center justify-center p-4 sm:p-6 overflow-y-auto bg-background text-foreground">
+        <StudyScopeErrorCard
+          error={study.error}
+          deckName={deckName}
+          deckId={deckIdRaw}
+        />
       </div>
     )
   }
