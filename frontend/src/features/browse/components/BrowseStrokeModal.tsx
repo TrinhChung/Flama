@@ -30,6 +30,10 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { appApi, type GenerateStrokesResponse } from '@/app/api'
 import { resolveBackendUrl } from '@/config/env'
+import {
+  loadStoredStrokeSettings,
+  saveStoredStrokeSettings,
+} from '../services/strokeStorage'
 import type { useBrowseState, CardDetailResponse } from '../hooks/useBrowseState'
 
 interface BrowseStrokeModalProps {
@@ -194,16 +198,24 @@ export function BrowseStrokeModal({
     return 'ja'
   }, [decksQuery?.data?.decks, cardDetailQuery.data, cards, selectedDeckId, targetCardId, resolvedSourceValue])
 
-  const [locale, setLocale] = useState('ja')
+  const [locale, setLocale] = useState<'ja' | 'zh-CN' | 'zh-TW'>(() => {
+    return loadStoredStrokeSettings().locale
+  })
 
+  // Auto-detect initial locale if user hasn't explicitly customized yet or if card has strong match
   useEffect(() => {
-    if (detectedLocale) {
-      setLocale(detectedLocale)
+    const raw = localStorage.getItem('flama_browse_stroke_settings_v1')
+    if (!raw && detectedLocale) {
+      setLocale(detectedLocale as 'ja' | 'zh-CN' | 'zh-TW')
     }
   }, [detectedLocale])
 
-  const [outputFormat, setOutputFormat] = useState<'html' | 'raw' | 'urls'>('html')
-  const [overwrite, setOverwrite] = useState(false)
+  const [outputFormat, setOutputFormat] = useState<'html' | 'raw' | 'urls'>(() => {
+    return loadStoredStrokeSettings().outputFormat
+  })
+  const [overwrite, setOverwrite] = useState(() => {
+    return loadStoredStrokeSettings().overwrite
+  })
   const [maxChars] = useState(15)
   const [copiedCode, setCopiedCode] = useState(false)
 
@@ -407,7 +419,11 @@ export function BrowseStrokeModal({
               </Label>
               <NativeSelect
                 value={locale}
-                onChange={(e) => setLocale(e.target.value)}
+                onChange={(e) => {
+                  const nextLocale = e.target.value as 'ja' | 'zh-CN' | 'zh-TW'
+                  setLocale(nextLocale)
+                  saveStoredStrokeSettings({ locale: nextLocale })
+                }}
                 className="h-9 text-xs rounded-lg bg-background"
               >
                 <option value="ja">Tiếng Nhật (Kanji - KanjiVG)</option>
@@ -424,7 +440,11 @@ export function BrowseStrokeModal({
               </Label>
               <NativeSelect
                 value={outputFormat}
-                onChange={(e) => setOutputFormat(e.target.value as 'html' | 'raw' | 'urls')}
+                onChange={(e) => {
+                  const nextFormat = e.target.value as 'html' | 'raw' | 'urls'
+                  setOutputFormat(nextFormat)
+                  saveStoredStrokeSettings({ outputFormat: nextFormat })
+                }}
                 className="h-9 text-xs rounded-lg bg-background font-medium"
               >
                 <option value="html">HTML bọc &lt;img&gt; (Khuyên dùng - Hiển thị ngay)</option>
@@ -442,25 +462,25 @@ export function BrowseStrokeModal({
                 <span>
                   <strong className="text-foreground font-semibold">HTML Embed:</strong> Sinh thẻ ảnh{' '}
                   <code className="font-mono bg-primary/10 text-primary px-1 py-0.5 rounded text-[10px]">
-                    &lt;div class=&quot;flama-stroke-diagram&quot;&gt;&lt;img src=&quot;/media/library/stroke_ja_65e5&quot; .../&gt;&lt;/div&gt;
+                    &lt;div class=&quot;flama-stroke-diagram&quot;&gt;&lt;img src=&quot;/media/library/stroke_ja_65e5.svg&quot; .../&gt;&lt;/div&gt;
                   </code>{' '}
                   để hiển thị trực tiếp sơ đồ nét khi ôn tập thẻ trên web và Anki.
                 </span>
               )}
               {outputFormat === 'raw' && (
                 <span>
-                  <strong className="text-foreground font-semibold">URL Raw:</strong> Chỉ lưu chuỗi đường dẫn Image Library{' '}
+                  <strong className="text-foreground font-semibold">URL Raw:</strong> Chỉ lưu chuỗi đường dẫn tệp SVG{' '}
                   <code className="font-mono bg-primary/10 text-primary px-1 py-0.5 rounded text-[10px]">
-                    /media/library/stroke_ja_65e5
+                    /media/library/stroke_ja_65e5.svg
                   </code>{' '}
-                  (xuống dòng nếu nhiều chữ), phù hợp để tự viết template HTML riêng.
+                  (xuống dòng nếu nhiều chữ), phù hợp để tự viết template HTML riêng như &lt;img src=&quot;&#123;&#123;StrokeDiagram&#125;&#125;&quot; /&gt;.
                 </span>
               )}
               {outputFormat === 'urls' && (
                 <span>
-                  <strong className="text-foreground font-semibold">JSON URLs:</strong> Lưu danh sách mảng JSON{' '}
+                  <strong className="text-foreground font-semibold">JSON URLs:</strong> Lưu danh sách mảng JSON tệp SVG{' '}
                   <code className="font-mono bg-primary/10 text-primary px-1 py-0.5 rounded text-[10px]">
-                    [&quot;/media/library/stroke_ja_65e5&quot;]
+                    [&quot;/media/library/stroke_ja_65e5.svg&quot;]
                   </code>{' '}
                   cho việc lập trình hoặc tự xử lý dữ liệu nâng cao.
                 </span>
@@ -473,7 +493,11 @@ export function BrowseStrokeModal({
             <Checkbox
               id="overwrite-strokes"
               checked={overwrite}
-              onCheckedChange={(c) => setOverwrite(Boolean(c))}
+              onCheckedChange={(c) => {
+                const nextOverwrite = Boolean(c)
+                setOverwrite(nextOverwrite)
+                saveStoredStrokeSettings({ overwrite: nextOverwrite })
+              }}
             />
             <Label
               htmlFor="overwrite-strokes"

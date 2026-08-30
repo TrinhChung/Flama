@@ -8,6 +8,10 @@ import {
   uploadNoteMediaBatch,
   type BatchMediaItemInput,
 } from '@/shared/api/noteMedia'
+import {
+  loadStoredLocalAudioSettings,
+  saveStoredLocalAudioSettings,
+} from '../services/localAudioStorage'
 import type { VoiceDescriptor } from '../types'
 
 export type ProcessItemStatus = 'pending' | 'synthesizing' | 'uploading' | 'done' | 'failed' | 'skipped'
@@ -208,11 +212,25 @@ export function useLocalAudioEngine(options: {
   const [isPairingApproved, setIsPairingApproved] = useState<boolean>(false)
 
   // Voice Selection State
+  const initialLocalSettings = loadStoredLocalAudioSettings()
   const [voices, setVoices] = useState<VoiceDescriptor[]>([])
-  const [selectedVoiceId, setSelectedVoiceId] = useState<string>(defaultVoiceId || (isKokoro ? 'af_bella' : '3'))
+  const [selectedVoiceId, setSelectedVoiceIdState] = useState<string>(() => {
+    return defaultVoiceId || (isKokoro ? initialLocalSettings.lastVoiceIdKokoro : initialLocalSettings.lastVoiceIdVoicevox)
+  })
+
+  const setSelectedVoiceId = (voiceId: string) => {
+    setSelectedVoiceIdState(voiceId)
+    if (isKokoro) {
+      saveStoredLocalAudioSettings({ lastVoiceIdKokoro: voiceId })
+    } else {
+      saveStoredLocalAudioSettings({ lastVoiceIdVoicevox: voiceId })
+    }
+  }
 
   useEffect(() => {
-    setSelectedVoiceId(defaultVoiceId || (isKokoro ? 'af_bella' : '3'))
+    const stored = loadStoredLocalAudioSettings()
+    const fallbackId = isKokoro ? stored.lastVoiceIdKokoro : stored.lastVoiceIdVoicevox
+    setSelectedVoiceIdState(defaultVoiceId || fallbackId)
     setVoices([])
   }, [engineId, isKokoro, defaultVoiceId])
 
@@ -259,10 +277,41 @@ export function useLocalAudioEngine(options: {
   }, [isOpen, dynamicFields])
 
   // Advanced Sliders State
-  const [volumeScale, setVolumeScale] = useState<number>(1.0)
-  const [pitch, setPitch] = useState<number>(0.0)
-  const [speed, setSpeed] = useState<number>(1.0)
-  const [intonationScale, setIntonationScale] = useState<number>(1.0)
+  const [volumeScale, setVolumeScaleState] = useState<number>(initialLocalSettings.volumeScale)
+  const setVolumeScale = (val: number | ((prev: number) => number)) => {
+    setVolumeScaleState((prev) => {
+      const next = typeof val === 'function' ? val(prev) : val
+      saveStoredLocalAudioSettings({ volumeScale: next })
+      return next
+    })
+  }
+
+  const [pitch, setPitchState] = useState<number>(initialLocalSettings.pitch)
+  const setPitch = (val: number | ((prev: number) => number)) => {
+    setPitchState((prev) => {
+      const next = typeof val === 'function' ? val(prev) : val
+      saveStoredLocalAudioSettings({ pitch: next })
+      return next
+    })
+  }
+
+  const [speed, setSpeedState] = useState<number>(initialLocalSettings.speed)
+  const setSpeed = (val: number | ((prev: number) => number)) => {
+    setSpeedState((prev) => {
+      const next = typeof val === 'function' ? val(prev) : val
+      saveStoredLocalAudioSettings({ speed: next })
+      return next
+    })
+  }
+
+  const [intonationScale, setIntonationScaleState] = useState<number>(initialLocalSettings.intonationScale)
+  const setIntonationScale = (val: number | ((prev: number) => number)) => {
+    setIntonationScaleState((prev) => {
+      const next = typeof val === 'function' ? val(prev) : val
+      saveStoredLocalAudioSettings({ intonationScale: next })
+      return next
+    })
+  }
 
   // Audio Preview State
   const [isPreviewing, setIsPreviewing] = useState<boolean>(false)
@@ -424,10 +473,16 @@ export function useLocalAudioEngine(options: {
   }
 
   const handleResetDefaults = () => {
-    setVolumeScale(1.0)
-    setPitch(0.0)
-    setSpeed(1.0)
-    setIntonationScale(1.0)
+    saveStoredLocalAudioSettings({
+      volumeScale: 1.0,
+      pitch: 0.0,
+      speed: 1.0,
+      intonationScale: 1.0,
+    })
+    setVolumeScaleState(1.0)
+    setPitchState(0.0)
+    setSpeedState(1.0)
+    setIntonationScaleState(1.0)
     toast.info('Đã khôi phục thông số âm thanh mặc định.')
   }
 

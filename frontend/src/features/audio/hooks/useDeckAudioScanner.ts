@@ -4,6 +4,11 @@ import { toast } from 'sonner'
 import { apiRequest } from '@/shared/api/client'
 import { scanDeckAudio } from '../services/audioScanService'
 import { cleanTextForTts } from '../services/ttsTextNormalizer'
+import {
+  loadStoredDeckAudioStudioSettings,
+  saveStoredDeckAudioStudioSettings,
+  type DeckAudioStudioSettings,
+} from '../services/deckAudioSettingsStorage'
 import type {
   AudioDeckJob,
   AudioJobItem,
@@ -27,10 +32,19 @@ function generateId(): string {
 }
 
 export function useDeckAudioScanner(initialDeckId?: number | null) {
+  const initialStudioSettings = loadStoredDeckAudioStudioSettings()
   const [selectedDeckId, setSelectedDeckId] = useState<number | null>(initialDeckId || null)
   const [isScanning, setIsScanning] = useState(false)
   const [scanData, setScanData] = useState<DeckScanResponse | null>(null)
-  const [generationMode, setGenerationMode] = useState<'missing_and_broken' | 'all'>('missing_and_broken')
+  const [generationMode, setGenerationModeState] = useState<'missing_and_broken' | 'all'>(
+    initialStudioSettings.generationMode,
+  )
+
+  const setGenerationMode = (mode: 'missing_and_broken' | 'all') => {
+    setGenerationModeState(mode)
+    saveStoredDeckAudioStudioSettings({ generationMode: mode })
+  }
+
   const [rules, setRules] = useState<AudioRuleConfig[]>([])
 
   // 1. Fetch accessible deck list
@@ -99,6 +113,12 @@ export function useDeckAudioScanner(initialDeckId?: number | null) {
         }
       }
 
+      const storedSettings = loadStoredDeckAudioStudioSettings()
+      const effectiveVoiceId =
+        storedSettings.defaultEngineId === 'kokoro'
+          ? storedSettings.defaultVoiceIdKokoro
+          : storedSettings.defaultVoiceIdVoicevox
+
       if (data.auto_mappings && data.auto_mappings.length > 0) {
         const mappings: FieldMapping[] = data.auto_mappings.map((m) => ({
           id: generateId(),
@@ -109,12 +129,12 @@ export function useDeckAudioScanner(initialDeckId?: number | null) {
         const defaultRule: AudioRuleConfig = {
           id: generateId(),
           name: 'Cấu hình âm thanh 1',
-          engineId: 'voicevox',
-          voiceId: '3', // Zundamon normal default
-          speed: 1.0,
-          pitch: 0.0,
-          intonation: 1.0,
-          volume: 1.0,
+          engineId: storedSettings.defaultEngineId,
+          voiceId: effectiveVoiceId,
+          speed: storedSettings.speed,
+          pitch: storedSettings.pitch,
+          intonation: storedSettings.intonation,
+          volume: storedSettings.volume,
           mappings,
         }
         setRules([defaultRule])
@@ -126,12 +146,12 @@ export function useDeckAudioScanner(initialDeckId?: number | null) {
         const defaultRule: AudioRuleConfig = {
           id: generateId(),
           name: 'Cấu hình âm thanh 1',
-          engineId: 'voicevox',
-          voiceId: '3',
-          speed: 1.0,
-          pitch: 0.0,
-          intonation: 1.0,
-          volume: 1.0,
+          engineId: storedSettings.defaultEngineId,
+          voiceId: effectiveVoiceId,
+          speed: storedSettings.speed,
+          pitch: storedSettings.pitch,
+          intonation: storedSettings.intonation,
+          volume: storedSettings.volume,
           mappings: [
             {
               id: generateId(),
@@ -186,15 +206,21 @@ export function useDeckAudioScanner(initialDeckId?: number | null) {
     const defaultSource = availableFieldNames.find((f) => ['Reading', 'Word', 'Front', 'Expression'].includes(f)) || availableFieldNames[0] || 'Word'
     const defaultDest = availableFieldNames.find((f) => f.toLowerCase().includes('audio') || f.toLowerCase().includes('sound')) || 'Audio'
 
+    const storedSettings = loadStoredDeckAudioStudioSettings()
+    const effectiveVoiceId =
+      storedSettings.defaultEngineId === 'kokoro'
+        ? storedSettings.defaultVoiceIdKokoro
+        : storedSettings.defaultVoiceIdVoicevox
+
     const newRule: AudioRuleConfig = {
       id: generateId(),
       name: `Cấu hình âm thanh ${rules.length + 1}`,
-      engineId: 'voicevox',
-      voiceId: '3',
-      speed: 1.0,
-      pitch: 0.0,
-      intonation: 1.0,
-      volume: 1.0,
+      engineId: storedSettings.defaultEngineId,
+      voiceId: effectiveVoiceId,
+      speed: storedSettings.speed,
+      pitch: storedSettings.pitch,
+      intonation: storedSettings.intonation,
+      volume: storedSettings.volume,
       mappings: [
         {
           id: generateId(),
@@ -219,6 +245,28 @@ export function useDeckAudioScanner(initialDeckId?: number | null) {
     setRules((prev) =>
       prev.map((r) => (r.id === ruleId ? { ...r, ...updater } : r)),
     )
+
+    // Persist preferences for future rules & scans
+    const preferencesToSave: Partial<DeckAudioStudioSettings> = {}
+    if (updater.engineId) {
+      preferencesToSave.defaultEngineId = updater.engineId
+    }
+    if (updater.voiceId) {
+      const activeEngine = updater.engineId || rules.find((r) => r.id === ruleId)?.engineId || 'voicevox'
+      if (activeEngine === 'kokoro') {
+        preferencesToSave.defaultVoiceIdKokoro = updater.voiceId
+      } else {
+        preferencesToSave.defaultVoiceIdVoicevox = updater.voiceId
+      }
+    }
+    if (typeof updater.volume === 'number') preferencesToSave.volume = updater.volume
+    if (typeof updater.pitch === 'number') preferencesToSave.pitch = updater.pitch
+    if (typeof updater.speed === 'number') preferencesToSave.speed = updater.speed
+    if (typeof updater.intonation === 'number') preferencesToSave.intonation = updater.intonation
+
+    if (Object.keys(preferencesToSave).length > 0) {
+      saveStoredDeckAudioStudioSettings(preferencesToSave)
+    }
   }
 
   const handleAddFieldMapping = (ruleId: string) => {

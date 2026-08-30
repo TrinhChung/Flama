@@ -5,6 +5,11 @@ import { toast } from 'sonner'
 import { appApi } from '@/app/api'
 import { apiBlob } from '@/shared/api/client'
 import { updateCardFieldValuesInSessions } from '@/features/study/session/sessionStore'
+import {
+  loadStoredBrowseTtsSettings,
+  resetStoredBrowseTtsSettings,
+  saveStoredBrowseTtsSettings,
+} from '../services/ttsSettingsStorage'
 
 export type BrowseCardRow = {
   card_id: string
@@ -107,6 +112,7 @@ export function useBrowseState() {
   }
 
   // VoiceVox TTS Audio Generation Modal State
+  const initialTtsSettings = loadStoredBrowseTtsSettings()
   const [isTtsModalOpen, setIsTtsModalOpen] = useState(false)
   const [isLocalAudioModalOpen, setIsLocalAudioModalOpen] = useState(false)
   const [isStrokeModalOpen, setIsStrokeModalOpen] = useState(false)
@@ -117,21 +123,95 @@ export function useBrowseState() {
   const [localAudioTargetCardIds, setLocalAudioTargetCardIds] = useState<string[]>([])
   const [ttsSourceField, setTtsSourceField] = useState('Word')
   const [ttsDestinationField, setTtsDestinationField] = useState('Audio')
-  const [ttsCharacter, setTtsCharacter] = useState('')
+  
+  const [ttsCharacter, setTtsCharacterState] = useState<string>(initialTtsSettings.character)
+  const setTtsCharacter = (val: string | ((prev: string) => string)) => {
+    setTtsCharacterState((prev) => {
+      const next = typeof val === 'function' ? val(prev) : val
+      saveStoredBrowseTtsSettings({ character: next })
+      return next
+    })
+  }
+
   const [ttsApiKey, setTtsApiKey] = useState(() => {
     return localStorage.getItem('flama_voicevox_api_key') || ''
   })
   const [isKeySaved, setIsKeySaved] = useState(false)
   const [isSavingKey, setIsSavingKey] = useState(false)
   const [showApiKey, setShowApiKey] = useState(false)
-  const [ttsAppendAudio, setTtsAppendAudio] = useState(false)
-  const [ttsUseOpus, setTtsUseOpus] = useState(false)
-  const [ttsVolumeScale, setTtsVolumeScale] = useState(1.0)
-  const [ttsPitch, setTtsPitch] = useState(0.0)
-  const [ttsSpeed, setTtsSpeed] = useState(1.0)
-  const [ttsIntonationScale, setTtsIntonationScale] = useState(1.0)
-  const [ttsInitialSilence, setTtsInitialSilence] = useState(0.1)
-  const [ttsFinalSilence, setTtsFinalSilence] = useState(0.1)
+
+  const [ttsAppendAudio, setTtsAppendAudioState] = useState<boolean>(initialTtsSettings.appendAudio)
+  const setTtsAppendAudio = (val: boolean | ((prev: boolean) => boolean)) => {
+    setTtsAppendAudioState((prev) => {
+      const next = typeof val === 'function' ? val(prev) : val
+      saveStoredBrowseTtsSettings({ appendAudio: next })
+      return next
+    })
+  }
+
+  const [ttsUseOpus, setTtsUseOpusState] = useState<boolean>(initialTtsSettings.useOpus)
+  const setTtsUseOpus = (val: boolean | ((prev: boolean) => boolean)) => {
+    setTtsUseOpusState((prev) => {
+      const next = typeof val === 'function' ? val(prev) : val
+      saveStoredBrowseTtsSettings({ useOpus: next })
+      return next
+    })
+  }
+
+  const [ttsVolumeScale, setTtsVolumeScaleState] = useState<number>(initialTtsSettings.volumeScale)
+  const setTtsVolumeScale = (val: number | ((prev: number) => number)) => {
+    setTtsVolumeScaleState((prev) => {
+      const next = typeof val === 'function' ? val(prev) : val
+      saveStoredBrowseTtsSettings({ volumeScale: next })
+      return next
+    })
+  }
+
+  const [ttsPitch, setTtsPitchState] = useState<number>(initialTtsSettings.pitch)
+  const setTtsPitch = (val: number | ((prev: number) => number)) => {
+    setTtsPitchState((prev) => {
+      const next = typeof val === 'function' ? val(prev) : val
+      saveStoredBrowseTtsSettings({ pitch: next })
+      return next
+    })
+  }
+
+  const [ttsSpeed, setTtsSpeedState] = useState<number>(initialTtsSettings.speed)
+  const setTtsSpeed = (val: number | ((prev: number) => number)) => {
+    setTtsSpeedState((prev) => {
+      const next = typeof val === 'function' ? val(prev) : val
+      saveStoredBrowseTtsSettings({ speed: next })
+      return next
+    })
+  }
+
+  const [ttsIntonationScale, setTtsIntonationScaleState] = useState<number>(initialTtsSettings.intonationScale)
+  const setTtsIntonationScale = (val: number | ((prev: number) => number)) => {
+    setTtsIntonationScaleState((prev) => {
+      const next = typeof val === 'function' ? val(prev) : val
+      saveStoredBrowseTtsSettings({ intonationScale: next })
+      return next
+    })
+  }
+
+  const [ttsInitialSilence, setTtsInitialSilenceState] = useState<number>(initialTtsSettings.initialSilence)
+  const setTtsInitialSilence = (val: number | ((prev: number) => number)) => {
+    setTtsInitialSilenceState((prev) => {
+      const next = typeof val === 'function' ? val(prev) : val
+      saveStoredBrowseTtsSettings({ initialSilence: next })
+      return next
+    })
+  }
+
+  const [ttsFinalSilence, setTtsFinalSilenceState] = useState<number>(initialTtsSettings.finalSilence)
+  const setTtsFinalSilence = (val: number | ((prev: number) => number)) => {
+    setTtsFinalSilenceState((prev) => {
+      const next = typeof val === 'function' ? val(prev) : val
+      saveStoredBrowseTtsSettings({ finalSilence: next })
+      return next
+    })
+  }
+
   const [isPreviewing, setIsPreviewing] = useState(false)
 
   // Worksheet Generator Modal State
@@ -525,18 +605,19 @@ export function useBrowseState() {
 
   // Reset VoiceVox Settings
   const handleResetTtsDefaults = () => {
+    resetStoredBrowseTtsSettings()
     setTtsSourceField('Word')
     setTtsDestinationField('Audio')
-    setTtsCharacter('')
+    setTtsCharacterState('')
     setTtsApiKey('')
-    setTtsAppendAudio(false)
-    setTtsUseOpus(false)
-    setTtsVolumeScale(1.0)
-    setTtsPitch(0.0)
-    setTtsSpeed(1.0)
-    setTtsIntonationScale(1.0)
-    setTtsInitialSilence(0.1)
-    setTtsFinalSilence(0.1)
+    setTtsAppendAudioState(false)
+    setTtsUseOpusState(false)
+    setTtsVolumeScaleState(1.0)
+    setTtsPitchState(0.0)
+    setTtsSpeedState(1.0)
+    setTtsIntonationScaleState(1.0)
+    setTtsInitialSilenceState(0.1)
+    setTtsFinalSilenceState(0.1)
     toast.info('Đã khôi phục thiết lập VoiceVox về mặc định.')
   }
 
