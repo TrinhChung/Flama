@@ -1,16 +1,16 @@
-# P1-02 — External progress revision and conflict contract
+# P1-02 — External progress revision and conflict contract (completed)
 
 > Phase: 1
 >
 > Priority: P1
 >
-> Status: IN PROGRESS — P1-02.1 and P1-02.2 completed; P1-02.3 implementation is next
+> Status: COMPLETED — P1-02.1 through P1-02.4 closed on 2026-08-30
 >
 > Dependency: P1-01
 >
 > Primary lane: Backend Connect / Import / Share
 >
-> Preparation status: P1-01 dependency is satisfied. P1-02.1 inventory and P1-02.2 conflict decisions closed on 2026-08-29; P1-02.3 is the next executable task.
+> Completion status: the inventory/decision slices closed on 2026-08-29; runtime, acceptance and disposable-MySQL concurrency proof closed on 2026-08-30. No schema or migration change was introduced.
 
 ## Mục tiêu
 
@@ -237,6 +237,60 @@ Known limitations: legacy clients without baseSnapshotHash remain compatibility-
 Follow-up task IDs: P1-02.3, P1-02.4, P1-03, P2-07.
 ```
 
+## Review implementation — 2026-08-30
+
+Chi tiết evidence và kế hoạch xuyên Phase nằm tại [`docs/architecture/decoupling-progress-review-2026-08-30.md`](../../../architecture/decoupling-progress-review-2026-08-30.md).
+
+### Kết quả P1-02.3
+
+| Contract area | Evidence đã có | Trạng thái review |
+|---|---|---|
+| Modern Anki snapshot | source-ref/progress lock, `baseSnapshotHash`, `applied_local_revision`, typed conflict/forced/no-op result, material revision bump; mỗi result trả `serverSnapshotHash`; request thiếu base được đánh dấu `legacy_unversioned` | **PASS** |
+| First-party sync | client lấy `serverSnapshotHash` từ note-status và luôn gửi field `baseSnapshotHash`, kể cả giá trị `null` ở snapshot đầu | **PASS** |
+| Anki revlog | append/repair immutable event/provenance, không sửa current-progress pointers hoặc revision | **PASS** |
+| Legacy `cardsProgress` | newer/stale/identical/ambiguous ordering, scheduler provenance `anki`, row mới revision 1 | **PASS** |
+| Progress reset | canonical API và compatibility route cùng gọi một service; cancel open sessions chứa affected owned/overlay cards trước khi xóa progress | **PASS** |
+| Cutover delegation/savepoint | compatibility shim và monolith public export cùng delegate full lifecycle sang modular owner; mỗi install dùng savepoint, CLI/startup giữ outer commit | **PASS** |
+| Clone progress merge | lock local/source theo card ID ổn định bằng `FOR UPDATE`; surviving row nhận `max(local,source)+1`, giữ newer-state/max-counter rule | **PASS** |
+
+### P1-02.3 — slices đã đóng
+
+| Slice | Công việc chi tiết | Output đầu ra |
+|---|---|---|
+| P1-02.3a | **COMPLETED** — `legacy_unversioned` dựa trên sự hiện diện field; result trả trực tiếp `serverSnapshotHash`; first-party luôn gửi base field | Additive response contract và client telemetry không mơ hồ |
+| P1-02.3b | **COMPLETED** — repository load local/source theo card ID rồi row ID ổn định với `FOR UPDATE` | Một deterministic lock order; không còn unlocked active path |
+| P1-02.3c | **COMPLETED** — rekey/merge đặt surviving revision `max(local_revision, source_revision)+1`, xóa local atomically | Open session cũ stale; source Note/Card không đổi |
+| P1-02.3d | **COMPLETED** — compatibility surfaces export canonical modular cutover; non-strict loop dùng per-install savepoint | Một canonical public cutover owner; outer commit không đổi |
+
+### P1-02.4 — acceptance proof đã đóng
+
+| Slice | Test bắt buộc | Output đầu ra |
+|---|---|---|
+| P1-02.4a | **PASS** — modern snapshot new revision 1, same hash, local/source conflict, force, due unresolved, first-insert typed race và base-hash forwarding | Mọi typed code có assertion side effect |
+| P1-02.4b | **PASS** — legacy newer/stale/identical/equal-different/missing-time; revlog không mutate current progress; reset cancel owned/overlay sessions | Không replay bump, false provenance hoặc progress resurrection |
+| P1-02.4c | **PASS** — local-only/source-only/dual-row, local/source newer, exact max+1, strict/non-strict savepoint, canonical export và source-content preservation | Không silent last-write-wins hoặc source mutation |
+| P1-02.4d | **PASS** — MySQL 8.0.40 two-connection probe; snapshot loser `LOCAL_PROGRESS_CHANGED`, stale-session loser `CARD_PROGRESS_CONFLICT`, deterministic lock order `local -> source` | Final revisions 2 và 11; probe table được dọn |
+| P1-02.4e | **PASS** — focused direct tests và frontend contract test xanh; modular regression gate được chạy trên isolated committed tree | Completed handoff và tracker links nhất quán |
+
+### Completion handoff — 2026-08-30
+
+```text
+Task ID: P1-02
+Primary outcome: External snapshot/import/reset/cutover writers now share explicit revision, idempotency and typed-conflict rules with native/open-session consumers.
+Schema/migration change: none.
+Wire change: additive serverSnapshotHash result field; legacy clients that omit baseSnapshotHash remain accepted and are marked legacy_unversioned.
+Canonical cutover owner: app.services.share.cutover; compatibility exports delegate to it.
+Reset behavior: affected owned/overlay open sessions are cancelled before progress deletion on both API and compatibility routes.
+MySQL evidence: 8.0.40; native-vs-snapshot final revision 2 with LOCAL_PROGRESS_CHANGED; session-vs-cutover final revision 11 with CARD_PROGRESS_CONFLICT; lock order local/source; disposable table cleanup verified.
+Focused tests: Anki import 15/15; deck reset/settings 15/15; P1-02 cutover contract 3/3; frontend Anki sync helper 11/11; Python compile gate PASS.
+Isolated committed-tree regression: Study backend 98/98; Connect/MCP backend 161/161; Decks+Flashcards backend 305/305; frontend Anki sync helper 11/11.
+Rollback path: revert the P1-02 closeout commit; no downgrade or data migration is required.
+Known limitation: unversioned client retirement remains a P2-07 wire-policy decision; private legacy cutover bodies remain named _legacy_*_unused for later physical cleanup, but no public runtime path calls them.
+Follow-up task IDs: P1-03 and P2-07. P1-03 is not started by this handoff.
+```
+
+The reproducible MySQL probe is `scripts/probe_p1_02_mysql_concurrency.py`. It loads credentials without printing them, creates one validated uniquely named InnoDB table, uses two independent connections per scenario, drops the table in `finally`, and verifies cleanup through `information_schema`.
+
 ## Output đầu ra bắt buộc
 
 - Mutation inventory table đầy đủ.
@@ -260,6 +314,8 @@ Follow-up task IDs: P1-02.3, P1-02.4, P1-03, P2-07.
 python scripts/run_tests.py --module study --backend-only
 python scripts/run_tests.py --module connect_mcp --backend-only
 python scripts/run_tests.py --module decks,flashcards --backend-only
+npm run test -- --run src/lib/ankiSyncEngine.test.ts
+python scripts/probe_p1_02_mysql_concurrency.py
 ```
 
 ## Rollback

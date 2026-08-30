@@ -2,9 +2,11 @@
 
 > Review date: 2026-08-29
 >
-> Status: ACTIVE; Phase 0, P1-01 and P1-02.1–P1-02.2 closed, P1-02.3 is next
+> Status: ACTIVE; Phase 0 and P1-01–P1-02 closed; P1-03 is queued and has not started
 >
-> Scope: 17 remaining parent tasks from P1-02 through INT-01
+> Scope: 16 remaining parent tasks from P1-03 through INT-01
+
+> Latest evidence review: [`docs/architecture/decoupling-progress-review-2026-08-30.md`](../../architecture/decoupling-progress-review-2026-08-30.md)
 >
 > Hard boundary: no Phase 4 model, migration, second progress authority, physical clone fallback or source Note/Card mutation
 
@@ -12,9 +14,9 @@
 
 | State | Tasks | Evidence/next action |
 |---|---|---|
-| Completed and moved to `completed/` | P0-01, P0-02, P0-03, P0-04, P1-01, P2-01 | Code, handoffs and focused gates passed; P1-01 Study 98/98 and Connect/MCP 161/161 are green. |
+| Completed and moved to `completed/` | P0-01, P0-02, P0-03, P0-04, P1-01, P1-02, P2-01 | Code, handoffs and focused gates passed; P1-02 includes typed snapshot/import/reset/cutover tests and MySQL 8.0.40 concurrency evidence. |
 | Pre-decision inventory complete; ADR not approved | P3-05, P3-07 | Repository evidence/open questions are documented; the accepted P0-03 distribution is now available for decision review. |
-| Queued | P1-02.3–P1-02.4, P1-03–P1-04, P2-02–P2-07, P3-01–P3-06, INT-01 | Begin with P1-02.3 and execute in the waves below. |
+| Queued | P1-03–P1-04, P2-02–P2-07, P3-01–P3-06, INT-01 | P1-03 is the next Phase 1 task; it was not started in the P1-02 closeout. |
 
 Latest local gate verification:
 
@@ -84,12 +86,14 @@ Gate: REST, MCP and batch produce equivalent progress/canonical metadata; batch 
 
 ### P1-02 — External progress revision/conflict contract
 
+Status: `COMPLETED 2026-08-30`; handoff moved to [`completed/P1-02_EXTERNAL_PROGRESS_REVISION_CONTRACT.md`](./completed/P1-02_EXTERNAL_PROGRESS_REVISION_CONTRACT.md).
+
 | Slice | Detailed work | Required output |
 |---|---|---|
 | P1-02.1 | **COMPLETED 2026-08-29** — inventoried snapshot, revlog, Connect, import, cutover, reset and repair mutators including locks, revisions, events and commit owner | Complete mutation table in the P1-02 task file |
 | P1-02.2 | **COMPLETED 2026-08-29** — approved conflict matrix against direct/MCP/open batch sessions | Priority, revision and typed-result matrix in the P1-02 task file |
-| P1-02.3 | Apply lock/revision/idempotency rules without disguising state sync as native action | Updated mutation paths and provenance mapping |
-| P1-02.4 | Test stale/newer snapshots, idempotent replay, concurrent native review and overlay identities | No silent last-write-wins proof |
+| P1-02.3 | **COMPLETED 2026-08-30** — response token/unversioned semantics, deterministic cutover locks, `max(revision)+1`, canonical cutover export and reset compatibility delegation landed | Updated mutation paths and provenance mapping |
+| P1-02.4 | **COMPLETED 2026-08-30** — typed snapshot/legacy/revlog/reset/cutover assertions plus disposable MySQL 8.0.40 two-connection proof | No silent last-write-wins proof |
 
 Gate: every external mutation detects newer state, preserves replay idempotency and never mutates source content.
 

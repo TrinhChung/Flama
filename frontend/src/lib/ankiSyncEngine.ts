@@ -260,6 +260,16 @@ export function ankiReviewRecord(sourceCardId: number, log: AnkiReviewLog) {
   }
 }
 
+export function attachProgressSnapshotBase<T extends { sourceCardId: number }>(
+  record: T,
+  serverSnapshotHash: string | null | undefined,
+) {
+  return {
+    ...record,
+    baseSnapshotHash: serverSnapshotHash ?? null,
+  }
+}
+
 export function shouldQueueAnkiHistory(params: {
   reps: number
   syncMode: 'new_and_changed' | 'only_new' | 'resync_all'
@@ -563,10 +573,10 @@ export async function executeAnkiSync(
       const state = cardStates.get(record.sourceCardId)?.progressState || 'new'
       if (state === 'local_changed' && syncMode !== 'resync_all') return false
       return syncMode === 'resync_all' || state === 'new' || state === 'changed'
-    }).map((record) => ({
-      ...record,
-      baseSnapshotHash: cardStates.get(record.sourceCardId)?.serverSnapshotHash ?? null,
-    }))
+    }).map((record) => attachProgressSnapshotBase(
+      record,
+      cardStates.get(record.sourceCardId)?.serverSnapshotHash,
+    ))
   })
   const eligibleMedia = syncMedia
     ? new Set(eligible.flatMap((entry) => [...entry.item.images, ...entry.item.audios]))

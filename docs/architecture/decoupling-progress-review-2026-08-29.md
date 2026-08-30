@@ -2,7 +2,7 @@
 
 > Status: evidence-backed architecture review and execution proposal. This document does not authorize a schema migration, production write, or source-of-truth cutover.
 >
-> Current superseding status: [`docs/task/decoupling/P0_PHASE_REVIEW_HANDOFF_2026-08-29.md`](../task/decoupling/P0_PHASE_REVIEW_HANDOFF_2026-08-29.md) records Phase 0 **GO** with P0-01..P0-04 completed. P1-01 is also completed; the next task is P1-02.1.
+> Superseded current review: [`decoupling-progress-review-2026-08-30.md`](decoupling-progress-review-2026-08-30.md) contains the P1-02 pre-closeout findings and completion addendum; the final task evidence is in [`completed/P1-02_EXTERNAL_PROGRESS_REVISION_CONTRACT.md`](../task/decoupling/completed/P1-02_EXTERNAL_PROGRESS_REVISION_CONTRACT.md).
 >
 > Next execution plan: [`docs/task/decoupling/PHASE_0_3_NEXT_EXECUTION_PLAN_2026-08-29.md`](../task/decoupling/PHASE_0_3_NEXT_EXECUTION_PLAN_2026-08-29.md).
 >

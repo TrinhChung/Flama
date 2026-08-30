@@ -137,6 +137,7 @@ def _apply_progress_snapshot(
     snapshot_hash = str(record.get("snapshotHash") or "").strip().lower()
     if not SHA256_RE.fullmatch(snapshot_hash):
         raise AnkiSyncError("snapshotHash must be a SHA-256 hex string")
+    base_snapshot_supplied = "baseSnapshotHash" in record
     raw_base_snapshot_hash = record.get("baseSnapshotHash")
     base_snapshot_hash = (
         str(raw_base_snapshot_hash).strip().lower()
@@ -145,6 +146,7 @@ def _apply_progress_snapshot(
     )
     if base_snapshot_hash is not None and not SHA256_RE.fullmatch(base_snapshot_hash):
         raise AnkiSyncError("baseSnapshotHash must be a SHA-256 hex string")
+    legacy_unversioned = not base_snapshot_supplied
     force = record.get("force") is True
     previous_snapshot_hash = source_card.snapshot_hash
 
@@ -159,15 +161,15 @@ def _apply_progress_snapshot(
     same_snapshot = previous_snapshot_hash == snapshot_hash
     force_reapply = force and (local_diverged or progress is None)
     if same_snapshot and not force_reapply:
-        return "unchanged", "PROGRESS_UNCHANGED", False
+        return "unchanged", "PROGRESS_UNCHANGED", legacy_unversioned
     if (
-        base_snapshot_hash is not None
-        and base_snapshot_hash != (previous_snapshot_hash or "")
+        base_snapshot_supplied
+        and (base_snapshot_hash or "") != (previous_snapshot_hash or "")
         and not force
     ):
-        return "source_conflict", "SOURCE_SNAPSHOT_CHANGED", False
+        return "source_conflict", "SOURCE_SNAPSHOT_CHANGED", legacy_unversioned
     if local_diverged and not force:
-        return "local_conflict", "LOCAL_PROGRESS_CHANGED", False
+        return "local_conflict", "LOCAL_PROGRESS_CHANGED", legacy_unversioned
 
     card_type = _integer(record.get("type", 0), "type", 0, 3)
     anki_queue = _integer(record.get("queue", 0), "queue", -3, 4)
@@ -188,7 +190,7 @@ def _apply_progress_snapshot(
     )
     day_based_due = card_type == 2 or (card_type in {1, 3} and anki_queue == 3)
     if day_based_due and record.get("sourceToday") is None:
-        return "due_unresolved", "ANKI_DUE_UNRESOLVED", False
+        return "due_unresolved", "ANKI_DUE_UNRESOLVED", legacy_unversioned
 
     if progress is None:
         progress = CardProgress(user_id=session.user_id, card_id=source_card.card_id)
@@ -237,11 +239,6 @@ def _apply_progress_snapshot(
         ) from exc
     source_card.snapshot_hash = snapshot_hash
     source_card.applied_local_revision = int(progress.revision or 0)
-    legacy_unversioned = bool(
-        previous_snapshot_hash is not None
-        and base_snapshot_hash is None
-        and not same_snapshot
-    )
     return (
         "applied",
         "FORCED_PROGRESS_APPLIED" if force else "PROGRESS_APPLIED",
@@ -283,6 +280,11 @@ def import_progress(
                 "applied": state == "applied",
                 "state": state,
                 "code": code,
+                "serverSnapshotHash": (
+                    str(source_card.snapshot_hash)
+                    if source_card.snapshot_hash
+                    else None
+                ),
             }
             if legacy_unversioned:
                 result["legacy_unversioned"] = True
@@ -290,6 +292,11 @@ def import_progress(
                 result["error"] = "Anki day index could not be resolved; scheduler snapshot was not applied"
             results.append(result)
         except AnkiProgressConflict as exc:
+            current_source_card = ConnectSourceCardRef.query.filter_by(
+                user_id=session.user_id,
+                source_key=session.source_key,
+                external_card_id=str(external_card_id),
+            ).first()
             results.append(
                 {
                     "sourceCardId": external_card_id,
@@ -297,6 +304,18 @@ def import_progress(
                     "state": "conflict",
                     "code": exc.code,
                     "error": str(exc),
+                    "serverSnapshotHash": (
+                        str(current_source_card.snapshot_hash)
+                        if current_source_card is not None
+                        and current_source_card.snapshot_hash
+                        else None
+                    ),
+                    **(
+                        {"legacy_unversioned": True}
+                        if isinstance(record, dict)
+                        and "baseSnapshotHash" not in record
+                        else {}
+                    ),
                 }
             )
         except Exception as exc:

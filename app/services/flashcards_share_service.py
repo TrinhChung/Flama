@@ -2201,7 +2201,7 @@ def can_user_rate_deck_item(
         deck_active_review_threshold=deck_active_review_threshold,
     )
 
-def migrate_legacy_clone_install_to_overlay(
+def _legacy_migrate_legacy_clone_install_to_overlay_unused(
     install: DeckInstall,
 ) -> dict[str, int]:
     deck_item = db.session.get(DeckMarketplaceItem, install.deck_item_id)
@@ -3602,7 +3602,7 @@ def _build_note_override_payload_for_cutover(
             )
     return override_items
 
-def cutover_clone_model_to_overlay_only(*, fail_on_mismatch: bool = True) -> dict[str, Any]:
+def _legacy_cutover_clone_model_to_overlay_only_unused(*, fail_on_mismatch: bool = True) -> dict[str, Any]:
     legacy_installs = (
         DeckInstall.query.filter(
             db.or_(
@@ -3627,7 +3627,7 @@ def cutover_clone_model_to_overlay_only(*, fail_on_mismatch: bool = True) -> dic
     for install in legacy_installs:
         try:
             with db.session.begin_nested():
-                counters = migrate_legacy_clone_install_to_overlay(install)
+                counters = _legacy_migrate_legacy_clone_install_to_overlay_unused(install)
                 db.session.flush()
             summary["migrated"] += 1
             summary["deck_map_rows"] += int(counters.get("deck_map_rows") or 0)
@@ -3647,6 +3647,15 @@ def cutover_clone_model_to_overlay_only(*, fail_on_mismatch: bool = True) -> dic
                 raise
 
     return summary
+
+
+# Compatibility exports delegate the complete cutover lifecycle to the modular
+# implementation so startup, CLI and package imports cannot drift.
+from app.services.share.cutover import (  # noqa: E402
+    cutover_clone_model_to_overlay_only,
+    migrate_legacy_clone_install_to_overlay,
+)
+
 
 def install_shared_deck_item_for_user(
     deck_item: DeckMarketplaceItem,

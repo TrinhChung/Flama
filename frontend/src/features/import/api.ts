@@ -212,6 +212,7 @@ export const ankiImportApi = {
         imported?: boolean
         state: string
         code?: string
+        serverSnapshotHash?: string | null
         legacy_unversioned?: boolean
         error?: string
       }>

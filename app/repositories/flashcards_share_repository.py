@@ -529,3 +529,29 @@ def get_card_progress_for_source_card(user_id: int, source_card_id: str) -> Opti
         .order_by(CardProgress.updated_at.desc(), CardProgress.id.desc())
         .first()
     )
+
+
+def get_card_progress_rows_for_cutover(
+    user_id: int,
+    card_ids: List[str],
+) -> List[CardProgress]:
+    """Lock cutover progress subjects in one deterministic card/id order."""
+
+    normalized_card_ids = sorted(
+        {
+            str(card_id).strip()
+            for card_id in card_ids
+            if card_id is not None and str(card_id).strip()
+        }
+    )
+    if not normalized_card_ids:
+        return []
+    return (
+        CardProgress.query.filter(
+            CardProgress.user_id == user_id,
+            CardProgress.card_id.in_(normalized_card_ids),
+        )
+        .order_by(CardProgress.card_id.asc(), CardProgress.id.asc())
+        .with_for_update()
+        .all()
+    )

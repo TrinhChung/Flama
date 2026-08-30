@@ -1,6 +1,6 @@
 # Phase 0–3 Decoupling Task Backlog
 
-> Status: ACTIVE backlog; Phase 0, P1-01 and P1-02.1–P1-02.2 closed, next task P1-02.3
+> Status: ACTIVE backlog; Phase 0 and P1-01–P1-02 closed; P1-03 is next but has not started
 >
 > Source of truth: `docs/architecture/study-interaction-trigger-algorithm-plan.md`
 >
@@ -8,9 +8,9 @@
 >
 > Latest Phase 0 gate review/handoff: [`P0_PHASE_REVIEW_HANDOFF_2026-08-29.md`](./P0_PHASE_REVIEW_HANDOFF_2026-08-29.md) — **GO; P0-01 through P0-04 COMPLETED**.
 >
-> Next execution plan: [`PHASE_0_3_NEXT_EXECUTION_PLAN_2026-08-29.md`](./PHASE_0_3_NEXT_EXECUTION_PLAN_2026-08-29.md) — P1-02.1 inventory and P1-02.2 conflict matrix are complete; continue with P1-02.3 implementation.
+> Next execution plan: [`PHASE_0_3_NEXT_EXECUTION_PLAN_2026-08-29.md`](./PHASE_0_3_NEXT_EXECUTION_PLAN_2026-08-29.md) — P1-02 completed on 2026-08-30; P1-03 remains queued.
 >
-> Reviewed detailed backlog: [`REVIEWED_DETAILED_EXECUTION_BACKLOG_2026-08-29.md`](./REVIEWED_DETAILED_EXECUTION_BACKLOG_2026-08-29.md) — 17 remaining parent tasks with execution slices, required outputs and gates.
+> Reviewed detailed backlog: [`REVIEWED_DETAILED_EXECUTION_BACKLOG_2026-08-29.md`](./REVIEWED_DETAILED_EXECUTION_BACKLOG_2026-08-29.md) — 16 remaining parent tasks with execution slices, required outputs and gates.
 >
 > Scope boundary: chỉ đóng các phần còn thiếu của Phase 0–3. Không tạo model, migration, progress store hoặc physical Template/NoteType schema mới.
 
@@ -89,7 +89,7 @@ Historical dependency note: `P2-01` has been merged, but the current reviewed ex
 | ID | Task | Dependency | Output chính |
 |---|---|---|---|
 | P1-01 | [Canonical native review transaction](./completed/P1-01_CANONICAL_REVIEW_TRANSACTION.md) | P0-04 | `COMPLETED`; one typed transition/mutation core for REST, MCP and batch |
-| P1-02 | [External progress revision/conflict contract](./P1-02_EXTERNAL_PROGRESS_REVISION_CONTRACT.md) | P1-01 | contract cho Anki/import/Connect/cutover conflicts |
+| P1-02 | [External progress revision/conflict contract](./completed/P1-02_EXTERNAL_PROGRESS_REVISION_CONTRACT.md) | P1-01 | `COMPLETED`; typed Anki/import/reset/cutover revision and conflict contract |
 | P1-03 | [ReviewEvent provenance and payload hardening](./P1-03_REVIEW_EVENT_PROVENANCE.md) | P1-01 | canonical native/external provenance, bounded payloads |
 | P1-04 | [Algorithm executable and decoder retirement lifecycle](./P1-04_ALGORITHM_VERSION_RETIREMENT.md) | P1-01 | support matrix, fail-closed retention policy, tests |
 
