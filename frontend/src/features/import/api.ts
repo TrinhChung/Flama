@@ -120,6 +120,7 @@ export const ankiImportApi = {
         cards: Array<{
           sourceCardId: number
           progressState: 'new' | 'changed' | 'unchanged' | 'local_changed'
+          serverSnapshotHash: string | null
           reviewCursor: string | null
         }>
       }>
@@ -210,6 +211,8 @@ export const ankiImportApi = {
         applied?: boolean
         imported?: boolean
         state: string
+        code?: string
+        legacy_unversioned?: boolean
         error?: string
       }>
     }>(`${API_ROOT}/sessions/${encodeURIComponent(sessionId)}/packages/${kind}/${sequence}`, {

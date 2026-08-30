@@ -523,6 +523,7 @@ export async function executeAnkiSync(
     cards: Array<{
       sourceCardId: number
       progressState: 'new' | 'changed' | 'unchanged' | 'local_changed'
+      serverSnapshotHash: string | null
       reviewCursor: string | null
     }>
   }>()
@@ -562,7 +563,10 @@ export async function executeAnkiSync(
       const state = cardStates.get(record.sourceCardId)?.progressState || 'new'
       if (state === 'local_changed' && syncMode !== 'resync_all') return false
       return syncMode === 'resync_all' || state === 'new' || state === 'changed'
-    })
+    }).map((record) => ({
+      ...record,
+      baseSnapshotHash: cardStates.get(record.sourceCardId)?.serverSnapshotHash ?? null,
+    }))
   })
   const eligibleMedia = syncMedia
     ? new Set(eligible.flatMap((entry) => [...entry.item.images, ...entry.item.audios]))
@@ -810,14 +814,21 @@ export async function executeAnkiSync(
       )
       progressPackageSequence++
       for (const outcome of result.results) {
-        if (outcome.state === 'failed') {
+        const blocked = new Set([
+          'failed',
+          'due_unresolved',
+          'conflict',
+          'local_conflict',
+          'source_conflict',
+        ]).has(outcome.state)
+        if (blocked) {
           const sourceCardId = Number(outcome.sourceCardId)
           if (Number.isFinite(sourceCardId)) unmappedHistoryCardIds.add(sourceCardId)
         } else {
           const sourceCardId = Number(outcome.sourceCardId)
           if (Number.isFinite(sourceCardId)) mappedDuringProgress.add(sourceCardId)
         }
-        if (outcome.state === 'failed' || outcome.state === 'due_unresolved') {
+        if (blocked) {
           errors.push(`Card Anki #${outcome.sourceCardId}: ${outcome.error || 'Không đồng bộ được tiến độ.'}`)
         }
       }
