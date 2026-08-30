@@ -7,7 +7,6 @@ import {
   ONBOARDING_COMPLETED_KEY,
   ONBOARDING_STORAGE_KEY,
   SUBJECT_OPTIONS,
-  CURATED_STARTER_DECKS,
 } from '../constants'
 import type {
   DailyTargetOption,
@@ -131,30 +130,15 @@ export function useOnboarding(hasUserDecks = false): UseOnboardingReturn {
     staleTime: 1000 * 60 * 5,
   })
 
-  // Merge API results with curated starter decks for seamless experience
+  // Only return real API results from marketplace
   const recommendedDecks = useMemo(() => {
-    const apiDecks = decksQuery.data || []
-    const curated = CURATED_STARTER_DECKS[preferences.targetSubject] || []
-
-    if (apiDecks.length > 0) {
-      // Return api decks combined with curated items that don't overlap
-      const ids = new Set(apiDecks.map((d) => d.id))
-      const extraCurated = curated.filter((c) => !ids.has(c.id))
-      return [...apiDecks, ...extraCurated].slice(0, 6)
-    }
-
-    return curated
-  }, [decksQuery.data, preferences.targetSubject])
+    return decksQuery.data || []
+  }, [decksQuery.data])
 
   // Install mutation
   const installMutation = useMutation({
     mutationFn: async (deck: RecommendedDeckItem) => {
       setInstallingDeckId(deck.id)
-      if (deck.id.startsWith('curated-')) {
-        // Simulated starter pack clone
-        await new Promise((resolve) => setTimeout(resolve, 600))
-        return { success: true, simulated: true, title: deck.title }
-      }
       return appApi.mutate<{ installed_deck_id?: number }>(
         `/api/shared/decks/${deck.id}/install`,
         'POST',

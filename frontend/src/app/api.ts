@@ -414,7 +414,7 @@ export type BatchGenerateStrokesPayload = {
   deck_id?: number | null
   note_ids?: string[]
   card_ids?: string[]
-  format?: 'html' | 'urls'
+  format?: 'html' | 'urls' | 'raw'
   overwrite?: boolean
   max_characters?: number
 }
