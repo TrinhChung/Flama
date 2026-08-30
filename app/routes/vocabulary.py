@@ -340,6 +340,26 @@ def browse_api_card_delete(card_id: str):
         return jsonify({"error": str(exc)}), exc.status
     return jsonify(payload)
 
+
+@vocabulary_bp.route("/api/browse/cards/batch-delete", methods=["POST"])
+@login_required
+def browse_api_cards_batch_delete():
+    """Batch delete multiple cards atomically."""
+    from app.services import browse_card_service
+
+    data = request.get_json(silent=True) or {}
+    card_ids = data.get("card_ids") or []
+    try:
+        payload = browse_card_service.delete_browse_cards_batch(
+            user_id=current_user.id,
+            admin_mode=is_admin_user(current_user),
+            card_ids=card_ids,
+        )
+    except browse_card_service.BrowseApiError as exc:
+        return jsonify({"error": str(exc)}), exc.status
+    return jsonify(payload)
+
+
 @vocabulary_bp.route("/api/browse/notes", methods=["GET"])
 @login_required
 def browse_api_notes():

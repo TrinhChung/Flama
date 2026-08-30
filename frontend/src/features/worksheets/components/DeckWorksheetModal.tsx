@@ -13,16 +13,22 @@ import { NativeSelect } from '@/components/ui/native-select'
 import { Badge } from '@/components/ui/badge'
 import {
   BookOpen,
+  Check,
   ChevronLeft,
   ChevronRight,
+  Database,
   Download,
   Eye,
   FileText,
   HelpCircle,
   Layers,
+  LayoutGrid,
   Loader2,
+  Minus,
   PenTool,
+  Plus,
   Printer,
+  Sliders,
   Table as TableIcon,
   ZoomIn,
   ZoomOut,
@@ -52,6 +58,13 @@ export interface DeckWorksheetModalProps {
 
 type WizardStep = 'template' | 'fields' | 'layout' | 'preview'
 
+const STEPS_CONFIG: { id: WizardStep; label: string; short: string; icon: any }[] = [
+  { id: 'template', label: '1. Chọn mẫu bài tập', short: '1. Mẫu', icon: LayoutGrid },
+  { id: 'fields', label: '2. Dữ liệu & Ánh xạ', short: '2. Dữ liệu', icon: Database },
+  { id: 'layout', label: '3. Bố cục & Trang in', short: '3. Bố cục', icon: Sliders },
+  { id: 'preview', label: '4. Xem trước & In', short: '4. In ấn', icon: Printer },
+]
+
 export function DeckWorksheetModal({
   open,
   onOpenChange,
@@ -60,6 +73,7 @@ export function DeckWorksheetModal({
   initialCardIds,
 }: DeckWorksheetModalProps) {
   const [step, setStep] = useState<WizardStep>('template')
+  const [visitedSteps, setVisitedSteps] = useState<Set<WizardStep>>(new Set(['template']))
   const [isLoadingMeta, setIsLoadingMeta] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
   const [isPrinting, setIsPrinting] = useState(false)
@@ -99,12 +113,18 @@ export function DeckWorksheetModal({
   const [currentPageIdx, setCurrentPageIdx] = useState<number>(0)
   const [zoomLevel, setZoomLevel] = useState<number>(0.85)
 
+  const goToStep = (newStep: WizardStep) => {
+    setStep(newStep)
+    setVisitedSteps((prev) => new Set([...prev, newStep]))
+  }
+
   // Load deck worksheet meta on open
   useEffect(() => {
     if (!open || !deckId) return
 
     setIsLoadingMeta(true)
     setStep('template')
+    setVisitedSteps(new Set(['template']))
     setPreviewData(null)
     setCurrentPageIdx(0)
 
@@ -123,12 +143,12 @@ export function DeckWorksheetModal({
 
         // Initialize default mappings
         const initMapping: WorksheetFieldMapping = {
-          kanji: data.suggested_mappings.kanji || 'Expression',
-          reading: data.suggested_mappings.reading || '',
-          meaning: data.suggested_mappings.meaning || '',
-          word: data.suggested_mappings.word || 'Expression',
-          prompt_reading: data.suggested_mappings.prompt_reading || '',
-          prompt_meaning: data.suggested_mappings.prompt_meaning || 'Meaning',
+          kanji: data.suggested_mappings?.kanji || 'Expression',
+          reading: data.suggested_mappings?.reading || '',
+          meaning: data.suggested_mappings?.meaning || '',
+          word: data.suggested_mappings?.word || 'Expression',
+          prompt_reading: data.suggested_mappings?.prompt_reading || '',
+          prompt_meaning: data.suggested_mappings?.prompt_meaning || 'Meaning',
           custom_columns: data.note_types[0]?.fields || ['Expression', 'Meaning'],
         }
         setFieldMapping(initMapping)
@@ -173,9 +193,9 @@ export function DeckWorksheetModal({
         ...prev,
         orientation: tpl.default_orientation || 'portrait',
         rows_per_page: tpl.default_rows_per_page || 5,
-        grid_style: (tpl.default_options.grid_style as any) || 'cross',
-        trace_count: tpl.default_options.trace_count ?? 2,
-        practice_count: tpl.default_options.practice_count ?? 5,
+        grid_style: (tpl.default_options?.grid_style as any) || 'cross',
+        trace_count: tpl.default_options?.trace_count ?? 2,
+        practice_count: tpl.default_options?.practice_count ?? 5,
       }))
     }
   }
@@ -198,7 +218,14 @@ export function DeckWorksheetModal({
 
       setPreviewData(response)
       setCurrentPageIdx(0)
-      setStep('preview')
+      goToStep('preview')
+
+      // Set responsive initial zoom
+      if (layoutOptions.orientation === 'landscape') {
+        setZoomLevel(0.72)
+      } else {
+        setZoomLevel(0.85)
+      }
 
       if (response.warnings && response.warnings.length > 0) {
         response.warnings.forEach((w) => toast.warning(w))
@@ -247,74 +274,92 @@ export function DeckWorksheetModal({
     deck_table: TableIcon,
   }
 
+  const isLandscape = layoutOptions.orientation === 'landscape'
+  const mmToPx = 3.7795
+  const a4WidthMm = isLandscape ? 297 : 210
+  const a4HeightMm = isLandscape ? 210 : 297
+  const containerWidthPx = Math.round(a4WidthMm * mmToPx * zoomLevel)
+  const containerHeightPx = Math.round(a4HeightMm * mmToPx * zoomLevel)
+
+  const stepIndex = STEPS_CONFIG.findIndex((s) => s.id === step)
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[92vh] flex flex-col p-0 gap-0 overflow-hidden rounded-2xl border-border bg-background shadow-2xl">
+      <DialogContent
+        className={`flex flex-col p-0 gap-0 overflow-hidden rounded-2xl border-border bg-background shadow-2xl transition-all duration-200 ${
+          step === 'preview'
+            ? 'sm:max-w-5xl lg:max-w-6xl xl:max-w-7xl h-[92vh] max-h-[94vh]'
+            : 'sm:max-w-3xl max-h-[90vh]'
+        }`}
+      >
         {/* Modal Header */}
-        <DialogHeader className="px-6 py-4 border-b border-border/80 bg-muted/30 shrink-0">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className="size-9 rounded-xl bg-orange-500/10 text-orange-600 flex items-center justify-center">
+        <DialogHeader className="px-6 py-3.5 border-b border-border/80 bg-muted/40 shrink-0">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="size-10 rounded-xl bg-orange-500/15 text-orange-600 dark:text-orange-400 flex items-center justify-center shadow-xs shrink-0">
                 <Printer className="size-5" />
               </div>
               <div>
-                <DialogTitle className="text-base font-bold text-foreground">
-                  Xuất bài tập in ấn / PDF (A4)
+                <DialogTitle className="text-base font-bold text-foreground flex items-center gap-2">
+                  <span>Xuất bài tập in ấn / PDF (A4)</span>
                 </DialogTitle>
-                <DialogDescription className="text-xs text-muted-foreground">
+                <DialogDescription className="text-xs text-muted-foreground mt-0.5">
                   {meta?.deck_name || deckName || 'Bộ thẻ'} &bull;{' '}
-                  {meta?.total_notes || 0} ghi chú
+                  <span className="font-semibold text-foreground">{meta?.total_notes || 0}</span> ghi chú
                 </DialogDescription>
               </div>
             </div>
 
-            {/* Stepper indicator */}
-            <div className="hidden sm:flex items-center gap-1.5 text-xs font-semibold">
-              <span
-                className={`px-2.5 py-1 rounded-full ${
-                  step === 'template'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-muted text-muted-foreground'
-                }`}
-              >
-                1. Mẫu
-              </span>
-              <ChevronRight className="size-3.5 text-muted-foreground" />
-              <span
-                className={`px-2.5 py-1 rounded-full ${
-                  step === 'fields'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-muted text-muted-foreground'
-                }`}
-              >
-                2. Dữ liệu
-              </span>
-              <ChevronRight className="size-3.5 text-muted-foreground" />
-              <span
-                className={`px-2.5 py-1 rounded-full ${
-                  step === 'layout'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-muted text-muted-foreground'
-                }`}
-              >
-                3. Bố cục
-              </span>
-              <ChevronRight className="size-3.5 text-muted-foreground" />
-              <span
-                className={`px-2.5 py-1 rounded-full ${
-                  step === 'preview'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-muted text-muted-foreground'
-                }`}
-              >
-                4. Xem trước & In
-              </span>
+            {/* Stepper indicator - Desktop */}
+            <div className="hidden md:flex items-center gap-1.5 text-xs font-semibold">
+              {STEPS_CONFIG.map((s, idx) => {
+                const isActive = step === s.id
+                const isVisited = visitedSteps.has(s.id)
+                const isPassed = idx < stepIndex
+                const Icon = s.icon
+
+                return (
+                  <div key={s.id} className="flex items-center gap-1.5">
+                    {idx > 0 && <ChevronRight className="size-3.5 text-muted-foreground/60" />}
+                    <button
+                      type="button"
+                      disabled={!isVisited && !isPassed}
+                      onClick={() => isVisited && goToStep(s.id)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all text-xs font-medium cursor-pointer ${
+                        isActive
+                          ? 'bg-primary text-primary-foreground shadow-sm font-semibold'
+                          : isVisited || isPassed
+                          ? 'bg-muted hover:bg-muted/80 text-foreground'
+                          : 'bg-muted/40 text-muted-foreground/50 cursor-not-allowed'
+                      }`}
+                    >
+                      {isPassed ? (
+                        <Check className="size-3.5 text-emerald-600 dark:text-emerald-400" />
+                      ) : (
+                        <Icon className="size-3.5" />
+                      )}
+                      <span>{s.short}</span>
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Stepper indicator - Mobile / Tablet */}
+            <div className="flex md:hidden items-center gap-2">
+              <Badge variant="secondary" className="text-xs font-semibold px-2.5 py-1">
+                Bước {stepIndex + 1}/4: {STEPS_CONFIG[stepIndex]?.short}
+              </Badge>
             </div>
           </div>
         </DialogHeader>
 
         {/* Modal Body */}
-        <div className="flex-1 overflow-y-auto p-6 min-h-[380px]">
+        <div
+          className={`flex-1 min-h-0 ${
+            step === 'preview' ? 'flex flex-col p-0 overflow-hidden' : 'p-6 overflow-y-auto'
+          }`}
+        >
           {isLoadingMeta ? (
             <div className="h-64 flex flex-col items-center justify-center gap-3 text-muted-foreground">
               <Loader2 className="size-8 animate-spin text-primary" />
@@ -330,25 +375,38 @@ export function DeckWorksheetModal({
                       Bước 1: Chọn mẫu bài tập phù hợp
                     </h3>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      Chọn định dạng luyện tập bạn muốn in cho bộ thẻ này.
+                      Chọn định dạng bài tập luyện viết hoặc phiếu học tập bạn muốn in.
                     </p>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 pt-1">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1">
                     {meta?.templates.map((tpl) => {
                       const Icon = templateIcons[tpl.id] || FileText
                       const isSelected = selectedTemplateId === tpl.id
+
+                      const categoryBadgeColor =
+                        tpl.category === 'kanji'
+                          ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
+                          : tpl.category === 'vocabulary'
+                          ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20'
+                          : 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20'
 
                       return (
                         <div
                           key={tpl.id}
                           onClick={() => handleSelectTemplate(tpl.id)}
-                          className={`relative p-4 rounded-xl border-2 cursor-pointer transition-all flex flex-col justify-between gap-3 ${
+                          className={`relative p-4 rounded-xl border-2 cursor-pointer transition-all flex flex-col justify-between gap-3 text-left ${
                             isSelected
-                              ? 'border-primary bg-primary/5 shadow-sm'
-                              : 'border-border hover:border-border/80 hover:bg-muted/30 bg-card'
+                              ? 'border-primary bg-primary/5 shadow-sm ring-2 ring-primary/20'
+                              : 'border-border hover:border-border/80 hover:bg-muted/40 bg-card'
                           }`}
                         >
+                          {isSelected && (
+                            <div className="absolute top-3 right-3 size-5 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-xs">
+                              <Check className="size-3.5" />
+                            </div>
+                          )}
+
                           <div className="flex items-start gap-3">
                             <div
                               className={`size-10 rounded-xl flex items-center justify-center shrink-0 ${
@@ -359,33 +417,36 @@ export function DeckWorksheetModal({
                             >
                               <Icon className="size-5" />
                             </div>
-                            <div className="space-y-1 flex-1">
-                              <div className="flex items-center justify-between">
+                            <div className="space-y-1 flex-1 pr-6">
+                              <div className="flex items-center gap-2">
                                 <h4 className="text-sm font-bold text-foreground">
                                   {tpl.name_vi}
                                 </h4>
-                                <Badge
-                                  variant={isSelected ? 'default' : 'secondary'}
-                                  className="text-[10px] uppercase font-semibold"
-                                >
-                                  {tpl.category}
-                                </Badge>
                               </div>
-                              <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">
+                              <Badge
+                                variant="outline"
+                                className={`text-[10px] uppercase font-semibold px-2 py-0.5 border ${categoryBadgeColor}`}
+                              >
+                                {tpl.category === 'kanji'
+                                  ? 'Chữ Hán'
+                                  : tpl.category === 'vocabulary'
+                                  ? 'Từ vựng'
+                                  : 'Bảng dữ liệu'}
+                              </Badge>
+                              <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2 mt-1">
                                 {tpl.description_vi}
                               </p>
                             </div>
                           </div>
 
-                          <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-2 border-t border-border/50">
+                          <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-2.5 border-t border-border/50">
                             <span>
-                              Mặc định:{' '}
-                              <strong>{tpl.default_rows_per_page} mục/trang</strong>
+                              Mặc định: <strong>{tpl.default_rows_per_page} mục/trang</strong>
                             </span>
                             <span className="capitalize">
                               Khổ:{' '}
                               <strong>
-                                {tpl.default_orientation === 'portrait' ? 'Dọc' : 'Ngang'}
+                                {tpl.default_orientation === 'portrait' ? 'A4 Dọc' : 'A4 Ngang'}
                               </strong>
                             </span>
                           </div>
@@ -404,17 +465,15 @@ export function DeckWorksheetModal({
                       Bước 2: Ánh xạ trường dữ liệu & Phạm vi
                     </h3>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      Chỉ định các trường trong ghi chú để điền vào các vị trí của mẫu{' '}
-                      <strong>{currentTemplate.name_vi}</strong>.
+                      Chỉ định các trường trong ghi chú để điền vào mẫu{' '}
+                      <strong className="text-foreground">{currentTemplate.name_vi}</strong>.
                     </p>
                   </div>
 
                   {/* Note Type Selector if multiple */}
                   {meta && meta.note_types.length > 1 && (
-                    <div className="space-y-1.5 bg-muted/40 p-3.5 rounded-xl border border-border/60">
-                      <Label className="text-xs font-semibold">
-                        Loại ghi chú (Note Type)
-                      </Label>
+                    <div className="space-y-1.5 bg-muted/30 p-3.5 rounded-xl border border-border/60">
+                      <Label className="text-xs font-semibold">Loại ghi chú (Note Type)</Label>
                       <NativeSelect
                         value={selectedNoteTypeId}
                         onChange={(e) => setSelectedNoteTypeId(e.target.value)}
@@ -430,16 +489,53 @@ export function DeckWorksheetModal({
                   )}
 
                   {/* Field Slots Mapping */}
-                  <div className="space-y-3 bg-card p-4 rounded-xl border border-border/70">
-                    <h4 className="text-xs font-bold text-foreground uppercase tracking-wider">
-                      Ánh xạ trường ({currentTemplate.name_vi})
-                    </h4>
+                  <div className="space-y-3 bg-card p-4 rounded-xl border border-border/70 shadow-xs">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-bold text-foreground uppercase tracking-wider">
+                        Ánh xạ trường ({currentTemplate.name_vi})
+                      </h4>
+                      <Badge variant="outline" className="text-[10px] text-muted-foreground">
+                        {availableFields.length} trường khả dụng
+                      </Badge>
+                    </div>
 
                     {currentTemplate.id === 'deck_table' ? (
-                      <div className="space-y-2">
-                        <Label className="text-xs font-medium">
-                          Chọn các trường hiển thị làm cột bảng:
-                        </Label>
+                      <div className="space-y-3 pt-1">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-xs font-medium">
+                            Chọn các trường hiển thị làm cột bảng:
+                          </Label>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 text-[11px] px-2"
+                              onClick={() =>
+                                setFieldMapping((prev) => ({
+                                  ...prev,
+                                  custom_columns: [...availableFields],
+                                }))
+                              }
+                            >
+                              Chọn tất cả
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 text-[11px] px-2 text-muted-foreground"
+                              onClick={() =>
+                                setFieldMapping((prev) => ({
+                                  ...prev,
+                                  custom_columns: [],
+                                }))
+                              }
+                            >
+                              Bỏ chọn
+                            </Button>
+                          </div>
+                        </div>
                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                           {availableFields.map((f) => {
                             const currentCols = (fieldMapping.custom_columns as string[]) || []
@@ -447,7 +543,11 @@ export function DeckWorksheetModal({
                             return (
                               <label
                                 key={f}
-                                className="flex items-center gap-2 p-2 rounded-lg border border-border text-xs cursor-pointer hover:bg-muted/40"
+                                className={`flex items-center gap-2 p-2.5 rounded-lg border text-xs cursor-pointer transition-all ${
+                                  isChecked
+                                    ? 'border-primary bg-primary/5 text-foreground font-semibold'
+                                    : 'border-border bg-muted/20 hover:bg-muted/40 text-muted-foreground'
+                                }`}
                               >
                                 <input
                                   type="checkbox"
@@ -465,25 +565,23 @@ export function DeckWorksheetModal({
                                       }))
                                     }
                                   }}
-                                  className="rounded text-primary"
+                                  className="rounded text-primary focus:ring-primary size-3.5"
                                 />
-                                <span className="font-medium text-foreground">{f}</span>
+                                <span className="truncate">{f}</span>
                               </label>
                             )
                           })}
                         </div>
                       </div>
                     ) : (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1">
                         {currentTemplate.field_slots.map((slot) => {
                           const val = (fieldMapping[slot.key] as string) || ''
                           return (
                             <div key={slot.key} className="space-y-1">
                               <Label className="text-xs font-semibold flex items-center gap-1">
                                 <span>{slot.label_vi}</span>
-                                {slot.required && (
-                                  <span className="text-rose-500">*</span>
-                                )}
+                                {slot.required && <span className="text-rose-500">*</span>}
                               </Label>
                               {slot.description_vi && (
                                 <p className="text-[11px] text-muted-foreground">
@@ -515,171 +613,345 @@ export function DeckWorksheetModal({
                   </div>
 
                   {/* Scope & Limit */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 bg-muted/40 p-4 rounded-xl border border-border/60">
-                    <div className="space-y-1">
-                      <Label className="text-xs font-semibold">Phạm vi tạo bài tập</Label>
-                      <NativeSelect
-                        value={scope}
-                        onChange={(e) => setScope(e.target.value as any)}
-                        className="h-9 text-xs"
-                      >
-                        {initialCardIds && initialCardIds.length > 0 && (
-                          <option value="selected">
-                            {initialCardIds.length} thẻ đang chọn
-                          </option>
-                        )}
-                        <option value="all">Toàn bộ bộ thẻ ({meta?.total_notes} ghi chú)</option>
-                        <option value="first_n">N thẻ đầu tiên</option>
-                        <option value="random_n">Lấy ngẫu nhiên N thẻ</option>
-                      </NativeSelect>
+                  <div className="space-y-3 bg-muted/30 p-4 rounded-xl border border-border/60">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs font-bold text-foreground uppercase tracking-wider">
+                        Phạm vi xuất bài tập
+                      </Label>
+                      <Badge variant="secondary" className="text-[11px] font-semibold">
+                        {scope === 'all'
+                          ? `Toàn bộ (${meta?.total_notes || 0} ghi chú)`
+                          : scope === 'selected'
+                          ? `${initialCardIds?.length || 0} thẻ đã chọn`
+                          : `${limitCount} ghi chú`}
+                      </Badge>
                     </div>
 
-                    {(scope === 'first_n' || scope === 'random_n') && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                       <div className="space-y-1">
-                        <Label className="text-xs font-semibold">
-                          Số lượng ghi chú (N):
-                        </Label>
-                        <Input
-                          type="number"
-                          min={1}
-                          max={500}
-                          value={limitCount}
-                          onChange={(e) => setLimitCount(Number(e.target.value))}
+                        <Label className="text-xs font-semibold">Chế độ lọc</Label>
+                        <NativeSelect
+                          value={scope}
+                          onChange={(e) => setScope(e.target.value as any)}
                           className="h-9 text-xs"
-                        />
+                        >
+                          {initialCardIds && initialCardIds.length > 0 && (
+                            <option value="selected">
+                              {initialCardIds.length} thẻ đang chọn trong danh sách
+                            </option>
+                          )}
+                          <option value="all">Toàn bộ bộ thẻ ({meta?.total_notes} ghi chú)</option>
+                          <option value="first_n">N thẻ đầu tiên</option>
+                          <option value="random_n">Lấy ngẫu nhiên N thẻ</option>
+                        </NativeSelect>
                       </div>
-                    )}
+
+                      {(scope === 'first_n' || scope === 'random_n') && (
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-semibold">Số lượng ghi chú (N):</Label>
+                          <div className="flex items-center gap-2">
+                            <Input
+                              type="number"
+                              min={1}
+                              max={500}
+                              value={limitCount}
+                              onChange={(e) => setLimitCount(Math.max(1, Number(e.target.value)))}
+                              className="h-9 text-xs w-24"
+                            />
+                            {/* Preset chips */}
+                            <div className="flex items-center gap-1">
+                              {[10, 20, 50, 100].map((cnt) => (
+                                <Button
+                                  key={cnt}
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => setLimitCount(cnt)}
+                                  className={`h-7 px-2 text-[11px] ${
+                                    limitCount === cnt ? 'bg-primary text-primary-foreground font-bold' : ''
+                                  }`}
+                                >
+                                  {cnt}
+                                </Button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}
 
               {/* STEP 3: LAYOUT & PRINT OPTIONS */}
               {step === 'layout' && currentTemplate && (
-                <div className="space-y-5">
+                <div className="space-y-4">
                   <div>
                     <h3 className="text-sm font-bold text-foreground">
                       Bước 3: Tùy chỉnh Bố cục & Trang in A4
                     </h3>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      Cấu hình kiểu ô chữ, số lượng ô luyện tập, và tiêu đề trang in.
+                      Cấu hình kiểu ô chữ, số dòng mỗi trang và tiêu đề phiếu bài tập.
                     </p>
                   </div>
 
-                  {/* Grid / Kanji specific options */}
-                  {currentTemplate.category === 'kanji' && (
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 bg-card p-4 rounded-xl border border-border/70">
-                      <div className="space-y-1">
-                        <Label className="text-xs font-semibold">Kiểu đường kẻ ô chữ</Label>
+                  {/* Card 1: Page & Density Options */}
+                  <div className="space-y-3 bg-card p-4 rounded-xl border border-border/70 shadow-xs">
+                    <h4 className="text-xs font-bold text-foreground uppercase tracking-wider">
+                      Thiết lập khổ giấy & Hướng in
+                    </h4>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                      {/* Orientation Visual Toggle */}
+                      <div className="space-y-1.5">
+                        <Label className="text-xs font-semibold">Hướng giấy A4</Label>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setLayoutOptions((prev) => ({ ...prev, orientation: 'portrait' }))
+                            }
+                            className={`flex flex-col items-center justify-center p-2 rounded-lg border text-xs font-medium transition-all ${
+                              layoutOptions.orientation === 'portrait'
+                                ? 'border-primary bg-primary/10 text-primary font-bold shadow-xs'
+                                : 'border-border bg-muted/20 hover:bg-muted/40 text-muted-foreground'
+                            }`}
+                          >
+                            <div className="w-4 h-6 border-2 border-current rounded-xs mb-1" />
+                            <span>A4 Dọc</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setLayoutOptions((prev) => ({ ...prev, orientation: 'landscape' }))
+                            }
+                            className={`flex flex-col items-center justify-center p-2 rounded-lg border text-xs font-medium transition-all ${
+                              layoutOptions.orientation === 'landscape'
+                                ? 'border-primary bg-primary/10 text-primary font-bold shadow-xs'
+                                : 'border-border bg-muted/20 hover:bg-muted/40 text-muted-foreground'
+                            }`}
+                          >
+                            <div className="w-6 h-4 border-2 border-current rounded-xs mb-1.5" />
+                            <span>A4 Ngang</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Rows per page stepper */}
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-xs font-semibold">Số mục / trang</Label>
+                          <span className="text-[10px] text-muted-foreground">Khuyên dùng 5-10</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            className="size-9 shrink-0"
+                            onClick={() =>
+                              setLayoutOptions((prev) => ({
+                                ...prev,
+                                rows_per_page: Math.max(1, (prev.rows_per_page ?? 5) - 1),
+                              }))
+                            }
+                          >
+                            <Minus className="size-3.5" />
+                          </Button>
+                          <div className="h-9 flex-1 flex items-center justify-center bg-muted/40 rounded-md border border-border text-xs font-bold text-foreground">
+                            {layoutOptions.rows_per_page ?? 5} dòng
+                          </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            className="size-9 shrink-0"
+                            onClick={() =>
+                              setLayoutOptions((prev) => ({
+                                ...prev,
+                                rows_per_page: Math.min(25, (prev.rows_per_page ?? 5) + 1),
+                              }))
+                            }
+                          >
+                            <Plus className="size-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+
+                      {/* Margins */}
+                      <div className="space-y-1.5">
+                        <Label className="text-xs font-semibold">Căn lề (Margins)</Label>
                         <NativeSelect
-                          value={layoutOptions.grid_style || 'cross'}
+                          value={layoutOptions.margin || 'standard'}
                           onChange={(e) =>
                             setLayoutOptions((prev) => ({
                               ...prev,
-                              grid_style: e.target.value as any,
+                              margin: e.target.value as any,
                             }))
                           }
                           className="h-9 text-xs"
                         >
-                          <option value="cross">Ô chữ thập (+ / 田)</option>
-                          <option value="diagonal">Ô hoa thị (米字格)</option>
-                          <option value="square">Ô vuông trơn (□)</option>
+                          <option value="compact">Thu gọn (10mm - Tiết kiệm giấy)</option>
+                          <option value="standard">Tiêu chuẩn (12mm - Cân đối)</option>
+                          <option value="wide">Rộng (18mm - Thoáng đẹp)</option>
                         </NativeSelect>
                       </div>
+                    </div>
+                  </div>
 
-                      <div className="space-y-1">
-                        <Label className="text-xs font-semibold">Số ô mờ để đồ chữ</Label>
-                        <Input
-                          type="number"
-                          min={0}
-                          max={5}
-                          value={layoutOptions.trace_count ?? 2}
-                          onChange={(e) =>
-                            setLayoutOptions((prev) => ({
-                              ...prev,
-                              trace_count: Number(e.target.value),
-                            }))
-                          }
-                          className="h-9 text-xs"
-                        />
+                  {/* Card 2: Grid / Kanji specific options */}
+                  {currentTemplate.category === 'kanji' && (
+                    <div className="space-y-3 bg-muted/30 p-4 rounded-xl border border-border/60">
+                      <h4 className="text-xs font-bold text-foreground uppercase tracking-wider">
+                        Kiểu ô chữ & Thực hành Kanji
+                      </h4>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                        {/* Grid Style */}
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-semibold">Kiểu đường kẻ</Label>
+                          <NativeSelect
+                            value={layoutOptions.grid_style || 'cross'}
+                            onChange={(e) =>
+                              setLayoutOptions((prev) => ({
+                                ...prev,
+                                grid_style: e.target.value as any,
+                              }))
+                            }
+                            className="h-9 text-xs"
+                          >
+                            <option value="cross">Ô chữ thập (+ / 田)</option>
+                            <option value="diagonal">Ô hoa thị (米字格)</option>
+                            <option value="square">Ô vuông trơn (□)</option>
+                          </NativeSelect>
+                        </div>
+
+                        {/* Trace Count Stepper */}
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-semibold">Số ô mờ (Đồ chữ)</Label>
+                          <div className="flex items-center gap-1.5">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon"
+                              className="size-9 shrink-0"
+                              onClick={() =>
+                                setLayoutOptions((prev) => ({
+                                  ...prev,
+                                  trace_count: Math.max(0, (prev.trace_count ?? 2) - 1),
+                                }))
+                              }
+                            >
+                              <Minus className="size-3.5" />
+                            </Button>
+                            <div className="h-9 flex-1 flex items-center justify-center bg-background rounded-md border border-border text-xs font-bold text-foreground">
+                              {layoutOptions.trace_count ?? 2} ô
+                            </div>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon"
+                              className="size-9 shrink-0"
+                              onClick={() =>
+                                setLayoutOptions((prev) => ({
+                                  ...prev,
+                                  trace_count: Math.min(5, (prev.trace_count ?? 2) + 1),
+                                }))
+                              }
+                            >
+                              <Plus className="size-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+
+                        {/* Blank Practice Count Stepper */}
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-semibold">Số ô trống (Tự viết)</Label>
+                          <div className="flex items-center gap-1.5">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon"
+                              className="size-9 shrink-0"
+                              onClick={() =>
+                                setLayoutOptions((prev) => ({
+                                  ...prev,
+                                  practice_count: Math.max(1, (prev.practice_count ?? 5) - 1),
+                                }))
+                              }
+                            >
+                              <Minus className="size-3.5" />
+                            </Button>
+                            <div className="h-9 flex-1 flex items-center justify-center bg-background rounded-md border border-border text-xs font-bold text-foreground">
+                              {layoutOptions.practice_count ?? 5} ô
+                            </div>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon"
+                              className="size-9 shrink-0"
+                              onClick={() =>
+                                setLayoutOptions((prev) => ({
+                                  ...prev,
+                                  practice_count: Math.min(10, (prev.practice_count ?? 5) + 1),
+                                }))
+                              }
+                            >
+                              <Plus className="size-3.5" />
+                            </Button>
+                          </div>
+                        </div>
                       </div>
 
-                      <div className="space-y-1">
-                        <Label className="text-xs font-semibold">Số ô trống tự viết</Label>
-                        <Input
-                          type="number"
-                          min={1}
-                          max={10}
-                          value={layoutOptions.practice_count ?? 5}
-                          onChange={(e) =>
-                            setLayoutOptions((prev) => ({
-                              ...prev,
-                              practice_count: Number(e.target.value),
-                            }))
-                          }
-                          className="h-9 text-xs"
-                        />
+                      <div className="flex items-center flex-wrap gap-4 pt-1 text-xs">
+                        <label className="flex items-center gap-2 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={layoutOptions.show_stroke_diagram !== false}
+                            onChange={(e) =>
+                              setLayoutOptions((prev) => ({
+                                ...prev,
+                                show_stroke_diagram: e.target.checked,
+                              }))
+                            }
+                            className="rounded text-primary size-3.5"
+                          />
+                          <span>Hiện sơ đồ nét bút SVG</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={layoutOptions.show_reading !== false}
+                            onChange={(e) =>
+                              setLayoutOptions((prev) => ({
+                                ...prev,
+                                show_reading: e.target.checked,
+                              }))
+                            }
+                            className="rounded text-primary size-3.5"
+                          />
+                          <span>Hiện Âm đọc</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={layoutOptions.show_meaning !== false}
+                            onChange={(e) =>
+                              setLayoutOptions((prev) => ({
+                                ...prev,
+                                show_meaning: e.target.checked,
+                              }))
+                            }
+                            className="rounded text-primary size-3.5"
+                          />
+                          <span>Hiện Ý nghĩa</span>
+                        </label>
                       </div>
                     </div>
                   )}
 
-                  {/* Page & Density Options */}
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 bg-muted/40 p-4 rounded-xl border border-border/60">
-                    <div className="space-y-1">
-                      <Label className="text-xs font-semibold">Hướng giấy A4</Label>
-                      <NativeSelect
-                        value={layoutOptions.orientation || 'portrait'}
-                        onChange={(e) =>
-                          setLayoutOptions((prev) => ({
-                            ...prev,
-                            orientation: e.target.value as any,
-                          }))
-                        }
-                        className="h-9 text-xs"
-                      >
-                        <option value="portrait">A4 Dọc (Portrait)</option>
-                        <option value="landscape">A4 Ngang (Landscape)</option>
-                      </NativeSelect>
-                    </div>
-
-                    <div className="space-y-1">
-                      <Label className="text-xs font-semibold">Số mục mỗi trang A4</Label>
-                      <Input
-                        type="number"
-                        min={1}
-                        max={30}
-                        value={layoutOptions.rows_per_page ?? 5}
-                        onChange={(e) =>
-                          setLayoutOptions((prev) => ({
-                            ...prev,
-                            rows_per_page: Number(e.target.value),
-                          }))
-                        }
-                        className="h-9 text-xs"
-                      >
-                      </Input>
-                    </div>
-
-                    <div className="space-y-1">
-                      <Label className="text-xs font-semibold">Căn lề trang (Margins)</Label>
-                      <NativeSelect
-                        value={layoutOptions.margin || 'standard'}
-                        onChange={(e) =>
-                          setLayoutOptions((prev) => ({
-                            ...prev,
-                            margin: e.target.value as any,
-                          }))
-                        }
-                        className="h-9 text-xs"
-                      >
-                        <option value="compact">Thu gọn (10mm)</option>
-                        <option value="standard">Tiêu chuẩn (12mm)</option>
-                        <option value="wide">Rộng (18mm)</option>
-                      </NativeSelect>
-                    </div>
-                  </div>
-
-                  {/* Header & Typography info */}
-                  <div className="space-y-3 bg-card p-4 rounded-xl border border-border/70">
+                  {/* Card 3: Header & Typography info */}
+                  <div className="space-y-3 bg-card p-4 rounded-xl border border-border/70 shadow-xs">
                     <h4 className="text-xs font-bold text-foreground uppercase tracking-wider">
                       Tiêu đề & Thông tin đầu trang
                     </h4>
@@ -696,11 +968,12 @@ export function DeckWorksheetModal({
                             }))
                           }
                           className="h-9 text-xs"
+                          placeholder="Ví dụ: JLPT N5 - Luyện viết chữ Hán"
                         />
                       </div>
 
                       <div className="space-y-1">
-                        <Label className="text-xs font-semibold">Phụ đề / Hướng dẫn</Label>
+                        <Label className="text-xs font-semibold">Phụ đề / Lời dặn</Label>
                         <Input
                           value={layoutOptions.header_subtitle || ''}
                           onChange={(e) =>
@@ -710,12 +983,13 @@ export function DeckWorksheetModal({
                             }))
                           }
                           className="h-9 text-xs"
+                          placeholder="Luyện viết từ vựng và chữ Hán mỗi ngày"
                         />
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-6 pt-1">
-                      <label className="flex items-center gap-2 text-xs cursor-pointer">
+                    <div className="flex items-center gap-6 pt-1 text-xs">
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
                         <input
                           type="checkbox"
                           checked={layoutOptions.show_student_info !== false}
@@ -725,12 +999,12 @@ export function DeckWorksheetModal({
                               show_student_info: e.target.checked,
                             }))
                           }
-                          className="rounded text-primary"
+                          className="rounded text-primary size-3.5"
                         />
                         <span>Hiện dòng Họ tên</span>
                       </label>
 
-                      <label className="flex items-center gap-2 text-xs cursor-pointer">
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
                         <input
                           type="checkbox"
                           checked={layoutOptions.show_date !== false}
@@ -740,7 +1014,7 @@ export function DeckWorksheetModal({
                               show_date: e.target.checked,
                             }))
                           }
-                          className="rounded text-primary"
+                          className="rounded text-primary size-3.5"
                         />
                         <span>Hiện dòng Ngày tháng</span>
                       </label>
@@ -749,26 +1023,44 @@ export function DeckWorksheetModal({
                 </div>
               )}
 
-              {/* STEP 4: INTERACTIVE LIVE PREVIEW */}
+              {/* STEP 4: INTERACTIVE LIVE PREVIEW & WORKBENCH */}
               {step === 'preview' && previewData && currentTemplate && (
-                <div className="space-y-4">
-                  {/* Toolbar */}
-                  <div className="flex items-center justify-between flex-wrap gap-2 bg-muted/40 p-2.5 rounded-xl border border-border/60 shrink-0">
-                    <div className="flex items-center gap-2">
+                <div className="flex flex-col h-full overflow-hidden bg-background">
+                  {/* Top Workbench Toolbar */}
+                  <div className="flex items-center justify-between flex-wrap gap-2 px-4 py-2.5 bg-muted/40 border-b border-border/70 shrink-0">
+                    {/* Page pagination navigation */}
+                    <div className="flex items-center gap-1.5">
                       <Button
                         variant="outline"
                         size="sm"
                         disabled={currentPageIdx === 0}
                         onClick={() => setCurrentPageIdx((p) => Math.max(0, p - 1))}
-                        className="h-8 px-2.5 text-xs"
+                        className="h-8 px-2.5 text-xs font-semibold gap-1"
                       >
-                        <ChevronLeft className="size-3.5 mr-1" />
-                        Trang trước
+                        <ChevronLeft className="size-4" />
+                        <span className="hidden sm:inline">Trang trước</span>
                       </Button>
 
-                      <span className="text-xs font-semibold px-2">
-                        Trang {currentPageIdx + 1} / {previewData.total_pages || 1}
-                      </span>
+                      {/* Page selector */}
+                      <div className="flex items-center gap-1 px-2 text-xs font-bold text-foreground">
+                        <span>Trang</span>
+                        {previewData.total_pages > 1 ? (
+                          <NativeSelect
+                            value={currentPageIdx}
+                            onChange={(e) => setCurrentPageIdx(Number(e.target.value))}
+                            className="h-7 text-xs py-0 px-2 font-bold w-16"
+                          >
+                            {Array.from({ length: previewData.total_pages }).map((_, idx) => (
+                              <option key={idx} value={idx}>
+                                {idx + 1}
+                              </option>
+                            ))}
+                          </NativeSelect>
+                        ) : (
+                          <span>1</span>
+                        )}
+                        <span>/ {previewData.total_pages || 1}</span>
+                      </div>
 
                       <Button
                         variant="outline"
@@ -779,58 +1071,97 @@ export function DeckWorksheetModal({
                             Math.min(previewData.total_pages - 1, p + 1)
                           )
                         }
-                        className="h-8 px-2.5 text-xs"
+                        className="h-8 px-2.5 text-xs font-semibold gap-1"
                       >
-                        Trang sau
-                        <ChevronRight className="size-3.5 ml-1" />
+                        <span className="hidden sm:inline">Trang sau</span>
+                        <ChevronRight className="size-4" />
                       </Button>
                     </div>
 
-                    {/* Zoom & summary */}
+                    {/* Zoom & Quick presets */}
                     <div className="flex items-center gap-2">
-                      <div className="flex items-center bg-background rounded-lg border border-border/80 px-1 py-0.5">
+                      <div className="flex items-center bg-background rounded-lg border border-border/80 px-1 py-0.5 shadow-2xs">
                         <Button
                           variant="ghost"
                           size="icon"
                           className="size-7"
-                          onClick={() => setZoomLevel((z) => Math.max(0.5, z - 0.1))}
+                          onClick={() => setZoomLevel((z) => Math.max(0.4, Number((z - 0.1).toFixed(2))))}
                           title="Thu nhỏ"
                         >
                           <ZoomOut className="size-3.5" />
                         </Button>
-                        <span className="text-xs font-medium px-1.5">
+                        <span className="text-xs font-bold px-2 min-w-12 text-center">
                           {Math.round(zoomLevel * 100)}%
                         </span>
                         <Button
                           variant="ghost"
                           size="icon"
                           className="size-7"
-                          onClick={() => setZoomLevel((z) => Math.min(1.5, z + 0.1))}
+                          onClick={() => setZoomLevel((z) => Math.min(1.4, Number((z + 0.1).toFixed(2))))}
                           title="Phóng to"
                         >
                           <ZoomIn className="size-3.5" />
                         </Button>
                       </div>
 
-                      <Badge variant="secondary" className="text-xs font-semibold">
-                        Tổng: {previewData.total_items} mục &bull;{' '}
-                        {previewData.total_pages} trang A4
+                      {/* Quick Zoom Presets */}
+                      <div className="hidden sm:flex items-center gap-1">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setZoomLevel(isLandscape ? 0.72 : 0.85)}
+                          className="h-7 px-2 text-[11px] font-medium"
+                          title="Vừa trang"
+                        >
+                          Vừa trang
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setZoomLevel(1)}
+                          className="h-7 px-2 text-[11px] font-medium"
+                          title="100% kích thước thật"
+                        >
+                          100%
+                        </Button>
+                      </div>
+
+                      <Badge variant="secondary" className="text-xs font-semibold px-2.5 py-1">
+                        {previewData.total_items} mục &bull; {previewData.total_pages} trang A4
                       </Badge>
                     </div>
                   </div>
 
-                  {/* Rendered Page Preview Container */}
-                  <div className="overflow-auto max-h-[58vh] bg-slate-100 dark:bg-slate-950/80 p-4 rounded-xl border border-border/80 flex justify-center">
+                  {/* Rendered Page Preview Canvas with Precise Bounding Box */}
+                  <div className="flex-1 overflow-auto bg-slate-200/90 dark:bg-slate-950 p-6 flex justify-center items-start min-h-0 select-none">
                     {previewData.pages.length > 0 && previewData.pages[currentPageIdx] ? (
-                      <WorksheetPageRenderer
-                        page={previewData.pages[currentPageIdx]}
-                        template={currentTemplate}
-                        options={layoutOptions}
-                        fieldMapping={fieldMapping}
-                        zoom={zoomLevel}
-                      />
+                      <div
+                        style={{
+                          width: `${containerWidthPx}px`,
+                          height: `${containerHeightPx}px`,
+                        }}
+                        className="relative shrink-0 transition-all duration-150"
+                      >
+                        <div
+                          style={{
+                            transform: `scale(${zoomLevel})`,
+                            transformOrigin: 'top left',
+                            width: `${a4WidthMm}mm`,
+                            height: `${a4HeightMm}mm`,
+                          }}
+                          className="absolute top-0 left-0"
+                        >
+                          <WorksheetPageRenderer
+                            page={previewData.pages[currentPageIdx]}
+                            template={currentTemplate}
+                            options={layoutOptions}
+                            fieldMapping={fieldMapping}
+                            zoom={1}
+                          />
+                        </div>
+                      </div>
                     ) : (
-                      <div className="py-12 text-center text-muted-foreground text-xs">
+                      <div className="py-16 text-center text-muted-foreground text-xs">
                         Không có dữ liệu trang xem trước.
                       </div>
                     )}
@@ -842,18 +1173,18 @@ export function DeckWorksheetModal({
         </div>
 
         {/* Modal Footer / Navigation Controls */}
-        <div className="px-6 py-3.5 border-t border-border/80 bg-muted/20 flex items-center justify-between shrink-0">
+        <div className="px-6 py-3.5 border-t border-border/80 bg-muted/30 flex items-center justify-between shrink-0">
           <div>
             {step !== 'template' ? (
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => {
-                  if (step === 'preview') setStep('layout')
-                  else if (step === 'layout') setStep('fields')
-                  else if (step === 'fields') setStep('template')
+                  if (step === 'preview') goToStep('layout')
+                  else if (step === 'layout') goToStep('fields')
+                  else if (step === 'fields') goToStep('template')
                 }}
-                className="h-9 px-3 text-xs gap-1"
+                className="h-9 px-3 text-xs font-semibold gap-1.5"
               >
                 <ChevronLeft className="size-4" />
                 Quay lại
@@ -870,14 +1201,14 @@ export function DeckWorksheetModal({
             )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             {step === 'template' && (
               <Button
                 size="sm"
-                onClick={() => setStep('fields')}
-                className="h-9 px-4 text-xs font-semibold gap-1"
+                onClick={() => goToStep('fields')}
+                className="h-9 px-4 text-xs font-semibold gap-1.5 shadow-xs"
               >
-                Tiếp tục: Dữ liệu
+                <span>Tiếp tục: Dữ liệu</span>
                 <ChevronRight className="size-4" />
               </Button>
             )}
@@ -885,10 +1216,10 @@ export function DeckWorksheetModal({
             {step === 'fields' && (
               <Button
                 size="sm"
-                onClick={() => setStep('layout')}
-                className="h-9 px-4 text-xs font-semibold gap-1"
+                onClick={() => goToStep('layout')}
+                className="h-9 px-4 text-xs font-semibold gap-1.5 shadow-xs"
               >
-                Tiếp tục: Bố cục
+                <span>Tiếp tục: Bố cục</span>
                 <ChevronRight className="size-4" />
               </Button>
             )}
@@ -898,17 +1229,17 @@ export function DeckWorksheetModal({
                 size="sm"
                 onClick={handleGeneratePreview}
                 disabled={isGenerating}
-                className="h-9 px-4 text-xs font-semibold gap-1.5 bg-orange-600 hover:bg-orange-700 text-white"
+                className="h-9 px-5 text-xs font-bold gap-2 bg-orange-600 hover:bg-orange-700 text-white shadow-md"
               >
                 {isGenerating ? (
                   <>
                     <Loader2 className="size-4 animate-spin" />
-                    Đang xử lý...
+                    <span>Đang xử lý & phân trang...</span>
                   </>
                 ) : (
                   <>
                     <Eye className="size-4" />
-                    Xem trước bài tập
+                    <span>Xem trước bài tập</span>
                   </>
                 )}
               </Button>
@@ -921,27 +1252,28 @@ export function DeckWorksheetModal({
                   size="sm"
                   onClick={handleDownload}
                   disabled={isPrinting}
-                  className="h-9 px-3.5 text-xs gap-1.5 font-medium"
+                  className="h-9 px-3.5 text-xs gap-1.5 font-medium shadow-2xs"
                 >
                   <Download className="size-4" />
-                  Tải file in (HTML)
+                  <span className="hidden sm:inline">Tải file in (HTML)</span>
+                  <span className="sm:hidden">Tải file</span>
                 </Button>
 
                 <Button
                   size="sm"
                   onClick={handlePrint}
                   disabled={isPrinting}
-                  className="h-9 px-4 text-xs font-semibold gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground shadow-md"
+                  className="h-9 px-5 text-xs font-bold gap-2 bg-primary hover:bg-primary/90 text-primary-foreground shadow-md"
                 >
                   {isPrinting ? (
                     <>
                       <Loader2 className="size-4 animate-spin" />
-                      Đang chuẩn bị...
+                      <span>Đang chuẩn bị in...</span>
                     </>
                   ) : (
                     <>
                       <Printer className="size-4" />
-                      In ngay (Print / PDF)
+                      <span>In ngay (Print / PDF)</span>
                     </>
                   )}
                 </Button>
@@ -953,3 +1285,4 @@ export function DeckWorksheetModal({
     </Dialog>
   )
 }
+

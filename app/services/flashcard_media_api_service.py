@@ -164,7 +164,7 @@ def upload_media(
         db.session.flush()
         if not markdown_inline:
             values = dict(note.field_values or {})
-            values[validated.field_name] = asset.filename or asset.id
+            values[validated.field_name] = asset.id
             note.field_values = values
             deck_working_tree_service.mark_note_field_batches_changed(
                 mutations=[

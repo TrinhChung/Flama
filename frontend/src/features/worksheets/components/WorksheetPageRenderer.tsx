@@ -38,13 +38,13 @@ export const WorksheetPageRenderer = memo(function WorksheetPageRenderer({
   return (
     <div
       style={{
-        transform: isPrintMode ? undefined : `scale(${zoom})`,
-        transformOrigin: 'top center',
+        transform: isPrintMode || zoom === 1 ? undefined : `scale(${zoom})`,
+        transformOrigin: 'top left',
       }}
-      className={`bg-white text-slate-900 mx-auto shadow-md border border-border/80 flex flex-col justify-between transition-transform duration-150 select-none ${
+      className={`bg-white text-slate-900 mx-auto shadow-2xl border border-slate-300/80 flex flex-col justify-between select-none box-border shrink-0 print:shadow-none print:border-none print:m-0 font-['Hiragino_Kaku_Gothic_ProN','Yu_Gothic','Meiryo','Noto_Sans_JP',sans-serif] ${
         isLandscape
-          ? 'w-[297mm] min-h-[210mm] max-w-full'
-          : 'w-[210mm] min-h-[297mm] max-w-full'
+          ? 'w-[297mm] min-h-[210mm] max-h-[210mm]'
+          : 'w-[210mm] min-h-[297mm] max-h-[297mm]'
       } ${
         options.margin === 'compact'
           ? 'p-[10mm]'

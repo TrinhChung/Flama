@@ -163,6 +163,110 @@ describe('DeckWorksheetModal', () => {
 
     // Verify Step 3: Bố cục
     expect(document.body.textContent).toContain('Bước 3: Tùy chỉnh Bố cục')
-    expect(document.body.textContent).toContain('Kiểu đường kẻ ô chữ')
+    expect(document.body.textContent).toContain('Kiểu đường kẻ')
+
+    // Test direct stepper navigation back to step 1
+    const step1Btn = Array.from(document.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('1. Mẫu'),
+    )
+    expect(step1Btn).toBeDefined()
+    await act(async () => {
+      step1Btn?.click()
+    })
+    expect(document.body.textContent).toContain('Bước 1: Chọn mẫu bài tập phù hợp')
+  })
+
+  it('generates preview and displays workbench with page navigation', async () => {
+    const mockPreviewData = {
+      template: mockMeta.templates[0],
+      deck_id: 1,
+      deck_name: 'JLPT N5 Core',
+      options: { orientation: 'portrait' as const, rows_per_page: 5 },
+      field_mapping: { kanji: 'Expression' },
+      total_items: 2,
+      total_pages: 1,
+      pages: [
+        {
+          page_number: 1,
+          total_pages: 1,
+          header: {
+            title: 'JLPT N5 Core - Bài tập',
+            subtitle: 'Luyện viết mỗi ngày',
+            deck_name: 'JLPT N5 Core',
+            show_student_info: true,
+            show_date: true,
+          },
+          items: [
+            {
+              type: 'kanji' as const,
+              note_id: '1',
+              char: '日',
+              hex: '65e5',
+              has_stroke: true,
+              stroke_svg: null,
+              stroke_url: null,
+              reading: 'にち',
+              meaning: 'Mặt trời, ngày',
+              source_word: '日',
+            },
+          ],
+        },
+      ],
+      warnings: [],
+    }
+
+    vi.spyOn(worksheetApi, 'generateWorksheetPreview').mockResolvedValue(mockPreviewData as any)
+
+    await act(async () => {
+      root?.render(
+        <DeckWorksheetModal
+          open={true}
+          onOpenChange={vi.fn()}
+          deckId={1}
+          deckName="JLPT N5 Core"
+        />,
+      )
+    })
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 50))
+    })
+
+    // Navigate to step 2
+    const nextBtn = Array.from(document.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Tiếp tục: Dữ liệu'),
+    )
+    await act(async () => {
+      nextBtn?.click()
+    })
+
+    // Navigate to step 3
+    const toLayoutBtn = Array.from(document.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Tiếp tục: Bố cục'),
+    )
+    await act(async () => {
+      toLayoutBtn?.click()
+    })
+
+    // Generate preview
+    const genPreviewBtn = Array.from(document.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Xem trước bài tập'),
+    )
+    expect(genPreviewBtn).toBeDefined()
+
+    await act(async () => {
+      genPreviewBtn?.click()
+    })
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 50))
+    })
+
+    // Verify preview workbench elements
+    expect(document.body.textContent).toContain('Trang trước')
+    expect(document.body.textContent).toContain('Trang sau')
+    expect(document.body.textContent).toContain('In ngay (Print / PDF)')
+    expect(document.body.textContent).toContain('Tải file in (HTML)')
+    expect(document.body.textContent).toContain('日')
   })
 })

@@ -245,10 +245,14 @@ export function useBrowseState() {
     urlCardId ? 'editor' : 'cards',
   )
 
-  // Sync state if URL search parameters change
+  // Sync state if URL search parameters change on initial mount
+  const initialUrlDeckSyncedRef = useRef(false)
   useEffect(() => {
-    if (urlDeckId) {
-      setSelectedDeckId(Number(urlDeckId))
+    if (!initialUrlDeckSyncedRef.current) {
+      initialUrlDeckSyncedRef.current = true
+      if (urlDeckId) {
+        setSelectedDeckId(Number(urlDeckId))
+      }
     }
     if (urlCardId) {
       setActiveCardId(urlCardId)
@@ -467,23 +471,39 @@ export function useBrowseState() {
       deck_id: number
       field_values: Record<string, string>
       tags?: string[]
-    }) => appApi.mutate<{ id: string; card_ids?: Array<string | number> }>('/notes', 'POST', payload),
+    }) =>
+      appApi.mutate<{ id: string; card_ids?: Array<string | number>; first_card_id?: string | number }>(
+        '/notes',
+        'POST',
+        payload,
+      ),
     onSuccess: async (data, variables) => {
       toast.success('Đã tạo thẻ mới thành công.')
       setIsCreatingCard(false)
 
-      if (variables.deck_id && selectedDeckId !== null && selectedDeckId !== variables.deck_id) {
-        setSelectedDeckId(variables.deck_id)
+      const targetDeckId = variables.deck_id
+      if (targetDeckId !== undefined && targetDeckId !== null) {
+        setSelectedDeckId(targetDeckId)
       }
 
-      await queryClient.invalidateQueries({ queryKey: ['browse', 'cards'] })
-      await queryClient.invalidateQueries({ queryKey: ['browse', 'decks'] })
-      await queryClient.invalidateQueries({ queryKey: ['bootstrap'] })
+      const rawCardId = data?.first_card_id ?? data?.card_ids?.[0]
+      const newCardId = rawCardId !== undefined && rawCardId !== null ? String(rawCardId) : null
 
-      const newCardId = data?.card_ids?.[0] !== undefined ? String(data.card_ids[0]) : null
       if (newCardId) {
         setActiveCardId(newCardId)
-        await queryClient.invalidateQueries({ queryKey: ['browse', 'card-detail', newCardId] })
+      }
+
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['browse', 'cards'] }),
+        queryClient.invalidateQueries({ queryKey: ['browse', 'decks'] }),
+        queryClient.invalidateQueries({ queryKey: ['bootstrap'] }),
+        newCardId
+          ? queryClient.invalidateQueries({ queryKey: ['browse', 'card-detail', newCardId] })
+          : Promise.resolve(),
+      ])
+
+      if (newCardId) {
+        setActiveCardId(newCardId)
       }
       setMobileTab('editor')
     },
@@ -538,14 +558,12 @@ export function useBrowseState() {
   // Bulk Delete Mutation
   const bulkDeleteMutation = useMutation({
     mutationFn: async (cardIds: string[]) => {
-      const results = await Promise.allSettled(
-        cardIds.map((id) => appApi.mutate(`/browse/cards/${id}`, 'DELETE')),
+      const res = await appApi.mutate<{ success: boolean; deleted_count?: number }>(
+        '/browse/cards/batch-delete',
+        'POST',
+        { card_ids: cardIds },
       )
-      const failed = results.filter((r) => r.status === 'rejected')
-      if (failed.length > 0) {
-        throw new Error(`Có ${failed.length}/${cardIds.length} thẻ xóa không thành công.`)
-      }
-      return cardIds.length
+      return res.deleted_count ?? cardIds.length
     },
     onMutate: () => {
       toast?.loading?.('Đang xóa các thẻ đã chọn…', {
@@ -555,11 +573,13 @@ export function useBrowseState() {
     },
     onSuccess: (count) => {
       toast.success(`Đã xóa thành công ${count} thẻ đã chọn.`, { id: 'bulk-delete-cards' })
-      if (activeCardId && selectedCards.includes(activeCardId)) {
+      if (activeCardId && selectedCards.some((id) => String(id) === String(activeCardId))) {
         setActiveCardId(null)
       }
       setSelectedCards([])
       void queryClient.invalidateQueries({ queryKey: ['browse', 'cards'] })
+      void queryClient.invalidateQueries({ queryKey: ['browse', 'decks'] })
+      void queryClient.invalidateQueries({ queryKey: ['bootstrap'] })
     },
     onError: (error: Error) => {
       toast.error('Lỗi khi xóa hàng loạt', { id: 'bulk-delete-cards', description: error.message })

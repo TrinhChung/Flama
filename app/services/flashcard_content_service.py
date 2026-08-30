@@ -998,7 +998,8 @@ def create_note(
         {"note_id": note.id, "note_type_id": note.note_type_id},
     )
     db.session.flush()
-    card_ids = [card.id for card in (note.cards or [])]
+    cards = Card.query.filter_by(note_id=note.id).order_by(Card.id.asc()).all()
+    card_ids = [str(card.id) for card in cards]
     db.session.commit()
     return {
         "id": note.id,
@@ -1007,6 +1008,7 @@ def create_note(
         "field_values": note.field_values,
         "tags": note.tags,
         "card_ids": card_ids,
+        "first_card_id": card_ids[0] if card_ids else None,
     }
 
 
@@ -1309,7 +1311,7 @@ def _create_cards(note: Note) -> None:
         .all()
     )
     for template in templates:
-        db.session.add(Card(note_id=note.id, template_id=template.id))
+        db.session.add(Card(note=note, note_id=note.id, template_id=template.id))
 
 
 def _refresh_source_note_type_stats(

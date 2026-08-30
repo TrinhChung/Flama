@@ -6,18 +6,20 @@ export function printWorksheetHtml(htmlContent: string): void {
   // Use a hidden iframe for seamless native printing without browser popup blockers
   let iframe = document.getElementById('flama-worksheet-print-frame') as HTMLIFrameElement | null
 
-  if (!iframe) {
-    iframe = document.createElement('iframe')
-    iframe.id = 'flama-worksheet-print-frame'
-    iframe.style.position = 'fixed'
-    iframe.style.right = '0'
-    iframe.style.bottom = '0'
-    iframe.style.width = '0'
-    iframe.style.height = '0'
-    iframe.style.border = '0'
-    iframe.style.visibility = 'hidden'
-    document.body.appendChild(iframe)
+  if (iframe && iframe.parentNode) {
+    iframe.parentNode.removeChild(iframe)
   }
+
+  iframe = document.createElement('iframe')
+  iframe.id = 'flama-worksheet-print-frame'
+  iframe.style.position = 'fixed'
+  iframe.style.right = '0'
+  iframe.style.bottom = '0'
+  iframe.style.width = '0'
+  iframe.style.height = '0'
+  iframe.style.border = '0'
+  iframe.style.visibility = 'hidden'
+  document.body.appendChild(iframe)
 
   const doc = iframe.contentWindow?.document
   if (!doc) {

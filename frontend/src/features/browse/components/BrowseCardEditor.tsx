@@ -156,9 +156,42 @@ export function BrowseCardEditor({ browse }: BrowseCardEditorProps) {
       (f) => f.name.trim().toLowerCase() !== 'stt'
     )
 
+    const submitCreateCard = () => {
+      if (!editDeckId) {
+        toast.error('Vui lòng chọn deck lưu trữ')
+        return
+      }
+      const noteTypeId = effectiveNoteTypeId || selectedNoteType?.id
+      if (!noteTypeId) {
+        toast.error('Vui lòng chọn mẫu thẻ')
+        return
+      }
+      // Only send fields defined in the selected Note Type
+      const allowedNames = new Set(fields.map((f) => f.name))
+      const payloadFields: Record<string, string> = {}
+      for (const [k, v] of Object.entries(editFieldValues)) {
+        if (allowedNames.has(k) && v !== undefined && v !== null && String(v).trim() !== '') {
+          payloadFields[k] = String(v)
+        }
+      }
+
+      void createMutation.mutate({
+        deck_id: editDeckId,
+        note_type_id: noteTypeId,
+        field_values: payloadFields,
+        tags: editTags,
+      })
+    }
+
     return (
       <div
         style={{ width: isMobile ? '100%' : `${editorWidth}px` }}
+        onKeyDown={(e) => {
+          if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+            e.preventDefault()
+            submitCreateCard()
+          }
+        }}
         className={`relative border-l border-border/60 flex flex-col bg-card shrink-0 h-full overflow-hidden ${
           mobileTab === 'editor' ? 'flex' : 'hidden lg:flex'
         }`}
@@ -324,32 +357,7 @@ export function BrowseCardEditor({ browse }: BrowseCardEditorProps) {
             <Button
               size="sm"
               className="flex-1 h-9 text-xs font-bold rounded-lg shadow-sm bg-primary text-primary-foreground hover:opacity-95 disabled:opacity-50"
-              onClick={() => {
-                if (!editDeckId) {
-                  toast.error('Vui lòng chọn deck lưu trữ')
-                  return
-                }
-                const noteTypeId = effectiveNoteTypeId || selectedNoteType?.id
-                if (!noteTypeId) {
-                  toast.error('Vui lòng chọn mẫu thẻ')
-                  return
-                }
-                // Only send fields defined in the selected Note Type
-                const allowedNames = new Set(fields.map((f) => f.name))
-                const payloadFields: Record<string, string> = {}
-                for (const [k, v] of Object.entries(editFieldValues)) {
-                  if (allowedNames.has(k) && v !== undefined && v !== null && String(v).trim() !== '') {
-                    payloadFields[k] = String(v)
-                  }
-                }
-
-                void createMutation.mutate({
-                  deck_id: editDeckId,
-                  note_type_id: noteTypeId,
-                  field_values: payloadFields,
-                  tags: editTags,
-                })
-              }}
+              onClick={submitCreateCard}
               disabled={createMutation.isPending || !editDeckId}
             >
               {createMutation.isPending ? (
@@ -399,9 +407,24 @@ export function BrowseCardEditor({ browse }: BrowseCardEditorProps) {
 
   const deckList = detail.decks || decksQuery.data?.decks || []
 
+  const submitUpdateCard = () => {
+    if (!isDirty || updateMutation.isPending) return
+    void updateMutation.mutate({
+      field_values: editFieldValues,
+      deck_id: editDeckId || undefined,
+      tags: editTags,
+    })
+  }
+
   return (
     <div
       style={{ width: isMobile ? '100%' : `${editorWidth}px` }}
+      onKeyDown={(e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+          e.preventDefault()
+          submitUpdateCard()
+        }
+      }}
       className={`relative border-l border-border/60 flex flex-col bg-card shrink-0 h-full overflow-hidden ${
         mobileTab === 'editor' ? 'flex' : 'hidden lg:flex'
       }`}
@@ -552,13 +575,7 @@ export function BrowseCardEditor({ browse }: BrowseCardEditorProps) {
           <Button
             size="sm"
             className="flex-1 h-9 text-xs font-bold rounded-lg shadow-sm disabled:bg-muted disabled:text-muted-foreground disabled:border disabled:border-border/50 disabled:shadow-none disabled:opacity-100"
-            onClick={() => {
-              void updateMutation.mutate({
-                field_values: editFieldValues,
-                deck_id: editDeckId || undefined,
-                tags: editTags,
-              })
-            }}
+            onClick={submitUpdateCard}
             disabled={!isDirty || updateMutation.isPending}
           >
             {updateMutation.isPending ? (
