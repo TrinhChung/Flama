@@ -235,7 +235,7 @@ class StudyBehaviorAcceptanceBaselineTests(unittest.TestCase):
             self.client.post(
                 "/login",
                 data={"email": "author@example.com", "password": "password"},
-                follow_redirects=True,
+                follow_redirects=False,
             )
             rest_response = self.client.post(
                 f"/api/study/{self.card_a_id}/answer",
