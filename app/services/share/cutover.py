@@ -70,9 +70,12 @@ from models.field_def import FieldDef
 from models.note import Note
 from models.note_type import NoteType
 from models.note_type_install import NoteTypeInstall
-from models.note_type_review import NoteTypeReview
-from models.taxonomy import TaxonomyDomain, TaxonomyLevel, TaxonomySubject, TaxonomyTopic
-from models.template import Template
+from models.taxonomy import (
+    TaxonomyDomain,
+    TaxonomyFramework,
+    TaxonomyFrameworkLevel,
+    TaxonomySubject,
+)
 from models.user import User
 
 logger = logging.getLogger(__name__)
@@ -486,8 +489,6 @@ def migrate_legacy_clone_install_to_overlay(
         "progress_rows": progress_migrated,
     }
 
-
-@dataclass
 
 def _ensure_clone_map_rows_for_cutover(
     *,
