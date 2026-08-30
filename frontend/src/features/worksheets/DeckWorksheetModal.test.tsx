@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DeckWorksheetModal } from './components/DeckWorksheetModal'
 import * as worksheetApi from './api'
 
-describe('DeckWorksheetModal', () => {
+describe('DeckWorksheetModal Live Studio', () => {
   let container: HTMLDivElement | null = null
   let root: Root | null = null
 
@@ -77,7 +77,67 @@ describe('DeckWorksheetModal', () => {
           rows_per_page: 10,
         },
       },
+      {
+        id: 'deck_table',
+        name_vi: 'Bảng dữ liệu bộ thẻ tuỳ biến',
+        name_en: 'Generic Deck Table',
+        description_vi: 'Mẫu bảng đa năng cho phép chọn tự do các trường.',
+        description_en: 'Generic Table.',
+        category: 'table' as const,
+        supported_orientations: ['portrait' as const, 'landscape' as const],
+        default_orientation: 'portrait' as const,
+        default_rows_per_page: 15,
+        field_slots: [
+          {
+            key: 'custom_columns',
+            label_vi: 'Cột hiển thị',
+            label_en: 'Custom Columns',
+            required: true,
+          },
+        ],
+        default_options: {
+          rows_per_page: 15,
+        },
+      },
     ],
+  }
+
+  const mockPreviewData = {
+    template: mockMeta.templates[0],
+    deck_id: 1,
+    deck_name: 'JLPT N5 Core',
+    options: { orientation: 'portrait' as const, rows_per_page: 5 },
+    field_mapping: { kanji: 'Expression' },
+    total_items: 2,
+    total_pages: 1,
+    pages: [
+      {
+        page_number: 1,
+        total_pages: 1,
+        header: {
+          title: 'JLPT N5 Core - Bài tập',
+          subtitle: 'Luyện viết mỗi ngày',
+          deck_name: 'JLPT N5 Core',
+          show_student_info: true,
+          show_date: true,
+        },
+        items: [
+          {
+            type: 'kanji' as const,
+            note_id: '1',
+            char: '日',
+            hex: '65e5',
+            has_stroke: true,
+            stroke_svg: null,
+            stroke_url: null,
+            reading: 'にち',
+            meaning: 'Mặt trời, ngày',
+            source_word: '日',
+          },
+        ],
+      },
+    ],
+    warnings: [],
   }
 
   beforeEach(() => {
@@ -85,6 +145,7 @@ describe('DeckWorksheetModal', () => {
     document.body.appendChild(container)
     root = createRoot(container)
     vi.spyOn(worksheetApi, 'fetchDeckWorksheetMeta').mockResolvedValue(mockMeta)
+    vi.spyOn(worksheetApi, 'generateWorksheetPreview').mockResolvedValue(mockPreviewData as any)
   })
 
   afterEach(() => {
@@ -99,7 +160,7 @@ describe('DeckWorksheetModal', () => {
     vi.restoreAllMocks()
   })
 
-  it('renders modal and displays loaded templates', async () => {
+  it('renders live studio with header, templates list, and automatic demo preview', async () => {
     await act(async () => {
       root?.render(
         <DeckWorksheetModal
@@ -111,17 +172,23 @@ describe('DeckWorksheetModal', () => {
       )
     })
 
-    // Wait for async meta fetch
+    // Wait for async meta fetch and auto debounced preview
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 50))
+      await new Promise((r) => setTimeout(r, 300))
     })
 
     expect(document.body.textContent).toContain('Xuất bài tập in ấn / PDF (A4)')
+    expect(document.body.textContent).toContain('Live Studio')
     expect(document.body.textContent).toContain('Luyện viết Kanji chuẩn')
     expect(document.body.textContent).toContain('Luyện viết từ vựng')
+    expect(document.body.textContent).toContain('In ngay (A4)')
+
+    // Live preview canvas content
+    expect(document.body.textContent).toContain('日')
+    expect(document.body.textContent).toContain('Mặt trời, ngày')
   })
 
-  it('navigates through steps to field mapping and layout', async () => {
+  it('switches sidebar tabs between template, data, layout, and header', async () => {
     await act(async () => {
       root?.render(
         <DeckWorksheetModal
@@ -134,80 +201,103 @@ describe('DeckWorksheetModal', () => {
     })
 
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 50))
+      await new Promise((r) => setTimeout(r, 300))
     })
 
-    // Step 1: Click Continue to Fields
-    const nextBtn = Array.from(document.querySelectorAll('button')).find((b) =>
-      b.textContent?.includes('Tiếp tục: Dữ liệu'),
+    // Click Tab 2: Dữ liệu & Trường
+    const dataTabBtn = Array.from(document.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Dữ liệu & Trường'),
     )
-    expect(nextBtn).toBeDefined()
+    expect(dataTabBtn).toBeDefined()
 
     await act(async () => {
-      nextBtn?.click()
+      dataTabBtn?.click()
     })
 
-    // Verify Step 2: Dữ liệu
-    expect(document.body.textContent).toContain('Bước 2: Ánh xạ trường dữ liệu')
-    expect(document.body.textContent).toContain('Trường Kanji')
+    expect(document.body.textContent).toContain('Phạm vi dữ liệu')
+    expect(document.body.textContent).toContain('Ánh xạ trường nguồn')
 
-    // Click Continue to Layout
-    const toLayoutBtn = Array.from(document.querySelectorAll('button')).find((b) =>
-      b.textContent?.includes('Tiếp tục: Bố cục'),
+    // Click Tab 3: Bố cục & Ô chữ
+    const layoutTabBtn = Array.from(document.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Bố cục & Ô chữ'),
     )
-    expect(toLayoutBtn).toBeDefined()
+    expect(layoutTabBtn).toBeDefined()
 
     await act(async () => {
-      toLayoutBtn?.click()
+      layoutTabBtn?.click()
     })
 
-    // Verify Step 3: Bố cục
-    expect(document.body.textContent).toContain('Bước 3: Tùy chỉnh Bố cục')
-    expect(document.body.textContent).toContain('Kiểu đường kẻ')
+    expect(document.body.textContent).toContain('Khổ giấy & Hướng in A4')
+    expect(document.body.textContent).toContain('Kiểu đường kẻ ô')
+    expect(document.body.textContent).toContain('Số ô đồ chữ (mờ)')
 
-    // Test direct stepper navigation back to step 1
-    const step1Btn = Array.from(document.querySelectorAll('button')).find((b) =>
-      b.textContent?.includes('1. Mẫu'),
+    // Click Tab 4: Tiêu đề & Thông tin
+    const headerTabBtn = Array.from(document.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Tiêu đề & Thông tin'),
     )
-    expect(step1Btn).toBeDefined()
+    expect(headerTabBtn).toBeDefined()
+
     await act(async () => {
-      step1Btn?.click()
+      headerTabBtn?.click()
     })
-    expect(document.body.textContent).toContain('Bước 1: Chọn mẫu bài tập phù hợp')
+
+    expect(document.body.textContent).toContain('Tiêu đề bài tập')
+    expect(document.body.textContent).toContain('Phụ đề / Hướng dẫn')
   })
 
-  it('generates preview and displays workbench with page navigation', async () => {
-    const mockPreviewData = {
-      template: mockMeta.templates[0],
+  it('renders workbench page navigation and zoom controls', async () => {
+    await act(async () => {
+      root?.render(
+        <DeckWorksheetModal
+          open={true}
+          onOpenChange={vi.fn()}
+          deckId={1}
+          deckName="JLPT N5 Core"
+        />,
+      )
+    })
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 300))
+    })
+
+    expect(document.body.textContent).toContain('Trang trước')
+    expect(document.body.textContent).toContain('Trang sau')
+    expect(document.body.textContent).toContain('Vừa trang')
+    expect(document.body.textContent).toContain('100%')
+  })
+
+  it('switches to deck_table template without crashing and renders custom columns', async () => {
+    const tablePreviewData = {
+      template: {
+        id: 'deck_table',
+        name_vi: 'Bảng dữ liệu bộ thẻ tuỳ biến',
+        category: 'table' as const,
+        field_slots: [],
+      },
       deck_id: 1,
       deck_name: 'JLPT N5 Core',
-      options: { orientation: 'portrait' as const, rows_per_page: 5 },
-      field_mapping: { kanji: 'Expression' },
-      total_items: 2,
+      options: { orientation: 'portrait' as const, rows_per_page: 15 },
+      field_mapping: { custom_columns: ['Expression', 'Meaning'] },
+      total_items: 1,
       total_pages: 1,
       pages: [
         {
           page_number: 1,
           total_pages: 1,
           header: {
-            title: 'JLPT N5 Core - Bài tập',
-            subtitle: 'Luyện viết mỗi ngày',
-            deck_name: 'JLPT N5 Core',
+            title: 'JLPT N5 Core - Bảng dữ liệu',
             show_student_info: true,
             show_date: true,
           },
           items: [
             {
-              type: 'kanji' as const,
+              type: 'table_row' as const,
               note_id: '1',
-              char: '日',
-              hex: '65e5',
-              has_stroke: true,
-              stroke_svg: null,
-              stroke_url: null,
-              reading: 'にち',
-              meaning: 'Mặt trời, ngày',
-              source_word: '日',
+              data: {
+                Expression: '日本語',
+                Meaning: 'Tiếng Nhật',
+              },
             },
           ],
         },
@@ -215,7 +305,7 @@ describe('DeckWorksheetModal', () => {
       warnings: [],
     }
 
-    vi.spyOn(worksheetApi, 'generateWorksheetPreview').mockResolvedValue(mockPreviewData as any)
+    vi.spyOn(worksheetApi, 'generateWorksheetPreview').mockResolvedValue(tablePreviewData as any)
 
     await act(async () => {
       root?.render(
@@ -229,44 +319,87 @@ describe('DeckWorksheetModal', () => {
     })
 
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 50))
+      await new Promise((r) => setTimeout(r, 300))
     })
 
-    // Navigate to step 2
-    const nextBtn = Array.from(document.querySelectorAll('button')).find((b) =>
-      b.textContent?.includes('Tiếp tục: Dữ liệu'),
+    // Click template card for deck_table
+    const tplCard = Array.from(document.querySelectorAll('h4')).find((h) =>
+      h.textContent?.includes('Bảng dữ liệu bộ thẻ tuỳ biến'),
     )
+    expect(tplCard).toBeDefined()
     await act(async () => {
-      nextBtn?.click()
+      tplCard?.click()
     })
 
-    // Navigate to step 3
-    const toLayoutBtn = Array.from(document.querySelectorAll('button')).find((b) =>
-      b.textContent?.includes('Tiếp tục: Bố cục'),
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 300))
+    })
+
+    // By default no columns are selected -> shows helpful empty state
+    expect(document.body.textContent).toContain('Chưa chọn cột nào để hiển thị')
+
+    // Switch to Data tab and click "Tất cả"
+    const dataTabBtn = Array.from(document.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Dữ liệu & Trường'),
     )
+    expect(dataTabBtn).toBeDefined()
     await act(async () => {
-      toLayoutBtn?.click()
+      dataTabBtn?.click()
     })
 
-    // Generate preview
-    const genPreviewBtn = Array.from(document.querySelectorAll('button')).find((b) =>
-      b.textContent?.includes('Xem trước bài tập'),
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 100))
+    })
+
+    const selectAllBtn = Array.from(document.querySelectorAll('button')).find((b) =>
+      b.textContent?.trim() === 'Tất cả',
     )
-    expect(genPreviewBtn).toBeDefined()
-
+    expect(selectAllBtn).toBeDefined()
     await act(async () => {
-      genPreviewBtn?.click()
+      selectAllBtn?.click()
     })
 
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 50))
+      await new Promise((r) => setTimeout(r, 300))
     })
 
-    // Verify preview workbench elements
-    expect(document.body.textContent).toContain('Trang trước')
-    expect(document.body.textContent).toContain('Trang sau')
-    expect(document.body.textContent).toContain('In ngay (Print / PDF)')
-    expect(document.body.textContent).toContain('Tải file in (HTML)')
-    expect(document.body.textContent).toContain('日')
+    expect(document.body.textContent).toContain('日本語')
+    expect(document.body.textContent).toContain('Tiếng Nhật')
+  })
+
+  it('renders auto-fit A4 toggle and extra blank rows selector in layout tab', async () => {
+    await act(async () => {
+      root?.render(
+        <DeckWorksheetModal
+          open={true}
+          onOpenChange={vi.fn()}
+          deckId={1}
+          deckName="JLPT N5 Core"
+        />,
+      )
+    })
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 300))
+    })
+
+    // Click Layout Tab
+    const layoutTabBtn = Array.from(document.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Bố cục & Ô chữ'),
+    )
+    expect(layoutTabBtn).toBeDefined()
+    await act(async () => {
+      layoutTabBtn?.click()
+    })
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 100))
+    })
+
+    expect(document.body.textContent).toContain('Tự tính số dòng Full trang A4')
+    expect(document.body.textContent).toContain('Dòng trống luyện viết bổ sung')
+    expect(document.body.textContent).toContain('+1 dòng')
+    expect(document.body.textContent).toContain('Điền đầy trang cuối bằng dòng trống')
   })
 })
+

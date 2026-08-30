@@ -7,6 +7,8 @@ export interface KanjiGridBoxProps {
   isBlank?: boolean
   size?: number
   className?: string
+  rounded?: boolean
+  strokeColor?: string
 }
 
 export const KanjiGridBox = memo(function KanjiGridBox({
@@ -14,19 +16,24 @@ export const KanjiGridBox = memo(function KanjiGridBox({
   gridStyle = 'cross',
   isTrace = false,
   isBlank = false,
-  size = 52,
+  size = 36,
   className = '',
+  rounded = false,
+  strokeColor = '#64748b',
 }: KanjiGridBoxProps) {
   const half = size / 2
-  const fontSize = Math.round(size * 0.72)
+  const fontSize = Math.max(6, Math.round(size * 0.72))
   const yPos = Math.round(size * 0.76)
+  const isSmall = size < 22
+  const guideStroke = isSmall ? '0.6' : '1'
+  const dashArray = isSmall ? '1 1' : '2 2'
 
   return (
     <svg
       width={size}
       height={size}
       viewBox={`0 0 ${size} ${size}`}
-      className={`shrink-0 rounded-[4px] bg-white select-none ${className}`}
+      className={`shrink-0 bg-white select-none ${rounded ? 'rounded-[3px]' : ''} ${className}`}
       xmlns="http://www.w3.org/2000/svg"
     >
       {/* Outer border */}
@@ -36,9 +43,9 @@ export const KanjiGridBox = memo(function KanjiGridBox({
         width={size - 1}
         height={size - 1}
         fill="#ffffff"
-        stroke="#94a3b8"
-        strokeWidth="1.2"
-        rx="4"
+        stroke={strokeColor}
+        strokeWidth="1"
+        rx={rounded ? 3 : 0}
       />
 
       {/* Cross guidelines */}
@@ -50,8 +57,8 @@ export const KanjiGridBox = memo(function KanjiGridBox({
             x2={half}
             y2={size - 1}
             stroke="#cbd5e1"
-            strokeWidth="1"
-            strokeDasharray="2 2"
+            strokeWidth={guideStroke}
+            strokeDasharray={dashArray}
           />
           <line
             x1={1}
@@ -59,8 +66,8 @@ export const KanjiGridBox = memo(function KanjiGridBox({
             x2={size - 1}
             y2={half}
             stroke="#cbd5e1"
-            strokeWidth="1"
-            strokeDasharray="2 2"
+            strokeWidth={guideStroke}
+            strokeDasharray={dashArray}
           />
         </>
       )}
@@ -74,8 +81,8 @@ export const KanjiGridBox = memo(function KanjiGridBox({
             x2={size - 1}
             y2={size - 1}
             stroke="#e2e8f0"
-            strokeWidth="0.8"
-            strokeDasharray="2 2"
+            strokeWidth={isSmall ? '0.5' : '0.8'}
+            strokeDasharray={dashArray}
           />
           <line
             x1={1}
@@ -83,8 +90,8 @@ export const KanjiGridBox = memo(function KanjiGridBox({
             x2={size - 1}
             y2={1}
             stroke="#e2e8f0"
-            strokeWidth="0.8"
-            strokeDasharray="2 2"
+            strokeWidth={isSmall ? '0.5' : '0.8'}
+            strokeDasharray={dashArray}
           />
         </>
       )}

@@ -220,6 +220,79 @@ class TestWorksheetService(unittest.TestCase):
         self.assertIn("worksheet-grid-box", html_out)
         self.assertIn("<svg", html_out)
 
+    def test_auto_fit_page_and_extra_blank_rows(self):
+        # 1. Test optimal row calculation with auto_fit_page
+        payload = {
+            "template_id": "kanji_stroke",
+            "deck_id": self.deck.id,
+            "note_ids": [self.note1.id],  # 5 Kanji chars
+            "field_mapping": {"kanji": "Expression"},
+            "options": {
+                "auto_fit_page": True,
+                "extra_blank_rows": 1,
+                "fill_blank_rows": True,
+            },
+        }
+        res = generate_worksheet_preview(user_id=self.user.id, payload=payload)
+        self.assertTrue(res["options"]["auto_fit_page"])
+        self.assertEqual(res["options"]["extra_blank_rows"], 1)
+        # Optimal rows for kanji_stroke (36px box) with 1 extra blank row in Portrait = 9 items/page
+        self.assertEqual(res["options"]["rows_per_page"], 9)
+        self.assertEqual(len(res["pages"]), 1)
+        # Page 1 has 5 real items + 4 filled blank rows = 9 items
+        self.assertEqual(len(res["pages"][0]["items"]), 9)
+        self.assertTrue(res["pages"][0]["items"][-1].get("is_blank_filler"))
+
+        # Render printable HTML and verify extra blank strips
+        html_out = render_printable_html(res)
+        self.assertIn("kanji-extra-blank-strip", html_out)
+
+    def test_sentence_writing_and_grammar_practice(self):
+        # 1. Test Sentence Writing
+        payload_sentence = {
+            "template_id": "sentence_writing",
+            "deck_id": self.deck.id,
+            "field_mapping": {
+                "sentence": "Expression",
+                "reading": "Reading",
+                "meaning": "Meaning",
+            },
+            "options": {
+                "writing_lines_count": 4,
+                "writing_line_style": "dashed",
+                "watermark_enabled": True,
+                "watermark_text": "FLAMA.APP",
+            },
+        }
+        res_s = generate_worksheet_preview(user_id=self.user.id, payload=payload_sentence)
+        self.assertEqual(res_s["template"]["id"], "sentence_writing")
+        self.assertEqual(res_s["total_items"], 3)
+        html_s = render_printable_html(res_s)
+        self.assertIn("sentence-card", html_s)
+        self.assertIn("sentence-write-line", html_s)
+        self.assertIn("watermark-overlay", html_s)
+        self.assertIn("FLAMA.APP", html_s)
+
+        # 2. Test Grammar Practice
+        payload_grammar = {
+            "template_id": "grammar_practice",
+            "deck_id": self.deck.id,
+            "field_mapping": {
+                "grammar_point": "Expression",
+                "meaning_usage": "Meaning",
+                "example": "Reading",
+            },
+            "options": {
+                "exercise_prompt": "Hãy đặt 2 câu hoàn chỉnh với ngữ pháp trên:",
+                "writing_lines_count": 3,
+            },
+        }
+        res_g = generate_worksheet_preview(user_id=self.user.id, payload=payload_grammar)
+        self.assertEqual(res_g["template"]["id"], "grammar_practice")
+        html_g = render_printable_html(res_g)
+        self.assertIn("grammar-card", html_g)
+        self.assertIn("Hãy đặt 2 câu hoàn chỉnh", html_g)
+
 
 if __name__ == "__main__":
     unittest.main()

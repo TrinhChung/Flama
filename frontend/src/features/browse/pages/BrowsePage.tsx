@@ -3,6 +3,7 @@ import {
   ChevronDown,
   Layers,
   PenTool,
+  Printer,
   Volume2,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
@@ -80,6 +81,38 @@ export function BrowsePage() {
         </div>
 
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+          {/* Nút In bài tập / Worksheet: Hiển thị trạng thái theo số thẻ đã chọn */}
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={selectedCards.length === 0}
+            className="h-7 sm:h-8 rounded-full text-[11px] sm:text-xs px-2 sm:px-3 gap-1.5 bg-background hover:bg-muted border-border disabled:opacity-40 disabled:cursor-not-allowed"
+            onClick={() => {
+              if (selectedCards.length === 0) return
+              const firstDeckId = browse.cardsQuery.data?.items[0]?.deck_id
+              const targetDeckId = browse.selectedDeckId || firstDeckId || 1
+              browse.setWorksheetTargetDeckId(targetDeckId)
+              browse.setWorksheetTargetCardIds(selectedCards)
+              browse.setIsWorksheetModalOpen(true)
+            }}
+            title={
+              selectedCards.length === 0
+                ? 'Vui lòng tích chọn ít nhất 1 thẻ để in bài tập'
+                : `In bài tập cho ${selectedCards.length} thẻ đã chọn`
+            }
+          >
+            <Printer className="size-3.5 text-primary" />
+            <span className="hidden sm:inline">In bài tập</span>
+            {selectedCards.length > 0 && (
+              <Badge
+                variant="secondary"
+                className="text-[10px] px-1.5 py-0 h-4 min-w-4 flex items-center justify-center font-bold bg-primary/15 text-primary rounded-full"
+              >
+                {selectedCards.length}
+              </Badge>
+            )}
+          </Button>
+
           <Button
             variant="outline"
             size="sm"

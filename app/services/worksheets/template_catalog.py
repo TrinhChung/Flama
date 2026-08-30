@@ -35,17 +35,58 @@ class WorksheetTemplate:
         return data
 
 
+def calculate_optimal_rows_per_page(
+    template_id: str,
+    orientation: str = "portrait",
+    margin: str = "compact",
+    extra_blank_rows: int = 0,
+    box_size: int = 36,
+) -> int:
+    """Calculate the exact number of items/rows per page to fill 100% of an A4 sheet."""
+    is_landscape = str(orientation).lower() == "landscape"
+    box_size = max(10, min(int(box_size or 36), 120))
+    extra_blanks = max(0, min(int(extra_blank_rows or 0), 10))
+
+    if template_id in {"kanji_stroke", "kanji_compact"}:
+        usable_height = 580 if is_landscape else 900
+        item_height = (box_size + 16) + min(3, extra_blanks) * (box_size + 6)
+        optimal_rows = max(1, min(24, int(usable_height // item_height)))
+        return optimal_rows
+
+    elif template_id == "vocab_writing":
+        usable_height = 580 if is_landscape else 900
+        row_height = 36 + min(3, extra_blanks) * 30
+        return max(1, min(30, int(usable_height // row_height)))
+
+    elif template_id == "vocab_recall":
+        return 12 if is_landscape else 18
+
+    elif template_id == "sentence_writing":
+        usable_height = 660 if is_landscape else 940
+        lines_cnt = max(1, min(10, extra_blanks if extra_blanks > 0 else 3))
+        row_h = 42 + lines_cnt * 24
+        return max(1, min(10, int(usable_height // row_h)))
+
+    elif template_id == "grammar_practice":
+        usable_height = 660 if is_landscape else 940
+        lines_cnt = max(1, min(10, extra_blanks if extra_blanks > 0 else 3))
+        row_h = 50 + lines_cnt * 24
+        return max(1, min(8, int(usable_height // row_h)))
+
+    return 6 if is_landscape else 8
+
+
 # 1. Kanji Stroke Practice Template
 KANJI_STROKE_TEMPLATE = WorksheetTemplate(
     id="kanji_stroke",
     name_vi="Luyện viết Kanji chuẩn (Stroke Practice)",
     name_en="Kanji Stroke Order Practice",
-    description_vi="Mẫu luyện viết chữ Hán tiêu chuẩn với chữ mẫu to, sơ đồ thứ tự từng nét, các ô mờ để đồ chữ (trace) và các ô trống kẻ lưới hướng dẫn.",
-    description_en="Standard Japanese Kanji practice sheet with large reference character, stroke order diagrams, faint tracing boxes, and guided writing grid.",
+    description_vi="Mẫu luyện viết chữ Hán tiêu chuẩn với chữ mẫu to, sơ đồ thứ tự từng nét, các ô mờ để đồ chữ (trace) và dải ô lưới luyện viết liền mạch tiết kiệm giấy.",
+    description_en="Standard Japanese Kanji practice sheet with large reference character, stroke order diagrams, faint tracing boxes, and continuous guided writing grid.",
     category="kanji",
     supported_orientations=("portrait", "landscape"),
     default_orientation="portrait",
-    default_rows_per_page=5,
+    default_rows_per_page=8,
     field_slots=(
         FieldSlot(
             key="kanji",
@@ -75,14 +116,18 @@ KANJI_STROKE_TEMPLATE = WorksheetTemplate(
     default_options={
         "grid_style": "cross",  # 'cross' (+) | 'diagonal' (*) | 'square' (box)
         "trace_count": 2,       # Number of faint tracing boxes
-        "practice_count": 5,    # Number of blank practice boxes
+        "practice_count": 6,    # Number of blank practice boxes
         "show_stroke_diagram": True,
         "show_reading": True,
         "show_meaning": True,
-        "rows_per_page": 5,
+        "rows_per_page": 8,
+        "auto_fit_page": True,
+        "box_size": 36,
+        "extra_blank_rows": 0,
+        "fill_blank_rows": True,
         "paper_size": "a4",
         "orientation": "portrait",
-        "margin": "standard",   # 'compact' | 'standard' | 'wide'
+        "margin": "compact",   # 'compact' | 'standard' | 'wide'
         "locale": "ja",         # 'ja' | 'zh' | 'zh-hant'
     },
 )
@@ -92,12 +137,12 @@ KANJI_COMPACT_TEMPLATE = WorksheetTemplate(
     id="kanji_compact",
     name_vi="Luyện viết Kanji nhiều dòng (Compact Practice)",
     name_en="Kanji Compact Multi-row Practice",
-    description_vi="Mẫu thu gọn chứa nhiều chữ Hán trên 1 trang A4, sơ đồ nét tinh gọn kèm nhiều ô luyện viết liên tiếp (thích hợp ôn tập tốc hành).",
+    description_vi="Mẫu thu gọn tối đa chứa nhiều chữ Hán trên 1 trang A4, sơ đồ nét tinh gọn kèm nhiều ô luyện viết liền kề (thích hợp ôn tập tốc hành, siêu tiết kiệm giấy photo).",
     description_en="Compact multi-character layout per page with mini stroke order diagrams and high-density writing squares.",
     category="kanji",
     supported_orientations=("portrait", "landscape"),
     default_orientation="portrait",
-    default_rows_per_page=8,
+    default_rows_per_page=10,
     field_slots=(
         FieldSlot(
             key="kanji",
@@ -125,11 +170,15 @@ KANJI_COMPACT_TEMPLATE = WorksheetTemplate(
     default_options={
         "grid_style": "cross",
         "trace_count": 1,
-        "practice_count": 7,
+        "practice_count": 8,
         "show_stroke_diagram": True,
         "show_reading": True,
         "show_meaning": True,
-        "rows_per_page": 8,
+        "rows_per_page": 10,
+        "auto_fit_page": True,
+        "box_size": 30,
+        "extra_blank_rows": 0,
+        "fill_blank_rows": True,
         "paper_size": "a4",
         "orientation": "portrait",
         "margin": "compact",
@@ -142,12 +191,12 @@ VOCAB_WRITING_TEMPLATE = WorksheetTemplate(
     id="vocab_writing",
     name_vi="Luyện viết từ vựng (Vocabulary Writing Table)",
     name_en="Vocabulary Writing Practice Table",
-    description_vi="Bảng từ vựng chia cột: Từ gốc, Cách đọc, Nghĩa và các ô/dòng kẻ trống để viết lại từ nhiều lần.",
+    description_vi="Bảng từ vựng chia cột: Từ gốc, Cách đọc, Nghĩa và dải ô kẻ liền mạch để viết lại từ nhiều lần.",
     description_en="Structured table with word, reading, meaning columns and handwriting practice space.",
     category="vocabulary",
     supported_orientations=("portrait", "landscape"),
     default_orientation="portrait",
-    default_rows_per_page=12,
+    default_rows_per_page=16,
     field_slots=(
         FieldSlot(
             key="word",
@@ -173,13 +222,16 @@ VOCAB_WRITING_TEMPLATE = WorksheetTemplate(
     ),
     default_options={
         "practice_type": "boxes",  # 'boxes' | 'lines' | 'grid'
-        "practice_boxes_count": 5,
+        "practice_boxes_count": 6,
         "show_reading": True,
         "show_meaning": True,
-        "rows_per_page": 12,
+        "rows_per_page": 16,
+        "auto_fit_page": True,
+        "extra_blank_rows": 0,
+        "fill_blank_rows": True,
         "paper_size": "a4",
         "orientation": "portrait",
-        "margin": "standard",
+        "margin": "compact",
     },
 )
 
@@ -193,7 +245,7 @@ VOCAB_RECALL_TEMPLATE = WorksheetTemplate(
     category="vocabulary",
     supported_orientations=("portrait", "landscape"),
     default_orientation="portrait",
-    default_rows_per_page=14,
+    default_rows_per_page=18,
     field_slots=(
         FieldSlot(
             key="word",
@@ -220,10 +272,13 @@ VOCAB_RECALL_TEMPLATE = WorksheetTemplate(
     default_options={
         "show_reading_hint": True,
         "show_word_length_hint": False,
-        "rows_per_page": 14,
+        "rows_per_page": 18,
+        "auto_fit_page": True,
+        "extra_blank_rows": 0,
+        "fill_blank_rows": True,
         "paper_size": "a4",
         "orientation": "portrait",
-        "margin": "standard",
+        "margin": "compact",
     },
 )
 
@@ -237,7 +292,7 @@ DECK_TABLE_TEMPLATE = WorksheetTemplate(
     category="table",
     supported_orientations=("portrait", "landscape"),
     default_orientation="portrait",
-    default_rows_per_page=15,
+    default_rows_per_page=22,
     field_slots=(
         FieldSlot(
             key="custom_columns",
@@ -250,10 +305,126 @@ DECK_TABLE_TEMPLATE = WorksheetTemplate(
     default_options={
         "include_practice_column": True,
         "practice_column_label": "Ghi chú / Luyện viết",
-        "rows_per_page": 15,
+        "rows_per_page": 22,
+        "auto_fit_page": True,
+        "extra_blank_rows": 0,
+        "fill_blank_rows": True,
         "paper_size": "a4",
         "orientation": "portrait",
-        "margin": "standard",
+        "margin": "compact",
+        "watermark_enabled": True,
+        "watermark_text": "flama.app",
+        "watermark_opacity": 0.04,
+    },
+)
+
+# 6. Sentence Writing & Translation Template
+SENTENCE_WRITING_TEMPLATE = WorksheetTemplate(
+    id="sentence_writing",
+    name_vi="Mẫu câu & Dịch câu / Đoạn văn (Sentence Practice)",
+    name_en="Sentence Writing & Translation Worksheet",
+    description_vi="Mẫu câu mẫu từ thẻ, bên dưới có các dòng kẻ tự do để học sinh tự dịch, chép lại hoặc viết thành đoạn văn (tuỳ chỉnh số dòng kẻ).",
+    description_en="Sample sentence practice sheet with custom writing lines below for translation or paragraph writing.",
+    category="sentence",
+    supported_orientations=("portrait", "landscape"),
+    default_orientation="portrait",
+    default_rows_per_page=6,
+    field_slots=(
+        FieldSlot(
+            key="sentence",
+            label_vi="Trường câu mẫu / Ví dụ (Sample Sentence)",
+            label_en="Sample Sentence Field",
+            required=True,
+            description_vi="Trường chứa câu mẫu hoặc ví dụ cần luyện tập.",
+            suggested_names=("Example", "Sentence", "Expression", "Word", "Front"),
+        ),
+        FieldSlot(
+            key="reading",
+            label_vi="Trường cách đọc / Phiên âm câu mẫu (Furigana / Romaji)",
+            label_en="Reading / Furigana Field",
+            required=False,
+            description_vi="Hiển thị cách đọc phụ âm phía trên hoặc bên dưới câu mẫu.",
+            suggested_names=("Example_Reading", "ExampleReading", "Reading", "Furigana"),
+        ),
+        FieldSlot(
+            key="meaning",
+            label_vi="Trường ý nghĩa / Bản dịch câu mẫu",
+            label_en="Meaning / Translation Field",
+            required=False,
+            description_vi="Hiển thị bản dịch câu mẫu hoặc ẩn đi để học sinh tự dịch.",
+            suggested_names=("Example_Meaning", "ExampleMeaning", "Meaning", "Definition", "Vietnamese", "Back"),
+        ),
+    ),
+    default_options={
+        "writing_lines_count": 3,
+        "writing_line_style": "dashed",
+        "show_sample_sentence": True,
+        "show_sample_reading": True,
+        "show_sample_meaning": True,
+        "auto_fit_page": True,
+        "extra_blank_rows": 0,
+        "fill_blank_rows": True,
+        "paper_size": "a4",
+        "orientation": "portrait",
+        "margin": "compact",
+        "watermark_enabled": True,
+        "watermark_text": "flama.app",
+        "watermark_opacity": 0.04,
+    },
+)
+
+# 7. Grammar Practice & Custom Prompts Template
+GRAMMAR_PRACTICE_TEMPLATE = WorksheetTemplate(
+    id="grammar_practice",
+    name_vi="Ngữ pháp & Đặt câu theo đề bài (Grammar Practice)",
+    name_en="Grammar Practice & Custom Prompts Worksheet",
+    description_vi="Hiển thị cấu trúc ngữ pháp/từ vựng mục tiêu, đi kèm đề bài/yêu cầu bài tập tuỳ chỉnh của giáo viên và dòng kẻ để học sinh làm bài.",
+    description_en="Grammar pattern & vocab worksheet with customizable exercise instructions/prompts and ruled answer lines.",
+    category="grammar",
+    supported_orientations=("portrait", "landscape"),
+    default_orientation="portrait",
+    default_rows_per_page=5,
+    field_slots=(
+        FieldSlot(
+            key="grammar_point",
+            label_vi="Trường cấu trúc ngữ pháp / Điểm ngữ pháp mục tiêu",
+            label_en="Grammar Point Field",
+            required=True,
+            description_vi="Trường chứa điểm ngữ pháp hoặc từ vựng trọng tâm.",
+            suggested_names=("Expression", "Grammar", "Pattern", "Word", "Front"),
+        ),
+        FieldSlot(
+            key="meaning_usage",
+            label_vi="Trường ý nghĩa / Cách dùng / Giải thích",
+            label_en="Meaning / Usage Field",
+            required=False,
+            description_vi="Hiển thị giải thích ý nghĩa hoặc cấu trúc kết nối của ngữ pháp.",
+            suggested_names=("Meaning", "Usage", "Explanation", "Definition", "Vietnamese"),
+        ),
+        FieldSlot(
+            key="example",
+            label_vi="Trường câu ví dụ minh hoạ",
+            label_en="Example Sentence Field",
+            required=False,
+            description_vi="Ví dụ minh hoạ ngữ pháp làm gợi ý cho học sinh.",
+            suggested_names=("Example", "Sentence", "Sample"),
+        ),
+    ),
+    default_options={
+        "exercise_prompt": "Hãy đặt câu hoàn chỉnh sử dụng cấu trúc / từ vựng trên:",
+        "writing_lines_count": 3,
+        "writing_line_style": "dashed",
+        "show_explanation": True,
+        "show_example_hint": True,
+        "auto_fit_page": True,
+        "extra_blank_rows": 0,
+        "fill_blank_rows": True,
+        "paper_size": "a4",
+        "orientation": "portrait",
+        "margin": "compact",
+        "watermark_enabled": True,
+        "watermark_text": "flama.app",
+        "watermark_opacity": 0.04,
     },
 )
 
@@ -263,6 +434,8 @@ TEMPLATE_CATALOG: dict[str, WorksheetTemplate] = {
     VOCAB_WRITING_TEMPLATE.id: VOCAB_WRITING_TEMPLATE,
     VOCAB_RECALL_TEMPLATE.id: VOCAB_RECALL_TEMPLATE,
     DECK_TABLE_TEMPLATE.id: DECK_TABLE_TEMPLATE,
+    SENTENCE_WRITING_TEMPLATE.id: SENTENCE_WRITING_TEMPLATE,
+    GRAMMAR_PRACTICE_TEMPLATE.id: GRAMMAR_PRACTICE_TEMPLATE,
 }
 
 

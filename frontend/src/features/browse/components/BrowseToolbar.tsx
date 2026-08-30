@@ -2,13 +2,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { NativeSelect } from '@/components/ui/native-select'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import { Search, Sliders, ChevronDown, Trash2, Volume2, Printer, Plus } from 'lucide-react'
+import { Search, Sliders, Trash2, Plus } from 'lucide-react'
 import type { useBrowseState } from '../hooks/useBrowseState'
 
 interface BrowseToolbarProps {
@@ -23,16 +17,6 @@ export function BrowseToolbar({ browse }: BrowseToolbarProps) {
     setStatusFilter,
     selectedCards,
     bulkDeleteMutation,
-    setIsTtsModalOpen,
-    setLocalAudioEngineId,
-    setLocalAudioDefaultVoiceId,
-    setLocalAudioTargetCardIds,
-    setIsLocalAudioModalOpen,
-    setIsWorksheetModalOpen,
-    setWorksheetTargetDeckId,
-    setWorksheetTargetCardIds,
-    selectedDeckId,
-    cardsQuery,
     handleStartCreateCard,
   } = browse
 
@@ -83,68 +67,21 @@ export function BrowseToolbar({ browse }: BrowseToolbarProps) {
               Đã chọn: {selectedCards.length} thẻ
             </Badge>
 
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="h-8 rounded-lg text-xs gap-1 bg-muted/50">
-                  <span>Thao tác hàng loạt</span>
-                  <ChevronDown className="size-3 opacity-60" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                {/* Worksheet Generator Trigger */}
-                <DropdownMenuItem
-                  onClick={() => {
-                    const firstDeckId = cardsQuery.data?.items[0]?.deck_id
-                    const targetDeckId = selectedDeckId || firstDeckId || 1
-                    setWorksheetTargetDeckId(targetDeckId)
-                    setWorksheetTargetCardIds(selectedCards)
-                    setIsWorksheetModalOpen(true)
-                  }}
-                  className="flex items-center gap-2 font-medium cursor-pointer"
-                >
-                  <Printer className="size-4 text-orange-600 shrink-0" />
-                  <span>Xuất bài tập in ấn (Worksheet)</span>
-                </DropdownMenuItem>
-
-                {/* Voice Generation Trigger */}
-                <DropdownMenuItem
-                  onClick={() => setIsTtsModalOpen(true)}
-                  className="flex items-center gap-2 font-medium cursor-pointer"
-                >
-                  <Volume2 className="size-4 text-primary shrink-0" />
-                  <span>Tạo audio VoiceVox</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => {
-                    setLocalAudioEngineId('voicevox')
-                    setLocalAudioDefaultVoiceId('3')
-                    setLocalAudioTargetCardIds(selectedCards)
-                    setIsLocalAudioModalOpen(true)
-                  }}
-                  className="flex items-center justify-between font-medium cursor-pointer"
-                >
-                  <div className="flex items-center gap-2">
-                    <Volume2 className="size-4 text-emerald-600 shrink-0" />
-                    <span>Tạo audio local</span>
-                  </div>
-                  <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30">
-                    Local
-                  </Badge>
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => {
-                    if (window.confirm(`Bạn có chắc chắn muốn xóa vĩnh viễn ${selectedCards.length} thẻ đã chọn?`)) {
-                      bulkDeleteMutation.mutate(selectedCards)
-                    }
-                  }}
-                  disabled={bulkDeleteMutation.isPending}
-                  className="flex items-center gap-2 text-destructive focus:text-destructive focus:bg-destructive/10 font-medium cursor-pointer"
-                >
-                  <Trash2 className="size-4 shrink-0" />
-                  <span>Xóa thẻ vĩnh viễn</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                if (window.confirm(`Bạn có chắc chắn muốn xóa vĩnh viễn ${selectedCards.length} thẻ đã chọn?`)) {
+                  bulkDeleteMutation.mutate(selectedCards)
+                }
+              }}
+              disabled={bulkDeleteMutation.isPending}
+              className="h-8 rounded-lg text-xs gap-1.5 text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/30 bg-background"
+            >
+              <Trash2 className="size-3.5 shrink-0" />
+              <span>Xóa {selectedCards.length} thẻ</span>
+            </Button>
           </div>
         )}
       </div>
