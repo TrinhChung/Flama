@@ -1,6 +1,8 @@
-﻿import {
+import {
   ChevronsUpDown,
   CreditCard,
+  Goal,
+  HelpCircle,
   Key,
   LogOut,
   NotebookTabs,
@@ -99,6 +101,12 @@ export function NavUser({
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
+                <Link to="/settings/goals">
+                  <Goal />
+                  Mục tiêu học tập
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
                 <Link to="/wallet">
                   <Wallet />
                   Ví & Doanh thu
@@ -120,6 +128,12 @@ export function NavUser({
                 <Link to="/settings/mcp-tokens">
                   <Key />
                   Kết nối AI (MCP)
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link to="/guide">
+                  <HelpCircle />
+                  Trợ giúp
                 </Link>
               </DropdownMenuItem>
             </DropdownMenuGroup>

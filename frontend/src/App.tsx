@@ -149,6 +149,11 @@ const AdminTtsPage = lazy(() =>
     default: module.AdminTtsPage,
   })),
 )
+const StudyGoalsPage = lazy(() =>
+  import('./features/settings/pages/StudyGoalsPage').then((module) => ({
+    default: module.StudyGoalsPage,
+  })),
+)
 const McpTokensPage = lazy(() =>
   import('./features/settings/pages/McpTokensPage').then((module) => ({
     default: module.McpTokensPage,
@@ -470,6 +475,14 @@ const router = createBrowserRouter([
                 element: deferred(<ReleaseBuilderPage />),
               },
             ],
+          },
+          {
+            path: 'settings/goals',
+            element: deferred(<StudyGoalsPage />),
+          },
+          {
+            path: 'goals',
+            element: <Navigate to="/settings/goals" replace />,
           },
           {
             path: 'settings/mcp-tokens',
