@@ -1191,20 +1191,12 @@ def _clone_scope_deck_lookup(*, user_id: int, clone_scope) -> dict[int, str]:
     return deck_lookup
 
 
-def _collect_note_media_refs(note_obj) -> set[str]:
-    refs: set[str] = set()
+def _collect_note_media_refs(note_obj):
+    from app.services.media_field_codec import build_media_reference_lookup
+
     if note_obj is None:
-        return refs
-    for asset in note_obj.media_assets or []:
-        asset_id = str(getattr(asset, "id", "") or "").strip()
-        if asset_id:
-            refs.add(asset_id)
-            refs.add(f"/media/proxy/{asset_id}")
-        filename = str(getattr(asset, "filename", "") or "").strip()
-        if filename:
-            refs.add(filename)
-            refs.add(f"[sound:{filename}]")
-    return refs
+        return {}
+    return build_media_reference_lookup(note_obj.media_assets or [])
 
 
 def _normalize_tags_payload(raw_tags: object) -> list[str]:

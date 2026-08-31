@@ -304,4 +304,33 @@ describe('card renderer host viewport modes', () => {
     )
     controller.destroy()
   })
+
+  it('adds exact public HTTPS media URLs to CSP without authorizing injected proxy ids', () => {
+    const source = readFileSync(
+      resolve(process.cwd(), '../static/js/card_renderer_host.js'),
+      'utf8',
+    )
+    window.eval(source)
+
+    const iframe = document.createElement('iframe')
+    document.body.appendChild(iframe)
+    const controller = window.FlamaCardRendererHost!.createRendererFrameController(iframe)
+    controller.render({
+      html: [
+        '<img src="https://cdn.example.com/cards/cat.png">',
+        '<audio src="https://cdn.example.com/audio/cat.mp3"></audio>',
+        '<audio src="/media/proxy/not-attached"></audio>',
+      ].join(''),
+      allowed_media_urls: [
+        'https://cdn.example.com/cards/cat.png',
+        'https://cdn.example.com/audio/cat.mp3',
+      ],
+      allowed_audio_urls: ['https://cdn.example.com/audio/cat.mp3'],
+    })
+
+    expect(iframe.srcdoc).toContain('https://cdn.example.com/cards/cat.png')
+    expect(iframe.srcdoc).toContain('https://cdn.example.com/audio/cat.mp3')
+    expect(iframe.srcdoc).not.toContain(`${window.location.origin}/media/proxy/not-attached`)
+    controller.destroy()
+  })
 })

@@ -1,12 +1,10 @@
 import { memo } from 'react'
 import { Table as TableIcon } from 'lucide-react'
 import type {
-  WorksheetGrammarItem,
   WorksheetKanjiItem,
   WorksheetLayoutOptions,
   WorksheetPageData,
   WorksheetRecallItem,
-  WorksheetSentenceItem,
   WorksheetTableRowItem,
   WorksheetTemplate,
   WorksheetVocabItem,

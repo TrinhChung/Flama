@@ -1334,16 +1334,10 @@ def _refresh_source_note_type_stats(
             )
 
 
-def _note_media_refs(note: Note) -> set[str]:
-    refs: set[str] = set()
-    for asset in note.media_assets or []:
-        asset_id = str(asset.id or "").strip()
-        if asset_id:
-            refs.update({asset_id, f"/media/proxy/{asset_id}"})
-        filename = str(asset.filename or "").strip()
-        if filename:
-            refs.update({filename, f"[sound:{filename}]"})
-    return refs
+def _note_media_refs(note: Note):
+    from app.services.media_field_codec import build_media_reference_lookup
+
+    return build_media_reference_lookup(note.media_assets or [])
 
 
 def _validation_error(exc: RequestValidationError) -> ContentApiError:

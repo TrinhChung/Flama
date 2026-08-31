@@ -5,6 +5,7 @@ import unittest
 from app import create_app
 from models import db
 from models.deck import Deck
+from models.field_def import FieldDef
 from models.note import Note
 from models.note_type import NoteType
 from models.user import User
@@ -33,6 +34,11 @@ class TestApiStrokes(unittest.TestCase):
         deck = Deck(name="Test Deck", owner_user_id=user.id)
         db.session.add_all([note_type, deck])
         db.session.flush()
+        db.session.add_all([
+            FieldDef(note_type_id=note_type.id, name="Expression", field_type="text", position=0),
+            FieldDef(note_type_id=note_type.id, name="Meaning", field_type="text", position=1),
+            FieldDef(note_type_id=note_type.id, name="StrokeDiagram", field_type="diagram", position=2),
+        ])
 
         note = Note(
             user_id=user.id,

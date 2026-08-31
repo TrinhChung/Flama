@@ -50,7 +50,8 @@ export function BrowsePage() {
     setLocalAudioTargetCardIds,
     selectedCards,
     activeCardId,
-    availableFieldNames,
+    availableSourceFieldNames,
+    availableAudioFieldNames,
     mobileTab,
     setMobileTab,
   } = browse
@@ -377,7 +378,8 @@ export function BrowsePage() {
           onClose={() => setIsLocalAudioModalOpen(false)}
           selectedCardIds={localAudioTargetCardIds}
           activeCardId={activeCardId}
-          availableFieldNames={availableFieldNames}
+          availableFieldNames={availableSourceFieldNames}
+          availableAudioFieldNames={availableAudioFieldNames}
           engineId={localAudioEngineId}
           defaultVoiceId={localAudioDefaultVoiceId}
           onSuccess={() => {

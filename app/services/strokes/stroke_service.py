@@ -287,6 +287,28 @@ def batch_generate_strokes(
             "missing_characters": [],
         }
 
+    invalid_targets: list[str] = []
+    missing_sources: list[str] = []
+    for note in notes:
+        defs_by_name = {
+            str(field_def.name or ""): field_def
+            for field_def in (note.note_type.field_defs if note.note_type else [])
+        }
+        target_def = defs_by_name.get(target_field)
+        if target_def is None or str(target_def.field_type or "").strip().lower() not in {"image", "diagram"}:
+            invalid_targets.append(str(note.id))
+        if source_field not in defs_by_name:
+            missing_sources.append(str(note.id))
+    if invalid_targets:
+        raise StrokeServiceError(
+            f"Trường đích '{target_field}' phải tồn tại và có kiểu image/diagram "
+            f"(sai ở {len(invalid_targets)} note)."
+        )
+    if missing_sources:
+        raise StrokeServiceError(
+            f"Trường nguồn '{source_field}' không tồn tại ở {len(missing_sources)} note."
+        )
+
     updated_count = 0
     skipped_count = 0
     missing_all: set[str] = set()
@@ -308,7 +330,7 @@ def batch_generate_strokes(
         res = resolve_stroke_items(
             source_val,
             locale=locale,
-            output_format=output_format,
+            output_format="raw",
             max_characters=max_characters,
         )
 

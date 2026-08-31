@@ -17,6 +17,7 @@ from flask import current_app, has_app_context
 import bleach
 import chevron
 from bleach.css_sanitizer import CSSSanitizer
+from app.services.media_field_codec import is_canonical_media_url, split_media_field_value
 try:
     from markdown_it import MarkdownIt
 except Exception:  # pragma: no cover - optional dependency fallback
@@ -197,7 +198,6 @@ def _strict_allowed_attr(tag: str, name: str, value: str) -> bool:
             _PROXY_MEDIA_URL_RE.match(val)
             or _LIBRARY_MEDIA_URL_RE.match(val)
             or _STATIC_STROKE_URL_RE.match(val)
-            or val.startswith("/media/")
         ):
             return True
         if lowered == "href" and val.startswith("https://"):
@@ -235,16 +235,11 @@ def _template_allowed_attr(tag: str, name: str, value: str) -> bool:
         return tag in {"th", "td"}
     if lowered in {"src", "href", "poster"}:
         val = (value or "").strip()
-        if (
-            _PROXY_MEDIA_URL_RE.match(val)
-            or _LIBRARY_MEDIA_URL_RE.match(val)
-            or _STATIC_STROKE_URL_RE.match(val)
-            or val.startswith("/media/")
-        ):
+        if is_canonical_media_url(val):
             return True
         if lowered == "href" and val.startswith("https://"):
             return True
-        if lowered in {"src", "poster"} and (val.startswith("https://") or val.startswith("http://")):
+        if lowered in {"src", "poster"} and is_canonical_media_url(val):
             return True
         return False
     return False
@@ -255,6 +250,7 @@ def _is_media_template_url_attr(
     name: str,
     value: str,
     field_defs: list[Any],
+    dot_media_field_types: set[str] | None = None,
 ) -> bool:
     """Allow whole-value Mustache URLs backed by declared media fields only.
 
@@ -269,6 +265,13 @@ def _is_media_template_url_attr(
     if not match:
         return False
     placeholder = match.group(1).strip()
+    if placeholder == "." and dot_media_field_types:
+        if lowered_name == "href":
+            return lowered_tag == "a"
+        if lowered_tag in {"audio", "source"} and "audio" in dot_media_field_types:
+            return True
+        if lowered_tag == "img" and dot_media_field_types.intersection({"image", "diagram"}):
+            return True
     for field_def in field_defs:
         field_type = str(getattr(field_def, "field_type", "") or "").lower()
         if field_type not in {"audio", "image", "diagram"}:
@@ -372,7 +375,7 @@ def _upgrade_html_field_double_brace_tokens(
 ) -> str:
     upgraded = source_html or ""
     for field_def in field_defs:
-        if field_def.field_type not in {"image", "diagram", "richtext", "markdown"}:
+        if field_def.field_type not in {"image", "audio", "diagram", "richtext", "markdown"}:
             continue
         name = re.escape(field_def.name)
         # Upgrade HTML-producing fields from {{Field}} to {{{Field}}}.
@@ -381,16 +384,31 @@ def _upgrade_html_field_double_brace_tokens(
     return upgraded
 
 
-def _media_field_used_as_url(field_name: str, template_sources: tuple[str, str] | None) -> bool:
-    if not template_sources:
-        return False
-    pattern = re.compile(
-        r"""(?is)\b(?:src|href)\s*=\s*["']\s*\{\{\{?\s*"""
-        + re.escape(field_name)
-        + r"""\s*\}\}\}?\s*["']""",
-        flags=re.IGNORECASE,
-    )
-    return bool(pattern.search(template_sources[0] or "") or pattern.search(template_sources[1] or ""))
+def _rewrite_media_url_attribute_tokens(source_html: str, field_defs: list[Any]) -> str:
+    """Compile legacy ``src={{Media}}`` usage to the explicit URL helper."""
+    rewritten = source_html or ""
+    for field_def in field_defs:
+        if str(getattr(field_def, "field_type", "") or "").lower() not in {"image", "audio", "diagram"}:
+            continue
+        field_name = str(getattr(field_def, "name", "") or "")
+        if not field_name:
+            continue
+        token = re.compile(
+            rf"(?P<prefix>\b(?:src|href|poster)\s*=\s*['\"]\s*)"
+            rf"\{{\{{\{{?\s*{re.escape(field_name)}\s*\}}\}}\}}?"
+            rf"(?P<suffix>\s*['\"])",
+            flags=re.IGNORECASE,
+        )
+        rewritten = token.sub(
+            lambda match: f"{match.group('prefix')}{{{{{field_name}_url}}}}{match.group('suffix')}",
+            rewritten,
+        )
+    return rewritten
+
+
+def rewrite_media_template_url_tokens(source_html: str, field_defs: list[Any]) -> str:
+    """Public migration helper for deterministic ``Field_url`` placeholders."""
+    return _rewrite_media_url_attribute_tokens(source_html, field_defs)
 
 
 def _resolve_media_url(value: Any, media_lookup: dict[str, Any]) -> str:
@@ -409,16 +427,11 @@ def _resolve_media_url(value: Any, media_lookup: dict[str, Any]) -> str:
     asset = media_lookup.get(raw)
     if asset is not None:
         return f"/media/proxy/{asset.id}"
-    if raw.startswith("/media/proxy/"):
-        return raw
-    if (
-        raw.startswith("/media/library/")
-        or raw.startswith("/static/strokes/")
-        or raw.startswith("/media/")
-    ):
+    if is_canonical_media_url(raw):
         return raw
     if raw.startswith("stroke_"):
         return f"/media/library/{raw}.svg"
+    # External URLs — pass through directly for user-provided public media.
     return ""
 
 
@@ -500,13 +513,30 @@ def prepare_client_template_source(
     content can be sanitized after interpolation without granting it script
     provenance.
     """
-    upgraded = _upgrade_html_field_double_brace_tokens(raw_html or "", field_defs)
+    upgraded = _upgrade_html_field_double_brace_tokens(
+        _rewrite_media_url_attribute_tokens(raw_html or "", field_defs),
+        field_defs,
+    )
+    dot_media_field_types = {
+        str(getattr(field_def, "field_type", "") or "").lower()
+        for field_def in field_defs
+        if re.search(
+            rf"\{{\{{#\s*{re.escape(str(getattr(field_def, 'name', '') or ''))}_urls\s*\}}\}}",
+            upgraded,
+        )
+    }
     script_free_html, scripts = _extract_inline_scripts(upgraded)
     for token, _ in scripts:
         script_free_html = script_free_html.replace(token, "")
 
     def _client_template_allowed_attr(tag: str, name: str, value: str) -> bool:
-        return _is_media_template_url_attr(tag, name, value, field_defs) or _template_allowed_attr(
+        return _is_media_template_url_attr(
+            tag,
+            name,
+            value,
+            field_defs,
+            dot_media_field_types,
+        ) or _template_allowed_attr(
             tag,
             name,
             value,
@@ -694,57 +724,37 @@ def _cache_template(cache_key: str, source: str) -> str:
     return source
 
 
-def _render_media_html(field_type: str, value: Any, field_name: str, media_lookup: dict[str, Any]) -> str:
-    if is_field_empty(value):
-        return ""
-    raw = str(value).strip()
-
-    if raw == PREVIEW_MEDIA_IMAGE_TOKEN:
-        return (
-            f"<div class=\"fc-preview-media-box\" style=\"background-color:#f3f4f6;padding:12px;text-align:center;\">"
-            f"[Image: {html.escape(field_name)}]"
-            "</div>"
-        )
-    if raw == PREVIEW_MEDIA_AUDIO_TOKEN:
-        return (
-            f"<div class=\"fc-preview-media-box\" style=\"background-color:#f3f4f6;padding:12px;text-align:center;\">"
-            f"[Audio: {html.escape(field_name)}]"
-            "</div>"
-        )
-    if raw == PREVIEW_MEDIA_DIAGRAM_TOKEN:
-        return (
-            f"<div class=\"fc-preview-media-box\" style=\"background-color:#f3f4f6;padding:12px;text-align:center;\">"
-            f"[Diagram: {html.escape(field_name)}]"
-            "</div>"
-        )
-
-    # Backward compatibility and support for HTML / inline SVG in diagram/image fields.
-    if "<svg" in raw.lower() and "</svg>" in raw.lower():
-        return sanitize_html_fragment(raw)
-
-    if (field_type in {"image", "diagram"} or "<svg" in raw.lower()) and (raw.startswith("<") or "<svg" in raw.lower()):
-        return sanitize_html_fragment(raw)
-
+def _render_single_media_html(
+    field_type: str,
+    raw: str,
+    field_name: str,
+    media_lookup: dict[str, Any],
+) -> str:
+    """Render one canonical or resolvable legacy reference to safe HTML."""
     media_url = _resolve_media_url(raw, media_lookup)
 
     if not media_url:
-        return sanitize_html_fragment(raw) if (field_type in {"image", "diagram"} and "<" in raw) else ""
+        return ""
 
     escaped_alt = html.escape(field_name, quote=True)
     escaped_field = html.escape(field_name, quote=True)
     asset_id = _extract_proxy_asset_id(media_url)
+    asset = media_lookup.get(raw) or media_lookup.get(media_url)
+    asset_mime = str(getattr(asset, "mime_type", "") or "").strip().lower()
     is_svg = (
-        field_type == "diagram"
-        or raw.lower().endswith(".svg")
+        raw.lower().endswith(".svg")
         or media_url.lower().endswith(".svg")
         or "image/svg+xml" in raw.lower()
         or "image/svg+xml" in media_url.lower()
+        or asset_mime.startswith("image/svg+xml")
     )
     media_attrs = [
         f'data-flama-media-field="{escaped_field}"',
         f'data-flama-media-kind="{html.escape("svg" if is_svg else field_type, quote=True)}"',
     ]
-    if is_svg:
+    if field_type == "audio":
+        media_attrs.append('class="flama-media-audio"')
+    elif is_svg:
         media_attrs.append('data-flama-is-svg="true"')
         media_attrs.append('class="flama-media-image flama-svg-image"')
     else:
@@ -753,9 +763,54 @@ def _render_media_html(field_type: str, value: Any, field_name: str, media_looku
     if asset_id:
         media_attrs.append(f'data-flama-media-asset-id="{html.escape(asset_id, quote=True)}"')
     joined_attrs = " ".join(media_attrs)
+    escaped_url = html.escape(media_url, quote=True)
     if field_type == "audio":
-        return f"<audio controls {joined_attrs} src=\"{media_url}\"></audio>"
-    return f"<img {joined_attrs} src=\"{media_url}\" alt=\"{escaped_alt}\">"
+        return f'<audio controls {joined_attrs} src="{escaped_url}"></audio>'
+    return f'<img {joined_attrs} src="{escaped_url}" alt="{escaped_alt}">'
+
+
+def _render_media_html(field_type: str, value: Any, field_name: str, media_lookup: dict[str, Any]) -> str:
+    if is_field_empty(value):
+        return ""
+    raw = str(value).strip()
+
+    if raw == PREVIEW_MEDIA_IMAGE_TOKEN:
+        return (
+            f'<div class="fc-preview-media-box" style="background-color:#f3f4f6;padding:12px;text-align:center;">'
+            f"[Image: {html.escape(field_name)}]"
+            "</div>"
+        )
+    if raw == PREVIEW_MEDIA_AUDIO_TOKEN:
+        return (
+            f'<div class="fc-preview-media-box" style="background-color:#f3f4f6;padding:12px;text-align:center;">'
+            f"[Audio: {html.escape(field_name)}]"
+            "</div>"
+        )
+    if raw == PREVIEW_MEDIA_DIAGRAM_TOKEN:
+        return (
+            f'<div class="fc-preview-media-box" style="background-color:#f3f4f6;padding:12px;text-align:center;">'
+            f"[Diagram: {html.escape(field_name)}]"
+            "</div>"
+        )
+
+    # Split on newlines for multi-value support (e.g. 3 image URLs).
+    lines = split_media_field_value(raw)
+
+    if len(lines) <= 1:
+        # Single value — render without wrapping div.
+        return _render_single_media_html(field_type, raw, field_name, media_lookup)
+
+    # Multi-value — render each line and wrap in a gallery div.
+    fragments: list[str] = []
+    for line in lines:
+        rendered = _render_single_media_html(field_type, line, field_name, media_lookup)
+        if rendered:
+            fragments.append(rendered)
+    if not fragments:
+        return ""
+    if len(fragments) == 1:
+        return fragments[0]
+    return f'<div class="flama-media-gallery">{"".join(fragments)}</div>'
 
 
 class _RenderedMediaMetadataParser(HTMLParser):
@@ -769,24 +824,20 @@ class _RenderedMediaMetadataParser(HTMLParser):
         src = attr_map.get("src", "").strip()
         href = attr_map.get("href", "").strip()
         media_url = src if src else href
-        if (
-            _PROXY_MEDIA_URL_RE.match(media_url)
-            or _LIBRARY_MEDIA_URL_RE.match(media_url)
-            or _STATIC_STROKE_URL_RE.match(media_url)
-            or media_url.startswith("/media/")
-        ):
+
+        def _is_known_media_url(url: str) -> bool:
+            return bool(
+                _PROXY_MEDIA_URL_RE.match(url)
+                or _LIBRARY_MEDIA_URL_RE.match(url)
+                or _STATIC_STROKE_URL_RE.match(url)
+                or is_canonical_media_url(url)
+            )
+
+        if _is_known_media_url(media_url):
             self.allowed_media_urls.add(media_url)
-        if tag.lower() == "audio" and (
-            _PROXY_MEDIA_URL_RE.match(src)
-            or _LIBRARY_MEDIA_URL_RE.match(src)
-            or src.startswith("/media/")
-        ):
+        if tag.lower() == "audio" and _is_known_media_url(src):
             self.allowed_audio_urls.add(src)
-        if tag.lower() == "source" and (
-            _PROXY_MEDIA_URL_RE.match(src)
-            or _LIBRARY_MEDIA_URL_RE.match(src)
-            or src.startswith("/media/")
-        ):
+        if tag.lower() == "source" and _is_known_media_url(src):
             type_value = str(attr_map.get("type", "") or "").strip().lower()
             if type_value.startswith("audio/"):
                 self.allowed_audio_urls.add(src)
@@ -902,12 +953,14 @@ def build_render_context(
             continue
         if field_def.field_type in {"image", "audio", "diagram"}:
             media_html = _render_media_html(field_def.field_type, value, name, media_lookup)
-            media_url = _resolve_media_url(value, media_lookup)
-            if field_def.field_type == "audio" and _media_field_used_as_url(name, template_sources):
-                context[name] = media_url
-            else:
-                context[name] = media_html
-            context[f"{name}_url"] = media_url
+            media_urls = [
+                resolved
+                for item in split_media_field_value(value)
+                if (resolved := _resolve_media_url(item, media_lookup))
+            ]
+            context[name] = media_html
+            context[f"{name}_url"] = media_urls[0] if media_urls else ""
+            context[f"{name}_urls"] = media_urls
             continue
         context[name] = _normalize_multiline_value(value)
 
@@ -961,8 +1014,14 @@ def render_template_pair(
     template_updated = str(getattr(template, "updated_at", ""))
     front_source_raw = getattr(template, "front_html", "")
     back_source_raw = getattr(template, "back_html", "")
-    front_source_prepared = _upgrade_html_field_double_brace_tokens(front_source_raw, field_defs)
-    back_source_prepared = _upgrade_html_field_double_brace_tokens(back_source_raw, field_defs)
+    front_source_prepared = _upgrade_html_field_double_brace_tokens(
+        _rewrite_media_url_attribute_tokens(front_source_raw, field_defs),
+        field_defs,
+    )
+    back_source_prepared = _upgrade_html_field_double_brace_tokens(
+        _rewrite_media_url_attribute_tokens(back_source_raw, field_defs),
+        field_defs,
+    )
     context = build_render_context(
         field_defs,
         field_values,

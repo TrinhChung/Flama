@@ -138,7 +138,7 @@ class FlashcardRendererTests(unittest.TestCase):
         )
         self.assertIn("/media/proxy/asset-a", rendered_b["front_html"])
 
-    def test_client_template_preserves_audio_field_url_without_mutating_user_html(self):
+    def test_client_template_compiles_audio_field_to_explicit_url_helper(self):
         raw_html = (
             '<audio id="custom-audio" src="{{word_audio}}"></audio>'
             '<source src="{{word_audio_url}}">'
@@ -151,7 +151,7 @@ class FlashcardRendererTests(unittest.TestCase):
         prepared = prepare_client_template_source(raw_html, fields)
 
         self.assertEqual(raw_html, original_html)
-        self.assertIn('src="{{word_audio}}"', prepared["source"])
+        self.assertIn('src="{{word_audio_url}}"', prepared["source"])
         self.assertIn('src="{{word_audio_url}}"', prepared["source"])
         self.assertIn('onclick=', prepared["source"])
         self.assertNotIn("<script", prepared["source"])
@@ -210,7 +210,7 @@ class FlashcardRendererTests(unittest.TestCase):
         self.assertIn('src="/media/proxy/audio-1"', html)
         self.assertIn("HANVIET", html)
         self.assertIn("<img", html)
-        self.assertIn("diagram-html", html)
+        self.assertNotIn("diagram-html", html)
         self.assertIn("<script>window.__fc_test = true;</script>", html)
         payload = rendered["front_renderer_payload"]
         self.assertIn("window.__fc_test = true;", payload["html"])
@@ -460,11 +460,11 @@ class FlashcardSecurityTests(unittest.TestCase):
                 "must_exclude": "<meta",
             },
             {
-                "name": "case9_external_audio_rejected",
+                "name": "case9_external_audio_allowed",
                 "template": "{{{Word_Audio}}}",
                 "fields": [self._field("Word_Audio", "audio")],
-                "values": {"Word_Audio": "https://evil.com/track.mp3"},
-                "must_exclude": "https://evil.com",
+                "values": {"Word_Audio": "https://example.com/track.mp3"},
+                "must_include": '<audio controls data-flama-media-field="Word_Audio" data-flama-media-kind="audio" class="flama-media-audio" src="https://example.com/track.mp3"></audio>',
             },
             {
                 "name": "case10_attribute_injection_escaped",
@@ -520,6 +520,138 @@ class FlashcardSecurityTests(unittest.TestCase):
         self.assertIn("同期", res["front_html"])
         self.assertIn("synchronization", res["back_html"])
         self.assertIn(".card { text-align: center; }", res["front_html"])
+
+
+    def test_external_media_urls_rendered_directly(self):
+        template = self._template("{{{Word_Audio}}} {{{Image}}}")
+        fields = [self._field("Word_Audio", "audio"), self._field("Image", "image")]
+        rendered = render_template_pair(
+            template=template,
+            field_defs=fields,
+            field_values={
+                "Word_Audio": "https://example.com/audio/cat.mp3",
+                "Image": "https://example.com/images/cat.jpg",
+            },
+            media_assets=[],
+        )
+        html = rendered["front_html"]
+        self.assertIn('<audio controls', html)
+        self.assertIn('src="https://example.com/audio/cat.mp3"', html)
+        self.assertIn('<img', html)
+        self.assertIn('src="https://example.com/images/cat.jpg"', html)
+        self.assertIn("https://example.com/audio/cat.mp3", rendered["front_renderer_payload"]["allowed_audio_urls"])
+        self.assertIn("https://example.com/images/cat.jpg", rendered["front_renderer_payload"]["allowed_media_urls"])
+
+    def test_multi_image_rendering_wraps_in_gallery(self):
+        template = self._template("{{{Images}}}")
+        fields = [self._field("Images", "image")]
+        rendered = render_template_pair(
+            template=template,
+            field_defs=fields,
+            field_values={
+                "Images": "https://example.com/1.jpg\nhttps://example.com/2.jpg\nhttps://example.com/3.jpg",
+            },
+            media_assets=[],
+        )
+        html = rendered["front_html"]
+        self.assertIn('class="flama-media-gallery"', html)
+        self.assertIn('src="https://example.com/1.jpg"', html)
+        self.assertIn('src="https://example.com/2.jpg"', html)
+        self.assertIn('src="https://example.com/3.jpg"', html)
+        self.assertEqual(html.count("<img "), 3)
+
+    def test_raster_diagram_is_not_mislabeled_as_svg(self):
+        rendered = render_template_pair(
+            template=self._template("{{{Diagram}}}"),
+            field_defs=[self._field("Diagram", "diagram")],
+            field_values={"Diagram": "https://example.com/diagram.png"},
+            media_assets=[],
+        )
+        html = rendered["front_html"]
+        self.assertIn('data-flama-media-kind="diagram"', html)
+        self.assertNotIn('data-flama-is-svg="true"', html)
+
+    def test_media_urls_helper_supports_custom_multi_item_template(self):
+        source = '{{#Images_urls}}<img class="custom" src="{{.}}">{{/Images_urls}}'
+        fields = [self._field("Images", "image")]
+        prepared = prepare_client_template_source(source, fields)
+        self.assertIn('src="{{.}}"', prepared["source"])
+
+        rendered = render_template_pair(
+            template=self._template(source),
+            field_defs=fields,
+            field_values={"Images": "https://example.com/1.jpg\nhttps://example.com/2.jpg"},
+            media_assets=[],
+        )
+        self.assertEqual(rendered["front_html"].count('class="custom"'), 2)
+        self.assertIn('src="https://example.com/1.jpg"', rendered["front_html"])
+        self.assertIn('src="https://example.com/2.jpg"', rendered["front_html"])
+
+    def test_multi_audio_rendering_wraps_in_gallery(self):
+        template = self._template("{{{Audios}}}")
+        fields = [self._field("Audios", "audio")]
+        rendered = render_template_pair(
+            template=template,
+            field_defs=fields,
+            field_values={
+                "Audios": "https://example.com/1.mp3\nhttps://example.com/2.mp3",
+            },
+            media_assets=[],
+        )
+        html = rendered["front_html"]
+        self.assertIn('class="flama-media-gallery"', html)
+        self.assertIn('src="https://example.com/1.mp3"', html)
+        self.assertIn('src="https://example.com/2.mp3"', html)
+        self.assertEqual(html.count("<audio "), 2)
+
+    def test_external_sound_bracket_tag_in_validator_and_renderer(self):
+        from app.validators.flashcard_input import _clean_media_reference
+        cleaned = _clean_media_reference(
+            "[sound:https://example.com/test.mp3]",
+            field_name="Sound",
+            note_media_ids=None,
+        )
+        self.assertEqual(cleaned, "https://example.com/test.mp3")
+
+        # Multi-line in validator
+        cleaned_multi = _clean_media_reference(
+            "https://example.com/img1.png\nhttps://example.com/img2.png",
+            field_name="Images",
+            note_media_ids=None,
+            field_type="image",
+        )
+        self.assertEqual(cleaned_multi, "https://example.com/img1.png\nhttps://example.com/img2.png")
+
+    def test_media_normalizer_service(self):
+        from app.services.flashcard_media_normalizer import (
+            normalize_single_media_reference,
+            normalize_media_field_value,
+        )
+        # External URL remains unchanged
+        self.assertEqual(
+            normalize_single_media_reference("https://example.com/a.jpg", field_type="image"),
+            "https://example.com/a.jpg",
+        )
+        # [sound:https://...] is normalized
+        self.assertEqual(
+            normalize_single_media_reference("[sound:https://example.com/a.mp3]"),
+            "https://example.com/a.mp3",
+        )
+        # An unresolved UUID is quarantined and never turned into a fabricated proxy URL.
+        self.assertEqual(
+            normalize_single_media_reference("a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d"),
+            "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d",
+        )
+        # Stroke reference
+        self.assertEqual(
+            normalize_single_media_reference("stroke_kanji_4e00", field_type="diagram"),
+            "/media/library/stroke_kanji_4e00.svg",
+        )
+        # Multi-value
+        self.assertEqual(
+            normalize_media_field_value("https://a.com/1.jpg\nhttps://a.com/2.jpg", field_type="image"),
+            "https://a.com/1.jpg\nhttps://a.com/2.jpg",
+        )
 
 
 if __name__ == "__main__":

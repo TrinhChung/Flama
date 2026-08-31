@@ -30,6 +30,7 @@ from models.field_def import FieldDef
 from models.field_rename_job import FieldRenameJob
 from models.media_asset import MediaAsset
 from models.marketplace_saved_item import MarketplaceSavedItem
+from models.media_field_migration import MediaFieldMigrationItem, MediaFieldMigrationRun
 from models.note import Note
 from models.note_type import NoteType
 from models.note_type_install import NoteTypeInstall
@@ -71,6 +72,8 @@ __all__ = [
     "FieldRenameJob",
     "MediaAsset",
     "MarketplaceSavedItem",
+    "MediaFieldMigrationItem",
+    "MediaFieldMigrationRun",
     "Note",
     "NoteType",
     "NoteTypeInstall",

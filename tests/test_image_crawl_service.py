@@ -207,7 +207,10 @@ class ImageCrawlServiceTests(unittest.TestCase):
 
             # Check Note field was updated
             note = Note.query.get(self.note1_id)
-            self.assertEqual(note.field_values.get("Illustration"), payload["asset_id"])
+            self.assertEqual(
+                note.field_values.get("Illustration"),
+                f"/media/proxy/{payload['asset_id']}",
+            )
 
             # Verify file exists on disk
             asset = MediaAsset.query.get(payload["asset_id"])
@@ -424,9 +427,9 @@ class ImageCrawlServiceTests(unittest.TestCase):
             )
             note_id = result["note_id"]
             note = Note.query.get(note_id)
-            # Illustration field should be converted from public URL to asset ID
+            # Illustration field should be converted to the canonical proxy URL.
             self.assertNotEqual(note.field_values.get("Illustration"), "https://images.example.com/dog.png")
-            self.assertTrue(len(note.field_values.get("Illustration")) > 0)
+            self.assertTrue(note.field_values.get("Illustration", "").startswith("/media/proxy/"))
             # NotesMD should be rewritten with /media/proxy/
             self.assertNotIn("https://images.example.com/dog.png", note.field_values.get("NotesMD"))
             self.assertIn("/media/proxy/", note.field_values.get("NotesMD"))

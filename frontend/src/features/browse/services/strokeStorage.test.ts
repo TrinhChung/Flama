@@ -21,13 +21,11 @@ describe('strokeStorage', () => {
   it('saves and loads customized stroke settings', () => {
     saveStoredStrokeSettings({
       locale: 'zh-CN',
-      outputFormat: 'raw',
       overwrite: true,
     })
 
     const loaded = loadStoredStrokeSettings()
     expect(loaded.locale).toBe('zh-CN')
-    expect(loaded.outputFormat).toBe('raw')
     expect(loaded.overwrite).toBe(true)
   })
 
@@ -35,13 +33,11 @@ describe('strokeStorage', () => {
     saveStoredStrokeSettings({ locale: 'zh-TW' })
     let loaded = loadStoredStrokeSettings()
     expect(loaded.locale).toBe('zh-TW')
-    expect(loaded.outputFormat).toBe('html')
     expect(loaded.overwrite).toBe(false)
 
-    saveStoredStrokeSettings({ outputFormat: 'urls', overwrite: true })
+    saveStoredStrokeSettings({ overwrite: true })
     loaded = loadStoredStrokeSettings()
     expect(loaded.locale).toBe('zh-TW')
-    expect(loaded.outputFormat).toBe('urls')
     expect(loaded.overwrite).toBe(true)
   })
 

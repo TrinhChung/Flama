@@ -24,13 +24,10 @@ import {
   LayoutGrid,
   Loader2,
   Minus,
-  PanelLeft,
   PenTool,
   Plus,
   Printer,
-  RotateCcw,
   Sliders,
-  Sparkles,
   Table as TableIcon,
   X,
   ZoomIn,
@@ -67,16 +64,6 @@ const STUDIO_TABS: { id: StudioTab; label: string; icon: any }[] = [
   { id: 'layout', label: 'Bố cục & Ô chữ', icon: Sliders },
   { id: 'header', label: 'Tiêu đề & Thông tin', icon: FileText },
 ]
-
-const templateIcons: Record<string, any> = {
-  kanji_stroke: PenTool,
-  kanji_compact: Layers,
-  vocab_writing: BookOpen,
-  vocab_recall: Sparkles,
-  deck_table: TableIcon,
-  sentence_writing: FileText,
-  grammar_practice: HelpCircle,
-}
 
 export function DeckWorksheetModal({
   open,
@@ -2177,5 +2164,4 @@ export function DeckWorksheetModal({
     </Dialog>
   )
 }
-
 

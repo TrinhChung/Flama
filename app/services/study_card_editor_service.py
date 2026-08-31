@@ -11,6 +11,7 @@ from app.services.flashcard_renderer import (
     TemplateCompileError,
     render_template_pair,
 )
+from app.services.media_field_codec import build_media_reference_lookup
 from app.validators import RequestValidationError, validate_study_card_edit_request
 
 
@@ -48,16 +49,7 @@ def update_study_card_note(
     if note_type is None:
         raise StudyCardEditError("Note type not found.", status=404, code="FIELD_NOT_FOUND")
 
-    note_media_ids: set[str] = set()
-    for asset in note.media_assets or []:
-        asset_id = str(getattr(asset, "id", "") or "").strip()
-        if asset_id:
-            note_media_ids.add(asset_id)
-            note_media_ids.add(f"/media/proxy/{asset_id}")
-        filename = str(getattr(asset, "filename", "") or "").strip()
-        if filename:
-            note_media_ids.add(filename)
-            note_media_ids.add(f"[sound:{filename}]")
+    note_media_ids = build_media_reference_lookup(note.media_assets or [])
     try:
         validated = validate_study_card_edit_request(
             note_type=note_type,

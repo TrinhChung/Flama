@@ -16,7 +16,6 @@ import { NativeSelect } from '@/components/ui/native-select'
 import {
   AlertCircle,
   Check,
-  Code,
   Copy,
   Eye,
   Info,
@@ -95,6 +94,14 @@ export function BrowseStrokeModal({
     return ['Expression', 'Reading', 'Meaning', 'StrokeDiagram']
   }, [actualNoteFields])
 
+  const mediaTargetFieldNames = useMemo(
+    () => actualNoteFields
+      .filter((field) => ['image', 'diagram'].includes(String(field.field_type || '').toLowerCase()))
+      .map((field) => field.name)
+      .filter(Boolean),
+    [actualNoteFields],
+  )
+
   // Smart defaults based strictly on actual note fields
   const defaultSource = useMemo(() => {
     return (
@@ -110,32 +117,32 @@ export function BrowseStrokeModal({
 
   const defaultTarget = useMemo(() => {
     return (
-      noteFieldNames.find((f) =>
-        ['strokediagram', 'stroke_diagram', 'kanjistrokes', 'strokes', 'kanji_strokes', 'stroke'].includes(
+      mediaTargetFieldNames.find((f) =>
+        ['diagram', 'strokediagram', 'stroke_diagram', 'kanjistrokes', 'strokes', 'kanji_strokes', 'stroke'].includes(
           f.toLowerCase(),
         ),
       ) ||
-      (noteFieldNames.includes('StrokeDiagram')
+      (mediaTargetFieldNames.includes('StrokeDiagram')
         ? 'StrokeDiagram'
-        : noteFieldNames[noteFieldNames.length - 1]) ||
-      'StrokeDiagram'
+        : mediaTargetFieldNames[0]) ||
+      ''
     )
-  }, [noteFieldNames])
+  }, [mediaTargetFieldNames])
 
   const [sourceField, setSourceField] = useState(defaultSource)
   const [targetField, setTargetField] = useState(defaultTarget)
-  const [isCustomTarget, setIsCustomTarget] = useState(false)
-  const [customTargetName, setCustomTargetName] = useState('')
 
   // Sync state when defaults change
   useEffect(() => {
     if (defaultSource && !noteFieldNames.includes(sourceField)) {
       setSourceField(defaultSource)
     }
-    if (defaultTarget && !noteFieldNames.includes(targetField) && !isCustomTarget) {
+    if (!defaultTarget) {
+      setTargetField('')
+    } else if (!mediaTargetFieldNames.includes(targetField)) {
       setTargetField(defaultTarget)
     }
-  }, [defaultSource, defaultTarget, noteFieldNames, isCustomTarget])
+  }, [defaultSource, defaultTarget, noteFieldNames, mediaTargetFieldNames, sourceField, targetField])
 
   // Resolve actual text content from the selected sourceField across active/target card data
   const resolvedSourceValue = useMemo(() => {
@@ -210,9 +217,6 @@ export function BrowseStrokeModal({
     }
   }, [detectedLocale])
 
-  const [outputFormat, setOutputFormat] = useState<'html' | 'raw' | 'urls'>(() => {
-    return loadStoredStrokeSettings().outputFormat
-  })
   const [overwrite, setOverwrite] = useState(() => {
     return loadStoredStrokeSettings().overwrite
   })
@@ -228,20 +232,17 @@ export function BrowseStrokeModal({
 
   // Stroke preview query
   const previewQuery = useQuery<GenerateStrokesResponse>({
-    queryKey: ['stroke-preview', sampleText, locale, outputFormat, maxChars],
+    queryKey: ['stroke-preview', sampleText, locale, maxChars],
     queryFn: () =>
       appApi.generateStrokes({
         text: sampleText,
         locale,
-        format: outputFormat,
+        format: 'raw',
         max_characters: maxChars,
       }),
     enabled: isOpen && Boolean(sampleText.trim()),
     staleTime: 1000 * 60 * 5,
   })
-
-  // Resolved effective target field name
-  const effectiveTargetField = isCustomTarget ? customTargetName.trim() : targetField
 
   // Batch generate mutation
   const batchMutation = useMutation({
@@ -250,17 +251,17 @@ export function BrowseStrokeModal({
       if (!sourceField.trim()) {
         throw new Error('Vui lòng chọn hoặc nhập trường nguồn.')
       }
-      if (!effectiveTargetField) {
+      if (!targetField) {
         throw new Error('Vui lòng chọn hoặc nhập trường lưu kết quả.')
       }
 
       return appApi.batchGenerateStrokes({
         source_field: sourceField,
-        target_field: effectiveTargetField,
+        target_field: targetField,
         locale,
         deck_id: !targetCardIds.length && selectedDeckId ? selectedDeckId : undefined,
         card_ids: targetCardIds.length ? targetCardIds : undefined,
-        format: outputFormat,
+        format: 'raw',
         overwrite,
         max_characters: maxChars,
       })
@@ -279,16 +280,20 @@ export function BrowseStrokeModal({
   })
 
   const handleApplySingle = () => {
-    if (!effectiveTargetField) {
+    if (!targetField) {
       toast.error('Vui lòng chọn hoặc nhập trường lưu kết quả.')
       return
     }
     if (previewQuery.data?.output) {
+      const canonicalUrls = (previewQuery.data.items || [])
+        .map((item) => String(item.url || '').trim())
+        .filter(Boolean)
+        .join('\n')
       setEditFieldValues((prev) => ({
         ...prev,
-        [effectiveTargetField]: previewQuery.data?.output || '',
+        [targetField]: canonicalUrls,
       }))
-      toast.success(`Đã điền sơ đồ nét vào trường "${effectiveTargetField}". Bấm "Lưu thẻ" để hoàn tất!`)
+      toast.success(`Đã điền sơ đồ nét vào trường "${targetField}". Bấm "Lưu thẻ" để hoàn tất!`)
       onClose()
     } else {
       toast.warning('Không tìm thấy ký tự Kanji/Hanzi nào trong văn bản nguồn.')
@@ -363,52 +368,27 @@ export function BrowseStrokeModal({
 
             {/* Target field */}
             <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                  Trường lưu (Target Field)
-                </Label>
-                {isCustomTarget && (
-                  <button
-                    type="button"
-                    onClick={() => setIsCustomTarget(false)}
-                    className="text-[11px] text-primary hover:underline"
-                  >
-                    Chọn từ Note Type
-                  </button>
-                )}
-              </div>
-
-              {!isCustomTarget ? (
-                <NativeSelect
-                  value={targetField}
-                  onChange={(e) => {
-                    if (e.target.value === '__custom__') {
-                      setIsCustomTarget(true)
-                      setCustomTargetName('')
-                    } else {
-                      setTargetField(e.target.value)
-                    }
-                  }}
-                  className="h-9 text-xs rounded-lg bg-background"
-                >
-                  <optgroup label="Các trường của Note Type hiện tại">
-                    {noteFieldNames.map((name) => (
+              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                Trường lưu (Target Field)
+              </Label>
+              <NativeSelect
+                value={targetField}
+                onChange={(e) => setTargetField(e.target.value)}
+                disabled={mediaTargetFieldNames.length === 0}
+                className="h-9 text-xs rounded-lg bg-background"
+              >
+                {mediaTargetFieldNames.length === 0 ? (
+                  <option value="">Note Type chưa có trường image/diagram</option>
+                ) : (
+                  <optgroup label="Các trường image/diagram của Note Type">
+                    {mediaTargetFieldNames.map((name) => (
                       <option key={name} value={name}>
                         {name}
                       </option>
                     ))}
                   </optgroup>
-                  <option value="__custom__">✏️ Nhập tên trường mới...</option>
-                </NativeSelect>
-              ) : (
-                <Input
-                  value={customTargetName}
-                  onChange={(e) => setCustomTargetName(e.target.value)}
-                  placeholder="Nhập tên trường lưu (vd: StrokeDiagram)..."
-                  className="h-9 text-xs bg-background"
-                  autoFocus
-                />
-              )}
+                )}
+              </NativeSelect>
             </div>
 
             {/* Locale */}
@@ -431,61 +411,15 @@ export function BrowseStrokeModal({
                 <option value="zh-TW">Tiếng Trung (Phồn thể - zh-TW)</option>
               </NativeSelect>
             </div>
-
-            {/* Output format */}
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
-                <Code className="size-3.5" />
-                <span>Định dạng lưu trữ</span>
-              </Label>
-              <NativeSelect
-                value={outputFormat}
-                onChange={(e) => {
-                  const nextFormat = e.target.value as 'html' | 'raw' | 'urls'
-                  setOutputFormat(nextFormat)
-                  saveStoredStrokeSettings({ outputFormat: nextFormat })
-                }}
-                className="h-9 text-xs rounded-lg bg-background font-medium"
-              >
-                <option value="html">HTML bọc &lt;img&gt; (Khuyên dùng - Hiển thị ngay)</option>
-                <option value="raw">URL raw (Đường dẫn Image Library - /media/library/...)</option>
-                <option value="urls">JSON URLs (Mảng JSON - ["/media/library/..."])</option>
-              </NativeSelect>
-            </div>
           </div>
 
-          {/* Format helper hint */}
+          {/* Canonical storage hint */}
           <div className="p-2.5 rounded-xl bg-primary/5 border border-primary/10 flex items-start gap-2 text-[11px] text-muted-foreground leading-relaxed">
             <Info className="size-3.5 text-primary shrink-0 mt-0.5" />
-            <div>
-              {outputFormat === 'html' && (
-                <span>
-                  <strong className="text-foreground font-semibold">HTML Embed:</strong> Sinh thẻ ảnh{' '}
-                  <code className="font-mono bg-primary/10 text-primary px-1 py-0.5 rounded text-[10px]">
-                    &lt;div class=&quot;flama-stroke-diagram&quot;&gt;&lt;img src=&quot;/media/library/stroke_ja_65e5.svg&quot; .../&gt;&lt;/div&gt;
-                  </code>{' '}
-                  để hiển thị trực tiếp sơ đồ nét khi ôn tập thẻ trên web và Anki.
-                </span>
-              )}
-              {outputFormat === 'raw' && (
-                <span>
-                  <strong className="text-foreground font-semibold">URL Raw:</strong> Chỉ lưu chuỗi đường dẫn tệp SVG{' '}
-                  <code className="font-mono bg-primary/10 text-primary px-1 py-0.5 rounded text-[10px]">
-                    /media/library/stroke_ja_65e5.svg
-                  </code>{' '}
-                  (xuống dòng nếu nhiều chữ), phù hợp để tự viết template HTML riêng như &lt;img src=&quot;&#123;&#123;StrokeDiagram&#125;&#125;&quot; /&gt;.
-                </span>
-              )}
-              {outputFormat === 'urls' && (
-                <span>
-                  <strong className="text-foreground font-semibold">JSON URLs:</strong> Lưu danh sách mảng JSON tệp SVG{' '}
-                  <code className="font-mono bg-primary/10 text-primary px-1 py-0.5 rounded text-[10px]">
-                    [&quot;/media/library/stroke_ja_65e5.svg&quot;]
-                  </code>{' '}
-                  cho việc lập trình hoặc tự xử lý dữ liệu nâng cao.
-                </span>
-              )}
-            </div>
+            <span>
+              Sơ đồ nét luôn được lưu dưới dạng URL chuẩn, mỗi URL một dòng. Khi hiển thị, trường
+              image/diagram sẽ tự tạo một thẻ <code className="font-mono">&lt;img&gt;</code> cho từng URL.
+            </span>
           </div>
 
           {/* Overwrite option */}
@@ -585,7 +519,7 @@ export function BrowseStrokeModal({
                 <div className="flex items-center justify-between text-[11px] text-muted-foreground">
                   <span className="flex items-center gap-1 font-medium">
                     <Sparkles className="size-3 text-primary" />
-                    <span>Mã sẽ được lưu vào trường &quot;{effectiveTargetField}&quot;:</span>
+                    <span>Các URL sẽ được lưu vào trường &quot;{targetField}&quot;:</span>
                   </span>
                   <button
                     type="button"
@@ -613,7 +547,7 @@ export function BrowseStrokeModal({
             <Button
               size="sm"
               onClick={handleApplySingle}
-              disabled={!previewQuery.data?.items?.length}
+              disabled={!targetField || !previewQuery.data?.items?.length}
               className="h-9 text-xs font-bold rounded-xl gap-1.5 shadow-xs"
             >
               <Check className="size-3.5" />
@@ -623,7 +557,7 @@ export function BrowseStrokeModal({
             <Button
               size="sm"
               onClick={() => batchMutation.mutate()}
-              disabled={batchMutation.isPending}
+              disabled={!targetField || batchMutation.isPending}
               className="h-9 text-xs font-bold rounded-xl gap-1.5 shadow-xs"
             >
               {batchMutation.isPending ? (

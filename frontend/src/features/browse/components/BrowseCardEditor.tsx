@@ -19,6 +19,7 @@ import {
 import { toast } from 'sonner'
 import type { useBrowseState } from '../hooks/useBrowseState'
 import { statusLabel, statusVariant } from '../utils/formatter'
+import { MediaFieldPreview } from './MediaFieldPreview'
 
 interface BrowseCardEditorProps {
   browse: ReturnType<typeof useBrowseState>
@@ -255,6 +256,24 @@ export function BrowseCardEditor({ browse }: BrowseCardEditorProps) {
           ) : (
             fields.map((field) => {
               const val = editFieldValues[field.name] || ''
+              const ft = (field.field_type || 'text').toLowerCase()
+
+              // Media fields get a specialized preview/code editor.
+              if (ft === 'image' || ft === 'audio' || ft === 'diagram') {
+                return (
+                  <MediaFieldPreview
+                    key={field.name}
+                    fieldName={field.name}
+                    fieldType={ft as 'image' | 'audio' | 'diagram'}
+                    value={val}
+                    onChange={(v) =>
+                      setEditFieldValues((prev) => ({ ...prev, [field.name]: v }))
+                    }
+                    required={field.required}
+                  />
+                )
+              }
+
               const isMultiline =
                 val.length > 50 ||
                 val.includes('\n') ||
@@ -487,6 +506,24 @@ export function BrowseCardEditor({ browse }: BrowseCardEditorProps) {
         {/* Dynamic Card fields */}
         {detail.fields.map((field) => {
           const val = editFieldValues[field.name] || ''
+          const ft = (field.field_type || 'text').toLowerCase()
+
+          // Media fields get a specialized preview/code editor.
+          if (ft === 'image' || ft === 'audio' || ft === 'diagram') {
+            return (
+              <MediaFieldPreview
+                key={field.name}
+                fieldName={field.name}
+                fieldType={ft as 'image' | 'audio' | 'diagram'}
+                value={val}
+                onChange={(v) =>
+                  setEditFieldValues((prev) => ({ ...prev, [field.name]: v }))
+                }
+                required={field.required}
+              />
+            )
+          }
+
           const isMultiline = val.length > 50 || val.includes('\n') || field.name.toLowerCase().includes('meaning')
 
           return (

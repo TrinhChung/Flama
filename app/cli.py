@@ -24,6 +24,10 @@ from app.services.flashcard_legacy import (
 )
 from app.services.bootstrap_admin_service import sync_bootstrap_admin
 from app.services.anki_content_normalizer import backfill_anki_note_entities
+from app.services.flashcard_media_normalizer import (
+    backfill_media_field_values,
+    rollback_media_field_migration,
+)
 from app.services.user_roles import ensure_default_user_roles
 from app.services.tts_provider_service import (
     VOICEVOX_AUDIO_BASE_URL,
@@ -348,6 +352,59 @@ def register_cli_commands(app: Flask) -> None:
         click.echo(
             f"Anki entity normalization {'applied' if apply else 'dry run'}. "
             f"scanned={result.scanned}, changed={result.changed}"
+        )
+
+    @app.cli.command("media-normalize-fields")
+    @click.option("--user-id", type=int, default=None, help="Limit the migration to one user ID.")
+    @click.option("--deck-id", type=int, default=None, help="Limit the migration to one deck ID.")
+    @click.option("--apply", is_flag=True, default=False, help="Commit audited changes; otherwise dry-run.")
+    @click.option("--no-overlays", is_flag=True, default=False, help="Skip active clone overlays.")
+    @click.option("--no-templates", is_flag=True, default=False, help="Skip Template URL-helper migration.")
+    def media_normalize_fields(
+        user_id: int | None,
+        deck_id: int | None,
+        apply: bool,
+        no_overlays: bool,
+        no_templates: bool,
+    ) -> None:
+        """Audit or migrate media fields to newline-delimited canonical URLs."""
+        result = backfill_media_field_values(
+            user_id=user_id,
+            deck_id=deck_id,
+            apply=apply,
+            include_overlays=not no_overlays,
+            include_templates=not no_templates,
+        )
+        if apply:
+            db.session.commit()
+        else:
+            db.session.rollback()
+        click.echo(
+            f"Media normalization {'applied' if apply else 'dry run'}. "
+            f"run_id={result.run_id or '-'}, scanned={result.scanned}, "
+            f"fields={result.scanned_fields}, changed={result.changed}, "
+            f"normalized={result.normalized}, cleared={result.cleared}, "
+            f"quarantined={result.quarantined}, overlays={result.overlays_changed}, "
+            f"templates={result.templates_changed}"
+        )
+        if not apply and result.changed > 0:
+            click.echo("Re-run with --apply after reviewing the dry-run summary.")
+
+    @app.cli.command("media-normalize-rollback")
+    @click.option("--run-id", required=True, help="Migration run UUID to restore.")
+    @click.option("--apply", is_flag=True, default=False, help="Commit restore; otherwise dry-run.")
+    def media_normalize_rollback(run_id: str, apply: bool) -> None:
+        """Restore one migration run without overwriting later user edits."""
+        result = rollback_media_field_migration(run_id=run_id, apply=apply)
+        if apply:
+            db.session.commit()
+        else:
+            db.session.rollback()
+        click.echo(
+            f"Media rollback {'applied' if apply else 'dry run'}. "
+            f"run_id={result.run_id}, restorable={result.restorable}, "
+            f"restored={result.restored}, skipped_changed_since={result.skipped_changed_since}, "
+            f"missing={result.missing}"
         )
 
     @app.cli.command("clone-cutover-overlay")
@@ -1046,49 +1103,22 @@ def register_cli_commands(app: Flask) -> None:
     @strokes_group.command("migrate-notes")
     @click.option("--dry-run", is_flag=True, help="Preview migrations without committing changes.")
     def migrate_notes_cmd(dry_run: bool) -> None:
-        """Migrate legacy stroke keys or URLs in notes to clean .svg URLs."""
-        from models.flashcard import Note
-
-        notes = Note.query.all()
-        updated_count = 0
-        for note in notes:
-            if not note.field_values:
-                continue
-            field_values = dict(note.field_values)
-            changed = False
-            for k, v in list(field_values.items()):
-                if not isinstance(v, str) or not v.strip():
-                    continue
-                val = v.strip()
-                # If raw key like stroke_ja_65e5
-                if re.match(r"^stroke_[a-z0-9_]+_[a-f0-9]{4,6}$", val, re.IGNORECASE):
-                    field_values[k] = f"/media/library/{val}.svg"
-                    changed = True
-                # If URL without extension like /media/library/stroke_ja_65e5
-                elif re.match(r"^/media/library/(stroke_[a-z0-9_]+_[a-f0-9]{4,6})$", val, re.IGNORECASE):
-                    m = re.match(r"^/media/library/(stroke_[a-z0-9_]+_[a-f0-9]{4,6})$", val, re.IGNORECASE)
-                    if m:
-                        field_values[k] = f"/media/library/{m.group(1)}.svg"
-                        changed = True
-                # If HTML snippet with src="/media/library/stroke_..." without .svg
-                elif "/media/library/stroke_" in val and ".svg" not in val:
-                    new_val = re.sub(
-                        r"/media/library/(stroke_[a-z0-9_]+_[a-f0-9]{4,6})(?!\.svg)",
-                        r"/media/library/\1.svg",
-                        val,
-                        flags=re.IGNORECASE,
-                    )
-                    if new_val != val:
-                        field_values[k] = new_val
-                        changed = True
-            if changed:
-                updated_count += 1
-                if not dry_run:
-                    note.field_values = field_values
-
-        if not dry_run and updated_count > 0:
+        """Compatibility alias for the canonical typed media migration."""
+        result = backfill_media_field_values(
+            apply=not dry_run,
+            include_overlays=True,
+            include_templates=False,
+        )
+        if dry_run:
+            db.session.rollback()
+        else:
             db.session.commit()
-        click.echo(f"Notes stroke URL migration complete! Updated: {updated_count} notes. (dry-run={dry_run})")
+        click.echo(
+            "Typed media migration complete. "
+            f"run_id={result.run_id or '-'}, changed={result.changed}, "
+            f"normalized={result.normalized}, cleared={result.cleared}, "
+            f"quarantined={result.quarantined}, dry-run={dry_run}"
+        )
 
     @app.cli.command("seed-production-strokes")
     @click.option("--locale", default="all", type=click.Choice(["all", "ja", "zh", "zh-hant"]), help="Language locale to pre-generate.")

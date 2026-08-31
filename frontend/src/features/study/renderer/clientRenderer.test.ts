@@ -54,18 +54,47 @@ describe('renderStudySide', () => {
     expect(result.html).not.toContain('<img')
   })
 
-  it('removes content-injected scripts and unsafe media URLs', () => {
+  it('removes content-injected scripts and untyped external media URLs', () => {
     const result = renderStudySide(
       template({ front_source: '<div>{{{Meaning}}}</div>' }),
       content({
         render_context: {
-          Meaning: '<script>alert(1)</script><img src="https://evil.example/a.png">',
+          Meaning: (
+            '<script>alert(1)</script><a href="javascript:alert(2)">click</a>'
+            + '<img src="https://tracker.example/pixel.png">'
+          ),
         },
       }),
       'front',
     )
     expect(result.html).not.toContain('<script>alert(1)</script>')
-    expect(result.html).not.toContain('https://evil.example')
+    expect(result.html).not.toContain('javascript:')
+    expect(result.html).not.toContain('tracker.example')
+  })
+
+  it('allows safe external URLs from typed media fields and URL helpers', () => {
+    const result = renderStudySide(
+      template({
+        front_source: '<div>{{{Image}}}<audio controls src="{{Audio_url}}"></audio></div>',
+        field_defs: [
+          { name: 'Image', field_type: 'image' },
+          { name: 'Audio', field_type: 'audio' },
+        ],
+      }),
+      content({
+        render_context: {
+          Image: '<img src="https://example.com/a.png">',
+          Image_url: 'https://example.com/a.png',
+          Image_urls: ['https://example.com/a.png'],
+          Audio: '<audio controls src="https://example.com/a.mp3"></audio>',
+          Audio_url: 'https://example.com/a.mp3',
+          Audio_urls: ['https://example.com/a.mp3'],
+        },
+      }),
+      'front',
+    )
+    expect(result.html).toContain('<img src="https://example.com/a.png">')
+    expect(result.html).toContain('src="https://example.com/a.mp3"')
   })
 
   it('restores only server-validated template scripts inside renderer payload', () => {

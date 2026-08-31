@@ -414,7 +414,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         self.assertEqual(detail_response.status_code, 200)
         self.assertEqual(
             detail_response.get_json()["field_values"]["Audio"],
-            asset_id,
+            f"/media/proxy/{asset_id}",
         )
         self.assertEqual(
             self.client.get("/api/flashcards/import/options").status_code,
@@ -3863,6 +3863,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             content_type="multipart/form-data",
         )
         self.assertEqual(upload_resp.status_code, 201)
+        asset_id = (upload_resp.get_json() or {})["asset_id"]
 
         with self.app.app_context():
             card = Card.query.filter_by(note_id=note_id).first()
@@ -4067,6 +4068,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             content_type="multipart/form-data",
         )
         self.assertEqual(upload_resp.status_code, 201)
+        asset_id = (upload_resp.get_json() or {})["asset_id"]
 
         with self.app.app_context():
             card = Card.query.filter_by(note_id=note_id).first()
@@ -4084,7 +4086,10 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         self.assertEqual(edit_resp.status_code, 200)
         payload = edit_resp.get_json() or {}
         self.assertTrue(payload.get("success"))
-        self.assertEqual((payload.get("field_values") or {}).get("Word_Audio"), "voice.wav")
+        self.assertEqual(
+            (payload.get("field_values") or {}).get("Word_Audio"),
+            f"/media/proxy/{asset_id}",
+        )
 
     def test_study_edit_card_updates_deck_and_tags(self):
         note_type = self._create_note_type()

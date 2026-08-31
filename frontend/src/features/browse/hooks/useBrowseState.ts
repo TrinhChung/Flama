@@ -49,12 +49,14 @@ export type CardDetailField = {
   name: string
   position: number
   required?: boolean
+  field_type?: 'text' | 'richtext' | 'markdown' | 'image' | 'audio' | 'diagram'
 }
 
 export type NoteTypeFieldDef = {
   name: string
   position: number
   required?: boolean
+  field_type?: 'text' | 'richtext' | 'markdown' | 'image' | 'audio' | 'diagram'
 }
 
 export type NoteTypeSummary = {
@@ -384,28 +386,38 @@ export function useBrowseState() {
       setInitialTags(tags)
 
       if (cardDetailQuery.data.fields && cardDetailQuery.data.fields.length > 0) {
-        const fieldNames = cardDetailQuery.data.fields.map((f) => f.name)
+        const fields = cardDetailQuery.data.fields
+        const sourceFieldNames = fields
+          .filter((field) => !['image', 'audio', 'diagram'].includes(String(field.field_type || '').toLowerCase()))
+          .map((field) => field.name)
+        const audioFieldNames = fields
+          .filter((field) => String(field.field_type || '').toLowerCase() === 'audio')
+          .map((field) => field.name)
 
-        if (fieldNames.includes('Reading')) {
+        if (sourceFieldNames.includes('Reading')) {
           setTtsSourceField('Reading')
-        } else if (fieldNames.includes('Word')) {
+        } else if (sourceFieldNames.includes('Word')) {
           setTtsSourceField('Word')
-        } else if (fieldNames.includes('Expression')) {
+        } else if (sourceFieldNames.includes('Expression')) {
           setTtsSourceField('Expression')
-        } else if (fieldNames.includes('Kanji')) {
+        } else if (sourceFieldNames.includes('Kanji')) {
           setTtsSourceField('Kanji')
-        } else if (fieldNames.length > 0 && !fieldNames.includes(ttsSourceFieldRef.current)) {
-          setTtsSourceField(fieldNames[0])
+        } else if (sourceFieldNames.length > 0 && !sourceFieldNames.includes(ttsSourceFieldRef.current)) {
+          setTtsSourceField(sourceFieldNames[0])
+        } else if (sourceFieldNames.length === 0) {
+          setTtsSourceField('')
         }
 
-        if (fieldNames.includes('Audio')) {
+        if (audioFieldNames.includes('Audio')) {
           setTtsDestinationField('Audio')
-        } else if (fieldNames.includes('AudioReading')) {
+        } else if (audioFieldNames.includes('AudioReading')) {
           setTtsDestinationField('AudioReading')
-        } else if (fieldNames.includes('Sound')) {
+        } else if (audioFieldNames.includes('Sound')) {
           setTtsDestinationField('Sound')
-        } else if (fieldNames.length > 0 && !fieldNames.includes(ttsDestinationFieldRef.current)) {
-          setTtsDestinationField(fieldNames[fieldNames.length - 1])
+        } else if (audioFieldNames.length > 0 && !audioFieldNames.includes(ttsDestinationFieldRef.current)) {
+          setTtsDestinationField(audioFieldNames[0])
+        } else if (audioFieldNames.length === 0) {
+          setTtsDestinationField('')
         }
       }
     }
@@ -770,17 +782,20 @@ export function useBrowseState() {
     setPage(1)
   }
 
-  const availableFieldNames = Array.from(
+  const availableSourceFieldNames = Array.from(
     new Set(
-      (
-        cardDetailQuery.data?.fields?.map((f) => f.name) || [
-          'Word',
-          'Reading',
-          'Meaning',
-          'Audio',
-          'AudioReading',
-        ]
-      ).filter(Boolean),
+      (cardDetailQuery.data?.fields || [])
+        .filter((field) => !['image', 'audio', 'diagram'].includes(String(field.field_type || '').toLowerCase()))
+        .map((field) => field.name)
+        .filter(Boolean),
+    ),
+  )
+  const availableAudioFieldNames = Array.from(
+    new Set(
+      (cardDetailQuery.data?.fields || [])
+        .filter((field) => String(field.field_type || '').toLowerCase() === 'audio')
+        .map((field) => field.name)
+        .filter(Boolean),
     ),
   )
 
@@ -886,7 +901,8 @@ export function useBrowseState() {
     isDirty,
     allSelected,
     filteredDecks,
-    availableFieldNames,
+    availableSourceFieldNames,
+    availableAudioFieldNames,
     targetTtsCardIds,
     decksQuery,
     cardsQuery,

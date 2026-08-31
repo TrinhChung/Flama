@@ -149,10 +149,9 @@ class FlashcardValidationSecurityTests(unittest.TestCase):
         self.assertIn("<b>cat</b>", values.get("Meaning", ""))
         self.assertNotIn("<script>", values.get("Meaning", ""))
 
-    def test_media_field_accepts_svg_and_library_urls_and_snippets(self):
+    def test_media_fields_accept_typed_urls_and_reject_html_or_wrong_kind(self):
         note_type = self._create_note_type_with_media()
-        # Create note with inline SVG in Picture field and library URL in Sound field
-        response = self.client.post(
+        rejected = self.client.post(
             "/api/notes",
             json={
                 "note_type_id": note_type["id"],
@@ -165,14 +164,29 @@ class FlashcardValidationSecurityTests(unittest.TestCase):
                 },
             },
         )
+        self.assertEqual(rejected.status_code, 400)
+
+        response = self.client.post(
+            "/api/notes",
+            json={
+                "note_type_id": note_type["id"],
+                "deck_id": self.deck_id,
+                "field_values": {
+                    "Word": "猫",
+                    "Meaning": "Con mèo",
+                    "Picture": "/static/strokes/ja/52c9.svg",
+                    "Sound": "https://media.example.com/cat.mp3",
+                },
+            },
+        )
         self.assertEqual(response.status_code, 201)
         note_id = response.get_json()["id"]
 
         detail_resp = self.client.get(f"/api/notes/{note_id}")
         self.assertEqual(detail_resp.status_code, 200)
         values = (detail_resp.get_json() or {}).get("field_values") or {}
-        self.assertIn("<svg", values.get("Picture", ""))
-        self.assertEqual(values.get("Sound"), "/media/library/stroke_ja_65e5.svg")
+        self.assertEqual(values.get("Picture"), "/static/strokes/ja/52c9.svg")
+        self.assertEqual(values.get("Sound"), "https://media.example.com/cat.mp3")
 
         # Update note via patch with another URL and snippet
         patch_resp = self.client.patch(
@@ -352,6 +366,7 @@ class FlashcardValidationSecurityTests(unittest.TestCase):
             content_type="multipart/form-data",
         )
         self.assertEqual(upload_resp.status_code, 201)
+        asset_id = (upload_resp.get_json() or {})["asset_id"]
 
         patch_resp = self.client.patch(
             f"/api/notes/{note_id}",
@@ -360,7 +375,7 @@ class FlashcardValidationSecurityTests(unittest.TestCase):
         self.assertEqual(patch_resp.status_code, 200)
         payload = patch_resp.get_json() or {}
         values = payload.get("field_values") or {}
-        self.assertEqual(values.get("Sound"), "voice.wav")
+        self.assertEqual(values.get("Sound"), f"/media/proxy/{asset_id}")
 
     def test_patch_note_accepts_audio_sound_tag_reference(self):
         note_type = self._create_note_type_with_media()
@@ -375,6 +390,7 @@ class FlashcardValidationSecurityTests(unittest.TestCase):
             content_type="multipart/form-data",
         )
         self.assertEqual(upload_resp.status_code, 201)
+        asset_id = (upload_resp.get_json() or {})["asset_id"]
 
         patch_resp = self.client.patch(
             f"/api/notes/{note_id}",
@@ -383,7 +399,7 @@ class FlashcardValidationSecurityTests(unittest.TestCase):
         self.assertEqual(patch_resp.status_code, 200)
         payload = patch_resp.get_json() or {}
         values = payload.get("field_values") or {}
-        self.assertEqual(values.get("Sound"), "[sound:voice.wav]")
+        self.assertEqual(values.get("Sound"), f"/media/proxy/{asset_id}")
 
     def test_upload_rejects_fake_extension(self):
         note_type = self._create_note_type_with_media()

@@ -281,8 +281,9 @@ def crawl_and_save_note_media(
     if existing:
         if not markdown_inline:
             values = dict(note.field_values or {})
-            if values.get(sanitized.field_name) != existing.id:
-                values[sanitized.field_name] = existing.id
+            canonical_url = f"/media/proxy/{existing.id}"
+            if values.get(sanitized.field_name) != canonical_url:
+                values[sanitized.field_name] = canonical_url
                 note.field_values = values
                 deck_working_tree_service.mark_note_field_batches_changed(
                     mutations=[
@@ -325,7 +326,7 @@ def crawl_and_save_note_media(
         db.session.flush()
         if not markdown_inline:
             values = dict(note.field_values or {})
-            values[sanitized.field_name] = asset.id
+            values[sanitized.field_name] = f"/media/proxy/{asset.id}"
             note.field_values = values
             deck_working_tree_service.mark_note_field_batches_changed(
                 mutations=[
@@ -509,8 +510,9 @@ def crawl_note_media_batch(
             if existing:
                 if not markdown_inline:
                     values = dict(note.field_values or {})
-                    if values.get(sanitized.field_name) != existing.id:
-                        values[sanitized.field_name] = existing.id
+                    canonical_url = f"/media/proxy/{existing.id}"
+                    if values.get(sanitized.field_name) != canonical_url:
+                        values[sanitized.field_name] = canonical_url
                         note.field_values = values
                         dirty_field_names_by_note_id.setdefault(note.id, set()).add(
                             sanitized.field_name
@@ -561,7 +563,7 @@ def crawl_note_media_batch(
 
             if not markdown_inline:
                 values = dict(note.field_values or {})
-                values[sanitized.field_name] = asset.id
+                values[sanitized.field_name] = f"/media/proxy/{asset.id}"
                 note.field_values = values
                 dirty_field_names_by_note_id.setdefault(note.id, set()).add(
                     sanitized.field_name

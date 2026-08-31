@@ -339,6 +339,59 @@ class OwnerNoteDirtyTrackingServiceTests(unittest.TestCase):
             self.assertIsNotNone(first_dirty.current_hash)
             self.assertIsNone(db.session.get(MediaAsset, first_asset_id))
 
+    def test_voicevox_appends_proxy_url_and_rejects_non_audio_destination(self):
+        synthesized = tts_provider_service.SynthesizedAudioResult(
+            content=_MIN_WAV_BYTES,
+            mime_type="audio/wav",
+            extension="wav",
+            content_type_header="audio/wav",
+        )
+        with self.app.app_context(), patch.object(
+            browse_voicevox_service,
+            "_active_voicevox_provider",
+            return_value=object(),
+        ), patch.object(
+            browse_voicevox_service.tts_provider_service,
+            "synthesize_voicevox_audio_for_user",
+            return_value=(synthesized, [], []),
+        ):
+            note = db.session.get(Note, self.first_note_id)
+            note.field_values = {
+                **dict(note.field_values or {}),
+                "Sound": "https://cdn.example.com/original.mp3",
+            }
+            db.session.commit()
+
+            result = browse_voicevox_service.generate_voicevox(
+                user_id=self.owner_id,
+                admin_mode=False,
+                payload={
+                    "card_ids": [self.first_card_id],
+                    "source_field": "Word",
+                    "destination_field": "Sound",
+                    "character_id": "speaker-1",
+                    "append_audio": True,
+                },
+                upload_root=Path(self.upload_tmp.name),
+            )
+            value = result["items"][0]["value"]
+            self.assertEqual(value.splitlines()[0], "https://cdn.example.com/original.mp3")
+            self.assertTrue(value.splitlines()[1].startswith("/media/proxy/"))
+
+            with self.assertRaises(browse_voicevox_service.BrowseVoiceVoxError) as ctx:
+                browse_voicevox_service.generate_voicevox(
+                    user_id=self.owner_id,
+                    admin_mode=False,
+                    payload={
+                        "card_ids": [self.first_card_id],
+                        "source_field": "Word",
+                        "destination_field": "Meaning",
+                        "character_id": "speaker-1",
+                    },
+                    upload_root=Path(self.upload_tmp.name),
+                )
+            self.assertEqual(ctx.exception.code, "invalid_destination_field")
+
     def test_voicevox_tracks_all_generated_notes_in_one_revision(self):
         synthesized = tts_provider_service.SynthesizedAudioResult(
             content=_MIN_WAV_BYTES,
@@ -371,6 +424,11 @@ class OwnerNoteDirtyTrackingServiceTests(unittest.TestCase):
             dirty = self._dirty_rows()
             self.assertEqual(len(dirty), 2)
             self.assertEqual({row.field_def_id for row in dirty}, {self.sound_field_id})
+            self.assertTrue(all(item["value"] == item["url"] for item in result["items"]))
+            self.assertTrue(all(str(item["url"]).startswith("/media/proxy/") for item in result["items"]))
+            for note_id in (self.first_note_id, self.second_note_id):
+                note = db.session.get(Note, note_id)
+                self.assertTrue(str(note.field_values["Sound"]).startswith("/media/proxy/"))
 
     def test_note_sync_tracks_create_and_update_with_fixed_creation_tags(self):
         with self.app.app_context():

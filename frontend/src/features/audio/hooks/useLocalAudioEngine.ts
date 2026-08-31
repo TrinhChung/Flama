@@ -143,7 +143,7 @@ function autoSelectSourceField(fields: string[], currentSource?: string): string
     const match = fields.find((f) => f.toLowerCase() === p.toLowerCase())
     if (match) return match
   }
-  return fields[0] || 'Word'
+  return fields[0] || ''
 }
 
 function autoSelectDestinationField(fields: string[], currentDest?: string): string {
@@ -153,7 +153,7 @@ function autoSelectDestinationField(fields: string[], currentDest?: string): str
     const match = fields.find((f) => f.toLowerCase() === p.toLowerCase())
     if (match) return match
   }
-  return fields[fields.length - 1] || 'Audio'
+  return fields[0] || ''
 }
 
 function cleanTextForVoiceVox(rawText: string): string {
@@ -186,6 +186,7 @@ export function useLocalAudioEngine(options: {
   selectedCardIds: string[]
   activeCardId?: string | null
   availableFieldNames?: string[]
+  availableAudioFieldNames?: string[]
   engineId?: 'voicevox' | 'kokoro'
   defaultVoiceId?: string
   onSuccess?: () => void
@@ -194,7 +195,8 @@ export function useLocalAudioEngine(options: {
     isOpen,
     selectedCardIds,
     activeCardId,
-    availableFieldNames = ['Reading', 'Word', 'Meaning', 'Audio'],
+    availableFieldNames = ['Reading', 'Word', 'Meaning'],
+    availableAudioFieldNames = ['Audio'],
     engineId = 'voicevox',
     defaultVoiceId,
     onSuccess,
@@ -218,14 +220,14 @@ export function useLocalAudioEngine(options: {
     return defaultVoiceId || (isKokoro ? initialLocalSettings.lastVoiceIdKokoro : initialLocalSettings.lastVoiceIdVoicevox)
   })
 
-  const setSelectedVoiceId = (voiceId: string) => {
+  const setSelectedVoiceId = useCallback((voiceId: string) => {
     setSelectedVoiceIdState(voiceId)
     if (isKokoro) {
       saveStoredLocalAudioSettings({ lastVoiceIdKokoro: voiceId })
     } else {
       saveStoredLocalAudioSettings({ lastVoiceIdVoicevox: voiceId })
     }
-  }
+  }, [isKokoro])
 
   useEffect(() => {
     const stored = loadStoredLocalAudioSettings()
@@ -236,12 +238,17 @@ export function useLocalAudioEngine(options: {
 
   // Dynamic Fields Resolution State
   const [dynamicFields, setDynamicFields] = useState<string[]>(availableFieldNames)
+  const [dynamicAudioFields, setDynamicAudioFields] = useState<string[]>(
+    availableAudioFieldNames,
+  )
 
   useEffect(() => {
-    if (availableFieldNames && availableFieldNames.length > 0) {
-      setDynamicFields(availableFieldNames)
-    }
+    setDynamicFields(availableFieldNames)
   }, [availableFieldNames])
+
+  useEffect(() => {
+    setDynamicAudioFields(availableAudioFieldNames)
+  }, [availableAudioFieldNames])
 
   // Fetch card details dynamically if fields are missing
   useEffect(() => {
@@ -249,16 +256,26 @@ export function useLocalAudioEngine(options: {
       const cardId = targetCardIds[0]
       apiRequest<{
         card: { word: string }
-        fields?: Array<{ name: string }>
+        fields?: Array<{ name: string; field_type?: string }>
         note?: { field_values?: Record<string, string> }
       }>(`/api/browse/cards/${encodeURIComponent(cardId)}`)
         .then((res) => {
           if (res.fields && res.fields.length > 0) {
-            const names = res.fields.map((f) => f.name).filter(Boolean)
-            if (names.length > 0) setDynamicFields(names)
+            const sourceNames = res.fields
+              .filter((field) => !['image', 'audio', 'diagram'].includes(String(field.field_type || '').toLowerCase()))
+              .map((field) => field.name)
+              .filter(Boolean)
+            const audioNames = res.fields
+              .filter((field) => String(field.field_type || '').toLowerCase() === 'audio')
+              .map((field) => field.name)
+              .filter(Boolean)
+            setDynamicFields(sourceNames)
+            setDynamicAudioFields(audioNames)
           } else if (res.note?.field_values) {
             const names = Object.keys(res.note.field_values)
-            if (names.length > 0) setDynamicFields(names)
+            const guessedAudioNames = names.filter((name) => /audio|sound/i.test(name))
+            setDynamicFields(names.filter((name) => !guessedAudioNames.includes(name)))
+            setDynamicAudioFields(guessedAudioNames)
           }
         })
         .catch(() => {})
@@ -270,11 +287,16 @@ export function useLocalAudioEngine(options: {
   const [destinationField, setDestinationField] = useState<string>('Audio')
 
   useEffect(() => {
-    if (isOpen && dynamicFields.length > 0) {
+    if (isOpen) {
       setSourceField((prev) => autoSelectSourceField(dynamicFields, prev))
-      setDestinationField((prev) => autoSelectDestinationField(dynamicFields, prev))
     }
   }, [isOpen, dynamicFields])
+
+  useEffect(() => {
+    if (isOpen) {
+      setDestinationField((prev) => autoSelectDestinationField(dynamicAudioFields, prev))
+    }
+  }, [isOpen, dynamicAudioFields])
 
   // Advanced Sliders State
   const [volumeScale, setVolumeScaleState] = useState<number>(initialLocalSettings.volumeScale)
@@ -401,7 +423,7 @@ export function useLocalAudioEngine(options: {
     if (voiceOptions.length > 0 && !voiceOptions.some((v) => v.id === selectedVoiceId)) {
       setSelectedVoiceId(voiceOptions[0].id)
     }
-  }, [voiceOptions, selectedVoiceId])
+  }, [voiceOptions, selectedVoiceId, setSelectedVoiceId])
 
   const handleInstallEngine = async () => {
     setEngineActionState('installing')
@@ -615,6 +637,10 @@ export function useLocalAudioEngine(options: {
       toast.error('Vui lòng chọn ít nhất 1 thẻ từ vựng.')
       return
     }
+    if (!destinationField) {
+      toast.error('Note Type cần có ít nhất một trường kiểu audio.')
+      return
+    }
 
     setIsProcessing(true)
     setProgressPercent(0)
@@ -823,6 +849,7 @@ export function useLocalAudioEngine(options: {
     selectedVoiceId,
     setSelectedVoiceId,
     dynamicFields,
+    dynamicAudioFields,
     sourceField,
     setSourceField,
     destinationField,

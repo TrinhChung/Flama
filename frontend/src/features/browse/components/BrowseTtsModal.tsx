@@ -59,7 +59,8 @@ export function BrowseTtsModal({ browse }: BrowseTtsModalProps) {
     generateTtsMutation,
     targetTtsCardIds,
     isPreviewing,
-    availableFieldNames,
+    availableSourceFieldNames,
+    availableAudioFieldNames,
   } = browse
 
   const availableVoices = ttsVoicesQuery.data?.items || []
@@ -196,13 +197,16 @@ export function BrowseTtsModal({ browse }: BrowseTtsModalProps) {
                   id="tts-source-field"
                   value={ttsSourceField}
                   onChange={(e) => setTtsSourceField(e.target.value)}
+                  disabled={availableSourceFieldNames.length === 0}
                   className="h-9 text-xs"
                 >
-                  {availableFieldNames.map((f) => (
-                    <option key={f} value={f}>
-                      {f}
-                    </option>
-                  ))}
+                  {availableSourceFieldNames.length === 0 ? (
+                    <option value="">Note Type chưa có trường văn bản</option>
+                  ) : availableSourceFieldNames.map((f) => (
+                      <option key={f} value={f}>
+                        {f}
+                      </option>
+                    ))}
                 </NativeSelect>
               </div>
 
@@ -212,13 +216,16 @@ export function BrowseTtsModal({ browse }: BrowseTtsModalProps) {
                   id="tts-dest-field"
                   value={ttsDestinationField}
                   onChange={(e) => setTtsDestinationField(e.target.value)}
+                  disabled={availableAudioFieldNames.length === 0}
                   className="h-9 text-xs"
                 >
-                  {availableFieldNames.map((f) => (
-                    <option key={f} value={f}>
-                      {f}
-                    </option>
-                  ))}
+                  {availableAudioFieldNames.length === 0 ? (
+                    <option value="">Note Type chưa có trường audio</option>
+                  ) : availableAudioFieldNames.map((f) => (
+                      <option key={f} value={f}>
+                        {f}
+                      </option>
+                    ))}
                 </NativeSelect>
               </div>
             </div>
@@ -395,7 +402,14 @@ export function BrowseTtsModal({ browse }: BrowseTtsModalProps) {
               type="button"
               size="sm"
               onClick={handleGenerate}
-              disabled={generateTtsMutation.isPending || targetTtsCardIds.length === 0}
+              disabled={
+                generateTtsMutation.isPending
+                || targetTtsCardIds.length === 0
+                || availableSourceFieldNames.length === 0
+                || availableAudioFieldNames.length === 0
+                || !ttsSourceField
+                || !ttsDestinationField
+              }
             >
               {generateTtsMutation.isPending ? <LoaderCircle className="size-3.5 mr-1 animate-spin" /> : null}
               Bắt đầu tạo ({targetTtsCardIds.length} thẻ)

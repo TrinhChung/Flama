@@ -127,6 +127,8 @@ def create_app(config: Optional[dict] = None, audit_mode: bool = False) -> Flask
         FieldDef,
         FieldRenameJob,
         MediaAsset,
+        MediaFieldMigrationItem,
+        MediaFieldMigrationRun,
         Note,
         NoteType,
         NoteTypeInstall,
