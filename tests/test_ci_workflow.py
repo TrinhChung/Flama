@@ -40,6 +40,7 @@ class CiWorkflowTests(unittest.TestCase):
         self.assertIn("push:", self.audio_workflow)
         self.assertIn("pull_request:", self.audio_workflow)
         self.assertIn('runs-on: windows-latest', self.audio_workflow)
+        self.assertIn("submodules: recursive", self.audio_workflow)
         self.assertIn(
             "dotnet test flama-audio/Flama.Audio.sln -c Release --no-restore",
             self.audio_workflow,
