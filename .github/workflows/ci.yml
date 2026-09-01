@@ -1,5 +1,11 @@
 name: CI
 
+env:
+  # Pin the complete event range. HEAD~1 misses files when a push contains
+  # multiple commits; the modular runner consumes these values directly.
+  TEST_DIFF_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+  TEST_DIFF_HEAD: ${{ github.sha }}
+
 on:
   push:
     paths-ignore:
@@ -29,6 +35,11 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Setup Python for changed-file selection
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -54,7 +65,7 @@ jobs:
             npm test
           else
             echo "Running targeted tests for changed files..."
-            npm run test:changed || npm test
+            python ../scripts/run_tests.py --changed --frontend-only
           fi
 
       - name: Build

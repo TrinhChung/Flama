@@ -61,10 +61,14 @@ jobs:
           dotnet-version: "8.0.x"
 
       - name: Restore dependencies
-        run: dotnet restore flama-audio/Flama.Audio.sln
+        run: |
+          dotnet restore flama-audio/Flama.Audio.sln
+          dotnet restore flama-audio/src/Flama.Audio.Engine.Kokoro/G2P/Flama.G2P.sln
 
       - name: Run tests
-        run: dotnet test flama-audio/Flama.Audio.sln -c Release --no-restore
+        run: |
+          dotnet test flama-audio/Flama.Audio.sln -c Release --no-restore
+          dotnet test flama-audio/src/Flama.Audio.Engine.Kokoro/G2P/Flama.G2P.sln -c Release --no-restore
 
       - name: Clean publish directory
         shell: pwsh

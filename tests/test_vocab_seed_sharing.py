@@ -811,9 +811,9 @@ class VocabSeedSharingTests(unittest.TestCase):
             shutil.rmtree(export_root, ignore_errors=True)
 
     def test_reseed_script_uses_canonical_flama_standard_vocabulary_template(self):
-        seed_globals = runpy.run_path(
-            str(Path(__file__).resolve().parents[1] / "scripts" / "seed_flama_template.py")
-        )
+        seed_script = Path(__file__).resolve().parents[1] / "scripts" / "seed_flama_template.py"
+        seed_globals = runpy.run_path(str(seed_script))
+        seed_source = seed_script.read_text(encoding="utf-8")
 
         front_html = seed_globals["FRONT_HTML"]
         back_html = seed_globals["BACK_HTML"]
@@ -829,6 +829,21 @@ class VocabSeedSharingTests(unittest.TestCase):
         self.assertEqual(back_html.strip(), LEGACY_BACK_TEMPLATE.strip())
         self.assertEqual(shared_css.strip(), LEGACY_SHARED_CSS.strip())
         self.assertEqual(LEGACY_FRONT_TEMPLATE.strip().count("{{word}}"), 1)
+        self.assertIn("ensure_legacy_note_type(db.session, user.id)", seed_source)
+        self.assertNotIn("default-flama-vocab-000000000000", seed_source)
+        self.assertNotIn("default-template-000000000000", seed_source)
+
+    def test_reseed_wrapper_progress_counts_match_their_commands(self):
+        scripts_dir = Path(__file__).resolve().parents[1] / "scripts"
+        shell_source = (scripts_dir / "reseed_db.sh").read_text(encoding="utf-8")
+        powershell_source = (scripts_dir / "reseed_db.ps1").read_text(encoding="utf-8")
+        batch_source = (scripts_dir / "reseed_db.bat").read_text(encoding="utf-8")
+
+        for step in range(1, 7):
+            self.assertIn(f"[{step}/6]", shell_source)
+        for source in (powershell_source, batch_source):
+            for step in range(1, 6):
+                self.assertIn(f"[{step}/5]", source)
 
     def test_vocab_seed_supports_path_pointing_directly_to_seed_subfolder(self):
         direct_root = Path(tempfile.mkdtemp(prefix="flama-direct-seed-"))

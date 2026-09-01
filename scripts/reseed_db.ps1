@@ -7,10 +7,10 @@ if (Test-Path ".venv\Scripts\Activate.ps1") {
     & ".venv\Scripts\Activate.ps1"
 }
 
-Write-Host "[1/4] flask --app wsgi.py db upgrade"
+Write-Host "[1/5] flask --app wsgi.py db upgrade"
 flask --app wsgi.py db upgrade
 
-Write-Host "[2/4] python scripts/seed_flama_template.py"
+Write-Host "[2/5] python scripts/seed_flama_template.py"
 python scripts/seed_flama_template.py
 
 Write-Host "[3/5] flask --app wsgi.py user-role-seed"

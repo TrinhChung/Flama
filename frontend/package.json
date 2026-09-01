@@ -9,7 +9,6 @@
     "lint": "oxlint src",
     "typecheck": "tsc -b --pretty",
     "test": "vitest run",
-    "test:changed": "vitest related --run",
     "test:study": "vitest run src/features/study",
     "test:collab": "vitest run src/features/deck-collaboration",
     "test:dashboard": "vitest run src/features/dashboard",
