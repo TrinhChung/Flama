@@ -213,6 +213,7 @@
   ["GET", "/api/statistics/study-time"],
   ["GET", "/api/statistics/today-future"],
   ["POST", "/api/strokes/batch-generate"],
+  ["POST", "/api/strokes/estimate"],
   ["POST", "/api/strokes/generate"],
   ["GET", "/api/student-status"],
   ["GET", "/api/support-donation"],

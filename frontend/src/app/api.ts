@@ -378,6 +378,10 @@ export const appApi = {
     return apiJson<GenerateStrokesResponse>(`${API_BASE}/strokes/generate`, 'POST', payload)
   },
 
+  async estimateBatchStrokes(payload: EstimateBatchStrokesPayload): Promise<EstimateBatchStrokesResponse> {
+    return apiJson<EstimateBatchStrokesResponse>(`${API_BASE}/strokes/estimate`, 'POST', payload)
+  },
+
   async batchGenerateStrokes(payload: BatchGenerateStrokesPayload): Promise<BatchGenerateStrokesResponse> {
     return apiJson<BatchGenerateStrokesResponse>(`${API_BASE}/strokes/batch-generate`, 'POST', payload)
   },
@@ -405,6 +409,30 @@ export type GenerateStrokesResponse = {
   output: string
   missing_count: number
   missing_characters: string[]
+}
+
+export type EstimateBatchStrokesPayload = {
+  source_field: string
+  target_field: string
+  locale?: string
+  deck_id?: number | null
+  note_ids?: string[]
+  card_ids?: string[]
+  overwrite?: boolean
+  max_characters?: number
+}
+
+export type EstimateBatchStrokesResponse = {
+  total_notes: number
+  notes_to_update: number
+  notes_skipped: number
+  unique_characters: number
+  cached_characters: number
+  new_characters: number
+  estimated_seconds: number
+  estimated_human: string
+  is_heavy_task: boolean
+  friendly_summary: string
 }
 
 export type BatchGenerateStrokesPayload = {

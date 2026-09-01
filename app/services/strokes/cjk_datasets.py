@@ -75,12 +75,40 @@ def fetch_makemeahanzi_all_characters(cache_dir: Path | None = None) -> list[str
 
 
 def get_production_hanzi_list(locale: str = "zh", limit: int = 9000, cache_dir: Path | None = None) -> list[str]:
-    """Return curated list of Chinese Hanzi for production seeding."""
-    all_chars = fetch_makemeahanzi_all_characters(cache_dir=cache_dir)
-    if not all_chars:
-        from app.services.strokes.dataset_builder import ZH_STARTER_HANZI, ZH_HANT_STARTER_HANZI
-        if "hant" in locale.lower() or "tw" in locale.lower() or "hk" in locale.lower():
-            return ZH_HANT_STARTER_HANZI[:limit]
-        return ZH_STARTER_HANZI[:limit]
+    """Return curated list of Chinese Hanzi for production seeding.
 
-    return all_chars[:limit]
+    Uses locale-specific pre-split JSON files generated via OpenCC S↔T mapping:
+      - zh_production_hanzi.json     → Simplified-only + shared characters
+      - zh_hant_production_hanzi.json → Traditional-only + shared characters
+    Falls back to starter lists when neither locale-specific nor MakeMeAHanzi data is available.
+    """
+    seed_root = cache_dir or Path("static/seed_data/strokes")
+    norm_locale = str(locale or "zh").strip().lower()
+    is_traditional = "hant" in norm_locale or "tw" in norm_locale or "hk" in norm_locale
+
+    # 1. Try locale-specific pre-split file (preferred)
+    locale_file = seed_root / ("zh_hant_production_hanzi.json" if is_traditional else "zh_production_hanzi.json")
+    if locale_file.exists():
+        try:
+            data = json.loads(locale_file.read_text(encoding="utf-8"))
+            if isinstance(data, list) and len(data) > 100:
+                return data[:limit]
+        except Exception as e:
+            logger.warning("Could not read locale-specific Hanzi list %s: %s", locale_file, e)
+
+    # 2. Fallback: raw MakeMeAHanzi list (mixed S/T — legacy behavior)
+    all_chars = fetch_makemeahanzi_all_characters(cache_dir=cache_dir)
+    if all_chars:
+        logger.warning(
+            "Using unsplit MakeMeAHanzi list for locale '%s'. "
+            "Run the generation script to create locale-specific files.",
+            locale,
+        )
+        return all_chars[:limit]
+
+    # 3. Last resort: hardcoded starter lists
+    from app.services.strokes.dataset_builder import ZH_STARTER_HANZI, ZH_HANT_STARTER_HANZI
+    if is_traditional:
+        return ZH_HANT_STARTER_HANZI[:limit]
+    return ZH_STARTER_HANZI[:limit]
+

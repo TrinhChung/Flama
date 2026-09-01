@@ -113,6 +113,27 @@ class TestApiStrokes(unittest.TestCase):
         db.session.refresh(self.note)
         self.assertIn("/media/library/stroke_ja_52c9", self.note.field_values.get("StrokeDiagram", ""))
 
+    def test_estimate_strokes_api(self):
+        self._login()
+        res = self.client.post(
+            "/api/strokes/estimate",
+            json={
+                "deck_id": self.deck.id,
+                "source_field": "Expression",
+                "target_field": "StrokeDiagram",
+                "locale": "ja",
+                "overwrite": True,
+            },
+        )
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertEqual(data["total_notes"], 1)
+        self.assertEqual(data["notes_to_update"], 1)
+        self.assertEqual(data["unique_characters"], 5)
+        self.assertIn("estimated_seconds", data)
+        self.assertIn("estimated_human", data)
+        self.assertIn("friendly_summary", data)
+
 
 if __name__ == "__main__":
     unittest.main()

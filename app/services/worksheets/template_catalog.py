@@ -118,6 +118,8 @@ KANJI_STROKE_TEMPLATE = WorksheetTemplate(
         "trace_count": 2,       # Number of faint tracing boxes
         "practice_count": 6,    # Number of blank practice boxes
         "show_stroke_diagram": True,
+        "reference_char_color": "#e11d48",
+        "stroke_color_mode": "monochrome",  # 'monochrome' | 'multicolor' | 'same_as_reference'
         "show_reading": True,
         "show_meaning": True,
         "rows_per_page": 8,
@@ -172,6 +174,8 @@ KANJI_COMPACT_TEMPLATE = WorksheetTemplate(
         "trace_count": 1,
         "practice_count": 8,
         "show_stroke_diagram": True,
+        "reference_char_color": "#e11d48",
+        "stroke_color_mode": "monochrome",  # 'monochrome' | 'multicolor' | 'same_as_reference'
         "show_reading": True,
         "show_meaning": True,
         "rows_per_page": 10,

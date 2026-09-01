@@ -38,6 +38,8 @@ export interface WorksheetLayoutOptions {
   practice_type?: 'boxes' | 'lines' | 'grid'
   practice_boxes_count?: number
   show_stroke_diagram?: boolean
+  reference_char_color?: string
+  stroke_color_mode?: 'monochrome' | 'multicolor' | 'same_as_reference'
   show_reading?: boolean
   show_meaning?: boolean
   show_reading_hint?: boolean

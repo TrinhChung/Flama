@@ -1145,7 +1145,7 @@ def register_cli_commands(app: Flask) -> None:
         click.echo("----------------------------------------------------------")
 
         start_time = time.time()
-        
+
         def on_progress(p: dict):
             completed = p["completed"]
             total = p["total"]
@@ -1176,10 +1176,105 @@ def register_cli_commands(app: Flask) -> None:
         click.echo(f"  Elapsed Time            : {elapsed:.2f}s")
         click.echo("==========================================================")
 
+    @app.cli.command("cleanup-wrong-strokes")
+    @click.option("--dry-run", is_flag=True, help="Preview only, do not delete files.")
+    def cleanup_wrong_strokes_command(dry_run: bool):
+        """Remove incorrectly seeded stroke SVGs (S/T mix-up) from zh and zh-hant folders."""
+        import json
+        from pathlib import Path
+        from app.services.strokes.stroke_service import _get_static_root, _get_upload_root
+        from models.shared_image_asset import SharedImageAsset
 
+        click.echo("==========================================================")
+        click.echo(" FLAMA STROKE CLEANUP - Remove S/T Mix-up Files")
+        click.echo(f"  Dry run: {dry_run}")
+        click.echo("----------------------------------------------------------")
 
+        seed_root = Path("static/seed_data/strokes")
+        zh_file = seed_root / "zh_production_hanzi.json"
+        zh_hant_file = seed_root / "zh_hant_production_hanzi.json"
 
+        if not zh_file.exists() or not zh_hant_file.exists():
+            click.echo("ERROR: Locale-specific JSON files not found.")
+            return
 
+        zh_chars = set(json.loads(zh_file.read_text(encoding="utf-8")))
+        zh_hant_chars = set(json.loads(zh_hant_file.read_text(encoding="utf-8")))
+
+        zh_valid_hexes = set()
+        for ch in zh_chars:
+            h = format(ord(ch), "x")
+            zh_valid_hexes.add(h)
+            zh_valid_hexes.add(h.zfill(5))
+
+        zh_hant_valid_hexes = set()
+        for ch in zh_hant_chars:
+            h = format(ord(ch), "x")
+            zh_hant_valid_hexes.add(h)
+            zh_hant_valid_hexes.add(h.zfill(5))
+
+        static_root = _get_static_root()
+        upload_root = _get_upload_root()
+
+        targets = [
+            (static_root / "strokes" / "zh", zh_valid_hexes, "stroke_zh_"),
+            (static_root / "strokes" / "zh-hant", zh_hant_valid_hexes, "stroke_zh_hant_"),
+            (upload_root / "library" / "strokes" / "zh", zh_valid_hexes, "stroke_zh_"),
+            (upload_root / "library" / "strokes" / "zh_hant", zh_hant_valid_hexes, "stroke_zh_hant_"),
+        ]
+
+        total_deleted = 0
+        total_kept = 0
+        db_keys_to_delete: list[str] = []
+
+        for folder, valid_hexes, prefix in targets:
+            if not folder.exists():
+                continue
+            svgs = list(folder.glob("*.svg"))
+            deleted = 0
+            kept = 0
+            for svg_path in svgs:
+                stem = svg_path.stem.lower()
+                if stem not in valid_hexes:
+                    if dry_run:
+                        click.echo(f"  [DRY] Would delete: {svg_path}")
+                    else:
+                        svg_path.unlink()
+                    deleted += 1
+                    hex_clean = stem.lstrip("0") or stem
+                    db_keys_to_delete.append(f"{prefix}{hex_clean}")
+                else:
+                    kept += 1
+            if deleted > 0 or kept > 0:
+                action = "would delete" if dry_run else "deleted"
+                click.echo(f"  {folder}: kept={kept}, {action}={deleted}")
+            total_deleted += deleted
+            total_kept += kept
+
+        db_cleaned = 0
+        if db_keys_to_delete and not dry_run:
+            unique_keys = list(set(db_keys_to_delete))
+            for i in range(0, len(unique_keys), 100):
+                chunk = unique_keys[i:i + 100]
+                assets = SharedImageAsset.query.filter(
+                    SharedImageAsset.image_key.in_(chunk)
+                ).all()
+                for asset in assets:
+                    db.session.delete(asset)
+                    db_cleaned += 1
+            try:
+                db.session.commit()
+            except Exception as exc:
+                db.session.rollback()
+                click.echo(f"  DB cleanup error: {exc}")
+
+        click.echo("----------------------------------------------------------")
+        click.echo(f"  Files kept     : {total_kept}")
+        action = "to delete" if dry_run else "deleted"
+        click.echo(f"  Files {action} : {total_deleted}")
+        if not dry_run:
+            click.echo(f"  DB records removed: {db_cleaned}")
+        click.echo("==========================================================")
 
 
 # Re-exports from seeding_service for backward compatibility
