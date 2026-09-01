@@ -221,29 +221,15 @@ def resolve_stroke_items(
     }
 
 
-def batch_generate_strokes(
+def _collect_notes(
     *,
     user_id: int,
     admin_mode: bool,
-    source_field: str,
-    target_field: str,
-    locale: str = "ja",
     deck_id: int | None = None,
     note_ids: list[str] | None = None,
     card_ids: list[str] | None = None,
-    output_format: str = "html",
-    overwrite: bool = False,
-    max_characters: int = 15,
-) -> dict[str, Any]:
-    """Batch generate stroke diagrams across notes in a deck or specified notes/cards."""
-    source_field = str(source_field or "").strip()
-    target_field = str(target_field or "").strip()
-    if not source_field:
-        raise StrokeServiceError("source_field là bắt buộc.")
-    if not target_field:
-        raise StrokeServiceError("target_field là bắt buộc.")
-
-    # 1. Collect target notes
+) -> list[Note]:
+    """Collect target notes based on card_ids, note_ids, or deck_id."""
     notes: list[Note] = []
     if card_ids:
         card_query = (
@@ -278,6 +264,182 @@ def batch_generate_strokes(
         notes = note_query.all()
     else:
         raise StrokeServiceError("Phải cung cấp deck_id, note_ids hoặc card_ids.")
+    return notes
+
+
+def estimate_batch_strokes(
+    *,
+    user_id: int,
+    admin_mode: bool,
+    source_field: str,
+    target_field: str,
+    locale: str = "ja",
+    deck_id: int | None = None,
+    note_ids: list[str] | None = None,
+    card_ids: list[str] | None = None,
+    overwrite: bool = False,
+    max_characters: int = 15,
+) -> dict[str, Any]:
+    """Estimate time and workload for batch stroke generation without blocking network calls."""
+    source_field = str(source_field or "").strip()
+    target_field = str(target_field or "").strip()
+    if not source_field or not target_field:
+        return {
+            "total_notes": 0,
+            "notes_to_update": 0,
+            "notes_skipped": 0,
+            "unique_characters": 0,
+            "cached_characters": 0,
+            "new_characters": 0,
+            "estimated_seconds": 0,
+            "estimated_human": "0 giây",
+            "is_heavy_task": False,
+            "friendly_summary": "Vui lòng chọn trường nguồn và trường lưu kết quả.",
+        }
+
+    try:
+        notes = _collect_notes(
+            user_id=user_id,
+            admin_mode=admin_mode,
+            deck_id=deck_id,
+            note_ids=note_ids,
+            card_ids=card_ids,
+        )
+    except StrokeServiceError:
+        return {
+            "total_notes": 0,
+            "notes_to_update": 0,
+            "notes_skipped": 0,
+            "unique_characters": 0,
+            "cached_characters": 0,
+            "new_characters": 0,
+            "estimated_seconds": 0,
+            "estimated_human": "0 giây",
+            "is_heavy_task": False,
+            "friendly_summary": "Không tìm thấy thẻ nào phù hợp.",
+        }
+
+    if not notes:
+        return {
+            "total_notes": 0,
+            "notes_to_update": 0,
+            "notes_skipped": 0,
+            "unique_characters": 0,
+            "cached_characters": 0,
+            "new_characters": 0,
+            "estimated_seconds": 0,
+            "estimated_human": "0 giây",
+            "is_heavy_task": False,
+            "friendly_summary": "Không tìm thấy thẻ nào phù hợp.",
+        }
+
+    notes_to_update = 0
+    notes_skipped = 0
+    unique_chars: set[str] = set()
+
+    for note in notes:
+        field_values = dict(note.field_values or {})
+        existing_val = str(field_values.get(target_field) or "").strip()
+
+        if not overwrite and existing_val:
+            notes_skipped += 1
+            continue
+
+        source_val = str(field_values.get(source_field) or "").strip()
+        if not source_val:
+            notes_skipped += 1
+            continue
+
+        chars = CjkExtractor.extract_characters(
+            source_val,
+            deduplicate=True,
+            max_limit=max_characters,
+        )
+        if not chars:
+            notes_skipped += 1
+            continue
+
+        notes_to_update += 1
+        unique_chars.update(chars)
+
+    cached_count = 0
+    missing_count = 0
+
+    for char in unique_chars:
+        hex_code = CjkExtractor.char_to_hex(char)
+        if check_stroke_svg_exists(locale, hex_code):
+            cached_count += 1
+        else:
+            missing_count += 1
+
+    # Calculation:
+    # Reading local cached svg: ~0.005s per character
+    # Fetching & generating missing svg: ~0.25s per character
+    # DB update per note: ~0.008s
+    est_sec = round((cached_count * 0.005) + (missing_count * 0.25) + (notes_to_update * 0.008) + 0.5)
+    estimated_seconds = max(1, est_sec) if notes_to_update > 0 else 0
+
+    if estimated_seconds <= 0:
+        estimated_human = "ngay lập tức"
+    elif estimated_seconds < 60:
+        estimated_human = f"khoảng {estimated_seconds} giây"
+    else:
+        mins = round(estimated_seconds / 60, 1)
+        estimated_human = f"khoảng {mins} phút"
+
+    is_heavy_task = estimated_seconds >= 15 or missing_count >= 30
+
+    if notes_to_update == 0:
+        friendly_summary = "Tất cả các thẻ đã có sẵn nét vẽ hoặc không có chữ Hán."
+    elif missing_count == 0:
+        friendly_summary = f"Tất cả {len(unique_chars)} chữ Hán đã có sẵn nét vẽ. Xử lý rất nhanh!"
+    else:
+        friendly_summary = f"Cần chuẩn bị nét vẽ mới cho {missing_count} chữ Hán."
+
+    return {
+        "total_notes": len(notes),
+        "notes_to_update": notes_to_update,
+        "notes_skipped": notes_skipped,
+        "unique_characters": len(unique_chars),
+        "cached_characters": cached_count,
+        "new_characters": missing_count,
+        "estimated_seconds": estimated_seconds,
+        "estimated_human": estimated_human,
+        "is_heavy_task": is_heavy_task,
+        "friendly_summary": friendly_summary,
+    }
+
+
+def batch_generate_strokes(
+    *,
+    user_id: int,
+    admin_mode: bool,
+    source_field: str,
+    target_field: str,
+    locale: str = "ja",
+    deck_id: int | None = None,
+    note_ids: list[str] | None = None,
+    card_ids: list[str] | None = None,
+    output_format: str = "html",
+    overwrite: bool = False,
+    max_characters: int = 15,
+) -> dict[str, Any]:
+    """Batch generate stroke diagrams across notes in a deck or specified notes/cards."""
+    source_field = str(source_field or "").strip()
+    target_field = str(target_field or "").strip()
+    if not source_field:
+        raise StrokeServiceError("source_field là bắt buộc.")
+    if not target_field:
+        raise StrokeServiceError("target_field là bắt buộc.")
+
+    # 1. Collect target notes
+    notes = _collect_notes(
+        user_id=user_id,
+        admin_mode=admin_mode,
+        deck_id=deck_id,
+        note_ids=note_ids,
+        card_ids=card_ids,
+    )
 
     if not notes:
         return {

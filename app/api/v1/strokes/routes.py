@@ -8,6 +8,7 @@ from flask_login import current_user, login_required
 from app.services.strokes.stroke_service import (
     StrokeServiceError,
     batch_generate_strokes,
+    estimate_batch_strokes,
     resolve_stroke_items,
 )
 from app.utils.permissions import is_admin_user
@@ -20,6 +21,48 @@ def _error_response(exc: StrokeServiceError):
     if exc.code is not None:
         payload["code"] = exc.code
     return jsonify(payload), exc.status
+
+
+@strokes_bp.post("/strokes/estimate")
+@login_required
+def estimate_strokes_route():
+    """Estimate time and workload for batch stroke diagram generation."""
+    payload = request.get_json(silent=True) or {}
+    if not isinstance(payload, dict):
+        return jsonify({"error": "Payload phải là JSON object."}), 400
+
+    source_field = str(payload.get("source_field") or "").strip()
+    target_field = str(payload.get("target_field") or "").strip()
+    locale = str(payload.get("locale") or "ja").strip()
+    overwrite = bool(payload.get("overwrite", False))
+    max_characters = int(payload.get("max_characters") or 15)
+
+    raw_card_ids = payload.get("card_ids")
+    card_ids = [str(cid) for cid in raw_card_ids] if isinstance(raw_card_ids, list) else None
+
+    raw_note_ids = payload.get("note_ids")
+    note_ids = [str(nid) for nid in raw_note_ids] if isinstance(raw_note_ids, list) else None
+
+    deck_id = payload.get("deck_id")
+    deck_id_int = int(deck_id) if deck_id is not None else None
+
+    try:
+        result = estimate_batch_strokes(
+            user_id=current_user.id,
+            admin_mode=is_admin_user(current_user),
+            source_field=source_field,
+            target_field=target_field,
+            locale=locale,
+            deck_id=deck_id_int,
+            note_ids=note_ids,
+            card_ids=card_ids,
+            overwrite=overwrite,
+            max_characters=max_characters,
+        )
+    except StrokeServiceError as exc:
+        return _error_response(exc)
+
+    return jsonify(result)
 
 
 @strokes_bp.post("/strokes/generate")

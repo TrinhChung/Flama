@@ -15,10 +15,11 @@ import { Label } from '@/components/ui/label'
 import { NativeSelect } from '@/components/ui/native-select'
 import {
   AlertCircle,
+  AlertTriangle,
   Check,
+  Clock,
   Copy,
   Eye,
-  Info,
   Languages,
   Layers,
   LoaderCircle,
@@ -29,6 +30,7 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { appApi, type GenerateStrokesResponse } from '@/app/api'
 import { resolveBackendUrl } from '@/config/env'
+import { cn } from '@/lib/utils'
 import {
   loadStoredStrokeSettings,
   saveStoredStrokeSettings,
@@ -95,10 +97,11 @@ export function BrowseStrokeModal({
   }, [actualNoteFields])
 
   const mediaTargetFieldNames = useMemo(
-    () => actualNoteFields
-      .filter((field) => ['image', 'diagram'].includes(String(field.field_type || '').toLowerCase()))
-      .map((field) => field.name)
-      .filter(Boolean),
+    () =>
+      actualNoteFields
+        .filter((field) => ['image', 'diagram'].includes(String(field.field_type || '').toLowerCase()))
+        .map((field) => field.name)
+        .filter(Boolean),
     [actualNoteFields],
   )
 
@@ -147,22 +150,35 @@ export function BrowseStrokeModal({
   // Resolve actual text content from the selected sourceField across active/target card data
   const resolvedSourceValue = useMemo(() => {
     // 1. From active sidebar edits
-    if (editFieldValues[sourceField] !== undefined && editFieldValues[sourceField] !== null && String(editFieldValues[sourceField]).trim()) {
+    if (
+      editFieldValues[sourceField] !== undefined &&
+      editFieldValues[sourceField] !== null &&
+      String(editFieldValues[sourceField]).trim()
+    ) {
       return String(editFieldValues[sourceField]).trim()
     }
     // 2. From active card note field_values
-    if (cardDetailQuery.data?.note?.field_values?.[sourceField] !== undefined && String(cardDetailQuery.data.note.field_values[sourceField]).trim()) {
+    if (
+      cardDetailQuery.data?.note?.field_values?.[sourceField] !== undefined &&
+      String(cardDetailQuery.data.note.field_values[sourceField]).trim()
+    ) {
       return String(cardDetailQuery.data.note.field_values[sourceField]).trim()
     }
     // 3. From target card query note field_values
-    if (targetCardQuery.data?.note?.field_values?.[sourceField] !== undefined && String(targetCardQuery.data.note.field_values[sourceField]).trim()) {
+    if (
+      targetCardQuery.data?.note?.field_values?.[sourceField] !== undefined &&
+      String(targetCardQuery.data.note.field_values[sourceField]).trim()
+    ) {
       return String(targetCardQuery.data.note.field_values[sourceField]).trim()
     }
     // 4. Fallback from card row
     const matchingCard = cards.find((c) => c.card_id === targetCardId) || cards[0]
     if (matchingCard) {
       const lower = sourceField.toLowerCase()
-      if (['expression', 'word', 'kanji', 'hanzi', 'vocab', 'vocabulary', 'front'].includes(lower) && matchingCard.word) {
+      if (
+        ['expression', 'word', 'kanji', 'hanzi', 'vocab', 'vocabulary', 'front'].includes(lower) &&
+        matchingCard.word
+      ) {
         return matchingCard.word.trim()
       }
       if (['reading', 'kana', 'pinyin'].includes(lower) && matchingCard.reading) {
@@ -244,10 +260,38 @@ export function BrowseStrokeModal({
     staleTime: 1000 * 60 * 5,
   })
 
+  const targetCardIds = mode === 'single' && cardId ? [cardId] : selectedCards
+
+  // Estimate batch workload query
+  const estimateQuery = useQuery({
+    queryKey: [
+      'stroke-estimate',
+      mode,
+      targetCardIds,
+      selectedDeckId,
+      sourceField,
+      targetField,
+      locale,
+      overwrite,
+      maxChars,
+    ],
+    queryFn: () =>
+      appApi.estimateBatchStrokes({
+        source_field: sourceField,
+        target_field: targetField,
+        locale,
+        deck_id: !targetCardIds.length && selectedDeckId ? selectedDeckId : undefined,
+        card_ids: targetCardIds.length ? targetCardIds : undefined,
+        overwrite,
+        max_characters: maxChars,
+      }),
+    enabled: isOpen && mode !== 'single' && Boolean(sourceField.trim() && targetField.trim()),
+    staleTime: 1000 * 30,
+  })
+
   // Batch generate mutation
   const batchMutation = useMutation({
     mutationFn: () => {
-      const targetCardIds = mode === 'single' && cardId ? [cardId] : selectedCards
       if (!sourceField.trim()) {
         throw new Error('Vui lòng chọn hoặc nhập trường nguồn.')
       }
@@ -267,15 +311,20 @@ export function BrowseStrokeModal({
       })
     },
     onSuccess: (res) => {
-      toast.success(
-        `Đã tạo sơ đồ nét thành công! Cập nhật: ${res.updated}, Bỏ qua: ${res.skipped} / Tổng: ${res.total_processed} thẻ.`,
-      )
+      const updatedText =
+        res.updated > 0
+          ? `Đã thêm nét vẽ cho ${res.updated} thẻ thành công!`
+          : 'Đã hoàn tất kiểm tra các thẻ!'
+      const skippedNote = res.skipped > 0 ? ` (${res.skipped} thẻ đã có sẵn hoặc bỏ qua)` : ''
+      toast.success(`${updatedText}${skippedNote}`)
       void queryClient.invalidateQueries({ queryKey: ['browse-cards'] })
       void queryClient.invalidateQueries({ queryKey: ['card-detail'] })
       onClose()
     },
     onError: (err: any) => {
-      toast.error(err?.message || 'Có lỗi xảy ra khi tạo sơ đồ nét.')
+      toast.error(
+        err?.message || 'Không thể tạo sơ đồ nét lúc này. Bạn vui lòng thử lại sau nhé.',
+      )
     },
   })
 
@@ -293,10 +342,10 @@ export function BrowseStrokeModal({
         ...prev,
         [targetField]: canonicalUrls,
       }))
-      toast.success(`Đã điền sơ đồ nét vào trường "${targetField}". Bấm "Lưu thẻ" để hoàn tất!`)
+      toast.success(`Đã điền nét vẽ vào trường "${targetField}". Bấm "Lưu thẻ" để hoàn tất nhé!`)
       onClose()
     } else {
-      toast.warning('Không tìm thấy ký tự Kanji/Hanzi nào trong văn bản nguồn.')
+      toast.warning('Không tìm thấy ký tự chữ Hán nào trong nội dung nguồn.')
     }
   }
 
@@ -305,7 +354,7 @@ export function BrowseStrokeModal({
     try {
       await navigator.clipboard.writeText(previewQuery.data.output)
       setCopiedCode(true)
-      toast.success('Đã sao chép nội dung xuất vào bộ nhớ tạm!')
+      toast.success('Đã sao chép liên kết nét vẽ vào bộ nhớ tạm!')
       setTimeout(() => setCopiedCode(false), 2000)
     } catch {
       toast.error('Không thể sao chép.')
@@ -330,14 +379,14 @@ export function BrowseStrokeModal({
             <span>Tạo sơ đồ thứ tự nét Kanji & Hanzi</span>
           </DialogTitle>
           <DialogDescription className="text-xs text-muted-foreground mt-0.5">
-            Tự động trích xuất chữ Hán từ trường nguồn và sinh sơ đồ nét SVG vector tĩnh chuẩn hóa (KanjiVG / MakeMeAHanzi).
+            Tự động trích xuất chữ Hán từ trường nguồn và sinh hình ảnh động/tĩnh minh họa thứ tự nét chuẩn xác.
           </DialogDescription>
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4 text-xs">
           {/* Target summary badge */}
           <div className="flex items-center justify-between p-3 rounded-xl bg-muted/50 border border-border/60">
-            <span className="text-muted-foreground flex items-center gap-1.5">
+            <span className="text-muted-foreground flex items-center gap-1.5 font-medium">
               <Layers className="size-3.5 text-primary" />
               <span>Phạm vi áp dụng:</span>
             </span>
@@ -351,7 +400,7 @@ export function BrowseStrokeModal({
             {/* Source field */}
             <div className="space-y-1.5">
               <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                Trường nguồn (Ký tự nguồn)
+                Trường nguồn (chứa từ vựng)
               </Label>
               <NativeSelect
                 value={sourceField}
@@ -369,7 +418,7 @@ export function BrowseStrokeModal({
             {/* Target field */}
             <div className="space-y-1.5">
               <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                Trường lưu (Target Field)
+                Trường lưu nét vẽ (Target Field)
               </Label>
               <NativeSelect
                 value={targetField}
@@ -378,9 +427,9 @@ export function BrowseStrokeModal({
                 className="h-9 text-xs rounded-lg bg-background"
               >
                 {mediaTargetFieldNames.length === 0 ? (
-                  <option value="">Note Type chưa có trường image/diagram</option>
+                  <option value="">Loại thẻ này chưa có trường hình ảnh/sơ đồ</option>
                 ) : (
-                  <optgroup label="Các trường image/diagram của Note Type">
+                  <optgroup label="Các trường hình ảnh/sơ đồ của loại thẻ">
                     {mediaTargetFieldNames.map((name) => (
                       <option key={name} value={name}>
                         {name}
@@ -392,7 +441,7 @@ export function BrowseStrokeModal({
             </div>
 
             {/* Locale */}
-            <div className="space-y-1.5">
+            <div className="space-y-1.5 sm:col-span-2">
               <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
                 <Languages className="size-3.5" />
                 <span>Quy tắc nét / Ngôn ngữ</span>
@@ -406,20 +455,11 @@ export function BrowseStrokeModal({
                 }}
                 className="h-9 text-xs rounded-lg bg-background"
               >
-                <option value="ja">Tiếng Nhật (Kanji - KanjiVG)</option>
-                <option value="zh-CN">Tiếng Trung (Giản thể - zh-CN)</option>
-                <option value="zh-TW">Tiếng Trung (Phồn thể - zh-TW)</option>
+                <option value="ja">Tiếng Nhật (Kanji - Chuẩn KanjiVG)</option>
+                <option value="zh-CN">Tiếng Trung Giản thể (zh-CN - Chuẩn Hán ngữ hiện đại)</option>
+                <option value="zh-TW">Tiếng Trung Phồn thể (zh-TW - Chuẩn Đài Loan / Hồng Kông)</option>
               </NativeSelect>
             </div>
-          </div>
-
-          {/* Canonical storage hint */}
-          <div className="p-2.5 rounded-xl bg-primary/5 border border-primary/10 flex items-start gap-2 text-[11px] text-muted-foreground leading-relaxed">
-            <Info className="size-3.5 text-primary shrink-0 mt-0.5" />
-            <span>
-              Sơ đồ nét luôn được lưu dưới dạng URL chuẩn, mỗi URL một dòng. Khi hiển thị, trường
-              image/diagram sẽ tự tạo một thẻ <code className="font-mono">&lt;img&gt;</code> cho từng URL.
-            </span>
           </div>
 
           {/* Overwrite option */}
@@ -437,20 +477,88 @@ export function BrowseStrokeModal({
               htmlFor="overwrite-strokes"
               className="text-xs font-medium cursor-pointer select-none text-foreground"
             >
-              Ghi đè nếu trường đích đã có dữ liệu trước đó
+              Ghi đè nếu thẻ đã có sẵn nét vẽ trước đó
             </Label>
           </div>
+
+          {/* Batch ETA & Workload Estimation Card */}
+          {mode !== 'single' && Boolean(targetField) && (
+            <div
+              className={cn(
+                'p-3.5 rounded-xl border transition-all text-xs space-y-2',
+                estimateQuery.data?.is_heavy_task
+                  ? 'bg-amber-500/10 border-amber-500/30 text-amber-950 dark:text-amber-200'
+                  : 'bg-muted/40 border-border/80 text-foreground',
+              )}
+            >
+              <div className="flex items-center justify-between">
+                <span className="font-semibold flex items-center gap-1.5 text-xs">
+                  <Clock
+                    className={cn(
+                      'size-4 shrink-0',
+                      estimateQuery.data?.is_heavy_task
+                        ? 'text-amber-600 dark:text-amber-400'
+                        : 'text-primary',
+                    )}
+                  />
+                  <span>Thời gian dự kiến hoàn thành:</span>
+                </span>
+                {estimateQuery.isLoading ? (
+                  <span className="text-[11px] text-muted-foreground flex items-center gap-1 font-medium">
+                    <LoaderCircle className="size-3 animate-spin text-primary" /> Đang tính toán...
+                  </span>
+                ) : estimateQuery.data ? (
+                  <Badge
+                    variant={estimateQuery.data.is_heavy_task ? 'default' : 'secondary'}
+                    className={cn(
+                      'font-bold text-xs px-2 py-0.5',
+                      estimateQuery.data.is_heavy_task &&
+                        'bg-amber-600 hover:bg-amber-700 text-white',
+                    )}
+                  >
+                    {estimateQuery.data.estimated_human}
+                  </Badge>
+                ) : null}
+              </div>
+
+              {estimateQuery.data && (
+                <div className="space-y-1.5 pt-1 text-[11px] text-muted-foreground border-t border-border/50">
+                  <div className="flex flex-wrap items-center justify-between gap-1">
+                    <span>Khối lượng cần xử lý:</span>
+                    <span className="font-medium text-foreground">
+                      {estimateQuery.data.notes_to_update} thẻ cần cập nhật (bỏ qua {estimateQuery.data.notes_skipped} thẻ)
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap items-center justify-between gap-1">
+                    <span>Số lượng chữ Hán:</span>
+                    <span className="font-medium text-foreground">
+                      {estimateQuery.data.unique_characters} chữ ({estimateQuery.data.cached_characters} chữ có sẵn, {estimateQuery.data.new_characters} chữ mới)
+                    </span>
+                  </div>
+
+                  {estimateQuery.data.is_heavy_task && (
+                    <div className="flex items-start gap-1.5 pt-1 text-[11px] text-amber-700 dark:text-amber-300 font-medium">
+                      <AlertTriangle className="size-3.5 shrink-0 mt-0.5" />
+                      <span>
+                        Tác vụ có {estimateQuery.data.new_characters} nét chữ mới cần chuẩn bị lần đầu. Bạn vui lòng giữ màn hình trong lúc hệ thống thực hiện nhé!
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Live Preview Area */}
           <div className="space-y-2 pt-2 border-t border-border/60">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
                 <Eye className="size-3.5 text-primary" />
-                <span>Xem trước kết quả trích xuất từ trường "{sourceField}"</span>
+                <span>Xem trước nét vẽ từ trường "{sourceField}"</span>
               </span>
               {previewQuery.isFetching && (
                 <span className="text-[11px] text-primary flex items-center gap-1 font-medium">
-                  <LoaderCircle className="size-3 animate-spin" /> Đang xử lý…
+                  <LoaderCircle className="size-3 animate-spin" /> Đang tải…
                 </span>
               )}
             </div>
@@ -459,12 +567,12 @@ export function BrowseStrokeModal({
               <Input
                 value={sampleText}
                 onChange={(e) => setSampleText(e.target.value)}
-                placeholder={`Nhập văn bản hoặc nội dung trường "${sourceField}"...`}
+                placeholder={`Nhập chữ hoặc văn bản của trường "${sourceField}"...`}
                 className="h-8 text-xs bg-muted/40 font-medium"
               />
               {!sampleText && (
                 <p className="text-[11px] text-muted-foreground italic">
-                  Trường "{sourceField}" của thẻ đang chọn chưa có nội dung. Bạn có thể gõ chữ trực tiếp vào ô trên để xem thử.
+                  Trường "{sourceField}" của thẻ đang chọn chưa có nội dung. Bạn có thể gõ chữ trực tiếp vào ô trên để xem thử nét vẽ nhé.
                 </p>
               )}
             </div>
@@ -472,9 +580,15 @@ export function BrowseStrokeModal({
             {/* Extracted characters badges */}
             {previewQuery.data?.characters && previewQuery.data.characters.length > 0 && (
               <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                <span className="text-[11px] text-muted-foreground mr-0.5">Chữ Hán trích xuất ({previewQuery.data.characters.length}):</span>
+                <span className="text-[11px] text-muted-foreground mr-0.5">
+                  Chữ Hán tìm thấy ({previewQuery.data.characters.length}):
+                </span>
                 {previewQuery.data.characters.map((c) => (
-                  <Badge key={c} variant="secondary" className="text-xs font-bold px-2 py-0.5 bg-primary/10 text-primary border-primary/20">
+                  <Badge
+                    key={c}
+                    variant="secondary"
+                    className="text-xs font-bold px-2 py-0.5 bg-primary/10 text-primary border-primary/20"
+                  >
                     {c}
                   </Badge>
                 ))}
@@ -508,7 +622,7 @@ export function BrowseStrokeModal({
               ) : (
                 <div className="text-center text-muted-foreground text-xs py-3">
                   <AlertCircle className="size-5 mx-auto mb-1 opacity-50" />
-                  <span>Không tìm thấy chữ Hán nào trong văn bản để hiển thị thứ tự nét.</span>
+                  <span>Chưa tìm thấy chữ Hán nào để vẽ nét. Hãy thử gõ một chữ Hán vào ô trên nhé!</span>
                 </div>
               )}
             </div>
@@ -519,7 +633,7 @@ export function BrowseStrokeModal({
                 <div className="flex items-center justify-between text-[11px] text-muted-foreground">
                   <span className="flex items-center gap-1 font-medium">
                     <Sparkles className="size-3 text-primary" />
-                    <span>Các URL sẽ được lưu vào trường &quot;{targetField}&quot;:</span>
+                    <span>Liên kết nét vẽ lưu vào trường &quot;{targetField}&quot;:</span>
                   </span>
                   <button
                     type="button"
@@ -527,7 +641,7 @@ export function BrowseStrokeModal({
                     className="flex items-center gap-1 text-primary hover:underline font-semibold"
                   >
                     {copiedCode ? <Check className="size-3" /> : <Copy className="size-3" />}
-                    <span>{copiedCode ? 'Đã chép' : 'Sao chép'}</span>
+                    <span>{copiedCode ? 'Đã sao chép' : 'Sao chép'}</span>
                   </button>
                 </div>
                 <div className="p-2.5 rounded-lg bg-muted/60 border border-border/60 font-mono text-[11px] text-foreground overflow-x-auto whitespace-pre-wrap break-all max-h-20 select-all">
@@ -540,7 +654,7 @@ export function BrowseStrokeModal({
 
         <DialogFooter className="px-5 py-3 border-t bg-muted/20 flex flex-row items-center justify-end gap-2 shrink-0">
           <Button variant="outline" size="sm" onClick={onClose} className="h-9 text-xs rounded-xl">
-            Hủy
+            Đóng
           </Button>
 
           {mode === 'single' ? (
@@ -551,7 +665,7 @@ export function BrowseStrokeModal({
               className="h-9 text-xs font-bold rounded-xl gap-1.5 shadow-xs"
             >
               <Check className="size-3.5" />
-              <span>Áp dụng vào thẻ</span>
+              <span>Thêm vào thẻ</span>
             </Button>
           ) : (
             <Button
@@ -561,11 +675,23 @@ export function BrowseStrokeModal({
               className="h-9 text-xs font-bold rounded-xl gap-1.5 shadow-xs"
             >
               {batchMutation.isPending ? (
-                <LoaderCircle className="size-3.5 animate-spin" />
+                <>
+                  <LoaderCircle className="size-3.5 animate-spin" />
+                  <span>
+                    Đang tạo nét...{' '}
+                    {estimateQuery.data?.estimated_human
+                      ? `(${estimateQuery.data.estimated_human})`
+                      : ''}
+                  </span>
+                </>
               ) : (
-                <PenTool className="size-3.5" />
+                <>
+                  <PenTool className="size-3.5" />
+                  <span>
+                    Tạo cho {typeof targetCount === 'number' ? `${targetCount} thẻ` : targetCount}
+                  </span>
+                </>
               )}
-              <span>Tạo hàng loạt ({typeof targetCount === 'number' ? targetCount : 'Deck'})</span>
             </Button>
           )}
         </DialogFooter>
