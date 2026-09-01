@@ -110,6 +110,8 @@ export function DeckWorksheetModal({
     watermark_text: typeof window !== 'undefined' ? window.location.hostname : 'flama.app',
     watermark_opacity: 0.07,
     show_stroke_diagram: true,
+    reference_char_color: '#e11d48',
+    stroke_color_mode: 'monochrome',
     show_reading: true,
     show_meaning: true,
     show_student_info: true,
@@ -208,6 +210,8 @@ export function DeckWorksheetModal({
         grid_style: (tpl.default_options?.grid_style as any) || 'cross',
         trace_count: tpl.default_options?.trace_count ?? 2,
         practice_count: tpl.default_options?.practice_count ?? 5,
+        reference_char_color: (tpl.default_options?.reference_char_color as string) || '#e11d48',
+        stroke_color_mode: (tpl.default_options?.stroke_color_mode as any) || 'monochrome',
       }))
     }
   }
@@ -1325,8 +1329,123 @@ export function DeckWorksheetModal({
                             </div>
                           </div>
 
+                          {/* Color & Stroke Settings */}
+                          <div className="space-y-3 pt-2 border-t border-border/60">
+                            <div className="space-y-1.5">
+                              <Label className="text-[11px] font-semibold text-foreground flex items-center justify-between">
+                                <span>Màu chữ mẫu (Ô đầu tiên):</span>
+                                <span
+                                  className="size-3.5 rounded-full border border-border inline-block shrink-0 shadow-2xs"
+                                  style={{ backgroundColor: layoutOptions.reference_char_color || '#e11d48' }}
+                                />
+                              </Label>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                {[
+                                  { label: 'Đỏ', color: '#e11d48' },
+                                  { label: 'Xanh dương', color: '#2563eb' },
+                                  { label: 'Xanh lá', color: '#16a34a' },
+                                  { label: 'Cam', color: '#ea580c' },
+                                  { label: 'Tím', color: '#9333ea' },
+                                  { label: 'Đen', color: '#0f172a' },
+                                ].map((p) => {
+                                  const isSelected = (layoutOptions.reference_char_color || '#e11d48') === p.color
+                                  return (
+                                    <button
+                                      key={p.color}
+                                      type="button"
+                                      onClick={() =>
+                                        setLayoutOptions((prev) => ({
+                                          ...prev,
+                                          reference_char_color: p.color,
+                                        }))
+                                      }
+                                      className={`size-5 rounded-full transition-all flex items-center justify-center ${
+                                        isSelected
+                                          ? 'ring-2 ring-primary ring-offset-1 scale-110 shadow-xs'
+                                          : 'opacity-70 hover:opacity-100 hover:scale-105'
+                                      }`}
+                                      style={{ backgroundColor: p.color }}
+                                      title={p.label}
+                                    >
+                                      {isSelected && <span className="text-[9px] text-white font-bold leading-none">✓</span>}
+                                    </button>
+                                  )
+                                })}
+                                <label
+                                  className="size-5 rounded-full border border-dashed border-border cursor-pointer flex items-center justify-center hover:bg-muted transition-colors relative overflow-hidden"
+                                  title="Chọn màu tuỳ chỉnh"
+                                >
+                                  <span className="text-[10px] text-muted-foreground font-bold">🎨</span>
+                                  <input
+                                    type="color"
+                                    value={layoutOptions.reference_char_color || '#e11d48'}
+                                    onChange={(e) =>
+                                      setLayoutOptions((prev) => ({
+                                        ...prev,
+                                        reference_char_color: e.target.value,
+                                      }))
+                                    }
+                                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                                  />
+                                </label>
+                              </div>
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <Label className="text-[11px] font-semibold text-foreground block">
+                                Kiểu màu nét vẽ (Ô thứ 2):
+                              </Label>
+                              <div className="grid grid-cols-3 gap-1">
+                                {[
+                                  {
+                                    id: 'monochrome',
+                                    label: 'Đen đơn sắc',
+                                    icon: '🖤',
+                                    hint: 'Rõ nét khi in/photo',
+                                  },
+                                  {
+                                    id: 'multicolor',
+                                    label: 'Đa màu sắc',
+                                    icon: '🌈',
+                                    hint: 'Phân biệt từng nét',
+                                  },
+                                  {
+                                    id: 'same_as_reference',
+                                    label: 'Theo chữ mẫu',
+                                    icon: '🎨',
+                                    hint: 'Đồng bộ màu sắc',
+                                  },
+                                ].map((modeOpt) => {
+                                  const isSelected =
+                                    (layoutOptions.stroke_color_mode || 'monochrome') === modeOpt.id
+                                  return (
+                                    <button
+                                      key={modeOpt.id}
+                                      type="button"
+                                      onClick={() =>
+                                        setLayoutOptions((prev) => ({
+                                          ...prev,
+                                          stroke_color_mode: modeOpt.id as any,
+                                        }))
+                                      }
+                                      className={`px-1.5 py-1 rounded-md text-[10px] border font-medium flex flex-col items-center text-center transition-all ${
+                                        isSelected
+                                          ? 'border-primary bg-primary/10 text-primary font-bold shadow-2xs'
+                                          : 'border-border/70 bg-card text-muted-foreground hover:bg-muted/50'
+                                      }`}
+                                      title={modeOpt.hint}
+                                    >
+                                      <span className="text-xs">{modeOpt.icon}</span>
+                                      <span className="truncate w-full mt-0.5">{modeOpt.label}</span>
+                                    </button>
+                                  )
+                                })}
+                              </div>
+                            </div>
+                          </div>
+
                           {/* Toggles */}
-                          <div className="space-y-1.5 pt-1 text-xs">
+                          <div className="space-y-1.5 pt-2 border-t border-border/60 text-xs">
                             <label className="flex items-center gap-2 cursor-pointer select-none">
                               <input
                                 type="checkbox"
@@ -1339,7 +1458,7 @@ export function DeckWorksheetModal({
                                 }
                                 className="rounded text-primary size-3.5"
                               />
-                              <span>Hiện sơ đồ nét bút SVG</span>
+                              <span>Hiện sơ đồ nét bút SVG (Ô thứ 2)</span>
                             </label>
                             <label className="flex items-center gap-2 cursor-pointer select-none">
                               <input
@@ -1944,85 +2063,7 @@ export function DeckWorksheetModal({
                         </div>
                       </div>
 
-                      {/* WATERMARK ANTI-COPY SECTION (MANDATORY) */}
-                      <div className="space-y-3 pt-3 border-t border-border/60">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <h4 className="text-xs font-bold text-foreground uppercase tracking-wider">
-                              Hình mờ chống sao chép (Watermark)
-                            </h4>
-                            <Badge variant="outline" className="text-[9.5px] text-amber-600 dark:text-amber-400 bg-amber-500/10 border-amber-500/20">
-                              Bảo vệ bản quyền
-                            </Badge>
-                          </div>
-                        </div>
 
-                        <div className="space-y-2.5 bg-muted/20 p-3 rounded-xl border border-border/80">
-                          <p className="text-[11px] text-muted-foreground leading-relaxed">
-                            Mặc định in lớp hoa văn chéo thanh mảnh phủ nổi trên trang A4 với độ mờ tinh tế, giúp bảo vệ tài liệu chống sao chép/xoá watermark tuyệt đối mà học sinh đọc chữ và viết bài vẫn rõ nét 100%.
-                          </p>
-
-                          <div className="space-y-2 pt-1 border-t border-border/50">
-                            <div className="space-y-1">
-                              <Label className="text-xs font-semibold">Nội dung chữ Watermark (DNS / Tên miền):</Label>
-                              <Input
-                                value={
-                                  layoutOptions.watermark_text ??
-                                  (typeof window !== 'undefined' ? window.location.hostname : 'flama.app') ??
-                                  'flama.app'
-                                }
-                                onChange={(e) =>
-                                  setLayoutOptions((prev) => ({
-                                    ...prev,
-                                    watermark_text: e.target.value,
-                                  }))
-                                }
-                                className="h-8 text-xs font-medium uppercase"
-                                placeholder="Ví dụ: flama.app, tiengnhatonline.com..."
-                              />
-                            </div>
-
-                            <div className="space-y-1 pt-1">
-                              <div className="flex items-center justify-between">
-                                <Label className="text-xs font-semibold">Độ mờ / đậm của Watermark:</Label>
-                                <span className="text-xs font-bold text-primary">
-                                  {((layoutOptions.watermark_opacity ?? 0.04) * 100).toFixed(1).replace('.0', '')}%
-                                </span>
-                              </div>
-                              <div className="grid grid-cols-4 gap-1.5">
-                                {[
-                                  { val: 0.02, label: '2% (Rất nhẹ)' },
-                                  { val: 0.035, label: '3.5% (Chuẩn)' },
-                                  { val: 0.05, label: '5% (Vừa)' },
-                                  { val: 0.07, label: '7% (Đậm)' },
-                                ].map((op) => {
-                                  const currentOp = layoutOptions.watermark_opacity ?? 0.04
-                                  const isSelected = Math.abs(currentOp - op.val) < 0.008
-                                  return (
-                                    <button
-                                      key={op.val}
-                                      type="button"
-                                      onClick={() =>
-                                        setLayoutOptions((prev) => ({
-                                          ...prev,
-                                          watermark_opacity: op.val,
-                                        }))
-                                      }
-                                      className={`py-1 px-1.5 rounded-lg border text-[10px] font-medium transition-all ${
-                                        isSelected
-                                          ? 'bg-primary text-primary-foreground font-bold border-primary shadow-2xs'
-                                          : 'bg-background text-muted-foreground hover:bg-muted/50 border-border'
-                                      }`}
-                                    >
-                                      {op.label}
-                                    </button>
-                                  )
-                                })}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
                     </div>
                   )}
                 </>

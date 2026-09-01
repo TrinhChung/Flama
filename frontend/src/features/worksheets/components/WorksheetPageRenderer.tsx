@@ -91,6 +91,34 @@ export const WorksheetPageRenderer = memo(function WorksheetPageRenderer({
           : 'w-[210mm] min-h-[297mm] max-h-[297mm]'
       } ${paddingClass}`}
     >
+      {/* Global CSS overrides for stroke diagram color modes */}
+      <style>{`
+        .flama-stroke-monochrome .flama-stroke-char {
+          --flama-stroke-c1: #0f172a !important;
+          --flama-stroke-c2: #0f172a !important;
+          --flama-stroke-c3: #0f172a !important;
+          --flama-stroke-c4: #0f172a !important;
+          --flama-stroke-c5: #0f172a !important;
+          --flama-stroke-c6: #0f172a !important;
+          --flama-stroke-c7: #0f172a !important;
+          --flama-stroke-c8: #0f172a !important;
+          --flama-stroke-c9: #0f172a !important;
+          --flama-stroke-c10: #0f172a !important;
+        }
+        .flama-stroke-monochrome .flama-kvg-num {
+          fill: #334155 !important;
+        }
+        .flama-stroke-monochrome .flama-kvg-stroke {
+          stroke: #0f172a !important;
+        }
+        .flama-stroke-same-ref .flama-kvg-stroke {
+          stroke: var(--ref-char-color, #e11d48) !important;
+        }
+        .flama-stroke-same-ref .flama-kvg-num {
+          fill: var(--ref-char-color, #e11d48) !important;
+        }
+      `}</style>
+
       {/* Watermark: Refined Non-Distracting Overlays (Mandatory Protection) */}
       {watermarkLayout === 'diagonal_grid' && (
         <div
@@ -233,12 +261,21 @@ export const WorksheetPageRenderer = memo(function WorksheetPageRenderer({
                 )
               }
 
+              const refCharColor = options.reference_char_color || '#e11d48'
+              const strokeColorMode = options.stroke_color_mode || 'monochrome'
+              const strokeWrapperClass =
+                strokeColorMode === 'monochrome'
+                  ? 'flama-stroke-monochrome'
+                  : strokeColorMode === 'same_as_reference'
+                  ? 'flama-stroke-same-ref'
+                  : 'flama-stroke-multicolor'
+
               return (
                 <div key={`${item.note_id || idx}-${char || 'blank'}-${idx}`} className="flex flex-col gap-1">
                   <div className="border border-slate-200 rounded-md p-1.5 bg-white flex items-center justify-between gap-2 overflow-hidden">
                     {/* Left Info Column: Mẫu + Thứ tự nét + Âm/Nghĩa */}
                     <div className="flex items-center gap-1.5 shrink-0">
-                      {/* 1. Reference Kanji */}
+                      {/* 1. Reference Kanji (Chữ mẫu đầu tiên có màu) */}
                       <div className="flex flex-col items-center">
                         <KanjiGridBox
                           char={char}
@@ -247,16 +284,23 @@ export const WorksheetPageRenderer = memo(function WorksheetPageRenderer({
                           size={boxSize}
                           rounded={true}
                           strokeColor="#0f172a"
+                          charColor={refCharColor}
                         />
                       </div>
 
-                      {/* 2. Stroke Order Box */}
+                      {/* 2. Stroke Order Box (Chữ thứ 2: Nét vẽ) */}
                       {options.show_stroke_diagram !== false && (
                         <div className="flex flex-col items-center">
                           {item.stroke_svg ? (
                             <div
-                              className="shrink-0 rounded-[3px] bg-white border border-slate-700 p-0.5 flex items-center justify-center"
-                              style={{ width: boxSize, height: boxSize }}
+                              className={`shrink-0 rounded-[3px] bg-white border border-slate-700 p-0.5 flex items-center justify-center ${strokeWrapperClass}`}
+                              style={
+                                {
+                                  width: boxSize,
+                                  height: boxSize,
+                                  '--ref-char-color': refCharColor,
+                                } as React.CSSProperties
+                              }
                               dangerouslySetInnerHTML={{ __html: item.stroke_svg }}
                             />
                           ) : (
@@ -267,6 +311,7 @@ export const WorksheetPageRenderer = memo(function WorksheetPageRenderer({
                               size={boxSize}
                               rounded={true}
                               strokeColor="#475569"
+                              charColor={strokeColorMode === 'same_as_reference' ? refCharColor : '#0f172a'}
                             />
                           )}
                         </div>

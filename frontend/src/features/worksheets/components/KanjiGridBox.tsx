@@ -9,6 +9,7 @@ export interface KanjiGridBoxProps {
   className?: string
   rounded?: boolean
   strokeColor?: string
+  charColor?: string
 }
 
 export const KanjiGridBox = memo(function KanjiGridBox({
@@ -20,6 +21,7 @@ export const KanjiGridBox = memo(function KanjiGridBox({
   className = '',
   rounded = false,
   strokeColor = '#64748b',
+  charColor = '#0f172a',
 }: KanjiGridBoxProps) {
   const half = size / 2
   const fontSize = Math.max(6, Math.round(size * 0.72))
@@ -118,7 +120,7 @@ export const KanjiGridBox = memo(function KanjiGridBox({
           fontFamily="'Hiragino Kaku Gothic ProN', 'Yu Gothic', 'Meiryo', 'Noto Sans JP', sans-serif"
           fontSize={fontSize}
           textAnchor="middle"
-          fill="#0f172a"
+          fill={charColor}
           fontWeight="500"
         >
           {char}

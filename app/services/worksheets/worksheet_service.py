@@ -527,6 +527,7 @@ def _render_kanji_grid_svg(
     size: int = 38,
     rounded: bool = False,
     stroke_color: str = "#64748b",
+    char_color: str = "#0f172a",
 ) -> str:
     """Render an inline SVG practice box with guide lines and optional tracing character."""
     half = size / 2
@@ -559,7 +560,7 @@ def _render_kanji_grid_svg(
     elif not is_blank and char:
         char_svg = (
             f'<text x="{half}" y="{y_pos}" font-family="\'Hiragino Kaku Gothic ProN\', \'Yu Gothic\', \'Meiryo\', \'Noto Sans JP\', sans-serif" '
-            f'font-size="{font_size}" text-anchor="middle" fill="#0f172a" font-weight="500">{html.escape(char)}</text>'
+            f'font-size="{font_size}" text-anchor="middle" fill="{char_color}" font-weight="500">{html.escape(char)}</text>'
         )
 
     rx_val = 3 if rounded else 0
@@ -677,15 +678,23 @@ def render_printable_html(preview_data: dict[str, Any]) -> str:
                     rows_html.append(row_html)
                     continue
 
-                # 1. Reference Kanji Box
-                ref_box = _render_kanji_grid_svg(char, grid_style=grid_style, is_trace=False, size=box_size, rounded=True, stroke_color="#0f172a")
+                # 1. Reference Kanji Box (Chữ mẫu đầu tiên có màu)
+                ref_char_color = str(options.get("reference_char_color") or "#e11d48").strip()
+                stroke_color_mode = str(options.get("stroke_color_mode") or "monochrome").strip().lower()
+                ref_box = _render_kanji_grid_svg(char, grid_style=grid_style, is_trace=False, size=box_size, rounded=True, stroke_color="#0f172a", char_color=ref_char_color)
 
-                # 2. Stroke Order Box
+                # 2. Stroke Order Box (Chữ thứ 2: Nét vẽ)
                 stroke_box = ""
                 if stroke_svg and options.get("show_stroke_diagram", True):
-                    stroke_box = f'<div class="stroke-diagram-wrapper" style="width: {box_size}px; height: {box_size}px;">{stroke_svg}</div>'
+                    stroke_box_class = (
+                        "flama-stroke-monochrome" if stroke_color_mode == "monochrome"
+                        else "flama-stroke-same-ref" if stroke_color_mode == "same_as_reference"
+                        else "flama-stroke-multicolor"
+                    )
+                    stroke_box = f'<div class="stroke-diagram-wrapper {stroke_box_class}" style="width: {box_size}px; height: {box_size}px; --ref-char-color: {ref_char_color};">{stroke_svg}</div>'
                 elif options.get("show_stroke_diagram", True):
-                    stroke_box = _render_kanji_grid_svg(char, grid_style=grid_style, is_trace=False, size=box_size, rounded=True, stroke_color="#475569")
+                    fallback_stroke_color = ref_char_color if stroke_color_mode == "same_as_reference" else "#0f172a"
+                    stroke_box = _render_kanji_grid_svg(char, grid_style=grid_style, is_trace=False, size=box_size, rounded=True, stroke_color="#475569", char_color=fallback_stroke_color)
 
                 # 3. Tracing Boxes
                 trace_boxes = "".join(
@@ -1181,6 +1190,30 @@ def render_printable_html(preview_data: dict[str, Any]) -> str:
             width: 100%;
             height: 100%;
             display: block;
+        }}
+        .flama-stroke-monochrome .flama-stroke-char {{
+            --flama-stroke-c1: #0f172a !important;
+            --flama-stroke-c2: #0f172a !important;
+            --flama-stroke-c3: #0f172a !important;
+            --flama-stroke-c4: #0f172a !important;
+            --flama-stroke-c5: #0f172a !important;
+            --flama-stroke-c6: #0f172a !important;
+            --flama-stroke-c7: #0f172a !important;
+            --flama-stroke-c8: #0f172a !important;
+            --flama-stroke-c9: #0f172a !important;
+            --flama-stroke-c10: #0f172a !important;
+        }}
+        .flama-stroke-monochrome .flama-kvg-num {{
+            fill: #334155 !important;
+        }}
+        .flama-stroke-monochrome .flama-kvg-stroke {{
+            stroke: #0f172a !important;
+        }}
+        .flama-stroke-same-ref .flama-kvg-stroke {{
+            stroke: var(--ref-char-color, #e11d48) !important;
+        }}
+        .flama-stroke-same-ref .flama-kvg-num {{
+            fill: var(--ref-char-color, #e11d48) !important;
         }}
         .kanji-info-pill {{
             display: flex;
