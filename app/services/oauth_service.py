@@ -128,13 +128,9 @@ def get_base_url(req: Request | None = None) -> str:
 
 def get_frontend_base_url(req: Request | None = None) -> str:
     """Return the base URL of the frontend application (e.g. https://flama.stmtp.com)."""
-    # 1. Explicit FRONTEND_URL or PUBLIC_APP_URL
+    # 1. Explicit FRONTEND_URL
     try:
-        frontend_url = str(
-            current_app.config.get("FRONTEND_URL")
-            or current_app.config.get("PUBLIC_APP_URL")
-            or ""
-        ).strip().rstrip("/")
+        frontend_url = str(current_app.config.get("FRONTEND_URL") or "").strip().rstrip("/")
         if frontend_url:
             return frontend_url
     except RuntimeError:
@@ -154,7 +150,15 @@ def get_frontend_base_url(req: Request | None = None) -> str:
     except RuntimeError:
         pass
 
-    # 3. Fallback to request host if available
+    # 3. Explicit PUBLIC_APP_URL
+    try:
+        public_url = str(current_app.config.get("PUBLIC_APP_URL") or "").strip().rstrip("/")
+        if public_url:
+            return public_url
+    except RuntimeError:
+        pass
+
+    # 4. Fallback to request host if available
     if req:
         proto = req.headers.get("X-Forwarded-Proto") or req.scheme
         host = req.headers.get("X-Forwarded-Host") or req.host

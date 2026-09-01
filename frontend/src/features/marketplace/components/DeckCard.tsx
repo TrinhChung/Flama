@@ -11,7 +11,6 @@ import {
   Layers,
   RefreshCcw,
   ShieldAlert,
-  Sparkles,
   Star,
   Zap,
 } from 'lucide-react'
@@ -285,9 +284,6 @@ export function DeckCard({
                   : 'bg-primary/10 text-primary border border-primary/20'
               }`}
             >
-              {item.pricing_mode === 'free' ? (
-                <Sparkles className="size-3" />
-              ) : null}
               {item.price_display || 'Miễn phí'}
             </span>
           )}

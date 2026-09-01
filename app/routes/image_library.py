@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from flask import (
@@ -287,15 +288,29 @@ def resolve_api(image_key: str):
 
 @image_library_bp.route("/media/library/<image_key>", methods=["GET"])
 def image_content(image_key: str):
+    clean_key = re.sub(r"\.(svg|png|jpe?g|webp|gif)$", "", str(image_key or ""), flags=re.IGNORECASE)
     normalized_key = ""
     try:
-        normalized_key = normalize_image_key(image_key)
+        normalized_key = normalize_image_key(clean_key)
         resolution = image_library_service.resolve_image(
             image_key=normalized_key,
             upload_root=_upload_root(),
         )
     except RequestValidationError:
         resolution = None
+
+    # If missing but is a stroke diagram key (e.g. stroke_ja_65e5), auto-create in SharedImageAsset
+    if (resolution is None or resolution.is_fallback) and normalized_key.startswith("stroke_"):
+        try:
+            from app.services.strokes.stroke_service import ensure_stroke_shared_asset
+            asset = ensure_stroke_shared_asset(normalized_key, upload_root=_upload_root())
+            if asset:
+                from app.services.image_library_service import ImageResolution
+                file_path = _upload_root() / asset.storage_path
+                if file_path.exists():
+                    resolution = ImageResolution(normalized_key, asset, file_path, None)
+        except Exception:
+            pass
 
     if resolution is None or resolution.is_fallback:
         return _send_fallback(
@@ -388,7 +403,7 @@ def _apply_image_headers(
     filename: str | None,
 ) -> None:
     response.headers["X-Content-Type-Options"] = "nosniff"
-    response.headers["Content-Security-Policy"] = "default-src 'none'; sandbox"
+    response.headers["Content-Security-Policy"] = "default-src 'none'; style-src 'unsafe-inline'; sandbox"
     # The URL is intentionally stable across replacements. Always revalidate so
     # existing deck references pick up a changed image on their next request.
     response.headers["Cache-Control"] = "private, no-cache, must-revalidate"

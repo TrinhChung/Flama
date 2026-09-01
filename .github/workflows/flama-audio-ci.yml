@@ -1,0 +1,37 @@
+name: Flama Audio CI
+
+on:
+  push:
+    paths:
+      - "flama-audio/**"
+      - ".github/workflows/flama-audio-ci.yml"
+  pull_request:
+    paths:
+      - "flama-audio/**"
+      - ".github/workflows/flama-audio-ci.yml"
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restore
+        run: |
+          dotnet restore flama-audio/Flama.Audio.sln
+          dotnet restore flama-audio/src/Flama.Audio.Engine.Kokoro/G2P/Flama.G2P.sln
+
+      - name: Test
+        run: |
+          dotnet test flama-audio/Flama.Audio.sln -c Release --no-restore
+          dotnet test flama-audio/src/Flama.Audio.Engine.Kokoro/G2P/Flama.G2P.sln -c Release --no-restore

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import {
+  Copy,
   Eye,
   Image as ImageIcon,
   Link as LinkIcon,
@@ -189,6 +190,90 @@ export function AdminImageLibraryPage() {
         />
       </div>
 
+      {/* Category filter tabs */}
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          size="sm"
+          variant="outline"
+          className={
+            debouncedSearch === ''
+              ? 'h-8 text-xs rounded-xl font-semibold shadow-xs bg-orange-500 hover:bg-orange-600 text-white border-orange-500'
+              : 'h-8 text-xs rounded-xl font-medium border border-orange-500/70 text-orange-600 dark:text-orange-400 bg-transparent hover:bg-orange-500/10 hover:text-orange-700 dark:hover:text-orange-300'
+          }
+          onClick={() => {
+            setSearchText('')
+            setDebouncedSearch('')
+            setPage(1)
+          }}
+        >
+          Tất cả ({query.data?.total || 0})
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          className={
+            debouncedSearch === 'stroke_zh_'
+              ? 'h-8 text-xs rounded-xl font-semibold shadow-xs bg-orange-500 hover:bg-orange-600 text-white border-orange-500 gap-1.5'
+              : 'h-8 text-xs rounded-xl font-medium border border-orange-500/70 text-orange-600 dark:text-orange-400 bg-transparent hover:bg-orange-500/10 hover:text-orange-700 dark:hover:text-orange-300 gap-1.5'
+          }
+          onClick={() => {
+            setSearchText('stroke_zh_')
+            setDebouncedSearch('stroke_zh_')
+            setPage(1)
+          }}
+        >
+          <span>🇨🇳 Hán tự Giản thể (Simplified)</span>
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          className={
+            debouncedSearch === 'stroke_zh_hant_'
+              ? 'h-8 text-xs rounded-xl font-semibold shadow-xs bg-orange-500 hover:bg-orange-600 text-white border-orange-500 gap-1.5'
+              : 'h-8 text-xs rounded-xl font-medium border border-orange-500/70 text-orange-600 dark:text-orange-400 bg-transparent hover:bg-orange-500/10 hover:text-orange-700 dark:hover:text-orange-300 gap-1.5'
+          }
+          onClick={() => {
+            setSearchText('stroke_zh_hant_')
+            setDebouncedSearch('stroke_zh_hant_')
+            setPage(1)
+          }}
+        >
+          <span>🇹🇼 Hán tự Phồn thể (Traditional)</span>
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          className={
+            debouncedSearch === 'stroke_ja_'
+              ? 'h-8 text-xs rounded-xl font-semibold shadow-xs bg-orange-500 hover:bg-orange-600 text-white border-orange-500 gap-1.5'
+              : 'h-8 text-xs rounded-xl font-medium border border-orange-500/70 text-orange-600 dark:text-orange-400 bg-transparent hover:bg-orange-500/10 hover:text-orange-700 dark:hover:text-orange-300 gap-1.5'
+          }
+          onClick={() => {
+            setSearchText('stroke_ja_')
+            setDebouncedSearch('stroke_ja_')
+            setPage(1)
+          }}
+        >
+          <span>🇯🇵 Kanji Nhật (KanjiVG)</span>
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          className={
+            debouncedSearch === 'stroke'
+              ? 'h-8 text-xs rounded-xl font-semibold shadow-xs bg-orange-500 hover:bg-orange-600 text-white border-orange-500 gap-1.5'
+              : 'h-8 text-xs rounded-xl font-medium border border-orange-500/70 text-orange-600 dark:text-orange-400 bg-transparent hover:bg-orange-500/10 hover:text-orange-700 dark:hover:text-orange-300 gap-1.5'
+          }
+          onClick={() => {
+            setSearchText('stroke')
+            setDebouncedSearch('stroke')
+            setPage(1)
+          }}
+        >
+          <span>✍️ Tất cả sơ đồ nét</span>
+        </Button>
+      </div>
+
       {/* Filter toolbar */}
       <Card className="shadow-xs">
         <CardContent className="grid gap-3 p-4 sm:grid-cols-[minmax(0,1fr)_180px_auto]">
@@ -196,7 +281,7 @@ export function AdminImageLibraryPage() {
             <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               className="pl-9 pr-9"
-              placeholder="Tìm theo tên, tag tiếng Anh, hoặc mô tả ảnh…"
+              placeholder="Tìm theo tên, tag, chữ Hán, hoặc mô tả ảnh…"
               value={searchText}
               onChange={(e) => setSearchText(e.target.value)}
             />
@@ -257,13 +342,31 @@ export function AdminImageLibraryPage() {
                 ? `/media/library/${asset.image_key || asset.name}`
                 : `/media/proxy/${assetId}`)
             const imageUrl = resolveBackendUrl(rawUrl)
+            const isStroke =
+              asset.image_key?.startsWith('stroke_') ||
+              asset.name?.startsWith('stroke_') ||
+              asset.tags?.includes('stroke') ||
+              asset.mime_type === 'image/svg+xml'
+
+            const strokeChar = isStroke
+              ? asset.tags?.[2] || asset.description?.match(/:\s*([^\s()]+)/)?.[1] || ''
+              : ''
+
             return (
-              <Card key={assetId} className="group relative overflow-hidden flex flex-col justify-between">
-                <div className="relative aspect-video w-full overflow-hidden bg-muted">
+              <Card key={assetId} className="group relative overflow-hidden flex flex-col justify-between border-border/80 hover:border-primary/50 transition-all shadow-xs">
+                <div
+                  className={`relative w-full overflow-hidden flex items-center justify-center ${
+                    isStroke
+                      ? 'aspect-square bg-white dark:bg-zinc-950 p-1.5 border-b border-border/60'
+                      : 'aspect-video bg-muted'
+                  }`}
+                >
                   <img
                     src={imageUrl}
                     alt={asset.name}
-                    className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                    className={`transition-transform duration-300 group-hover:scale-105 ${
+                      isStroke ? 'w-full h-full object-contain' : 'h-full w-full object-cover'
+                    }`}
                     loading="lazy"
                     onError={(e) => {
                       const target = e.target as HTMLImageElement
@@ -277,7 +380,7 @@ export function AdminImageLibraryPage() {
                       variant="secondary"
                       className="size-8 rounded-full"
                       onClick={() => setPreviewModalUrl(imageUrl)}
-                      title="Xem ảnh"
+                      title="Xem ảnh phóng to"
                     >
                       <Eye className="size-4" />
                     </Button>
@@ -302,10 +405,40 @@ export function AdminImageLibraryPage() {
                   </div>
                 </div>
 
-                <div className="p-3 space-y-1.5 flex-1 flex flex-col justify-between">
+                <div className="p-3 space-y-1.5 flex-1 flex flex-col justify-between text-xs">
                   <div>
+                    {isStroke && (
+                      <div className="flex items-center gap-1 mb-1.5 flex-wrap">
+                        <Badge variant="outline" className="text-[10px] bg-primary/10 text-primary border-primary/20 font-bold px-1.5 py-0">
+                          ✍️ Sơ đồ nét
+                        </Badge>
+                        {asset.image_key?.includes('_ja_') && (
+                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-medium">
+                            🇯🇵 Tiếng Nhật
+                          </Badge>
+                        )}
+                        {asset.image_key?.includes('_zh_') && !asset.image_key?.includes('_zh_hant_') && (
+                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-medium">
+                            🇨🇳 Giản thể
+                          </Badge>
+                        )}
+                        {asset.image_key?.includes('_zh_hant_') && (
+                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-medium">
+                            🇹🇼 Phồn thể
+                          </Badge>
+                        )}
+                      </div>
+                    )}
+
                     <div className="flex items-center justify-between gap-2">
-                      <h4 className="font-semibold text-sm line-clamp-1">{asset.name}</h4>
+                      <h4 className="font-bold text-sm line-clamp-1 flex items-center gap-1.5">
+                        {strokeChar && (
+                          <span className="text-lg font-extrabold text-primary font-japanese leading-none">
+                            {strokeChar}
+                          </span>
+                        )}
+                        <span className="font-mono text-xs">{asset.name}</span>
+                      </h4>
                       <Badge
                         variant={asset.status === 'enabled' ? 'default' : 'secondary'}
                         className="text-[10px]"
@@ -313,11 +446,13 @@ export function AdminImageLibraryPage() {
                         {asset.status}
                       </Badge>
                     </div>
+
                     {asset.description && (
                       <p className="text-xs text-muted-foreground line-clamp-2 mt-1">
                         {asset.description}
                       </p>
                     )}
+
                     {asset.tags && asset.tags.length > 0 && (
                       <div className="flex flex-wrap gap-1 pt-1.5">
                         {asset.tags.map((t) => (
@@ -333,9 +468,20 @@ export function AdminImageLibraryPage() {
                       </div>
                     )}
                   </div>
-                  <div className="pt-2 text-[10px] text-muted-foreground flex justify-between items-center">
-                    <span>ID: #{assetId}</span>
-                    <span>{asset.mime_type || 'image'}</span>
+
+                  <div className="pt-2 text-[10px] text-muted-foreground flex justify-between items-center border-t border-border/40">
+                    <span className="font-mono">{asset.mime_type?.replace('image/', '') || 'svg'}</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void navigator.clipboard.writeText(rawUrl)
+                        toast.success(`Đã copy link: ${rawUrl}`)
+                      }}
+                      className="text-primary hover:underline flex items-center gap-1 font-semibold"
+                    >
+                      <Copy className="size-2.5" />
+                      <span>Copy link</span>
+                    </button>
                   </div>
                 </div>
               </Card>
@@ -503,19 +649,40 @@ export function AdminImageLibraryPage() {
 
       {/* Preview Modal */}
       <Dialog open={Boolean(previewModalUrl)} onOpenChange={() => setPreviewModalUrl(null)}>
-        <DialogContent className="sm:max-w-xl p-2">
+        <DialogContent className="sm:max-w-xl p-4">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold flex items-center gap-2">
+              <Eye className="size-4 text-primary" /> Xem chi tiết hình ảnh / Sơ đồ nét
+            </DialogTitle>
+          </DialogHeader>
           {previewModalUrl && (
-            <div className="flex items-center justify-center p-2">
-              <img
-                src={previewModalUrl}
-                alt="Preview"
-                className="max-h-[70vh] rounded-md object-contain"
-                onError={(e) => {
-                  const target = e.target as HTMLImageElement
-                  target.onerror = null
-                  target.src = resolveBackendUrl('/static/images/image-library-fallback.svg')
-                }}
-              />
+            <div className="flex flex-col items-center justify-center gap-4 py-2">
+              <div className="w-full max-w-md aspect-square rounded-2xl bg-white dark:bg-zinc-950 p-2 border border-border/80 shadow-md flex items-center justify-center overflow-hidden">
+                <img
+                  src={previewModalUrl}
+                  alt="Preview"
+                  className="w-full h-full object-contain"
+                  onError={(e) => {
+                    const target = e.target as HTMLImageElement
+                    target.onerror = null
+                    target.src = resolveBackendUrl('/static/images/image-library-fallback.svg')
+                  }}
+                />
+              </div>
+              <div className="w-full flex items-center justify-between gap-2 p-2.5 rounded-xl bg-muted/50 border text-xs">
+                <span className="font-mono text-muted-foreground truncate">{previewModalUrl}</span>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="h-7 text-xs gap-1.5 shrink-0"
+                  onClick={() => {
+                    void navigator.clipboard.writeText(previewModalUrl)
+                    toast.success('Đã copy đường dẫn ảnh!')
+                  }}
+                >
+                  <Copy className="size-3" /> Copy URL
+                </Button>
+              </div>
             </div>
           )}
         </DialogContent>

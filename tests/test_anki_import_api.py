@@ -258,6 +258,28 @@ class AnkiImportApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 201, response.get_json())
         return response.get_json()
 
+    def _upload_package(
+        self,
+        session_id: str,
+        kind: str,
+        sequence: int,
+        records: list[dict],
+    ) -> dict:
+        package = gzip.compress(
+            ("\n".join(json.dumps(record) for record in records) + "\n").encode(),
+            mtime=0,
+        )
+        response = self.client.put(
+            f"/api/flashcards/import/anki/sessions/{session_id}/packages/{kind}/{sequence}",
+            data=package,
+            headers={
+                "Content-Encoding": "gzip",
+                "X-Package-SHA256": hashlib.sha256(package).hexdigest(),
+            },
+        )
+        self.assertEqual(response.status_code, 200, response.get_json())
+        return response.get_json()
+
     def _obsolete_duplicate_admin_flow(self):
         self._login()
         capabilities = self.client.get("/api/flashcards/import/anki/capabilities")
@@ -390,6 +412,9 @@ class AnkiImportApiTests(unittest.TestCase):
         )
         self.assertEqual(uploaded.status_code, 200, uploaded.get_json())
         self.assertTrue(uploaded.get_json()["results"][0]["imported"])
+        first_progress_result = uploaded.get_json()["results"][0]["progressResults"][0]
+        self.assertEqual(first_progress_result["code"], "PROGRESS_APPLIED")
+        self.assertEqual(first_progress_result["revision"], 1)
 
         from models.card import Card
         from models.card_progress import CardProgress
@@ -453,6 +478,9 @@ class AnkiImportApiTests(unittest.TestCase):
             },
         )
         self.assertEqual(uploaded2.status_code, 200, uploaded2.get_json())
+        stale_progress_result = uploaded2.get_json()["results"][0]["progressResults"][0]
+        self.assertEqual(stale_progress_result["code"], "PROGRESS_STALE")
+        self.assertEqual(stale_progress_result["revision"], 1)
 
         with self.app.app_context():
             progress = CardProgress.query.filter_by(user_id=self.admin_id, card_id=card.id).one()
@@ -500,6 +528,9 @@ class AnkiImportApiTests(unittest.TestCase):
             },
         )
         self.assertEqual(uploaded3.status_code, 200, uploaded3.get_json())
+        newer_progress_result = uploaded3.get_json()["results"][0]["progressResults"][0]
+        self.assertEqual(newer_progress_result["code"], "PROGRESS_APPLIED")
+        self.assertEqual(newer_progress_result["revision"], 2)
 
         with self.app.app_context():
             progress = CardProgress.query.filter_by(user_id=self.admin_id, card_id=card.id).one()
@@ -508,6 +539,57 @@ class AnkiImportApiTests(unittest.TestCase):
             self.assertEqual(progress.ease_factor, 2.6)
             self.assertEqual(progress.reps, 12)
             self.assertEqual(progress.lapses, 2)
+
+        identical_session = self._create_session()["importSessionId"]
+        identical = self._upload_package(
+            identical_session,
+            "cards",
+            0,
+            [{**record3, "contentHash": "f" * 64}],
+        )["results"][0]["progressResults"][0]
+        self.assertEqual(identical["code"], "PROGRESS_UNCHANGED")
+        self.assertEqual(identical["revision"], 2)
+
+        equal_but_different_record = {
+            **record3,
+            "contentHash": "1" * 64,
+            "cardsProgress": [
+                {**record3["cardsProgress"][0], "interval": 21},
+            ],
+        }
+        ambiguous_session = self._create_session()["importSessionId"]
+        ambiguous = self._upload_package(
+            ambiguous_session,
+            "cards",
+            0,
+            [equal_but_different_record],
+        )["results"][0]["progressResults"][0]
+        self.assertEqual(ambiguous["code"], "AMBIGUOUS_PROGRESS_ORDER")
+        self.assertEqual(ambiguous["revision"], 2)
+
+        missing_time_record = {
+            **record3,
+            "contentHash": "2" * 64,
+            "cardsProgress": [
+                {
+                    key: value
+                    for key, value in record3["cardsProgress"][0].items()
+                    if key != "lastReviewAt"
+                },
+            ],
+        }
+        missing_time_session = self._create_session()["importSessionId"]
+        missing_time = self._upload_package(
+            missing_time_session,
+            "cards",
+            0,
+            [missing_time_record],
+        )["results"][0]["progressResults"][0]
+        self.assertEqual(missing_time["code"], "AMBIGUOUS_PROGRESS_ORDER")
+        self.assertEqual(missing_time["revision"], 2)
+        with self.app.app_context():
+            progress = CardProgress.query.filter_by(user_id=self.admin_id, card_id=card.id).one()
+            self.assertEqual((progress.interval_days, int(progress.revision or 0)), (20, 2))
 
     def test_anki_progress_migration_suspended_and_learning(self):
         self._login()
@@ -822,6 +904,205 @@ class AnkiImportApiTests(unittest.TestCase):
         self.assertEqual(changed.status_code, 200, changed.get_json())
         self.assertEqual(changed.get_json()["notes"][0]["state"], "changed")
 
+    def test_progress_snapshot_conflict_and_idempotency_contract(self):
+        self._login()
+        session_id = self._create_session()["importSessionId"]
+        note_record = {
+            "ankiNoteId": 3001,
+            "sourceModelId": "anki-model-1",
+            "sourceDeckId": "anki-inbox",
+            "sourceDeckPath": "Inbox",
+            "contentHash": "3" * 64,
+            "note": {
+                "deckName": "Inbox",
+                "modelName": self.note_type_id,
+                "fields": {"Word": "snapshot", "Meaning": "contract"},
+                "tags": ["anki-snapshot-contract"],
+            },
+        }
+        card_result = self._upload_package(session_id, "cards", 0, [note_record])
+        self.assertTrue(card_result["results"][0]["imported"])
+
+        snapshot_a = {
+            "externalNoteId": 3001,
+            "sourceCardId": 4001,
+            "ord": 0,
+            "snapshotHash": "a" * 64,
+            "baseSnapshotHash": None,
+            "type": 2,
+            "queue": 2,
+            "due": 50003,
+            "sourceToday": 50000,
+            "interval": 14,
+            "factor": 2500,
+            "reps": 2,
+            "lapses": 1,
+            "left": 0,
+            "mod": 1,
+        }
+        applied = self._upload_package(session_id, "progress", 0, [snapshot_a])["results"][0]
+        self.assertEqual(applied["code"], "PROGRESS_APPLIED")
+        self.assertEqual(applied["serverSnapshotHash"], "a" * 64)
+        self.assertNotIn("legacy_unversioned", applied)
+        with self.app.app_context():
+            progress = CardProgress.query.filter_by(user_id=self.admin_id).one()
+            self.assertEqual(int(progress.revision or 0), 1)
+            self.assertEqual(progress.scheduler_mode, "anki")
+
+        unchanged = self._upload_package(
+            session_id,
+            "progress",
+            1,
+            [{**snapshot_a, "baseSnapshotHash": "a" * 64}],
+        )["results"][0]
+        self.assertEqual(unchanged["code"], "PROGRESS_UNCHANGED")
+        self.assertEqual(unchanged["serverSnapshotHash"], "a" * 64)
+        with self.app.app_context():
+            progress = CardProgress.query.filter_by(user_id=self.admin_id).one()
+            self.assertEqual(int(progress.revision or 0), 1)
+            progress.interval_days = 99
+            progress.revision = 2
+            db.session.commit()
+
+        snapshot_b = {
+            **snapshot_a,
+            "snapshotHash": "b" * 64,
+            "baseSnapshotHash": "a" * 64,
+            "interval": 20,
+        }
+        local_conflict = self._upload_package(
+            session_id,
+            "progress",
+            2,
+            [snapshot_b],
+        )["results"][0]
+        self.assertEqual(local_conflict["code"], "LOCAL_PROGRESS_CHANGED")
+        self.assertEqual(local_conflict["serverSnapshotHash"], "a" * 64)
+        with self.app.app_context():
+            progress = CardProgress.query.filter_by(user_id=self.admin_id).one()
+            self.assertEqual((progress.interval_days, int(progress.revision or 0)), (99, 2))
+
+        forced = self._upload_package(
+            session_id,
+            "progress",
+            3,
+            [{**snapshot_b, "force": True}],
+        )["results"][0]
+        self.assertEqual(forced["code"], "FORCED_PROGRESS_APPLIED")
+        self.assertEqual(forced["serverSnapshotHash"], "b" * 64)
+        with self.app.app_context():
+            progress = CardProgress.query.filter_by(user_id=self.admin_id).one()
+            self.assertEqual((progress.interval_days, int(progress.revision or 0)), (20, 3))
+
+        source_conflict = self._upload_package(
+            session_id,
+            "progress",
+            4,
+            [{**snapshot_b, "snapshotHash": "c" * 64}],
+        )["results"][0]
+        self.assertEqual(source_conflict["code"], "SOURCE_SNAPSHOT_CHANGED")
+        self.assertEqual(source_conflict["serverSnapshotHash"], "b" * 64)
+
+        legacy_snapshot = {
+            key: value
+            for key, value in {**snapshot_b, "snapshotHash": "d" * 64}.items()
+            if key != "baseSnapshotHash"
+        }
+        legacy_applied = self._upload_package(
+            session_id,
+            "progress",
+            5,
+            [legacy_snapshot],
+        )["results"][0]
+        self.assertEqual(legacy_applied["code"], "PROGRESS_APPLIED")
+        self.assertTrue(legacy_applied["legacy_unversioned"])
+        self.assertEqual(legacy_applied["serverSnapshotHash"], "d" * 64)
+        with self.app.app_context():
+            progress = CardProgress.query.filter_by(user_id=self.admin_id).one()
+            self.assertEqual(int(progress.revision or 0), 4)
+
+        unresolved = {
+            **snapshot_b,
+            "snapshotHash": "e" * 64,
+            "baseSnapshotHash": "d" * 64,
+        }
+        unresolved.pop("sourceToday")
+        due_unresolved = self._upload_package(
+            session_id,
+            "progress",
+            6,
+            [unresolved],
+        )["results"][0]
+        self.assertEqual(due_unresolved["code"], "ANKI_DUE_UNRESOLVED")
+        self.assertEqual(due_unresolved["serverSnapshotHash"], "d" * 64)
+        with self.app.app_context():
+            progress = CardProgress.query.filter_by(user_id=self.admin_id).one()
+            source_card = ConnectSourceCardRef.query.filter_by(
+                user_id=self.admin_id,
+                external_card_id="4001",
+            ).one()
+            self.assertEqual(int(progress.revision or 0), 4)
+            self.assertEqual(source_card.snapshot_hash, "d" * 64)
+
+    def test_progress_first_insert_race_returns_typed_conflict(self):
+        from app.services.anki_sync_service import (
+            AnkiProgressConflict,
+            _apply_progress_snapshot,
+            _upsert_source_card,
+        )
+        from sqlalchemy.exc import IntegrityError
+
+        self._login()
+        session_id = self._create_session()["importSessionId"]
+        note_record = {
+            "ankiNoteId": 5001,
+            "sourceModelId": "anki-model-1",
+            "sourceDeckId": "anki-inbox",
+            "sourceDeckPath": "Inbox",
+            "contentHash": "5" * 64,
+            "note": {
+                "deckName": "Inbox",
+                "modelName": self.note_type_id,
+                "fields": {"Word": "race", "Meaning": "typed conflict"},
+                "tags": ["anki-progress-race"],
+            },
+        }
+        self._upload_package(session_id, "cards", 0, [note_record])
+
+        with self.app.app_context():
+            session = db.session.get(ConnectImportSession, session_id)
+            source_card = _upsert_source_card(
+                session,
+                external_card_id="6001",
+                external_note_id="5001",
+                source_ord=0,
+            )
+            db.session.flush()
+            record = {
+                "externalNoteId": 5001,
+                "sourceCardId": 6001,
+                "ord": 0,
+                "snapshotHash": "6" * 64,
+                "baseSnapshotHash": None,
+                "type": 2,
+                "queue": 2,
+                "due": 50001,
+                "sourceToday": 50000,
+                "interval": 10,
+                "factor": 2500,
+                "reps": 1,
+                "lapses": 0,
+                "left": 0,
+            }
+            with patch(
+                "app.services.anki_sync_service.db.session.flush",
+                side_effect=IntegrityError("insert", {}, RuntimeError("duplicate")),
+            ):
+                with self.assertRaises(AnkiProgressConflict) as raised:
+                    _apply_progress_snapshot(session, source_card, record)
+            self.assertEqual(raised.exception.code, "CONCURRENT_PROGRESS_WRITE")
+            db.session.rollback()
+
     def test_progress_and_full_revlog_are_separate_idempotent_sync_streams(self):
         from app.services.stats_overview import build_stats_overview
 
@@ -889,7 +1170,16 @@ class AnkiImportApiTests(unittest.TestCase):
             },
         )
         self.assertEqual(response.status_code, 200, response.get_json())
-        self.assertEqual(response.get_json()["results"][0]["state"], "applied")
+        progress_result = response.get_json()["results"][0]
+        self.assertEqual(progress_result["state"], "applied")
+        self.assertEqual(progress_result["code"], "PROGRESS_APPLIED")
+        self.assertEqual(progress_result["serverSnapshotHash"], "2" * 64)
+        self.assertTrue(progress_result["legacy_unversioned"])
+        with self.app.app_context():
+            progress = CardProgress.query.filter_by(user_id=self.admin_id).one()
+            snapshot_revision = int(progress.revision or 0)
+            snapshot_last_reviewed_at = progress.last_reviewed_at
+            snapshot_last_review_event_id = progress.last_review_event_id
 
         first_ms = int(datetime(2026, 8, 12, 10, tzinfo=timezone.utc).timestamp() * 1000)
         second_ms = int(datetime(2026, 8, 13, 11, tzinfo=timezone.utc).timestamp() * 1000)
@@ -963,6 +1253,9 @@ class AnkiImportApiTests(unittest.TestCase):
             self.assertEqual(source_card.review_cursor, third_ms)
             progress = CardProgress.query.filter_by(user_id=self.admin_id).one()
             self.assertEqual(progress.reps, 2)
+            self.assertEqual(int(progress.revision or 0), snapshot_revision)
+            self.assertEqual(progress.last_reviewed_at, snapshot_last_reviewed_at)
+            self.assertEqual(progress.last_review_event_id, snapshot_last_review_event_id)
             overview = build_stats_overview(
                 user_id=self.admin_id,
                 year=2026,

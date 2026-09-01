@@ -261,6 +261,27 @@ describe('StudyPage undo interactions', () => {
 
     expect(mocks.undo).toHaveBeenCalledOnce()
   })
+
+  it('ignores forged flama:host-command events without modifying study state', async () => {
+    setupActiveStudy()
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+    await act(async () => {
+      root?.render(renderWithClient(<StudyPage />))
+    })
+
+    await act(async () => {
+      window.dispatchEvent(
+        new CustomEvent('flama:host-command', {
+          detail: { command: 'rate_good', instanceId: 'test-inst' },
+        }),
+      )
+    })
+
+    expect(mocks.answer).not.toHaveBeenCalled()
+    expect(mocks.undo).not.toHaveBeenCalled()
+  })
 })
 
 describe('StudyPage quick edit interactions', () => {
@@ -340,6 +361,67 @@ describe('StudyPage quick edit interactions', () => {
     })
 
     expect(document.body.textContent).toContain('Sửa nhanh thẻ')
+  })
+})
+
+describe('StudyPage error state rendering', () => {
+  it('renders StudyScopeErrorCard when session fails with DECK_ACCESS_DENIED', async () => {
+    const { ApiError } = await import('@/shared/api/client')
+    mocks.sessionHookData = {
+      session: null,
+      view: null,
+      receipt: null,
+      error: new ApiError('Bạn không thể truy cập bộ thẻ này.', 403, 'DECK_ACCESS_DENIED', undefined, {
+        deck_id: 12,
+        deck_name: 'Minna no Nihongo',
+        marketplace_url: '/marketplace/decks/item-minna',
+      }),
+      leaseConflict: false,
+      takeoverState: 'idle',
+      isLoading: false,
+      isBusy: false,
+      canUndo: false,
+    }
+
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+    await act(async () => {
+      root?.render(renderWithClient(<StudyPage />))
+    })
+
+    expect(container?.textContent).toContain('Bạn không thể truy cập bộ thẻ này')
+    expect(container?.textContent).toContain('Minna no Nihongo')
+    const links = Array.from(container?.querySelectorAll('a') || [])
+    const marketLink = links.find((a) => a.textContent?.includes('Khám phá Chợ bộ thẻ'))
+    expect(marketLink?.getAttribute('href')).toBe('/marketplace/decks/item-minna')
+  })
+
+  it('renders StudyScopeErrorCard when session fails with DECK_NOT_FOUND', async () => {
+    const { ApiError } = await import('@/shared/api/client')
+    mocks.sessionHookData = {
+      session: null,
+      view: null,
+      receipt: null,
+      error: new ApiError('Bộ thẻ không tồn tại hoặc đã bị xóa.', 404, 'DECK_NOT_FOUND'),
+      leaseConflict: false,
+      takeoverState: 'idle',
+      isLoading: false,
+      isBusy: false,
+      canUndo: false,
+    }
+
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+    await act(async () => {
+      root?.render(renderWithClient(<StudyPage />))
+    })
+
+    expect(container?.textContent).toContain('Bộ thẻ không tồn tại')
+    const links = Array.from(container?.querySelectorAll('a') || [])
+    const dashboardLink = links.find((a) => a.textContent?.includes('Về Dashboard'))
+    expect(dashboardLink?.getAttribute('href')).toBe('/dashboard')
   })
 })
 

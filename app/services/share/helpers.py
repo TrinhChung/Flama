@@ -70,9 +70,12 @@ from models.field_def import FieldDef
 from models.note import Note
 from models.note_type import NoteType
 from models.note_type_install import NoteTypeInstall
-from models.note_type_review import NoteTypeReview
-from models.taxonomy import TaxonomyDomain, TaxonomyLevel, TaxonomySubject, TaxonomyTopic
-from models.template import Template
+from models.taxonomy import (
+    TaxonomyDomain,
+    TaxonomyFramework,
+    TaxonomyFrameworkLevel,
+    TaxonomySubject,
+)
 from models.user import User
 
 logger = logging.getLogger(__name__)
@@ -341,6 +344,19 @@ def validate_note_type_consistency_for_deck(
         return None
     return "All notes in one deck must use the same template (note type)."
 
+
+
+def validate_deck_source_note_type_provenance(
+    *,
+    deck_item: DeckMarketplaceItem,
+    source_note_type: NoteType,
+) -> str | None:
+    if source_note_type.user_id != deck_item.owner_user_id:
+        return "source_note_type_id not found."
+    from app.services.share.note_types import is_installed_note_type_copy
+    if is_installed_note_type_copy(source_note_type.id):
+        return "Note Type được cài từ Marketplace không thể được đóng gói để chia sẻ lại."
+    return None
 
 
 def validate_marketplace_note_type_for_deck(

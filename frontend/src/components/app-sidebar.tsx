@@ -6,6 +6,7 @@ import {
   CreditCard,
   Download,
   Heart,
+  HelpCircle,
   Image as ImageIcon,
   Key,
   Layers,
@@ -58,6 +59,7 @@ export function AppSidebar({
     { title: 'Kho shared deck', url: bootstrap.links.shared_decks, icon: Store },
     { title: 'Kho note type', url: bootstrap.links.shared_note_types, icon: Shapes },
     { title: 'Đăng học liệu', url: '/marketplace/decks/publish', icon: Upload },
+    { title: 'Đăng mẫu thẻ', url: '/marketplace/note-types/publish', icon: Shapes },
   ]
 
   const extensions: AppNavigationItem[] = [
@@ -99,6 +101,7 @@ export function AppSidebar({
     { title: 'Trang cá nhân', url: '/profile', icon: User },
     { title: 'Ví & Doanh thu', url: '/wallet', icon: Wallet },
     { title: 'Lịch sử đơn hàng', url: '/orders', icon: CreditCard },
+    { title: 'Trợ giúp', url: '/guide', icon: HelpCircle },
     { title: 'Đóng góp ý kiến', url: '/feedback', icon: MessageSquareHeart },
   ]
 

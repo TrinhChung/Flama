@@ -97,12 +97,13 @@ export function DeckTree({
         </div>
       ) : null}
 
-      {nodes.map((node) => (
+      {nodes.map((node, index) => (
         <DeckRow
           key={node.id}
           node={node}
           adminMode={adminMode}
           selectedDeckId={selectedDeckId}
+          dataTour={index === 0 ? 'dash-deck-row-first' : undefined}
           onSelect={onSelect}
           onActivate={onActivate}
           onAction={onAction}

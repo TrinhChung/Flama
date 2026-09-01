@@ -2,13 +2,13 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle,
   ArrowLeft,
+  Award,
   CheckCircle2,
   RotateCcw,
   Search,
   Shield,
   ShieldCheck,
   ShieldUser,
-  Sparkles,
   Trash2,
   UserCheck,
   Users,
@@ -110,8 +110,8 @@ function RoleBadge({ roleName, isAdmin }: { roleName?: string | null; isAdmin?: 
   }
   if (roleName?.toLowerCase() === 'creator') {
     return (
-      <Badge className="bg-amber-500/15 text-amber-800 dark:text-amber-300 hover:bg-amber-500/25 gap-1 border-amber-500/30">
-        <Sparkles className="size-3.5" />
+      <Badge variant="outline" className="bg-muted text-foreground border-border/80 gap-1 font-medium">
+        <Award className="size-3.5" />
         Creator
       </Badge>
     )

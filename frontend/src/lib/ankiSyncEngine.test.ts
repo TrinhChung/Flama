@@ -10,6 +10,7 @@ import {
 import {
   ankiProgressSnapshot,
   ankiReviewRecord,
+  attachProgressSnapshotBase,
   canonicalizeAnkiEndpoint,
   shouldQueueAnkiHistory,
 } from './ankiSyncEngine'
@@ -93,6 +94,19 @@ describe('ankiSyncEngine helpers', () => {
     })
     expect(snapshot).toMatchObject({ sourceCardId: 12, due: 50001, reps: 3, mod: 123 })
     expect(snapshot).not.toHaveProperty('relativeDue')
+  })
+
+  it('always sends the server snapshot base token for first-party progress sync', () => {
+    const record = { sourceCardId: 12, snapshotHash: 'next' }
+
+    expect(attachProgressSnapshotBase(record, 'server-hash')).toEqual({
+      ...record,
+      baseSnapshotHash: 'server-hash',
+    })
+    expect(attachProgressSnapshotBase(record, undefined)).toEqual({
+      ...record,
+      baseSnapshotHash: null,
+    })
   })
 
   it('serializes every revlog field needed by historical analytics and dedupe', () => {

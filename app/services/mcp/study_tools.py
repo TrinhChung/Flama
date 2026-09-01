@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any
+from uuid import uuid4
 
 from app.repositories import study_repository, vocabulary_repository
 from app.services import stats_overview
@@ -257,9 +258,12 @@ def submit_review(
 
     user = db.session.get(User, user_id)
     timezone_name = stats_overview.get_effective_timezone_name(getattr(user, "timezone", "UTC"))
+    mcp_event_id = f"mcp-review-{uuid4()}"
     service_payload = {
         "duration_ms": duration_ms,
         "timezone": timezone_name,
+        "source": "mcp",
+        "client_event_id": mcp_event_id,
     }
     try:
         command_result = execute_native_review_command(
@@ -270,6 +274,7 @@ def submit_review(
             clone_scope=None,
             requested_scope_id=card.note.deck_id,
             timezone_name=timezone_name,
+            client_event_id=mcp_event_id,
         )
     except StudyReviewError as exc:
         raise RequestValidationError(

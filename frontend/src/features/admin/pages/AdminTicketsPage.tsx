@@ -8,9 +8,9 @@ import {
   Image as ImageIcon,
   Lightbulb,
   MessageSquare,
+  Palette,
   RefreshCw,
   Search,
-  Sparkles,
   Ticket,
   User as UserIcon,
   XCircle,
@@ -50,6 +50,7 @@ export type TicketItem = {
   created_at: string
   updated_at: string
   resolved_at?: string
+  replies_count?: number
   replies?: ReplyItem[]
 }
 
@@ -80,10 +81,10 @@ type AdminTicketsResponse = {
 }
 
 const CATEGORY_MAP: Record<string, { label: string; icon: any; color: string }> = {
-  bug: { label: 'Báo lỗi', icon: Bug, color: 'bg-red-500/10 text-red-600 border-red-200' },
-  feature: { label: 'Ý tưởng mới', icon: Lightbulb, color: 'bg-amber-500/10 text-amber-600 border-amber-200' },
-  ui: { label: 'Giao diện', icon: Sparkles, color: 'bg-sky-500/10 text-sky-600 border-sky-200' },
-  other: { label: 'Khác', icon: MessageSquare, color: 'bg-purple-500/10 text-purple-600 border-purple-200' },
+  bug: { label: 'Báo lỗi', icon: Bug, color: 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-200/50' },
+  feature: { label: 'Ý tưởng mới', icon: Lightbulb, color: 'bg-muted text-foreground border-border/80' },
+  ui: { label: 'Giao diện', icon: Palette, color: 'bg-muted text-foreground border-border/80' },
+  other: { label: 'Khác', icon: MessageSquare, color: 'bg-muted text-foreground border-border/80' },
 }
 
 const STATUS_MAP: Record<string, { label: string; badge: string; icon: any }> = {

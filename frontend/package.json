@@ -9,7 +9,6 @@
     "lint": "oxlint src",
     "typecheck": "tsc -b --pretty",
     "test": "vitest run",
-    "test:changed": "vitest related --run",
     "test:study": "vitest run src/features/study",
     "test:collab": "vitest run src/features/deck-collaboration",
     "test:dashboard": "vitest run src/features/dashboard",
@@ -22,6 +21,10 @@
   },
   "dependencies": {
     "@fontsource-variable/geist": "^5.3.0",
+    "@fortawesome/fontawesome-svg-core": "^7.3.1",
+    "@fortawesome/free-regular-svg-icons": "^7.3.1",
+    "@fortawesome/free-solid-svg-icons": "^7.3.1",
+    "@fortawesome/react-fontawesome": "^3.5.0",
     "@hookform/resolvers": "^5.5.7",
     "@tailwindcss/vite": "^4.3.3",
     "@tanstack/react-query": "^5.101.4",

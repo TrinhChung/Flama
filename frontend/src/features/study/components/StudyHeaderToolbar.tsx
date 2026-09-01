@@ -8,6 +8,7 @@ import {
 } from '@/shared/components/Icons'
 import { Pencil } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { ContextHelpButton } from '@/features/guide'
 import { StudyModeSelector } from './StudyModeSelector'
 import type { AppliedComposition } from '../types'
 
@@ -111,6 +112,16 @@ export function StudyHeaderToolbar({
           >
             <Search className="size-3.5 sm:size-4" /> Browse
           </Link>
+
+          <ContextHelpButton
+            guidePath="/guide/study/shortcuts"
+            guideTitle="Bảng phím tắt & Cách chấm điểm"
+            troubleshootPath="/guide/troubleshooting/dashboard-study"
+            troubleshootTitle="Sự cố trong phòng học"
+            label="Phím tắt"
+            variant="outline"
+            size="xs"
+          />
         </div>
       </div>
 

@@ -9,13 +9,13 @@ if [[ -f ".venv/bin/activate" ]]; then
   source ".venv/bin/activate"
 fi
 
-echo "[1/5] flask --app wsgi.py db upgrade"
+echo "[1/6] flask --app wsgi.py db upgrade"
 flask --app wsgi.py db upgrade
 
-echo "[2/5] flask --app wsgi.py dev-purge-data --yes"
+echo "[2/6] flask --app wsgi.py dev-purge-data --yes"
 flask --app wsgi.py dev-purge-data --yes
 
-echo "[3/5] python scripts/seed_flama_template.py"
+echo "[3/6] python scripts/seed_flama_template.py"
 python scripts/seed_flama_template.py
 
 echo "[4/6] flask --app wsgi.py user-role-seed"

@@ -50,7 +50,7 @@ class StatsUserStudyTimeTests(unittest.TestCase):
         self.client.post(
             "/login",
             data={"email": "study@example.com", "password": "password"},
-            follow_redirects=True,
+            follow_redirects=False,
         )
 
     def _add_review(

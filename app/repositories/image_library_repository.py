@@ -66,20 +66,40 @@ def list_assets(
 ) -> SharedImagePage:
     query = SharedImageAsset.query
     if search_term:
-        escaped = escape_like_pattern(search_term.lower())
-        pattern = f"%{escaped}%"
-        query = query.filter(
-            or_(
-                SharedImageAsset.image_key.ilike(pattern, escape="\\"),
-                SharedImageAsset.description.ilike(pattern, escape="\\"),
-                func.lower(cast(SharedImageAsset.tags, Text)).like(pattern, escape="\\"),
+        term_clean = search_term.strip().lower()
+        if term_clean == "stroke_zh_":
+            query = query.filter(
+                SharedImageAsset.image_key.ilike("stroke_zh_%"),
+                ~SharedImageAsset.image_key.ilike("stroke_zh_hant_%"),
             )
-        )
+        else:
+            escaped = escape_like_pattern(term_clean)
+            pattern = f"%{escaped}%"
+            query = query.filter(
+                or_(
+                    SharedImageAsset.image_key.ilike(pattern, escape="\\"),
+                    SharedImageAsset.description.ilike(pattern, escape="\\"),
+                    func.lower(cast(SharedImageAsset.tags, Text)).like(pattern, escape="\\"),
+                )
+            )
     if tag:
-        escaped_tag = escape_like_pattern(tag.lower())
-        query = query.filter(
-            func.lower(cast(SharedImageAsset.tags, Text)).like(f"%{escaped_tag}%", escape="\\")
-        )
+        tag_lower = tag.strip().lower()
+        if tag_lower in {"zh", "zh-hans", "zh-cn"}:
+            query = query.filter(
+                SharedImageAsset.image_key.ilike("stroke_zh_%"),
+                ~SharedImageAsset.image_key.ilike("stroke_zh_hant_%"),
+            )
+        elif tag_lower in {"zh-hant", "zh-tw", "zh-hk", "traditional"}:
+            query = query.filter(SharedImageAsset.image_key.ilike("stroke_zh_hant_%"))
+        elif tag_lower in {"ja", "ja-jp", "japanese", "kanji"}:
+            query = query.filter(SharedImageAsset.image_key.ilike("stroke_ja_%"))
+        elif tag_lower in {"stroke", "strokes"}:
+            query = query.filter(SharedImageAsset.image_key.ilike("stroke_%"))
+        else:
+            escaped_tag = escape_like_pattern(tag_lower)
+            query = query.filter(
+                func.lower(cast(SharedImageAsset.tags, Text)).like(f"%{escaped_tag}%", escape="\\")
+            )
     if status == "enabled":
         query = query.filter(SharedImageAsset.is_enabled.is_(True))
     elif status == "disabled":

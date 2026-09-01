@@ -12,8 +12,8 @@ export function PublishedDecksTab({
 }) {
   if (!decks || decks.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border/80 p-12 text-center">
-        <BookOpen className="size-10 text-muted-foreground/40 mb-3" />
+      <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border/80 p-8 sm:p-12 text-center">
+        <BookOpen className="size-8 sm:size-10 text-muted-foreground/40 mb-3" />
         <p className="text-sm font-semibold text-foreground">
           Chưa có học liệu nào được xuất bản
         </p>
@@ -25,13 +25,13 @@ export function PublishedDecksTab({
   }
 
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="grid grid-cols-1 gap-3.5 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {decks.map((deck) => (
         <Card
           key={deck.id}
           className="group relative flex flex-col overflow-hidden border-border/60 bg-card transition-all hover:border-primary/40 hover:shadow-md"
         >
-          <CardContent className="flex flex-1 flex-col justify-between p-5">
+          <CardContent className="flex flex-1 flex-col justify-between p-4 sm:p-5">
             <div className="space-y-2.5">
               <div className="flex items-center justify-between gap-2">
                 <Badge variant="secondary" className="text-[11px] font-medium">

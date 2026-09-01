@@ -686,6 +686,7 @@ def build_browse_deck_tree_payload(
         bucket["learn"] += int(row[3] or 0)
         bucket["due"] += int(row[4] or 0)
 
+    logical_installs: list[DeckInstall] = []
     if not admin_mode:
         logical_installs = (
             DeckInstall.query.filter(
@@ -753,7 +754,35 @@ def build_browse_deck_tree_payload(
                 bucket["learn"] += int(row[3] or 0)
                 bucket["due"] += int(row[4] or 0)
 
-    def _build_node(deck_obj: Deck) -> dict[str, Any]:
+    deck_note_type_rows = (
+        db.session.query(Note.deck_id, Note.note_type_id)
+        .filter(Note.deck_id.in_(scoped_ids))
+        .distinct()
+        .all()
+    )
+    deck_note_type_map: dict[int, str] = {
+        int(row[0]): str(row[1]) for row in deck_note_type_rows if row[0] and row[1]
+    }
+    if logical_installs:
+        for install in logical_installs:
+            map_rows = (
+                DeckCloneDeckMap.query.filter_by(deck_install_id=install.id)
+                .order_by(DeckCloneDeckMap.local_deck_id.asc(), DeckCloneDeckMap.source_deck_id.asc())
+                .all()
+            )
+            source_to_local = {
+                int(row.source_deck_id): int(row.local_deck_id)
+                for row in map_rows
+                if row.source_deck_id is not None
+                and row.local_deck_id is not None
+                and int(row.local_deck_id) in scoped_ids
+            }
+            if install.source_note_type_id:
+                for local_id in source_to_local.values():
+                    deck_note_type_map.setdefault(local_id, str(install.source_note_type_id))
+
+    def _build_node(deck_obj: Deck, prefix: str = "") -> dict[str, Any]:
+        path = f"{prefix} :: {deck_obj.name}" if prefix else deck_obj.name
         direct = direct_counts.get(deck_obj.id, {"total": 0, "new": 0, "learn": 0, "due": 0})
         counts = {
             "total": int(direct["total"]),
@@ -763,17 +792,20 @@ def build_browse_deck_tree_payload(
         }
         children_payload: list[dict[str, Any]] = []
         for child_obj in children_by_parent.get(deck_obj.id, []):
-            child_payload = _build_node(child_obj)
+            child_payload = _build_node(child_obj, prefix=path)
             children_payload.append(child_payload)
             child_counts = child_payload["counts"]
             counts["total"] += int(child_counts["total"])
             counts["new"] += int(child_counts["new"])
             counts["learn"] += int(child_counts["learn"])
             counts["due"] += int(child_counts["due"])
+        resolved_note_type_id = deck_obj.note_type_id or deck_note_type_map.get(deck_obj.id)
         return {
             "id": deck_obj.id,
             "name": deck_obj.name,
+            "path": path,
             "parent_id": deck_obj.parent_id,
+            "note_type_id": str(resolved_note_type_id) if resolved_note_type_id else None,
             "counts": counts,
             "children": children_payload,
         }
@@ -784,7 +816,7 @@ def build_browse_deck_tree_payload(
         if deck_obj.parent_id is None or deck_obj.parent_id not in deck_lookup
     ]
     roots.sort(key=lambda deck_obj: ((deck_obj.position or 0), deck_obj.created_at, deck_obj.id))
-    return [_build_node(root_obj) for root_obj in roots]
+    return [_build_node(root_obj, prefix="") for root_obj in roots]
 
 
 def can_user_delete_cloned_deck(*, deck_obj: Deck, user_id: int) -> bool:

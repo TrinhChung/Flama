@@ -20,14 +20,17 @@ from app.services import (
     marketplace_query_service,
     payment_service,
 )
-from app.services.flashcard_renderer import TemplateCompileError, render_template_pair
+from app.services.flashcard_renderer import (
+    PREVIEW_MEDIA_AUDIO_TOKEN,
+    PREVIEW_MEDIA_DIAGRAM_TOKEN,
+    PREVIEW_MEDIA_IMAGE_TOKEN,
+    TemplateCompileError,
+    render_template_pair,
+)
 
 UTC = timezone.utc
 PUBLISH_STATUSES_VISIBLE = {"published", "unlisted"}
 MAX_MARKET_REVIEW_SUBMISSIONS_PER_USER = 2
-PREVIEW_MEDIA_IMAGE_TOKEN = "[[media:image:sample.png]]"
-PREVIEW_MEDIA_AUDIO_TOKEN = "[sound:sample.mp3]"
-PREVIEW_MEDIA_DIAGRAM_TOKEN = "[[media:diagram:sample.svg]]"
 
 
 class MarketplaceNoteTypeError(Exception):

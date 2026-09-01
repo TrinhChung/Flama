@@ -255,6 +255,25 @@ def reset_deck_progress(*, deck_obj: Deck, user_id: int) -> int:
 
     deleted_count = 0
     if card_id_set:
+        from models.study_session import StudySession
+        from models.study_session_card import StudySessionCard
+
+        affected_session_ids = db.session.query(
+            StudySessionCard.session_id
+        ).filter(StudySessionCard.card_id.in_(sorted(card_id_set)))
+        open_sessions = (
+            StudySession.query.filter(
+                StudySession.user_id == user_id,
+                StudySession.status == "open",
+                StudySession.id.in_(affected_session_ids),
+            )
+            .order_by(StudySession.id.asc())
+            .with_for_update()
+            .all()
+        )
+        for session in open_sessions:
+            session.status = "cancelled"
+
         deleted_count = CardProgress.query.filter(
             CardProgress.user_id == user_id,
             CardProgress.card_id.in_(sorted(card_id_set)),

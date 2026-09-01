@@ -997,11 +997,18 @@ def create_note(
         "note.create",
         {"note_id": note.id, "note_type_id": note.note_type_id},
     )
+    db.session.flush()
+    cards = Card.query.filter_by(note_id=note.id).order_by(Card.id.asc()).all()
+    card_ids = [str(card.id) for card in cards]
     db.session.commit()
     return {
         "id": note.id,
+        "deck_id": note.deck_id,
+        "note_type_id": note.note_type_id,
         "field_values": note.field_values,
         "tags": note.tags,
+        "card_ids": card_ids,
+        "first_card_id": card_ids[0] if card_ids else None,
     }
 
 
@@ -1304,7 +1311,7 @@ def _create_cards(note: Note) -> None:
         .all()
     )
     for template in templates:
-        db.session.add(Card(note_id=note.id, template_id=template.id))
+        db.session.add(Card(note=note, note_id=note.id, template_id=template.id))
 
 
 def _refresh_source_note_type_stats(
@@ -1327,16 +1334,10 @@ def _refresh_source_note_type_stats(
             )
 
 
-def _note_media_refs(note: Note) -> set[str]:
-    refs: set[str] = set()
-    for asset in note.media_assets or []:
-        asset_id = str(asset.id or "").strip()
-        if asset_id:
-            refs.update({asset_id, f"/media/proxy/{asset_id}"})
-        filename = str(asset.filename or "").strip()
-        if filename:
-            refs.update({filename, f"[sound:{filename}]"})
-    return refs
+def _note_media_refs(note: Note):
+    from app.services.media_field_codec import build_media_reference_lookup
+
+    return build_media_reference_lookup(note.media_assets or [])
 
 
 def _validation_error(exc: RequestValidationError) -> ContentApiError:

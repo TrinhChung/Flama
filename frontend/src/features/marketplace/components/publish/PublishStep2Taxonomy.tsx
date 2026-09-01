@@ -1,4 +1,6 @@
-import { Check, Sparkles } from 'lucide-react'
+import { Check } from 'lucide-react'
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
+import { faLayerGroup } from '@fortawesome/free-solid-svg-icons'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -158,8 +160,8 @@ export function PublishStep2Taxonomy({
         <div className="space-y-3.5 p-4 rounded-2xl bg-muted/30 border border-border/80">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div className="p-1 rounded-lg bg-muted text-foreground">
-                <Sparkles className="w-4 h-4" />
+              <div className="p-1 rounded-lg bg-muted text-muted-foreground">
+                <FontAwesomeIcon icon={faLayerGroup} className="w-3.5 h-3.5" />
               </div>
               <div>
                 <Label className="text-xs font-bold text-foreground">

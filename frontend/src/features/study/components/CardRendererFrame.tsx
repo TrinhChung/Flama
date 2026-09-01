@@ -42,7 +42,7 @@ type CardRendererFrameProps = {
 }
 
 let scriptLoadPromise: Promise<void> | null = null
-const RENDERER_HOST_VERSION = 'renderer-security-v1'
+const RENDERER_HOST_VERSION = 'renderer-media-url-v2'
 const EMPTY_FIELD_DEFS: unknown[] = []
 const EMPTY_FIELD_VALUES: Record<string, string> = {}
 

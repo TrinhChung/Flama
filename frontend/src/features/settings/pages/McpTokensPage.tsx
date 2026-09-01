@@ -1,22 +1,22 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
+  ArrowRight,
   BookOpen,
   Bot,
   Flame,
   KeyRound,
-  Sparkles,
+  MousePointerClick,
   Wrench,
   Zap,
 } from 'lucide-react'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Page, PageHeader } from '@/shared/components/Page'
 import { PageError, PageLoading } from '@/shared/components/PageState'
+import { ContextHelpButton } from '@/features/guide'
 
 import { useMcpTokenCRUD } from '../hooks/useMcpTokenCRUD'
-import { McpAboutTab } from '../components/McpAboutTab'
 import { McpTokensTab } from '../components/McpTokensTab'
-import { McpGuideTab } from '../components/McpGuideTab'
-import { McpToolsTab } from '../components/McpToolsTab'
 import { McpOAuthTab } from '../components/McpOAuthTab'
 
 export function McpTokensPage() {
@@ -34,7 +34,42 @@ export function McpTokensPage() {
         <PageHeader
           title="Kết nối AI qua Model Context Protocol (MCP)"
           description="Tích hợp ChatGPT, Claude Desktop, Cursor và các trợ lý AI với kho Flashcard Flama để tự động tra cứu, tạo thẻ và ôn tập."
+          actions={
+            <ContextHelpButton
+              guidePath="/guide/integrations/mcp-ai"
+              guideTitle="Hướng dẫn kết nối trợ lý AI qua MCP"
+              troubleshootPath="/guide/troubleshooting/mcp"
+              troubleshootTitle="Khắc phục sự cố MCP"
+              label="Hướng dẫn kết nối"
+            />
+          }
         />
+
+        {/* Top Quick Explanatory Links */}
+        <div className="flex flex-wrap items-center gap-2 pt-0.5 text-xs">
+          <span className="text-muted-foreground font-medium text-[11px]">Tra cứu nhanh:</span>
+          <Link
+            to="/guide/integrations/mcp-ai"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border bg-muted/40 hover:bg-purple-500/10 hover:border-purple-500/40 hover:text-purple-600 dark:hover:text-purple-400 transition-all font-medium text-[11px]"
+          >
+            <Bot className="size-3 text-purple-500" />
+            <span>Cẩm nang kết nối Claude/Cursor/ChatGPT</span>
+          </Link>
+          <Link
+            to="/guide/integrations/mcp-tools"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border bg-muted/40 hover:bg-amber-500/10 hover:border-amber-500/40 hover:text-amber-600 dark:hover:text-amber-400 transition-all font-medium text-[11px]"
+          >
+            <Wrench className="size-3 text-amber-500" />
+            <span>Danh mục 20 Công cụ & Prompts AI</span>
+          </Link>
+          <Link
+            to="/guide/troubleshooting/mcp"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border bg-muted/40 hover:bg-sky-500/10 hover:border-sky-500/40 hover:text-sky-600 dark:hover:text-sky-400 transition-all font-medium text-[11px]"
+          >
+            <Zap className="size-3 text-sky-500" />
+            <span>Khắc phục sự cố MCP</span>
+          </Link>
+        </div>
 
         {/* Quick Highlights Bar */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
@@ -53,7 +88,7 @@ export function McpTokensPage() {
               <Zap className="size-4.5 sm:size-5" />
             </div>
             <div className="min-w-0">
-              <div className="text-[11px] sm:text-xs font-semibold truncate">8 Flashcard Tools</div>
+              <div className="text-[11px] sm:text-xs font-semibold truncate">20 Flashcard Tools</div>
               <div className="text-[10px] sm:text-[11px] text-muted-foreground truncate">Tạo thẻ, tìm kiếm, due</div>
             </div>
           </div>
@@ -81,60 +116,103 @@ export function McpTokensPage() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full space-y-6">
-        {/* Responsive Horizontal Scroll Tab Bar */}
+        {/* Clean 2-Tab Bar */}
         <div className="overflow-x-auto pb-1 -mx-1 px-1 no-scrollbar">
           <TabsList className="inline-flex w-full sm:w-auto p-1 bg-muted/60 backdrop-blur-md rounded-2xl gap-1">
             <TabsTrigger
               value="tokens"
-              className="flex-1 sm:flex-none px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium rounded-xl gap-1.5 transition-all"
+              className="flex-1 sm:flex-none px-4 py-2 text-xs sm:text-sm font-medium rounded-xl gap-1.5 transition-all"
             >
-              <KeyRound className="size-4 text-primary shrink-0" />
-              <span className="hidden sm:inline">Quản lý Token (Claude / Cursor)</span>
-              <span className="sm:hidden">Token</span>
+              <KeyRound className="size-4 shrink-0" />
+              <span>Quản lý Token (Claude / Cursor / Antigravity)</span>
             </TabsTrigger>
             <TabsTrigger
               value="oauth"
-              className="flex-1 sm:flex-none px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium rounded-xl gap-1.5 transition-all"
+              className="flex-1 sm:flex-none px-4 py-2 text-xs sm:text-sm font-medium rounded-xl gap-1.5 transition-all"
             >
-              <Bot className="size-4 text-purple-500 shrink-0" />
-              <span className="hidden sm:inline">ChatGPT & OAuth 2.1 (Mới)</span>
-              <span className="sm:hidden">ChatGPT</span>
-            </TabsTrigger>
-            <TabsTrigger
-              value="about"
-              className="flex-1 sm:flex-none px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium rounded-xl gap-1.5 transition-all"
-            >
-              <Sparkles className="size-4 text-amber-500 shrink-0" />
-              <span className="hidden sm:inline">MCP là gì?</span>
-              <span className="sm:hidden">Tổng quan</span>
-            </TabsTrigger>
-            <TabsTrigger
-              value="guide"
-              className="flex-1 sm:flex-none px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium rounded-xl gap-1.5 transition-all"
-            >
-              <BookOpen className="size-4 text-sky-500 shrink-0" />
-              <span className="hidden sm:inline">Hướng dẫn Cài đặt</span>
-              <span className="sm:hidden">Hướng dẫn</span>
-            </TabsTrigger>
-            <TabsTrigger
-              value="tools"
-              className="flex-1 sm:flex-none px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium rounded-xl gap-1.5 transition-all"
-            >
-              <Wrench className="size-4 text-emerald-500 shrink-0" />
-              <span className="hidden sm:inline">Danh mục 8 Công cụ & Prompts</span>
-              <span className="sm:hidden">Công cụ</span>
+              <Bot className="size-4 shrink-0" />
+              <span>ChatGPT & OAuth 2.1 (Mới)</span>
             </TabsTrigger>
           </TabsList>
         </div>
 
-        {/* Tab Contents */}
+        {/* Operational Tab Contents */}
         <McpTokensTab hookResult={hookResult} />
         <McpOAuthTab />
-        <McpAboutTab />
-        <McpGuideTab />
-        <McpToolsTab />
       </Tabs>
+
+      {/* Contextual Reference / Documentation Strip */}
+      <div className="rounded-2xl border bg-card/60 p-4 sm:p-5 space-y-3 shadow-2xs">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            <BookOpen className="size-3.5 text-primary" />
+            <span>Tài liệu & Hướng dẫn tham chiếu MCP</span>
+          </div>
+          <Link
+            to="/guide/integrations/mcp-ai"
+            className="text-xs text-primary hover:underline font-medium flex items-center gap-1"
+          >
+            <span>Xem tất cả</span>
+            <ArrowRight className="size-3" />
+          </Link>
+        </div>
+
+        <div className="grid gap-2 sm:grid-cols-3 pt-1">
+          <Link
+            to="/guide/integrations/mcp-ai"
+            className="group flex items-start gap-3 p-3 rounded-xl hover:bg-muted/60 transition-colors"
+          >
+            <div className="p-2 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400 shrink-0 mt-0.5 group-hover:scale-105 transition-transform">
+              <Bot className="size-4" />
+            </div>
+            <div className="min-w-0 space-y-0.5">
+              <div className="text-xs sm:text-sm font-semibold text-foreground group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors flex items-center gap-1">
+                <span>Cẩm nang kết nối MCP</span>
+                <ArrowRight className="size-3 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all text-purple-500" />
+              </div>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                Cấu hình Claude Desktop, Cursor IDE, Antigravity và kiểm tra lệnh cURL.
+              </p>
+            </div>
+          </Link>
+
+          <Link
+            to="/guide/integrations/mcp-tools"
+            className="group flex items-start gap-3 p-3 rounded-xl hover:bg-muted/60 transition-colors"
+          >
+            <div className="p-2 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5 group-hover:scale-105 transition-transform">
+              <Wrench className="size-4" />
+            </div>
+            <div className="min-w-0 space-y-0.5">
+              <div className="text-xs sm:text-sm font-semibold text-foreground group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors flex items-center gap-1">
+                <span>Danh mục Công cụ & Prompts</span>
+                <ArrowRight className="size-3 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all text-amber-500" />
+              </div>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                Tra cứu 20 công cụ Flashcard và các câu lệnh mẫu ra lệnh cho AI.
+              </p>
+            </div>
+          </Link>
+
+          <Link
+            to="/guide/integrations/yomitan"
+            className="group flex items-start gap-3 p-3 rounded-xl hover:bg-muted/60 transition-colors"
+          >
+            <div className="p-2 rounded-lg bg-sky-500/10 text-sky-600 dark:text-sky-400 shrink-0 mt-0.5 group-hover:scale-105 transition-transform">
+              <MousePointerClick className="size-4" />
+            </div>
+            <div className="min-w-0 space-y-0.5">
+              <div className="text-xs sm:text-sm font-semibold text-foreground group-hover:text-primary transition-colors flex items-center gap-1">
+                <span>Tiện ích Yomitan 1-Click</span>
+                <ArrowRight className="size-3 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all text-primary" />
+              </div>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                Tự động khai thác từ vựng khi đọc báo, manga trực tiếp trên trình duyệt.
+              </p>
+            </div>
+          </Link>
+        </div>
+      </div>
     </Page>
   )
 }
-

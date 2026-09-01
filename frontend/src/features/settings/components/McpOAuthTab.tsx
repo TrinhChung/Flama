@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import {
   Bot,
   Check,
@@ -8,7 +9,6 @@ import {
   Plus,
   RefreshCw,
   ShieldCheck,
-  Sparkles,
   Trash2,
   Zap,
 } from 'lucide-react'
@@ -117,7 +117,10 @@ export function McpOAuthTab() {
                 Tích hợp ChatGPT qua OAuth 2.1
               </CardTitle>
               <CardDescription className="text-xs sm:text-sm">
-                Cung cấp mã xác thực chuẩn để ChatGPT Actions & MCP Client kết nối trực tiếp, tự động đăng nhập và thao tác kho thẻ thay mặt bạn an toàn.
+                Cung cấp mã xác thực chuẩn để ChatGPT Actions & MCP Client kết nối trực tiếp, tự động đăng nhập và thao tác kho thẻ thay mặt bạn an toàn.{' '}
+                <Link to="/guide/integrations/mcp-ai" className="text-primary hover:underline font-medium inline-flex items-center gap-0.5">
+                  Xem hướng dẫn kết nối &rarr;
+                </Link>
               </CardDescription>
             </div>
 
@@ -171,7 +174,7 @@ export function McpOAuthTab() {
                           className="h-6 text-[11px] text-primary gap-1 px-1.5"
                           onClick={() => setClientSecret(generateRandomKey())}
                         >
-                          <Sparkles className="size-3" />
+                          <RefreshCw className="size-3" />
                           Tạo Secret ngẫu nhiên
                         </Button>
                       </div>
@@ -601,7 +604,7 @@ export function McpOAuthTab() {
                   className="h-6 text-[11px] text-primary gap-1 px-1.5"
                   onClick={() => setEditClientSecret(generateRandomKey())}
                 >
-                  <Sparkles className="size-3" />
+                  <RefreshCw className="size-3" />
                   Tạo ngẫu nhiên
                 </Button>
               </div>
@@ -670,7 +673,7 @@ export function McpOAuthTab() {
                   className="h-6 text-[11px] text-primary gap-1 px-1.5"
                   onClick={() => setCustomRotateSecret(generateRandomKey())}
                 >
-                  <Sparkles className="size-3" />
+                  <RefreshCw className="size-3" />
                   Sinh ngẫu nhiên
                 </Button>
               </div>

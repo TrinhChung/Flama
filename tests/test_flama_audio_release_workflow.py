@@ -35,6 +35,16 @@ class TestFlamaAudioReleaseWorkflow(unittest.TestCase):
         self.assertNotIn("Inno Setup", self.workflow)
         self.assertNotIn("FlamaAudio-Setup.exe", self.workflow)
 
+    def test_release_runs_main_and_nested_g2p_test_solutions(self):
+        self.assertIn(
+            "dotnet test flama-audio/Flama.Audio.sln -c Release --no-restore",
+            self.workflow,
+        )
+        self.assertIn(
+            "dotnet test flama-audio/src/Flama.Audio.Engine.Kokoro/G2P/Flama.G2P.sln -c Release --no-restore",
+            self.workflow,
+        )
+
     def test_signs_final_binary_with_sha256_and_rfc3161_timestamp(self):
         self.assertIn("WINDOWS_SIGNING_CERTIFICATE_BASE64", self.workflow)
         self.assertIn("WINDOWS_SIGNING_CERTIFICATE_PASSWORD", self.workflow)

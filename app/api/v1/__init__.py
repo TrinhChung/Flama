@@ -34,6 +34,7 @@ from .settings import settings_bp
 from .strokes import strokes_bp
 from .tickets import tickets_bp
 from .wallet import wallet_bp
+from .worksheets import worksheets_bp
 
 
 api_v1_bp = Blueprint("api_v1", __name__, url_prefix="/api")
@@ -134,3 +135,4 @@ api_v1_bp.register_blueprint(settings_bp)
 api_v1_bp.register_blueprint(strokes_bp)
 api_v1_bp.register_blueprint(images_bp, url_prefix="/images")
 api_v1_bp.register_blueprint(tickets_bp)
+api_v1_bp.register_blueprint(worksheets_bp)

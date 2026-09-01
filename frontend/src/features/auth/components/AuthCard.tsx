@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Brain, Flame, ShieldCheck, Sparkles, Zap } from 'lucide-react'
+import { Brain, Flame, Layers, ShieldCheck, Zap } from 'lucide-react'
 import { Link, useLocation } from 'react-router-dom'
 import { Card } from '@/components/ui/card'
 import { Brand } from '@/shared/components/Brand'
@@ -81,7 +81,7 @@ export function AuthCard({
 
             <div className="flex items-start gap-3 rounded-2xl border border-border/50 bg-card/60 p-3.5 backdrop-blur-sm">
               <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <Sparkles className="size-4" />
+                <Layers className="size-4" />
               </span>
               <div>
                 <h2 className="text-xs font-bold">Tạo thẻ linh hoạt</h2>

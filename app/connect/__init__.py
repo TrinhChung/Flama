@@ -128,6 +128,7 @@ def _register_models() -> None:
     # SQLAlchemy resolves string relationships lazily, so every related model
     # used by this app must be registered even though Connect exposes only a few.
     from models.user import User  # noqa: F401
+    from models.user_identity import UserIdentity  # noqa: F401
     from models.user_role import UserRole  # noqa: F401
     from models.user_scheduler_settings import UserSchedulerSettings  # noqa: F401
     from models.scheduler_preset import SchedulerPreset  # noqa: F401

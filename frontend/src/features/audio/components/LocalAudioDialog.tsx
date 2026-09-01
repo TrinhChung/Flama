@@ -33,6 +33,7 @@ type LocalAudioDialogProps = {
   selectedCardIds: string[]
   activeCardId?: string | null
   availableFieldNames?: string[]
+  availableAudioFieldNames?: string[]
   noteTypeName?: string
   engineId?: 'voicevox' | 'kokoro'
   defaultVoiceId?: string
@@ -52,6 +53,7 @@ export function LocalAudioDialog(props: LocalAudioDialogProps) {
     selectedVoiceId,
     setSelectedVoiceId,
     dynamicFields,
+    dynamicAudioFields,
     sourceField,
     setSourceField,
     destinationField,
@@ -221,14 +223,16 @@ export function LocalAudioDialog(props: LocalAudioDialogProps) {
                     <NativeSelect
                       value={sourceField}
                       onChange={(e) => setSourceField(e.target.value)}
-                      disabled={isProcessing}
+                      disabled={isProcessing || dynamicFields.length === 0}
                       className="h-10 text-xs sm:text-sm rounded-xl"
                     >
-                      {dynamicFields.map((f) => (
-                        <option key={f} value={f}>
-                          {f}
-                        </option>
-                      ))}
+                      {dynamicFields.length === 0 ? (
+                        <option value="">Note Type chưa có trường văn bản</option>
+                      ) : dynamicFields.map((f) => (
+                          <option key={f} value={f}>
+                            {f}
+                          </option>
+                        ))}
                     </NativeSelect>
                   </div>
                   <div className="space-y-1.5">
@@ -236,14 +240,16 @@ export function LocalAudioDialog(props: LocalAudioDialogProps) {
                     <NativeSelect
                       value={destinationField}
                       onChange={(e) => setDestinationField(e.target.value)}
-                      disabled={isProcessing}
+                      disabled={isProcessing || dynamicAudioFields.length === 0}
                       className="h-10 text-xs sm:text-sm rounded-xl"
                     >
-                      {dynamicFields.map((f) => (
-                        <option key={f} value={f}>
-                          {f}
-                        </option>
-                      ))}
+                      {dynamicAudioFields.length === 0 ? (
+                        <option value="">Note Type chưa có trường audio</option>
+                      ) : dynamicAudioFields.map((f) => (
+                          <option key={f} value={f}>
+                            {f}
+                          </option>
+                        ))}
                     </NativeSelect>
                   </div>
                 </div>
@@ -357,7 +363,12 @@ export function LocalAudioDialog(props: LocalAudioDialogProps) {
                   size="sm"
                   className="h-9 text-xs gap-1.5"
                   onClick={handleStartBatch}
-                  disabled={isProcessing || targetCardIds.length === 0}
+                  disabled={
+                    isProcessing
+                    || targetCardIds.length === 0
+                    || !sourceField
+                    || !destinationField
+                  }
                 >
                   {isProcessing ? (
                     <LoaderCircle className="size-3.5 animate-spin" />

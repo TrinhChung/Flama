@@ -54,18 +54,47 @@ describe('renderStudySide', () => {
     expect(result.html).not.toContain('<img')
   })
 
-  it('removes content-injected scripts and unsafe media URLs', () => {
+  it('removes content-injected scripts and untyped external media URLs', () => {
     const result = renderStudySide(
       template({ front_source: '<div>{{{Meaning}}}</div>' }),
       content({
         render_context: {
-          Meaning: '<script>alert(1)</script><img src="https://evil.example/a.png">',
+          Meaning: (
+            '<script>alert(1)</script><a href="javascript:alert(2)">click</a>'
+            + '<img src="https://tracker.example/pixel.png">'
+          ),
         },
       }),
       'front',
     )
     expect(result.html).not.toContain('<script>alert(1)</script>')
-    expect(result.html).not.toContain('https://evil.example')
+    expect(result.html).not.toContain('javascript:')
+    expect(result.html).not.toContain('tracker.example')
+  })
+
+  it('allows safe external URLs from typed media fields and URL helpers', () => {
+    const result = renderStudySide(
+      template({
+        front_source: '<div>{{{Image}}}<audio controls src="{{Audio_url}}"></audio></div>',
+        field_defs: [
+          { name: 'Image', field_type: 'image' },
+          { name: 'Audio', field_type: 'audio' },
+        ],
+      }),
+      content({
+        render_context: {
+          Image: '<img src="https://example.com/a.png">',
+          Image_url: 'https://example.com/a.png',
+          Image_urls: ['https://example.com/a.png'],
+          Audio: '<audio controls src="https://example.com/a.mp3"></audio>',
+          Audio_url: 'https://example.com/a.mp3',
+          Audio_urls: ['https://example.com/a.mp3'],
+        },
+      }),
+      'front',
+    )
+    expect(result.html).toContain('<img src="https://example.com/a.png">')
+    expect(result.html).toContain('src="https://example.com/a.mp3"')
   })
 
   it('restores only server-validated template scripts inside renderer payload', () => {
@@ -158,6 +187,40 @@ describe('renderStudySide', () => {
     expect(result.html).toContain('src="/static/strokes/ja/5f37.svg"')
     expect(result.html).toContain('alt="勉"')
     expect(result.html).toContain('class="stroke-svg"')
+  })
+
+  it('preserves library stroke diagram SVG images in rich HTML content', () => {
+    const strokeDiagramHtml = (
+      '<div class="flama-stroke-diagram" data-locale="ja">'
+      + '<img src="/media/library/stroke_ja_65e5.svg" alt="日" class="flama-stroke-char" />'
+      + '</div>'
+    )
+    const result = renderStudySide(
+      template({ back_source: '<div class="strokes">{{{StrokeDiagram}}}</div>' }),
+      content({
+        render_context: { StrokeDiagram: strokeDiagramHtml },
+      }),
+      'back',
+    )
+
+    expect(result.html).toContain('src="/media/library/stroke_ja_65e5.svg"')
+    expect(result.html).toContain('alt="日"')
+    expect(result.html).toContain('class="flama-stroke-char"')
+  })
+
+  it('preserves inline SVG markup in card render context', () => {
+    const svgMarkup = '<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="40" stroke="green" stroke-width="4" fill="yellow" /></svg>'
+    const result = renderStudySide(
+      template({ back_source: '<div class="diagram-container">{{{Diagram}}}</div>' }),
+      content({
+        render_context: { Diagram: svgMarkup },
+      }),
+      'back',
+    )
+
+    expect(result.html).toContain('<svg viewBox="0 0 100 100"')
+    expect(result.html).toContain('<circle cx="50" cy="50" r="40"')
+    expect(result.html).toContain('fill="yellow"')
   })
 })
 

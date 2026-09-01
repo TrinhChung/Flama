@@ -70,8 +70,12 @@ from models.field_def import FieldDef
 from models.note import Note
 from models.note_type import NoteType
 from models.note_type_install import NoteTypeInstall
-from models.note_type_review import NoteTypeReview
-from models.taxonomy import TaxonomyDomain, TaxonomyLevel, TaxonomySubject, TaxonomyTopic
+from models.taxonomy import (
+    TaxonomyDomain,
+    TaxonomyFramework,
+    TaxonomyFrameworkLevel,
+    TaxonomySubject,
+)
 from models.template import Template
 from models.user import User
 

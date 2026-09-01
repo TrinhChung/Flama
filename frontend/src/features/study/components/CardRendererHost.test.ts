@@ -94,7 +94,87 @@ describe('card renderer host viewport modes', () => {
 
     expect(hostKeydown).not.toHaveBeenCalled()
     expect(iframe.srcdoc).not.toContain("post('keydown_event'")
+    expect(iframe.srcdoc).not.toContain("post('host_command'")
     window.removeEventListener('keydown', hostKeydown)
+
+    const hostCommandHandler = vi.fn()
+    window.addEventListener('flama:host-command', hostCommandHandler)
+    window.dispatchEvent(new MessageEvent('message', {
+      source: iframe.contentWindow,
+      data: {
+        channel: 'flama-card-renderer',
+        direction: 'renderer_to_host',
+        instanceId,
+        action: 'host_command',
+        payload: { command: 'rate_good' },
+      },
+    }))
+
+    expect(hostCommandHandler).not.toHaveBeenCalled()
+    window.removeEventListener('flama:host-command', hostCommandHandler)
+    controller.destroy()
+  })
+
+  it('rejects postMessage payloads from unrelated windows, channels, or forged instanceIds', async () => {
+    const source = readFileSync(
+      resolve(process.cwd(), '../static/js/card_renderer_host.js'),
+      'utf8',
+    )
+    window.eval(source)
+
+    const iframe = document.createElement('iframe')
+    document.body.appendChild(iframe)
+    const controller = window.FlamaCardRendererHost!.createRendererFrameController(iframe)
+    controller.render({ html: '<div>Safe Card</div>' })
+
+    const otherIframe = document.createElement('iframe')
+    document.body.appendChild(otherIframe)
+
+    const playSpy = vi.spyOn(window.HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined)
+    const hostCommandHandler = vi.fn()
+    window.addEventListener('flama:host-command', hostCommandHandler)
+
+    // 1. Message from unrelated window (wrong source Window)
+    window.dispatchEvent(new MessageEvent('message', {
+      source: otherIframe.contentWindow,
+      data: {
+        channel: 'flama-card-renderer',
+        direction: 'renderer_to_host',
+        instanceId: 'forged-instance-id',
+        action: 'host_command',
+        payload: { command: 'rate_good' },
+      },
+    }))
+
+    // 2. Message with invalid/wrong channel
+    window.dispatchEvent(new MessageEvent('message', {
+      source: iframe.contentWindow,
+      data: {
+        channel: 'untrusted-channel',
+        direction: 'renderer_to_host',
+        instanceId: 'instance-id',
+        action: 'host_command',
+        payload: { command: 'rate_easy' },
+      },
+    }))
+
+    // 3. Forged arbitrary action types
+    window.dispatchEvent(new MessageEvent('message', {
+      source: iframe.contentWindow,
+      data: {
+        channel: 'flama-card-renderer',
+        direction: 'renderer_to_host',
+        instanceId: 'instance-id',
+        action: 'arbitrary_eval_or_rating',
+        payload: { rating: 10, grant_permission: true },
+      },
+    }))
+
+    expect(playSpy).not.toHaveBeenCalled()
+    expect(hostCommandHandler).not.toHaveBeenCalled()
+
+    window.removeEventListener('flama:host-command', hostCommandHandler)
+    otherIframe.remove()
     controller.destroy()
   })
 
@@ -222,6 +302,35 @@ describe('card renderer host viewport modes', () => {
     expect(sharedAudio?.getAttribute('src')).toBe(
       'https://be-flama.stmtp.com/media/proxy/audio-1',
     )
+    controller.destroy()
+  })
+
+  it('adds exact public HTTPS media URLs to CSP without authorizing injected proxy ids', () => {
+    const source = readFileSync(
+      resolve(process.cwd(), '../static/js/card_renderer_host.js'),
+      'utf8',
+    )
+    window.eval(source)
+
+    const iframe = document.createElement('iframe')
+    document.body.appendChild(iframe)
+    const controller = window.FlamaCardRendererHost!.createRendererFrameController(iframe)
+    controller.render({
+      html: [
+        '<img src="https://cdn.example.com/cards/cat.png">',
+        '<audio src="https://cdn.example.com/audio/cat.mp3"></audio>',
+        '<audio src="/media/proxy/not-attached"></audio>',
+      ].join(''),
+      allowed_media_urls: [
+        'https://cdn.example.com/cards/cat.png',
+        'https://cdn.example.com/audio/cat.mp3',
+      ],
+      allowed_audio_urls: ['https://cdn.example.com/audio/cat.mp3'],
+    })
+
+    expect(iframe.srcdoc).toContain('https://cdn.example.com/cards/cat.png')
+    expect(iframe.srcdoc).toContain('https://cdn.example.com/audio/cat.mp3')
+    expect(iframe.srcdoc).not.toContain(`${window.location.origin}/media/proxy/not-attached`)
     controller.destroy()
   })
 })

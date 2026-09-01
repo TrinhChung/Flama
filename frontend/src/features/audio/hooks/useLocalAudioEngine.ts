@@ -8,6 +8,10 @@ import {
   uploadNoteMediaBatch,
   type BatchMediaItemInput,
 } from '@/shared/api/noteMedia'
+import {
+  loadStoredLocalAudioSettings,
+  saveStoredLocalAudioSettings,
+} from '../services/localAudioStorage'
 import type { VoiceDescriptor } from '../types'
 
 export type ProcessItemStatus = 'pending' | 'synthesizing' | 'uploading' | 'done' | 'failed' | 'skipped'
@@ -139,7 +143,7 @@ function autoSelectSourceField(fields: string[], currentSource?: string): string
     const match = fields.find((f) => f.toLowerCase() === p.toLowerCase())
     if (match) return match
   }
-  return fields[0] || 'Word'
+  return fields[0] || ''
 }
 
 function autoSelectDestinationField(fields: string[], currentDest?: string): string {
@@ -149,7 +153,7 @@ function autoSelectDestinationField(fields: string[], currentDest?: string): str
     const match = fields.find((f) => f.toLowerCase() === p.toLowerCase())
     if (match) return match
   }
-  return fields[fields.length - 1] || 'Audio'
+  return fields[0] || ''
 }
 
 function cleanTextForVoiceVox(rawText: string): string {
@@ -182,6 +186,7 @@ export function useLocalAudioEngine(options: {
   selectedCardIds: string[]
   activeCardId?: string | null
   availableFieldNames?: string[]
+  availableAudioFieldNames?: string[]
   engineId?: 'voicevox' | 'kokoro'
   defaultVoiceId?: string
   onSuccess?: () => void
@@ -190,7 +195,8 @@ export function useLocalAudioEngine(options: {
     isOpen,
     selectedCardIds,
     activeCardId,
-    availableFieldNames = ['Reading', 'Word', 'Meaning', 'Audio'],
+    availableFieldNames = ['Reading', 'Word', 'Meaning'],
+    availableAudioFieldNames = ['Audio'],
     engineId = 'voicevox',
     defaultVoiceId,
     onSuccess,
@@ -208,22 +214,41 @@ export function useLocalAudioEngine(options: {
   const [isPairingApproved, setIsPairingApproved] = useState<boolean>(false)
 
   // Voice Selection State
+  const initialLocalSettings = loadStoredLocalAudioSettings()
   const [voices, setVoices] = useState<VoiceDescriptor[]>([])
-  const [selectedVoiceId, setSelectedVoiceId] = useState<string>(defaultVoiceId || (isKokoro ? 'af_bella' : '3'))
+  const [selectedVoiceId, setSelectedVoiceIdState] = useState<string>(() => {
+    return defaultVoiceId || (isKokoro ? initialLocalSettings.lastVoiceIdKokoro : initialLocalSettings.lastVoiceIdVoicevox)
+  })
+
+  const setSelectedVoiceId = useCallback((voiceId: string) => {
+    setSelectedVoiceIdState(voiceId)
+    if (isKokoro) {
+      saveStoredLocalAudioSettings({ lastVoiceIdKokoro: voiceId })
+    } else {
+      saveStoredLocalAudioSettings({ lastVoiceIdVoicevox: voiceId })
+    }
+  }, [isKokoro])
 
   useEffect(() => {
-    setSelectedVoiceId(defaultVoiceId || (isKokoro ? 'af_bella' : '3'))
+    const stored = loadStoredLocalAudioSettings()
+    const fallbackId = isKokoro ? stored.lastVoiceIdKokoro : stored.lastVoiceIdVoicevox
+    setSelectedVoiceIdState(defaultVoiceId || fallbackId)
     setVoices([])
   }, [engineId, isKokoro, defaultVoiceId])
 
   // Dynamic Fields Resolution State
   const [dynamicFields, setDynamicFields] = useState<string[]>(availableFieldNames)
+  const [dynamicAudioFields, setDynamicAudioFields] = useState<string[]>(
+    availableAudioFieldNames,
+  )
 
   useEffect(() => {
-    if (availableFieldNames && availableFieldNames.length > 0) {
-      setDynamicFields(availableFieldNames)
-    }
+    setDynamicFields(availableFieldNames)
   }, [availableFieldNames])
+
+  useEffect(() => {
+    setDynamicAudioFields(availableAudioFieldNames)
+  }, [availableAudioFieldNames])
 
   // Fetch card details dynamically if fields are missing
   useEffect(() => {
@@ -231,16 +256,26 @@ export function useLocalAudioEngine(options: {
       const cardId = targetCardIds[0]
       apiRequest<{
         card: { word: string }
-        fields?: Array<{ name: string }>
+        fields?: Array<{ name: string; field_type?: string }>
         note?: { field_values?: Record<string, string> }
       }>(`/api/browse/cards/${encodeURIComponent(cardId)}`)
         .then((res) => {
           if (res.fields && res.fields.length > 0) {
-            const names = res.fields.map((f) => f.name).filter(Boolean)
-            if (names.length > 0) setDynamicFields(names)
+            const sourceNames = res.fields
+              .filter((field) => !['image', 'audio', 'diagram'].includes(String(field.field_type || '').toLowerCase()))
+              .map((field) => field.name)
+              .filter(Boolean)
+            const audioNames = res.fields
+              .filter((field) => String(field.field_type || '').toLowerCase() === 'audio')
+              .map((field) => field.name)
+              .filter(Boolean)
+            setDynamicFields(sourceNames)
+            setDynamicAudioFields(audioNames)
           } else if (res.note?.field_values) {
             const names = Object.keys(res.note.field_values)
-            if (names.length > 0) setDynamicFields(names)
+            const guessedAudioNames = names.filter((name) => /audio|sound/i.test(name))
+            setDynamicFields(names.filter((name) => !guessedAudioNames.includes(name)))
+            setDynamicAudioFields(guessedAudioNames)
           }
         })
         .catch(() => {})
@@ -252,17 +287,53 @@ export function useLocalAudioEngine(options: {
   const [destinationField, setDestinationField] = useState<string>('Audio')
 
   useEffect(() => {
-    if (isOpen && dynamicFields.length > 0) {
+    if (isOpen) {
       setSourceField((prev) => autoSelectSourceField(dynamicFields, prev))
-      setDestinationField((prev) => autoSelectDestinationField(dynamicFields, prev))
     }
   }, [isOpen, dynamicFields])
 
+  useEffect(() => {
+    if (isOpen) {
+      setDestinationField((prev) => autoSelectDestinationField(dynamicAudioFields, prev))
+    }
+  }, [isOpen, dynamicAudioFields])
+
   // Advanced Sliders State
-  const [volumeScale, setVolumeScale] = useState<number>(1.0)
-  const [pitch, setPitch] = useState<number>(0.0)
-  const [speed, setSpeed] = useState<number>(1.0)
-  const [intonationScale, setIntonationScale] = useState<number>(1.0)
+  const [volumeScale, setVolumeScaleState] = useState<number>(initialLocalSettings.volumeScale)
+  const setVolumeScale = (val: number | ((prev: number) => number)) => {
+    setVolumeScaleState((prev) => {
+      const next = typeof val === 'function' ? val(prev) : val
+      saveStoredLocalAudioSettings({ volumeScale: next })
+      return next
+    })
+  }
+
+  const [pitch, setPitchState] = useState<number>(initialLocalSettings.pitch)
+  const setPitch = (val: number | ((prev: number) => number)) => {
+    setPitchState((prev) => {
+      const next = typeof val === 'function' ? val(prev) : val
+      saveStoredLocalAudioSettings({ pitch: next })
+      return next
+    })
+  }
+
+  const [speed, setSpeedState] = useState<number>(initialLocalSettings.speed)
+  const setSpeed = (val: number | ((prev: number) => number)) => {
+    setSpeedState((prev) => {
+      const next = typeof val === 'function' ? val(prev) : val
+      saveStoredLocalAudioSettings({ speed: next })
+      return next
+    })
+  }
+
+  const [intonationScale, setIntonationScaleState] = useState<number>(initialLocalSettings.intonationScale)
+  const setIntonationScale = (val: number | ((prev: number) => number)) => {
+    setIntonationScaleState((prev) => {
+      const next = typeof val === 'function' ? val(prev) : val
+      saveStoredLocalAudioSettings({ intonationScale: next })
+      return next
+    })
+  }
 
   // Audio Preview State
   const [isPreviewing, setIsPreviewing] = useState<boolean>(false)
@@ -352,7 +423,7 @@ export function useLocalAudioEngine(options: {
     if (voiceOptions.length > 0 && !voiceOptions.some((v) => v.id === selectedVoiceId)) {
       setSelectedVoiceId(voiceOptions[0].id)
     }
-  }, [voiceOptions, selectedVoiceId])
+  }, [voiceOptions, selectedVoiceId, setSelectedVoiceId])
 
   const handleInstallEngine = async () => {
     setEngineActionState('installing')
@@ -424,10 +495,16 @@ export function useLocalAudioEngine(options: {
   }
 
   const handleResetDefaults = () => {
-    setVolumeScale(1.0)
-    setPitch(0.0)
-    setSpeed(1.0)
-    setIntonationScale(1.0)
+    saveStoredLocalAudioSettings({
+      volumeScale: 1.0,
+      pitch: 0.0,
+      speed: 1.0,
+      intonationScale: 1.0,
+    })
+    setVolumeScaleState(1.0)
+    setPitchState(0.0)
+    setSpeedState(1.0)
+    setIntonationScaleState(1.0)
     toast.info('Đã khôi phục thông số âm thanh mặc định.')
   }
 
@@ -558,6 +635,10 @@ export function useLocalAudioEngine(options: {
   const handleStartBatch = async () => {
     if (targetCardIds.length === 0) {
       toast.error('Vui lòng chọn ít nhất 1 thẻ từ vựng.')
+      return
+    }
+    if (!destinationField) {
+      toast.error('Note Type cần có ít nhất một trường kiểu audio.')
       return
     }
 
@@ -768,6 +849,7 @@ export function useLocalAudioEngine(options: {
     selectedVoiceId,
     setSelectedVoiceId,
     dynamicFields,
+    dynamicAudioFields,
     sourceField,
     setSourceField,
     destinationField,

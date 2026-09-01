@@ -1,12 +1,14 @@
 import { useEffect } from 'react'
 import {
   BookOpen,
+  Goal,
   Heart,
+  HelpCircle,
   LoaderCircle,
   LogIn,
   LogOut,
   Menu,
-  Sparkles,
+  Store,
   UserPlus,
 } from 'lucide-react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
@@ -51,8 +53,10 @@ const pageTitles: Record<string, string> = {
   '/marketplace/note-types/publish': 'Đăng loại thẻ',
   '/orders': 'Đơn hàng',
   '/profile': 'Trang cá nhân & Ví',
+  '/settings/goals': 'Mục tiêu học tập',
   '/settings/mcp-tokens': 'MCP Tokens',
   '/settings/yomitan': 'Kết nối Yomitan',
+  '/guide': 'Trung tâm Trợ giúp',
   '/guide/flama-audio': 'Tải Flama Audio',
   '/feedback': 'Đóng góp ý kiến',
   '/tickets': 'Báo lỗi & Góp ý',
@@ -170,6 +174,12 @@ function PublicLayout({
                         <span>Đơn hàng</span>
                       </Link>
                     </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link to="/guide" className="flex items-center gap-2">
+                        <HelpCircle className="size-4 text-primary" />
+                        <span>Trợ giúp</span>
+                      </Link>
+                    </DropdownMenuItem>
                     {onLogout && (
                       <DropdownMenuItem
                         className="flex cursor-pointer items-center gap-2 text-destructive focus:text-destructive"
@@ -210,7 +220,7 @@ function PublicLayout({
               {user && (
                 <DropdownMenuItem asChild>
                   <Link to="/marketplace/decks" className="flex items-center gap-2">
-                    <Sparkles className="size-4 text-primary" />
+                    <Store className="size-4" />
                     <span>Marketplace</span>
                   </Link>
                 </DropdownMenuItem>
@@ -219,6 +229,12 @@ function PublicLayout({
                 <Link to="/support" className="flex items-center gap-2">
                   <Heart className="size-4 text-rose-500" />
                   <span>Ủng hộ</span>
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link to="/guide" className="flex items-center gap-2">
+                  <HelpCircle className="size-4 text-primary" />
+                  <span>Trợ giúp</span>
                 </Link>
               </DropdownMenuItem>
               {!user ? (
@@ -405,9 +421,21 @@ export function AppLayout() {
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
+                  <Link to="/settings/goals" className="flex items-center gap-2">
+                    <Goal className="size-4" />
+                    <span>Mục tiêu học tập</span>
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
                   <Link to="/orders" className="flex items-center gap-2">
                     <Heart className="size-4 text-rose-500" />
                     <span>Đơn hàng</span>
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link to="/guide" className="flex items-center gap-2">
+                    <HelpCircle className="size-4 text-primary" />
+                    <span>Trợ giúp</span>
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem

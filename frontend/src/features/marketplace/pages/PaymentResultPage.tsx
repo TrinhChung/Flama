@@ -7,9 +7,9 @@ import {
   Clock,
   ExternalLink,
   Heart,
+  Info,
   RefreshCw,
   ShoppingBag,
-  Sparkles,
   XCircle,
 } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -299,7 +299,7 @@ export function PaymentResultPage() {
           {/* Next Action / Guidance Alert */}
           {order.next_action ? (
             <Alert className={isPaid ? 'border-emerald-500/20 bg-emerald-500/5' : 'border-primary/20 bg-primary/5'}>
-              <Sparkles className="size-4 text-primary shrink-0" />
+              <Info className="size-4 text-primary shrink-0" />
               <AlertTitle className="text-xs sm:text-sm font-bold">Hướng dẫn tiếp theo</AlertTitle>
               <AlertDescription className="text-xs text-muted-foreground leading-relaxed">
                 {order.next_action}

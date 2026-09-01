@@ -94,11 +94,28 @@ def _build_study_scope_query(
 
     if normalized_scope == "deck":
         if not normalized_scope_id:
-            return None, None, {"card_id": None, "message": "No cards found for selected scope."}
+            return None, None, {
+                "error": "DECK_NOT_FOUND",
+                "message": "Bộ thẻ này không tồn tại hoặc đã bị xóa.",
+                "status": 404,
+            }
         try:
             scope_id = int(normalized_scope_id)
         except (TypeError, ValueError):
-            return None, None, {"card_id": None, "message": "No cards found for selected scope."}
+            return None, None, {
+                "error": "DECK_NOT_FOUND",
+                "message": "Bộ thẻ này không tồn tại hoặc đã bị xóa.",
+                "status": 404,
+            }
+
+        scope_deck = db.session.get(Deck, scope_id)
+        if scope_deck is None or scope_deck.deleted_at is not None:
+            return None, None, {
+                "error": "DECK_NOT_FOUND",
+                "message": "Bộ thẻ này không tồn tại hoặc đã bị xóa.",
+                "status": 404,
+            }
+
         clone_scope = _resolve_clone_scope_for_local_deck(
             user_id=current_user.id,
             local_deck_id=scope_id,
@@ -106,25 +123,89 @@ def _build_study_scope_query(
         if clone_scope is not None:
             query = _query_clone_scope_cards(clone_scope)
         else:
+            is_admin = is_admin_user(current_user)
+            is_owner = scope_deck.owner_user_id == current_user.id
             scope_deck_ids = _collect_deck_subtree_ids(scope_id)
             if not scope_deck_ids:
-                return None, None, {"card_id": None, "message": "No cards found for selected scope."}
+                return None, None, {
+                    "error": "DECK_NOT_FOUND",
+                    "message": "Bộ thẻ này không tồn tại hoặc đã bị xóa.",
+                    "status": 404,
+                }
+
             query = Card.query.join(Note, Card.note_id == Note.id).filter(
                 Note.user_id == current_user.id,
                 Note.deck_id.in_(scope_deck_ids),
             )
+            has_owned_card = bool(query.with_entities(Card.id).first())
+
+            if not is_admin and not is_owner and not has_owned_card:
+                # Deck belongs to someone else and user does not have an installed clone.
+                # Find if this deck or its ancestor has an active marketplace item.
+                marketplace_item = None
+                search_deck_ids = [scope_deck.id]
+                curr = scope_deck
+                while curr and curr.parent_id:
+                    curr = db.session.get(Deck, curr.parent_id)
+                    if curr:
+                        search_deck_ids.append(curr.id)
+
+                for d_id in search_deck_ids:
+                    item = DeckMarketplaceItem.query.filter_by(
+                        source_deck_id=d_id,
+                    ).first()
+                    if item:
+                        marketplace_item = item
+                        break
+
+                marketplace_url = (
+                    f"/marketplace/decks/{marketplace_item.id}"
+                    if marketplace_item
+                    else "/marketplace/decks"
+                )
+                return None, None, {
+                    "error": "DECK_ACCESS_DENIED",
+                    "message": "Bạn không thể truy cập bộ thẻ này.",
+                    "status": 403,
+                    "details": {
+                        "deck_id": scope_id,
+                        "deck_name": scope_deck.name,
+                        "marketplace_url": marketplace_url,
+                        "marketplace_item_id": marketplace_item.id if marketplace_item else None,
+                    },
+                }
+
     elif normalized_scope == "note_type":
         if not normalized_scope_id:
-            return None, None, {"card_id": None, "message": "No cards found for selected scope."}
+            return None, None, {
+                "error": "NOTE_TYPE_NOT_FOUND",
+                "message": "Loại thẻ không tồn tại.",
+                "status": 404,
+            }
+        nt = db.session.get(NoteType, normalized_scope_id)
+        if not nt:
+            return None, None, {
+                "error": "NOTE_TYPE_NOT_FOUND",
+                "message": "Loại thẻ không tồn tại.",
+                "status": 404,
+            }
         query = Card.query.join(Note, Card.note_id == Note.id).filter(
             Note.user_id == current_user.id,
             Note.note_type_id == normalized_scope_id,
         )
 
     if query is None:
-        return None, None, {"card_id": None, "message": "No cards found for selected scope."}
+        return None, None, {
+            "error": "NO_STUDY_CARDS",
+            "message": "Không tìm thấy thẻ học cho phạm vi đã chọn.",
+            "status": 404,
+        }
     if not allow_empty and not query.with_entities(Card.id).first():
-        return None, None, {"card_id": None, "message": "No cards found for selected scope."}
+        return None, None, {
+            "error": "NO_STUDY_CARDS",
+            "message": "Bộ thẻ này chưa có thẻ học nào.",
+            "status": 404,
+        }
     return query, clone_scope, None
 
 
@@ -643,37 +724,29 @@ def study_session_open():
         scope_id_raw=validated_query.scope_id_raw,
         allow_empty=True,
     )
-    if (
-        query is not None
-        and validated_query.scope == "deck"
-        and validated_query.scope_id_int is not None
-        and clone_scope is None
-    ):
-        scope_deck = db.session.get(Deck, validated_query.scope_id_int)
-        has_owned_card = bool(query.with_entities(Card.id).first())
-        if (
-            scope_deck is None
-            or scope_deck.deleted_at is not None
-            or (
-                not is_admin_user(current_user)
-                and scope_deck.owner_user_id != current_user.id
-                and not has_owned_card
-            )
-        ):
-            query = None
-            empty_payload = {"message": "No cards found for selected scope."}
     if empty_payload is not None or query is None:
-        return _no_store_json(
-            {
-                "error": "NO_STUDY_CARDS",
-                "message": (
-                    empty_payload.get("message")
-                    if empty_payload is not None
-                    else "No cards found for selected scope."
-                ),
-            },
-            404,
+        error_code = (
+            empty_payload.get("error", "NO_STUDY_CARDS")
+            if empty_payload
+            else "NO_STUDY_CARDS"
         )
+        error_msg = (
+            empty_payload.get("message", "Không tìm thấy thẻ học cho phạm vi đã chọn.")
+            if empty_payload
+            else "Không tìm thấy thẻ học cho phạm vi đã chọn."
+        )
+        status_code = (
+            int(empty_payload.get("status", 404))
+            if empty_payload
+            else 404
+        )
+        response_data = {
+            "error": error_code,
+            "message": error_msg,
+        }
+        if empty_payload and empty_payload.get("details"):
+            response_data["details"] = empty_payload["details"]
+        return _no_store_json(response_data, status_code)
 
     timezone_name = get_effective_timezone_name(
         getattr(current_user, "timezone", "UTC")
@@ -826,11 +899,6 @@ def study_answer(card_id: str):
         if not _is_card_visible_in_clone_scope(scope=clone_scope, card_obj=card):
             return _study_error("FIELD_NOT_FOUND", "Card not found.", status=404)
 
-    progress = CardProgress.query.filter_by(user_id=current_user.id, card_id=card.id).first()
-    deck_options = resolve_deck_options(
-        user_id=current_user.id,
-        deck_id=_effective_scheduler_deck_id(card, clone_scope),
-    )
     now = datetime.utcnow()
     timezone_name = get_effective_timezone_name(getattr(current_user, "timezone", "UTC"))
     from app.services.study_service import (

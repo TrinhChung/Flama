@@ -15,6 +15,11 @@ from sqlalchemy.orm import selectinload
 from werkzeug.utils import secure_filename
 
 from app.services import deck_working_tree_service, tts_provider_service
+from app.services.media_field_codec import (
+    is_canonical_media_url,
+    join_media_field_urls,
+    split_media_field_value,
+)
 from models import db
 from models.flashcard import Card, MediaAsset, Note, NoteType
 
@@ -149,6 +154,11 @@ def precheck_voicevox(
         destination_def = field_defs.get(destination_field)
         if destination_def is None:
             continue
+        if str(destination_def.field_type or "").strip().lower() != "audio":
+            raise BrowseVoiceVoxError(
+                f"Trường đích '{destination_field}' phải có kiểu audio.",
+                code="invalid_destination_field",
+            )
         existing_value = str(
             dict(note_obj.field_values or {}).get(destination_field) or ""
         ).strip()
@@ -254,6 +264,20 @@ def generate_voicevox(
             code="mixed_note_types",
         )
 
+    destination_defs = {
+        str(field_def.name or "").strip(): field_def
+        for field_def in (
+            selected_notes[0].note_type.field_defs
+            if selected_notes[0].note_type else []
+        )
+    }
+    destination_def = destination_defs.get(destination_field)
+    if destination_def is None or str(destination_def.field_type or "").strip().lower() != "audio":
+        raise BrowseVoiceVoxError(
+            f"Trường đích '{destination_field}' phải tồn tại và có kiểu audio.",
+            code="invalid_destination_field",
+        )
+
     resolved_upload_root = upload_root.resolve()
     generated_items: list[dict[str, Any]] = []
     skipped_items: list[dict[str, str]] = []
@@ -262,7 +286,6 @@ def generate_voicevox(
         str,
         tuple[tts_provider_service.SynthesizedAudioResult, list[str]],
     ] = {}
-    audio_field_append_warned = False
     dirty_mutations: list[dict[str, Any]] = []
 
     for sequence, note_obj in enumerate(selected_notes, start=1):
@@ -384,23 +407,14 @@ def generate_voicevox(
             db.session.flush()
 
         filename = str(existing_asset.filename or "")
+        asset_url = f"/media/proxy/{existing_asset.id}"
         existing_value = str(note_values.get(destination_field) or "").strip()
-        destination_type = str(destination_def.field_type or "").strip().lower()
-        if append_audio and destination_type != "audio" and existing_value:
-            next_value = f"{existing_value}\n{filename}"
+        if append_audio and existing_value:
+            next_value = join_media_field_urls(
+                [*split_media_field_value(existing_value), asset_url]
+            )
         else:
-            next_value = filename
-            if (
-                append_audio
-                and destination_type == "audio"
-                and existing_value
-                and not audio_field_append_warned
-            ):
-                warning_items.append(
-                    "Destination field kiểu audio không hỗ trợ append nhiều dòng, "
-                    "hệ thống đã ghi đè bằng file mới."
-                )
-                audio_field_append_warned = True
+            next_value = asset_url
         if note_values.get(destination_field) != next_value:
             note_values[destination_field] = next_value
             note_obj.field_values = note_values
@@ -418,7 +432,7 @@ def generate_voicevox(
                 "filename": filename,
                 "destination_field": destination_field,
                 "value": next_value,
-                "url": f"/media/proxy/{existing_asset.id}",
+                "url": asset_url,
             }
         )
 
@@ -568,7 +582,7 @@ def _looks_like_audio_token(raw_value: object) -> bool:
     return (
         (token_lower.startswith("[sound:") and token.endswith("]"))
         or "<audio" in token_lower
-        or token_lower.startswith("/media/proxy/")
+        or is_canonical_media_url(token)
         or bool(_AUDIO_FILE_EXT_RE.search(token_lower))
     )
 

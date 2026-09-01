@@ -11,6 +11,8 @@ from models.user import User
 from models.user_role import UserRole
 from models.deck import Deck
 from models.card_progress import CardProgress
+from models.study_session import StudySession
+from models.study_session_card import StudySessionCard
 
 
 class DeckSettingsRoutesTests(unittest.TestCase):
@@ -211,10 +213,59 @@ class DeckSettingsRoutesTests(unittest.TestCase):
                 queue="learning",
                 step_index=1,
             )
-            db.session.add_all([admin_progress, other_progress])
+            admin_session = StudySession(
+                user_id=self.admin_id,
+                scope_type="deck",
+                scope_id=str(deck.id),
+                local_deck_id=deck.id,
+                snapshot_hash="admin-reset-snapshot",
+                token_hash="a" * 64,
+                config_snapshot_json="{}",
+                expires_at=datetime.utcnow() + timedelta(hours=1),
+            )
+            other_session = StudySession(
+                user_id=self.other_user_id,
+                scope_type="deck",
+                scope_id=str(deck.id),
+                local_deck_id=deck.id,
+                snapshot_hash="other-reset-snapshot",
+                token_hash="b" * 64,
+                config_snapshot_json="{}",
+                expires_at=datetime.utcnow() + timedelta(hours=1),
+            )
+            db.session.add_all(
+                [admin_progress, other_progress, admin_session, other_session]
+            )
+            db.session.flush()
+            db.session.add_all(
+                [
+                    StudySessionCard(
+                        session_id=admin_session.id,
+                        card_id=card.id,
+                        local_deck_id=deck.id,
+                        base_progress_revision=0,
+                        base_state_hash="admin-state",
+                        scheduler_config_hash="admin-config",
+                        initial_state_json="{}",
+                        ordinal=0,
+                    ),
+                    StudySessionCard(
+                        session_id=other_session.id,
+                        card_id=card.id,
+                        local_deck_id=deck.id,
+                        base_progress_revision=0,
+                        base_state_hash="other-state",
+                        scheduler_config_hash="other-config",
+                        initial_state_json="{}",
+                        ordinal=0,
+                    ),
+                ]
+            )
             db.session.commit()
             deck_id = deck.id
             card_id = card.id
+            admin_session_id = admin_session.id
+            other_session_id = other_session.id
 
         self._login_admin()
         response = self.client.post(
@@ -235,6 +286,14 @@ class DeckSettingsRoutesTests(unittest.TestCase):
             ).count()
             self.assertEqual(admin_progress_count, 0)
             self.assertEqual(other_progress_count, 1)
+            self.assertEqual(
+                db.session.get(StudySession, admin_session_id).status,
+                "cancelled",
+            )
+            self.assertEqual(
+                db.session.get(StudySession, other_session_id).status,
+                "open",
+            )
 
     def test_non_admin_owner_can_reset_owned_deck_without_clone_install(self):
         with self.app.app_context():
@@ -378,10 +437,37 @@ class DeckSettingsRoutesTests(unittest.TestCase):
                 queue="review",
                 reps=7,
             )
-            db.session.add_all([owner_progress, admin_progress])
+            overlay_session = StudySession(
+                user_id=self.other_user_id,
+                scope_type="deck",
+                scope_id=str(cloned_root.id),
+                local_deck_id=cloned_root.id,
+                clone_install_id=install_row.id,
+                snapshot_hash="overlay-reset-snapshot",
+                token_hash="c" * 64,
+                config_snapshot_json="{}",
+                expires_at=datetime.utcnow() + timedelta(hours=1),
+            )
+            db.session.add_all([owner_progress, admin_progress, overlay_session])
+            db.session.flush()
+            db.session.add(
+                StudySessionCard(
+                    session_id=overlay_session.id,
+                    card_id=source_card.id,
+                    source_deck_id=source_root.id,
+                    local_deck_id=cloned_root.id,
+                    note_type_id=note_type.id,
+                    base_progress_revision=0,
+                    base_state_hash="overlay-state",
+                    scheduler_config_hash="overlay-config",
+                    initial_state_json="{}",
+                    ordinal=0,
+                )
+            )
             db.session.commit()
             cloned_root_id = cloned_root.id
             source_card_id = source_card.id
+            overlay_session_id = overlay_session.id
 
         self._login_other()
         response = self.client.post(
@@ -402,6 +488,10 @@ class DeckSettingsRoutesTests(unittest.TestCase):
             ).count()
             self.assertEqual(owner_progress_count, 0)
             self.assertEqual(admin_progress_count, 1)
+            self.assertEqual(
+                db.session.get(StudySession, overlay_session_id).status,
+                "cancelled",
+            )
 
     def test_non_admin_dashboard_serves_react_shell(self):
         self._login_other()

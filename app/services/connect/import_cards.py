@@ -155,9 +155,9 @@ def _migrate_cards_progress(
     note: Note,
     note_type: NoteType,
     cards_progress_payload: list[dict[str, Any]],
-) -> None:
+) -> list[dict[str, Any]]:
     if not cards_progress_payload:
-        return
+        return []
 
     from datetime import datetime, timezone
     from app.services.scheduler_config_service import resolve_scheduler_runtime_settings
@@ -209,6 +209,7 @@ def _migrate_cards_progress(
             raise ConnectError("cardsProgress lapses is out of range")
         progress_map[ord_value] = item
 
+    results: list[dict[str, Any]] = []
     for ord_idx, template in enumerate(templates):
         card = existing_cards.get(template.id)
         if not card:
@@ -222,8 +223,6 @@ def _migrate_cards_progress(
             user_id=user_id,
             card_id=card.id,
         ).with_for_update().first()
-        existing_progress = progress is not None
-
         anki_last_reviewed_at = None
         last_rev_str = progress_data.get("lastReviewAt")
         if last_rev_str:
@@ -237,52 +236,37 @@ def _migrate_cards_progress(
             except ValueError as exc:
                 raise ConnectError("cardsProgress lastReviewAt is invalid") from exc
 
-        # Conflict Handling: Newest progress wins
-        if progress is not None:
-            if progress.last_reviewed_at is not None:
-                if anki_last_reviewed_at is not None and anki_last_reviewed_at >= progress.last_reviewed_at:
-                    pass
-                else:
-                    continue
-        else:
-            progress = CardProgress(user_id=user_id, card_id=card.id)
-            db.session.add(progress)
-
-        anki_type = progress_data.get("type", 0)
-        anki_queue = progress_data.get("queue", 0)
+        anki_type = int(progress_data.get("type", 0))
+        anki_queue = int(progress_data.get("queue", 0))
 
         # 0=new, 1=learning, 2=review, 3=relearning
         queue_map = {0: "new", 1: "learning", 2: "review", 3: "relearning"}
-        progress.queue = queue_map.get(anki_type, "new")
+        desired_queue = queue_map.get(anki_type, "new")
 
         # queue: -1=suspended, -2=sched buried, -3=user buried
-        progress.is_suspended = (anki_queue == -1)
-        progress.is_buried = (anki_queue in {-2, -3})
-        if progress.is_buried:
-            progress.buried_until_day = today_day_index_flama + 1
-        else:
-            progress.buried_until_day = None
-
-        progress.interval_days = int(progress_data.get("interval", 0))
-        progress.interval_days_raw = float(progress_data.get("interval", 0))
-        progress.ease_factor = float(progress_data.get("factor", 2500)) / 1000.0
-        progress.reps = int(progress_data.get("reps", 0))
-        progress.lapses = int(progress_data.get("lapses", 0))
-        progress.last_reviewed_at = anki_last_reviewed_at
+        desired_suspended = anki_queue == -1
+        desired_buried = anki_queue in {-2, -3}
+        desired_buried_until_day = (
+            today_day_index_flama + 1 if desired_buried else None
+        )
 
         relative_due = progress_data.get("relativeDue")
         due_at_str = progress_data.get("dueAt")
+        desired_due_at = None
+        desired_due_day = None
+        compare_due_at = False
         if relative_due is not None:
             if isinstance(relative_due, bool) or not isinstance(relative_due, (int, float)):
                 raise ConnectError("cardsProgress relativeDue must be a number or null")
             if not -365000 <= int(relative_due) <= 365000:
                 raise ConnectError("cardsProgress relativeDue is out of range")
-            progress.due_day = today_day_index_flama + int(relative_due)
-            progress.due_at = _day_index_to_datetime(
-                progress.due_day,
+            desired_due_day = today_day_index_flama + int(relative_due)
+            desired_due_at = _day_index_to_datetime(
+                desired_due_day,
                 boundary_hour,
                 timezone_name=timezone_name,
             )
+            compare_due_at = True
         elif due_at_str:
             if not isinstance(due_at_str, str) or len(due_at_str) > 64:
                 raise ConnectError("cardsProgress dueAt is invalid")
@@ -291,25 +275,125 @@ def _migrate_cards_progress(
                 dt = datetime.fromisoformat(clean_str)
                 if dt.tzinfo is not None:
                     dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
-                progress.due_at = dt
+                desired_due_at = dt
             except (TypeError, ValueError) as exc:
                 raise ConnectError("cardsProgress dueAt is invalid") from exc
-            progress.due_day = None
+            compare_due_at = True
         elif anki_type == 2:
-            progress.due_day = today_day_index_flama
-            progress.due_at = now
+            desired_due_day = today_day_index_flama
+            desired_due_at = now
         elif anki_type in {1, 3}:
-            progress.due_at = now
-            progress.due_day = None
+            desired_due_at = now
         else:
-            progress.due_day = None
-            progress.due_at = now
+            desired_due_at = now
 
-        progress.step_index = 0
-        progress.review_kind = "review"
-        progress.scheduler_mode = runtime.scheduler_mode
-        if existing_progress:
-            progress.revision = int(progress.revision or 0) + 1
+        desired = {
+            "queue": desired_queue,
+            "step_index": 0,
+            "due_at": desired_due_at,
+            "due_day": desired_due_day,
+            "interval_days": int(progress_data.get("interval", 0)),
+            "interval_days_raw": float(progress_data.get("interval", 0)),
+            "ease_factor": float(progress_data.get("factor", 2500)) / 1000.0,
+            "is_suspended": desired_suspended,
+            "is_buried": desired_buried,
+            "buried_until_day": desired_buried_until_day,
+            "review_kind": "review",
+            "scheduler_mode": "anki",
+            "memory_stability": None,
+            "memory_difficulty": None,
+            "suspension_reason": "anki_import" if desired_suspended else None,
+            "reps": int(progress_data.get("reps", 0)),
+            "lapses": int(progress_data.get("lapses", 0)),
+            "last_reviewed_at": anki_last_reviewed_at,
+        }
+
+        def _matches_existing() -> bool:
+            if progress is None:
+                return False
+            for field_name, expected in desired.items():
+                if field_name == "due_at" and not compare_due_at:
+                    continue
+                actual = getattr(progress, field_name, None)
+                if isinstance(expected, float):
+                    if actual is None or abs(float(actual) - expected) > 1e-9:
+                        return False
+                elif actual != expected:
+                    return False
+            return True
+
+        if progress is not None:
+            current_reviewed_at = progress.last_reviewed_at
+            if (
+                current_reviewed_at is not None
+                and anki_last_reviewed_at is not None
+                and anki_last_reviewed_at < current_reviewed_at
+            ):
+                results.append(
+                    {
+                        "ord": ord_idx,
+                        "cardId": str(card.id),
+                        "state": "stale",
+                        "code": "PROGRESS_STALE",
+                        "revision": int(progress.revision or 0),
+                    }
+                )
+                continue
+            ambiguous_order = (
+                (current_reviewed_at is None and anki_last_reviewed_at is None)
+                or (current_reviewed_at is not None and anki_last_reviewed_at is None)
+                or (
+                    current_reviewed_at is not None
+                    and anki_last_reviewed_at == current_reviewed_at
+                )
+            )
+            if ambiguous_order:
+                if _matches_existing():
+                    results.append(
+                        {
+                            "ord": ord_idx,
+                            "cardId": str(card.id),
+                            "state": "unchanged",
+                            "code": "PROGRESS_UNCHANGED",
+                            "revision": int(progress.revision or 0),
+                        }
+                    )
+                else:
+                    results.append(
+                        {
+                            "ord": ord_idx,
+                            "cardId": str(card.id),
+                            "state": "conflict",
+                            "code": "AMBIGUOUS_PROGRESS_ORDER",
+                            "revision": int(progress.revision or 0),
+                        }
+                    )
+                continue
+        else:
+            progress = CardProgress(user_id=user_id, card_id=card.id)
+            db.session.add(progress)
+
+        for field_name, value in desired.items():
+            setattr(progress, field_name, value)
+        progress.revision = int(progress.revision or 0) + 1
+        try:
+            db.session.flush()
+        except IntegrityError as exc:
+            conflict = ConnectError(
+                "card progress changed while the imported snapshot was being applied"
+            )
+            setattr(conflict, "code", "CONCURRENT_PROGRESS_WRITE")
+            raise conflict from exc
+        results.append(
+            {
+                "ord": ord_idx,
+                "cardId": str(card.id),
+                "state": "applied",
+                "code": "PROGRESS_APPLIED",
+                "revision": int(progress.revision or 0),
+            }
+        )
+    return results
 
 
 
@@ -319,7 +403,7 @@ def _upsert_import_card(
     session: ConnectImportSession,
     card_data: dict[str, Any],
     batch_context: ImportBatchContext | None = None,
-) -> tuple[Note, bool, bool, Any, Any]:
+) -> tuple[Note, bool, bool, Any, Any, list[dict[str, Any]]]:
     external_note_id = str(card_data.get("ankiNoteId") or "").strip()
     source_model_id = str(card_data.get("sourceModelId") or "").strip()
     source_deck_path = str(card_data.get("sourceDeckPath") or "").strip()
@@ -484,8 +568,14 @@ def _upsert_import_card(
         preserve_released_history=preserve_released_history,
     )
     cards_progress_payload = card_data.get("cardsProgress")
+    progress_results: list[dict[str, Any]] = []
     if cards_progress_payload:
-        _migrate_cards_progress(user_id, note, prepared.note_type, cards_progress_payload)
+        progress_results = _migrate_cards_progress(
+            user_id,
+            note,
+            prepared.note_type,
+            cards_progress_payload,
+        )
     materialized = flama_connect_media_service.materialize_import_media(
         user_id=user_id,
         note=note,
@@ -569,7 +659,14 @@ def _upsert_import_card(
             },
         )
     )
-    return note, created, already_counted, connect_ref, materialized
+    return (
+        note,
+        created,
+        already_counted,
+        connect_ref,
+        materialized,
+        progress_results,
+    )
 
 
 
@@ -605,7 +702,14 @@ def import_cards(
         materialized = None
         try:
             with db.session.begin_nested():
-                note, created, already_counted, connect_ref, materialized = _upsert_import_card(
+                (
+                    note,
+                    created,
+                    already_counted,
+                    connect_ref,
+                    materialized,
+                    progress_results,
+                ) = _upsert_import_card(
                     user_id=user_id,
                     session=session,
                     card_data=card_data,
@@ -620,6 +724,7 @@ def import_cards(
                     "created": created,
                     "noteId": note.id,
                     "connectNoteId": int(connect_ref.id),
+                    "progressResults": progress_results,
                 }
             )
             if not already_counted:
@@ -631,7 +736,14 @@ def import_cards(
             ]
         except Exception as exc:
             flama_connect_media_service.compensate_materialized(materialized)
-            results.append({"ankiNoteId": anki_note_id, "imported": False, "error": str(exc)})
+            results.append(
+                {
+                    "ankiNoteId": anki_note_id,
+                    "imported": False,
+                    "code": getattr(exc, "code", "CARD_IMPORT_FAILED"),
+                    "error": str(exc),
+                }
+            )
             errors = list(session.error_summary or [])
             if len(errors) < 100:
                 errors.append({"ankiNoteId": anki_note_id, "error": str(exc)})
@@ -775,8 +887,11 @@ def get_import_note_statuses(
                 ).first()
                 local_changed = (
                     progress is not None
-                    and card_ref.applied_local_revision is not None
-                    and int(progress.revision or 0) != int(card_ref.applied_local_revision)
+                    and (
+                        card_ref.applied_local_revision is None
+                        or int(progress.revision or 0)
+                        != int(card_ref.applied_local_revision)
+                    )
                 )
                 if local_changed:
                     progress_state = "local_changed"
@@ -796,6 +911,11 @@ def get_import_note_statuses(
                 {
                     "sourceCardId": requested_card["sourceCardId"],
                     "progressState": progress_state,
+                    "serverSnapshotHash": (
+                        str(card_ref.snapshot_hash)
+                        if card_ref is not None and card_ref.snapshot_hash
+                        else None
+                    ),
                     "reviewCursor": str(review_cursor) if review_cursor is not None else None,
                 }
             )

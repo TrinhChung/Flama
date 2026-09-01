@@ -6,7 +6,6 @@ import {
   ExternalLink,
   HelpCircle,
   ShieldCheck,
-  Sparkles,
   Zap,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
@@ -45,8 +44,8 @@ export function TtsKeyGuidePage() {
       />
 
       {/* Overview Alert */}
-      <Alert className="border-primary/20 bg-primary/5">
-        <Sparkles className="size-5 text-primary" />
+      <Alert className="border-border/80 bg-muted/30">
+        <AudioLines className="size-5 text-foreground/80" />
         <AlertTitle className="text-base font-bold text-foreground">
           Tại sao bạn nên dùng API Key cá nhân?
         </AlertTitle>

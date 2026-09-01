@@ -1420,53 +1420,15 @@ def _merge_card_progress_rows_for_cutover(
     local_card_id: str,
     source_card_id: str,
 ) -> int:
-    moved_count = 0
-    progress_rows = flashcards_share_repository.get_card_progress_rows_for_local_card(user_id, local_card_id)
-    
-    for row in progress_rows:
-        target = flashcards_share_repository.get_card_progress_for_source_card(user_id, source_card_id)
-        if target is None:
-            row.card_id = source_card_id
-            moved_count += 1
-            continue
+    from app.services.share.cutover import (
+        _merge_card_progress_rows_for_cutover as merge_progress_rows,
+    )
 
-        row_newer = (row.updated_at or datetime.min) >= (target.updated_at or datetime.min)
-        if row_newer:
-            target.queue = row.queue
-            target.step_index = row.step_index
-            target.due_at = row.due_at
-            target.due_day = row.due_day
-            target.interval_days = row.interval_days
-            if hasattr(target, "interval_days_raw"):
-                target.interval_days_raw = getattr(row, "interval_days_raw", None)
-            target.is_suspended = bool(row.is_suspended)
-            if hasattr(target, "is_buried"):
-                target.is_buried = bool(getattr(row, "is_buried", False))
-            if hasattr(target, "buried_until_day"):
-                target.buried_until_day = getattr(row, "buried_until_day", None)
-            target.ease_factor = row.ease_factor
-            if hasattr(target, "review_kind"):
-                target.review_kind = getattr(row, "review_kind", target.review_kind)
-            if hasattr(target, "scheduler_mode"):
-                target.scheduler_mode = getattr(row, "scheduler_mode", target.scheduler_mode)
-            if hasattr(target, "memory_stability"):
-                target.memory_stability = getattr(row, "memory_stability", None)
-            if hasattr(target, "memory_difficulty"):
-                target.memory_difficulty = getattr(row, "memory_difficulty", None)
-            if hasattr(target, "suspension_reason"):
-                target.suspension_reason = getattr(row, "suspension_reason", None)
-            if hasattr(target, "last_leech_at"):
-                target.last_leech_at = getattr(row, "last_leech_at", None)
-            if hasattr(target, "last_leech_lapses"):
-                target.last_leech_lapses = int(getattr(row, "last_leech_lapses", 0) or 0)
-            if hasattr(target, "last_review_event_id"):
-                target.last_review_event_id = getattr(row, "last_review_event_id", None)
-            target.last_reviewed_at = row.last_reviewed_at or target.last_reviewed_at
-        target.reps = max(int(target.reps or 0), int(row.reps or 0))
-        target.lapses = max(int(target.lapses or 0), int(row.lapses or 0))
-        db.session.delete(row)
-        moved_count += 1
-    return moved_count
+    return merge_progress_rows(
+        user_id=user_id,
+        local_card_id=local_card_id,
+        source_card_id=source_card_id,
+    )
 
 def _assert_cutover_note_equivalence(
     *,
@@ -2239,7 +2201,7 @@ def can_user_rate_deck_item(
         deck_active_review_threshold=deck_active_review_threshold,
     )
 
-def migrate_legacy_clone_install_to_overlay(
+def _legacy_migrate_legacy_clone_install_to_overlay_unused(
     install: DeckInstall,
 ) -> dict[str, int]:
     deck_item = db.session.get(DeckMarketplaceItem, install.deck_item_id)
@@ -3640,7 +3602,7 @@ def _build_note_override_payload_for_cutover(
             )
     return override_items
 
-def cutover_clone_model_to_overlay_only(*, fail_on_mismatch: bool = True) -> dict[str, Any]:
+def _legacy_cutover_clone_model_to_overlay_only_unused(*, fail_on_mismatch: bool = True) -> dict[str, Any]:
     legacy_installs = (
         DeckInstall.query.filter(
             db.or_(
@@ -3664,14 +3626,15 @@ def cutover_clone_model_to_overlay_only(*, fail_on_mismatch: bool = True) -> dic
 
     for install in legacy_installs:
         try:
-            counters = migrate_legacy_clone_install_to_overlay(install)
+            with db.session.begin_nested():
+                counters = _legacy_migrate_legacy_clone_install_to_overlay_unused(install)
+                db.session.flush()
             summary["migrated"] += 1
             summary["deck_map_rows"] += int(counters.get("deck_map_rows") or 0)
             summary["note_pairs"] += int(counters.get("note_pairs") or 0)
             summary["note_overrides"] += int(counters.get("note_overrides") or 0)
             summary["progress_rows"] += int(counters.get("progress_rows") or 0)
         except ShareControllerError as exc:
-            db.session.rollback()
             summary["failed"] += 1
             summary["errors"].append(
                 {
@@ -3684,6 +3647,15 @@ def cutover_clone_model_to_overlay_only(*, fail_on_mismatch: bool = True) -> dic
                 raise
 
     return summary
+
+
+# Compatibility exports delegate the complete cutover lifecycle to the modular
+# implementation so startup, CLI and package imports cannot drift.
+from app.services.share.cutover import (  # noqa: E402
+    cutover_clone_model_to_overlay_only,
+    migrate_legacy_clone_install_to_overlay,
+)
+
 
 def install_shared_deck_item_for_user(
     deck_item: DeckMarketplaceItem,

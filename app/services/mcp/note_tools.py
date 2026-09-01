@@ -238,7 +238,7 @@ def _auto_crawl_note_fields(
                     scan_enabled=scan_enabled,
                     markdown_inline=False,
                 )
-                current_values[field_name] = payload["asset_id"]
+                current_values[field_name] = payload["url"]
                 changed = True
             except Exception as exc:
                 logger.warning("MCP auto-crawl image failed for note %s field %s: %s", note.id, field_name, exc)

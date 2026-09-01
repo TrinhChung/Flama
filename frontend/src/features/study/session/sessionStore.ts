@@ -250,6 +250,7 @@ export async function removeStudySessionIfMatches(
 export async function updateCardFieldValuesInSessions(
   cardId: string,
   newFieldValues: Record<string, string>,
+  options?: { noteId?: string | null },
 ) {
   try {
     const keys: string[] = []
@@ -278,7 +279,7 @@ export async function updateCardFieldValuesInSessions(
       let updated = false
       const snapshot = session.snapshot
       for (const card of snapshot.cards) {
-        if (card.card_id === cardId) {
+        if (card.card_id === cardId || (options?.noteId && card.note_id === options.noteId)) {
           const contentKey = card.content_key
           if (snapshot.contents[contentKey]) {
             snapshot.contents[contentKey] = {
@@ -294,6 +295,31 @@ export async function updateCardFieldValuesInSessions(
       }
       if (updated) {
         await saveStudySession(session)
+      }
+    }
+
+    // Broadcast synchronization event to any active study sessions (in current window & across tabs)
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('flama_study_card_updated', {
+          detail: {
+            cardId,
+            noteId: options?.noteId || null,
+            fieldValues: newFieldValues,
+          },
+        }),
+      )
+      try {
+        const channel = new BroadcastChannel('flama_study_sync_channel')
+        channel.postMessage({
+          type: 'CARD_UPDATED',
+          cardId,
+          noteId: options?.noteId || null,
+          fieldValues: newFieldValues,
+        })
+        channel.close()
+      } catch {
+        // BroadcastChannel unavailable
       }
     }
   } catch {

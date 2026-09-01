@@ -139,6 +139,38 @@ def browse_card_delete(card_id: str):
     return jsonify(payload)
 
 
+@browse_bp.post("/cards/batch-delete")
+@login_required
+def browse_cards_batch_delete():
+    user_id, admin_mode, _timezone_name = _context()
+    data = request.get_json(silent=True)
+    if data is None:
+        data = {}
+    try:
+        if not isinstance(data, dict):
+            raise browse_card_service.BrowseApiError(
+                "Payload must be a JSON object.",
+                status=400,
+                code="VALIDATION_ERROR",
+            )
+        card_ids = data.get("card_ids") or []
+        if not isinstance(card_ids, list):
+            raise browse_card_service.BrowseApiError(
+                "card_ids must be a list.",
+                status=400,
+                field="card_ids",
+                code="VALIDATION_ERROR",
+            )
+        payload = browse_card_service.delete_browse_cards_batch(
+            user_id=user_id,
+            admin_mode=admin_mode,
+            card_ids=card_ids,
+        )
+    except browse_card_service.BrowseApiError as exc:
+        return _browse_error(exc)
+    return jsonify(payload)
+
+
 @browse_bp.get("/notes")
 @login_required
 def browse_notes():

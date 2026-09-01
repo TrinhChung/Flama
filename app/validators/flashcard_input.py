@@ -14,8 +14,11 @@ from werkzeug.datastructures import FileStorage
 from werkzeug.utils import secure_filename
 
 from app.services.flashcard_renderer import is_field_empty, sanitize_richtext
+from app.services.media_field_codec import (
+    MediaFieldValueError,
+    normalize_media_field_for_write,
+)
 
-MEDIA_ALLOWED_PREFIX = "/media/proxy/"
 MAX_TEXT_FIELD_LENGTH = 5_000
 MAX_RICHTEXT_LENGTH = 20_000
 MAX_MARKDOWN_LENGTH = 20_000
@@ -34,10 +37,6 @@ _SVG_DOCTYPE_RE = re.compile(r"(?is)<!DOCTYPE|<!ENTITY")
 _SVG_DANGEROUS_STYLE_RE = re.compile(r"(?i)(?:expression\s*\(|url\s*\(\s*['\"]?\s*javascript\s*:)")
 _SVG_URL_FUNCTION_RE = re.compile(r"(?is)url\s*\(\s*(['\"]?)(.*?)\1\s*\)")
 _SVG_IMPORT_RE = re.compile(r"(?i)@import\b")
-_ASSET_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$")
-_PROXY_MEDIA_URL_RE = re.compile(r"^/media/proxy/([A-Za-z0-9][A-Za-z0-9_-]{0,127})$")
-_MEDIA_FILENAME_RE = re.compile(r"^[\w][\w_.-]{0,254}$")
-_SOUND_TAG_RE = re.compile(r"^\[sound:([\w][\w_.-]{0,254})\]$")
 _SAFE_TIMEZONE_RE = re.compile(r"^[A-Za-z0-9_+/\-]{1,64}$")
 _CONTROL_CHAR_RE = re.compile(r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]")
 _DANGEROUS_SVG_ELEMENTS = {"script", "iframe", "object", "embed", "foreignobject", "link", "meta"}
@@ -379,65 +378,22 @@ def _clean_media_reference(
     raw_value: Any,
     *,
     field_name: str,
-    note_media_ids: set[str] | None,
+    note_media_ids: Any,
+    field_type: str = "audio",
 ) -> str:
     candidate = _normalize_text_input(raw_value)
-    if not candidate:
-        return ""
-
-    url_match = _PROXY_MEDIA_URL_RE.match(candidate)
-    if url_match:
-        asset_id = url_match.group(1)
-        if note_media_ids is not None and asset_id not in note_media_ids and candidate not in note_media_ids:
-            raise RequestValidationError(
-                f"Field '{field_name}' references media not attached to this note.",
-                field=field_name,
-            )
-        return f"{MEDIA_ALLOWED_PREFIX}{asset_id}"
-
-    sound_match = _SOUND_TAG_RE.match(candidate)
-    if sound_match:
-        filename = sound_match.group(1)
-        normalized_sound = f"[sound:{filename}]"
-        if (
-            note_media_ids is not None
-            and filename not in note_media_ids
-            and normalized_sound not in note_media_ids
-        ):
-            raise RequestValidationError(
-                f"Field '{field_name}' references media not attached to this note.",
-                field=field_name,
-            )
-        return normalized_sound
-
-    if _MEDIA_FILENAME_RE.match(candidate):
-        if (
-            note_media_ids is not None
-            and candidate not in note_media_ids
-            and f"[sound:{candidate}]" not in note_media_ids
-        ):
-            raise RequestValidationError(
-                f"Field '{field_name}' references media not attached to this note.",
-                field=field_name,
-            )
-        return candidate
-
-    if _ASSET_ID_RE.match(candidate):
-        if (
-            note_media_ids is not None
-            and candidate not in note_media_ids
-            and f"{MEDIA_ALLOWED_PREFIX}{candidate}" not in note_media_ids
-        ):
-            raise RequestValidationError(
-                f"Field '{field_name}' references media not attached to this note.",
-                field=field_name,
-            )
-        return candidate
-
-    raise RequestValidationError(
-        f"Field '{field_name}' contains invalid media reference.",
-        field=field_name,
-    )
+    try:
+        return normalize_media_field_for_write(
+            candidate,
+            field_type=field_type,
+            reference_lookup=note_media_ids,
+        )
+    except MediaFieldValueError as exc:
+        raise RequestValidationError(
+            str(exc),
+            field=field_name,
+            code="INVALID_MEDIA_REFERENCE",
+        ) from exc
 
 
 def _assert_required_fields(
@@ -463,7 +419,7 @@ def clean_note_field_values(
     raw_field_values: Any,
     partial: bool,
     current_values: dict[str, Any] | None = None,
-    note_media_ids: set[str] | None = None,
+    note_media_ids: Any = None,
     allow_missing_media: bool = False,
 ) -> tuple[dict[str, str], dict[str, str]]:
     if raw_field_values is None:
@@ -515,6 +471,7 @@ def clean_note_field_values(
                 raw_value,
                 field_name=field_name,
                 note_media_ids=note_media_ids,
+                field_type=field_type,
             )
         else:
             cleaned_value = sanitize_plain_text(raw_value, field_name=field_name)
@@ -539,7 +496,7 @@ def validate_note_create_request(
     *,
     note_type: Any,
     payload: dict[str, Any] | None,
-    note_media_ids: set[str] | None = None,
+    note_media_ids: Any = None,
     allow_missing_media: bool = False,
 ) -> NoteMutationInput:
     body = _payload_dict(payload)
@@ -570,7 +527,7 @@ def validate_note_patch_request(
     note_type: Any,
     payload: dict[str, Any] | None,
     current_values: dict[str, Any] | None,
-    note_media_ids: set[str] | None,
+    note_media_ids: Any,
 ) -> NoteMutationInput:
     body = _payload_dict(payload)
     _reject_forbidden_keys(body, {"id", "user_id", "created_at", "updated_at", "note_type_id"})
@@ -612,7 +569,7 @@ def validate_study_card_edit_request(
     note_type: Any,
     payload: dict[str, Any] | None,
     current_values: dict[str, Any] | None,
-    note_media_ids: set[str],
+    note_media_ids: Any,
 ) -> NoteMutationInput:
     body = _payload_dict(payload)
     _validate_allowed_keys(body, {"field_values", "deck_id", "tags", "render_contract"})
@@ -653,7 +610,7 @@ def validate_browse_card_update_request(
     note_type: Any,
     payload: dict[str, Any] | None,
     current_values: dict[str, Any] | None,
-    note_media_ids: set[str] | None,
+    note_media_ids: Any,
 ) -> NoteMutationInput:
     body = _payload_dict(payload)
     _validate_allowed_keys(body, {"field_values", "fields", "deck_id", "tags"})
@@ -698,7 +655,7 @@ def validate_legacy_browse_note_update_request(
     note_type: Any,
     payload: dict[str, Any] | None,
     current_values: dict[str, Any] | None,
-    note_media_ids: set[str] | None,
+    note_media_ids: Any,
 ) -> dict[str, str]:
     body = _payload_dict(payload)
     _validate_allowed_keys(body, {"fields"})

@@ -8,6 +8,7 @@ import { StudyBottomBar } from '../components/StudyBottomBar'
 import { StudyCompletionCard } from '../components/StudyCompletionCard'
 import { StudySessionConflict } from '../components/StudySessionConflict'
 import { StudyWaitingCard } from '../components/StudyWaitingCard'
+import { StudyScopeErrorCard } from '../components/StudyScopeErrorCard'
 import { StudyQuickEditDialog } from '../components/StudyQuickEditDialog'
 import { useStudySession } from '../hooks/useStudySession'
 import { isBackgroundRolloverCommit } from '../session/studySessionEngine'
@@ -239,44 +240,11 @@ export function StudyPage() {
       }
     }
 
-    const handleHostCommand = (event: Event) => {
-      const detail = (event as CustomEvent<{ command: string }>).detail
-      if (!detail?.command) return
-      const cmd = detail.command
-
-      if (cmd === 'undo') {
-        void handleUndo()
-        return
-      }
-      if (cmd === 'toggle_fullscreen') {
-        handleToggleFullscreen()
-        return
-      }
-      if (cmd === 'reveal_or_good') {
-        if (!card?.card_id) return
-        if (!revealed) handleReveal()
-        else void handleAnswer('good')
-        return
-      }
-      if (!revealed) return
-      const commandRatingMap: Record<string, ReviewRating> = {
-        rate_again: 'again', rate_hard: 'hard',
-        rate_good: 'good', rate_easy: 'easy',
-      }
-      const rating = commandRatingMap[cmd]
-      if (rating) {
-        resolveReviewAction(rating)
-        void handleAnswer(rating)
-      }
-    }
-
     window.addEventListener('keydown', handleKeyDown)
     window.addEventListener('focus', handleFocusBack)
-    window.addEventListener('flama:host-command', handleHostCommand)
     return () => {
       window.removeEventListener('keydown', handleKeyDown)
       window.removeEventListener('focus', handleFocusBack)
-      window.removeEventListener('flama:host-command', handleHostCommand)
     }
   }, [
     card?.card_id,
@@ -327,8 +295,12 @@ export function StudyPage() {
 
   if (study.error && !study.session) {
     return (
-      <div className="h-screen h-[100dvh] w-full flex items-center justify-center p-6">
-        <PageError error={study.error} />
+      <div className="h-screen h-[100dvh] w-full flex items-center justify-center p-4 sm:p-6 overflow-y-auto bg-background text-foreground">
+        <StudyScopeErrorCard
+          error={study.error}
+          deckName={deckName}
+          deckId={deckIdRaw}
+        />
       </div>
     )
   }

@@ -6,10 +6,10 @@ import {
   Copy,
   FileText,
   HelpCircle,
+  Info,
   List,
   Printer,
   Shield,
-  Sparkles,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
@@ -114,9 +114,9 @@ function LegalPage({
         </h1>
 
         {/* Editorial Summary Callout (Clean subtle border & warm backdrop) */}
-        <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3.5 sm:px-5 sm:py-4">
-          <div className="mb-1 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-primary">
-            <Sparkles className="size-3.5" /> Tóm tắt cốt lõi
+        <div className="rounded-xl border border-border/80 bg-muted/30 px-4 py-3.5 sm:px-5 sm:py-4">
+          <div className="mb-1 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+            <Info className="size-3.5" /> Tóm tắt cốt lõi
           </div>
           <p className="text-sm sm:text-base leading-relaxed text-foreground/90 font-medium">
             {summary}

@@ -111,9 +111,9 @@ class StudyArtifactServiceTest(unittest.TestCase):
         self.assertEqual(context.template.back_html, original_template)
         self.assertEqual(context.note.field_values, original_values)
         self.assertEqual(template_artifact["renderer_abi"], "flama-client-mustache.v2")
-        self.assertIn('src="{{word_audio}}"', template_artifact["back_source"])
+        self.assertIn('src="{{word_audio_url}}"', template_artifact["back_source"])
         self.assertEqual(
-            content_artifact["render_context"]["word_audio"],
+            content_artifact["render_context"]["word_audio_url"],
             "/media/proxy/audio-1",
         )
         self.assertEqual(

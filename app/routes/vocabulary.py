@@ -340,6 +340,26 @@ def browse_api_card_delete(card_id: str):
         return jsonify({"error": str(exc)}), exc.status
     return jsonify(payload)
 
+
+@vocabulary_bp.route("/api/browse/cards/batch-delete", methods=["POST"])
+@login_required
+def browse_api_cards_batch_delete():
+    """Batch delete multiple cards atomically."""
+    from app.services import browse_card_service
+
+    data = request.get_json(silent=True) or {}
+    card_ids = data.get("card_ids") or []
+    try:
+        payload = browse_card_service.delete_browse_cards_batch(
+            user_id=current_user.id,
+            admin_mode=is_admin_user(current_user),
+            card_ids=card_ids,
+        )
+    except browse_card_service.BrowseApiError as exc:
+        return jsonify({"error": str(exc)}), exc.status
+    return jsonify(payload)
+
+
 @vocabulary_bp.route("/api/browse/notes", methods=["GET"])
 @login_required
 def browse_api_notes():
@@ -589,52 +609,11 @@ def reset_deck(deck_id: int):
         return redirect(url_for("main.dashboard"))
 
     next_url = _resolve_next_url()
-
-    deck_ids = _collect_deck_subtree_ids(deck.id)
-
-    card_id_set = {
-        str(row[0])
-        for row in (
-            db.session.query(Card.id)
-            .join(Note, Card.note_id == Note.id)
-            .filter(Note.deck_id.in_(deck_ids))
-            .all()
-        )
-        if row and row[0]
-    }
-
-    # For logical-overlay installs, reset progress on source cards visible in this local scope.
-    from app.services import flashcards_share as share_ctrl
-
-    seen_scopes: set[tuple[str, int]] = set()
-    for local_deck_id in sorted({int(deck_id_item) for deck_id_item in deck_ids if deck_id_item is not None}):
-        clone_scope = share_ctrl.resolve_clone_scope_for_local_deck(
-            user_id=current_user.id,
-            local_deck_id=local_deck_id,
-        )
-        if clone_scope is None:
-            continue
-        scope_key = (clone_scope.install.id, int(clone_scope.local_scope_deck_id))
-        if scope_key in seen_scopes:
-            continue
-        seen_scopes.add(scope_key)
-
-        clone_card_rows = share_ctrl.query_clone_scope_cards(clone_scope).with_entities(Card.id).all()
-        for row in clone_card_rows:
-            if row and row[0]:
-                card_id_set.add(str(row[0]))
-
-    card_ids = sorted(card_id_set)
-
-    if card_ids:
-        deleted_count = (
-            CardProgress.query.filter(
-                CardProgress.user_id == current_user.id,
-                CardProgress.card_id.in_(card_ids),
-            ).delete(synchronize_session=False)
-            or 0
-        )
-        db.session.commit()
+    deleted_count = deck_management_service.reset_deck_progress(
+        deck_obj=deck,
+        user_id=current_user.id,
+    )
+    if deleted_count:
         flash(f"Reset progress for {deleted_count} cards in '{deck.name}' (your account).", "success")
     else:
         flash(f"No cards to reset in '{deck.name}'.", "info")

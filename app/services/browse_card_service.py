@@ -178,7 +178,9 @@ def build_browse_decks(
                 {
                     "id": node["id"],
                     "name": node["name"],
+                    "path": node.get("path") or node["name"],
                     "parent_id": node["parent_id"],
+                    "note_type_id": node.get("note_type_id"),
                     "counts": node.get("counts", {}),
                 }
             )
@@ -776,11 +778,19 @@ def delete_browse_card(
     admin_mode: bool,
     card_id: str,
 ) -> dict[str, bool]:
-    query = Card.query.join(Note, Card.note_id == Note.id).filter(Card.id == card_id)
+    clean_card_id = str(card_id).strip()
+    query = Card.query.join(Note, Card.note_id == Note.id).filter(Card.id == clean_card_id)
     if not admin_mode:
         query = query.filter(Note.user_id == user_id)
     card_obj = query.first()
     if not card_obj:
+        existing_card = Card.query.filter(Card.id == clean_card_id).first()
+        if existing_card is not None and not admin_mode:
+            raise BrowseApiError(
+                "Không thể xóa thẻ thuộc bộ bài gốc được chia sẻ/clone. Bộ bài gốc được bảo vệ để không ảnh hưởng đến tác giả và những người học khác.",
+                status=403,
+                code="SHARED_SOURCE_CARD_PROTECTED",
+            )
         raise BrowseApiError("Card not found", status=404)
 
     from app.services import deck_working_tree_service
@@ -812,6 +822,77 @@ def delete_browse_card(
             db.session.delete(note_obj)
     db.session.commit()
     return {"success": True}
+
+
+def delete_browse_cards_batch(
+    *,
+    user_id: int,
+    admin_mode: bool,
+    card_ids: list[str],
+) -> dict[str, Any]:
+    if not card_ids:
+        return {"success": True, "deleted_count": 0}
+
+    from app.services import deck_working_tree_service
+
+    clean_card_ids = [str(cid).strip() for cid in card_ids if str(cid).strip()]
+    if not clean_card_ids:
+        return {"success": True, "deleted_count": 0}
+
+    query = (
+        Card.query.join(Note, Card.note_id == Note.id)
+        .filter(Card.id.in_(clean_card_ids))
+    )
+    if not admin_mode:
+        query = query.filter(Note.user_id == user_id)
+
+    cards_to_delete = query.all()
+    if not cards_to_delete:
+        existing_cards = Card.query.filter(Card.id.in_(clean_card_ids)).all()
+        if existing_cards and not admin_mode:
+            raise BrowseApiError(
+                "Không thể xóa các thẻ thuộc bộ bài gốc được chia sẻ/clone. Bộ bài gốc được bảo vệ để không ảnh hưởng đến tác giả và những người học khác.",
+                status=403,
+                code="SHARED_SOURCE_CARD_PROTECTED",
+            )
+        return {"success": True, "deleted_count": 0}
+
+    # Verify none of the deleted cards have shared release dependents
+    for card_obj in cards_to_delete:
+        if card_obj.note is not None and deck_working_tree_service.note_has_shared_release_dependents(
+            card_obj.note
+        ):
+            raise BrowseApiError(
+                "Published shared cards cannot be hard-deleted because learner history must be preserved.",
+                status=409,
+                code="SHARED_ENTITY_RETIRE_REQUIRED",
+            )
+
+    note_ids = {card_obj.note_id for card_obj in cards_to_delete if card_obj.note_id}
+    deleted_count = len(cards_to_delete)
+
+    for card_obj in cards_to_delete:
+        db.session.delete(card_obj)
+    db.session.flush()
+
+    for note_id in note_ids:
+        remaining_cards_count = Card.query.filter(Card.note_id == note_id).count()
+        if remaining_cards_count == 0:
+            note_obj = db.session.get(Note, note_id)
+            if note_obj:
+                deck_working_tree_service.mark_note_field_batches_changed(
+                    mutations=[
+                        {
+                            "note": note_obj,
+                            "field_names": (note_obj.field_values or {}).keys(),
+                            "operation": "remove",
+                        }
+                    ],
+                )
+                db.session.delete(note_obj)
+
+    db.session.commit()
+    return {"success": True, "deleted_count": deleted_count}
 
 
 def build_legacy_notes_payload(cards_payload: dict[str, Any]) -> dict[str, Any]:
@@ -1110,20 +1191,12 @@ def _clone_scope_deck_lookup(*, user_id: int, clone_scope) -> dict[int, str]:
     return deck_lookup
 
 
-def _collect_note_media_refs(note_obj) -> set[str]:
-    refs: set[str] = set()
+def _collect_note_media_refs(note_obj):
+    from app.services.media_field_codec import build_media_reference_lookup
+
     if note_obj is None:
-        return refs
-    for asset in note_obj.media_assets or []:
-        asset_id = str(getattr(asset, "id", "") or "").strip()
-        if asset_id:
-            refs.add(asset_id)
-            refs.add(f"/media/proxy/{asset_id}")
-        filename = str(getattr(asset, "filename", "") or "").strip()
-        if filename:
-            refs.add(filename)
-            refs.add(f"[sound:{filename}]")
-    return refs
+        return {}
+    return build_media_reference_lookup(note_obj.media_assets or [])
 
 
 def _normalize_tags_payload(raw_tags: object) -> list[str]:

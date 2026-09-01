@@ -1,10 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import {
-  ArrowLeft,
+  faArrowLeft,
+  faCode,
+  faPlus,
+} from '@fortawesome/free-solid-svg-icons'
+import {
   Check,
   ChevronDown,
   ChevronUp,
-  Code2,
   GripVertical,
   Info,
   LoaderCircle,
@@ -209,14 +213,14 @@ export function NoteTypeFieldsPage() {
         description="Quản lý và sắp xếp thứ tự các trường thông tin trong NoteType."
         actions={
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" asChild className="h-8 sm:h-9 px-3 text-xs font-semibold rounded-xl">
+            <Button variant="outline" size="sm" asChild className="h-8 sm:h-9 px-3 text-xs font-semibold rounded-xl gap-1.5">
               <Link to="/flashcards/note-types">
-                <ArrowLeft className="size-3.5 mr-1.5" /> Quay lại
+                <FontAwesomeIcon icon={faArrowLeft} className="text-xs" /> Quay lại
               </Link>
             </Button>
-            <Button variant="outline" size="sm" asChild className="h-8 sm:h-9 px-3 text-xs font-semibold rounded-xl">
+            <Button variant="outline" size="sm" asChild className="h-8 sm:h-9 px-3 text-xs font-semibold rounded-xl gap-1.5">
               <Link to={`/flashcards/note-types/${noteTypeId}`}>
-                <Code2 className="size-3.5 mr-1.5" /> Sửa template
+                <FontAwesomeIcon icon={faCode} className="text-xs" /> Sửa template
               </Link>
             </Button>
           </div>
@@ -232,7 +236,7 @@ export function NoteTypeFieldsPage() {
               <Button
                 size="sm"
                 variant="outline"
-                className="h-8 px-2.5 text-xs font-semibold rounded-xl"
+                className="h-8 px-2.5 text-xs font-semibold rounded-xl gap-1.5"
                 onClick={() => {
                   setIsAddingField(true)
                   setSelectedFieldId(null)
@@ -241,7 +245,7 @@ export function NoteTypeFieldsPage() {
                   scrollToFormOnMobile()
                 }}
               >
-                <Plus className="size-3.5 mr-1" /> Thêm
+                <FontAwesomeIcon icon={faPlus} className="text-xs" /> Thêm
               </Button>
             </CardHeader>
             <CardContent className="p-4 sm:p-5 pt-0 flex-1 space-y-3">

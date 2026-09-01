@@ -4,7 +4,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { NativeSelect } from '@/components/ui/native-select'
 import { DeckSelectionTreeView } from '../components/DeckSelectionTreeView'
-import { Sparkles, Layers } from 'lucide-react'
+import { Check, Layers } from 'lucide-react'
 import type { useFileImportWizard } from '../hooks/useFileImportWizard'
 
 interface ImportOptionsStepProps {
@@ -29,7 +29,7 @@ export function ImportOptionsStep({ wizard }: ImportOptionsStepProps) {
     <Card className="border-border/80 shadow-sm rounded-2xl overflow-hidden">
       <CardHeader className="pb-3 border-b bg-card/50">
         <CardTitle className="text-sm font-semibold flex items-center gap-2">
-          <Layers className="size-4 text-primary" />
+          <Layers className="size-4 text-foreground/80" />
           Cấu hình Deck &amp; Loại Note
         </CardTitle>
         <CardDescription className="text-xs">
@@ -53,8 +53,8 @@ export function ImportOptionsStep({ wizard }: ImportOptionsStepProps) {
                 Loại note
               </Label>
               {autoSelectBadge && (
-                <Badge variant="outline" className="bg-primary/5 text-primary border-primary/20 text-[11px] font-medium gap-1">
-                  <Sparkles className="size-3" /> Tự động khớp theo deck
+                <Badge variant="outline" className="bg-muted text-muted-foreground border-border/80 text-[11px] font-medium gap-1">
+                  <Check className="size-3" /> Tự động khớp theo deck
                 </Badge>
               )}
             </div>

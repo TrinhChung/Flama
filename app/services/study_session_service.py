@@ -14,15 +14,14 @@ from uuid import UUID, uuid4
 from sqlalchemy.exc import IntegrityError
 
 from app.repositories.study_repository import (
-    apply_card_state_to_progress,
     card_state_from_progress,
     is_progress_suspended,
     load_card_progress_map,
 )
 from app.services import (
-    deck_working_tree_service,
     flashcards_share_service,
     study_artifact_service,
+    study_service,
 )
 from app.services.anki_scheduler import (
     CardState,
@@ -35,7 +34,6 @@ from app.services.anki_scheduler import (
 from app.services.study_action_runtime import (
     REVIEW_RATINGS,
     ReviewTransitionResult,
-    execute_review_action,
     resolve_review_action,
 )
 from app.services.study_algorithm_registry import (
@@ -47,7 +45,7 @@ from app.services.scheduler_config_service import (
     resolve_deck_options,
     resolve_scheduler_runtime_settings,
 )
-from app.services.stats_overview import normalize_review_mode, record_review_event
+from app.services.study_policy_service import build_scheduler_policy
 from models import db
 from models.audit_log import AuditLog
 from models.card import Card
@@ -276,64 +274,6 @@ def _states_match_for_commit(
     return submitted == authoritative
 
 
-def serialize_deck_options(options: DeckOptions) -> dict[str, Any]:
-    fsrs_states = options.fsrsNextStates
-
-    def _serialize_fsrs_state(state: FsrsAnswerState | None):
-        if state is None:
-            return None
-        return {
-            "interval_days": float(state.intervalDays),
-            "memory": (
-                {
-                    "stability": float(state.memory.stability),
-                    "difficulty": float(state.memory.difficulty),
-                }
-                if state.memory is not None
-                else None
-            ),
-        }
-
-    return {
-        "learning_steps_ms": [
-            int(step.total_seconds() * 1000) for step in options.learningSteps
-        ],
-        "graduating_interval_days": int(options.graduatingIntervalDays),
-        "easy_interval_days": int(options.easyIntervalDays),
-        "relearning_steps_ms": [
-            int(step.total_seconds() * 1000) for step in options.relearningSteps
-        ],
-        "minimum_interval_days": int(options.minimumIntervalDays),
-        "starting_ease": float(options.startingEase),
-        "easy_bonus": float(options.easyBonus),
-        "interval_modifier": float(options.intervalModifier),
-        "hard_factor": float(options.hardFactor),
-        "new_interval_factor": float(options.newIntervalFactor),
-        "min_ease": float(options.minEase),
-        "max_interval_days": int(options.maxIntervalDays),
-        "day_boundary_hour_local": int(options.dayBoundaryHourLocal),
-        "learn_ahead_seconds": int(options.learnAheadSeconds),
-        "leech_threshold": int(options.leechThreshold),
-        "leech_suspend": bool(options.leechSuspend),
-        "scheduler_mode": str(options.schedulerMode or "legacy"),
-        "review_fuzz_factor": (
-            float(options.reviewFuzzFactor)
-            if options.reviewFuzzFactor is not None
-            else None
-        ),
-        "fsrs_next_states": (
-            {
-                "again": _serialize_fsrs_state(fsrs_states.again),
-                "hard": _serialize_fsrs_state(fsrs_states.hard),
-                "good": _serialize_fsrs_state(fsrs_states.good),
-                "easy": _serialize_fsrs_state(fsrs_states.easy),
-            }
-            if fsrs_states is not None
-            else None
-        ),
-    }
-
-
 def deserialize_deck_options(payload: Any) -> DeckOptions:
     if not isinstance(payload, dict):
         raise StudySessionError(
@@ -420,29 +360,6 @@ def deserialize_deck_options(payload: Any) -> DeckOptions:
     )
 
 
-def _local_deck_id_for_card(
-    card: Card,
-    clone_scope: flashcards_share_service.CloneDeckScope | None,
-) -> int | None:
-    source_deck_id = getattr(card.note, "deck_id", None)
-    if clone_scope is None:
-        return int(source_deck_id) if source_deck_id is not None else None
-    if (
-        source_deck_id is not None
-        and int(source_deck_id) in set(clone_scope.local_deck_ids)
-        and flashcards_share_service.is_clone_added_note(
-            scope=clone_scope,
-            note_id=card.note.id,
-        )
-    ):
-        return int(source_deck_id)
-    if source_deck_id is not None:
-        mapped = clone_scope.source_to_local_deck_id.get(int(source_deck_id))
-        if mapped is not None:
-            return int(mapped)
-    return int(clone_scope.local_scope_deck_id)
-
-
 def open_study_session(
     *,
     user: Any,
@@ -492,7 +409,10 @@ def open_study_session(
 
     for ordinal, card in enumerate(cards):
         note = card.note
-        local_deck_id = _local_deck_id_for_card(card, clone_scope)
+        local_deck_id = study_service.resolve_effective_study_deck_id(
+            card=card,
+            clone_scope=clone_scope,
+        )
         local_deck = (
             db.session.get(Deck, local_deck_id)
             if local_deck_id is not None
@@ -503,19 +423,14 @@ def open_study_session(
             deck_id=local_deck_id,
             deck_obj=local_deck,
         )
-        config_payload = serialize_deck_options(options)
-        policy_material = {
-            "algorithm_key": SCHEDULER_ALGORITHM,
-            "algorithm_version": ALGORITHM_VERSION,
-            "config_schema_version": "scheduler-config.v1",
-            "timezone": timezone_name,
-            "config": config_payload,
-        }
-        policy_key = study_artifact_service.canonical_digest(policy_material)
+        policy = build_scheduler_policy(
+            options=options,
+            timezone_name=timezone_name,
+        )
+        policy_key = policy["config_hash"]
         if policy_key not in policies:
             policies[policy_key] = {
-                **policy_material,
-                "config_hash": policy_key,
+                **policy,
                 "preset_id": (
                     int(local_deck.scheduler_preset_id)
                     if local_deck is not None
@@ -697,38 +612,6 @@ def _validate_session_token(session: StudySession, raw_token: Any) -> None:
             "Study session token is invalid.",
             status=403,
         )
-
-
-def _compute_days_late(
-    state: CardState,
-    now: datetime,
-    timezone_name: str,
-    options: DeckOptions,
-) -> int | None:
-    if str(state.type).lower() != "review":
-        return None
-    current_day = _day_index(
-        now,
-        options.dayBoundaryHourLocal,
-        timezone_name=timezone_name,
-    )
-    due_day = state.dueDay
-    if due_day is None:
-        due_day = _day_index(
-            state.due or now,
-            options.dayBoundaryHourLocal,
-            timezone_name=timezone_name,
-        )
-    return int(current_day - int(due_day))
-
-
-def _normalized_duration(value: Any) -> int | None:
-    if value is None:
-        return None
-    try:
-        return max(0, min(60 * 60 * 1000, int(value)))
-    except (TypeError, ValueError):
-        return None
 
 
 def _idempotent_response(
@@ -1005,14 +888,16 @@ def commit_study_session(
                 status=422,
             )
         try:
-            transition = execute_review_action(
-                state=before,
-                options=options,
-                now=answer_at,
-                action=rating,
-                timezone_name=session.timezone,
-                algorithm_key=session.scheduler_algorithm,
-                algorithm_version=session.algorithm_version,
+            transition = study_service.execute_native_review_transition(
+                study_service.NativeReviewTransitionInput(
+                    state=before,
+                    deck_options=options,
+                    reviewed_at=answer_at,
+                    action=rating,
+                    timezone_name=session.timezone,
+                    algorithm_key=session.scheduler_algorithm,
+                    algorithm_version=session.algorithm_version,
+                )
             )
         except StudyAlgorithmNotFoundError as exc:
             raise StudySessionError(
@@ -1223,194 +1108,153 @@ def commit_study_session(
                     "A card moved outside the session scope.",
                     status=409,
                 )
-    for card_id in sorted(touched_ids):
-        if card_id not in card_rows:
-            raise StudySessionError(
-                "CARD_OUTSIDE_SESSION",
-                f"Card {card_id} no longer exists.",
-                status=409,
-            )
-        progress = progress_map.get(card_id)
-        if progress is not None and is_progress_suspended(progress):
-            raise StudySessionError(
-                "CARD_SUSPENDED",
-                f"Card {card_id} is suspended.",
-                status=409,
-            )
-        if progress is None:
-            progress = CardProgress(
-                user_id=int(user.id),
-                card_id=card_id,
-                revision=0,
-            )
-            db.session.add(progress)
-            progress_map[card_id] = progress
-
-    last_review_event_by_card: dict[str, Any] = {}
-    rating_counts = {rating: 0 for rating in sorted(VALID_RATINGS)}
-    for (
-        raw_event,
-        session_card,
-        before,
-        after,
-        answer_at,
-        options,
-        transition,
-    ) in replayed_events:
-        card = card_rows[session_card.card_id]
-        rating = str(raw_event["rating"]).lower()
-        rating_counts[rating] += 1
-        event_payload = dict(raw_event)
-        event_payload["_study_runtime"] = {
-            **transition.metadata(),
-            "scheduler_config_hash": session_card.scheduler_config_hash,
-        }
-        review_event = record_review_event(
-            user_id=int(user.id),
-            card_id=session_card.card_id,
-            deck_id=session_card.local_deck_id,
-            note_type_id=session_card.note_type_id,
-            scheduler_preset_id=session_card.scheduler_preset_id,
-            scheduler_algorithm=transition.algorithm.key,
-            algorithm_version=transition.algorithm.version,
-            scheduler_config_hash=session_card.scheduler_config_hash,
-            reviewed_at=answer_at,
-            duration_ms=_normalized_duration(raw_event.get("duration_ms")),
-            rating=rating,
-            mode=normalize_review_mode(before.type),
-            scheduler_mode=str(after.schedulerMode or "legacy"),
-            review_kind=str(after.reviewKind or "review"),
-            queue_before=str(before.type),
-            queue_after=str(after.type),
-            interval_days_before=float(before.intervalDays or 0),
-            interval_days_after=float(after.intervalDays or 0),
-            due_day_before=before.dueDay,
-            due_day_after=after.dueDay,
-            days_late=_compute_days_late(
-                before,
-                answer_at,
-                session.timezone,
-                options,
-            ),
-            ease_factor_before=float(before.ease or 0),
-            ease_factor_after=float(after.ease or 0),
-            memory_stability_before=(
-                float(before.memoryState.stability)
-                if before.memoryState is not None
-                else None
-            ),
-            memory_stability_after=(
-                float(after.memoryState.stability)
-                if after.memoryState is not None
-                else None
-            ),
-            memory_difficulty_before=(
-                float(before.memoryState.difficulty)
-                if before.memoryState is not None
-                else None
-            ),
-            memory_difficulty_after=(
-                float(after.memoryState.difficulty)
-                if after.memoryState is not None
-                else None
-            ),
-            leeched_after=bool(after.leeched),
-            suspended_after=bool(after.suspended),
-            payload_json=_json_dumps(event_payload),
-        )
-        review_event.study_session_id = session.id
-        review_event.client_event_id = str(raw_event["event_id"])
-        review_event.sequence_no = int(raw_event["sequence"])
-        last_review_event_by_card[session_card.card_id] = review_event
-
-        if after.leeched and card.note.user_id == user.id:
-            tags = [
-                str(tag).strip()
-                for tag in (card.note.tags or [])
-                if str(tag).strip()
-            ]
-            if (
-                "leech" not in {tag.lower() for tag in tags}
-                and not deck_working_tree_service.note_has_shared_release_dependents(
-                    card.note
-                )
-            ):
-                card.note.tags = tags + ["leech"]
-        flashcards_share_service.touch_note_type_install_usage(
-            user_id=int(user.id),
-            installed_note_type_id=str(card.note.note_type_id),
-            activity_at=answer_at,
-        )
-        if session_card.local_deck_id is not None:
-            flashcards_share_service.touch_deck_install_usage(
-                user_id=int(user.id),
-                local_deck_id=int(session_card.local_deck_id),
-                activity_at=answer_at,
-            )
-
-    db.session.flush()
-    updated_cards = []
-    for card_id in sorted(touched_ids):
-        progress = progress_map[card_id]
-        last_event = last_review_event_by_card.get(card_id)
-        options = deserialize_deck_options(
-            policies[membership[card_id].scheduler_config_hash]["config"]
-        )
-        last_review_at = states[card_id].lastReviewAt or committed_at
-        apply_card_state_to_progress(
-            progress,
-            states[card_id],
-            last_review_at,
-            timezone_name=session.timezone,
-            options=options,
-        )
-        progress.revision = int(membership[card_id].base_progress_revision or 0) + 1
-        if last_event is not None and last_event.id is not None:
-            progress.last_review_event_id = int(last_event.id)
-        updated_cards.append(
-            {
-                "card_id": card_id,
-                "revision": int(progress.revision),
-                "state": serialize_card_state(states[card_id]),
-            }
-        )
-
-    response = {
-        "schema_version": "study-commit-receipt.v1",
-        "success": True,
-        "session_id": session.id,
-        "commit_id": commit_key,
-        "commit_reason": commit_reason,
-        "applied_event_count": len(replayed_events),
-        "updated_cards": updated_cards,
-        "rating_counts": rating_counts,
-        "committed_at": _utc_iso(committed_at),
-    }
-    session.status = "committed"
-    session.committed_at = committed_at
-    commit_row = StudySessionCommit(
-        session_id=session.id,
-        user_id=int(user.id),
-        idempotency_key=commit_key,
-        request_hash=payload_hash,
-        response_json=_json_dumps(response),
-    )
-    db.session.add(commit_row)
-    db.session.add(
-        AuditLog(
-            user_id=int(user.id),
-            action="study.session.commit",
-            payload={
-                "session_id": session.id,
-                "scope_type": session.scope_type,
-                "scope_id": session.scope_id,
-                "event_count": len(replayed_events),
-                "card_count": len(touched_ids),
-                "commit_reason": commit_reason,
-            },
-        )
-    )
     try:
+        created_progress_ids: list[str] = []
+        for card_id in sorted(touched_ids):
+            if card_id not in card_rows:
+                raise StudySessionError(
+                    "CARD_OUTSIDE_SESSION",
+                    f"Card {card_id} no longer exists.",
+                    status=409,
+                )
+            progress = progress_map.get(card_id)
+            if progress is not None and is_progress_suspended(progress):
+                raise StudySessionError(
+                    "CARD_SUSPENDED",
+                    f"Card {card_id} is suspended.",
+                    status=409,
+                )
+            if progress is None:
+                progress = CardProgress(
+                    user_id=int(user.id),
+                    card_id=card_id,
+                    revision=0,
+                )
+                db.session.add(progress)
+                progress_map[card_id] = progress
+                created_progress_ids.append(card_id)
+
+        if created_progress_ids:
+            try:
+                db.session.flush()
+            except IntegrityError as exc:
+                raise StudySessionError(
+                    "CARD_PROGRESS_CONFLICT",
+                    "Card progress changed while this study session was committing.",
+                    status=409,
+                    details=[
+                        {"card_id": card_id}
+                        for card_id in created_progress_ids
+                    ],
+                ) from exc
+
+        last_review_event_by_card: dict[str, Any] = {}
+        last_replay_index_by_card = {
+            session_card.card_id: index
+            for index, (_, session_card, *_rest) in enumerate(replayed_events)
+        }
+        rating_counts = {rating: 0 for rating in sorted(VALID_RATINGS)}
+        for replay_index, (
+            raw_event,
+            session_card,
+            before,
+            _after,
+            answer_at,
+            options,
+            transition,
+        ) in enumerate(replayed_events):
+            card = card_rows[session_card.card_id]
+            rating = str(raw_event["rating"]).lower()
+            rating_counts[rating] += 1
+            progress_input = None
+            if last_replay_index_by_card[session_card.card_id] == replay_index:
+                final_state = states[session_card.card_id]
+                progress_input = study_service.NativeReviewProgressInput(
+                    progress=progress_map[session_card.card_id],
+                    state=final_state,
+                    last_reviewed_at=final_state.lastReviewAt or committed_at,
+                    revision=(
+                        int(session_card.base_progress_revision or 0) + 1
+                    ),
+                )
+            mutation_result = study_service.apply_native_review_mutation(
+                study_service.NativeReviewMutationInput(
+                    user_id=int(user.id),
+                    card=card,
+                    current_state=before,
+                    transition=transition,
+                    reviewed_at=answer_at,
+                    duration_ms=study_service.normalize_review_duration(
+                        raw_event.get("duration_ms")
+                    ),
+                    payload=dict(raw_event),
+                    local_deck_id=session_card.local_deck_id,
+                    scheduler_preset_id=session_card.scheduler_preset_id,
+                    scheduler_config_hash=session_card.scheduler_config_hash,
+                    timezone_name=session.timezone,
+                    deck_options=options,
+                    note_type_id=session_card.note_type_id,
+                    provenance=study_service.NativeReviewProvenance(
+                        study_session_id=session.id,
+                        client_event_id=str(raw_event["event_id"]),
+                        sequence_no=int(raw_event["sequence"]),
+                    ),
+                    progress_input=progress_input,
+                )
+            )
+            review_event = mutation_result.review_event
+            last_review_event_by_card[session_card.card_id] = review_event
+
+        db.session.flush()
+        updated_cards = []
+        for card_id in sorted(touched_ids):
+            progress = progress_map[card_id]
+            last_event = last_review_event_by_card.get(card_id)
+            if last_event is not None and last_event.id is not None:
+                progress.last_review_event_id = int(last_event.id)
+            updated_cards.append(
+                {
+                    "card_id": card_id,
+                    "revision": int(progress.revision),
+                    "state": serialize_card_state(states[card_id]),
+                }
+            )
+
+        response = {
+            "schema_version": "study-commit-receipt.v1",
+            "success": True,
+            "session_id": session.id,
+            "commit_id": commit_key,
+            "commit_reason": commit_reason,
+            "applied_event_count": len(replayed_events),
+            "updated_cards": updated_cards,
+            "rating_counts": rating_counts,
+            "committed_at": _utc_iso(committed_at),
+        }
+        session.status = "committed"
+        session.committed_at = committed_at
+        commit_row = StudySessionCommit(
+            session_id=session.id,
+            user_id=int(user.id),
+            idempotency_key=commit_key,
+            request_hash=payload_hash,
+            response_json=_json_dumps(response),
+        )
+        db.session.add(commit_row)
+        db.session.add(
+            AuditLog(
+                user_id=int(user.id),
+                action="study.session.commit",
+                payload={
+                    "session_id": session.id,
+                    "scope_type": session.scope_type,
+                    "scope_id": session.scope_id,
+                    "event_count": len(replayed_events),
+                    "card_count": len(touched_ids),
+                    "commit_reason": commit_reason,
+                },
+            )
+        )
         db.session.commit()
     except IntegrityError:
         db.session.rollback()
@@ -1421,5 +1265,8 @@ def commit_study_session(
         )
         if replayed is not None:
             return replayed
+        raise
+    except Exception:
+        db.session.rollback()
         raise
     return response

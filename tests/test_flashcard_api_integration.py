@@ -10,6 +10,8 @@ from pathlib import Path
 from app import create_app
 from app.services import flashcards_share as share_ctrl
 from app.services import flashcards_share_service
+from app.services.share import cutover as cutover_service
+from app.services.share.helpers import ShareControllerError
 from app.services.anki_scheduler import _day_index, _day_index_to_datetime, default_deck_options
 from models import db
 from models.flashcard import (
@@ -412,7 +414,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         self.assertEqual(detail_response.status_code, 200)
         self.assertEqual(
             detail_response.get_json()["field_values"]["Audio"],
-            asset_id,
+            f"/media/proxy/{asset_id}",
         )
         self.assertEqual(
             self.client.get("/api/flashcards/import/options").status_code,
@@ -1965,6 +1967,245 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         self.assertIn("\u72ac", second_next_payload.get("rendered_front_html", ""))
         self.assertNotIn("\u732b", second_next_payload.get("rendered_front_html", ""))
 
+    def test_cutover_uses_per_install_savepoints_and_canonical_exports(self):
+        with self.app.app_context():
+            source_decks = [
+                Deck(name=f"Cutover Source {index}", owner_user_id=self.user_id)
+                for index in range(2)
+            ]
+            local_decks = [
+                Deck(name=f"Cutover Local {index}", owner_user_id=self.user_id)
+                for index in range(2)
+            ]
+            db.session.add_all([*source_decks, *local_decks])
+            db.session.flush()
+            items = [
+                DeckMarketplaceItem(
+                    owner_user_id=self.user_id,
+                    source_deck_id=source_decks[index].id,
+                    title=f"Cutover Item {index}",
+                    description="Cutover savepoint contract",
+                    primary_category="General",
+                    tags=[],
+                    pricing_mode="free",
+                    price_amount_minor=0,
+                    version="1.0.0",
+                    publish_status="private",
+                )
+                for index in range(2)
+            ]
+            db.session.add_all(items)
+            db.session.flush()
+            installs = [
+                DeckInstall(
+                    deck_item_id=items[index].id,
+                    user_id=self.user_id,
+                    local_deck_id=local_decks[index].id,
+                    source_deck_id=source_decks[index].id,
+                    source_owner_user_id=self.user_id,
+                    clone_mode="legacy_copy",
+                    installed_at=datetime.utcnow() + timedelta(seconds=index),
+                )
+                for index in range(2)
+            ]
+            db.session.add_all(installs)
+            db.session.commit()
+
+            self.assertIs(
+                share_ctrl.cutover_clone_model_to_overlay_only,
+                cutover_service.cutover_clone_model_to_overlay_only,
+            )
+            self.assertIs(
+                flashcards_share_service.cutover_clone_model_to_overlay_only,
+                cutover_service.cutover_clone_model_to_overlay_only,
+            )
+
+            calls = 0
+
+            def fake_migrate(_install):
+                nonlocal calls
+                calls += 1
+                if calls == 1:
+                    raise ShareControllerError("expected mismatch", status=409)
+                return {
+                    "deck_map_rows": 1,
+                    "note_pairs": 2,
+                    "note_overrides": 3,
+                    "progress_rows": 4,
+                }
+
+            with patch.object(
+                cutover_service,
+                "migrate_legacy_clone_install_to_overlay",
+                side_effect=fake_migrate,
+            ):
+                summary = cutover_service.cutover_clone_model_to_overlay_only(
+                    fail_on_mismatch=False
+                )
+            self.assertEqual(calls, 2)
+            self.assertEqual((summary["migrated"], summary["failed"]), (1, 1))
+            self.assertEqual(summary["progress_rows"], 4)
+            self.assertEqual(summary["errors"][0]["status"], 409)
+
+            with patch.object(
+                cutover_service,
+                "migrate_legacy_clone_install_to_overlay",
+                side_effect=ShareControllerError("strict mismatch", status=409),
+            ):
+                with self.assertRaises(ShareControllerError):
+                    cutover_service.cutover_clone_model_to_overlay_only(
+                        fail_on_mismatch=True
+                    )
+
+    def test_cutover_progress_rekey_and_merge_revision_contract(self):
+        with self.app.app_context():
+            note_type = NoteType(user_id=self.user_id, name="Cutover Progress Contract")
+            template = Template(
+                note_type=note_type,
+                name="Card 1",
+                front_html="{{Word}}",
+                back_html="{{Word}}",
+                position=0,
+                is_default=True,
+            )
+            notes = [
+                Note(
+                    note_type=note_type,
+                    user_id=self.user_id,
+                    deck_id=self.deck_id,
+                    field_values={"Word": f"card-{index}"},
+                )
+                for index in range(7)
+            ]
+            cards = [Card(note=note, template=template) for note in notes]
+            db.session.add_all([note_type, template, *notes, *cards])
+            db.session.flush()
+
+            now = datetime.utcnow()
+            local_only = CardProgress(
+                user_id=self.user_id,
+                card_id=cards[0].id,
+                queue="learning",
+                interval_days=5,
+                reps=3,
+                revision=5,
+                updated_at=now,
+            )
+            local_newer = CardProgress(
+                user_id=self.user_id,
+                card_id=cards[2].id,
+                queue="review",
+                interval_days=20,
+                reps=5,
+                lapses=2,
+                revision=7,
+                updated_at=now,
+            )
+            source_older = CardProgress(
+                user_id=self.user_id,
+                card_id=cards[3].id,
+                queue="learning",
+                interval_days=2,
+                reps=9,
+                lapses=1,
+                revision=10,
+                updated_at=now - timedelta(days=1),
+            )
+            local_older = CardProgress(
+                user_id=self.user_id,
+                card_id=cards[4].id,
+                queue="learning",
+                interval_days=4,
+                reps=12,
+                lapses=1,
+                revision=4,
+                updated_at=now - timedelta(days=2),
+            )
+            source_newer = CardProgress(
+                user_id=self.user_id,
+                card_id=cards[5].id,
+                queue="review",
+                interval_days=30,
+                reps=8,
+                lapses=3,
+                revision=6,
+                updated_at=now,
+            )
+            db.session.add_all(
+                [local_only, local_newer, source_older, local_older, source_newer]
+            )
+            db.session.commit()
+
+            self.assertEqual(
+                cutover_service._merge_card_progress_rows_for_cutover(
+                    user_id=self.user_id,
+                    local_card_id=cards[0].id,
+                    source_card_id=cards[1].id,
+                ),
+                1,
+            )
+            self.assertEqual(
+                cutover_service._merge_card_progress_rows_for_cutover(
+                    user_id=self.user_id,
+                    local_card_id=cards[6].id,
+                    source_card_id=cards[1].id,
+                ),
+                0,
+            )
+            self.assertEqual(
+                cutover_service._merge_card_progress_rows_for_cutover(
+                    user_id=self.user_id,
+                    local_card_id=cards[2].id,
+                    source_card_id=cards[3].id,
+                ),
+                1,
+            )
+            self.assertEqual(
+                cutover_service._merge_card_progress_rows_for_cutover(
+                    user_id=self.user_id,
+                    local_card_id=cards[4].id,
+                    source_card_id=cards[5].id,
+                ),
+                1,
+            )
+            db.session.flush()
+
+            rekeyed = CardProgress.query.filter_by(
+                user_id=self.user_id,
+                card_id=cards[1].id,
+            ).one()
+            self.assertEqual((rekeyed.queue, rekeyed.interval_days, rekeyed.revision), ("learning", 5, 6))
+
+            local_won = CardProgress.query.filter_by(
+                user_id=self.user_id,
+                card_id=cards[3].id,
+            ).one()
+            self.assertEqual(local_won.queue, "review")
+            self.assertEqual(local_won.interval_days, 20)
+            self.assertEqual((local_won.reps, local_won.lapses), (9, 2))
+            self.assertEqual(int(local_won.revision or 0), 11)
+
+            source_won = CardProgress.query.filter_by(
+                user_id=self.user_id,
+                card_id=cards[5].id,
+            ).one()
+            self.assertEqual(source_won.queue, "review")
+            self.assertEqual(source_won.interval_days, 30)
+            self.assertEqual((source_won.reps, source_won.lapses), (12, 3))
+            self.assertEqual(int(source_won.revision or 0), 7)
+
+            for local_card in (cards[0], cards[2], cards[4]):
+                self.assertIsNone(
+                    CardProgress.query.filter_by(
+                        user_id=self.user_id,
+                        card_id=local_card.id,
+                    ).first()
+                )
+            self.assertEqual(
+                [note.field_values["Word"] for note in notes],
+                [f"card-{index}" for index in range(7)],
+            )
+
     def test_cutover_migrates_legacy_full_copy_install_to_overlay(self):
         note_type = self._create_note_type()
         note_type_id = note_type["id"]
@@ -2097,10 +2338,19 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
                     ease_factor=2.5,
                     reps=5,
                     lapses=1,
+                    revision=7,
                 )
             )
             db.session.commit()
 
+            self.assertIs(
+                share_ctrl.cutover_clone_model_to_overlay_only,
+                cutover_service.cutover_clone_model_to_overlay_only,
+            )
+            self.assertIs(
+                flashcards_share_service.cutover_clone_model_to_overlay_only,
+                cutover_service.cutover_clone_model_to_overlay_only,
+            )
             summary = share_ctrl.cutover_clone_model_to_overlay_only(fail_on_mismatch=True)
             db.session.commit()
             self.assertEqual(int(summary.get("migrated") or 0), 1)
@@ -2126,6 +2376,13 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             ).first()
             self.assertIsNotNone(source_progress)
             self.assertEqual(int(source_progress.reps or 0), 5)
+            self.assertEqual(int(source_progress.revision or 0), 8)
+
+            surviving_source_note = db.session.get(Note, source_note.id)
+            surviving_source_card = db.session.get(Card, source_card.id)
+            self.assertIsNotNone(surviving_source_note)
+            self.assertIsNotNone(surviving_source_card)
+            self.assertEqual(surviving_source_note.field_values["Word"], "\u72ac")
 
             legacy_progress = CardProgress.query.filter_by(
                 user_id=learner_id,
@@ -3606,6 +3863,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             content_type="multipart/form-data",
         )
         self.assertEqual(upload_resp.status_code, 201)
+        asset_id = (upload_resp.get_json() or {})["asset_id"]
 
         with self.app.app_context():
             card = Card.query.filter_by(note_id=note_id).first()
@@ -3810,6 +4068,7 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             content_type="multipart/form-data",
         )
         self.assertEqual(upload_resp.status_code, 201)
+        asset_id = (upload_resp.get_json() or {})["asset_id"]
 
         with self.app.app_context():
             card = Card.query.filter_by(note_id=note_id).first()
@@ -3827,7 +4086,10 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
         self.assertEqual(edit_resp.status_code, 200)
         payload = edit_resp.get_json() or {}
         self.assertTrue(payload.get("success"))
-        self.assertEqual((payload.get("field_values") or {}).get("Word_Audio"), "voice.wav")
+        self.assertEqual(
+            (payload.get("field_values") or {}).get("Word_Audio"),
+            f"/media/proxy/{asset_id}",
+        )
 
     def test_study_edit_card_updates_deck_and_tags(self):
         note_type = self._create_note_type()
@@ -3924,6 +4186,62 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             self.assertEqual(values.get("Word"), "\u72ac-browse-updated")
             self.assertEqual(values.get("Reading"), "\u3044\u306c")
             self.assertEqual(values.get("Meaning"), "dog")
+
+    def test_browse_batch_delete_removes_owned_cards_and_orphaned_notes(self):
+        note_type_id = self._create_note_type()["id"]
+        note_ids = []
+        card_ids = []
+
+        for word in ("\u72ac", "\u732b"):
+            note_response = self.client.post(
+                "/api/notes",
+                json={
+                    "note_type_id": note_type_id,
+                    "deck_id": self.deck_id,
+                    "field_values": {
+                        "Word": word,
+                        "Reading": "reading",
+                        "Meaning": "meaning",
+                    },
+                },
+            )
+            self.assertEqual(note_response.status_code, 201)
+            note_id = note_response.get_json()["id"]
+            note_ids.append(note_id)
+            with self.app.app_context():
+                card = Card.query.filter_by(note_id=note_id).one()
+                card_ids.append(card.id)
+
+        invalid_response = self.client.post(
+            "/api/browse/cards/batch-delete",
+            json={"card_ids": card_ids[0]},
+        )
+        self.assertEqual(invalid_response.status_code, 400)
+        self.assertEqual(invalid_response.get_json()["field"], "card_ids")
+
+        invalid_payload_response = self.client.post(
+            "/api/browse/cards/batch-delete",
+            json=[],
+        )
+        self.assertEqual(invalid_payload_response.status_code, 400)
+        self.assertEqual(
+            invalid_payload_response.get_json()["code"],
+            "VALIDATION_ERROR",
+        )
+
+        response = self.client.post(
+            "/api/browse/cards/batch-delete",
+            json={"card_ids": card_ids},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.get_json(),
+            {"success": True, "deleted_count": 2},
+        )
+        with self.app.app_context():
+            self.assertEqual(Card.query.filter(Card.id.in_(card_ids)).count(), 0)
+            self.assertEqual(Note.query.filter(Note.id.in_(note_ids)).count(), 0)
 
     def test_browse_card_update_can_move_owned_card_to_another_deck(self):
         note_type = self._create_note_type()

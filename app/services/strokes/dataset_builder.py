@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import urllib.request
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
@@ -15,20 +16,48 @@ _FORBIDDEN_TAGS = {"script", "foreignobject", "iframe", "object", "embed", "appl
 _FORBIDDEN_ATTR_PREFIXES = ("on", "javascript:", "data:")
 
 
+STROKE_COLORS = [
+    "#e11d48",  # 1: Rose / Red
+    "#2563eb",  # 2: Blue
+    "#16a34a",  # 3: Green
+    "#d97706",  # 4: Amber
+    "#9333ea",  # 5: Purple
+    "#0891b2",  # 6: Cyan
+    "#ea580c",  # 7: Orange
+    "#4f46e5",  # 8: Indigo
+    "#059669",  # 9: Teal
+    "#c026d3",  # 10: Fuchsia
+]
+
+
 def sanitize_stroke_svg(raw_svg: str) -> str:
-    """Sanitize and standardize an SVG string for stroke order rendering.
+    """Sanitize, standardize, and animate an SVG string for stroke order rendering.
 
     - Strips dangerous tags (<script>, <foreignObject>, etc.).
     - Strips event handlers (onload, onclick, etc.).
+    - Adds sequential stroke drawing animation (@keyframes) for Japanese KanjiVG and static SVGs.
+    - Applies vibrant multi-color stroke palette for easy stroke component distinction.
+    - Preserves stroke paths (<path>) and stroke numbers (<text>).
     - Ensures standard viewBox="0 0 109 109".
     - Adds standard class "flama-stroke-char".
     """
     if not raw_svg or not raw_svg.strip():
         return ""
 
+    # Register XML namespaces so ElementTree does not rename tags or strip stroke paths
+    try:
+        ET.register_namespace("", "http://www.w3.org/2000/svg")
+        ET.register_namespace("kvg", "https://kanjivg.tagaini.net/")
+    except Exception:
+        pass
+
+    # Pre-clean any duplicate xmlns declaration from raw SVG
+    cleaned_input = re.sub(r'\s+xmlns="[^"]*"', '', raw_svg)
+    cleaned_input = re.sub(r'(<svg\b[^>]*?)(\s*>)', r'\1 xmlns="http://www.w3.org/2000/svg"\2', cleaned_input, count=1)
+
     # Parse XML safely
     try:
-        root = ET.fromstring(raw_svg)
+        root = ET.fromstring(cleaned_input)
     except ET.ParseError:
         # Fallback regex strip if XML parsing fails due to unclosed comments/entities
         cleaned = re.sub(r"(?is)<script\b[^>]*>.*?</script>", "", raw_svg)
@@ -61,6 +90,162 @@ def sanitize_stroke_svg(raw_svg: str) -> str:
 
     _clean_node(root)
 
+    # Check if SVG already has MakeMeAHanzi animations
+    is_makemeahanzi = False
+    for style_node in root.iter():
+        if style_node.tag.split("}")[-1].lower() == "style" and ("make-me-a-hanzi" in (style_node.text or "") or "keyframes0" in (style_node.text or "")):
+            is_makemeahanzi = True
+            break
+
+    # If it's MakeMeAHanzi (Chinese), add crisp practice box grid and stroke order numbers
+    if is_makemeahanzi:
+        # Remove old faint grid elements and previous number groups if present
+        for child in list(root):
+            if child.get("stroke") == "lightgray" or child.get("class") in {"flama-grid-box", "flama-mmah-numbers"}:
+                root.remove(child)
+
+        grid_group = ET.Element("{http://www.w3.org/2000/svg}g", {"class": "flama-grid-box", "fill": "none"})
+        border_rect = ET.Element("{http://www.w3.org/2000/svg}rect", {
+            "x": "8", "y": "8", "width": "1008", "height": "1008",
+            "stroke": "#cbd5e1", "stroke-width": "6", "stroke-opacity": "0.7", "rx": "24",
+        })
+        grid_lines = ET.Element("{http://www.w3.org/2000/svg}path", {
+            "d": "M 0 512 L 1024 512 M 512 0 L 512 1024 M 0 0 L 1024 1024 M 1024 0 L 0 1024",
+            "stroke": "#e2e8f0", "stroke-width": "5", "stroke-dasharray": "16,16", "stroke-opacity": "0.8",
+        })
+        grid_group.append(border_rect)
+        grid_group.append(grid_lines)
+        root.insert(0, grid_group)
+
+        # Extract centerline starting points and append stroke numbers (1, 2, 3...)
+        stroke_points: list[tuple[int, float, float]] = []
+        for elem in root.iter():
+            tag = elem.tag.split("}")[-1].lower()
+            if tag == "path":
+                elem_id = elem.get("id", "")
+                d_attr = elem.get("d", "")
+                m_id = re.search(r"make-me-a-hanzi-animation-(\d+)", elem_id)
+                if m_id and d_attr.strip().startswith("M"):
+                    coords = re.findall(r"^M\s*([0-9.-]+)\s+([0-9.-]+)", d_attr.strip())
+                    if coords:
+                        stroke_idx = int(m_id.group(1))
+                        x0, y0 = float(coords[0][0]), float(coords[0][1])
+                        stroke_points.append((stroke_idx, x0, y0))
+
+        if stroke_points:
+            stroke_points.sort(key=lambda item: item[0])
+            numbers_group = ET.Element("{http://www.w3.org/2000/svg}g", {
+                "class": "flama-mmah-numbers",
+                "style": "font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 800; font-size: 52px;",
+            })
+            for stroke_idx, x0, y0 in stroke_points:
+                num_x = max(24, min(980, x0 - 18))
+                num_y = max(48, min(980, 900 - y0 - 12))
+                color = STROKE_COLORS[stroke_idx % len(STROKE_COLORS)]
+                txt_elem = ET.Element("{http://www.w3.org/2000/svg}text", {
+                    "x": f"{num_x:.0f}",
+                    "y": f"{num_y:.0f}",
+                    "fill": color,
+                    "fill-opacity": "0.95",
+                    "class": f"flama-stroke-num flama-sn-{stroke_idx+1}",
+                })
+                txt_elem.text = str(stroke_idx + 1)
+                numbers_group.append(txt_elem)
+            root.append(numbers_group)
+
+    # If it's a KanjiVG or static SVG, apply smooth 1-shot sequential drawing & multi-color palette & practice grid
+    if not is_makemeahanzi:
+        # Remove existing generated style & bg layers
+        for child in list(root):
+            tag_name = child.tag.split("}")[-1].lower()
+            if tag_name == "style" or child.get("class") == "flama-kvg-bg-layer":
+                root.remove(child)
+
+        paths: list[ET.Element] = []
+        texts: list[ET.Element] = []
+        for elem in root.iter():
+            tag = elem.tag.split("}")[-1].lower()
+            if tag == "path" and "d" in elem.attrib and elem.get("class") != "flama-kvg-bg":
+                paths.append(elem)
+            elif tag == "text":
+                texts.append(elem)
+
+        num_strokes = len(paths)
+        if num_strokes > 0:
+            stroke_dur = 0.45
+
+            css_rules = [
+                "/* Flama Sequential Stroke Order Animation (Single Run) & Multi-color Styling */",
+                ":root {",
+                "  --flama-stroke-width: 3.2px;",
+                "  --flama-grid-color: #f1f5f9;",
+                "  --flama-ghost-color: #e2e8f0;",
+            ]
+            for i, c in enumerate(STROKE_COLORS, 1):
+                css_rules.append(f"  --flama-stroke-c{i}: {c};")
+            css_rules.extend([
+                "}",
+                "@keyframes flama-kanjivg-dash {",
+                "  0% { stroke-dashoffset: 100; opacity: 0.15; }",
+                "  20% { opacity: 1; }",
+                "  100% { stroke-dashoffset: 0; opacity: 1; }",
+                "}",
+                ".flama-kvg-bg { stroke: var(--flama-ghost-color, #e2e8f0); stroke-width: var(--flama-stroke-width, 3.2px); fill: none; stroke-linecap: round; stroke-linejoin: round; }",
+                ".flama-kvg-stroke { fill: none; stroke-linecap: round; stroke-linejoin: round; }",
+                ".flama-kvg-num { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 8px; font-weight: 700; }",
+            ])
+
+            # Create background guide layer with rounded border, grid & ghost paths
+            bg_group = ET.Element("{http://www.w3.org/2000/svg}g", {"class": "flama-kvg-bg-layer", "fill": "none"})
+            border_rect = ET.Element("{http://www.w3.org/2000/svg}rect", {
+                "x": "2", "y": "2", "width": "105", "height": "105",
+                "stroke": "#cbd5e1", "stroke-width": "0.8", "stroke-opacity": "0.7", "rx": "4",
+            })
+            grid_path = ET.Element("{http://www.w3.org/2000/svg}path", {
+                "d": "M 0 54.5 L 109 54.5 M 54.5 0 L 54.5 109 M 0 0 L 109 109 M 109 0 L 0 109",
+                "stroke": "#e2e8f0",
+                "stroke-width": "0.6",
+                "stroke-dasharray": "2,2",
+                "stroke-opacity": "0.8",
+                "fill": "none",
+            })
+            bg_group.append(border_rect)
+            bg_group.append(grid_path)
+
+            for p in paths:
+                ghost = ET.Element("{http://www.w3.org/2000/svg}path", {
+                    "d": p.get("d", ""),
+                    "class": "flama-kvg-bg",
+                })
+                bg_group.append(ghost)
+
+            # Style each stroke path with 1-shot sequential drawing animation and distinct color
+            for idx, p in enumerate(paths):
+                color_var = f"var(--flama-stroke-c{(idx % len(STROKE_COLORS)) + 1}, {STROKE_COLORS[idx % len(STROKE_COLORS)]})"
+                delay = idx * stroke_dur
+                p.set("class", f"flama-kvg-stroke flama-kvg-s{idx+1}")
+                p.set("pathLength", "100")
+                p.set("stroke-dasharray", "100")
+                p.set("stroke-dashoffset", "100")
+                p.set("style", f"stroke: {color_var}; stroke-width: var(--flama-stroke-width, 3.2px); animation: flama-kanjivg-dash {stroke_dur:.2f}s cubic-bezier(0.4, 0, 0.2, 1) {delay:.2f}s 1 forwards;")
+
+            # Style stroke numbers with static fixed visibility and matching stroke colors
+            for idx, txt in enumerate(texts):
+                color_var = f"var(--flama-stroke-c{(idx % len(STROKE_COLORS)) + 1}, {STROKE_COLORS[idx % len(STROKE_COLORS)]})"
+                txt.set("class", f"flama-kvg-num flama-kvg-n{idx+1}")
+                txt.set("style", f"fill: {color_var}; fill-opacity: 0.95;")
+
+            style_elem = ET.Element("{http://www.w3.org/2000/svg}style", {"type": "text/css"})
+            style_elem.text = "\n" + "\n".join(css_rules) + "\n"
+
+            # Remove previous styles and insert new elements
+            for child in list(root):
+                if child.tag.split("}")[-1].lower() == "style":
+                    root.remove(child)
+
+            root.insert(0, style_elem)
+            root.insert(1, bg_group)
+
     # Standardize root SVG attributes
     if not root.get("viewBox"):
         width = root.get("width", "109").replace("px", "")
@@ -71,13 +256,61 @@ def sanitize_stroke_svg(raw_svg: str) -> str:
         except ValueError:
             root.set("viewBox", "0 0 109 109")
 
-    # Set root namespace and styling classes
-    root.set("xmlns", "http://www.w3.org/2000/svg")
+    # Remove hardcoded pixel width/height so SVG is 100% responsive and fills its parent container
+    root.attrib.pop("width", None)
+    root.attrib.pop("height", None)
+
+    # Pop any manual xmlns attribute from root to prevent duplicate xmlns in XML output
+    root.attrib.pop("xmlns", None)
+    for key in list(root.attrib.keys()):
+        if key.endswith("}xmlns") or key == "xmlns":
+            del root.attrib[key]
+
+    # Standardize root styling classes
     existing_class = root.get("class", "")
     if "flama-stroke-char" not in existing_class:
         root.set("class", f"flama-stroke-char {existing_class}".strip())
 
     return ET.tostring(root, encoding="utf-8").decode("utf-8")
+
+
+def fetch_authentic_stroke_svg(char: str, locale: str = "ja") -> str | None:
+    """Fetch authentic stroke diagram SVG (KanjiVG or MakeMeAHanzi) with stroke paths & stroke numbers."""
+    if not is_cjk_ideograph(char):
+        return None
+
+    norm_locale = str(locale or "ja").strip().lower()
+    hex_code = CjkExtractor.char_to_hex(char)
+    padded_hex = hex_code.zfill(5)
+    cp = ord(char)
+
+    # Primary URLs based on target locale
+    urls: list[str] = []
+    if "zh" in norm_locale:
+        urls.extend([
+            f"https://raw.githubusercontent.com/skishore/makemeahanzi/master/svgs/{cp}.svg",
+            f"https://cdn.jsdelivr.net/gh/skishore/makemeahanzi@master/svgs/{cp}.svg",
+            f"https://raw.githubusercontent.com/KanjiVG/kanjivg/master/kanji/{padded_hex}.svg",
+        ])
+    else:
+        urls.extend([
+            f"https://raw.githubusercontent.com/KanjiVG/kanjivg/master/kanji/{padded_hex}.svg",
+            f"https://cdn.jsdelivr.net/gh/KanjiVG/kanjivg@master/kanji/{padded_hex}.svg",
+            f"https://raw.githubusercontent.com/skishore/makemeahanzi/master/svgs/{cp}.svg",
+        ])
+
+    for u in urls:
+        try:
+            req = urllib.request.Request(u, headers={"User-Agent": "Flama/1.0"})
+            with urllib.request.urlopen(req, timeout=4.0) as resp:
+                if resp.status == 200:
+                    raw_data = resp.read().decode("utf-8", errors="ignore")
+                    if "<path" in raw_data:
+                        return sanitize_stroke_svg(raw_data)
+        except Exception:
+            continue
+
+    return None
 
 
 def generate_kanji_placeholder_svg(char: str) -> str:
@@ -137,43 +370,98 @@ def build_dataset_from_directory(
     return {"processed": processed, "skipped": skipped}
 
 
+JA_STARTER_KANJI = [
+    "日", "本", "語", "勉", "強", "学", "校", "人", "大", "中", "小",
+    "生", "先", "会", "社", "行", "来", "見", "聞", "食", "飲", "買",
+    "書", "話", "読", "友", "達", "時", "分", "年", "月", "週", "今",
+    "何", "漢", "字", "文", "習", "愛", "好", "上", "下", "左", "右",
+    "一", "二", "三", "四", "五", "六", "七", "八", "九", "十", "百", "千", "万",
+    "国", "家", "山", "川", "木", "天", "気", "雨", "電", "車",
+    "道", "手", "目", "口", "耳", "足", "心", "力", "名", "前", "後", "高", "新", "古",
+    "白", "黒", "赤", "青", "花", "父", "母", "兄", "弟", "姉", "妹", "男", "女", "子",
+    "出", "入", "休", "立", "買", "売", "春", "夏", "秋", "冬", "東", "西", "南", "北",
+]
+
+ZH_STARTER_HANZI = [
+    "汉", "语", "话", "书", "买", "卖", "时", "间", "样", "谁", "现", "会", "听", "说", "读", "写",
+    "认", "识", "见", "边", "远", "近", "进", "出", "门", "关", "开", "问", "题", "帮", "助",
+    "给", "让", "岁", "钱", "块", "俩", "哪", "儿", "还", "过", "鸡", "蛋", "苹", "果", "鱼",
+    "羊", "肉", "面", "条", "穿", "衣", "服", "视", "影", "脑", "钟", "点", "笔", "课", "练",
+    "难", "易", "简", "单", "结", "束", "发", "经", "济", "动", "物", "园", "绿", "红", "蓝",
+    "颜", "色", "欢", "迎", "宾", "馆", "银", "辆", "跑", "步", "跳", "飞", "机", "站", "坐",
+    "船", "票", "房", "医", "院", "药", "病", "感", "冒", "身", "体", "运", "游", "泳", "球",
+    "你", "我", "他", "她", "它", "好", "们", "的", "是", "不", "了", "在", "有", "个", "这",
+    "一", "二", "三", "四", "五", "六", "七", "八", "九", "十", "百", "千", "万",
+    "大", "小", "多", "少", "冷", "热", "高", "新", "老", "朋", "友", "人", "男", "女", "子",
+    "爱", "学", "习", "电", "车", "国", "家", "山", "水", "天", "气", "雨", "东", "西", "南", "北",
+]
+
+ZH_HANT_STARTER_HANZI = [
+    "漢", "語", "話", "書", "買", "賣", "時", "間", "樣", "誰", "現", "會", "聽", "說", "讀", "寫",
+    "認", "識", "見", "邊", "遠", "近", "進", "出", "門", "關", "開", "問", "題", "幫", "助",
+    "給", "讓", "歲", "錢", "塊", "倆", "哪", "兒", "還", "過", "雞", "蛋", "蘋", "果", "魚",
+    "羊", "肉", "麵", "條", "穿", "衣", "服", "視", "影", "腦", "鐘", "點", "筆", "課", "練",
+    "難", "易", "簡", "單", "結", "束", "發", "經", "濟", "動", "物", "園", "綠", "紅", "藍",
+    "顏", "色", "歡", "迎", "賓", "館", "銀", "輛", "跑", "步", "跳", "飛", "機", "站", "坐",
+    "船", "票", "房", "醫", "院", "藥", "病", "感", "冒", "身", "體", "運", "遊", "泳", "球",
+    "你", "我", "他", "她", "好", "們", "的", "是", "不", "了", "在", "有", "個", "這",
+    "一", "二", "三", "四", "五", "六", "七", "八", "九", "十", "百", "千", "萬",
+    "國", "家", "山", "川", "木", "天", "氣", "雨", "電", "車",
+    "道", "手", "目", "口", "耳", "足", "心", "力", "名", "前", "後", "高", "新", "古",
+    "白", "黑", "赤", "青", "花", "父", "母", "兄", "弟", "姊", "妹", "男", "女", "子",
+    "東", "西", "南", "北", "春", "夏", "秋", "冬",
+]
+
+# Combined starter list
+STARTER_CHARS = list(dict.fromkeys(JA_STARTER_KANJI + ZH_STARTER_HANZI + ZH_HANT_STARTER_HANZI))
+
+
 def populate_starter_strokes(static_root: str | Path) -> dict[str, int]:
-    """Populate starter Kanji & Hanzi stroke SVGs into static/strokes/ja and static/strokes/zh."""
+    """Populate starter Kanji & Hanzi stroke SVGs into static/strokes/ja, zh, and zh-hant."""
     root = Path(static_root)
     ja_dir = root / "strokes" / "ja"
     zh_dir = root / "strokes" / "zh"
+    zh_hant_dir = root / "strokes" / "zh-hant"
     ja_dir.mkdir(parents=True, exist_ok=True)
     zh_dir.mkdir(parents=True, exist_ok=True)
-
-    # Core high frequency Kanji & Hanzi
-    starter_chars = [
-        "日", "本", "語", "勉", "強", "学", "校", "人", "大", "中", "小",
-        "生", "先", "会", "社", "行", "来", "見", "聞", "食", "飲", "買",
-        "書", "話", "読", "友", "達", "時", "分", "年", "月", "週", "今",
-        "何", "漢", "字", "文", "習", "愛", "你", "我", "他", "她", "好",
-        "们", "的", "是", "不", "了", "在", "有", "个", "这", "上", "一",
-        "二", "三", "四", "五", "六", "七", "八", "九", "十", "百", "千", "万",
-    ]
+    zh_hant_dir.mkdir(parents=True, exist_ok=True)
 
     total_created = 0
-    for char in starter_chars:
+
+    # 1. JA
+    for char in JA_STARTER_KANJI:
         if not is_cjk_ideograph(char):
             continue
         hex_unpadded = CjkExtractor.char_to_hex(char)
         hex_padded = CjkExtractor.char_to_hex(char, zero_pad=5)
-        svg_content = generate_kanji_placeholder_svg(char)
-
-        # JA
         ja_file = ja_dir / f"{hex_unpadded}.svg"
-        if not ja_file.exists():
-            ja_file.write_text(svg_content, encoding="utf-8")
-            (ja_dir / f"{hex_padded}.svg").write_text(svg_content, encoding="utf-8")
-            total_created += 1
+        ja_content = fetch_authentic_stroke_svg(char, locale="ja") or generate_kanji_placeholder_svg(char)
+        ja_file.write_text(ja_content, encoding="utf-8")
+        (ja_dir / f"{hex_padded}.svg").write_text(ja_content, encoding="utf-8")
+        total_created += 1
 
-        # ZH
+    # 2. ZH (Simplified)
+    for char in ZH_STARTER_HANZI:
+        if not is_cjk_ideograph(char):
+            continue
+        hex_unpadded = CjkExtractor.char_to_hex(char)
+        hex_padded = CjkExtractor.char_to_hex(char, zero_pad=5)
         zh_file = zh_dir / f"{hex_unpadded}.svg"
-        if not zh_file.exists():
-            zh_file.write_text(svg_content, encoding="utf-8")
-            (zh_dir / f"{hex_padded}.svg").write_text(svg_content, encoding="utf-8")
+        zh_content = fetch_authentic_stroke_svg(char, locale="zh") or generate_kanji_placeholder_svg(char)
+        zh_file.write_text(zh_content, encoding="utf-8")
+        (zh_dir / f"{hex_padded}.svg").write_text(zh_content, encoding="utf-8")
+        total_created += 1
 
-    return {"starter_kanji_count": len(starter_chars), "created": total_created}
+    # 3. ZH-HANT (Traditional)
+    for char in ZH_HANT_STARTER_HANZI:
+        if not is_cjk_ideograph(char):
+            continue
+        hex_unpadded = CjkExtractor.char_to_hex(char)
+        hex_padded = CjkExtractor.char_to_hex(char, zero_pad=5)
+        zh_hant_file = zh_hant_dir / f"{hex_unpadded}.svg"
+        zh_hant_content = fetch_authentic_stroke_svg(char, locale="zh-hant") or generate_kanji_placeholder_svg(char)
+        zh_hant_file.write_text(zh_hant_content, encoding="utf-8")
+        (zh_hant_dir / f"{hex_padded}.svg").write_text(zh_hant_content, encoding="utf-8")
+        total_created += 1
+
+    return {"processed": total_created, "ja": len(JA_STARTER_KANJI), "zh": len(ZH_STARTER_HANZI), "zh_hant": len(ZH_HANT_STARTER_HANZI)}

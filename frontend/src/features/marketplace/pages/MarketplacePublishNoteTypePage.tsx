@@ -6,18 +6,16 @@ import {
   AlertCircle,
   ArrowLeft,
   ArrowRight,
-  BookOpen,
   Check,
   CheckCircle2,
-  DollarSign,
-  Sparkles,
-  Target
 } from 'lucide-react'
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
+import { faCreditCard, faGift, faLayerGroup } from '@fortawesome/free-solid-svg-icons'
 import { appApi } from '@/app/api'
 import { AmbientBackground } from '@/components/ambient-background'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
@@ -26,6 +24,7 @@ import { Page } from '@/shared/components/Page'
 import { PageError, PageLoading } from '@/shared/components/PageState'
 
 import { useTaxonomySchema } from '../hooks/useTaxonomySchema'
+import { PublishNoteTypeSelector } from '../components/PublishNoteTypeSelector'
 import {
   NOTE_TYPE_CATEGORY_PRESETS,
   TAXONOMY_DIFFICULTIES,
@@ -34,10 +33,10 @@ import {
 } from '../utils/publishTaxonomyConstants'
 
 const WIZARD_STEPS = [
-  { id: 1, title: 'Mẫu thẻ & Mô tả', sub: 'Chọn NoteType và giới thiệu', icon: BookOpen },
-  { id: 2, title: 'Phân loại & Trình độ', sub: 'Chứng chỉ & Môn học', icon: Sparkles },
-  { id: 3, title: 'Mục tiêu & Kỹ năng', sub: 'Goals & Chủ đề trọng tâm', icon: Target },
-  { id: 4, title: 'Giá bán & Đăng tải', sub: 'Thiết lập giá và xuất bản', icon: DollarSign },
+  { id: 1, title: 'Mẫu thẻ & Mô tả', sub: 'Chọn NoteType và giới thiệu' },
+  { id: 2, title: 'Phân loại & Trình độ', sub: 'Chứng chỉ & Môn học' },
+  { id: 3, title: 'Mục tiêu & Kỹ năng', sub: 'Goals & Chủ đề trọng tâm' },
+  { id: 4, title: 'Giá bán & Đăng tải', sub: 'Thiết lập giá và xuất bản' },
 ]
 
 type SimpleNoteType = {
@@ -362,37 +361,19 @@ export function MarketplacePublishNoteTypePage() {
   const templates: Array<{ name: string }> = detailData?.templates || []
 
   return (
-    <Page className="space-y-6 relative px-3 sm:px-6 lg:px-8 py-4 sm:py-6 max-w-7xl mx-auto">
+    <Page className="space-y-6 relative px-3 sm:px-6 lg:px-8 py-4 sm:py-6 max-w-4xl mx-auto">
       <AmbientBackground intensity="subtle" />
 
-      {/* Hero Header Banner */}
-      <div className="relative overflow-hidden rounded-2xl border border-border/80 bg-card/60 p-4 sm:p-6 shadow-xs backdrop-blur-xl">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-2">
-              <Badge variant="secondary" className="border-border/80 bg-muted font-bold text-[11px] px-2.5 py-0.5 text-foreground">
-                NoteType Publisher
-              </Badge>
-              <Badge variant="outline" className="text-[11px] font-medium text-muted-foreground">
-                Mẫu thẻ Anki / Flama
-              </Badge>
-            </div>
-            <h1 className="text-xl sm:text-2xl md:text-3xl font-black tracking-tight text-foreground">
-              {isEditMode ? 'Chỉnh sửa thông tin chia sẻ Loại thẻ' : 'Chia sẻ Loại thẻ (Note Type) vào Marketplace'}
-            </h1>
-            <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed max-w-3xl">
-              {isEditMode
-                ? 'Cập nhật lại các thông tin mô tả chi tiết, phân loại học tập và giá bán của loại thẻ đã xuất bản.'
-                : 'Đóng gói thiết kế mẫu thẻ (Cloze, Từ vựng song ngữ, Code Snippets, Q&A...) và cấu hình trường dữ liệu để chia sẻ cho cộng đồng.'}
-            </p>
-          </div>
-
-          <Button variant="outline" asChild className="h-9 px-3.5 text-xs font-semibold rounded-xl shrink-0 self-start sm:self-center">
-            <Link to={isEditMode ? `/marketplace/note-types/${sourceNoteTypeId}` : "/marketplace/note-types"}>
-              {isEditMode ? 'Quay lại chi tiết' : 'Quay lại NoteTypes'}
-            </Link>
-          </Button>
-        </div>
+      {/* Compact Header */}
+      <div className="flex items-center justify-between gap-4 pt-1">
+        <h1 className="text-lg sm:text-xl font-bold tracking-tight text-foreground">
+          {isEditMode ? 'Chỉnh sửa thông tin Mẫu thẻ' : 'Chia sẻ Mẫu thẻ (Note Type) vào Marketplace'}
+        </h1>
+        <Button variant="outline" size="sm" asChild className="h-8 px-3 text-xs font-semibold rounded-xl shrink-0">
+          <Link to={isEditMode ? `/marketplace/note-types/${sourceNoteTypeId}` : "/marketplace/note-types"}>
+            {isEditMode ? 'Quay lại chi tiết' : 'Quay lại NoteTypes'}
+          </Link>
+        </Button>
       </div>
 
       {isSelectedInstalledCopy ? (
@@ -450,7 +431,6 @@ export function MarketplacePublishNoteTypePage() {
       <div className="rounded-2xl border border-border/80 bg-card/90 p-1.5 sm:p-3 shadow-xs backdrop-blur-md">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-1.5 sm:gap-2">
           {WIZARD_STEPS.map((s) => {
-            const StepIcon = s.icon
             const isActive = currentStep === s.id
             const isCompleted = currentStep > s.id
             return (
@@ -475,11 +455,11 @@ export function MarketplacePublishNoteTypePage() {
                         : 'bg-muted text-muted-foreground'
                   }`}
                 >
-                  {isCompleted ? <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : <StepIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
+                  {isCompleted ? <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : <span>{s.id}</span>}
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="text-[11px] sm:text-xs font-bold truncate">
-                    B{s.id}: {s.title}
+                    {s.title}
                   </div>
                   <div className={`text-[10px] hidden xs:block truncate ${isActive ? 'text-primary-foreground/80' : 'text-muted-foreground'}`}>
                     {s.sub}
@@ -500,33 +480,9 @@ export function MarketplacePublishNoteTypePage() {
             e.preventDefault()
           }
         }}
-        className="grid gap-6 lg:grid-cols-3 items-start"
+        className="space-y-6"
       >
-        {/* Active Step Content Card (2 spans) */}
-        <div className="lg:col-span-2 space-y-6">
-          <Card className="shadow-xs rounded-2xl border-border/80 bg-card/90 backdrop-blur-sm overflow-hidden min-h-[480px] flex flex-col justify-between">
-            {/* Step Header */}
-            <CardHeader className="p-4 sm:p-6 pb-4 border-b border-border/40 bg-muted/20">
-              <div className="flex items-center justify-between gap-4">
-                <div className="flex items-center gap-2.5">
-                  <span className="flex items-center justify-center w-7 h-7 rounded-xl bg-foreground text-background text-xs font-bold shadow-2xs">
-                    {currentStep}
-                  </span>
-                  <div>
-                    <CardTitle className="text-base sm:text-lg font-bold">
-                      {WIZARD_STEPS[currentStep - 1].title}
-                    </CardTitle>
-                    <CardDescription className="text-xs">
-                      {WIZARD_STEPS[currentStep - 1].sub}
-                    </CardDescription>
-                  </div>
-                </div>
-                <Badge variant="secondary" className="text-xs font-semibold text-muted-foreground bg-muted/60 border-border/60 px-2.5 py-1 shrink-0">
-                  Bước {currentStep} / 4
-                </Badge>
-              </div>
-            </CardHeader>
-
+        <Card className="shadow-xs rounded-2xl border-border/80 bg-card/90 backdrop-blur-sm overflow-hidden min-h-[480px] flex flex-col justify-between">
             {/* Step Body */}
             <CardContent className="p-4 sm:p-6 space-y-5 flex-1">
               {/* STEP 1: Chọn Mẫu NoteType & Thông tin mô tả */}
@@ -542,31 +498,16 @@ export function MarketplacePublishNoteTypePage() {
                         <span className="text-[10px] text-muted-foreground font-mono">ID: {sourceNoteTypeId}</span>
                       </div>
                     ) : (
-                      <NativeSelect
-                        id="source-nt"
-                        value={sourceNoteTypeId}
-                        onChange={(e) => {
-                          setSourceNoteTypeId(e.target.value)
+                      <PublishNoteTypeSelector
+                        noteTypes={noteTypes}
+                        selectedNoteTypeId={sourceNoteTypeId}
+                        onSelectNoteType={(nt) => {
+                          setSourceNoteTypeId(nt.id)
                           clearFieldError('sourceNoteTypeId')
-                          const found = noteTypes.find((nt) => nt.id === e.target.value)
-                          if (found && !title) setTitle(found.name)
+                          if (!title) setTitle(nt.name)
                         }}
-                        className={`h-10 text-xs sm:text-sm rounded-xl font-medium ${
-                          fieldErrors.sourceNoteTypeId ? 'border-destructive focus-visible:ring-destructive bg-destructive/5' : ''
-                        }`}
-                        required
-                      >
-                        <NativeSelectOption value="">-- Chọn loại thẻ chưa xuất bản --</NativeSelectOption>
-                        {noteTypes.map((nt) => {
-                          const isPublished = nt.publish_status === 'published' || nt.publish_status === 'unlisted'
-                          const isBlocked = isPublished || Boolean(nt.is_marketplace_install)
-                          return (
-                            <NativeSelectOption key={nt.id} value={nt.id} disabled={isBlocked}>
-                              {nt.name} {nt.is_marketplace_install ? '(Từ Marketplace)' : isPublished ? '(Đã xuất bản)' : ''}
-                            </NativeSelectOption>
-                          )
-                        })}
-                      </NativeSelect>
+                        hasError={Boolean(fieldErrors.sourceNoteTypeId)}
+                      />
                     )}
                     <FieldErrorMessage error={fieldErrors.sourceNoteTypeId} />
                   </div>
@@ -780,8 +721,8 @@ export function MarketplacePublishNoteTypePage() {
                     <div className="space-y-3.5 p-4 rounded-2xl bg-muted/30 border border-border/80">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                          <div className="p-1 rounded-lg bg-muted text-foreground">
-                            <Sparkles className="w-4 h-4" />
+                          <div className="p-1 rounded-lg bg-muted text-muted-foreground">
+                            <FontAwesomeIcon icon={faLayerGroup} className="w-3.5 h-3.5" />
                           </div>
                           <div>
                             <Label className="text-xs font-bold text-foreground">
@@ -940,7 +881,7 @@ export function MarketplacePublishNoteTypePage() {
                   {/* Contextual Subject Banner */}
                   <div className="flex items-center justify-between p-3.5 rounded-xl border border-border/80 bg-muted/30 text-xs">
                     <div className="flex items-center gap-2">
-                      <Sparkles className="w-4 h-4 text-muted-foreground shrink-0" />
+                      <CheckCircle2 className="w-4 h-4 text-muted-foreground shrink-0" />
                       <div>
                         <span className="text-muted-foreground">Môn học đang chọn: </span>
                         <strong className="text-foreground">
@@ -1074,10 +1015,13 @@ export function MarketplacePublishNoteTypePage() {
                         onClick={() => setPricingMode('free')}
                         className={`p-4 rounded-xl border cursor-pointer transition-all text-center select-none ${
                           pricingMode === 'free'
-                            ? 'border-primary bg-primary/10 text-foreground font-bold ring-2 ring-primary/30'
-                            : 'border-border bg-card hover:bg-muted/50 text-muted-foreground'
+                            ? 'border-primary bg-primary/5 text-foreground font-bold ring-1 ring-primary/30 shadow-2xs'
+                            : 'border-border/80 bg-card hover:bg-muted/40 text-muted-foreground'
                         }`}
                       >
+                        <div className="flex items-center justify-center mb-1.5 text-muted-foreground">
+                          <FontAwesomeIcon icon={faGift} className="size-4" />
+                        </div>
                         <div className="font-bold text-sm sm:text-base">Miễn phí (Free)</div>
                         <div className="text-xs opacity-80 mt-0.5">Chia sẻ tự do tới mọi người</div>
                       </div>
@@ -1086,10 +1030,13 @@ export function MarketplacePublishNoteTypePage() {
                         onClick={() => setPricingMode('paid')}
                         className={`p-4 rounded-xl border cursor-pointer transition-all text-center select-none ${
                           pricingMode === 'paid'
-                            ? 'border-primary bg-primary/10 text-foreground font-bold ring-2 ring-primary/30'
-                            : 'border-border bg-card hover:bg-muted/50 text-muted-foreground'
+                            ? 'border-primary bg-primary/5 text-foreground font-bold ring-1 ring-primary/30 shadow-2xs'
+                            : 'border-border/80 bg-card hover:bg-muted/40 text-muted-foreground'
                         }`}
                       >
+                        <div className="flex items-center justify-center mb-1.5 text-muted-foreground">
+                          <FontAwesomeIcon icon={faCreditCard} className="size-4" />
+                        </div>
                         <div className="font-bold text-sm sm:text-base">Có phí (Paid)</div>
                         <div className="text-xs opacity-80 mt-0.5">Bán nội dung có thu phí</div>
                       </div>
@@ -1138,7 +1085,7 @@ export function MarketplacePublishNoteTypePage() {
                   {/* Summary Checklist before Submit */}
                   <div className="p-4 rounded-xl border border-border/80 bg-muted/30 space-y-2.5 text-xs">
                     <div className="font-bold text-foreground flex items-center gap-1.5">
-                      <Sparkles className="w-4 h-4 text-muted-foreground" />
+                      <CheckCircle2 className="w-4 h-4 text-muted-foreground" />
                       <span>Tóm tắt thông tin xuất bản NoteType:</span>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-muted-foreground">
@@ -1204,100 +1151,6 @@ export function MarketplacePublishNoteTypePage() {
               )}
             </div>
           </Card>
-        </div>
-
-        {/* Sidebar Column: Live Preview & Progress Checklist (1 span) */}
-        <div className="lg:col-span-1 space-y-6 lg:sticky lg:top-6 self-start">
-          {/* Live Marketplace Card Preview */}
-          <Card className="shadow-xs rounded-2xl border-border/80 bg-card/90 overflow-hidden">
-            <CardHeader className="p-4 sm:p-5 pb-2 border-b border-border/40 bg-muted/20">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-muted-foreground" />
-                  <span>Xem trước Marketplace</span>
-                </CardTitle>
-                <Badge variant="secondary" className="text-[10px]">
-                  Live Card
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="p-4 sm:p-5 space-y-3">
-              <div className="rounded-xl border bg-card/90 p-4 space-y-3 shadow-2xs">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="space-y-1 min-w-0">
-                    <div className="font-bold text-sm text-foreground line-clamp-1">
-                      {title.trim() || 'Tiêu đề NoteType của bạn'}
-                    </div>
-                    <div className="text-xs text-muted-foreground line-clamp-2">
-                      {previewText.trim() || 'Mô tả ngắn hiển thị tại đây khi người học duyệt danh sách loại thẻ...'}
-                    </div>
-                  </div>
-                  <Badge variant={pricingMode === 'paid' ? 'default' : 'secondary'} className="shrink-0 text-xs font-bold">
-                    {pricingMode === 'paid' ? `${priceAmountMinor.toLocaleString('vi-VN')} đ` : 'Miễn phí'}
-                  </Badge>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                  <Badge variant="secondary" className="text-[10px] bg-muted/60 text-foreground border-border/60 font-semibold">
-                    {effectiveCategory}
-                  </Badge>
-                  {fieldDefs.length > 0 ? (
-                    <Badge variant="outline" className="text-[10px] text-muted-foreground">
-                      {fieldDefs.length} trường
-                    </Badge>
-                  ) : null}
-                  <Badge variant="outline" className="text-[10px] text-muted-foreground font-mono">
-                    v{version}
-                  </Badge>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Step Progress Checklist (Desktop only - mobile already has top Stepper) */}
-          <Card className="hidden lg:block shadow-xs rounded-2xl border-border/80 bg-card/90 backdrop-blur-sm overflow-hidden">
-            <CardHeader className="p-4 sm:p-5 pb-3 border-b border-border/40 bg-muted/20">
-              <CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                Tiến trình hoàn thiện
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-4 sm:p-5 space-y-2.5 text-xs">
-              {WIZARD_STEPS.map((s) => {
-                const isCurrent = currentStep === s.id
-                const isDone = currentStep > s.id
-                return (
-                  <div
-                    key={s.id}
-                    onClick={() => goToStep(s.id)}
-                    className={`p-2.5 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
-                      isCurrent
-                        ? 'border-primary/50 bg-primary/5 font-semibold text-foreground ring-1 ring-primary/20'
-                        : isDone
-                          ? 'border-border/60 bg-card hover:bg-muted/40 font-medium text-muted-foreground'
-                          : 'border-border/40 bg-muted/20 text-muted-foreground'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <div
-                        className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
-                          isDone
-                            ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
-                            : isCurrent
-                              ? 'bg-primary/20 text-primary'
-                              : 'bg-muted text-muted-foreground'
-                        }`}
-                      >
-                        {isDone ? <Check className="w-3 h-3" /> : s.id}
-                      </div>
-                      <span>{s.title}</span>
-                    </div>
-                    {isDone && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />}
-                  </div>
-                )
-              })}
-            </CardContent>
-          </Card>
-        </div>
       </form>
     </Page>
   )

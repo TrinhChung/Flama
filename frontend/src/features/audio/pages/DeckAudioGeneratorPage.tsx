@@ -4,7 +4,6 @@ import {
   AudioLines,
   CheckCircle2,
   Folder,
-  HelpCircle,
   Layers,
   ListPlus,
   LoaderCircle,
@@ -12,15 +11,14 @@ import {
   Plus,
   Radio,
   RefreshCw,
-  Sparkles,
   Volume2,
 } from 'lucide-react'
-import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
+import { ContextHelpButton } from '@/features/guide'
 import { DeckSelectionTreeView } from '@/features/import/components/DeckSelectionTreeView'
 import { DeckAudioQueueMonitor } from '../components/DeckAudioQueueMonitor'
 import { DeckAudioRuleCard } from '../components/DeckAudioRuleCard'
@@ -107,17 +105,13 @@ export function DeckAudioGeneratorPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 text-xs gap-1.5"
-            asChild
-          >
-            <Link to="/guide/flama-audio" target="_blank">
-              <HelpCircle className="size-3.5 text-muted-foreground" />
-              <span>Hướng dẫn sử dụng</span>
-            </Link>
-          </Button>
+          <ContextHelpButton
+            guidePath="/guide/audio/batch-generation"
+            guideTitle="Hướng dẫn tạo âm thanh hàng loạt"
+            troubleshootPath="/guide/troubleshooting/flama-audio"
+            troubleshootTitle="Khắc phục lỗi phát âm / Flama Audio"
+            label="Hướng dẫn & Sửa lỗi"
+          />
         </div>
       </div>
 
@@ -223,7 +217,7 @@ export function DeckAudioGeneratorPage() {
                     {/* Needs Audio */}
                     <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 space-y-0.5">
                       <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-300 flex items-center gap-1">
-                        <Sparkles className="size-2.5" />
+                        <AudioLines className="size-2.5" />
                         Cần tạo âm
                       </span>
                       <p className="text-base font-black text-amber-700 dark:text-amber-300 font-mono">

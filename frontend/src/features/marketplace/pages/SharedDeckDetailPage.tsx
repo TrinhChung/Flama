@@ -16,7 +16,6 @@ import {
   Loader2,
   MessageSquare,
   Inbox,
-  Sparkles,
   Star,
   BookOpen,
   EyeOff,
@@ -535,9 +534,6 @@ export function SharedDeckDetailPage() {
                       : 'bg-primary/10 text-primary border-primary/30'
                   }`}
                 >
-                  {deck.pricing_mode === 'free' ? (
-                    <Sparkles className="mr-1 size-3" />
-                  ) : null}
                   {deck.price_display || 'Miễn phí'}
                 </span>
               )}
@@ -1083,7 +1079,7 @@ export function SharedDeckDetailPage() {
               {/* Status Indicator */}
               <div className="flex flex-wrap items-center justify-between gap-2 pt-2.5 text-xs text-muted-foreground border-t border-border/50">
                 <div className="font-semibold text-foreground flex items-center gap-1.5">
-                  <Sparkles className="size-3.5 text-primary" />
+                  <Layers className="size-3.5 text-muted-foreground" />
                   <span>
                     {samples.length > 0
                       ? `Mẫu ${activeSampleIndex + 1}/${samples.length}: ${(currentSample?.word || '').trim() || 'Từ mẫu'} ${currentSample?.reading ? `(${currentSample.reading})` : ''}`

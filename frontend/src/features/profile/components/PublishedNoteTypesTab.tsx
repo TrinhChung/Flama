@@ -1,4 +1,4 @@
-﻿import { DownloadCloud, Shapes, Star } from 'lucide-react'
+import { DownloadCloud, Shapes, Star } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
@@ -11,8 +11,8 @@ export function PublishedNoteTypesTab({
 }) {
   if (!noteTypes || noteTypes.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border/80 p-12 text-center">
-        <Shapes className="size-10 text-muted-foreground/40 mb-3" />
+      <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border/80 p-8 sm:p-12 text-center">
+        <Shapes className="size-8 sm:size-10 text-muted-foreground/40 mb-3" />
         <p className="text-sm font-semibold text-foreground">
           Chưa có loại thẻ nào được xuất bản
         </p>
@@ -24,13 +24,13 @@ export function PublishedNoteTypesTab({
   }
 
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="grid grid-cols-1 gap-3.5 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {noteTypes.map((nt) => (
         <Card
           key={nt.id}
           className="group relative flex flex-col overflow-hidden border-border/60 bg-card transition-all hover:border-primary/40 hover:shadow-md"
         >
-          <CardContent className="flex flex-1 flex-col justify-between p-5">
+          <CardContent className="flex flex-1 flex-col justify-between p-4 sm:p-5">
             <div className="space-y-2.5">
               <div className="flex items-center justify-between gap-2">
                 <Badge variant="outline" className="text-[11px]">

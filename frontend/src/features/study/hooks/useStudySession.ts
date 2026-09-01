@@ -551,29 +551,35 @@ export function useStudySession(deckId: string | null, compositionFilter?: strin
   const updateCardContent = useCallback(async (
     cardId: string,
     updatedFieldValues: Record<string, string>,
+    options?: { noteId?: string | null; skipBroadcast?: boolean },
   ) => {
     const current = sessionRef.current
     if (!current) return
-    const card = current.snapshot.cards.find((c) => c.card_id === cardId)
-    if (!card) return
-    const contentKey = card.content_key
-    const existingContent = current.snapshot.contents[contentKey]
-    if (!existingContent) return
+    const targetCards = current.snapshot.cards.filter(
+      (c) => c.card_id === cardId || (options?.noteId && c.note_id === options.noteId),
+    )
+    if (targetCards.length === 0) return
+
+    const updatedContents = { ...current.snapshot.contents }
+    for (const card of targetCards) {
+      const contentKey = card.content_key
+      const existingContent = updatedContents[contentKey]
+      if (existingContent) {
+        updatedContents[contentKey] = {
+          ...existingContent,
+          field_values: {
+            ...existingContent.field_values,
+            ...updatedFieldValues,
+          },
+        }
+      }
+    }
 
     const nextSession: PersistedStudySession = {
       ...current,
       snapshot: {
         ...current.snapshot,
-        contents: {
-          ...current.snapshot.contents,
-          [contentKey]: {
-            ...existingContent,
-            field_values: {
-              ...existingContent.field_values,
-              ...updatedFieldValues,
-            },
-          },
-        },
+        contents: updatedContents,
       },
       updated_at_ms: Date.now(),
     }
@@ -584,8 +590,49 @@ export function useStudySession(deckId: string | null, compositionFilter?: strin
     } catch {
       // Retain in-memory copy
     }
-    await updateCardFieldValuesInSessions(cardId, updatedFieldValues)
+    if (!options?.skipBroadcast) {
+      await updateCardFieldValuesInSessions(cardId, updatedFieldValues, { noteId: options?.noteId })
+    }
   }, [activateSession])
+
+  // Synchronize card content updates in real-time (from Browse, Note Modal, or other tabs)
+  useEffect(() => {
+    const handleSync = (detail: { cardId?: string; noteId?: string | null; fieldValues?: Record<string, string> }) => {
+      if (!detail?.cardId || !detail?.fieldValues) return
+      void updateCardContent(detail.cardId, detail.fieldValues, {
+        noteId: detail.noteId,
+        skipBroadcast: true,
+      })
+    }
+
+    const handleWindowCustomEvent = (event: Event) => {
+      const customEvent = event as CustomEvent
+      handleSync(customEvent.detail)
+    }
+
+    window.addEventListener('flama_study_card_updated', handleWindowCustomEvent)
+
+    let broadcastChannel: BroadcastChannel | null = null
+    try {
+      broadcastChannel = new BroadcastChannel('flama_study_sync_channel')
+      broadcastChannel.onmessage = (event) => {
+        if (event.data?.type === 'CARD_UPDATED') {
+          handleSync({
+            cardId: event.data.cardId,
+            noteId: event.data.noteId,
+            fieldValues: event.data.fieldValues,
+          })
+        }
+      }
+    } catch {}
+
+    return () => {
+      window.removeEventListener('flama_study_card_updated', handleWindowCustomEvent)
+      if (broadcastChannel) {
+        broadcastChannel.close()
+      }
+    }
+  }, [updateCardContent])
 
   return {
     session,

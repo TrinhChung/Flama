@@ -49,7 +49,7 @@ export type DashboardHeatmapDay = HeatmapDay
 export type DashboardOverview = HeatmapOverviewData
 
 
-export type DeckAction = 'rename' | 'move' | 'reset' | 'delete'
+export type DeckAction = 'rename' | 'move' | 'reset' | 'delete' | 'worksheet'
 
 export type SelectedDeckAction = {
   type: DeckAction

@@ -20,6 +20,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
+import { DeckWorksheetModal } from '@/features/worksheets'
 import { dashboardQueryKey } from '../api'
 import {
   createDeckSchema,
@@ -212,6 +213,18 @@ export function DeckActionModal({ selection, onClose, dashboard }: {
 
   if (!selection) return null
   const { type, deck } = selection
+
+  if (type === 'worksheet') {
+    return (
+      <DeckWorksheetModal
+        open
+        onOpenChange={(open) => !open && onClose()}
+        deckId={deck.id}
+        deckName={deck.name}
+      />
+    )
+  }
+
   const options = flattenDecks(dashboard.decks).filter((option) => option.value !== String(deck.id))
   const destructive = type === 'delete'
   const title =

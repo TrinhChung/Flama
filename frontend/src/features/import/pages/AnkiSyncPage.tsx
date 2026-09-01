@@ -1,6 +1,7 @@
 import { HelpCircle, Layers, NotebookTabs } from 'lucide-react'
 import { Page, PageHeader } from '@/shared/components/Page'
 import { PageError, PageLoading } from '@/shared/components/PageState'
+import { ContextHelpButton } from '@/features/guide'
 import { AnkiConnectionBar } from '../components/AnkiConnectionBar'
 import { AnkiSyncTab } from '../components/AnkiSyncTab'
 import { AnkiNoteTypeSyncTab } from '../components/AnkiNoteTypeSyncTab'
@@ -35,6 +36,15 @@ export function AnkiSyncPage() {
       <PageHeader
         title="Đồng bộ Anki Desktop (AnkiConnect)"
         description="Nhập và đồng bộ bộ thẻ (Deck), loại thẻ (NoteType), nội dung HTML, hình ảnh và âm thanh trực tiếp từ Anki Desktop lên Flama."
+        actions={
+          <ContextHelpButton
+            guidePath="/guide/import-sync/anki-connect-sync"
+            guideTitle="Hướng dẫn đồng bộ AnkiConnect"
+            troubleshootPath="/guide/troubleshooting/anki-sync"
+            troubleshootTitle="Khắc phục lỗi kết nối Anki"
+            label="Hướng dẫn kết nối"
+          />
+        }
       />
 
       {/* Shared Connection Status Header Bar */}

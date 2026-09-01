@@ -478,8 +478,9 @@ def resolve_import_media(
                 None,
             )
             if matching_existing is not None:
-                allowed.add(filename)
-                allowed.add(f"[sound:{filename}]")
+                canonical_url = f"/media/proxy/{matching_existing.id}"
+                raw_fields[field_name] = canonical_url
+                allowed.add(canonical_url)
                 continue
             raw_fields[field_name] = ""
             current_app.logger.warning(
@@ -554,7 +555,8 @@ def materialize_import_media(
                         size_bytes=staged.size_bytes,
                     )
                     db.session.add(existing)
-                values[field_name] = staged.filename
+                    db.session.flush()
+                values[field_name] = f"/media/proxy/{existing.id}"
                 attached_count += 1
             except Exception as exc:
                 current_app.logger.error("Lỗi khi xử lý import media %s: %s", staged.filename, exc)
@@ -615,10 +617,7 @@ def materialize_audio(
             )
             db.session.add(asset)
             db.session.flush()
-            # Yomitan sends Anki-style ``[sound:filename.mp3]`` references, but
-            # Flama's canonical media field value is the original safe filename.
-            # The MediaAsset UUID remains the internal proxy/persistence identity.
-            values[field_name] = pending.filename
+            values[field_name] = f"/media/proxy/{asset.id}"
             pending_paths_by_id[pending.id] = pending_path
     except Exception:
         for path in final_paths:

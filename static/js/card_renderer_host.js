@@ -7,6 +7,8 @@
   const DEFAULT_MIN_HEIGHT = 180;
   const MAX_FRAME_HEIGHT = 4096;
   const PROXY_MEDIA_RE = /^\/media\/proxy\/([A-Za-z0-9][A-Za-z0-9_-]{0,127})$/;
+  const LIBRARY_MEDIA_RE = /^\/media\/library\/([A-Za-z0-9][A-Za-z0-9_.-]{0,127})$/;
+  const STATIC_STROKE_RE = /^\/static\/strokes\/([a-zA-Z0-9_-]+\/[a-fA-F0-9]+\.svg)$/;
 
   let sharedAudioEl = null;
   let sharedAudioPlayback = null;
@@ -55,14 +57,34 @@
     if (directMatch) {
       return "/media/proxy/" + directMatch[1];
     }
+    const libraryMatch = trimmed.match(LIBRARY_MEDIA_RE);
+    if (libraryMatch) {
+      return "/media/library/" + libraryMatch[1];
+    }
+    const strokeMatch = trimmed.match(STATIC_STROKE_RE);
+    if (strokeMatch) {
+      return "/static/strokes/" + strokeMatch[1];
+    }
     try {
       const parsed = new URL(trimmed, global.location.href);
       const normalizedPath = String(parsed.pathname || "").trim();
-      const absoluteMatch = normalizedPath.match(PROXY_MEDIA_RE);
-      if (absoluteMatch) {
-        // The origin is discarded deliberately.  A controller resolves the
-        // approved opaque asset id against its trusted mediaBaseUrl below.
-        return "/media/proxy/" + absoluteMatch[1];
+      if (parsed.origin === global.location.origin) {
+        const absoluteMatch = normalizedPath.match(PROXY_MEDIA_RE);
+        if (absoluteMatch) {
+          return "/media/proxy/" + absoluteMatch[1];
+        }
+        const absoluteLibraryMatch = normalizedPath.match(LIBRARY_MEDIA_RE);
+        if (absoluteLibraryMatch) {
+          return "/media/library/" + absoluteLibraryMatch[1];
+        }
+        const absoluteStrokeMatch = normalizedPath.match(STATIC_STROKE_RE);
+        if (absoluteStrokeMatch) {
+          return "/static/strokes/" + absoluteStrokeMatch[1];
+        }
+      }
+      const localHttp = parsed.protocol === "http:" && ["localhost", "127.0.0.1", "::1"].includes(parsed.hostname);
+      if (parsed.protocol === "https:" || localHttp) {
+        return parsed.href;
       }
     } catch (_error) {
       // Ignore URL parsing failures and keep checking other formats.
@@ -133,7 +155,7 @@
       const attrName = node.hasAttribute("src") ? "src" : "href";
       const rawValue = String(node.getAttribute(attrName) || "").trim();
       const normalizedRef = normalizeProxyRef(rawValue);
-      if (!normalizedRef) {
+      if (!normalizedRef || PROXY_MEDIA_RE.test(normalizedRef)) {
         return;
       }
       allowedMediaUrls.add(normalizedRef);
@@ -265,7 +287,14 @@
     const mediaBaseUrl = normalizeMediaBaseUrl(options.mediaBaseUrl);
     const mediaOrigin = new URL(mediaBaseUrl).origin;
     const allowedMediaSources = buildCspSourceList(options.allowedMediaUrls, mediaBaseUrl);
-    const imgSrc = allowedMediaSources.length ? allowedMediaSources.join(" ") : "'none'";
+    const defaultImgSources = [
+      mediaOrigin + "/media/library/",
+      mediaOrigin + "/static/strokes/",
+      "data:",
+      "blob:",
+    ];
+    const combinedImgSources = Array.from(new Set([...allowedMediaSources, ...defaultImgSources]));
+    const imgSrc = combinedImgSources.length ? combinedImgSources.join(" ") : "'none'";
     const mediaSrc = allowedMediaSources.length ? allowedMediaSources.join(" ") : "'none'";
     return [
       "default-src 'none'",
@@ -659,21 +688,6 @@
       "    var message = reason && reason.message ? reason.message : String(reason || 'Sandbox renderer promise rejection.');",
       "    post('log_error', { message: message });",
       "  });",
-      "  var HOST_KEY_COMMANDS = {",
-      "    '1': 'rate_again', '2': 'rate_hard', '3': 'rate_good', '4': 'rate_easy',",
-      "    ' ': 'reveal_or_good', 'Enter': 'reveal_or_good',",
-      "    'z': 'undo', 'Z': 'undo',",
-      "    'f': 'toggle_fullscreen', 'F': 'toggle_fullscreen'",
-      "  };",
-      "  document.addEventListener('keydown', function (event) {",
-      "    if (event.ctrlKey || event.metaKey || event.altKey) return;",
-      "    var command = HOST_KEY_COMMANDS[event.key];",
-      "    if (command) {",
-      "      event.preventDefault();",
-      "      event.stopPropagation();",
-      "      post('host_command', { command: command });",
-      "    }",
-      "  }, true);",
       "  if (typeof ResizeObserver === 'function') {",
       "    var resizeObserver = new ResizeObserver(function () {",
       "      window.requestAnimationFrame(notifyHeight);",
@@ -1037,18 +1051,6 @@
           global.console.warn("Flama card renderer:", message);
         }
         return;
-      }
-      if (action === "host_command") {
-        const ALLOWED_COMMANDS = {
-          rate_again: true, rate_hard: true, rate_good: true, rate_easy: true,
-          reveal_or_good: true, undo: true, toggle_fullscreen: true,
-        };
-        const command = typeof payload.command === "string" ? payload.command : "";
-        if (ALLOWED_COMMANDS[command]) {
-          global.dispatchEvent(new CustomEvent("flama:host-command", {
-            detail: { command: command, instanceId: instanceId },
-          }));
-        }
       }
     }
 

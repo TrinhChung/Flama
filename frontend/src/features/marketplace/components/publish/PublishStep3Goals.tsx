@@ -1,4 +1,4 @@
-import { CheckCircle2, Sparkles } from 'lucide-react'
+import { BookOpen, CheckCircle2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Label } from '@/components/ui/label'
 import { FieldErrorMessage } from './PublishWizardTypes'
@@ -37,7 +37,7 @@ export function PublishStep3Goals({
       {/* Contextual Subject Banner */}
       <div className="flex items-center justify-between p-3.5 rounded-xl border border-border/80 bg-muted/30 text-xs">
         <div className="flex items-center gap-2">
-          <Sparkles className="w-4 h-4 text-muted-foreground shrink-0" />
+          <BookOpen className="w-4 h-4 text-muted-foreground shrink-0" />
           <div>
             <span className="text-muted-foreground">Môn học đang chọn: </span>
             <strong className="text-foreground">

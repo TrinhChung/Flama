@@ -23,6 +23,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -53,6 +54,10 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "app/services/profile_service.py",
             "app/services/student_verification_service.py",
             "app/services/user_api_token_service.py",
+            "app/services/email_service.py",
+            "app/email/**",
+            "app/routes/auth.py",
+            "app/validators/password.py",
             "models/user.py",
             "models/user_identity.py",
             "models/email_verification_token.py",
@@ -75,11 +80,14 @@ MODULES: dict[str, dict[str, list[str]]] = {
     },
     "study": {
         "source_patterns": [
-            "app/api/v1/learning/**",
             "app/services/anki_scheduler.py",
             "app/services/study_*.py",
             "app/services/scheduler_config_service.py",
             "app/repositories/study_repository.py",
+            "app/repositories/card_progress_repository.py",
+            "app/repositories/review_event_repository.py",
+            "app/repositories/study_card_editor_repository.py",
+            "app/routes/flashcards/study.py",
             "models/study_session*.py",
             "models/review_event.py",
             "models/card_progress.py",
@@ -91,8 +99,10 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "tests/test_anki_scheduler.py",
             "tests/test_study_action_runtime.py",
             "tests/test_study_algorithm_golden_vectors.py",
+            "tests/test_study_architecture_audit_cli.py",
             "tests/test_study_architecture_audit_service.py",
             "tests/test_study_artifact_service.py",
+            "tests/test_study_behavior_acceptance_baseline.py",
             "tests/test_study_composition_exit_gate.py",
             "tests/test_study_composition_service.py",
             "tests/test_study_integration.py",
@@ -122,6 +132,27 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "src/features/study/session/studySessionLease.test.ts",
         ],
     },
+    "browse": {
+        "source_patterns": [
+            "app/api/v1/learning/__init__.py",
+            "app/api/v1/learning/browse.py",
+            "app/services/browse_card_service.py",
+            "app/repositories/browse_card_repository.py",
+            "app/presenters/vocabulary_presenter.py",
+            "app/routes/vocabulary.py",
+            "frontend/src/features/browse/**",
+        ],
+        "backend_tests": [
+            "tests/test_flashcard_api_integration.py",
+            "tests/test_flashcard_validation_security.py",
+            "tests/test_rest_api_v1.py",
+        ],
+        "frontend_tests": [
+            "src/features/browse/components/MediaFieldPreview.test.tsx",
+            "src/features/browse/services/strokeStorage.test.ts",
+            "src/features/browse/services/ttsSettingsStorage.test.ts",
+        ],
+    },
     "flashcards": {
         "source_patterns": [
             "app/api/v1/flashcards/**",
@@ -134,6 +165,15 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "app/services/remote_image_fetcher.py",
             "app/services/stroke*.py",
             "app/repositories/flashcard*.py",
+            "app/repositories/image_library_repository.py",
+            "app/routes/flashcards/**",
+            "app/routes/image_library.py",
+            "app/routes/media_asset_routes.py",
+            "app/services/media_field_codec.py",
+            "app/services/note_management_service.py",
+            "app/services/note_type_service.py",
+            "app/validators/flashcard_input.py",
+            "app/validators/image_*.py",
             "models/flashcard.py",
             "models/note*.py",
             "models/field_def*.py",
@@ -149,6 +189,8 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "tests/test_flashcard_api_integration.py",
             "tests/test_flashcard_audio_scan.py",
             "tests/test_flashcard_media_batch_api.py",
+            "tests/test_flashcard_media_migration.py",
+            "tests/test_flashcard_media_normalizer.py",
             "tests/test_flashcard_renderer.py",
             "tests/test_flashcard_renderer_strokes.py",
             "tests/test_flashcard_validation_security.py",
@@ -173,8 +215,19 @@ MODULES: dict[str, dict[str, list[str]]] = {
         "source_patterns": [
             "app/api/v1/decks/**",
             "app/api/v1/creator/**",
-            "app/services/deck_*.py",
-            "app/services/browse_card_service.py",
+            "app/services/deck_access_key*.py",
+            "app/services/deck_naming*.py",
+            "app/services/deck_release*.py",
+            "app/services/deck_working_tree*.py",
+            "app/services/creator_key_entitlement_service.py",
+            "app/services/deck_access_policy.py",
+            "app/services/deck_api_service.py",
+            "app/services/deck_auto_publish_service.py",
+            "app/services/deck_management_service.py",
+            "app/services/release/**",
+            "app/repositories/deck_access_key_repository.py",
+            "app/repositories/deck_release_repository.py",
+            "app/repositories/deck_tree_query.py",
             "app/repositories/vocabulary_repository.py",
             "models/deck.py",
             "models/deck_access_key*.py",
@@ -210,6 +263,10 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "app/services/share/**",
             "app/repositories/deck_change_request*.py",
             "app/repositories/flashcards_share*.py",
+            "app/repositories/deck_install_rebase_repository.py",
+            "app/routes/flashcards/change_requests.py",
+            "app/routes/flashcards/share.py",
+            "app/validators/deck_change_request.py",
             "models/deck_change_request*.py",
             "models/deck_install*.py",
             "models/deck_clone*.py",
@@ -236,6 +293,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "app/api/v1/marketplace/**",
             "app/services/marketplace/**",
             "app/services/marketplace*.py",
+            "app/repositories/marketplace_taxonomy_repository.py",
             "models/deck_marketplace_item.py",
             "models/marketplace_saved_item.py",
             "models/taxonomy.py",
@@ -267,6 +325,13 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "app/services/mcp_*.py",
             "app/services/oauth_service.py",
             "app/services/note_sync_service.py",
+            "app/services/anki_sync_service.py",
+            "app/api/v1/settings/**",
+            "app/repositories/mcp_access_token_repository.py",
+            "app/repositories/oauth_repository.py",
+            "app/routes/mcp.py",
+            "app/routes/oauth.py",
+            "app/validators/mcp.py",
             "models/connect_*.py",
             "models/mcp_*.py",
             "models/oauth_*.py",
@@ -303,6 +368,16 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "app/services/payout*.py",
             "app/services/support_checkout*.py",
             "app/services/support_donation*.py",
+            "app/repositories/payment/**",
+            "app/repositories/payment_repository.py",
+            "app/repositories/payout_repository.py",
+            "app/repositories/wallet_repository.py",
+            "app/routes/admin_payments.py",
+            "app/routes/payments.py",
+            "app/routes/user_orders.py",
+            "app/validators/payment_*.py",
+            "app/validators/payout_input.py",
+            "app/validators/support_donation.py",
             "models/payment_*.py",
             "models/payout_*.py",
             "models/user_balance_transaction.py",
@@ -325,6 +400,11 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "app/services/admin_*.py",
             "app/services/bootstrap_admin*.py",
             "app/services/user_roles.py",
+            "app/services/user_management_schema.py",
+            "app/repositories/admin_analytics_repository.py",
+            "app/routes/admin.py",
+            "app/routes/admin_rest_api.py",
+            "app/utils/bootstrap_admin.py",
             "models/user_role.py",
             "models/admin_security_alert.py",
             "models/user_permission_audit_log.py",
@@ -345,6 +425,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "app/api/v1/analytics/**",
             "app/services/stats_*.py",
             "app/services/dashboard_service.py",
+            "app/repositories/stats_query_repository.py",
         ],
         "backend_tests": [
             "tests/test_stats_overview.py",
@@ -374,10 +455,83 @@ MODULES: dict[str, dict[str, list[str]]] = {
         "source_patterns": [
             "app/api/v1/tickets.py",
             "app/services/support_ticket*.py",
+            "app/repositories/support_ticket_repository.py",
+            "app/validators/support_ticket*.py",
             "models/support_ticket*.py",
         ],
         "backend_tests": [
             "tests/test_support_tickets.py",
+        ],
+        "frontend_tests": [],
+    },
+    "worksheets": {
+        "source_patterns": [
+            "app/api/v1/worksheets/**",
+            "app/services/worksheets/**",
+            "frontend/src/features/worksheets/**",
+        ],
+        "backend_tests": [
+            "tests/test_api_worksheets.py",
+            "tests/test_worksheet_service.py",
+        ],
+        "frontend_tests": [
+            "src/features/worksheets/DeckWorksheetModal.test.tsx",
+            "src/features/worksheets/api.test.ts",
+        ],
+    },
+    "seed": {
+        "source_patterns": [
+            "scripts/seed_flama_template.py",
+            "scripts/seed_production_strokes.py",
+            "scripts/reseed_db.*",
+            "static/seed_data/**",
+            "app/services/seeding_service.py",
+            "app/services/flashcard_legacy.py",
+        ],
+        "backend_tests": [
+            "tests/test_admin_user_roles.py",
+            "tests/test_bootstrap_admin_credentials.py",
+            "tests/test_tts_provider_seed.py",
+            "tests/test_vocab_seed_sharing.py",
+        ],
+        "frontend_tests": [],
+    },
+    "database": {
+        "source_patterns": [
+            "migrations/**",
+            "scripts/audit_legacy_schema.py",
+            "scripts/probe_p1_02_mysql_concurrency.py",
+        ],
+        "backend_tests": [
+            "tests/test_app_startup.py",
+            "tests/test_deck_release_schema.py",
+            "tests/test_flashcard_media_migration.py",
+            "tests/test_image_library_schema.py",
+            "tests/test_marketplace_taxonomy_migration.py",
+            "tests/test_scheduler_schema.py",
+        ],
+        "frontend_tests": [],
+    },
+    "tooling": {
+        "source_patterns": [
+            ".github/workflows/**",
+            "scripts/launch_chrome_devtools.*",
+            "scripts/run_lighthouse_audit.*",
+            "scripts/run_tests.py",
+            "scripts/setup_github_workspace.sh",
+            "scripts/setup_new_device.sh",
+            "scripts/setup_venv.sh",
+            "scripts/update_route_snapshot.py",
+            "fix_deck_imports.py",
+            "update_imports.py",
+            "wsgi_audit.py",
+        ],
+        "backend_tests": [
+            "tests/test_ci_workflow.py",
+            "tests/test_deploy_workflow.py",
+            "tests/test_flama_audio_release_workflow.py",
+            "tests/test_modular_test_runner.py",
+            "tests/test_test_mapping_coverage.py",
         ],
         "frontend_tests": [],
     },
@@ -391,9 +545,35 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "app/spa.py",
             "app/settings.py",
             "app/template_formatters.py",
+            "app/api/__init__.py",
+            "app/api/common/**",
             "app/api/v1/health.py",
             "app/api/v1/download.py",
             "app/api/v1/__init__.py",
+            "app/routes/__init__.py",
+            "app/routes/main.py",
+            "app/routes/rest_api.py",
+            "app/routes/spa_routes.py",
+            "app/services/__init__.py",
+            "app/services/common/**",
+            "app/services/daily_rate_limit_service.py",
+            "app/services/redis_state_service.py",
+            "app/services/rest_api_service.py",
+            "app/utils/__init__.py",
+            "app/utils/deck_move_token.py",
+            "app/utils/logging_redactor.py",
+            "app/utils/permissions.py",
+            "app/utils/redirects.py",
+            "app/validators/__init__.py",
+            "app/presenters/__init__.py",
+            "app/repositories/__init__.py",
+            "models/__init__.py",
+            "models/audit_log.py",
+            "models/column_preference.py",
+            "models/creator_feature_policy.py",
+            "models/field_rename_job.py",
+            "models/media_field_migration.py",
+            "models/model_uuid.py",
             "wsgi.py",
             "frontend/src/shared/**",
         ],
@@ -415,6 +595,22 @@ MODULES: dict[str, dict[str, list[str]]] = {
         ],
     },
 }
+
+# Central entrypoints and dependency manifests intentionally invalidate an
+# entire runtime layer. Keep this list short and covered by an audit test.
+FULL_BACKEND_SOURCE_PATTERNS = (
+    "app/cli.py",
+    "requirements.txt",
+    "pyproject.toml",
+    "setup.cfg",
+)
+
+FULL_FRONTEND_SOURCE_PATTERNS = (
+    "frontend/package.json",
+    "frontend/package-lock.json",
+    "frontend/vite.config.ts",
+    "frontend/vitest.config.ts",
+)
 
 # -----------------------------------------------------------------------------
 # Runtime Helpers
@@ -508,15 +704,29 @@ def get_git_modified_files() -> list[str]:
     # 3. If working tree is clean (e.g. CI runner right after checkout / commit), diff against base branch or previous commit
     if not files:
         diff_targets: list[list[str]] = []
+        explicit_base = os.environ.get("TEST_DIFF_BASE")
+        explicit_head = os.environ.get("TEST_DIFF_HEAD") or "HEAD"
+        is_new_branch_push = bool(explicit_base) and set(explicit_base or "") <= {"0"}
+        if explicit_base and not is_new_branch_push:
+            diff_targets.append([explicit_base, explicit_head])
+
         base_ref = os.environ.get("GITHUB_BASE_REF")
         if base_ref:
             diff_targets.append([f"origin/{base_ref}...HEAD"])
             diff_targets.append([f"{base_ref}...HEAD"])
 
-        # Check CI commit diffs
+        # A newly-created branch has an all-zero event.before. Compare against
+        # the integration branches before falling back to one commit.
+        if is_new_branch_push:
+            diff_targets.append(["origin/develop...HEAD"])
+            diff_targets.append(["origin/master...HEAD"])
+
+        # Local clean-tree fallback. Normal CI pushes supply an explicit range,
+        # so a push containing multiple commits is never reduced to HEAD~1.
         diff_targets.append(["HEAD~1", "HEAD"])
-        diff_targets.append(["origin/master...HEAD"])
-        diff_targets.append(["origin/develop...HEAD"])
+        if not is_new_branch_push:
+            diff_targets.append(["origin/master...HEAD"])
+            diff_targets.append(["origin/develop...HEAD"])
 
         for target in diff_targets:
             try:
@@ -543,50 +753,99 @@ def map_files_to_modules(changed_files: list[str]) -> tuple[set[str], set[str], 
     backend test files, and frontend test files.
     """
     matched_modules: set[str] = set()
+    backend_modules: set[str] = set()
+    frontend_modules: set[str] = set()
     backend_tests: set[str] = set()
     frontend_tests: set[str] = set()
 
     for file_path in changed_files:
         norm_path = file_path.replace("\\", "/")
 
-        # If direct test file was modified, run it directly
+        # A direct test edit runs that test only. Module names remain useful in
+        # diagnostics, but must not expand one test file into a whole domain.
         if norm_path.startswith("tests/test_") and norm_path.endswith(".py"):
             backend_tests.add(norm_path)
-            # Also find which module it belongs to
             for mod_name, mod_info in MODULES.items():
                 if norm_path in mod_info["backend_tests"]:
                     matched_modules.add(mod_name)
             continue
 
-        if "frontend/src/" in norm_path and (".test." in norm_path or ".spec." in norm_path):
-            rel_fe_test = norm_path.replace("frontend/", "")
+        if norm_path.startswith("frontend/src/") and (
+            ".test." in norm_path or ".spec." in norm_path
+        ):
+            rel_fe_test = norm_path.removeprefix("frontend/")
             frontend_tests.add(rel_fe_test)
             for mod_name, mod_info in MODULES.items():
                 if rel_fe_test in mod_info["frontend_tests"]:
                     matched_modules.add(mod_name)
             continue
 
-        # Match against module source patterns
+        is_frontend_source = norm_path.startswith("frontend/src/")
         matched = False
+
+        # Frontend tests are co-located. Discover the whole feature so a newly
+        # added test does not require immediate catalog maintenance.
+        feature_prefix = "frontend/src/features/"
+        if norm_path.startswith(feature_prefix):
+            feature_name = norm_path[len(feature_prefix):].split("/", 1)[0]
+            relative_prefix = f"src/features/{feature_name}/"
+            co_located_tests = {
+                path
+                for path in discover_all_frontend_tests()
+                if path.startswith(relative_prefix)
+            }
+            frontend_tests.update(co_located_tests)
+            matched = bool(co_located_tests)
+
         for mod_name, mod_info in MODULES.items():
-            for pattern in mod_info["source_patterns"]:
-                if fnmatch.fnmatch(norm_path, pattern):
-                    matched_modules.add(mod_name)
-                    matched = True
-                    break
+            if any(
+                fnmatch.fnmatch(norm_path, pattern)
+                for pattern in mod_info["source_patterns"]
+            ):
+                matched_modules.add(mod_name)
+                if is_frontend_source:
+                    frontend_modules.add(mod_name)
+                else:
+                    backend_modules.add(mod_name)
+                matched = True
+
+        # Any API/blueprint edit must verify both the endpoint list and count.
+        # This invariant also covers a route in a brand-new, unmapped domain.
+        if (
+            norm_path.startswith("app/api/")
+            or norm_path.startswith("app/routes/")
+            or norm_path == "app/__init__.py"
+        ):
+            backend_tests.add("tests/test_api_v1_route_map.py")
+
+        # Runtime dependency changes can affect every test in their layer.
+        if any(
+            fnmatch.fnmatch(norm_path, pattern)
+            for pattern in FULL_BACKEND_SOURCE_PATTERNS
+        ):
+            backend_tests.update(discover_all_backend_tests())
+            matched = True
+        if any(
+            fnmatch.fnmatch(norm_path, pattern)
+            for pattern in FULL_FRONTEND_SOURCE_PATTERNS
+        ):
+            frontend_tests.update(discover_all_frontend_tests())
+            matched = True
 
         if not matched:
-            # Fallback checks
+            # Fail safe when the catalog is stale: run the affected layer in
+            # full rather than silently substituting unrelated core tests.
             if norm_path.startswith("app/") or norm_path.startswith("models/"):
-                matched_modules.add("core")
-            elif norm_path.startswith("frontend/src/"):
-                matched_modules.add("core")
+                backend_tests.update(discover_all_backend_tests())
+            elif is_frontend_source:
+                frontend_tests.update(discover_all_frontend_tests())
 
-    # Collect all tests for matched modules
-    for mod_name in matched_modules:
-        if mod_name in MODULES:
-            backend_tests.update(MODULES[mod_name]["backend_tests"])
-            frontend_tests.update(MODULES[mod_name]["frontend_tests"])
+    # Never cross layers: React changes select Vitest only; Python changes
+    # select unittest only.
+    for mod_name in backend_modules:
+        backend_tests.update(MODULES[mod_name]["backend_tests"])
+    for mod_name in frontend_modules:
+        frontend_tests.update(MODULES[mod_name]["frontend_tests"])
 
     return matched_modules, backend_tests, frontend_tests
 
@@ -594,6 +853,39 @@ def map_files_to_modules(changed_files: list[str]) -> tuple[set[str], set[str], 
 # -----------------------------------------------------------------------------
 # Test Execution
 # -----------------------------------------------------------------------------
+
+def discover_all_backend_tests() -> list[str]:
+    """Return every backend unittest file, independent of module mappings."""
+    tests_dir = ROOT_DIR / "tests"
+    return sorted(
+        path.relative_to(ROOT_DIR).as_posix()
+        for path in tests_dir.rglob("test_*.py")
+        if "__pycache__" not in path.parts
+    )
+
+
+def discover_all_frontend_tests() -> list[str]:
+    """Return every Vitest file relative to frontend/."""
+    source_dir = ROOT_DIR / "frontend" / "src"
+    if not source_dir.exists():
+        return []
+    return sorted(
+        path.relative_to(ROOT_DIR / "frontend").as_posix()
+        for path in source_dir.rglob("*")
+        if path.is_file()
+        and any(marker in path.name for marker in (".test.", ".spec."))
+    )
+
+
+def build_backend_test_environment(media_root: str) -> dict[str, str]:
+    """Build an isolated environment for the backend test subprocess."""
+    env = dict(os.environ)
+    env["FLAMA_TEST_MEDIA_UPLOAD_ROOT"] = media_root
+    env["FLASHCARD_MEDIA_UPLOAD_ROOT"] = media_root
+    # Rate-limit tests opt in explicitly through their app config. Disabling the
+    # default here prevents module-level counters from leaking across test apps.
+    env["RATE_LIMIT_DAILY_ENABLED"] = "0"
+    return env
 
 def run_backend_tests(
     python_cmd: list[str],
@@ -626,7 +918,12 @@ def run_backend_tests(
     cmd.extend(existing_tests)
 
     start_time = time.time()
-    res = subprocess.run(cmd, cwd=str(ROOT_DIR))
+    with tempfile.TemporaryDirectory(prefix="flama-backend-tests-") as media_root:
+        res = subprocess.run(
+            cmd,
+            cwd=str(ROOT_DIR),
+            env=build_backend_test_environment(media_root),
+        )
     elapsed = time.time() - start_time
 
     if res.returncode == 0:
@@ -766,10 +1063,11 @@ def main() -> int:
 
     if args.all:
         print("[MODE] Running ALL test suites across all modules.")
-        for mod, data in MODULES.items():
-            target_modules.add(mod)
-            selected_backend_tests.update(data["backend_tests"])
-            selected_frontend_tests.update(data["frontend_tests"])
+        target_modules.update(MODULES)
+        # --all must discover the filesystem. MODULES intentionally supports
+        # focused selection and may lag when a new test file is added.
+        selected_backend_tests.update(discover_all_backend_tests())
+        selected_frontend_tests.update(discover_all_frontend_tests())
 
     elif args.module:
         requested = [m.strip().lower() for m in args.module.split(",") if m.strip()]

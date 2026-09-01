@@ -616,6 +616,52 @@ class ProfileApiTests(unittest.TestCase):
         self.assertEqual(resp.status_code, 404)
         self.assertEqual(resp.get_json()["error"], "USER_NOT_FOUND")
 
+    def test_profile_verify_email_flow(self):
+        from models.email_verification_token import EmailVerificationToken
+        from app.services import email_verification_service, email_verification_rate_limit_service
+
+        email_verification_rate_limit_service.reset_state()
+        self._login()
+
+        # Request verification OTP from profile endpoint
+        req_resp = self.client.post("/api/profile/verify-email/request")
+        self.assertEqual(req_resp.status_code, 200)
+        req_data = req_resp.get_json()
+        self.assertTrue(req_data["success"])
+
+        # Override token hash to known code
+        with self.app.app_context():
+            token_row = (
+                EmailVerificationToken.query.filter_by(user_id=self.user_id, token_type="code")
+                .order_by(EmailVerificationToken.id.desc())
+                .first()
+            )
+            self.assertIsNotNone(token_row)
+            token_row.token_hash = email_verification_service._token_digest("654321")
+            db.session.commit()
+
+        # Wrong code
+        bad_resp = self.client.post(
+            "/api/profile/verify-email/confirm",
+            json={"code": "000000"},
+        )
+        self.assertEqual(bad_resp.status_code, 400)
+        self.assertEqual(bad_resp.get_json()["error"], "INVALID_CODE")
+
+        # Correct code
+        good_resp = self.client.post(
+            "/api/profile/verify-email/confirm",
+            json={"code": "654321"},
+        )
+        self.assertEqual(good_resp.status_code, 200)
+        self.assertTrue(good_resp.get_json()["email_verified"])
+
+        # Subsequent profile get reflects email_verified=True
+        profile_resp = self.client.get("/api/profile")
+        self.assertEqual(profile_resp.status_code, 200)
+        self.assertTrue(profile_resp.get_json()["user"]["email_verified"])
+
 
 if __name__ == "__main__":
     unittest.main()
+

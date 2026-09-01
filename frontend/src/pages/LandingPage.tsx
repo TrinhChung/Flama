@@ -16,7 +16,6 @@ import {
   Search,
   ShieldCheck,
   Smartphone,
-  Sparkles,
   Target,
   TrendingUp,
   Trophy,
@@ -46,7 +45,7 @@ const steps: Array<{
     title: 'Tạo thẻ trong 30 giây',
     description:
       'Thêm công thức, thuật ngữ hay định nghĩa nhanh chóng. Thiết kế tối giản giúp bạn tập trung vào nội dung.',
-    icon: Sparkles,
+    icon: PencilLine,
   },
   {
     title: 'Học theo lịch thông minh',

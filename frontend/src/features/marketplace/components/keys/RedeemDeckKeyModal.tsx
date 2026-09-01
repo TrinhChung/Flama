@@ -6,7 +6,6 @@ import {
   CheckCircle2,
   KeyRound,
   LoaderCircle,
-  Sparkles,
   User,
   Clock,
   BookOpen,
@@ -283,7 +282,7 @@ export function RedeemDeckKeyModal({
                 {redeemMutation.isPending ? (
                   <LoaderCircle className="size-4 animate-spin" />
                 ) : (
-                  <Sparkles className="size-4" />
+                  <KeyRound className="size-4" />
                 )}
                 Kích hoạt & Cài đặt
               </Button>

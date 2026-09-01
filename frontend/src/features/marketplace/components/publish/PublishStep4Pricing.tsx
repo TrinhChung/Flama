@@ -1,4 +1,6 @@
-import { DollarSign, GitCompare, GraduationCap, KeyRound, Sparkles } from 'lucide-react'
+import { GitCompare, GraduationCap } from 'lucide-react'
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
+import { faCreditCard, faGift, faKey } from '@fortawesome/free-solid-svg-icons'
 import { Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -79,12 +81,12 @@ export function PublishStep4Pricing({
             }}
             className={`p-4 rounded-xl border cursor-pointer transition-all text-center select-none ${
               distributionMode === 'free'
-                ? 'border-emerald-500 bg-emerald-500/10 text-foreground font-bold ring-2 ring-emerald-500/30'
-                : 'border-border bg-card hover:bg-muted/50 text-muted-foreground'
+                ? 'border-primary bg-primary/5 text-foreground font-bold ring-1 ring-primary/30 shadow-2xs'
+                : 'border-border/80 bg-card hover:bg-muted/40 text-muted-foreground'
             }`}
           >
-            <div className="flex items-center justify-center mb-1 text-emerald-600 dark:text-emerald-400">
-              <Sparkles className="size-5" />
+            <div className="flex items-center justify-center mb-1.5 text-muted-foreground">
+              <FontAwesomeIcon icon={faGift} className="size-4" />
             </div>
             <div className="font-bold text-sm sm:text-base">Miễn phí (Free)</div>
             <div className="text-xs opacity-80 mt-0.5">Chia sẻ tự do tới mọi người</div>
@@ -98,12 +100,12 @@ export function PublishStep4Pricing({
             }}
             className={`p-4 rounded-xl border cursor-pointer transition-all text-center select-none ${
               distributionMode === 'paid'
-                ? 'border-primary bg-primary/10 text-foreground font-bold ring-2 ring-primary/30'
-                : 'border-border bg-card hover:bg-muted/50 text-muted-foreground'
+                ? 'border-primary bg-primary/5 text-foreground font-bold ring-1 ring-primary/30 shadow-2xs'
+                : 'border-border/80 bg-card hover:bg-muted/40 text-muted-foreground'
             }`}
           >
-            <div className="flex items-center justify-center mb-1 text-primary">
-              <DollarSign className="size-5" />
+            <div className="flex items-center justify-center mb-1.5 text-muted-foreground">
+              <FontAwesomeIcon icon={faCreditCard} className="size-4" />
             </div>
             <div className="font-bold text-sm sm:text-base">Có phí (Paid)</div>
             <div className="text-xs opacity-80 mt-0.5">Bán qua cổng payOS</div>
@@ -119,12 +121,12 @@ export function PublishStep4Pricing({
             }}
             className={`p-4 rounded-xl border cursor-pointer transition-all text-center select-none ${
               distributionMode === 'course_key'
-                ? 'border-purple-500 bg-purple-500/10 text-foreground font-bold ring-2 ring-purple-500/30'
-                : 'border-border bg-card hover:bg-muted/50 text-muted-foreground'
+                ? 'border-primary bg-primary/5 text-foreground font-bold ring-1 ring-primary/30 shadow-2xs'
+                : 'border-border/80 bg-card hover:bg-muted/40 text-muted-foreground'
             }`}
           >
-            <div className="flex items-center justify-center mb-1 text-purple-600 dark:text-purple-400">
-              <KeyRound className="size-5" />
+            <div className="flex items-center justify-center mb-1.5 text-muted-foreground">
+              <FontAwesomeIcon icon={faKey} className="size-4" />
             </div>
             <div className="font-bold text-sm sm:text-base">Mã lớp học (Keys)</div>
             <div className="text-xs opacity-80 mt-0.5">Kích hoạt qua Access Keys</div>
@@ -257,9 +259,9 @@ export function PublishStep4Pricing({
         {/* Course Key Form Fields */}
         {distributionMode === 'course_key' && (
           <div className="space-y-4 pt-1 animate-in fade-in duration-200">
-            <div className="rounded-xl border border-purple-500/30 bg-purple-500/5 p-4 space-y-3.5">
+            <div className="rounded-xl border border-border/80 bg-muted/30 p-4 space-y-3.5">
               <div className="flex items-center gap-2">
-                <GraduationCap className="size-4 text-purple-600 dark:text-purple-400" />
+                <GraduationCap className="size-4 text-muted-foreground" />
                 <Label className="text-xs font-bold text-foreground">
                   Thông tin khóa học & Hướng dẫn nhận mã
                 </Label>
@@ -324,8 +326,8 @@ export function PublishStep4Pricing({
                 />
               </div>
 
-              <p className="text-[11px] leading-relaxed text-purple-700 dark:text-purple-300 pt-1">
-                💡 <strong>Gợi ý:</strong> Sau khi đăng tải deck, bạn có thể tạo hàng loạt <strong>Mã kích hoạt (Access Keys)</strong> và theo dõi danh sách học viên đã kích hoạt trong trang chi tiết của bộ deck.
+              <p className="text-[11px] leading-relaxed text-muted-foreground pt-1">
+                Gợi ý: Sau khi đăng tải deck, bạn có thể tạo hàng loạt <strong>Mã kích hoạt (Access Keys)</strong> và theo dõi danh sách học viên đã kích hoạt trong trang chi tiết của bộ deck.
               </p>
             </div>
           </div>

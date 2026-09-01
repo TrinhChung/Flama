@@ -1,8 +1,12 @@
 # Study Architecture Multi-Agent Execution Plan
 
-Status: proposed execution backlog  
-Last reviewed: 2026-08-28  
+Status: proposed execution backlog; sequencing amended by the 2026-08-29 review
+
+Last reviewed: 2026-08-29
+
 Primary architecture reference: `docs/architecture/study-interaction-trigger-algorithm-plan.md`
+
+> **Sequencing amendment:** the [2026-08-29 decoupling progress review](../../architecture/decoupling-progress-review-2026-08-29.md) found an active forgeable iframe `host_command` path. Its Wave 0 security containment must complete before Wave 1 below. The remaining work packages and their dependency order continue to apply.
 
 ## 1. Purpose
 

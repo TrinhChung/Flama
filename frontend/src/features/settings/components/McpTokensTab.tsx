@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -38,7 +39,6 @@ import {
   Shield,
   ShieldAlert,
   ShieldCheck,
-  Sparkles,
   Trash2,
   Zap,
 } from 'lucide-react'
@@ -180,7 +180,10 @@ export function McpTokensTab({ hookResult }: McpTokensTabProps) {
             Tạo MCP Access Token mới
           </CardTitle>
           <CardDescription className="text-xs sm:text-sm">
-            Mỗi AI client hoặc thiết bị (Claude Desktop, Cursor IDE, Antigravity, Laptop) nên tạo 1 token riêng biệt để dễ dàng cấp quyền và quản lý.
+            Mỗi AI client (Claude Desktop, Cursor, Antigravity) nên tạo 1 token riêng để phân quyền an toàn.{' '}
+            <Link to="/guide/integrations/mcp-ai" className="text-primary hover:underline font-medium inline-flex items-center gap-0.5">
+              Xem hướng dẫn cấu hình file JSON &rarr;
+            </Link>
           </CardDescription>
         </CardHeader>
         <CardContent className="p-4 sm:p-6 pt-0 space-y-5">
@@ -242,9 +245,12 @@ export function McpTokensTab({ hookResult }: McpTokensTabProps) {
           {/* Scope selection matrix */}
           <div className="space-y-3 pt-2 border-t">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+              <div className="text-xs font-semibold text-foreground flex items-center gap-1.5 flex-wrap">
                 <Shield className="size-4 text-primary shrink-0" />
-                <span>Quyền hạn cấp cho Token ({selectedScopes.length}/{ALL_MCP_SCOPES.length} Scopes đã chọn):</span>
+                <span>Quyền hạn cấp cho Token ({selectedScopes.length}/{ALL_MCP_SCOPES.length} Scopes):</span>
+                <Link to="/guide/integrations/mcp-tools" className="text-xs text-primary hover:underline font-normal">
+                  (Xem 20 công cụ tương ứng &rarr;)
+                </Link>
               </div>
 
               {/* 1-Click Presets Bar */}
@@ -265,7 +271,7 @@ export function McpTokensTab({ hookResult }: McpTokensTabProps) {
                       }`}
                       onClick={() => applyCreatePreset(preset.key)}
                     >
-                      {preset.key === 'all' && <Sparkles className="size-3" />}
+                      {preset.key === 'all' && <ShieldCheck className="size-3" />}
                       {preset.key === 'readonly' && <BookOpen className="size-3" />}
                       {preset.key === 'manager' && <FolderTree className="size-3" />}
                       {preset.key === 'study' && <Brain className="size-3" />}
@@ -504,7 +510,7 @@ export function McpTokensTab({ hookResult }: McpTokensTabProps) {
                           >
                             {isFullAccess ? (
                               <Badge className="bg-primary/10 text-primary border-primary/30 font-medium text-[11px] gap-1 hover:bg-primary/20 transition-colors">
-                                <Sparkles className="size-3 text-primary" />
+                                <ShieldCheck className="size-3 text-primary" />
                                 Toàn quyền ({tokenScopes.length}/{ALL_MCP_SCOPES.length})
                               </Badge>
                             ) : isReadOnly ? (

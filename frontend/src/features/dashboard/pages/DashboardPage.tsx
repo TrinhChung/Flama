@@ -58,6 +58,7 @@ export function DashboardPage() {
   return (
     <Page className="anki-home relative max-w-[1200px] w-full mx-auto px-2 sm:px-4 py-2 sm:py-3 space-y-3 sm:space-y-6">
       <AmbientBackground />
+
       {/* Shared Dashboard Toolbar */}
       <div className="dash-toolbar flex items-center justify-between gap-2 border-b border-border/60 pb-2 sm:pb-3">
         {/* Left Navigation Tabs */}

@@ -5,6 +5,11 @@ import { toast } from 'sonner'
 import { appApi } from '@/app/api'
 import { apiBlob } from '@/shared/api/client'
 import { updateCardFieldValuesInSessions } from '@/features/study/session/sessionStore'
+import {
+  loadStoredBrowseTtsSettings,
+  resetStoredBrowseTtsSettings,
+  saveStoredBrowseTtsSettings,
+} from '../services/ttsSettingsStorage'
 
 export type BrowseCardRow = {
   card_id: string
@@ -32,6 +37,7 @@ export type BrowseDeck = {
   name: string
   parent_id?: number | null
   path?: string
+  note_type_id?: string | null
   counts?: {
     new?: number
     learn?: number
@@ -43,6 +49,21 @@ export type CardDetailField = {
   name: string
   position: number
   required?: boolean
+  field_type?: 'text' | 'richtext' | 'markdown' | 'image' | 'audio' | 'diagram'
+}
+
+export type NoteTypeFieldDef = {
+  name: string
+  position: number
+  required?: boolean
+  field_type?: 'text' | 'richtext' | 'markdown' | 'image' | 'audio' | 'diagram'
+}
+
+export type NoteTypeSummary = {
+  id: string
+  name: string
+  title?: string
+  field_defs?: NoteTypeFieldDef[]
 }
 
 export type CardDetailResponse = {
@@ -107,6 +128,7 @@ export function useBrowseState() {
   }
 
   // VoiceVox TTS Audio Generation Modal State
+  const initialTtsSettings = loadStoredBrowseTtsSettings()
   const [isTtsModalOpen, setIsTtsModalOpen] = useState(false)
   const [isLocalAudioModalOpen, setIsLocalAudioModalOpen] = useState(false)
   const [isStrokeModalOpen, setIsStrokeModalOpen] = useState(false)
@@ -117,40 +139,126 @@ export function useBrowseState() {
   const [localAudioTargetCardIds, setLocalAudioTargetCardIds] = useState<string[]>([])
   const [ttsSourceField, setTtsSourceField] = useState('Word')
   const [ttsDestinationField, setTtsDestinationField] = useState('Audio')
-  const [ttsCharacter, setTtsCharacter] = useState('')
+  
+  const [ttsCharacter, setTtsCharacterState] = useState<string>(initialTtsSettings.character)
+  const setTtsCharacter = (val: string | ((prev: string) => string)) => {
+    setTtsCharacterState((prev) => {
+      const next = typeof val === 'function' ? val(prev) : val
+      saveStoredBrowseTtsSettings({ character: next })
+      return next
+    })
+  }
+
   const [ttsApiKey, setTtsApiKey] = useState(() => {
     return localStorage.getItem('flama_voicevox_api_key') || ''
   })
   const [isKeySaved, setIsKeySaved] = useState(false)
   const [isSavingKey, setIsSavingKey] = useState(false)
   const [showApiKey, setShowApiKey] = useState(false)
-  const [ttsAppendAudio, setTtsAppendAudio] = useState(false)
-  const [ttsUseOpus, setTtsUseOpus] = useState(false)
-  const [ttsVolumeScale, setTtsVolumeScale] = useState(1.0)
-  const [ttsPitch, setTtsPitch] = useState(0.0)
-  const [ttsSpeed, setTtsSpeed] = useState(1.0)
-  const [ttsIntonationScale, setTtsIntonationScale] = useState(1.0)
-  const [ttsInitialSilence, setTtsInitialSilence] = useState(0.1)
-  const [ttsFinalSilence, setTtsFinalSilence] = useState(0.1)
+
+  const [ttsAppendAudio, setTtsAppendAudioState] = useState<boolean>(initialTtsSettings.appendAudio)
+  const setTtsAppendAudio = (val: boolean | ((prev: boolean) => boolean)) => {
+    setTtsAppendAudioState((prev) => {
+      const next = typeof val === 'function' ? val(prev) : val
+      saveStoredBrowseTtsSettings({ appendAudio: next })
+      return next
+    })
+  }
+
+  const [ttsUseOpus, setTtsUseOpusState] = useState<boolean>(initialTtsSettings.useOpus)
+  const setTtsUseOpus = (val: boolean | ((prev: boolean) => boolean)) => {
+    setTtsUseOpusState((prev) => {
+      const next = typeof val === 'function' ? val(prev) : val
+      saveStoredBrowseTtsSettings({ useOpus: next })
+      return next
+    })
+  }
+
+  const [ttsVolumeScale, setTtsVolumeScaleState] = useState<number>(initialTtsSettings.volumeScale)
+  const setTtsVolumeScale = (val: number | ((prev: number) => number)) => {
+    setTtsVolumeScaleState((prev) => {
+      const next = typeof val === 'function' ? val(prev) : val
+      saveStoredBrowseTtsSettings({ volumeScale: next })
+      return next
+    })
+  }
+
+  const [ttsPitch, setTtsPitchState] = useState<number>(initialTtsSettings.pitch)
+  const setTtsPitch = (val: number | ((prev: number) => number)) => {
+    setTtsPitchState((prev) => {
+      const next = typeof val === 'function' ? val(prev) : val
+      saveStoredBrowseTtsSettings({ pitch: next })
+      return next
+    })
+  }
+
+  const [ttsSpeed, setTtsSpeedState] = useState<number>(initialTtsSettings.speed)
+  const setTtsSpeed = (val: number | ((prev: number) => number)) => {
+    setTtsSpeedState((prev) => {
+      const next = typeof val === 'function' ? val(prev) : val
+      saveStoredBrowseTtsSettings({ speed: next })
+      return next
+    })
+  }
+
+  const [ttsIntonationScale, setTtsIntonationScaleState] = useState<number>(initialTtsSettings.intonationScale)
+  const setTtsIntonationScale = (val: number | ((prev: number) => number)) => {
+    setTtsIntonationScaleState((prev) => {
+      const next = typeof val === 'function' ? val(prev) : val
+      saveStoredBrowseTtsSettings({ intonationScale: next })
+      return next
+    })
+  }
+
+  const [ttsInitialSilence, setTtsInitialSilenceState] = useState<number>(initialTtsSettings.initialSilence)
+  const setTtsInitialSilence = (val: number | ((prev: number) => number)) => {
+    setTtsInitialSilenceState((prev) => {
+      const next = typeof val === 'function' ? val(prev) : val
+      saveStoredBrowseTtsSettings({ initialSilence: next })
+      return next
+    })
+  }
+
+  const [ttsFinalSilence, setTtsFinalSilenceState] = useState<number>(initialTtsSettings.finalSilence)
+  const setTtsFinalSilence = (val: number | ((prev: number) => number)) => {
+    setTtsFinalSilenceState((prev) => {
+      const next = typeof val === 'function' ? val(prev) : val
+      saveStoredBrowseTtsSettings({ finalSilence: next })
+      return next
+    })
+  }
+
   const [isPreviewing, setIsPreviewing] = useState(false)
+
+  // Worksheet Generator Modal State
+  const [isWorksheetModalOpen, setIsWorksheetModalOpen] = useState(false)
+  const [worksheetTargetDeckId, setWorksheetTargetDeckId] = useState<number | null>(null)
+  const [worksheetTargetCardIds, setWorksheetTargetCardIds] = useState<string[]>([])
 
   // Right Pane: Active Card Selection & Editor State
   const [activeCardId, setActiveCardId] = useState<string | null>(
     urlCardId ? urlCardId : null,
   )
+  const [isCreatingCard, setIsCreatingCard] = useState(false)
+  const [createNoteTypeId, setCreateNoteTypeId] = useState<string | null>(null)
 
   // Mobile View Switcher Tab State: 'decks' | 'cards' | 'editor'
   const [mobileTab, setMobileTab] = useState<'decks' | 'cards' | 'editor'>(
     urlCardId ? 'editor' : 'cards',
   )
 
-  // Sync state if URL search parameters change
+  // Sync state if URL search parameters change on initial mount
+  const initialUrlDeckSyncedRef = useRef(false)
   useEffect(() => {
-    if (urlDeckId) {
-      setSelectedDeckId(Number(urlDeckId))
+    if (!initialUrlDeckSyncedRef.current) {
+      initialUrlDeckSyncedRef.current = true
+      if (urlDeckId) {
+        setSelectedDeckId(Number(urlDeckId))
+      }
     }
     if (urlCardId) {
       setActiveCardId(urlCardId)
+      setIsCreatingCard(false)
       setMobileTab('editor')
     }
   }, [urlDeckId, urlCardId])
@@ -179,6 +287,18 @@ export function useBrowseState() {
     queryKey: ['browse', 'decks'],
     queryFn: () => appApi.get<{ decks: BrowseDeck[] }>('/browse/decks'),
   })
+
+  // Note Types Query for Card Creation
+  const noteTypesQuery = useQuery({
+    queryKey: ['note-types'],
+    queryFn: () => appApi.get<{ items: NoteTypeSummary[] }>('/note-types'),
+  })
+
+  useEffect(() => {
+    if (isCreatingCard && !createNoteTypeId && noteTypesQuery.data?.items?.length) {
+      setCreateNoteTypeId(noteTypesQuery.data.items[0].id)
+    }
+  }, [isCreatingCard, createNoteTypeId, noteTypesQuery.data?.items])
 
   // Cards List Query
   const cardsQuery = useQuery({
@@ -266,28 +386,38 @@ export function useBrowseState() {
       setInitialTags(tags)
 
       if (cardDetailQuery.data.fields && cardDetailQuery.data.fields.length > 0) {
-        const fieldNames = cardDetailQuery.data.fields.map((f) => f.name)
+        const fields = cardDetailQuery.data.fields
+        const sourceFieldNames = fields
+          .filter((field) => !['image', 'audio', 'diagram'].includes(String(field.field_type || '').toLowerCase()))
+          .map((field) => field.name)
+        const audioFieldNames = fields
+          .filter((field) => String(field.field_type || '').toLowerCase() === 'audio')
+          .map((field) => field.name)
 
-        if (fieldNames.includes('Reading')) {
+        if (sourceFieldNames.includes('Reading')) {
           setTtsSourceField('Reading')
-        } else if (fieldNames.includes('Word')) {
+        } else if (sourceFieldNames.includes('Word')) {
           setTtsSourceField('Word')
-        } else if (fieldNames.includes('Expression')) {
+        } else if (sourceFieldNames.includes('Expression')) {
           setTtsSourceField('Expression')
-        } else if (fieldNames.includes('Kanji')) {
+        } else if (sourceFieldNames.includes('Kanji')) {
           setTtsSourceField('Kanji')
-        } else if (fieldNames.length > 0 && !fieldNames.includes(ttsSourceFieldRef.current)) {
-          setTtsSourceField(fieldNames[0])
+        } else if (sourceFieldNames.length > 0 && !sourceFieldNames.includes(ttsSourceFieldRef.current)) {
+          setTtsSourceField(sourceFieldNames[0])
+        } else if (sourceFieldNames.length === 0) {
+          setTtsSourceField('')
         }
 
-        if (fieldNames.includes('Audio')) {
+        if (audioFieldNames.includes('Audio')) {
           setTtsDestinationField('Audio')
-        } else if (fieldNames.includes('AudioReading')) {
+        } else if (audioFieldNames.includes('AudioReading')) {
           setTtsDestinationField('AudioReading')
-        } else if (fieldNames.includes('Sound')) {
+        } else if (audioFieldNames.includes('Sound')) {
           setTtsDestinationField('Sound')
-        } else if (fieldNames.length > 0 && !fieldNames.includes(ttsDestinationFieldRef.current)) {
-          setTtsDestinationField(fieldNames[fieldNames.length - 1])
+        } else if (audioFieldNames.length > 0 && !audioFieldNames.includes(ttsDestinationFieldRef.current)) {
+          setTtsDestinationField(audioFieldNames[0])
+        } else if (audioFieldNames.length === 0) {
+          setTtsDestinationField('')
         }
       }
     }
@@ -312,6 +442,88 @@ export function useBrowseState() {
     setEditTags(initialTags)
   }
 
+  const handleStartCreateCard = () => {
+    setIsCreatingCard(true)
+    setActiveCardId(null)
+    setSelectedCards([])
+
+    const defaultDeckId = selectedDeckId ?? decksQuery.data?.decks?.[0]?.id ?? null
+    setEditDeckId(defaultDeckId)
+
+    const currentDeck = decksQuery.data?.decks?.find((d) => d.id === defaultDeckId)
+    const availableNoteTypes = noteTypesQuery.data?.items || []
+    const resolvedNoteTypeId =
+      currentDeck?.note_type_id ||
+      cardDetailQuery.data?.note?.note_type_id ||
+      availableNoteTypes.find((nt) => nt.field_defs?.some((f) => f.name.toLowerCase() === 'word'))?.id ||
+      availableNoteTypes.find((nt) => !nt.field_defs?.some((f) => f.name.toLowerCase() === 'stt'))?.id ||
+      availableNoteTypes[0]?.id
+
+    if (resolvedNoteTypeId) {
+      setCreateNoteTypeId(resolvedNoteTypeId)
+    }
+
+    setEditFieldValues({})
+    setEditTags([])
+    setNewTagInput('')
+    setMobileTab('editor')
+  }
+
+  const handleCancelCreate = () => {
+    setIsCreatingCard(false)
+    setEditFieldValues({})
+    setEditTags([])
+    setNewTagInput('')
+  }
+
+  // Create Card / Note Mutation
+  const createMutation = useMutation({
+    mutationFn: (payload: {
+      note_type_id: string
+      deck_id: number
+      field_values: Record<string, string>
+      tags?: string[]
+    }) =>
+      appApi.mutate<{ id: string; card_ids?: Array<string | number>; first_card_id?: string | number }>(
+        '/notes',
+        'POST',
+        payload,
+      ),
+    onSuccess: async (data, variables) => {
+      toast.success('Đã tạo thẻ mới thành công.')
+      setIsCreatingCard(false)
+
+      const targetDeckId = variables.deck_id
+      if (targetDeckId !== undefined && targetDeckId !== null) {
+        setSelectedDeckId(targetDeckId)
+      }
+
+      const rawCardId = data?.first_card_id ?? data?.card_ids?.[0]
+      const newCardId = rawCardId !== undefined && rawCardId !== null ? String(rawCardId) : null
+
+      if (newCardId) {
+        setActiveCardId(newCardId)
+      }
+
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['browse', 'cards'] }),
+        queryClient.invalidateQueries({ queryKey: ['browse', 'decks'] }),
+        queryClient.invalidateQueries({ queryKey: ['bootstrap'] }),
+        newCardId
+          ? queryClient.invalidateQueries({ queryKey: ['browse', 'card-detail', newCardId] })
+          : Promise.resolve(),
+      ])
+
+      if (newCardId) {
+        setActiveCardId(newCardId)
+      }
+      setMobileTab('editor')
+    },
+    onError: (error: Error) => {
+      toast.error('Không thể tạo thẻ', { description: error.message })
+    },
+  })
+
   // Update Mutation
   const updateMutation = useMutation({
     mutationFn: (payload: { field_values: Record<string, string>; deck_id?: number; tags?: string[] }) =>
@@ -332,7 +544,8 @@ export function useBrowseState() {
       setInitialDeckId(editDeckId)
       setInitialTags(editTags)
       if (activeCardId) {
-        void updateCardFieldValuesInSessions(activeCardId, editFieldValues)
+        const noteId = cardDetailQuery.data?.note?.id ? String(cardDetailQuery.data.note.id) : null
+        void updateCardFieldValuesInSessions(activeCardId, editFieldValues, { noteId })
       }
       void queryClient.invalidateQueries({ queryKey: ['browse', 'cards'] })
       void queryClient.invalidateQueries({ queryKey: ['browse', 'card-detail', activeCardId] })
@@ -358,14 +571,12 @@ export function useBrowseState() {
   // Bulk Delete Mutation
   const bulkDeleteMutation = useMutation({
     mutationFn: async (cardIds: string[]) => {
-      const results = await Promise.allSettled(
-        cardIds.map((id) => appApi.mutate(`/browse/cards/${id}`, 'DELETE')),
+      const res = await appApi.mutate<{ success: boolean; deleted_count?: number }>(
+        '/browse/cards/batch-delete',
+        'POST',
+        { card_ids: cardIds },
       )
-      const failed = results.filter((r) => r.status === 'rejected')
-      if (failed.length > 0) {
-        throw new Error(`Có ${failed.length}/${cardIds.length} thẻ xóa không thành công.`)
-      }
-      return cardIds.length
+      return res.deleted_count ?? cardIds.length
     },
     onMutate: () => {
       toast?.loading?.('Đang xóa các thẻ đã chọn…', {
@@ -375,11 +586,13 @@ export function useBrowseState() {
     },
     onSuccess: (count) => {
       toast.success(`Đã xóa thành công ${count} thẻ đã chọn.`, { id: 'bulk-delete-cards' })
-      if (activeCardId && selectedCards.includes(activeCardId)) {
+      if (activeCardId && selectedCards.some((id) => String(id) === String(activeCardId))) {
         setActiveCardId(null)
       }
       setSelectedCards([])
       void queryClient.invalidateQueries({ queryKey: ['browse', 'cards'] })
+      void queryClient.invalidateQueries({ queryKey: ['browse', 'decks'] })
+      void queryClient.invalidateQueries({ queryKey: ['bootstrap'] })
     },
     onError: (error: Error) => {
       toast.error('Lỗi khi xóa hàng loạt', { id: 'bulk-delete-cards', description: error.message })
@@ -520,18 +733,19 @@ export function useBrowseState() {
 
   // Reset VoiceVox Settings
   const handleResetTtsDefaults = () => {
+    resetStoredBrowseTtsSettings()
     setTtsSourceField('Word')
     setTtsDestinationField('Audio')
-    setTtsCharacter('')
+    setTtsCharacterState('')
     setTtsApiKey('')
-    setTtsAppendAudio(false)
-    setTtsUseOpus(false)
-    setTtsVolumeScale(1.0)
-    setTtsPitch(0.0)
-    setTtsSpeed(1.0)
-    setTtsIntonationScale(1.0)
-    setTtsInitialSilence(0.1)
-    setTtsFinalSilence(0.1)
+    setTtsAppendAudioState(false)
+    setTtsUseOpusState(false)
+    setTtsVolumeScaleState(1.0)
+    setTtsPitchState(0.0)
+    setTtsSpeedState(1.0)
+    setTtsIntonationScaleState(1.0)
+    setTtsInitialSilenceState(0.1)
+    setTtsFinalSilenceState(0.1)
     toast.info('Đã khôi phục thiết lập VoiceVox về mặc định.')
   }
 
@@ -568,17 +782,20 @@ export function useBrowseState() {
     setPage(1)
   }
 
-  const availableFieldNames = Array.from(
+  const availableSourceFieldNames = Array.from(
     new Set(
-      (
-        cardDetailQuery.data?.fields?.map((f) => f.name) || [
-          'Word',
-          'Reading',
-          'Meaning',
-          'Audio',
-          'AudioReading',
-        ]
-      ).filter(Boolean),
+      (cardDetailQuery.data?.fields || [])
+        .filter((field) => !['image', 'audio', 'diagram'].includes(String(field.field_type || '').toLowerCase()))
+        .map((field) => field.name)
+        .filter(Boolean),
+    ),
+  )
+  const availableAudioFieldNames = Array.from(
+    new Set(
+      (cardDetailQuery.data?.fields || [])
+        .filter((field) => String(field.field_type || '').toLowerCase() === 'audio')
+        .map((field) => field.name)
+        .filter(Boolean),
     ),
   )
 
@@ -618,6 +835,12 @@ export function useBrowseState() {
     setStrokeModalMode,
     strokeModalCardId,
     setStrokeModalCardId,
+    isWorksheetModalOpen,
+    setIsWorksheetModalOpen,
+    worksheetTargetDeckId,
+    setWorksheetTargetDeckId,
+    worksheetTargetCardIds,
+    setWorksheetTargetCardIds,
     localAudioEngineId,
     setLocalAudioEngineId,
     localAudioDefaultVoiceId,
@@ -657,6 +880,11 @@ export function useBrowseState() {
     isPreviewing,
     activeCardId,
     setActiveCardId,
+    isCreatingCard,
+    setIsCreatingCard,
+    createNoteTypeId,
+    setCreateNoteTypeId,
+    noteTypesQuery,
     mobileTab,
     setMobileTab,
     editFieldValues,
@@ -673,7 +901,8 @@ export function useBrowseState() {
     isDirty,
     allSelected,
     filteredDecks,
-    availableFieldNames,
+    availableSourceFieldNames,
+    availableAudioFieldNames,
     targetTtsCardIds,
     decksQuery,
     cardsQuery,
@@ -681,6 +910,9 @@ export function useBrowseState() {
     ttsProfileQuery,
     ttsVoicesQuery,
     handleRevert,
+    handleStartCreateCard,
+    handleCancelCreate,
+    createMutation,
     updateMutation,
     deleteMutation,
     bulkDeleteMutation,

@@ -24,6 +24,10 @@ from app.services.flashcard_legacy import (
 )
 from app.services.bootstrap_admin_service import sync_bootstrap_admin
 from app.services.anki_content_normalizer import backfill_anki_note_entities
+from app.services.flashcard_media_normalizer import (
+    backfill_media_field_values,
+    rollback_media_field_migration,
+)
 from app.services.user_roles import ensure_default_user_roles
 from app.services.tts_provider_service import (
     VOICEVOX_AUDIO_BASE_URL,
@@ -126,6 +130,146 @@ class SeedStats:
     shared_decks: int = 0
 
 
+def run_study_architecture_audit_command(
+    app: Flask | None = None,
+    compact: bool = False,
+    output_path: str | None = None,
+) -> int:
+    """Run read-only reconciliation gates for the study refactor and return exit code.
+
+    Guarantees:
+    - PASS: 0
+    - WARN: 1
+    - BLOCK / Error: 2
+    - Read-only by construction; does not mutate schema or data.
+    - Fails closed on output path errors or startup config errors.
+    - Sanitizes DB credentials / secrets from error output.
+    """
+    import json
+    import re
+    from pathlib import Path
+    from app.services.study_architecture_audit_service import (
+        SCHEMA_VERSION,
+        build_study_architecture_audit,
+    )
+
+    def _sanitize_error(err: Exception | str) -> str:
+        msg = str(err)
+        # Redact credentials in URLs: scheme://user:pass@host and scheme://:pass@host
+        msg = re.sub(r"://([^:@\s]*):([^@\s]+)@", r"://\1:***@", msg)
+        # Redact password parameters in connection strings/queries
+        msg = re.sub(r"(password|pwd)=([^;&\s]+)", r"\1=***", msg, flags=re.IGNORECASE)
+        # Redact secrets, tokens, api keys
+        msg = re.sub(r"(secret|api_key|token)=([^;&\s]+)", r"\1=***", msg, flags=re.IGNORECASE)
+        return msg
+
+    def _write_output_file(path_str: str, payload_str: str) -> None:
+        out_p = Path(path_str)
+        out_p.parent.mkdir(parents=True, exist_ok=True)
+        out_p.write_text(payload_str, encoding="utf-8")
+
+    try:
+        if app is None:
+            from app import create_audit_app
+
+            app = create_audit_app()
+        else:
+            # Guard: ensure the app instance has not enabled startup maintenance mutators
+            if (
+                app.config.get("STARTUP_RUN_MAINTENANCE")
+                or app.config.get("STARTUP_RUN_DB_CREATE_ALL")
+                or app.config.get("STARTUP_RUN_USER_MANAGEMENT_SCHEMA")
+                or app.config.get("STARTUP_RUN_BACKWARD_COMPAT_SCHEMA")
+                or app.config.get("STARTUP_RUN_DEFAULT_USER_ROLE_SEED")
+                or app.config.get("STARTUP_RUN_DEFAULT_TAXONOMY_SEED")
+                or app.config.get("STARTUP_RUN_DEFAULT_TTS_PROVIDER_SEED")
+                or app.config.get("STARTUP_RUN_CLONE_CUTOVER")
+            ):
+                raise RuntimeError(
+                    "Unsafe audit execution: cannot run audit on an app instance with startup maintenance enabled. "
+                    "Use wsgi_audit.py or create_audit_app()."
+                )
+
+        with app.app_context():
+            report = build_study_architecture_audit()
+            payload = json.dumps(
+                report,
+                ensure_ascii=False,
+                sort_keys=True,
+                indent=None if compact else 2,
+            )
+            exit_code = int(report.get("verdicts", {}).get("exit_code", 0))
+
+            if output_path:
+                try:
+                    _write_output_file(output_path, payload)
+                except Exception as write_err:
+                    clean_write_err = _sanitize_error(write_err)
+                    raise RuntimeError(
+                        f"Failed to write audit output file '{output_path}': {clean_write_err}"
+                    ) from write_err
+
+            click.echo(payload)
+            return exit_code
+    except Exception as err:
+        clean_error = _sanitize_error(err)
+        error_report = {
+            "schema_version": SCHEMA_VERSION,
+            "error": clean_error,
+            "verdicts": {
+                "pass": [],
+                "warn": [],
+                "block": [f"Audit execution error: {clean_error}"],
+                "overall_status": "BLOCK",
+                "exit_code": 2,
+            },
+        }
+        error_payload = json.dumps(
+            error_report,
+            ensure_ascii=False,
+            sort_keys=True,
+            indent=None if compact else 2,
+        )
+        if output_path:
+            try:
+                _write_output_file(output_path, error_payload)
+            except Exception:
+                pass
+        click.echo(error_payload)
+        return 2
+
+
+
+def register_audit_cli_commands(app: Flask) -> None:
+    """Register ONLY read-only audit commands on audit Flask app instances."""
+
+    @app.cli.command("study-architecture-audit")
+    @click.option(
+        "--compact",
+        is_flag=True,
+        default=False,
+        help="Emit compact JSON instead of indented JSON.",
+    )
+    @click.option(
+        "--output",
+        "output_path",
+        type=str,
+        default=None,
+        help="Optional file path to write audit JSON.",
+    )
+    def study_architecture_audit(compact: bool, output_path: str | None) -> None:
+        """Print read-only reconciliation gates for the study refactor."""
+        import sys
+
+        exit_code = run_study_architecture_audit_command(
+            app=app,
+            compact=compact,
+            output_path=output_path,
+        )
+        if exit_code != 0:
+            sys.exit(exit_code)
+
+
 def register_cli_commands(app: Flask) -> None:
     """Register custom Flask CLI commands."""
 
@@ -210,27 +354,57 @@ def register_cli_commands(app: Flask) -> None:
             f"scanned={result.scanned}, changed={result.changed}"
         )
 
-    @app.cli.command("study-architecture-audit")
-    @click.option(
-        "--compact",
-        is_flag=True,
-        default=False,
-        help="Emit compact JSON instead of indented JSON.",
-    )
-    def study_architecture_audit(compact: bool) -> None:
-        """Print read-only reconciliation gates for the study refactor."""
-        from app.services.study_architecture_audit_service import (
-            build_study_architecture_audit,
+    @app.cli.command("media-normalize-fields")
+    @click.option("--user-id", type=int, default=None, help="Limit the migration to one user ID.")
+    @click.option("--deck-id", type=int, default=None, help="Limit the migration to one deck ID.")
+    @click.option("--apply", is_flag=True, default=False, help="Commit audited changes; otherwise dry-run.")
+    @click.option("--no-overlays", is_flag=True, default=False, help="Skip active clone overlays.")
+    @click.option("--no-templates", is_flag=True, default=False, help="Skip Template URL-helper migration.")
+    def media_normalize_fields(
+        user_id: int | None,
+        deck_id: int | None,
+        apply: bool,
+        no_overlays: bool,
+        no_templates: bool,
+    ) -> None:
+        """Audit or migrate media fields to newline-delimited canonical URLs."""
+        result = backfill_media_field_values(
+            user_id=user_id,
+            deck_id=deck_id,
+            apply=apply,
+            include_overlays=not no_overlays,
+            include_templates=not no_templates,
         )
-
-        report = build_study_architecture_audit()
+        if apply:
+            db.session.commit()
+        else:
+            db.session.rollback()
         click.echo(
-            json.dumps(
-                report,
-                ensure_ascii=False,
-                sort_keys=True,
-                indent=None if compact else 2,
-            )
+            f"Media normalization {'applied' if apply else 'dry run'}. "
+            f"run_id={result.run_id or '-'}, scanned={result.scanned}, "
+            f"fields={result.scanned_fields}, changed={result.changed}, "
+            f"normalized={result.normalized}, cleared={result.cleared}, "
+            f"quarantined={result.quarantined}, overlays={result.overlays_changed}, "
+            f"templates={result.templates_changed}"
+        )
+        if not apply and result.changed > 0:
+            click.echo("Re-run with --apply after reviewing the dry-run summary.")
+
+    @app.cli.command("media-normalize-rollback")
+    @click.option("--run-id", required=True, help="Migration run UUID to restore.")
+    @click.option("--apply", is_flag=True, default=False, help="Commit restore; otherwise dry-run.")
+    def media_normalize_rollback(run_id: str, apply: bool) -> None:
+        """Restore one migration run without overwriting later user edits."""
+        result = rollback_media_field_migration(run_id=run_id, apply=apply)
+        if apply:
+            db.session.commit()
+        else:
+            db.session.rollback()
+        click.echo(
+            f"Media rollback {'applied' if apply else 'dry run'}. "
+            f"run_id={result.run_id}, restorable={result.restorable}, "
+            f"restored={result.restored}, skipped_changed_since={result.skipped_changed_since}, "
+            f"missing={result.missing}"
         )
 
     @app.cli.command("clone-cutover-overlay")
@@ -885,31 +1059,122 @@ def register_cli_commands(app: Flask) -> None:
 
     @strokes_group.command("seed-starter")
     def seed_starter_cmd() -> None:
-        """Seed starter set of common Kanji and Hanzi SVG stroke diagrams."""
+        """Seed starter set of common Kanji and Hanzi SVG stroke diagrams into Image Library."""
         from pathlib import Path
-        from app.services.strokes.dataset_builder import populate_starter_strokes
+        from app.services.strokes.dataset_builder import (
+            JA_STARTER_KANJI,
+            ZH_STARTER_HANZI,
+            ZH_HANT_STARTER_HANZI,
+            populate_starter_strokes,
+        )
+        from app.services.strokes.stroke_service import resolve_stroke_items
 
         static_root = Path(app.static_folder or "static")
         res = populate_starter_strokes(static_root)
-        click.echo(f"Starter stroke SVGs seeded: {res}")
+        
+        resolve_stroke_items("".join(JA_STARTER_KANJI), locale="ja", max_characters=len(JA_STARTER_KANJI))
+        resolve_stroke_items("".join(ZH_STARTER_HANZI), locale="zh", max_characters=len(ZH_STARTER_HANZI))
+        resolve_stroke_items("".join(ZH_HANT_STARTER_HANZI), locale="zh-hant", max_characters=len(ZH_HANT_STARTER_HANZI))
+        click.echo(f"Starter stroke SVGs seeded into Image Library: {res}")
 
     @strokes_group.command("status")
     def status_cmd() -> None:
-        """Show current stroke dataset file counts."""
+        """Show current stroke dataset and Image Library file counts."""
         from pathlib import Path
-        static_root = Path(app.static_folder or "static")
-        ja_dir = static_root / "strokes" / "ja"
-        zh_dir = static_root / "strokes" / "zh"
-        zh_hant_dir = static_root / "strokes" / "zh-hant"
+        from models.shared_image_asset import SharedImageAsset
 
-        ja_count = len(list(ja_dir.glob("*.svg"))) if ja_dir.exists() else 0
-        zh_count = len(list(zh_dir.glob("*.svg"))) if zh_dir.exists() else 0
-        zh_hant_count = len(list(zh_hant_dir.glob("*.svg"))) if zh_hant_dir.exists() else 0
+        upload_root = Path(app.config.get("FLASHCARD_MEDIA_UPLOAD_ROOT", "media")).resolve()
+        
+        lib_ja = upload_root / "library" / "strokes" / "ja"
+        lib_zh = upload_root / "library" / "strokes" / "zh"
+        lib_zh_hant = upload_root / "library" / "strokes" / "zh_hant"
 
-        click.echo("Stroke Dataset Status:")
-        click.echo(f"  - Japanese (ja): {ja_count} SVGs ({ja_dir})")
-        click.echo(f"  - Chinese Simplified/General (zh): {zh_count} SVGs ({zh_dir})")
-        click.echo(f"  - Chinese Traditional (zh-hant): {zh_hant_count} SVGs ({zh_hant_dir})")
+        ja_count = len(list(lib_ja.glob("*.svg"))) if lib_ja.exists() else 0
+        zh_count = len(list(lib_zh.glob("*.svg"))) if lib_zh.exists() else 0
+        zh_hant_count = len(list(lib_zh_hant.glob("*.svg"))) if lib_zh_hant.exists() else 0
+        total_assets = SharedImageAsset.query.filter(SharedImageAsset.image_key.like("stroke_%")).count()
+
+        click.echo("Stroke Dataset Status (Image Library):")
+        click.echo(f"  - Japanese (ja): {ja_count} SVGs ({lib_ja})")
+        click.echo(f"  - Chinese Simplified (zh): {zh_count} SVGs ({lib_zh})")
+        click.echo(f"  - Chinese Traditional (zh-hant): {zh_hant_count} SVGs ({lib_zh_hant})")
+        click.echo(f"  - Total Registered Image Library Stroke Assets: {total_assets}")
+
+    @strokes_group.command("migrate-notes")
+    @click.option("--dry-run", is_flag=True, help="Preview migrations without committing changes.")
+    def migrate_notes_cmd(dry_run: bool) -> None:
+        """Compatibility alias for the canonical typed media migration."""
+        result = backfill_media_field_values(
+            apply=not dry_run,
+            include_overlays=True,
+            include_templates=False,
+        )
+        if dry_run:
+            db.session.rollback()
+        else:
+            db.session.commit()
+        click.echo(
+            "Typed media migration complete. "
+            f"run_id={result.run_id or '-'}, changed={result.changed}, "
+            f"normalized={result.normalized}, cleared={result.cleared}, "
+            f"quarantined={result.quarantined}, dry-run={dry_run}"
+        )
+
+    @app.cli.command("seed-production-strokes")
+    @click.option("--locale", default="all", type=click.Choice(["all", "ja", "zh", "zh-hant"]), help="Language locale to pre-generate.")
+    @click.option("--limit-ja", default=2500, type=int, help="Number of Japanese Kanji to generate (default: 2500).")
+    @click.option("--limit-zh", default=9000, type=int, help="Number of Simplified Chinese Hanzi to generate (default: 9000).")
+    @click.option("--limit-zh-hant", default=9000, type=int, help="Number of Traditional Chinese Hanzi to generate (default: 9000).")
+    @click.option("--workers", default=4, type=int, help="Concurrent download threads (default: 4).")
+    @click.option("--delay", default=0.0, type=float, help="Pacing delay in seconds per request (default: 0.0).")
+    @click.option("--force", is_flag=True, help="Force regenerate existing SVG files.")
+    def seed_production_strokes_command(locale: str, limit_ja: int, limit_zh: int, limit_zh_hant: int, workers: int, delay: float, force: bool):
+        """Batch pre-generate 2,500+ Japanese Kanji & 9,000+ Chinese Hanzi for Production."""
+        from app.services.strokes.production_seeder import seed_production_strokes_dataset
+        import time
+
+        click.echo("==========================================================")
+        click.echo(" FLAMA PRODUCTION STROKE PRE-GENERATOR & SEEDER")
+        click.echo("==========================================================")
+        click.echo(f"  Locale target : {locale}")
+        click.echo(f"  JA limit      : {limit_ja}")
+        click.echo(f"  ZH limit      : {limit_zh}")
+        click.echo(f"  ZH-HANT limit : {limit_zh_hant}")
+        click.echo(f"  Concurrency   : {workers} workers (delay: {delay}s)")
+        click.echo(f"  Force overwrite: {force}")
+        click.echo("----------------------------------------------------------")
+
+        start_time = time.time()
+        
+        def on_progress(p: dict):
+            completed = p["completed"]
+            total = p["total"]
+            loc = p["locale"]
+            if completed % 100 == 0 or completed == total:
+                pct = (completed / total) * 100 if total else 100
+                click.echo(f"[{loc.upper()}] Progress: {completed}/{total} ({pct:.1f}%) - U+{ord(p['char']):04X}")
+
+        stats = seed_production_strokes_dataset(
+            locales=(locale,) if locale != "all" else ("ja", "zh", "zh-hant"),
+            limit_ja=limit_ja,
+            limit_zh=limit_zh,
+            limit_zh_hant=limit_zh_hant,
+            workers=workers,
+            delay=delay,
+            force=force,
+            progress_callback=on_progress,
+        )
+
+        elapsed = time.time() - start_time
+        click.echo("----------------------------------------------------------")
+        click.echo(" PRODUCTION STROKE SEEDING COMPLETED!")
+        click.echo(f"  Total targets processed : {stats['total_targets']}")
+        click.echo(f"  Newly Generated SVGs    : {stats['generated']}")
+        click.echo(f"  Cached / Skipped        : {stats['cached']}")
+        click.echo(f"  Failed / Fallback       : {stats['failed']}")
+        click.echo(f"  Database Records Synced : {stats['db_updated']}")
+        click.echo(f"  Elapsed Time            : {elapsed:.2f}s")
+        click.echo("==========================================================")
 
 
 

@@ -1,0 +1,41 @@
+{
+  "schema_version": "study-architecture-audit-code-manifest.v1",
+  "base_git_commit": "24c505fdf988c547b7887e3a917069c6393de64a",
+  "worktree_state": "audit-files-clean-unrelated-worktree-dirty",
+  "manifest_digest_algorithm": "sha256 of UTF-8 canonical JSON excluding manifest_sha256 (sort_keys=true, separators=[comma,colon])",
+  "manifest_sha256": "51d54a34c5b6f64aa4a058a5ab7637132373cf4a6734bb069d079aa6e3549967",
+  "files": [
+    {
+      "path": "app/__init__.py",
+      "sha256": "8b4f94f087abbc627118ac2a1c5261c4d2a141129563af6173f1f337302673dc"
+    },
+    {
+      "path": "app/cli.py",
+      "sha256": "48e6e35f1e11418da2fa91b5d09784a2b8d298429f579f1a04b37f347235a419"
+    },
+    {
+      "path": "app/services/study_algorithm_registry.py",
+      "sha256": "6c26ad773a8776cf0d2c87aa4bbba94cd656e5ebd68217900a4719f4d28db702"
+    },
+    {
+      "path": "app/services/study_architecture_audit_service.py",
+      "sha256": "4ee2f4ab2983361879d1b51c57017a47567b3760af0d98aa436c13319a446ba2"
+    },
+    {
+      "path": "app/services/study_artifact_service.py",
+      "sha256": "8b04c6793a04d5a3f57d2b4a2bc721ab7061b77b9558a79ec0c6e0780cbb2989"
+    },
+    {
+      "path": "app/settings.py",
+      "sha256": "ff9730fa5a1a051c87b053a334a0e6f042c7afb8d3cf1579c42628c41a0f914b"
+    },
+    {
+      "path": "app/startup.py",
+      "sha256": "e8d263fa26d190ea3732949aadc401ce6ad4d750a43e651279720558e1b1345b"
+    },
+    {
+      "path": "wsgi_audit.py",
+      "sha256": "0c84d0e36074e3f13005120ec74a6ed5e2f77b607358621b4dba946a06599a02"
+    }
+  ]
+}

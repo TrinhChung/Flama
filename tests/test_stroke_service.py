@@ -10,6 +10,7 @@ from app.services.strokes.stroke_service import (
 )
 from models import db
 from models.deck import Deck
+from models.field_def import FieldDef
 from models.note import Note
 from models.note_type import NoteType
 from models.user import User
@@ -37,6 +38,11 @@ class TestStrokeService(unittest.TestCase):
         deck = Deck(name="JLPT N5 Core", owner_user_id=user.id)
         db.session.add_all([note_type, deck])
         db.session.flush()
+        db.session.add_all([
+            FieldDef(note_type_id=note_type.id, name="Expression", field_type="text", position=0),
+            FieldDef(note_type_id=note_type.id, name="Meaning", field_type="text", position=1),
+            FieldDef(note_type_id=note_type.id, name="StrokeDiagram", field_type="diagram", position=2),
+        ])
 
         note1 = Note(
             user_id=user.id,
@@ -84,13 +90,18 @@ class TestStrokeService(unittest.TestCase):
         self.assertEqual(res["characters"], ["勉", "強"])
         self.assertEqual(len(res["items"]), 2)
         self.assertIn('class="flama-stroke-diagram"', res["output"])
-        self.assertIn('/static/strokes/ja/52c9.svg', res["output"])
-        self.assertIn('/static/strokes/ja/5f37.svg', res["output"])
+        self.assertIn('/media/library/stroke_ja_52c9', res["output"])
+        self.assertIn('/media/library/stroke_ja_5f37', res["output"])
 
     def test_resolve_stroke_items_urls(self):
         res = resolve_stroke_items("勉強", locale="ja", output_format="urls")
         self.assertEqual(res["characters"], ["勉", "強"])
-        self.assertIn('/static/strokes/ja/52c9.svg', res["output"])
+        self.assertIn('/media/library/stroke_ja_52c9', res["output"])
+
+    def test_resolve_stroke_items_raw(self):
+        res = resolve_stroke_items("勉強", locale="ja", output_format="raw")
+        self.assertEqual(res["characters"], ["勉", "強"])
+        self.assertEqual(res["output"], "/media/library/stroke_ja_52c9.svg\n/media/library/stroke_ja_5f37.svg")
 
     def test_batch_generate_strokes_deck(self):
         res = batch_generate_strokes(
@@ -108,7 +119,7 @@ class TestStrokeService(unittest.TestCase):
 
         # Verify note1 has StrokeDiagram
         db.session.refresh(self.note1)
-        self.assertIn("/static/strokes/ja/52c9.svg", self.note1.field_values.get("StrokeDiagram", ""))
+        self.assertIn("/media/library/stroke_ja_52c9", self.note1.field_values.get("StrokeDiagram", ""))
 
         # Verify note2 was not overwritten
         db.session.refresh(self.note2)
@@ -127,7 +138,7 @@ class TestStrokeService(unittest.TestCase):
         self.assertEqual(res["updated"], 2)  # note1 and note2 updated
 
         db.session.refresh(self.note2)
-        self.assertIn("/static/strokes/ja/5b66.svg", self.note2.field_values.get("StrokeDiagram", ""))
+        self.assertIn("/media/library/stroke_ja_5b66", self.note2.field_values.get("StrokeDiagram", ""))
 
 
 if __name__ == "__main__":

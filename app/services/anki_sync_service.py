@@ -9,6 +9,8 @@ import math
 import re
 from typing import Any
 
+from sqlalchemy.exc import IntegrityError
+
 from app.repositories.review_event_repository import create_review_event_record
 from app.services.anki_scheduler import _day_index, _day_index_to_datetime
 from app.services.scheduler_config_service import resolve_scheduler_runtime_settings
@@ -29,6 +31,12 @@ MAX_REVIEW_DURATION_MS = 3_600_000
 
 class AnkiSyncError(ValueError):
     pass
+
+
+class AnkiProgressConflict(AnkiSyncError):
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(message)
+        self.code = code
 
 
 def _finite_number(value: object, field: str) -> float:
@@ -125,30 +133,43 @@ def _apply_progress_snapshot(
     session: ConnectImportSession,
     source_card: ConnectSourceCardRef,
     record: dict[str, Any],
-) -> tuple[str, CardProgress]:
+) -> tuple[str, str, bool]:
     snapshot_hash = str(record.get("snapshotHash") or "").strip().lower()
     if not SHA256_RE.fullmatch(snapshot_hash):
         raise AnkiSyncError("snapshotHash must be a SHA-256 hex string")
+    base_snapshot_supplied = "baseSnapshotHash" in record
+    raw_base_snapshot_hash = record.get("baseSnapshotHash")
+    base_snapshot_hash = (
+        str(raw_base_snapshot_hash).strip().lower()
+        if raw_base_snapshot_hash is not None
+        else None
+    )
+    if base_snapshot_hash is not None and not SHA256_RE.fullmatch(base_snapshot_hash):
+        raise AnkiSyncError("baseSnapshotHash must be a SHA-256 hex string")
+    legacy_unversioned = not base_snapshot_supplied
+    force = record.get("force") is True
+    previous_snapshot_hash = source_card.snapshot_hash
 
     progress = CardProgress.query.filter_by(
         user_id=session.user_id,
         card_id=source_card.card_id,
     ).with_for_update().first()
-    if source_card.snapshot_hash == snapshot_hash:
-        if progress is None:
-            progress = CardProgress(user_id=session.user_id, card_id=source_card.card_id)
-            db.session.add(progress)
-        return "unchanged", progress
+    local_diverged = progress is not None and (
+        source_card.applied_local_revision is None
+        or int(progress.revision or 0) != int(source_card.applied_local_revision)
+    )
+    same_snapshot = previous_snapshot_hash == snapshot_hash
+    force_reapply = force and (local_diverged or progress is None)
+    if same_snapshot and not force_reapply:
+        return "unchanged", "PROGRESS_UNCHANGED", legacy_unversioned
     if (
-        progress is not None
-        and source_card.applied_local_revision is not None
-        and int(progress.revision or 0) != int(source_card.applied_local_revision)
-        and record.get("force") is not True
+        base_snapshot_supplied
+        and (base_snapshot_hash or "") != (previous_snapshot_hash or "")
+        and not force
     ):
-        return "local_conflict", progress
-    if progress is None:
-        progress = CardProgress(user_id=session.user_id, card_id=source_card.card_id)
-        db.session.add(progress)
+        return "source_conflict", "SOURCE_SNAPSHOT_CHANGED", legacy_unversioned
+    if local_diverged and not force:
+        return "local_conflict", "LOCAL_PROGRESS_CHANGED", legacy_unversioned
 
     card_type = _integer(record.get("type", 0), "type", 0, 3)
     anki_queue = _integer(record.get("queue", 0), "queue", -3, 4)
@@ -169,16 +190,23 @@ def _apply_progress_snapshot(
     )
     day_based_due = card_type == 2 or (card_type in {1, 3} and anki_queue == 3)
     if day_based_due and record.get("sourceToday") is None:
-        return "due_unresolved", progress
+        return "due_unresolved", "ANKI_DUE_UNRESOLVED", legacy_unversioned
+
+    if progress is None:
+        progress = CardProgress(user_id=session.user_id, card_id=source_card.card_id)
+        db.session.add(progress)
     progress.queue = _progress_queue(card_type)
     progress.review_kind = {0: "new", 1: "learn", 2: "review", 3: "relearn"}[card_type]
     progress.scheduler_mode = "anki"
     progress.is_suspended = anki_queue == -1
     progress.is_buried = anki_queue in {-2, -3}
     progress.buried_until_day = today + 1 if progress.is_buried else None
+    progress.suspension_reason = "anki_import" if progress.is_suspended else None
     progress.interval_days_raw = float(interval)
     progress.interval_days = max(0, int(interval))
     progress.ease_factor = float(factor) / 1000.0
+    progress.memory_stability = None
+    progress.memory_difficulty = None
     progress.reps = reps
     progress.lapses = lapses
     progress.step_index = max(0, (left % 1000) - 1) if card_type in {1, 3} else 0
@@ -202,10 +230,20 @@ def _apply_progress_snapshot(
         progress.due_day = None
 
     progress.revision = int(progress.revision or 0) + 1
-    db.session.flush()
+    try:
+        db.session.flush()
+    except IntegrityError as exc:
+        raise AnkiProgressConflict(
+            "CONCURRENT_PROGRESS_WRITE",
+            "card progress changed while the Anki snapshot was being applied",
+        ) from exc
     source_card.snapshot_hash = snapshot_hash
     source_card.applied_local_revision = int(progress.revision or 0)
-    return "applied", progress
+    return (
+        "applied",
+        "FORCED_PROGRESS_APPLIED" if force else "PROGRESS_APPLIED",
+        legacy_unversioned,
+    )
 
 
 def import_progress(
@@ -231,14 +269,65 @@ def import_progress(
                     external_note_id=note_id,
                     source_ord=source_ord,
                 )
-                state, progress = _apply_progress_snapshot(session, source_card, record)
+                state, code, legacy_unversioned = _apply_progress_snapshot(
+                    session,
+                    source_card,
+                    record,
+                )
                 db.session.flush()
-            result = {"sourceCardId": external_card_id, "applied": state == "applied", "state": state}
+            result = {
+                "sourceCardId": external_card_id,
+                "applied": state == "applied",
+                "state": state,
+                "code": code,
+                "serverSnapshotHash": (
+                    str(source_card.snapshot_hash)
+                    if source_card.snapshot_hash
+                    else None
+                ),
+            }
+            if legacy_unversioned:
+                result["legacy_unversioned"] = True
             if state == "due_unresolved":
                 result["error"] = "Anki day index could not be resolved; scheduler snapshot was not applied"
             results.append(result)
+        except AnkiProgressConflict as exc:
+            current_source_card = ConnectSourceCardRef.query.filter_by(
+                user_id=session.user_id,
+                source_key=session.source_key,
+                external_card_id=str(external_card_id),
+            ).first()
+            results.append(
+                {
+                    "sourceCardId": external_card_id,
+                    "applied": False,
+                    "state": "conflict",
+                    "code": exc.code,
+                    "error": str(exc),
+                    "serverSnapshotHash": (
+                        str(current_source_card.snapshot_hash)
+                        if current_source_card is not None
+                        and current_source_card.snapshot_hash
+                        else None
+                    ),
+                    **(
+                        {"legacy_unversioned": True}
+                        if isinstance(record, dict)
+                        and "baseSnapshotHash" not in record
+                        else {}
+                    ),
+                }
+            )
         except Exception as exc:
-            results.append({"sourceCardId": external_card_id, "applied": False, "state": "failed", "error": str(exc)})
+            results.append(
+                {
+                    "sourceCardId": external_card_id,
+                    "applied": False,
+                    "state": "failed",
+                    "code": "PROGRESS_IMPORT_FAILED",
+                    "error": str(exc),
+                }
+            )
     return results
 
 
@@ -347,12 +436,6 @@ def _import_review(
         db.session.flush()
         ref.review_event_id = event.id
         ref.status = "imported"
-        progress = CardProgress.query.filter_by(user_id=session.user_id, card_id=card.id).first()
-        if progress is not None and (
-            progress.last_reviewed_at is None or reviewed_at > progress.last_reviewed_at
-        ):
-            progress.last_reviewed_at = reviewed_at
-            progress.last_review_event_id = event.id
     source_card.review_cursor = max(int(source_card.review_cursor or 0), int(external_review_id))
     if repairing_projection and ref.status == "imported":
         return "repaired", ref
