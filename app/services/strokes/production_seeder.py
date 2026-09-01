@@ -77,8 +77,11 @@ def _process_single_character(
     # Write files to upload and static dirs
     upload_file.write_text(svg_content, encoding="utf-8")
     upload_file_padded.write_text(svg_content, encoding="utf-8")
-    static_file.write_text(svg_content, encoding="utf-8")
-    static_file_padded.write_text(svg_content, encoding="utf-8")
+    try:
+        static_file.write_text(svg_content, encoding="utf-8")
+        static_file_padded.write_text(svg_content, encoding="utf-8")
+    except Exception:
+        pass
 
     svg_bytes = svg_content.encode("utf-8")
     return {
@@ -93,6 +96,12 @@ def _process_single_character(
     }
 
 
+from app.services.strokes.stroke_service import (
+    _get_static_root,
+    _get_upload_root,
+)
+
+
 def seed_production_strokes_dataset(
     *,
     locales: Sequence[str] = ("ja", "zh", "zh-hant"),
@@ -105,8 +114,8 @@ def seed_production_strokes_dataset(
     progress_callback: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     """Concurrent production seeder for 2,500+ Japanese Kanji & 9,000+ Chinese Hanzi."""
-    upload_root = Path("app/static/uploads/flashcard_media/library/strokes")
-    static_root = Path("static/strokes")
+    upload_root = _get_upload_root() / "library" / "strokes"
+    static_root = _get_static_root() / "strokes"
 
     targets = []
     if "ja" in locales or "all" in locales:
@@ -128,7 +137,10 @@ def seed_production_strokes_dataset(
         upload_dir = upload_root / raw_folder
         static_dir = static_root / (locale_key if locale_key != "zh-hant" else "zh-hant")
         upload_dir.mkdir(parents=True, exist_ok=True)
-        static_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            static_dir.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            pass
 
         total_locale = len(char_list)
         logger.info("Starting production stroke generation for [%s]: %d characters with %d workers", locale_key, total_locale, workers)
