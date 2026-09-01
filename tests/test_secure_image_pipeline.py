@@ -218,15 +218,19 @@ class SecureImagePipelineTests(unittest.TestCase):
             source_url=public_url,
         )
 
-        # Ingest external URL
-        asset = image_ingestion_service.ingest_image(
-            user_id=self.regular_user.id,
-            source_type="external_url",
-            source_url=public_url,
-            usage_type="deck_cover",
-            upload_root=self.upload_root,
-            async_process=True,
-        )
+        # Ingest external URL without depending on real DNS availability.
+        with patch(
+            "app.services.remote_image_fetcher._resolve_public_addresses",
+            return_value=("93.184.216.34",),
+        ):
+            asset = image_ingestion_service.ingest_image(
+                user_id=self.regular_user.id,
+                source_type="external_url",
+                source_url=public_url,
+                usage_type="deck_cover",
+                upload_root=self.upload_root,
+                async_process=True,
+            )
 
         # Step 1: Initial state: display_url is temporary external URL
         self.assertEqual(asset.processing_status, "pending")
@@ -344,4 +348,3 @@ class SecureImagePipelineTests(unittest.TestCase):
         self.assertEqual(patch_resp.status_code, 200)
         self.assertTrue(patch_resp.get_json()["item"]["is_resolved"])
         self.assertEqual(patch_resp.get_json()["item"]["resolved_by_user_id"], self.admin_user.id)
-

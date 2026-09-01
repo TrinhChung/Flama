@@ -1,6 +1,8 @@
 """Startup maintenance configuration tests."""
 
 import os
+from pathlib import Path
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -34,6 +36,33 @@ class AppStartupTests(unittest.TestCase):
         ensure_roles.assert_not_called()
         ensure_tts.assert_not_called()
         cutover.assert_not_called()
+
+    def test_testing_uses_isolated_media_root_instead_of_runtime_storage(self):
+        with tempfile.TemporaryDirectory() as runtime_root, tempfile.TemporaryDirectory() as test_root:
+            with patch.dict(
+                os.environ,
+                {
+                    "FLASHCARD_MEDIA_UPLOAD_ROOT": runtime_root,
+                    "FLAMA_TEST_MEDIA_UPLOAD_ROOT": test_root,
+                },
+            ):
+                app = self._create_test_app()
+
+        self.assertEqual(
+            Path(app.config["FLASHCARD_MEDIA_UPLOAD_ROOT"]).resolve(),
+            Path(test_root).resolve(),
+        )
+        self.assertNotEqual(
+            Path(app.config["FLASHCARD_MEDIA_UPLOAD_ROOT"]).resolve(),
+            Path(runtime_root).resolve(),
+        )
+
+    def test_testing_disables_daily_rate_limit_unless_explicitly_enabled(self):
+        default_app = self._create_test_app()
+        enabled_app = self._create_test_app(RATE_LIMIT_DAILY_ENABLED=True)
+
+        self.assertFalse(default_app.config["RATE_LIMIT_DAILY_ENABLED"])
+        self.assertTrue(enabled_app.config["RATE_LIMIT_DAILY_ENABLED"])
 
     def test_startup_maintenance_cli_forces_explicit_run_with_overrides(self):
         app = self._create_test_app(STARTUP_RUN_MAINTENANCE=False)

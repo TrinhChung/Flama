@@ -419,6 +419,14 @@ class StudyArchitectureAuditCLITests(unittest.TestCase):
 
     def test_audit_subprocess_command_surface_isolation(self):
         """Subprocess --help verifies exact command surface on wsgi_audit and wsgi entrypoints."""
+        env = dict(os.environ)
+        env.update(
+            {
+                "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
+                "STARTUP_CHECK_DB_CONNECTIVITY": "0",
+                "STARTUP_RUN_MAINTENANCE": "0",
+            }
+        )
         proc_audit = subprocess.run(
             [
                 sys.executable,
@@ -428,6 +436,7 @@ class StudyArchitectureAuditCLITests(unittest.TestCase):
                 "wsgi_audit:create_app",
                 "--help",
             ],
+            env=env,
             capture_output=True,
             text=True,
             cwd=str(Path(__file__).resolve().parent.parent),
@@ -448,6 +457,7 @@ class StudyArchitectureAuditCLITests(unittest.TestCase):
                 "wsgi:create_app",
                 "--help",
             ],
+            env=env,
             capture_output=True,
             text=True,
             cwd=str(Path(__file__).resolve().parent.parent),

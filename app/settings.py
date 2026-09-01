@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import tempfile
 from typing import Any, Mapping
 from urllib.parse import quote_plus
 
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+_PROCESS_TEST_MEDIA_DIRECTORY: tempfile.TemporaryDirectory[str] | None = None
 
 
 def load_environment() -> None:
@@ -66,6 +68,20 @@ def resolve_media_upload_root(raw_value: str | None = None, *, base_dir: Path = 
     return candidate
 
 
+def resolve_test_media_upload_root() -> Path:
+    """Return one writable media root isolated to the current test process."""
+    configured = os.getenv("FLAMA_TEST_MEDIA_UPLOAD_ROOT", "").strip()
+    if configured:
+        return resolve_media_upload_root(configured)
+
+    global _PROCESS_TEST_MEDIA_DIRECTORY
+    if _PROCESS_TEST_MEDIA_DIRECTORY is None:
+        _PROCESS_TEST_MEDIA_DIRECTORY = tempfile.TemporaryDirectory(
+            prefix="flama-test-media-"
+        )
+    return Path(_PROCESS_TEST_MEDIA_DIRECTORY.name).resolve()
+
+
 def build_database_uri_from_env() -> str:
     """Construct the MySQL connection string from environment variables."""
     db_user = os.getenv("DB_USER", "").strip()
@@ -105,6 +121,15 @@ def build_app_config(overrides: Mapping[str, Any] | None = None) -> dict[str, An
             max_overflow=coerce_int_env("DB_MAX_OVERFLOW", default=1),
             pool_timeout=coerce_int_env("DB_POOL_TIMEOUT_SECONDS", default=5),
         )
+
+    explicit_media_root = str(
+        (overrides or {}).get("FLASHCARD_MEDIA_UPLOAD_ROOT") or ""
+    ).strip()
+    is_testing = bool((overrides or {}).get("TESTING", False))
+    initial_media_root = (
+        explicit_media_root
+        or (str(resolve_test_media_upload_root()) if is_testing else None)
+    )
 
     config: dict[str, Any] = {
         "SECRET_KEY": os.getenv("SECRET_KEY", "change-me"),
@@ -148,7 +173,7 @@ def build_app_config(overrides: Mapping[str, Any] | None = None) -> dict[str, An
             "CONNECT_CARD_PACKAGE_TARGET_ITEMS",
             default=500,
         ),
-        "FLASHCARD_MEDIA_UPLOAD_ROOT": str(resolve_media_upload_root()),
+        "FLASHCARD_MEDIA_UPLOAD_ROOT": str(resolve_media_upload_root(initial_media_root)),
         "FLASHCARD_MEDIA_MAX_BYTES": int(os.getenv("FLASHCARD_MEDIA_MAX_BYTES", str(10 * 1024 * 1024))),
         "IMAGE_LIBRARY_MAX_BYTES": int(os.getenv("IMAGE_LIBRARY_MAX_BYTES", str(5 * 1024 * 1024))),
         "IMAGE_LIBRARY_MAX_PIXELS": coerce_int_env(
@@ -283,6 +308,13 @@ def build_app_config(overrides: Mapping[str, Any] | None = None) -> dict[str, An
 
     if overrides:
         config.update(overrides)
+
+    if bool(config.get("TESTING")) and not (
+        overrides and "RATE_LIMIT_DAILY_ENABLED" in overrides
+    ):
+        # Most tests do not exercise quotas. Keep them order-independent; the
+        # dedicated rate-limit suites opt in explicitly.
+        config["RATE_LIMIT_DAILY_ENABLED"] = False
 
     config["FLASHCARD_MEDIA_UPLOAD_ROOT"] = str(
         resolve_media_upload_root(config.get("FLASHCARD_MEDIA_UPLOAD_ROOT"))

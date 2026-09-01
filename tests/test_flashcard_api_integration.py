@@ -4187,6 +4187,62 @@ class FlashcardApiIntegrationTests(unittest.TestCase):
             self.assertEqual(values.get("Reading"), "\u3044\u306c")
             self.assertEqual(values.get("Meaning"), "dog")
 
+    def test_browse_batch_delete_removes_owned_cards_and_orphaned_notes(self):
+        note_type_id = self._create_note_type()["id"]
+        note_ids = []
+        card_ids = []
+
+        for word in ("\u72ac", "\u732b"):
+            note_response = self.client.post(
+                "/api/notes",
+                json={
+                    "note_type_id": note_type_id,
+                    "deck_id": self.deck_id,
+                    "field_values": {
+                        "Word": word,
+                        "Reading": "reading",
+                        "Meaning": "meaning",
+                    },
+                },
+            )
+            self.assertEqual(note_response.status_code, 201)
+            note_id = note_response.get_json()["id"]
+            note_ids.append(note_id)
+            with self.app.app_context():
+                card = Card.query.filter_by(note_id=note_id).one()
+                card_ids.append(card.id)
+
+        invalid_response = self.client.post(
+            "/api/browse/cards/batch-delete",
+            json={"card_ids": card_ids[0]},
+        )
+        self.assertEqual(invalid_response.status_code, 400)
+        self.assertEqual(invalid_response.get_json()["field"], "card_ids")
+
+        invalid_payload_response = self.client.post(
+            "/api/browse/cards/batch-delete",
+            json=[],
+        )
+        self.assertEqual(invalid_payload_response.status_code, 400)
+        self.assertEqual(
+            invalid_payload_response.get_json()["code"],
+            "VALIDATION_ERROR",
+        )
+
+        response = self.client.post(
+            "/api/browse/cards/batch-delete",
+            json={"card_ids": card_ids},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.get_json(),
+            {"success": True, "deleted_count": 2},
+        )
+        with self.app.app_context():
+            self.assertEqual(Card.query.filter(Card.id.in_(card_ids)).count(), 0)
+            self.assertEqual(Note.query.filter(Note.id.in_(note_ids)).count(), 0)
+
     def test_browse_card_update_can_move_owned_card_to_another_deck(self):
         note_type = self._create_note_type()
         note_type_id = note_type["id"]

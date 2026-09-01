@@ -65,6 +65,7 @@
   ["DELETE", "/api/browse/cards/<card_id>"],
   ["GET", "/api/browse/cards/<card_id>"],
   ["PATCH", "/api/browse/cards/<card_id>"],
+  ["POST", "/api/browse/cards/batch-delete"],
   ["GET", "/api/browse/decks"],
   ["GET", "/api/browse/decks/tree"],
   ["GET", "/api/browse/notes"],

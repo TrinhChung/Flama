@@ -23,6 +23,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -124,6 +125,24 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "src/features/study/session/studySessionLease.test.ts",
         ],
     },
+    "browse": {
+        "source_patterns": [
+            "app/api/v1/learning/browse.py",
+            "app/services/browse_card_service.py",
+            "app/repositories/browse_card_repository.py",
+            "frontend/src/features/browse/**",
+        ],
+        "backend_tests": [
+            "tests/test_flashcard_api_integration.py",
+            "tests/test_flashcard_validation_security.py",
+            "tests/test_rest_api_v1.py",
+        ],
+        "frontend_tests": [
+            "src/features/browse/components/MediaFieldPreview.test.tsx",
+            "src/features/browse/services/strokeStorage.test.ts",
+            "src/features/browse/services/ttsSettingsStorage.test.ts",
+        ],
+    },
     "flashcards": {
         "source_patterns": [
             "app/api/v1/flashcards/**",
@@ -151,6 +170,8 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "tests/test_flashcard_api_integration.py",
             "tests/test_flashcard_audio_scan.py",
             "tests/test_flashcard_media_batch_api.py",
+            "tests/test_flashcard_media_migration.py",
+            "tests/test_flashcard_media_normalizer.py",
             "tests/test_flashcard_renderer.py",
             "tests/test_flashcard_renderer_strokes.py",
             "tests/test_flashcard_validation_security.py",
@@ -383,6 +404,21 @@ MODULES: dict[str, dict[str, list[str]]] = {
         ],
         "frontend_tests": [],
     },
+    "worksheets": {
+        "source_patterns": [
+            "app/api/v1/worksheets/**",
+            "app/services/worksheets/**",
+            "frontend/src/features/worksheets/**",
+        ],
+        "backend_tests": [
+            "tests/test_api_worksheets.py",
+            "tests/test_worksheet_service.py",
+        ],
+        "frontend_tests": [
+            "src/features/worksheets/DeckWorksheetModal.test.tsx",
+            "src/features/worksheets/api.test.ts",
+        ],
+    },
     "core": {
         "source_patterns": [
             "app/__init__.py",
@@ -568,6 +604,18 @@ def map_files_to_modules(changed_files: list[str]) -> tuple[set[str], set[str], 
                     matched_modules.add(mod_name)
             continue
 
+        # Frontend feature tests are co-located. Include every test in the same
+        # feature even when the hard-coded module catalog has not caught up yet.
+        feature_prefix = "frontend/src/features/"
+        if norm_path.startswith(feature_prefix):
+            feature_name = norm_path[len(feature_prefix):].split("/", 1)[0]
+            relative_prefix = f"src/features/{feature_name}/"
+            frontend_tests.update(
+                path
+                for path in discover_all_frontend_tests()
+                if path.startswith(relative_prefix)
+            )
+
         # Match against module source patterns
         matched = False
         for mod_name, mod_info in MODULES.items():
@@ -596,6 +644,39 @@ def map_files_to_modules(changed_files: list[str]) -> tuple[set[str], set[str], 
 # -----------------------------------------------------------------------------
 # Test Execution
 # -----------------------------------------------------------------------------
+
+def discover_all_backend_tests() -> list[str]:
+    """Return every backend unittest file, independent of module mappings."""
+    tests_dir = ROOT_DIR / "tests"
+    return sorted(
+        path.relative_to(ROOT_DIR).as_posix()
+        for path in tests_dir.rglob("test_*.py")
+        if "__pycache__" not in path.parts
+    )
+
+
+def discover_all_frontend_tests() -> list[str]:
+    """Return every Vitest file relative to frontend/."""
+    source_dir = ROOT_DIR / "frontend" / "src"
+    if not source_dir.exists():
+        return []
+    return sorted(
+        path.relative_to(ROOT_DIR / "frontend").as_posix()
+        for path in source_dir.rglob("*")
+        if path.is_file()
+        and any(marker in path.name for marker in (".test.", ".spec."))
+    )
+
+
+def build_backend_test_environment(media_root: str) -> dict[str, str]:
+    """Build an isolated environment for the backend test subprocess."""
+    env = dict(os.environ)
+    env["FLAMA_TEST_MEDIA_UPLOAD_ROOT"] = media_root
+    env["FLASHCARD_MEDIA_UPLOAD_ROOT"] = media_root
+    # Rate-limit tests opt in explicitly through their app config. Disabling the
+    # default here prevents module-level counters from leaking across test apps.
+    env["RATE_LIMIT_DAILY_ENABLED"] = "0"
+    return env
 
 def run_backend_tests(
     python_cmd: list[str],
@@ -628,7 +709,12 @@ def run_backend_tests(
     cmd.extend(existing_tests)
 
     start_time = time.time()
-    res = subprocess.run(cmd, cwd=str(ROOT_DIR))
+    with tempfile.TemporaryDirectory(prefix="flama-backend-tests-") as media_root:
+        res = subprocess.run(
+            cmd,
+            cwd=str(ROOT_DIR),
+            env=build_backend_test_environment(media_root),
+        )
     elapsed = time.time() - start_time
 
     if res.returncode == 0:
@@ -768,10 +854,11 @@ def main() -> int:
 
     if args.all:
         print("[MODE] Running ALL test suites across all modules.")
-        for mod, data in MODULES.items():
-            target_modules.add(mod)
-            selected_backend_tests.update(data["backend_tests"])
-            selected_frontend_tests.update(data["frontend_tests"])
+        target_modules.update(MODULES)
+        # --all must discover the filesystem. MODULES intentionally supports
+        # focused selection and may lag when a new test file is added.
+        selected_backend_tests.update(discover_all_backend_tests())
+        selected_frontend_tests.update(discover_all_frontend_tests())
 
     elif args.module:
         requested = [m.strip().lower() for m in args.module.split(",") if m.strip()]
