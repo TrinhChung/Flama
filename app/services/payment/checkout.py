@@ -444,7 +444,7 @@ def _sync_attempt_with_payos(order: PaymentOrder, attempt: PaymentAttempt, *, no
 def _create_or_reuse_order_for_context(
     context: dict[str, Any],
     *,
-    user_id: int,
+    user_id: int | None,
     return_url: str,
     cancel_url: str,
     buyer_email: str | None = None,
@@ -457,22 +457,16 @@ def _create_or_reuse_order_for_context(
     )
     dirty = False
     for order in pending_orders:
-        dirty = _maybe_expire_order(order, now=now) or dirty
         latest_attempt = _latest_attempt(order)
         if latest_attempt and latest_attempt.status in ACTIVE_ATTEMPT_STATUSES and order.status == "pending_payment":
             resolution = _sync_attempt_with_payos(order, latest_attempt, now=now)
             dirty = dirty or resolution != "reuse"
-            if resolution == "reuse":
-                db.session.commit()
-                return order, False
-            if resolution == "completed":
-                db.session.commit()
-                return order, False
-            if resolution == "block":
+            if resolution in {"reuse", "completed", "block"}:
                 db.session.commit()
                 return order, False
             if resolution == "recreate":
                 continue
+        dirty = _maybe_expire_order(order, now=now) or dirty
 
     order = PaymentOrder(
         user_id=user_id,
@@ -568,7 +562,7 @@ def prepare_checkout_for_product(
 
 def prepare_support_donation_checkout(
     *,
-    user_id: int,
+    user_id: int | None,
     amount_minor: int,
     return_url: str | None = None,
     cancel_url: str | None = None,
@@ -583,11 +577,35 @@ def prepare_support_donation_checkout(
         buyer_email=None,
     )
     fresh_order = payment_repository.get_order_by_id(order.id) or order
+    latest_attempt = _latest_attempt(fresh_order)
+    provider_metadata = dict(latest_attempt.provider_metadata_json or {}) if latest_attempt else {}
+    serialized = serialize_order(fresh_order)
+    mode = "saved" if user_id is not None else "anonymous"
     return {
-        "checkout_mode": "saved",
+        "checkout_mode": mode,
         "payment_required": True,
         "created": created,
-        "order": serialize_order(fresh_order),
+        "order": serialized,
+        "checkout_url": latest_attempt.checkout_url if latest_attempt else None,
+        "payment_link_id": latest_attempt.provider_payment_id if latest_attempt else None,
+        "provider_order_code": latest_attempt.provider_order_code if latest_attempt else None,
+        "checkout": {
+            "provider": latest_attempt.provider_code if latest_attempt else "payos",
+            "checkout_url": latest_attempt.checkout_url if latest_attempt else None,
+            "payment_link_id": latest_attempt.provider_payment_id if latest_attempt else None,
+            "provider_order_code": latest_attempt.provider_order_code if latest_attempt else None,
+            "bank_bin": provider_metadata.get("bank_bin"),
+            "account_no": provider_metadata.get("account_no"),
+            "account_name": provider_metadata.get("account_name"),
+            "qr_code": provider_metadata.get("qr_code"),
+            "provider_status": provider_metadata.get("provider_status"),
+            "amount_minor": int(fresh_order.total_amount_minor or amount_minor or 0),
+            "currency_code": fresh_order.currency_code or "VND",
+            "payment_reference": latest_attempt.expected_payment_reference if latest_attempt else None,
+            "merchant_order_code": fresh_order.merchant_order_code,
+            "expires_at": _iso(latest_attempt.expires_at) if latest_attempt else None,
+            "provider_metadata": provider_metadata,
+        },
     }
 
 

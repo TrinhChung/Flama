@@ -49,25 +49,11 @@ def prepare_support_checkout(
 
     return_url = normalized.return_url or default_return_url
     cancel_url = normalized.cancel_url or return_url
-    anonymous_checkout = bool(normalized.anonymous or not authenticated)
+    effective_user_id = user_id if (authenticated and not normalized.anonymous) else None
 
     try:
-        if anonymous_checkout:
-            result = support_donation_service.create_anonymous_checkout(
-                amount_minor=normalized.amount_minor,
-                return_url=return_url,
-                cancel_url=cancel_url,
-            )
-            return result, 201
-
-        if user_id is None:
-            raise SupportCheckoutError(
-                "AUTHENTICATION_REQUIRED",
-                "Authentication is required.",
-                status=401,
-            )
         result = payment_service.prepare_support_donation_checkout(
-            user_id=user_id,
+            user_id=effective_user_id,
             amount_minor=normalized.amount_minor,
             return_url=return_url,
             cancel_url=cancel_url,

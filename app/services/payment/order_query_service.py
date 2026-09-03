@@ -20,6 +20,12 @@ def list_user_orders(*, user_id: int, filters: OrderFilterInput, page: int, per_
 
 
 def get_admin_order_detail(order_id: str) -> dict[str, Any] | None:
+    from app.services import payment_service
+
+    try:
+        payment_service.sync_and_get_order(order_id=order_id)
+    except Exception:
+        pass
     order = order_queries.get_order_detail_for_admin(order_id)
     if order is None:
         return None

@@ -1337,7 +1337,7 @@ def _sync_attempt_with_payos(order: PaymentOrder, attempt: PaymentAttempt, *, no
 def _create_or_reuse_order_for_context(
     context: dict[str, Any],
     *,
-    user_id: int,
+    user_id: int | None,
     return_url: str,
     cancel_url: str,
     buyer_email: str | None = None,
@@ -1350,22 +1350,16 @@ def _create_or_reuse_order_for_context(
     )
     dirty = False
     for order in pending_orders:
-        dirty = _maybe_expire_order(order, now=now) or dirty
         latest_attempt = _latest_attempt(order)
         if latest_attempt and latest_attempt.status in ACTIVE_ATTEMPT_STATUSES and order.status == "pending_payment":
             resolution = _sync_attempt_with_payos(order, latest_attempt, now=now)
             dirty = dirty or resolution != "reuse"
-            if resolution == "reuse":
-                db.session.commit()
-                return order, False
-            if resolution == "completed":
-                db.session.commit()
-                return order, False
-            if resolution == "block":
+            if resolution in {"reuse", "completed", "block"}:
                 db.session.commit()
                 return order, False
             if resolution == "recreate":
                 continue
+        dirty = _maybe_expire_order(order, now=now) or dirty
 
     order = PaymentOrder(
         user_id=user_id,
@@ -1461,7 +1455,7 @@ def prepare_checkout_for_product(
 
 def prepare_support_donation_checkout(
     *,
-    user_id: int,
+    user_id: int | None,
     amount_minor: int,
     return_url: str | None = None,
     cancel_url: str | None = None,
@@ -1476,27 +1470,67 @@ def prepare_support_donation_checkout(
         buyer_email=None,
     )
     fresh_order = payment_repository.get_order_by_id(order.id) or order
+    latest_attempt = _latest_attempt(fresh_order)
+    provider_metadata = dict(latest_attempt.provider_metadata_json or {}) if latest_attempt else {}
+    serialized = serialize_order(fresh_order)
+    mode = "saved" if user_id is not None else "anonymous"
     return {
-        "checkout_mode": "saved",
+        "checkout_mode": mode,
         "payment_required": True,
         "created": created,
-        "order": serialize_order(fresh_order),
+        "order": serialized,
+        "checkout_url": latest_attempt.checkout_url if latest_attempt else None,
+        "payment_link_id": latest_attempt.provider_payment_id if latest_attempt else None,
+        "provider_order_code": latest_attempt.provider_order_code if latest_attempt else None,
+        "checkout": {
+            "provider": latest_attempt.provider_code if latest_attempt else "payos",
+            "checkout_url": latest_attempt.checkout_url if latest_attempt else None,
+            "payment_link_id": latest_attempt.provider_payment_id if latest_attempt else None,
+            "provider_order_code": latest_attempt.provider_order_code if latest_attempt else None,
+            "bank_bin": provider_metadata.get("bank_bin"),
+            "account_no": provider_metadata.get("account_no"),
+            "account_name": provider_metadata.get("account_name"),
+            "qr_code": provider_metadata.get("qr_code"),
+            "provider_status": provider_metadata.get("provider_status"),
+            "amount_minor": int(fresh_order.total_amount_minor or amount_minor or 0),
+            "currency_code": fresh_order.currency_code or "VND",
+            "payment_reference": latest_attempt.expected_payment_reference if latest_attempt else None,
+            "merchant_order_code": fresh_order.merchant_order_code,
+            "expires_at": _iso(latest_attempt.expires_at) if latest_attempt else None,
+            "provider_metadata": provider_metadata,
+        },
     }
+
+
+def sync_and_get_order(*, order_id: str) -> dict[str, Any]:
+    order = payment_repository.get_order_by_id(order_id)
+    if order is None:
+        raise PaymentServiceError("FIELD_NOT_FOUND", "Không tìm thấy đơn hàng thanh toán.", status=404)
+    latest_attempt = _latest_attempt(order)
+    if latest_attempt is not None and latest_attempt.status in ACTIVE_ATTEMPT_STATUSES and order.status == "pending_payment":
+        resolution = _sync_attempt_with_payos(order, latest_attempt, now=_utcnow())
+        if resolution in {"reuse", "completed", "block", "recreate"}:
+            db.session.commit()
+            order = payment_repository.get_order_by_id(order_id) or order
+    if _maybe_expire_order(order):
+        db.session.commit()
+        order = payment_repository.get_order_by_id(order_id) or order
+    return serialize_order(order)
 
 
 def get_order_detail_for_user(*, order_id: str, user_id: int) -> dict[str, Any]:
     order = payment_repository.get_order_for_user(order_id, user_id)
     if order is None:
         raise PaymentServiceError("FIELD_NOT_FOUND", "Không tìm thấy đơn hàng thanh toán.", status=404)
-    if _maybe_expire_order(order):
-        db.session.commit()
-        order = payment_repository.get_order_for_user(order_id, user_id) or order
     latest_attempt = _latest_attempt(order)
     if latest_attempt is not None and latest_attempt.status in ACTIVE_ATTEMPT_STATUSES and order.status == "pending_payment":
         resolution = _sync_attempt_with_payos(order, latest_attempt, now=_utcnow())
         if resolution in {"reuse", "completed", "block", "recreate"}:
             db.session.commit()
             order = payment_repository.get_order_for_user(order_id, user_id) or order
+    if _maybe_expire_order(order):
+        db.session.commit()
+        order = payment_repository.get_order_for_user(order_id, user_id) or order
     return serialize_order(order)
 
 
@@ -1712,6 +1746,10 @@ def _fulfill_order_item(*, order: PaymentOrder, order_item: PaymentOrderItem, at
 def _ensure_entitlements_for_confirmed_order(order: PaymentOrder, attempt: PaymentAttempt, *, now: datetime) -> None:
     existing_by_item_id = {row.payment_order_item_id: row for row in order.entitlements}
     for order_item in order.items:
+        if order.user_id is None:
+            if order_item.product_type == support_donation_service.DONATION_PRODUCT_TYPE:
+                continue
+            raise PaymentServiceError("VALIDATION_ERROR", "Đơn hàng này không gắn với người dùng hợp lệ để cấp quyền.")
         entitlement = existing_by_item_id.get(order_item.id)
         if entitlement is None:
             entitlement_type = "shared_note_type_install"

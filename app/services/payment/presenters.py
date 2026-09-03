@@ -74,6 +74,14 @@ def build_order_detail_payload(order: PaymentOrder) -> dict[str, Any]:
     return {
         "id": order.id,
         "merchant_order_code": order.merchant_order_code,
+        "status": order.status,
+        "status_label": payload.get("status_label") or ORDER_STATUS_LABELS.get(order.status, order.status),
+        "status_tone": payload.get("status_tone"),
+        "total_amount_display": payload.get("total_amount_display") or format_minor_amount(order.total_amount_minor),
+        "created_at": order.created_at.isoformat() if order.created_at else None,
+        "created_at_display": format_datetime(order.created_at),
+        "paid_at": order.paid_at.isoformat() if order.paid_at else None,
+        "paid_at_display": format_datetime(order.paid_at),
         "buyer": _build_buyer_payload(order),
         "seller_labels": _build_seller_labels(order.items),
         "item_rows": [build_order_item_payload(item) for item in order.items],
@@ -211,11 +219,11 @@ def product_type_label(value: str) -> str:
 def _build_buyer_payload(order: PaymentOrder | None) -> dict[str, Any]:
     user = order.user if order is not None else None
     if user is None:
-        return {"id": None, "username": "", "email": ""}
+        return {"id": None, "username": "Khách ẩn danh", "email": ""}
     return {
         "id": user.id,
-        "username": user.username,
-        "email": user.email,
+        "username": user.username or "Khách ẩn danh",
+        "email": user.email or "",
     }
 
 

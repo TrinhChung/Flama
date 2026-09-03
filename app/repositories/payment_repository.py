@@ -37,7 +37,9 @@ def get_order_by_id(order_id: str) -> PaymentOrder | None:
     )
 
 
-def list_reusable_orders_for_product(*, user_id: int, product_type: str, product_ref_id: str) -> list[PaymentOrder]:
+def list_reusable_orders_for_product(*, user_id: int | None, product_type: str, product_ref_id: str) -> list[PaymentOrder]:
+    if user_id is None:
+        return []
     return (
         PaymentOrder.query.options(
             joinedload(PaymentOrder.items),

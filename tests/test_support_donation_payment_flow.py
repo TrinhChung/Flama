@@ -115,7 +115,7 @@ class SupportDonationPaymentFlowTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b'<div id="root"></div>', response.data)
 
-    def test_anonymous_support_donation_does_not_require_login_or_create_order(self):
+    def test_anonymous_support_donation_does_not_require_login_and_creates_order(self):
         with patch(
             "app.services.payment.provider.payos_provider.create_checkout_session",
             side_effect=self._fake_checkout_session,
@@ -135,7 +135,11 @@ class SupportDonationPaymentFlowTests(unittest.TestCase):
         self.assertTrue(((payload.get("checkout") or {}).get("checkout_url")))
 
         with self.app.app_context():
-            self.assertEqual(PaymentOrder.query.count(), 0)
+            self.assertEqual(PaymentOrder.query.count(), 1)
+            order = PaymentOrder.query.first()
+            self.assertIsNone(order.user_id)
+            self.assertEqual(order.total_amount_minor, 120000)
+            self.assertEqual(order.status, "pending_payment")
 
     def test_v1_support_checkout_exposes_frontend_checkout_url(self):
         with patch(
@@ -194,7 +198,10 @@ class SupportDonationPaymentFlowTests(unittest.TestCase):
         self.assertEqual(payload.get("checkout_mode"), "anonymous")
 
         with self.app.app_context():
-            self.assertEqual(PaymentOrder.query.count(), 0)
+            self.assertEqual(PaymentOrder.query.count(), 1)
+            order = PaymentOrder.query.first()
+            self.assertIsNone(order.user_id)
+            self.assertEqual(order.total_amount_minor, 90000)
 
     def test_logged_in_support_donation_creates_saved_payment_order(self):
         self._login()
@@ -448,8 +455,87 @@ class SupportDonationPaymentFlowTests(unittest.TestCase):
         self.assertEqual(anon_response.status_code, 200)
         anon_payload = anon_response.get_json() or {}
         self.assertEqual(anon_payload.get("status"), "paid")
-        self.assertEqual(anon_payload.get("grant_status"), "completed")
-        self.assertEqual(anon_payload.get("total_amount_minor"), 50000)
+
+    def test_anonymous_support_donation_is_visible_to_admin_and_can_be_paid_via_webhook(self):
+        with patch(
+            "app.services.payment.provider.payos_provider.create_checkout_session",
+            side_effect=self._fake_checkout_session,
+        ):
+            checkout_response = self.client.post(
+                "/api/support-donation/checkout",
+                json={
+                    "amount_minor": 150000,
+                    "return_url": "http://localhost/support-donation",
+                    "cancel_url": "http://localhost/support-donation",
+                },
+            )
+
+        self.assertEqual(checkout_response.status_code, 201)
+        checkout_payload = checkout_response.get_json() or {}
+        order_info = checkout_payload.get("order") or {}
+        order_id = order_info.get("id")
+        self.assertTrue(order_id)
+
+        with self.app.app_context():
+            order = PaymentOrder.query.get(order_id)
+            self.assertIsNotNone(order)
+            self.assertIsNone(order.user_id)
+            attempt = order.attempts[0]
+            provider_order_code = attempt.provider_order_code
+            expected_reference = attempt.expected_payment_reference
+
+            # Make admin user and verify admin sees this anonymous order
+            admin_user = User(username="admin-user", email="admin@example.com", is_admin=True)
+            admin_user.set_password("password")
+            db.session.add(admin_user)
+            db.session.commit()
+
+        # Login as admin
+        self.client.post("/login", data={"email": "admin@example.com", "password": "password"})
+        admin_response = self.client.get("/api/admin/payments/orders")
+        self.assertEqual(admin_response.status_code, 200)
+        admin_payload = admin_response.get_json() or {}
+        items = admin_payload.get("items") or []
+        anon_items = [it for it in items if it.get("id") == order_id]
+        self.assertEqual(len(anon_items), 1)
+        self.assertEqual(anon_items[0].get("buyer", {}).get("username"), "Khách ẩn danh")
+
+        # Logout admin
+        self.client.get("/logout")
+
+        # Simulate PayOS Webhook confirming the anonymous donation
+        with patch(
+            "app.services.payment.provider.payos_provider.verify_webhook_payload",
+            return_value={
+                "provider_code": "payos",
+                "event_type": "payment.succeeded",
+                "event_key": f"test_anon_event_{order_id}",
+                "provider_order_code": str(provider_order_code),
+                "payment_reference": expected_reference,
+                "amount_minor": 150000,
+                "currency_code": "VND",
+                "success": True,
+                "raw_payload": {"orderCode": provider_order_code},
+            },
+        ):
+            webhook_response = self.client.post(
+                "/api/payments/providers/payos/webhook",
+                data=b'{"mock": true}',
+                content_type="application/json",
+            )
+            self.assertIn(webhook_response.status_code, (200, 202))
+
+        # Check status without authentication
+        anon_status_response = self.client.get(f"/api/support-donation/status?payment_order_id={order_id}")
+        self.assertEqual(anon_status_response.status_code, 200)
+        anon_status_payload = anon_status_response.get_json() or {}
+        self.assertEqual(anon_status_payload.get("status"), "paid")
+        self.assertEqual(anon_status_payload.get("grant_status"), "completed")
+
+        with self.app.app_context():
+            updated_order = PaymentOrder.query.get(order_id)
+            self.assertEqual(updated_order.status, "paid")
+            self.assertEqual(updated_order.grant_status, "completed")
 
 
 if __name__ == "__main__":
