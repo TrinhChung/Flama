@@ -85,6 +85,16 @@ def serve_react_spa(*_args, **_kwargs) -> Response:
     plain 404 text response is returned so the developer knows to run
     ``npm run build`` first.
     """
+    if current_app.config.get("SPA_TEST_SHELL_ENABLED", False):
+        from app.csrf import generate_csrf_token
+
+        generate_csrf_token()
+        return Response(
+            "<!doctype html><html><body><div id=\"root\"></div>"
+            "<script type=\"module\"></script></body></html>",
+            content_type="text/html; charset=utf-8",
+        )
+
     index = _FRONTEND_DIST / "index.html"
     if not index.is_file():
         from app.services import oauth_service

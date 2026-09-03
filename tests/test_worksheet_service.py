@@ -293,6 +293,29 @@ class TestWorksheetService(unittest.TestCase):
         self.assertIn("grammar-card", html_g)
         self.assertIn("Hãy đặt 2 câu hoàn chỉnh", html_g)
 
+    def test_kanji_reference_char_color_and_stroke_mode(self):
+        # Test custom reference_char_color and monochrome stroke mode
+        payload = {
+            "template_id": "kanji_stroke",
+            "deck_id": self.deck.id,
+            "field_mapping": {"kanji": "Expression"},
+            "options": {
+                "reference_char_color": "#2563eb",
+                "stroke_color_mode": "monochrome",
+                "show_stroke_diagram": True,
+            },
+        }
+        res = generate_worksheet_preview(user_id=self.user.id, payload=payload)
+        self.assertEqual(res["template"]["id"], "kanji_stroke")
+        self.assertEqual(res["options"]["reference_char_color"], "#2563eb")
+        self.assertEqual(res["options"]["stroke_color_mode"], "monochrome")
+
+        html_out = render_printable_html(res)
+        # Verify custom fill color in reference char
+        self.assertIn('fill="#2563eb"', html_out)
+        # Verify monochrome stroke class and styles
+        self.assertIn("flama-stroke-monochrome", html_out)
+
 
 if __name__ == "__main__":
     unittest.main()

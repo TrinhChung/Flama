@@ -19,19 +19,26 @@ from models.user import User
 
 
 class OAuthRemoteMcpTests(unittest.TestCase):
-    def setUp(self):
-        self.app = create_app(
+    @classmethod
+    def setUpClass(cls):
+        cls.app = create_app(
             {
                 "TESTING": True,
                 "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
                 "WTF_CSRF_ENABLED": False,
                 "SERVER_NAME": "localhost:4789",
+                "STARTUP_RUN_MAINTENANCE": False,
+                "STARTUP_CHECK_DB_CONNECTIVITY": False,
             }
         )
+
+    def setUp(self):
+        self.app.config["CORS_ALLOWED_ORIGINS"] = ()
         self.client = self.app.test_client()
         mcp_access_token_service.reset_rate_limit_state()
 
         with self.app.app_context():
+            db.create_all()
             # Create users
             self.user = User(
                 username="alice",
@@ -124,6 +131,11 @@ class OAuthRemoteMcpTests(unittest.TestCase):
             )
             db.session.commit()
 
+    def tearDown(self):
+        with self.app.app_context():
+            db.session.remove()
+            db.drop_all()
+
 
     def _logout(self):
         return self.client.delete("/api/session")
@@ -210,8 +222,16 @@ class OAuthRemoteMcpTests(unittest.TestCase):
 
     def test_serve_react_spa_redirects_to_external_frontend_when_dist_missing(self):
         from unittest.mock import patch
-        self.app.config["CORS_ALLOWED_ORIGINS"] = ("https://flama.stmtp.com",)
-        with patch("pathlib.Path.is_file", return_value=False):
+        with (
+            patch.dict(
+                self.app.config,
+                {
+                    "CORS_ALLOWED_ORIGINS": ("https://flama.stmtp.com",),
+                    "SPA_TEST_SHELL_ENABLED": False,
+                },
+            ),
+            patch("pathlib.Path.is_file", return_value=False),
+        ):
             resp = self.client.get("/oauth/consent?client_id=test_client&state=123")
             self.assertEqual(resp.status_code, 302)
             self.assertEqual(

@@ -12,8 +12,9 @@ from models.user import User
 
 
 class AuthSecurityTests(unittest.TestCase):
-    def setUp(self):
-        self.app = create_app(
+    @classmethod
+    def setUpClass(cls):
+        cls.app = create_app(
             {
                 "TESTING": True,
                 "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
@@ -22,12 +23,17 @@ class AuthSecurityTests(unittest.TestCase):
                 "LOGIN_RATE_LIMIT_MAX_ATTEMPTS": 3,
                 "LOGIN_RATE_LIMIT_WINDOW_SECONDS": 60,
                 "LOGIN_RATE_LIMIT_LOCKOUT_SECONDS": 60,
+                "STARTUP_RUN_MAINTENANCE": False,
+                "STARTUP_CHECK_DB_CONNECTIVITY": False,
             }
         )
+
+    def setUp(self):
         self.client = self.app.test_client()
         login_rate_limit_service.reset_state()
 
         with self.app.app_context():
+            db.create_all()
             user = User(username="secure-user", email="secure-user@example.com", is_admin=True)
             user.set_password("password")
             db.session.add(user)
@@ -65,6 +71,19 @@ class AuthSecurityTests(unittest.TestCase):
         response = self._login(next_url="https://example.com/phish")
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.headers.get("Location"), "/dashboard")
+
+    def test_production_password_hash_default_still_verifies(self):
+        with self.app.app_context():
+            original_method = self.app.config["PASSWORD_HASH_METHOD"]
+            try:
+                self.app.config["PASSWORD_HASH_METHOD"] = ""
+                user = User(username="production-hash", email="hash@example.com")
+                user.set_password("production-password")
+            finally:
+                self.app.config["PASSWORD_HASH_METHOD"] = original_method
+
+        self.assertTrue(user.check_password("production-password"))
+        self.assertFalse(user.password_hash.startswith("pbkdf2:sha256:1000$"))
 
     def test_login_requires_csrf_token(self):
         response = self.client.post(

@@ -64,6 +64,12 @@ class AppStartupTests(unittest.TestCase):
         self.assertFalse(default_app.config["RATE_LIMIT_DAILY_ENABLED"])
         self.assertTrue(enabled_app.config["RATE_LIMIT_DAILY_ENABLED"])
 
+    def test_testing_uses_fast_password_hash_and_minimal_spa_shell(self):
+        app = self._create_test_app()
+
+        self.assertEqual(app.config["PASSWORD_HASH_METHOD"], "pbkdf2:sha256:1000")
+        self.assertTrue(app.config["SPA_TEST_SHELL_ENABLED"])
+
     def test_startup_maintenance_cli_forces_explicit_run_with_overrides(self):
         app = self._create_test_app(STARTUP_RUN_MAINTENANCE=False)
         runner = app.test_cli_runner()
@@ -107,6 +113,8 @@ class AppStartupTests(unittest.TestCase):
         self.assertFalse(app.config["STARTUP_RUN_USER_MANAGEMENT_SCHEMA"])
         self.assertFalse(app.config["STARTUP_RUN_BACKWARD_COMPAT_SCHEMA"])
         self.assertTrue(app.config["STARTUP_CHECK_DB_CONNECTIVITY"])
+        self.assertEqual(app.config["PASSWORD_HASH_METHOD"], "")
+        self.assertFalse(app.config["SPA_TEST_SHELL_ENABLED"])
 
         # Schema mutation functions must NOT be called on production boot
         ensure_compat.assert_not_called()

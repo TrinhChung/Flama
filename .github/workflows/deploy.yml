@@ -1,11 +1,7 @@
 name: Deploy Flama Backend to Hostinger VPS
 
 on:
-  push:
-    branches:
-      - master
-    paths-ignore:
-      - 'frontend/**'
+  workflow_call:
   workflow_dispatch:
 
 concurrency:

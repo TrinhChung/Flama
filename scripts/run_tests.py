@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import fnmatch
+import json
 import os
 import shutil
 import subprocess
@@ -512,6 +513,36 @@ MODULES: dict[str, dict[str, list[str]]] = {
         ],
         "frontend_tests": [],
     },
+    "cli": {
+        # app/cli.py is still a monolith, so path-only selection cannot know
+        # which command changed. Keep a broad CLI contract set here, but do not
+        # invalidate unrelated API/UI suites; master/manual still run all tests.
+        "source_patterns": ["app/cli.py"],
+        "backend_tests": [
+            "tests/test_admin_user_roles.py",
+            "tests/test_anki_import_api.py",
+            "tests/test_api_strokes.py",
+            "tests/test_app_startup.py",
+            "tests/test_batched_deck_clone.py",
+            "tests/test_bootstrap_admin_credentials.py",
+            "tests/test_bootstrap_admin_sync.py",
+            "tests/test_deck_notetype_guard.py",
+            "tests/test_deck_release_api.py",
+            "tests/test_flashcard_media_migration.py",
+            "tests/test_flashcard_media_normalizer.py",
+            "tests/test_image_library.py",
+            "tests/test_market_counter_deletion.py",
+            "tests/test_marketplace_taxonomy_db.py",
+            "tests/test_oauth_mcp.py",
+            "tests/test_payment_order_flow.py",
+            "tests/test_stroke_service.py",
+            "tests/test_study_architecture_audit_cli.py",
+            "tests/test_transactional_email_service.py",
+            "tests/test_tts_provider_seed.py",
+            "tests/test_vocab_seed_sharing.py",
+        ],
+        "frontend_tests": [],
+    },
     "tooling": {
         "source_patterns": [
             ".github/workflows/**",
@@ -586,6 +617,7 @@ MODULES: dict[str, dict[str, list[str]]] = {
             "tests/test_logging_redaction.py",
             "tests/test_rest_api_v1.py",
             "tests/test_rest_only_runtime.py",
+            "tests/test_spa_artifact_contract.py",
             "tests/test_spa_routes.py",
             "tests/test_sync_managed_env.py",
             "tests/test_template_formatters.py",
@@ -599,7 +631,6 @@ MODULES: dict[str, dict[str, list[str]]] = {
 # Central entrypoints and dependency manifests intentionally invalidate an
 # entire runtime layer. Keep this list short and covered by an audit test.
 FULL_BACKEND_SOURCE_PATTERNS = (
-    "app/cli.py",
     "requirements.txt",
     "pyproject.toml",
     "setup.cfg",
@@ -610,6 +641,50 @@ FULL_FRONTEND_SOURCE_PATTERNS = (
     "frontend/package-lock.json",
     "frontend/vite.config.ts",
     "frontend/vitest.config.ts",
+)
+
+# Environment-specific contract tiers. These patterns are intentionally
+# narrower than the domain catalog so PRs only pay for external services when
+# the changed code can affect that contract.
+SPA_CONTRACT_SOURCE_PATTERNS = (
+    "app/spa.py",
+    "frontend/index.html",
+    "frontend/package.json",
+    "frontend/package-lock.json",
+    "frontend/vite.config.*",
+    "Dockerfile",
+    ".github/workflows/ci.yml",
+    "tests/test_spa_artifact_contract.py",
+)
+
+REDIS_CONTRACT_SOURCE_PATTERNS = (
+    "app/services/redis_state_service.py",
+    "app/services/login_rate_limit_service.py",
+    "app/services/daily_rate_limit_service.py",
+    "app/api/v1/health.py",
+    "requirements.txt",
+    "tests/test_shared_state_services.py",
+)
+
+MYSQL_CONTRACT_SOURCE_PATTERNS = (
+    "migrations/**",
+    "models/**",
+    "requirements.txt",
+    "scripts/probe_p1_02_mysql_concurrency.py",
+    "tests/test_marketplace_taxonomy_migration.py",
+)
+
+DEPLOY_RUNTIME_SOURCE_PATTERNS = (
+    "app/**",
+    "models/**",
+    "migrations/**",
+    "deploy/**",
+    "static/**",
+    "requirements.txt",
+    "wsgi.py",
+    "connect_wsgi.py",
+    "Dockerfile",
+    ".github/workflows/deploy.yml",
 )
 
 # -----------------------------------------------------------------------------
@@ -850,6 +925,44 @@ def map_files_to_modules(changed_files: list[str]) -> tuple[set[str], set[str], 
     return matched_modules, backend_tests, frontend_tests
 
 
+def build_ci_change_plan(
+    changed_files: list[str],
+    *,
+    force_all_validation: bool = False,
+) -> dict[str, bool]:
+    """Return job-level CI decisions for one complete event diff."""
+    normalized = [path.replace("\\", "/") for path in changed_files]
+    _, backend_tests, frontend_tests = map_files_to_modules(normalized)
+
+    def matches_any(patterns: tuple[str, ...]) -> bool:
+        return any(
+            fnmatch.fnmatch(path, pattern)
+            for path in normalized
+            for pattern in patterns
+        )
+
+    spa_contract = matches_any(SPA_CONTRACT_SOURCE_PATTERNS)
+    return {
+        "backend": force_all_validation or bool(backend_tests),
+        "frontend": force_all_validation or bool(frontend_tests) or spa_contract,
+        "spa_contract": force_all_validation or spa_contract,
+        "redis_contract": force_all_validation
+        or matches_any(REDIS_CONTRACT_SOURCE_PATTERNS),
+        "mysql_contract": force_all_validation
+        or matches_any(MYSQL_CONTRACT_SOURCE_PATTERNS),
+        # Deployment remains path-sensitive even though master intentionally
+        # receives full validation. Test/docs-only merges must not deploy.
+        "deploy": matches_any(DEPLOY_RUNTIME_SOURCE_PATTERNS),
+    }
+
+
+def write_github_outputs(path: str, values: dict[str, bool]) -> None:
+    """Append stable lowercase booleans to a GitHub Actions output file."""
+    with open(path, "a", encoding="utf-8", newline="\n") as output_file:
+        for key in sorted(values):
+            output_file.write(f"{key}={str(values[key]).lower()}\n")
+
+
 # -----------------------------------------------------------------------------
 # Test Execution
 # -----------------------------------------------------------------------------
@@ -1025,6 +1138,16 @@ def main() -> int:
         help="List all defined domain modules and their associated test counts.",
     )
     parser.add_argument(
+        "--ci-plan",
+        action="store_true",
+        help="Print job-level CI decisions for the current event diff.",
+    )
+    parser.add_argument(
+        "--github-output",
+        type=str,
+        help="Append --ci-plan decisions to this GitHub Actions output file.",
+    )
+    parser.add_argument(
         "--failfast",
         action="store_true",
         help="Stop execution on the first test failure.",
@@ -1050,6 +1173,23 @@ def main() -> int:
         total_b = sum(len(d["backend_tests"]) for d in MODULES.values())
         total_f = sum(len(d["frontend_tests"]) for d in MODULES.values())
         print(f"{'TOTAL (Mapped)':<20} | {total_b:<15} | {total_f:<15}\n")
+        return 0
+
+    if args.ci_plan:
+        changed = get_git_modified_files()
+        force_all = str(os.environ.get("CI_FORCE_ALL_VALIDATION") or "").lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+        plan = build_ci_change_plan(
+            changed,
+            force_all_validation=force_all,
+        )
+        print(json.dumps({"changed_files": changed, **plan}, indent=2, sort_keys=True))
+        if args.github_output:
+            write_github_outputs(args.github_output, plan)
         return 0
 
     # Determine Python executable

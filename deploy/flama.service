@@ -1,8 +1,7 @@
 [Unit]
 Description=Flama Nihongo Gunicorn application
 After=network-online.target mysql.service redis-server.service
-Wants=network-online.target redis-server.service
-Requires=mysql.service
+Wants=network-online.target mysql.service redis-server.service
 
 [Service]
 Type=simple
@@ -12,7 +11,7 @@ WorkingDirectory=/opt/flama/current
 EnvironmentFile=/etc/flama/flama.env
 Environment=PYTHONDONTWRITEBYTECODE=1
 ExecStart=/opt/flama/venv/bin/gunicorn --workers 2 --threads 4 --worker-class gthread --timeout 120 --bind 0.0.0.0:4789 --access-logfile - --error-logfile - wsgi:app
-Restart=on-failure
+Restart=always
 RestartSec=5
 KillSignal=SIGQUIT
 TimeoutStopSec=150
