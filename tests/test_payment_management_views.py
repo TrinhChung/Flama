@@ -337,6 +337,43 @@ class PaymentManagementViewTests(unittest.TestCase):
         self.assertIn("recent_orders", payload)
         self.assertIn("recent_webhook_failures", payload)
 
+    def test_admin_update_order_status_success(self):
+        self._login(self.admin_email)
+        response = self.client.patch(
+            f"/api/admin/payments/orders/{self.buyer_pending_order_id}/status",
+            json={"status": "paid", "note": "Duyệt thủ công qua admin"},
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json() or {}
+        self.assertIn("order", payload)
+        order = payload["order"]
+        self.assertEqual(order["status"], "paid")
+        self.assertEqual(order["status_label"], "Thanh toán thành công")
+        self.assertIn("order_detail_lines", order.get("serialized") or {})
+
+    def test_admin_update_order_status_to_canceled(self):
+        self._login(self.admin_email)
+        response = self.client.patch(
+            f"/api/admin/payments/orders/{self.buyer_pending_order_id}/status",
+            json={"status": "canceled", "note": "Khách yêu cầu hủy"},
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json() or {}
+        order = payload.get("order") or {}
+        self.assertEqual(order.get("status"), "canceled")
+
+    def test_admin_sync_order_success(self):
+        self._login(self.admin_email)
+        response = self.client.post(
+            f"/api/admin/payments/orders/{self.buyer_paid_order_id}/sync",
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json() or {}
+        order = payload.get("order") or {}
+        self.assertEqual(order.get("status"), "paid")
+        self.assertEqual(order.get("status_label"), "Thanh toán thành công")
+
 
 if __name__ == "__main__":
     unittest.main()
+

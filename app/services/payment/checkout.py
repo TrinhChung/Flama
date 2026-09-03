@@ -44,6 +44,7 @@ PAYOS_PROVIDER_REUSABLE_STATUSES = {"PENDING", "PROCESSING"}
 
 
 from app.services.payment.base import (
+    ACTIVE_ATTEMPT_STATUSES,
     PaymentServiceError,
     _clean_text,
     _iso,

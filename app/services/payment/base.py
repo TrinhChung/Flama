@@ -41,6 +41,7 @@ UTC = timezone.utc
 PAYMENT_PROVIDER_CODE = "payos"
 PAYMENT_METHOD_CODE = "payos_checkout"
 PAYOS_PROVIDER_REUSABLE_STATUSES = {"PENDING", "PROCESSING"}
+ACTIVE_ATTEMPT_STATUSES = {"created", "pending"}
 
 
 class PaymentServiceError(RuntimeError):

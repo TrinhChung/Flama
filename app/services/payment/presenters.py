@@ -22,6 +22,16 @@ ATTEMPT_STATUS_LABELS = {
     "refunded": "Đã hoàn tiền",
 }
 
+ORDER_STATUS_LABELS = {
+    "pending_payment": "Đang chờ thanh toán",
+    "paid": "Đã thanh toán",
+    "under_review": "Cần kiểm tra",
+    "expired": "Đã hết hạn",
+    "canceled": "Đã hủy",
+    "failed": "Thất bại",
+    "refunded": "Đã hoàn tiền",
+}
+
 WEBHOOK_STATUS_LABELS = {
     "received": "Đã nhận",
     "processed": "Đã xử lý",
@@ -51,7 +61,7 @@ def build_order_row(order: PaymentOrder) -> dict[str, Any]:
         "total_amount_minor": int(order.total_amount_minor or 0),
         "total_amount_display": format_minor_amount(order.total_amount_minor, currency_code=order.currency_code),
         "status": order.status,
-        "status_label": status_display.get("label") or order.status,
+        "status_label": status_display.get("label") or ORDER_STATUS_LABELS.get(order.status, order.status),
         "status_tone": status_display.get("tone") or "secondary",
         "payment_status": active_attempt.get("status") or "",
         "payment_status_label": attempt_status_display.get("label") or "",
@@ -71,12 +81,13 @@ def build_order_detail_payload(order: PaymentOrder) -> dict[str, Any]:
     from app.services import payment_service
 
     payload = payment_service.serialize_order(order)
+    status_display = payload.get("status_display") or {}
     return {
         "id": order.id,
         "merchant_order_code": order.merchant_order_code,
         "status": order.status,
-        "status_label": payload.get("status_label") or ORDER_STATUS_LABELS.get(order.status, order.status),
-        "status_tone": payload.get("status_tone"),
+        "status_label": payload.get("status_label") or status_display.get("label") or status_display.get("title") or ORDER_STATUS_LABELS.get(order.status, order.status),
+        "status_tone": payload.get("status_tone") or status_display.get("tone") or status_display.get("badge_variant") or "secondary",
         "total_amount_display": payload.get("total_amount_display") or format_minor_amount(order.total_amount_minor),
         "created_at": order.created_at.isoformat() if order.created_at else None,
         "created_at_display": format_datetime(order.created_at),
