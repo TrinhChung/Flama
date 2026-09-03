@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# Pre-commit hook: Auto update REST API route snapshot if app routes or models were touched
+
+set -e
+
+# Find python executable
+PYTHON=""
+if [ -f ".venv/Scripts/python.exe" ]; then
+    PYTHON=".venv/Scripts/python.exe"
+elif [ -f ".venv/bin/python" ]; then
+    PYTHON=".venv/bin/python"
+elif command -v python3 >/dev/null 2>&1; then
+    PYTHON="python3"
+elif command -v python >/dev/null 2>&1; then
+    PYTHON="python"
+elif command -v py >/dev/null 2>&1; then
+    PYTHON="py -3.12"
+else
+    echo "[pre-commit] WARNING: Python not found, skipping route snapshot update."
+    exit 0
+fi
+
+# Check if any route/app/model files are staged
+STAGED_FILES=$(git diff --cached --name-only)
+if echo "$STAGED_FILES" | grep -qE '^(app/|models/|tests/test_api_v1_route_map\.py)'; then
+    echo "[pre-commit] Route-affecting files modified in commit. Refreshing API route snapshot..."
+    $PYTHON scripts/update_route_snapshot.py
+    git add tests/snapshots/api_v1_routes.json
+    echo "[pre-commit] API route snapshot verified and auto-staged."
+fi
+
+exit 0

@@ -265,6 +265,7 @@ jobs:
           DB_PASSWORD: ci-root-password
           DB_NAME: ci
           SECRET_KEY: ci-secret
+          STARTUP_RUN_MAINTENANCE: '1'
         run: flask --app wsgi.py db upgrade
 
       - name: Run MySQL locking and concurrency contract

@@ -1,6 +1,7 @@
 """Unit tests for Worksheet Service."""
 
 import unittest
+from unittest.mock import patch
 
 from app import create_app
 from app.services.worksheets.template_catalog import (
@@ -129,7 +130,9 @@ class TestWorksheetService(unittest.TestCase):
             get_deck_worksheet_meta(user_id=self.other_user.id, deck_id=self.deck.id)
         self.assertEqual(ctx.exception.status, 403)
 
-    def test_generate_worksheet_preview_kanji_stroke(self):
+    @patch("app.services.worksheets.worksheet_service.check_stroke_svg_exists", return_value=True)
+    @patch("app.services.worksheets.worksheet_service._get_stroke_svg_content", return_value="<svg><path d='M0,0'/></svg>")
+    def test_generate_worksheet_preview_kanji_stroke(self, mock_svg_content, mock_stroke_exists):
         payload = {
             "template_id": "kanji_stroke",
             "deck_id": self.deck.id,
@@ -293,7 +296,9 @@ class TestWorksheetService(unittest.TestCase):
         self.assertIn("grammar-card", html_g)
         self.assertIn("Hãy đặt 2 câu hoàn chỉnh", html_g)
 
-    def test_kanji_reference_char_color_and_stroke_mode(self):
+    @patch("app.services.worksheets.worksheet_service.check_stroke_svg_exists", return_value=True)
+    @patch("app.services.worksheets.worksheet_service._get_stroke_svg_content", return_value="<svg><path d='M0,0'/></svg>")
+    def test_kanji_reference_char_color_and_stroke_mode(self, mock_svg_content, mock_stroke_exists):
         # Test custom reference_char_color and monochrome stroke mode
         payload = {
             "template_id": "kanji_stroke",
